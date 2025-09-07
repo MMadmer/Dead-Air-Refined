@@ -54,12 +54,6 @@
 // exceptions will still be catched when there's
 // no error checking.
 
-// LUABIND_NOT_THREADSAFE
-// this define will make luabind non-thread safe. That is,
-// it will rely on a static variable. You can still have
-// multiple lua states and use coroutines, but only
-// one of your real threads may run lua code.
-
 // LUABIND_NO_EXCEPTIONS
 // this define will disable all usage of try, catch and throw in
 // luabind. This will in many cases disable runtime-errors, such

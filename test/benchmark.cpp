@@ -9,7 +9,6 @@ namespace std
 
 #define LUABIND_NO_ERROR_CHECKING
 #define LUABIND_DONT_COPY_STRINGS
-//#define LUABIND_NOT_THREADSAFE
 
 extern "C"
 {

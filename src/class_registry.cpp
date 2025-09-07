@@ -93,29 +93,18 @@ namespace luabind {
 
 		class_registry* class_registry::get_registry(lua_State* L)
 		{
-
-#ifdef LUABIND_NOT_THREADSAFE
-
-			// if we don't have to be thread safe, we can keep a
-			// chache of the class_registry pointer without the
-			// need of a mutex
-			static lua_State* cache_key = 0;
-			static class_registry* registry_cache = 0;
-			if(cache_key == L) return registry_cache;
-
-#endif
+			thread_local lua_State* cache_key = 0;
+			thread_local class_registry* registry_cache = 0;
+			if (cache_key == L)
+				return registry_cache;
 
 			lua_pushstring(L, "__luabind_classes");
 			lua_gettable(L, LUA_REGISTRYINDEX);
 			class_registry* p = static_cast<class_registry*>(lua_touserdata(L, -1));
 			lua_pop(L, 1);
 
-#ifdef LUABIND_NOT_THREADSAFE
-
 			cache_key = L;
 			registry_cache = p;
-
-#endif
 
 			return p;
 		}

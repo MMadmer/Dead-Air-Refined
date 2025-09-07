@@ -28,12 +28,6 @@
 namespace luabind {
 	namespace detail {
 
-#ifdef LUABIND_NOT_THREADSAFE
-		LUABIND_API void not_threadsafe_defined_conflict();
-#else
-		LUABIND_API void not_threadsafe_not_defined_conflict();
-#endif
-
 #ifdef LUABIND_NO_ERROR_CHECKING
 		LUABIND_API void no_error_checking_defined_conflict();
 #else
@@ -42,12 +36,6 @@ namespace luabind {
 
 		inline void check_link_compatibility()
 		{
-#ifdef LUABIND_NOT_THREADSAFE
-			not_threadsafe_defined_conflict();
-#else
-			not_threadsafe_not_defined_conflict();
-#endif
-
 #ifdef LUABIND_NO_ERROR_CHECKING
 			no_error_checking_defined_conflict();
 #else
