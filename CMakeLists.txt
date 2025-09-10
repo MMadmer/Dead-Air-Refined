@@ -4,10 +4,8 @@ project(xrLuabind)
 
 set(CMAKE_CXX_STANDARD 17)
 
-if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    option(LUABIND_BUILD_TESTING "Build luabind with tests" OFF)
-    option(LUABIND_BUILD_SHARED "Build luabind as a shared library" ON)
-endif()
+option(BUILD_SHARED_LIBS "Build luabind as a shared library" ON)
+option(LUABIND_BUILD_TESTING "Build luabind with tests" OFF)
 
 add_subdirectory(luabind)
 add_subdirectory(src)

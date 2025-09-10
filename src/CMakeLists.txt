@@ -1,13 +1,4 @@
-if (NOT LUABIND_BUILD_SHARED)
-    add_library(xrLuabind STATIC)
-else()
-    add_library(xrLuabind SHARED)
-
-    target_compile_definitions(xrLuabind
-        PRIVATE
-        LUABIND_DYNAMIC_LINK
-    )
-endif()
+add_library(xrLuabind)
 
 target_sources(xrLuabind PRIVATE
 	class.cpp
@@ -51,25 +42,17 @@ else()
     target_link_libraries(xrLuabind PUBLIC ${LUA_LIBRARIES})
 endif()
 
-if (MASTER_GOLD)
-    target_compile_definitions(xrLuabind
-        PUBLIC
-        LUABIND_NO_EXCEPTIONS
-        LUABIND_NO_ERROR_CHECKING
-    )
-endif()
-
-target_compile_options(xrLuabind
-	PRIVATE
-	$<$<CXX_COMPILER_ID:MSVC>:"/MP">
-	$<$<CXX_COMPILER_ID:MSVC>:"/wd4251">
+target_compile_definitions(xrLuabind
+	PUBLIC
+	$<$<BOOL:${BUILD_SHARED_LIBS}>:LUABIND_DYNAMIC_LINK>
 )
 
 set_target_properties(xrLuabind PROPERTIES
 	PREFIX ""
-    POSITION_INDEPENDENT_CODE ON
 )
 
-install(TARGETS xrLuabind LIBRARY
-	DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-)
+if (BUILD_SHARED_LIBS)
+	install(TARGETS xrLuabind LIBRARY
+		DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+	)
+endif()
