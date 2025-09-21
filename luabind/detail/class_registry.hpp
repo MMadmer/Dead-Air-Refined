@@ -46,7 +46,6 @@ namespace luabind {
 
 			int lua_instance() const { return m_instance_metatable; }
 			int lua_class() const { return m_lua_class_metatable; }
-			int lua_function() const { return m_lua_function_metatable; }
 
 			void add_class(type_id const& info, class_rep* crep);
 
@@ -73,10 +72,6 @@ namespace luabind {
 			// this is a lua reference to the metatable to be used
 			// for all classes defined in lua
 			int m_lua_class_metatable;
-
-			// this metatable only contains a destructor
-			// for luabind::Detail::free_functions::function_rep
-			int m_lua_function_metatable;
 
 		};
 
