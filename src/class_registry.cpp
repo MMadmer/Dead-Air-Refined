@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2004 Daniel Wallin
+// Copyright (c) 2004 Daniel Wallin
 
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -83,28 +83,42 @@ namespace luabind {
 
 		class class_rep;
 
+		std::mutex class_registry::class_registry_cache_mutex;
+		std::unordered_map<lua_State*, class_registry*> class_registry::class_registry_cache;
+
 		class_registry::class_registry(lua_State* L)
 			: m_cpp_class_metatable(create_cpp_class_metatable(L))
 			, m_lua_class_metatable(create_lua_class_metatable(L))
 		{
 			push_instance_metatable(L);
 			m_instance_metatable = luaL_ref(L, LUA_REGISTRYINDEX);
+
+			std::lock_guard lock{ class_registry_cache_mutex };
+			class_registry_cache[L] = this;
 		}
 
-		class_registry* class_registry::get_registry(lua_State* L)
+		class_registry::~class_registry()
 		{
-			thread_local lua_State* cache_key = 0;
-			thread_local class_registry* registry_cache = 0;
-			if (cache_key == L)
-				return registry_cache;
+			std::lock_guard lock{ class_registry_cache_mutex };
+			const auto it = std::find_if(class_registry_cache.begin(), class_registry_cache.end(), [this](const auto& entry)
+			{
+				return entry.second == this;
+			});
+			if (it != class_registry_cache.end())
+				class_registry_cache.erase(it);
+		}
+
+        class_registry* class_registry::get_registry(lua_State* L)
+		{
+			if (class_registry* registry = class_registry_cache[L])
+			{
+				return registry;
+			}
 
 			lua_pushstring(L, "__luabind_classes");
 			lua_gettable(L, LUA_REGISTRYINDEX);
 			class_registry* p = static_cast<class_registry*>(lua_touserdata(L, -1));
 			lua_pop(L, 1);
-
-			cache_key = L;
-			registry_cache = p;
 
 			return p;
 		}

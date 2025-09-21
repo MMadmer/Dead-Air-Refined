@@ -24,7 +24,8 @@
 #ifndef LUABIND_CLASS_REGISTRY_HPP_INCLUDED
 #define LUABIND_CLASS_REGISTRY_HPP_INCLUDED
 
-#include <map>
+#include <mutex>
+#include <unordered_map>
 
 #include <luabind/config.hpp>
 #include <luabind/open.hpp>
@@ -38,6 +39,7 @@ namespace luabind {
 		struct LUABIND_API class_registry
 		{
 			class_registry(lua_State* L);
+			~class_registry();
 
 			static class_registry* get_registry(lua_State* L);
 
@@ -57,6 +59,8 @@ namespace luabind {
 			}
 
 		private:
+			static std::mutex class_registry_cache_mutex;
+			static std::unordered_map<lua_State*, class_registry*> class_registry_cache;
 
 			luabind::map<type_id, class_rep*> m_classes;
 
