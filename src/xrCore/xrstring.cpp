@@ -157,7 +157,8 @@ str_value* str_container::dock(pcstr value) const
     // calc len
     const auto s_len = xr_strlen(value);
     const auto s_len_with_zero = s_len + 1;
-    VERIFY(sizeof(str_value) + s_len_with_zero < 4096);
+    // The x86 header was smaller, so its page-size check rejected valid Dead Air strings only after moving to x64.
+    VERIFY(s_len <= std::numeric_limits<u32>::max());
 
     // setup find structure
     char header[sizeof(str_value)];

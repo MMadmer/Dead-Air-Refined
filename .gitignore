@@ -8,6 +8,14 @@
 # exclude binaries and temporary files
 [Bb]in/
 [Bb]uild*/
+!tools/build/
+!tools/build/**
+
+# Local bootstrap tools are downloaded and signature-checked by the build setup.
+tools/nuget/
+[Tt]est_root/
+__pycache__/
+*.py[cod]
 
 # User-specific files
 *.user

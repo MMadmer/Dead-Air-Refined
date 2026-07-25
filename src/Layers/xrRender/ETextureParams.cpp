@@ -41,9 +41,35 @@ const xr_token tmtl_token[] = {{"OrenNayar <-> Blin", STextureParams::tmOrenNaya
 const xr_token tbmode_token[] = {{"None", STextureParams::tbmNone}, {"Use", STextureParams::tbmUse},
     {"Use parallax", STextureParams::tbmUseParallax}, {nullptr, 0}};
 
+namespace
+{
+size_t find_texture_chunk(IReader& reader, u32 id)
+{
+    constexpr size_t headerSize = sizeof(u32) * 2;
+    const auto* bytes = static_cast<const u8*>(reader.begin());
+
+    // Some shipped Dead Air THMs overlap the following chunk with an incorrect preceding size.
+    for (size_t offset = 0; offset + headerSize <= reader.length(); ++offset)
+    {
+        u32 chunkId;
+        u32 chunkSize;
+        CopyMemory(&chunkId, bytes + offset, sizeof(chunkId));
+        CopyMemory(&chunkSize, bytes + offset + sizeof(chunkId), sizeof(chunkSize));
+
+        const size_t payloadOffset = offset + headerSize;
+        if (chunkId == id && chunkSize <= reader.length() - payloadOffset)
+        {
+            reader.seek(payloadOffset);
+            return chunkSize;
+        }
+    }
+    return 0;
+}
+}
+
 void STextureParams::Load(IReader& F)
 {
-    R_ASSERT(F.find_chunk(THM_CHUNK_TEXTUREPARAM));
+    R_ASSERT(find_texture_chunk(F, THM_CHUNK_TEXTUREPARAM));
     F.r(&fmt, sizeof(ETFormat));
     flags.assign(F.r_u32());
     border_color = F.r_u32();
@@ -53,24 +79,24 @@ void STextureParams::Load(IReader& F)
     width = F.r_u32();
     height = F.r_u32();
 
-    if (F.find_chunk(THM_CHUNK_TEXTURE_TYPE))
+    if (find_texture_chunk(F, THM_CHUNK_TEXTURE_TYPE))
     {
         type = (ETType)F.r_u32();
     }
 
-    if (F.find_chunk(THM_CHUNK_DETAIL_EXT))
+    if (find_texture_chunk(F, THM_CHUNK_DETAIL_EXT))
     {
         F.r_stringZ(detail_name);
         detail_scale = F.r_float();
     }
 
-    if (F.find_chunk(THM_CHUNK_MATERIAL))
+    if (find_texture_chunk(F, THM_CHUNK_MATERIAL))
     {
         material = (ETMaterial)F.r_u32();
         material_weight = F.r_float();
     }
 
-    if (F.find_chunk(THM_CHUNK_BUMP))
+    if (find_texture_chunk(F, THM_CHUNK_BUMP))
     {
         bump_virtual_height = F.r_float();
         bump_mode = (ETBumpMode)F.r_u32();
@@ -81,10 +107,10 @@ void STextureParams::Load(IReader& F)
         F.r_stringZ(bump_name);
     }
 
-    if (F.find_chunk(THM_CHUNK_EXT_NORMALMAP))
+    if (find_texture_chunk(F, THM_CHUNK_EXT_NORMALMAP))
         F.r_stringZ(ext_normal_map_name);
 
-    if (F.find_chunk(THM_CHUNK_FADE_DELAY))
+    if (find_texture_chunk(F, THM_CHUNK_FADE_DELAY))
         fade_delay = F.r_u8();
 }
 

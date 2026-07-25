@@ -243,7 +243,7 @@ void CEnvAmbient::load(
             m_effects[k] = create_effect(effects_config, _GetItem(effs, k, tmp));
     }
 
-    R_ASSERT(!m_sound_channels.empty() || !m_effects.empty());
+    // Dead Air intentionally uses silent ambient sections during weather transitions.
 }
 
 //-----------------------------------------------------------------------------
