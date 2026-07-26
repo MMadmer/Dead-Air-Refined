@@ -87,7 +87,8 @@ bool CUIArtefactParams::InitFromXml(CUIXml& xml)
     };
 
     //Alundaio: Show AF Condition
-    m_disp_condition = create_item("condition", "ui_inv_af_condition");
+    const auto condition = StringTable().translate("ui_inv_af_condition");
+    m_disp_condition = create_item("condition", condition.c_str());
     //-Alundaio
 
     for (auto [id, section, actor_condition, caption_id, magnitude, sign_inverse, unit] : af_restore)

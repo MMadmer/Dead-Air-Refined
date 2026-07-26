@@ -450,6 +450,14 @@ public:
 
     void Execute(pcstr args) override
     {
+        // Legacy Dead Air configs must win over the newer window-mode entry loaded in the same frame.
+        if (m_legacyFullscreenCommandPending && m_legacyFullscreenCommandFrame == Device.dwFrame)
+        {
+            m_legacyFullscreenCommandPending = false;
+            return;
+        }
+
+        m_legacyFullscreenCommandPending = false;
         CCC_Token::Execute(args);
         m_fullscreen.set(fl_fullscreen, psDeviceMode.WindowStyle == rsFullscreen);
     }
@@ -457,6 +465,8 @@ public:
 private:
     enum { fl_fullscreen = 1u << 0u };
     inline static Flags32 m_fullscreen; // for rs_fullscreen backwards compatibility
+    inline static bool m_legacyFullscreenCommandPending = false;
+    inline static u32 m_legacyFullscreenCommandFrame = 0;
 
 public:
     class CCC_Fullscreen final : public CCC_Mask
@@ -470,10 +480,12 @@ public:
         void Execute(pcstr args) override
         {
             CCC_Mask::Execute(args);
+            m_legacyFullscreenCommandPending = true;
+            m_legacyFullscreenCommandFrame = Device.dwFrame;
             if (GetValue())
                 psDeviceMode.WindowStyle = rsFullscreen;
             else
-                psDeviceMode.WindowStyle = rsWindowedBorderless;
+                psDeviceMode.WindowStyle = rsWindowed;
         }
     };
 };
@@ -712,6 +724,12 @@ extern int g_ErrorLineCount;
 
 ENGINE_API int ps_r__Supersample = 1;
 ENGINE_API int ps_r__WallmarksOnSkeleton = 0;
+ENGINE_API float ps_r__color_base_r = 0.42f;
+ENGINE_API float ps_r__color_base_g = 0.5f;
+ENGINE_API float ps_r__color_base_b = 0.65f;
+ENGINE_API float ps_r__color_add_r = 0.f;
+ENGINE_API float ps_r__color_add_g = 0.f;
+ENGINE_API float ps_r__color_add_b = 0.f;
 ENGINE_API shared_str current_player_hud_sect{};
 
 extern int ps_fps_limit;
@@ -758,6 +776,12 @@ void CCC_Register()
     // Render device states
     CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 4);
     CMD4(CCC_Integer, "r__wallmarks_on_skeleton", &ps_r__WallmarksOnSkeleton, 0, 1);
+    CMD4(CCC_Float, "r__color_base_r", &ps_r__color_base_r, 0.3f, 0.8f);
+    CMD4(CCC_Float, "r__color_base_g", &ps_r__color_base_g, 0.3f, 0.8f);
+    CMD4(CCC_Float, "r__color_base_b", &ps_r__color_base_b, 0.3f, 0.8f);
+    CMD4(CCC_Float, "r__color_add_r", &ps_r__color_add_r, -0.5f, 0.5f);
+    CMD4(CCC_Float, "r__color_add_g", &ps_r__color_add_g, -0.5f, 0.5f);
+    CMD4(CCC_Float, "r__color_add_b", &ps_r__color_add_b, -0.5f, 0.5f);
 
     CMD1(CCC_Editor, "rs_editor");
 

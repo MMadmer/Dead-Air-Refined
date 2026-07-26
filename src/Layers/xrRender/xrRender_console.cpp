@@ -172,6 +172,7 @@ int ps_r1_force_geomx = 0;
 // R1-specific
 int ps_r1_GlowsPerFrame = 16; // r1-only
 float ps_r1_fog_luminance = 1.1f; // r1-only
+int ps_r1_dynamic_lights = 1; // Dead Air preset compatibility
 int ps_r1_SoftwareSkinning = 0; // r1-only
 
 // R2
@@ -812,6 +813,7 @@ void xrRender_initconsole()
     CMD3(CCC_Mask, "r1_detail_textures", &ps_r2_ls_flags, R1FLAG_DETAIL_TEXTURES);
 
     CMD4(CCC_Float, "r1_fog_luminance", &ps_r1_fog_luminance, 0.2f, 5.f);
+    CMD4(CCC_Integer, "r1_dynamic_lights", &ps_r1_dynamic_lights, 0, 1);
 
     // Software Skinning
     // 0 - disabled (renderer can override)
@@ -834,7 +836,7 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_tonemap_lowlum", &ps_r2_tonemap_low_lum, 0.0001f, 1.0f);
     CMD4(CCC_Float, "r2_tonemap_amount", &ps_r2_tonemap_amount, 0.0000f, 1.0f);
     CMD4(CCC_Float, "r2_ls_bloom_kernel_scale", &ps_r2_ls_bloom_kernel_scale, 0.5f, 2.f);
-    CMD4(CCC_Float, "r2_ls_bloom_kernel_g", &ps_r2_ls_bloom_kernel_g, 1.f, 7.f);
+    CMD4(CCC_Float, "r2_ls_bloom_kernel_g", &ps_r2_ls_bloom_kernel_g, 1.f, 20.f);
     CMD4(CCC_Float, "r2_ls_bloom_kernel_b", &ps_r2_ls_bloom_kernel_b, 0.01f, 1.f);
     CMD4(CCC_Float, "r2_ls_bloom_threshold", &ps_r2_ls_bloom_threshold, 0.f, 1.f);
     CMD4(CCC_Float, "r2_ls_bloom_speed", &ps_r2_ls_bloom_speed, 0.f, 100.f);

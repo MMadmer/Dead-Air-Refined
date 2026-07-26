@@ -109,7 +109,7 @@ void CUIZoneMap::Init(bool motionIconAttached)
 
 void CUIZoneMap::Render()
 {
-    if (!visible)
+    if (!visible || !psHUD_Flags.test(HUD_DRAW_MAP))
         return;
 
     m_clipFrame.Draw();

@@ -1040,15 +1040,17 @@ float CActor::currentFOV()
 
     CWeapon* pWeapon = smart_cast<CWeapon*>(inventory().ActiveItem());
 
-    if (eacFirstEye == cam_active && pWeapon && pWeapon->IsZoomed() &&
-        (!pWeapon->ZoomTexture() || (!pWeapon->IsRotatingToZoom() && pWeapon->ZoomTexture())))
-    {
-        return pWeapon->GetZoomFactor() * (0.75f);
-    }
-    else
-    {
+    if (eacFirstEye != cam_active || !pWeapon || !pWeapon->IsZoomed())
         return g_fov;
-    }
+
+    const bool hasZoomTexture = pWeapon->ZoomTexture();
+    const float zoomFactor = pWeapon->GetZoomFactor();
+
+    if (hasZoomTexture && zoomFactor < 1.f)
+        return g_fov;
+
+    const float baseFov = hasZoomTexture ? 75.f : g_fov;
+    return rad2deg(2.f * atanf(tanf(deg2rad(baseFov) * 0.5f) / zoomFactor));
 }
 
 void CActor::UpdateCL()

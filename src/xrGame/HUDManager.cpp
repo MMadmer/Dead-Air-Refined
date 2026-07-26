@@ -65,12 +65,10 @@ void CHUDManager::Render_First(u32 context_id)
     if (!A || !A->HUDview())
         return;
 
-    // On R1 render only shadow
-    // On R2+ render everything
     {
         const auto root = O->H_Root();
         ScopeLock lock{ &render_lock };
-        root->renderable_Invisible(GEnv.Render->GenerationIsR1());
+        root->renderable_Invisible(true);
         O->renderable_Render(context_id, root);
         root->renderable_Invisible(false);
     }

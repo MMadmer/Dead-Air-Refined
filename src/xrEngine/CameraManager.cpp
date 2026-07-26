@@ -18,6 +18,13 @@
 float psCamInert = 0.f;
 float psCamSlideInert = 0.25f;
 
+extern ENGINE_API float ps_r__color_base_r;
+extern ENGINE_API float ps_r__color_base_g;
+extern ENGINE_API float ps_r__color_base_b;
+extern ENGINE_API float ps_r__color_add_r;
+extern ENGINE_API float ps_r__color_add_g;
+extern ENGINE_API float ps_r__color_add_b;
+
 SPPInfo pp_identity;
 SPPInfo pp_zero;
 
@@ -78,6 +85,10 @@ CEffectorCam* CCameraManager::AddCamEffector(CEffectorCam* ef)
 
 void CCameraManager::UpdateDeffered()
 {
+    pp_identity.color_base.set(ps_r__color_base_r, ps_r__color_base_g, ps_r__color_base_b);
+    pp_identity.color_gray.set(.333f, .333f, .333f);
+    pp_identity.color_add.set(ps_r__color_add_r, ps_r__color_add_g, ps_r__color_add_b);
+
     for (auto& effector : m_EffectorsCam_added_deffered)
     {
         RemoveCamEffector(effector->eType);

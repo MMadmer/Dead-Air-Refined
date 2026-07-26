@@ -566,7 +566,8 @@ void CUIMainIngameWnd::AnimateContacts(bool b_snd)
 void CUIMainIngameWnd::SetPickUpItem(CInventoryItem* PickUpItem) { m_pPickUpItem = PickUpItem; };
 void CUIMainIngameWnd::UpdatePickUpItem()
 {
-    if (!m_pPickUpItem || !Level().CurrentViewEntity() || !smart_cast<CActor*>(Level().CurrentViewEntity()))
+    if (!m_pPickUpItem || !Level().CurrentViewEntity() || !smart_cast<CActor*>(Level().CurrentViewEntity()) ||
+        !psHUD_Flags.test(HUD_DRAW_INFO))
     {
         UIPickUpItemIcon->Show(false);
         return;

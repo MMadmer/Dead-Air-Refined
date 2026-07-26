@@ -10,6 +10,7 @@
 #include "UIPdaWnd.h"
 #include "Actor.h"
 #include "inventory_item.h"
+#include "InventoryBox.h"
 #include "UICellItem.h"
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
@@ -135,7 +136,14 @@ void CUIActorMenu::script_register(lua_State* luaState)
             .def("ShowDialog", &CUIActorMenu::ShowDialog)
             .def("HideDialog", &CUIActorMenu::HideDialog)
             .def("ToSlot", &CUIActorMenu::ToSlotScript)
-            .def("ToBelt", &CUIActorMenu::ToBeltScript),
+            .def("ToBelt", &CUIActorMenu::ToBeltScript)
+            .def("SetMenuMode", &CUIActorMenu::SetMenuMode)
+            .def("GetMenuMode", &CUIActorMenu::GetMenuMode)
+            .def("GetPartner", &CUIActorMenu::GetPartner)
+            .def("GetInvBox", &CUIActorMenu::GetInvBox)
+            .def("SetPartner", &CUIActorMenu::SetPartner)
+            .def("SetInvBox", &CUIActorMenu::SetInvBox)
+            .def("SetActor", &CUIActorMenu::SetActor),
 
         class_<CUIPdaWnd, CUIDialogWnd>("CUIPdaWnd")
             .def(constructor<>())
