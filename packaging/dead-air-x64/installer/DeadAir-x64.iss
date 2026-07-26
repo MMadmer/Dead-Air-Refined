@@ -77,6 +77,7 @@ Source: "{#LauncherPath}"; DestDir: "{app}"; DestName: "Uninstall Dead Air x64.e
 Source: "{#InstallerRoot}\runtime-files.txt"; Flags: dontcopy
 Source: "{#InstallerRoot}\runtime-files.txt"; DestDir: "{app}\.dead-air-x64"; Flags: ignoreversion
 
+#ifndef QuickTest
 Source: "{#StandaloneSource}\credits.txt"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
 Source: "{#StandaloneSource}\debug.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
 Source: "{#StandaloneSource}\fsgame.ltx"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
@@ -97,6 +98,7 @@ Source: "{#StandaloneSource}\database\textures.xdb0"; DestDir: "{app}\database";
 Source: "{#StandaloneSource}\database\textures.xdb1"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
 Source: "{#StandaloneSource}\database\textures.xdb2"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
 Source: "{#StandaloneSource}\database\xtra.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
+#endif
 
 [Icons]
 Name: "{group}\Dead Air 0.98b x64"; Filename: "{app}\xrEngine.exe"; WorkingDir: "{app}"
@@ -116,12 +118,24 @@ const
   UpgradeMode = 0;
   StandaloneMode = 1;
   Scs32BitBinary = 0;
+  Scs64BitBinary = 6;
+  UninstallActionCancel = 0;
+  UninstallActionRemove = 1;
+  UninstallActionRollback = 2;
 
 var
   ModePage: TInputOptionWizardPage;
   BackupPage: TInputOptionWizardPage;
   RuntimeFiles: TArrayOfString;
-  RestoreUpgradeBackupOnUninstall: Boolean;
+  ManagedFiles: TArrayOfString;
+  DeleteBackupsOnUninstall: Boolean;
+  BackupDirectoryEdit: TNewEdit;
+  BackupBrowseButton: TNewButton;
+  RemovePatchRadio: TNewRadioButton;
+  RollbackPatchRadio: TNewRadioButton;
+  DeleteBackupsCheck: TNewCheckBox;
+  SelectedBackupDirectory: String;
+  SelectedDeleteBackups: Boolean;
 
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
@@ -144,9 +158,22 @@ begin
   Result := (Value <> 'no') and (Value <> 'off') and (Value <> '0');
 end;
 
-function RestoreBackupParameter: String;
+function UninstallActionParameter: String;
 begin
-  Result := Lowercase(Trim(ExpandConstant('{param:RESTOREBACKUP|ask}')));
+  Result := Lowercase(Trim(ExpandConstant('{param:ACTION|ask}')));
+end;
+
+function BackupDirectoryParameter: String;
+begin
+  Result := RemoveBackslashUnlessRoot(Trim(ExpandConstant('{param:BACKUPDIR|}')));
+end;
+
+function DeleteBackupsParameterEnabled: Boolean;
+var
+  Value: String;
+begin
+  Value := Lowercase(Trim(ExpandConstant('{param:DELETEBACKUPS|no}')));
+  Result := (Value = 'yes') or (Value = 'on') or (Value = '1');
 end;
 
 function ExistingX64Directory: String;
@@ -283,27 +310,11 @@ begin
     exit;
   end;
 
-  if FileExists(AddBackslash(DirectoryName) + '.dead-air-x64\install-state.json') then
+  if not GetBinaryType(AddBackslash(DirectoryName) + 'xrEngine.exe', BinaryType) or
+     ((BinaryType <> Scs32BitBinary) and (BinaryType <> Scs64BitBinary)) then
   begin
     Result :=
-      'Здесь установлена ранняя PowerShell-версия Dead Air x64.' + #13#10 +
-      'Удалите её с помощью прежнего Uninstall-DeadAir-x64.ps1, затем повторно запустите установщик.';
-    exit;
-  end;
-
-  if IsOwnInstallation(DirectoryName, 'standalone') then
-  begin
-    Result := 'Эта папка уже используется самостоятельной установкой. Выберите режим самостоятельной установки.';
-    exit;
-  end;
-
-  if not IsOwnInstallation(DirectoryName, 'upgrade') then
-  begin
-    if not GetBinaryType(AddBackslash(DirectoryName) + 'xrEngine.exe', BinaryType) or
-       (BinaryType <> Scs32BitBinary) then
-    begin
-      Result := 'Режим обновления требует существующий 32-битный xrEngine.exe Dead Air 0.98b.';
-    end;
+      'Выбранный xrEngine.exe не является поддерживаемым 32- или 64-разрядным движком Dead Air.';
   end;
 end;
 
@@ -339,20 +350,20 @@ begin
     wpWelcome,
     'Тип установки',
     'Как установить Dead Air 0.98b x64?',
-    'Выберите один из двух вариантов. Содержимое существующей игры и её сохранения в режиме обновления не изменяются.',
+    'Выберите один из двух вариантов. Режим обновления подходит как для оригинальной игры, так и для любой уже установленной версии x64-патча.',
     True,
     False);
-  ModePage.Add('Обновить существующую Dead Air 0.98b / Dead Air Revolution II (x86 → x64)');
+  ModePage.Add('Обновить оригинальную Dead Air либо установленную версию x64-патча');
   ModePage.Add('Установить чистую самостоятельную Dead Air 0.98b x64');
 
   BackupPage := CreateInputOptionPage(
     wpSelectDir,
     'Резервная копия',
-    'Сохранение исходного x86-движка',
-    'Резервная копия позволяет восстановить 32-битный движок при удалении x64-порта. Без неё автоматическое восстановление будет невозможно.',
+    'Сохранение текущей версии',
+    'Перед заменой файлов установщик может создать независимый снимок текущего движка. Снимок подходит для последующего отката независимо от версии установщика.',
     False,
     False);
-  BackupPage.Add('Создать резервную копию исходного x86-движка (рекомендуется)');
+  BackupPage.Add('Создать резервную копию текущей версии (рекомендуется)');
   BackupPage.Values[0] := BackupParameterEnabled;
 
   if ModeParameter = 'standalone' then
@@ -368,7 +379,7 @@ function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result :=
     (PageID = BackupPage.ID) and
-    (IsStandaloneMode or IsOwnInstallation(WizardDirValue, 'upgrade'));
+    IsStandaloneMode;
 end;
 
 function NextButtonClick(CurrentPageId: Integer): Boolean;
@@ -425,58 +436,162 @@ begin
   end;
 end;
 
-function PrepareUpgradeBackup(DirectoryName: String): String;
+procedure AppendUniqueString(var Values: TArrayOfString; Value: String);
+begin
+  if not StringArrayContains(Values, Value) then
+    AppendString(Values, Value);
+end;
+
+function LoadManagedFilesFromControl(DirectoryName: String; var Values: TArrayOfString): Boolean;
 var
   ControlDirectory: String;
+begin
+  SetArrayLength(Values, 0);
+  ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
+  Result := LoadStringsFromFile(AddBackslash(ControlDirectory) + 'managed-files.txt', Values);
+  if not Result then
+  begin
+    Result := LoadStringsFromFile(AddBackslash(ControlDirectory) + 'runtime-files.txt', Values);
+    if Result then
+      AppendUniqueString(Values, 'database\xtra_dead_air_x64.xdb0');
+  end;
+end;
+
+procedure BuildManagedFiles;
+var
+  Index: Integer;
+begin
+  SetArrayLength(ManagedFiles, 0);
+  for Index := 0 to GetArrayLength(RuntimeFiles) - 1 do
+    AppendUniqueString(ManagedFiles, Trim(RuntimeFiles[Index]));
+  AppendUniqueString(ManagedFiles, 'database\xtra_dead_air_x64.xdb0');
+end;
+
+function CurrentVersionName(DirectoryName: String): String;
+var
+  StoredVersion: AnsiString;
+  BinaryType: Cardinal;
+begin
+  if LoadStringFromFile(
+    AddBackslash(DirectoryName) + '.dead-air-x64\port-version.txt',
+    StoredVersion) then
+  begin
+    Result := Trim(String(StoredVersion));
+    exit;
+  end;
+
+  if GetBinaryType(AddBackslash(DirectoryName) + 'xrEngine.exe', BinaryType) and
+     (BinaryType = Scs32BitBinary) then
+    Result := 'original-x86'
+  else
+    Result := 'unknown-x64';
+end;
+
+function NextBackupDirectory(DirectoryName: String; VersionName: String): String;
+var
+  BackupRoot: String;
+  BaseName: String;
+  Suffix: Integer;
+begin
+  BackupRoot := AddBackslash(DirectoryName) + '.dead-air-x64\backups';
+  BaseName := GetDateTimeString('yyyy-mm-dd_hh-nn-ss', '-', ':') + '_' + VersionName;
+  Result := AddBackslash(BackupRoot) + BaseName;
+  Suffix := 1;
+  while DirExists(Result) do
+  begin
+    Result := AddBackslash(BackupRoot) + BaseName + '_' + IntToStr(Suffix);
+    Suffix := Suffix + 1;
+  end;
+end;
+
+function PrepareUpgradeBackup(DirectoryName: String): String;
+var
   BackupDirectory: String;
-  OriginalFileNames: TArrayOfString;
+  BackupFilesDirectory: String;
+  CurrentManagedFiles: TArrayOfString;
+  CaptureFiles: TArrayOfString;
+  PresentFiles: TArrayOfString;
   Index: Integer;
   FileName: String;
   SourcePath: String;
   DestinationPath: String;
+  VersionName: String;
 begin
   Result := '';
-  ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
-  BackupDirectory := AddBackslash(ControlDirectory) + 'backup-x86';
+  SetArrayLength(CurrentManagedFiles, 0);
+  LoadManagedFilesFromControl(DirectoryName, CurrentManagedFiles);
 
-  if IsOwnInstallation(DirectoryName, 'upgrade') then
-    exit;
+  // Capture the union so upgrades also preserve files removed by the incoming version.
+  SetArrayLength(CaptureFiles, 0);
+  for Index := 0 to GetArrayLength(CurrentManagedFiles) - 1 do
+    AppendUniqueString(CaptureFiles, Trim(CurrentManagedFiles[Index]));
+  for Index := 0 to GetArrayLength(ManagedFiles) - 1 do
+    AppendUniqueString(CaptureFiles, Trim(ManagedFiles[Index]));
 
-  if DirExists(ControlDirectory) then
+  VersionName := CurrentVersionName(DirectoryName);
+  BackupDirectory := NextBackupDirectory(DirectoryName, VersionName);
+  BackupFilesDirectory := AddBackslash(BackupDirectory) + 'files';
+  if not ForceDirectories(BackupFilesDirectory) then
   begin
-    Result := 'Папка .dead-air-x64 уже существует, но не принадлежит этому установщику.';
+    Result := 'Не удалось создать папку резервной копии.';
     exit;
   end;
 
-  if not ForceDirectories(BackupDirectory) then
+  SetArrayLength(PresentFiles, 0);
+  for Index := 0 to GetArrayLength(CaptureFiles) - 1 do
   begin
-    Result := 'Не удалось создать резервную копию исходного x86-движка.';
-    exit;
-  end;
-
-  SetArrayLength(OriginalFileNames, 0);
-  for Index := 0 to GetArrayLength(RuntimeFiles) - 1 do
-  begin
-    FileName := Trim(RuntimeFiles[Index]);
+    FileName := Trim(CaptureFiles[Index]);
     SourcePath := AddBackslash(DirectoryName) + FileName;
     if FileExists(SourcePath) then
     begin
-      DestinationPath := AddBackslash(BackupDirectory) + FileName;
-      if not CopyFile(SourcePath, DestinationPath, False) then
+      DestinationPath := AddBackslash(BackupFilesDirectory) + FileName;
+      if not ForceDirectories(ExtractFileDir(DestinationPath)) then
       begin
-        Result := 'Не удалось сохранить исходный файл: ' + FileName;
+        Result := 'Не удалось создать структуру резервной копии: ' + FileName;
         exit;
       end;
-      AppendString(OriginalFileNames, FileName);
+      if not CopyFile(SourcePath, DestinationPath, False) then
+      begin
+        Result := 'Не удалось сохранить текущий файл: ' + FileName;
+        exit;
+      end;
+      AppendString(PresentFiles, FileName);
     end;
   end;
 
   if not SaveStringsToFile(
-    AddBackslash(ControlDirectory) + 'original-files.txt',
-    OriginalFileNames,
+    AddBackslash(BackupDirectory) + 'present-files.txt',
+    PresentFiles,
     False) then
   begin
-    Result := 'Не удалось записать список исходных x86-файлов.';
+    Result := 'Не удалось записать список сохранённых файлов.';
+    exit;
+  end;
+
+  if not SaveStringsToFile(
+    AddBackslash(BackupDirectory) + 'restore-scope.txt',
+    CaptureFiles,
+    False) then
+  begin
+    Result := 'Не удалось записать область восстановления.';
+    exit;
+  end;
+
+  if not SaveStringsToFile(
+    AddBackslash(BackupDirectory) + 'managed-files.txt',
+    CurrentManagedFiles,
+    False) then
+  begin
+    Result := 'Не удалось записать состав сохранённой версии.';
+    exit;
+  end;
+
+  if not SaveStringToFile(
+    AddBackslash(BackupDirectory) + 'port-version.txt',
+    VersionName,
+    False) then
+  begin
+    Result := 'Не удалось записать версию резервной копии.';
   end;
 end;
 
@@ -484,7 +599,6 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ValidationError: String;
   ControlDirectory: String;
-  ExistingUpgrade: Boolean;
 begin
   Result := '';
   if TargetParameter <> '' then
@@ -503,16 +617,10 @@ begin
     Result := 'Не удалось прочитать список файлов x64-движка.';
     exit;
   end;
+  BuildManagedFiles;
 
-  ExistingUpgrade := IsUpgradeMode and IsOwnInstallation(WizardDirValue, 'upgrade');
   ControlDirectory := AddBackslash(WizardDirValue) + '.dead-air-x64';
-  if IsUpgradeMode and not ExistingUpgrade and DirExists(ControlDirectory) then
-  begin
-    Result := 'Папка .dead-air-x64 уже существует, но не принадлежит этому установщику.';
-    exit;
-  end;
-
-  if IsUpgradeMode and not ExistingUpgrade and BackupPage.Values[0] then
+  if IsUpgradeMode and BackupPage.Values[0] then
   begin
     Result := PrepareUpgradeBackup(WizardDirValue);
     if Result <> '' then
@@ -534,6 +642,15 @@ begin
     exit;
   end;
 
+  if not SaveStringsToFile(
+    AddBackslash(ControlDirectory) + 'managed-files.txt',
+    ManagedFiles,
+    False) then
+  begin
+    Result := 'Не удалось записать список управляемых файлов x64-порта.';
+    exit;
+  end;
+
   if not SaveStringToFile(
     AddBackslash(ControlDirectory) + 'port-version.txt',
     '{#ProductVersion}',
@@ -543,74 +660,160 @@ begin
   end;
 end;
 
-function UpgradeBackupAvailable(DirectoryName: String): Boolean;
-begin
-  Result :=
-    DirExists(AddBackslash(DirectoryName) + '.dead-air-x64\backup-x86') and
-    FileExists(AddBackslash(DirectoryName) + '.dead-air-x64\original-files.txt');
-end;
-
 procedure RemoveControlMetadata(DirectoryName: String);
 var
   ControlDirectory: String;
 begin
   ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
   DeleteFile(AddBackslash(ControlDirectory) + 'install-mode.txt');
-  DeleteFile(AddBackslash(ControlDirectory) + 'original-files.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'port-version.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'managed-files.txt');
 end;
 
-function RestoreUpgradeRuntime(DirectoryName: String): Boolean;
+function LoadBackupSnapshot(
+  BackupDirectory: String;
+  var BackupFilesDirectory: String;
+  var PresentFiles: TArrayOfString;
+  var RestoreScope: TArrayOfString;
+  var SnapshotManagedFiles: TArrayOfString;
+  var SnapshotVersion: String): Boolean;
 var
-  Manifest: TArrayOfString;
-  OriginalFileNames: TArrayOfString;
+  StoredVersion: AnsiString;
+begin
+  Result := False;
+  BackupDirectory := RemoveBackslashUnlessRoot(BackupDirectory);
+  BackupFilesDirectory := AddBackslash(BackupDirectory) + 'files';
+
+  if not DirExists(BackupFilesDirectory) or
+     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'present-files.txt', PresentFiles) or
+     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'restore-scope.txt', RestoreScope) or
+     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'managed-files.txt', SnapshotManagedFiles) then
+  begin
+    MsgBox(
+      'В выбранной папке не найден полный снимок Dead Air x64.' + #13#10 +
+      'Требуются папка files и файлы present-files.txt, restore-scope.txt и managed-files.txt.',
+      mbError,
+      MB_OK);
+    exit;
+  end;
+
+  if LoadStringFromFile(AddBackslash(BackupDirectory) + 'port-version.txt', StoredVersion) then
+    SnapshotVersion := Trim(String(StoredVersion))
+  else
+    SnapshotVersion := 'restored-backup';
+
+  Result := True;
+end;
+
+function ValidateBackupFiles(
+  BackupFilesDirectory: String;
+  PresentFiles: TArrayOfString): Boolean;
+var
+  Index: Integer;
+  FileName: String;
+  BackupPath: String;
+begin
+  Result := True;
+  for Index := 0 to GetArrayLength(PresentFiles) - 1 do
+  begin
+    FileName := Trim(PresentFiles[Index]);
+    BackupPath := AddBackslash(BackupFilesDirectory) + FileName;
+    if not FileExists(BackupPath) then
+    begin
+      MsgBox(
+        'Резервная копия неполна. Отсутствует файл:' + #13#10 + FileName,
+        mbError,
+        MB_OK);
+      Result := False;
+      exit;
+    end;
+  end;
+end;
+
+function RestoreBackupSnapshot(DirectoryName: String; BackupDirectory: String): Boolean;
+var
+  BackupFilesDirectory: String;
+  PresentFiles: TArrayOfString;
+  RestoreScope: TArrayOfString;
+  SnapshotManagedFiles: TArrayOfString;
+  CurrentManagedFiles: TArrayOfString;
+  FilesToRemove: TArrayOfString;
+  SnapshotVersion: String;
+  ControlDirectory: String;
   Index: Integer;
   FileName: String;
   TargetPath: String;
   BackupPath: String;
 begin
   Result := False;
-  if not LoadStringsFromFile(
-    AddBackslash(DirectoryName) + '.dead-air-x64\runtime-files.txt',
-    Manifest) then
+  if not LoadBackupSnapshot(
+    BackupDirectory,
+    BackupFilesDirectory,
+    PresentFiles,
+    RestoreScope,
+    SnapshotManagedFiles,
+    SnapshotVersion) then
   begin
-    MsgBox('Не удалось прочитать список x64-файлов. Восстановление остановлено.', mbError, MB_OK);
     exit;
   end;
 
-  if not LoadStringsFromFile(
-    AddBackslash(DirectoryName) + '.dead-air-x64\original-files.txt',
-    OriginalFileNames) then
-  begin
-    MsgBox('Не удалось прочитать список исходных x86-файлов. Восстановление остановлено.', mbError, MB_OK);
+  if not ValidateBackupFiles(BackupFilesDirectory, PresentFiles) then
     exit;
-  end;
 
-  for Index := 0 to GetArrayLength(Manifest) - 1 do
+  SetArrayLength(CurrentManagedFiles, 0);
+  LoadManagedFilesFromControl(DirectoryName, CurrentManagedFiles);
+
+  // Remove both version scopes before restoring the snapshot's exact file set.
+  SetArrayLength(FilesToRemove, 0);
+  for Index := 0 to GetArrayLength(CurrentManagedFiles) - 1 do
+    AppendUniqueString(FilesToRemove, Trim(CurrentManagedFiles[Index]));
+  for Index := 0 to GetArrayLength(RestoreScope) - 1 do
+    AppendUniqueString(FilesToRemove, Trim(RestoreScope[Index]));
+
+  for Index := 0 to GetArrayLength(FilesToRemove) - 1 do
   begin
-    FileName := Trim(Manifest[Index]);
+    FileName := Trim(FilesToRemove[Index]);
     TargetPath := AddBackslash(DirectoryName) + FileName;
-    if StringArrayContains(OriginalFileNames, FileName) then
+    if FileExists(TargetPath) and not DeleteFile(TargetPath) then
     begin
-      BackupPath := AddBackslash(DirectoryName) + '.dead-air-x64\backup-x86\' + FileName;
-      if not CopyFile(BackupPath, TargetPath, False) then
-      begin
-        MsgBox(
-          'Не удалось восстановить исходный файл: ' + FileName + #13#10 +
-          'Резервная копия сохранена в .dead-air-x64\backup-x86.',
-          mbError,
-          MB_OK);
-        exit;
-      end;
-    end
-    else
-    begin
-      if FileExists(TargetPath) and not DeleteFile(TargetPath) then
-      begin
-        MsgBox('Не удалось удалить x64-файл: ' + FileName, mbError, MB_OK);
-        exit;
-      end;
+      MsgBox('Не удалось заменить текущий файл: ' + FileName, mbError, MB_OK);
+      exit;
     end;
+  end;
+
+  for Index := 0 to GetArrayLength(PresentFiles) - 1 do
+  begin
+    FileName := Trim(PresentFiles[Index]);
+    BackupPath := AddBackslash(BackupFilesDirectory) + FileName;
+    TargetPath := AddBackslash(DirectoryName) + FileName;
+    if not ForceDirectories(ExtractFileDir(TargetPath)) or
+       not CopyFile(BackupPath, TargetPath, False) then
+    begin
+      MsgBox(
+        'Не удалось восстановить файл: ' + FileName + #13#10 +
+        'Выбранная резервная копия не изменена.',
+        mbError,
+        MB_OK);
+      exit;
+    end;
+  end;
+
+  ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
+  if not ForceDirectories(ControlDirectory) or
+     not SaveStringsToFile(
+       AddBackslash(ControlDirectory) + 'managed-files.txt',
+       SnapshotManagedFiles,
+       False) or
+     not SaveStringToFile(
+       AddBackslash(ControlDirectory) + 'port-version.txt',
+       SnapshotVersion,
+       False) then
+  begin
+    MsgBox(
+      'Файлы восстановлены, но не удалось обновить служебные данные x64-порта.',
+      mbError,
+      MB_OK);
+    exit;
   end;
 
   Result := True;
@@ -621,123 +824,205 @@ var
   Manifest: TArrayOfString;
   Index: Integer;
 begin
-  if LoadStringsFromFile(
-    AddBackslash(DirectoryName) + '.dead-air-x64\runtime-files.txt',
-    Manifest) then
+  if LoadManagedFilesFromControl(DirectoryName, Manifest) then
   begin
     for Index := 0 to GetArrayLength(Manifest) - 1 do
       DeleteFile(AddBackslash(DirectoryName) + Trim(Manifest[Index]));
   end;
 end;
 
+procedure UpdateUninstallActionControls(Sender: TObject);
+begin
+  BackupDirectoryEdit.Enabled := RollbackPatchRadio.Checked;
+  BackupBrowseButton.Enabled := RollbackPatchRadio.Checked;
+  DeleteBackupsCheck.Enabled := RemovePatchRadio.Checked;
+end;
+
+procedure BrowseBackupDirectory(Sender: TObject);
+var
+  SelectedDirectory: String;
+begin
+  SelectedDirectory := BackupDirectoryEdit.Text;
+  if BrowseForFolder('Выберите папку резервной копии', SelectedDirectory, False) then
+    BackupDirectoryEdit.Text := SelectedDirectory;
+end;
+
+function ShowUninstallActionDialog: Integer;
+var
+  ActionForm: TSetupForm;
+  DescriptionLabel: TNewStaticText;
+  BackupLabel: TNewStaticText;
+  OkButton: TNewButton;
+  CancelButton: TNewButton;
+begin
+  Result := UninstallActionCancel;
+  ActionForm := CreateCustomForm(620, 330, True, True);
+  try
+    ActionForm.Caption := 'Dead Air 0.98b x64 — обслуживание';
+    ActionForm.Position := poScreenCenter;
+
+    DescriptionLabel := TNewStaticText.Create(ActionForm);
+    DescriptionLabel.Parent := ActionForm;
+    DescriptionLabel.Left := 24;
+    DescriptionLabel.Top := 20;
+    DescriptionLabel.Width := 572;
+    DescriptionLabel.Height := 42;
+    DescriptionLabel.AutoSize := False;
+    DescriptionLabel.WordWrap := True;
+    DescriptionLabel.Caption :=
+      'Выберите полное удаление x64-патча либо откат файлов игры до выбранной резервной копии.';
+
+    RemovePatchRadio := TNewRadioButton.Create(ActionForm);
+    RemovePatchRadio.Parent := ActionForm;
+    RemovePatchRadio.Left := 24;
+    RemovePatchRadio.Top := 76;
+    RemovePatchRadio.Width := 572;
+    RemovePatchRadio.Caption := 'Удалить x64-патч';
+    RemovePatchRadio.Checked := True;
+    RemovePatchRadio.OnClick := @UpdateUninstallActionControls;
+
+    DeleteBackupsCheck := TNewCheckBox.Create(ActionForm);
+    DeleteBackupsCheck.Parent := ActionForm;
+    DeleteBackupsCheck.Left := 48;
+    DeleteBackupsCheck.Top := 108;
+    DeleteBackupsCheck.Width := 548;
+    DeleteBackupsCheck.Caption := 'Удалить также все резервные копии из папки игры';
+    DeleteBackupsCheck.Checked := DeleteBackupsParameterEnabled;
+
+    RollbackPatchRadio := TNewRadioButton.Create(ActionForm);
+    RollbackPatchRadio.Parent := ActionForm;
+    RollbackPatchRadio.Left := 24;
+    RollbackPatchRadio.Top := 154;
+    RollbackPatchRadio.Width := 572;
+    RollbackPatchRadio.Caption := 'Откатить файлы игры до резервной копии';
+    RollbackPatchRadio.OnClick := @UpdateUninstallActionControls;
+
+    BackupLabel := TNewStaticText.Create(ActionForm);
+    BackupLabel.Parent := ActionForm;
+    BackupLabel.Left := 48;
+    BackupLabel.Top := 187;
+    BackupLabel.Width := 548;
+    BackupLabel.Caption := 'Папка резервной копии:';
+
+    BackupDirectoryEdit := TNewEdit.Create(ActionForm);
+    BackupDirectoryEdit.Parent := ActionForm;
+    BackupDirectoryEdit.Left := 48;
+    BackupDirectoryEdit.Top := 210;
+    BackupDirectoryEdit.Width := 454;
+    BackupDirectoryEdit.Text := BackupDirectoryParameter;
+
+    BackupBrowseButton := TNewButton.Create(ActionForm);
+    BackupBrowseButton.Parent := ActionForm;
+    BackupBrowseButton.Left := 510;
+    BackupBrowseButton.Top := 208;
+    BackupBrowseButton.Width := 86;
+    BackupBrowseButton.Height := 25;
+    BackupBrowseButton.Caption := 'Обзор...';
+    BackupBrowseButton.OnClick := @BrowseBackupDirectory;
+
+    OkButton := TNewButton.Create(ActionForm);
+    OkButton.Parent := ActionForm;
+    OkButton.Left := 404;
+    OkButton.Top := 280;
+    OkButton.Width := 92;
+    OkButton.Height := 28;
+    OkButton.Caption := 'Продолжить';
+    OkButton.Default := True;
+    OkButton.ModalResult := mrOk;
+
+    CancelButton := TNewButton.Create(ActionForm);
+    CancelButton.Parent := ActionForm;
+    CancelButton.Left := 504;
+    CancelButton.Top := 280;
+    CancelButton.Width := 92;
+    CancelButton.Height := 28;
+    CancelButton.Caption := 'Отмена';
+    CancelButton.Cancel := True;
+    CancelButton.ModalResult := mrCancel;
+
+    UpdateUninstallActionControls(nil);
+    if ActionForm.ShowModal = mrOk then
+    begin
+      SelectedBackupDirectory := BackupDirectoryEdit.Text;
+      SelectedDeleteBackups := DeleteBackupsCheck.Checked;
+      if RollbackPatchRadio.Checked then
+        Result := UninstallActionRollback
+      else
+        Result := UninstallActionRemove;
+    end;
+  finally
+    ActionForm.Free;
+  end;
+end;
+
 function InitializeUninstall: Boolean;
 var
-  StoredMode: AnsiString;
-  RestoreMode: String;
-  Response: Integer;
+  ActionName: String;
+  Action: Integer;
+  BackupDirectory: String;
 begin
-  Result := True;
-  RestoreUpgradeBackupOnUninstall := False;
+  Result := False;
+  DeleteBackupsOnUninstall := False;
+  SelectedBackupDirectory := '';
+  SelectedDeleteBackups := False;
+  ActionName := UninstallActionParameter;
 
-  if not LoadStringFromFile(
-    ExpandConstant('{app}\.dead-air-x64\install-mode.txt'),
-    StoredMode) or
-    (CompareText(Trim(String(StoredMode)), 'upgrade') <> 0) then
+  if ActionName = 'remove' then
+    Action := UninstallActionRemove
+  else if ActionName = 'rollback' then
+    Action := UninstallActionRollback
+  else
+    Action := ShowUninstallActionDialog;
+
+  if Action = UninstallActionCancel then
+    exit;
+
+  if Action = UninstallActionRollback then
   begin
+    BackupDirectory := BackupDirectoryParameter;
+    if BackupDirectory = '' then
+      BackupDirectory := SelectedBackupDirectory;
+
+    if BackupDirectory = '' then
+    begin
+      MsgBox('Выберите папку резервной копии.', mbError, MB_OK);
+      exit;
+    end;
+
+    if RestoreBackupSnapshot(ExpandConstant('{app}'), BackupDirectory) then
+      MsgBox(
+        'Откат завершён. Управление установленной версией Dead Air x64 сохранено.',
+        mbInformation,
+        MB_OK);
     exit;
   end;
 
-  RestoreMode := RestoreBackupParameter;
-  if UpgradeBackupAvailable(ExpandConstant('{app}')) then
-  begin
-    if RestoreMode = 'yes' then
-    begin
-      RestoreUpgradeBackupOnUninstall := True;
-      exit;
-    end;
+  DeleteBackupsOnUninstall := DeleteBackupsParameterEnabled;
+  if ActionName = 'ask' then
+    DeleteBackupsOnUninstall := SelectedDeleteBackups;
 
-    if RestoreMode = 'no' then
-      exit;
-
-    Response := MsgBox(
-      'Обнаружена резервная копия исходного x86-движка.' + #13#10 + #13#10 +
-      'Восстановить 32-битный движок при удалении x64-порта?' + #13#10 +
-      'После успешного восстановления резервная копия будет удалена.' + #13#10 + #13#10 +
-      '«Да» — восстановить x86-движок.' + #13#10 +
-      '«Нет» — удалить x64-порт без восстановления и сохранить резервную копию.' + #13#10 +
-      '«Отмена» — прекратить удаление.',
-      mbConfirmation,
-      MB_YESNOCANCEL);
-
-    if Response = IDCANCEL then
-    begin
-      Result := False;
-      exit;
-    end;
-
-    RestoreUpgradeBackupOnUninstall := Response = IDYES;
-  end
-  else
-  begin
-    if RestoreMode = 'no' then
-      exit;
-
-    if RestoreMode = 'yes' then
-    begin
-      MsgBox(
-        'Восстановление невозможно: резервная копия исходного x86-движка отсутствует.',
-        mbError,
-        MB_OK);
-      Result := False;
-      exit;
-    end;
-
-    Result := MsgBox(
-      'Резервная копия исходного x86-движка отсутствует.' + #13#10 +
-      'После удаления x64-порта 32-битный движок не будет восстановлен автоматически.' + #13#10 + #13#10 +
-      'Продолжить удаление?',
-      mbConfirmation,
-      MB_YESNO) = IDYES;
-  end;
+  Result := MsgBox(
+    'x64-файлы будут удалены без автоматического восстановления другой версии.' + #13#10 +
+    'Для восстановления версии следует отменить удаление и выбрать откат.' + #13#10 + #13#10 +
+    'Продолжить полное удаление x64-патча?',
+    mbConfirmation,
+    MB_YESNO) = IDYES;
 end;
 
 procedure CurUninstallStepChanged(CurrentStep: TUninstallStep);
 var
-  StoredMode: AnsiString;
   GameDirectory: String;
 begin
   if CurrentStep <> usUninstall then
     exit;
 
-  if not LoadStringFromFile(
-    ExpandConstant('{app}\.dead-air-x64\install-mode.txt'),
-    StoredMode) then
-  begin
-    MsgBox('Не удалось определить режим установки. Файлы движка не изменены.', mbError, MB_OK);
-    exit;
-  end;
-
   GameDirectory := ExpandConstant('{app}');
-  if CompareText(Trim(String(StoredMode)), 'upgrade') = 0 then
+  RemoveX64Runtime(GameDirectory);
+  RemoveControlMetadata(GameDirectory);
+
+  if DeleteBackupsOnUninstall then
   begin
-    if RestoreUpgradeBackupOnUninstall then
-    begin
-      if RestoreUpgradeRuntime(GameDirectory) then
-      begin
-        DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backup-x86', True, True, True);
-        RemoveControlMetadata(GameDirectory);
-      end;
-    end
-    else
-    begin
-      RemoveX64Runtime(GameDirectory);
-      if not UpgradeBackupAvailable(GameDirectory) then
-        RemoveControlMetadata(GameDirectory);
-    end;
-  end
-  else if CompareText(Trim(String(StoredMode)), 'standalone') = 0 then
-  begin
-    RemoveX64Runtime(GameDirectory);
-    RemoveControlMetadata(GameDirectory);
+    DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backups', True, True, True);
+    DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backup-x86', True, True, True);
   end;
 end;
