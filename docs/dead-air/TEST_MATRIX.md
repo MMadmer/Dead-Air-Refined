@@ -18,7 +18,11 @@
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
 | Dependency audit | 42-file release runtime | Pass, no missing local DLLs |
-| Installer | Final `1.0.0` package over an isolated existing x86 root | Pass |
+| GUI upgrade installer | Final `0.98b-x64-1.0.0` package over an isolated x86 root | Pass, all 42 runtime hashes matched |
+| GUI standalone installer | Clean 0.98b payload in a new empty root | Pass, 14 base XDB files and no DAR2/addons |
+| Installed EXE uninstaller | Upgrade mode | Pass, 33 original root files restored and zero x64 leftovers |
+| Installed EXE uninstaller | Standalone mode | Pass, runtime and base XDB removed; user `appdata` preserved |
+| Standalone runtime smoke | Freshly installed clean 0.98b root | Pass, responsive menu and clean `KERNEL:QUIT` |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Rollback | Restore 28 original x86 files by SHA-256 and remove added files | Pass, zero mismatches or leftovers |
 

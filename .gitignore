@@ -13,6 +13,7 @@
 
 # Local bootstrap tools are downloaded and signature-checked by the build setup.
 tools/nuget/
+tools/third_party/inno-setup/
 [Tt]est_root/
 [Tt]est_root_*/
 [Tt]est_install_root/
@@ -24,6 +25,11 @@ __pycache__/
 tools/sysinternals/
 build_*.log
 build_*.pid
+installer_*.log
+installer_*.pid
+standalone*.log
+standalone*.pid
+UninstallLauncher.obj
 [Aa]rtifacts/
 
 # User-specific files
