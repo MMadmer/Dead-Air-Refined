@@ -13,6 +13,9 @@
 #ifndef LauncherPath
   #define LauncherPath AddBackslash(RepoRoot) + "build\installer\Uninstall Dead Air x64.exe"
 #endif
+#ifndef CompatibilityArchive
+  #define CompatibilityArchive AddBackslash(RepoRoot) + "build\installer\xtra_dead_air_x64.xdb0"
+#endif
 #ifndef ApplicationId
   #define ApplicationId "{{9732DFF1-E40D-4B23-B215-6D28B1DD0DE0}"
 #endif
@@ -69,6 +72,7 @@ Name: "desktopicon"; Description: "Создать ярлык на рабочем
 [Files]
 Source: "{#RuntimeRoot}\*.exe"; DestDir: "{app}"; Flags: ignoreversion uninsneveruninstall
 Source: "{#RuntimeRoot}\*.dll"; DestDir: "{app}"; Flags: ignoreversion uninsneveruninstall
+Source: "{#CompatibilityArchive}"; DestDir: "{app}\database"; Flags: ignoreversion
 Source: "{#LauncherPath}"; DestDir: "{app}"; DestName: "Uninstall Dead Air x64.exe"; Flags: ignoreversion
 Source: "{#InstallerRoot}\runtime-files.txt"; Flags: dontcopy
 Source: "{#InstallerRoot}\runtime-files.txt"; DestDir: "{app}\.dead-air-x64"; Flags: ignoreversion

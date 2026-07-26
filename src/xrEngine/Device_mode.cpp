@@ -124,24 +124,29 @@ void CRenderDevice::UpdateWindowProps()
         SDL_SetWindowPosition(m_sdlWnd, rect.x, rect.y);
     }
 
-    if (psDeviceMode.WindowStyle != rsFullscreenBorderless)
-        SDL_SetWindowSize(m_sdlWnd, psDeviceMode.Width, psDeviceMode.Height);
-    else
+    if (psDeviceMode.WindowStyle == rsFullscreenBorderless)
     {
         SDL_DisplayMode current;
         SDL_GetCurrentDisplayMode(psDeviceMode.Monitor, &current);
 
+        SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
+        SDL_SetWindowBordered(m_sdlWnd, SDL_FALSE);
+        SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
         SDL_SetWindowSize(m_sdlWnd, current.w, current.h);
+        SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
-
-    if (windowed)
+    else if (windowed)
     {
         const bool drawBorders = psDeviceMode.WindowStyle == rsWindowed;
-        const bool useDesktopFullscreen = b_is_Ready && psDeviceMode.WindowStyle == rsFullscreenBorderless;
 
+        SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
         SDL_SetWindowBordered(m_sdlWnd, drawBorders ? SDL_TRUE : SDL_FALSE);
-        SDL_SetWindowResizable(m_sdlWnd, !useDesktopFullscreen ? SDL_TRUE : SDL_FALSE);
-        SDL_SetWindowFullscreen(m_sdlWnd, useDesktopFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_DISABLE);
+        SDL_SetWindowResizable(m_sdlWnd, SDL_TRUE);
+        SDL_SetWindowSize(m_sdlWnd, psDeviceMode.Width, psDeviceMode.Height);
+
+        if (drawBorders)
+            SDL_SetWindowPosition(m_sdlWnd, SDL_WINDOWPOS_CENTERED_DISPLAY(psDeviceMode.Monitor),
+                SDL_WINDOWPOS_CENTERED_DISPLAY(psDeviceMode.Monitor));
     }
     else if (b_is_Ready)
     {

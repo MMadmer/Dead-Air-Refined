@@ -14,6 +14,7 @@
 # Local bootstrap tools are downloaded and signature-checked by the build setup.
 tools/nuget/
 tools/third_party/inno-setup/
+tools/third_party/procdump/
 [Tt]est_root/
 [Tt]est_root_*/
 [Tt]est_install_root/

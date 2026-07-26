@@ -22,6 +22,11 @@ $launcherSource = Join-Path $repositoryRoot "packaging\dead-air-x64\installer\Un
 $launcherOutputRoot = Join-Path $repositoryRoot "build\installer"
 $launcherOutput = Join-Path $launcherOutputRoot "Uninstall Dead Air x64.exe"
 $launcherObject = Join-Path $launcherOutputRoot "UninstallLauncher.obj"
+$compatibilityRoot = Join-Path $repositoryRoot "packaging\dead-air-x64\compatibility"
+$compatibilityGameRoot = Join-Path $compatibilityRoot "gamedata"
+$compatibilityUserData = Join-Path $compatibilityRoot "xdb_userdata.ltx"
+$compatibilityArchive = Join-Path $launcherOutputRoot "xtra_dead_air_x64.xdb0"
+$compatibilityVerifyRoot = Join-Path $launcherOutputRoot "compatibility-verify"
 $innoRoot = Join-Path $repositoryRoot "tools\third_party\inno-setup"
 $innoCompilerRoot = Join-Path $innoRoot "compiler"
 $innoCompiler = Join-Path $innoCompilerRoot "ISCC.exe"
@@ -116,6 +121,44 @@ function Build-UninstallLauncher {
     }
 }
 
+function Build-CompatibilityArchive {
+    $converter = Join-Path $StandaloneSource "tools\AXRToolset\bin\converter.exe"
+    if (-not (Test-Path -LiteralPath $converter -PathType Leaf)) {
+        throw "AXRToolset converter was not found: $converter"
+    }
+
+    New-Item -ItemType Directory -Path $launcherOutputRoot -Force | Out-Null
+    & $converter -pack -xdb -xdb_ud $compatibilityUserData -out $compatibilityArchive $compatibilityGameRoot
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $compatibilityArchive -PathType Leaf)) {
+        throw "The Dead Air x64 compatibility archive build failed."
+    }
+
+    if (Test-Path -LiteralPath $compatibilityVerifyRoot) {
+        Remove-Item -LiteralPath $compatibilityVerifyRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $compatibilityVerifyRoot -Force | Out-Null
+    & $converter -unpack -xdb -dir $compatibilityVerifyRoot $compatibilityArchive
+    if ($LASTEXITCODE -ne 0) {
+        throw "The Dead Air x64 compatibility archive verification failed."
+    }
+
+    $sourceFiles = Get-ChildItem -LiteralPath $compatibilityGameRoot -Recurse -File
+    $verifiedFiles = Get-ChildItem -LiteralPath $compatibilityVerifyRoot -Recurse -File
+    if ($sourceFiles.Count -ne $verifiedFiles.Count) {
+        throw "The Dead Air x64 compatibility archive file count is invalid."
+    }
+
+    foreach ($sourceFile in $sourceFiles) {
+        $relativePath = $sourceFile.FullName.Substring($compatibilityGameRoot.Length + 1)
+        $verifiedFile = Join-Path $compatibilityVerifyRoot $relativePath
+        if (-not (Test-Path -LiteralPath $verifiedFile -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $sourceFile.FullName).Hash -ne
+                (Get-FileHash -LiteralPath $verifiedFile).Hash) {
+            throw "Compatibility archive verification failed: $relativePath"
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "xrEngine.exe"))) {
     throw "Build the x64 Release runtime before creating the installer."
 }
@@ -151,6 +194,7 @@ if ($missingStandaloneFiles.Count) {
 
 Initialize-InnoSetupCompiler
 Build-UninstallLauncher
+Build-CompatibilityArchive
 
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 Assert-PathInside -Parent $artifactRoot -Child $outputRoot
@@ -169,6 +213,7 @@ $compilerArguments = @(
     "/DPortVersion=$PortVersion",
     "/DOutputDirectory=$outputRoot",
     "/DLauncherPath=$launcherOutput",
+    "/DCompatibilityArchive=$compatibilityArchive",
     $installerSource
 )
 & $innoCompiler @compilerArguments

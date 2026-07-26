@@ -439,9 +439,8 @@ class CCC_VidWindowMode final : public CCC_Token
     inline static xr_token vid_window_mode_token[] =
     {
         { "st_opt_windowed",                rsWindowed             },
-        { "st_opt_windowed_borderless",     rsWindowedBorderless   },
-        { "st_opt_fullscreen",              rsFullscreen           },
         { "st_opt_fullscreen_borderless",   rsFullscreenBorderless },
+        { "st_opt_fullscreen",              rsFullscreen           },
         { nullptr,                          -1                     },
     };
 
@@ -450,14 +449,6 @@ public:
 
     void Execute(pcstr args) override
     {
-        // Legacy Dead Air configs must win over the newer window-mode entry loaded in the same frame.
-        if (m_legacyFullscreenCommandPending && m_legacyFullscreenCommandFrame == Device.dwFrame)
-        {
-            m_legacyFullscreenCommandPending = false;
-            return;
-        }
-
-        m_legacyFullscreenCommandPending = false;
         CCC_Token::Execute(args);
         m_fullscreen.set(fl_fullscreen, psDeviceMode.WindowStyle == rsFullscreen);
     }
@@ -465,8 +456,6 @@ public:
 private:
     enum { fl_fullscreen = 1u << 0u };
     inline static Flags32 m_fullscreen; // for rs_fullscreen backwards compatibility
-    inline static bool m_legacyFullscreenCommandPending = false;
-    inline static u32 m_legacyFullscreenCommandFrame = 0;
 
 public:
     class CCC_Fullscreen final : public CCC_Mask
@@ -480,8 +469,6 @@ public:
         void Execute(pcstr args) override
         {
             CCC_Mask::Execute(args);
-            m_legacyFullscreenCommandPending = true;
-            m_legacyFullscreenCommandFrame = Device.dwFrame;
             if (GetValue())
                 psDeviceMode.WindowStyle = rsFullscreen;
             else

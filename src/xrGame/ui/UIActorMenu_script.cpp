@@ -13,6 +13,7 @@
 #include "InventoryBox.h"
 #include "UICellItem.h"
 #include "ai_space.h"
+#include "script_game_object.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "xrUICore/TabControl/UITabControl.h"
 #include "xrGame/ui/UIMainIngameWnd.h"
@@ -105,6 +106,40 @@ void CUIActorMenu::CurModeToScript()
 template<class T>
 class enum_dummy {};
 
+namespace
+{
+CScriptGameObject* GetActorMenuPartner(CUIActorMenu* menu)
+{
+    const auto partner = menu->GetPartner();
+    if (!partner)
+        return nullptr;
+
+    const auto object = partner->cast_game_object();
+    return object ? object->lua_game_object() : nullptr;
+}
+
+CScriptGameObject* GetActorMenuInventoryBox(CUIActorMenu* menu)
+{
+    const auto box = menu->GetInvBox();
+    return box ? box->lua_game_object() : nullptr;
+}
+
+void SetActorMenuPartner(CUIActorMenu* menu, CScriptGameObject* object)
+{
+    menu->SetPartner(object ? object->object().cast_inventory_owner() : nullptr);
+}
+
+void SetActorMenuInventoryBox(CUIActorMenu* menu, CScriptGameObject* object)
+{
+    menu->SetInvBox(object ? smart_cast<CInventoryBox*>(&object->object()) : nullptr);
+}
+
+void SetActorMenuActor(CUIActorMenu* menu, CScriptGameObject* object)
+{
+    menu->SetActor(object ? object->object().cast_inventory_owner() : nullptr);
+}
+}
+
 void CUIActorMenu::script_register(lua_State* luaState)
 {
     using namespace luabind;
@@ -139,11 +174,11 @@ void CUIActorMenu::script_register(lua_State* luaState)
             .def("ToBelt", &CUIActorMenu::ToBeltScript)
             .def("SetMenuMode", &CUIActorMenu::SetMenuMode)
             .def("GetMenuMode", &CUIActorMenu::GetMenuMode)
-            .def("GetPartner", &CUIActorMenu::GetPartner)
-            .def("GetInvBox", &CUIActorMenu::GetInvBox)
-            .def("SetPartner", &CUIActorMenu::SetPartner)
-            .def("SetInvBox", &CUIActorMenu::SetInvBox)
-            .def("SetActor", &CUIActorMenu::SetActor),
+            .def("GetPartner", &GetActorMenuPartner)
+            .def("GetInvBox", &GetActorMenuInventoryBox)
+            .def("SetPartner", &SetActorMenuPartner)
+            .def("SetInvBox", &SetActorMenuInventoryBox)
+            .def("SetActor", &SetActorMenuActor),
 
         class_<CUIPdaWnd, CUIDialogWnd>("CUIPdaWnd")
             .def(constructor<>())
