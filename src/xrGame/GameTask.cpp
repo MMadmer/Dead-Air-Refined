@@ -607,33 +607,38 @@ void SGameTaskObjective::load(IReader& stream)
 
 void CGameTask::save(IWriter& stream)
 {
-    save_data(m_ID, stream);
+    save_data(m_task_state, stream);
+    save_data(m_task_type, stream);
+    save_data(m_ReceiveTime, stream);
+    save_data(m_FinishTime, stream);
+    save_data(m_TimeToComplete, stream);
+    save_data(m_timer_finish, stream);
+    save_data(m_Title, stream);
+    save_data(m_Description, stream);
+    save_data(m_pScriptHelper, stream);
+    save_data(m_icon_texture_name, stream);
+    save_data(m_map_hint, stream);
+    save_data(m_map_location, stream);
+    save_data(m_map_object_id, stream);
     save_data(m_priority, stream);
-    SGameTaskObjective::save(stream);
-
-    const u32 count = static_cast<u32>(m_Objectives.size());
-    save_data(count, stream);
-
-    for (auto& objective : m_Objectives)
-        save_data(objective, stream);
 }
 
 void CGameTask::load(IReader& stream)
 {
-    load_data(m_ID, stream);
+    load_data(m_task_state, stream);
+    load_data(m_task_type, stream);
+    load_data(m_ReceiveTime, stream);
+    load_data(m_FinishTime, stream);
+    load_data(m_TimeToComplete, stream);
+    load_data(m_timer_finish, stream);
+    load_data(m_Title, stream);
+    load_data(m_Description, stream);
+    load_data(m_pScriptHelper, stream);
+    load_data(m_icon_texture_name, stream);
+    load_data(m_map_hint, stream);
+    load_data(m_map_location, stream);
+    load_data(m_map_object_id, stream);
     load_data(m_priority, stream);
-    SGameTaskObjective::load(stream);
-
-    u32 count;
-    load_data(count, stream);
-    m_Objectives.resize(count);
-
-    for (u32 i = 0; i < count; ++i)
-    {
-        m_Objectives[i].m_parent = this;
-        load_data(m_Objectives[i], stream);
-    }
-
     CommitScriptHelperContents();
     CreateMapLocation(true);
 }
@@ -698,13 +703,16 @@ void SScriptTaskHelper::save(IWriter& stream)
 void SGameTaskKey::save(IWriter& stream)
 {
     R_ASSERT(task_id == game_task->m_ID);
-    save_data(game_task, stream);
+    save_data(task_id, stream);
+    game_task->save(stream);
 }
 
 void SGameTaskKey::load(IReader& stream)
 {
-    load_data(game_task, stream);
-    task_id = game_task->m_ID;
+    game_task = xr_new<CGameTask>();
+    load_data(task_id, stream);
+    game_task->m_ID = task_id;
+    game_task->load(stream);
 }
 
 void SGameTaskKey::destroy() { delete_data(game_task); }

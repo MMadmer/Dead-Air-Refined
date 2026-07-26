@@ -13,6 +13,102 @@
 #include "xrNetServer/NET_Messages.h"
 
 #include "xrUICore/ui_base.h"
+#include "xrUICore/Windows/UIWindow.h"
+#include "xrUICore/Static/UIStatic.h"
+#include "Include/xrRender/UIRender.h"
+#include "ui/UIXmlInit.h"
+#include "xrUICore/XML/xrUIXmlParser.h"
+
+class CUIHudUI final : public CUIWindow
+{
+    using inherited = CUIWindow;
+
+    attachable_hud_item* m_hud_item{};
+    Fmatrix m_transform{ Fidentity };
+    shared_str m_attach_bone;
+    CUIWindow* m_canvas{};
+
+public:
+    CUIHudUI() : inherited("3D HUD UI") {}
+
+    void Load(attachable_hud_item* hud_item, pcstr tag)
+    {
+        VERIFY(hud_item);
+        VERIFY(tag);
+
+        m_hud_item = hud_item;
+
+        CUIXml xml;
+        xml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "hud_ui_3d.xml");
+        CUIXmlInit::InitWindow(xml, tag, 0, this);
+
+        string256 canvas_path;
+        xr_sprintf(canvas_path, "%s:canvas", tag);
+
+        m_canvas = xr_new<CUIWindow>("3D HUD UI canvas");
+        CUIXmlInit::InitWindow(xml, canvas_path, 0, m_canvas);
+        m_canvas->SetAutoDelete(true);
+        AttachChild(m_canvas);
+
+        // Dead Air's first detector template uses a regular static instead of auto_static.
+        const int static_count = static_cast<int>(xml.GetNodesNum(canvas_path, 0, "static"));
+        for (int index = 0; index < static_count; ++index)
+        {
+            string256 static_name;
+            xr_sprintf(static_name, "static_%d", index);
+            auto* ui_static = xr_new<CUIStatic>(static_name);
+
+            string256 static_path;
+            xr_sprintf(static_path, "%s:static", canvas_path);
+            CUIXmlInit::InitStatic(xml, static_path, index, ui_static);
+            ui_static->SetAutoDelete(true);
+            m_canvas->AttachChild(ui_static);
+        }
+
+        m_attach_bone = pSettings->r_string(m_hud_item->m_sect_name, "hud_ui_attach_bone");
+        const Fvector position = pSettings->r_fvector3(m_hud_item->m_sect_name, "hud_ui_pos");
+        Fvector rotation = pSettings->r_fvector3(m_hud_item->m_sect_name, "hud_ui_rot");
+        rotation.mul(PI / 180.f);
+        m_transform.setHPB(rotation.x, rotation.y, rotation.z);
+        m_transform.translate_over(position);
+    }
+
+    CUIWindow* Canvas() const { return m_canvas; }
+
+    void Draw() override
+    {
+        if (!m_hud_item || !m_hud_item->m_model || !m_canvas)
+            return;
+
+        const u16 bone_id = m_hud_item->m_model->LL_BoneID(m_attach_bone);
+        if (bone_id == BI_NONE)
+            return;
+
+        Fmatrix world;
+        world.mul(m_hud_item->m_item_transform, m_hud_item->m_model->LL_GetTransform(bone_id));
+        world.mulB_43(m_transform);
+
+        const IUIRender::ePointType previous_point_type = UI().m_currentPointType;
+        UI().m_currentPointType = IUIRender::pttLIT;
+        GEnv.UIRender->CacheSetXformWorld(world);
+        GEnv.UIRender->CacheSetCullMode(IUIRender::cmNONE);
+
+        inherited::Draw();
+
+        Frect canvas_rect;
+        m_canvas->GetAbsoluteRect(canvas_rect);
+        UI().ScreenFrustumLIT().CreateFromRect(canvas_rect);
+
+        UI().m_currentPointType = previous_point_type;
+        GEnv.UIRender->CacheSetCullMode(IUIRender::cmCCW);
+    }
+
+    void Update() override
+    {
+        if (m_canvas)
+            inherited::Update();
+    }
+};
 
 CHudItem::CHudItem()
 {
@@ -36,7 +132,7 @@ IFactoryObject* CHudItem::_construct()
     return (m_object);
 }
 
-CHudItem::~CHudItem() {}
+CHudItem::~CHudItem() { xr_delete(m_hud_ui); }
 void CHudItem::Load(cpcstr section)
 {
     //загрузить hud, если он нужен
@@ -48,6 +144,9 @@ void CHudItem::Load(cpcstr section)
         m_animation_slot = pSettings->r_u32(section, "animation_slot");
 
     m_sounds.LoadSound(section, "snd_bore", "sndBore", true);
+
+    if (hud_sect.size())
+        m_hud_ui_tag = pSettings->read_if_exists<pcstr>(hud_sect, "hud_ui_xml_tag_name", nullptr);
 }
 
 void CHudItem::PlaySound(LPCSTR alias, const Fvector& position)
@@ -181,6 +280,18 @@ void CHudItem::SendHiddenItem()
 void CHudItem::UpdateHudAdditonal(Fmatrix& hud_trans) {}
 void CHudItem::UpdateCL()
 {
+    if (!m_hud_ui && m_hud_ui_tag.size())
+    {
+        if (attachable_hud_item* hud_item = HudItemData())
+        {
+            m_hud_ui = xr_new<CUIHudUI>();
+            m_hud_ui->Load(hud_item, m_hud_ui_tag.c_str());
+        }
+    }
+
+    if (m_hud_ui)
+        m_hud_ui->Update();
+
     if (m_current_motion_def)
     {
         if (m_bStopAtEndAnimIsRunning)
@@ -219,6 +330,30 @@ void CHudItem::UpdateCL()
                 OnAnimationEnd(m_startedMotionState);
             }
         }
+    }
+}
+
+void CHudItem::render_item_3d_ui()
+{
+    if (m_hud_ui)
+        m_hud_ui->Draw();
+}
+
+bool CHudItem::render_item_3d_ui_query() { return m_hud_ui; }
+
+CUIWindow* CHudItem::Get3dUI() const { return m_hud_ui ? m_hud_ui->Canvas() : nullptr; }
+
+void CHudItem::Reset3dUI()
+{
+    xr_delete(m_hud_ui);
+
+    if (!m_hud_ui_tag.size())
+        return;
+
+    if (attachable_hud_item* hud_item = HudItemData())
+    {
+        m_hud_ui = xr_new<CUIHudUI>();
+        m_hud_ui->Load(hud_item, m_hud_ui_tag.c_str());
     }
 }
 

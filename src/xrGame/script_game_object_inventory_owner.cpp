@@ -46,6 +46,8 @@
 #include "doors_door.h"
 #include "Torch.h"
 #include "PhysicObject.h"
+#include "ui/UIMainIngameWnd.h"
+#include "ui/UIHudStatesWnd.h"
 //Alundaio
 #include "inventory_upgrade_manager.h"
 #include "inventory_upgrade_root.h"
@@ -1116,6 +1118,153 @@ void CScriptGameObject::enable_torch(bool value)
     torch->Switch(value);
 }
 
+static CTorch* get_torch(CScriptGameObject& script_object, LPCSTR member)
+{
+    CTorch* torch = smart_cast<CTorch*>(&script_object.object());
+    if (!torch)
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error, "CTorch : cannot access class member %s!", member);
+
+    return torch;
+}
+
+void CScriptGameObject::enable_torch2(bool value)
+{
+    if (CTorch* torch = get_torch(*this, "enable_torch2"))
+        torch->Switch2(value);
+}
+
+void CScriptGameObject::torch_switch_spot(bool value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_switch_spot"))
+        torch->SetTorchSpot(value);
+}
+
+void CScriptGameObject::torch_set_radius(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_radius"))
+        torch->SetTorchRadius(value);
+}
+
+void CScriptGameObject::torch_set_range(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_range"))
+        torch->SetTorchRange(value);
+}
+
+void CScriptGameObject::torch_set_inertion(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_inertion"))
+        torch->SetTorchInertion(value);
+}
+
+void CScriptGameObject::torch_set_color_r(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_color_r"))
+        torch->SetTorchColorR(value);
+}
+
+void CScriptGameObject::torch_set_color_g(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_color_g"))
+        torch->SetTorchColorG(value);
+}
+
+void CScriptGameObject::torch_set_color_b(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_color_b"))
+        torch->SetTorchColorB(value);
+}
+
+void CScriptGameObject::torch_set_color_a(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_color_a"))
+        torch->SetTorchColorA(value);
+}
+
+void CScriptGameObject::torch_set_offset_x(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_offset_x"))
+        torch->SetTorchOffsetX(value);
+}
+
+void CScriptGameObject::torch_set_offset_y(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_offset_y"))
+        torch->SetTorchOffsetY(value);
+}
+
+void CScriptGameObject::torch_set_offset_z(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_offset_z"))
+        torch->SetTorchOffsetZ(value);
+}
+
+void CScriptGameObject::torch_set_animation(LPCSTR value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_animation"))
+        torch->SetTorchAnimation(value);
+}
+
+void CScriptGameObject::torch_set_texture(LPCSTR value)
+{
+    if (CTorch* torch = get_torch(*this, "torch_set_texture"))
+        torch->SetTorchTexture(value);
+}
+
+void CScriptGameObject::torch2_set_radius(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_radius"))
+        torch->SetTorch2Radius(value);
+}
+
+void CScriptGameObject::torch2_set_range(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_range"))
+        torch->SetTorch2Range(value);
+}
+
+void CScriptGameObject::torch2_set_color_r(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_color_r"))
+        torch->SetTorch2ColorR(value);
+}
+
+void CScriptGameObject::torch2_set_color_g(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_color_g"))
+        torch->SetTorch2ColorG(value);
+}
+
+void CScriptGameObject::torch2_set_color_b(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_color_b"))
+        torch->SetTorch2ColorB(value);
+}
+
+void CScriptGameObject::torch2_set_color_a(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_color_a"))
+        torch->SetTorch2ColorA(value);
+}
+
+void CScriptGameObject::torch2_set_offset_x(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_offset_x"))
+        torch->SetTorch2OffsetX(value);
+}
+
+void CScriptGameObject::torch2_set_offset_y(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_offset_y"))
+        torch->SetTorch2OffsetY(value);
+}
+
+void CScriptGameObject::torch2_set_offset_z(float value)
+{
+    if (CTorch* torch = get_torch(*this, "torch2_set_offset_z"))
+        torch->SetTorch2OffsetZ(value);
+}
+
 bool CScriptGameObject::torch_enabled() const
 {
     CTorch* torch = smart_cast<CTorch*>(&object());
@@ -1995,6 +2144,53 @@ void CScriptGameObject::SetActorMaxWeight(float max_weight)
         return;
     }
     pActor->inventory().SetMaxWeight(max_weight);
+}
+
+void CScriptGameObject::SetRadiationDetector(bool enabled)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor || !CurrentGameUI() || !CurrentGameUI()->UIMainIngameWnd)
+        return;
+
+    CUIHudStatesWnd* hud_states = CurrentGameUI()->UIMainIngameWnd->get_hud_states();
+    if (hud_states)
+        hud_states->set_radiation_detector(enabled);
+}
+
+void CScriptGameObject::SetActorRecoilCoeff(float recoil_coeff)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CActor : cannot access class member SetActorRecoilCoeff!");
+        return;
+    }
+
+    actor->m_fRecoilCoeff = recoil_coeff;
+}
+
+void CScriptGameObject::SetActorZoomInertion(float zoom_inertion)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CActor : cannot access class member SetActorZoomInertion!");
+        return;
+    }
+
+    actor->m_fZoomInertion = zoom_inertion;
+}
+
+float CScriptGameObject::GetRadiationDetector() const
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor || !CurrentGameUI() || !CurrentGameUI()->UIMainIngameWnd)
+        return 0.0f;
+
+    CUIHudStatesWnd* hud_states = CurrentGameUI()->UIMainIngameWnd->get_hud_states();
+    return hud_states ? hud_states->get_radiation_detector() : 0.0f;
 }
 
 // получить и задать максимальный вес при котором можно ходить

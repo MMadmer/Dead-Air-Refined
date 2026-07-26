@@ -43,6 +43,8 @@ CWeaponMagazined::CWeaponMagazined(ESoundTypes eSoundType) : CWeapon(), m_bStope
     m_fOldBulletSpeed = 0;
     m_iQueueSize = WEAPON_ININITE_QUEUE;
     m_bLockType = false;
+    m_condition_coeff = 1.f;
+    m_condition_available = 0;
 }
 
 CWeaponMagazined::~CWeaponMagazined()
@@ -103,6 +105,9 @@ void CWeaponMagazined::Load(LPCSTR section)
         m_sSndShotCurrent = "sndSilencerShot";
     else
         m_sSndShotCurrent = "sndShot";
+
+    m_condition_coeff = READ_IF_EXISTS(pSettings, r_float, section, "condition_coeff", 1.f);
+    m_condition_available = READ_IF_EXISTS(pSettings, r_u32, section, "condition_avail", 0);
 
     m_iBaseDispersionedBulletsCount = READ_IF_EXISTS(pSettings, r_u8, section, "base_dispersioned_bullets_count", 0);
     m_fBaseDispersionedBulletsSpeed =
@@ -563,9 +568,24 @@ void CWeaponMagazined::state_Fire(float dt)
                 fShotTimeCounter = fModeShotTime;
             else
                 fShotTimeCounter = fOneShotTime;
+
+            float delay_penalty = 0.f;
+            if (m_condition_type & 0x4)
+                delay_penalty += 0.3f;
+            if (m_condition_type & 0x8)
+                delay_penalty += 0.6f;
+            if (GetCurrentFireMode() == -1)
+            {
+                if (m_condition_type & 0x10)
+                    delay_penalty += 0.2f;
+                if (m_condition_type & 0x20)
+                    delay_penalty += 0.4f;
+            }
+            fShotTimeCounter *= 1.f + ::Random.randF(0.5f, 2.5f) * delay_penalty;
             //Alundaio: END
 
             ++m_iShotNum;
+            TryAddConditionFailure();
 
             OnShot();
 
@@ -604,6 +624,42 @@ void CWeaponMagazined::state_Fire(float dt)
     {
         fShotTimeCounter -= dt;
     }
+}
+
+void CWeaponMagazined::TryAddConditionFailure()
+{
+    if (!IsUsingCondition() || !m_condition_available)
+        return;
+
+    const float scaled_deterioration = (GetWeaponDeterioration() + 0.0001f) * 1000.f;
+    const int first_divisor = int(m_condition_coeff * 50.f / scaled_deterioration);
+    const int second_divisor = int(m_condition_coeff * 100.f * _max(GetCondition(), 0.01f) / scaled_deterioration + 20.f);
+    const int third_divisor = int(m_condition_coeff * 50.f * _max(GetCondition(), 0.01f) / scaled_deterioration + 1.f);
+
+    u32 condition_id = 0;
+    if (::Random.randI(first_divisor) == 0)
+    {
+        static constexpr u32 failures[] = {1, 3, 5, 11, 16, 19};
+        condition_id = failures[::Random.randI(std::size(failures))];
+    }
+
+    if (::Random.randI(second_divisor) == 0)
+    {
+        static constexpr u32 failures[] = {4, 6, 9, 12, 14, 17, 20};
+        condition_id = failures[::Random.randI(std::size(failures))];
+    }
+
+    if (::Random.randI(third_divisor) == 0)
+    {
+        static constexpr u32 prerequisites[] = {0x100, 0x800, 0x2000, 0x10000, 0x80000};
+        static constexpr u32 failures[] = {10, 13, 15, 18, 21};
+        const u32 index = ::Random.randI(std::size(failures));
+        if (m_condition_type & prerequisites[index])
+            condition_id = failures[index];
+    }
+
+    if (condition_id && (m_condition_available & (1u << condition_id)))
+        m_condition_type |= 1u << (condition_id - 1);
 }
 
 void CWeaponMagazined::state_Misfire(float dt)
@@ -847,7 +903,8 @@ bool CWeaponMagazined::CanAttach(PIItem pIItem)
     CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(pIItem);
 
     if (pScope && m_eScopeStatus == ALife::eAddonAttachable &&
-        (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) == 0 /*&&
+        (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) == 0 &&
+        (GetConditionType() & 0x10000000) == 0 /*&&
                 (m_scopes[cur_scope]->m_sScopeName == pIItem->object().cNameSect())*/)
     {
         auto it = m_scopes.begin();
@@ -860,10 +917,12 @@ bool CWeaponMagazined::CanAttach(PIItem pIItem)
     }
     else if (pSilencer && m_eSilencerStatus == ALife::eAddonAttachable &&
         (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonSilencer) == 0 &&
+        (GetConditionType() & 0x20000000) == 0 &&
         (m_sSilencerName == pIItem->object().cNameSect()))
         return true;
     else if (pGrenadeLauncher && m_eGrenadeLauncherStatus == ALife::eAddonAttachable &&
         (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) == 0 &&
+        (GetConditionType() & 0x40000000) == 0 &&
         (m_sGrenadeLauncherName == pIItem->object().cNameSect()))
         return true;
     else
@@ -873,7 +932,8 @@ bool CWeaponMagazined::CanAttach(PIItem pIItem)
 bool CWeaponMagazined::CanDetach(const char* item_section_name)
 {
     if (m_eScopeStatus == ALife::eAddonAttachable &&
-        0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope)) /* &&
+        0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) &&
+        (GetConditionType() & 0x10000000) == 0) /* &&
            (m_scopes[cur_scope]->m_sScopeName	== item_section_name))*/
     {
         auto it = m_scopes.begin();
@@ -886,10 +946,12 @@ bool CWeaponMagazined::CanDetach(const char* item_section_name)
     }
     //	   return true;
     else if (m_eSilencerStatus == ALife::eAddonAttachable &&
-        0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonSilencer) && (m_sSilencerName == item_section_name))
+        0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonSilencer) &&
+        (GetConditionType() & 0x20000000) == 0 && (m_sSilencerName == item_section_name))
         return true;
     else if (m_eGrenadeLauncherStatus == ALife::eAddonAttachable &&
         0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) &&
+        (GetConditionType() & 0x40000000) == 0 &&
         (m_sGrenadeLauncherName == item_section_name))
         return true;
     else

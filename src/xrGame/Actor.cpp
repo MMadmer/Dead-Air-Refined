@@ -1116,11 +1116,9 @@ void CActor::UpdateCL()
     {
         if (pWeapon->IsZoomed())
         {
-            float full_fire_disp = pWeapon->GetFireDispersion(true);
-
             CEffectorZoomInertion* S = smart_cast<CEffectorZoomInertion*>(Cameras().GetCamEffector(eCEZoom));
             if (S)
-                S->SetParams(full_fire_disp);
+                S->SetParams(m_fZoomInertion);
 
             SetZoomAimingMode(true);
         }

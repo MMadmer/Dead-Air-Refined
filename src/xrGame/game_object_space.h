@@ -57,7 +57,13 @@ enum ECallbackType : u32
     //Alundaio: added defines
     eActorHudAnimationEnd,
 
+    eTakeItemFromGround,
+
     //AVO: custom callbacks
+    // Input
+    eKeyPress,
+    eKeyRelease,
+    eKeyHold,
     // Inventory
     eItemToBelt,
     eItemToSlot,
@@ -81,9 +87,6 @@ enum ECallbackType : u32
     eControllerAttitudeChange,
 
     // X-Ray Extensions:
-    eKeyPress   = 123,
-    eKeyRelease = 124,
-    eKeyHold    = 125,
     eMouseWheel = 126,
     eMouseMove  = 127,
 

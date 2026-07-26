@@ -12,7 +12,6 @@
 #include "AI_PhraseDialogManager.h"
 #include "step_manager.h"
 
-#ifdef DEBUG
 template <typename _object_type>
 class CActionBase;
 
@@ -26,7 +25,6 @@ class CActionPlanner;
 typedef CActionPlanner<CScriptGameObject, false, CActionBase<CScriptGameObject>, CPropertyEvaluator<CScriptGameObject>,
     CActionBase<CScriptGameObject>*, CPropertyEvaluator<CScriptGameObject>*>
     script_planner;
-#endif
 
 namespace MonsterSpace
 {
@@ -88,9 +86,7 @@ private:
     CSightManager* m_sight_manager;
     stalker_movement_manager_smart_cover* m_movement_manager;
 
-#ifdef DEBUG
     const script_planner* m_debug_planner;
-#endif
 
     // ALife
 private:
@@ -404,9 +400,7 @@ public:
     virtual void UpdateCamera();
     virtual bool can_attach(const CInventoryItem* inventory_item) const;
 
-#ifdef DEBUG
     void debug_planner(const script_planner* planner);
-#endif
 
 private:
     u32 m_pstl_min_queue_size_far;

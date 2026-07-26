@@ -1391,6 +1391,38 @@ void CScriptGameObject::SetArtefactBleedingRestoreSpeed(float value)
     artefact->SetBleedingPower(value);
 }
 
+float CScriptGameObject::GetArtefactAdditionalInventoryWeight()
+{
+    CArtefact* artefact = smart_cast<CArtefact*>(&object());
+    THROW(artefact);
+
+    return artefact->AdditionalInventoryWeight();
+}
+
+void CScriptGameObject::SetArtefactAdditionalInventoryWeight(float value)
+{
+    CArtefact* artefact = smart_cast<CArtefact*>(&object());
+    THROW(artefact);
+
+    artefact->SetAdditionalInventoryWeight(value);
+}
+
+float CScriptGameObject::GetArtefactHitImmunity(ALife::EHitType hitType)
+{
+    CArtefact* artefact = smart_cast<CArtefact*>(&object());
+    THROW(artefact);
+
+    return artefact->ArtefactHitImmunity(hitType);
+}
+
+void CScriptGameObject::SetArtefactHitImmunity(ALife::EHitType hitType, float value)
+{
+    CArtefact* artefact = smart_cast<CArtefact*>(&object());
+    THROW(artefact);
+
+    artefact->SetArtefactHitImmunity(hitType, value);
+}
+
 void CScriptGameObject::AttachVehicle(CScriptGameObject* veh, bool bForce)
 {
     if (CActor* actor = smart_cast<CActor*>(&object()))

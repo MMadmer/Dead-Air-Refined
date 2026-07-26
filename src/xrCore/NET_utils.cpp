@@ -153,6 +153,12 @@ void NET_Packet::r(void* p, u32 count)
 {
     R_ASSERT(inistream == NULL);
     VERIFY(p && count);
+    if (r_pos > B.count || count > B.count - r_pos)
+    {
+        Msg("! NET_Packet overflow: position=%u, requested=%u, size=%u", r_pos, count, B.count);
+        xrDebug::LogStackTrace("NET_Packet overflow");
+    }
+    VERIFY(r_pos <= B.count && count <= B.count - r_pos);
     CopyMemory(p, &B.data[r_pos], count);
     r_pos += count;
     VERIFY(r_pos <= B.count);

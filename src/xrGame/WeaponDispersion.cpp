@@ -30,7 +30,19 @@ float CWeapon::GetFireDispersion(bool with_cartridge, bool for_crosshair)
 
 float CWeapon::GetBaseDispersion(float cartridge_k)
 {
-    return fireDispersionBase * cur_silencer_koef.fire_dispersion * cartridge_k * GetConditionDispersionFactor();
+    float condition_penalty = 0.f;
+    if (m_condition_type & 0x40)
+        condition_penalty += 0.025f;
+    if (m_condition_type & 0x80)
+        condition_penalty += 0.025f;
+    if (m_condition_type & 0x400)
+        condition_penalty += 0.025f;
+    if (m_condition_type & 0x800)
+        condition_penalty += 0.05f;
+    if (m_condition_type & 0x1000)
+        condition_penalty += 0.1f;
+
+    return fireDispersionBase * cur_silencer_koef.fire_dispersion * cartridge_k + condition_penalty;
 }
 
 //текущая дисперсия (в радианах) оружия с учетом используемого патрона

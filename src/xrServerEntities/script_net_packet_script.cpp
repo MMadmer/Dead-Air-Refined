@@ -75,6 +75,8 @@ void CScriptNetPacket::script_register(lua_State* luaState)
             .def("r_s16", (s16(NET_Packet::*)())(&NET_Packet::r_s16))
             .def("r_u8", (u8(NET_Packet::*)())(&NET_Packet::r_u8))
             .def("r_s8", (s8(NET_Packet::*)())(&NET_Packet::r_s8))
+            .def("r_float_q16", (float (NET_Packet::*)(float, float))(&NET_Packet::r_float_q16))
+            .def("r_float_q8", (float (NET_Packet::*)(float, float))(&NET_Packet::r_float_q8))
             // XXX: should use pure_out_value here
             .def("r_angle16", &NET_Packet::r_angle16, out_value<2>())
             .def("r_angle8", &NET_Packet::r_angle8, out_value<2>())

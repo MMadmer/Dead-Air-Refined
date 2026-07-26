@@ -92,6 +92,7 @@ public:
     CEffect_Rain();
     ~CEffect_Rain();
 
+    float GetVolume();
     void Render();
     void OnFrame();
 };

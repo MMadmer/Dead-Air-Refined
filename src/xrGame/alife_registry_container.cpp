@@ -26,7 +26,9 @@ template <typename TContainer, typename Head, typename Tail>
 struct RegistryHelper<TContainer, Loki::Typelist<Head, Tail>>
 {
     static constexpr bool isSerializable =
-        object_type_traits::is_base_and_derived<ISerializable, Head>::value;
+        object_type_traits::is_base_and_derived<ISerializable, Head>::value &&
+        !std::is_same_v<Head, CKnownContactsRegistry> &&
+        !std::is_same_v<Head, CEncyclopediaRegistry>;
 
     static void Save(TContainer* self, IWriter& writer)
     {
@@ -39,7 +41,11 @@ struct RegistryHelper<TContainer, Loki::Typelist<Head, Tail>>
     {
         RegistryHelper<TContainer, Tail>::Load(self, reader);
         if constexpr (isSerializable)
+        {
+            Msg("~ Registry load %s at %u", typeid(Head).name(), reader.tell());
             self->Head::load(reader);
+            Msg("~ Registry loaded %s at %u", typeid(Head).name(), reader.tell());
+        }
     }
 };
 

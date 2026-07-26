@@ -122,6 +122,13 @@ public:
 
     BOOL IsMisfire() const;
     BOOL CheckForMisfire();
+    u32 GetConditionType() const { return m_condition_type; }
+    void SetConditionType(u32 condition_type) { m_condition_type = condition_type; }
+    bool IsAmmoSuitable(const shared_str& item_section) { return IsNecessaryItem(item_section); }
+    LPCSTR GetAmmoName() const
+    {
+        return m_ammoType < m_ammoTypes.size() ? m_ammoTypes[m_ammoType].c_str() : nullptr;
+    }
 
     BOOL AutoSpawnAmmo() const { return m_bAutoSpawnAmmo; };
     bool IsTriStateReload() const { return m_bTriStateReload; }
@@ -131,6 +138,7 @@ protected:
 
     // a misfire happens, you'll need to rearm weapon
     bool bMisfire;
+    u32 m_condition_type;
 
     BOOL m_bAutoSpawnAmmo;
     virtual bool AllowBore();

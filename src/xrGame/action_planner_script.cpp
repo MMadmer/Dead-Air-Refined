@@ -55,11 +55,7 @@ void CScriptActionPlannerExport::script_register(lua_State* luaState)
             .def("initialized", &CScriptActionPlanner::initialized)
             .def("set_goal_world_state", &set_goal_world_state)
             .def("clear", &CScriptActionPlanner::clear)
-#ifdef LOG_ACTION
             .def("show", &CScriptActionPlanner::show)
-            .def("show_current_world_state", &CScriptActionPlanner::show_current_world_state)
-            .def("show_target_world_state", &CScriptActionPlanner::show_target_world_state)
-#endif // LOG_ACTION
 
             ,
 

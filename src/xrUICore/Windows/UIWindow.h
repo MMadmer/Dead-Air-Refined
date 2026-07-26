@@ -13,8 +13,15 @@
 class XRUICORE_API CUIWindow : public CUIDebuggable
 {
 public:
+    using PPModeHandler = void (*)(CUIWindow*, bool);
+
     CUIWindow(pcstr window_name);
     ~CUIWindow() override;
+
+    static void SetPPModeHandler(PPModeHandler handler);
+    void SetPPMode();
+    void ResetPPMode();
+    bool GetPPMode() const { return m_bPP; }
 
     virtual void SetWndPos(const Fvector2& pos)
     {
@@ -401,6 +408,9 @@ protected:
     u32 m_dwFocusReceiveTime{};
 
 private:
+    static PPModeHandler m_ppModeHandler;
+    bool m_bPP{};
+
     DECLARE_SCRIPT_REGISTER_FUNCTION();
 };
 

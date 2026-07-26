@@ -40,6 +40,7 @@
 #include "PropertiesBox/UIPropertiesBox.h"
 
 #include "EditBox/UIEditBox.h"
+#include "EditBox/UIEditBoxEx.h"
 
 #include "MessageBox/UIMessageBox.h"
 
@@ -283,7 +284,9 @@ void CUIWindow::script_register(lua_State* luaState)
             })
 
             .def("WindowName", +[](CUIWindow* self) -> pcstr { return self->WindowName().c_str(); })
-            .def("SetWindowName", &CUIWindow::SetWindowName),
+            .def("SetWindowName", &CUIWindow::SetWindowName)
+            .def("SetPPMode", &CUIWindow::SetPPMode)
+            .def("ResetPPMode", &CUIWindow::ResetPPMode),
 
         class_<CUIWindowScript, CUIWindow>("CUIWindow")
             .def(constructor<>()),
@@ -598,6 +601,13 @@ void CUIStatic::script_register(lua_State* luaState)
         pcstr GetDebugType() override { return "CUIStaticScript"; }
     };
 
+    class CUITextWndScript final : public CUIStatic
+    {
+    public:
+        CUITextWndScript() : CUIStatic("CUITextWnd") {}
+        pcstr GetDebugType() override { return "CUITextWnd"; }
+    };
+
     using namespace luabind;
 
     module(luaState)
@@ -699,6 +709,9 @@ void CUIStatic::script_register(lua_State* luaState)
             }),
 
         class_<CUIStaticScript, CUIStatic>("CUIStatic")
+            .def(constructor<>()),
+
+        class_<CUITextWndScript, CUIStatic>("CUITextWnd")
             .def(constructor<>())
     ];
 }
@@ -876,7 +889,11 @@ void CUIEditBox::script_register(lua_State* luaState)
         class_<CUIEditBox, CUICustomEdit>("CUIEditBox")
             .def(constructor<>())
             .def("InitTexture", &CUIEditBox::InitTexture)
-            .def("InitTexture", +[](CUIEditBox* self, pcstr texture) { self->InitTexture(texture); })
+            .def("InitTexture", +[](CUIEditBox* self, pcstr texture) { self->InitTexture(texture); }),
+
+        class_<CUIEditBoxEx, CUICustomEdit>("CUIEditBoxEx")
+            .def(constructor<>())
+            .def("InitTexture", +[](CUIEditBoxEx* self, pcstr texture) { self->InitTexture(texture); })
     ];
 }
 
@@ -935,6 +952,10 @@ void CUIOptionsManager::script_register(lua_State* luaState)
         {
             return CUIOptionsItem::GetOptionsManager()->NeedVidRestart();
         }
+        bool IsGroupChanged(pcstr group)
+        {
+            return CUIOptionsItem::GetOptionsManager()->IsGroupChanged(group);
+        }
     };
 
     module(luaState)
@@ -949,5 +970,6 @@ void CUIOptionsManager::script_register(lua_State* luaState)
             .def("SendMessage2Group", &CUIOptionsManagerScript::SendMessage2Group)
             .def("NeedSystemRestart", &CUIOptionsManagerScript::NeedSystemRestart)
             .def("NeedVidRestart", &CUIOptionsManagerScript::NeedVidRestart)
+            .def("IsGroupChanged", &CUIOptionsManagerScript::IsGroupChanged)
     ];
 }

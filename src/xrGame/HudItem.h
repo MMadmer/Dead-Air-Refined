@@ -12,6 +12,8 @@ class CMotionDef;
 
 struct attachable_hud_item;
 class motion_marks;
+class CUIHudUI;
+class CUIWindow;
 
 class CHUDState
 {
@@ -146,9 +148,11 @@ public:
     virtual float GetInertionPowerFactor() { return 1.f; }; //--#SM+#--
     virtual void render_hud_mode(){};
     virtual bool need_renderable() { return true; };
-    virtual void render_item_3d_ui() {}
-    virtual bool render_item_3d_ui_query() { return false; }
+    virtual void render_item_3d_ui();
+    virtual bool render_item_3d_ui_query();
     virtual bool CheckCompatibility(CHudItem*) { return true; }
+    CUIWindow* Get3dUI() const;
+    void Reset3dUI();
 protected:
     IC void SetPending(BOOL H) { m_huditem_flags.set(fl_pending, H); }
     shared_str hud_sect;
@@ -162,6 +166,8 @@ protected:
     u32 m_animation_slot;
 
     HUD_SOUND_COLLECTION m_sounds;
+    shared_str m_hud_ui_tag;
+    CUIHudUI* m_hud_ui{};
 
 private:
     CPhysicItem* m_object;

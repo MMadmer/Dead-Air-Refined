@@ -163,7 +163,7 @@ SDeclaration* CResourceManager::_CreateDecl(const D3DVERTEXELEMENT9* dcl)
 dx11ConstantBuffer* CResourceManager::_CreateConstantBuffer(u32 context_id, ID3DShaderReflectionConstantBuffer* pTable)
 {
     VERIFY(pTable);
-    dx11ConstantBuffer* pTempBuffer = xr_new<dx11ConstantBuffer>(pTable);
+    dx11ConstantBuffer* pTempBuffer = xr_new<dx11ConstantBuffer>(context_id, pTable);
 
     for (dx11ConstantBuffer* buf : v_constant_buffer[context_id])
     {

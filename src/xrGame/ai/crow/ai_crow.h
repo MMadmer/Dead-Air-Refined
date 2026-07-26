@@ -82,12 +82,19 @@ protected:
     float fDHeading;
 
     // constants
-    float fGoalChangeDelta;
-    float fSpeed;
-    float fASpeed;
+    float fGoalChangeDeltaMin;
+    float fGoalChangeDeltaMax;
+    float fSpeedMin;
+    float fSpeedMax;
+    float fASpeedMin;
+    float fASpeedMax;
     float fMinHeight;
+    float fMaxHeight;
     Fvector vVarGoal;
-    float fIdleSoundDelta;
+    Fvector vVarGoalMin;
+    Fvector vVarGoalMax;
+    float fIdleSoundDeltaMin;
+    float fIdleSoundDeltaMax;
 
     // variables
     float fGoalChangeTime;

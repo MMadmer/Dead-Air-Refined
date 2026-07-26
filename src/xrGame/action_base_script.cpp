@@ -40,8 +40,6 @@ void CScriptActionBaseExport::script_register(lua_State* luaState)
             .def("finalize", &CScriptActionBase::finalize, &CScriptActionWrapper::finalize_static)
             .def("weight", &CScriptActionBase::weight, &CScriptActionWrapper::weight_static)
             .def("set_weight", &CScriptActionBase::set_weight)
-#ifdef LOG_ACTION
             .def("show", &CScriptActionBase::show)
-#endif
     ];
 }

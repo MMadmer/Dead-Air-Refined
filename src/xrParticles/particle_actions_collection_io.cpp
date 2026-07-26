@@ -401,8 +401,12 @@ void PATargetColor::Load(IReader& F)
     scale = F.r_float();
     if (ShadowOfChernobylMode)
         return; // XXX: make dynamic check
-    timeFrom = F.r_float();
-    timeTo = F.r_float();
+
+    // Some Dead Air effects omit the final timing fields and rely on constructor defaults.
+    if (!F.eof())
+        timeFrom = F.r_float();
+    if (!F.eof())
+        timeTo = F.r_float();
 }
 
 void PATargetColor::Save(IWriter& F)

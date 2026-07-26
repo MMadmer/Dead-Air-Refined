@@ -10,6 +10,115 @@ namespace xray::render::RENDER_NAMESPACE
 
 float hclip(float v, float dim) { return 2.f * v / dim - 1.f; }
 
+void CRenderTarget::phase_fxaa()
+{
+    PIX_EVENT(phase_fxaa);
+
+    const float width = static_cast<float>(Device.dwWidth);
+    const float height = static_cast<float>(Device.dwHeight);
+    const float du = ps_r1_pps_u;
+    const float dv = ps_r1_pps_v;
+
+    u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Base_Depth);
+
+    u32 offset = 0;
+    auto* vertex = static_cast<FVF::V*>(RImplementation.Vertex.Lock(4, g_fxaa->vb_stride, offset));
+    vertex++->set(du, dv + height, 0.f, 0.f, 1.f);
+    vertex++->set(du, dv, 0.f, 0.f, 0.f);
+    vertex++->set(du + width, dv + height, 0.f, 1.f, 1.f);
+    vertex->set(du + width, dv, 0.f, 1.f, 0.f);
+    RImplementation.Vertex.Unlock(4, g_fxaa->vb_stride);
+
+    RCache.set_Element(s_fxaa->E[0]);
+    RCache.set_Geometry(g_fxaa);
+    RCache.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
+    HW.get_context(RCache.context_id)->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
+}
+
+void CRenderTarget::phase_sunshafts()
+{
+    PIX_EVENT(phase_sunshafts);
+
+    struct v_aa
+    {
+        Fvector4 p;
+        Fvector2 uv0;
+        Fvector2 uv1;
+        Fvector2 uv2;
+        Fvector2 uv3;
+        Fvector2 uv4;
+        Fvector4 uv5;
+        Fvector4 uv6;
+    };
+
+    const float width = static_cast<float>(Device.dwWidth);
+    const float height = static_cast<float>(Device.dwHeight);
+    const float inverseWidth = 1.f / width;
+    const float inverseHeight = 1.f / height;
+    const Fvector2 p0 = { .5f * inverseWidth, .5f * inverseHeight };
+    const Fvector2 p1 = { (width + .5f) * inverseWidth, (height + .5f) * inverseHeight };
+
+    const auto renderPass = [&](const ref_rt& target, ref_selement element, pcstr constant = nullptr,
+                                float x = 0.f, float y = 0.f)
+    {
+        u_setrt(RCache, target, nullptr, nullptr, static_cast<ID3DDepthStencilView*>(nullptr));
+        RCache.set_CullMode(CULL_NONE);
+        RCache.set_Stencil(FALSE);
+
+        u32 offset = 0;
+        auto* vertex = static_cast<v_aa*>(RImplementation.Vertex.Lock(4, g_aa_AA->vb_stride, offset));
+        vertex->p.set(EPS, height + EPS, EPS, 1.f);
+        vertex->uv0.set(p0.x, p1.y);
+        vertex->uv1.set(p0.x - inverseWidth, p1.y - inverseHeight);
+        vertex->uv2.set(p0.x + inverseWidth, p1.y + inverseHeight);
+        vertex->uv3.set(p0.x + inverseWidth, p1.y - inverseHeight);
+        vertex->uv4.set(p0.x - inverseWidth, p1.y + inverseHeight);
+        vertex->uv5.set(p0.x - inverseWidth, p1.y, p1.y, p0.x + inverseWidth);
+        vertex->uv6.set(p0.x, p1.y - inverseHeight, p1.y + inverseHeight, p0.x);
+        ++vertex;
+        vertex->p.set(EPS, EPS, EPS, 1.f);
+        vertex->uv0.set(p0.x, p0.y);
+        vertex->uv1.set(p0.x - inverseWidth, p0.y - inverseHeight);
+        vertex->uv2.set(p0.x + inverseWidth, p0.y + inverseHeight);
+        vertex->uv3.set(p0.x + inverseWidth, p0.y - inverseHeight);
+        vertex->uv4.set(p0.x - inverseWidth, p0.y + inverseHeight);
+        vertex->uv5.set(p0.x - inverseWidth, p0.y, p0.y, p0.x + inverseWidth);
+        vertex->uv6.set(p0.x, p0.y - inverseHeight, p0.y + inverseHeight, p0.x);
+        ++vertex;
+        vertex->p.set(width + EPS, height + EPS, EPS, 1.f);
+        vertex->uv0.set(p1.x, p1.y);
+        vertex->uv1.set(p1.x - inverseWidth, p1.y - inverseHeight);
+        vertex->uv2.set(p1.x + inverseWidth, p1.y + inverseHeight);
+        vertex->uv3.set(p1.x + inverseWidth, p1.y - inverseHeight);
+        vertex->uv4.set(p1.x - inverseWidth, p1.y + inverseHeight);
+        vertex->uv5.set(p1.x - inverseWidth, p1.y, p1.y, p1.x + inverseWidth);
+        vertex->uv6.set(p1.x, p1.y - inverseHeight, p1.y + inverseHeight, p1.x);
+        ++vertex;
+        vertex->p.set(width + EPS, EPS, EPS, 1.f);
+        vertex->uv0.set(p1.x, p0.y);
+        vertex->uv1.set(p1.x - inverseWidth, p0.y - inverseHeight);
+        vertex->uv2.set(p1.x + inverseWidth, p0.y + inverseHeight);
+        vertex->uv3.set(p1.x + inverseWidth, p0.y - inverseHeight);
+        vertex->uv4.set(p1.x - inverseWidth, p0.y + inverseHeight);
+        vertex->uv5.set(p1.x - inverseWidth, p0.y, p0.y, p1.x + inverseWidth);
+        vertex->uv6.set(p1.x, p0.y - inverseHeight, p0.y + inverseHeight, p1.x);
+        RImplementation.Vertex.Unlock(4, g_aa_AA->vb_stride);
+
+        RCache.set_Element(element);
+        if (constant)
+            RCache.set_c(constant, x, y, 0.f, 0.f);
+        RCache.set_Geometry(g_aa_AA);
+        RCache.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
+    };
+
+    renderPass(rt_SunShaftsMask, s_sunshafts->E[0]);
+    renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[1]);
+    renderPass(rt_SunShaftsPass0, s_sunshafts->E[2], "SSParams", ps_r2_sss_phase1, ps_r2_sss_radius);
+    renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[3], "SSParams", ps_r2_sss_phase2, ps_r2_sss_radius);
+    renderPass(rt_Generic, s_sunshafts->E[4], "SSParamsDISPLAY", ps_r2_sss_intensity, ps_r2_sss_blend);
+    HW.get_context(RCache.context_id)->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
+}
+
 void CRenderTarget::phase_combine()
 {
     ZoneScoped;
@@ -282,6 +391,12 @@ void CRenderTarget::phase_combine()
 
     RCache.set_Stencil(FALSE);
 
+    if (ps_r2_fxaa)
+        phase_fxaa();
+
+    if (!_menu_pp)
+        phase_sunshafts();
+
     // PP enabled ?
     //	Render to RT texture to be able to copy RT even in windowed mode.
     BOOL PP_Complex = u_need_PP();
@@ -399,6 +514,14 @@ void CRenderTarget::phase_combine()
         RCache.set_c("m_current", m_current);
         RCache.set_c("m_previous", m_previous);
         RCache.set_c("m_blur", m_blur_scale.x, m_blur_scale.y, 0.f, 0.f);
+        RCache.set_c("aberration", ps_r2_aberration, ps_r2_aberration, ps_r2_aberration, ps_r2_aberration);
+        RCache.set_c("vibrance", ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance);
+        RCache.set_c("lensdirt", ps_r2_lensdirt_value, ps_r2_lensdirt_value, ps_r2_lensdirt_value,
+            ps_r2_lensdirt_value);
+        RCache.set_c("lenswater", ps_r2_lenswater_value, ps_r2_lenswater_value, ps_r2_lenswater_value,
+            ps_r2_lenswater_value);
+        RCache.set_c("lumasharpen", ps_r2_lumasharpen, 0.f, 0.f, 0.f);
+        RCache.set_c("temp", ps_r2_temp);
         Fvector3 dof;
         g_pGamePersistent->GetCurrentDof(dof);
         RCache.set_c("dof_params", dof.x, dof.y, dof.z, ps_r2_dof_sky);

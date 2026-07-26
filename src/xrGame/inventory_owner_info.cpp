@@ -48,7 +48,7 @@ bool CInventoryOwner::OnReceiveInfo(shared_str info_id) const
     KNOWN_INFO_VECTOR& known_info = m_known_info_registry->registry().objects();
     auto it = std::find_if(known_info.begin(), known_info.end(), CFindByIDPred(info_id));
     if (known_info.end() == it)
-        known_info.emplace_back(info_id, Level().GetGameTime());
+        known_info.emplace_back(info_id);
     else
         return false;
 
@@ -86,7 +86,7 @@ void CInventoryOwner::DumpInfo() const
     auto it = known_info.begin();
     for (int i = 0; it != known_info.end(); ++it, ++i)
     {
-        Msg("known info[%d]:%s", i, (*it).info_id.c_str());
+        Msg("known info[%d]:%s", i, it->c_str());
     }
     Msg("------------------------------------------");
 }
@@ -158,7 +158,7 @@ bool CInventoryOwner::GetInfo(shared_str info_id, INFO_DATA& info_data) const
     if (known_info->cend() == it)
         return false;
 
-    info_data = *it;
+    info_data = INFO_DATA(*it, 0);
     return true;
 }
 

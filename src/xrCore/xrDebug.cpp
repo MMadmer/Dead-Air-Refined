@@ -204,10 +204,7 @@ void xrDebug::GatherInfo(char* assertionInfo, size_t bufferSize, const ErrorLoca
 
     xr_vector<xr_string> stackTrace = BuildStackTrace();
     for (size_t i = 2; i < stackTrace.size(); i++)
-    {
-        Log(stackTrace[i].c_str());
-        buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%s\n", stackTrace[i].c_str());
-    }
+        Msg("%s", stackTrace[i].c_str());
 
     FlushLog();
     os_clipboard::copy_to_clipboard(assertionInfo);
@@ -609,6 +606,7 @@ void xr_terminate()
 
 static void handler_base(const char* reason)
 {
+    xrDebug::LogStackTrace(reason);
     bool ignoreAlways = false;
     xrDebug::Fail(ignoreAlways, DEBUG_INFO, nullptr, reason, nullptr, nullptr);
 }

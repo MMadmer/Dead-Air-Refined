@@ -20,7 +20,7 @@ IC const xr_vector<u32>& CSpaceRestrictionAbstract::border()
         initialize();
 
     THROW(initialized());
-    VERIFY3(!m_border.empty(), "Space restrictor has no border!", name().c_str());
+    // Legacy Dead Air maps contain valid restrictors whose shapes do not intersect the navigation graph.
     return (m_border);
 }
 

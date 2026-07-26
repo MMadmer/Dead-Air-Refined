@@ -64,6 +64,9 @@ public:
     ref_rt rt_Generic_1; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
     //	Igor: for volumetric lights
     ref_rt rt_Generic_2; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
+    ref_rt rt_SunShaftsMask;
+    ref_rt rt_SunShaftsMaskSmoothed;
+    ref_rt rt_SunShaftsPass0;
     ref_rt rt_Bloom_1; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_Bloom_2; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_LUM_64; // 64bit, 64x64,	log-average in all components
@@ -168,6 +171,9 @@ private:
     ref_shader s_combine;
     ref_shader s_combine_msaa[8];
     ref_shader s_combine_volumetric;
+    ref_shader s_fxaa;
+    ref_shader s_sunshafts;
+    ref_geom g_fxaa;
 
 public:
     ref_shader s_postprocess;
@@ -298,6 +304,8 @@ public:
 
     void phase_bloom();
     void phase_luminance();
+    void phase_fxaa();
+    void phase_sunshafts();
     void phase_combine();
     void phase_combine_volumetric();
     void phase_pp();

@@ -11,13 +11,17 @@ void CUIGameCustom::script_register(lua_State* luaState)
 
     module(luaState)
     [
-        class_<StaticDrawableWrapper>("StaticDrawableWrapper")
+        class_<StaticDrawableWrapper>("SDrawStaticStruct")
             .def_readwrite("m_endTime", &StaticDrawableWrapper::m_endTime)
             .def("wnd", &StaticDrawableWrapper::wnd),
 
         class_<CUIGameCustom, CDialogHolder>("CUIGameCustom")
             .def("AddDialogToRender", &CUIGameCustom::AddDialogToRender)
             .def("RemoveDialogToRender", &CUIGameCustom::RemoveDialogToRender)
+            .def("AddCustomStatic", +[](CUIGameCustom* self, pcstr id)
+            {
+                return self->AddCustomStatic(id, false);
+            })
             .def("AddCustomStatic", +[](CUIGameCustom* self, pcstr id, bool singleInstance)
             {
                 return self->AddCustomStatic(id, singleInstance);

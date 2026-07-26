@@ -49,18 +49,14 @@ struct CGameTaskRegistry : public CALifeAbstractRegistry<u16, vGameTasks>
     void save(IWriter& stream) override
     {
         CALifeAbstractRegistry<u16, vGameTasks>::save(stream);
-        for (auto& taskId : g_active_task_id)
-        {
-            save_data(taskId, stream);
-        }
+        save_data(g_active_task_id[eTaskTypeStoryline], stream);
     }
 
     void load(IReader& stream) override
     {
         CALifeAbstractRegistry<u16, vGameTasks>::load(stream);
-        for (auto& taskId : g_active_task_id)
-        {
-            load_data(taskId, stream);
-        }
+        load_data(g_active_task_id[eTaskTypeStoryline], stream);
+        g_active_task_id[eTaskTypeAdditional] = nullptr;
+        g_active_task_id[eTaskTypeInsignificant] = nullptr;
     }
 };

@@ -795,15 +795,21 @@ void CGamePersistent::RestoreEffectorDOF() { SetEffectorDOF(m_dof[3]); }
 //	m_dof		[4];	// 0-dest 1-current 2-from 3-original
 void CGamePersistent::UpdateDof()
 {
+    float minFloat;
+    float maxFloat;
+    int minInteger;
+    int maxInteger;
+    m_bPickableDOF = Console->GetBool("r2_dof_pickable");
+    const float transitionTime = Console->GetFloat("r2_dof_time", minFloat, maxFloat);
+    const int diffNear = Console->GetInteger("r2_dof_diff_near", minInteger, maxInteger);
+    const int diffFar = Console->GetInteger("r2_dof_diff_far", minInteger, maxInteger);
+
     if (m_bPickableDOF)
     {
-        static float diff_far = pSettings->read_if_exists<float>("zone_pick_dof", "far", 70.0f);
-        static float diff_near = pSettings->read_if_exists<float>("zone_pick_dof", "near", -70.0f);
-
         Fvector pick_dof;
         pick_dof.y = HUD().GetCurrentRayQuery().range;
-        pick_dof.x = pick_dof.y + diff_near;
-        pick_dof.z = pick_dof.y + diff_far;
+        pick_dof.x = pick_dof.y + static_cast<float>(diffNear);
+        pick_dof.z = pick_dof.y + static_cast<float>(diffFar);
         m_dof[0] = pick_dof;
         m_dof[2] = m_dof[1]; // current
     }
@@ -813,7 +819,7 @@ void CGamePersistent::UpdateDof()
     float td = Device.fTimeDelta;
     Fvector diff;
     diff.sub(m_dof[0], m_dof[2]);
-    diff.mul(td / 0.2f); // 0.2 sec
+    diff.mul(td / transitionTime);
     m_dof[1].add(diff);
     (m_dof[0].x < m_dof[2].x) ? clamp(m_dof[1].x, m_dof[0].x, m_dof[2].x) : clamp(m_dof[1].x, m_dof[2].x, m_dof[0].x);
     (m_dof[0].y < m_dof[2].y) ? clamp(m_dof[1].y, m_dof[0].y, m_dof[2].y) : clamp(m_dof[1].y, m_dof[2].y, m_dof[0].y);

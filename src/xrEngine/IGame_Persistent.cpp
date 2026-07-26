@@ -378,7 +378,7 @@ void IGame_Persistent::OnGameStart()
     ZoneScoped;
 #ifndef _EDITOR
     LoadTitle("st_prefetching_objects");
-    if (!strstr(Core.Params, "-noprefetch"))
+    if (strstr(Core.Params, "-prefetch"))
         Prefetch();
 #endif
 }

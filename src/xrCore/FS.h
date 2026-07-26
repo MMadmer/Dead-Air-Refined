@@ -19,6 +19,7 @@
 #define CFS_HeaderChunkID (666)
 
 XRCORE_API void VerifyPath(pcstr path);
+XRCORE_API void ReportReaderAdvanceOverflow(size_t position, size_t requested, size_t size);
 
 //#define FS_DEBUG
 
@@ -383,6 +384,8 @@ public:
     IC void* end() const { return data + Size; }
     IC void advance(size_t cnt)
     {
+        if (Pos > Size || cnt > Size - Pos)
+            ReportReaderAdvanceOverflow(Pos, cnt, Size);
         Pos += cnt;
         VERIFY(Pos <= Size);
     }

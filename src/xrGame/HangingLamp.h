@@ -42,6 +42,7 @@ public:
     virtual ~CHangingLamp();
     void TurnOn();
     void TurnOff();
+    bool IsOn() const { return light_render && light_render->get_active(); }
     virtual void Load(LPCSTR section);
     virtual bool net_Spawn(CSE_Abstract* DC);
     virtual void net_Destroy();

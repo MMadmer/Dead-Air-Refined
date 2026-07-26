@@ -364,7 +364,12 @@ IReader* IReader::open_chunk_iterator(u32& ID, IReader* _prev)
 
 void IReader::r(void* p, size_t cnt)
 {
-    VERIFY(Pos + cnt <= Size);
+    if (Pos > Size || cnt > Size - Pos)
+    {
+        Msg("! IReader overflow: position=%zu, requested=%zu, size=%zu", Pos, cnt, Size);
+        xrDebug::LogStackTrace("IReader overflow");
+    }
+    VERIFY(Pos <= Size && cnt <= Size - Pos);
     CopyMemory(p, pointer(), cnt);
     advance(cnt);
 #ifdef DEBUG
@@ -379,6 +384,12 @@ void IReader::r(void* p, size_t cnt)
     }
 #endif
 };
+
+void ReportReaderAdvanceOverflow(size_t position, size_t requested, size_t size)
+{
+    Msg("! IReader::advance overflow: position=%zu, requested=%zu, size=%zu", position, requested, size);
+    xrDebug::LogStackTrace("IReader::advance overflow");
+}
 
 IC bool is_term(char a) { return (a == 13) || (a == 10); };
 IC size_t IReader::advance_term_string()

@@ -22,7 +22,7 @@ class CFindByIDPred
 
 public:
     CFindByIDPred(const shared_str& element_to_find) { element = element_to_find; }
-    bool operator()(const INFO_DATA& data) const { return data.info_id == element; }
+    bool operator()(const shared_str& data) const { return data == element; }
 };
 
-using KNOWN_INFO_VECTOR = xr_vector<INFO_DATA>;
+using KNOWN_INFO_VECTOR = xr_vector<shared_str>;

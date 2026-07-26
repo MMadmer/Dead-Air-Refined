@@ -350,7 +350,7 @@ void IterateInfo(const CALifeSimulator* alife, const ALife::_OBJECT_ID& id, cons
         return;
 
     for (const auto& it : *known_info)
-        functor(id, it.info_id);
+        functor(id, it);
 }
 
 CSE_Abstract* reprocess_spawn(CALifeSimulator* self, CSE_Abstract* object)

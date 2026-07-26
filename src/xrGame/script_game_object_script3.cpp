@@ -149,6 +149,29 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("enable_night_vision", &CScriptGameObject::enable_night_vision)
         .def("night_vision_enabled", &CScriptGameObject::night_vision_enabled)
         .def("enable_torch", &CScriptGameObject::enable_torch)
+        .def("enable_torch2", &CScriptGameObject::enable_torch2)
+        .def("torch_switch_spot", &CScriptGameObject::torch_switch_spot)
+        .def("torch_set_radius", &CScriptGameObject::torch_set_radius)
+        .def("torch_set_range", &CScriptGameObject::torch_set_range)
+        .def("torch_set_inertion", &CScriptGameObject::torch_set_inertion)
+        .def("torch_set_color_r", &CScriptGameObject::torch_set_color_r)
+        .def("torch_set_color_g", &CScriptGameObject::torch_set_color_g)
+        .def("torch_set_color_b", &CScriptGameObject::torch_set_color_b)
+        .def("torch_set_color_a", &CScriptGameObject::torch_set_color_a)
+        .def("torch_set_offset_x", &CScriptGameObject::torch_set_offset_x)
+        .def("torch_set_offset_y", &CScriptGameObject::torch_set_offset_y)
+        .def("torch_set_offset_z", &CScriptGameObject::torch_set_offset_z)
+        .def("torch_set_animation", &CScriptGameObject::torch_set_animation)
+        .def("torch_set_texture", &CScriptGameObject::torch_set_texture)
+        .def("torch2_set_radius", &CScriptGameObject::torch2_set_radius)
+        .def("torch2_set_range", &CScriptGameObject::torch2_set_range)
+        .def("torch2_set_color_r", &CScriptGameObject::torch2_set_color_r)
+        .def("torch2_set_color_g", &CScriptGameObject::torch2_set_color_g)
+        .def("torch2_set_color_b", &CScriptGameObject::torch2_set_color_b)
+        .def("torch2_set_color_a", &CScriptGameObject::torch2_set_color_a)
+        .def("torch2_set_offset_x", &CScriptGameObject::torch2_set_offset_x)
+        .def("torch2_set_offset_y", &CScriptGameObject::torch2_set_offset_y)
+        .def("torch2_set_offset_z", &CScriptGameObject::torch2_set_offset_z)
         .def("torch_enabled", &CScriptGameObject::torch_enabled)
         .def("attachable_item_load_attach", &CScriptGameObject::attachable_item_load_attach)
         .def("weapon_strapped", &CScriptGameObject::weapon_strapped)
@@ -319,6 +342,82 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("set_artefact_satiety", &CScriptGameObject::SetArtefactSatietyRestoreSpeed)
         .def("set_artefact_power", &CScriptGameObject::SetArtefactPowerRestoreSpeed)
         .def("set_artefact_bleeding", &CScriptGameObject::SetArtefactBleedingRestoreSpeed)
+        .def("get_artefact_weight", &CScriptGameObject::Weight)
+        .def("set_artefact_weight", &CScriptGameObject::SetWeight)
+        .def("get_artefact_additional_weight", &CScriptGameObject::GetArtefactAdditionalInventoryWeight)
+        .def("set_artefact_additional_weight", &CScriptGameObject::SetArtefactAdditionalInventoryWeight)
+        .def("get_artefact_burn_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeBurn);
+        })
+        .def("get_artefact_strike_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeStrike);
+        })
+        .def("get_artefact_shock_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeShock);
+        })
+        .def("get_artefact_wound_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeWound);
+        })
+        .def("get_artefact_radiation_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeRadiation);
+        })
+        .def("get_artefact_telepatic_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeTelepatic);
+        })
+        .def("get_artefact_chemical_burn_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeChemicalBurn);
+        })
+        .def("get_artefact_explosion_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeExplosion);
+        })
+        .def("get_artefact_fire_wound_immunity", +[](CScriptGameObject* self)
+        {
+            return self->GetArtefactHitImmunity(ALife::eHitTypeFireWound);
+        })
+        .def("set_artefact_burn_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeBurn, value);
+        })
+        .def("set_artefact_strike_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeStrike, value);
+        })
+        .def("set_artefact_shock_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeShock, value);
+        })
+        .def("set_artefact_wound_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeWound, value);
+        })
+        .def("set_artefact_radiation_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeRadiation, value);
+        })
+        .def("set_artefact_telepatic_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeTelepatic, value);
+        })
+        .def("set_artefact_chemical_burn_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeChemicalBurn, value);
+        })
+        .def("set_artefact_explosion_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeExplosion, value);
+        })
+        .def("set_artefact_fire_wound_immunity", +[](CScriptGameObject* self, float value)
+        {
+            self->SetArtefactHitImmunity(ALife::eHitTypeFireWound, value);
+        })
 
         // HELICOPTER
         .def("get_helicopter", &CScriptGameObject::get_helicopter)
@@ -594,6 +693,10 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("set_actor_run_coef", &CScriptGameObject::SetActorRunCoef)
         .def("get_actor_runback_coef", &CScriptGameObject::GetActorRunBackCoef)
         .def("set_actor_runback_coef", &CScriptGameObject::SetActorRunBackCoef)
+        .def("set_actor_recoil_coeff", &CScriptGameObject::SetActorRecoilCoeff)
+        .def("set_actor_zoom_inertion", &CScriptGameObject::SetActorZoomInertion)
+        .def("set_radiation_detector", &CScriptGameObject::SetRadiationDetector)
+        .def("get_radiation_detector", &CScriptGameObject::GetRadiationDetector)
         //-AVO
 
         ;

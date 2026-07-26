@@ -48,6 +48,12 @@ void CUIHudStatesWnd::reset_ui()
     }
 }
 
+void CUIHudStatesWnd::set_radiation_detector(bool enabled)
+{
+    m_radiation_detector_enabled = enabled;
+    m_radiation_detector = 0.0f;
+}
+
 ALife::EInfluenceType CUIHudStatesWnd::get_indik_type(ALife::EHitType hit_type)
 {
     ALife::EInfluenceType iz_type = ALife::infl_max_count;
@@ -674,6 +680,8 @@ void CUIHudStatesWnd::UpdateZones()
 
         //определить текущую частоту срабатывания сигнала
         zone_info.cur_period = zone_type->freq.x + (zone_type->freq.y - zone_type->freq.x) * (fRelPow * fRelPow);
+        if (hit_type == ALife::eHitTypeRadiation)
+            m_radiation_detector = zone_info.cur_period;
 
         // string256	buff_z;
         // xr_sprintf( buff_z, "zone %2.2f\n", zone_info.cur_period );
@@ -681,7 +689,8 @@ void CUIHudStatesWnd::UpdateZones()
         if (zone_info.snd_time > zone_info.cur_period)
         {
             zone_info.snd_time = 0.0f;
-            HUD_SOUND_ITEM::PlaySound(zone_type->detect_snds, Fvector().set(0, 0, 0), NULL, true, false);
+            if (m_radiation_detector_enabled)
+                HUD_SOUND_ITEM::PlaySound(zone_type->detect_snds, Fvector().set(0, 0, 0), NULL, true, false);
         }
         else
         {

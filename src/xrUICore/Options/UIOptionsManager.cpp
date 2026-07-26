@@ -95,6 +95,15 @@ void CUIOptionsManager::UndoGroup(const shared_str& group)
     }
 }
 
+bool CUIOptionsManager::IsGroupChanged(const shared_str& group) const
+{
+    const auto it = m_groups.find(group);
+    R_ASSERT3(m_groups.end() != it, "invalid group name", group.c_str());
+
+    return std::any_of(it->second.begin(), it->second.end(),
+        [](const CUIOptionsItem* item) { return item->IsChangedOptValue(); });
+}
+
 void CUIOptionsManager::OptionsPostAccept()
 {
     if (m_restart_flags & e_vid_restart)

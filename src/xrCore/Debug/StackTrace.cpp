@@ -66,6 +66,9 @@ ICF void init_dbghelp()
 {
     s_dbghelp = GetModuleHandleA("dbghelp.dll");
     if (!s_dbghelp)
+        s_dbghelp = LoadLibraryExW(L"dbghelp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (!s_dbghelp)
     {
         Log("! [StackTraceBuilder] Failed to load dbghelp.dll");
         return;
@@ -95,6 +98,7 @@ struct StackTraceBuilder
     bool GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, xr_string& frameStr);
 
     bool IsInitialized{};
+    bool OwnsSymbolSession{};
 };
 
 StackTraceBuilder::StackTraceBuilder()
@@ -102,20 +106,29 @@ StackTraceBuilder::StackTraceBuilder()
     if (!s_dbghelp)
         init_dbghelp();
 
+    if (!s_dbghelp)
+        return;
+
     u32 dwOptions = symGetOptions();
     symSetOptions(dwOptions | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
 
     IsInitialized = symInitialize(GetCurrentProcess(), nullptr, TRUE);
+    OwnsSymbolSession = IsInitialized;
 
     if (!IsInitialized)
     {
-        Msg("[StackTraceBuilder] SymInitialize failed with error: 0x%u", GetLastError());
+        const DWORD error = GetLastError();
+        // Tracy owns the process-wide DbgHelp session in instrumented builds.
+        if (error == ERROR_INVALID_PARAMETER)
+            IsInitialized = true;
+        else
+            Msg("[StackTraceBuilder] SymInitialize failed with error: 0x%u", error);
     }
 }
 
 StackTraceBuilder::~StackTraceBuilder()
 {
-    if (IsInitialized)
+    if (OwnsSymbolSession)
         symCleanup(GetCurrentProcess());
 }
 

@@ -84,6 +84,15 @@ public:
     virtual void PhTune(float step){};
 
     float AdditionalInventoryWeight() const { return m_additional_weight; }
+    void SetAdditionalInventoryWeight(float value) { m_additional_weight = value; }
+    float ArtefactHitImmunity(ALife::EHitType hitType) const
+    {
+        return m_ArtefactHitImmunities.GetHitImmunity(hitType);
+    }
+    void SetArtefactHitImmunity(ALife::EHitType hitType, float value)
+    {
+        m_ArtefactHitImmunities.SetHitImmunity(hitType, value);
+    }
     bool m_bCanSpawnZone;
     float m_fHealthRestoreSpeed;
     float m_fRadiationRestoreSpeed;

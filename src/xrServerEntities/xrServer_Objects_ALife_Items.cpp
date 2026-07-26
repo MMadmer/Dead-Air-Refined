@@ -487,6 +487,7 @@ CSE_ALifeItemWeapon::CSE_ALifeItemWeapon(LPCSTR caSection) : CSE_ALifeItem(caSec
 {
     a_current = 90;
     a_elapsed = 0;
+    m_condition_type = 0;
     a_elapsed_grenades.grenades_count = 0;
     a_elapsed_grenades.grenades_type = 0;
 
@@ -533,6 +534,7 @@ void CSE_ALifeItemWeapon::UPDATE_Read(NET_Packet& tNetPacket)
     tNetPacket.r_u8(ammo_type);
     tNetPacket.r_u8(wpn_state);
     tNetPacket.r_u8(m_bZoom);
+    tNetPacket.r_u32(m_condition_type);
 }
 
 void CSE_ALifeItemWeapon::clone_addons(CSE_ALifeItemWeapon* parent) { m_addon_flags = parent->m_addon_flags; }
@@ -547,6 +549,7 @@ void CSE_ALifeItemWeapon::UPDATE_Write(NET_Packet& tNetPacket)
     tNetPacket.w_u8(ammo_type);
     tNetPacket.w_u8(wpn_state);
     tNetPacket.w_u8(m_bZoom);
+    tNetPacket.w_u32(m_condition_type);
 }
 
 void CSE_ALifeItemWeapon::STATE_Read(NET_Packet& tNetPacket, u16 size)
@@ -563,7 +566,10 @@ void CSE_ALifeItemWeapon::STATE_Read(NET_Packet& tNetPacket, u16 size)
         tNetPacket.r_u8(ammo_type);
 
     if (m_wVersion > 122)
+    {
         a_elapsed_grenades.unpack_from_byte(tNetPacket.r_u8());
+        tNetPacket.r_u32(m_condition_type);
+    }
 }
 
 void CSE_ALifeItemWeapon::STATE_Write(NET_Packet& tNetPacket)
@@ -575,6 +581,7 @@ void CSE_ALifeItemWeapon::STATE_Write(NET_Packet& tNetPacket)
     tNetPacket.w_u8(m_addon_flags.get());
     tNetPacket.w_u8(ammo_type);
     tNetPacket.w_u8(a_elapsed_grenades.pack_to_byte());
+    tNetPacket.w_u32(m_condition_type);
 }
 
 void CSE_ALifeItemWeapon::OnEvent(NET_Packet& tNetPacket, u16 type, u32 time, ClientID sender)

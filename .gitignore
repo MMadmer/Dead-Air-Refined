@@ -14,8 +14,17 @@
 # Local bootstrap tools are downloaded and signature-checked by the build setup.
 tools/nuget/
 [Tt]est_root/
+[Tt]est_root_*/
+[Tt]est_install_root/
+[Tt]est_patch_apply/
 __pycache__/
 *.py[cod]
+
+# Local diagnostics are not part of the runtime or source package.
+tools/sysinternals/
+build_*.log
+build_*.pid
+[Aa]rtifacts/
 
 # User-specific files
 *.user

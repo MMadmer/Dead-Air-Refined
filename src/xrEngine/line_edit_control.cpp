@@ -702,40 +702,31 @@ void line_edit_control::SwitchKL()
 
 void remove_spaces(pstr str)
 {
-    const size_t str_size = xr_strlen(str);
-    if (str_size < 1)
-    {
+    if (!str || !*str)
         return;
-    }
-    auto new_str = (pstr)xr_alloca((str_size + 1) * sizeof(char));
-    new_str[0] = 0;
 
-    size_t a = 0, b = 0, i = 0;
-    while (b < str_size)
+    pstr read = str;
+    pstr write = str;
+    while (*read == ' ')
+        ++read;
+
+    bool pending_space = false;
+    while (*read)
     {
-        a = b;
-
-        while (a < str_size && str[a] == ' ')
-            ++a;
-
-        b = a;
-
-        while (b < str_size && str[b] != ' ')
-            ++b;
-
-        strncpy_s(new_str + i, str_size - i + 1, str + a, b - a);
-        i += (b - a);
-
-        if (i < str_size)
-            new_str[i] = ' ';
-
-        ++b;
-        ++i;
+        if (*read == ' ')
+        {
+            pending_space = true;
+        }
+        else
+        {
+            if (pending_space && write != str)
+                *write++ = ' ';
+            *write++ = *read;
+            pending_space = false;
+        }
+        ++read;
     }
-    --i;
-
-    if (i < str_size)
-        strncpy_s(str, str_size, new_str, i);
+    *write = '\0';
 }
 
 void split_cmd(pstr first, pstr second, pcstr str)

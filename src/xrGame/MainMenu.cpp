@@ -65,9 +65,19 @@ extern bool b_shniaganeed_pp;
 
 CMainMenu* MainMenu() { return (CMainMenu*)g_pGamePersistent->m_pMainMenu; };
 
+static void SetWindowPPMode(CUIWindow* window, bool enabled)
+{
+    if (enabled)
+        MainMenu()->RegisterPPDraw(window);
+    else
+        MainMenu()->UnregisterPPDraw(window);
+}
+
 CMainMenu::CMainMenu()
 {
     ZoneScoped;
+
+    CUIWindow::SetPPModeHandler(&SetWindowPPMode);
 
     class CResetEventCb : public CEventNotifierCallbackWithCid
     {
@@ -157,6 +167,7 @@ CMainMenu::~CMainMenu()
     delete_data(m_pMB_ErrDlgs);
 
     ai().Unsubscribe(m_script_reset_event_cid, CAI_Space::EVENT_SCRIPT_ENGINE_RESET);
+    CUIWindow::SetPPModeHandler(nullptr);
 }
 
 void CMainMenu::Activate(bool bActivate)

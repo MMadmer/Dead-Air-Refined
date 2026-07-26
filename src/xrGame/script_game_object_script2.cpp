@@ -171,6 +171,12 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("set_weapon_type", &CScriptGameObject::SetWeaponType)
         .def("has_ammo_type", &CScriptGameObject::HasAmmoType)
         .def("get_weapon_substate", &CScriptGameObject::GetWeaponSubstate)
+        .def("is_ammo_suitable", &CScriptGameObject::IsAmmoSuitable)
+        .def("get_ammo_name", &CScriptGameObject::GetAmmoName)
+        .def("set_weapon_condition_type", &CScriptGameObject::SetWeaponConditionType)
+        .def("get_weapon_condition_type", &CScriptGameObject::GetWeaponConditionType)
+        .def("get_3d_ui", &CScriptGameObject::Get3dUI)
+        .def("reset_3d_ui", &CScriptGameObject::Reset3dUI)
         .def("set_weight", &CScriptGameObject::SetWeight)
         //-Alundaio
         .def("set_queue_size", &CScriptGameObject::SetQueueSize)
@@ -332,9 +338,7 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("active_slot", &CScriptGameObject::active_slot)
         .def("activate_slot", &CScriptGameObject::activate_slot)
 
-#ifdef DEBUG
         .def("debug_planner", &CScriptGameObject::debug_planner)
-#endif // DEBUG
         .def("invulnerable", (bool (CScriptGameObject::*)() const) & CScriptGameObject::invulnerable)
         .def("invulnerable", (void (CScriptGameObject::*)(bool)) & CScriptGameObject::invulnerable)
 

@@ -200,6 +200,51 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
             const u16 bone_id = rm_bones[i];
             VERIFY2(bone_id != BI_NONE, "Invalid remap index.");
             CMotion& M = m_motions[bones->at(bone_id)->name][m_idx];
+
+            const bool missingTrack = MS->elapsed() < intptr_t(sizeof(u8));
+            const u8 flags = missingTrack ? 0 : *static_cast<const u8*>(MS->pointer());
+            size_t trackSize = sizeof(flags);
+            trackSize += flags & flRKeyAbsent ? sizeof(CKeyQR) : sizeof(u32) + size_t(dwLen) * sizeof(CKeyQR);
+            if (flags & flTKeyPresent)
+            {
+                trackSize += sizeof(u32);
+                trackSize += size_t(dwLen) * (flags & flTKey16IsBit ? sizeof(CKeyQT16) : sizeof(CKeyQT8));
+                trackSize += 2 * sizeof(Fvector);
+            }
+            else
+            {
+                trackSize += sizeof(Fvector);
+            }
+
+            // Some legacy OMF files omit unchanged trailing bone tracks.
+            if (missingTrack || size_t(MS->elapsed()) < trackSize)
+            {
+                Msg("! Motion '%s' in '%s' has %zu of %zu bone tracks; using bind pose for the remainder.", mname,
+                    N, i, bones->size());
+                for (u32 missing = i; missing < bones->size(); ++missing)
+                {
+                    const u16 missingBoneId = rm_bones[missing];
+                    VERIFY2(missingBoneId != BI_NONE, "Invalid remap index.");
+                    const CBoneData& bone = *bones->at(missingBoneId);
+                    CMotion& fallback = m_motions[bone.name][m_idx];
+                    fallback.set_count(dwLen);
+                    fallback.set_flags(flRKeyAbsent);
+
+                    Fquaternion rotation;
+                    rotation.set(bone.bind_transform);
+                    CKeyQR rotationKey{
+                        s16(clampr(iFloor(rotation.x * KEY_Quant), -32767, 32767)),
+                        s16(clampr(iFloor(rotation.y * KEY_Quant), -32767, 32767)),
+                        s16(clampr(iFloor(rotation.z * KEY_Quant), -32767, 32767)),
+                        s16(clampr(iFloor(rotation.w * KEY_Quant), -32767, 32767)),
+                    };
+                    fallback._keysR.create(crc32(&rotationKey, sizeof(rotationKey)), 1, &rotationKey);
+                    fallback._initT.set(bone.bind_transform.c);
+                    fallback._sizeT.set(0.f, 0.f, 0.f);
+                }
+                break;
+            }
+
             M.set_count(dwLen);
             M.set_flags(MS->r_u8());
 

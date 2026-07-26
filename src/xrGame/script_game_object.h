@@ -111,8 +111,8 @@ class CScriptGameObject;
 class CZoneCampfire;
 class CPhysicObject;
 class CArtefact;
+class CUIWindow;
 
-#ifdef DEBUG
 template <typename _object_type>
 class CActionBase;
 
@@ -126,7 +126,6 @@ class CActionPlanner;
 typedef CActionPlanner<CScriptGameObject, false, CActionBase<CScriptGameObject>, CPropertyEvaluator<CScriptGameObject>,
     CActionBase<CScriptGameObject>*, CPropertyEvaluator<CScriptGameObject>*>
     script_planner;
-#endif // DEBUG
 
 class CScriptGameObject;
 
@@ -608,6 +607,29 @@ public:
     void enable_night_vision(bool value);
     bool night_vision_enabled() const;
     void enable_torch(bool value);
+    void enable_torch2(bool value);
+    void torch_switch_spot(bool value);
+    void torch_set_radius(float value);
+    void torch_set_range(float value);
+    void torch_set_inertion(float value);
+    void torch_set_color_r(float value);
+    void torch_set_color_g(float value);
+    void torch_set_color_b(float value);
+    void torch_set_color_a(float value);
+    void torch_set_offset_x(float value);
+    void torch_set_offset_y(float value);
+    void torch_set_offset_z(float value);
+    void torch_set_animation(LPCSTR value);
+    void torch_set_texture(LPCSTR value);
+    void torch2_set_radius(float value);
+    void torch2_set_range(float value);
+    void torch2_set_color_r(float value);
+    void torch2_set_color_g(float value);
+    void torch2_set_color_b(float value);
+    void torch2_set_color_a(float value);
+    void torch2_set_offset_x(float value);
+    void torch2_set_offset_y(float value);
+    void torch2_set_offset_z(float value);
     bool torch_enabled() const;
 
     void attachable_item_load_attach(LPCSTR section);
@@ -662,9 +684,7 @@ public:
     u32 active_slot();
     void activate_slot(u32 slot_id);
 
-#ifdef DEBUG
     void debug_planner(const script_planner* planner);
-#endif
 
     void sell_condition(CScriptIniFile* ini_file, LPCSTR section);
     void sell_condition(float friend_factor, float enemy_factor);
@@ -865,6 +885,12 @@ public:
     u32 GetWeaponType();
     u8 GetWeaponSubstate();
     u8 GetAmmoType();
+    bool IsAmmoSuitable(LPCSTR ammo_section);
+    LPCSTR GetAmmoName();
+    void SetWeaponConditionType(u32 condition_type);
+    u32 GetWeaponConditionType();
+    CUIWindow* Get3dUI();
+    void Reset3dUI();
 
     // CWeaponAmmo
     u16 AmmoGetCount();
@@ -913,6 +939,10 @@ public:
     void SetArtefactSatietyRestoreSpeed(float value);
     void SetArtefactPowerRestoreSpeed(float value);
     void SetArtefactBleedingRestoreSpeed(float value);
+    float GetArtefactAdditionalInventoryWeight();
+    void SetArtefactAdditionalInventoryWeight(float value);
+    float GetArtefactHitImmunity(ALife::EHitType hitType);
+    void SetArtefactHitImmunity(ALife::EHitType hitType, float value);
 
     // Eatable items
     void SetRemainingUses(u8 value);
@@ -942,6 +972,10 @@ public:
     void SetActorRunCoef(float run_coef);
     float GetActorRunBackCoef() const;
     void SetActorRunBackCoef(float run_back_coef);
+    void SetActorRecoilCoeff(float recoil_coeff);
+    void SetActorZoomInertion(float zoom_inertion);
+    void SetRadiationDetector(bool enabled);
+    float GetRadiationDetector() const;
 
     void SetCharacterIcon(pcstr iconName);
     //-Alundaio

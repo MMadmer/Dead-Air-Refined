@@ -110,14 +110,14 @@ void CSpaceRestrictionHolder::register_restrictor(
     shared_str space_restrictors = space_restrictor->cName();
     if (restrictor_type != RestrictionSpace::eDefaultRestrictorTypeNone)
     {
-        shared_str *temp = 0, temp1;
+        shared_str* temp;
         if (restrictor_type == RestrictionSpace::eDefaultRestrictorTypeOut)
             temp = &m_default_out_restrictions;
-        else if (restrictor_type == RestrictionSpace::eDefaultRestrictorTypeIn)
-            temp = &m_default_in_restrictions;
         else
-            NODEFAULT;
-        temp1 = *temp;
+            temp = &m_default_in_restrictions;
+
+        // This preserves the optimized Dead Air x86 behavior for every nonzero legacy type.
+        shared_str temp1 = *temp;
 
         if (xr_strlen(*temp) && xr_strlen(space_restrictors))
             strconcat(sizeof(m_temp_string), m_temp_string, (*temp).c_str(), ",", space_restrictors.c_str());

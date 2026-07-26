@@ -350,6 +350,7 @@ public:
 
     void SetWeather(shared_str name, bool forced = false);
     shared_str GetWeather() { return CurrentWeatherName; }
+    float GetRainVolume();
     void ChangeGameTime(float game_time);
     void SetGameTime(float game_time, float time_factor);
 

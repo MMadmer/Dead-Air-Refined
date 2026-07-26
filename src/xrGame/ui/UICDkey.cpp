@@ -233,7 +233,7 @@ void GetPlayerName_FromRegistry(char* name, u32 const name_size)
 
 #if defined(XR_PLATFORM_WINDOWS)
     if (!ReadRegistry_StrValue(REGISTRY_VALUE_USERNAME, name))
-        name[0] = 0;
+        xr_strcpy(name, name_size, Core.UserName);
 #elif defined(XR_PLATFORM_POSIX)
     uid_t uid = geteuid();
     struct passwd* pw = getpwuid(uid);
@@ -249,12 +249,6 @@ void GetPlayerName_FromRegistry(char* name, u32 const name_size)
 #else
 #   error Select or add implementation for your platform
 #endif
-
-    if (!name[0])
-    {
-        Msg("! Player name registry key (%s) not found !", REGISTRY_VALUE_USERNAME);
-        return;
-    }
 
     u32 const max_name_length = GP_UNIQUENICK_LEN - 1;
     if (xr_strlen(name) > max_name_length)

@@ -5,6 +5,63 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+void CBlender_fxaa::Compile(CBlender_Compile& C)
+{
+    IBlender::Compile(C);
+
+#if RENDER == R_R4
+    C.r_Pass("fxaa_main", "fxaa_main", FALSE, FALSE, FALSE);
+    C.r_dx11Texture("s_base0", r2_RT_generic0);
+    C.r_dx11Sampler("smp_rtlinear");
+    C.r_End();
+#endif
+}
+
+void CBlender_sunshafts::Compile(CBlender_Compile& C)
+{
+    IBlender::Compile(C);
+
+#if RENDER == R_R4
+    switch (C.iElement)
+    {
+    case 0:
+        C.r_Pass("stub_notransform_aa_aa", "SunShaftsMask", FALSE, FALSE, FALSE);
+        C.r_dx11Texture("sPosition", r2_RT_P);
+        C.r_dx11Texture("sScene", r2_RT_generic0);
+        C.r_dx11Sampler("smp_nofilter");
+        C.r_dx11Sampler("smp_rtlinear");
+        C.r_End();
+        break;
+    case 1:
+        C.r_Pass("stub_notransform_aa_aa", "SunShaftsMaskBlur", FALSE, FALSE, FALSE);
+        C.r_dx11Texture("sMask", r2_RT_SunShaftsMask);
+        C.r_dx11Sampler("smp_rtlinear");
+        C.r_End();
+        break;
+    case 2:
+        C.r_Pass("stub_notransform_aa_aa", "SunShaftsGeneration", FALSE, FALSE, FALSE);
+        C.r_dx11Texture("sMaskBlur", r2_RT_SunShaftsMaskSmoothed);
+        C.r_dx11Sampler("smp_rtlinear");
+        C.r_End();
+        break;
+    case 3:
+        C.r_Pass("stub_notransform_aa_aa", "SunShaftsGeneration", FALSE, FALSE, FALSE);
+        C.r_dx11Texture("sMaskBlur", r2_RT_SunShaftsPass0);
+        C.r_dx11Sampler("smp_rtlinear");
+        C.r_End();
+        break;
+    case 4:
+        C.r_Pass("stub_notransform_aa_aa", "SunShaftsDisplay", FALSE, FALSE, FALSE);
+        C.r_dx11Texture("sScene", r2_RT_generic0);
+        C.r_dx11Texture("sSunShafts", r2_RT_SunShaftsMaskSmoothed);
+        C.r_dx11Sampler("smp_nofilter");
+        C.r_dx11Sampler("smp_rtlinear");
+        C.r_End();
+        break;
+    }
+#endif
+}
+
 CBlender_combine::CBlender_combine() { description.CLS = 0; }
 CBlender_combine::~CBlender_combine() {}
 void CBlender_combine::Compile(CBlender_Compile& C)
@@ -194,6 +251,10 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -213,6 +274,10 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -231,6 +296,10 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -250,6 +319,10 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -392,6 +465,10 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -411,6 +488,10 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -429,6 +510,10 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -448,6 +533,10 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
+        C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
+        C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
+        C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
+        C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");

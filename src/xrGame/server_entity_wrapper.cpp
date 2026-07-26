@@ -15,6 +15,18 @@
 #include "factory_api.h"
 #endif
 
+namespace
+{
+constexpr u32 LegacySavePacketPadding = 256;
+
+void pad_legacy_save_packet(NET_Packet& packet)
+{
+    const u32 padding = std::min(LegacySavePacketPadding, NET_PacketSizeLimit - packet.B.count);
+    std::fill_n(packet.B.data + packet.B.count, padding, u8{});
+    packet.B.count += padding;
+}
+}
+
 class IServerEntity;
 
 CServerEntityWrapper::~CServerEntityWrapper() { F_entity_Destroy(m_object); }
@@ -57,6 +69,7 @@ void CServerEntityWrapper::load(IReader& stream)
 
     net_packet.B.count = chunk->r_u16();
     chunk->r(net_packet.B.data, net_packet.B.count);
+    pad_legacy_save_packet(net_packet);
 
     chunk->close();
 
@@ -75,6 +88,7 @@ void CServerEntityWrapper::load(IReader& stream)
 
     net_packet.B.count = chunk->r_u16();
     chunk->r(net_packet.B.data, net_packet.B.count);
+    pad_legacy_save_packet(net_packet);
 
     chunk->close();
 

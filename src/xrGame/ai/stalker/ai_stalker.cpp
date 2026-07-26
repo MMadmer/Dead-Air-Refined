@@ -83,8 +83,8 @@ CAI_Stalker::CAI_Stalker()
     m_boneHitProtection = NULL;
     m_power_fx_factor = flt_max;
     m_wounded = false;
-#ifdef DEBUG
     m_debug_planner = 0;
+#ifdef DEBUG
     m_dbg_hud_draw = false;
 #endif // DEBUG
     m_registered_in_combat_on_migration = false;
@@ -99,6 +99,8 @@ CAI_Stalker::~CAI_Stalker()
     xr_delete(m_weapon_shot_effector);
     xr_delete(m_sound_user_data_visitor);
 }
+
+void CAI_Stalker::debug_planner(const script_planner* planner) { m_debug_planner = planner; }
 
 void CAI_Stalker::reinit()
 {

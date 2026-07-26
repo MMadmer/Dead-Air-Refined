@@ -45,6 +45,7 @@
 #include "UIGameCustom.h"
 #include "ui/UIActorMenu.h"
 #include "InventoryBox.h"
+#include "HudItem.h"
 
 class CScriptBinderObject;
 
@@ -424,6 +425,44 @@ u8 CScriptGameObject::GetWeaponSubstate()
         return 255;
 
     return weapon->m_sub_state;
+}
+
+bool CScriptGameObject::IsAmmoSuitable(LPCSTR ammo_section)
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon && ammo_section && weapon->IsAmmoSuitable(shared_str(ammo_section));
+}
+
+LPCSTR CScriptGameObject::GetAmmoName()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetAmmoName() : nullptr;
+}
+
+void CScriptGameObject::SetWeaponConditionType(u32 condition_type)
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    if (weapon)
+        weapon->SetConditionType(condition_type);
+}
+
+u32 CScriptGameObject::GetWeaponConditionType()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetConditionType() : 0;
+}
+
+CUIWindow* CScriptGameObject::Get3dUI()
+{
+    CHudItem* hud_item = smart_cast<CHudItem*>(&object());
+    return hud_item ? hud_item->Get3dUI() : nullptr;
+}
+
+void CScriptGameObject::Reset3dUI()
+{
+    CHudItem* hud_item = smart_cast<CHudItem*>(&object());
+    if (hud_item)
+        hud_item->Reset3dUI();
 }
 
 //-Alundaio

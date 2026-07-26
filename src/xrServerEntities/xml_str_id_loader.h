@@ -153,9 +153,6 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
             LPCSTR item_name = uiXml->ReadAttrib(uiXml->GetRoot(), tag_name, i, "id", nullptr);
             if (!item_name || !item_name[0])
             {
-#ifndef MASTER_GOLD
-                Msg("! id for %s don't set, number %d in %s", tag_name, i, xml_file_full.c_str());
-#endif
                 continue;
             }
 

@@ -5,55 +5,61 @@
 - Upstream: OpenXRay `xray-16`
 - Pinned commit: `29030f81b137f6ea5365b3d71f2b588490832f5b`
 - Port branch: `dead-air-x64`
-- Target: Windows x64, `Mixed` configuration
-- Live Dead Air installation: untouched
+- Target: Windows x64, `Release`
+- Live Dead Air x86 installation: untouched
 
 ## Current milestone
 
-The first milestone is a clean upstream x64 engine build and an isolated launch
-against the existing Dead Air filesystem layout. Dead Air-specific engine and
-Lua API differences are ported only after that baseline is reproducible.
+The engine now loads and runs the existing Dead Air 0.98b and Dead Air
+Revolution II content directly. It retains the original root layout, XDB and
+loose `gamedata` precedence, Lua addon API, JSGME workflow, and x86 save format.
+The compatibility port, release hardening, isolated installation test, and
+rollback verification are complete.
 
 ## Work completed
 
-- Created a standalone repository with all upstream submodules.
-- Verified an x64 MSVC compiler and Windows SDK are installed.
-- Built the unmodified upstream x64 runtime successfully.
-- Produced x64 `xrEngine.exe`, `xrCore.dll`, `xrGame.dll`, LuaJIT, DX11, and
-  OpenGL renderer binaries under `bin\x64\Mixed`.
-- Restored the pinned SDL2, DirectXMath, and DirectXTex build dependencies.
-- Added a reproducible x64 build entry point at `tools/build/build_x64.ps1`.
-- Recorded the addon and save compatibility contract.
-- Preserved the existing `fsgame.ltx`, XDB, loose `gamedata`, and JSGME model as
-  release requirements.
-- Mounted all 34 existing Dead Air archives and 62,527 files from an isolated
-  test root.
-- Loaded all 98 localization files, existing user settings, audio, the DX11
-  renderer, Dead Air shaders, 258 script-export nodes, and core Dead Air scripts.
-- Reached engine startup and the Dead Air main-menu resource/script path without
-  a fatal or Lua runtime error.
-- Ported the first three data-compatibility differences:
-  - x64 shared-string headers no longer reduce the x86 payload limit;
-  - malformed but x86-compatible overlapping texture THM chunks are accepted;
-  - intentionally silent Dead Air ambient sections are accepted.
-- Generated a machine-readable inventory of 330 x86 Dead Air Lua classes, 4,483
-  class functions, 718 properties, and 136 namespace functions.
+- Built a complete AMD64 runtime: all 42 shipped EXE/DLL files are x64.
+- Added a reproducible `Release` build entry point at
+  `tools/build/build_x64.ps1`, including required external-library
+  compatibility patches.
+- Mounted all existing Dead Air archives and loose overrides without
+  repacking or converting content.
+- Restored the complete Dead Air native/Lua API surface. The automated binding
+  comparison reports no missing classes, methods, properties, or namespaces.
+- Restored Dead Air renderer behavior, console variables, actor body, 3D HUD,
+  screen-space sun shafts, and FXAA.
+- Added compatibility for legacy Dead Air animation, texture, particle,
+  registry, task, ALife, LuaJIT bytecode, Lua marshal, and save formats.
+- Started a clean Dead Air 0.98b game and created a new x64 save.
+- Reloaded the new x64 save successfully.
+- Loaded the latest existing x86 DAR2 save with 22,958 spawn points and 27,198
+  objects.
+- Loaded representative packed and loose addons through the unchanged
+  `database` and `gamedata` paths:
+  - DA Inventory Sort from XDB;
+  - DAR2 Oxygen HUD from loose `gamedata`.
+- Performed an actual level transition and produced reloadable underground and
+  Agroprom saves.
+- Rebuilt the whole runtime from a clean build tree with zero errors.
+- Launched the freshly rebuilt runtime from an isolated root against the
+  unchanged live content.
+- Verified runtime private memory above 2 GiB, demonstrating that the x86
+  address-space ceiling is removed.
+- Hardened stack traces so diagnostics use the system `dbghelp.dll` safely.
+- Audited all runtime imports: every non-system dependency is present in the
+  package.
+- Completed a 15.29-minute Agroprom soak at 3.04 GiB private memory without a
+  fatal error, assertion, packet overflow, hang, or memory growth.
+- Built the final `1.0.0` archive from the clean output and verified all 42
+  packaged hashes.
+- Installed the final archive over an isolated x86 root and loaded the latest
+  existing x86 save with 22,958 spawn points and 27,198 objects.
+- Uninstalled it and restored all 28 original x86 runtime files by SHA-256,
+  with no added x64 files or control directory left behind.
 
-## In progress
+## Release constraints
 
-- Compare the Dead Air Lua/native API surface with upstream OpenXRay.
-- Make main-menu shutdown clean and deterministic in the isolated harness.
-- Restore Dead Air-specific console commands and renderer behavior.
-- Reach new-game and save-load runtime gates.
-
-## Next gates
-
-1. Finish the Lua/API difference report.
-2. Port missing Dead Air/DAR2 native and Lua exports in small, testable groups.
-3. Start a new game in x64.
-4. Load the latest x86 save and produce a reloadable x64 save.
-5. Validate representative addons.
-6. Run level-transition and long-session soak tests.
-7. Build a non-destructive install package.
-
-No public release is authorized or planned at this stage.
+- Do not replace, edit, or repack `database`, `gamedata`, saves, or JSGME state.
+- Keep `fsgame.ltx` and normal addon precedence compatible with the x86 game.
+- Keep the original x86 runtime recoverable.
+- Do not publish a public release without explicit authorization.

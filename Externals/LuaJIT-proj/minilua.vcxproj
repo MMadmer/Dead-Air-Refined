@@ -54,7 +54,7 @@ if %25errorlevel%25==8 (
     set DASMFLAGS=%25DASMFLAGS%25 -D P64
 )
 
-set DASC=..\LuaJIT\src\vm_$(PlatformShortName).dasc
+set DASC=..\LuaJIT\src\vm_x86.dasc
 set OUTDIR=intermediate\$(PlatformShortName)
 
 "$(OutDir)$(TargetName)" "%25DASM%25" -LN %25DASMFLAGS%25 -o "%25OUTDIR%25\buildvm_arch.h" "%25DASC%25"

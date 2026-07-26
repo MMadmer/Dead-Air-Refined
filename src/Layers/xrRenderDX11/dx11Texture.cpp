@@ -152,7 +152,34 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
     {
         DirectX::TexMetadata IMG;
         DirectX::ScratchImage texture;
-        auto hresult = LoadFromDDSMemory(static_cast<u8*>(S->pointer()), img_size, dds_flags, &IMG, texture);
+        const u8* ddsData = static_cast<u8*>(S->pointer());
+        xr_vector<u8> normalizedDDS;
+
+        // Legacy D3DX accepted DDS_HEADER.dwSize including the four-byte magic.
+        if (img_size >= 8 && !memcmp(ddsData, "DDS ", 4))
+        {
+            u32 headerSize;
+            memcpy(&headerSize, ddsData + 4, sizeof(headerSize));
+            if (headerSize == 128)
+            {
+                normalizedDDS.assign(ddsData, ddsData + img_size);
+                headerSize = 124;
+                memcpy(normalizedDDS.data() + 4, &headerSize, sizeof(headerSize));
+                ddsData = normalizedDDS.data();
+            }
+        }
+
+        auto hresult = LoadFromDDSMemory(ddsData, img_size, dds_flags, &IMG, texture);
+
+        if (FAILED(hresult))
+        {
+            Msg("! DDS load failed: HRESULT=0x%08X, size=%zu, file=%s", static_cast<u32>(hresult), img_size, fn);
+            if (IWriter* dump = FS.w_open("$logs$", "failed_texture.dds"))
+            {
+                dump->w(S->begin(), S->length());
+                FS.w_close(dump);
+            }
+        }
 
         R_ASSERT3_CURE(SUCCEEDED(hresult), "Failed to load texture from memory", fn,
         {

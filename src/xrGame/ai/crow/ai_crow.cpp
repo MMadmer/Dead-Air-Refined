@@ -105,14 +105,21 @@ void CAI_Crow::init()
     vCurrentDir.set(0, 0, 1);
     vHPB.set(0, 0, 0);
     fDHeading = 0;
-    fGoalChangeDelta = 10.f;
+    fGoalChangeDeltaMin = 10.f;
+    fGoalChangeDeltaMax = 20.f;
     fGoalChangeTime = 0.f;
-    fSpeed = 5.f;
-    fASpeed = 0.2f;
+    fSpeedMin = 5.f;
+    fSpeedMax = 10.f;
+    fASpeedMin = 0.2f;
+    fASpeedMax = 0.4f;
     fMinHeight = 40.f;
+    fMaxHeight = 40.f;
     vVarGoal.set(10.f, 10.f, 100.f);
-    fIdleSoundDelta = 10.f;
-    fIdleSoundTime = fIdleSoundDelta;
+    vVarGoalMin.set(0.5f, 0.5f, 0.5f);
+    vVarGoalMax.set(1.f, 1.f, 1.f);
+    fIdleSoundDeltaMin = 10.f;
+    fIdleSoundDeltaMax = 20.f;
+    fIdleSoundTime = 30.f;
     bPlayDeathIdle = false;
     o_workload_frame = 0;
     o_workload_rframe = 0;
@@ -134,13 +141,24 @@ void CAI_Crow::Load(LPCSTR section)
     m_Sounds.m_idle.Load("monsters" DELIMITER "crow" DELIMITER "idle");
     // play defaut
 
-    fSpeed = pSettings->r_float(section, "speed");
-    fASpeed = pSettings->r_float(section, "angular_speed");
-    fGoalChangeDelta = pSettings->r_float(section, "goal_change_delta");
+    fSpeedMin = pSettings->r_float(section, "speed_min");
+    fSpeedMax = pSettings->r_float(section, "speed_max");
+    fASpeedMin = pSettings->r_float(section, "angular_speed_min");
+    fASpeedMax = pSettings->r_float(section, "angular_speed_max");
+    fGoalChangeDeltaMin = pSettings->r_float(section, "goal_change_delta_min");
+    fGoalChangeDeltaMax = pSettings->r_float(section, "goal_change_delta_max");
     fMinHeight = pSettings->r_float(section, "min_height");
+    fMaxHeight = pSettings->r_float(section, "max_height");
     vVarGoal = pSettings->r_fvector3(section, "goal_variability");
-    fIdleSoundDelta = pSettings->r_float(section, "idle_sound_delta");
-    fIdleSoundTime = fIdleSoundDelta + fIdleSoundDelta * Random.randF(-.5f, .5f);
+    vVarGoalMin.set(pSettings->r_float(section, "goal_variability_x_min"),
+        pSettings->r_float(section, "goal_variability_y_min"),
+        pSettings->r_float(section, "goal_variability_z_min"));
+    vVarGoalMax.set(pSettings->r_float(section, "goal_variability_x_max"),
+        pSettings->r_float(section, "goal_variability_y_max"),
+        pSettings->r_float(section, "goal_variability_z_max"));
+    fIdleSoundDeltaMin = pSettings->r_float(section, "idle_sound_delta_min");
+    fIdleSoundDeltaMax = pSettings->r_float(section, "idle_sound_delta_max");
+    fIdleSoundTime = Random.randF(fIdleSoundDeltaMin, fIdleSoundDeltaMax);
     VERIFY2(valid_pos(Position()), dbg_valide_pos_string(Position(), this, "CAI_Crow::Load( LPCSTR section )"));
 }
 
@@ -210,7 +228,7 @@ void CAI_Crow::switch2_DeathDead()
 void CAI_Crow::switch2_DeathFall()
 {
     Fvector V;
-    V.mul(XFORM().k, fSpeed);
+    V.mul(XFORM().k, Random.randF(fSpeedMin, fSpeedMax));
     //	m_PhysicMovementControl->SetVelocity(V);
     smart_cast<IKinematicsAnimated*>(Visual())->PlayCycle(m_Anims.m_death.GetRandom(), TRUE, cb_OnHitEndPlaying, this);
 }
@@ -218,7 +236,7 @@ void CAI_Crow::switch2_DeathFall()
 void CAI_Crow::state_Flying(float fdt)
 {
     // Update position and orientation of the planes
-    float fAT = fASpeed * fdt;
+    float fAT = Random.randF(fASpeedMin, fASpeedMax) * fdt;
     Fvector& vDirection = XFORM().k;
 
     // Tweak orientation based on last position and goal
@@ -264,7 +282,7 @@ void CAI_Crow::state_Flying(float fdt)
     // Update position
     vOldPosition.set(Position());
     XFORM().setHPB(vHPB.x, vHPB.y, vHPB.z);
-    Position().mad(vOldPosition, vDirection, fSpeed * fdt);
+    Position().mad(vOldPosition, vDirection, Random.randF(fSpeedMin, fSpeedMax) * fdt);
     VERIFY2(valid_pos(Position()), dbg_valide_pos_string(Position(), this, "state_Flying		(float fdt)"));
 }
 
@@ -368,18 +386,19 @@ void CAI_Crow::shedule_Update(u32 DT)
         // At random times, change the direction (goal) of the plane
         if (fGoalChangeTime <= 0)
         {
-            fGoalChangeTime += fGoalChangeDelta + fGoalChangeDelta * Random.randF(-0.5f, 0.5f);
+            fGoalChangeTime +=
+                Random.randF(-0.5f, 0.5f) * Random.randF(fGoalChangeDeltaMin, fGoalChangeDeltaMax);
             Fvector vP = Actor()->Position();
-            vP.y += +fMinHeight;
-            vGoalDir.x = vP.x + vVarGoal.x * Random.randF(-0.5f, 0.5f);
-            vGoalDir.y = vP.y + vVarGoal.y * Random.randF(-0.5f, 0.5f);
-            vGoalDir.z = vP.z + vVarGoal.z * Random.randF(-0.5f, 0.5f);
+            vP.y += Random.randF(fMinHeight, fMaxHeight);
+            vGoalDir.x = vP.x + vVarGoal.x * Random.randF(vVarGoalMin.x, vVarGoalMax.x);
+            vGoalDir.y = vP.y + vVarGoal.y * Random.randF(vVarGoalMin.y, vVarGoalMax.y);
+            vGoalDir.z = vP.z + vVarGoal.z * Random.randF(vVarGoalMin.z, vVarGoalMax.z);
         }
         fGoalChangeTime -= fDT;
         // sounds
         if (fIdleSoundTime <= 0)
         {
-            fIdleSoundTime = fIdleSoundDelta + fIdleSoundDelta * Random.randF(-0.5f, 0.5f);
+            fIdleSoundTime = Random.randF(fIdleSoundDeltaMin, fIdleSoundDeltaMax);
             // if (st_current==eFlyIdle)
             m_Sounds.m_idle.GetRandom().play_at_pos(H_Root(), Position());
         }

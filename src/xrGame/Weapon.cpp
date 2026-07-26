@@ -90,6 +90,7 @@ CWeapon::CWeapon()
     SetNextState(eHidden);
     m_sub_state = eSubstateReloadBegin;
     m_bTriStateReload = false;
+    m_condition_type = 0;
     SetDefaults();
 
     m_Offset.identity();
@@ -576,6 +577,7 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
     iAmmoElapsed = E->a_elapsed;
     m_flagsAddOnState = E->m_addon_flags.get();
     m_ammoType = E->ammo_type;
+    m_condition_type = E->m_condition_type;
     SetState(E->wpn_state);
     SetNextState(E->wpn_state);
 
@@ -634,6 +636,7 @@ void CWeapon::net_Export(NET_Packet& P)
     P.w_u8(m_ammoType);
     P.w_u8((u8)GetState());
     P.w_u8((u8)IsZoomed());
+    P.w_u32(m_condition_type);
 }
 
 void CWeapon::net_Import(NET_Packet& P)
@@ -662,6 +665,7 @@ void CWeapon::net_Import(NET_Packet& P)
 
     u8 Zoom;
     P.r_u8(Zoom);
+    P.r_u32(m_condition_type);
 
     if (H_Parent() && H_Parent()->Remote())
     {
@@ -703,6 +707,7 @@ void CWeapon::save(NET_Packet& output_packet)
     save_data(m_ammoType, output_packet);
     save_data(m_zoom_params.m_bIsZoomModeNow, output_packet);
     save_data(m_bRememberActorNVisnStatus, output_packet);
+    save_data(m_condition_type, output_packet);
 }
 
 void CWeapon::load(IReader& input_packet)
@@ -721,6 +726,7 @@ void CWeapon::load(IReader& input_packet)
         OnZoomOut();
 
     load_data(m_bRememberActorNVisnStatus, input_packet);
+    load_data(m_condition_type, input_packet);
 }
 
 void CWeapon::OnEvent(NET_Packet& P, u16 type)
@@ -1248,9 +1254,32 @@ BOOL CWeapon::CheckForMisfire()
     if (OnClient())
         return FALSE;
 
-    float rnd = ::Random.randF(0.f, 1.f);
-    float mp = GetConditionMisfireProbability();
-    if (rnd < mp)
+    float probability = 0.f;
+    if (m_condition_type & 0x8000)
+        probability += 0.03f;
+    if (m_condition_type & 0x10000)
+        probability += 0.05f;
+    if (m_condition_type & 0x40000)
+        probability += 0.03f;
+    if (m_condition_type & 0x80000)
+        probability += 0.05f;
+    if (m_condition_type & 0x200000)
+        probability += 0.03f;
+    if (m_condition_type & 0x400000)
+        probability += 0.05f;
+    if (m_condition_type & 0x800000)
+        probability += 0.15f;
+    if (m_condition_type & 0x200)
+        probability += 0.99f;
+    if (m_condition_type & 0x4000)
+        probability += 0.99f;
+    if (m_condition_type & 0x20000)
+        probability += 0.99f;
+    if (m_condition_type & 0x100000)
+        probability += 0.99f;
+
+    clamp(probability, 0.f, 0.99f);
+    if (::Random.randF(0.f, 1.f) < probability)
     {
         FireEnd();
 

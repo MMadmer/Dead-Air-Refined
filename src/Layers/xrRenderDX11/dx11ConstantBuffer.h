@@ -8,7 +8,7 @@ struct R_constant_load;
 class dx11ConstantBuffer : public xr_resource_named
 {
 public:
-    dx11ConstantBuffer(ID3DShaderReflectionConstantBuffer* pTable);
+    dx11ConstantBuffer(u32 contextId, ID3DShaderReflectionConstantBuffer* pTable);
     ~dx11ConstantBuffer();
 
     bool Similar(dx11ConstantBuffer& _in);
@@ -31,6 +31,7 @@ private:
     Fvector4* Access(u16 offset);
 
 private:
+    u32 m_contextId;
     shared_str m_strBufferName;
     D3D_CBUFFER_TYPE m_eBufferType;
 

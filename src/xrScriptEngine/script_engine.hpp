@@ -168,7 +168,7 @@ public:
     {
         int result = 0;
 
-        if (message == LuaMessageType::Error || g_LuaDebug.test(1))
+        if (message == LuaMessageType::Error || message == LuaMessageType::Message || g_LuaDebug.test(1))
         {
             string4096 log;
             result = xr_sprintf(log, format, std::forward<Args>(args)...);

@@ -132,6 +132,8 @@ protected:
     xr_vector<s8> m_aFireModes;
     int m_iCurFireMode;
     int m_iPrefferedFireMode;
+    float m_condition_coeff;
+    u32 m_condition_available;
 
     //переменная блокирует использование
     //только разных типов патронов
@@ -170,6 +172,7 @@ protected:
 
     virtual int ShotsFired() { return m_iShotNum; }
     virtual float GetWeaponDeterioration();
+    void TryAddConditionFailure();
 
     virtual void FireBullet(const Fvector& pos, const Fvector& dir, float fire_disp, const CCartridge& cartridge,
         u16 parent_id, u16 weapon_id, bool send_hit);

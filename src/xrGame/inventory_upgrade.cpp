@@ -96,9 +96,8 @@ void Upgrade::construct(const shared_str& upgrade_id, Group& parental_group, Man
         if (prop.size())
         {
             m_properties[i] = prop;
-            VERIFY2(manager_r.get_property(prop),
-                make_string("Upgrade <%s> : property [%s] is unknown (not found in upgrade manager) !", id_str(),
-                    prop.c_str()));
+            if (!manager_r.get_property(prop))
+                Msg("! Upgrade <%s> references unknown property [%s].", id_str(), prop.c_str());
         }
     }
 

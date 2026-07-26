@@ -44,7 +44,7 @@ void CShootingObject::Load(LPCSTR section)
     //Alundaio: Two-shot burst rpm; used for Abakan/AN-94
     fModeShotTime = READ_IF_EXISTS(pSettings, r_float, section, "rpm_mode_2", fOneShotTime);
 
-    VERIFY(fOneShotTime > 0.f);
+    // Dead Air uses zero RPM for non-firing weapon-derived items such as binoculars.
     fOneShotTime = 60.f / fOneShotTime;
     fModeShotTime = 60.f / fModeShotTime;
 

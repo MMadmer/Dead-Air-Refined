@@ -21,9 +21,9 @@
 
 constexpr pcstr TORCH_DEFINITION = "torch_definition";
 static const float TORCH_INERTION_CLAMP = PI_DIV_6;
-static const float TORCH_INERTION_SPEED_MAX = 7.5f;
 static const float TORCH_INERTION_SPEED_MIN = 0.5f;
 static Fvector TORCH_OFFSET = {-0.2f, +0.1f, -0.3f};
+static Fvector TORCH_OFFSET2 = {-0.2f, +0.1f, -0.3f};
 static const Fvector OMNI_OFFSET = {-0.2f, +0.1f, -0.1f};
 static const float OPTIMIZATION_DISTANCE = 100.f;
 
@@ -31,14 +31,20 @@ CTorch::CTorch()
     : fBrightness(1.f), lanim(nullptr), guid_bone(BI_NONE),
       m_delta_h(0), m_switched_on(false),
       light_render(GEnv.Render->light_create()),
+      light_render2(GEnv.Render->light_create()),
       light_omni(GEnv.Render->light_create()),
       glow_render(GEnv.Render->glow_create()),
+      m_torch_inertion(5.f),
       m_bNightVisionEnabled(false), m_bNightVisionOn(false), m_night_vision(nullptr)
 {
     m_prev_hp.set(0, 0);
+    m_torch_color.set(0.f, 0.f, 0.f, 0.f);
+    m_torch2_color.set(0.f, 0.f, 0.f, 0.f);
 
     light_render->set_type(IRender_Light::SPOT);
     light_render->set_shadow(true);
+    light_render2->set_type(IRender_Light::SPOT);
+    light_render2->set_shadow(true);
     light_omni->set_type(IRender_Light::POINT);
     light_omni->set_shadow(false);
 
@@ -54,6 +60,7 @@ CTorch::CTorch()
 CTorch::~CTorch()
 {
     light_render.destroy();
+    light_render2.destroy();
     light_omni.destroy();
     glow_render.destroy();
     xr_delete(m_night_vision);
@@ -209,6 +216,198 @@ void CTorch::Switch(bool light_on)
         pVisual->CalculateBones(TRUE);
     }
 }
+
+void CTorch::Switch2(bool light_on)
+{
+    m_switched_on = light_on;
+    if (can_use_dynamic_lights())
+    {
+        light_render2->set_active(light_on);
+        light_omni->set_active(light_on);
+    }
+    glow_render->set_active(light_on);
+
+    if (light_trace_bone.c_str())
+    {
+        IKinematics* visual = smart_cast<IKinematics*>(Visual());
+        VERIFY(visual);
+        const u16 bone = visual->LL_BoneID(light_trace_bone);
+        visual->LL_SetBoneVisible(bone, light_on, TRUE);
+        visual->CalculateBones(TRUE);
+    }
+}
+
+void CTorch::SetTorchSpot(bool spot)
+{
+    if (OnClient())
+        return;
+
+    light_render->set_type(spot ? IRender_Light::SPOT : IRender_Light::POINT);
+}
+
+void CTorch::SetTorchRadius(float value)
+{
+    if (OnClient())
+        return;
+
+    light_render->set_cone(deg2rad(value));
+    glow_render->set_radius(value);
+}
+
+void CTorch::SetTorchRange(float value)
+{
+    if (!OnClient())
+        light_render->set_range(value);
+}
+
+void CTorch::SetTorchInertion(float value)
+{
+    if (!OnClient())
+        m_torch_inertion = value;
+}
+
+void CTorch::SetTorchColorR(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch_color.r = value;
+    light_render->set_color(m_torch_color);
+    glow_render->set_color(m_torch_color);
+}
+
+void CTorch::SetTorchColorG(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch_color.g = value;
+    light_render->set_color(m_torch_color);
+    glow_render->set_color(m_torch_color);
+}
+
+void CTorch::SetTorchColorB(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch_color.b = value;
+    light_render->set_color(m_torch_color);
+    glow_render->set_color(m_torch_color);
+}
+
+void CTorch::SetTorchColorA(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch_color.a = value;
+    light_render->set_color(m_torch_color);
+}
+
+void CTorch::SetTorchOffsetX(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET.x = value;
+}
+
+void CTorch::SetTorchOffsetY(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET.y = value;
+}
+
+void CTorch::SetTorchOffsetZ(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET.z = value;
+}
+
+void CTorch::SetTorchAnimation(LPCSTR value)
+{
+    if (!OnClient())
+        lanim = LALib.FindItem(value);
+}
+
+void CTorch::SetTorchTexture(LPCSTR value)
+{
+    if (OnClient())
+        return;
+
+    light_render->set_texture(value);
+    glow_render->set_texture(value);
+}
+
+void CTorch::SetTorch2Radius(float value)
+{
+    if (!OnClient())
+        light_render2->set_cone(deg2rad(value));
+}
+
+void CTorch::SetTorch2Range(float value)
+{
+    if (!OnClient())
+        light_render2->set_range(value);
+}
+
+void CTorch::SetTorch2ColorR(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch2_color.r = value;
+    light_render2->set_color(m_torch2_color);
+    light_omni->set_color(m_torch2_color);
+}
+
+void CTorch::SetTorch2ColorG(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch2_color.g = value;
+    light_render2->set_color(m_torch2_color);
+    light_omni->set_color(m_torch2_color);
+}
+
+void CTorch::SetTorch2ColorB(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch2_color.b = value;
+    light_render2->set_color(m_torch2_color);
+    light_omni->set_color(m_torch2_color);
+}
+
+void CTorch::SetTorch2ColorA(float value)
+{
+    if (OnClient())
+        return;
+
+    m_torch2_color.a = value;
+    light_render2->set_color(m_torch2_color);
+    light_omni->set_color(m_torch2_color);
+}
+
+void CTorch::SetTorch2OffsetX(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET2.x = value;
+}
+
+void CTorch::SetTorch2OffsetY(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET2.y = value;
+}
+
+void CTorch::SetTorch2OffsetZ(float value)
+{
+    if (!OnClient())
+        TORCH_OFFSET2.z = value;
+}
+
 bool CTorch::torch_active() const { return (m_switched_on); }
 bool CTorch::net_Spawn(CSE_Abstract* DC)
 {
@@ -236,8 +435,11 @@ bool CTorch::net_Spawn(CSE_Abstract* DC)
     Fcolor clr = pUserData->r_fcolor(TORCH_DEFINITION, (b_r2) ? "color_r2" : "color");
     fBrightness = clr.intensity();
     float range = pUserData->r_float(TORCH_DEFINITION, (b_r2) ? "range_r2" : "range");
+    m_torch_color = clr;
     light_render->set_color(clr);
     light_render->set_range(range);
+    light_render2->set_color(clr);
+    light_render2->set_range(range);
 
     if (b_r2)
     {
@@ -266,6 +468,8 @@ bool CTorch::net_Spawn(CSE_Abstract* DC)
 
     light_render->set_cone(deg2rad(pUserData->r_float(TORCH_DEFINITION, "spot_angle")));
     light_render->set_texture(pUserData->r_string(TORCH_DEFINITION, "spot_texture"));
+    light_render2->set_cone(deg2rad(pUserData->r_float(TORCH_DEFINITION, "spot_angle")));
+    light_render2->set_texture(pUserData->r_string(TORCH_DEFINITION, "spot_texture"));
 
     glow_render->set_texture(pUserData->r_string(TORCH_DEFINITION, "glow_texture"));
     glow_render->set_color(clr);
@@ -343,9 +547,9 @@ void CTorch::UpdateCL()
         if (actor)
         {
             m_prev_hp.x = angle_inertion_var(m_prev_hp.x, -actor->cam_FirstEye()->yaw, TORCH_INERTION_SPEED_MIN,
-                TORCH_INERTION_SPEED_MAX, TORCH_INERTION_CLAMP, Device.fTimeDelta);
+                m_torch_inertion + TORCH_INERTION_SPEED_MIN, TORCH_INERTION_CLAMP, Device.fTimeDelta);
             m_prev_hp.y = angle_inertion_var(m_prev_hp.y, -actor->cam_FirstEye()->pitch, TORCH_INERTION_SPEED_MIN,
-                TORCH_INERTION_SPEED_MAX, TORCH_INERTION_CLAMP, Device.fTimeDelta);
+                m_torch_inertion + TORCH_INERTION_SPEED_MIN, TORCH_INERTION_CLAMP, Device.fTimeDelta);
 
             Fvector dir, right, up;
             dir.setHP(m_prev_hp.x + m_delta_h, m_prev_hp.y);
@@ -358,6 +562,12 @@ void CTorch::UpdateCL()
                 offset.mad(M.j, TORCH_OFFSET.y);
                 offset.mad(M.k, TORCH_OFFSET.z);
                 light_render->set_position(offset);
+
+                offset = M.c;
+                offset.mad(M.i, TORCH_OFFSET2.x);
+                offset.mad(M.j, TORCH_OFFSET2.y);
+                offset.mad(M.k, TORCH_OFFSET2.z);
+                light_render2->set_position(offset);
 
                 if (true /*false*/)
                 {
@@ -373,6 +583,7 @@ void CTorch::UpdateCL()
             if (true)
             {
                 light_render->set_rotation(dir, right);
+                light_render2->set_rotation(dir, right);
 
                 if (true /*false*/)
                 {
@@ -388,6 +599,9 @@ void CTorch::UpdateCL()
             {
                 light_render->set_position(M.c);
                 light_render->set_rotation(M.k, M.i);
+                light_render2->set_position(M.c);
+                light_render2->set_rotation(M.k, M.i);
+                light_render2->set_active(false);
 
                 Fvector offset = M.c;
                 offset.mad(M.i, OMNI_OFFSET.x);
@@ -409,6 +623,7 @@ void CTorch::UpdateCL()
 
             m_switched_on = false;
             light_render->set_active(false);
+            light_render2->set_active(false);
             light_omni->set_active(false);
             glow_render->set_active(false);
         } // if (getVisible() && m_pPhysicsShell)

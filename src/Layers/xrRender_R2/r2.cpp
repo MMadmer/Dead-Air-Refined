@@ -118,7 +118,7 @@ static class cl_sun_shafts_intensity : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float fValue = env.m_fSunShaftsIntensity;
+        const float fValue = env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value;
         cmd_list.set_c(C, fValue, fValue, fValue, 0.f);
     }
 } binder_sun_shafts_intensity;

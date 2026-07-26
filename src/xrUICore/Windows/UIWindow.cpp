@@ -5,6 +5,8 @@
 #include "Cursor/UICursor.h"
 #include "xrEngine/editor_helper.h"
 
+CUIWindow::PPModeHandler CUIWindow::m_ppModeHandler{};
+
 CUIWindow::CUIWindow(pcstr window_name) : m_windowName(window_name)
 {
     Show(true);
@@ -13,6 +15,8 @@ CUIWindow::CUIWindow(pcstr window_name) : m_windowName(window_name)
 
 CUIWindow::~CUIWindow()
 {
+    ResetPPMode();
+
     VERIFY(!(GetParent() && IsAutoDelete()));
 
     CUIWindow* parent = GetParent();
@@ -21,6 +25,32 @@ CUIWindow::~CUIWindow()
         parent->CUIWindow::DetachChild(this);
 
     DetachAll();
+}
+
+void CUIWindow::SetPPModeHandler(PPModeHandler handler)
+{
+    m_ppModeHandler = handler;
+}
+
+void CUIWindow::SetPPMode()
+{
+    if (m_bPP)
+        return;
+
+    m_bPP = true;
+    if (m_ppModeHandler)
+        m_ppModeHandler(this, true);
+    Show(false);
+}
+
+void CUIWindow::ResetPPMode()
+{
+    if (!m_bPP)
+        return;
+
+    if (m_ppModeHandler)
+        m_ppModeHandler(this, false);
+    m_bPP = false;
 }
 
 void CUIWindow::Draw()

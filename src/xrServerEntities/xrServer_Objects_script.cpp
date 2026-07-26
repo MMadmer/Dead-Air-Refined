@@ -17,6 +17,12 @@ pcstr get_section_name(const CSE_Abstract* abstract) { return (abstract->name())
 pcstr get_name(const CSE_Abstract* abstract) { return (abstract->name_replace()); }
 CScriptIniFile* get_spawn_ini(CSE_Abstract* abstract) { return ((CScriptIniFile*)&abstract->spawn_ini()); }
 
+// Dead Air exposes these empty Lua type markers for compatibility checks.
+struct DeadAirClsidCompatibility {};
+struct DeadAirLoadObjectCompatibility {};
+struct DeadAirSaveObjectCompatibility {};
+struct DeadAirLoadSaveObjectCompatibility {};
+
 template <typename T>
 struct CSEAbstractWrapperBase : public T, public luabind::wrap_base
 {
@@ -57,6 +63,10 @@ void CPureServerObject::script_register(lua_State* luaState)
 
     module(luaState)
     [
+        class_<DeadAirClsidCompatibility>("clsid"),
+        class_<DeadAirLoadObjectCompatibility>("ipure_alife_load_object"),
+        class_<DeadAirSaveObjectCompatibility>("ipure_alife_save_object"),
+        class_<DeadAirLoadSaveObjectCompatibility>("ipure_alife_load_save_object"),
         class_<ISerializable>("iserializable"),
         class_<IPureServerObject, ISerializable>("ipure_server_object"),
         class_<CPureServerObject, IPureServerObject>("cpure_server_object")

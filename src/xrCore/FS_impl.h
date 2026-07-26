@@ -123,10 +123,12 @@ IC size_t IReaderBase<T>::find_chunk(u32 ID, bool* bCompressed)
     if (!success)
     {
         rewind();
-        while (!eof())
+        while (impl().elapsed() >= sizeof(u32) * 2)
         {
             dwType = r_u32();
             dwSize = r_u32();
+            if (dwSize > impl().elapsed())
+                break;
             if ((dwType & (~CFS_CompressMark)) == ID)
             {
                 success = true;
@@ -145,7 +147,11 @@ IC size_t IReaderBase<T>::find_chunk(u32 ID, bool* bCompressed)
         }
     }
 
-    VERIFY(impl().tell() + dwSize <= impl().length());
+    if (dwSize > impl().elapsed())
+    {
+        m_last_pos = 0;
+        return 0;
+    }
     if (bCompressed)
         *bCompressed = dwType & CFS_CompressMark;
 

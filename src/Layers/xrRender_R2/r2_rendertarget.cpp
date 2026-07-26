@@ -312,6 +312,11 @@ CRenderTarget::CRenderTarget()
         rt_Generic_0.create(r2_RT_generic0, w, h, D3DFMT_A8R8G8B8, 1);
         rt_Generic_1.create(r2_RT_generic1, w, h, D3DFMT_A8R8G8B8, 1);
         rt_Generic.create(r2_RT_generic, w, h, D3DFMT_A8R8G8B8, 1);
+#if RENDER == R_R4
+        rt_SunShaftsMask.create(r2_RT_SunShaftsMask, w, h, D3DFMT_A8R8G8B8, 1);
+        rt_SunShaftsMaskSmoothed.create(r2_RT_SunShaftsMaskSmoothed, w, h, D3DFMT_A8R8G8B8, 1);
+        rt_SunShaftsPass0.create(r2_RT_SunShaftsPass0, w, h, D3DFMT_A8R8G8B8, 1);
+#endif
 
         if (!options.msaa)
         {
@@ -652,6 +657,14 @@ CRenderTarget::CRenderTarget()
 
         CBlender_combine b_combine;
         s_combine.create(&b_combine, "r2" DELIMITER "combine");
+#if RENDER == R_R4
+        CBlender_fxaa b_fxaa;
+        s_fxaa.create(&b_fxaa, "r2" DELIMITER "fxaa");
+        g_fxaa.create(FVF::F_V, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+
+        CBlender_sunshafts b_sunshafts;
+        s_sunshafts.create(&b_sunshafts, "r2" DELIMITER "sunshafts");
+#endif
         s_combine_volumetric.create("combine_volumetric");
         s_combine_dbg_0.create("effects" DELIMITER "screen_set", r2_RT_smap_surf);
         s_combine_dbg_1.create("effects" DELIMITER "screen_set", r2_RT_luminance_t8);

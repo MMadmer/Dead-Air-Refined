@@ -52,6 +52,23 @@ CEffect_Rain::~CEffect_Rain()
     p_destroy();
 }
 
+float CEffect_Rain::GetVolume()
+{
+#ifndef _EDITOR
+    if (!g_pGameLevel)
+        return 0.f;
+
+    IGameObject* entity = g_pGameLevel->CurrentViewEntity();
+    if (!entity || !entity->renderable_ROS())
+        return 0.f;
+
+    const float* hemiCube = entity->renderable_ROS()->get_luminocity_hemi_cube();
+    return _max(_max(_max(hemiCube[0], hemiCube[1]), _max(hemiCube[2], hemiCube[3])), hemiCube[5]);
+#else
+    return 0.f;
+#endif
+}
+
 // Born
 void CEffect_Rain::Born(Item& dest, float radius)
 {

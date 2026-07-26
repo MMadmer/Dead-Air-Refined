@@ -107,6 +107,9 @@ void CRender::Render()
     //.	VERIFY					(g_pGameLevel && g_pGameLevel->pHUD);
     auto& dsgraph = get_imm_context();
 
+    if (g_pGameLevel->pHUD && ps_r__common_flags.test(RFLAG_ACTOR_BODY))
+        g_pGameLevel->pHUD->Render_First(dsgraph.context_id);
+
     //******* Z-prefill calc - DEFERRER RENDERER
     if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
     {

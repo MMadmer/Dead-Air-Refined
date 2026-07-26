@@ -233,6 +233,8 @@ void CActor::PickupModeUpdate_COD()
         if (pUsableObject && (!m_pUsableObject))
             pUsableObject->use(this);
 
+        callback(GameObject::eTakeItemFromGround)(pNearestItem->object().lua_game_object());
+
         //подбирание объекта
         Game().SendPickUpEvent(ID(), pNearestItem->object().ID());
 

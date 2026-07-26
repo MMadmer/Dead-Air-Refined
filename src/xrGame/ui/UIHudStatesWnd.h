@@ -80,6 +80,8 @@ private:
     bool m_fake_indicators_update{};
     std::bitset<it_max> m_cur_state_LA;
     bool m_b_force_update;
+    bool m_radiation_detector_enabled{};
+    float m_radiation_detector{};
 
 public:
     CUIHudStatesWnd();
@@ -100,6 +102,8 @@ public:
 
     float get_zone_cur_power(ALife::EHitType hit_type);
     float get_main_sensor_value() { return m_radia_hit; }
+    void set_radiation_detector(bool enabled);
+    float get_radiation_detector() const { return m_radiation_detector; }
     void DrawZoneIndicators();
     void FakeUpdateIndicatorType(u8 t, float power);
     void EnableFakeIndicators(bool enable);

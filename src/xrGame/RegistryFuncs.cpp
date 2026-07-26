@@ -11,16 +11,10 @@ bool ReadRegistryValue(LPCSTR rKeyName, DWORD rKeyType, void* value)
     long res = RegOpenKeyEx(REGISTRY_BASE, REGISTRY_PATH, 0, KEY_READ, &hKey);
 
     if (res != ERROR_SUCCESS)
-    {
-        Msg("! Unable to find %s in registry", REGISTRY_PATH);
         return false;
-    }
 
     if (!hKey)
-    {
-        Msg("! Unable to find %s entry in registry", REGISTRY_PATH);
         return false;
-    }
 
     string64 rBuf;
     DWORD KeyValueSize = 0;
@@ -45,10 +39,7 @@ bool ReadRegistryValue(LPCSTR rKeyName, DWORD rKeyType, void* value)
         RegCloseKey(hKey);
 
     if (res != ERROR_SUCCESS)
-    {
-        Msg("! Unable to find %s entry in registry", rKeyName);
         return false;
-    }
 
     memcpy(value, rBuf, KeyValueSize);
     return true;

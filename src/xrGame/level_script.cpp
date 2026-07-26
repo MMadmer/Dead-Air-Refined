@@ -45,7 +45,6 @@
 LPCSTR command_line() { return Core.Params; }
 bool IsDynamicMusic() { return !!psActorFlags.test(AF_DYNAMIC_MUSIC); }
 bool IsImportantSave() { return !!psActorFlags.test(AF_IMPORTANT_SAVE); }
-#ifdef DEBUG
 void check_object(CScriptGameObject* object)
 {
     try
@@ -85,7 +84,6 @@ CScriptGameObject* get_object_by_name(LPCSTR caObjectName)
     else
         return (0);
 }
-#endif
 
 CScriptGameObject* get_object_by_id(u16 id)
 {
@@ -191,6 +189,7 @@ float low_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 }
 
 float rain_factor() { return (g_pGamePersistent->Environment().CurrentEnv.rain_density); }
+float get_rain_volume() { return g_pGamePersistent->Environment().GetRainVolume(); }
 u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distance)
 {
     direction.normalize_safe();
@@ -784,11 +783,9 @@ void CLevel::script_register(lua_State* luaState)
         def("iterate_online_objects", &iterate_online_objects),
         // obsolete\deprecated
         def("object_by_id", get_object_by_id),
-#ifdef DEBUG
         def("debug_object", get_object_by_name),
         def("debug_actor", tpfGetActor),
         def("check_object", check_object),
-#endif
 
         def("get_weather", get_weather),
         def("set_weather", set_weather),
@@ -815,6 +812,7 @@ void CLevel::script_register(lua_State* luaState)
         def("low_cover_in_direction", low_cover_in_direction),
         def("vertex_in_direction", vertex_in_direction),
         def("rain_factor", rain_factor),
+        def("get_rain_volume", get_rain_volume),
         def("patrol_path_exists", patrol_path_exists),
         def("vertex_position", vertex_position),
         def("name", +[]() { return Level().name().c_str(); }),

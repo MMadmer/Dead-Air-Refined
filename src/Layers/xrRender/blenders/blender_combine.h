@@ -14,6 +14,24 @@ public:
     virtual ~CBlender_combine();
 };
 
+class CBlender_sunshafts final : public IBlender
+{
+public:
+    LPCSTR getComment() override { return "INTERNAL: Dead Air screen-space sun shafts"; }
+    BOOL canBeDetailed() override { return FALSE; }
+    BOOL canBeLMAPped() override { return FALSE; }
+    void Compile(CBlender_Compile& C) override;
+};
+
+class CBlender_fxaa final : public IBlender
+{
+public:
+    LPCSTR getComment() override { return "INTERNAL: Dead Air FXAA"; }
+    BOOL canBeDetailed() override { return FALSE; }
+    BOOL canBeLMAPped() override { return FALSE; }
+    void Compile(CBlender_Compile& C) override;
+};
+
 #if RENDER != R_R2
 class CBlender_combine_msaa final : public IBlender
 {

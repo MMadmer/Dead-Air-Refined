@@ -95,6 +95,7 @@ void CScriptGameObject::script_register(lua_State* luaState)
 
                 //Alundaio:
                 value("hud_animation_end", int(GameObject::eActorHudAnimationEnd)),
+                value("take_item_from_ground", int(GameObject::eTakeItemFromGround)),
                 //AVO: custom callbacks
                 // Input
                 value("key_press", int(GameObject::eKeyPress)),

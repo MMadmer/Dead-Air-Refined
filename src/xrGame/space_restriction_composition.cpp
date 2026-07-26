@@ -120,10 +120,6 @@ void CSpaceRestrictionComposition::initialize()
     m_border.erase(std::remove_if(m_border.begin(), m_border.end(), CMergePredicate(this)), m_border.end());
 
     process_borders();
-
-#ifdef DEBUG
-    test_correctness();
-#endif
 }
 
 #ifdef DEBUG

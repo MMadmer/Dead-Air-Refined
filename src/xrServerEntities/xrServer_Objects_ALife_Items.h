@@ -205,6 +205,7 @@ public:
     u8 ammo_type;
     u16 a_current;
     u16 a_elapsed;
+    u32 m_condition_type;
     // count of grenades to spawn in grenade launcher [ttcccccc]
     // WARNING! hight 2 bits (tt bits) indicate type of grenade, so maximum grenade count is 2^6 = 64
     struct grenade_count_t
@@ -240,6 +241,7 @@ public:
     u16 get_ammo_elapsed();
     void set_ammo_elapsed(u16 count);
     u16 get_ammo_magsize();
+    u8 get_addon_flags() const { return m_addon_flags.get(); }
     void clone_addons(CSE_ALifeItemWeapon* parent);
 
     virtual BOOL Net_Relevant();

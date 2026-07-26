@@ -78,6 +78,14 @@ const xr_token qssao_mode_token[] =
 
 u32 ps_r_sun_shafts = 2;
 const xr_token qsun_shafts_token[] = {{"st_opt_off", 0}, {"st_opt_low", 1}, {"st_opt_medium", 2}, {"st_opt_high", 3}, {nullptr, 0}};
+float ps_r2_sun_shafts_value = 0.f;
+int ps_r2_sss_enable = 0;
+float ps_r2_sss_intensity = 1.f;
+float ps_r2_sss_blend = 0.066f;
+float ps_r2_sss_phase1 = 0.09f;
+float ps_r2_sss_phase2 = 0.03f;
+float ps_r2_sss_radius = 1.56f;
+int ps_r2_fxaa = 0;
 
 u32 ps_r_ssao = 3;
 const xr_token qssao_token[] = {{"st_opt_off", 0}, {"st_opt_low", 1}, {"st_opt_medium", 2}, {"st_opt_high", 3},
@@ -241,6 +249,22 @@ float ps_r2_slight_fade = 0.5f; // 1.f
 Fvector3 ps_r2_dof = Fvector3().set(-1.25f, 1.4f, 600.f);
 float ps_r2_dof_sky = 30; //    distance to sky
 float ps_r2_dof_kernel_size = 5.0f; //  7.0f
+int ps_r2_dof_pickable = 0;
+float ps_r2_dof_time = 0.05f;
+int ps_r2_dof_diff_near = -70;
+int ps_r2_dof_diff_far = 70;
+
+int ps_r2_technicolor = 0;
+int ps_r2_vignette = 0;
+int ps_r2_reflections = 0;
+int ps_r2_lensdirt = 0;
+int ps_r2_lenswater = 0;
+float ps_r2_aberration = 0.f;
+float ps_r2_vibrance = 0.f;
+float ps_r2_lensdirt_value = 0.f;
+float ps_r2_lenswater_value = 0.f;
+float ps_r2_lumasharpen = 0.f;
+Fvector4 ps_r2_temp{};
 
 float ps_r3_dyn_wet_surf_near = 5.f; // 10.0f
 float ps_r3_dyn_wet_surf_far = 20.f; // 30.0f
@@ -765,6 +789,7 @@ void xrRender_initconsole()
 #endif // DEBUG
 
     CMD3(CCC_Mask, "r__actor_shadow", &ps_r__common_flags, RFLAG_ACTOR_SHADOW);
+    CMD3(CCC_Mask, "r__actor_body", &ps_r__common_flags, RFLAG_ACTOR_BODY);
 
     CMD2(CCC_tf_Aniso, "r__tf_aniso", &ps_r__tf_Anisotropic); // {1..16}
     CMD2(CCC_tf_MipBias, "r1_tf_mipbias", &ps_r__tf_Mipbias); // {-3 +3}
@@ -889,6 +914,7 @@ void xrRender_initconsole()
 
     CMD4(CCC_Float, "r2_slight_fade", &ps_r2_slight_fade, .2f, 1.f);
     CMD3(CCC_Token, "r2_smap_size", &ps_r2_smapsize, qsmapsize_token);
+    CMD3(CCC_Token, "r2_shadow_map_size", &ps_r2_smapsize, qsmapsize_token);
 
     Fvector tw_min, tw_max;
     tw_min.set(0, 0, 0);
@@ -910,6 +936,25 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_dof_kernel", &ps_r2_dof_kernel_size, .0f, 10.f);
     CMD4(CCC_Float, "r2_dof_sky", &ps_r2_dof_sky, -10000.f, 10000.f);
     CMD3(CCC_Mask, "r2_dof_enable", &ps_r2_ls_flags, R2FLAG_DOF);
+    CMD4(CCC_Integer, "r2_dof_pickable", &ps_r2_dof_pickable, 0, 1);
+    CMD4(CCC_Float, "r2_dof_time", &ps_r2_dof_time, 0.f, 10.f);
+    CMD4(CCC_Integer, "r2_dof_diff_near", &ps_r2_dof_diff_near, -10000, 10000);
+    CMD4(CCC_Integer, "r2_dof_diff_far", &ps_r2_dof_diff_far, -10000, 10000);
+
+    CMD4(CCC_Integer, "r2_technicolor", &ps_r2_technicolor, 0, 1);
+    CMD4(CCC_Integer, "r2_vignette", &ps_r2_vignette, 0, 1);
+    CMD4(CCC_Integer, "r2_reflections", &ps_r2_reflections, 0, 1);
+    CMD4(CCC_Integer, "r2_lensdirt", &ps_r2_lensdirt, 0, 1);
+    CMD4(CCC_Integer, "r2_lenswater", &ps_r2_lenswater, 0, 1);
+    CMD4(CCC_Float, "r2_aberration_val", &ps_r2_aberration, 0.f, 1.f);
+    CMD4(CCC_Float, "r2_vibrance_val", &ps_r2_vibrance, -1.f, 1.f);
+    CMD4(CCC_Float, "r2_lensdirt_val", &ps_r2_lensdirt_value, 0.f, 1.f);
+    CMD4(CCC_Float, "r2_lenswater_val", &ps_r2_lenswater_value, 0.f, 1.f);
+    CMD4(CCC_Float, "r2_lumasharpen", &ps_r2_lumasharpen, 0.f, 1.f);
+    CMD4(CCC_Float, "r2_tmp_x", &ps_r2_temp.x, -1.f, 1.f);
+    CMD4(CCC_Float, "r2_tmp_y", &ps_r2_temp.y, -1.f, 1.f);
+    CMD4(CCC_Float, "r2_tmp_z", &ps_r2_temp.z, -1.f, 1.f);
+    CMD4(CCC_Float, "r2_tmp_w", &ps_r2_temp.w, -1.f, 1.f);
 
     //float ps_r2_dof_near = 0.f; // 0.f
     //float ps_r2_dof_focus = 1.4f; // 1.4f
@@ -917,6 +962,14 @@ void xrRender_initconsole()
     CMD3(CCC_Mask, "r2_volumetric_lights", &ps_r2_ls_flags, R2FLAG_VOLUMETRIC_LIGHTS);
     //CMD3(CCC_Mask, "r2_sun_shafts", &ps_r2_ls_flags, R2FLAG_SUN_SHAFTS);
     CMD3(CCC_Token, "r2_sun_shafts", &ps_r_sun_shafts, qsun_shafts_token);
+    CMD4(CCC_Float, "r2_sun_shafts_value", &ps_r2_sun_shafts_value, 0.f, 0.4f);
+    CMD4(CCC_Integer, "r2_sss_enable", &ps_r2_sss_enable, 0, 1);
+    CMD4(CCC_Float, "r2_sss_intensity", &ps_r2_sss_intensity, 0.f, 2.f);
+    CMD4(CCC_Float, "r2_sss_blend", &ps_r2_sss_blend, 0.01f, 1.f);
+    CMD4(CCC_Float, "r2_sss_phase1", &ps_r2_sss_phase1, 0.01f, 0.2f);
+    CMD4(CCC_Float, "r2_sss_phase2", &ps_r2_sss_phase2, 0.01f, 0.2f);
+    CMD4(CCC_Float, "r2_sss_radius", &ps_r2_sss_radius, 0.5f, 2.f);
+    CMD4(CCC_Integer, "r2_fxaa", &ps_r2_fxaa, 0, 1);
     CMD3(CCC_SSAO_Mode, "r2_ssao_mode", &ps_r_ssao_mode, qssao_mode_token);
     CMD3(CCC_Token, "r2_ssao", &ps_r_ssao, qssao_token);
     CMD3(CCC_Mask, "r2_ssao_blur", &ps_r2_ls_flags_ext, R2FLAGEXT_SSAO_BLUR); // Need restart

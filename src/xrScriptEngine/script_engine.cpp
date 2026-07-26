@@ -129,7 +129,12 @@ void CScriptEngine::reinit()
         lua_close(m_virtual_machine);
         UnregisterState(m_virtual_machine);
     }
+    // LuaJIT FR1 requires its low-address allocator inside a 64-bit process.
+#if defined(_M_X64)
+    m_virtual_machine = luaL_newstate();
+#else
     m_virtual_machine = lua_newstate(lua_alloc, nullptr);
+#endif
     if (!m_virtual_machine)
     {
         Log("! ERROR : Cannot initialize script virtual machine!");

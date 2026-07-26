@@ -521,7 +521,6 @@ CCar* CScriptGameObject::get_car()
     return car;
 }
 
-#ifdef DEBUG
 void CScriptGameObject::debug_planner(const script_planner* planner)
 {
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&object());
@@ -534,7 +533,6 @@ void CScriptGameObject::debug_planner(const script_planner* planner)
 
     stalker->debug_planner(planner);
 }
-#endif
 
 u32 CScriptGameObject::location_on_path(float distance, Fvector* location)
 {

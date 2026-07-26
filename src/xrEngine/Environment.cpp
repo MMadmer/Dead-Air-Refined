@@ -89,6 +89,8 @@ CEnvironment::~CEnvironment()
     m_effects_config = nullptr;
 }
 
+float CEnvironment::GetRainVolume() { return eff_Rain ? eff_Rain->GetVolume() : 0.f; }
+
 void CEnvironment::Invalidate()
 {
     bWFX = false;
