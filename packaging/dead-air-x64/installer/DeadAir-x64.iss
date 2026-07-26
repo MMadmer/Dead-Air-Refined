@@ -13,6 +13,9 @@
 #ifndef LauncherPath
   #define LauncherPath AddBackslash(RepoRoot) + "build\installer\Uninstall Dead Air x64.exe"
 #endif
+#ifndef ApplicationId
+  #define ApplicationId "{{9732DFF1-E40D-4B23-B215-6D28B1DD0DE0}"
+#endif
 
 #define ProductName "Dead Air 0.98b x64"
 #define ProductVersion "0.98b-x64-" + PortVersion
@@ -20,7 +23,7 @@
 #define InstallerRoot AddBackslash(RepoRoot) + "packaging\dead-air-x64\installer"
 
 [Setup]
-AppId={{9732DFF1-E40D-4B23-B215-6D28B1DD0DE0}
+AppId={#ApplicationId}
 AppName={#ProductName}
 AppVerName={#ProductName} — порт {#PortVersion}
 AppVersion={#ProductVersion}
@@ -100,9 +103,6 @@ Name: "{autodesktop}\Dead Air 0.98b x64"; Filename: "{app}\xrEngine.exe"; Workin
 Filename: "{app}\xrEngine.exe"; Description: "Запустить Dead Air 0.98b x64"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-Type: files; Name: "{app}\.dead-air-x64\install-mode.txt"
-Type: files; Name: "{app}\.dead-air-x64\original-files.txt"
-Type: files; Name: "{app}\.dead-air-x64\port-version.txt"
 Type: dirifempty; Name: "{app}\.dead-air-x64"
 Type: dirifempty; Name: "{app}\database"
 Type: dirifempty; Name: "{app}"
@@ -115,7 +115,9 @@ const
 
 var
   ModePage: TInputOptionWizardPage;
+  BackupPage: TInputOptionWizardPage;
   RuntimeFiles: TArrayOfString;
+  RestoreUpgradeBackupOnUninstall: Boolean;
 
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
@@ -128,6 +130,19 @@ end;
 function TargetParameter: String;
 begin
   Result := RemoveBackslashUnlessRoot(Trim(ExpandConstant('{param:TARGET|}')));
+end;
+
+function BackupParameterEnabled: Boolean;
+var
+  Value: String;
+begin
+  Value := Lowercase(Trim(ExpandConstant('{param:BACKUP|yes}')));
+  Result := (Value <> 'no') and (Value <> 'off') and (Value <> '0');
+end;
+
+function RestoreBackupParameter: String;
+begin
+  Result := Lowercase(Trim(ExpandConstant('{param:RESTOREBACKUP|ask}')));
 end;
 
 function ExistingX64Directory: String;
@@ -326,6 +341,16 @@ begin
   ModePage.Add('Обновить существующую Dead Air 0.98b / Dead Air Revolution II (x86 → x64)');
   ModePage.Add('Установить чистую самостоятельную Dead Air 0.98b x64');
 
+  BackupPage := CreateInputOptionPage(
+    wpSelectDir,
+    'Резервная копия',
+    'Сохранение исходного x86-движка',
+    'Резервная копия позволяет восстановить 32-битный движок при удалении x64-порта. Без неё автоматическое восстановление будет невозможно.',
+    False,
+    False);
+  BackupPage.Add('Создать резервную копию исходного x86-движка (рекомендуется)');
+  BackupPage.Values[0] := BackupParameterEnabled;
+
   if ModeParameter = 'standalone' then
     ModePage.SelectedValueIndex := StandaloneMode
   else
@@ -333,6 +358,13 @@ begin
 
   if TargetParameter <> '' then
     WizardForm.DirEdit.Text := TargetParameter;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result :=
+    (PageID = BackupPage.ID) and
+    (IsStandaloneMode or IsOwnInstallation(WizardDirValue, 'upgrade'));
 end;
 
 function NextButtonClick(CurrentPageId: Integer): Boolean;
@@ -448,6 +480,7 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ValidationError: String;
   ControlDirectory: String;
+  ExistingUpgrade: Boolean;
 begin
   Result := '';
   if TargetParameter <> '' then
@@ -467,14 +500,21 @@ begin
     exit;
   end;
 
-  if IsUpgradeMode then
+  ExistingUpgrade := IsUpgradeMode and IsOwnInstallation(WizardDirValue, 'upgrade');
+  ControlDirectory := AddBackslash(WizardDirValue) + '.dead-air-x64';
+  if IsUpgradeMode and not ExistingUpgrade and DirExists(ControlDirectory) then
+  begin
+    Result := 'Папка .dead-air-x64 уже существует, но не принадлежит этому установщику.';
+    exit;
+  end;
+
+  if IsUpgradeMode and not ExistingUpgrade and BackupPage.Values[0] then
   begin
     Result := PrepareUpgradeBackup(WizardDirValue);
     if Result <> '' then
       exit;
   end;
 
-  ControlDirectory := AddBackslash(WizardDirValue) + '.dead-air-x64';
   if not ForceDirectories(ControlDirectory) then
   begin
     Result := 'Не удалось создать служебную папку .dead-air-x64.';
@@ -497,6 +537,23 @@ begin
   begin
     Result := 'Не удалось записать версию x64-порта.';
   end;
+end;
+
+function UpgradeBackupAvailable(DirectoryName: String): Boolean;
+begin
+  Result :=
+    DirExists(AddBackslash(DirectoryName) + '.dead-air-x64\backup-x86') and
+    FileExists(AddBackslash(DirectoryName) + '.dead-air-x64\original-files.txt');
+end;
+
+procedure RemoveControlMetadata(DirectoryName: String);
+var
+  ControlDirectory: String;
+begin
+  ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
+  DeleteFile(AddBackslash(ControlDirectory) + 'install-mode.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'original-files.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'port-version.txt');
 end;
 
 function RestoreUpgradeRuntime(DirectoryName: String): Boolean;
@@ -555,7 +612,7 @@ begin
   Result := True;
 end;
 
-procedure RemoveStandaloneRuntime(DirectoryName: String);
+procedure RemoveX64Runtime(DirectoryName: String);
 var
   Manifest: TArrayOfString;
   Index: Integer;
@@ -569,9 +626,81 @@ begin
   end;
 end;
 
+function InitializeUninstall: Boolean;
+var
+  StoredMode: AnsiString;
+  RestoreMode: String;
+  Response: Integer;
+begin
+  Result := True;
+  RestoreUpgradeBackupOnUninstall := False;
+
+  if not LoadStringFromFile(
+    ExpandConstant('{app}\.dead-air-x64\install-mode.txt'),
+    StoredMode) or
+    (CompareText(Trim(String(StoredMode)), 'upgrade') <> 0) then
+  begin
+    exit;
+  end;
+
+  RestoreMode := RestoreBackupParameter;
+  if UpgradeBackupAvailable(ExpandConstant('{app}')) then
+  begin
+    if RestoreMode = 'yes' then
+    begin
+      RestoreUpgradeBackupOnUninstall := True;
+      exit;
+    end;
+
+    if RestoreMode = 'no' then
+      exit;
+
+    Response := MsgBox(
+      'Обнаружена резервная копия исходного x86-движка.' + #13#10 + #13#10 +
+      'Восстановить 32-битный движок при удалении x64-порта?' + #13#10 +
+      'После успешного восстановления резервная копия будет удалена.' + #13#10 + #13#10 +
+      '«Да» — восстановить x86-движок.' + #13#10 +
+      '«Нет» — удалить x64-порт без восстановления и сохранить резервную копию.' + #13#10 +
+      '«Отмена» — прекратить удаление.',
+      mbConfirmation,
+      MB_YESNOCANCEL);
+
+    if Response = IDCANCEL then
+    begin
+      Result := False;
+      exit;
+    end;
+
+    RestoreUpgradeBackupOnUninstall := Response = IDYES;
+  end
+  else
+  begin
+    if RestoreMode = 'no' then
+      exit;
+
+    if RestoreMode = 'yes' then
+    begin
+      MsgBox(
+        'Восстановление невозможно: резервная копия исходного x86-движка отсутствует.',
+        mbError,
+        MB_OK);
+      Result := False;
+      exit;
+    end;
+
+    Result := MsgBox(
+      'Резервная копия исходного x86-движка отсутствует.' + #13#10 +
+      'После удаления x64-порта 32-битный движок не будет восстановлен автоматически.' + #13#10 + #13#10 +
+      'Продолжить удаление?',
+      mbConfirmation,
+      MB_YESNO) = IDYES;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurrentStep: TUninstallStep);
 var
   StoredMode: AnsiString;
+  GameDirectory: String;
 begin
   if CurrentStep <> usUninstall then
     exit;
@@ -584,11 +713,27 @@ begin
     exit;
   end;
 
+  GameDirectory := ExpandConstant('{app}');
   if CompareText(Trim(String(StoredMode)), 'upgrade') = 0 then
   begin
-    if RestoreUpgradeRuntime(ExpandConstant('{app}')) then
-      DelTree(ExpandConstant('{app}\.dead-air-x64\backup-x86'), True, True, True);
+    if RestoreUpgradeBackupOnUninstall then
+    begin
+      if RestoreUpgradeRuntime(GameDirectory) then
+      begin
+        DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backup-x86', True, True, True);
+        RemoveControlMetadata(GameDirectory);
+      end;
+    end
+    else
+    begin
+      RemoveX64Runtime(GameDirectory);
+      if not UpgradeBackupAvailable(GameDirectory) then
+        RemoveControlMetadata(GameDirectory);
+    end;
   end
   else if CompareText(Trim(String(StoredMode)), 'standalone') = 0 then
-    RemoveStandaloneRuntime(ExpandConstant('{app}'));
+  begin
+    RemoveX64Runtime(GameDirectory);
+    RemoveControlMetadata(GameDirectory);
+  end;
 end;
