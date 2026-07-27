@@ -61,6 +61,7 @@ public:
     shared_str m_NightVisionSect;
 
     bool bIsHelmetAvaliable;
+    bool bIsBackpackAvaliable;
 
     virtual u32 ef_equipment_type() const;
     virtual bool BonePassBullet(int boneID);

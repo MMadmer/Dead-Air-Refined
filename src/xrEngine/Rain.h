@@ -71,6 +71,7 @@ private:
 
     // Sounds
     ref_sound snd_Ambient;
+    float rain_volume;
 
     // Utilities
     void p_create();
@@ -92,7 +93,7 @@ public:
     CEffect_Rain();
     ~CEffect_Rain();
 
-    float GetVolume();
+    float GetVolume() { return rain_volume; }
     void Render();
     void OnFrame();
 };

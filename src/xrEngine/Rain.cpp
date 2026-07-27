@@ -38,6 +38,7 @@ const float particles_time = .3f;
 CEffect_Rain::CEffect_Rain()
 {
     state = stIdle;
+    rain_volume = 0.f;
 
     snd_Ambient.create("ambient" DELIMITER "rain", st_Effect, sg_Undefined);
 
@@ -47,26 +48,10 @@ CEffect_Rain::CEffect_Rain()
 CEffect_Rain::~CEffect_Rain()
 {
     snd_Ambient.destroy();
+    rain_volume = 0.f;
 
     // Cleanup
     p_destroy();
-}
-
-float CEffect_Rain::GetVolume()
-{
-#ifndef _EDITOR
-    if (!g_pGameLevel)
-        return 0.f;
-
-    IGameObject* entity = g_pGameLevel->CurrentViewEntity();
-    if (!entity || !entity->renderable_ROS())
-        return 0.f;
-
-    const float* hemiCube = entity->renderable_ROS()->get_luminocity_hemi_cube();
-    return _max(_max(_max(hemiCube[0], hemiCube[1]), _max(hemiCube[2], hemiCube[3])), hemiCube[5]);
-#else
-    return 0.f;
-#endif
 }
 
 // Born
@@ -180,6 +165,7 @@ void CEffect_Rain::OnFrame()
         {
             state = stIdle;
             snd_Ambient.stop();
+            rain_volume = 0.f;
             return;
         }
         break;
@@ -191,7 +177,9 @@ void CEffect_Rain::OnFrame()
         // Fvector sndP;
         // sndP.mad (Device.vCameraPosition,Fvector().set(0,1,0),source_offset);
         // snd_Ambient.set_position(sndP);
-        snd_Ambient.set_volume(_max(0.1f, factor) * hemi_factor);
+        rain_volume = factor * hemi_factor;
+        clamp(rain_volume, 0.1f, 1.f);
+        snd_Ambient.set_volume(rain_volume);
     }
 }
 

@@ -16,6 +16,7 @@
 #include "inventory_item.h"
 #include "InventoryBox.h"
 #include "ai/monsters/basemonster/base_monster.h"
+#include "xrScriptEngine/script_callback_ex.h"
 
 void move_item_from_to(u16 from_id, u16 to_id, u16 what_id)
 {
@@ -147,6 +148,13 @@ bool CUIActorMenu::ToDeadBodyBag(CUICellItem* itm, bool b_use_cursor_pos)
     PIItem quest_item = (PIItem)itm->m_pData;
     if (quest_item->IsQuestItem())
         return false;
+    if (!m_pPartnerInvOwner)
+    {
+        luabind::functor<bool> can_take;
+        if (GEnv.ScriptEngine->functor("_G.CInventoryBox_CanTake", can_take) &&
+            !can_take(m_pInvBox->lua_game_object(), quest_item->object().lua_game_object()))
+            return false;
+    }
 
     CUIDragDropListEx* old_owner = itm->OwnerList();
     CUIDragDropListEx* new_owner = nullptr;

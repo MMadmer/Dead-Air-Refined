@@ -202,6 +202,7 @@ u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distan
 }
 
 Fvector vertex_position(u32 level_vertex_id) { return (ai().level_graph().vertex_position(level_vertex_id)); }
+bool valid_vertex_id(u32 level_vertex_id) { return ai().level_graph().valid_vertex_id(level_vertex_id); }
 void map_add_object_spot(u16 id, LPCSTR spot_type, LPCSTR text)
 {
     CMapLocation* ml = Level().MapManager().AddMapLocation(spot_type, id);
@@ -815,6 +816,7 @@ void CLevel::script_register(lua_State* luaState)
         def("get_rain_volume", get_rain_volume),
         def("patrol_path_exists", patrol_path_exists),
         def("vertex_position", vertex_position),
+        def("valid_vertex_id", valid_vertex_id),
         def("name", +[]() { return Level().name().c_str(); }),
         def("prefetch_sound", prefetch_sound),
 

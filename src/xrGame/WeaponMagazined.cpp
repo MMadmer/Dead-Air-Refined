@@ -83,6 +83,10 @@ void CWeaponMagazined::Load(LPCSTR section)
     m_sounds.LoadSound(section, "snd_empty", "sndEmptyClick", true, m_eSoundEmptyClick);
     m_sounds.LoadSound(section, "snd_reload", "sndReload", true, m_eSoundReload);
 
+    if (WeaponSoundExist(section, "snd_pump"))
+        m_sounds.LoadSound(section, "snd_pump", "sndPump", false, m_eSoundReload);
+    if (WeaponSoundExist(section, "snd_fire_mode"))
+        m_sounds.LoadSound(section, "snd_fire_mode", "sndFireMode", true, m_eSoundReload);
     if (WeaponSoundExist(section, "snd_reload_empty"))
         m_sounds.LoadSound(section, "snd_reload_empty", "sndReloadEmpty", true, m_eSoundReloadEmpty);
     if (WeaponSoundExist(section, "snd_reload_misfire"))
@@ -98,6 +102,9 @@ void CWeaponMagazined::Load(LPCSTR section)
 
         //Alundaio: LAYERED_SND_SHOOT Silencer
         m_layered_sounds.LoadSound(section, "snd_silncer_shot", "sndSilencerShot", false, m_eSoundShot);
+        if (WeaponSoundExist(section, "snd_silncer_shot_actor"))
+            m_layered_sounds.LoadSound(
+                section, "snd_silncer_shot_actor", "sndSilencerShotActor", false, m_eSoundShot);
         //-Alundaio
     }
 
@@ -212,7 +219,7 @@ bool CWeaponMagazined::TryReload()
             Actor()->callback(GameObject::eWeaponNoAmmoAvailable)(lua_game_object(), AC);
         }
 
-        m_pCurrentAmmo = smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(m_ammoTypes[m_ammoType].c_str()));
+        m_pCurrentAmmo = GetAmmoForReload(m_ammoTypes[m_ammoType].c_str());
 
         if (IsMisfire() && iAmmoElapsed)
         {
@@ -230,7 +237,7 @@ bool CWeaponMagazined::TryReload()
         else
             for (u8 i = 0; i < u8(m_ammoTypes.size()); ++i)
             {
-                m_pCurrentAmmo = smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(m_ammoTypes[i].c_str()));
+                m_pCurrentAmmo = GetAmmoForReload(m_ammoTypes[i].c_str());
                 if (m_pCurrentAmmo)
                 {
                     m_set_next_ammoType_on_reload = i;
@@ -249,11 +256,11 @@ bool CWeaponMagazined::TryReload()
 
 bool CWeaponMagazined::IsAmmoAvailable()
 {
-    if (smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(m_ammoTypes[m_ammoType].c_str())))
+    if (GetAmmoForReload(m_ammoTypes[m_ammoType].c_str()))
         return (true);
     else
         for (u32 i = 0; i < m_ammoTypes.size(); ++i)
-            if (smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(m_ammoTypes[i].c_str())))
+            if (GetAmmoForReload(m_ammoTypes[i].c_str()))
                 return (true);
     return (false);
 }
@@ -317,7 +324,7 @@ void CWeaponMagazined::UnloadMagazine(bool spawn_ammo)
     xr_map<LPCSTR, u16>::iterator l_it;
     for (l_it = l_ammo.begin(); l_ammo.end() != l_it; ++l_it)
     {
-        if (m_pInventory)
+        if (m_pInventory && !UsesAmmoBelt())
         {
             CWeaponAmmo* l_pA = smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(l_it->first));
             if (l_pA)
@@ -365,14 +372,14 @@ void CWeaponMagazined::ReloadMagazine()
             return;
 
         //попытаться найти в инвентаре патроны текущего типа
-        m_pCurrentAmmo = smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(tmp_sect_name));
+        m_pCurrentAmmo = GetAmmoForReload(tmp_sect_name);
 
         if (!m_pCurrentAmmo && !m_bLockType)
         {
             for (u8 i = 0; i < u8(m_ammoTypes.size()); ++i)
             {
                 //проверить патроны всех подходящих типов
-                m_pCurrentAmmo = smart_cast<CWeaponAmmo*>(m_pInventory->GetAny(m_ammoTypes[i].c_str()));
+                m_pCurrentAmmo = GetAmmoForReload(m_ammoTypes[i].c_str());
                 if (m_pCurrentAmmo)
                 {
                     m_ammoType = i;
@@ -504,6 +511,10 @@ void CWeaponMagazined::UpdateSounds()
 
     if (m_sounds.FindSoundItem("sndReloadEmpty", false))
         m_sounds.SetPosition("sndReloadEmpty", P);
+    if (m_sounds.FindSoundItem("sndPump", false))
+        m_sounds.SetPosition("sndPump", P);
+    if (m_sounds.FindSoundItem("sndFireMode", false))
+        m_sounds.SetPosition("sndFireMode", P);
 
     //. nah	m_sounds.SetPosition("sndEmptyClick", P);
 }
@@ -628,7 +639,7 @@ void CWeaponMagazined::state_Fire(float dt)
 
 void CWeaponMagazined::TryAddConditionFailure()
 {
-    if (!IsUsingCondition() || !m_condition_available)
+    if (!ParentIsActor())
         return;
 
     const float scaled_deterioration = (GetWeaponDeterioration() + 0.0001f) * 1000.f;
@@ -680,6 +691,9 @@ void CWeaponMagazined::OnShot()
     //Alundaio: LAYERED_SND_SHOOT
     m_layered_sounds.PlaySound(m_sSndShotCurrent.c_str(), get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1);
     //-Alundaio
+
+    if (m_sounds.FindSoundItem("sndPump", false))
+        PlaySound("sndPump", get_LastFP());
 
     // Camera
     AddShotEffector();
@@ -1299,8 +1313,11 @@ void CWeaponMagazined::OnNextFireMode()
         return;
     if (GetState() != eIdle)
         return;
+    if (m_condition_type & 0x08000000)
+        return;
     m_iCurFireMode = (m_iCurFireMode + 1 + m_aFireModes.size()) % m_aFireModes.size();
     SetQueueSize(GetCurrentFireMode());
+    OnFireModeChanged();
 };
 
 void CWeaponMagazined::OnPrevFireMode()
@@ -1309,9 +1326,22 @@ void CWeaponMagazined::OnPrevFireMode()
         return;
     if (GetState() != eIdle)
         return;
+    if (m_condition_type & 0x08000000)
+        return;
     m_iCurFireMode = (m_iCurFireMode - 1 + m_aFireModes.size()) % m_aFireModes.size();
     SetQueueSize(GetCurrentFireMode());
+    OnFireModeChanged();
 };
+
+void CWeaponMagazined::OnFireModeChanged()
+{
+    if (m_sounds.FindSoundItem("sndFireMode", false))
+        PlaySound("sndFireMode", get_LastFP());
+
+    const float condition = _max(GetCondition(), 0.2f);
+    if (::Random.randF(0.f, 0.9f) > condition)
+        m_condition_type |= 0x08000000;
+}
 
 void CWeaponMagazined::OnH_A_Chield()
 {

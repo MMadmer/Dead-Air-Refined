@@ -1,15 +1,30 @@
-<?xml version="1.0" encoding="windows-1251" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <string_table>
     <string id="ui_mm_window_mode">
-        <text>&#x420;&#x435;&#x436;&#x438;&#x43C; &#x43E;&#x442;&#x43E;&#x431;&#x440;&#x430;&#x436;&#x435;&#x43D;&#x438;&#x44F;</text>
+        <text>Режим отображения</text>
     </string>
     <string id="st_opt_windowed">
-        <text>&#x41E;&#x43A;&#x43E;&#x43D;&#x43D;&#x44B;&#x439;</text>
+        <text>Оконный</text>
     </string>
     <string id="st_opt_fullscreen_borderless">
-        <text>&#x41F;&#x43E;&#x43B;&#x43D;&#x43E;&#x44D;&#x43A;&#x440;&#x430;&#x43D;&#x43D;&#x44B;&#x439; &#x432; &#x43E;&#x43A;&#x43D;&#x435;</text>
+        <text>Полноэкранный в окне</text>
     </string>
     <string id="st_opt_fullscreen">
-        <text>&#x41F;&#x43E;&#x43B;&#x43D;&#x43E;&#x44D;&#x43A;&#x440;&#x430;&#x43D;&#x43D;&#x44B;&#x439;</text>
+        <text>Полноэкранный</text>
+    </string>
+    <string id="st_opt_renderer_r2">
+        <text>Dx9 R2</text>
+    </string>
+    <string id="st_opt_renderer_r2.5">
+        <text>Dx9 R2.5</text>
+    </string>
+    <string id="st_opt_renderer_r3">
+        <text>Dx10 R3</text>
+    </string>
+    <string id="st_opt_renderer_r4">
+        <text>Dx11 R4</text>
+    </string>
+    <string id="st_opt_renderer_rgl">
+        <text>OpenGL</text>
     </string>
 </string_table>

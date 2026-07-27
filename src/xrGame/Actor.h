@@ -439,6 +439,7 @@ public:
     float m_fCrouchFactor;
     float m_fClimbFactor;
     float m_fSprintFactor;
+    float m_fBreath{0.2f};
     float m_fRecoilCoeff{1.0f};
     float m_fZoomInertion{};
 

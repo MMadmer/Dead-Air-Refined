@@ -362,7 +362,34 @@ void CResourceManager::DeferredUpload()
     ZoneScoped;
 
 #if defined(USE_DX11)
-    xr_parallel_for_each(m_textures, [&](auto m_tex) { m_tex.second->Load(); });
+    constexpr size_t texturesPerThread = 100;
+    if (m_textures.size() <= texturesPerThread)
+    {
+        for (auto& texture : m_textures)
+            texture.second->Load();
+        return;
+    }
+
+    xr_vector<CTexture*> textures;
+    textures.reserve(m_textures.size());
+    for (auto& texture : m_textures)
+        textures.push_back(texture.second);
+
+    // Dead Air keeps D3D texture loading off the caller thread.
+    xr_vector<std::thread> workers;
+    workers.reserve((textures.size() + texturesPerThread - 1) / texturesPerThread);
+    for (size_t begin = 0; begin < textures.size(); begin += texturesPerThread)
+    {
+        const size_t end = std::min(begin + texturesPerThread, textures.size());
+        workers.emplace_back([&textures, begin, end]
+        {
+            for (size_t index = begin; index < end; ++index)
+                textures[index]->Load();
+        });
+    }
+
+    for (auto& worker : workers)
+        worker.join();
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
     for (auto& texture : m_textures)
         texture.second->Load();

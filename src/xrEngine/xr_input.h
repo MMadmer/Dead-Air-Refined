@@ -22,6 +22,9 @@ enum EMouseButton
     MOUSE_3, // Middle
     MOUSE_4, // X1
     MOUSE_5, // X2
+    MOUSE_6,
+    MOUSE_7,
+    MOUSE_8,
     MOUSE_MAX,
     MOUSE_COUNT = MOUSE_MAX - MOUSE_INVALID - 1
 };

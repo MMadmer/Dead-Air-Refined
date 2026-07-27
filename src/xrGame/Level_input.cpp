@@ -127,7 +127,6 @@ void CLevel::IR_OnKeyboardPress(int key)
     bool b_ui_exist = !!CurrentGameUI();
 
     EGameActions _curr = GetBindedAction(key);
-
     /* avo: script callback */
     if (!g_bDisableAllInput && g_actor)
     {
@@ -172,7 +171,7 @@ void CLevel::IR_OnKeyboardPress(int key)
 
     case kQUIT:
     {
-        if (b_ui_exist && CurrentGameUI()->TopInputReceiver() && !Device.Paused())
+        if (b_ui_exist && CurrentGameUI()->TopInputReceiver())
         {
             if (CurrentGameUI()->IR_UIOnKeyboardPress(key))
                 return; // special case for mp and main_menu

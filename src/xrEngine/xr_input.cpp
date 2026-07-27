@@ -174,8 +174,8 @@ void CInput::MouseUpdate()
 
     // Mouse2 is a middle button in SDL,
     // but in X-Ray this is a right button
-    constexpr int RemapIdx[] = { 0, 2, 1, 3, 4 };
-    constexpr int IdxToKey[] = { MOUSE_1, MOUSE_2, MOUSE_3, MOUSE_4, MOUSE_5 };
+    constexpr int RemapIdx[] = { 0, 2, 1, 3, 4, 5, 6, 7 };
+    constexpr int IdxToKey[] = { MOUSE_1, MOUSE_2, MOUSE_3, MOUSE_4, MOUSE_5, MOUSE_6, MOUSE_7, MOUSE_8 };
     static_assert(std::size(RemapIdx) == COUNT_MOUSE_BUTTONS);
     static_assert(std::size(IdxToKey) == COUNT_MOUSE_BUTTONS);
 
@@ -207,6 +207,10 @@ void CInput::MouseUpdate()
 
         case SDL_MOUSEBUTTONDOWN:
         {
+            // SDL can report vendor-specific buttons beyond the supported range.
+            if (!event.button.button || event.button.button > COUNT_MOUSE_BUTTONS)
+                break;
+
             const auto idx = RemapIdx[event.button.button - 1];
             mouseState[idx] = true;
             cbStack.back()->IR_OnMousePress(IdxToKey[idx]);
@@ -214,6 +218,9 @@ void CInput::MouseUpdate()
         }
         case SDL_MOUSEBUTTONUP:
         {
+            if (!event.button.button || event.button.button > COUNT_MOUSE_BUTTONS)
+                break;
+
             const auto idx = RemapIdx[event.button.button - 1];
             mouseState[idx] = false;
             cbStack.back()->IR_OnMouseRelease(IdxToKey[idx]);

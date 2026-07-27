@@ -38,6 +38,8 @@
 #include "ai_stalker_space.h"
 #include "EffectorShot.h"
 #include "BoneProtections.h"
+#include "script_hit.h"
+#include "xrScriptEngine/script_callback_ex.h"
 #include "RadioactiveZone.h"
 #include "restricted_object.h"
 #include "xrAICore/Navigation/ai_object_location.h"
@@ -381,6 +383,24 @@ void CAI_Stalker::Hit(SHit* pHDS)
         float const damage_factor = invulnerable() ? 0.f : 100.f;
         memory().hit().add(damage_factor * HDS.damage(), HDS.direction(), HDS.who, HDS.boneID);
     }
+
+    CScriptHit lua_hit;
+    lua_hit.m_fPower = HDS.power;
+    lua_hit.m_fImpulse = HDS.impulse;
+    lua_hit.m_tDirection = HDS.direction();
+    lua_hit.m_tHitType = HDS.hit_type;
+    const CGameObject* draftsman = smart_cast<const CGameObject*>(HDS.who);
+    lua_hit.m_tpDraftsman = draftsman ? draftsman->lua_game_object() : nullptr;
+
+    luabind::functor<bool> before_hit;
+    if (GEnv.ScriptEngine->functor("_G.CAI_Stalker__BeforeHitCallback", before_hit) &&
+        !before_hit(lua_game_object(), &lua_hit, HDS.boneID))
+        return;
+
+    HDS.power = lua_hit.m_fPower;
+    HDS.impulse = lua_hit.m_fImpulse;
+    HDS.dir = lua_hit.m_tDirection;
+    HDS.hit_type = static_cast<ALife::EHitType>(lua_hit.m_tHitType);
 
     // conditions().health()			= 1.f;
 

@@ -7,6 +7,7 @@
 #include "xrServer_Objects_ALife_Items.h"
 #include "Actor.h"
 #include "ActorEffector.h"
+#include "HUDManager.h"
 #include "Level.h"
 #include "xrEngine/xr_level_controller.h"
 #include "game_cl_base.h"
@@ -91,6 +92,7 @@ CWeapon::CWeapon()
     m_sub_state = eSubstateReloadBegin;
     m_bTriStateReload = false;
     m_condition_type = 0;
+    m_nearwall_last_hud_fov = psHUD_FOV;
     SetDefaults();
 
     m_Offset.identity();
@@ -404,6 +406,12 @@ void CWeapon::Load(LPCSTR section)
     m_crosshair_inertion = READ_IF_EXISTS(pSettings, r_float, section, "crosshair_inertion", 5.91f);
     m_first_bullet_controller.load(section);
     fireDispersionConditionFactor = pSettings->r_float(section, "fire_dispersion_condition_factor");
+
+    m_hud_fov_add_mod = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_addition_modifier", 0.0f);
+    m_nearwall_dist_min = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_min", 0.5f);
+    m_nearwall_dist_max = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_max", 1.0f);
+    m_nearwall_target_hud_fov = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_target_hud_fov", 0.27f);
+    m_nearwall_speed_mod = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_speed_mod", 10.0f);
 
     // modified by Peacemaker [17.10.08]
     if (pSettings->line_exist(section, "misfire_start_condition") ||
@@ -1083,7 +1091,7 @@ bool CWeapon::SwitchAmmoType(u32 flags)
     {
         l_newType = u8((u32(l_newType + 1)) % m_ammoTypes.size());
         b1 = (l_newType != m_ammoType);
-        b2 = unlimited_ammo() ? false : (!m_pInventory->GetAny(m_ammoTypes[l_newType].c_str()));
+        b2 = unlimited_ammo() ? false : !GetAmmoForReload(m_ammoTypes[l_newType].c_str());
     } while (b1 && b2);
 
     if (l_newType != m_ammoType)
@@ -1210,6 +1218,9 @@ int CWeapon::GetAmmoCount_forType(shared_str const& ammo_type) const
         }
     }
 
+    if (UsesAmmoBelt())
+        return res;
+
     itb = m_pInventory->m_ruck.begin();
     ite = m_pInventory->m_ruck.end();
     for (; itb != ite; ++itb)
@@ -1221,6 +1232,17 @@ int CWeapon::GetAmmoCount_forType(shared_str const& ammo_type) const
         }
     }
     return res;
+}
+
+bool CWeapon::UsesAmmoBelt() const
+{
+    return smart_cast<const CActor*>(H_Parent()) && pSettings->r_bool("inventory", "use_ammo_belt");
+}
+
+CWeaponAmmo* CWeapon::GetAmmoForReload(LPCSTR ammo_section) const
+{
+    const PIItem ammo = UsesAmmoBelt() ? m_pInventory->Get(ammo_section, false) : m_pInventory->GetAny(ammo_section);
+    return smart_cast<CWeaponAmmo*>(ammo);
 }
 
 float CWeapon::GetConditionMisfireProbability() const
@@ -1949,6 +1971,30 @@ u8 CWeapon::GetCurrentHudOffsetIdx()
 }
 
 void CWeapon::render_hud_mode() { RenderLight(); }
+
+float CWeapon::GetHudFov()
+{
+    if (ParentIsActor() && Level().CurrentViewEntity() == H_Parent())
+    {
+        float distance = HUD().GetCurrentRayQuery().range;
+        clamp(distance, m_nearwall_dist_min, m_nearwall_dist_max);
+
+        float distance_factor = 1.0f;
+        const float distance_span = m_nearwall_dist_max - m_nearwall_dist_min;
+        if (!fis_zero(distance_span))
+            distance_factor = (distance - m_nearwall_dist_min) / distance_span;
+
+        const float base_fov = _max(0.0f, psHUD_FOV_def + m_hud_fov_add_mod);
+        const float target_fov =
+            m_nearwall_target_hud_fov + distance_factor * (base_fov - m_nearwall_target_hud_fov);
+        const float interpolation = clampr(m_nearwall_speed_mod * Device.fTimeDelta, 0.0f, 1.0f);
+        m_nearwall_last_hud_fov =
+            m_nearwall_last_hud_fov * (1.0f - interpolation) + target_fov * interpolation;
+    }
+
+    return m_nearwall_last_hud_fov;
+}
+
 bool CWeapon::MovingAnimAllowedNow() { return !IsZoomed(); }
 bool CWeapon::IsHudModeNow() { return (HudItemData() != nullptr); }
 void CWeapon::ZoomInc()

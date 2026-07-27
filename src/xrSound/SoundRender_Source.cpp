@@ -256,6 +256,10 @@ bool CSoundRender_Source::LoadWave(pcstr pName)
 
 bool CSoundRender_Source::load(pcstr name)
 {
+    // Optional dialogue sounds use an empty name in the original game data.
+    if (!name || !*name)
+        return false;
+
     string_path fn, N;
     xr_strcpy(N, name);
 #ifdef XR_PLATFORM_WINDOWS

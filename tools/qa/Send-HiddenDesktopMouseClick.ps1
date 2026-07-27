@@ -6,8 +6,10 @@ param(
     [int]$ProcessId,
 
     [Parameter(Mandatory)]
-    [ValidateRange(1, 255)]
-    [int]$VirtualKey
+    [int]$X,
+
+    [Parameter(Mandatory)]
+    [int]$Y
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +20,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-public static class HiddenDesktopKeyboard
+public static class HiddenDesktopMouse
 {
     private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
 
@@ -61,24 +63,22 @@ public static class HiddenDesktopKeyboard
     [DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr window);
 
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte virtualKey, byte scanCode, int flags, IntPtr extraInfo);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetCursorPos(int x, int y);
 
     [DllImport("user32.dll")]
-    private static extern uint MapVirtualKey(uint code, uint mapType);
+    private static extern void mouse_event(int flags, int dx, int dy, int data, IntPtr extraInfo);
 
-    public static void Send(string desktopName, int processId, int virtualKey)
+    public static void Click(string desktopName, int processId, int x, int y)
     {
         const int desktopReadObjects = 0x0001;
         const int desktopWriteObjects = 0x0080;
-        const int wmKeyDown = 0x0100;
-        const int wmKeyUp = 0x0101;
+        const int wmMouseMove = 0x0200;
+        const int wmLeftButtonDown = 0x0201;
+        const int wmLeftButtonUp = 0x0202;
+        const int mkLeftButton = 0x0001;
 
-        IntPtr desktop = OpenDesktop(
-            desktopName,
-            0,
-            false,
-            desktopReadObjects | desktopWriteObjects);
+        IntPtr desktop = OpenDesktop(desktopName, 0, false, desktopReadObjects | desktopWriteObjects);
         if (desktop == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error());
 
@@ -111,19 +111,19 @@ public static class HiddenDesktopKeyboard
                     }, IntPtr.Zero);
 
                     if (target == IntPtr.Zero)
-                        throw new InvalidOperationException("The target process has no window on the requested desktop.");
+                        throw new InvalidOperationException("The target process has no visible window.");
 
                     SetForegroundWindow(target);
                     SetFocus(target);
-                    int scanCode = (int)MapVirtualKey((uint)virtualKey, 0);
-                    keybd_event((byte)virtualKey, (byte)scanCode, 0, IntPtr.Zero);
+                    SetCursorPos(x, y);
+                    mouse_event(2, 0, 0, 0, IntPtr.Zero);
                     Thread.Sleep(30);
-                    keybd_event((byte)virtualKey, (byte)scanCode, 2, IntPtr.Zero);
+                    mouse_event(4, 0, 0, 0, IntPtr.Zero);
 
-                    IntPtr downData = new IntPtr(1 | (scanCode << 16));
-                    IntPtr upData = new IntPtr(1 | (scanCode << 16) | unchecked((int)0xC0000000));
-                    PostMessage(target, wmKeyDown, new IntPtr(virtualKey), downData);
-                    PostMessage(target, wmKeyUp, new IntPtr(virtualKey), upData);
+                    IntPtr position = new IntPtr((y << 16) | (x & 0xFFFF));
+                    PostMessage(target, wmMouseMove, IntPtr.Zero, position);
+                    PostMessage(target, wmLeftButtonDown, new IntPtr(mkLeftButton), position);
+                    PostMessage(target, wmLeftButtonUp, IntPtr.Zero, position);
                 }
                 catch (Exception exception)
                 {
@@ -146,4 +146,4 @@ public static class HiddenDesktopKeyboard
 '@
 
 Add-Type -TypeDefinition $nativeSource -Language CSharp
-[HiddenDesktopKeyboard]::Send($DesktopName, $ProcessId, $VirtualKey)
+[HiddenDesktopMouse]::Click($DesktopName, $ProcessId, $X, $Y)

@@ -7,6 +7,15 @@
 
 #define CB_HEIGHT 20.0f
 
+static STRING_VALUE GetOptionTokenText(pcstr token)
+{
+    string256 displayId;
+    strconcat(displayId, "st_opt_", token);
+
+    const STRING_VALUE displayText = StringTable().translate(displayId);
+    return displayText == displayId ? StringTable().translate(token) : displayText;
+}
+
 CUIComboBox::CUIComboBox() : CUIWindow("CUIComboBox")
 {
     AttachChild(&m_frameLine);
@@ -84,8 +93,8 @@ void CUIComboBox::InitComboBox(Fvector2 pos, float width)
     else if (CUITextureMaster::ItemExist("ui_cb_listline_e"))
         m_list_box.SetSelectionTexture("ui_cb_listline");
 
-    // frame(texture) for list
-    if (!m_list_frame.InitTexture("ui_inGame2_combobox", false))
+    // The original combo frame has an almost fully transparent center.
+    if (!m_list_frame.InitTexture("ui_inGame2_listbox", false))
         m_list_frame.InitTexture("ui_cb_listbox", false);
 
     m_list_frame.SetWndSize(Fvector2().set(width, m_list_box.GetItemHeight() * m_iListHeight));
@@ -151,14 +160,14 @@ void CUIComboBox::SetCurrentOptValue()
     {
         if (m_disabled.end() == std::find(m_disabled.begin(), m_disabled.end(), tok->id))
         {
-            AddItem_(tok->name, tok->id);
+            AddItem_(GetOptionTokenText(tok->name).c_str(), tok->id);
         }
         tok++;
     }
 
-    cpcstr cur_val = StringTable().translate(GetOptTokenValue()).c_str();
-    m_text.SetText(cur_val);
-    m_list_box.SetSelectedText(cur_val);
+    const STRING_VALUE cur_val = GetOptionTokenText(GetOptTokenValue());
+    m_text.SetText(cur_val.c_str());
+    m_list_box.SetSelectedText(cur_val.c_str());
 
     if (CUIListBoxItem* itm = m_list_box.GetSelectedItem())
         m_itoken_id = (int)(__int64)itm->GetData();

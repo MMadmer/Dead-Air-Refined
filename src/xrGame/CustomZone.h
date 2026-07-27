@@ -258,6 +258,9 @@ protected:
     float m_fLightTime;
     float m_fLightTimeLeft;
     float m_fLightHeight;
+    float m_fLightVolumetricQuality;
+    float m_fLightVolumetricIntensity;
+    float m_fLightVolumetricDistance;
 
     void StartBlowoutLight();
     void StopBlowoutLight();

@@ -3,6 +3,9 @@
 class IRenderVisual;
 class IRender_ObjectSpecific;
 
+extern ENGINE_API float psHUD_FOV;
+extern ENGINE_API float psHUD_FOV_def;
+
 //////////////////////////////////////////////////////////////////////////
 // definition ("Renderable")
 

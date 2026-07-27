@@ -29,7 +29,6 @@ void CUIActorMenu::InitTradeMode()
     ShowIfExist(m_pTradeWnd, true);
     m_pLists[eInventoryBagList]->Show(false);
     GetModeSpecificPartnerInfo(mmTrade)->Show(true);
-    m_PartnerMoney->Show(true);
     ShowIfExist(m_pQuickSlot, true);
 
     m_pLists[eTradeActorBagList]->Show(true);
@@ -42,11 +41,13 @@ void CUIActorMenu::InitTradeMode()
     ShowIfExist(m_LeftBackground, true);
 
     m_PartnerWeightBar->Show(true);
-    ShowIfExist(m_trade_button, true);
-    ShowIfExist(m_trade_buy_button, true);
-    ShowIfExist(m_trade_sell_button, true);
-
     VERIFY(m_pPartnerInvOwner);
+    const bool barter_mode = m_pPartnerInvOwner->SpecificCharacter().barter_mode();
+    ShowIfExist(m_trade_button, barter_mode);
+    ShowIfExist(m_trade_buy_button, !barter_mode);
+    ShowIfExist(m_trade_sell_button, !barter_mode);
+    m_PartnerMoney->Show(!barter_mode);
+
     m_pPartnerInvOwner->StartTrading();
 
     InitInventoryContents(m_pLists[eTradeActorBagList],
@@ -392,44 +393,20 @@ void CUIActorMenu::UpdatePrices()
 
 void CUIActorMenu::OnBtnPerformTrade(CUIWindow* w, void* d)
 {
-    if (m_pLists[eTradeActorList]->ItemsCount() == 0 && m_pLists[eTradePartnerList]->ItemsCount() == 0)
-    {
+    if (m_pLists[eTradePartnerList]->ItemsCount() == 0)
         return;
-    }
 
-    int actor_money = (int)m_pActorInvOwner->get_money();
-    int partner_money = (int)m_pPartnerInvOwner->get_money();
-    int actor_price = (int)CalcItemsPrice(m_pLists[eTradeActorList], m_partner_trade, true);
-    int partner_price = (int)CalcItemsPrice(m_pLists[eTradePartnerList], m_partner_trade, false);
-
-    int delta_price = actor_price - partner_price;
-    actor_money += delta_price;
-    partner_money -= delta_price;
-
-    if ((actor_money >= 0) && (partner_money >= 0) && (actor_price >= 0 || partner_price > 0))
+    const u32 actor_price = CalcItemsPrice(m_pLists[eTradeActorList], m_partner_trade, true);
+    const u32 partner_price = CalcItemsPrice(m_pLists[eTradePartnerList], m_partner_trade, false);
+    if (actor_price >= partner_price)
     {
-        m_partner_trade->OnPerformTrade(partner_price, actor_price);
-
-        TransferItems(m_pLists[eTradeActorList], m_pLists[eTradePartnerBagList], m_partner_trade, true);
-        TransferItems(m_pLists[eTradePartnerList], m_pLists[eTradeActorBagList], m_partner_trade, false);
+        TransferItems(m_pLists[eTradeActorList], m_pLists[eTradePartnerBagList], m_partner_trade, true, true);
+        TransferItems(m_pLists[eTradePartnerList], m_pLists[eTradeActorBagList], m_partner_trade, false, true);
     }
     else
-    {
-        if (actor_money < 0)
-        {
-            ShowMessage("not_enough_money_actor", "not_enough_money_mine", 2.0f);
-        }
-        else if (partner_money < 0)
-        {
-            ShowMessage("not_enough_money_partner", "not_enough_money_other", 2.0f);
-        }
-        else
-        {
-            ShowMessage("trade_dont_make", "trade_dont_make", 2.0f);
-        }
-    }
-    SetCurrentItem(nullptr);
+        ShowMessage("trade_dont_make", "trade_dont_make", 2.0f);
 
+    SetCurrentItem(nullptr);
     UpdateItemsPlace();
 }
 
@@ -519,13 +496,13 @@ void CUIActorMenu::OnBtnPerformTradeSell(CUIWindow* w, void* d)
 }
 
 void CUIActorMenu::TransferItems(
-    CUIDragDropListEx* pSellList, CUIDragDropListEx* pBuyList, CTrade* pTrade, bool bBuying)
+    CUIDragDropListEx* pSellList, CUIDragDropListEx* pBuyList, CTrade* pTrade, bool bBuying, bool bFree)
 {
     while (pSellList->ItemsCount())
     {
         CUICellItem* cell_item = pSellList->RemoveItem(pSellList->GetItemIdx(0), false);
         PIItem item = (PIItem)cell_item->m_pData;
-        pTrade->TransferItem(item, bBuying);
+        pTrade->TransferItem(item, bBuying, bFree);
 
         if (bBuying)
         {
@@ -541,8 +518,11 @@ void CUIActorMenu::TransferItems(
             pBuyList->SetItem(cell_item);
         }
     }
-    pTrade->pThis.inv_owner->set_money(pTrade->pThis.inv_owner->get_money(), true);
-    pTrade->pPartner.inv_owner->set_money(pTrade->pPartner.inv_owner->get_money(), true);
+    if (!bFree)
+    {
+        pTrade->pThis.inv_owner->set_money(pTrade->pThis.inv_owner->get_money(), true);
+        pTrade->pPartner.inv_owner->set_money(pTrade->pPartner.inv_owner->get_money(), true);
+    }
 }
 
 //Alundaio: Donate current item while in trade menu

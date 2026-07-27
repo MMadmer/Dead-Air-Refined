@@ -51,6 +51,8 @@ void CUIActorMenu::InitInventoryMode()
     ShowIfExist(m_pLists[eInventoryKnifeList], true);
     m_pLists[eInventoryPistolList]->Show(true);
     m_pLists[eInventoryAutomaticList]->Show(true);
+    ShowIfExist(m_pLists[eInventorySidearmList], true);
+    ShowIfExist(m_pLists[eInventoryBinocularList], true);
     ShowIfExist(m_pQuickSlot, true);
     ShowIfExist(m_pLists[eTrashList], true);
     ShowIfExist(m_clock_value, true);
@@ -247,6 +249,7 @@ void CUIActorMenu::OnInventoryAction(PIItem pItem, u16 action_type)
     CUIDragDropListEx* all_lists[] =
     {
         m_pLists[eInventoryBeltList], m_pLists[eInventoryKnifeList], m_pLists[eInventoryPistolList], m_pLists[eInventoryAutomaticList],
+        m_pLists[eInventorySidearmList], m_pLists[eInventoryBinocularList],
         m_pLists[eInventoryBackpackList], m_pLists[eInventoryOutfitList], m_pLists[eInventoryHelmetList], m_pLists[eInventoryDetectorList],
         m_pLists[eInventoryBagList], m_pLists[eTradeActorBagList], m_pLists[eTradeActorList]
     };
@@ -467,6 +470,8 @@ void CUIActorMenu::InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyB
     //Alundaio
     if (!m_pActorInvOwner->inventory().SlotIsPersistent(KNIFE_SLOT))
         InitCellForSlot(KNIFE_SLOT);
+    if (!m_pActorInvOwner->inventory().SlotIsPersistent(SIDEARM_SLOT))
+        InitCellForSlot(SIDEARM_SLOT);
     if (!m_pActorInvOwner->inventory().SlotIsPersistent(BINOCULAR_SLOT))
         InitCellForSlot(BINOCULAR_SLOT);
     if (!m_pActorInvOwner->inventory().SlotIsPersistent(ARTEFACT_SLOT))
@@ -558,6 +563,13 @@ bool CUIActorMenu::ToSlot(CUICellItem* itm, bool force_place, u16 slot_id)
             return false;
     }
 
+    if (slot_id == BACKPACK_SLOT)
+    {
+        CCustomOutfit* pOutfit = m_pActorInvOwner->GetOutfit();
+        if (pOutfit && !pOutfit->bIsBackpackAvaliable)
+            return false;
+    }
+
     if (m_pActorInvOwner->inventory().CanPutInSlot(iitem, slot_id))
     {
         CUIDragDropListEx* new_owner = GetSlotList(slot_id);
@@ -580,6 +592,16 @@ bool CUIActorMenu::ToSlot(CUICellItem* itm, bool force_place, u16 slot_id)
                 {
                     CUICellItem* helmet_cell = helmet_list->GetItemIdx(0);
                     ToBag(helmet_cell, false);
+                }
+            }
+
+            if (pOutfit && !pOutfit->bIsBackpackAvaliable)
+            {
+                CUIDragDropListEx* backpack_list = GetSlotList(BACKPACK_SLOT);
+                if (backpack_list && backpack_list->ItemsCount() == 1)
+                {
+                    CUICellItem* backpack_cell = backpack_list->GetItemIdx(0);
+                    ToBag(backpack_cell, false);
                 }
             }
         }
@@ -816,6 +838,10 @@ CUIDragDropListEx* CUIActorMenu::GetSlotList(u16 slot_idx)
 
     case INV_SLOT_3: return m_pLists[eInventoryAutomaticList]; break;
 
+    case SIDEARM_SLOT: return m_pLists[eInventorySidearmList]; break;
+
+    case BINOCULAR_SLOT: return m_pLists[eInventoryBinocularList]; break;
+
     case BACKPACK_SLOT: return m_pLists[eInventoryBackpackList]; break;
 
     case OUTFIT_SLOT: return m_pLists[eInventoryOutfitList]; break;
@@ -827,7 +853,6 @@ CUIDragDropListEx* CUIActorMenu::GetSlotList(u16 slot_idx)
     case PDA_SLOT:
     case TORCH_SLOT:
     case ARTEFACT_SLOT:
-    case BINOCULAR_SLOT:
 
     default:
         if (m_currMenuMode == mmTrade)
@@ -948,7 +973,6 @@ void CUIActorMenu::ActivatePropertiesBox()
 
     if (m_currMenuMode == mmInventory || m_currMenuMode == mmDeadBodySearch)
     {
-        PropertiesBoxForSlots(item, b_show);
         PropertiesBoxForWeapon(cell_item, item, b_show);
         PropertiesBoxForAddon(item, b_show);
         PropertiesBoxForUsing(item, b_show);
@@ -1041,6 +1065,7 @@ void CUIActorMenu::PropertiesBoxForSlots(PIItem item, bool& b_show)
         m_UIPropertiesBox->AddItem("st_dress_helmet", NULL, INVENTORY_TO_SLOT_ACTION);
         b_show = true;
     }
+
 }
 
 void CUIActorMenu::PropertiesBoxForWeapon(CUICellItem* cell_item, PIItem item, bool& b_show)
@@ -1551,6 +1576,14 @@ void CUIActorMenu::UpdateOutfit()
             m_pLists[eInventoryHelmetList]->SetCellsCapacity({ 0, 0 });
         else
             m_pLists[eInventoryHelmetList]->SetCellsCapacity(m_pLists[eInventoryHelmetList]->MaxCellsCapacity());
+    }
+
+    if (m_pLists[eInventoryBackpackList])
+    {
+        if (outfit && !outfit->bIsBackpackAvaliable)
+            m_pLists[eInventoryBackpackList]->SetCellsCapacity({ 0, 0 });
+        else
+            m_pLists[eInventoryBackpackList]->SetCellsCapacity(m_pLists[eInventoryBackpackList]->MaxCellsCapacity());
     }
 
     if (m_OutfitInfo)

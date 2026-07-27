@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdio>
 
 #include "xr_types.h"
@@ -234,12 +235,17 @@ IC int xr_strcmp(const shared_str& a, const shared_str& b) noexcept
 
 IC char* xr_strlwr(char* src)
 {
-    size_t i = 0;
-    while (src[i])
+    static constexpr std::array<unsigned char, 256> lowerTable = []
     {
-        src[i] = (char)tolower(src[i]);// TODO rewrite locale-independent toupper_l()
-        i++;
-    }
+        std::array<unsigned char, 256> table{};
+        for (size_t i = 0; i < table.size(); ++i)
+            table[i] = i >= 'A' && i <= 'Z' ? static_cast<unsigned char>(i + ('a' - 'A')) : static_cast<unsigned char>(i);
+        return table;
+    }();
+
+    for (char* current = src; *current; ++current)
+        *current = static_cast<char>(lowerTable[static_cast<unsigned char>(*current)]);
+
     return src;
 }
 

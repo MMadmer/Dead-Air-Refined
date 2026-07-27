@@ -74,6 +74,8 @@ extern u64 g_qwEStartGameTime;
 
 ENGINE_API
 extern float psHUD_FOV;
+ENGINE_API
+extern float psHUD_FOV_def;
 extern float psSqueezeVelocity;
 extern int psLUA_GCSTEP;
 extern int psLUA_GCTIMEOUT;
@@ -2204,7 +2206,7 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "hud_draw_info", &psHUD_Flags, HUD_DRAW_INFO);
     CMD3(CCC_Mask, "hud_left_handed", &psHUD_Flags, HUD_LEFT_HANDED);
 
-    CMD4(CCC_Float, "hud_fov", &psHUD_FOV, 0.1f, 1.0f);
+    CMD4(CCC_Float, "hud_fov", &psHUD_FOV_def, 0.1f, 1.0f);
     CMD4(CCC_Float, "fov", &g_fov, 5.0f, 180.0f);
 
     // Demo

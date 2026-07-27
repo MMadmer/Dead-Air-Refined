@@ -44,6 +44,10 @@ void CRenderDevice::Initialize()
     TimerGlobal.Start();
     TimerMM.Start();
 
+    // Allow unattended QA desktops to keep the scheduler active before user.ltx is loaded.
+    if (strstr(Core.Params, "-always_active"))
+        psDeviceFlags.set(rsAlwaysActive, TRUE);
+
     {
         Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN |
             SDL_WINDOW_RESIZABLE;

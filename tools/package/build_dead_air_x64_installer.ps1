@@ -2,6 +2,7 @@
 param(
     [string]$PortVersion = "1.0.0",
     [string]$StandaloneSource = "D:\Games\Dead Air",
+    [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
 )
 
@@ -26,6 +27,8 @@ $compatibilityRoot = Join-Path $repositoryRoot "packaging\dead-air-x64\compatibi
 $compatibilityGameRoot = Join-Path $compatibilityRoot "gamedata"
 $compatibilityUserData = Join-Path $compatibilityRoot "xdb_userdata.ltx"
 $compatibilityArchive = Join-Path $launcherOutputRoot "xtra_dead_air_x64.xdb0"
+$compatibilityStageRoot = Join-Path $launcherOutputRoot "compatibility-stage"
+$compatibilityStageGameRoot = Join-Path $compatibilityStageRoot "gamedata"
 $compatibilityVerifyRoot = Join-Path $launcherOutputRoot "compatibility-verify"
 $innoRoot = Join-Path $repositoryRoot "tools\third_party\inno-setup"
 $innoCompilerRoot = Join-Path $innoRoot "compiler"
@@ -128,7 +131,31 @@ function Build-CompatibilityArchive {
     }
 
     New-Item -ItemType Directory -Path $launcherOutputRoot -Force | Out-Null
-    & $converter -pack -xdb -xdb_ud $compatibilityUserData -out $compatibilityArchive $compatibilityGameRoot
+    if (Test-Path -LiteralPath $compatibilityStageRoot) {
+        Remove-Item -LiteralPath $compatibilityStageRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $compatibilityStageGameRoot -Force | Out-Null
+    Get-ChildItem -LiteralPath $compatibilityGameRoot | Copy-Item -Destination $compatibilityStageGameRoot -Recurse
+
+    $localizedTextPath =
+        Join-Path $compatibilityStageGameRoot "configs\text\rus\dead_air_x64.xml"
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $localizedText = [IO.File]::ReadAllText($localizedTextPath, $utf8)
+    $localizedText = $localizedText.Replace('encoding="utf-8"', 'encoding="windows-1251"')
+    [Text.Encoding]::RegisterProvider([Text.CodePagesEncodingProvider]::Instance)
+    $windows1251 = [Text.Encoding]::GetEncoding(
+        1251,
+        [Text.EncoderExceptionFallback]::new(),
+        [Text.DecoderExceptionFallback]::new()
+    )
+    [IO.File]::WriteAllText($localizedTextPath, $localizedText, $windows1251)
+
+    $gravityGunScriptPath =
+        Join-Path $compatibilityStageGameRoot "scripts\bind_gr_gun.script"
+    $gravityGunScript = [IO.File]::ReadAllText($gravityGunScriptPath, $utf8)
+    [IO.File]::WriteAllText($gravityGunScriptPath, $gravityGunScript, $windows1251)
+
+    & $converter -pack -xdb -xdb_ud $compatibilityUserData -out $compatibilityArchive $compatibilityStageGameRoot
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $compatibilityArchive -PathType Leaf)) {
         throw "The Dead Air x64 compatibility archive build failed."
     }
@@ -142,14 +169,14 @@ function Build-CompatibilityArchive {
         throw "The Dead Air x64 compatibility archive verification failed."
     }
 
-    $sourceFiles = Get-ChildItem -LiteralPath $compatibilityGameRoot -Recurse -File
+    $sourceFiles = Get-ChildItem -LiteralPath $compatibilityStageGameRoot -Recurse -File
     $verifiedFiles = Get-ChildItem -LiteralPath $compatibilityVerifyRoot -Recurse -File
     if ($sourceFiles.Count -ne $verifiedFiles.Count) {
         throw "The Dead Air x64 compatibility archive file count is invalid."
     }
 
     foreach ($sourceFile in $sourceFiles) {
-        $relativePath = $sourceFile.FullName.Substring($compatibilityGameRoot.Length + 1)
+        $relativePath = $sourceFile.FullName.Substring($compatibilityStageGameRoot.Length + 1)
         $verifiedFile = Join-Path $compatibilityVerifyRoot $relativePath
         if (-not (Test-Path -LiteralPath $verifiedFile -PathType Leaf) -or
             (Get-FileHash -LiteralPath $sourceFile.FullName).Hash -ne
@@ -157,6 +184,12 @@ function Build-CompatibilityArchive {
             throw "Compatibility archive verification failed: $relativePath"
         }
     }
+}
+
+if ($CompatibilityArchiveOnly) {
+    Build-CompatibilityArchive
+    Get-Item -LiteralPath $compatibilityArchive
+    return
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "xrEngine.exe"))) {

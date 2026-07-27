@@ -87,11 +87,8 @@ void CPlanner::update()
 		Msg("! ERROR: there is no action sequence, which can transfer current world state to the target one: action[%s]", current_action().m_action_name);
 #endif
 
-    THROW(!this->solution().empty());
-	//Alundaio:
 	if (this->solution().empty())
 		return;
-	//-Alundaio
 
     if (initialized())
     {

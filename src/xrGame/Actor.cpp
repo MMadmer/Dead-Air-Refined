@@ -375,6 +375,7 @@ void CActor::Load(LPCSTR section)
     m_fCrouchFactor = pSettings->r_float(section, "crouch_coef");
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
+    m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
 
     m_fWalk_StrafeFactor = READ_IF_EXISTS(pSettings, r_float, section, "walk_strafe_coef", 1.0f);
     m_fRun_StrafeFactor = READ_IF_EXISTS(pSettings, r_float, section, "run_strafe_coef", 1.0f);
@@ -936,6 +937,14 @@ void CActor::Die(IGameObject* who)
         else if (xr_strcmp("fixedlook", camera) == 0)
             cam_Set(eacFixedLookAt);
 
+        CCustomOutfit* outfit = GetOutfit();
+        xr_string corpse_visual = outfit && pSettings->line_exist(outfit->cNameSect(), "npc_visual")
+            ? pSettings->r_string(outfit->cNameSect(), "npc_visual")
+            : "actors\\stalker_neutral\\stalker_neutral_1";
+        if (!strext(corpse_visual.c_str()))
+            corpse_visual += ".ogf";
+        ChangeVisual(corpse_visual.c_str());
+
         CurrentGameUI()->HideShownDialogs();
         start_tutorial("game_over");
     }
@@ -1118,11 +1127,34 @@ void CActor::UpdateCL()
     {
         if (pWeapon->IsZoomed())
         {
+            SetZoomAimingMode(true);
+
+            float zoom_inertion_factor = 1.0f;
+            if (mstate_real & mcCrouch)
+                zoom_inertion_factor = isActorAccelerated(mstate_real, IsZoomAimingMode()) ? 0.85f : 0.7f;
+
+            bool holding_breath = false;
+            ForAllActionKeys(kSPRINT_TOGGLE, [&](size_t, int key)
+            {
+                holding_breath = pInput->iGetAsyncKeyState(key);
+                return holding_breath;
+            });
+
+            // Dead Air drains stamina while the sprint action steadies a zoomed weapon.
+            if (holding_breath)
+            {
+                conditions().ChangePower(-m_fBreath * conditions().fdelta_time());
+                zoom_inertion_factor *= 1.0f - conditions().GetPower();
+                if (!m_sndShockEffector)
+                {
+                    m_sndShockEffector = xr_new<SndShockEffector>();
+                    m_sndShockEffector->Start(this, -0.9f, 0.0f);
+                }
+            }
+
             CEffectorZoomInertion* S = smart_cast<CEffectorZoomInertion*>(Cameras().GetCamEffector(eCEZoom));
             if (S)
-                S->SetParams(m_fZoomInertion);
-
-            SetZoomAimingMode(true);
+                S->SetParams(m_fZoomInertion * zoom_inertion_factor);
         }
 
         if (Level().CurrentEntity() && this->ID() == Level().CurrentEntity()->ID())

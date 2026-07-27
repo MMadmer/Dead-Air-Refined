@@ -179,6 +179,7 @@ protected:
 
     //AVO: for custom added sounds check if sound exists
     bool WeaponSoundExist(pcstr section, pcstr sound_name) const;
+    void OnFireModeChanged();
 
     //Alundaio: LAYERED_SND_SHOOT
     HUD_SOUND_COLLECTION_LAYERED m_layered_sounds;

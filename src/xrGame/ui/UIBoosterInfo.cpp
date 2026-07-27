@@ -14,6 +14,7 @@ CUIBoosterInfo::~CUIBoosterInfo()
 {
     delete_data(m_booster_items);
     xr_delete(m_booster_satiety);
+    xr_delete(m_booster_radiation);
     xr_delete(m_booster_anabiotic);
     xr_delete(m_booster_time);
     xr_delete(m_Prop_line);
@@ -59,6 +60,16 @@ bool CUIBoosterInfo::InitFromXml(CUIXml& xml)
     LPCSTR name = StringTable().translate("ui_inv_satiety").c_str();
     m_booster_satiety->SetCaption(name);
     xml.SetLocalRoot(base_node);
+
+    if (xml.NavigateToNode("boost_radiation"))
+    {
+        m_booster_radiation = xr_new<UIBoosterInfoItem>();
+        m_booster_radiation->Init(xml, "boost_radiation");
+        m_booster_radiation->SetAutoDelete(false);
+        name = StringTable().translate("ui_inv_radiation").c_str();
+        m_booster_radiation->SetCaption(name);
+        xml.SetLocalRoot(base_node);
+    }
 
     m_booster_anabiotic = xr_new<UIBoosterInfoItem>();
     m_booster_anabiotic->Init(xml, "boost_anabiotic");
@@ -160,6 +171,21 @@ void CUIBoosterInfo::SetInfo(shared_str const& section)
 
             h += m_booster_satiety->GetWndSize().y;
             AttachChild(m_booster_satiety);
+        }
+    }
+
+    if (m_booster_radiation && pSettings->line_exist(section.c_str(), "eat_radiation"))
+    {
+        val = pSettings->r_float(section, "eat_radiation");
+        if (!fis_zero(val))
+        {
+            m_booster_radiation->SetValue(val);
+            pos.set(m_booster_radiation->GetWndPos());
+            pos.y = h;
+            m_booster_radiation->SetWndPos(pos);
+
+            h += m_booster_radiation->GetWndSize().y;
+            AttachChild(m_booster_radiation);
         }
     }
 

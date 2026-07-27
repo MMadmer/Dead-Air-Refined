@@ -51,6 +51,7 @@ public:
 
     void renderable_Render(u32 context_id, IRenderable* root) override;
     void render_hud_mode() override;
+    float GetHudFov();
     bool need_renderable() override;
 
     virtual void render_item_ui();
@@ -411,6 +412,8 @@ protected:
 
 protected:
     int GetAmmoCount(u8 ammo_type) const;
+    bool UsesAmmoBelt() const;
+    CWeaponAmmo* GetAmmoForReload(LPCSTR ammo_section) const;
 
 public:
     IC int GetAmmoElapsed() const { return /*int(m_magazine.size())*/ iAmmoElapsed; }
@@ -470,6 +473,12 @@ public:
     xr_vector<CCartridge> m_magazine;
     CCartridge m_DefaultCartridge;
     float m_fCurrentCartirdgeDisp;
+    float m_hud_fov_add_mod;
+    float m_nearwall_dist_max;
+    float m_nearwall_dist_min;
+    float m_nearwall_last_hud_fov;
+    float m_nearwall_target_hud_fov;
+    float m_nearwall_speed_mod;
 
     bool unlimited_ammo();
     IC bool can_be_strapped() const { return m_can_be_strapped; };

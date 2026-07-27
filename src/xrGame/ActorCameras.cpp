@@ -286,6 +286,13 @@ void CActor::cam_Update(float dt, float fFOV)
 
     ZoneScoped;
 
+    if (this == Level().CurrentViewEntity())
+    {
+        CWeapon* weapon = smart_cast<CWeapon*>(inventory().ActiveItem());
+        const float hud_fov = cam_active == eacFirstEye && weapon ? weapon->GetHudFov() : psHUD_FOV_def;
+        psHUD_FOV = hud_fov * 100.0f / Device.fFOV;
+    }
+
     if ((mstate_real & mcClimb) && (cam_active != eacFreeLook))
         camUpdateLadder(dt);
     on_weapon_shot_update();

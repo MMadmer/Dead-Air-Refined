@@ -180,29 +180,11 @@ void CTorch::Switch()
 
 void CTorch::Switch(bool light_on)
 {
-    CActor* pActor = smart_cast<CActor*>(H_Parent());
-    if (pActor)
-    {
-        if (light_on && !m_switched_on)
-        {
-            if (m_sounds.FindSoundItem("SndTurnOn", false))
-                m_sounds.PlaySound("SndTurnOn", pActor->Position(), NULL, !!pActor->HUDview());
-        }
-        else if (!light_on && m_switched_on)
-        {
-            if (m_sounds.FindSoundItem("SndTurnOff", false))
-                m_sounds.PlaySound("SndTurnOff", pActor->Position(), NULL, !!pActor->HUDview());
-        }
-    }
-
     m_switched_on = light_on;
     if (can_use_dynamic_lights())
     {
         light_render->set_active(light_on);
-
-        // CActor *pA = smart_cast<CActor *>(H_Parent());
-        // if(!pA)
-        light_omni->set_active(light_on);
+        light_omni->set_active(smart_cast<CActor*>(H_Parent()) ? false : light_on);
     }
     glow_render->set_active(light_on);
 

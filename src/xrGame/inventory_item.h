@@ -100,6 +100,7 @@ public:
     LPCSTR NameItem(); // remove <virtual> by sea
     LPCSTR NameShort();
     shared_str ItemDescription() { return m_Description; }
+    void SetItemDescription(const shared_str& description) { m_Description = description; }
     virtual bool GetBriefInfo(II_BriefInfo& info)
     {
         info.clear();

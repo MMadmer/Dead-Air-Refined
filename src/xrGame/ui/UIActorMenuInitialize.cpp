@@ -199,9 +199,11 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
     constexpr std::tuple<eActorMenuListType, cpcstr, cpcstr, cpcstr, cpcstr, bool> inventory_lists[] =
     {
         // { id,                   "xml_section_name",         "condition_indicator,  "highlighter",             "blocker",          required }
-        { eInventoryKnifeList,     "dragdrop_knife",           "progess_bar_knife",   "inv_slot1_highlight",     nullptr,            false },
+        { eInventoryKnifeList,     "dragdrop_knife",           "progess_bar_knife",   "knife_highlight",         nullptr,            false },
         { eInventoryPistolList,    "dragdrop_pistol",          "progess_bar_weapon1", "inv_slot2_highlight",     nullptr,            true },
         { eInventoryAutomaticList, "dragdrop_automatic",       "progess_bar_weapon2", "inv_slot3_highlight",     nullptr,            true },
+        { eInventorySidearmList,   "dragdrop_sidearm",         "progess_bar_sidearm", "sidearm_highlight",       nullptr,            false },
+        { eInventoryBinocularList, "dragdrop_binocular",       nullptr,               "binocular_slot_highlight", nullptr,           false },
 
         { eInventoryOutfitList,    "dragdrop_outfit",          "progess_bar_outfit",  "outfit_slot_highlight",   nullptr,            true },
         { eInventoryHelmetList,    "dragdrop_helmet",          "progess_bar_helmet",  "helmet_slot_highlight",   "helmet_over",      false },
@@ -222,7 +224,7 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
 
         { eTrashList,              "dragdrop_trash",           nullptr,               nullptr,                   nullptr,            false },
 
-        { eInventoryBackpackList,  "dragdrop_backpack",        nullptr,               "backpack_slot_highlight", nullptr,            false },
+        { eInventoryBackpackList,  "dragdrop_backpack",        "progess_bar_backpack", "backpack_slot_highlight", "backpack_over",    false },
     };
     static_assert(std::size(inventory_lists) == eListCount,
         "All lists should be listed in the tuple above.");
@@ -258,6 +260,8 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
 
     if (m_pLists[eInventoryHelmetList])
         m_pLists[eInventoryHelmetList]->SetMaxCellsCapacity(m_pLists[eInventoryHelmetList]->CellsCapacity());
+    if (m_pLists[eInventoryBackpackList])
+        m_pLists[eInventoryBackpackList]->SetMaxCellsCapacity(m_pLists[eInventoryBackpackList]->CellsCapacity());
 
     m_pQuickSlot = UIHelper::CreateDragDropReferenceList(uiXml, "dragdrop_quick_slots", this, false);
     if (m_pQuickSlot)
@@ -271,7 +275,7 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
     m_ActorStateInfo->init_from_xml(uiXml, "actor_state_info");
     AttachChild(m_ActorStateInfo);
 
-    m_trade_button = UIHelper::Create3tButton(uiXml, "trade_button", this, false);
+    m_trade_button = UIHelper::Create3tButton(uiXml, "trade_barter_button", this, false);
     m_trade_buy_button = UIHelper::Create3tButton(uiXml, "trade_buy_button", this, false);
     m_trade_sell_button = UIHelper::Create3tButton(uiXml, "trade_sell_button", this, false);
     m_takeall_button = UIHelper::Create3tButton(uiXml, "takeall_button", this);
@@ -354,6 +358,8 @@ void CUIActorMenu::InitializeInventoryMode(CUIXml& uiXml)
             m_pLists[id] = list;
         }
     }
+    if (m_pLists[eInventoryBackpackList])
+        m_pLists[eInventoryBackpackList]->SetMaxCellsCapacity(m_pLists[eInventoryBackpackList]->CellsCapacity());
 
     CUIStatic* time = UIHelper::CreateStatic(uiXml, "time_static", m_pInventoryWnd);
     m_clock_value = UIHelper::CreateStatic(uiXml, "time_static_str", time);
@@ -531,6 +537,8 @@ void CUIActorMenu::InitCallbacks()
     BindDragDropListEvents(m_pLists[eInventoryKnifeList]);
     BindDragDropListEvents(m_pLists[eInventoryPistolList]);
     BindDragDropListEvents(m_pLists[eInventoryAutomaticList]);
+    BindDragDropListEvents(m_pLists[eInventorySidearmList]);
+    BindDragDropListEvents(m_pLists[eInventoryBinocularList]);
 
     BindDragDropListEvents(m_pLists[eInventoryBackpackList]);
     BindDragDropListEvents(m_pLists[eInventoryOutfitList]);
@@ -606,23 +614,6 @@ void CUIActorMenu::InitAllowedDrops()
 
 void CUIActorMenu::UpdateButtonsLayout()
 {
-    if (m_trade_button && !m_pInventoryWnd)
-    {
-        Fvector2 btn_exit_pos;
-        if (m_trade_button->IsShown() || m_takeall_button->IsShown())
-        {
-            btn_exit_pos = m_trade_button->GetWndPos();
-            btn_exit_pos.x += m_trade_button->GetWndSize().x;
-        }
-        else
-        {
-            btn_exit_pos = m_trade_button->GetWndPos();
-            btn_exit_pos.x += m_trade_button->GetWndSize().x / 2.0f;
-        }
-
-        m_exit_button->SetWndPos(btn_exit_pos);
-    }
-
     if (m_pQuickSlot)
         m_pQuickSlot->UpdateLabels();
 }

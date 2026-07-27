@@ -24,13 +24,16 @@ static action_binding_desc g_action_bindings[bindings_count];
 // clang-format off
 game_action actions[] =
 {
-    { "look_around",            kLOOK_AROUND,               _both }, // gamepad
     { "left",                   kLEFT,                      _both },
     { "right",                  kRIGHT,                     _both },
     { "up",                     kUP,                        _both },
     { "down",                   kDOWN,                      _both },
 
-    { "move_around",            kMOVE_AROUND,               _both }, // gamepad
+    { "jump",                   kJUMP,                      _both },
+    { "crouch",                 kCROUCH,                    _both },
+    { "accel",                  kACCEL,                     _both },
+    { "sprint_toggle",          kSPRINT_TOGGLE,             _both },
+
     { "forward",                kFWD,                       _both },
     { "back",                   kBACK,                      _both },
     { "lstrafe",                kL_STRAFE,                  _both },
@@ -39,21 +42,11 @@ game_action actions[] =
     { "llookout",               kL_LOOKOUT,                 _both },
     { "rlookout",               kR_LOOKOUT,                 _both },
 
-    { "jump",                   kJUMP,                      _both },
-    { "crouch",                 kCROUCH,                    _both },
-    { "crouch_toggle",          kCROUCH_TOGGLE,             _both },
-    { "accel",                  kACCEL,                     _both },
-    { "sprint_toggle",          kSPRINT_TOGGLE,             _both },
-
-    { "turn_engine",            kENGINE,                    _sp},
-
     { "cam_1",                  kCAM_1,                     _both },
     { "cam_2",                  kCAM_2,                     _both },
     { "cam_3",                  kCAM_3,                     _both },
-    { "cam_4",                  kCAM_4,                     _both},
     { "cam_zoom_in",            kCAM_ZOOM_IN,               _both },
     { "cam_zoom_out",           kCAM_ZOOM_OUT,              _both },
-    { "cam_autoaim",            kCAM_AUTOAIM,               _sp },
 
     { "torch",                  kTORCH,                     _both },
     { "night_vision",           kNIGHT_VISION,              _both },
@@ -65,6 +58,7 @@ game_action actions[] =
     { "wpn_4",                  kWPN_4,                     _both },
     { "wpn_5",                  kWPN_5,                     _both },
     { "wpn_6",                  kWPN_6,                     _both },
+    { "wpn_7",                  kWPN_7,                     _both },
     { "artefact",               kARTEFACT,                  _both /*_mp*/ },
     { "wpn_next",               kWPN_NEXT,                  _both }, // means next ammo type
     { "wpn_fire",               kWPN_FIRE,                  _both },
@@ -83,7 +77,6 @@ game_action actions[] =
     { "chat",                   kCHAT,                      _mp },
     { "chat_team",              kCHAT_TEAM,                 _mp },
     { "screenshot",             kSCREENSHOT,                _both },
-    { "enter",                  kENTER,                     _both },
     { "quit",                   kQUIT,                      _both },
     { "console",                kCONSOLE,                   _both },
     { "inventory",              kINVENTORY,                 _both },
@@ -91,9 +84,6 @@ game_action actions[] =
     { "skin_menu",              kSKIN,                      _mp },
     { "team_menu",              kTEAM,                      _mp },
     { "active_jobs",            kACTIVE_JOBS,               _sp },
-    { "map",                    kMAP,                       _both },
-    { "contacts",               kCONTACTS,                  _sp },
-    { "ext_1",                  kEXT_1,                     _both },
 
     { "vote_begin",             kVOTE_BEGIN,                _mp },
     { "show_admin_menu",        kSHOW_ADMIN_MENU,           _mp },
@@ -106,17 +96,6 @@ game_action actions[] =
 
     { "speech_menu_0",          kSPEECH_MENU_0,             _mp },
     { "speech_menu_1",          kSPEECH_MENU_1,             _mp },
-    { "speech_menu_2",          kSPEECH_MENU_2,             _mp },
-    { "speech_menu_3",          kSPEECH_MENU_3,             _mp },
-    { "speech_menu_4",          kSPEECH_MENU_4,             _mp },
-    { "speech_menu_5",          kSPEECH_MENU_5,             _mp },
-    { "speech_menu_6",          kSPEECH_MENU_6,             _mp },
-    { "speech_menu_7",          kSPEECH_MENU_7,             _mp },
-    { "speech_menu_8",          kSPEECH_MENU_8,             _mp },
-    { "speech_menu_9",          kSPEECH_MENU_9,             _mp },
-
-    { "use_bandage",            kUSE_BANDAGE,               _sp },
-    { "use_medkit",             kUSE_MEDKIT,                _sp },
 
     { "quick_use_1",            kQUICK_USE_1,               _both },
     { "quick_use_2",            kQUICK_USE_2,               _both },
@@ -125,7 +104,6 @@ game_action actions[] =
 
     { "quick_save",             kQUICK_SAVE,                _sp },
     { "quick_load",             kQUICK_LOAD,                _sp },
-    { "alife_command",          kALIFE_CMD,                 _sp },
 
     { "custom1",                kCUSTOM1,                   _sp },
     { "custom2",                kCUSTOM2,                   _sp },
@@ -143,12 +121,37 @@ game_action actions[] =
     { "custom14",               kCUSTOM14,                  _sp },
     { "custom15",               kCUSTOM15,                  _sp },
 
+    { "cam_autoaim",            kCAM_AUTOAIM,               _sp },
+
     { "pda_tab1",               kPDA_TAB1,                  _sp },
     { "pda_tab2",               kPDA_TAB2,                  _sp },
     { "pda_tab3",               kPDA_TAB3,                  _sp },
     { "pda_tab4",               kPDA_TAB4,                  _sp },
     { "pda_tab5",               kPDA_TAB5,                  _sp },
     { "pda_tab6",               kPDA_TAB6,                  _sp },
+
+    { "look_around",            kLOOK_AROUND,               _both }, // gamepad
+    { "move_around",            kMOVE_AROUND,               _both }, // gamepad
+    { "crouch_toggle",          kCROUCH_TOGGLE,             _both },
+    { "turn_engine",            kENGINE,                    _sp},
+    { "cam_4",                  kCAM_4,                     _both},
+    { "enter",                  kENTER,                     _both },
+    { "map",                    kMAP,                       _both },
+    { "contacts",               kCONTACTS,                  _sp },
+    { "ext_1",                  kEXT_1,                     _both },
+
+    { "speech_menu_2",          kSPEECH_MENU_2,             _mp },
+    { "speech_menu_3",          kSPEECH_MENU_3,             _mp },
+    { "speech_menu_4",          kSPEECH_MENU_4,             _mp },
+    { "speech_menu_5",          kSPEECH_MENU_5,             _mp },
+    { "speech_menu_6",          kSPEECH_MENU_6,             _mp },
+    { "speech_menu_7",          kSPEECH_MENU_7,             _mp },
+    { "speech_menu_8",          kSPEECH_MENU_8,             _mp },
+    { "speech_menu_9",          kSPEECH_MENU_9,             _mp },
+
+    { "use_bandage",            kUSE_BANDAGE,               _sp },
+    { "use_medkit",             kUSE_MEDKIT,                _sp },
+    { "alife_command",          kALIFE_CMD,                 _sp },
 
     { "kick",                   kKICK,                      _sp },
 
@@ -497,11 +500,30 @@ keyboard_key keyboards[] =
     { "kAPP1",                  SDL_SCANCODE_APP1,               "App 1" },
     { "kAPP2",                  SDL_SCANCODE_APP2,               "App 2" },
 
+    // Accept legacy DirectInput names used by Dead Air configs and addons.
+    { "kSYSRQ",                 SDL_SCANCODE_PRINTSCREEN,        "Print Screen" },
+    { "kNEXT",                  SDL_SCANCODE_PAGEDOWN,           "Page Down" },
+    { "kDECIMAL",               SDL_SCANCODE_KP_PERIOD,          "Numpad Period" },
+    { "kAPPS",                  SDL_SCANCODE_APPLICATION,        "Application" },
+    { "kKANA",                  SDL_SCANCODE_LANG3,              "Kana" },
+    { "kCONVERT",               SDL_SCANCODE_INTERNATIONAL4,     "Convert" },
+    { "kNOCONVERT",             SDL_SCANCODE_INTERNATIONAL5,     "No Convert" },
+    { "kKANJI",                 SDL_SCANCODE_LANG2,              "Kanji" },
+    { "kUNDERLINE",             SDL_SCANCODE_INTERNATIONAL1,     "Underline" },
+    { "kCIRCUMFLEX",            SDL_SCANCODE_EQUALS,             "Circumflex" },
+    { "kAT",                    SDL_SCANCODE_LEFTBRACKET,        "At" },
+    { "kCOLON",                 SDL_SCANCODE_APOSTROPHE,         "Colon" },
+    { "kAX",                    SDL_SCANCODE_INTERNATIONAL8,     "AX" },
+    { "kUNLABELED",             SDL_SCANCODE_INTERNATIONAL9,     "Unlabeled" },
+
     { "mouse1",                 MOUSE_1,                         "Left mouse button" },
     { "mouse2",                 MOUSE_2,                         "Right mouse button" },
     { "mouse3",                 MOUSE_3,                         "Mouse wheel button" },
     { "mouse4",                 MOUSE_4,                         "Mouse X1" },
     { "mouse5",                 MOUSE_5,                         "Mouse X2" },
+    { "mouse6",                 MOUSE_6,                         "Mouse 6" },
+    { "mouse7",                 MOUSE_7,                         "Mouse 7" },
+    { "mouse8",                 MOUSE_8,                         "Mouse 8" },
 
     { "gpA",                    XR_CONTROLLER_BUTTON_A,             "A" },
     { "gpB",                    XR_CONTROLLER_BUTTON_B,             "B" },

@@ -568,11 +568,13 @@ void CRenderDevice::OnWindowActivate(SDL_Window* window, bool activated)
     else
         pInput->GrabInput(false);
 
-    b_is_Active = activated || psDeviceFlags.test(rsAlwaysActive);
+    const bool active = activated || psDeviceFlags.test(rsAlwaysActive);
+    b_is_Active = active;
 
-    if (activated != b_is_InFocus)
+    // Keep worker tasks running when the explicit always-active mode is enabled.
+    if (active != b_is_InFocus)
     {
-        b_is_InFocus = activated;
+        b_is_InFocus = active;
         if (b_is_InFocus)
         {
             TaskScheduler->Pause(false);

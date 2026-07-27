@@ -79,7 +79,6 @@
 #include <malloc.h>
 #define xr_alloca _alloca
 #define xr_strupr _strupr
-#define xr_strlwr _strlwr
 #define xr_stricmp _stricmp
 #define xr_strcmpi _strcmpi
 #define xr_unlink _unlink

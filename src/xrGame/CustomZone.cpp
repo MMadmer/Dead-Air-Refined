@@ -36,6 +36,9 @@ CCustomZone::CCustomZone(void)
     m_pLight = NULL;
     m_pIdleLight = NULL;
     m_pIdleLAnim = NULL;
+    m_fLightVolumetricQuality = 1.f;
+    m_fLightVolumetricIntensity = 1.f;
+    m_fLightVolumetricDistance = 1.f;
 
     m_StateTime.resize(eZoneStateMax);
     for (int i = 0; i < eZoneStateMax; i++)
@@ -284,6 +287,9 @@ void CCustomZone::Load(LPCSTR section)
         m_zone_flags.set(eIdleLightShadow, pSettings->read_if_exists<bool>(section, "idle_light_shadow", true));
         m_zone_flags.set(eIdleLightR1, pSettings->read_if_exists<bool>(section, "idle_light_r1", true));
     }
+    m_fLightVolumetricQuality = pSettings->r_float(section, "light_volumetric_quality");
+    m_fLightVolumetricIntensity = pSettings->r_float(section, "light_volumetric_intensity");
+    m_fLightVolumetricDistance = pSettings->r_float(section, "light_volumetric_distance");
 
     //загрузить параметры для разбрасывания артефактов
     m_zone_flags.set(eSpawnBlowoutArtefacts, pSettings->read_if_exists<bool>(section, "spawn_blowout_artefacts", false));
@@ -381,6 +387,9 @@ bool CCustomZone::net_Spawn(CSE_Abstract* DC)
         {
             // m_pIdleLight->set_type				(IRender_Light::SPOT);
             m_pIdleLight->set_volumetric(true);
+            m_pIdleLight->set_volumetric_quality(m_fLightVolumetricQuality);
+            m_pIdleLight->set_volumetric_intensity(m_fLightVolumetricIntensity);
+            m_pIdleLight->set_volumetric_distance(m_fLightVolumetricDistance);
         }
     }
     else
@@ -390,6 +399,9 @@ bool CCustomZone::net_Spawn(CSE_Abstract* DC)
     {
         m_pLight = GEnv.Render->light_create();
         m_pLight->set_shadow(true);
+        m_pLight->set_volumetric_quality(m_fLightVolumetricQuality);
+        m_pLight->set_volumetric_intensity(m_fLightVolumetricIntensity);
+        m_pLight->set_volumetric_distance(m_fLightVolumetricDistance);
     }
     else
         m_pLight = NULL;

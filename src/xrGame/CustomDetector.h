@@ -8,6 +8,7 @@
 
 class CCustomZone;
 class CInventoryOwner;
+class CLAItem;
 
 struct ITEM_TYPE
 {
@@ -129,6 +130,7 @@ public:
     virtual ~CCustomDetector();
 
     virtual bool net_Spawn(CSE_Abstract* DC);
+    virtual void net_Destroy();
     virtual void Load(LPCSTR section);
 
     virtual void OnH_A_Chield();
@@ -168,6 +170,30 @@ protected:
     float m_fAfVisRadius;
     float m_fDecayRate; //Alundaio
     CAfList m_artefacts;
+
+    ref_light m_light;
+    CLAItem* m_light_anim;
+    u16 m_light_bone;
+    shared_str m_light_bone_name;
+    shared_str m_light_texture;
+    float m_light_range;
+    float m_light_brightness;
+    float m_light_angle;
+    bool m_light_enabled;
+    bool m_light_volumetric;
+    bool m_light_shadow;
+    bool m_light_spot;
+    Fcolor m_light_color;
+
+    bool m_particles_enabled;
+    bool m_hud_particles_enabled;
+    u16 m_particles_bone;
+    shared_str m_particles_bone_name;
+    shared_str m_particles_name;
+    CParticlesObject* m_hud_particles;
+
+    void UpdateHudParticles(bool active);
+    void UpdateDeviceEffects();
 };
 
 class CZoneList : public CDetectList<CCustomZone>

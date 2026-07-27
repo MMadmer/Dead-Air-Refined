@@ -26,76 +26,41 @@
 using namespace InventoryUtilities;
 
 // what to block
-u16 INV_STATE_LADDER = (1 << INV_SLOT_3 | 1 << BINOCULAR_SLOT);
+u16 INV_STATE_LADDER = (1 << INV_SLOT_3 | 1 << SIDEARM_SLOT);
 u16 INV_STATE_CAR = INV_STATE_LADDER;
 u16 INV_STATE_BLOCK_ALL = 0xffff;
 u16 INV_STATE_INV_WND = INV_STATE_BLOCK_ALL;
 u16 INV_STATE_BUY_MENU = INV_STATE_BLOCK_ALL;
 int g_auto_ammo_unload = 0;
 
-bool defaultSlotActiveness[] =
-{
-    false, // no slot
-    true, // knife
-    true, // pistol
-    true, // automatic
-    true, // grenades
-    true, // binocular
-    true, // bolt
-    false, // outfit
-    false, // pda
-    false, // detector
-    false, // torch
-    true, // artefact
-    false // helmet
-};
-
 CInventory::CInventory()
 {
     m_fMaxWeight = pSettings->r_float("inventory", "max_weight");
     m_iMaxBelt = pSettings->read_if_exists<s32>("inventory", "max_belt", 5);
 
-    u16 slotsCount = SLOTS_COUNT;
-    pSettings->read_if_exists<u16>(slotsCount, "inventory", "slots_count", "slots"); // slots_count in CS/COP, slots in SOC
-
-    // slots_count + 1 because [0] is the inactive slot
-    m_slots.reserve(slotsCount + 1u);
+    m_slots.reserve(SLOTS_COUNT);
 
     // Inactive slot [0]
     m_slots.emplace_back(CInventorySlot{});
 
-    // Dynamically create as many slots as we may define in system.ltx
-    u16 i = 0;
-    do
+    m_iLastSlot = NO_ACTIVE_SLOT;
+    for (u16 i = 1;; ++i)
     {
-        ++i;
-
         string256 slot_persistent;
         string256 slot_active;
         xr_sprintf(slot_persistent, "slot_persistent_%d", i);
         xr_sprintf(slot_active,     "slot_active_%d",     i);
 
-        if (!pSettings->line_exist("inventory", slot_persistent))
-        {
-            --i;
+        if (!pSettings->line_exist("inventory", slot_persistent) ||
+            !pSettings->line_exist("inventory", slot_active))
             break;
-        }
 
         const bool isPersistent = pSettings->r_bool("inventory", slot_persistent);
-        const bool isActive = pSettings->read_if_exists<bool>("inventory", slot_active,
-            ShadowOfChernobylMode ? defaultSlotActiveness[i] : false);
+        const bool isActive = pSettings->r_bool("inventory", slot_active);
 
         m_slots.emplace_back(CInventorySlot{ nullptr, isPersistent, isActive });
-    } while (true);
-
-    m_iLastSlot = i;
-#ifndef MASTER_GOLD
-    if (m_iLastSlot != slotsCount)
-    {
-        Log("~ Not critical, but check [inventory] section in your system.ltx.");
-        Msg("~ slots_count = %u, but real slots count is %u", slotsCount, m_iLastSlot);
+        m_iLastSlot = i;
     }
-#endif
 
     m_blocked_slots.resize(m_slots.size());
     // ^ no need to initialize members of array
@@ -728,6 +693,22 @@ bool CInventory::Action(u16 cmd, u32 flags)
         }
     }
     break;
+    case kWPN_7:
+    {
+        b_send_event = true;
+        if (flags & CMD_START)
+        {
+            if (GetActiveSlot() == BINOCULAR_SLOT && ActiveItem())
+            {
+                Activate(NO_ACTIVE_SLOT);
+            }
+            else
+            {
+                Activate(BINOCULAR_SLOT);
+            }
+        }
+    }
+    break;
     case kARTEFACT:
     {
         b_send_event = true;
@@ -1187,6 +1168,13 @@ bool CInventory::CanPutInSlot(PIItem pIItem, u16 slot_id) const
     {
         CCustomOutfit* pOutfit = m_pOwner->GetOutfit();
         if (pOutfit && !pOutfit->bIsHelmetAvaliable)
+            return false;
+    }
+
+    if (slot_id == BACKPACK_SLOT)
+    {
+        CCustomOutfit* pOutfit = m_pOwner->GetOutfit();
+        if (pOutfit && !pOutfit->bIsBackpackAvaliable)
             return false;
     }
 

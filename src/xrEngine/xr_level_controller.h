@@ -11,37 +11,26 @@
 
 enum EGameActions : u32
 {
-    kLOOK_AROUND, // gamepad
-    kLEFT,
+    // Preserve the numeric IDs exposed by Dead Air to scripts, packets, and addons.
+    kLEFT = 0,
     kRIGHT,
     kUP,
     kDOWN,
-
-    kMOVE_AROUND, // gamepad
+    kJUMP,
+    kCROUCH,
+    kACCEL,
+    kSPRINT_TOGGLE,
     kFWD,
     kBACK,
     kL_STRAFE,
     kR_STRAFE,
-
     kL_LOOKOUT,
     kR_LOOKOUT,
-
-    kJUMP,
-    kCROUCH,
-    kCROUCH_TOGGLE,
-    kACCEL,
-    kSPRINT_TOGGLE,
-
-    kENGINE,
-
     kCAM_1,
     kCAM_2,
     kCAM_3,
-    kCAM_4,
     kCAM_ZOOM_IN,
     kCAM_ZOOM_OUT,
-    kCAM_AUTOAIM,
-
     kTORCH,
     kNIGHT_VISION,
     kDETECTOR,
@@ -51,6 +40,7 @@ enum EGameActions : u32
     kWPN_4,
     kWPN_5,
     kWPN_6,
+    kWPN_7,
     kARTEFACT,
     kWPN_NEXT,
     kWPN_FIRE,
@@ -69,7 +59,6 @@ enum EGameActions : u32
     kCHAT,
     kCHAT_TEAM,
     kSCREENSHOT,
-    kENTER,
     kQUIT,
     kCONSOLE,
     kINVENTORY,
@@ -77,10 +66,6 @@ enum EGameActions : u32
     kSKIN,
     kTEAM,
     kACTIVE_JOBS,
-    kMAP,
-    kCONTACTS,
-    kEXT_1,
-
     kVOTE_BEGIN,
     kSHOW_ADMIN_MENU,
     kVOTE,
@@ -92,18 +77,6 @@ enum EGameActions : u32
 
     kSPEECH_MENU_0,
     kSPEECH_MENU_1,
-    kSPEECH_MENU_2,
-    kSPEECH_MENU_3,
-    kSPEECH_MENU_4,
-    kSPEECH_MENU_5,
-    kSPEECH_MENU_6,
-    kSPEECH_MENU_7,
-    kSPEECH_MENU_8,
-    kSPEECH_MENU_9,
-
-    kUSE_BANDAGE,
-    kUSE_MEDKIT,
-
     kQUICK_USE_1,
     kQUICK_USE_2,
     kQUICK_USE_3,
@@ -111,8 +84,6 @@ enum EGameActions : u32
 
     kQUICK_SAVE,
     kQUICK_LOAD,
-    kALIFE_CMD,
-
     kCUSTOM1,
     kCUSTOM2,
     kCUSTOM3,
@@ -128,13 +99,37 @@ enum EGameActions : u32
     kCUSTOM13,
     kCUSTOM14,
     kCUSTOM15,
-
+    kCAM_AUTOAIM,
     kPDA_TAB1,
     kPDA_TAB2,
     kPDA_TAB3,
     kPDA_TAB4,
     kPDA_TAB5,
     kPDA_TAB6,
+
+    // OpenXRay-specific actions follow the complete legacy range.
+    kLOOK_AROUND, // gamepad
+    kMOVE_AROUND, // gamepad
+    kCROUCH_TOGGLE,
+    kENGINE,
+    kCAM_4,
+    kENTER,
+    kMAP,
+    kCONTACTS,
+    kEXT_1,
+
+    kSPEECH_MENU_2,
+    kSPEECH_MENU_3,
+    kSPEECH_MENU_4,
+    kSPEECH_MENU_5,
+    kSPEECH_MENU_6,
+    kSPEECH_MENU_7,
+    kSPEECH_MENU_8,
+    kSPEECH_MENU_9,
+
+    kUSE_BANDAGE,
+    kUSE_MEDKIT,
+    kALIFE_CMD,
 
     kKICK, // alpet: kick dynamic objects
 
@@ -197,6 +192,9 @@ enum EGameActions : u32
     kLASTACTION,
     kNOTBINDED
 };
+
+static_assert(kWPN_7 == 28);
+static_assert(kPDA_TAB6 == 89);
 
 enum class EKeyContext
 {

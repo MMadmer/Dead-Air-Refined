@@ -87,6 +87,8 @@ protected:
         eInventoryKnifeList,
         eInventoryPistolList,
         eInventoryAutomaticList,
+        eInventorySidearmList,
+        eInventoryBinocularList,
 
         eInventoryBackpackList,
         eInventoryOutfitList,
@@ -352,7 +354,8 @@ protected:
     u32 CalcItemsPrice(CUIDragDropListEx* pList, CTrade* pTrade, bool bBuying);
     void UpdatePrices();
     bool CanMoveToPartner(PIItem pItem);
-    void TransferItems(CUIDragDropListEx* pSellList, CUIDragDropListEx* pBuyList, CTrade* pTrade, bool bBuying);
+    void TransferItems(
+        CUIDragDropListEx* pSellList, CUIDragDropListEx* pBuyList, CTrade* pTrade, bool bBuying, bool bFree = false);
 
 public:
     CUIActorMenu();

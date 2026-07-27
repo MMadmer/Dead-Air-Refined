@@ -19,12 +19,12 @@
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
 | Dependency audit | 42-file release runtime | Pass, no missing local DLLs |
 | GUI upgrade installer | Final `0.98b-x64-1.0.0` package over an isolated x86 root | Pass, all 42 runtime hashes matched |
-| GUI standalone installer | Clean 0.98b payload in a new empty root | Pass, 14 base XDB files and no DAR2/addons |
-| Installed EXE uninstaller | Upgrade mode | Pass, 33 original root files restored and zero x64 leftovers |
+| GUI standalone installer | Clean 0.98b payload in a new empty root | Pass, 42 runtime files, 14 base XDB files, and the compatibility XDB matched |
+| Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |
 | Installed EXE uninstaller | Standalone mode | Pass, runtime and base XDB removed; user `appdata` preserved |
-| Standalone runtime smoke | Freshly installed clean 0.98b root | Pass, responsive menu and clean `KERNEL:QUIT` |
+| Standalone runtime smoke | Freshly installed clean 0.98b root | Pass, loaded `x64_da_newgame`, handled Escape, and remained responsive for 120 seconds |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
-| Rollback | Restore 28 original x86 files by SHA-256 and remove added files | Pass, zero mismatches or leftovers |
+| Rollback | Restore the selected version-independent snapshot by SHA-256 and remove added files | Pass, zero mismatches or leftovers |
 
 ## Runtime acceptance rules
 
@@ -33,9 +33,3 @@ remains responsive after loading, and the log contains no new fatal error,
 assertion, reader overflow, or Lua compatibility failure. A content bug already
 present in the original x86 runtime is recorded separately and is not treated
 as an x64 regression.
-
-## Known content issue
-
-`bind_gr_gun.script` fails because the shipped script references an undefined
-`ggun_binder`. The same script fails at the same stage in the original x86
-runtime, so this is not introduced by the port.

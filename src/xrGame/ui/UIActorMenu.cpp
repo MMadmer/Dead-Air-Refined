@@ -338,7 +338,11 @@ EDDListType CUIActorMenu::GetListType(CUIDragDropListEx* l)
         return iActorSlot;
     if (l == m_pLists[eInventoryPistolList])
         return iActorSlot;
-    if (l == m_pLists[eInventoryBackpackList] && m_pLists[eInventoryBackpackList] != nullptr)
+    if (m_pLists[eInventorySidearmList] && l == m_pLists[eInventorySidearmList])
+        return iActorSlot;
+    if (m_pLists[eInventoryBinocularList] && l == m_pLists[eInventoryBinocularList])
+        return iActorSlot;
+    if (m_pLists[eInventoryBackpackList] && l == m_pLists[eInventoryBackpackList])
         return iActorSlot;
     if (l == m_pLists[eInventoryOutfitList])
         return iActorSlot;
@@ -614,6 +618,10 @@ void CUIActorMenu::clear_highlight_lists()
         m_pLists[eInventoryKnifeList]->Highlight(false);
     m_pLists[eInventoryPistolList]->Highlight(false);
     m_pLists[eInventoryAutomaticList]->Highlight(false);
+    if (m_pLists[eInventorySidearmList])
+        m_pLists[eInventorySidearmList]->Highlight(false);
+    if (m_pLists[eInventoryBinocularList])
+        m_pLists[eInventoryBinocularList]->Highlight(false);
     if (m_pLists[eInventoryHelmetList])
         m_pLists[eInventoryHelmetList]->Highlight(false);
     if (m_pLists[eInventoryBackpackList])
@@ -662,10 +670,18 @@ void CUIActorMenu::highlight_item_slot(CUICellItem* cell_item)
     CArtefact* artefact = smart_cast<CArtefact*>(item);
 
     u16 slot_id = item->BaseSlot();
-    if (weapon && (slot_id == INV_SLOT_2 || slot_id == INV_SLOT_3))
+    if (weapon && (slot_id == INV_SLOT_2 || slot_id == INV_SLOT_3 || slot_id == SIDEARM_SLOT))
     {
         m_pLists[eInventoryPistolList]->Highlight(true);
         m_pLists[eInventoryAutomaticList]->Highlight(true);
+        if (m_pLists[eInventorySidearmList])
+            m_pLists[eInventorySidearmList]->Highlight(true);
+        return;
+    }
+    if (slot_id == BINOCULAR_SLOT)
+    {
+        if (m_pLists[eInventoryBinocularList])
+            m_pLists[eInventoryBinocularList]->Highlight(true);
         return;
     }
     if (helmet && slot_id == HELMET_SLOT)
@@ -983,6 +999,10 @@ void CUIActorMenu::ClearAllLists()
         m_pLists[eInventoryKnifeList]->ClearAll(true);
     m_pLists[eInventoryPistolList]->ClearAll(true);
     m_pLists[eInventoryAutomaticList]->ClearAll(true);
+    if (m_pLists[eInventorySidearmList])
+        m_pLists[eInventorySidearmList]->ClearAll(true);
+    if (m_pLists[eInventoryBinocularList])
+        m_pLists[eInventoryBinocularList]->ClearAll(true);
     if (m_pQuickSlot)
         m_pQuickSlot->ClearAll(true);
 

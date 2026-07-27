@@ -113,6 +113,7 @@ void CCustomOutfit::Load(LPCSTR section)
 
     m_BonesProtectionSect = READ_IF_EXISTS(pSettings, r_string, section, "bones_koeff_protection", "");
     bIsHelmetAvaliable = !!READ_IF_EXISTS(pSettings, r_bool, section, "helmet_avaliable", true);
+    bIsBackpackAvaliable = !!READ_IF_EXISTS(pSettings, r_bool, section, "backpack_avaliable", true);
 
     // Added by Axel, to enable optional condition use on any item
     m_flags.set(FUsingCondition, READ_IF_EXISTS(pSettings, r_bool, section, "use_condition", true));
@@ -302,6 +303,10 @@ void CCustomOutfit::OnMoveToSlot(const SInvItemPlace& prev)
             PIItem pHelmet = pActor->inventory().ItemFromSlot(HELMET_SLOT);
             if (pHelmet && !bIsHelmetAvaliable)
                 pActor->inventory().Ruck(pHelmet, false);
+
+            PIItem pBackpack = pActor->inventory().ItemFromSlot(BACKPACK_SLOT);
+            if (pBackpack && !bIsBackpackAvaliable)
+                pActor->inventory().Ruck(pBackpack, false);
         }
     }
 }

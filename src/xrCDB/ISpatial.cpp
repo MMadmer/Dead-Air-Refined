@@ -337,6 +337,15 @@ void ISpatial_DB::_remove(ISpatial_NODE* N, ISpatial_NODE* N_sub)
         octant = 6;
     else if (N_sub == N->children[7])
         octant = 7;
+
+    // A loading-screen object may outlive the level tree that originally owned its node.
+    if (octant >= std::size(N->children))
+    {
+        Stats.NodeCount--;
+        allocator_pool.push_back(N_sub);
+        return;
+    }
+
     VERIFY(octant < 8);
     VERIFY(N_sub->_empty());
     _node_destroy(N->children[octant]);

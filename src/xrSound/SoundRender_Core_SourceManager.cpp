@@ -5,8 +5,12 @@
 
 CSoundRender_Source* CSoundRender_Core::i_create_source(pcstr name)
 {
-    // Search
-    string256 id;
+    // Optional dialogue sounds may omit the sound name.
+    if (!name || !*name)
+        return nullptr;
+
+    // Dialogue sound names can use the full engine path capacity.
+    string_path id;
     xr_strcpy(id, name);
     xr_strlwr(id);
     if (strext(id))
