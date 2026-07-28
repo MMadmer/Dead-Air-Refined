@@ -18,6 +18,7 @@
 #include "ui/UIPdaWnd.h"
 #include "xrNetServer/NET_AuthCheck.h"
 #include "xrNetServer/NET_Messages.h"
+#include "alife_storage_manager.h"
 
 #include "xrPhysics/PhysicsCommon.h"
 #include "xrPhysics/PHCommander.h"
@@ -119,6 +120,8 @@ extern CUISequencer* g_tutorial2;
 
 void CLevel::net_Stop()
 {
+    CALifeStorageManager::wait_for_pending_saves();
+
     Msg("- Disconnect");
 
     if (CurrentGameUI())
@@ -281,6 +284,35 @@ void CLevel::ClientSave()
         else
             break;
     }
+}
+
+bool CLevel::ClientSaveStep(u32& start, u32 objectBudget)
+{
+    NET_Packet packet;
+    packet.w_begin(M_SAVE_PACKET);
+
+    u32 processedObjects = 0;
+    const u32 objectCount = Objects.o_count();
+    while (start < objectCount && processedObjects < objectBudget)
+    {
+        IGameObject* object = Objects.o_get_by_iterator(start++);
+        ++processedObjects;
+        CGameObject* gameObject = smart_cast<CGameObject*>(object);
+        if (!gameObject || gameObject->getDestroy() || !gameObject->net_SaveRelevant())
+            continue;
+
+        packet.w_u16(u16(gameObject->ID()));
+        u32 position = 0;
+        packet.w_chunk_open16(position);
+        gameObject->net_Save(packet);
+        packet.w_chunk_close16(position);
+        if (max_objects_size_in_save >= NET_PacketSizeLimit - packet.w_tell())
+            break;
+    }
+
+    if (packet.B.count > 2)
+        Send(packet, net_flags(FALSE));
+    return start >= objectCount;
 }
 
 // extern	XRPHYSICS_API	float		phTimefactor;

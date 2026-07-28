@@ -157,7 +157,8 @@ float ps_r__ssaHZBvsTEX = 96.f; // RO
 int ps_r__tf_Anisotropic = 8;
 float ps_r__tf_Mipbias = 0.0f;
 
-int ps_r__clear_models_on_unload = 0; // Alundaio
+int ps_r__clear_models_on_unload = 1; // Alundaio
+int ps_r__unload_level_textures = 1;
 
 // R1
 float ps_r1_ssaLOD_A = 64.f;
@@ -326,6 +327,21 @@ public:
     }
 };
 //-AVO
+
+class CCC_ClearModelsOnUnload final : public CCC_Integer
+{
+public:
+    CCC_ClearModelsOnUnload(pcstr name, int* target, int minimum, int maximum)
+        : CCC_Integer(name, target, minimum, maximum)
+    {
+    }
+
+    void Execute(pcstr args) override
+    {
+        CCC_Integer::Execute(args);
+        *value = 1;
+    }
+};
 
 class CCC_tf_Aniso : public CCC_Integer
 {
@@ -796,7 +812,8 @@ void xrRender_initconsole()
     CMD2(CCC_tf_MipBias, "r1_tf_mipbias", &ps_r__tf_Mipbias); // {-3 +3}
     CMD2(CCC_tf_MipBias, "r2_tf_mipbias", &ps_r__tf_Mipbias); // {-3 +3}
 
-    CMD4(CCC_Integer, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1); // Alundaio
+    CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
+    CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
 
     // R1
     CMD4(CCC_Float, "r1_ssa_lod_a", &ps_r1_ssaLOD_A, 16, 96);

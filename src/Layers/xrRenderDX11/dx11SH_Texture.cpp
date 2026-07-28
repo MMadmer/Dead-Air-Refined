@@ -41,6 +41,26 @@ CTexture::~CTexture()
     RImplementation.Resources->_DeleteTexture(this);
 }
 
+void CTexture::release_surface_views()
+{
+    bool aliasesOwnedView = m_pSRView && m_pSRView == srv_all;
+    if (!aliasesOwnedView && m_pSRView)
+    {
+        aliasesOwnedView = std::find(srv_per_slice.begin(), srv_per_slice.end(), m_pSRView) != srv_per_slice.end() ||
+            std::find(m_seqSRView.begin(), m_seqSRView.end(), m_pSRView) != m_seqSRView.end();
+    }
+
+    if (aliasesOwnedView)
+        m_pSRView = nullptr;
+    else
+        _RELEASE(m_pSRView);
+
+    _RELEASE(srv_all);
+    for (auto& srv : srv_per_slice)
+        _RELEASE(srv);
+    srv_per_slice.clear();
+}
+
 void CTexture::surface_set(ID3DBaseTexture* surf)
 {
 #if 0//def DEBUG
@@ -51,6 +71,7 @@ void CTexture::surface_set(ID3DBaseTexture* surf)
 
     if (surf)
         surf->AddRef();
+    release_surface_views();
     _RELEASE(pSurface);
 
     pSurface = surf;
@@ -116,14 +137,11 @@ void CTexture::surface_set(ID3DBaseTexture* surf)
                 break;
             }
 
-            _RELEASE(srv_all);
             CHK_DX(HW.pDevice->CreateShaderResourceView(pSurface, &ViewDesc, &srv_all));
 
             srv_per_slice.resize(desc.ArraySize);
             for (u32 id = 0; id < desc.ArraySize; ++id)
             {
-                _RELEASE(srv_per_slice[id]);
-
                 if (desc.SampleDesc.Count <= 1)
                 {
                     ViewDesc.Texture2DArray.ArraySize = 1;
@@ -502,6 +520,7 @@ void CTexture::Unload()
 #endif // DEBUG
 
     flags.bLoaded = FALSE;
+    release_surface_views();
     if (!seqDATA.empty())
     {
         for (u32 I = 0; I < seqDATA.size(); I++)
@@ -515,12 +534,9 @@ void CTexture::Unload()
     }
 
     _RELEASE(pSurface);
-    _RELEASE(srv_all);
-    for (auto& srv : srv_per_slice)
-    {
-        _RELEASE(srv);
-    }
 
+    desc_cache = nullptr;
+    flags.MemoryUsage = 0;
 
     xr_delete(pAVI);
     xr_delete(pTheora);

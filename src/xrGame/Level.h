@@ -335,6 +335,7 @@ public:
     void ClientSend();
     void ClientSendProfileData();
     void ClientSave();
+    bool ClientSaveStep(u32& start, u32 object_budget);
     u32 Objects_net_Save(NET_Packet* _Packet, u32 start, u32 count);
     void Send(NET_Packet& P, u32 dwFlags = 0x0008 /*DPNSEND_GUARANTEED*/, u32 dwTimeout = 0) override;
     void g_cl_Spawn(LPCSTR name, u8 rp, u16 flags, Fvector pos); // only ask server

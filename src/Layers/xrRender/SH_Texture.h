@@ -203,6 +203,8 @@ private:
 #endif
 
 #if defined(USE_DX11)
+    void release_surface_views();
+
     ID3DShaderResourceView* m_pSRView{ nullptr };
     ID3DShaderResourceView* srv_all{ nullptr };
     xr_vector<ID3DShaderResourceView*> srv_per_slice;

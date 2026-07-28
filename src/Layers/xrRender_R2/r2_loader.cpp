@@ -20,6 +20,7 @@ void CRender::level_Load(IReader* fs)
 
     R_ASSERT(g_pGameLevel);
     R_ASSERT(!b_loaded);
+    Resources->BeginLevelTextureTracking();
 
     // Begin
     g_pGamePersistent->LoadBegin();
@@ -188,12 +189,23 @@ void CRender::level_Unload()
     b_loaded = FALSE;
     if (ps_r__clear_models_on_unload)
     {
+        Models->DeleteQueue();
         Models->ClearPool(true);
-        Visuals.clear();
-        Resources->Dump(false);
-        //static int unload_counter = 0;
-        //Msg("The Level Unloaded.======================== %d", ++unload_counter);
     }
+
+#if defined(USE_DX11)
+    if (ps_r__unload_level_textures)
+    {
+#if RENDER == R_R4
+        for (auto& context : contexts_pool)
+            context.cmd_list.OnFrameEnd();
+#else
+        RCache.OnFrameEnd();
+#endif
+        Resources->UnloadLevelTextures();
+        Memory.mem_compact();
+    }
+#endif
 }
 
 void CRender::LoadBuffers(CStreamReader* base_fs, bool alternative)

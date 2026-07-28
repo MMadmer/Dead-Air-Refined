@@ -8,9 +8,257 @@
 #include <DirectXTex.h>
 #include <wincodec.h>
 
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
+
 namespace xray::render::RENDER_NAMESPACE
 {
 #define GAMESAVE_SIZE 128
+
+namespace
+{
+struct GamesaveScreenshotJob
+{
+    DirectX::ScratchImage image;
+    std::string name;
+    u64 id{};
+};
+
+struct GamesaveGpuCapture
+{
+    ~GamesaveGpuCapture()
+    {
+        _RELEASE(ready);
+        _RELEASE(staging);
+    }
+
+    ID3D11Texture2D* staging{};
+    ID3D11Query* ready{};
+    std::string name;
+    DXGI_FORMAT format{DXGI_FORMAT_UNKNOWN};
+    u32 width{};
+    u32 height{};
+};
+
+class GamesaveScreenshotQueue
+{
+public:
+    GamesaveScreenshotQueue() : worker(&GamesaveScreenshotQueue::run, this) {}
+
+    ~GamesaveScreenshotQueue()
+    {
+        {
+            std::lock_guard lock(mutex);
+            stopping = true;
+        }
+        condition.notify_one();
+        worker.join();
+    }
+
+    void enqueue(DirectX::ScratchImage&& image, pcstr name)
+    {
+        {
+            std::lock_guard lock(mutex);
+            jobs.push_back({std::move(image), name, nextId++});
+        }
+        condition.notify_one();
+    }
+
+    bool enqueue_gpu_capture(ID3D11Resource* source, pcstr name)
+    {
+        ID3D11Texture2D* sourceTexture = nullptr;
+        if (FAILED(source->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&sourceTexture))))
+            return false;
+
+        D3D11_TEXTURE2D_DESC sourceDescription;
+        sourceTexture->GetDesc(&sourceDescription);
+
+        auto capture = std::make_unique<GamesaveGpuCapture>();
+        capture->name = name;
+        capture->format = sourceDescription.Format;
+        capture->width = sourceDescription.Width;
+        capture->height = sourceDescription.Height;
+
+        D3D11_TEXTURE2D_DESC stagingDescription = sourceDescription;
+        stagingDescription.MipLevels = 1;
+        stagingDescription.ArraySize = 1;
+        stagingDescription.SampleDesc.Count = 1;
+        stagingDescription.SampleDesc.Quality = 0;
+        stagingDescription.Usage = D3D11_USAGE_STAGING;
+        stagingDescription.BindFlags = 0;
+        stagingDescription.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDescription.MiscFlags = 0;
+
+        HRESULT result = HW.pDevice->CreateTexture2D(&stagingDescription, nullptr, &capture->staging);
+        ID3D11Texture2D* resolvedTexture = nullptr;
+        if (SUCCEEDED(result) && sourceDescription.SampleDesc.Count > 1)
+        {
+            D3D11_TEXTURE2D_DESC resolvedDescription = stagingDescription;
+            resolvedDescription.Usage = D3D11_USAGE_DEFAULT;
+            resolvedDescription.CPUAccessFlags = 0;
+            result = HW.pDevice->CreateTexture2D(&resolvedDescription, nullptr, &resolvedTexture);
+        }
+
+        D3D11_QUERY_DESC queryDescription{D3D11_QUERY_EVENT, 0};
+        if (SUCCEEDED(result))
+            result = HW.pDevice->CreateQuery(&queryDescription, &capture->ready);
+
+        ID3D11DeviceContext* context = HW.get_context(CHW::IMM_CTX_ID);
+        if (SUCCEEDED(result))
+        {
+            if (resolvedTexture)
+            {
+                context->ResolveSubresource(resolvedTexture, 0, sourceTexture, 0, sourceDescription.Format);
+                context->CopyResource(capture->staging, resolvedTexture);
+            }
+            else
+                context->CopyResource(capture->staging, sourceTexture);
+
+            // The event completes only after the staging copy reaches the GPU command stream.
+            context->End(capture->ready);
+            gpuCaptures.emplace_back(std::move(capture));
+        }
+
+        _RELEASE(resolvedTexture);
+        _RELEASE(sourceTexture);
+        return SUCCEEDED(result);
+    }
+
+    void process_gpu_captures()
+    {
+        if (gpuCaptures.empty())
+            return;
+
+        ID3D11DeviceContext* context = HW.get_context(CHW::IMM_CTX_ID);
+        GamesaveGpuCapture& capture = *gpuCaptures.front();
+        const HRESULT state =
+            context->GetData(capture.ready, nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        if (state == S_FALSE)
+            return;
+        if (FAILED(state))
+        {
+            gpuCaptures.pop_front();
+            return;
+        }
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (FAILED(context->Map(capture.staging, 0, D3D11_MAP_READ, 0, &mapped)))
+        {
+            gpuCaptures.pop_front();
+            return;
+        }
+
+        DirectX::ScratchImage image;
+        const HRESULT initialized =
+            image.Initialize2D(capture.format, capture.width, capture.height, 1, 1);
+        if (SUCCEEDED(initialized))
+        {
+            const DirectX::Image* destination = image.GetImage(0, 0, 0);
+            const size_t rowSize = std::min(destination->rowPitch, static_cast<size_t>(mapped.RowPitch));
+            for (u32 row = 0; row < capture.height; ++row)
+            {
+                memcpy(destination->pixels + row * destination->rowPitch,
+                    static_cast<const u8*>(mapped.pData) + row * mapped.RowPitch, rowSize);
+            }
+        }
+        context->Unmap(capture.staging, 0);
+
+        if (SUCCEEDED(initialized))
+            enqueue(std::move(image), capture.name.c_str());
+        gpuCaptures.pop_front();
+    }
+
+private:
+    static bool write_file(pcstr name, const void* data, size_t size)
+    {
+        const HANDLE file = CreateFileA(name, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+            return false;
+
+        const auto* cursor = static_cast<const u8*>(data);
+        size_t remaining = size;
+        bool succeeded = true;
+        while (remaining)
+        {
+            const DWORD blockSize =
+                static_cast<DWORD>(std::min<size_t>(remaining, std::numeric_limits<DWORD>::max()));
+            DWORD written = 0;
+            if (!WriteFile(file, cursor, blockSize, &written, nullptr) || written != blockSize)
+            {
+                succeeded = false;
+                break;
+            }
+            cursor += written;
+            remaining -= written;
+        }
+
+        succeeded = succeeded && FlushFileBuffers(file) != FALSE;
+        CloseHandle(file);
+        return succeeded;
+    }
+
+    static void execute(GamesaveScreenshotJob&& job)
+    {
+        DirectX::ScratchImage resized;
+        if (FAILED(Resize(*job.image.GetImage(0, 0, 0), GAMESAVE_SIZE, GAMESAVE_SIZE,
+                DirectX::TEX_FILTER_BOX, resized)))
+            return;
+
+        DirectX::ScratchImage compressed;
+        if (FAILED(Compress(*resized.GetImage(0, 0, 0), DXGI_FORMAT_BC1_UNORM,
+                DirectX::TEX_COMPRESS_DEFAULT | DirectX::TEX_COMPRESS_PARALLEL, 0.f, compressed)))
+            return;
+
+        DirectX::Blob saved;
+        if (FAILED(SaveToDDSMemory(
+                *compressed.GetImage(0, 0, 0), DirectX::DDS_FLAGS_FORCE_DX9_LEGACY, saved)))
+            return;
+
+        const std::string temporaryName =
+            job.name + "." + std::to_string(GetCurrentProcessId()) + "." + std::to_string(job.id) + ".tmp";
+        if (!write_file(temporaryName.c_str(), saved.GetBufferPointer(), saved.GetBufferSize()) ||
+            !MoveFileExA(temporaryName.c_str(), job.name.c_str(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+            DeleteFileA(temporaryName.c_str());
+        }
+    }
+
+    void run()
+    {
+        for (;;)
+        {
+            GamesaveScreenshotJob job;
+            {
+                std::unique_lock lock(mutex);
+                condition.wait(lock, [this] { return stopping || !jobs.empty(); });
+                if (jobs.empty())
+                    return;
+                job = std::move(jobs.front());
+                jobs.pop_front();
+            }
+            execute(std::move(job));
+        }
+    }
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::deque<GamesaveScreenshotJob> jobs;
+    std::deque<std::unique_ptr<GamesaveGpuCapture>> gpuCaptures;
+    std::thread worker;
+    u64 nextId{};
+    bool stopping{};
+};
+
+GamesaveScreenshotQueue& gamesave_screenshot_queue()
+{
+    static GamesaveScreenshotQueue queue;
+    return queue;
+}
+}
 
 void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nullptr*/)
 {
@@ -20,6 +268,15 @@ void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nul
     if (!pSrcTexture)
     {
         Log("! Failed to make a screenshot: couldn't obtain base RT resource");
+        return;
+    }
+
+    if (mode == IRender::SM_FOR_GAMESAVE)
+    {
+        VERIFY(name);
+        if (!gamesave_screenshot_queue().enqueue_gpu_capture(pSrcTexture, name))
+            Log("! Failed to queue the gamesave screenshot");
+        _RELEASE(pSrcTexture);
         return;
     }
 
@@ -36,34 +293,7 @@ void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nul
     switch (mode)
     {
     case IRender::SM_FOR_GAMESAVE:
-    {
-        // resize
-        DirectX::ScratchImage resized;
-        auto hr = Resize(*image.GetImage(0, 0, 0), GAMESAVE_SIZE, GAMESAVE_SIZE,
-            DirectX::TEX_FILTER_BOX, resized);
-        if (FAILED(hr))
-            goto _end_;
-
-        // compress
-        DirectX::ScratchImage compressed;
-        hr = Compress(*resized.GetImage(0, 0, 0), DXGI_FORMAT_BC1_UNORM,
-            DirectX::TEX_COMPRESS_DEFAULT | DirectX::TEX_COMPRESS_PARALLEL, 0.0f, compressed);
-        if (FAILED(hr))
-            goto _end_;
-
-        // save (logical & physical)
-        DirectX::Blob saved;
-        hr = SaveToDDSMemory(*compressed.GetImage(0, 0, 0), DirectX::DDS_FLAGS_FORCE_DX9_LEGACY, saved);
-        if (FAILED(hr))
-            goto _end_;
-
-        if (IWriter* fs = FS.w_open(name))
-        {
-            fs->w(saved.GetBufferPointer(), saved.GetBufferSize());
-            FS.w_close(fs);
-        }
         break;
-    }
     case IRender::SM_NORMAL:
     {
         string64 t_stemp;
@@ -139,5 +369,10 @@ void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nul
 
 _end_:
     _RELEASE(pSrcTexture);
+}
+
+void CRender::ProcessGamesaveScreenshots()
+{
+    gamesave_screenshot_queue().process_gpu_captures();
 }
 } // namespace xray::render::RENDER_NAMESPACE

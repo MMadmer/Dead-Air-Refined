@@ -2,12 +2,25 @@
 
 #include "xr_types.h"
 
+#include <atomic>
 #include <new>
+
+struct XRCORE_API xrMemoryStatistics
+{
+    size_t virtualFree{};
+    size_t largestFreeBlock{};
+    size_t virtualReserved{};
+    size_t virtualCommitted{};
+    size_t privateBytes{};
+    size_t workingSet{};
+    size_t mappedBytes{};
+};
 
 class XRCORE_API xrMemory
 {
 public:
     static constexpr size_t SMALL_SIZE_MAX = 128 * sizeof(void*);
+    static constexpr size_t EMERGENCY_RESERVE_SIZE = 32 * 1024 * 1024;
 
 public:
     xrMemory() = default;
@@ -15,8 +28,10 @@ public:
     void _destroy();
 
     size_t mem_usage();
+    xrMemoryStatistics statistics() const;
 
     void mem_compact();
+    bool release_emergency_reserve() noexcept;
 
     void* mem_alloc(size_t size);
     void* mem_alloc(size_t size, size_t alignment);
@@ -29,6 +44,12 @@ public:
 
     void* small_alloc(size_t size) noexcept;
     void  small_free (void* ptr) noexcept;
+
+private:
+    bool recover_allocation_failure() noexcept;
+
+    void* m_emergencyReserve{};
+    std::atomic_flag m_recoveryInProgress = ATOMIC_FLAG_INIT;
 };
 
 extern XRCORE_API xrMemory Memory;

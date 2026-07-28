@@ -56,6 +56,17 @@ __pycache__/
 *.psess
 *.vsp
 *.vspx
+*.diagsession
+
+# Local performance captures and profile-guided build data.
+*.etl
+*.pgc
+*.pgd
+
+# Local packaging and deployment staging.
+/dist/
+/release/
+/staging/
 
 # exclude doxygen output
 doc/doxygen/html/*

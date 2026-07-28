@@ -321,12 +321,17 @@ struct resptrcode_sound : public resptr_base<CSound>
     ICF bool create(pcstr name, esound_type sound_type, u32 game_type)
     {
         VerSndUnlocked();
+        if (auto* feedback = _feedback())
+            feedback->stop(false);
         _set(GEnv.Sound->create(name, sound_type, game_type));
         return _get();
     }
 
     ICF void destroy()
     {
+        VerSndUnlocked();
+        if (auto* feedback = _feedback())
+            feedback->stop(false);
         _set(nullptr);
     }
 
@@ -342,6 +347,9 @@ struct resptrcode_sound : public resptr_base<CSound>
     {
         if (!from._get())
             return;
+        VerSndUnlocked();
+        if (auto* feedback = _feedback())
+            feedback->stop(false);
         _set(xr_new<CSound>(from->handle));
         p_->dwBytesTotal = from->dwBytesTotal;
         p_->fTimeTotal = from->fTimeTotal;

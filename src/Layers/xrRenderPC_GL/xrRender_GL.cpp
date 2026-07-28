@@ -34,17 +34,10 @@ public:
     {
         ZoneScoped;
 
+#ifndef XR_PLATFORM_WINDOWS
         if (CheckCanAddMode())
-        {
-#ifdef XR_PLATFORM_WINDOWS
-            modes.emplace_back(RENDERER_RGL_MODE, 6);
-#else
-            //modes.emplace_back(RENDERER_R2_MODE, 2);
-            //modes.emplace_back(RENDERER_R2_5_MODE, 3);
             modes.emplace_back(RENDERER_R3_MODE, 4);
-            //modes.emplace_back(RENDERER_R4_MODE, 5);
 #endif
-        }
         return modes;
     }
 

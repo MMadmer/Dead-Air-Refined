@@ -17,6 +17,14 @@ public:
     typedef ALife::_TIME_ID _TIME_ID;
     typedef GameGraph::_LEVEL_ID _LEVEL_ID;
 
+    struct SaveMetadata
+    {
+        size_t sourceSize{};
+        size_t compressedSize{};
+        u64 saveId{};
+        bool protectedFormat{};
+    };
+
 private:
     _TIME_ID m_game_time;
     _LEVEL_ID m_level_id;
@@ -29,6 +37,7 @@ public:
     static bool saved_game_exist(LPCSTR saved_game_name);
     static bool valid_saved_game(IReader& stream);
     static bool valid_saved_game(LPCSTR saved_game_name);
+    static bool read_metadata(IReader& stream, SaveMetadata& metadata);
     inline const _TIME_ID& game_time() const;
     inline const _LEVEL_ID& level_id() const;
     inline LPCSTR level_name() const;

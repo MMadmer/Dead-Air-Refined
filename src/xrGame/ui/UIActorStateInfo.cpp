@@ -92,12 +92,10 @@ void ui_actor_state_wnd::UpdateActorInfo(CInventoryOwner* owner)
 
     const auto& conditions = actor->conditions();
 
-    // show stamina icon
-    value = conditions.GetPower();
+    // show satiety icon
+    value = conditions.GetSatiety();
+    value = floor(value * 55) / 55; // number of sticks in progress bar
     m_state[stt_stamina]->set_progress(value);
-
-    value = actor->GetRestoreSpeed(ALife::ePowerRestoreSpeed);
-    m_state[stt_stamina]->set_text(value); // 0..0.99
 
     // show health icon
     value = conditions.GetHealth();

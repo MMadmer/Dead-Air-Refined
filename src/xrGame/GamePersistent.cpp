@@ -32,6 +32,7 @@
 #include "xrEngine/xr_input.h"
 #include "ui/UILoadingScreen.h"
 #include "AnselManager.h"
+#include "alife_storage_manager.h"
 #include "xrCore/Threading/TaskManager.hpp"
 
 #include "xrPhysics/IPHWorld.h"
@@ -480,6 +481,8 @@ void CGamePersistent::OnFrame()
 {
     ZoneScoped;
 
+    CALifeStorageManager::process_async_save_completions();
+
     if (Device.dwPrecacheFrame == 5 && m_intro_event.empty())
     {
         LoadTitle();
@@ -662,6 +665,8 @@ void CGamePersistent::OnEvent(EVENT E, u64 P1, u64 P2)
 
     if (E == eQuickLoad)
     {
+        CALifeStorageManager::wait_for_pending_saves();
+
         if (Device.Paused())
             Device.Pause(FALSE, TRUE, TRUE, "eQuickLoad");
 

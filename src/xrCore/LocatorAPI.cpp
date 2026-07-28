@@ -1418,6 +1418,20 @@ void CLocatorAPI::file_from_archive(IReader*& R, pcstr fname, const file& desc)
     register_file_mapping(ptr, sz, temp);
 #endif // DEBUG
 
+    const auto unmapArchiveView = [&]
+    {
+#ifdef FS_DEBUG
+        unregister_file_mapping(ptr, sz);
+#endif // DEBUG
+#if defined(XR_PLATFORM_WINDOWS)
+        UnmapViewOfFile(ptr);
+#elif defined(XR_PLATFORM_POSIX)
+        ::munmap(ptr, sz);
+#else
+#   error Select or add implementation for your platform
+#endif
+    };
+
     size_t ptr_offs = desc.ptr - start;
     if (desc.size_real == desc.size_compressed)
     {
@@ -1427,19 +1441,16 @@ void CLocatorAPI::file_from_archive(IReader*& R, pcstr fname, const file& desc)
 
     // Compressed
     u8* dest = xr_alloc<u8>(desc.size_real);
-    rtc_decompress(dest, desc.size_real, ptr + ptr_offs, desc.size_compressed);
+    const size_t decompressedSize = rtc_decompress(dest, desc.size_real, ptr + ptr_offs, desc.size_compressed);
+    R_ASSERT3_CURE(decompressedSize == desc.size_real, "cannot decompress archived file", fname,
+    {
+        xr_free(dest);
+        unmapArchiveView();
+        R = nullptr;
+        return;
+    });
     R = xr_new<CTempReader>(dest, desc.size_real, 0);
-#if defined(XR_PLATFORM_WINDOWS)
-    UnmapViewOfFile(ptr);
-#elif defined(XR_PLATFORM_POSIX)
-    ::munmap(ptr, sz);
-#else
-#   error Select or add implementation for your platform
-#endif
-
-#ifdef FS_DEBUG
-    unregister_file_mapping(ptr, sz);
-#endif // DEBUG
+    unmapArchiveView();
 }
 
 void CLocatorAPI::file_from_archive(CStreamReader*& R, pcstr fname, const file& desc)
@@ -1786,35 +1797,47 @@ void CLocatorAPI::file_copy(pcstr src, pcstr dest)
 
 void CLocatorAPI::file_rename(pcstr src, pcstr dest, bool overwrite)
 {
+    if (!xr_stricmp(src, dest))
+        return;
+
     files_it S = file_find_it(src);
     if (S != m_files.end())
     {
         files_it D = file_find_it(dest);
+        if (D != m_files.end() && !overwrite)
+            return;
+
+        VerifyPath(dest);
+        pstr conv_src = xr_strdup(src);
+        pstr conv_dest = xr_strdup(dest);
+        convert_path_separators(conv_src);
+        convert_path_separators(conv_dest);
+
+#if defined(XR_PLATFORM_WINDOWS)
+        const DWORD flags = MOVEFILE_WRITE_THROUGH | (overwrite ? MOVEFILE_REPLACE_EXISTING : 0);
+        const bool renamed = MoveFileExA(conv_src, conv_dest, flags) != FALSE;
+#else
+        const bool renamed = rename(conv_src, conv_dest) == 0;
+#endif
+        xr_free(conv_src);
+        xr_free(conv_dest);
+
+        if (!renamed)
+            return;
+
         if (D != m_files.end())
         {
-            if (!overwrite)
-                return;
-            xr_unlink(D->name);
-            auto str = pstr(D->name);
-            xr_free(str);
+            auto destinationName = pstr(D->name);
+            xr_free(destinationName);
             m_files.erase(D);
         }
 
         file new_desc = *S;
-        // remove existing item
-        auto str = pstr(S->name);
-        xr_free(str);
+        auto sourceName = pstr(S->name);
+        xr_free(sourceName);
         m_files.erase(S);
-        // insert updated item
         new_desc.name = xr_fs_strlwr(xr_strdup(dest));
         m_files.insert(new_desc);
-
-        // physically rename file
-        VerifyPath(dest);
-        pstr conv_dest = xr_strdup(dest);
-        convert_path_separators(conv_dest);
-        rename(src, conv_dest);
-        xr_free(conv_dest);
     }
 }
 

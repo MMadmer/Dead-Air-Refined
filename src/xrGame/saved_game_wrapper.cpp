@@ -16,8 +16,29 @@
 #include "alife_simulator_header.h"
 #include "alife_simulator.h"
 #include "alife_spawn_registry.h"
+#include "alife_storage_manager.h"
 
 extern LPCSTR alife_section;
+
+namespace
+{
+constexpr u32 saveFooterMagic = 0x53343644;
+constexpr u32 saveFooterVersion = 1;
+constexpr u32 saveProtectedSourceFlag = 0x80000000;
+constexpr size_t saveFooterSize = sizeof(u32) * 5 + sizeof(u64);
+constexpr size_t maxSaveSourceSize = 512ull * 1024 * 1024;
+
+bool valid_saved_game_file(pcstr fileName)
+{
+    IReader* stream = FS.r_open(fileName);
+    if (!stream)
+        return false;
+
+    const bool valid = CSavedGameWrapper::valid_saved_game(*stream);
+    FS.r_close(stream);
+    return valid;
+}
+}
 
 pcstr CSavedGameWrapper::saved_game_full_name(pcstr saved_game_name, string_path& result, pcstr extension)
 {
@@ -29,6 +50,8 @@ pcstr CSavedGameWrapper::saved_game_full_name(pcstr saved_game_name, string_path
 
 bool CSavedGameWrapper::saved_game_exist(LPCSTR saved_game_name)
 {
+    CALifeStorageManager::wait_for_pending_saves();
+
     string_path file_name;
     if (FS.exist(saved_game_full_name(saved_game_name, file_name, SAVE_EXTENSION)))
         return true;
@@ -37,7 +60,7 @@ bool CSavedGameWrapper::saved_game_exist(LPCSTR saved_game_name)
 
 bool CSavedGameWrapper::valid_saved_game(IReader& stream)
 {
-    if (stream.length() < 8)
+    if (stream.length() < 3 * sizeof(u32))
         return (false);
 
     if (stream.r_u32() != u32(-1))
@@ -46,20 +69,119 @@ bool CSavedGameWrapper::valid_saved_game(IReader& stream)
     if (stream.r_u32() < ALIFE_VERSION)
         return (false);
 
-    return (true);
+    SaveMetadata metadata;
+    if (!read_metadata(stream, metadata))
+        return false;
+
+    if (metadata.protectedFormat)
+        return true;
+
+    const size_t savedPosition = stream.tell();
+    stream.seek(3 * sizeof(u32));
+    void* sourceData = xr_malloc(metadata.sourceSize);
+    const size_t decodedSize =
+        rtc_decompress(sourceData, metadata.sourceSize, stream.pointer(), metadata.compressedSize);
+    xr_free(sourceData);
+    stream.seek(savedPosition);
+    return decodedSize == metadata.sourceSize;
 }
 
 bool CSavedGameWrapper::valid_saved_game(LPCSTR saved_game_name)
 {
+    CALifeStorageManager::wait_for_pending_saves();
+
     string_path file_name;
     if (!FS.exist(saved_game_full_name(saved_game_name, file_name, SAVE_EXTENSION)))
         if (!FS.exist(saved_game_full_name(saved_game_name, file_name, SAVE_EXTENSION_LEGACY)))
             return false;
 
-    IReader* stream = FS.r_open(file_name);
-    bool result = valid_saved_game(*stream);
-    FS.r_close(stream);
-    return (result);
+    if (valid_saved_game_file(file_name))
+        return true;
+
+    string_path backupName;
+    strconcat(sizeof(backupName), backupName, file_name, ".bak");
+    if (!FS.exist(backupName) || !valid_saved_game_file(backupName))
+        return false;
+
+    string_path recoveryName;
+    strconcat(sizeof(recoveryName), recoveryName, file_name, ".recover");
+    FS.file_copy(backupName, recoveryName);
+    FS.file_rename(recoveryName, file_name, true);
+
+    string_path customName;
+    xr_strcpy(customName, file_name);
+    if (char* extension = strrchr(customName, '.'))
+        xr_strcpy(extension, sizeof(customName) - (extension - customName), ".scoc");
+
+    string_path customBackup;
+    strconcat(sizeof(customBackup), customBackup, customName, ".bak");
+    if (FS.exist(customBackup))
+    {
+        string_path customRecovery;
+        strconcat(sizeof(customRecovery), customRecovery, customName, ".recover");
+        FS.file_copy(customBackup, customRecovery);
+        FS.file_rename(customRecovery, customName, true);
+    }
+
+    Msg("! Restored the previous complete save pair for '%s'", saved_game_name);
+    return valid_saved_game_file(file_name);
+}
+
+bool CSavedGameWrapper::read_metadata(IReader& stream, SaveMetadata& metadata)
+{
+    const size_t savedPosition = stream.tell();
+    const size_t streamLength = stream.length();
+    metadata = {};
+
+    if (streamLength < 3 * sizeof(u32))
+        return false;
+
+    stream.seek(2 * sizeof(u32));
+    const u32 sourceMarker = stream.r_u32();
+    const bool protectedHeader = (sourceMarker & saveProtectedSourceFlag) != 0;
+    const u32 sourceSize = sourceMarker & ~saveProtectedSourceFlag;
+    metadata.sourceSize = sourceSize;
+    metadata.compressedSize = streamLength - 3 * sizeof(u32);
+
+    if (streamLength >= 3 * sizeof(u32) + saveFooterSize)
+    {
+        stream.seek(streamLength - saveFooterSize);
+        const u32 magic = stream.r_u32();
+        if (magic == saveFooterMagic)
+        {
+            const u32 formatVersion = stream.r_u32();
+            metadata.saveId = stream.r_u64();
+            const u32 footerSourceSize = stream.r_u32();
+            const u32 footerCompressedSize = stream.r_u32();
+            const u32 footerChecksum = stream.r_u32();
+
+            metadata.protectedFormat = true;
+            metadata.compressedSize = streamLength - 3 * sizeof(u32) - saveFooterSize;
+
+            if (formatVersion != saveFooterVersion || footerSourceSize != sourceSize ||
+                footerCompressedSize != metadata.compressedSize)
+            {
+                stream.seek(savedPosition);
+                return false;
+            }
+
+            stream.seek(3 * sizeof(u32));
+            if (crc32(stream.pointer(), static_cast<u32>(metadata.compressedSize)) != footerChecksum)
+            {
+                stream.seek(savedPosition);
+                return false;
+            }
+        }
+    }
+
+    if (protectedHeader && !metadata.protectedFormat)
+    {
+        stream.seek(savedPosition);
+        return false;
+    }
+
+    stream.seek(savedPosition);
+    return metadata.compressedSize > 0 && metadata.sourceSize > 0 && metadata.sourceSize <= maxSaveSourceSize;
 }
 
 CSavedGameWrapper::CSavedGameWrapper(LPCSTR saved_game_name)
@@ -83,10 +205,26 @@ CSavedGameWrapper::CSavedGameWrapper(LPCSTR saved_game_name)
         return;
     }
 
-    u32 source_count = stream->r_u32();
+    SaveMetadata metadata;
+    if (!read_metadata(*stream, metadata))
+    {
+        FS.r_close(stream);
+        m_level_id = _LEVEL_ID(-1);
+        m_level_name = "";
+        return;
+    }
+    stream->advance(sizeof(u32));
+    const u32 source_count = static_cast<u32>(metadata.sourceSize);
     void* source_data = xr_malloc(source_count);
-    rtc_decompress(source_data, source_count, stream->pointer(), stream->length() - 3 * sizeof(u32));
+    const size_t decodedSize = rtc_decompress(source_data, source_count, stream->pointer(), metadata.compressedSize);
     FS.r_close(stream);
+    if (decodedSize != source_count)
+    {
+        xr_free(source_data);
+        m_level_id = _LEVEL_ID(-1);
+        m_level_name = "";
+        return;
+    }
 
     IReader reader(source_data, source_count);
 

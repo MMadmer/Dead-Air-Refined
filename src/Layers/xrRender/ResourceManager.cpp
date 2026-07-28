@@ -12,8 +12,107 @@
 #include "Blender.h"
 #include "Blender_Recorder.h"
 
+#include <condition_variable>
+
 namespace xray::render::RENDER_NAMESPACE
 {
+namespace
+{
+class TextureUploadPool final
+{
+public:
+    TextureUploadPool()
+    {
+        workers.reserve(maximumWorkers);
+        for (size_t workerIndex = 0; workerIndex < maximumWorkers; ++workerIndex)
+            workers.emplace_back(&TextureUploadPool::WorkerMain, this, workerIndex);
+    }
+
+    ~TextureUploadPool()
+    {
+        {
+            std::lock_guard lock(mutex);
+            stopping = true;
+        }
+        workAvailable.notify_all();
+
+        for (auto& worker : workers)
+            worker.join();
+    }
+
+    void Run(const xr_vector<CTexture*>& batch, size_t requestedWorkers)
+    {
+        std::unique_lock lock(mutex);
+        VERIFY(!workersRemaining);
+
+        textures = &batch;
+        workerLimit = std::min(requestedWorkers, maximumWorkers);
+        workersRemaining = workerLimit;
+        nextTexture.store(0, std::memory_order_relaxed);
+        ++generation;
+        workAvailable.notify_all();
+
+        completed.wait(lock, [this] { return !workersRemaining; });
+        textures = nullptr;
+    }
+
+private:
+    void WorkerMain(size_t workerIndex)
+    {
+        size_t observedGeneration{};
+        for (;;)
+        {
+            std::unique_lock lock(mutex);
+            workAvailable.wait(lock, [this, observedGeneration]
+            {
+                return stopping || generation != observedGeneration;
+            });
+
+            if (stopping)
+                return;
+
+            observedGeneration = generation;
+            if (workerIndex >= workerLimit)
+                continue;
+
+            const auto* batch = textures;
+            lock.unlock();
+
+            for (size_t index = nextTexture.fetch_add(1, std::memory_order_relaxed);
+                 index < batch->size();
+                 index = nextTexture.fetch_add(1, std::memory_order_relaxed))
+            {
+                (*batch)[index]->Load();
+            }
+
+            lock.lock();
+            if (!--workersRemaining)
+                completed.notify_one();
+        }
+    }
+
+private:
+    static constexpr size_t maximumWorkers = 4;
+
+    xr_vector<std::thread> workers;
+    std::mutex mutex;
+    std::condition_variable workAvailable;
+    std::condition_variable completed;
+    const xr_vector<CTexture*>* textures{};
+    std::atomic_size_t nextTexture{};
+    size_t workerLimit{};
+    size_t workersRemaining{};
+    size_t generation{};
+    bool stopping{};
+};
+
+TextureUploadPool*& texture_upload_pool()
+{
+    static TextureUploadPool* pool{};
+    return pool;
+}
+}
+
 //	Already defined in Texture.cpp
 void fix_texture_name(pstr fn);
 /*
@@ -362,8 +461,7 @@ void CResourceManager::DeferredUpload()
     ZoneScoped;
 
 #if defined(USE_DX11)
-    constexpr size_t texturesPerThread = 100;
-    if (m_textures.size() <= texturesPerThread)
+    if (m_textures.size() < 2)
     {
         for (auto& texture : m_textures)
             texture.second->Load();
@@ -375,26 +473,34 @@ void CResourceManager::DeferredUpload()
     for (auto& texture : m_textures)
         textures.push_back(texture.second);
 
-    // Dead Air keeps D3D texture loading off the caller thread.
-    xr_vector<std::thread> workers;
-    workers.reserve((textures.size() + texturesPerThread - 1) / texturesPerThread);
-    for (size_t begin = 0; begin < textures.size(); begin += texturesPerThread)
-    {
-        const size_t end = std::min(begin + texturesPerThread, textures.size());
-        workers.emplace_back([&textures, begin, end]
-        {
-            for (size_t index = begin; index < end; ++index)
-                textures[index]->Load();
-        });
-    }
+    constexpr size_t taskMemoryBudget = 128 * 1024 * 1024;
+    constexpr size_t maximumLoaderBudget = 512 * 1024 * 1024;
+    const auto memory = Memory.statistics();
+    const size_t availableBudget = std::min(memory.largestFreeBlock / 8, maximumLoaderBudget);
+    const size_t budgetedWorkers = std::clamp(availableBudget / taskMemoryBudget, size_t{2}, size_t{4});
+    const size_t workerCount = std::min(budgetedWorkers, textures.size());
 
-    for (auto& worker : workers)
-        worker.join();
+    Msg("* Deferred texture upload: %zu textures, %zu workers, %zu MiB transient budget",
+        textures.size(), workerCount, workerCount * taskMemoryBudget / 1048576);
+
+    // Reusing the same threads prevents graphics-driver thread caches from multiplying after every level load.
+    auto*& uploadPool = texture_upload_pool();
+    if (!uploadPool)
+        uploadPool = xr_new<TextureUploadPool>();
+    uploadPool->Run(textures, workerCount);
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
     for (auto& texture : m_textures)
         texture.second->Load();
 #else
 #   error No graphics API selected or enabled!
+#endif
+}
+
+void CResourceManager::ShutdownTextureUploadPool()
+{
+#if defined(USE_DX11)
+    auto*& uploadPool = texture_upload_pool();
+    xr_delete(uploadPool);
 #endif
 }
 
@@ -406,13 +512,49 @@ void CResourceManager::DeferredUnload()
     ZoneScoped;
 
 #if defined(USE_DX11)
-    xr_parallel_for_each(m_textures, [&](auto m_tex) { m_tex.second->Unload(); });
+    for (auto& texture : m_textures)
+        texture.second->Unload();
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
     for (auto& texture : m_textures)
         texture.second->Unload();
 #else
 #   error No graphics API selected or enabled!
 #endif
+}
+
+void CResourceManager::BeginLevelTextureTracking()
+{
+    m_level_persistent_textures.clear();
+    m_level_persistent_textures.reserve(m_textures.size());
+
+    for (const auto& texture : m_textures)
+    {
+        if (texture.second->flags.bLoaded)
+            m_level_persistent_textures.emplace_back(texture.first);
+    }
+}
+
+void CResourceManager::UnloadLevelTextures()
+{
+    u32 unloaded_count = 0;
+    u64 unloaded_memory = 0;
+
+    for (const auto& texture : m_textures)
+    {
+        CTexture* resource = texture.second;
+        const bool was_loaded_before_level =
+            std::find(m_level_persistent_textures.begin(), m_level_persistent_textures.end(), texture.first) !=
+            m_level_persistent_textures.end();
+        if (!resource->flags.bLoaded || was_loaded_before_level)
+            continue;
+
+        unloaded_memory += resource->flags.MemoryUsage;
+        resource->Unload();
+        ++unloaded_count;
+    }
+
+    m_level_persistent_textures.clear();
+    Msg("* Level texture unload: %u textures, %llu MiB released", unloaded_count, unloaded_memory / 1048576);
 }
 
 #ifdef _EDITOR
@@ -487,7 +629,6 @@ void CResourceManager::_DumpMemoryUsage()
 
 void CResourceManager::Evict()
 {
-    // TODO: DX11: check if we really need this method
 }
 /*
 BOOL	CResourceManager::_GetDetailTexture(LPCSTR Name,LPCSTR& T, R_constant_setup* &CS)

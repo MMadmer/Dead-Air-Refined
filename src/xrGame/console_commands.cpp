@@ -10,6 +10,7 @@
 #include "xrScriptEngine/script_debugger.hpp"
 #include "ai_debug.h"
 #include "alife_simulator.h"
+#include "alife_object_registry.h"
 #include "game_cl_base.h"
 #include "game_cl_single.h"
 #include "game_sv_single.h"
@@ -163,23 +164,45 @@ const xr_token lua_gc_method_token[] =
 
 CUIOptConCom g_OptConCom;
 
-static void full_memory_stats()
+void log_stability_memory_stats(bool compact)
 {
-    Memory.mem_compact();
+    if (compact)
+        Memory.mem_compact();
+
     u32 m_base = 0, c_base = 0, m_lmaps = 0, c_lmaps = 0;
     GEnv.Render->ResourcesGetMemoryUsage(m_base, c_base, m_lmaps, c_lmaps);
     log_vminfo();
-    size_t _process_heap = ::Memory.mem_usage();
-    const auto [_eco_strings_bytes, _eco_strings_count] = g_pStringContainer->stat_economy();
-    int _eco_smem = (int)g_pSharedMemoryContainer->stat_economy();
-    Msg("* [ render ]: textures[%d K]", (m_base + m_lmaps) / 1024);
-    Msg("* [ x-ray  ]: process heap[%u K]", _process_heap / 1024);
-    Msg("* [ x-ray  ]: shared strings: memory[%ld K], count[%lu]", _eco_strings_bytes / 1024, _eco_strings_count);
-    Msg("* [ x-ray  ]: shared memory[%ld K]", _eco_smem);
+
+    const size_t processHeap = Memory.mem_usage();
+    const auto [ecoStringsBytes, ecoStringsCount] = g_pStringContainer->stat_economy();
+    const size_t ecoSmem = g_pSharedMemoryContainer->stat_economy();
+    const size_t luaBytes = GEnv.ScriptEngine ? lua_gc(GEnv.ScriptEngine->lua(), LUA_GCCOUNT, 0) * 1024ull : 0;
+    const size_t modelBytes = GEnv.Render->models_GetMemoryUsage();
+    const size_t alifeObjects = ai().get_alife() ? ai().alife().objects().objects().size() : 0;
+    const size_t onlineObjects = g_pGameLevel ? Level().Objects.o_count() : 0;
+
+    u32 pendingRelease = 0;
+    if (GEnv.ScriptEngine)
+    {
+        luabind::functor<u32> pendingCount;
+        if (GEnv.ScriptEngine->functor("safe_release_manager.pending_count", pendingCount))
+            pendingRelease = pendingCount();
+    }
+
+    Msg("* [render]: textures[%zu MiB], models[%zu MiB]", size_t(m_base + m_lmaps) / 1048576, modelBytes / 1048576);
+    Msg("* [x-ray]: private[%zu MiB], Lua[%zu MiB]", processHeap / 1048576, luaBytes / 1048576);
+    Msg("* [x-ray]: shared string savings[%zu KiB/%zu], shared memory savings[%zu KiB]",
+        ecoStringsBytes / 1024, ecoStringsCount, ecoSmem);
+    Msg("* [ALife]: objects[%zu], online[%zu], pending release[%u]", alifeObjects, onlineObjects, pendingRelease);
 #ifdef FS_DEBUG
     Msg("* [ x-ray  ]: file mapping: memory[%d K], count[%d]", g_file_mapped_memory / 1024, g_file_mapped_count);
     dump_file_mappings();
 #endif
+}
+
+static void full_memory_stats()
+{
+    log_stability_memory_stats(true);
 }
 
 class CCC_MemStats : public IConsole_Command
@@ -651,8 +674,6 @@ public:
             return;
         }
 
-        Console->Execute("stat_memory");
-
         string_path S, S1;
         S[0] = 0;
         strncpy_s(S, sizeof(S), args, MAX_PATH - 1);
@@ -688,11 +709,14 @@ public:
         Msg("Game save overhead  : %f milliseconds", timer.GetElapsed_sec() * 1000.f);
 #endif
         const bool compat = ClearSkyMode || ShadowOfChernobylMode;
-        StaticDrawableWrapper* _s = CurrentGameUI()->AddCustomStatic("game_saved", true, compat ? 3.0f : -1.0f);
-
-        pstr save_name;
-        STRCONCAT(save_name, StringTable().translate("st_game_saved").c_str(), ": ", S);
-        _s->wnd()->TextItemControl()->SetText(save_name);
+        CUIGameCustom* gameUi = CurrentGameUI();
+        if (gameUi)
+        {
+            gameUi->RemoveCustomStatic("game_saved");
+            StaticDrawableWrapper* message = gameUi->AddCustomStatic("game_saved", true, compat ? 3.0f : -1.0f);
+            if (message)
+                message->wnd()->TextItemControl()->SetText(StringTable().translate("st_game_saving").c_str());
+        }
 
         xr_strcat(S, ".dds");
         FS.update_path(S1, "$game_saves$", S);
@@ -701,7 +725,6 @@ public:
         timer.Start();
 #endif
         MainMenu()->Screenshot(IRender::SM_FOR_GAMESAVE, S1);
-
 #ifdef DEBUG
         Msg("Screenshot overhead : %f milliseconds", timer.GetElapsed_sec() * 1000.f);
 #endif

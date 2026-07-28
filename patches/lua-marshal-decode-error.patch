@@ -1,8 +1,75 @@
 diff --git a/lmarshal.c b/lmarshal.c
-index 232eec6..3acbad7 100644
+index 232eec6..9c42df3 100644
 --- a/lmarshal.c
 +++ b/lmarshal.c
-@@ -378,7 +378,8 @@ static void mar_decode_value
+@@ -102,6 +102,34 @@ static const char* buf_read(lua_State *L, mar_Buffer *buf, size_t *len)
+     return NULL;
+ }
+ 
++static void mar_encode_source_callback(
++    lua_State *L,
++    mar_Buffer *buf,
++    const char *source,
++    size_t source_len,
++    size_t *idx)
++{
++    const unsigned char number_type = LUA_TNUMBER;
++    const unsigned char function_type = LUA_TFUNCTION;
++    const unsigned char value_tag = MAR_TVAL;
++    const uint32_t encoded_source_len = (uint32_t)source_len;
++    const uint32_t empty_upvalues_len = 0;
++    const lua_Number callback_key = 1;
++
++    if (source_len > UINT32_MAX) {
++        luaL_error(L, "portable callback source is too long");
++    }
++
++    buf_write(L, (const char*)&number_type, MAR_CHR, buf);
++    buf_write(L, (const char*)&callback_key, MAR_I64, buf);
++    buf_write(L, (const char*)&function_type, MAR_CHR, buf);
++    buf_write(L, (const char*)&value_tag, MAR_CHR, buf);
++    buf_write(L, (const char*)&encoded_source_len, MAR_I32, buf);
++    buf_write(L, source, source_len, buf);
++    buf_write(L, (const char*)&empty_upvalues_len, MAR_I32, buf);
++    (*idx)++;
++}
++
+ static void mar_encode_value(lua_State *L, mar_Buffer *buf, int val, size_t *idx)
+ {
+     size_t l;
+@@ -261,16 +289,22 @@ static void mar_encode_value(lua_State *L, mar_Buffer *buf, int val, size_t *idx
+ 
+                 lua_pushvalue(L, -2);
+                 lua_call(L, 1, 1);
+-                if (!lua_isfunction(L, -1)) {
+-                    luaL_error(L, "__persist must return a function");
+-                }
+-                lua_newtable(L);
+-                lua_pushvalue(L, -2);
+-                lua_rawseti(L, -2, 1);
+-                lua_remove(L, -2);
+-
+                 buf_init(L, &rec_buf);
+-                mar_encode_table(L, &rec_buf, idx);
++                if (lua_isfunction(L, -1)) {
++                    lua_newtable(L);
++                    lua_pushvalue(L, -2);
++                    lua_rawseti(L, -2, 1);
++                    lua_remove(L, -2);
++                    mar_encode_table(L, &rec_buf, idx);
++                }
++                else if (lua_isstring(L, -1)) {
++                    size_t source_len;
++                    const char *source = lua_tolstring(L, -1, &source_len);
++                    mar_encode_source_callback(L, &rec_buf, source, source_len, idx);
++                }
++                else {
++                    luaL_error(L, "__persist must return a function or Lua source string");
++                }
+ 
+                 buf_write(L, (void*)&tag, MAR_CHR, buf);
+                 buf_write(L, (void*)&rec_buf.head, MAR_I32, buf);
+@@ -378,7 +412,8 @@ static void mar_decode_value
              dec_buf.size = l;
              dec_buf.head = l;
              dec_buf.seek = 0;

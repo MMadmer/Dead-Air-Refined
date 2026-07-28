@@ -1602,7 +1602,9 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
         }
     }
     float soft_param = dumping_rate + normal[1] * (1.f - dumping_rate); //=(1.f-normal[1])*dumping_rate +normal[1]
-    if (is_control)
+    const dReal support_normal_y = bo1 ? normal[1] : -normal[1];
+    const bool is_sliding_surface = support_normal_y > 0.f && support_normal_y <= M_SQRT1_2;
+    if (is_control && !is_sliding_surface)
     { //&&!b_lose_control||b_jumping
         if ((g1 == m_wheel) || ((g2 == m_wheel) && !bClimable))
         {

@@ -193,6 +193,15 @@
                 <d r="70" g="70" b="70"/>
             </text_color>
 		</list_window_mode>
+
+		<cap_level_texture_unload x="240" y="393" width="90" height="21"
+			hint="ui_mm_level_texture_unload_hint">
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_level_texture_unload</text>
+		</cap_level_texture_unload>
+		<check_level_texture_unload x="320" y="390" width="30" height="21"
+			hint="ui_mm_level_texture_unload_hint">
+			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
+		</check_level_texture_unload>
 		
 		
 		<cap_color_correction x="240" y="440" width="90" height="21">

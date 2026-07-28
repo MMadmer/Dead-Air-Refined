@@ -75,8 +75,9 @@ layout, and version handling used by Dead Air wherever they affect:
 - object packets;
 - multiplayer or GameSpy-era packet structures still exercised by the game.
 
-Save compatibility is a release gate and is not considered proven until the
-x64 runtime loads, advances, saves, and reloads representative x86 saves.
+Save compatibility is a release gate and is not considered proven until both
+runtimes load, advance, save, and reload representative saves produced by the
+other runtime.
 
 ## User-facing compatibility gates
 
@@ -88,6 +89,7 @@ A release candidate is acceptable only after it passes all of the following:
 - reaches the main menu using the existing configs and scripts;
 - starts a new game;
 - loads the latest x86 save and creates a reloadable x64 save;
+- loads an x64-created save in the original x86 runtime;
 - completes level transitions;
 - loads representative script, UI, localization, texture, shader, sound, and
   gameplay addons without repackaging;

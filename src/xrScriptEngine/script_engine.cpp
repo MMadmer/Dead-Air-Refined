@@ -145,8 +145,11 @@ void CScriptEngine::reinit()
         file_header = file_header_new;
     else
         file_header = file_header_old;
-    scriptBufferSize = 1024 * 1024;
-    scriptBuffer = xr_alloc<char>(scriptBufferSize);
+    if (!scriptBuffer)
+    {
+        scriptBufferSize = 1024 * 1024;
+        scriptBuffer = xr_alloc<char>(scriptBufferSize);
+    }
 
     if (m_profiler)
         m_profiler->OnReinit(m_virtual_machine);

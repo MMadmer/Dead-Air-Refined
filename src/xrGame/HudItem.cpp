@@ -14,7 +14,6 @@
 
 #include "xrUICore/ui_base.h"
 #include "xrUICore/Windows/UIWindow.h"
-#include "xrUICore/Static/UIStatic.h"
 #include "Include/xrRender/UIRender.h"
 #include "ui/UIXmlInit.h"
 #include "xrUICore/XML/xrUIXmlParser.h"
@@ -49,21 +48,6 @@ public:
         CUIXmlInit::InitWindow(xml, canvas_path, 0, m_canvas);
         m_canvas->SetAutoDelete(true);
         AttachChild(m_canvas);
-
-        // Dead Air's first detector template uses a regular static instead of auto_static.
-        const int static_count = static_cast<int>(xml.GetNodesNum(canvas_path, 0, "static"));
-        for (int index = 0; index < static_count; ++index)
-        {
-            string256 static_name;
-            xr_sprintf(static_name, "static_%d", index);
-            auto* ui_static = xr_new<CUIStatic>(static_name);
-
-            string256 static_path;
-            xr_sprintf(static_path, "%s:static", canvas_path);
-            CUIXmlInit::InitStatic(xml, static_path, index, ui_static);
-            ui_static->SetAutoDelete(true);
-            m_canvas->AttachChild(ui_static);
-        }
 
         m_attach_bone = pSettings->r_string(m_hud_item->m_sect_name, "hud_ui_attach_bone");
         const Fvector position = pSettings->r_fvector3(m_hud_item->m_sect_name, "hud_ui_pos");

@@ -31,6 +31,13 @@ CALifeSpawnRegistry::~CALifeSpawnRegistry()
 
 void CALifeSpawnRegistry::save(IWriter& memory_stream)
 {
+    SaveState state;
+    begin_save(memory_stream, state);
+    continue_save(memory_stream, state, flt_max);
+}
+
+void CALifeSpawnRegistry::begin_save(IWriter& memory_stream, SaveState& state)
+{
     Msg("* Saving spawns...");
     memory_stream.open_chunk(SPAWN_CHUNK_DATA);
 
@@ -40,10 +47,33 @@ void CALifeSpawnRegistry::save(IWriter& memory_stream)
     memory_stream.close_chunk();
 
     memory_stream.open_chunk(1);
-    save_updates(memory_stream);
-    memory_stream.close_chunk();
+    state.current = m_spawns.vertices().begin();
+    state.end = m_spawns.vertices().end();
+}
+
+bool CALifeSpawnRegistry::continue_save(IWriter& memory_stream, SaveState& state, float budgetMilliseconds)
+{
+    CTimer budgetTimer;
+    budgetTimer.Start();
+
+    while (state.current != state.end)
+    {
+        SPAWN_GRAPH::CVertex* vertex = state.current->second;
+        ++state.current;
+        memory_stream.open_chunk(vertex->vertex_id());
+        vertex->data()->save_update(memory_stream);
+        memory_stream.close_chunk();
+
+        if (budgetMilliseconds != flt_max &&
+            budgetTimer.GetElapsed_sec() * 1000.f >= budgetMilliseconds)
+        {
+            return false;
+        }
+    }
 
     memory_stream.close_chunk();
+    memory_stream.close_chunk();
+    return true;
 }
 
 void CALifeSpawnRegistry::load(IReader& file_stream, LPCSTR game_name)

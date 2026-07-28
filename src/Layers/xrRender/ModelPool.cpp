@@ -504,7 +504,7 @@ void CModelPool::memory_stats(u32& vb_mem_video, u32& vb_mem_system, u32& ib_mem
         dxRender_Visual* ptr = md.model;
         Fvisual* vis_ptr = dynamic_cast<Fvisual*>(ptr);
 
-        if (vis_ptr == nullptr)
+        if (!vis_ptr || !vis_ptr->m_fast || !vis_ptr->m_fast->p_rm_Indices || !vis_ptr->m_fast->p_rm_Vertices)
             continue;
 
         ib_mem_video += vis_ptr->m_fast->p_rm_Indices->GetVideoMemoryUsage();
@@ -512,6 +512,29 @@ void CModelPool::memory_stats(u32& vb_mem_video, u32& vb_mem_system, u32& ib_mem
         vb_mem_video += vis_ptr->m_fast->p_rm_Vertices->GetVideoMemoryUsage();
         vb_mem_system += vis_ptr->m_fast->p_rm_Vertices->GetSystemMemoryUsage();
     }
+}
+
+size_t CModelPool::memory_usage()
+{
+    size_t result = 0;
+    for (const auto& model : Models)
+    {
+        if (CKinematics* kinematics = PCKinematics(model.model))
+            result += kinematics->mem_usage(false);
+    }
+    for (const auto& instance : Registry)
+    {
+        if (CKinematics* kinematics = PCKinematics(instance.first))
+            result += kinematics->mem_usage(true);
+    }
+
+    u32 vertexVideo = 0;
+    u32 vertexSystem = 0;
+    u32 indexVideo = 0;
+    u32 indexSystem = 0;
+    memory_stats(vertexVideo, vertexSystem, indexVideo, indexSystem);
+    result += vertexVideo + vertexSystem + indexVideo + indexSystem;
+    return result;
 }
 
 #ifdef _EDITOR

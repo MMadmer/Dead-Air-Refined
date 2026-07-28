@@ -22,6 +22,7 @@
 #include "xrEngine/profiler.h"
 #include "mt_config.h"
 #include "xrNetServer/NET_Messages.h"
+#include "alife_storage_manager.h"
 
 using namespace ALife;
 
@@ -96,6 +97,9 @@ void CALifeUpdateManager::update_scheduled(bool init_ef)
 
 void CALifeUpdateManager::update()
 {
+    if (CALifeStorageManager::save_capture_active())
+        return;
+
     update_switch();
     update_scheduled(false);
 }
@@ -105,6 +109,9 @@ void CALifeUpdateManager::shedule_Update(u32 dt)
     ScheduledBase::shedule_Update(dt);
 
     if (!initialized())
+        return;
+
+    if (CALifeStorageManager::save_capture_active())
         return;
 
     if (!m_first_time && g_mt_config.test(mtALife))
@@ -196,6 +203,8 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
     *m_server_command_line = strconcat(sizeof(temp), temp, autoave_name, temp0);
 
     save(autoave_name);
+    // The transition snapshot must capture the temporary destination state before it is restored.
+    CALifeStorageManager::wait_for_pending_saves();
 
     graph().actor()->m_tGraphID = safe_graph_vertex_id;
     graph().actor()->m_tNodeID = safe_level_vertex_id;
@@ -281,6 +290,8 @@ void CALifeUpdateManager::reload(LPCSTR section)
 
 bool CALifeUpdateManager::load_game(LPCSTR game_name, bool no_assert)
 {
+    CALifeStorageManager::wait_for_pending_saves();
+
     {
         string_path temp, file_name;
         strconcat(sizeof(temp), temp, game_name, SAVE_EXTENSION);

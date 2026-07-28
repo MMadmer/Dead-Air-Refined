@@ -131,5 +131,6 @@ void CSE_ALifeInventoryBox::script_register(lua_State* luaState)
     [
         luabind_class_dynamic_alife1(
             CSE_ALifeInventoryBox, "cse_alife_inventory_box", CSE_ALifeDynamicObjectVisual)
+            .property("children_count", +[](CSE_ALifeInventoryBox* self) { return self->children.size(); })
     ];
 }

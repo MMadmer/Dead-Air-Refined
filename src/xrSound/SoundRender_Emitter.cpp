@@ -50,6 +50,7 @@ CSoundRender_Emitter::~CSoundRender_Emitter()
     // try to release dependencies, events, for example
     Event_ReleaseOwner();
     wait_prefill();
+    CSoundRender_Source::close(ovf);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -146,7 +147,14 @@ void CSoundRender_Emitter::move_cursor(int offset)
 void CSoundRender_Emitter::fill_data(void* dest, u32 offset, u32 size)
 {
     if (!ovf)
+    {
         ovf = source()->open();
+        if (!ovf)
+        {
+            memset(dest, 0, size);
+            return;
+        }
+    }
     source()->decompress(dest, offset, size, ovf);
 }
 

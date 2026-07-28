@@ -137,17 +137,25 @@ constexpr ov_callbacks g_ov_callbacks =
 
 OggVorbis_File* CSoundRender_Source::open() const
 {
-    const auto file = FS.r_open(pname.c_str());
+    auto* file = FS.r_open(pname.c_str());
     R_ASSERT3(file && file->length(), "Can't open wave file:", pname.c_str());
 
-    const auto ovf = xr_new<OggVorbis_File>();
-    ov_open_callbacks(file, ovf, nullptr, 0, g_ov_callbacks);
+    auto* ovf = xr_new<OggVorbis_File>();
+    if (ov_open_callbacks(file, ovf, nullptr, 0, g_ov_callbacks))
+    {
+        FS.r_close(file);
+        xr_delete(ovf);
+        return nullptr;
+    }
 
     return ovf;
 }
 
-void CSoundRender_Source::close(OggVorbis_File*& ovf) const
+void CSoundRender_Source::close(OggVorbis_File*& ovf)
 {
+    if (!ovf)
+        return;
+
     ov_clear(ovf);
     xr_delete(ovf);
 }
@@ -163,7 +171,11 @@ bool CSoundRender_Source::LoadWave(pcstr pName)
     {
         IReader* wave = FS.r_open(pname.c_str());
         R_ASSERT3(wave && wave->length(), "Can't open wave file:", pname.c_str());
-        ov_open_callbacks(wave, &ovf, nullptr, 0, g_ov_callbacks);
+        if (ov_open_callbacks(wave, &ovf, nullptr, 0, g_ov_callbacks))
+        {
+            FS.r_close(wave);
+            return false;
+        }
     }
 
     const vorbis_info* ovi = ov_info(&ovf, -1);

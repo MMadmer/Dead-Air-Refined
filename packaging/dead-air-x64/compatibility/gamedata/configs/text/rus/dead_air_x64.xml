@@ -27,4 +27,10 @@
     <string id="st_opt_renderer_rgl">
         <text>OpenGL</text>
     </string>
+    <string id="ui_mm_level_texture_unload">
+        <text>Выгружать текстуры локации</text>
+    </string>
+    <string id="ui_mm_level_texture_unload_hint">
+        <text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
+    </string>
 </string_table>

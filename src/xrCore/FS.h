@@ -144,6 +144,7 @@ public:
 
     void seek(size_t pos) override { position = pos; }
     size_t tell() override { return position; }
+    void reserve(size_t capacity);
     // specific
     IC u8* pointer() const { return data; }
     IC size_t size() const { return file_size; }

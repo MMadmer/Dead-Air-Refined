@@ -88,6 +88,7 @@ private:
     Lock v_shaders_lock;
 
     xr_vector<ref_texture> m_necessary;
+    xr_vector<shared_str> m_level_persistent_textures;
     // misc
 public:
     CTextureDescrMngr m_textures_description;
@@ -240,6 +241,9 @@ public:
     void DeferredLoad(BOOL E) { bDeferredLoad = E; }
     void DeferredUpload();
     void DeferredUnload();
+    void BeginLevelTextureTracking();
+    void UnloadLevelTextures();
+    static void ShutdownTextureUploadPool();
     void Evict();
     void StoreNecessaryTextures();
     void DestroyNecessaryTextures();

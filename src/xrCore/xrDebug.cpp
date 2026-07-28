@@ -351,6 +351,8 @@ pcstr xrDebug::ErrorToString(long code)
 
 int out_of_memory_handler(size_t size)
 {
+    Memory.release_emergency_reserve();
+
     xrDebug::OutOfMemoryCallbackFunc cb = xrDebug::GetOutOfMemoryCallback();
     if (cb)
         cb();
@@ -358,11 +360,15 @@ int out_of_memory_handler(size_t size)
     {
         Memory.mem_compact();
         const size_t processHeap = Memory.mem_usage();
-        const auto [ecoStringsBytes, ecoStringsCount] = g_pStringContainer->stat_economy();
-        const size_t ecoSmem = g_pSharedMemoryContainer->stat_economy();
         Msg("* [x-ray]: process heap[%zu K]", processHeap / 1024);
-        Msg("* [x-ray]: shared strings: memory[%ld K], count[%lu]", ecoStringsBytes / 1024, ecoStringsCount);
-        Msg("* [x-ray]: shared memory[%ld K]", ecoSmem);
+        if (g_pStringContainer)
+        {
+            const auto [ecoStringsBytes, ecoStringsCount] = g_pStringContainer->stat_economy();
+            Msg("* [x-ray]: shared string savings[%zu K], count[%zu]", ecoStringsBytes / 1024, ecoStringsCount);
+        }
+        if (g_pSharedMemoryContainer)
+            Msg("* [x-ray]: shared memory savings[%zu K]", g_pSharedMemoryContainer->stat_economy());
+        log_vminfo();
     }
     xrDebug::Fatal(DEBUG_INFO, "Out of memory. Memory request: %zu K", size / 1024);
     return 1;

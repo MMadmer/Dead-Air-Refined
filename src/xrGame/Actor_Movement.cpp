@@ -668,18 +668,26 @@ float CActor::get_additional_weight() const
     CCustomOutfit* outfit = GetOutfit();
     if (outfit)
     {
-        res += outfit->m_additional_weight;
+        res += outfit->m_additional_weight * outfit->GetCondition();
     }
-
-    CBackpack* pBackpack = GetBackpack();
-    if (pBackpack)
-        res += pBackpack->m_additional_weight;
 
     for (TIItemContainer::const_iterator it = inventory().m_belt.begin(); inventory().m_belt.end() != it; ++it)
     {
         CArtefact* artefact = smart_cast<CArtefact*>(*it);
         if (artefact)
             res += artefact->AdditionalInventoryWeight() * artefact->GetCondition();
+    }
+
+    PIItem backpackItem = inventory().ItemFromSlot(BACKPACK_SLOT);
+    CArtefact* backpackArtefact = smart_cast<CArtefact*>(backpackItem);
+    if (backpackArtefact)
+        res += backpackArtefact->AdditionalInventoryWeight() * backpackArtefact->GetCondition();
+    else
+    {
+        // Keep native x64 backpack items compatible with addons while preserving Dead Air's SCRPTART slot behavior.
+        CBackpack* backpack = smart_cast<CBackpack*>(backpackItem);
+        if (backpack)
+            res += backpack->m_additional_weight * backpack->GetCondition();
     }
 
     return res;

@@ -178,6 +178,15 @@ void* FileDecompress(pcstr fn, pcstr sign, size_t* size)
 //---------------------------------------------------
 // memory
 CMemoryWriter::~CMemoryWriter() { xr_free(data); }
+void CMemoryWriter::reserve(size_t capacity)
+{
+    if (capacity <= mem_size)
+        return;
+
+    data = static_cast<u8*>(xr_realloc(data, capacity));
+    mem_size = capacity;
+}
+
 void CMemoryWriter::w(const void* ptr, size_t count)
 {
     if (position + count > mem_size)

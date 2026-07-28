@@ -24,7 +24,7 @@ size_t rtc_compress(void* dst, size_t dst_len, const void* src, size_t src_len)
 size_t rtc_decompress(void* dst, size_t dst_len, const void* src, size_t src_len)
 {
     lzo_uint out_size = dst_len;
-    [[maybe_unused]] int r = lzo1x_decompress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size, rtc_wrkmem);
-    VERIFY(r == LZO_E_OK);
-    return out_size;
+    const int result =
+        lzo1x_decompress_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size, rtc_wrkmem);
+    return result == LZO_E_OK && out_size == dst_len ? out_size : 0;
 }

@@ -27,6 +27,11 @@ public:
 public:
     typedef xr_vector<ALife::_SPAWN_ID> SPAWN_IDS;
     typedef AssociativeVector<ALife::_SPAWN_STORY_ID, ALife::_OBJECT_ID> SPAWN_STORY_IDS;
+    struct SaveState
+    {
+        SPAWN_GRAPH::vertex_iterator current;
+        SPAWN_GRAPH::vertex_iterator end;
+    };
 
 private:
     CALifeSpawnHeader m_header;
@@ -68,6 +73,8 @@ public:
     virtual ~CALifeSpawnRegistry();
     virtual void load(IReader& file_stream, xrGUID* save_guid = 0);
     virtual void save(IWriter& memory_stream);
+    void begin_save(IWriter& memory_stream, SaveState& state);
+    bool continue_save(IWriter& memory_stream, SaveState& state, float budget_milliseconds);
     void load(IReader& file_stream, LPCSTR game_name);
     void load(LPCSTR spawn_name);
     void fill_new_spawns(

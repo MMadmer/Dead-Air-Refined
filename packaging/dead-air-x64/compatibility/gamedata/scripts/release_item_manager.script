@@ -1,0 +1,88 @@
+local items_marked_for_removal = {}
+
+local function make_handle(item)
+	return {
+		name = item:name(),
+		section = item:section(),
+		dropped_at = game.get_game_time()
+	}
+end
+
+local function is_protected_item(se_obj, section)
+	return get_object_story_id(se_obj.id) ~= nil or system_ini():r_bool_ex(section, "quest_item", false)
+end
+
+local function npc_on_item_drop(npc, item)
+	local parent = item:parent()
+	if not parent or parent:id() == npc:id() then
+		items_marked_for_removal[item:id()] = make_handle(item)
+	end
+end
+
+local function npc_on_item_take(_, item)
+	items_marked_for_removal[item:id()] = nil
+end
+
+local function actor_on_item_drop(item)
+	npc_on_item_drop(db.actor, item)
+end
+
+local function actor_on_item_take(item)
+	items_marked_for_removal[item:id()] = nil
+end
+
+local function save_state(data)
+	data.items_marked_for_removal = items_marked_for_removal
+end
+
+local function load_state(data)
+	items_marked_for_removal = data.items_marked_for_removal or {}
+	data.items_marked_for_removal = nil
+	for id, handle in pairs(items_marked_for_removal) do
+		local se_obj = alife():object(id)
+		if type(handle) == "table" and handle[1] and handle[2] and se_obj and se_obj:name() == handle[1] then
+			items_marked_for_removal[id] = {
+				name = handle[1],
+				section = se_obj:section_name(),
+				dropped_at = handle[2]
+			}
+		elseif type(handle) ~= "table" or not handle.name or not handle.section or
+			not handle.dropped_at or not se_obj or se_obj:name() ~= handle.name then
+			items_marked_for_removal[id] = nil
+		end
+	end
+end
+
+local function on_game_load()
+	RemoveTimeEvent(0, "release_item")
+	CreateTimeEvent(0, "release_item", 5, clear)
+end
+
+function clear()
+	if axr_main.config:r_value("mm_options", "enable_release_dropped_items", 1, false) then
+		local sim = alife()
+		for id, handle in pairs(items_marked_for_removal) do
+			local se_obj = sim:object(id)
+			local valid = se_obj and se_obj.parent_id == 65535 and se_obj:name() == handle.name
+			if not valid or is_protected_item(se_obj, handle.section) then
+				items_marked_for_removal[id] = nil
+			elseif game.get_game_time():diffSec(handle.dropped_at) >= 86400 and not se_obj.online then
+				safe_release_manager.release(se_obj)
+				items_marked_for_removal[id] = nil
+			end
+		end
+	end
+
+	ResetTimeEvent(0, "release_item", 5)
+	return false
+end
+
+function on_game_start()
+	RegisterScriptCallback("npc_on_item_drop", npc_on_item_drop)
+	RegisterScriptCallback("npc_on_item_take", npc_on_item_take)
+	RegisterScriptCallback("actor_on_item_drop", actor_on_item_drop)
+	RegisterScriptCallback("actor_on_item_take", actor_on_item_take)
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+	RegisterScriptCallback("on_game_load", on_game_load)
+end

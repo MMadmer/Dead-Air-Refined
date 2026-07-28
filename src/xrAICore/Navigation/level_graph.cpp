@@ -41,7 +41,11 @@ void CLevelGraph::Initialize(const char* filePath)
     unpack_xz(vertex_position(box.vMax), m_max_x, m_max_z);
 }
 
-CLevelGraph::~CLevelGraph() { FS.r_close(m_reader); }
+CLevelGraph::~CLevelGraph()
+{
+    xr_delete(m_nodes);
+    FS.r_close(m_reader);
+}
 u32 CLevelGraph::vertex(const Fvector& position) const
 {
     CLevelGraph::CPosition _node_position;

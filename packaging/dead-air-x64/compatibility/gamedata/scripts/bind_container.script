@@ -1,0 +1,258 @@
+containers = {}
+curBoxID = nil
+
+local persisted_links = {}
+local active_container_id
+
+function bind(obj)
+	obj:bind_object(container_binder(obj))
+end
+
+local function valid_box(link)
+	local box = link and link.id and alife_object(link.id)
+	if not box or not IsInvbox(nil, box:clsid()) then
+		return nil
+	end
+	if link.box_name and box:name() ~= link.box_name then
+		return nil
+	end
+	return box
+end
+
+local function set_box_offline(box)
+	if not box then
+		return
+	end
+	local sim = alife()
+	sim:set_switch_online(box.id, false)
+	sim:set_switch_offline(box.id, true)
+	if box.online then
+		box:switch_offline()
+	end
+end
+
+function calculate_weight(se_inv_box, base)
+	local inv_box = level.object_by_id(se_inv_box.id)
+	if not inv_box then
+		return base
+	end
+
+	local transfer = {}
+	local total_weight = 0
+	local function add_items(_, item)
+		if containers[item:id()] and containers[item:id()].id then
+			table.insert(transfer, item)
+		else
+			total_weight = total_weight + (item:weight() or 0)
+		end
+	end
+	inv_box:iterate_inventory_box(add_items, inv_box)
+
+	for _, item in ipairs(transfer) do
+		inv_box:transfer_item(item, db.actor)
+	end
+	if #transfer > 0 then
+		local hud = get_hud()
+		if hud then
+			hud:HideActorMenu()
+		end
+	end
+	return base + total_weight
+end
+
+local function close_container(container_id, object)
+	local link = containers[container_id]
+	local box = valid_box(link)
+	if box then
+		object:set_weight(calculate_weight(box, system_ini():r_float_ex(object:section(), "inv_weight")))
+		set_box_offline(box)
+	end
+	if active_container_id == container_id then
+		active_container_id = nil
+	end
+	if curBoxID == container_id then
+		curBoxID = nil
+	end
+end
+
+local function use_container(box_id, container_id)
+	local box = box_id and level.object_by_id(box_id)
+	if not box then
+		return false
+	end
+
+	curBoxID = container_id
+	active_container_id = container_id
+	local hud = get_hud()
+	if hud then
+		hud:HideActorMenu()
+	end
+	box:use(db.actor)
+	return true
+end
+
+function access_inventory(obj)
+	local id = obj:id()
+	local link = containers[id] or {}
+	containers[id] = link
+	local box = valid_box(link)
+	if not box then
+		local position = utils.vector_copy_by_val(level.get_bounding_volume().min)
+		position.y = position.y + 50
+		box = alife():create("hidden_box", position, level.vertex_id(position), db.actor:game_vertex_id())
+	end
+	if not box or not IsInvbox(nil, box:clsid()) then
+		link.id = nil
+		link.box_name = nil
+		return
+	end
+
+	link.id = box.id
+	link.box_name = box:name()
+	link.container_name = obj:name()
+	persisted_links[link.container_name] = {
+		container_id = id,
+		container_name = link.container_name,
+		box_id = link.id,
+		box_name = link.box_name
+	}
+
+	local sim = alife()
+	sim:set_switch_online(box.id, true)
+	sim:set_switch_offline(box.id, false)
+	CreateTimeEvent(id, "container", 0, use_container, box.id, id)
+end
+
+class "container_binder" (object_binder)
+
+function container_binder:__init(obj) super(obj)
+end
+
+function container_binder:update(delta)
+	object_binder.update(self, delta)
+	local id = self.object:id()
+	if active_container_id ~= id then
+		return
+	end
+	if actor_menu.dead_body_searching then
+		local box = valid_box(containers[id])
+		if box then
+			self.object:set_weight(calculate_weight(box, system_ini():r_float_ex(self.object:section(), "inv_weight")))
+		end
+	else
+		close_container(id, self.object)
+	end
+end
+
+function container_binder:reload(section)
+	object_binder.reload(self, section)
+end
+
+function container_binder:reinit()
+	object_binder.reinit(self)
+end
+
+function container_binder:net_spawn(sobject)
+	if not object_binder.net_spawn(self, sobject) then
+		return false
+	end
+	containers[sobject.id] = containers[sobject.id] or {}
+	containers[sobject.id].container_name = sobject:name()
+	return true
+end
+
+function container_binder:net_destroy()
+	local id = self.object:id()
+	RemoveTimeEvent(id, "container")
+	close_container(id, self.object)
+
+	local link = containers[id]
+	local box = valid_box(link)
+	if box and box.children_count == 0 then
+		safe_release_manager.release(box)
+	end
+	if link and link.container_name then
+		persisted_links[link.container_name] = nil
+	end
+	containers[id] = nil
+	object_binder.net_destroy(self)
+end
+
+function container_binder:net_save_relevant()
+	return true
+end
+
+function container_binder:save(stpk)
+	object_binder.save(self, stpk)
+	local link = containers[self.object:id()]
+	stpk:w_stringZ(tostring(link and link.id))
+end
+
+function container_binder:load(stpk)
+	object_binder.load(self, stpk)
+	local id = self.object:id()
+	local link = containers[id] or {}
+	containers[id] = link
+	link.id = tonumber(stpk:r_stringZ())
+	link.container_name = self.object:name()
+
+	local box = link.id and alife_object(link.id)
+	if box and IsInvbox(nil, box:clsid()) then
+		link.box_name = box:name()
+		persisted_links[link.container_name] = {
+			container_id = id,
+			container_name = link.container_name,
+			box_id = box.id,
+			box_name = link.box_name
+		}
+		set_box_offline(box)
+	else
+		link.id = nil
+	end
+end
+
+local function cleanup_orphan_boxes()
+	local sim = alife()
+	for container_name, saved in pairs(persisted_links) do
+		local container = sim:object(saved.container_id)
+		local valid_container = container and container:name() == saved.container_name
+		if not valid_container then
+			local box = sim:object(saved.box_id)
+			if box and box:name() == saved.box_name and IsInvbox(nil, box:clsid()) and box.children_count == 0 then
+				safe_release_manager.release(box)
+			end
+			persisted_links[container_name] = nil
+		end
+	end
+	return true
+end
+
+local function actor_on_reinit()
+	active_container_id = nil
+	curBoxID = nil
+	RemoveTimeEvent("bind_container", "orphan_cleanup")
+	CreateTimeEvent("bind_container", "orphan_cleanup", 10, cleanup_orphan_boxes)
+end
+
+local function save_state(data)
+	data.dar_container_links = persisted_links
+end
+
+local function load_state(data)
+	persisted_links = data.dar_container_links or {}
+	data.dar_container_links = nil
+end
+
+function pending_count()
+	local count = 0
+	for _ in pairs(persisted_links) do
+		count = count + 1
+	end
+	return count
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_reinit", actor_on_reinit)
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+end

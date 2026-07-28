@@ -130,7 +130,8 @@ struct str_container_impl
             while (value)
             {
                 ++count;
-                bytes += (value->dwReference - 1) * (value->dwLength + 1);
+                if (value->dwReference > 1)
+                    bytes += (value->dwReference - 1) * (value->dwLength + 1);
                 value = value->next;
             }
         }

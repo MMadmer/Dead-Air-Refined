@@ -63,6 +63,7 @@
 
 extern CUISequencer* g_tutorial;
 extern CUISequencer* g_tutorial2;
+extern void log_stability_memory_stats(bool compact);
 
 float g_cl_lvInterp = 0.1;
 u32 lvInterpSteps = 0;
@@ -581,6 +582,14 @@ void CLevel::OnFrame()
         static float fRPS_Mult = 1.0f;
         pStatGraphR->AppendItem(float(m_dwRPC) * fRPC_Mult, 0xffff0000, 1);
         pStatGraphR->AppendItem(float(m_dwRPS) * fRPS_Mult, 0xff00ff00, 0);
+    }
+
+    static u32 nextMemoryTelemetry = Device.TimerAsync_MMT() + 60000;
+    const u32 telemetryTime = Device.TimerAsync_MMT();
+    if (s32(telemetryTime - nextMemoryTelemetry) >= 0 && bReady && g_loading_events.empty())
+    {
+        log_stability_memory_stats(false);
+        nextMemoryTelemetry = telemetryTime + 60000;
     }
 }
 

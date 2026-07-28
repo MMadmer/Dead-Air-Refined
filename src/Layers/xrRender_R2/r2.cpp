@@ -633,6 +633,10 @@ void CRender::OnFrame()
 {
     ZoneScoped;
 
+#if defined(USE_DX11)
+    ProcessGamesaveScreenshots();
+#endif
+
     Models->DeleteQueue();
 
     if (g_pGamePersistent->MainMenuActiveOrLevelNotExist())

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "XR_IOConsole.h"
+#include "Render.h"
 #include "xr_ioc_cmd.h"
 
 #include "xrScriptEngine/script_space.hpp"
@@ -48,6 +49,11 @@ void CConsole::script_register(lua_State* luaState)
         def("renderer_allow_override", +[]()
         {
             return renderer_allow_override;
+        }),
+
+        def("level_texture_unload_supported", +[]()
+        {
+            return GEnv.Render && GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D11;
         })
     ];
 }

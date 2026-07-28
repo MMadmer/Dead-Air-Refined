@@ -60,7 +60,7 @@ public:
     void unload();
 
     OggVorbis_File* open() const;
-    void close(OggVorbis_File*& ovf) const;
+    static void close(OggVorbis_File*& ovf);
 
     void decompress(void* dest, u32 byte_offset, u32 size, OggVorbis_File* ovf) const;
 

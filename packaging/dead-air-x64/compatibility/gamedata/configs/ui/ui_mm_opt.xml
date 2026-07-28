@@ -150,6 +150,15 @@
             </text_color>
         </list_window_mode>
 
+        <cap_level_texture_unload x="15" y="273" width="108" height="24"
+            hint="ui_mm_level_texture_unload_hint">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_level_texture_unload</text>
+        </cap_level_texture_unload>
+        <check_level_texture_unload x="136" y="270" width="35" stretch="1" height="29"
+            hint="ui_mm_level_texture_unload_hint">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r__unload_level_textures" group="mm_opt_video"/>
+        </check_level_texture_unload>
 
         <btn_advanced x="338" y="299" width="86" height="24" stretch="1">
             <text r="170" g="170" b="170" align="c" font="letterica16">ui_mm_advanced</text>

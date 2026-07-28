@@ -328,6 +328,7 @@ public:
     virtual void model_Logging(bool bEnable) = 0;
     virtual void models_Prefetch() = 0;
     virtual void models_Clear(bool b_complete) = 0;
+    virtual size_t models_GetMemoryUsage() = 0;
 
     // Occlusion culling
     virtual bool occ_visible(vis_data& V) = 0;

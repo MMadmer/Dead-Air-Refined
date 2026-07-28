@@ -111,7 +111,12 @@ public:
     void flush() override
     {
         if (hf)
+        {
             fflush(hf);
+#if defined(XR_PLATFORM_WINDOWS)
+            _commit(_fileno(hf));
+#endif
+        }
     };
 };
 

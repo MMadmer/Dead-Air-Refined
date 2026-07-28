@@ -2,6 +2,9 @@
 
 void CPHSimpleCharacter::UpdateStaticDamage(dContact* c, SGameMtl* tri_material, bool bo1)
 {
+    if (tri_material->Flags.test(SGameMtl::flPassable))
+        return;
+
     const dReal* v = dBodyGetLinearVel(m_body);
     dReal norm_prg = dFabs(dDOT(v, c->geom.normal));
     dReal smag = dDOT(v, v);

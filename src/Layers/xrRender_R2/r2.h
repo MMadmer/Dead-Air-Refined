@@ -473,6 +473,7 @@ public:
     void model_Logging(bool bEnable) override { Models->Logging(bEnable); }
     void models_Prefetch() override;
     void models_Clear(bool b_complete) override;
+    size_t models_GetMemoryUsage() override { return Models->memory_usage(); }
 
     // Occlusion culling
     bool occ_visible(vis_data& V) override;
@@ -488,6 +489,9 @@ public:
 
     void Screenshot(ScreenshotMode mode = SM_NORMAL, pcstr name = nullptr) override;
     void OnFrame() override;
+#if defined(USE_DX11)
+    void ProcessGamesaveScreenshots();
+#endif
 
     void BeforeWorldRender() override; //--#SM+#-- +SecondVP+ Procedure is called before world render and post-effects
     void AfterWorldRender() override;  //--#SM+#-- +SecondVP+ Procedure is called after world render and before UI
