@@ -25,6 +25,7 @@
 
 /* Reuse some lexer fields for our own purposes. */
 #define bcread_flags(ls)	ls->level
+#define bcread_version(ls)	ls->linenumber
 #define bcread_swap(ls) \
   ((bcread_flags(ls) & BCDUMP_F_BE) != LJ_BE*BCDUMP_F_BE)
 #define bcread_oldtop(L, ls)	restorestack(L, ls->lastline)
@@ -284,6 +285,7 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
 {
   BCIns *bc = proto_bc(pt);
   BCIns op;
+  MSize i;
   if (ls->fr2 != LJ_FR2) op = BC_NOT;  /* Mark non-native prototype. */
   else if ((pt->flags & PROTO_VARARG)) op = BC_FUNCV;
   else op = BC_FUNCF;
@@ -291,8 +293,20 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
   bcread_block(ls, bc+1, (sizebc-1)*(MSize)sizeof(BCIns));
   /* Swap bytecode instructions if the endianess differs. */
   if (bcread_swap(ls)) {
-    MSize i;
     for (i = 1; i < sizebc; i++) bc[i] = lj_bswap(bc[i]);
+  }
+  /* LuaJIT 2.1 inserted four opcodes into the version 1 instruction table. */
+  if (bcread_version(ls) == 1) {
+    for (i = 1; i < sizebc; i++) {
+      BCOp lop = bc_op(bc[i]);
+      if (lop >= 61)
+	lop = (BCOp)(lop + 4);
+      else if (lop >= 57)
+	lop = (BCOp)(lop + 3);
+      else if (lop >= 16)
+	lop = (BCOp)(lop + 2);
+      setbc_op(&bc[i], lop);
+    }
   }
 }
 
@@ -393,11 +407,13 @@ GCproto *lj_bcread_proto(LexState *ls)
 /* Read and check header of bytecode dump. */
 static int bcread_header(LexState *ls)
 {
-  uint32_t flags;
+  uint32_t flags, version;
   bcread_want(ls, 3+5+5);
   if (bcread_byte(ls) != BCDUMP_HEAD2 ||
-      bcread_byte(ls) != BCDUMP_HEAD3 ||
-      bcread_byte(ls) != BCDUMP_VERSION) return 0;
+      bcread_byte(ls) != BCDUMP_HEAD3) return 0;
+  version = bcread_byte(ls);
+  if (version != BCDUMP_VERSION && version != 1) return 0;
+  bcread_version(ls) = version;
   bcread_flags(ls) = flags = bcread_uleb128(ls);
   if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;
   if ((flags & BCDUMP_F_FR2) != (uint32_t)ls->fr2*BCDUMP_F_FR2) return 0;
