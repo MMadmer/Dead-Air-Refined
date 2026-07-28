@@ -830,13 +830,13 @@ void R_dsgraph_structure::build_subspace()
         for (u32 o_it = 0; o_it < lstRenderables.size(); o_it++)
         {
             ISpatial* spatial = lstRenderables[o_it];
-            if (o.is_main_pass)
+            auto& data = spatial->GetSpatialData();
+            if (o.is_main_pass && (data.type & STYPEFLAG_INVALIDSECTOR))
             {
                 const auto& entity_pos = spatial->spatial_sector_point();
                 const auto sector_id = detect_sector(entity_pos);
                 spatial->spatial_updatesector(sector_id);
             }
-            const auto& data = spatial->GetSpatialData();
             const auto& [type, sphere, sector_id] = std::tuple(data.type, data.sphere, data.sector_id);
             if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
                 continue; // disassociated from S/P structure
@@ -921,11 +921,15 @@ void R_dsgraph_structure::build_subspace()
                 do
                 {
                     IGameObject* viewEntity = g_pGameLevel->CurrentViewEntity();
-                    if (viewEntity == nullptr)
+                    if (!viewEntity)
                         break;
-                    const auto& entity_pos = viewEntity->spatial_sector_point();
-                    viewEntity->spatial_updatesector(detect_sector(entity_pos));
-                    const auto sector_id = viewEntity->GetSpatialData().sector_id;
+                    auto& spatialData = viewEntity->GetSpatialData();
+                    if (spatialData.type & STYPEFLAG_INVALIDSECTOR)
+                    {
+                        const auto& entityPosition = viewEntity->spatial_sector_point();
+                        viewEntity->spatial_updatesector(detect_sector(entityPosition));
+                    }
+                    const auto sector_id = spatialData.sector_id;
                     if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
                         break; // disassociated from S/P structure
                     CSector* sector = Sectors[sector_id];

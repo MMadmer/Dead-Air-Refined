@@ -11,7 +11,35 @@
 #include "script_game_object.h"
 #include "xrServer_Objects_ALife.h"
 
-CScriptBinderObjectWrapper::CScriptBinderObjectWrapper(CScriptGameObject* object) : CScriptBinderObject(object) {}
+#include <luabind/function.hpp>
+
+#ifndef LUAJIT_DISABLE_GC64
+#define LUAJIT_DISABLE_GC64
+#endif
+#include <lj_bc.h>
+#include <lj_obj.h>
+
+namespace
+{
+bool is_empty_lua_function(lua_State* luaState)
+{
+    const TValue* value = luaState->top - 1;
+    if (!tvisfunc(value))
+        return false;
+
+    const GCfunc* function = funcV(value);
+    if (!isluafunc(function))
+        return false;
+
+    const GCproto* prototype = funcproto(function);
+    return prototype->sizebc == 2 && bc_op(proto_bc(prototype)[1]) == BC_RET0;
+}
+}
+
+CScriptBinderObjectWrapper::CScriptBinderObjectWrapper(CScriptGameObject* object)
+    : CScriptBinderObject(object), m_netRelcaseCheckFrame(u32(-1)), m_hasNetRelcaseOverride(false)
+{
+}
 CScriptBinderObjectWrapper::~CScriptBinderObjectWrapper() {}
 void CScriptBinderObjectWrapper::reinit() { luabind::call_member<void>(this, "reinit"); }
 void CScriptBinderObjectWrapper::reinit_static(CScriptBinderObject* script_binder_object)
@@ -91,6 +119,23 @@ bool CScriptBinderObjectWrapper::net_SaveRelevant_static(CScriptBinderObject* sc
 
 void CScriptBinderObjectWrapper::net_Relcase(CScriptGameObject* object)
 {
+    if (m_netRelcaseCheckFrame != Device.dwFrame)
+    {
+        // Match luabind's virtual dispatch selection without invoking empty Lua or native fallbacks.
+        const auto& self = luabind::detail::wrap_access::ref(*this);
+        lua_State* luaState = self.state();
+        self.get(luaState);
+        lua_pushliteral(luaState, "net_Relcase");
+        lua_gettable(luaState, -2);
+        m_hasNetRelcaseOverride =
+            !luabind::detail::is_luabind_function(luaState, -1) && !is_empty_lua_function(luaState);
+        lua_pop(luaState, 2);
+        m_netRelcaseCheckFrame = Device.dwFrame;
+    }
+
+    if (!m_hasNetRelcaseOverride)
+        return;
+
     luabind::call_member<void>(this, "net_Relcase", object);
 }
 

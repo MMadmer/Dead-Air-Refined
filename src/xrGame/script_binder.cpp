@@ -211,8 +211,11 @@ BOOL CScriptBinder::net_SaveRelevant()
 
 void CScriptBinder::net_Relcase(IGameObject* object)
 {
+    if (!m_object)
+        return;
+
     CGameObject* game_object = smart_cast<CGameObject*>(object);
-    if (m_object && game_object)
+    if (game_object)
     {
         try
         {

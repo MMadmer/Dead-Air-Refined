@@ -15,6 +15,11 @@ class CScriptGameObject;
 
 class CScriptBinderObjectWrapper : public CScriptBinderObject, public luabind::wrap_base
 {
+private:
+    // Recheck each frame so runtime Lua method replacement remains observable.
+    u32 m_netRelcaseCheckFrame;
+    bool m_hasNetRelcaseOverride;
+
 public:
     CScriptBinderObjectWrapper(CScriptGameObject* object);
     virtual ~CScriptBinderObjectWrapper();

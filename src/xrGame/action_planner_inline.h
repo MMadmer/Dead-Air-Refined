@@ -73,7 +73,7 @@ void CPlanner::update()
 	static bool bDbgAct = strstr(Core.Params, "-dbgact") != NULL;
 
 #ifdef LOG_ACTION
-    if (this->m_failed)
+    if (m_use_log && this->m_failed)
     {
         // printing current world state
         show();
