@@ -43,6 +43,7 @@
 #include "lj_profile.c"
 #include "lj_lex.c"
 #include "lj_parse.c"
+/* The bytecode reader translates compatible LuaJIT 2.0 save closures. */
 #include "lj_bcread.c"
 #include "lj_bcwrite.c"
 #include "lj_load.c"
