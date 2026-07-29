@@ -424,8 +424,11 @@ void CUIPdaWnd::UpdatePda()
 
 void CUIPdaWnd::UpdateRankingWnd()
 {
-    if (pUIRankingWnd)
-        pUIRankingWnd->Update();
+    // Detached PDA pages must not receive frame updates.
+    if (!pUIRankingWnd || !IsShown() || m_pActiveDialog != pUIRankingWnd)
+        return;
+
+    pUIRankingWnd->Update();
 }
 
 void CUIPdaWnd::Reset()
