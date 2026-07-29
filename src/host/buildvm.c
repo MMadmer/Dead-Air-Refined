@@ -95,8 +95,8 @@ static void emit_raw(BuildCtx *ctx)
 
 /* -- Build machine code -------------------------------------------------- */
 
-static const char *sym_decorate(BuildCtx *ctx,
-				const char *prefix, const char *suffix)
+static char *sym_decorate(BuildCtx *ctx,
+			 const char *prefix, const char *suffix)
 {
   char name[256];
   char *p;
@@ -182,7 +182,7 @@ static int build_code(BuildCtx *ctx)
 
   ctx->globnames = globnames;
   ctx->extnames = extnames;
-  ctx->relocsym = (const char **)malloc(NRELOCSYM*sizeof(const char *));
+  ctx->relocsym = (char **)malloc(NRELOCSYM*sizeof(char *));
   ctx->nrelocsym = 0;
   for (i = 0; i < (int)NRELOCSYM; i++) relocmap[i] = -1;
 
@@ -243,7 +243,7 @@ static int build_code(BuildCtx *ctx)
   return 0;
 }
 
-static int clean_ctx(BuildCtx *ctx)
+static void clean_ctx(BuildCtx *ctx)
 {
     if(ctx->glob)
         free(ctx->glob);
