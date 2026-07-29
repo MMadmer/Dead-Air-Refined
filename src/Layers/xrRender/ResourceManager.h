@@ -8,6 +8,7 @@
 #include "tss_def.h"
 #include "TextureDescrManager.h"
 
+#include "xrCommon/xr_hash_map.h"
 #include "xrScriptEngine/script_engine.hpp"
 
 namespace xray::render::RENDER_NAMESPACE
@@ -48,7 +49,7 @@ private:
 
 public:
     using map_Blender = xr_map<const char*, IBlender*, str_pred>;
-    using map_Texture = xr_unordered_map<const char*, CTexture*, str_hash, str_equal>;
+    using map_Texture = xr_flat_hash_map<const char*, CTexture*, str_hash, str_equal>;
     using map_Matrix = xr_map<const char*, CMatrix*, str_pred>;
     using map_Constant = xr_map<const char*, CConstant*, str_pred>;
     using map_RT = xr_map<const char*, CRT*, str_pred>;

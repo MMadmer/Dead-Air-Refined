@@ -407,6 +407,7 @@ void CALifeObjectRegistry::load(IReader& file_stream)
     R_ASSERT2(file_stream.find_chunk(OBJECT_CHUNK_DATA), "Can't find chunk OBJECT_CHUNK_DATA!");
 
     m_objects.clear();
+    m_objectIndex.fill(nullptr);
 
     u32 count = file_stream.r_u32();
     for (u32 index = 0; index < count; ++index)

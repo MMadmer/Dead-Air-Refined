@@ -10,6 +10,7 @@
 #include "xrCore/_vector3d.h"
 #include "xrCore/_vector4.h"
 #include "xrCore/clsid.h"
+#include "xrCommon/xr_hash_map.h"
 #include "xrCommon/xr_vector.h"
 
 constexpr pcstr OPENXRAY_INI_SECTION = "openxray";
@@ -41,10 +42,37 @@ public:
 
     struct XRCORE_API Sect
     {
+        struct StringHash
+        {
+            size_t operator()(pcstr value) const noexcept
+            {
+                size_t hash = sizeof(size_t) == 8 ? size_t{14695981039346656037ull} : size_t{2166136261u};
+                const size_t prime = sizeof(size_t) == 8 ? size_t{1099511628211ull} : size_t{16777619u};
+                while (*value)
+                {
+                    hash ^= static_cast<u8>(*value++);
+                    hash *= prime;
+                }
+                return hash;
+            }
+        };
+
+        struct StringEqual
+        {
+            bool operator()(pcstr left, pcstr right) const noexcept
+            {
+                return left == right || xr_strcmp(left, right) == 0;
+            }
+        };
+
+        using Index = xr_flat_hash_map<pcstr, u32, StringHash, StringEqual>;
+
         shared_str Name;
         Items Data;
+        Index LineIndex;
 
         bool line_exist(pcstr line, pcstr* value = nullptr);
+        void rebuild_index();
     };
 
     using Root = xr_vector<Sect*>;
@@ -69,8 +97,11 @@ private:
     string_path m_file_name;
     Root DATA;
     xr_vector<xr_string> m_includes;
+    xr_flat_hash_map<pcstr, Sect*, Sect::StringHash, Sect::StringEqual> m_sectionIndex;
 
     void Load(IReader* F, pcstr path, allow_include_func_t allow_include_func = nullptr);
+    void insert_section(Sect* section);
+    Sect* find_section(pcstr section) const;
 
 public:
     CInifile(IReader* F, pcstr path = nullptr, allow_include_func_t allow_include_func = nullptr);

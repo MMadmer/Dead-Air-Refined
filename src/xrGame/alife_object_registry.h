@@ -11,6 +11,8 @@
 #include "xrServer_Objects_ALife.h"
 #include "xrEngine/profiler.h"
 
+#include <array>
+
 class CALifeObjectRegistry
 {
 public:
@@ -40,6 +42,9 @@ protected:
     };
 
     OBJECT_REGISTRY m_objects;
+    static constexpr size_t ObjectIndexSize =
+        size_t(std::numeric_limits<ALife::_OBJECT_ID>::max()) + 1;
+    std::array<CSE_ALifeDynamicObject*, ObjectIndexSize> m_objectIndex{};
 
 private:
     static xr_map<shared_str, SaveCostEstimate>& save_section_costs();

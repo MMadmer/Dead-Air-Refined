@@ -314,14 +314,24 @@ XRCORE_API void _decorate(pstr dest, pcstr src)
 
 bool CInifile::Sect::line_exist(pcstr line, pcstr* value)
 {
-    auto A = std::lower_bound(Data.begin(), Data.end(), line, item_pred);
-    if (A != Data.end() && xr_strcmp(A->first.c_str(), line) == 0)
+    const auto item = LineIndex.find(line);
+    if (item == LineIndex.end())
+        return false;
+
+    if (value)
+        *value = Data[item->second].second.c_str();
+    return true;
+}
+
+void CInifile::Sect::rebuild_index()
+{
+    LineIndex.clear();
+    LineIndex.reserve(Data.size());
+    for (u32 index = 0; index < Data.size(); ++index)
     {
-        if (value)
-            *value = A->second.c_str();
-        return true;
+        if (Data[index].first)
+            LineIndex.emplace(Data[index].first.c_str(), index);
     }
-    return false;
 }
 //------------------------------------------------------------------------------
 
@@ -377,16 +387,45 @@ CInifile::~CInifile()
 
 static void insert_item(CInifile::Sect* tgt, const CInifile::Item& I)
 {
-    auto sect_it = std::lower_bound(tgt->Data.begin(), tgt->Data.end(), I.first.c_str(), item_pred);
-    if (sect_it != tgt->Data.end() && sect_it->first.equal(I.first))
+    if (I.first)
     {
-        sect_it->second = I.second;
-        //#ifdef DEBUG
-        // sect_it->comment= I.comment;
-        //#endif
+        const auto existing = tgt->LineIndex.find(I.first.c_str());
+        if (existing != tgt->LineIndex.end())
+        {
+            tgt->Data[existing->second].second = I.second;
+            return;
+        }
     }
-    else
-        tgt->Data.insert(sect_it, I);
+
+    tgt->Data.push_back(I);
+    if (I.first)
+        tgt->LineIndex.emplace(tgt->Data.back().first.c_str(), static_cast<u32>(tgt->Data.size() - 1));
+}
+
+void CInifile::insert_section(Sect* section)
+{
+    std::sort(section->Data.begin(), section->Data.end(), [](const Item& left, const Item& right)
+    {
+        if (!left.first)
+            return !!right.first;
+        if (!right.first)
+            return false;
+        return xr_strcmp(left.first.c_str(), right.first.c_str()) < 0;
+    });
+    section->rebuild_index();
+
+    if (m_sectionIndex.find(section->Name.c_str()) != m_sectionIndex.end())
+        xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", section->Name.c_str());
+
+    const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
+    DATA.insert(position, section);
+    m_sectionIndex.emplace(section->Name.c_str(), section);
+}
+
+CInifile::Sect* CInifile::find_section(pcstr section) const
+{
+    const auto found = m_sectionIndex.find(section);
+    return found != m_sectionIndex.end() ? found->second : nullptr;
 }
 
 IC bool is_empty_line_now(IReader* F)
@@ -466,7 +505,7 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
                     {
                         IReader* I = FS.r_open(_fn);
 #ifndef XR_PLATFORM_WINDOWS // XXX: replace with runtime check for case-sensitivity
-                        if (I == nullptr)
+                        if (!I)
                         {
                             xr_fs_nostrlwr(inc_name);
                             strconcat(fn, path, inc_name);
@@ -501,11 +540,7 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
             // insert previous filled section
             if (Current)
             {
-                // store previous section
-                auto I = std::lower_bound(DATA.begin(), DATA.end(), Current->Name.c_str(), sect_pred);
-                if (I != DATA.end() && (*I)->Name == Current->Name)
-                    xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", Current->Name.c_str());
-                DATA.insert(I, Current);
+                insert_section(Current);
             }
             Current = xr_new<Sect>();
             Current->Name = nullptr;
@@ -632,12 +667,7 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
         }
     }
     if (Current)
-    {
-        auto I = std::lower_bound(DATA.begin(), DATA.end(), Current->Name.c_str(), sect_pred);
-        if (I != DATA.end() && (*I)->Name == Current->Name)
-            xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", Current->Name.c_str());
-        DATA.insert(I, Current);
-    }
+        insert_section(Current);
 }
 
 void CInifile::save_as(IWriter& writer, bool bcheck) const
@@ -712,17 +742,15 @@ bool CInifile::save_as(pcstr new_fname)
 
 bool CInifile::section_exist(pcstr S) const
 {
-    auto I = std::lower_bound(DATA.begin(), DATA.end(), S, sect_pred);
-    return I != DATA.end() && xr_strcmp((*I)->Name.c_str(), S) == 0;
+    return find_section(S);
 }
 
 bool CInifile::line_exist(pcstr S, pcstr L) const
 {
-    if (!section_exist(S))
+    Sect* section = find_section(S);
+    if (!section)
         return false;
-    Sect& I = r_section(S);
-    auto A = std::lower_bound(I.Data.begin(), I.Data.end(), L, item_pred);
-    return A != I.Data.end() && xr_strcmp(A->first.c_str(), L) == 0;
+    return section->line_exist(L);
 }
 
 u32 CInifile::line_count(pcstr Sname) const
@@ -749,34 +777,18 @@ CInifile::Sect& CInifile::r_section(pcstr S) const
     char section[256];
     xr_strcpy(section, sizeof section, S);
     xr_strlwr(section);
-    auto I = std::lower_bound(DATA.cbegin(), DATA.cend(), section, sect_pred);
-    if (I == DATA.cend())
+    Sect* found = find_section(section);
+    if (!found)
         xrDebug::Fatal(DEBUG_INFO, "Can't find section '%s'.", S);
-    else if (xr_strcmp((*I)->Name.c_str(), section))
-    {
-        // g_pStringContainer->verify();
-
-        // string_path ini_dump_fn, path;
-        // strconcat (sizeof(ini_dump_fn), ini_dump_fn, Core.ApplicationName, "_", Core.UserName, ".ini_log");
-        //
-        // FS.update_path (path, "$logs$", ini_dump_fn);
-        // IWriter* F = FS.w_open_ex(path);
-        // save_as (*F);
-        // F->w_string ("shared strings:");
-        // g_pStringContainer->dump(F);
-        // FS.w_close (F);
-        xrDebug::Fatal(DEBUG_INFO, "Can't open section '%s' (only '%s' avail). Please attach [*.ini_log] file to your bug report", section, (*I)->Name.c_str());
-    }
-    return **I;
+    return *found;
 }
 
 pcstr CInifile::r_string(pcstr S, pcstr L) const
 {
     Sect const& I = r_section(S);
-    auto A = std::lower_bound(I.Data.cbegin(), I.Data.cend(), L, item_pred);
-
-    if (A != I.Data.cend() && xr_strcmp(A->first.c_str(), L) == 0)
-        return A->second.c_str();
+    const auto item = I.LineIndex.find(L);
+    if (item != I.LineIndex.end())
+        return I.Data[item->second].second.c_str();
 
     xrDebug::Fatal(DEBUG_INFO, "Can't find variable %s in [%s]", L, S);
     return nullptr;
@@ -786,7 +798,7 @@ shared_str CInifile::r_string_wb(pcstr S, pcstr L) const
 {
     pcstr _base = r_string(S, L);
 
-    if (_base == nullptr)
+    if (!_base)
         return shared_str(nullptr);
 
     string4096 _original;
@@ -984,11 +996,9 @@ void CInifile::w_string(pcstr S, pcstr L, pcstr V, pcstr comment)
 
     if (!section_exist(sect))
     {
-        // create _new_ section
         Sect* NEW = xr_new<Sect>();
         NEW->Name = sect;
-        auto I = std::lower_bound(DATA.begin(), DATA.end(), sect, sect_pred);
-        DATA.insert(I, NEW);
+        insert_section(NEW);
     }
 
     // parse line/value
@@ -1006,22 +1016,20 @@ void CInifile::w_string(pcstr S, pcstr L, pcstr V, pcstr comment)
     //#ifdef DEBUG
     // I.comment = (comment?comment:0);
     //#endif
-    auto it = std::lower_bound(data.Data.begin(), data.Data.end(), I.first.c_str(), item_pred);
-
-    if (it != data.Data.end())
+    const auto existing = data.LineIndex.find(I.first.c_str());
+    if (existing != data.LineIndex.end())
     {
-        // Check for "first" matching
-        if (0 == xr_strcmp(it->first.c_str(), I.first.c_str()))
-        {
-            bool b = m_flags.test(eOverrideNames);
-            R_ASSERT2(b, make_string("name[%s] already exist in section[%s]", line, sect).c_str());
-            *it = I;
-        }
-        else
-            data.Data.insert(it, I);
+        bool b = m_flags.test(eOverrideNames);
+        R_ASSERT2(b, make_string("name[%s] already exist in section[%s]", line, sect).c_str());
+        data.Data[existing->second] = I;
+        data.rebuild_index();
     }
     else
-        data.Data.insert(it, I);
+    {
+        const auto position = std::lower_bound(data.Data.begin(), data.Data.end(), I.first.c_str(), item_pred);
+        data.Data.insert(position, I);
+        data.rebuild_index();
+    }
 }
 void CInifile::w_u8(pcstr S, pcstr L, u8 V, pcstr comment)
 {
@@ -1152,9 +1160,10 @@ void CInifile::remove_line(pcstr S, pcstr L)
     if (line_exist(S, L))
     {
         Sect& data = r_section(S);
-        auto A = std::lower_bound(data.Data.begin(), data.Data.end(), L, item_pred);
-        R_ASSERT(A != data.Data.end() && xr_strcmp(A->first.c_str(), L) == 0);
-        data.Data.erase(A);
+        const auto item = data.LineIndex.find(L);
+        R_ASSERT(item != data.LineIndex.end());
+        data.Data.erase(data.Data.begin() + item->second);
+        data.rebuild_index();
     }
 }
 

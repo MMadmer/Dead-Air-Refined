@@ -3,7 +3,7 @@
 #include <bitset>
 
 #include "ETextureParams.h"
-#include "xrCommon/xr_unordered_map.h"
+#include "xrCommon/xr_hash_map.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -35,8 +35,8 @@ class CTextureDescrMngr
         texture_desc() : m_assoc(nullptr), m_spec(nullptr) {}
     };
 
-    using map_TD = xr_unordered_map<shared_str, texture_desc>;
-    using map_CS = xr_unordered_map<shared_str, cl_dt_scaler*>;
+    using map_TD = xr_flat_hash_map<shared_str, texture_desc>;
+    using map_CS = xr_flat_hash_map<shared_str, cl_dt_scaler*>;
 
     map_TD m_texture_details;
     map_CS m_detail_scalers;
