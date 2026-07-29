@@ -95,6 +95,10 @@ void Upgrade::construct(const shared_str& upgrade_id, Group& parental_group, Man
         shared_str prop = _GetItem(properties.c_str(), i, buffer);
         if (prop.size())
         {
+            // Correct the misspelling shipped by DAR2 while preserving the intended upgrade property.
+            if (prop == "prop_night_vsision" && manager_r.get_property("prop_night_vision"))
+                prop = "prop_night_vision";
+
             m_properties[i] = prop;
             if (!manager_r.get_property(prop))
                 Msg("! Upgrade <%s> references unknown property [%s].", id_str(), prop.c_str());

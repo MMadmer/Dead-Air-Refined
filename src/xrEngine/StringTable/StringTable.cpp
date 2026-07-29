@@ -243,7 +243,7 @@ void CStringTable::Load(LPCSTR xml_file_full)
         }
 #ifndef MASTER_GOLD
         if (duplicate)
-            Msg("~ duplicate string table id [%s]", string_name);
+            Msg("* String table override [%s]", string_name);
 #endif
     }
 }

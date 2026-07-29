@@ -35,8 +35,8 @@ bool CUITaskWnd::Init()
 
     CUIXmlInit::InitWindow(xml, "main_wnd", 0, this);
 
-    std::ignore = UIHelper::CreateFrameWindow(xml, "background", this, false);
-    std::ignore = UIHelper::CreateFrameLine(xml, "background", this, false);
+    if (!UIHelper::CreateFrameWindow(xml, "background", this, false))
+        std::ignore = UIHelper::CreateFrameLine(xml, "background", this, false);
 
     std::ignore = UIHelper::CreateFrameLine(xml, "task_split", this, false);
 

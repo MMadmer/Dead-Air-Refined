@@ -402,7 +402,12 @@ void CActor::Load(LPCSTR section)
         {
 
             cpcstr hit_name = ALife::g_cafHitType2String((ALife::EHitType)hit_type);
-            cpcstr hit_snds = READ_IF_EXISTS(pSettings, r_string, hit_snd_sect, hit_name, "");
+            pcstr hit_snds = READ_IF_EXISTS(pSettings, r_string, hit_snd_sect, hit_name, "");
+
+            // Older Dead Air configs use the regular strike sounds for physical impacts.
+            if (!hit_snds[0] && hit_type == ALife::eHitTypePhysicStrike)
+                hit_snds = READ_IF_EXISTS(pSettings, r_string, hit_snd_sect, "strike", "");
+
             const int cnt = _GetItemCount(hit_snds);
 #ifndef MASTER_GOLD
             if (cnt == 0)

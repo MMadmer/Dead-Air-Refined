@@ -44,7 +44,18 @@ void AnselManager::Unload()
 bool AnselManager::Init() const
 {
 #ifdef XR_PLATFORM_WINDOWS
-    if (anselModule->IsLoaded() && ansel::isAnselAvailable())
+    if (!anselModule->IsLoaded())
+    {
+        Log("! Nvidia Ansel: failed to load AnselSDKxx.dll");
+        return false;
+    }
+
+    if (!ansel::isAnselAvailable())
+    {
+        Log("* Nvidia Ansel is unavailable on this system");
+        return false;
+    }
+
     {
         ansel::Configuration config;
 
@@ -158,8 +169,6 @@ bool AnselManager::Init() const
             break;
         }
     }
-    else
-        Log("! Nvidia Ansel:: failed to load AnselSDKxx.dll");
 #endif
     return false;
 }

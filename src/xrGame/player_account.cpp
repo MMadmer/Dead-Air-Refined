@@ -18,7 +18,7 @@ void player_account::load_account()
 
     if (!tmp_curr_prof)
     {
-        Msg("* WARNING: player not logged in");
+        Msg("* Using offline player account");
     }
 
     if (tmp_curr_prof)

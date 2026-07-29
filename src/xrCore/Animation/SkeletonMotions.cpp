@@ -219,8 +219,8 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
             // Some legacy OMF files omit unchanged trailing bone tracks.
             if (missingTrack || size_t(MS->elapsed()) < trackSize)
             {
-                Msg("! Motion '%s' in '%s' has %zu of %zu bone tracks; using bind pose for the remainder.", mname,
-                    N, i, bones->size());
+                Msg("* Legacy motion '%s' in '%s' stores %zu of %zu bone tracks; using bind pose for the remainder.",
+                    mname, N, i, bones->size());
                 for (u32 missing = i; missing < bones->size(); ++missing)
                 {
                     const u16 missingBoneId = rm_bones[missing];

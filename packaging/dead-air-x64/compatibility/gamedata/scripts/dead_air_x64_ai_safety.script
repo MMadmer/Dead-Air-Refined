@@ -1,4 +1,12 @@
 local original_send_to_nearest_accessible_vertex = utils.send_to_nearest_accessible_vertex
+local original_load_var = utils.load_var
+
+local function load_var(obj, varname, defval)
+	if not db.actor then
+		return defval
+	end
+	return original_load_var(obj, varname, defval)
+end
 
 local function send_to_nearest_accessible_vertex(npc, vertex_id, caller)
 	if not npc then
@@ -24,5 +32,6 @@ local function send_to_nearest_accessible_vertex(npc, vertex_id, caller)
 end
 
 function on_game_start()
+	utils.load_var = load_var
 	utils.send_to_nearest_accessible_vertex = send_to_nearest_accessible_vertex
 end

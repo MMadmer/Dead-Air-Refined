@@ -107,7 +107,8 @@ void CResourceManager::OnDeviceCreate(IReader* F)
 #ifndef MASTER_GOLD
                 if (B->getDescription().version != desc.version)
                 {
-                    Msg("! Version conflict in shader '%s'", desc.cName);
+                    Msg("* Loading compatible legacy shader '%s' (stored version %u, current version %u)",
+                        desc.cName, desc.version, B->getDescription().version);
                 }
 #endif
                 chunk->seek(0);
@@ -121,7 +122,7 @@ void CResourceManager::OnDeviceCreate(IReader* F)
 #ifndef MASTER_GOLD
             else
             {
-                Msg("! Renderer doesn't support blender '%s'", desc.cName);
+                Msg("* Skipping renderer-specific blender '%s'", desc.cName);
             }
 #endif
             chunk->close();
