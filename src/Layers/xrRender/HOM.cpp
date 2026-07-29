@@ -11,8 +11,24 @@
 #include "xrEngine/GameFont.h"
 #include "xrEngine/PerformanceAlert.hpp"
 
+#if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64)
+#include <xmmintrin.h>
+#endif
+
 namespace xray::render::RENDER_NAMESPACE
 {
+namespace
+{
+IC u32 hom_skip_interval(const u32 triangleId, const u32 frame)
+{
+    u32 value = triangleId * 0x9e3779b9u ^ frame;
+    value ^= value >> 16;
+    value *= 0x7feb352du;
+    value ^= value >> 15;
+    return 3u + value % 7u;
+}
+} // namespace
+
 float psOSSR = .001f;
 
 //////////////////////////////////////////////////////////////////////
@@ -164,18 +180,16 @@ void CHOM::Render_DB(CFrustum& base)
 {
     ZoneScoped;
 
-    // Update projection matrices on every frame to ensure valid HOM culling
-    float view_dim = occ_dim_0;
 #if defined(USE_DX11)
-    Fmatrix m_viewport = {view_dim / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, view_dim / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        view_dim / 2.f + 0 + 0, view_dim / 2.f + 0 + 0, 0.0f, 1.0f};
-    Fmatrix m_viewport_01 = {1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        1.f / 2.f + 0 + 0, 1.f / 2.f + 0 + 0, 0.0f, 1.0f};
+    static const Fmatrix m_viewport = {occ_dim_0 / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, occ_dim_0 / 2.f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, occ_dim_0 / 2.f, occ_dim_0 / 2.f, 0.0f, 1.0f};
+    static const Fmatrix m_viewport_01 = {0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 0.5f, 0.5f, 0.0f, 1.0f};
 #elif defined(USE_OGL)
-    Fmatrix m_viewport = {view_dim / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, -view_dim / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        view_dim / 2.f + 0 + 0, view_dim / 2.f + 0 + 0, 0.0f, 1.0f};
-    Fmatrix m_viewport_01 = {1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, -1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        1.f / 2.f + 0 + 0, 1.f / 2.f + 0 + 0, 0.0f, 1.0f};
+    static const Fmatrix m_viewport = {occ_dim_0 / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, -occ_dim_0 / 2.f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, occ_dim_0 / 2.f, occ_dim_0 / 2.f, 0.0f, 1.0f};
+    static const Fmatrix m_viewport_01 = {0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 0.5f, 0.5f, 0.0f, 1.0f};
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -187,21 +201,24 @@ void CHOM::Render_DB(CFrustum& base)
     if (0 == xrc.r_count())
         return;
 
-    // Prepare
-    auto it = xrc.r_get()->begin();
-    auto end = xrc.r_get()->end();
-
-    Fvector COP = Device.vCameraPosition;
-    end = std::remove_if(it, end, [this](const CDB::RESULT& _1)
+    const Fvector COP = Device.vCameraPosition;
+    m_sortedTriangles.clear();
+    m_sortedTriangles.reserve(xrc.r_count());
+    for (const CDB::RESULT& result : *xrc.r_get())
     {
-        const occTri& T = m_pTris[_1.id];
-        return T.skip > Device.dwFrame;
-    });
-    std::sort(it, end, [this, &COP](const CDB::RESULT& _1, const CDB::RESULT& _2)
+        const occTri& triangle = m_pTris[result.id];
+        if (triangle.skip <= Device.dwFrame)
+        {
+            const float deltaX = COP.x - triangle.center.x;
+            const float deltaY = COP.y - triangle.center.y;
+            const float deltaZ = COP.z - triangle.center.z;
+            m_sortedTriangles.emplace_back(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ, result.id);
+        }
+    }
+    if (m_sortedTriangles.size() > 1)
+        std::sort(m_sortedTriangles.begin(), m_sortedTriangles.end(), [](const auto& left, const auto& right)
     {
-        const occTri& t0 = m_pTris[_1.id];
-        const occTri& t1 = m_pTris[_2.id];
-        return COP.distance_to_sqr(t0.center) < COP.distance_to_sqr(t1.center);
+        return left.first < right.first;
     });
 
     // Build frustum with near plane only
@@ -209,35 +226,35 @@ void CHOM::Render_DB(CFrustum& base)
     clip.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_NEAR);
     sPoly src, dst;
     u32 _frame = Device.dwFrame;
-    stats.FrustumTriangleCount = static_cast<u32>(xrc.r_count());
+    stats.FrustumTriangleCount = static_cast<u32>(m_sortedTriangles.size());
     stats.VisibleTriangleCount = 0;
+    const CDB::TRI* modelTriangles = m_pModel->get_tris();
+    const Fvector* modelVertices = m_pModel->get_verts();
 
     // Perfrom selection, sorting, culling
-    for (auto &it : *xrc.r_get())
+    for (const auto& triangle : m_sortedTriangles)
     {
         // Control skipping
-        occTri& T = m_pTris[it.id];
-        u32 next = _frame + ::Random.randI(3, 10);
+        occTri& T = m_pTris[triangle.second];
 
         // Test for good occluder - should be improved :)
         if (!(T.flags || (T.plane.classify(COP) > 0)))
         {
-            T.skip = next;
+            T.skip = _frame + hom_skip_interval(triangle.second, _frame);
             continue;
         }
 
         // Access to triangle vertices
-        CDB::TRI& t = m_pModel->get_tris()[it.id];
-        Fvector* v = m_pModel->get_verts();
+        const CDB::TRI& t = modelTriangles[triangle.second];
         src.clear();
         dst.clear();
-        src.push_back(v[t.verts[0]]);
-        src.push_back(v[t.verts[1]]);
-        src.push_back(v[t.verts[2]]);
+        src.push_back(modelVertices[t.verts[0]]);
+        src.push_back(modelVertices[t.verts[1]]);
+        src.push_back(modelVertices[t.verts[2]]);
         sPoly* P = clip.ClipPoly(src, dst);
-        if (nullptr == P)
+        if (!P)
         {
-            T.skip = next;
+            T.skip = _frame + hom_skip_interval(triangle.second, _frame);
             continue;
         }
 
@@ -245,16 +262,16 @@ void CHOM::Render_DB(CFrustum& base)
         stats.VisibleTriangleCount++;
         u32 pixels = 0;
         int limit = int(P->size()) - 1;
+        m_xform.transform(T.raster[0], (*P)[0]);
         for (int v2 = 1; v2 < limit; v2++)
         {
-            m_xform.transform(T.raster[0], (*P)[0]);
             m_xform.transform(T.raster[1], (*P)[v2 + 0]);
             m_xform.transform(T.raster[2], (*P)[v2 + 1]);
             pixels += Raster.rasterize(&T);
         }
         if (0 == pixels)
         {
-            T.skip = next;
+            T.skip = _frame + hom_skip_interval(triangle.second, _frame);
             continue;
         }
     }
@@ -321,6 +338,79 @@ ICF BOOL xform_b1(Fvector2& min, Fvector2& max, float& minz, const Fmatrix& X, f
 
 IC BOOL _visible(const Fbox& B, const Fmatrix& m_xform_01)
 {
+#if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64)
+    const __m128 x = _mm_set_ps(B.vMax.x, B.vMax.x, B.vMin.x, B.vMin.x);
+    const __m128 z = _mm_set_ps(B.vMin.z, B.vMax.z, B.vMax.z, B.vMin.z);
+    const __m128 yMin = _mm_set1_ps(B.vMin.y);
+    const __m128 yMax = _mm_set1_ps(B.vMax.y);
+    const auto transformComponent = [x, z](const __m128 y, const float cx, const float cy, const float cz, const float cw)
+    {
+        return _mm_add_ps(_mm_add_ps(_mm_add_ps(
+            _mm_mul_ps(x, _mm_set1_ps(cx)),
+            _mm_mul_ps(y, _mm_set1_ps(cy))),
+            _mm_mul_ps(z, _mm_set1_ps(cz))),
+            _mm_set1_ps(cw));
+    };
+
+    const __m128 clipZMin =
+        transformComponent(yMin, m_xform_01._13, m_xform_01._23, m_xform_01._33, m_xform_01._43);
+    const __m128 clipZMax =
+        transformComponent(yMax, m_xform_01._13, m_xform_01._23, m_xform_01._33, m_xform_01._43);
+    const __m128 epsilon = _mm_set1_ps(EPS);
+    if (_mm_movemask_ps(_mm_cmplt_ps(clipZMin, epsilon)) ||
+        _mm_movemask_ps(_mm_cmplt_ps(clipZMax, epsilon)))
+    {
+        return TRUE;
+    }
+
+    const __m128 one = _mm_set1_ps(1.f);
+    const __m128 inverseWMin = _mm_div_ps(one,
+        transformComponent(yMin, m_xform_01._14, m_xform_01._24, m_xform_01._34, m_xform_01._44));
+    const __m128 inverseWMax = _mm_div_ps(one,
+        transformComponent(yMax, m_xform_01._14, m_xform_01._24, m_xform_01._34, m_xform_01._44));
+
+    alignas(16) float transformedX[8];
+    alignas(16) float transformedY[8];
+    alignas(16) float transformedZ[8];
+    _mm_store_ps(transformedX, _mm_mul_ps(
+        transformComponent(yMin, m_xform_01._11, m_xform_01._21, m_xform_01._31, m_xform_01._41),
+        inverseWMin));
+    _mm_store_ps(transformedX + 4, _mm_mul_ps(
+        transformComponent(yMax, m_xform_01._11, m_xform_01._21, m_xform_01._31, m_xform_01._41),
+        inverseWMax));
+    _mm_store_ps(transformedY, _mm_mul_ps(
+        transformComponent(yMin, m_xform_01._12, m_xform_01._22, m_xform_01._32, m_xform_01._42),
+        inverseWMin));
+    _mm_store_ps(transformedY + 4, _mm_mul_ps(
+        transformComponent(yMax, m_xform_01._12, m_xform_01._22, m_xform_01._32, m_xform_01._42),
+        inverseWMax));
+    _mm_store_ps(transformedZ, _mm_mul_ps(clipZMin, inverseWMin));
+    _mm_store_ps(transformedZ + 4, _mm_mul_ps(clipZMax, inverseWMax));
+
+    Fvector2 min;
+    Fvector2 max;
+    min.x = max.x = transformedX[0];
+    min.y = max.y = transformedY[0];
+    float minz = transformedZ[0];
+    for (int index = 1; index != 8; ++index)
+    {
+        const float xValue = transformedX[index];
+        if (xValue < min.x)
+            min.x = xValue;
+        else if (xValue > max.x)
+            max.x = xValue;
+
+        const float yValue = transformedY[index];
+        if (yValue < min.y)
+            min.y = yValue;
+        else if (yValue > max.y)
+            max.y = yValue;
+
+        if (transformedZ[index] < minz)
+            minz = transformedZ[index];
+    }
+    return Raster.test(min.x, min.y, max.x, max.y, minz);
+#else
     // Find min/max points of xformed-box
     Fvector2 min, max;
     float z;
@@ -341,6 +431,7 @@ IC BOOL _visible(const Fbox& B, const Fmatrix& m_xform_01)
     if (xform_b1(min, max, z, m_xform_01, B.vMax.x, B.vMax.y, B.vMin.z))
         return TRUE;
     return Raster.test(min.x, min.y, max.x, max.y, z);
+#endif
 }
 
 BOOL CHOM::visible(const Fbox3& B) const

@@ -145,9 +145,12 @@ public:
 #endif
     u16 LL_MotionsSlotCount() { return (u16)m_Motions.size(); }
     const shared_motions& LL_MotionsSlot(u16 idx) { return m_Motions[idx].motions; }
-    CMotionDef* LL_GetMotionDef(MotionID id) { return m_Motions[id.slot].motions.motion_def(id.idx); }
-    CMotion* LL_GetRootMotion(MotionID id) { return &m_Motions[id.slot].bone_motions[iRoot]->at(id.idx); }
-    CMotion* LL_GetMotion(MotionID id, u16 bone_id) { return &m_Motions[id.slot].bone_motions[bone_id]->at(id.idx); }
+    ICF CMotionDef* LL_GetMotionDef(MotionID id) { return m_Motions[id.slot].motions.motion_def(id.idx); }
+    ICF CMotion* LL_GetRootMotion(MotionID id) { return &m_Motions[id.slot].bone_motions[iRoot]->at(id.idx); }
+    ICF CMotion* LL_GetMotion(MotionID id, u16 bone_id)
+    {
+        return &m_Motions[id.slot].bone_motions[bone_id]->at(id.idx);
+    }
     virtual IBlendDestroyCallback* GetBlendDestroyCallback();
     virtual void SetBlendDestroyCallback(IBlendDestroyCallback* cb);
     // Low level interface

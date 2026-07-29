@@ -15,7 +15,7 @@ void CBackend::OnFrameEnd()
     if (!GEnv.isDedicatedServer)
     {
 #if defined(USE_DX11)
-        HW.get_context(CHW::IMM_CTX_ID)->ClearState();
+        HW.get_context(context_id)->ClearState();
 #endif
         Invalidate();
     }
@@ -47,11 +47,18 @@ void CBackend::OnFrameBegin()
 
 void CBackend::Invalidate()
 {
+#if defined(USE_DX11)
+    constants.discard_pending();
+#endif
+
     pRT[0] = 0;
     pRT[1] = 0;
     pRT[2] = 0;
     pRT[3] = 0;
     pZB = 0;
+#if defined(USE_DX11)
+    depth_dimensions_zb = nullptr;
+#endif
 #if defined(USE_OGL)
     pFB = 0;
     pp = 0;
@@ -98,6 +105,8 @@ void CBackend::Invalidate()
 
 #if defined(USE_DX11)
     m_pInputLayout = NULL;
+    m_pInputLayoutDecl = nullptr;
+    m_pInputLayoutSignature = nullptr;
     m_PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
     m_bChangedRTorZB = false;
     m_pInputSignature = NULL;
@@ -111,10 +120,8 @@ void CBackend::Invalidate()
         m_aComputeConstants[i] = 0;
     }
     StateManager.Reset();
-    // Redundant call. Just no note that we need to unmap const
-    // if we create dedicated class.
-    StateManager.UnmapConstants();
     SRVSManager.ResetDeviceState();
+    SSManager.ResetContext(context_id);
 
     for (u32 gs_it = 0; gs_it < CTexture::mtMaxGeometryShaderTextures;)
         textures_gs[gs_it++] = 0;
@@ -124,8 +131,6 @@ void CBackend::Invalidate()
         textures_ds[ds_it++] = 0;
     for (u32 cs_it = 0; cs_it < CTexture::mtMaxComputeShaderTextures;)
         textures_cs[cs_it++] = 0;
-
-    context_id = CHW::IMM_CTX_ID;
 #endif // USE_DX11
 
     for (u32 ps_it = 0; ps_it < CTexture::mtMaxPixelShaderTextures;)
@@ -134,6 +139,17 @@ void CBackend::Invalidate()
         textures_vs[vs_it++] = nullptr;
     for (auto& matrix : matrices)
         matrix = nullptr;
+
+    last_texture_ps = -1;
+    last_texture_vs = -1;
+    last_texture_gs = -1;
+    viewport_valid = false;
+    scissor_valid = false;
+#if defined(USE_DX11)
+    last_texture_hs = -1;
+    last_texture_ds = -1;
+    last_texture_cs = -1;
+#endif
 }
 
 void CBackend::set_ClipPlanes(u32 _enable, Fplane* _planes /*=NULL */, u32 count /* =0*/)
@@ -175,9 +191,25 @@ void CBackend::set_ClipPlanes(u32 _enable, Fmatrix* _xform /*=NULL */, u32 fmask
 
 void CBackend::set_Textures(STextureList* textures_list)
 {
-    // TODO: expose T invalidation method
-    //if (T == textures_list) // disabled due to cases when the set of resources the same, but different srv is need to be bind
-    //    return;
+    if (T == textures_list)
+    {
+        // A reused list can only require work when a pixel resource switched its array slice.
+        for (const auto& [loadId, texture] : *textures_list)
+        {
+            if (loadId >= CTexture::rstVertex)
+                break;
+
+            CTexture* surface = texture._get();
+            if (!surface || surface->last_slice == surface->curr_slice)
+                continue;
+
+            stat.textures++;
+            surface->bind(*this, loadId);
+            surface->last_slice = surface->curr_slice;
+        }
+        return;
+    }
+
     T = textures_list;
     // If resources weren't set at all we should clear from resource #0.
     int _last_ps = -1;
@@ -340,7 +372,8 @@ void CBackend::set_Textures(STextureList* textures_list)
     }
 
     // clear remaining stages (PS)
-    for (++_last_ps; _last_ps < CTexture::mtMaxPixelShaderTextures; _last_ps++)
+    const int newLastPs = _last_ps;
+    for (++_last_ps; _last_ps <= last_texture_ps; ++_last_ps)
     {
         if (!textures_ps[_last_ps])
             continue;
@@ -362,8 +395,11 @@ void CBackend::set_Textures(STextureList* textures_list)
 #   error No graphics API selected or enabled!
 #endif
     }
+    last_texture_ps = static_cast<s8>(newLastPs);
+
     // clear remaining stages (VS)
-    for (++_last_vs; _last_vs < CTexture::mtMaxVertexShaderTextures; _last_vs++)
+    const int newLastVs = _last_vs;
+    for (++_last_vs; _last_vs <= last_texture_vs; ++_last_vs)
     {
         if (!textures_vs[_last_vs])
             continue;
@@ -385,10 +421,12 @@ void CBackend::set_Textures(STextureList* textures_list)
 #   error No graphics API selected or enabled!
 #endif
     }
+    last_texture_vs = static_cast<s8>(newLastVs);
 
 #if defined(USE_DX11)
     // clear remaining stages (VS)
-    for (++_last_gs; _last_gs < CTexture::mtMaxGeometryShaderTextures; _last_gs++)
+    const int newLastGs = _last_gs;
+    for (++_last_gs; _last_gs <= last_texture_gs; ++_last_gs)
     {
         if (!textures_gs[_last_gs])
             continue;
@@ -400,7 +438,10 @@ void CBackend::set_Textures(STextureList* textures_list)
         // HW.pDevice->GSSetShaderResources(_last_gs, 1, &pRes);
         SRVSManager.SetGSResource(_last_gs, pRes);
     }
-    for (++_last_hs; _last_hs < CTexture::mtMaxHullShaderTextures; _last_hs++)
+    last_texture_gs = static_cast<s8>(newLastGs);
+
+    const int newLastHs = _last_hs;
+    for (++_last_hs; _last_hs <= last_texture_hs; ++_last_hs)
     {
         if (!textures_hs[_last_hs])
             continue;
@@ -411,7 +452,10 @@ void CBackend::set_Textures(STextureList* textures_list)
         ID3DShaderResourceView* pRes = 0;
         SRVSManager.SetHSResource(_last_hs, pRes);
     }
-    for (++_last_ds; _last_ds < CTexture::mtMaxDomainShaderTextures; _last_ds++)
+    last_texture_hs = static_cast<s8>(newLastHs);
+
+    const int newLastDs = _last_ds;
+    for (++_last_ds; _last_ds <= last_texture_ds; ++_last_ds)
     {
         if (!textures_ds[_last_ds])
             continue;
@@ -422,7 +466,10 @@ void CBackend::set_Textures(STextureList* textures_list)
         ID3DShaderResourceView* pRes = 0;
         SRVSManager.SetDSResource(_last_ds, pRes);
     }
-    for (++_last_cs; _last_cs < CTexture::mtMaxComputeShaderTextures; _last_cs++)
+    last_texture_ds = static_cast<s8>(newLastDs);
+
+    const int newLastCs = _last_cs;
+    for (++_last_cs; _last_cs <= last_texture_cs; ++_last_cs)
     {
         if (!textures_cs[_last_cs])
             continue;
@@ -433,8 +480,30 @@ void CBackend::set_Textures(STextureList* textures_list)
         ID3DShaderResourceView* pRes = 0;
         SRVSManager.SetCSResource(_last_cs, pRes);
     }
+    last_texture_cs = static_cast<s8>(newLastCs);
 #endif // USE_DX11
 }
+
+#if defined(USE_DX11)
+void CBackend::clear_CS_resources()
+{
+    if (last_texture_cs < 0)
+        return;
+
+    for (int slot = 0; slot <= last_texture_cs; ++slot)
+    {
+        if (!textures_cs[slot])
+            continue;
+
+        textures_cs[slot] = nullptr;
+        SRVSManager.SetCSResource(slot, nullptr);
+    }
+
+    last_texture_cs = -1;
+    T = nullptr;
+    SRVSManager.Apply(context_id);
+}
+#endif
 #else
 
 void CBackend::set_ClipPlanes(u32 _enable, Fmatrix* _xform /*=NULL */, u32 fmask /* =0xff */) {}

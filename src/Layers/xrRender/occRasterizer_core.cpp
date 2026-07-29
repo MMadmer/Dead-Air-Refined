@@ -69,28 +69,13 @@ static void i_order(float* A, float* B, float* C)
 }
 
 // Find the closest min/max pixels of a point
-static void Vclamp(int& v, int a, int b)
+ICF void Vclamp(int& v, int a, int b)
 {
     if (v < a)
         v = a;
     else if (v >= b)
         v = b - 1;
 }
-
-BOOL shared(occTri* T1, occTri* T2)
-{
-    if (T1 == T2)
-        return TRUE;
-    if (T1->adjacent[0] == T2)
-        return TRUE;
-    if (T1->adjacent[1] == T2)
-        return TRUE;
-    if (T1->adjacent[2] == T2)
-        return TRUE;
-    return FALSE;
-}
-
-const float one_div_3 = 1.f / 3.f;
 
 // Rasterize a scan line between given X point values, corresponding Z values and current color
 void i_scan(int curY, float leftX, float lhx, float rightX, float rhx, float startZ, float endZ)
@@ -138,11 +123,11 @@ void i_scan(int curY, float leftX, float lhx, float rightX, float rhx, float sta
     }
 
     // interpolate
-    float lenR = endR - startR;
-    float Zlen = endZ - startZ;
+    const float lenR = endR - startR;
+    const float Zlen = endZ - startZ;
     float Z = startZ + (minT - startR) / lenR * Zlen; // interpolate Z to the start
-    float Zend = startZ + (maxT - startR) / lenR * Zlen; // interpolate Z to the end
-    float dZ = (Zend - Z) / (maxT - minT); // increment in Z / pixel wrt dX
+    const float Zend = startZ + (maxT - startR) / lenR * Zlen; // interpolate Z to the end
+    const float dZ = (Zend - Z) / (maxT - minT); // increment in Z / pixel wrt dX
 
     // Move to far my dz/5 to place the pixel at the center of face that it covers.
     // This will make sure that objects will not be clipped for just standing next to the home from outside.
@@ -158,7 +143,7 @@ void i_scan(int curY, float leftX, float lhx, float rightX, float rhx, float sta
     int limit = i_base + limLeft;
     for (; i < limit; i++, Z += dZ)
     {
-        if (shared(currentTri, pFrame[i - 1]))
+        if (occTrianglesShared(currentTri, pFrame[i - 1]))
         {
             // float ZR = (Z+2*pDepth[i-1])*one_div_3;
             if (Z < pDepth[i])
@@ -188,7 +173,7 @@ void i_scan(int curY, float leftX, float lhx, float rightX, float rhx, float sta
     Z = Zend - dZ;
     for (; i >= limit; i--, Z -= dZ)
     {
-        if (shared(currentTri, pFrame[i + 1]))
+        if (occTrianglesShared(currentTri, pFrame[i + 1]))
         {
             // float ZR = (Z+2*pDepth[i+1])*one_div_3;
             if (Z < pDepth[i])
@@ -218,7 +203,7 @@ IC void i_test_micro(int x, int y)
     occTri** pFrame = Raster.get_frame();
     occTri* T1 = pFrame[pos_up];
     occTri* T2 = pFrame[pos_down];
-    if (T1 && shared(T1, T2))
+    if (T1 && occTrianglesShared(T1, T2))
     {
         float* pDepth = Raster.get_depth();
         float ZR = (pDepth[pos_up] + pDepth[pos_down]) / 2;
@@ -347,8 +332,8 @@ IC void i_section(int Sect, BOOL bMiddle)
         return;
 
     // Compute the inverse slopes of the lines, ie rate of change of X by Y
-    float mE1 = E1[0] / E1[1];
-    float mE2 = E2[0] / E2[1];
+    const float mE1 = E1[0] / E1[1];
+    const float mE2 = E2[0] / E2[1];
 
     // Initial Y offset for left and right (due to pixel rounding)
     float e1_init_dY = float(startY) - startp1[1], e2_init_dY = float(startY) - startp2[1];

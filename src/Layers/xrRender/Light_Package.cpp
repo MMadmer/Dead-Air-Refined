@@ -32,9 +32,12 @@ void light_Package::sort()
     };
 
     // resort lights (pending -> at the end), maintain stable order
-    std::stable_sort(v_point.begin(), v_point.end(), pred_light_cmp);
-    std::stable_sort(v_spot.begin(), v_spot.end(), pred_light_cmp);
-    std::stable_sort(v_shadowed.begin(), v_shadowed.end(), pred_light_cmp);
+    if (v_point.size() > 1)
+        std::stable_sort(v_point.begin(), v_point.end(), pred_light_cmp);
+    if (v_spot.size() > 1)
+        std::stable_sort(v_spot.begin(), v_spot.end(), pred_light_cmp);
+    if (v_shadowed.size() > 1)
+        std::stable_sort(v_shadowed.begin(), v_shadowed.end(), pred_light_cmp);
 }
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
 } // namespace xray::render::RENDER_NAMESPACE

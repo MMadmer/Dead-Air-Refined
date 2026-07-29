@@ -11,27 +11,7 @@ void CRenderTarget::u_setrt(CBackend& cmd_list, const ref_rt& _1, const ref_rt& 
         dwHeight[cmd_list.context_id] = _1->dwHeight;
     }
     else
-    {
-        D3D_DEPTH_STENCIL_VIEW_DESC desc;
-        zb->GetDesc(&desc);
-
-        if (!RImplementation.o.msaa)
-            VERIFY(desc.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2D || desc.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2DARRAY);
-
-        ID3DResource* pRes;
-
-        zb->GetResource(&pRes);
-
-        ID3DTexture2D* pTex = (ID3DTexture2D*)pRes;
-
-        D3D_TEXTURE2D_DESC TexDesc;
-
-        pTex->GetDesc(&TexDesc);
-
-        dwWidth[cmd_list.context_id] = TexDesc.Width;
-        dwHeight[cmd_list.context_id] = TexDesc.Height;
-        _RELEASE(pRes);
-    }
+        cmd_list.get_ZB_dimensions(zb, RImplementation.o.msaa, dwWidth[cmd_list.context_id], dwHeight[cmd_list.context_id]);
 
     if (_1)
         cmd_list.set_RT(_1->pRT, 0);
@@ -58,26 +38,7 @@ void CRenderTarget::u_setrt(CBackend& cmd_list, const ref_rt& _1, const ref_rt& 
         dwHeight[cmd_list.context_id] = _1->dwHeight;
     }
     else
-    {
-        D3D_DEPTH_STENCIL_VIEW_DESC desc;
-        zb->GetDesc(&desc);
-        if (!RImplementation.o.msaa)
-            VERIFY(desc.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2D || desc.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2DARRAY);
-
-        ID3DResource* pRes;
-
-        zb->GetResource(&pRes);
-
-        ID3DTexture2D* pTex = (ID3DTexture2D*)pRes;
-
-        D3D_TEXTURE2D_DESC TexDesc;
-
-        pTex->GetDesc(&TexDesc);
-
-        dwWidth[cmd_list.context_id] = TexDesc.Width;
-        dwHeight[cmd_list.context_id] = TexDesc.Height;
-        _RELEASE(pRes);
-    }
+        cmd_list.get_ZB_dimensions(zb, RImplementation.o.msaa, dwWidth[cmd_list.context_id], dwHeight[cmd_list.context_id]);
 
     if (_1)
         cmd_list.set_RT(_1->pRT, 0);

@@ -12,20 +12,17 @@ void CRender::render_lights(light_Package& LP)
     // const	u16		smap_unassigned		= u16(-1);
     {
         xr_vector<light*>& source = LP.v_shadowed;
-        for (u32 it = 0; it < source.size(); it++)
+        auto output = source.begin();
+        for (light* L : source)
         {
-            light* L = source[it];
             L->vis_update();
             if (!L->vis.visible)
-            {
-                source.erase(source.begin() + it);
-                it--;
-            }
-            else
-            {
-                LR.compute_xf_spot(L);
-            }
+                continue;
+
+            LR.compute_xf_spot(L);
+            *output++ = L;
         }
+        source.erase(output, source.end());
     }
 
     // 2. refactor - infact we could go from the backside and sort in ascending order
@@ -33,32 +30,33 @@ void CRender::render_lights(light_Package& LP)
         xr_vector<light*>& source = LP.v_shadowed;
         xr_vector<light*> refactored;
         refactored.reserve(source.size());
+        xr_vector<light*> remaining;
+        remaining.reserve(source.size());
         const size_t total = source.size();
+
+        std::sort(source.begin(), source.end(), [](light* l1, light* l2)
+        {
+            return l1->X.S.size > l2->X.S.size;
+        });
 
         for (u16 smap_ID = 0; refactored.size() != total; ++smap_ID)
         {
             LP_smap_pool.initialize(RImplementation.o.smapsize);
-            std::sort(source.begin(), source.end(), [](light* l1, light* l2)
+            remaining.clear();
+            for (light* L : source)
             {
-                const u32 a0 = l1->X.S.size;
-                const u32 a1 = l2->X.S.size;
-                return a0 > a1; // reverse -> descending
-            });
-            for (size_t test = 0; test < source.size(); ++test)
-            {
-                light* L = source[test];
                 SMAP_Rect R{};
                 if (LP_smap_pool.push(R, L->X.S.size))
                 {
-                    // OK
                     L->X.S.posX = R.min.x;
                     L->X.S.posY = R.min.y;
                     L->vis.smap_ID = smap_ID;
                     refactored.push_back(L);
-                    source.erase(source.begin() + test);
-                    --test;
                 }
+                else
+                    remaining.push_back(L);
             }
+            source.swap(remaining);
         }
 
         // save (lights are popped from back)

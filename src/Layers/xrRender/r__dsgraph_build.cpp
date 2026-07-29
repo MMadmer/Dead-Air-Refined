@@ -796,12 +796,26 @@ void R_dsgraph_structure::build_subspace()
         if (o.spatial_traverse_flags & ISpatial_DB::O_ORDERED) // this should be inside of query functions
         {
             // Exact sorting order (front-to-back)
-            std::sort(lstRenderables.begin(), lstRenderables.end(), [&](ISpatial* s1, ISpatial* s2)
-                {
-                    const float d1 = s1->GetSpatialData().sphere.P.distance_to_sqr(o.view_pos);
-                    const float d2 = s2->GetSpatialData().sphere.P.distance_to_sqr(o.view_pos);
-                    return d1 < d2;
-                });
+            lstRenderablesOrdered.clear();
+            lstRenderablesOrdered.reserve(lstRenderables.size());
+            for (ISpatial* spatial : lstRenderables)
+            {
+                const Fvector& position = spatial->GetSpatialData().sphere.P;
+                const float deltaX = position.x - o.view_pos.x;
+                const float deltaY = position.y - o.view_pos.y;
+                const float deltaZ = position.z - o.view_pos.z;
+                lstRenderablesOrdered.emplace_back(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ, spatial);
+            }
+
+            std::sort(lstRenderablesOrdered.begin(), lstRenderablesOrdered.end(), [](const auto& left, const auto& right)
+            {
+                return left.first < right.first;
+            });
+
+            for (size_t index = 0; index != lstRenderables.size(); ++index)
+            {
+                lstRenderables[index] = lstRenderablesOrdered[index].second;
+            }
         }
 
         u32 uID_LTRACK = 0xffffffff;
@@ -863,7 +877,7 @@ void R_dsgraph_structure::build_subspace()
             for (u32 v_it = 0; v_it < sector->r_frustums.size(); v_it++)
             {
                 const CFrustum& view = sector->r_frustums[v_it];
-                if (!view.testSphere_dirty(spatial->GetSpatialData().sphere.P, spatial->GetSpatialData().sphere.R))
+                if (!view.testSphere_dirty(sphere.P, sphere.R))
                     continue;
 
                 if (o.is_main_pass)
@@ -938,7 +952,7 @@ void R_dsgraph_structure::build_subspace()
                     for (const CFrustum& view : sector->r_frustums)
                     {
                         if (!view.testSphere_dirty(
-                            viewEntity->GetSpatialData().sphere.P, viewEntity->GetSpatialData().sphere.R))
+                            spatialData.sphere.P, spatialData.sphere.R))
                             continue;
 
                         // renderable

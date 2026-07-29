@@ -79,7 +79,7 @@ public:
             _flags &= ~mask;
     }
 
-    [[nodiscard]] BOOL test_flag(u8 mask) const { return BOOL(_flags & mask); }
+    [[nodiscard]] ICF BOOL test_flag(u8 mask) const { return BOOL(_flags & mask); }
 
     void set_count(u32 cnt)
     {

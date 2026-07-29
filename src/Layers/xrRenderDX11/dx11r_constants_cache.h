@@ -18,8 +18,17 @@ public:
     //	ALIGN(16)	R_constant_array	a_pixel;
     //	ALIGN(16)	R_constant_array	a_vertex;
 
-    explicit R_constants(CBackend& cmd_list_in) : cmd_list(cmd_list_in) {}
+    explicit R_constants(CBackend& cmd_list_in) : cmd_list(cmd_list_in) { dirty_buffers.reserve(16); }
     void flush_cache();
+    void discard_pending();
+    void queue_for_flush(dx11ConstantBuffer& Buffer)
+    {
+        if (!Buffer.NeedsFlush())
+            return;
+
+        if (Buffer.QueueForFlush())
+            dirty_buffers.push_back(&Buffer);
+    }
 
 public:
     // fp, non-array versions
@@ -148,6 +157,7 @@ private:
     {
         dx11ConstantBuffer& Buffer = GetCBuffer<BType>(C);
         Buffer.set(C, L, std::forward<Args>(args)...);
+        queue_for_flush(Buffer);
     }
 
     template<BufferType BType, typename... Args>
@@ -155,19 +165,23 @@ private:
     {
         dx11ConstantBuffer& Buffer = GetCBuffer<BType>(C);
         Buffer.seta(C, L, e, std::forward<Args>(args)...);
+        queue_for_flush(Buffer);
     }
 
     template<BufferType BType>
-    void access_direct(R_constant* C, R_constant_load& L, void** ppData, size_t DataSize) const
+    void access_direct(R_constant* C, R_constant_load& L, void** ppData, size_t DataSize)
     {
         dx11ConstantBuffer& Buffer = GetCBuffer<BType>(C);
         *ppData = Buffer.AccessDirect(L, DataSize);
+        if (*ppData)
+            queue_for_flush(Buffer);
     }
 
     template<BufferType BType>
     dx11ConstantBuffer& GetCBuffer(R_constant* C) const = delete; // no implicit specialization
 
     CBackend& cmd_list;
+    xr_vector<dx11ConstantBuffer*> dirty_buffers;
 };
 
 template<> dx11ConstantBuffer& R_constants::GetCBuffer<R_constants::BT_PixelBuffer>(R_constant* C) const;

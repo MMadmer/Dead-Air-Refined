@@ -454,7 +454,7 @@ struct Fmatrix
         dest.z = v.x * _13 + v.y * _23 + v.z * _33;
     }
 
-    IC void transform(Fvector4& dest, const Fvector& v) const // preferred to use
+    ICF void transform(Fvector4& dest, const Fvector& v) const // preferred to use
     {
         dest.w = v.x * _14 + v.y * _24 + v.z * _34 + _44;
         dest.x = (v.x * _11 + v.y * _21 + v.z * _31 + _41) / dest.w;
@@ -462,7 +462,7 @@ struct Fmatrix
         dest.z = (v.x * _13 + v.y * _23 + v.z * _33 + _43) / dest.w;
     }
 
-    IC void transform(Fvector& dest, const Fvector& v) const // preferred to use
+    ICF void transform(Fvector& dest, const Fvector& v) const // preferred to use
     {
         float iw = 1.f / (v.x * _14 + v.y * _24 + v.z * _34 + _44);
         dest.x = (v.x * _11 + v.y * _21 + v.z * _31 + _41) * iw;
@@ -470,7 +470,7 @@ struct Fmatrix
         dest.z = (v.x * _13 + v.y * _23 + v.z * _33 + _43) * iw;
     }
 
-    IC void transform(Fvector4& dest, const Fvector4& v) const // preferred to use
+    ICF void transform(Fvector4& dest, const Fvector4& v) const // preferred to use
     {
         dest.w = v.x * _14 + v.y * _24 + v.z * _34 + v.w * _44;
         dest.x = v.x * _11 + v.y * _21 + v.z * _31 + v.w * _41;
@@ -485,7 +485,7 @@ struct Fmatrix
         v.set(res);
     }
 
-    IC void transform(Fvector& v) const
+    ICF void transform(Fvector& v) const
     {
         Fvector res;
         transform(res, v);

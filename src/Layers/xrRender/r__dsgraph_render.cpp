@@ -33,7 +33,7 @@ bool cmp_pass(const T& left, const T& right)
 {
     if (left->first->equal(*right->first))
         return false;
-    return left->second.ssa >= right->second.ssa;
+    return left->second.ssa > right->second.ssa;
 }
 
 void R_dsgraph_structure::render_graph(u32 _priority)
@@ -56,7 +56,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             auto& map = mapNormalPasses[_priority][iPass];
 
             map.get_any_p(nrmPasses);
-            std::sort(nrmPasses.begin(), nrmPasses.end(), cmp_pass<mapNormal_T::value_type*>);
+            if (nrmPasses.size() > 1)
+                std::sort(nrmPasses.begin(), nrmPasses.end(), cmp_pass<mapNormal_T::value_type*>);
             for (const auto& it : nrmPasses)
             {
                 cmd_list.set_Pass(it->first);
@@ -65,7 +66,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
 
-                std::sort(items.begin(), items.end(), cmp_ssa<_NormalItem>);
+                if (items.size() > 1)
+                    std::sort(items.begin(), items.end(), cmp_ssa<_NormalItem>);
                 for (const auto& item : items)
                 {
                     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
@@ -98,7 +100,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             auto& map = mapMatrixPasses[_priority][iPass];
 
             map.get_any_p(matPasses);
-            std::sort(matPasses.begin(), matPasses.end(), cmp_pass<mapMatrix_T::value_type*>);
+            if (matPasses.size() > 1)
+                std::sort(matPasses.begin(), matPasses.end(), cmp_pass<mapMatrix_T::value_type*>);
             for (const auto& it : matPasses)
             {
                 cmd_list.set_Pass(it->first);
@@ -106,7 +109,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapMatrixItems& items = it->second;
                 items.ssa = 0;
 
-                std::sort(items.begin(), items.end(), cmp_ssa<_MatrixItem>);
+                if (items.size() > 1)
+                    std::sort(items.begin(), items.end(), cmp_ssa<_MatrixItem>);
                 for (auto& item : items)
                 {
                     cmd_list.set_xform_world(item.Matrix);

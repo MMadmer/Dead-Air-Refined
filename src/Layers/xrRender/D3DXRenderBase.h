@@ -7,6 +7,8 @@
 #include "r__sector.h"
 #include "xr_effgamma.h"
 
+#include <bit>
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // Common part of interface implementation for all D3D renderers
@@ -73,15 +75,11 @@ public:
 #if RENDER != R_R1
     ICF u32 alloc_context(bool alloc_cmd_list = true)
     {
-        if (contexts_used.all())
+        constexpr auto parallelContextsMask = (1ul << R__NUM_PARALLEL_CONTEXTS) - 1;
+        const auto availableContexts = ~contexts_used.to_ulong() & parallelContextsMask;
+        if (!availableContexts)
             return R_dsgraph_structure::INVALID_CONTEXT_ID;
-        const auto raw = ~contexts_used.to_ulong();
-        int id = 0;
-        for (; id < R__NUM_PARALLEL_CONTEXTS; ++id) // TODO: ffs intrinsic
-        {
-            if (raw & (1u << id))
-                break;
-        }
+        const auto id = static_cast<u32>(std::countr_zero(availableContexts));
         contexts_used.set(id, true);
         contexts_pool[id].reset();
         contexts_pool[id].context_id = id;

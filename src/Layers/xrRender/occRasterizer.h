@@ -22,6 +22,13 @@ public:
     Fvector center;
 };
 
+ICF bool occTrianglesShared(const occTri* first, const occTri* second)
+{
+    if (first == second)
+        return true;
+    return first->adjacent[0] == second || first->adjacent[1] == second || first->adjacent[2] == second;
+}
+
 const float occQ_s32 = float(0x40000000); // [-2..2]
 const float occQ_s16 = float(16384 - 1); // [-2..2]
 typedef s32 occD;

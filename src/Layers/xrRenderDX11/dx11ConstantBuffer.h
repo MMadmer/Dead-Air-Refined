@@ -14,6 +14,9 @@ public:
     bool Similar(dx11ConstantBuffer& _in);
     ID3DBuffer* GetBuffer() { return m_pBuffer; }
     void Flush(u32 context_id);
+    bool QueueForFlush();
+    void CancelFlush() { m_queuedForFlush = false; }
+    bool NeedsFlush() const { return m_bChanged; }
 
     //	Set copy data into constant buffer
     //	Plain buffer member
@@ -28,7 +31,9 @@ public:
     void* AccessDirect(R_constant_load& L, size_t DataSize);
 
 private:
-    Fvector4* Access(u16 offset);
+    void Update(u16 offset, const void* data, size_t size);
+    void MarkDirty(u16 offset, size_t size);
+    void ResetDirtyRange();
 
 private:
     u32 m_contextId;
@@ -43,7 +48,13 @@ private:
     ID3DBuffer* m_pBuffer;
     u32 m_uiBufferSize; //	Cache buffer size for debug validation
     void* m_pBufferData;
+    void* m_pCommittedData;
     bool m_bChanged;
+    bool m_hasCommittedData;
+    bool m_queuedForFlush;
+    bool m_knownDifferent;
+    u32 m_dirtyBegin;
+    u32 m_dirtyEnd;
 
     static const u32 lineSize = sizeof(Fvector4);
 

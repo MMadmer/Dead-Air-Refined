@@ -87,6 +87,8 @@ public:
 
     D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
     ID3DInputLayout* m_pInputLayout;
+    SDeclaration* m_pInputLayoutDecl;
+    ID3DBlob* m_pInputLayoutSignature;
     u32 dummy0; // Padding to avoid warning
     u32 dummy1; // Padding to avoid warning
     u32 dummy2; // Padding to avoid warning
@@ -96,6 +98,9 @@ private:
 #if defined (USE_DX11)
     ID3DRenderTargetView* pRT[4];
     ID3DDepthStencilView* pZB;
+    ID3DDepthStencilView* depth_dimensions_zb{};
+    u32 depth_dimensions_width{};
+    u32 depth_dimensions_height{};
 #elif defined(USE_OGL)
     GLuint pFB;
     GLuint pRT[4];
@@ -160,6 +165,11 @@ private:
     u32 z_enable;
     u32 z_func;
     u32 alpha_ref;
+    mutable D3D_VIEWPORT viewport_cache{};
+    mutable bool viewport_valid{};
+    Irect scissor_cache{};
+    bool scissor_enabled{};
+    bool scissor_valid{};
 
     // Lists
     STextureList* T;
@@ -171,10 +181,16 @@ private:
     //CTexture* textures_vs[5]; // dmap + 4 vs
     CTexture* textures_vs[CTexture::mtMaxVertexShaderTextures]; // 4 vs
     CTexture* textures_gs[CTexture::mtMaxGeometryShaderTextures]; // 4 vs
+    s8 last_texture_ps;
+    s8 last_texture_vs;
+    s8 last_texture_gs;
 #if defined(USE_DX11)
     CTexture* textures_hs[CTexture::mtMaxHullShaderTextures]; // 4 vs
     CTexture* textures_ds[CTexture::mtMaxDomainShaderTextures]; // 4 vs
     CTexture* textures_cs[CTexture::mtMaxComputeShaderTextures]; // 4 vs
+    s8 last_texture_hs;
+    s8 last_texture_ds;
+    s8 last_texture_cs;
 #endif
 
     CMatrix* matrices[8]{}; // matrices are supported only for FFP
@@ -272,6 +288,7 @@ public:
 #if defined(USE_DX11)
     IC void set_RT(ID3DRenderTargetView* RT, u32 ID = 0);
     IC void set_ZB(ID3DDepthStencilView* ZB);
+    IC void get_ZB_dimensions(ID3DDepthStencilView* ZB, bool msaa, u32& width, u32& height);
     IC ID3DRenderTargetView* get_RT(u32 ID = 0);
     IC ID3DDepthStencilView* get_ZB();
 #elif defined(USE_OGL)
@@ -334,6 +351,9 @@ public:
 
     void set_Textures(STextureList* T);
     void set_Textures(ref_texture_list& T) { set_Textures(&*T); }
+#if defined(USE_DX11)
+    void clear_CS_resources();
+#endif
 
     IC void set_Matrices(SMatrixList* M);
     IC void set_Matrices(ref_matrix_list& M) { set_Matrices(&*M); }

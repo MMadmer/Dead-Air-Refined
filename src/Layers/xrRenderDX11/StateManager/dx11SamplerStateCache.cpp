@@ -33,8 +33,9 @@ dx11SamplerStateCache::SHandle dx11SamplerStateCache::GetState(D3D_SAMPLER_DESC&
 
     if (hResult == hInvalidHandle)
     {
-        StateRecord rec;
+        StateRecord rec{};
         rec.m_crc = crc;
+        rec.m_desc = desc;
         CreateState(desc, &rec.m_pState);
         hResult = m_StateArray.size();
         m_StateArray.push_back(rec);
@@ -56,9 +57,7 @@ dx11SamplerStateCache::SHandle dx11SamplerStateCache::FindState(const StateDecs&
     {
         if (m_StateArray[i].m_crc == StateCRC)
         {
-            StateDecs descCandidate;
-            m_StateArray[i].m_pState->GetDesc(&descCandidate);
-            if (descCandidate == desc)
+            if (m_StateArray[i].m_desc == desc)
             // return i;
             //	TEST
             {
@@ -85,11 +84,38 @@ void dx11SamplerStateCache::ClearStateArray()
     }
 
     m_StateArray.clear();
+    ZeroMemory(m_boundSamplerCounts, sizeof(m_boundSamplerCounts));
+    InvalidateBoundArrays();
 }
 
-void dx11SamplerStateCache::PrepareSamplerStates(HArray& samplers,
-    ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT]) const
+void dx11SamplerStateCache::ResetContext(u32 contextId)
 {
+    VERIFY(contextId < R__NUM_CONTEXTS);
+    ZeroMemory(m_boundSamplerCounts[contextId], sizeof(m_boundSamplerCounts[contextId]));
+    ZeroMemory(m_boundSamplerArrays[contextId], sizeof(m_boundSamplerArrays[contextId]));
+}
+
+bool dx11SamplerStateCache::IsAlreadyBound(
+    u32 contextId, ShaderStage stage, const HArray& samplers) const
+{
+    return m_boundSamplerArrays[contextId][static_cast<u32>(stage)] == &samplers;
+}
+
+void dx11SamplerStateCache::MarkBound(u32 contextId, ShaderStage stage, const HArray& samplers)
+{
+    m_boundSamplerArrays[contextId][static_cast<u32>(stage)] = &samplers;
+}
+
+void dx11SamplerStateCache::InvalidateBoundArrays()
+{
+    ZeroMemory(m_boundSamplerArrays, sizeof(m_boundSamplerArrays));
+}
+
+u32 dx11SamplerStateCache::PrepareSamplerStates(
+    u32 contextId, ShaderStage stage, const HArray& samplers,
+    ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT])
+{
+    VERIFY(contextId < R__NUM_CONTEXTS);
     VERIFY(samplers.size() <= D3D_COMMONSHADER_SAMPLER_SLOT_COUNT);
     for (u32 i = 0; i < samplers.size(); ++i)
     {
@@ -99,48 +125,95 @@ void dx11SamplerStateCache::PrepareSamplerStates(HArray& samplers,
             pSS[i] = m_StateArray[samplers[i]].m_pState;
         }
     }
+
+    auto& previousCount = m_boundSamplerCounts[contextId][static_cast<u32>(stage)];
+    const auto applyCount = std::max<u32>(static_cast<u32>(samplers.size()), previousCount);
+    previousCount = static_cast<u8>(samplers.size());
+    return applyCount;
 }
 
 void dx11SamplerStateCache::VSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Vertex, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Vertex)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->VSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Vertex, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->VSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Vertex, samplers);
 }
 
 void dx11SamplerStateCache::PSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Pixel, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Pixel)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->PSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Pixel, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->PSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Pixel, samplers);
 }
 
 void dx11SamplerStateCache::GSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Geometry, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Geometry)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->GSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Geometry, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->GSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Geometry, samplers);
 }
 
 void dx11SamplerStateCache::HSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Hull, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Hull)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->HSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Hull, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->HSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Hull, samplers);
 }
 
 void dx11SamplerStateCache::DSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Domain, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Domain)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->DSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Domain, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->DSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Domain, samplers);
 }
 
 void dx11SamplerStateCache::CSApplySamplers(u32 context_id, HArray& samplers)
 {
+    if (IsAlreadyBound(context_id, ShaderStage::Compute, samplers))
+        return;
+    if (samplers.empty() && !m_boundSamplerCounts[context_id][static_cast<u32>(ShaderStage::Compute)])
+        return;
+
     ID3DSamplerState* pSS[D3D_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
-    PrepareSamplerStates(samplers, pSS);
-    HW.get_context(context_id)->CSSetSamplers(0, D3D_COMMONSHADER_SAMPLER_SLOT_COUNT, pSS);
+    const auto count = PrepareSamplerStates(context_id, ShaderStage::Compute, samplers, pSS);
+    if (count)
+        HW.get_context(context_id)->CSSetSamplers(0, count, pSS);
+    MarkBound(context_id, ShaderStage::Compute, samplers);
 }
 
 void dx11SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
@@ -155,9 +228,7 @@ void dx11SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
     for (u32 i = 0; i < m_StateArray.size(); ++i)
     {
         StateRecord& rec = m_StateArray[i];
-        StateDecs desc;
-
-        rec.m_pState->GetDesc(&desc);
+        StateDecs desc = rec.m_desc;
 
         //	MaxAnisitropy is reset by ValidateState if not aplicable
         //	to the filter mode used.
@@ -169,7 +240,9 @@ void dx11SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
         //	This can cause fragmentation if called too often
         rec.m_pState->Release();
         CreateState(desc, &rec.m_pState);
+        rec.m_desc = desc;
     }
+    InvalidateBoundArrays();
 }
 
 void dx11SamplerStateCache::SetMipLODBias(float uiMipLODBias)
@@ -182,9 +255,7 @@ void dx11SamplerStateCache::SetMipLODBias(float uiMipLODBias)
     for (u32 i = 0; i < m_StateArray.size(); ++i)
     {
         StateRecord& rec = m_StateArray[i];
-        StateDecs desc;
-
-        rec.m_pState->GetDesc(&desc);
+        StateDecs desc = rec.m_desc;
 
         desc.MipLODBias = m_uiMipLODBias;
         dx11StateUtils::ValidateState(desc);
@@ -192,6 +263,8 @@ void dx11SamplerStateCache::SetMipLODBias(float uiMipLODBias)
         // This can cause fragmentation if called too often
         rec.m_pState->Release();
         CreateState(desc, &rec.m_pState);
+        rec.m_desc = desc;
     }
+    InvalidateBoundArrays();
 }
 } // namespace xray::render::RENDER_NAMESPACE

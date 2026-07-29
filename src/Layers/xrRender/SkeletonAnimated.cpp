@@ -862,25 +862,31 @@ void CKinematicsAnimated::LL_BuldBoneMatrixDequatize(const CBoneData* bd, u8 cha
     for (auto &it : BLEND_INST.blend_vector())
     {
         CBlend* B = it;
-        int& b_count = keys.chanel_blend_conts[B->channel];
-        CKey* D = &keys.keys[B->channel][b_count];
-        if (!(channel_mask & (1 << B->channel)))
+        const u8 channel = B->channel;
+        if (!(channel_mask & (1 << channel)))
             continue;
-        u8 channel = B->channel;
+
+        int& b_count = keys.chanel_blend_conts[channel];
+        CKey* D = &keys.keys[channel][b_count];
         // keys.blend_factors[channel][b_count]	=  B->blendAmount;
         keys.blends[channel][b_count] = B;
         CMotion& M = *LL_GetMotion(B->motionID, SelfID);
         Dequantize(*D, *B, M);
-        QR2Quat(M._keysR[0], BK[channel][b_count].Q);
-        if (M.test_flag(flTKeyPresent))
+
+        if (channels.rule(channel).extern_ == animation::add)
         {
-            if (M.test_flag(flTKey16IsBit))
-                QT16_2T(M._keysT16[0], M, BK[channel][b_count].T);
+            QR2Quat(M._keysR[0], BK[channel][b_count].Q);
+            if (M.test_flag(flTKeyPresent))
+            {
+                if (M.test_flag(flTKey16IsBit))
+                    QT16_2T(M._keysT16[0], M, BK[channel][b_count].T);
+                else
+                    QT8_2T(M._keysT8[0], M, BK[channel][b_count].T);
+            }
             else
-                QT8_2T(M._keysT8[0], M, BK[channel][b_count].T);
+                BK[channel][b_count].T.set(M._initT);
         }
-        else
-            BK[channel][b_count].T.set(M._initT);
+
         ++b_count;
     }
     for (u16 j = 0; MAX_CHANNELS > j; ++j)
@@ -891,24 +897,33 @@ void CKinematicsAnimated::LL_BuldBoneMatrixDequatize(const CBoneData* bd, u8 cha
 // calculate single bone with key blending
 void CKinematicsAnimated::LL_BoneMatrixBuild(CBoneInstance& bi, const Fmatrix* parent, const SKeyTable& keys)
 {
-    // Blend them together
-    CKey channel_keys[MAX_CHANNELS];
-    animation::channel_def BC[MAX_CHANNELS];
-    u16 ch_count = 0;
-
-    for (u16 j = 0; MAX_CHANNELS > j; ++j)
-    {
-        if (j != 0 && keys.chanel_blend_conts[j] == 0)
-            continue;
-        // data for channel mix cycle based on ch_count
-        channels.get_def(j, BC[ch_count]);
-        process_single_channel(
-            channel_keys[ch_count], BC[ch_count], keys.keys[j], keys.blends[j], keys.chanel_blend_conts[j]);
-        ++ch_count;
-    }
     CKey Result;
-    // Mix channels
-    MixChannels(Result, channel_keys, BC, ch_count);
+    if (!(keys.chanel_blend_conts[1] | keys.chanel_blend_conts[2] | keys.chanel_blend_conts[3]))
+    {
+        MixInterlerp(Result, keys.keys[0], keys.blends[0], keys.chanel_blend_conts[0]);
+        VERIFY(_valid(Result.T));
+        VERIFY(_valid(Result.Q));
+    }
+    else
+    {
+        // Blend them together
+        CKey channel_keys[MAX_CHANNELS];
+        animation::channel_def BC[MAX_CHANNELS];
+        u16 ch_count = 0;
+
+        for (u16 j = 0; MAX_CHANNELS > j; ++j)
+        {
+            if (j != 0 && keys.chanel_blend_conts[j] == 0)
+                continue;
+            // data for channel mix cycle based on ch_count
+            channels.get_def(j, BC[ch_count]);
+            process_single_channel(
+                channel_keys[ch_count], BC[ch_count], keys.keys[j], keys.blends[j], keys.chanel_blend_conts[j]);
+            ++ch_count;
+        }
+        // Mix channels
+        MixChannels(Result, channel_keys, BC, ch_count);
+    }
 
     Fmatrix RES;
     RES.mk_xform(Result.Q, Result.T);

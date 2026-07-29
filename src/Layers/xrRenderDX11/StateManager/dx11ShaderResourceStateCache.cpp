@@ -11,6 +11,7 @@ void dx11ShaderResourceStateCache::ResetDeviceState()
     ZeroMemory(m_VSViews, sizeof(m_VSViews));
     ZeroMemory(m_HSViews, sizeof(m_HSViews));
     ZeroMemory(m_DSViews, sizeof(m_DSViews));
+    ZeroMemory(m_CSViews, sizeof(m_CSViews));
 
     m_uiMinPSView = 0xFFFFFFFF;
     m_uiMaxPSView = 0xFFFFFFFF;
@@ -27,18 +28,29 @@ void dx11ShaderResourceStateCache::ResetDeviceState()
     m_uiMinDSView = 0xFFFFFFFF;
     m_uiMaxDSView = 0xFFFFFFFF;
 
+    m_uiMinCSView = 0xFFFFFFFF;
+    m_uiMaxCSView = 0xFFFFFFFF;
+
     m_bUpdatePSViews = false;
     m_bUpdateGSViews = false;
     m_bUpdateVSViews = false;
     m_bUpdateDSViews = false;
     m_bUpdateHSViews = false;
+    m_bUpdateCSViews = false;
 }
 
 void dx11ShaderResourceStateCache::Apply(u32 context_id)
 {
+    if (!(m_bUpdatePSViews || m_bUpdateGSViews || m_bUpdateVSViews ||
+        m_bUpdateHSViews || m_bUpdateDSViews || m_bUpdateCSViews))
+    {
+        return;
+    }
+
+    auto* context = HW.get_context(context_id);
     if (m_bUpdatePSViews)
     {
-        HW.get_context(context_id)->PSSetShaderResources(m_uiMinPSView, m_uiMaxPSView - m_uiMinPSView + 1, &m_PSViews[m_uiMinPSView]);
+        context->PSSetShaderResources(m_uiMinPSView, m_uiMaxPSView - m_uiMinPSView + 1, &m_PSViews[m_uiMinPSView]);
         m_uiMinPSView = 0xFFFFFFFF;
         m_uiMaxPSView = 0xFFFFFFFF;
         m_bUpdatePSViews = false;
@@ -46,7 +58,7 @@ void dx11ShaderResourceStateCache::Apply(u32 context_id)
 
     if (m_bUpdateGSViews)
     {
-        HW.get_context(context_id)->GSSetShaderResources(m_uiMinGSView, m_uiMaxGSView - m_uiMinGSView + 1, &m_GSViews[m_uiMinGSView]);
+        context->GSSetShaderResources(m_uiMinGSView, m_uiMaxGSView - m_uiMinGSView + 1, &m_GSViews[m_uiMinGSView]);
         m_uiMinGSView = 0xFFFFFFFF;
         m_uiMaxGSView = 0xFFFFFFFF;
         m_bUpdateGSViews = false;
@@ -54,7 +66,7 @@ void dx11ShaderResourceStateCache::Apply(u32 context_id)
 
     if (m_bUpdateVSViews)
     {
-        HW.get_context(context_id)->VSSetShaderResources(m_uiMinVSView, m_uiMaxVSView - m_uiMinVSView + 1, &m_VSViews[m_uiMinVSView]);
+        context->VSSetShaderResources(m_uiMinVSView, m_uiMaxVSView - m_uiMinVSView + 1, &m_VSViews[m_uiMinVSView]);
         m_uiMinVSView = 0xFFFFFFFF;
         m_uiMaxVSView = 0xFFFFFFFF;
         m_bUpdateVSViews = false;
@@ -62,7 +74,7 @@ void dx11ShaderResourceStateCache::Apply(u32 context_id)
 
     if (m_bUpdateHSViews)
     {
-        HW.get_context(context_id)->HSSetShaderResources(m_uiMinHSView, m_uiMaxHSView - m_uiMinHSView + 1, &m_HSViews[m_uiMinHSView]);
+        context->HSSetShaderResources(m_uiMinHSView, m_uiMaxHSView - m_uiMinHSView + 1, &m_HSViews[m_uiMinHSView]);
         m_uiMinHSView = 0xFFFFFFFF;
         m_uiMaxHSView = 0xFFFFFFFF;
         m_bUpdateHSViews = false;
@@ -70,7 +82,7 @@ void dx11ShaderResourceStateCache::Apply(u32 context_id)
 
     if (m_bUpdateDSViews)
     {
-        HW.get_context(context_id)->DSSetShaderResources(m_uiMinDSView, m_uiMaxDSView - m_uiMinDSView + 1, &m_DSViews[m_uiMinDSView]);
+        context->DSSetShaderResources(m_uiMinDSView, m_uiMaxDSView - m_uiMinDSView + 1, &m_DSViews[m_uiMinDSView]);
         m_uiMinDSView = 0xFFFFFFFF;
         m_uiMaxDSView = 0xFFFFFFFF;
         m_bUpdateDSViews = false;
@@ -78,7 +90,7 @@ void dx11ShaderResourceStateCache::Apply(u32 context_id)
 
     if (m_bUpdateCSViews)
     {
-        HW.get_context(context_id)->CSSetShaderResources(m_uiMinCSView, m_uiMaxCSView - m_uiMinCSView + 1, &m_CSViews[m_uiMinCSView]);
+        context->CSSetShaderResources(m_uiMinCSView, m_uiMaxCSView - m_uiMinCSView + 1, &m_CSViews[m_uiMinCSView]);
         m_uiMinCSView = 0xFFFFFFFF;
         m_uiMaxCSView = 0xFFFFFFFF;
         m_bUpdateCSViews = false;

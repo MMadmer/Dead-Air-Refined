@@ -89,6 +89,8 @@ IC void Dequantize(CKey& K, const CBlend& BD, const CMotion& M)
     u32 frame = iFloor(time);
     float delta = time - float(frame);
     u32 count = M.get_count();
+    const u32 currentFrame = frame % count;
+    const u32 nextFrame = currentFrame + 1 == count ? 0 : currentFrame + 1;
     // rotation
     if (M.test_flag(flRKeyAbsent))
     {
@@ -97,8 +99,8 @@ IC void Dequantize(CKey& K, const CBlend& BD, const CMotion& M)
     }
     else
     {
-        const CKeyQR* K1r = &M._keysR[(frame + 0) % count];
-        const CKeyQR* K2r = &M._keysR[(frame + 1) % count];
+        const CKeyQR* K1r = &M._keysR[currentFrame];
+        const CKeyQR* K2r = &M._keysR[nextFrame];
         Fquaternion Q1, Q2;
         QR2Quat(*K1r, Q1);
         QR2Quat(*K2r, Q2);
@@ -111,16 +113,16 @@ IC void Dequantize(CKey& K, const CBlend& BD, const CMotion& M)
         Fvector T1, T2;
         if (M.test_flag(flTKey16IsBit))
         {
-            const CKeyQT16* K1t = &M._keysT16[(frame + 0) % count];
-            const CKeyQT16* K2t = &M._keysT16[(frame + 1) % count];
+            const CKeyQT16* K1t = &M._keysT16[currentFrame];
+            const CKeyQT16* K2t = &M._keysT16[nextFrame];
 
             QT16_2T(*K1t, M, T1);
             QT16_2T(*K2t, M, T2);
         }
         else
         {
-            const CKeyQT8* K1t = &M._keysT8[(frame + 0) % count];
-            const CKeyQT8* K2t = &M._keysT8[(frame + 1) % count];
+            const CKeyQT8* K1t = &M._keysT8[currentFrame];
+            const CKeyQT8* K2t = &M._keysT8[nextFrame];
 
             QT8_2T(*K1t, M, T1);
             QT8_2T(*K2t, M, T2);

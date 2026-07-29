@@ -355,6 +355,13 @@ IC void CBackend::set_Scissor(const Irect* R)
 {
     if (R)
     {
+        if (scissor_valid && scissor_enabled &&
+            scissor_cache.left == R->left && scissor_cache.top == R->top &&
+            scissor_cache.right == R->right && scissor_cache.bottom == R->bottom)
+        {
+            return;
+        }
+
         CHK_GL(glEnable(GL_SCISSOR_TEST));
 
         // The window space is inverted compared to DX,
@@ -363,17 +370,35 @@ IC void CBackend::set_Scissor(const Irect* R)
 
         // The origin of the scissor box is lower-left
         CHK_GL(glScissor(R->left, bottom, R->width(), R->height()));
+        scissor_cache = *R;
+        scissor_enabled = true;
+        scissor_valid = true;
     }
     else
     {
+        if (scissor_valid && !scissor_enabled)
+            return;
+
         CHK_GL(glDisable(GL_SCISSOR_TEST));
+        scissor_enabled = false;
+        scissor_valid = true;
     }
 }
 
 IC void CBackend::SetViewport(const D3D_VIEWPORT& viewport) const
 {
+    if (viewport_valid &&
+        viewport_cache.TopLeftX == viewport.TopLeftX && viewport_cache.TopLeftY == viewport.TopLeftY &&
+        viewport_cache.Width == viewport.Width && viewport_cache.Height == viewport.Height &&
+        viewport_cache.MinDepth == viewport.MinDepth && viewport_cache.MaxDepth == viewport.MaxDepth)
+    {
+        return;
+    }
+
     glViewport(viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height);
     glDepthRangef(viewport.MinDepth, viewport.MaxDepth);
+    viewport_cache = viewport;
+    viewport_valid = true;
 }
 
 IC void CBackend::set_Stencil(u32 _enable, u32 _func, u32 _ref, u32 _mask, u32 _writemask, u32 _fail, u32 _pass,

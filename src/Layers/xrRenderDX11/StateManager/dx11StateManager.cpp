@@ -56,13 +56,15 @@ void dx11StateManager::Reset()
 void dx11StateManager::UnmapConstants() { m_cAlphaRef = 0; }
 void dx11StateManager::SetRasterizerState(ID3DRasterizerState* pRState)
 {
+    const bool discardPendingChanges = m_bRSChanged;
     m_bRSChanged = false;
-    m_bRDInvalid = true;
+    m_bRDInvalid |= discardPendingChanges;
 
     if (pRState != m_pRState)
     {
         m_pRState = pRState;
         m_bRSNeedApply = true;
+        m_bRDInvalid = true;
     }
 
     if (m_bOverrideScissoring)
@@ -71,25 +73,29 @@ void dx11StateManager::SetRasterizerState(ID3DRasterizerState* pRState)
 
 void dx11StateManager::SetDepthStencilState(ID3DDepthStencilState* pDSState)
 {
+    const bool discardPendingChanges = m_bDSSChanged;
     m_bDSSChanged = false;
-    m_bDSDInvalid = true;
+    m_bDSDInvalid |= discardPendingChanges;
 
     if (pDSState != m_pDepthStencilState)
     {
         m_pDepthStencilState = pDSState;
         m_bDSSNeedApply = true;
+        m_bDSDInvalid = true;
     }
 }
 
 void dx11StateManager::SetBlendState(ID3DBlendState* pBlendState)
 {
+    const bool discardPendingChanges = m_bBSChanged;
     m_bBSChanged = false;
-    m_bBDInvalid = true;
+    m_bBDInvalid |= discardPendingChanges;
 
     if (pBlendState != m_pBlendState)
     {
         m_pBlendState = pBlendState;
         m_bBSNeedApply = true;
+        m_bBDInvalid = true;
     }
 }
 
@@ -161,6 +167,9 @@ void dx11StateManager::ValidateBDesc()
 //  Sends states to DX11 runtime, creates new state objects if necessary
 void dx11StateManager::Apply()
 {
+    if (!(m_bRSNeedApply || m_bRSChanged || m_bDSSNeedApply || m_bDSSChanged || m_bBSNeedApply || m_bBSChanged))
+        return;
+
     auto* d3d_context = HW.get_context(cmd_list.context_id);
 
     //  Apply rasterizer state
@@ -342,25 +351,20 @@ void dx11StateManager::SetColorWriteEnable(u32 WriteMask)
 
     u8 WMask = (u8)WriteMask;
 
-    bool bNeedUpdate = false;
     for (int i = 0; i < 4; ++i)
     {
 #ifdef USE_DX11
         if (m_BDesc.RenderTarget[i].RenderTargetWriteMask != WMask)
+        {
+            m_BDesc.RenderTarget[i].RenderTargetWriteMask = WMask;
+            m_bBSChanged = true;
+        }
 #else
         if (m_BDesc.RenderTargetWriteMask[i] != WMask)
-#endif
-            bNeedUpdate = true;
-    }
-
-    if (bNeedUpdate)
-    {
-        m_bBSChanged = true;
-        for (int i = 0; i < 4; ++i)
-#ifdef USE_DX11
-            m_BDesc.RenderTarget[i].RenderTargetWriteMask = WMask;
-#else
+        {
             m_BDesc.RenderTargetWriteMask[i] = WMask;
+            m_bBSChanged = true;
+        }
 #endif
     }
 }

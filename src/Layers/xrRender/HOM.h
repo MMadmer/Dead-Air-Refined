@@ -40,6 +40,7 @@ private:
     BOOL bEnabled;
     Fmatrix m_xform;
     Fmatrix m_xform_01;
+    xr_vector<std::pair<float, u32>> m_sortedTriangles;
 
     mutable HOMStatistics stats;
 

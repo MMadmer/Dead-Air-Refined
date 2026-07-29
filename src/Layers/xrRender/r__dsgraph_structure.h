@@ -73,6 +73,7 @@ struct R_dsgraph_structure
     xr_vector<R_dsgraph::_LodItem> lstLODs;
     xr_vector<int> lstLODgroups;
     xr_vector<ISpatial*> lstRenderables;
+    xr_vector<std::pair<float, ISpatial*>> lstRenderablesOrdered;
     xr_vector<ISpatial*> lstSpatial;
     xr_vector<dxRender_Visual*> lstVisuals;
 
@@ -126,26 +127,47 @@ struct R_dsgraph_structure
         lstLODs.clear();
         lstLODgroups.clear();
         lstRenderables.clear();
+        lstRenderablesOrdered.clear();
         lstSpatial.clear();
         lstVisuals.clear();
 
         for (int i = 0; i < SHADER_PASSES_MAX; ++i)
         {
-            mapNormalPasses[0][i].destroy();
-            mapNormalPasses[1][i].destroy();
-            mapMatrixPasses[0][i].destroy();
-            mapMatrixPasses[1][i].destroy();
+            for (int priority = 0; priority < 2; ++priority)
+            {
+                auto& normal = mapNormalPasses[priority][i];
+                if (!normal.empty())
+                {
+                    for (auto node = normal.begin(), end = normal.end(); node != end; ++node)
+                    {
+                        node->second.clear();
+                        node->second.ssa = 0.0f;
+                    }
+                }
+                normal.clear();
+
+                auto& matrix = mapMatrixPasses[priority][i];
+                if (!matrix.empty())
+                {
+                    for (auto node = matrix.begin(), end = matrix.end(); node != end; ++node)
+                    {
+                        node->second.clear();
+                        node->second.ssa = 0.0f;
+                    }
+                }
+                matrix.clear();
+            }
         }
-        mapSorted.destroy();
-        mapHUD.destroy();
-        mapLOD.destroy();
-        mapDistort.destroy();
-        mapHUDSorted.destroy();
+        mapSorted.clear();
+        mapHUD.clear();
+        mapLOD.clear();
+        mapDistort.clear();
+        mapHUDSorted.clear();
 
 #if RENDER != R_R1
-        mapWmark.destroy();
-        mapEmissive.destroy();
-        mapHUDEmissive.destroy();
+        mapWmark.clear();
+        mapEmissive.clear();
+        mapHUDEmissive.clear();
 #endif
         cmd_list.Invalidate();
     }

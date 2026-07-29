@@ -45,6 +45,35 @@ IC void CBackend::set_ZB(ID3DDepthStencilView* ZB)
     }
 }
 
+IC void CBackend::get_ZB_dimensions(ID3DDepthStencilView* ZB, bool msaa, u32& width, u32& height)
+{
+    VERIFY(ZB);
+    if (depth_dimensions_zb != ZB)
+    {
+        D3D_DEPTH_STENCIL_VIEW_DESC viewDescription;
+        ZB->GetDesc(&viewDescription);
+        if (!msaa)
+        {
+            VERIFY(viewDescription.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2D ||
+                viewDescription.ViewDimension == D3D_DSV_DIMENSION_TEXTURE2DARRAY);
+        }
+
+        ID3DResource* resource;
+        ZB->GetResource(&resource);
+        auto* texture = static_cast<ID3DTexture2D*>(resource);
+        D3D_TEXTURE2D_DESC textureDescription;
+        texture->GetDesc(&textureDescription);
+        _RELEASE(resource);
+
+        depth_dimensions_zb = ZB;
+        depth_dimensions_width = textureDescription.Width;
+        depth_dimensions_height = textureDescription.Height;
+    }
+
+    width = depth_dimensions_width;
+    height = depth_dimensions_height;
+}
+
 IC void CBackend::ClearRT(ID3DRenderTargetView* rt, const Fcolor& color)
 {
     HW.get_context(context_id)->ClearRenderTargetView(rt, reinterpret_cast<const FLOAT*>(&color));
@@ -401,22 +430,47 @@ IC void CBackend::set_Scissor(const Irect* R)
 {
     if (R)
     {
+        if (scissor_valid && scissor_enabled &&
+            scissor_cache.left == R->left && scissor_cache.top == R->top &&
+            scissor_cache.right == R->right && scissor_cache.bottom == R->bottom)
+        {
+            return;
+        }
+
         // CHK_DX       (HW.pDevice->SetRenderState(D3DRS_SCISSORTESTENABLE,TRUE));
         StateManager.EnableScissoring();
-        RECT* clip = (RECT*)R;
+        const RECT* clip = reinterpret_cast<const RECT*>(R);
         HW.get_context(context_id)->RSSetScissorRects(1, clip);
+        scissor_cache = *R;
+        scissor_enabled = true;
+        scissor_valid = true;
     }
     else
     {
+        if (scissor_valid && !scissor_enabled)
+            return;
+
         // CHK_DX       (HW.pDevice->SetRenderState(D3DRS_SCISSORTESTENABLE,FALSE));
         StateManager.EnableScissoring(FALSE);
         HW.get_context(context_id)->RSSetScissorRects(0, 0);
+        scissor_enabled = false;
+        scissor_valid = true;
     }
 }
 
 IC void CBackend::SetViewport(const D3D_VIEWPORT& viewport) const
 {
+    if (viewport_valid &&
+        viewport_cache.TopLeftX == viewport.TopLeftX && viewport_cache.TopLeftY == viewport.TopLeftY &&
+        viewport_cache.Width == viewport.Width && viewport_cache.Height == viewport.Height &&
+        viewport_cache.MinDepth == viewport.MinDepth && viewport_cache.MaxDepth == viewport.MaxDepth)
+    {
+        return;
+    }
+
     HW.get_context(context_id)->RSSetViewports(1, &viewport);
+    viewport_cache = viewport;
+    viewport_valid = true;
 }
 
 IC void CBackend::set_Stencil(
@@ -519,9 +573,10 @@ IC void CBackend::ApplyVertexLayout()
     VERIFY(decl);
     VERIFY(m_pInputSignature);
 
-    xr_map<ID3DBlob*, ID3DInputLayout*>::iterator it;
+    if (m_pInputLayout && m_pInputLayoutDecl == decl && m_pInputLayoutSignature == m_pInputSignature)
+        return;
 
-    it = decl->vs_to_layout.find(m_pInputSignature);
+    auto it = decl->vs_to_layout.find(m_pInputSignature);
 
     if (it == decl->vs_to_layout.end())
     {
@@ -533,6 +588,8 @@ IC void CBackend::ApplyVertexLayout()
         it = decl->vs_to_layout.insert(std::pair<ID3DBlob*, ID3DInputLayout*>(m_pInputSignature, pLayout)).first;
     }
 
+    m_pInputLayoutDecl = decl;
+    m_pInputLayoutSignature = m_pInputSignature;
     if (m_pInputLayout != it->second)
     {
         m_pInputLayout = it->second;
@@ -631,6 +688,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
         {
             // ID3DxxBuffer*    pBuffer = (it->second)->GetBuffer();
             u32 uiBufferIndex = it->first;
+            dx11ConstantBuffer& constantBuffer = *it->second;
 
             if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferPixelShader)
             {
@@ -666,6 +724,9 @@ IC void CBackend::set_Constants(R_constant_table* C)
 #endif
             else
                 VERIFY("Invalid enumeration");
+
+            if (constantBuffer.NeedsFlush())
+                constants.queue_for_flush(constantBuffer);
         }
 
         ID3DBuffer* tempBuffer[MaxCBuffers];

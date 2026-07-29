@@ -192,6 +192,7 @@ void CDetailManager::Load()
         IReader* S = m_fs->open_chunk(m_id);
         dt->Load(S);
         objects.push_back(dt);
+        m_objectRadiusSquared.push_back(dt->bv_sphere.R * dt->bv_sphere.R);
         S->close();
     }
     m_fs->close();
@@ -211,7 +212,18 @@ void CDetailManager::Load()
 
     // Hardware specific optimizations
     if (UseVS())
+    {
         hw_Load();
+        u32 vertexOffset = 0;
+        u32 indexOffset = 0;
+        for (const CDetail* object : objects)
+        {
+            m_objectVertexOffsets.push_back(vertexOffset);
+            m_objectIndexOffsets.push_back(indexOffset);
+            vertexOffset += hw_BatchSize * object->number_vertices;
+            indexOffset += hw_BatchSize * object->number_indices;
+        }
+    }
     else
         soft_Load();
 
@@ -245,9 +257,14 @@ void CDetailManager::Unload()
     }
 
     objects.clear();
-    m_visibles[0].clear();
-    m_visibles[1].clear();
-    m_visibles[2].clear();
+    m_objectRadiusSquared.clear();
+    m_objectVertexOffsets.clear();
+    m_objectIndexOffsets.clear();
+    for (int visibleGroup = 0; visibleGroup != 3; ++visibleGroup)
+    {
+        m_visibles[visibleGroup].clear();
+        m_visibleObjectIds[visibleGroup].clear();
+    }
     FS.r_close(dtFS);
 }
 
@@ -257,9 +274,12 @@ void CDetailManager::UpdateVisibleM()
 {
     ZoneScoped;
 
-    for (int i = 0; i != 3; ++i)
-        for (auto& vis : m_visibles[i])
-            vis.clear();
+    for (int visibleGroup = 0; visibleGroup != 3; ++visibleGroup)
+    {
+        for (const u8 objectId : m_visibleObjectIds[visibleGroup])
+            m_visibles[visibleGroup][objectId].clear();
+        m_visibleObjectIds[visibleGroup].clear();
+    }
 
     CFrustum View;
     View.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
@@ -270,6 +290,7 @@ void CDetailManager::UpdateVisibleM()
     fade_start = fade_start * fade_start;
     float fade_range = fade_limit - fade_start;
     float r_ssaCHEAP = 16 * r_ssaDISCARD;
+    constexpr u32 detailSlotsPerCache = dm_cache1_count * dm_cache1_count;
 
     // Initialize 'vis' and 'cache'
     // Collect objects for rendering
@@ -283,7 +304,7 @@ void CDetailManager::UpdateVisibleM()
             {
                 continue;
             }
-            u32 mask = 0xff;
+            u32 mask = View.getMask();
             u32 res = View.testSAABB(MS.vis.sphere.P, MS.vis.sphere.R, MS.vis.box.data(), mask);
             if (fcvNone == res)
             {
@@ -291,9 +312,7 @@ void CDetailManager::UpdateVisibleM()
             }
             // test slots
 
-            u32 dwCC = dm_cache1_count * dm_cache1_count;
-
-            for (u32 _i = 0; _i < dwCC; _i++)
+            for (u32 _i = 0; _i < detailSlotsPerCache; _i++)
             {
                 Slot* PS = *MS.slots[_i];
                 Slot& S = *PS;
@@ -317,6 +336,17 @@ void CDetailManager::UpdateVisibleM()
                         continue; // invisible-view frustum
                     }
                 }
+                const bool needsUpdate = Device.dwFrame > S.frame;
+                float dist_sq = 0.0f;
+                if (needsUpdate)
+                {
+                    const float deltaX = EYE.x - S.vis.sphere.P.x;
+                    const float deltaY = EYE.y - S.vis.sphere.P.y;
+                    const float deltaZ = EYE.z - S.vis.sphere.P.z;
+                    dist_sq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+                    if (dist_sq > fade_limit)
+                        continue;
+                }
 #ifndef _EDITOR
                 if (!RImplementation.HOM.visible(S.vis))
                 {
@@ -324,12 +354,9 @@ void CDetailManager::UpdateVisibleM()
                 }
 #endif
                 // Add to visibility structures
-                if (Device.dwFrame > S.frame)
+                if (needsUpdate)
                 {
                     // Calc fade factor (per slot)
-                    float dist_sq = EYE.distance_to_sqr(S.vis.sphere.P);
-                    if (dist_sq > fade_limit)
-                        continue;
                     float alpha = (dist_sq < fade_start) ? 0.f : (dist_sq - fade_start) / fade_range;
                     float alpha_i = 1.f - alpha;
                     float dist_sq_rcp = 1.f / dist_sq;
@@ -345,10 +372,9 @@ void CDetailManager::UpdateVisibleM()
                         sp.r_items[1].clear();
                         sp.r_items[2].clear();
 
-                        float R = objects[sp.id]->bv_sphere.R;
-                        float Rq_drcp = R * R * dist_sq_rcp; // reordered expression for 'ssa' calc
+                        const float Rq_drcp = m_objectRadiusSquared[sp.id] * dist_sq_rcp;
 
-                        for(auto& siIT : sp.items)
+                        for (auto& siIT : sp.items)
                         {
                             SlotItem& Item = *siIT;
                             float scale = Item.scale_calculated = Item.scale * alpha_i;
@@ -374,20 +400,31 @@ void CDetailManager::UpdateVisibleM()
                         continue;
                     if (!sp.r_items[0].empty())
                     {
-                        m_visibles[0][sp.id].push_back(&sp.r_items[0]);
+                        auto& visibleItems = m_visibles[0][sp.id];
+                        if (visibleItems.empty())
+                            m_visibleObjectIds[0].push_back(static_cast<u8>(sp.id));
+                        visibleItems.push_back(&sp.r_items[0]);
                     }
                     if (!sp.r_items[1].empty())
                     {
-                        m_visibles[1][sp.id].push_back(&sp.r_items[1]);
+                        auto& visibleItems = m_visibles[1][sp.id];
+                        if (visibleItems.empty())
+                            m_visibleObjectIds[1].push_back(static_cast<u8>(sp.id));
+                        visibleItems.push_back(&sp.r_items[1]);
                     }
                     if (!sp.r_items[2].empty())
                     {
-                        m_visibles[2][sp.id].push_back(&sp.r_items[2]);
+                        auto& visibleItems = m_visibles[2][sp.id];
+                        if (visibleItems.empty())
+                            m_visibleObjectIds[2].push_back(static_cast<u8>(sp.id));
+                        visibleItems.push_back(&sp.r_items[2]);
                     }
                 }
             }
         }
     }
+    for (auto& visibleObjectIds : m_visibleObjectIds)
+        std::sort(visibleObjectIds.begin(), visibleObjectIds.end());
     RImplementation.BasicStats.DetailVisibility.End();
 }
 
@@ -399,7 +436,7 @@ bool CDetailManager::UseVS() const
 void CDetailManager::Render(CBackend& cmd_list)
 {
 #ifndef _EDITOR
-    if (nullptr == dtFS)
+    if (!dtFS)
         return;
     if (!psDeviceFlags.is(rsDrawDetails))
         return;
@@ -436,9 +473,9 @@ void CDetailManager::DispatchMTCalc()
     m_calc_task = &TaskScheduler->AddTask([this]
     {
 #ifndef _EDITOR
-        if (nullptr == RImplementation.Details)
+        if (!RImplementation.Details)
             return; // possibly deleted
-        if (nullptr == dtFS)
+        if (!dtFS)
             return;
         if (!psDeviceFlags.is(rsDrawDetails))
             return;

@@ -59,6 +59,7 @@ __pycache__/
 *.diagsession
 
 # Local performance captures and profile-guided build data.
+/_analysis/
 *.etl
 *.pgc
 *.pgd

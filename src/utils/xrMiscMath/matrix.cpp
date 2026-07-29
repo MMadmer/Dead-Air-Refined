@@ -6,6 +6,9 @@
 #include "xrCore/xrDebug.h"
 
 #include <limits>
+#if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64)
+#include <xmmintrin.h>
+#endif
 
 Fmatrix& Fmatrix::rotation(const Fquaternion& Q)
 {
@@ -120,6 +123,29 @@ Fmatrix& Fmatrix::mul(const Fmatrix& A, const Fmatrix& B)
 Fmatrix& Fmatrix::mul_43(const Fmatrix& A, const Fmatrix& B)
 {
 	VERIFY((this != &A) && (this != &B));
+#if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64)
+    const __m128 basisI = _mm_loadu_ps(A.m[0]);
+    const __m128 basisJ = _mm_loadu_ps(A.m[1]);
+    const __m128 basisK = _mm_loadu_ps(A.m[2]);
+
+    const auto transformBasis = [&](const float* row)
+    {
+        const __m128 firstPair = _mm_add_ps(
+            _mm_mul_ps(basisI, _mm_set1_ps(row[0])),
+            _mm_mul_ps(basisJ, _mm_set1_ps(row[1])));
+        return _mm_add_ps(firstPair, _mm_mul_ps(basisK, _mm_set1_ps(row[2])));
+    };
+
+    _mm_storeu_ps(m[0], transformBasis(B.m[0]));
+    _mm_storeu_ps(m[1], transformBasis(B.m[1]));
+    _mm_storeu_ps(m[2], transformBasis(B.m[2]));
+    _mm_storeu_ps(m[3], _mm_add_ps(transformBasis(B.m[3]), _mm_loadu_ps(A.m[3])));
+
+    _14 = 0.0f;
+    _24 = 0.0f;
+    _34 = 0.0f;
+    _44 = 1.0f;
+#else
 	m[0][0] = A.m[0][0] * B.m[0][0] + A.m[1][0] * B.m[0][1] + A.m[2][0] * B.m[0][2];
 	m[0][1] = A.m[0][1] * B.m[0][0] + A.m[1][1] * B.m[0][1] + A.m[2][1] * B.m[0][2];
 	m[0][2] = A.m[0][2] * B.m[0][0] + A.m[1][2] * B.m[0][1] + A.m[2][2] * B.m[0][2];
@@ -139,6 +165,7 @@ Fmatrix& Fmatrix::mul_43(const Fmatrix& A, const Fmatrix& B)
 	m[3][1] = A.m[0][1] * B.m[3][0] + A.m[1][1] * B.m[3][1] + A.m[2][1] * B.m[3][2] + A.m[3][1];
 	m[3][2] = A.m[0][2] * B.m[3][0] + A.m[1][2] * B.m[3][1] + A.m[2][2] * B.m[3][2] + A.m[3][2];
 	m[3][3] = 1;
+#endif
 	return *this;
 }
 

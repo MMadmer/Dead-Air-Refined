@@ -13,29 +13,44 @@ namespace xray::render::RENDER_NAMESPACE
 {
 occRasterizer Raster;
 
+static __m128i max_epi32(__m128i left, __m128i right)
+{
+    const __m128i mask = _mm_cmpgt_epi32(left, right);
+    return _mm_or_si128(_mm_and_si128(mask, left), _mm_andnot_si128(mask, right));
+}
+
+static __m128i max_adjacent_pairs(__m128i values)
+{
+    const __m128i even = _mm_shuffle_epi32(values, _MM_SHUFFLE(2, 2, 0, 0));
+    const __m128i odd = _mm_shuffle_epi32(values, _MM_SHUFFLE(3, 3, 1, 1));
+    return max_epi32(even, odd);
+}
+
 static void propagade_depth(LPVOID p_dest, LPVOID p_src, int dim)
 {
-    occD* dest = (occD*)p_dest;
-    occD* src = (occD*)p_src;
+    auto* dest = static_cast<occD*>(p_dest);
+    auto* src = static_cast<occD*>(p_src);
+    const int sourceStride = dim * 2;
 
     for (int y = 0; y < dim; y++)
     {
-        for (int x = 0; x < dim; x++)
+        const occD* source0 = src + y * 2 * sourceStride;
+        const occD* source1 = source0 + sourceStride;
+        occD* destination = dest + y * dim;
+
+        for (int x = 0; x < dim; x += 4)
         {
-            occD* base0 = src + (y * 2 + 0) * (dim * 2) + (x * 2);
-            occD* base1 = src + (y * 2 + 1) * (dim * 2) + (x * 2);
-            occD f1 = base0[0];
-            occD f2 = base0[1];
-            occD f3 = base1[0];
-            occD f4 = base1[1];
-            occD f = f1;
-            if (f2 > f)
-                f = f2;
-            if (f3 > f)
-                f = f3;
-            if (f4 > f)
-                f = f4;
-            dest[y * dim + x] = f;
+            const int sourceX = x * 2;
+            const __m128i row0Low = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source0 + sourceX));
+            const __m128i row0High = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source0 + sourceX + 4));
+            const __m128i row1Low = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source1 + sourceX));
+            const __m128i row1High = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source1 + sourceX + 4));
+            const __m128i lowPairs = max_adjacent_pairs(max_epi32(row0Low, row1Low));
+            const __m128i highPairs = max_adjacent_pairs(max_epi32(row0High, row1High));
+            const __m128i compactLow = _mm_shuffle_epi32(lowPairs, _MM_SHUFFLE(2, 0, 2, 0));
+            const __m128i compactHigh = _mm_shuffle_epi32(highPairs, _MM_SHUFFLE(2, 0, 2, 0));
+            const __m128i result = _mm_unpacklo_epi64(compactLow, compactHigh);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(destination + x), result);
         }
     }
 }
@@ -66,8 +81,6 @@ void occRasterizer::clear()
     MemFill32(bufDepth, *(u32 *)(&f), size);
 }
 
-BOOL shared(occTri* T1, occTri* T2);
-
 void occRasterizer::propagade()
 {
     ZoneScoped;
@@ -91,7 +104,7 @@ void occRasterizer::propagade()
             if (Tu1)
             {
                 // We has pixel 1scan up
-                if (shared(Tu1, pFrame[pos_down]))
+                if (occTrianglesShared(Tu1, pFrame[pos_down]))
                 {
                     // We has pixel 1scan down
                     float ZR = (pDepth[pos_up] + pDepth[pos_down]) / 2;
@@ -101,7 +114,7 @@ void occRasterizer::propagade()
                         pDepth[pos] = ZR;
                     }
                 }
-                else if (shared(Tu1, pFrame[pos_down2]))
+                else if (occTrianglesShared(Tu1, pFrame[pos_down2]))
                 {
                     // We has pixel 2scan down
                     float ZR = (pDepth[pos_up] + pDepth[pos_down2]) / 2;
@@ -196,12 +209,18 @@ static BOOL test_Level(occD* depth, int dim, float _x0, float _y0, float _x1, fl
     int y1 = iFloor(_y1 * dim + .5f);
     clamp(y1, y0, dim - 1);
 
+    const __m128i queryDepth = _mm_set1_epi32(z);
     for (int y = y0; y <= y1; y++)
     {
-        occD* base = depth + y * dim;
-        occD* it = base + x0;
-        occD* end = base + x1;
-        for (; it <= end; it++)
+        const occD* it = depth + y * dim + x0;
+        const occD* end = depth + y * dim + x1 + 1;
+        for (; it + 4 <= end; it += 4)
+        {
+            const __m128i depths = _mm_loadu_si128(reinterpret_cast<const __m128i*>(it));
+            if (_mm_movemask_epi8(_mm_cmpgt_epi32(depths, queryDepth)))
+                return TRUE;
+        }
+        for (; it != end; ++it)
             if (z < *it)
                 return TRUE;
     }
@@ -210,15 +229,17 @@ static BOOL test_Level(occD* depth, int dim, float _x0, float _y0, float _x1, fl
 
 BOOL occRasterizer::test(float _x0, float _y0, float _x1, float _y1, float _z)
 {
-    occD z = df_2_s32up(_z) + 1;
+    const occD z = df_2_s32up(_z) + 1;
+    const float width = (_x1 - _x0) * occ_dim_0;
+    const float height = (_y1 - _y0) * occ_dim_0;
+    const float span = _max(width, height);
+
+    if (span >= 16.0f && !test_Level(get_depth_level(3), occ_dim_3, _x0, _y0, _x1, _y1, z))
+        return FALSE;
+    if (span >= 8.0f && !test_Level(get_depth_level(2), occ_dim_2, _x0, _y0, _x1, _y1, z))
+        return FALSE;
+    if (span >= 4.0f && !test_Level(get_depth_level(1), occ_dim_1, _x0, _y0, _x1, _y1, z))
+        return FALSE;
     return test_Level(get_depth_level(0), occ_dim_0, _x0, _y0, _x1, _y1, z);
-    /*
-    if	(test_Level(get_depth_level(2),occ_dim_2,_x0,_y0,_x1,_y1,z))
-    {
-        // Visbible on level 2 - test level 0
-        return test_Level(get_depth_level(0),occ_dim_0,_x0,_y0,_x1,_y1,z);
-    }
-    return FALSE;
-    */
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -145,7 +145,11 @@ public:
     DetailSlot DS_empty;
 
     DetailVec objects;
+    svector<float, dm_max_objects> m_objectRadiusSquared;
+    svector<u32, dm_max_objects> m_objectVertexOffsets;
+    svector<u32, dm_max_objects> m_objectIndexOffsets;
     vis_list m_visibles[3]; // 0=still, 1=Wave1, 2=Wave2
+    svector<u8, dm_max_objects> m_visibleObjectIds[3];
 
 #ifndef _EDITOR
     xrXRC xrc;

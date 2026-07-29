@@ -268,12 +268,10 @@ void D3DXRenderBase::Begin()
 {
     HW.BeginScene();
 #if RENDER == R_R4
-    for (int id = 0; id < R__NUM_CONTEXTS; ++id)
-    {
-        contexts_pool[id].cmd_list.OnFrameBegin();
-        contexts_pool[id].cmd_list.set_CullMode(CULL_CW);
-        contexts_pool[id].cmd_list.set_CullMode(CULL_CCW);
-    }
+    auto& immediate = get_imm_context().cmd_list;
+    immediate.OnFrameBegin();
+    immediate.set_CullMode(CULL_CW);
+    immediate.set_CullMode(CULL_CCW);
 #else
     RCache.OnFrameBegin();
     RCache.set_CullMode(CULL_CW);
@@ -299,10 +297,7 @@ void D3DXRenderBase::End()
     if (HW.Caps.SceneMode)
         overdrawEnd();
  #if RENDER == R_R4
-    for (int id = 0; id < R__NUM_CONTEXTS; ++id)
-    {
-        contexts_pool[id].cmd_list.OnFrameEnd();
-    }
+    get_imm_context().cmd_list.OnFrameEnd();
 #else
     RCache.OnFrameEnd();
 #endif

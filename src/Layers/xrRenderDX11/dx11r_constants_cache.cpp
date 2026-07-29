@@ -75,26 +75,18 @@ void R_constants::flush_cache()
 {
     const auto context_id = cmd_list.context_id; // TODO: constant buffer should be encapsulated, so no ctx ID needed
 
-    for (int i = 0; i < CBackend::MaxCBuffers; ++i)
-    {
-        if (cmd_list.m_aVertexConstants[i])
-            cmd_list.m_aVertexConstants[i]->Flush(context_id);
+    for (dx11ConstantBuffer* buffer : dirty_buffers)
+        buffer->Flush(context_id);
 
-        if (cmd_list.m_aPixelConstants[i])
-            cmd_list.m_aPixelConstants[i]->Flush(context_id);
+    dirty_buffers.clear();
+}
 
-        if (cmd_list.m_aGeometryConstants[i])
-            cmd_list.m_aGeometryConstants[i]->Flush(context_id);
+void R_constants::discard_pending()
+{
+    for (dx11ConstantBuffer* buffer : dirty_buffers)
+        buffer->CancelFlush();
 
-        if (cmd_list.m_aHullConstants[i])
-            cmd_list.m_aHullConstants[i]->Flush(context_id);
-
-        if (cmd_list.m_aDomainConstants[i])
-            cmd_list.m_aDomainConstants[i]->Flush(context_id);
-
-        if (cmd_list.m_aComputeConstants[i])
-            cmd_list.m_aComputeConstants[i]->Flush(context_id);
-    }
+    dirty_buffers.clear();
 }
 
 /*

@@ -1,7 +1,5 @@
 #include "stdafx.h"
 #include "Layers/xrRender/DetailManager.h"
-#include "xrEngine/IGame_Persistent.h"
-#include "xrEngine/Environment.h"
 #include "Layers/xrRender/BufferUtils.h"
 
 namespace xray::render::RENDER_NAMESPACE
@@ -103,120 +101,106 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
     RImplementation.BasicStats.DetailCount = 0;
 
-    // Matrices and offsets
-    u32 vOffset = 0;
-    u32 iOffset = 0;
-
     vis_list& list = m_visibles[var_id];
 
-    const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-    Fvector c_sun, c_ambient, c_hemi;
-    c_sun.set(desc.sun_color.x, desc.sun_color.y, desc.sun_color.z);
-    c_sun.mul(.5f);
-    c_ambient.set(desc.ambient.x, desc.ambient.y, desc.ambient.z);
-    c_hemi.set(desc.hemi_color.x, desc.hemi_color.y, desc.hemi_color.z);
-
     // Iterate
-    for (u32 O = 0; O < objects.size(); O++)
+    for (const u8 objectId : m_visibleObjectIds[var_id])
     {
-        CDetail& Object = *objects[O];
-        xr_vector<SlotItemVec*>& vis = list[O];
-        if (!vis.empty())
+        CDetail& Object = *objects[objectId];
+        xr_vector<SlotItemVec*>& vis = list[objectId];
+        const u32 vOffset = m_objectVertexOffsets[objectId];
+        const u32 iOffset = m_objectIndexOffsets[objectId];
+        for (u32 iPass = 0; iPass < Object.shader->E[lod_id]->passes.size(); ++iPass)
         {
-            for (u32 iPass = 0; iPass < Object.shader->E[lod_id]->passes.size(); ++iPass)
+            // Setup matrices + colors (and flush it as necessary)
+            // RCache.set_Element				(Object.shader->E[lod_id]);
+            cmd_list.set_Element(Object.shader->E[lod_id], iPass);
+            cmd_list.apply_lmaterial();
+
+            //	This could be cached in the corresponding consatant buffer
+            //	as it is done for DX9
+            cmd_list.set_c(strConsts, consts);
+            cmd_list.set_c(strWave, wave);
+            cmd_list.set_c(strDir2D, wind);
+            cmd_list.set_c(strXForm, Device.mFullTransform);
+
+            // ref_constant constArray = RCache.get_c(strArray);
+            // VERIFY(constArray);
+
+            // u32			c_base				= x_array->vs.index;
+            // Fvector4*	c_storage			= RCache.get_ConstantCache_Vertex().get_array_f().access(c_base);
+            Fvector4* c_storage = 0;
+            //	Map constants to memory directly
             {
-                // Setup matrices + colors (and flush it as necessary)
-                // RCache.set_Element				(Object.shader->E[lod_id]);
-                cmd_list.set_Element(Object.shader->E[lod_id], iPass);
-                cmd_list.apply_lmaterial();
+                void* pVData;
+                cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
+                c_storage = (Fvector4*)pVData;
+            }
+            VERIFY(c_storage);
 
-                //	This could be cached in the corresponding consatant buffer
-                //	as it is done for DX9
-                cmd_list.set_c(strConsts, consts);
-                cmd_list.set_c(strWave, wave);
-                cmd_list.set_c(strDir2D, wind);
-                cmd_list.set_c(strXForm, Device.mFullTransform);
+            u32 dwBatch = 0;
 
-                // ref_constant constArray = RCache.get_c(strArray);
-                // VERIFY(constArray);
-
-                // u32			c_base				= x_array->vs.index;
-                // Fvector4*	c_storage			= RCache.get_ConstantCache_Vertex().get_array_f().access(c_base);
-                Fvector4* c_storage = 0;
-                //	Map constants to memory directly
+            for (SlotItemVec* items : vis)
+            {
+                for (SlotItem* item : *items)
                 {
-                    void* pVData;
-                    cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
-                    c_storage = (Fvector4*)pVData;
-                }
-                VERIFY(c_storage);
+                    SlotItem& Instance = *item;
+                    u32 base = dwBatch * 4;
 
-                u32 dwBatch = 0;
-
-                for (SlotItemVec* items : vis)
-                {
-                    for (SlotItem* item : *items)
-                    {
-                        SlotItem& Instance = *item;
-                        u32 base = dwBatch * 4;
-
-                        // Build matrix ( 3x4 matrix, last row - color )
-                        float scale = Instance.scale_calculated;
-                        Fmatrix& M = Instance.mRotY;
-                        c_storage[base + 0].set(M._11 * scale, M._21 * scale, M._31 * scale, M._41);
-                        c_storage[base + 1].set(M._12 * scale, M._22 * scale, M._32 * scale, M._42);
-                        c_storage[base + 2].set(M._13 * scale, M._23 * scale, M._33 * scale, M._43);
+                    // Build matrix ( 3x4 matrix, last row - color )
+                    float scale = Instance.scale_calculated;
+                    Fmatrix& M = Instance.mRotY;
+                    c_storage[base + 0].set(M._11 * scale, M._21 * scale, M._31 * scale, M._41);
+                    c_storage[base + 1].set(M._12 * scale, M._22 * scale, M._32 * scale, M._42);
+                    c_storage[base + 2].set(M._13 * scale, M._23 * scale, M._33 * scale, M._43);
                         // RCache.set_ca(&*constArray, base+0, M._11*scale,	M._21*scale,	M._31*scale,	M._41	);
                         // RCache.set_ca(&*constArray, base+1, M._12*scale,	M._22*scale,	M._32*scale,	M._42	);
                         // RCache.set_ca(&*constArray, base+2, M._13*scale,	M._23*scale,	M._33*scale,	M._43	);
 
-                        // Build color
-                        // R2 only needs hemisphere
-                        float h = Instance.c_hemi;
-                        float s = Instance.c_sun;
-                        c_storage[base + 3].set(s, s, s, h);
+                    // Build color
+                    // R2 only needs hemisphere
+                    float h = Instance.c_hemi;
+                    float s = Instance.c_sun;
+                    c_storage[base + 3].set(s, s, s, h);
                         // RCache.set_ca(&*constArray, base+3, s,				s,				s,				h
                         // );
-                        dwBatch++;
-                        if (dwBatch == hw_BatchSize)
-                        {
-                            // flush
-                            RImplementation.BasicStats.DetailCount += dwBatch;
-                            u32 dwCNT_verts = dwBatch * Object.number_vertices;
-                            u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
+                    dwBatch++;
+                    if (dwBatch == hw_BatchSize)
+                    {
+                        // flush
+                        RImplementation.BasicStats.DetailCount += dwBatch;
+                        u32 dwCNT_verts = dwBatch * Object.number_vertices;
+                        u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
                             // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;
                             // RCache.get_ConstantCache_Vertex().get_array_f().dirty	(c_base,c_base+dwBatch*4);
-                            cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
-                            cmd_list.stat.r.s_details.add(dwCNT_verts);
+                        cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
+                        cmd_list.stat.r.s_details.add(dwCNT_verts);
 
-                            // restart
-                            dwBatch = 0;
+                        // restart
+                        dwBatch = 0;
 
-                            //	Remap constants to memory directly (just in case anything goes wrong)
-                            {
-                                void* pVData;
-                                cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
-                                c_storage = (Fvector4*)pVData;
-                            }
-                            VERIFY(c_storage);
+                        //	Remap constants to memory directly (just in case anything goes wrong)
+                        {
+                            void* pVData;
+                            cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
+                            c_storage = (Fvector4*)pVData;
                         }
+                        VERIFY(c_storage);
                     }
                 }
-                // flush if necessary
-                if (dwBatch)
-                {
-                    RImplementation.BasicStats.DetailCount += dwBatch;
-                    u32 dwCNT_verts = dwBatch * Object.number_vertices;
-                    u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
+            }
+            // flush if necessary
+            if (dwBatch)
+            {
+                RImplementation.BasicStats.DetailCount += dwBatch;
+                u32 dwCNT_verts = dwBatch * Object.number_vertices;
+                u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
                     // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;
                     // RCache.get_ConstantCache_Vertex().get_array_f().dirty	(c_base,c_base+dwBatch*4);
-                    cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
-                    cmd_list.stat.r.s_details.add(dwCNT_verts);
-                }
+                cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
+                cmd_list.stat.r.s_details.add(dwCNT_verts);
             }
         }
-        vOffset += hw_BatchSize * Object.number_vertices;
-        iOffset += hw_BatchSize * Object.number_indices;
     }
 }
 } // namespace xray::render::RENDER_NAMESPACE

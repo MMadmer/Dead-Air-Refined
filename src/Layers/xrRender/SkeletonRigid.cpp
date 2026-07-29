@@ -68,33 +68,12 @@ void CKinematics::CalculateBones(BOOL bForceExact)
             obb.xform_get(Mbox);
             Fmatrix X;
             X.mul_43(Mbone, Mbox);
-            Fvector& S = obb.m_halfsize;
-
-            Fvector P, A;
-            A.set(-S.x, -S.y, -S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(-S.x, -S.y, S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(S.x, -S.y, S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(S.x, -S.y, -S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(-S.x, S.y, -S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(-S.x, S.y, S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(S.x, S.y, S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
-            A.set(S.x, S.y, -S.z);
-            X.transform_tiny(P, A);
-            Box.modify(P);
+            const Fvector& halfSize = obb.m_halfsize;
+            Fbox localBox;
+            localBox.set(-halfSize.x, -halfSize.y, -halfSize.z, halfSize.x, halfSize.y, halfSize.z);
+            Fbox transformedBox;
+            transformedBox.xform(localBox, X);
+            Box.merge(transformedBox);
         }
         if (bones->size())
         {
