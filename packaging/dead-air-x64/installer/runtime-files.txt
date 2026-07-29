@@ -4,7 +4,7 @@ BugTrap.dll
 concrt140.dll
 d3dcompiler_47.dll
 discord_game_sdk.dll
-libcrypto-3-x64.dll
+libcrypto-4-x64.dll
 luabind.dll
 LuaJIT.dll
 msvcp140_1.dll

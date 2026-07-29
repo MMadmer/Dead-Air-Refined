@@ -47,7 +47,7 @@
     <CopyFileToFolders Condition="'$(Platform)'=='Win32'" Include="..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3.dll">
       <Filter>dependencies</Filter>
     </CopyFileToFolders>
-    <CopyFileToFolders Condition="'$(Platform)'=='x64'" Include="..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3-x64.dll">
+    <CopyFileToFolders Condition="'$(Platform)'=='x64'" Include="..\..\sdk\binaries\$(PlatformShortName)\libcrypto-4-x64.dll">
       <Filter>dependencies</Filter>
     </CopyFileToFolders>
     <CopyFileToFolders Include="..\..\sdk\binaries\$(PlatformShortName)\soft_oal.dll">

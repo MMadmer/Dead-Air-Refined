@@ -6,7 +6,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 //
-// http://go.microsoft.com/fwlink/?LinkID=324981
+// https://go.microsoft.com/fwlink/?LinkID=324981
 //--------------------------------------------------------------------------------------
 
 #pragma once
@@ -22,7 +22,6 @@
 
 #include <cstdint>
 #include <iterator>
-#include <vector>
 
 namespace FVF
 {
@@ -49,7 +48,7 @@ namespace FVF
 
     static_assert(std::size(g_declTypeSizes) == D3DDECLTYPE_UNUSED, "Mismatch of array size");
 
-    inline size_t ComputeVertexSize(uint32_t fvfCode)
+    constexpr size_t ComputeVertexSize(const uint32_t fvfCode) noexcept
     {
         if ((fvfCode & ((D3DFVF_RESERVED0 | D3DFVF_RESERVED2) & ~D3DFVF_POSITION_MASK)) != 0)
             return 0;
@@ -116,7 +115,7 @@ namespace FVF
         return vertexSize;
     }
 
-    inline size_t ComputeVertexSize(const D3DVERTEXELEMENT9* pDecl, uint32_t stream)
+    constexpr size_t ComputeVertexSize(const D3DVERTEXELEMENT9* pDecl, const uint32_t stream) noexcept
     {
         if (!pDecl || stream >= 16u /*D3D10_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT*/)
             return 0;
@@ -151,8 +150,8 @@ namespace FVF
     }
 
     // More secure version
-    inline size_t ComputeVertexSize(
-        _In_reads_(maxDeclLength) const D3DVERTEXELEMENT9* pDecl, size_t maxDeclLength, uint32_t stream)
+    constexpr size_t ComputeVertexSize(
+        _In_reads_(maxDeclLength) const D3DVERTEXELEMENT9* pDecl, const size_t maxDeclLength, const uint32_t stream) noexcept
     {
         if (!pDecl || stream >= 16u /*D3D10_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT*/)
             return 0;
@@ -189,7 +188,7 @@ namespace FVF
         return currentSize;
     }
 
-    inline size_t GetDeclLength(const D3DVERTEXELEMENT9* pDecl)
+    constexpr size_t GetDeclLength(const D3DVERTEXELEMENT9* pDecl) noexcept
     {
         if (!pDecl)
             return 0;
@@ -207,7 +206,7 @@ namespace FVF
     }
 
     _Success_(return)
-    inline bool CreateDeclFromFVF(uint32_t fvfCode, xr_vector<D3DVERTEXELEMENT9>& decl)
+        inline bool CreateDeclFromFVF(uint32_t fvfCode, xr_vector<D3DVERTEXELEMENT9>& decl)
     {
         static constexpr size_t s_texCoordSizes[] =
         {
@@ -406,7 +405,7 @@ namespace FVF
             il.emplace_back(
                 D3D11_INPUT_ELEMENT_DESC{ "SV_Position", 0, DXGI_FORMAT_R32G32B32_FLOAT,
                     0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-                );
+            );
             break;
         }
 
@@ -646,7 +645,7 @@ namespace FVF
     }
 #endif // __d3d12_h__
 
-    inline uint32_t ComputeFVF(const D3DVERTEXELEMENT9* pDecl)
+    inline uint32_t ComputeFVF(const D3DVERTEXELEMENT9* pDecl) noexcept
     {
         if (!pDecl)
             return 0;
@@ -839,7 +838,7 @@ namespace FVF
 
     // More secure version
     inline uint32_t ComputeFVF(
-        _In_reads_(maxDeclLength) const D3DVERTEXELEMENT9* pDecl, size_t maxDeclLength)
+        _In_reads_(maxDeclLength) const D3DVERTEXELEMENT9* pDecl, size_t maxDeclLength) noexcept
     {
         if (!pDecl)
             return 0;

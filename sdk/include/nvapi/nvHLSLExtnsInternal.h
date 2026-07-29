@@ -1,37 +1,28 @@
- /************************************************************************************************************************************\
-|*                                                                                                                                    *|
-|*     Copyright © 2012 NVIDIA Corporation.  All rights reserved.                                                                     *|
-|*                                                                                                                                    *|
-|*  NOTICE TO USER:                                                                                                                   *|
-|*                                                                                                                                    *|
-|*  This software is subject to NVIDIA ownership rights under U.S. and international Copyright laws.                                  *|
-|*                                                                                                                                    *|
-|*  This software and the information contained herein are PROPRIETARY and CONFIDENTIAL to NVIDIA                                     *|
-|*  and are being provided solely under the terms and conditions of an NVIDIA software license agreement.                             *|
-|*  Otherwise, you have no rights to use or access this software in any manner.                                                       *|
-|*                                                                                                                                    *|
-|*  If not covered by the applicable NVIDIA software license agreement:                                                               *|
-|*  NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOFTWARE FOR ANY PURPOSE.                                            *|
-|*  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY OF ANY KIND.                                                           *|
-|*  NVIDIA DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,                                                                     *|
-|*  INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.                       *|
-|*  IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,                               *|
-|*  OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT,                         *|
-|*  NEGLIGENCE OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOURCE CODE.            *|
-|*                                                                                                                                    *|
-|*  U.S. Government End Users.                                                                                                        *|
-|*  This software is a "commercial item" as that term is defined at 48 C.F.R. 2.101 (OCT 1995),                                       *|
-|*  consisting  of "commercial computer  software"  and "commercial computer software documentation"                                  *|
-|*  as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995) and is provided to the U.S. Government only as a commercial end item.     *|
-|*  Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through 227.7202-4 (JUNE 1995),                                          *|
-|*  all U.S. Government End Users acquire the software with only those rights set forth herein.                                       *|
-|*                                                                                                                                    *|
-|*  Any use of this software in individual and commercial software must include,                                                      *|
-|*  in the user documentation and internal comments to the code,                                                                      *|
-|*  the above Disclaimer (as applicable) and U.S. Government End Users Notice.                                                        *|
-|*                                                                                                                                    *|
- \************************************************************************************************************************************/
-
+/*********************************************************************************************************\
+|*                                                                                                        *|
+|* SPDX-FileCopyrightText: Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.  *|
+|* SPDX-License-Identifier: MIT                                                                           *|
+|*                                                                                                        *|
+|* Permission is hereby granted, free of charge, to any person obtaining a                                *|
+|* copy of this software and associated documentation files (the "Software"),                             *|
+|* to deal in the Software without restriction, including without limitation                              *|
+|* the rights to use, copy, modify, merge, publish, distribute, sublicense,                               *|
+|* and/or sell copies of the Software, and to permit persons to whom the                                  *|
+|* Software is furnished to do so, subject to the following conditions:                                   *|
+|*                                                                                                        *|
+|* The above copyright notice and this permission notice shall be included in                             *|
+|* all copies or substantial portions of the Software.                                                    *|
+|*                                                                                                        *|
+|* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR                             *|
+|* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                               *|
+|* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL                               *|
+|* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                             *|
+|* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING                                *|
+|* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER                                    *|
+|* DEALINGS IN THE SOFTWARE.                                                                              *|
+|*                                                                                                        *|
+|*                                                                                                        *|
+\*********************************************************************************************************/
 ////////////////////////// NVIDIA SHADER EXTENSIONS /////////////////
 // internal functions
 // Functions in this file are not expected to be called by apps directly
@@ -40,25 +31,28 @@
 
 struct NvShaderExtnStruct
 {
-    uint   opcode;      // opcode
-    uint   rid;         // resource ID
-    uint   sid;         // sampler ID
+    uint   opcode;                  // opcode
+    uint   rid;                     // resource ID
+    uint   sid;                     // sampler ID
 
-    uint4  dst1u;       // destination operand 1 (for instructions that need extra destination operands)
-    uint4  padding0[3]; // currently unused
+    uint4  dst1u;                   // destination operand 1 (for instructions that need extra destination operands)
+    uint4  src3u;                   // source operand 3
+    uint4  src4u;                   // source operand 4
+    uint4  src5u;                   // source operand 5
 
-    uint4  src0u;       // uint source operand  0
-    uint4  src1u;       // uint source operand  0
-    uint4  src2u;       // uint source operand  0
-    uint4  dst0u;       // uint destination operand
+    uint4  src0u;                   // uint source operand  0
+    uint4  src1u;                   // uint source operand  0
+    uint4  src2u;                   // uint source operand  0
+    uint4  dst0u;                   // uint destination operand
 
-    uint   markUavRef;  // the next store to UAV is fake and is used only to identify the uav slot
-    float  padding1[28];// struct size: 256 bytes
+    uint   markUavRef;              // the next store to UAV is fake and is used only to identify the uav slot
+    uint   numOutputsForIncCounter; // Used for output to IncrementCounter
+    float  padding1[27];            // struct size: 256 bytes
 };
 
 // RW structured buffer for Nvidia shader extensions
 
-// Application needs to define NV_SHADER_EXTN_SLOT as a unused slot, which should be 
+// Application needs to define NV_SHADER_EXTN_SLOT as a unused slot, which should be
 // set using NvAPI_D3D11_SetNvShaderExtnSlot() call before creating the first shader that
 // uses nvidia shader extensions. E.g before including this file in shader define it as:
 // #define NV_SHADER_EXTN_SLOT u7
@@ -316,7 +310,7 @@ uint __NvAtomicOpFP16x2(RWByteAddressBuffer uav, uint byteAddress, uint fp16x2Va
     g_NvidiaExt[index].src2u.x = atomicOpType;
     g_NvidiaExt[index].opcode  = NV_EXTN_OP_FP16_ATOMIC;
 
-    return g_NvidiaExt[index].dst0u.x;    
+    return g_NvidiaExt[index].dst0u.x;
 }
 
 //----------------------------------------------------------------------------//
@@ -325,7 +319,7 @@ uint __NvAtomicOpFP16x2(RWByteAddressBuffer uav, uint byteAddress, uint fp16x2Va
 // the uint paramater 'fp16x2Val' is treated as two fp16 values
 // the passed sub-opcode 'op' should be an immediate constant
 // the returned value are the two fp16 values (.x and .y components) packed into a single uint
-// Warning: Behaviour of these set of functions is undefined if the UAV is not 
+// Warning: Behaviour of these set of functions is undefined if the UAV is not
 // of R16G16_FLOAT format (might result in app crash or TDR)
 
 uint __NvAtomicOpFP16x2(RWTexture1D<float2> uav, uint address, uint fp16x2Val, uint atomicOpType)
@@ -337,7 +331,7 @@ uint __NvAtomicOpFP16x2(RWTexture1D<float2> uav, uint address, uint fp16x2Val, u
     g_NvidiaExt[index].src2u.x    = atomicOpType;
     g_NvidiaExt[index].opcode     = NV_EXTN_OP_FP16_ATOMIC;
 
-    return g_NvidiaExt[index].dst0u.x;    
+    return g_NvidiaExt[index].dst0u.x;
 }
 
 uint __NvAtomicOpFP16x2(RWTexture2D<float2> uav, uint2 address, uint fp16x2Val, uint atomicOpType)
@@ -349,7 +343,7 @@ uint __NvAtomicOpFP16x2(RWTexture2D<float2> uav, uint2 address, uint fp16x2Val, 
     g_NvidiaExt[index].src2u.x    = atomicOpType;
     g_NvidiaExt[index].opcode     = NV_EXTN_OP_FP16_ATOMIC;
 
-    return g_NvidiaExt[index].dst0u.x;    
+    return g_NvidiaExt[index].dst0u.x;
 }
 
 uint __NvAtomicOpFP16x2(RWTexture3D<float2> uav, uint3 address, uint fp16x2Val, uint atomicOpType)
@@ -361,17 +355,17 @@ uint __NvAtomicOpFP16x2(RWTexture3D<float2> uav, uint3 address, uint fp16x2Val, 
     g_NvidiaExt[index].src2u.x    = atomicOpType;
     g_NvidiaExt[index].opcode     = NV_EXTN_OP_FP16_ATOMIC;
 
-    return g_NvidiaExt[index].dst0u.x;    
+    return g_NvidiaExt[index].dst0u.x;
 }
 
 //----------------------------------------------------------------------------//
 
 // performs Atomic operation on a R16G16B16A16_FLOAT UAV at the given address
-// the uint2 paramater 'fp16x2Val' is treated as four fp16 values 
+// the uint2 paramater 'fp16x2Val' is treated as four fp16 values
 // i.e, fp16x2Val.x = uav.xy and fp16x2Val.y = uav.yz
 // the passed sub-opcode 'op' should be an immediate constant
 // the returned value are the four fp16 values (.xyzw components) packed into uint2
-// Warning: Behaviour of these set of functions is undefined if the UAV is not 
+// Warning: Behaviour of these set of functions is undefined if the UAV is not
 // of R16G16B16A16_FLOAT format (might result in app crash or TDR)
 
 uint2 __NvAtomicOpFP16x2(RWTexture1D<float4> uav, uint address, uint2 fp16x2Val, uint atomicOpType)
@@ -635,3 +629,327 @@ uint2 __NvAtomicOpUINT64(RWTexture3D<uint2> uav, uint3 address, uint2 value, uin
 
     return g_NvidiaExt[index].dst0u.xy;
 }
+
+
+uint4 __NvFootprint(uint texSpace, uint texIndex, uint smpSpace, uint smpIndex, uint texType, float3 location, uint footprintmode, uint gran, int3 offset = int3(0, 0, 0))
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].src0u.x = texIndex;
+    g_NvidiaExt[index].src0u.y  = smpIndex;
+    g_NvidiaExt[index].src1u.xyz = asuint(location);
+    g_NvidiaExt[index].src1u.w = gran;
+    g_NvidiaExt[index].src3u.x = texSpace;
+    g_NvidiaExt[index].src3u.y = smpSpace;
+    g_NvidiaExt[index].src3u.z = texType;
+    g_NvidiaExt[index].src3u.w = footprintmode;
+    g_NvidiaExt[index].src4u.xyz = asuint(offset);
+
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_FOOTPRINT;
+    g_NvidiaExt[index].numOutputsForIncCounter = 4;
+
+    // result is returned as the return value of IncrementCounter on fake UAV slot
+    uint4 op;
+    op.x = g_NvidiaExt.IncrementCounter();
+    op.y = g_NvidiaExt.IncrementCounter();
+    op.z = g_NvidiaExt.IncrementCounter();
+    op.w = g_NvidiaExt.IncrementCounter();
+    return op;
+}
+
+uint4 __NvFootprintBias(uint texSpace, uint texIndex, uint smpSpace, uint smpIndex, uint texType, float3 location, uint footprintmode, uint gran, float bias, int3 offset = int3(0, 0, 0))
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].src0u.x = texIndex;
+    g_NvidiaExt[index].src0u.y  = smpIndex;
+    g_NvidiaExt[index].src1u.xyz = asuint(location);
+    g_NvidiaExt[index].src1u.w = gran;
+    g_NvidiaExt[index].src2u.x = asuint(bias);
+    g_NvidiaExt[index].src3u.x = texSpace;
+    g_NvidiaExt[index].src3u.y = smpSpace;
+    g_NvidiaExt[index].src3u.z = texType;
+    g_NvidiaExt[index].src3u.w = footprintmode;
+    g_NvidiaExt[index].src4u.xyz = asuint(offset);
+
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_FOOTPRINT_BIAS;
+    g_NvidiaExt[index].numOutputsForIncCounter = 4;
+
+    // result is returned as the return value of IncrementCounter on fake UAV slot
+    uint4 op;
+    op.x = g_NvidiaExt.IncrementCounter();
+    op.y = g_NvidiaExt.IncrementCounter();
+    op.z = g_NvidiaExt.IncrementCounter();
+    op.w = g_NvidiaExt.IncrementCounter();
+    return op;
+}
+
+uint4 __NvFootprintLevel(uint texSpace, uint texIndex, uint smpSpace, uint smpIndex, uint texType, float3 location, uint footprintmode, uint gran, float lodLevel, int3 offset = int3(0, 0, 0))
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].src0u.x = texIndex;
+    g_NvidiaExt[index].src0u.y  = smpIndex;
+    g_NvidiaExt[index].src1u.xyz = asuint(location);
+    g_NvidiaExt[index].src1u.w = gran;
+    g_NvidiaExt[index].src2u.x = asuint(lodLevel);
+    g_NvidiaExt[index].src3u.x = texSpace;
+    g_NvidiaExt[index].src3u.y = smpSpace;
+    g_NvidiaExt[index].src3u.z = texType;
+    g_NvidiaExt[index].src3u.w = footprintmode;
+    g_NvidiaExt[index].src4u.xyz = asuint(offset);
+
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_FOOTPRINT_LEVEL;
+    g_NvidiaExt[index].numOutputsForIncCounter = 4;
+
+    // result is returned as the return value of IncrementCounter on fake UAV slot
+    uint4 op;
+    op.x = g_NvidiaExt.IncrementCounter();
+    op.y = g_NvidiaExt.IncrementCounter();
+    op.z = g_NvidiaExt.IncrementCounter();
+    op.w = g_NvidiaExt.IncrementCounter();
+    return op;
+}
+
+uint4 __NvFootprintGrad(uint texSpace, uint texIndex, uint smpSpace, uint smpIndex, uint texType, float3 location, uint footprintmode, uint gran, float3 ddx, float3 ddy, int3 offset = int3(0, 0, 0))
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].src0u.x = texIndex;
+    g_NvidiaExt[index].src0u.y  = smpIndex;
+    g_NvidiaExt[index].src1u.xyz = asuint(location);
+    g_NvidiaExt[index].src1u.w = gran;
+    g_NvidiaExt[index].src2u.xyz = asuint(ddx);
+    g_NvidiaExt[index].src5u.xyz = asuint(ddy);
+    g_NvidiaExt[index].src3u.x = texSpace;
+    g_NvidiaExt[index].src3u.y = smpSpace;
+    g_NvidiaExt[index].src3u.z = texType;
+    g_NvidiaExt[index].src3u.w = footprintmode;
+    g_NvidiaExt[index].src4u.xyz = asuint(offset);
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_FOOTPRINT_GRAD;
+    g_NvidiaExt[index].numOutputsForIncCounter = 4;
+
+    // result is returned as the return value of IncrementCounter on fake UAV slot
+    uint4 op;
+    op.x = g_NvidiaExt.IncrementCounter();
+    op.y = g_NvidiaExt.IncrementCounter();
+    op.z = g_NvidiaExt.IncrementCounter();
+    op.w = g_NvidiaExt.IncrementCounter();
+    return op;
+}
+
+// returns value of special register - specify subopcode from any of NV_SPECIALOP_* specified in nvShaderExtnEnums.h - other opcodes undefined behavior
+uint __NvGetSpecial(uint subOpCode)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_GET_SPECIAL;
+    g_NvidiaExt[index].src0u.x = subOpCode;
+    return g_NvidiaExt.IncrementCounter();
+}
+
+// predicate is returned in laneValid indicating if srcLane is in range and val from specified lane is returned.
+int __NvShflGeneric(int val, uint srcLane, uint maskClampVal, out uint laneValid)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].src0u.x  =  val;                             // variable to be shuffled
+    g_NvidiaExt[index].src0u.y  =  srcLane;                         // source lane
+    g_NvidiaExt[index].src0u.z  =  maskClampVal;
+    g_NvidiaExt[index].opcode   =  NV_EXTN_OP_SHFL_GENERIC;
+    g_NvidiaExt[index].numOutputsForIncCounter = 2;
+
+    laneValid = asuint(g_NvidiaExt.IncrementCounter());
+    return g_NvidiaExt.IncrementCounter();
+}
+
+//----------------------------------------------------------------------------//
+
+// DXR RayQuery functions
+
+#if __SHADER_TARGET_MAJOR > 6 || (__SHADER_TARGET_MAJOR == 6 && __SHADER_TARGET_MINOR >= 5)
+
+uint __NvRtGetCandidateClusterID(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_GET_CANDIDATE_CLUSTER_ID;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    return g_NvidiaExt.IncrementCounter();
+}
+
+uint __NvRtGetCommittedClusterID(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_GET_COMMITTED_CLUSTER_ID;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    return g_NvidiaExt.IncrementCounter();
+}
+
+float3x3 __NvRtCandidateTriangleObjectPositions(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_TRIANGLE_OBJECT_POSITIONS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float3x3 ret;
+    ret[0][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float3x3 __NvRtCommittedTriangleObjectPositions(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_TRIANGLE_OBJECT_POSITIONS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float3x3 ret;
+    ret[0][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+bool __NvRtCandidateIsNonOpaqueSphere(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_IS_NONOPAQUE_SPHERE;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    uint ret = g_NvidiaExt.IncrementCounter();
+    return ret != 0;
+}
+
+bool __NvRtCandidateIsNonOpaqueLss(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_IS_NONOPAQUE_LSS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    uint ret = g_NvidiaExt.IncrementCounter();
+    return ret != 0;
+}
+
+float __NvRtCandidateLssHitParameter(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_LSS_HIT_PARAMETER;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    float ret = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float4 __NvRtCandidateSphereObjectPositionAndRadius(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_SPHERE_OBJECT_POSITION_AND_RADIUS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float4 ret;
+    ret[0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[3] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float2x4 __NvRtCandidateLssObjectPositionsAndRadii(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_LSS_OBJECT_POSITIONS_AND_RADII;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float2x4 ret;
+    ret[0][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][3] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][3] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float __NvRtCandidateBuiltinPrimitiveRayT(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_CANDIDATE_BUILTIN_PRIMITIVE_RAY_T;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    float ret = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+bool __NvRtCommittedIsSphere(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_IS_SPHERE;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    uint ret = g_NvidiaExt.IncrementCounter();
+    return ret != 0;
+}
+
+bool __NvRtCommittedIsLss(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_IS_LSS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    uint ret = g_NvidiaExt.IncrementCounter();
+    return ret != 0;
+}
+
+float __NvRtCommittedLssHitParameter(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_LSS_HIT_PARAMETER;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    float ret = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float4 __NvRtCommittedSphereObjectPositionAndRadius(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_SPHERE_OBJECT_POSITION_AND_RADIUS;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float4 ret;
+    ret[0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[3] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+float2x4 __NvRtCommittedLssObjectPositionsAndRadii(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMITTED_LSS_OBJECT_POSITIONS_AND_RADII;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+
+    float2x4 ret;
+    ret[0][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[0][3] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][0] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][1] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][2] = asfloat(g_NvidiaExt.IncrementCounter());
+    ret[1][3] = asfloat(g_NvidiaExt.IncrementCounter());
+    return ret;
+}
+
+void __NvRtCommitNonOpaqueBuiltinPrimitiveHit(uint rqFlags)
+{
+    uint index = g_NvidiaExt.IncrementCounter();
+    g_NvidiaExt[index].opcode = NV_EXTN_OP_RT_COMMIT_NONOPAQUE_BUILTIN_PRIMITIVE_HIT;
+    g_NvidiaExt[index].src0u.x = rqFlags;
+    uint handle = g_NvidiaExt.IncrementCounter();
+}
+
+#endif

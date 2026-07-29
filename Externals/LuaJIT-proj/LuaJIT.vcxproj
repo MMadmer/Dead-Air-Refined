@@ -31,7 +31,7 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">LUAJIT_DISABLE_GC64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions>LUA_BUILD_AS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <TreatWarningAsError>false</TreatWarningAsError>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

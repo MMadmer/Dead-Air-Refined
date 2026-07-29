@@ -25,11 +25,10 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <TreatWarningAsError>false</TreatWarningAsError>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="GameSpy\src\GameSpy\common\gsAssert.c" />
     <ClCompile Include="GameSpy\src\GameSpy\common\gsAvailable.c" />
     <ClCompile Include="GameSpy\src\GameSpy\common\gsCore.c" />
     <ClCompile Include="GameSpy\src\GameSpy\common\gsCrypt.c" />

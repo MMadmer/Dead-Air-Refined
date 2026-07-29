@@ -30,8 +30,7 @@
   <ItemGroup>
     <CopyFileToFolders Include="..\..\..\sdk\binaries\$(PlatformShortName)\BugTrap.dll" />
     <CopyFileToFolders Condition="'$(Platform)'=='Win32'" Include="..\..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3.dll" />
-    <CopyFileToFolders Condition="'$(Platform)'=='x64'" Include="..\..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3-x64.dll" />
-    <CopyFileToFolders Include="..\..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3-x64.dll" />
+    <CopyFileToFolders Condition="'$(Platform)'=='x64'" Include="..\..\..\sdk\binaries\$(PlatformShortName)\libcrypto-4-x64.dll" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
