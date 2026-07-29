@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #pragma warning(push)
 #pragma warning(disable : 4995)
 #if defined(XR_PLATFORM_WINDOWS)
@@ -107,6 +109,7 @@ public:
 #else
 #   error Select or add implementation for your platform
 #endif
+        u8* mappedBase = nullptr;
         CInifile* header = nullptr;
 
         archive() = default;
@@ -186,7 +189,7 @@ public:
     };
     Flags32 m_Flags;
     u32 dwAllocGranularity;
-    u32 dwOpenCounter;
+    std::atomic<u32> dwOpenCounter;
 
 private:
     void check_cached_files(pstr fname, const size_t& fname_size, const file& desc, pcstr& source_name);
@@ -222,6 +225,7 @@ public:
     CStreamReader* rs_open(pcstr initial, pcstr N);
     IReader* r_open(pcstr initial, pcstr N);
     IReader* r_open(pcstr N) { return r_open(nullptr, N); }
+    bool archived_file_crc(pcstr path, pcstr name, u32& crc);
     void r_close(IReader*& S);
     void r_close(CStreamReader*& fs);
 

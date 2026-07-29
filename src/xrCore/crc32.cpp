@@ -41,42 +41,59 @@ constexpr std::array<u32, 256> generate_crc32_lookup_table() noexcept
     return crc32_table;
 }
 
-// Lookup table array
-static constexpr auto crc32_table = generate_crc32_lookup_table();
+constexpr std::array<std::array<u32, 256>, 8> generate_crc32_slicing_table() noexcept
+{
+    std::array<std::array<u32, 256>, 8> table{};
+    table[0] = generate_crc32_lookup_table();
+
+    for (size_t slice = 1; slice < table.size(); ++slice)
+    {
+        for (size_t value = 0; value < table[slice].size(); ++value)
+        {
+            const u32 previous = table[slice - 1][value];
+            table[slice][value] = (previous >> 8) ^ table[0][previous & 0xff];
+        }
+    }
+
+    return table;
+}
+
+static constexpr auto crc32_table = generate_crc32_slicing_table();
+
+static u32 update_crc32(const u8* buffer, u32 len, u32 crc)
+{
+    while (len >= 8)
+    {
+        u32 first;
+        std::memcpy(&first, buffer, sizeof(first));
+        first ^= crc;
+
+        crc = crc32_table[7][first & 0xff] ^
+            crc32_table[6][(first >> 8) & 0xff] ^
+            crc32_table[5][(first >> 16) & 0xff] ^
+            crc32_table[4][first >> 24] ^
+            crc32_table[3][buffer[4]] ^
+            crc32_table[2][buffer[5]] ^
+            crc32_table[1][buffer[6]] ^
+            crc32_table[0][buffer[7]];
+        buffer += 8;
+        len -= 8;
+    }
+
+    while (len--)
+        crc = (crc >> 8) ^ crc32_table[0][(crc & 0xff) ^ *buffer++];
+
+    return crc;
+}
 
 u32 crc32(const void* P, u32 len)
 {
-    // Pass a text string to this function and it will return the CRC.
-
-    // Once the lookup table has been filled in by the two functions above,
-    // this function creates all CRCs using only the lookup table.
-
-    // Be sure to use unsigned variables,
-    // because negative values introduce high bits
-    // where zero bits are required.
-
-    // Start out with all bits set high.
-    u32 ulCRC = 0xffffffff;
-    u8* buffer = (u8*)P;
-
-    // Perform the algorithm on each character
-    // in the string, using the lookup table values.
-    while (len--)
-        ulCRC = (ulCRC >> 8) ^ crc32_table[(ulCRC & 0xFF) ^ *buffer++];
-
-    // Exclusive OR the result with the beginning value.
-    return ulCRC ^ 0xffffffff;
+    return update_crc32(static_cast<const u8*>(P), len, 0xffffffff) ^ 0xffffffff;
 }
 
 u32 crc32(const void* P, u32 len, u32 starting_crc)
 {
-    u32 ulCRC = 0xffffffff ^ starting_crc;
-    u8* buffer = (u8*)P;
-
-    while (len--)
-        ulCRC = (ulCRC >> 8) ^ crc32_table[(ulCRC & 0xFF) ^ *buffer++];
-
-    return ulCRC ^ 0xffffffff;
+    return update_crc32(static_cast<const u8*>(P), len, 0xffffffff ^ starting_crc) ^ 0xffffffff;
 }
 
 u32 path_crc32(const char* path, u32 len)
@@ -89,7 +106,7 @@ u32 path_crc32(const char* path, u32 len)
         const u8 c = *buffer;
         if (c != '/' && c != _DELIMITER)
         {
-            ulCRC = (ulCRC >> 8) ^ crc32_table[(ulCRC & 0xFF) ^ *buffer];
+            ulCRC = (ulCRC >> 8) ^ crc32_table[0][(ulCRC & 0xFF) ^ *buffer];
         }
 
         ++buffer;

@@ -20,6 +20,8 @@
 #include "xrCore/Threading/Lock.hpp"
 #include "Crypto/trivial_encryptor.h"
 
+#include <mutex>
+
 constexpr size_t VFS_STANDARD_FILE = std::numeric_limits<size_t>::max();
 
 const u32 BIG_FILE_READER_WINDOW_SIZE = 1024 * 1024;
@@ -77,6 +79,7 @@ struct eq_fname_check
 };
 
 XRCORE_API xr_vector<_open_file> g_open_files;
+std::mutex g_open_files_mutex;
 
 void _check_open_file(const shared_str& _fname)
 {
@@ -104,8 +107,7 @@ void setup_reader(IReader* _r, _open_file& _of) { _of._reader = _r; }
 template <typename T>
 void _register_open_file(T* _r, pcstr _fname)
 {
-    Lock _lock;
-    _lock.Enter();
+    std::lock_guard lock(g_open_files_mutex);
 
     shared_str f = _fname;
     _check_open_file(f);
@@ -114,20 +116,17 @@ void _register_open_file(T* _r, pcstr _fname)
     setup_reader(_r, _of);
     _of._used += 1;
 
-    _lock.Leave();
 }
 
 template <typename T>
 void _unregister_open_file(T* _r)
 {
-    Lock _lock;
-    _lock.Enter();
+    std::lock_guard lock(g_open_files_mutex);
 
     auto it = std::find_if(g_open_files.begin(), g_open_files.end(), eq_pointer<T>(_r));
     VERIFY(it != g_open_files.end());
     _open_file& _of = *it;
     _of._reader = nullptr;
-    _lock.Leave();
 }
 
 XRCORE_API void _dump_open_files(int mode)
@@ -502,10 +501,32 @@ void CLocatorAPI::archive::open()
 #endif
     size = file_info.st_size;
     R_ASSERT(size > 0);
+
+#if defined(XR_PLATFORM_WINDOWS)
+    mappedBase = static_cast<u8*>(MapViewOfFile(hSrcMap, FILE_MAP_READ, 0, 0, 0));
+#elif defined(XR_PLATFORM_POSIX)
+    mappedBase = static_cast<u8*>(::mmap(nullptr, size, PROT_READ, MAP_SHARED, hSrcFile, 0));
+    if (mappedBase == MAP_FAILED)
+        mappedBase = nullptr;
+#else
+#   error Select or add implementation for your platform
+#endif
+    R_ASSERT3(mappedBase, "Cannot map archive", path.c_str());
 }
 
 void CLocatorAPI::archive::close()
 {
+#if defined(XR_PLATFORM_WINDOWS)
+    if (mappedBase)
+        UnmapViewOfFile(mappedBase);
+#elif defined(XR_PLATFORM_POSIX)
+    if (mappedBase)
+        ::munmap(mappedBase, size);
+#else
+#   error Select or add implementation for your platform
+#endif
+    mappedBase = nullptr;
+
 #if defined(XR_PLATFORM_WINDOWS)
     CloseHandle(hSrcMap);
     hSrcMap = nullptr;
@@ -1393,6 +1414,27 @@ void CLocatorAPI::file_from_archive(IReader*& R, pcstr fname, const file& desc)
 {
     // Archived one
     archive& A = m_archives[desc.vfs];
+    if (A.mappedBase)
+    {
+        const u8* source = A.mappedBase + desc.ptr;
+        if (desc.size_real == desc.size_compressed)
+        {
+            R = xr_new<CPackReader>(nullptr, const_cast<u8*>(source), desc.size_real);
+            return;
+        }
+
+        u8* dest = xr_alloc<u8>(desc.size_real);
+        const size_t decompressedSize = rtc_decompress(dest, desc.size_real, source, desc.size_compressed);
+        R_ASSERT3_CURE(decompressedSize == desc.size_real, "cannot decompress archived file", fname,
+        {
+            xr_free(dest);
+            R = nullptr;
+            return;
+        });
+        R = xr_new<CTempReader>(dest, desc.size_real, 0);
+        return;
+    }
+
     size_t start = desc.ptr / dwAllocGranularity * dwAllocGranularity;
     size_t end = (desc.ptr + desc.size_compressed) / dwAllocGranularity;
     if ((desc.ptr + desc.size_compressed) % dwAllocGranularity)
@@ -1618,6 +1660,21 @@ T* CLocatorAPI::r_open_impl(pcstr path, pcstr _fname)
 
 CStreamReader* CLocatorAPI::rs_open(pcstr path, pcstr _fname) { return r_open_impl<CStreamReader>(path, _fname); }
 IReader* CLocatorAPI::r_open(pcstr path, pcstr _fname) { return r_open_impl<IReader>(path, _fname); }
+
+bool CLocatorAPI::archived_file_crc(pcstr path, pcstr name, u32& crc)
+{
+    string_path resolvedName;
+    const file* description = nullptr;
+    if (!check_for_file(path, name, resolvedName, description) ||
+        description->vfs == VFS_STANDARD_FILE || !description->crc)
+    {
+        return false;
+    }
+
+    crc = description->crc;
+    return true;
+}
+
 void CLocatorAPI::r_close(IReader*& fs)
 {
     if (m_Flags.test(flDumpFileActivity))

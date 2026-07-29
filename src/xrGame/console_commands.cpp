@@ -104,7 +104,8 @@ extern float g_smart_cover_animation_speed_factor;
 
 extern BOOL g_ai_use_old_vision;
 float g_aim_predict_time = 0.40f;
-int g_keypress_on_start = 1;
+int g_auto_continue_on_load = 1;
+int g_keypress_on_start_legacy = 1;
 
 ENGINE_API extern float g_console_sensitive;
 
@@ -2649,7 +2650,8 @@ void CCC_RegisterCommands()
     CMD3(CCC_String, "slot_2", g_quick_use_slots[2], 32);
     CMD3(CCC_String, "slot_3", g_quick_use_slots[3], 32);
 
-    CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start, 0, 1);
+    CMD4(CCC_Integer, "auto_continue_on_load", &g_auto_continue_on_load, 0, 1);
+    CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start_legacy, 0, 1);
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);

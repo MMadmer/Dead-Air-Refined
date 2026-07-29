@@ -18,6 +18,9 @@
 #include "alife_spawn_registry.h"
 #include "alife_storage_manager.h"
 
+#include <future>
+#include <mutex>
+
 extern LPCSTR alife_section;
 
 namespace
@@ -27,6 +30,18 @@ constexpr u32 saveFooterVersion = 1;
 constexpr u32 saveProtectedSourceFlag = 0x80000000;
 constexpr size_t saveFooterSize = sizeof(u32) * 5 + sizeof(u64);
 constexpr size_t maxSaveSourceSize = 512ull * 1024 * 1024;
+
+struct PreparedSaveData
+{
+    xr_string name;
+    xr_vector<u8> source;
+    CSavedGameWrapper::SaveMetadata metadata;
+    bool valid{};
+};
+
+std::mutex preparedSaveMutex;
+std::future<PreparedSaveData> preparedSaveFuture;
+xr_string preparedSaveName;
 
 bool valid_saved_game_file(pcstr fileName)
 {
@@ -38,6 +53,82 @@ bool valid_saved_game_file(pcstr fileName)
     FS.r_close(stream);
     return valid;
 }
+}
+
+void CSavedGameWrapper::begin_async_load(LPCSTR saved_game_name)
+{
+    if (!saved_game_name || !saved_game_name[0])
+        return;
+
+    std::lock_guard lock(preparedSaveMutex);
+    if (preparedSaveFuture.valid())
+    {
+        if (preparedSaveName == saved_game_name)
+            return;
+        preparedSaveFuture.wait();
+        preparedSaveFuture = {};
+    }
+
+    preparedSaveName = saved_game_name;
+    const xr_string requestedName = saved_game_name;
+    preparedSaveFuture = std::async(std::launch::async, [requestedName]
+    {
+        PreparedSaveData result;
+        result.name = requestedName;
+
+        string_path fileName;
+        saved_game_full_name(requestedName.c_str(), fileName, SAVE_EXTENSION);
+        if (!FS.exist(fileName))
+            saved_game_full_name(requestedName.c_str(), fileName, SAVE_EXTENSION_LEGACY);
+
+        IReader* stream = FS.r_open(fileName);
+        if (!stream || stream->length() < 3 * sizeof(u32))
+        {
+            if (stream)
+                FS.r_close(stream);
+            return result;
+        }
+
+        const u32 marker = stream->r_u32();
+        const u32 version = stream->r_u32();
+        if (marker != u32(-1) || version < ALIFE_VERSION || !read_metadata(*stream, result.metadata))
+        {
+            FS.r_close(stream);
+            return result;
+        }
+
+        stream->seek(3 * sizeof(u32));
+        result.source.resize(result.metadata.sourceSize);
+        const size_t decodedSize = rtc_decompress(
+            result.source.data(), result.source.size(), stream->pointer(), result.metadata.compressedSize);
+        FS.r_close(stream);
+
+        result.valid = decodedSize == result.source.size();
+        if (!result.valid)
+            result.source.clear();
+        return result;
+    });
+}
+
+bool CSavedGameWrapper::consume_async_load(
+    LPCSTR saved_game_name, xr_vector<u8>& source_data, SaveMetadata& metadata)
+{
+    std::future<PreparedSaveData> pending;
+    {
+        std::lock_guard lock(preparedSaveMutex);
+        if (!preparedSaveFuture.valid() || preparedSaveName != saved_game_name)
+            return false;
+        pending = std::move(preparedSaveFuture);
+        preparedSaveName.clear();
+    }
+
+    PreparedSaveData prepared = pending.get();
+    if (!prepared.valid || prepared.name != saved_game_name)
+        return false;
+
+    source_data = std::move(prepared.source);
+    metadata = prepared.metadata;
+    return true;
 }
 
 pcstr CSavedGameWrapper::saved_game_full_name(pcstr saved_game_name, string_path& result, pcstr extension)

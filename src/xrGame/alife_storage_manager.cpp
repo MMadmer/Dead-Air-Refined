@@ -1083,7 +1083,11 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     }
 
     constexpr pcstr mismatch = "Saved game version mismatch or saved game is corrupted";
-    if (!CSavedGameWrapper::valid_saved_game(*stream))
+    xr_vector<u8> preparedSource;
+    CSavedGameWrapper::SaveMetadata metadata;
+    const bool prepared = CSavedGameWrapper::consume_async_load(save_name, preparedSource, metadata);
+
+    if (!prepared && !CSavedGameWrapper::valid_saved_game(*stream))
     {
         Msg("! %s [%s]", mismatch, file_name);
         FS.r_close(stream);
@@ -1100,37 +1104,45 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
         }
     }
 
-    CSavedGameWrapper::SaveMetadata metadata;
-    if (!CSavedGameWrapper::read_metadata(*stream, metadata))
+    if (!prepared && !CSavedGameWrapper::read_metadata(*stream, metadata))
     {
         FS.r_close(stream);
         xr_strcpy(m_save_name, saveBackup);
         return false;
     }
-
     string512 temp;
     strconcat(temp, StringTable().translate("st_loading_saved_game").c_str(),
         " \"", save_name, gameSaveExtension, "\"");
 
     g_pGamePersistent->LoadTitle(temp);
 
-    stream->advance(sizeof(u32));
     const u32 source_count = static_cast<u32>(metadata.sourceSize);
-    void* source_data = xr_malloc(source_count);
-    const size_t decodedSize = rtc_decompress(source_data, source_count, stream->pointer(), metadata.compressedSize);
-    FS.r_close(stream);
-    if (decodedSize != source_count)
+
+    void* source_data = nullptr;
+    if (prepared)
+        source_data = preparedSource.data();
+    else
     {
-        xr_free(source_data);
-        xr_strcpy(m_save_name, saveBackup);
-        return false;
+        stream->seek(3 * sizeof(u32));
+        source_data = xr_malloc(source_count);
+        const size_t decodedSize =
+            rtc_decompress(source_data, source_count, stream->pointer(), metadata.compressedSize);
+        if (decodedSize != source_count)
+        {
+            xr_free(source_data);
+            FS.r_close(stream);
+            xr_strcpy(m_save_name, saveBackup);
+            return false;
+        }
     }
+    FS.r_close(stream);
 
     unload();
     reload(m_section);
 
     load(source_data, source_count, file_name, metadata.saveId);
-    xr_free(source_data);
+    if (!prepared)
+        xr_free(source_data);
 
     groups().on_after_game_load();
 

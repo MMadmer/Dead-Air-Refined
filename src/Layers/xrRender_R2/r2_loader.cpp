@@ -51,6 +51,9 @@ void CRender::level_Load(IReader* fs)
         chunk->close();
     }
 
+    // Texture I/O and GPU creation can run while the main thread parses the rest of the level.
+    Resources->BeginDeferredUpload();
+
     // Components
     Wallmarks = xr_new<CWallmarksEngine>();
     Details = xr_new<CDetailManager>();
@@ -250,12 +253,10 @@ void CRender::LoadBuffers(CStreamReader* base_fs, bool alternative)
             // Create and fill
             //  TODO: DX11: Check fragmentation.
             //  Check if buffer is less then 2048 kb
-            vbuffers[i].Create(vCount * vSize);
-            u8* pData = static_cast<u8*>(vbuffers[i].Map());
-            fs->r(pData, vCount * vSize);
-            vbuffers[i].Unmap(true); // upload vertex data
-
-            //			fs->advance			(vCount*vSize);
+            const size_t dataSize = size_t(vCount) * vSize;
+            const void* data = fs->pointer_contiguous(dataSize);
+            vbuffers[i].CreateFromData(data, dataSize);
+            fs->advance(static_cast<int>(dataSize));
         }
         fs->close();
     }
@@ -278,12 +279,10 @@ void CRender::LoadBuffers(CStreamReader* base_fs, bool alternative)
             // Create and fill
             //  TODO: DX11: Check fragmentation.
             //  Check if buffer is less then 2048 kb
-            ibuffers[i].Create(iCount * 2);
-            u8* pData = static_cast<u8*>(ibuffers[i].Map());
-            fs->r(pData, iCount * 2);
-            ibuffers[i].Unmap(true); // upload index data
-
-            //			fs().advance		(iCount*2);
+            const size_t dataSize = size_t(iCount) * 2;
+            const void* data = fs->pointer_contiguous(dataSize);
+            ibuffers[i].CreateFromData(data, dataSize);
+            fs->advance(static_cast<int>(dataSize));
         }
         fs->close();
     }

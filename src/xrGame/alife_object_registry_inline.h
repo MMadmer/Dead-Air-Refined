@@ -10,15 +10,14 @@
 
 IC void CALifeObjectRegistry::add(CSE_ALifeDynamicObject* object)
 {
-    if (objects().find(object->ID) != objects().end())
+    const auto [iterator, inserted] = m_objects.emplace(object->ID, object);
+    if (!inserted)
     {
-        THROW2((*(objects().find(object->ID))).second == object,
+        THROW2(iterator->second == object,
             "The specified object is already presented in the Object Registry!");
-        THROW2((*(objects().find(object->ID))).second != object,
+        THROW2(iterator->second != object,
             "Object with the specified ID is already presented in the Object Registry!");
     }
-
-    m_objects.insert(std::make_pair(object->ID, object));
 }
 
 IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert)

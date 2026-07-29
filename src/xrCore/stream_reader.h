@@ -58,6 +58,7 @@ public:
 
 public:
     void advance(const int& offset);
+    const void* pointer_contiguous(size_t size);
     void r(void* buffer, size_t buffer_size) override;
     CStreamReader* open_chunk(const size_t& chunk_id);
     u32 find_chunk(u32 ID, bool* bCompressed = nullptr);

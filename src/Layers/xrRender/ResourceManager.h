@@ -22,6 +22,24 @@ private:
     {
         bool operator()(LPCSTR x, LPCSTR y) const { return xr_strcmp(x, y) < 0; }
     };
+    struct str_hash
+    {
+        size_t operator()(LPCSTR value) const noexcept
+        {
+            size_t hash = sizeof(size_t) == 8 ? size_t{14695981039346656037ull} : size_t{2166136261u};
+            const size_t prime = sizeof(size_t) == 8 ? size_t{1099511628211ull} : size_t{16777619u};
+            while (*value)
+            {
+                hash ^= static_cast<u8>(*value++);
+                hash *= prime;
+            }
+            return hash;
+        }
+    };
+    struct str_equal
+    {
+        bool operator()(LPCSTR left, LPCSTR right) const noexcept { return xr_strcmp(left, right) == 0; }
+    };
     struct texture_detail
     {
         const char* T;
@@ -30,7 +48,7 @@ private:
 
 public:
     using map_Blender = xr_map<const char*, IBlender*, str_pred>;
-    using map_Texture = xr_map<const char*, CTexture*, str_pred>;
+    using map_Texture = xr_unordered_map<const char*, CTexture*, str_hash, str_equal>;
     using map_Matrix = xr_map<const char*, CMatrix*, str_pred>;
     using map_Constant = xr_map<const char*, CConstant*, str_pred>;
     using map_RT = xr_map<const char*, CRT*, str_pred>;
@@ -88,7 +106,7 @@ private:
     Lock v_shaders_lock;
 
     xr_vector<ref_texture> m_necessary;
-    xr_vector<shared_str> m_level_persistent_textures;
+    xr_set<shared_str> m_level_persistent_textures;
     // misc
 public:
     CTextureDescrMngr m_textures_description;
@@ -206,6 +224,7 @@ public:
 
     CResourceManager() : bDeferredLoad(TRUE)
     {
+        m_textures.reserve(2048);
 #if RENDER == R_R1 || RENDER == R_R2
         m_shader_fallback_allowed = !!strstr(Core.Params, "-lack_of_shaders");
 #else // For another renderers we should always allow fallback
@@ -239,6 +258,7 @@ public:
 
     void DeleteGeom(const SGeometry* VS);
     void DeferredLoad(BOOL E) { bDeferredLoad = E; }
+    void BeginDeferredUpload();
     void DeferredUpload();
     void DeferredUnload();
     void BeginLevelTextureTracking();

@@ -52,6 +52,7 @@ public:
     ~VertexStagingBuffer();
 
     void Create(size_t size, bool allowReadBack = false);
+    void CreateFromData(const void* data, size_t size);
     bool IsValid() const;
     void* Map(size_t offset = 0, size_t size = 0, bool read = false);
     void Unmap(bool doFlush = false);
@@ -105,6 +106,7 @@ public:
     ~IndexStagingBuffer();
 
     void Create(size_t size, bool allowReadBack = false, bool managed = true);
+    void CreateFromData(const void* data, size_t size);
     bool IsValid() const;
     void* Map(size_t offset = 0, size_t size = 0, bool read = false);
     void Unmap(bool doFlush = false);

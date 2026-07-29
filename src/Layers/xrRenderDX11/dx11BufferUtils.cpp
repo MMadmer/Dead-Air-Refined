@@ -180,6 +180,17 @@ void VertexStagingBuffer::Create(size_t size, bool allowReadBack /*= false*/)
     AddRef();
 }
 
+void VertexStagingBuffer::CreateFromData(const void* data, size_t size)
+{
+    VERIFY(data && size && size <= std::numeric_limits<u32>::max());
+    m_Size = size;
+    m_AllowReadBack = false;
+    R_CHK(CreateVertexBuffer(&m_DeviceBuffer, data, static_cast<u32>(size), false));
+    VERIFY(m_DeviceBuffer);
+    AddRef();
+    HW.stats_manager.increment_stats_vb(m_DeviceBuffer);
+}
+
 bool VertexStagingBuffer::IsValid() const
 {
     return !!m_DeviceBuffer;
@@ -270,6 +281,17 @@ void IndexStagingBuffer::Create(size_t size, bool allowReadBack /*= false*/, boo
 
     m_HostBuffer = xr_alloc<u8>(size);
     AddRef();
+}
+
+void IndexStagingBuffer::CreateFromData(const void* data, size_t size)
+{
+    VERIFY(data && size && size <= std::numeric_limits<u32>::max());
+    m_Size = size;
+    m_AllowReadBack = false;
+    R_CHK(CreateIndexBuffer(&m_DeviceBuffer, data, static_cast<u32>(size), false));
+    VERIFY(m_DeviceBuffer);
+    AddRef();
+    HW.stats_manager.increment_stats_ib(m_DeviceBuffer);
 }
 
 bool IndexStagingBuffer::IsValid() const

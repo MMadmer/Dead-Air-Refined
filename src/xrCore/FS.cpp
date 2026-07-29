@@ -489,6 +489,8 @@ CTempReader::~CTempReader() { xr_free(data); };
 // pack stream
 CPackReader::~CPackReader()
 {
+    if (!base_address)
+        return;
 #ifdef FS_DEBUG
     unregister_file_mapping(base_address, Size);
 #endif // DEBUG

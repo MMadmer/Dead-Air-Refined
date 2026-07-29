@@ -11,6 +11,7 @@
 #include "MainMenu.h"
 #include "UIGameCustom.h"
 #include "ui/UICDkey.h"
+#include "saved_game_wrapper.h"
 #include "xrNetServer/NET_Messages.h"
 
 int g_cl_save_demo = 0;
@@ -113,6 +114,8 @@ bool CLevel::net_start1()
         if (!xr_strcmp(p.m_game_type, "single"))
         {
             Server = xr_new<xrServer>();
+            if (!xr_strcmp(p.m_new_or_load, "load"))
+                CSavedGameWrapper::begin_async_load(p.m_game_or_spawn);
         }
         else
         {

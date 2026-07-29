@@ -94,6 +94,149 @@ IC void Reduce(size_t& w, size_t& h, size_t& l, int skip)
         h = 1;
 }
 
+namespace
+{
+constexpr u32 ddsMagic = 0x20534444;
+constexpr u32 ddsHeaderSize = 124;
+constexpr u32 ddsPixelFormatSize = 32;
+constexpr u32 ddsFourCcDx10 = 0x30315844;
+
+HRESULT create_texture_from_block_compressed_dds(
+    const u8* data, size_t size, int requestedLod, ID3DBaseTexture** result, size_t& loadedMipCount)
+{
+    if (!data || !result || size < 128)
+        return E_INVALIDARG;
+
+    u32 magic = 0;
+    u32 headerSize = 0;
+    u32 pixelFormatSize = 0;
+    u32 fourCc = 0;
+    memcpy(&magic, data, sizeof(magic));
+    memcpy(&headerSize, data + 4, sizeof(headerSize));
+    memcpy(&pixelFormatSize, data + 76, sizeof(pixelFormatSize));
+    memcpy(&fourCc, data + 84, sizeof(fourCc));
+    if (magic != ddsMagic || headerSize != ddsHeaderSize || pixelFormatSize != ddsPixelFormatSize)
+        return E_FAIL;
+
+    DirectX::TexMetadata metadata;
+    const auto metadataResult =
+        DirectX::GetMetadataFromDDSMemory(data, size, DirectX::DDS_FLAGS_PERMISSIVE, metadata);
+    if (FAILED(metadataResult) || !DirectX::IsCompressed(metadata.format))
+        return E_FAIL;
+
+    size_t dataOffset = 128;
+    if (fourCc == ddsFourCcDx10)
+        dataOffset += 20;
+    if (dataOffset >= size || !metadata.mipLevels || !metadata.arraySize)
+        return E_FAIL;
+
+    const size_t skippedMips = metadata.IsCubemap() ?
+        0 :
+        std::min<size_t>(std::max(requestedLod, 0), metadata.mipLevels - 1);
+    const size_t outputMipCount = metadata.mipLevels - skippedMips;
+    const size_t itemCount = metadata.dimension == DirectX::TEX_DIMENSION_TEXTURE3D ? 1 : metadata.arraySize;
+
+    xr_vector<D3D11_SUBRESOURCE_DATA> subresources;
+    subresources.reserve(outputMipCount * itemCount);
+    const u8* source = data + dataOffset;
+    const u8* const sourceEnd = data + size;
+
+    for (size_t item = 0; item < itemCount; ++item)
+    {
+        size_t width = metadata.width;
+        size_t height = metadata.height;
+        size_t depth = metadata.depth;
+        for (size_t mip = 0; mip < metadata.mipLevels; ++mip)
+        {
+            size_t rowPitch = 0;
+            size_t slicePitch = 0;
+            const auto pitchResult =
+                DirectX::ComputePitch(metadata.format, width, height, rowPitch, slicePitch);
+            if (FAILED(pitchResult) || slicePitch > std::numeric_limits<UINT>::max())
+                return E_FAIL;
+
+            const size_t subresourceSize = slicePitch * depth;
+            if (subresourceSize > static_cast<size_t>(sourceEnd - source))
+                return HRESULT_FROM_WIN32(ERROR_HANDLE_EOF);
+
+            if (mip >= skippedMips)
+            {
+                D3D11_SUBRESOURCE_DATA& subresource = subresources.emplace_back();
+                subresource.pSysMem = source;
+                subresource.SysMemPitch = static_cast<UINT>(rowPitch);
+                subresource.SysMemSlicePitch = static_cast<UINT>(slicePitch);
+            }
+
+            source += subresourceSize;
+            width = std::max<size_t>(1, width >> 1);
+            height = std::max<size_t>(1, height >> 1);
+            depth = std::max<size_t>(1, depth >> 1);
+        }
+    }
+
+    const UINT outputWidth = static_cast<UINT>(std::max<size_t>(1, metadata.width >> skippedMips));
+    const UINT outputHeight = static_cast<UINT>(std::max<size_t>(1, metadata.height >> skippedMips));
+    const UINT outputDepth = static_cast<UINT>(std::max<size_t>(1, metadata.depth >> skippedMips));
+    HRESULT createResult = E_FAIL;
+
+    switch (metadata.dimension)
+    {
+    case DirectX::TEX_DIMENSION_TEXTURE1D:
+    {
+        D3D11_TEXTURE1D_DESC description{};
+        description.Width = outputWidth;
+        description.MipLevels = static_cast<UINT>(outputMipCount);
+        description.ArraySize = static_cast<UINT>(metadata.arraySize);
+        description.Format = metadata.format;
+        description.Usage = D3D11_USAGE_IMMUTABLE;
+        description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        ID3D11Texture1D* texture = nullptr;
+        createResult = HW.pDevice->CreateTexture1D(&description, subresources.data(), &texture);
+        *result = texture;
+        break;
+    }
+    case DirectX::TEX_DIMENSION_TEXTURE2D:
+    {
+        D3D11_TEXTURE2D_DESC description{};
+        description.Width = outputWidth;
+        description.Height = outputHeight;
+        description.MipLevels = static_cast<UINT>(outputMipCount);
+        description.ArraySize = static_cast<UINT>(metadata.arraySize);
+        description.Format = metadata.format;
+        description.SampleDesc.Count = 1;
+        description.Usage = D3D11_USAGE_IMMUTABLE;
+        description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        description.MiscFlags = metadata.IsCubemap() ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+        ID3D11Texture2D* texture = nullptr;
+        createResult = HW.pDevice->CreateTexture2D(&description, subresources.data(), &texture);
+        *result = texture;
+        break;
+    }
+    case DirectX::TEX_DIMENSION_TEXTURE3D:
+    {
+        D3D11_TEXTURE3D_DESC description{};
+        description.Width = outputWidth;
+        description.Height = outputHeight;
+        description.Depth = outputDepth;
+        description.MipLevels = static_cast<UINT>(outputMipCount);
+        description.Format = metadata.format;
+        description.Usage = D3D11_USAGE_IMMUTABLE;
+        description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        ID3D11Texture3D* texture = nullptr;
+        createResult = HW.pDevice->CreateTexture3D(&description, subresources.data(), &texture);
+        *result = texture;
+        break;
+    }
+    default:
+        return E_FAIL;
+    }
+
+    if (SUCCEEDED(createResult))
+        loadedMipCount = outputMipCount;
+    return createResult;
+}
+}
+
 ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
 {
     ret_msize = 0;
@@ -107,15 +250,26 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
         xr_strcpy(fname, fRName);
         fix_texture_name(fname);
 
-        // Call to FS.exist WRITES to fn !
-
-        if (!FS.exist(fn, "$game_textures$", fname, ".dds") && strstr(fname, "_bump"))
+        const bool isBump = strstr(fname, "_bump");
+        if (isBump)
         {
-            Msg("! Fallback to default bump map: %s", fname);
-            if (strstr(fname, "_bump#"))
-                R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return nullptr);
+            string_path gameTexturePath;
+            if (!FS.exist(gameTexturePath, "$game_textures$", fname, ".dds"))
+            {
+                Msg("! Fallback to default bump map: %s", fname);
+                if (strstr(fname, "_bump#"))
+                    R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return nullptr);
+                else
+                    R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump", ".dds"), return nullptr);
+            }
             else
-                R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump", ".dds"), return nullptr);
+            {
+                if (!FS.exist(fn, "$level$", fname, ".dds") &&
+                    !FS.exist(fn, "$game_saves$", fname, ".dds"))
+                {
+                    xr_strcpy(fn, gameTexturePath);
+                }
+            }
         }
         else
         {
@@ -147,6 +301,17 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
 #endif // DEBUG
 
     DirectX::DDS_FLAGS dds_flags{ DirectX::DDS_FLAGS_PERMISSIVE };
+    xr_strlwr(fn);
+    const int img_loaded_lod = get_texture_load_lod(fn);
+    size_t fastMipCount = 0;
+    auto fastResult = create_texture_from_block_compressed_dds(
+        static_cast<const u8*>(S->pointer()), img_size, img_loaded_lod, &pTexture2D, fastMipCount);
+    if (SUCCEEDED(fastResult))
+    {
+        ret_msize = calc_texture_size(img_loaded_lod, static_cast<u32>(fastMipCount), img_size);
+        FS.r_close(S);
+        return pTexture2D;
+    }
 
     for (int i = 1; i <= 3; ++i) // 3 attempts
     {
@@ -186,11 +351,6 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
             FS.r_close(S);
             return nullptr;
         });
-
-        // Check for LMAP and compress if needed
-        xr_strlwr(fn);
-
-        const int img_loaded_lod = get_texture_load_lod(fn);
 
         size_t mip_lod = 0;
         if (img_loaded_lod && !IMG.IsCubemap())

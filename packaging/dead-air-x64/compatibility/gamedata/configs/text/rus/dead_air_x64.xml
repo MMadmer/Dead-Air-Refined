@@ -33,4 +33,10 @@
     <string id="ui_mm_level_texture_unload_hint">
         <text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
     </string>
+    <string id="ui_mm_auto_continue_on_load">
+        <text>Автостарт игры</text>
+    </string>
+    <string id="ui_mm_auto_continue_on_load_hint">
+        <text>Автоматически продолжает игру после завершения загрузки без ожидания нажатия клавиши.</text>
+    </string>
 </string_table>

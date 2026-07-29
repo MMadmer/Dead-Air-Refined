@@ -809,6 +809,15 @@
       <check_map_draw x="162" y="0" width="30" height="21">
         <options_item entry="hud_draw_map" group="mm_opt_gameplay"/>
       </check_map_draw>
+
+      <cap_auto_continue_on_load x="25" y="0" width="108" height="24"
+        hint="ui_mm_auto_continue_on_load_hint">
+        <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_auto_continue_on_load</text>
+      </cap_auto_continue_on_load>
+      <check_auto_continue_on_load x="162" y="0" width="30" height="21"
+        hint="ui_mm_auto_continue_on_load_hint">
+        <options_item entry="auto_continue_on_load" group="mm_opt_gameplay"/>
+      </check_auto_continue_on_load>
 			
 		<check_show_tracers x="162" y="0" width="30" height="21">
 			<options_item entry="g_use_tracers" group="mm_opt_gameplay"/>

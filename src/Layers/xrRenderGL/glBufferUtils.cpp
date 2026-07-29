@@ -199,6 +199,13 @@ void VertexStagingBuffer::Create(size_t size, bool allowReadBack /*= false*/)
     AddRef();
 }
 
+void VertexStagingBuffer::CreateFromData(const void* data, size_t size)
+{
+    Create(size);
+    memcpy(Map(), data, size);
+    Unmap(true);
+}
+
 bool VertexStagingBuffer::IsValid() const
 {
     return !!m_DeviceBuffer;
@@ -289,6 +296,13 @@ void IndexStagingBuffer::Create(size_t size, bool allowReadBack /*= false*/, boo
 
     m_HostBuffer = xr_alloc<u8>(size);
     AddRef();
+}
+
+void IndexStagingBuffer::CreateFromData(const void* data, size_t size)
+{
+    Create(size);
+    memcpy(Map(), data, size);
+    Unmap(true);
 }
 
 bool IndexStagingBuffer::IsValid() const

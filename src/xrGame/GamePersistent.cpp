@@ -424,22 +424,32 @@ void CGamePersistent::update_logo_intro()
     m_pMainMenu->Activate(true);
 }
 
-extern int g_keypress_on_start;
+extern int g_auto_continue_on_load;
 void CGamePersistent::game_loaded()
 {
-    if (Device.dwPrecacheFrame <= 2)
+    const bool canContinueSinglePlayer = g_pGameLevel && g_pGameLevel->bReady &&
+        load_screen_renderer.NeedsUserInput() && m_game_params.m_e_game_type == eGameIDSingle;
+    const bool waitForInput = canContinueSinglePlayer && !g_auto_continue_on_load;
+    const u32 finalPrecacheFrame = waitForInput ? 2u : 0u;
+    if (Device.dwPrecacheFrame > finalPrecacheFrame)
+        return;
+
+    m_intro_event = nullptr;
+    if (!canContinueSinglePlayer)
+        return;
+
+    Msg("* Loading continuation: %s", g_auto_continue_on_load ? "automatic" : "waiting for input");
+    if (g_auto_continue_on_load)
     {
-        m_intro_event = nullptr;
-        if (g_pGameLevel && g_pGameLevel->bReady && g_keypress_on_start &&
-            load_screen_renderer.NeedsUserInput() && m_game_params.m_e_game_type == eGameIDSingle)
-        {
-            VERIFY(NULL == m_intro);
-            m_intro = xr_new<CUISequencer>();
-            m_intro->m_on_destroy_event.bind(this, &CGamePersistent::update_game_loaded);
-            if (!m_intro->Start("game_loaded"))
-                m_intro->Destroy();
-        }
+        update_game_loaded();
+        return;
     }
+
+    VERIFY(NULL == m_intro);
+    m_intro = xr_new<CUISequencer>();
+    m_intro->m_on_destroy_event.bind(this, &CGamePersistent::update_game_loaded);
+    if (!m_intro->Start("game_loaded"))
+        m_intro->Destroy();
 }
 
 void CGamePersistent::update_game_loaded()
@@ -483,7 +493,9 @@ void CGamePersistent::OnFrame()
 
     CALifeStorageManager::process_async_save_completions();
 
-    if (Device.dwPrecacheFrame == 5 && m_intro_event.empty())
+    const bool canPrepareLoadContinuation = g_pGameLevel && g_pGameLevel->bReady &&
+        load_screen_renderer.NeedsUserInput() && m_game_params.m_e_game_type == eGameIDSingle;
+    if (canPrepareLoadContinuation && Device.dwPrecacheFrame <= 5 && m_intro_event.empty() && !m_intro)
     {
         LoadTitle();
         m_intro_event.bind(this, &CGamePersistent::game_loaded);

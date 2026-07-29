@@ -25,8 +25,10 @@ CALifeSpawnRegistry::CALifeSpawnRegistry(LPCSTR section)
 CALifeSpawnRegistry::~CALifeSpawnRegistry()
 {
     xr_delete(m_game_graph);
-    m_chunk->close();
-    FS.r_close(m_file);
+    if (m_chunk)
+        m_chunk->close();
+    if (m_file)
+        FS.r_close(m_file);
 }
 
 void CALifeSpawnRegistry::save(IWriter& memory_stream)

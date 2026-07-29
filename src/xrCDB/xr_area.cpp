@@ -101,20 +101,23 @@ void CObjectSpace::Load(LPCSTR path, LPCSTR fname,
 {
     IReader* F = FS.r_open(path, fname);
     R_ASSERT(F);
-    Load(F, build_callback, serialize_callback, deserialize_callback, remapping_materials_callback);
+    u32 sourceCrc = 0;
+    FS.archived_file_crc(path, fname, sourceCrc);
+    Load(F, build_callback, serialize_callback, deserialize_callback, remapping_materials_callback, sourceCrc);
 }
 
 void CObjectSpace::Load(IReader* F,
     CDB::build_callback build_callback,
     CDB::serialize_callback serialize_callback,
     CDB::deserialize_callback deserialize_callback,
-    CDB::remapping_materials_callback remapping_materials_callback)
+    CDB::remapping_materials_callback remapping_materials_callback,
+    u32 knownSourceCrc)
 {
     ZoneScoped;
 
     static const bool use_cache = !strstr(Core.Params, "-no_cdb_cache");
     if (use_cache)
-        Static.set_model_crc32(crc32(F->pointer(), F->length()));
+        Static.set_model_crc32(knownSourceCrc ? knownSourceCrc : crc32(F->pointer(), F->length()));
 
     hdrCFORM H;
     F->r(&H, sizeof(hdrCFORM));

@@ -93,6 +93,22 @@ void CStreamReader::advance(const int& offset)
     m_current_pointer += offset;
 }
 
+const void* CStreamReader::pointer_contiguous(size_t size)
+{
+    VERIFY(tell() + size <= length());
+    VERIFY(size <= static_cast<size_t>(std::numeric_limits<int>::max()));
+
+    const size_t available = m_current_window_size - static_cast<size_t>(m_current_pointer - m_start_pointer);
+    if (available < size)
+    {
+        m_window_size = std::max(m_window_size, size);
+        remap(tell());
+    }
+
+    VERIFY(m_current_window_size >= size);
+    return m_current_pointer;
+}
+
 void CStreamReader::r(void* _buffer, size_t buffer_size)
 {
     VERIFY(m_current_pointer >= m_start_pointer);

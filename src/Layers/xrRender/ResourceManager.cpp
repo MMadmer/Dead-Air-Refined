@@ -40,20 +40,38 @@ public:
             worker.join();
     }
 
-    void Run(const xr_vector<CTexture*>& batch, size_t requestedWorkers)
+    void Start(xr_vector<CTexture*>&& batch, size_t requestedWorkers)
     {
         std::unique_lock lock(mutex);
         VERIFY(!workersRemaining);
 
-        textures = &batch;
+        textures = std::move(batch);
         workerLimit = std::min(requestedWorkers, maximumWorkers);
         workersRemaining = workerLimit;
         nextTexture.store(0, std::memory_order_relaxed);
         ++generation;
         workAvailable.notify_all();
+    }
 
+    void Wait()
+    {
+        std::unique_lock lock(mutex);
+        if (!workersRemaining)
+            return;
         completed.wait(lock, [this] { return !workersRemaining; });
-        textures = nullptr;
+        textures.clear();
+    }
+
+    bool IsRunning()
+    {
+        std::lock_guard lock(mutex);
+        return workersRemaining != 0;
+    }
+
+    void Run(xr_vector<CTexture*>&& batch, size_t requestedWorkers)
+    {
+        Start(std::move(batch), requestedWorkers);
+        Wait();
     }
 
 private:
@@ -75,7 +93,7 @@ private:
             if (workerIndex >= workerLimit)
                 continue;
 
-            const auto* batch = textures;
+            const auto* batch = &textures;
             lock.unlock();
 
             for (size_t index = nextTexture.fetch_add(1, std::memory_order_relaxed);
@@ -98,7 +116,7 @@ private:
     std::mutex mutex;
     std::condition_variable workAvailable;
     std::condition_variable completed;
-    const xr_vector<CTexture*>* textures{};
+    xr_vector<CTexture*> textures;
     std::atomic_size_t nextTexture{};
     size_t workerLimit{};
     size_t workersRemaining{};
@@ -110,6 +128,29 @@ TextureUploadPool*& texture_upload_pool()
 {
     static TextureUploadPool* pool{};
     return pool;
+}
+
+size_t texture_upload_worker_count(size_t textureCount)
+{
+    constexpr size_t taskMemoryBudget = 128 * 1024 * 1024;
+    constexpr size_t maximumLoaderBudget = 512 * 1024 * 1024;
+    const auto memory = Memory.statistics();
+    const size_t availableBudget = std::min(memory.largestFreeBlock / 8, maximumLoaderBudget);
+    const size_t budgetedWorkers = std::clamp(availableBudget / taskMemoryBudget, size_t{2}, size_t{4});
+    return std::min(budgetedWorkers, textureCount);
+}
+
+xr_vector<CTexture*> collect_unloaded_textures(const CResourceManager::map_Texture& resources)
+{
+    xr_vector<CTexture*> textures;
+    textures.reserve(resources.size());
+    for (const auto& [name, texture] : resources)
+    {
+        UNUSED(name);
+        if (!texture->flags.bLoaded)
+            textures.push_back(texture);
+    }
+    return textures;
 }
 }
 
@@ -453,6 +494,28 @@ void CResourceManager::Delete(const Shader* S)
     Msg("! ERROR: Failed to find complete shader");
 }
 
+void CResourceManager::BeginDeferredUpload()
+{
+    if (!Device.b_is_Ready)
+        return;
+
+#if defined(USE_DX11)
+    auto*& uploadPool = texture_upload_pool();
+    if (!uploadPool)
+        uploadPool = xr_new<TextureUploadPool>();
+    if (uploadPool->IsRunning())
+        return;
+
+    auto textures = collect_unloaded_textures(m_textures);
+    if (textures.empty())
+        return;
+
+    const size_t workerCount = texture_upload_worker_count(textures.size());
+    Msg("* Early texture upload: %zu textures, %zu workers", textures.size(), workerCount);
+    uploadPool->Start(std::move(textures), workerCount);
+#endif
+}
+
 void CResourceManager::DeferredUpload()
 {
     if (!Device.b_is_Ready)
@@ -461,33 +524,18 @@ void CResourceManager::DeferredUpload()
     ZoneScoped;
 
 #if defined(USE_DX11)
-    if (m_textures.size() < 2)
-    {
-        for (auto& texture : m_textures)
-            texture.second->Load();
-        return;
-    }
-
-    xr_vector<CTexture*> textures;
-    textures.reserve(m_textures.size());
-    for (auto& texture : m_textures)
-        textures.push_back(texture.second);
-
-    constexpr size_t taskMemoryBudget = 128 * 1024 * 1024;
-    constexpr size_t maximumLoaderBudget = 512 * 1024 * 1024;
-    const auto memory = Memory.statistics();
-    const size_t availableBudget = std::min(memory.largestFreeBlock / 8, maximumLoaderBudget);
-    const size_t budgetedWorkers = std::clamp(availableBudget / taskMemoryBudget, size_t{2}, size_t{4});
-    const size_t workerCount = std::min(budgetedWorkers, textures.size());
-
-    Msg("* Deferred texture upload: %zu textures, %zu workers, %zu MiB transient budget",
-        textures.size(), workerCount, workerCount * taskMemoryBudget / 1048576);
-
-    // Reusing the same threads prevents graphics-driver thread caches from multiplying after every level load.
     auto*& uploadPool = texture_upload_pool();
     if (!uploadPool)
         uploadPool = xr_new<TextureUploadPool>();
-    uploadPool->Run(textures, workerCount);
+    uploadPool->Wait();
+
+    auto textures = collect_unloaded_textures(m_textures);
+    if (textures.empty())
+        return;
+
+    const size_t workerCount = texture_upload_worker_count(textures.size());
+    Msg("* Final texture upload: %zu textures, %zu workers", textures.size(), workerCount);
+    uploadPool->Run(std::move(textures), workerCount);
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
     for (auto& texture : m_textures)
         texture.second->Load();
@@ -500,6 +548,8 @@ void CResourceManager::ShutdownTextureUploadPool()
 {
 #if defined(USE_DX11)
     auto*& uploadPool = texture_upload_pool();
+    if (uploadPool)
+        uploadPool->Wait();
     xr_delete(uploadPool);
 #endif
 }
@@ -512,6 +562,9 @@ void CResourceManager::DeferredUnload()
     ZoneScoped;
 
 #if defined(USE_DX11)
+    auto*& uploadPool = texture_upload_pool();
+    if (uploadPool)
+        uploadPool->Wait();
     for (auto& texture : m_textures)
         texture.second->Unload();
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
@@ -525,25 +578,27 @@ void CResourceManager::DeferredUnload()
 void CResourceManager::BeginLevelTextureTracking()
 {
     m_level_persistent_textures.clear();
-    m_level_persistent_textures.reserve(m_textures.size());
 
     for (const auto& texture : m_textures)
     {
         if (texture.second->flags.bLoaded)
-            m_level_persistent_textures.emplace_back(texture.first);
+            m_level_persistent_textures.emplace(texture.first);
     }
 }
 
 void CResourceManager::UnloadLevelTextures()
 {
+    auto*& uploadPool = texture_upload_pool();
+    if (uploadPool)
+        uploadPool->Wait();
+
     u32 unloaded_count = 0;
     u64 unloaded_memory = 0;
 
     for (const auto& texture : m_textures)
     {
         CTexture* resource = texture.second;
-        const bool was_loaded_before_level =
-            std::find(m_level_persistent_textures.begin(), m_level_persistent_textures.end(), texture.first) !=
+        const bool was_loaded_before_level = m_level_persistent_textures.find(texture.first) !=
             m_level_persistent_textures.end();
         if (!resource->flags.bLoaded || was_loaded_before_level)
             continue;
@@ -565,14 +620,14 @@ void CResourceManager::ED_UpdateTextures(AStringVec* names)
     {
         for (u32 nid = 0; nid < names->size(); nid++)
         {
-            map_TextureIt I = m_textures.find((*names)[nid].c_str());
+            auto I = m_textures.find((*names)[nid].c_str());
             if (I != m_textures.end())
                 I->second->Unload();
         }
     }
     else
     {
-        for (map_TextureIt t = m_textures.begin(); t != m_textures.end(); t++)
+        for (auto t = m_textures.begin(); t != m_textures.end(); t++)
             t->second->Unload();
     }
 
