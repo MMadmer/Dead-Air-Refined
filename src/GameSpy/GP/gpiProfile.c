@@ -13,6 +13,7 @@ Please see the GameSpy Presence SDK documentation for more information
 
 //INCLUDES
 //////////
+#include <stdint.h>
 #include "gpi.h"
 
 //DEFINES
@@ -1155,7 +1156,7 @@ gpiAddToBlockedList(
             iconnection->profileList.numBuddies--;
             assert(iconnection->profileList.numBuddies >= 0);
 #ifndef _PS2
-            gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(unsigned long)index);
+            gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(intptr_t)index);
 #else
             gpiProfileMap(connection, gpiFixBuddyIndices, (void *)index);
 #endif
@@ -1177,7 +1178,7 @@ gpiAddToBlockedList(
             iconnection->profileList.numBuddies--;
             assert(iconnection->profileList.numBuddies >= 0);
 #ifndef _PS2
-            gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(unsigned long)index);
+            gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(intptr_t)index);
 #else
             gpiProfileMap(connection, gpiFixBuddyIndices, (void *)index);
 #endif
@@ -1222,7 +1223,7 @@ gpiFixBlockIndices(
 )
 {
 #ifndef _PS2
-    int baseIndex = (int)(unsigned long)data;
+    int baseIndex = (int)(intptr_t)data;
 #else
     int baseIndex = (int)data;
 #endif
@@ -1256,7 +1257,7 @@ gpiRemoveFromBlockedList(
         index = profile->blockIndex;
 
 #ifndef _PS2
-        gpiProfileMap(connection, gpiFixBlockIndices, (void *)(unsigned long)index);
+        gpiProfileMap(connection, gpiFixBlockIndices, (void *)(intptr_t)index);
 #else
         gpiProfileMap(connection, gpiFixBlockIndices, (void *)index);
 #endif

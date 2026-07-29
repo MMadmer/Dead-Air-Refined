@@ -14,6 +14,7 @@ Please see the GameSpy Presence SDK documentation for more information
 //INCLUDES
 //////////
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include "gpi.h"
 
@@ -968,7 +969,7 @@ gpiFixBuddyIndices(
 )
 {
 #ifndef _PS2
-	int baseIndex = (int)(unsigned long)data;
+	int baseIndex = (int)(intptr_t)data;
 #else
 	int baseIndex = (int)data;
 #endif
@@ -1030,7 +1031,7 @@ gpiDeleteBuddy(
 		iconnection->profileList.numBuddies--;
 		assert(iconnection->profileList.numBuddies >= 0);
 #ifndef _PS2
-		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(unsigned long)index);
+		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(intptr_t)index);
 #else
 		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)index);
 #endif
@@ -1055,7 +1056,7 @@ gpiDeleteBuddy(
 		iconnection->profileList.numBuddies--;
 		assert(iconnection->profileList.numBuddies >= 0);
 #ifndef _PS2
-		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(unsigned long)index);
+		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)(intptr_t)index);
 #else
 		gpiProfileMap(connection, gpiFixBuddyIndices, (void *)index);
 #endif

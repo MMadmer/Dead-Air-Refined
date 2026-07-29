@@ -459,7 +459,7 @@ gpiSendLogin(
 	gpiAppendIntToBuffer(connection, &iconnection->outputBuffer, iconnection->partnerID);
 	gpiAppendStringToBuffer(connection, &iconnection->outputBuffer, "\\response\\");
 	gpiAppendStringToBuffer(connection, &iconnection->outputBuffer, response);
-	if(iconnection->firewall == GP_FIREWALL)
+	if(iconnection->firewall)
 		gpiAppendStringToBuffer(connection, &iconnection->outputBuffer, "\\firewall\\1");
 	gpiAppendStringToBuffer(connection, &iconnection->outputBuffer, "\\port\\");
 	gpiAppendIntToBuffer(connection, &iconnection->outputBuffer, iconnection->peerPort);

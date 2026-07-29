@@ -517,7 +517,7 @@ gpiProcessSearch(
 	int index;
 	int oldIndex;
 	GPIBool loop;
-	GPIBool more;
+	GPEnum more;
 	GPICallback callback;
 	GPIConnection * iconnection = (GPIConnection*)*connection;
 	int len;
@@ -932,7 +932,7 @@ gpiProcessSearch(
 
 					// Save the more state.
 					///////////////////////
-					more = (GPIBool)arg.more;
+					more = arg.more;
 
 					// Get the callback.
 					////////////////////
