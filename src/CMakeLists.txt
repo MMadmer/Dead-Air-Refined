@@ -28,6 +28,7 @@ target_sources(xrLuabind PRIVATE
 target_include_directories(xrLuabind
 	PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    "${CMAKE_SOURCE_DIR}/Externals"
 )
 
 target_link_libraries(xrLuabind

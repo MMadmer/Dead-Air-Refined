@@ -56,7 +56,8 @@ namespace luabind {
 
 			private:
 				using key_type = std::tuple<class_id, class_id, class_id, std::ptrdiff_t>;
-				using map_type = luabind::map<key_type, cache_entry>;
+				using map_type = phmap::flat_hash_map<key_type, cache_entry, phmap::Hash<key_type>,
+					std::equal_to<key_type>, memory_allocator<std::pair<const key_type, cache_entry>>>;
 				map_type m_cache;
 			};
 

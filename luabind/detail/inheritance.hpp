@@ -9,6 +9,7 @@
 # include <limits>
 # include <map>
 # include <memory>
+# include <parallel_hashmap/phmap.h>
 # include <vector>
 # include <luabind/typeid.hpp>
 
@@ -55,7 +56,16 @@ namespace luabind {
 			void put(class_id id, type_id const& type);
 
 		private:
-			using map_type = luabind::map<type_id, class_id>;
+			struct type_id_hash
+			{
+				std::size_t operator()(type_id const& type) const noexcept
+				{
+					return type.hash_code();
+				}
+			};
+
+			using map_type = phmap::flat_hash_map<type_id, class_id, type_id_hash, std::equal_to<type_id>,
+				memory_allocator<std::pair<const type_id, class_id>>>;
 			map_type m_classes;
 			class_id m_local_id;
 
