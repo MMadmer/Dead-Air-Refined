@@ -80,7 +80,7 @@ void CBlender_rain::Compile(CBlender_Compile& C)
         // C.r_Pass	("stub_notransform_2uv", "rain_layer", false,	TRUE,	FALSE, TRUE, D3DBLEND_ONE, D3DBLEND_ONE);
         // C.r_Pass	("stub_notransform_2uv", "rain_layer", false,	TRUE,	FALSE, TRUE, D3DBLEND_SRCALPHA,
         // D3DBLEND_INVSRCALPHA);
-        C.r_Pass("stub_notransform_2uv", "rain_apply_normal_nomsaa", false, TRUE, FALSE, FALSE);
+        C.r_Pass("stub_notransform_2uv", "rain_apply_normal_gloss_nomsaa", false, TRUE, FALSE, FALSE);
         C.PassSET_ZB(TRUE, FALSE, TRUE); // force inverted Z-Buffer
 
         C.r_dx11Texture("s_position", r2_RT_P);
@@ -106,6 +106,14 @@ void CBlender_rain::Compile(CBlender_Compile& C)
             C.r_ColorWriteEnable(true, true, false, false);
         else
             C.r_ColorWriteEnable(true, true, true, false);
+
+        C.RS.SetRS(D3DRS_COLORWRITEENABLE1, D3D_COLOR_WRITE_ENABLE_ALL);
+        C.RS.SetRS(XRDX11RS_INDEPENDENTBLEND, TRUE);
+        C.RS.SetRS(XRDX11RS_ALPHABLENDENABLE1, TRUE);
+        C.RS.SetRS(XRDX11RS_SRCBLEND1, D3DBLEND_ZERO);
+        C.RS.SetRS(XRDX11RS_DESTBLEND1, D3DBLEND_SRCCOLOR);
+        C.RS.SetRS(XRDX11RS_SRCBLENDALPHA1, D3DBLEND_ONE);
+        C.RS.SetRS(XRDX11RS_DESTBLENDALPHA1, D3DBLEND_ONE);
 
         C.r_End();
 
@@ -145,6 +153,7 @@ void CBlender_rain::Compile(CBlender_Compile& C)
         C.r_End();
 
         break;
+
     }
 
     RImplementation.m_SMAPSize = RImplementation.o.smapsize;
@@ -203,7 +212,7 @@ void CBlender_rain_msaa::Compile(CBlender_Compile& C)
         // C.r_Pass	("stub_notransform_2uv", "rain_layer", false,	TRUE,	FALSE, TRUE, D3DBLEND_ONE, D3DBLEND_ONE);
         // C.r_Pass	("stub_notransform_2uv", "rain_layer", false,	TRUE,	FALSE, TRUE, D3DBLEND_SRCALPHA,
         // D3DBLEND_INVSRCALPHA);
-        C.r_Pass("stub_notransform_2uv", "rain_apply_normal_msaa", false, TRUE, FALSE, FALSE);
+        C.r_Pass("stub_notransform_2uv", "rain_apply_normal_gloss_msaa", false, TRUE, FALSE, FALSE);
         C.PassSET_ZB(TRUE, FALSE, TRUE); // force inverted Z-Buffer
 
         C.r_dx11Texture("s_position", r2_RT_P);
@@ -229,6 +238,14 @@ void CBlender_rain_msaa::Compile(CBlender_Compile& C)
             C.r_ColorWriteEnable(true, true, false, false);
         else
             C.r_ColorWriteEnable(true, true, true, false);
+
+        C.RS.SetRS(D3DRS_COLORWRITEENABLE1, D3D_COLOR_WRITE_ENABLE_ALL);
+        C.RS.SetRS(XRDX11RS_INDEPENDENTBLEND, TRUE);
+        C.RS.SetRS(XRDX11RS_ALPHABLENDENABLE1, TRUE);
+        C.RS.SetRS(XRDX11RS_SRCBLEND1, D3DBLEND_ZERO);
+        C.RS.SetRS(XRDX11RS_DESTBLEND1, D3DBLEND_SRCCOLOR);
+        C.RS.SetRS(XRDX11RS_SRCBLENDALPHA1, D3DBLEND_ONE);
+        C.RS.SetRS(XRDX11RS_DESTBLENDALPHA1, D3DBLEND_ONE);
 
         C.r_End();
 

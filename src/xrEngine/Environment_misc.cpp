@@ -552,6 +552,10 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     fog_far = 0.99f * fog_distance;
 
     rain_density = fi * A.rain_density + f * B.rain_density;
+    if (strstr(Core.Params, "-qa_disable_rain"))
+        rain_density = 0.f;
+    else if (strstr(Core.Params, "-qa_force_rain"))
+        rain_density = 1.f;
     rain_color.lerp(A.rain_color, B.rain_color, f);
     bolt_period = fi * A.bolt_period + f * B.bolt_period;
     bolt_duration = fi * A.bolt_duration + f * B.bolt_duration;

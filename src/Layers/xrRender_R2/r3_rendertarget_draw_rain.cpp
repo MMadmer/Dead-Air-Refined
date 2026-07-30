@@ -1,10 +1,19 @@
 #include "stdafx.h"
+#include "rain_gpu_profile.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
 void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
 {
+#if defined(USE_DX11)
+    static QaGpuTimestampProfiler<2> gpuProfiler(
+        "rain_wet_surface", {"patch_normal", "apply_normal_gloss"});
+    ID3D11DeviceContext* gpuContext = HW.get_context(cmd_list.context_id);
+#endif
+
     float fRainFactor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
+    if (strstr(Core.Params, "-qa_force_rain"))
+        fRainFactor = 1.f;
 
     // Common calc for quad-rendering
     u32 Offset;
@@ -25,7 +34,9 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
     W_dirZ.normalize();
 
     // recalculate d_Z, to perform depth-clipping
-    const float fRainFar = ps_r3_dyn_wet_surf_far;
+    // The pixel shader reaches exactly zero wetness at 20 m, so reject farther pixels in hardware.
+    constexpr float wetSurfaceFadeEnd = 20.f;
+    const float fRainFar = std::min(ps_r3_dyn_wet_surf_far, wetSurfaceFadeEnd);
 
     Fvector center_pt;
     center_pt.mad(Device.vCameraPosition, Device.vCameraDirection, fRainFar);
@@ -236,6 +247,10 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
         //	Patch normal
         u_setrt(cmd_list, rt_Accumulator, nullptr, nullptr, rt_MSAADepth);
 
+#if defined(USE_DX11)
+        gpuProfiler.Begin(gpuContext);
+#endif
+
         // u_setrt	(rt_Normal,NULL,NULL,get_base_zb());
         cmd_list.set_Element(s_rain->E[1]);
         cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
@@ -298,22 +313,20 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
             }
         }
 
-        //	Apply normal
+#if defined(USE_DX11)
+        gpuProfiler.Mark(gpuContext);
+#endif
+
+        //	Apply normal and gloss
         cmd_list.set_Element(s_rain->E[2]);
-        cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
-        cmd_list.set_c("m_shadow", m_shadow);
-        cmd_list.set_c("m_sunmask", m_clouds_shadow);
 
         if (!RImplementation.o.gbuffer_opt)
         {
-            //	Do this in blender!
-            // StateManager.SetColorWriteEnable( D3D_COLOR_WRITE_ENABLE_RED | D3D_COLOR_WRITE_ENABLE_GREEN | D3D_COLOR_WRITE_ENABLE_BLUE );
-            u_setrt(cmd_list, rt_Normal, nullptr, nullptr, rt_MSAADepth);
+            u_setrt(cmd_list, rt_Normal, rt_Color, nullptr, rt_MSAADepth);
         }
         else
         {
-            // StateManager.SetColorWriteEnable( D3D_COLOR_WRITE_ENABLE_RED | D3D_COLOR_WRITE_ENABLE_GREEN );
-            u_setrt(cmd_list, rt_Position, nullptr, nullptr, rt_MSAADepth);
+            u_setrt(cmd_list, rt_Position, rt_Color, nullptr, rt_MSAADepth);
         }
 
         if (!RImplementation.o.msaa)
@@ -355,52 +368,10 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
             }
         }
 
-        //	Apply gloss
-        cmd_list.set_Element(s_rain->E[3]);
-        cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
-        cmd_list.set_c("m_shadow", m_shadow);
-        cmd_list.set_c("m_sunmask", m_clouds_shadow);
-
-        //	It is restored automatically by a set_Element call
-        // StateManager.SetColorWriteEnable( D3D_COLOR_WRITE_ENABLE_ALL );
-        u_setrt(cmd_list, rt_Color, nullptr, nullptr, rt_MSAADepth);
-
-        if (!RImplementation.o.msaa)
-        {
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x01, 0x01, 0);
-            cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
-        }
-        else
-        {
-            // per pixel execution
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x01, 0x81, 0);
-            cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
-
-            // per sample
-            if (RImplementation.o.msaa_opt)
-            {
-                cmd_list.set_Element(s_rain_msaa[0]->E[2]);
-                cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0);
-                cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
-            }
-            else
-            {
 #if defined(USE_DX11)
-                for (u32 i = 0; i < RImplementation.o.msaa_samples; ++i)
-                {
-                    cmd_list.set_Element(s_rain_msaa[i]->E[2]);
-                    cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0);
-                    cmd_list.StateManager.SetSampleMask(u32(1) << i);
-                    cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
-                }
-                cmd_list.StateManager.SetSampleMask(0xffffffff);
-#elif defined(USE_OGL)
-                VERIFY(!"Only optimized MSAA is supported in OpenGL");
-#else
-#   error No graphics API selected or enabled!
+        gpuProfiler.Mark(gpuContext);
+        gpuProfiler.End(gpuContext);
 #endif
-            }
-        }
 
         //	TODO: DX11: Check if DX11 has analog for NV DBT
         // disable depth bounds

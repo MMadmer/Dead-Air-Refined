@@ -4,12 +4,22 @@
 
 #include "StateManager/dx11SamplerStateCache.h"
 #include "dx11TextureUtils.h"
+#include "Layers/xrRender_R2/rain_gpu_profile.h"
 
 #include <SDL_syswm.h>
 
 namespace xray::render::RENDER_NAMESPACE
 {
 CHW HW;
+
+namespace
+{
+QaGpuTimestampProfiler<1>& qa_frame_profiler()
+{
+    static QaGpuTimestampProfiler<1> profiler("frame", {"gpu"});
+    return profiler;
+}
+}
 
 CHW::CHW()
 {
@@ -519,11 +529,27 @@ std::pair<u32, u32> CHW::GetSurfaceSize() const
     };
 }
 
-void CHW::BeginScene() { }
-void CHW::EndScene() { }
+void CHW::BeginScene()
+{
+    qa_frame_profiler().Begin(get_context(IMM_CTX_ID));
+}
+
+void CHW::EndScene()
+{
+    ID3D11DeviceContext* context = get_context(IMM_CTX_ID);
+    qa_frame_profiler().Mark(context);
+    qa_frame_profiler().End(context);
+}
 
 void CHW::Present()
 {
+    if (strstr(Core.Params, "-qa_offscreen_render"))
+    {
+        get_context(CHW::IMM_CTX_ID)->Flush();
+        TracyD3D11Collect(profiler_ctx);
+        return;
+    }
+
     const bool bUseVSync = psDeviceMode.WindowStyle == rsFullscreen &&
         psDeviceFlags.test(rsVSync); // xxx: weird tearing glitches when VSync turned on for windowed mode in DX11
 

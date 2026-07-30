@@ -265,7 +265,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, float2 pos2d, int iSample 
 #ifndef USE_MSAA
 	float4 P	= s_position.Sample( smp_nofilter, tc );
 #else
-	float4 P	= s_position.Load( int3( pos2d, 0 ), iSample );
+	float4 P	= s_position.Load( int2( pos2d ), iSample );
 #endif
 
 	// 3d view space pos reconstruction math
@@ -290,7 +290,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, float2 pos2d, int iSample 
 #ifndef USE_MSAA
    float4	C	= s_diffuse.Sample( smp_nofilter, tc );
 #else
-   float4	C	= s_diffuse.Load( int3( pos2d, 0 ), iSample );
+   float4	C	= s_diffuse.Load( int2( pos2d ), iSample );
 #endif
 
 	gbd.C		= C.xyz;
@@ -326,7 +326,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, uint iSample )
 #ifndef USE_MSAA
 	float4 P	= s_position.Sample( smp_nofilter, tc );
 #else
-   float4 P	= s_position.Load( int3( tc * pos_decompression_params2.xy, 0 ), iSample );
+    float4 P	= s_position.Load( int2( tc * pos_decompression_params2.xy ), iSample );
 #endif
 
 	gbd.P		= P.xyz;
@@ -335,7 +335,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, uint iSample )
 #ifndef USE_MSAA
 	float4 N	= s_normal.Sample( smp_nofilter, tc );
 #else
-	float4 N	= s_normal.Load( int3( tc * pos_decompression_params2.xy, 0 ), iSample );
+	float4 N	= s_normal.Load( int2( tc * pos_decompression_params2.xy ), iSample );
 #endif
 
 	gbd.N		= N.xyz;
@@ -344,7 +344,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, uint iSample )
 #ifndef USE_MSAA
 	float4	C	= s_diffuse.Sample(  smp_nofilter, tc );
 #else
-	float4	C	= s_diffuse.Load( int3( tc * pos_decompression_params2.xy, 0 ), iSample );
+	float4	C	= s_diffuse.Load( int2( tc * pos_decompression_params2.xy ), iSample );
 #endif
 
 

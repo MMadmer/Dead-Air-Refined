@@ -5,6 +5,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/IRenderable.h"
 #include "Layers/xrRender/FBasicVisual.h"
+#include "rain_gpu_profile.h"
 
 #if defined(USE_DX11)
 #include "DirectXMath.h"
@@ -51,11 +52,16 @@ static int facetable[6][4] =
 void render_rain::init()
 {
     rain_factor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
+    if (strstr(Core.Params, "-qa_force_rain"))
+        rain_factor = 1.f;
 
     o.active  = ps_r2_ls_flags.test(R3FLAG_DYN_WET_SURF);
     o.active &= rain_factor >= EPS_L;
-    o.active &= !Device.vCameraPositionSaved.similar(Device.vCameraPosition, EPS_L) ||
-        !Device.vCameraDirectionSaved.similar(Device.vCameraDirection, EPS_L);
+    if (!strstr(Core.Params, "-qa_rain_gpu_profile"))
+    {
+        o.active &= !Device.vCameraPositionSaved.similar(Device.vCameraPosition, EPS_L) ||
+            !Device.vCameraDirectionSaved.similar(Device.vCameraDirection, EPS_L);
+    }
 
     if (!o.active)
         return;
@@ -85,7 +91,9 @@ void render_rain::calculate()
     // calculate view-frustum bounds in world space
     Fmatrix ex_project, ex_full, ex_full_inverse;
     {
-        const float fRainFar = ps_r3_dyn_wet_surf_far;
+        // Match the wet-surface shader fade to avoid rendering unused rain casters.
+        constexpr float wetSurfaceFadeEnd = 20.f;
+        const float fRainFar = std::min(ps_r3_dyn_wet_surf_far, wetSurfaceFadeEnd);
         ex_project.build_projection(deg2rad(Device.fFOV /* * Device.fASPECT*/), Device.fASPECT, VIEWPORT_NEAR, fRainFar);
         ex_full.mul(ex_project, Device.mView);
 #if defined(USE_DX11)
@@ -327,7 +335,16 @@ void render_rain::flush()
 #endif
         auto& dsgraph = RImplementation.get_context(context_id);
 
+#if defined(USE_DX11)
+        static QaGpuTimestampProfiler<1> gpuProfiler("rain_shadow", {"shadow_map"});
+        ID3D11DeviceContext* gpuContext = HW.get_context(CHW::IMM_CTX_ID);
+        gpuProfiler.Begin(gpuContext);
+#endif
         dsgraph.cmd_list.submit();
+#if defined(USE_DX11)
+        gpuProfiler.Mark(gpuContext);
+        gpuProfiler.End(gpuContext);
+#endif
         RImplementation.release_context(context_id);
     }
 

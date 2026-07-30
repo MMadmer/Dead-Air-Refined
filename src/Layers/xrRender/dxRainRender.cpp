@@ -3,6 +3,7 @@
 
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Rain.h"
+#include "Layers/xrRender_R2/rain_gpu_profile.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -45,8 +46,20 @@ void dxRainRender::Copy(IRainRender& _in) { *this = *(dxRainRender*)&_in; }
 void dxRainRender::Render(CEffect_Rain& owner)
 {
     float factor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
+    if (strstr(Core.Params, "-qa_force_rain"))
+        factor = 1.f;
     if (factor < EPS_L)
         return;
+
+#if defined(USE_DX11)
+    static QaGpuTimestampProfiler<2> gpuProfiler(
+        "rain_effects", {"falling_drops", "splash_particles"});
+    static QaCpuIntervalProfiler<4> cpuProfiler(
+        "rain_effects", {"grow_items", "drops_update_build", "drops_submit", "splash_update_build_submit"});
+    ID3D11DeviceContext* gpuContext = HW.get_context(CHW::IMM_CTX_ID);
+    cpuProfiler.Begin();
+    gpuProfiler.Begin(gpuContext);
+#endif
 
     const u32 desired_items = iFloor(0.5f * (1.f + factor) * float(max_desired_items));
 
@@ -62,8 +75,14 @@ void dxRainRender::Render(CEffect_Rain& owner)
         }
     }
 
+#if defined(USE_DX11)
+    cpuProfiler.Mark();
+#endif
+
     // visual
     const float factor_visual = factor / 2.f + .5f;
+    const float visual_length = drop_length * factor_visual;
+    const float visual_half_length = visual_length * .5f;
     const Fvector3 f_rain_color = g_pGamePersistent->Environment().CurrentEnv.rain_color;
     const u32 u_rain_color = color_rgba_f(f_rain_color.x, f_rain_color.y, f_rain_color.z, factor_visual);
 
@@ -149,26 +168,21 @@ void dxRainRender::Render(CEffect_Rain& owner)
         // Build line
         Fvector& pos_head = one.P;
         Fvector pos_trail;
-        pos_trail.mad(pos_head, one.D, -drop_length * factor_visual);
+        pos_trail.mad(pos_head, one.D, -visual_length);
 
         // Culling
-        Fvector sC, lineD;
-        float sR;
-        sC.sub(pos_head, pos_trail);
-        lineD.normalize(sC);
-        sC.mul(.5f);
-        sR = sC.magnitude();
-        sC.add(pos_trail);
-        if (!RImplementation.ViewBase.testSphere_dirty(sC, sR))
+        Fvector sphere_center;
+        sphere_center.mad(pos_head, one.D, -visual_half_length);
+        if (!RImplementation.ViewBase.testSphere_dirty(sphere_center, visual_half_length))
             continue;
 
         static Fvector2 UV[2][4] = {{{0, 1}, {0, 0}, {1, 1}, {1, 0}}, {{1, 0}, {1, 1}, {0, 0}, {0, 1}}};
 
         // Everything OK - build vertices
         Fvector P, lineTop, camDir;
-        camDir.sub(sC, vEye);
+        camDir.sub(sphere_center, vEye);
         camDir.normalize();
-        lineTop.crossproduct(camDir, lineD);
+        lineTop.crossproduct(camDir, one.D);
         float w = drop_width;
         u32 s = one.uv_set;
         P.mad(pos_trail, lineTop, -w);
@@ -187,6 +201,10 @@ void dxRainRender::Render(CEffect_Rain& owner)
     u32 vCount = (u32)(verts - start);
     RImplementation.Vertex.Unlock(vCount, hGeom_Rain->vb_stride);
 
+#if defined(USE_DX11)
+    cpuProfiler.Mark();
+#endif
+
     // Render if needed
     if (vCount)
     {
@@ -200,10 +218,22 @@ void dxRainRender::Render(CEffect_Rain& owner)
         RCache.set_CullMode(CULL_CCW);
     }
 
+#if defined(USE_DX11)
+    cpuProfiler.Mark();
+    gpuProfiler.Mark(gpuContext);
+#endif
+
     // Particles
     CEffect_Rain::Particle* P = owner.particle_active;
-    if (nullptr == P)
+    if (!P)
+    {
+#if defined(USE_DX11)
+        gpuProfiler.Mark(gpuContext);
+        gpuProfiler.End(gpuContext);
+        cpuProfiler.End();
+#endif
         return;
+    }
 
     {
         float dt = Device.fTimeDelta;
@@ -278,6 +308,12 @@ void dxRainRender::Render(CEffect_Rain& owner)
             RCache.Render(D3DPT_TRIANGLELIST, v_offset, 0, vCount_Lock, i_offset, dwNumPrimitives);
         }
     }
+
+#if defined(USE_DX11)
+    gpuProfiler.Mark(gpuContext);
+    gpuProfiler.End(gpuContext);
+    cpuProfiler.End();
+#endif
 }
 
 const Fsphere& dxRainRender::GetDropBounds() const { return DM_Drop->bv_sphere; }

@@ -811,6 +811,16 @@ float 	shadowtest 	(float4 tc, float4 tcJ)				// jittered sampling
 
 float 	shadow_rain 	(float4 tc, float2 tcJ)			// jittered sampling
 {
+#ifdef SM_5
+	tc.xyz /= tc.w;
+
+	const float scale = (4.0f / float(SMAP_size));
+	const float4 jitter = jitter0.Sample(smp_linear, tcJ) * scale;
+	const float4 first = s_smap.GatherCmpRed(smp_smap, tc.xy + jitter.xy, tc.z);
+	const float4 second = s_smap.GatherCmpRed(smp_smap, tc.xy + jitter.wz, tc.z);
+
+	return dot(first + second, 1.0h / 8.0h);
+#else
 	float4	r;
 
 	const 	float 	scale 	= (4.0f/float(SMAP_size));
@@ -832,6 +842,7 @@ float 	shadow_rain 	(float4 tc, float2 tcJ)			// jittered sampling
 //	r.w		= test	(tc,J0.xw).x;
 
 	return	dot(r,1.h/4.h);
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

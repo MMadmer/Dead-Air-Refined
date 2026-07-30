@@ -290,6 +290,32 @@ void SimulatorStates::UpdateDesc(D3D_BLEND_DESC& desc) const
                     desc.AlphaToCoverageEnable = S.v2 ? 1 : 0;
                 break;
 
+#if defined(USE_DX11)
+            case XRDX11RS_INDEPENDENTBLEND:
+                desc.IndependentBlendEnable = S.v2 ? 1 : 0;
+                break;
+
+            case XRDX11RS_ALPHABLENDENABLE1:
+                desc.RenderTarget[1].BlendEnable = S.v2 ? 1 : 0;
+                break;
+
+            case XRDX11RS_SRCBLEND1:
+                desc.RenderTarget[1].SrcBlend = dx11StateUtils::ConvertBlendArg((D3DBLEND)S.v2);
+                break;
+
+            case XRDX11RS_DESTBLEND1:
+                desc.RenderTarget[1].DestBlend = dx11StateUtils::ConvertBlendArg((D3DBLEND)S.v2);
+                break;
+
+            case XRDX11RS_SRCBLENDALPHA1:
+                desc.RenderTarget[1].SrcBlendAlpha = dx11StateUtils::ConvertBlendArg((D3DBLEND)S.v2);
+                break;
+
+            case XRDX11RS_DESTBLENDALPHA1:
+                desc.RenderTarget[1].DestBlendAlpha = dx11StateUtils::ConvertBlendArg((D3DBLEND)S.v2);
+                break;
+#endif
+
             case D3DRS_SRCBLEND:
                 for (int i = 0; i < 8; ++i)
                     desc.RenderTarget[i].SrcBlend = dx11StateUtils::ConvertBlendArg((D3DBLEND)S.v2);
