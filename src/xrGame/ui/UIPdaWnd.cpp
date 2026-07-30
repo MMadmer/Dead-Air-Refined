@@ -264,7 +264,7 @@ void CUIPdaWnd::Update()
         m_clock->SetText(time.c_str());
     }
     if (pUILogsWnd)
-        Device.seqParallel.push_back(fastdelegate::FastDelegate0<>(pUILogsWnd, &CUILogsWnd::PerformWork));
+        Device.add_to_seq_parallel(fastdelegate::FastDelegate0<>(pUILogsWnd, &CUILogsWnd::PerformWork));
 }
 
 void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)

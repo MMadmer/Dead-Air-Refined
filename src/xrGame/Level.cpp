@@ -453,7 +453,7 @@ void CLevel::OnFrame()
         if (g_mt_config.test(mtMap))
         {
             R_ASSERT(m_map_manager);
-            Device.seqParallel.push_back(
+            Device.add_to_seq_parallel(
                 fastdelegate::FastDelegate0<>(m_map_manager, &CMapManager::Update));
         }
         else
@@ -562,7 +562,7 @@ void CLevel::OnFrame()
         if (g_mt_config.test(mtLevelSounds))
         {
             R_ASSERT(m_level_sound_manager);
-            Device.seqParallel.push_back(
+            Device.add_to_seq_parallel(
                 fastdelegate::FastDelegate0<>(m_level_sound_manager, &CLevelSoundManager::Update));
         }
         else
@@ -571,7 +571,7 @@ void CLevel::OnFrame()
         // defer LUA-GC-STEP
         if (g_mt_config.test(mtLUA_GC))
         {
-            Device.seqParallel.push_back(fastdelegate::FastDelegate0<>(this, &CLevel::script_gc));
+            Device.add_to_seq_parallel(fastdelegate::FastDelegate0<>(this, &CLevel::script_gc));
         }
         else
             script_gc();

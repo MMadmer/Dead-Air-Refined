@@ -24,6 +24,7 @@
 #include "xrScriptEngine/ScriptExporter.hpp"
 
 #include <SDL.h>
+#include <mutex>
 
 // refs
 class Task;
@@ -91,6 +92,12 @@ public:
     }
 
 public:
+    struct ParallelFrameTask
+    {
+        fastdelegate::FastDelegate0<> callback;
+        const void* concurrencyKey{};
+    };
+
     // Registrators
     MessageRegistry<pureRender> seqRender;
     MessageRegistry<pureAppActivate> seqAppActivate;
@@ -100,9 +107,12 @@ public:
     MessageRegistry<pureFrame> seqFrameMT;
     MessageRegistry<pureDeviceReset> seqDeviceReset;
     MessageRegistry<pureUIReset> seqUIReset;
-    xr_vector<fastdelegate::FastDelegate0<>> seqParallel;
+    xr_vector<ParallelFrameTask> seqParallel;
 
 private:
+    xr_vector<ParallelFrameTask> seqParallelProcessing;
+    mutable std::mutex seqParallelMutex;
+
     struct RenderDeviceStatistics
     {
         CStatTimer RenderTotal; // pureRender
@@ -255,12 +265,28 @@ public:
     void AddSeqFrame(pureFrame* f, bool mt);
     void RemoveSeqFrame(pureFrame* f);
 
+    void add_to_seq_parallel(
+        const fastdelegate::FastDelegate0<>& delegate, const void* concurrencyKey = nullptr)
+    {
+        std::lock_guard lock(seqParallelMutex);
+        seqParallel.push_back({delegate, concurrencyKey});
+    }
+
     ICF void remove_from_seq_parallel(const fastdelegate::FastDelegate0<>& delegate)
     {
-        xr_vector<fastdelegate::FastDelegate0<>>::iterator I =
-            std::find(seqParallel.begin(), seqParallel.end(), delegate);
-        if (I != seqParallel.end())
-            seqParallel.erase(I);
+        std::lock_guard lock(seqParallelMutex);
+        const auto iterator = std::find_if(seqParallel.begin(), seqParallel.end(),
+            [&delegate](const ParallelFrameTask& task) { return task.callback == delegate; });
+        if (iterator != seqParallel.end())
+            seqParallel.erase(iterator);
+    }
+
+    [[nodiscard]] bool in_seq_parallel(const fastdelegate::FastDelegate0<>& delegate) const
+    {
+        std::lock_guard lock(seqParallelMutex);
+        return std::find_if(seqParallel.begin(), seqParallel.end(),
+                   [&delegate](const ParallelFrameTask& task) { return task.callback == delegate; }) !=
+            seqParallel.end();
     }
 
 private:

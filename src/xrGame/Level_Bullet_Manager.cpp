@@ -914,7 +914,7 @@ void CBulletManager::CommitRenderSet() // @ the end of frame
     m_BulletsRendered = m_Bullets;
     if (g_mt_config.test(mtBullets))
     {
-        Device.seqParallel.push_back(
+        Device.add_to_seq_parallel(
             fastdelegate::FastDelegate0<>(this, &CBulletManager::UpdateWorkload));
     }
     else

@@ -56,6 +56,7 @@ CObjectList::~CObjectList()
 
 IGameObject* CObjectList::FindObjectByName(shared_str name)
 {
+    std::shared_lock lock(objectStateMutex);
     for (auto& it : objects_active)
         if (it->cName().equal(name))
             return it;
@@ -69,6 +70,7 @@ IGameObject* CObjectList::FindObjectByName(shared_str name)
 IGameObject* CObjectList::FindObjectByName(pcstr name) { return FindObjectByName(shared_str(name)); }
 IGameObject* CObjectList::FindObjectByCLS_ID(CLASS_ID cls)
 {
+    std::shared_lock lock(objectStateMutex);
     {
         Objects::iterator O = std::find_if(objects_active.begin(), objects_active.end(), fClassEQ(cls));
         if (O != objects_active.end())
@@ -98,15 +100,21 @@ void CObjectList::o_remove(Objects& v, IGameObject* O)
 void CObjectList::o_activate(IGameObject* O)
 {
     VERIFY(O && O->processing_enabled());
-    o_remove(objects_sleeping, O);
-    objects_active.push_back(O);
+    {
+        std::unique_lock lock(objectStateMutex);
+        o_remove(objects_sleeping, O);
+        objects_active.push_back(O);
+    }
     O->MakeMeCrow();
 }
 void CObjectList::o_sleep(IGameObject* O)
 {
     VERIFY(O && !O->processing_enabled());
-    o_remove(objects_active, O);
-    objects_sleeping.push_back(O);
+    {
+        std::unique_lock lock(objectStateMutex);
+        o_remove(objects_active, O);
+        objects_sleeping.push_back(O);
+    }
     O->MakeMeCrow();
 }
 
@@ -506,7 +514,7 @@ IGameObject* CObjectList::Create(pcstr name)
 
 void CObjectList::Destroy(IGameObject* game_obj)
 {
-    if (nullptr == game_obj)
+    if (!game_obj)
         return;
     net_Unregister(game_obj);
 

@@ -23,6 +23,7 @@ void CRenderDevice::Destroy()
     seqFrameMT.Clear();
     seqDeviceReset.Clear();
     seqParallel.clear();
+    seqParallelProcessing.clear();
     xr_delete(Statistic);
 
     SDL_DestroyWindow(m_sdlWnd);

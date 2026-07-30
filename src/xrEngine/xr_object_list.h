@@ -1,6 +1,8 @@
 #ifndef __XR_OBJECT_LIST_H__
 #define __XR_OBJECT_LIST_H__
 
+#include <shared_mutex>
+
 #ifdef DEBUG
 extern ENGINE_API BOOL debug_destroy;
 #endif
@@ -38,6 +40,7 @@ private:
     Objects destroy_queue;
     Objects objects_active;
     Objects objects_sleeping;
+    mutable std::shared_mutex objectStateMutex;
     /**
      * @brief m_primary_crows   - list of items of the primary thread
      * @brief m_secondary_crows - list of items of the secondary thread
@@ -111,11 +114,13 @@ public:
     [[nodiscard]]
     IC u32 o_count() const
     {
+        std::shared_lock lock(objectStateMutex);
         return u32(objects_active.size() + objects_sleeping.size());
     }
 
     IC IGameObject* o_get_by_iterator(u32 _it)
     {
+        std::shared_lock lock(objectStateMutex);
         if (_it < objects_active.size())
             return objects_active[_it];
         else

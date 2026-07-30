@@ -4,14 +4,36 @@
 #include "Navigation/level_graph.h"
 #include "Navigation/PatrolPath/patrol_path_storage.h"
 #include "Navigation/graph_engine.h"
+#include "xrCore/Threading/TaskManager.hpp"
+
+#include <thread>
 
 AISpaceBase::AISpaceBase() { GEnv.AISpace = this; }
 AISpaceBase::~AISpaceBase()
 {
     xr_delete(m_patrol_path_storage);
-    xr_delete(m_graph_engine);
+    DestroyGraphEngines();
     VERIFY(!m_game_graph);
     GEnv.AISpace = nullptr;
+}
+
+void AISpaceBase::CreateGraphEngines(u32 maxVertexCount)
+{
+    DestroyGraphEngines();
+    const size_t workerCount = std::max<size_t>(std::thread::hardware_concurrency(), 1);
+    m_graph_engine_vertex_count = maxVertexCount;
+    m_worker_graph_engines.resize(workerCount);
+    m_graph_engine = xr_new<CGraphEngine>(maxVertexCount);
+    m_worker_graph_engines.front() = m_graph_engine;
+}
+
+void AISpaceBase::DestroyGraphEngines()
+{
+    for (CGraphEngine*& graphEngine : m_worker_graph_engines)
+        xr_delete(graphEngine);
+    m_worker_graph_engines.clear();
+    m_graph_engine = nullptr;
+    m_graph_engine_vertex_count = 0;
 }
 
 void AISpaceBase::Load(const char* levelName)
@@ -26,7 +48,7 @@ void AISpaceBase::Load(const char* levelName)
     R_ASSERT2(crossHeader.level_guid() == levelHeader.guid(), "cross_table doesn't correspond to the AI-map");
     R_ASSERT2(crossHeader.game_guid() == gameHeader.guid(), "graph doesn't correspond to the cross table");
     u32 vertexCount = _max(gameHeader.vertex_count(), levelHeader.vertex_count());
-    m_graph_engine = xr_new<CGraphEngine>(vertexCount);
+    CreateGraphEngines(vertexCount);
     R_ASSERT2(currentLevel.guid() == levelHeader.guid(), "graph doesn't correspond to the AI-map");
     if (!xr_strcmp(currentLevel.name(), levelName))
         Validate(currentLevel.id());
@@ -37,10 +59,10 @@ void AISpaceBase::Unload(bool reload)
 {
     if (GEnv.isDedicatedServer)
         return;
-    xr_delete(m_graph_engine);
+    DestroyGraphEngines();
     xr_delete(m_level_graph);
     if (!reload && m_game_graph)
-        m_graph_engine = xr_new<CGraphEngine>(game_graph().header().vertex_count());
+        CreateGraphEngines(game_graph().header().vertex_count());
 }
 
 void AISpaceBase::Initialize()
@@ -48,7 +70,7 @@ void AISpaceBase::Initialize()
     if (GEnv.isDedicatedServer)
         return;
     VERIFY(!m_graph_engine);
-    m_graph_engine = xr_new<CGraphEngine>(1024);
+    CreateGraphEngines(1024);
     VERIFY(!m_patrol_path_storage);
     m_patrol_path_storage = xr_new<CPatrolPathStorage>();
 }
@@ -111,15 +133,31 @@ void AISpaceBase::SetGameGraph(CGameGraph* gameGraph)
     {
         VERIFY(!m_game_graph);
         m_game_graph = gameGraph;
-        xr_delete(m_graph_engine);
-        m_graph_engine = xr_new<CGraphEngine>(game_graph().header().vertex_count());
+        CreateGraphEngines(game_graph().header().vertex_count());
     }
     else
     {
         VERIFY(m_game_graph);
         m_game_graph = nullptr;
-        xr_delete(m_graph_engine);
+        DestroyGraphEngines();
     }
+}
+
+CGraphEngine& AISpaceBase::graph_engine() const
+{
+    VERIFY(m_graph_engine);
+    if (!TaskScheduler || m_worker_graph_engines.empty())
+        return *m_graph_engine;
+
+    const size_t workerIndex = TaskScheduler->GetCurrentWorkerID();
+    if (workerIndex >= m_worker_graph_engines.size())
+        return *m_graph_engine;
+
+    // Graph searches mutate scratch storage, so workers create isolated engines on first use.
+    CGraphEngine*& workerGraphEngine = m_worker_graph_engines[workerIndex];
+    if (!workerGraphEngine)
+        workerGraphEngine = xr_new<CGraphEngine>(m_graph_engine_vertex_count);
+    return *workerGraphEngine;
 }
 
 const CGameLevelCrossTable& AISpaceBase::cross_table() const { return game_graph().cross_table(); }

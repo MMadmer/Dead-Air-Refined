@@ -24,10 +24,14 @@ protected:
     CGameGraph* m_game_graph = nullptr; // not owned by AISpaceBase
     CLevelGraph* m_level_graph = nullptr;
     CGraphEngine* m_graph_engine = nullptr;
+    mutable xr_vector<CGraphEngine*> m_worker_graph_engines;
+    u32 m_graph_engine_vertex_count{};
     CPatrolPathStorage* m_patrol_path_storage = nullptr;
 
 protected:
     AISpaceBase();
+    void CreateGraphEngines(u32 maxVertexCount);
+    void DestroyGraphEngines();
     void Load(const char* levelName);
     void Unload(bool reload);
     void Initialize();
@@ -45,7 +49,7 @@ public:
     const CGameLevelCrossTable& cross_table() const;
     const CGameLevelCrossTable* get_cross_table() const;
     inline const CPatrolPathStorage& patrol_paths() const;
-    inline CGraphEngine& graph_engine() const;
+    CGraphEngine& graph_engine() const;
 };
 
 inline CGameGraph& AISpaceBase::game_graph() const
@@ -62,12 +66,6 @@ inline CLevelGraph& AISpaceBase::level_graph() const
 }
 
 inline const CLevelGraph* AISpaceBase::get_level_graph() const { return m_level_graph; }
-inline CGraphEngine& AISpaceBase::graph_engine() const
-{
-    VERIFY(m_graph_engine);
-    return *m_graph_engine;
-}
-
 inline const CPatrolPathStorage& AISpaceBase::patrol_paths() const
 {
     VERIFY(m_patrol_path_storage);

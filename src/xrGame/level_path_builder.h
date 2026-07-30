@@ -65,7 +65,8 @@ public:
         if (Device.dwTimeGlobal < m_last_fail_time + time_to_wait_after_fail)
             return;
 
-        Device.seqParallel.push_back(fastdelegate::FastDelegate0<>(this, &CLevelPathBuilder::process));
+        Device.add_to_seq_parallel(
+            fastdelegate::FastDelegate0<>(this, &CLevelPathBuilder::process), &m_object->object());
     }
 
     void process_impl()

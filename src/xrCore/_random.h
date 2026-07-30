@@ -3,6 +3,8 @@
 #include "xr_types.h"
 #include "xrCore/xrDebug.h"
 
+#include <atomic>
+
 /*
 u32 dwRandSeed;
 IC u32 dwfRandom(u32 dwRange)
@@ -22,15 +24,26 @@ return(dwResult);
 
 class XRCORE_API CRandom
 {
-    volatile s32 holdrand;
+    s32 holdrand;
 
 public:
     CRandom() : holdrand(1){};
     CRandom(s32 _seed) : holdrand(_seed){};
 
-    void seed(s32 val) { holdrand = val; }
+    void seed(s32 val) { std::atomic_ref(holdrand).store(val, std::memory_order_relaxed); }
     s32 maxI() { return 32767; }
-    ICN s32 randI() noexcept { return (holdrand = holdrand * 214013L + 2531011L) >> 16 & 0x7fff; }
+    ICN s32 randI() noexcept
+    {
+        std::atomic_ref state(holdrand);
+        s32 current = state.load(std::memory_order_relaxed);
+        s32 next;
+        do
+        {
+            next = static_cast<s32>(static_cast<u32>(current) * 214013u + 2531011u);
+        }
+        while (!state.compare_exchange_weak(current, next, std::memory_order_relaxed));
+        return static_cast<s32>((static_cast<u32>(next) >> 16u) & 0x7fffu);
+    }
     s32 randI(s32 max) { VERIFY(max); return randI() % max; };
     s32 randI(s32 min, s32 max) { return min + randI(max - min); }
     s32 randIs(s32 range) { return randI(-range, range); }
