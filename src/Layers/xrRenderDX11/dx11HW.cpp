@@ -524,8 +524,7 @@ void CHW::EndScene() { }
 
 void CHW::Present()
 {
-    const bool bUseVSync = psDeviceMode.WindowStyle == rsFullscreen &&
-        psDeviceFlags.test(rsVSync); // xxx: weird tearing glitches when VSync turned on for windowed mode in DX11
+    const bool bUseVSync = psDeviceFlags.test(rsVSync);
 
     switch (m_pSwapChain->Present(bUseVSync ? 1 : 0, 0))
     {

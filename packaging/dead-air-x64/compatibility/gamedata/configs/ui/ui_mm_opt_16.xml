@@ -528,7 +528,7 @@
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
         </cap_vsync>
         <check_vsync x="115" y="0" width="30" height="21">
-            <options_item entry="rs_v_sync" group="mm_opt_video_adv" depend="vid"/>
+            <options_item entry="rs_v_sync" group="mm_opt_video_adv" depend="runtime"/>
         </check_vsync>
 
         <cap_60hz x="25" y="2" width="90" height="21" complex_mode="1" >

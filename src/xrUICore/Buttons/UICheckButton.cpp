@@ -77,6 +77,7 @@ bool CUICheckButton::OnMouseDown(int mouse_btn)
         }
     }
     GetMessageTarget()->SendMessage(this, BUTTON_CLICKED, nullptr);
+    OnChangedOptValue();
     return true;
 }
 
