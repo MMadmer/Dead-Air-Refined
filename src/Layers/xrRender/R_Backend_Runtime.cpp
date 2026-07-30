@@ -109,6 +109,9 @@ void CBackend::Invalidate()
     m_pInputLayoutSignature = nullptr;
     m_PrimitiveTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
     m_bChangedRTorZB = false;
+    m_pixelUavs[0] = nullptr;
+    m_pixelUavs[1] = nullptr;
+    m_pixelUavsActive = false;
     m_pInputSignature = NULL;
     for (int i = 0; i < MaxCBuffers; ++i)
     {

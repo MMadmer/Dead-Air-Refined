@@ -118,6 +118,18 @@ void dx11ShaderResourceStateCache::SetPSResource(u32 uiSlot, ID3DShaderResourceV
     }
 }
 
+void dx11ShaderResourceStateCache::UnbindPSResource(ID3DShaderResourceView* resource)
+{
+    if (!resource)
+        return;
+
+    for (u32 slot = 0; slot < CTexture::mtMaxPixelShaderTextures; ++slot)
+    {
+        if (m_PSViews[slot] == resource)
+            SetPSResource(slot, nullptr);
+    }
+}
+
 void dx11ShaderResourceStateCache::SetGSResource(u32 uiSlot, ID3DShaderResourceView* pRes)
 {
     VERIFY(uiSlot < CTexture::mtMaxGeometryShaderTextures);

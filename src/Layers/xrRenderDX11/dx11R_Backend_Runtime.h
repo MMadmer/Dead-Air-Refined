@@ -29,6 +29,29 @@ IC void CBackend::set_RT(ID3DRenderTargetView* RT, u32 ID)
     }
 }
 
+IC void CBackend::set_PixelUAVs(ID3D11UnorderedAccessView* first, ID3D11UnorderedAccessView* second)
+{
+    const bool active = first || second;
+    if (m_pixelUavsActive == active && m_pixelUavs[0] == first && m_pixelUavs[1] == second)
+        return;
+
+    auto* context = HW.get_context(context_id);
+    if (m_pixelUavsActive)
+    {
+        ID3D11UnorderedAccessView* nullUavs[2]{};
+        context->OMSetRenderTargetsAndUnorderedAccessViews(0, nullptr, nullptr, 0, 2, nullUavs, nullptr);
+    }
+    else if (!m_bChangedRTorZB)
+    {
+        context->OMSetRenderTargets(0, nullptr, nullptr);
+    }
+
+    m_pixelUavs[0] = first;
+    m_pixelUavs[1] = second;
+    m_pixelUavsActive = active;
+    m_bChangedRTorZB = true;
+}
+
 IC void CBackend::set_ZB(ID3DDepthStencilView* ZB)
 {
     if (ZB != pZB)
@@ -865,7 +888,16 @@ ICF void CBackend::ApplyRTandZB()
     if (m_bChangedRTorZB)
     {
         m_bChangedRTorZB = false;
-        HW.get_context(context_id)->OMSetRenderTargets(sizeof(pRT) / sizeof(pRT[0]), pRT, pZB);
+        auto* context = HW.get_context(context_id);
+        if (m_pixelUavsActive)
+        {
+            context->OMSetRenderTargetsAndUnorderedAccessViews(
+                0, nullptr, pZB, 0, std::size(m_pixelUavs), m_pixelUavs, nullptr);
+        }
+        else
+        {
+            context->OMSetRenderTargets(std::size(pRT), pRT, pZB);
+        }
     }
 }
 

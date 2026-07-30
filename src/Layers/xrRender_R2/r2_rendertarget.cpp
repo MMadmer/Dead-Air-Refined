@@ -270,7 +270,11 @@ CRenderTarget::CRenderTarget()
         else
             rt_MSAADepth.create(r2_RT_MSAAdepth, w, h, D3DFMT_D24S8, SampleCount);
 
-        rt_Position.create(r2_RT_P, w, h, D3DFMT_A16B16G16R16F, SampleCount);
+        Flags32 gbufferFlags{};
+#if RENDER == R_R4
+        gbufferFlags.set(CRT::CreateUAV, !options.msaa);
+#endif
+        rt_Position.create(r2_RT_P, w, h, D3DFMT_A16B16G16R16F, SampleCount, gbufferFlags);
         if (!options.gbuffer_opt)
             rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F, SampleCount);
 
@@ -278,7 +282,7 @@ CRenderTarget::CRenderTarget()
         if (options.mrtmixdepth)
         {
             // NV50
-            rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount);
+            rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount, gbufferFlags);
             rt_Accumulator.create(r2_RT_accum, w, h, D3DFMT_A16B16G16R16F, SampleCount);
         }
         else
@@ -289,12 +293,14 @@ CRenderTarget::CRenderTarget()
                 // NV40
                 if (!options.gbuffer_opt)
                 {
-                    rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A16B16G16R16F, SampleCount); // expand to full
+                    rt_Color.create(
+                        r2_RT_albedo, w, h, D3DFMT_A16B16G16R16F, SampleCount, gbufferFlags); // expand to full
                     rt_Accumulator.create(r2_RT_accum, w, h, D3DFMT_A16B16G16R16F, SampleCount);
                 }
                 else
                 {
-                    rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount); // expand to full
+                    rt_Color.create(
+                        r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount, gbufferFlags); // expand to full
                     rt_Accumulator.create(r2_RT_accum, w, h, D3DFMT_A16B16G16R16F, SampleCount);
                 }
             }
@@ -302,7 +308,7 @@ CRenderTarget::CRenderTarget()
             {
                 // R4xx, no-fp-blend,-> albedo_wo
                 VERIFY(options.albedo_wo);
-                rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount); // normal
+                rt_Color.create(r2_RT_albedo, w, h, D3DFMT_A8R8G8B8, SampleCount, gbufferFlags); // normal
                 rt_Accumulator.create(r2_RT_accum, w, h, D3DFMT_A16B16G16R16F, SampleCount);
                 rt_Accumulator_temp.create(r2_RT_accum_temp, w, h, D3DFMT_A16B16G16R16F, SampleCount);
             }

@@ -12,6 +12,7 @@ public:
     void Apply(u32 context_id);
 
     void SetPSResource(u32 uiSlot, ID3DShaderResourceView* pRes);
+    void UnbindPSResource(ID3DShaderResourceView* resource);
     void SetGSResource(u32 uiSlot, ID3DShaderResourceView* pRes);
     void SetVSResource(u32 uiSlot, ID3DShaderResourceView* pRes);
     void SetDSResource(u32 uiSlot, ID3DShaderResourceView* pRes);

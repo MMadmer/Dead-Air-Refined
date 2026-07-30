@@ -243,13 +243,40 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
         //			HW.pDevice->SetSamplerState	( 0, D3DSAMP_MIPMAPLODBIAS, FOURCC_GET1 );
         //		}
 
-        //	Use for intermediate results
-        //	Patch normal
-        u_setrt(cmd_list, rt_Accumulator, nullptr, nullptr, rt_MSAADepth);
-
 #if defined(USE_DX11)
         gpuProfiler.Begin(gpuContext);
 #endif
+
+#if defined(USE_DX11) && RENDER == R_R4
+        const bool useInPlaceUav = RImplementation.o.gbuffer_opt && !RImplementation.o.msaa &&
+            rt_Position->pUAView && rt_Color->pUAView && !strstr(Core.Params, "-qa_disable_rain_uav");
+        if (useInPlaceUav)
+        {
+            u_setrt(cmd_list, nullptr, nullptr, nullptr, rt_MSAADepth);
+            cmd_list.set_Element(s_rain->E[4]);
+            cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
+            cmd_list.set_c("m_shadow", m_shadow);
+            cmd_list.set_c("m_sunmask", m_clouds_shadow);
+            cmd_list.set_c("RainDensity", fRainFactor, 0.f, 0.f, 0.f);
+
+            // Remove stale G-buffer SRVs before exposing the same resources as UAVs.
+            cmd_list.SRVSManager.UnbindPSResource(rt_Position->pTexture->get_SRView());
+            cmd_list.SRVSManager.UnbindPSResource(rt_Color->pTexture->get_SRView());
+            cmd_list.set_PixelUAVs(rt_Position->pUAView, rt_Color->pUAView);
+            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x01, 0x01, 0);
+            cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
+            cmd_list.set_PixelUAVs();
+
+            gpuProfiler.Mark(gpuContext);
+            gpuProfiler.Mark(gpuContext);
+            gpuProfiler.End(gpuContext);
+        }
+        else
+#endif
+        {
+        //	Use for intermediate results
+        //	Patch normal
+        u_setrt(cmd_list, rt_Accumulator, nullptr, nullptr, rt_MSAADepth);
 
         // u_setrt	(rt_Normal,NULL,NULL,get_base_zb());
         cmd_list.set_Element(s_rain->E[1]);
@@ -372,6 +399,7 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
         gpuProfiler.Mark(gpuContext);
         gpuProfiler.End(gpuContext);
 #endif
+        }
 
         //	TODO: DX11: Check if DX11 has analog for NV DBT
         // disable depth bounds
