@@ -30,57 +30,14 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
     cmd_list.set_xform_world(L->m_xform);
     cmd_list.set_xform_view(Device.mView);
     cmd_list.set_xform_project(Device.mProject);
-    enable_scissor(L);
+    const bool bIntersect = enable_scissor(L);
     enable_dbt_bounds(L);
 
-    // *****************************	Mask by stencil		*************************************
-    // *** similar to "Carmack's reverse", but assumes convex, non intersecting objects,
-    // *** thus can cope without stencil clear with 127 lights
-    // *** in practice, 'cause we "clear" it back to 0x1 it usually allows us to > 200 lights :)
-    cmd_list.set_Element(s_accum_mask->E[SE_MASK_POINT]); // masker
-    //	Done in blender!
-    // RCache.set_ColorWriteEnable		(FALSE);
-
-    // backfaces: if (1<=stencil && zfail)	stencil = light_id
-    cmd_list.set_CullMode(CULL_CW);
-    if (!RImplementation.o.msaa)
-    {
-        cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0x01, 0xff,
-            D3DSTENCILOP_KEEP, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE);
-    }
-    else
-    {
-        cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0x01, 0x7f,
-            D3DSTENCILOP_KEEP, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE);
-    }
-    draw_volume(cmd_list, L);
-
-    // frontfaces: if (1<=stencil && zfail)	stencil = 0x1
-    cmd_list.set_CullMode(CULL_CCW);
-    if (!RImplementation.o.msaa)
-    {
-        cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0xff,
-            D3DSTENCILOP_KEEP, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE);
-    }
-    else
-    {
-        cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0x7f, 0x7f,
-            D3DSTENCILOP_KEEP, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE);
-    }
-    draw_volume(cmd_list, L);
-
-    // nv-stencil recompression
-    if (RImplementation.o.nvstencil)
-        u_stencil_optimize(cmd_list);
-
     // *****************************	Minimize overdraw	*************************************
-    // Select shader (front or back-faces), *** back, if intersect near plane
+    // Dead Air clips point volumes directly and keeps stencil bit zero as the geometry mask.
     cmd_list.set_ColorWriteEnable();
-    cmd_list.set_CullMode(CULL_CW); // back
-    /*
-    if (bIntersect)	RCache.set_CullMode		(CULL_CW);		// back
-    else			RCache.set_CullMode		(CULL_CCW);		// front
-    */
+    const u32 lightCullMode = bIntersect ? CULL_CW : CULL_CCW;
+    cmd_list.set_CullMode(lightCullMode);
 
     // 2D texgens
     Fmatrix m_Texgen;
@@ -121,25 +78,24 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
         //			HW.pDevice->SetSamplerState	( 0, D3DSAMP_MIPMAPLODBIAS, FOURCC_GET4 );
         //		}
 
-        cmd_list.set_CullMode(CULL_CW); // back
         // Render if (light_id <= stencil && z-pass)
         if (!RImplementation.o.msaa)
         {
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0x00);
             draw_volume(cmd_list, L);
         }
         else // checked Holger
         {
             // per pixel
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x01, 0x81, 0x00);
             draw_volume(cmd_list, L);
 
             // per sample
             if (RImplementation.o.msaa_opt)
             {
                 cmd_list.set_Element(shader_msaa[0]->E[_id]);
-                cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID | 0x80, 0xff, 0x00);
-                cmd_list.set_CullMode(D3DCULL_CW);
+                cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0x00);
+                cmd_list.set_CullMode(lightCullMode);
                 draw_volume(cmd_list, L);
             }
             else // checked Holger
@@ -149,8 +105,8 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
                 {
                     cmd_list.set_Element(shader_msaa[i]->E[_id]);
                     cmd_list.StateManager.SetSampleMask(u32(1) << i);
-                    cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID | 0x80, 0xff, 0x00);
-                    cmd_list.set_CullMode(D3DCULL_CW);
+                    cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0x00);
+                    cmd_list.set_CullMode(lightCullMode);
                     draw_volume(cmd_list, L);
                 }
                 cmd_list.StateManager.SetSampleMask(0xffffffff);
@@ -160,7 +116,7 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
 #   error No graphics API selected or enabled!
 #endif
             }
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0x00);
         }
 
         // Fetch4 : disable
@@ -179,21 +135,21 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
         cmd_list.set_c("m_texgen", m_Texgen);
         if (!RImplementation.o.msaa)
         {
-            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0x00);
             draw_volume(cmd_list, L);
         }
         else // checked Holger
         {
             // per pixel
-            cmd_list.set_CullMode(D3DCULL_CW);
-            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_CullMode(lightCullMode);
+            cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x01, 0x81, 0x00);
             draw_volume(cmd_list, L);
             if (RImplementation.o.msaa_opt)
             {
                 // per sample
                 cmd_list.set_Element(s_accum_mask_msaa[0]->E[SE_MASK_ACCUM_VOL]);
-                cmd_list.set_CullMode(D3DCULL_CW);
-                cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID | 0x80, 0xff, 0x00);
+                cmd_list.set_CullMode(lightCullMode);
+                cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0x00);
                 draw_volume(cmd_list, L);
             }
             else // checked Holger
@@ -202,9 +158,9 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
                 for (u32 i = 0; i < RImplementation.o.msaa_samples; ++i)
                 {
                     cmd_list.set_Element(s_accum_mask_msaa[i]->E[SE_MASK_ACCUM_VOL]);
-                    cmd_list.set_CullMode(D3DCULL_CW);
+                    cmd_list.set_CullMode(lightCullMode);
                     cmd_list.StateManager.SetSampleMask(u32(1) << i);
-                    cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID | 0x80, 0xff, 0x00);
+                    cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, 0x81, 0x81, 0x00);
                     draw_volume(cmd_list, L);
                 }
                 cmd_list.StateManager.SetSampleMask(0xffffffff);
@@ -214,14 +170,11 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
 #   error No graphics API selected or enabled!
 #endif
             }
-            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
+            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0x00);
         }
     }
 
     cmd_list.set_Scissor(0);
-
-    // dwLightMarkerID					+=	2;	// keep lowest bit always setted up
-    increment_light_marker(cmd_list);
 
     u_DBT_disable();
 }
