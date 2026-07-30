@@ -13,10 +13,18 @@
 #include "moving_object.h"
 #include "moving_objects_impl.h"
 
+moving_objects::StaticQueryScratch& moving_objects::static_query_scratch()
+{
+    // Parallel path jobs need isolated reusable query storage.
+    thread_local StaticQueryScratch scratch;
+    return scratch;
+}
+
 bool moving_objects::collided_static(const Fvector& position, const float& radius)
 {
-    NEAREST_STATIC::const_iterator I = m_nearest_static.begin();
-    NEAREST_STATIC::const_iterator E = m_nearest_static.end();
+    const NEAREST_STATIC& nearest = static_query_scratch().nearest;
+    NEAREST_STATIC::const_iterator I = nearest.begin();
+    NEAREST_STATIC::const_iterator E = nearest.end();
     for (; I != E; ++I)
     {
         if (collided(*I, position, radius))
@@ -59,16 +67,18 @@ bool moving_objects::collided_static(moving_object* object, const Fvector& dest_
 
 void moving_objects::fill_static(obstacles_query& query)
 {
-    NEAREST_STATIC::const_iterator I = m_nearest_static.begin();
-    NEAREST_STATIC::const_iterator E = m_nearest_static.end();
+    const NEAREST_STATIC& nearest = static_query_scratch().nearest;
+    NEAREST_STATIC::const_iterator I = nearest.begin();
+    NEAREST_STATIC::const_iterator E = nearest.end();
     for (; I != E; ++I)
         query.add(smart_cast<const CGameObject*>(*I));
 }
 
 void moving_objects::fill_static(obstacles_query& query, const Fvector& position, const float& radius)
 {
-    NEAREST_STATIC::const_iterator I = m_nearest_static.begin();
-    NEAREST_STATIC::const_iterator E = m_nearest_static.end();
+    const NEAREST_STATIC& nearest = static_query_scratch().nearest;
+    NEAREST_STATIC::const_iterator I = nearest.begin();
+    NEAREST_STATIC::const_iterator E = nearest.end();
     for (; I != E; ++I)
     {
         if (!collided(*I, position, radius))
@@ -125,11 +135,12 @@ public:
 
 void moving_objects::fill_nearest_list(const Fvector& position, const float& radius, moving_object* object)
 {
+    StaticQueryScratch& scratch = static_query_scratch();
     Level().ObjectSpace.GetNearest(
-        m_spatial_objects, m_nearest_static, position, radius, const_cast<CEntityAlive*>(&object->object()));
+        scratch.spatials, scratch.nearest, position, radius, const_cast<CEntityAlive*>(&object->object()));
 
-    m_nearest_static.erase(std::remove_if(m_nearest_static.begin(), m_nearest_static.end(), ignore_predicate(object)),
-        m_nearest_static.end());
+    scratch.nearest.erase(std::remove_if(scratch.nearest.begin(), scratch.nearest.end(), ignore_predicate(object)),
+        scratch.nearest.end());
 }
 
 void moving_objects::query_action_static(
@@ -140,7 +151,7 @@ void moving_objects::query_action_static(
 
     fill_nearest_list(start_position, dest_position.distance_to(start_position) + EPS, object);
 
-    if (m_nearest_static.empty())
+    if (static_query_scratch().nearest.empty())
         return;
 
     if (!collided_static(object, dest_position))

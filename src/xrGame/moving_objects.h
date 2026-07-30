@@ -41,6 +41,11 @@ public:
 
 private:
     typedef xr_vector<ISpatial*> Spatials;
+    struct StaticQueryScratch
+    {
+        NEAREST_STATIC nearest;
+        Spatials spatials;
+    };
 
 public:
     typedef obstacles_query query;
@@ -48,7 +53,6 @@ public:
 
 private:
     TREE* m_tree;
-    NEAREST_STATIC m_nearest_static;
 
 private:
     NEAREST_MOVING m_nearest_moving;
@@ -56,7 +60,6 @@ private:
     NEAREST_MOVING m_visited_emitters;
     COLLISIONS m_collisions;
     COLLISIONS m_previous_collisions;
-    Spatials m_spatial_objects;
 
 #ifdef DEBUG
 private:
@@ -67,6 +70,7 @@ private:
 #endif // DEBUG
 
 private:
+    static StaticQueryScratch& static_query_scratch();
     IC bool collided(const IGameObject* object, const Fvector& position, const float& radius) const;
     bool collided_static(const Fvector& position, const float& radius);
     bool collided_static(moving_object* object, const Fvector& dest_position);
