@@ -7,6 +7,34 @@
 
 using namespace PAPI;
 
+namespace
+{
+template <typename Function>
+void for_each_particle(Particle* particles, u32 count, Function&& function)
+{
+    const auto processRange = [particles, &function](const TaskRange<u32>& range)
+    {
+        for (u32 index = range.begin(); index != range.end(); ++index)
+            function(particles[index]);
+    };
+
+    constexpr u32 minimumParallelParticles = 512;
+    const size_t workerCount = TaskScheduler ? TaskScheduler->GetWorkersCount() : 1;
+    const u32 parallelThreshold =
+        std::max(minimumParallelParticles, static_cast<u32>(std::min<size_t>(workerCount * 32, u32(-1))));
+    if (workerCount > 1 && count >= parallelThreshold)
+        xr_parallel_for(TaskRange<u32>(0, count, 64), processRange);
+    else
+        processRange(TaskRange<u32>(0, count));
+}
+
+template <typename Function>
+void for_each_particle(ParticleEffect* effect, Function&& function)
+{
+    for_each_particle(effect->particles, effect->p_count, std::forward<Function>(function));
+}
+}
+
 void PAPI::PAAvoid::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     float magdt = magnitude * dt;
@@ -681,11 +709,10 @@ void PACopyVertexB::Execute(ParticleEffect* effect, const float dt, float& tm_ma
 {
     if (copy_pos)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-            m.posB = m.pos;
-        }
+            particle.posB = particle.pos;
+        });
     }
     /*
     if (copy_vel)
@@ -708,18 +735,17 @@ void PADamping::Execute(ParticleEffect* effect, const float dt, float& tm_max)
     pVector one(1, 1, 1);
     pVector scale(one - (one - damping) * dt);
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& particle)
     {
-        Particle& m = effect->particles[i];
-        float vSqr = m.vel.length2();
+        const float velocitySquared = particle.vel.length2();
 
-        if (vSqr >= vlowSqr && vSqr <= vhighSqr)
+        if (velocitySquared >= vlowSqr && velocitySquared <= vhighSqr)
         {
-            m.vel.x *= scale.x;
-            m.vel.y *= scale.y;
-            m.vel.z *= scale.z;
+            particle.vel.x *= scale.x;
+            particle.vel.y *= scale.y;
+            particle.vel.z *= scale.z;
         }
-    }
+    });
 }
 void PADamping::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -733,20 +759,18 @@ void PAExplosion::Execute(ParticleEffect* effect, const float dt, float& tm_max)
     float inexp = -0.5f * _sqr(oneOverSigma);
     float outexp = ONEOVERSQRT2PI * oneOverSigma;
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& particle)
     {
-        Particle& m = effect->particles[i];
-
         // Figure direction to particle.
-        pVector dir(m.pos - center);
+        pVector dir(particle.pos - center);
         float distSqr = dir.length2();
         float dist = _sqrt(distSqr);
         float DistFromWaveSqr = _sqr(radius - dist);
 
         float Gd = expf(DistFromWaveSqr * inexp) * outexp;
 
-        m.vel += dir * (Gd * magdt / ((dist + EPS) * (distSqr + epsilon)));
-    }
+        particle.vel += dir * (Gd * magdt / ((dist + EPS) * (distSqr + epsilon)));
+    });
 
     age += dt;
 }
@@ -758,37 +782,39 @@ void PAFollow::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     float magdt = magnitude * dt;
     float max_radiusSqr = max_radius * max_radius;
+    if (effect->p_count < 2)
+        return;
 
     if (max_radiusSqr < P_MAXFLOAT)
     {
-        for (u32 i = 0; i < effect->p_count - 1; i++)
+        Particle* particles = effect->particles;
+        for_each_particle(particles, effect->p_count - 1, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Accelerate toward the particle after me in the list.
-            pVector tohim(effect->particles[i + 1].pos - m.pos); // tohim = p1 - p0
+            const u32 index = static_cast<u32>(&particle - particles);
+            pVector tohim(particles[index + 1].pos - particle.pos); // tohim = p1 - p0
             float tohimlenSqr = tohim.length2();
 
             if (tohimlenSqr < max_radiusSqr)
             {
                 // Compute force exerted between the two bodies
-                m.vel += tohim * (magdt / (_sqrt(tohimlenSqr) * (tohimlenSqr + epsilon)));
+                particle.vel += tohim * (magdt / (_sqrt(tohimlenSqr) * (tohimlenSqr + epsilon)));
             }
-        }
+        });
     }
     else
     {
-        for (u32 i = 0; i < effect->p_count - 1; i++)
+        Particle* particles = effect->particles;
+        for_each_particle(particles, effect->p_count - 1, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Accelerate toward the particle after me in the list.
-            pVector tohim(effect->particles[i + 1].pos - m.pos); // tohim = p1 - p0
+            const u32 index = static_cast<u32>(&particle - particles);
+            pVector tohim(particles[index + 1].pos - particle.pos); // tohim = p1 - p0
             float tohimlenSqr = tohim.length2();
 
             // Compute force exerted between the two bodies
-            m.vel += tohim * (magdt / (_sqrt(tohimlenSqr) * (tohimlenSqr + epsilon)));
-        }
+            particle.vel += tohim * (magdt / (_sqrt(tohimlenSqr) * (tohimlenSqr + epsilon)));
+        });
     }
 }
 void PAFollow::Transform(const Fmatrix&) { ; }
@@ -856,11 +882,11 @@ void PAGravity::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     pVector ddir(direction * dt);
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& particle)
     {
         // Step velocity with acceleration
-        effect->particles[i].vel += ddir;
-    }
+        particle.vel += ddir;
+    });
 }
 void PAGravity::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -930,12 +956,10 @@ void PAScatter::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
     if (max_radiusSqr < P_MAXFLOAT)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle.
-            pVector dir(m.pos - center);
+            pVector dir(particle.pos - center);
 
             // Distance to jet (force drops as 1/r^2)
             // Soften by epsilon to avoid tight encounters to infinity
@@ -948,18 +972,16 @@ void PAScatter::Execute(ParticleEffect* effect, const float dt, float& tm_max)
                 //acc.Generate(accel);
 
                 // Step velocity with acceleration
-                m.vel += accel * (magdt / (rSqr + epsilon));
+                particle.vel += accel * (magdt / (rSqr + epsilon));
             }
-        }
+        });
     }
     else
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle.
-            pVector dir(m.pos - center);
+            pVector dir(particle.pos - center);
 
             // Distance to jet (force drops as 1/r^2)
             // Soften by epsilon to avoid tight encounters to infinity
@@ -968,8 +990,8 @@ void PAScatter::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             pVector accel = dir / _sqrt(rSqr);
 
             // Step velocity with acceleration
-            m.vel += accel * (magdt / (rSqr + epsilon));
-        }
+            particle.vel += accel * (magdt / (rSqr + epsilon));
+        });
     }
 }
 void PAScatter::Transform(const Fmatrix& m) { m.transform_tiny(center, centerL); }
@@ -1051,15 +1073,14 @@ void PAMatchVelocity::Transform(const Fmatrix&) { ; }
 void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     // Step particle positions forward by dt, and age the particles.
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& particle)
     {
-        Particle& m = effect->particles[i];
         // move
-        m.age += dt;
-        m.posB = m.pos;
+        particle.age += dt;
+        particle.posB = particle.pos;
         //        m.velB 	= m.vel;
-        m.pos += m.vel * dt;
-    }
+        particle.pos += particle.vel * dt;
+    });
 }
 void PAMove::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -1072,12 +1093,10 @@ void PAOrbitLine::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
     if (max_radiusSqr < P_MAXFLOAT)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle from base of line.
-            pVector f(m.pos - p);
+            pVector f(particle.pos - p);
 
             pVector w(axis * (f * axis));
 
@@ -1090,18 +1109,16 @@ void PAOrbitLine::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
             if (rSqr < max_radiusSqr)
                 // Step velocity with acceleration
-                m.vel += into * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
-        }
+                particle.vel += into * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
+        });
     }
     else
     {
         // Removed because it causes pipeline stalls.
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle from base of line.
-            pVector f(m.pos - p);
+            pVector f(particle.pos - p);
 
             pVector w(axis * (f * axis));
 
@@ -1113,8 +1130,8 @@ void PAOrbitLine::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             float rSqr = into.length2();
 
             // Step velocity with acceleration
-            m.vel += into * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
-        }
+            particle.vel += into * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
+        });
     }
 }
 void PAOrbitLine::Transform(const Fmatrix& m)
@@ -1132,12 +1149,10 @@ void PAOrbitPoint::Execute(ParticleEffect* effect, const float dt, float& tm_max
 
     if (max_radiusSqr < P_MAXFLOAT)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle.
-            pVector dir(center - m.pos);
+            pVector dir(center - particle.pos);
 
             // Distance to gravity well (force drops as 1/r^2, normalize by 1/r)
             // Soften by epsilon to avoid tight encounters to infinity
@@ -1145,26 +1160,24 @@ void PAOrbitPoint::Execute(ParticleEffect* effect, const float dt, float& tm_max
 
             // Step velocity with acceleration
             if (rSqr < max_radiusSqr)
-                m.vel += dir * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
-        }
+                particle.vel += dir * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
+        });
     }
     else
     {
         // Avoids pipeline stalls.
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& particle)
         {
-            Particle& m = effect->particles[i];
-
             // Figure direction to particle.
-            pVector dir(center - m.pos);
+            pVector dir(center - particle.pos);
 
             // Distance to gravity well (force drops as 1/r^2, normalize by 1/r)
             // Soften by epsilon to avoid tight encounters to infinity
             float rSqr = dir.length2();
 
             // Step velocity with acceleration
-            m.vel += dir * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
-        }
+            particle.vel += dir * (magdt / (_sqrt(rSqr) + (rSqr + epsilon)));
+        });
     }
 }
 void PAOrbitPoint::Transform(const Fmatrix& m) { m.transform_tiny(center, centerL); }
@@ -1246,14 +1259,12 @@ void PARestore::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     if (time_left <= 0)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [](Particle& m)
         {
-            Particle& m = effect->particles[i];
-
             // Already constrained, keep it there.
             m.pos = m.posB;
             m.vel = pVector(0, 0, 0);
-        }
+        });
     }
     else
     {
@@ -1262,11 +1273,9 @@ void PARestore::Execute(ParticleEffect* effect, const float dt, float& tm_max)
         float tSqrInv2dt = dt * 2.0f / (t * t);
         float tCubInv3dtSqr = dtSqr * 3.0f / (t * t * t);
 
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& m)
         {
 #if 1
-            Particle& m = effect->particles[i];
-
             // Solve for a desired-behavior velocity function in each axis
             // _pconstrain(m.pos.x, m.vel.x, m.posB.x, 0., timeLeft, &a, &b, &c);
 
@@ -1291,8 +1300,6 @@ void PARestore::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             // Figure new velocity at next timestep
             m.vel.z += a + b;
 #else
-            Particle& m = effect->particles[i];
-
             // XXX Optimize this.
             // Solve for a desired-behavior velocity function in each axis
             float a, b, c; // Coefficients of velocity function needed
@@ -1313,7 +1320,7 @@ void PARestore::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             m.vel.z = a * dtSqr + b * dt + c;
 
 #endif
-        }
+        });
     }
 
     time_left -= dt;
@@ -1418,9 +1425,8 @@ void PASpeedLimit::Execute(ParticleEffect* effect, const float dt, float& tm_max
     float min_sqr = min_speed * min_speed;
     float max_sqr = max_speed * max_speed;
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& m)
     {
-        Particle& m = effect->particles[i];
         float sSqr = m.vel.length2();
         if (sSqr < min_sqr && sSqr)
         {
@@ -1432,7 +1438,7 @@ void PASpeedLimit::Execute(ParticleEffect* effect, const float dt, float& tm_max
             float s = _sqrt(sSqr);
             m.vel *= (max_speed / s);
         }
-    }
+    });
 }
 void PASpeedLimit::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -1441,19 +1447,18 @@ void PASpeedLimit::Transform(const Fmatrix&) { ; }
 void PATargetColor::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
     float scaleFac = scale * dt;
-    Fcolor c_p, c_t;
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& m)
     {
-        Particle& m = effect->particles[i];
         if (m.age < timeFrom * tm_max || m.age > timeTo * tm_max)
-            continue;
+            return;
 
+        Fcolor c_p, c_t;
         c_p.set(m.color);
         c_t.set(c_p.r + (color.x - c_p.r) * scaleFac, c_p.g + (color.y - c_p.g) * scaleFac,
             c_p.b + (color.z - c_p.b) * scaleFac, c_p.a + (alpha - c_p.a) * scaleFac);
         m.color = c_t.get();
-    }
+    });
 }
 void PATargetColor::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -1465,15 +1470,14 @@ void PATargetSize::Execute(ParticleEffect* effect, const float dt, float& tm_max
     float scaleFac_y = scale.y * dt;
     float scaleFac_z = scale.z * dt;
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& m)
     {
-        Particle& m = effect->particles[i];
         pVector dif(size - m.size);
         dif.x *= scaleFac_x;
         dif.y *= scaleFac_y;
         dif.z *= scaleFac_z;
         m.size += dif;
-    }
+    });
 }
 void PATargetSize::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -1485,13 +1489,12 @@ void PATargetRotate::Execute(ParticleEffect* effect, const float dt, float& tm_m
 
     float r = _abs(rot.x);
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& m)
     {
-        Particle& m = effect->particles[i];
         float sign = m.rot.x >= 0.f ? scaleFac : -scaleFac;
         float dif = (r - _abs(m.rot.x)) * sign;
         m.rot.x += dif;
-    }
+    });
 }
 void PATargetRotate::Transform(const Fmatrix&) { ; }
 //-------------------------------------------------------------------------------------------------
@@ -1501,11 +1504,10 @@ void PATargetVelocity::Execute(ParticleEffect* effect, const float dt, float& tm
 {
     float scaleFac = scale * dt;
 
-    for (u32 i = 0; i < effect->p_count; i++)
+    for_each_particle(effect, [&](Particle& m)
     {
-        Particle& m = effect->particles[i];
         m.vel += (velocity - m.vel) * scaleFac;
-    }
+    });
 }
 void PATargetVelocity::Transform(const Fmatrix& m) { m.transform_dir(velocity, velocityL); }
 //-------------------------------------------------------------------------------------------------
@@ -1520,10 +1522,8 @@ void PAVortex::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
     if (max_radiusSqr < P_MAXFLOAT)
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& m)
         {
-            Particle& m = effect->particles[i];
-
             // Vector from tip of vortex
             pVector offset(m.pos - center);
 
@@ -1532,7 +1532,7 @@ void PAVortex::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
             // Don't do anything to particle if too close or too far.
             if (rSqr > max_radiusSqr)
-                continue;
+                return;
 
             float r = _sqrt(rSqr);
 
@@ -1560,14 +1560,12 @@ void PAVortex::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
             // Translate back to object space
             m.pos = offset + center;
-        }
+        });
     }
     else
     {
-        for (u32 i = 0; i < effect->p_count; i++)
+        for_each_particle(effect, [&](Particle& m)
         {
-            Particle& m = effect->particles[i];
-
             // Vector from tip of vortex
             pVector offset(m.pos - center);
 
@@ -1600,7 +1598,7 @@ void PAVortex::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 
             // Translate back to object space
             m.pos = offset + center;
-        }
+        });
     }
 }
 void PAVortex::Transform(const Fmatrix& m)

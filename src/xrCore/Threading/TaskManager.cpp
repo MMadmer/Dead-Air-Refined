@@ -25,8 +25,6 @@
 
 #include "Math/fast_lc16.hpp"
 
-#include <random>
-
 #if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64) || defined(XR_ARCHITECTURE_E2K)
 #include <immintrin.h>
 #elif defined(XR_ARCHITECTURE_ARM) || defined(XR_ARCHITECTURE_ARM64)
@@ -86,8 +84,9 @@ public:
 // Multi consumer
 class TaskQueue
 {
-    std::atomic_size_t  m_head_pos{};
-    std::atomic_size_t  m_tail_pos{};
+    // Producers and consumers update these independently on the hot path.
+    alignas(64) std::atomic_size_t m_head_pos{};
+    alignas(64) std::atomic_size_t m_tail_pos{};
     Task*               m_storage[TASK_STORAGE_SIZE]{};
 
 public:
@@ -121,7 +120,9 @@ public:
 
     size_t size() const noexcept
     {
-        return m_head_pos - m_tail_pos;
+        const size_t tail = m_tail_pos.load(std::memory_order_acquire);
+        const size_t head = m_head_pos.load(std::memory_order_acquire);
+        return tail - head;
     }
 
     bool empty() const noexcept
@@ -269,22 +270,37 @@ void TaskManager::TaskWorkerStart()
 
 Task* TaskManager::TryToSteal() const
 {
-    std::uniform_int_distribution<u16> dist{ 0, static_cast<u16>(workers.size() - 1) };
+    const size_t workerCount = workers.size();
+    if (workerCount <= 1)
+        return nullptr;
 
-    int steal_attempts = 5;
-    while (steal_attempts > 0)
+    const auto stealFrom = [this](TaskWorker& worker) -> Task*
     {
-        const auto idx = dist(s_tl_worker.random);
-        TaskWorker* other = workers[idx];
-        if (other == &s_tl_worker)
-            continue;
-        if (auto* task = other->steal())
+        if (Task* task = worker.steal())
         {
-            if (!other->empty())
+            if (!worker.empty())
                 newWorkArrived.Set();
             return task;
         }
-        --steal_attempts;
+        return nullptr;
+    };
+
+    // Most frame work originates on the primary worker.
+    if (s_tl_worker.id != 0)
+    {
+        if (Task* task = stealFrom(*workers[0]))
+            return task;
+    }
+
+    const size_t firstWorker = s_tl_worker.random() % workerCount;
+    for (size_t offset = 0; offset < workerCount; ++offset)
+    {
+        const size_t workerIndex = (firstWorker + offset) % workerCount;
+        if (workerIndex == s_tl_worker.id || (s_tl_worker.id != 0 && workerIndex == 0))
+            continue;
+
+        if (Task* task = stealFrom(*workers[workerIndex]))
+            return task;
     }
     return nullptr;
 }
@@ -327,9 +343,6 @@ void TaskManager::Wait(const Task& task, bool updateSystemEvents /*= false*/) co
 bool TaskManager::ExecuteOneTask() const
 {
     Task* task = s_tl_worker.pop();
-
-    if (!task)
-        task = workers[0]->steal();
 
     if (!task)
         task = TryToSteal();

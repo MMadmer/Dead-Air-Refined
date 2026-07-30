@@ -74,7 +74,7 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
 
     // Select shader
     ShaderElement* sh = RImplementation.rimp_select_sh_dynamic(pVisual, distSQ, o.phase);
-    if (nullptr == sh)
+    if (!sh)
         return;
     if (!o.pmask[sh->flags.iPriority / 2])
         return;
@@ -191,7 +191,7 @@ void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual)
 
     // Select shader
     ShaderElement* sh = RImplementation.rimp_select_sh_static(pVisual, distSQ, o.phase);
-    if (nullptr == sh)
+    if (!sh)
         return;
     if (!o.pmask[sh->flags.iPriority / 2])
         return;
@@ -257,7 +257,7 @@ void R_dsgraph_structure::add_leafs_dynamic(IRenderable* root, dxRender_Visual* 
 {
     ZoneScoped;
 
-    if (nullptr == pVisual)
+    if (!pVisual)
         return;
 
     // Visual is 100% visible - simply add it
@@ -796,16 +796,29 @@ void R_dsgraph_structure::build_subspace()
         if (o.spatial_traverse_flags & ISpatial_DB::O_ORDERED) // this should be inside of query functions
         {
             // Exact sorting order (front-to-back)
-            lstRenderablesOrdered.clear();
-            lstRenderablesOrdered.reserve(lstRenderables.size());
-            for (ISpatial* spatial : lstRenderables)
+            lstRenderablesOrdered.resize(lstRenderables.size());
+            const auto calculateDistances = [&](const TaskRange<size_t>& range)
             {
-                const Fvector& position = spatial->GetSpatialData().sphere.P;
-                const float deltaX = position.x - o.view_pos.x;
-                const float deltaY = position.y - o.view_pos.y;
-                const float deltaZ = position.z - o.view_pos.z;
-                lstRenderablesOrdered.emplace_back(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ, spatial);
+                for (size_t index = range.begin(); index != range.end(); ++index)
+                {
+                    ISpatial* spatial = lstRenderables[index];
+                    const Fvector& position = spatial->GetSpatialData().sphere.P;
+                    const float deltaX = position.x - o.view_pos.x;
+                    const float deltaY = position.y - o.view_pos.y;
+                    const float deltaZ = position.z - o.view_pos.z;
+                    lstRenderablesOrdered[index] =
+                        std::make_pair(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ, spatial);
+                }
+            };
+
+            constexpr size_t minimumParallelRenderables = 512;
+            if (TaskScheduler && TaskScheduler->GetWorkersCount() > 1 &&
+                lstRenderables.size() >= minimumParallelRenderables)
+            {
+                xr_parallel_for(TaskRange<size_t>(0, lstRenderables.size(), 64), calculateDistances);
             }
+            else
+                calculateDistances(TaskRange<size_t>(0, lstRenderables.size()));
 
             std::sort(lstRenderablesOrdered.begin(), lstRenderablesOrdered.end(), [](const auto& left, const auto& right)
             {
@@ -918,7 +931,7 @@ void R_dsgraph_structure::build_subspace()
                 {
                     // renderable
                     IRenderable* renderable = spatial->dcast_Renderable();
-                    if (nullptr == renderable)
+                    if (!renderable)
                         continue; // unknown, but renderable object (r1_glow???)
 
                     renderable->renderable_Render(context_id, nullptr);

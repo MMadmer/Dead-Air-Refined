@@ -346,15 +346,11 @@ IC void FillSprite_fpu(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, co
 
 #ifndef _EDITOR
 //----------------------------------------------------
-Lock m_sprite_section;
-
 #if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64) || defined(XR_ARCHITECTURE_E2K) || defined(XR_ARCHITECTURE_PPC64)
 IC void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
     const Fvector2& rb, float r1, float r2, u32 clr, float sina, float cosa)
 {
     ZoneScoped;
-
-    m_sprite_section.Enter();
 
     __m128 Vr, Vt, T_, R_, _pos, _zz, _sa, _ca, a, b, c, d;
 
@@ -408,7 +404,6 @@ IC void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvec
     pv->color = clr;
     pv->t.set(rb.x, lt.y);
     pv++;
-    m_sprite_section.Leave();
 }
 
 IC void FillSprite(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
@@ -505,16 +500,16 @@ ICF void magnitude_sse(Fvector& vec, float& res)
 
 void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Particle * particles)
 {
-    float sina = 0.0f, cosa = 0.0f;
-    // Xottab_DUTY: changed angle to be float instead of DWORD
-    // But it must be 0xFFFFFFFF or otherwise some particles won't play
-    float angle = float(0xFFFFFFFF); // XXX: check if we can replace with flt_max
-
-    const auto renderParticles = [&, this](const TaskRange<u32>& range)
+    const auto renderParticles = [this, pv, particles](const TaskRange<u32>& range)
     {
+        float sina = 0.0f;
+        float cosa = 0.0f;
+        float angle = float(0xFFFFFFFF);
+
         for (u32 i = range.begin(); i != range.end(); ++i)
         {
             PAPI::Particle& m = particles[i];
+            FVF::LIT* particleVertices = pv + i * 4;
             Fvector2 lt, rb;
             lt.set(0.f, 0.f);
             rb.set(1.f, 1.f);
@@ -560,11 +555,11 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
                         Fvector p;
                         m_XFORM.transform_tiny(p, m.pos);
                         M.mulA_43(m_XFORM);
-                        FillSprite(pv, M.k, M.i, p, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, M.k, M.i, p, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                     else
                     {
-                        FillSprite(pv, M.k, M.i, m.pos, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, M.k, M.i, m.pos, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                 }
                 else if ((speed >= EPS_S) && m_Def->m_Flags.is(CPEDef::dfFaceAlign))
@@ -584,11 +579,11 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
                         Fvector p;
                         m_XFORM.transform_tiny(p, m.pos);
                         M.mulA_43(m_XFORM);
-                        FillSprite(pv, M.j, M.i, p, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, M.j, M.i, p, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                     else
                     {
-                        FillSprite(pv, M.j, M.i, m.pos, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, M.j, M.i, m.pos, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                 }
                 else
@@ -603,11 +598,11 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
                         Fvector p, d;
                         m_XFORM.transform_tiny(p, m.pos);
                         m_XFORM.transform_dir(d, dir);
-                        FillSprite(pv, p, d, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, p, d, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                     else
                     {
-                        FillSprite(pv, m.pos, dir, lt, rb, r_x, r_y, m.color, sina, cosa);
+                        FillSprite(particleVertices, m.pos, dir, lt, rb, r_x, r_y, m.color, sina, cosa);
                     }
                 }
             }
@@ -617,23 +612,26 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
                 {
                     Fvector p;
                     m_XFORM.transform_tiny(p, m.pos);
-                    FillSprite(pv, Device.vCameraTop, Device.vCameraRight, p, lt, rb, r_x, r_y, m.color, sina, cosa);
+                    FillSprite(
+                        particleVertices, Device.vCameraTop, Device.vCameraRight, p, lt, rb, r_x, r_y, m.color, sina, cosa);
                 }
                 else
                 {
-                    FillSprite(pv, Device.vCameraTop, Device.vCameraRight, m.pos, lt, rb, r_x, r_y, m.color, sina, cosa);
+                    FillSprite(particleVertices, Device.vCameraTop, Device.vCameraRight, m.pos, lt, rb, r_x, r_y,
+                        m.color, sina, cosa);
                 }
             }
         }
     };
-    // XXX: it turned out that singlethreaded code works way faster
-    // But on processors with small caches it may work slower, profiling needed
-    //if (count > (TaskScheduler->GetWorkersCount() * 64))
-    //    xr_parallel_for(TaskRange<u32>(0, count), renderParticles);
-    //else
-    {
+
+    constexpr u32 minimumParallelParticles = 512;
+    const size_t workerCount = TaskScheduler ? TaskScheduler->GetWorkersCount() : 1;
+    const u32 parallelThreshold =
+        std::max(minimumParallelParticles, static_cast<u32>(std::min<size_t>(workerCount * 32, u32(-1))));
+    if (workerCount > 1 && count >= parallelThreshold)
+        xr_parallel_for(TaskRange<u32>(0, count, 64), renderParticles);
+    else
         renderParticles(TaskRange<u32>(0, count));
-    }
 }
 
 void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
