@@ -366,6 +366,60 @@ gbuffer_data gbuffer_load_data_offset( float2 tc : TEXCOORD, float2 OffsetTC : T
 
 #endif // GBUFFER_OPTIMIZATION
 
+#ifdef GBUFFER_OPTIMIZATION
+float3 gbuffer_load_position(float2 tc, float2 pos2d, uint iSample)
+{
+#ifndef USE_MSAA
+	float depth = s_position.Sample(smp_nofilter, tc).z;
+#else
+	float depth = s_position.Load(int2(pos2d), iSample).z;
+#endif
+	return float3(depth * (pos2d * pos_decompression_params.zw - pos_decompression_params.xy), depth);
+}
+
+float gbuffer_load_depth(float2 tc, float2 pos2d, uint iSample)
+{
+#ifndef USE_MSAA
+	return s_position.Sample(smp_nofilter, tc).z;
+#else
+	return s_position.Load(int2(pos2d), iSample).z;
+#endif
+}
+
+float gbuffer_load_depth_offset(float2 tc, float2 offsetTC, float2 pos2d, uint iSample)
+{
+#ifndef USE_MSAA
+	return s_position.Sample(smp_nofilter, offsetTC).z;
+#else
+	float2 delta = (offsetTC - tc) * pos_decompression_params2.xy;
+	return s_position.Load(int2(pos2d + delta), iSample).z;
+#endif
+}
+#else
+float3 gbuffer_load_position(float2 tc, uint iSample)
+{
+#ifndef USE_MSAA
+	return s_position.Sample(smp_nofilter, tc).xyz;
+#else
+	return s_position.Load(int2(tc * pos_decompression_params2.xy), iSample).xyz;
+#endif
+}
+
+float gbuffer_load_depth(float2 tc, uint iSample)
+{
+#ifndef USE_MSAA
+	return s_position.Sample(smp_nofilter, tc).z;
+#else
+	return s_position.Load(int2(tc * pos_decompression_params2.xy), iSample).z;
+#endif
+}
+
+float gbuffer_load_depth_offset(float2 offsetTC, uint iSample)
+{
+	return gbuffer_load_depth(offsetTC, iSample);
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 //	Aplha to coverage code
 #if ( defined( MSAA_ALPHATEST_DX10_1_ATOC ) || defined( MSAA_ALPHATEST_DX10_1 ) )

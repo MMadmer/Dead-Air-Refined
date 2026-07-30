@@ -46,6 +46,13 @@ float sample_hw_pcf (float4 tc,float4 shift)
 	return s_smap.SampleCmpLevelZero( smp_smap, tc.xy, tc.z).x;
 }
 
+float sample_hw_pcf_projected(float3 tc, float2 shift)
+{
+	static const float ts = KERNEL / float(SMAP_size);
+	tc.xy += shift * ts;
+	return s_smap.SampleCmpLevelZero(smp_smap, tc.xy, tc.z).x;
+}
+
 #define GS2 3
 
 float shadow_hw( float4 tc )
@@ -56,6 +63,16 @@ float shadow_hw( float4 tc )
   	float	s3		= sample_hw_pcf( tc, float4( +1, +1, 0, 0) );
 
 	return	(s0+s1+s2+s3)/4.h;
+}
+
+float shadow_hw_projected(float3 tc)
+{
+	float4 samples;
+	samples.x = sample_hw_pcf_projected(tc, float2(-1, -1));
+	samples.y = sample_hw_pcf_projected(tc, float2(1, -1));
+	samples.z = sample_hw_pcf_projected(tc, float2(-1, 1));
+	samples.w = sample_hw_pcf_projected(tc, float2(1, 1));
+	return dot(samples, 0.25h);
 }
 
 #if SUN_QUALITY>=4
@@ -298,6 +315,7 @@ float shadow_extreme_quality_fused( float3 tc )
 
     fc     = stc - tcs;
     tc.xy  = tc.xy - ( fc * (1.0f/SMAP_size) );
+    tc.z  -= 0.0001f;
 
     // filter shadow map samples using the dynamic weights
     [unroll(FS)]for( row = -FS2; row <= FS2; row += 2 )
@@ -611,7 +629,7 @@ float shadow_hw_hq( float4 tc )
    else
    {
 #if SUN_QUALITY>=4 // extreme quality
-      return shadow_extreme_quality( tc.xyz / tc.w );
+      return shadow_extreme_quality_fused( tc.xyz / tc.w );
 #else // SUN_QUALITY<4
 #ifdef SM_4_1
       return dx10_1_hw_hq_7x7( tc.xyz / tc.w );
@@ -622,7 +640,7 @@ float shadow_hw_hq( float4 tc )
    }
 #else //	SM_MINMAX
 #if SUN_QUALITY>=4 // extreme quality
-      return shadow_extreme_quality( tc.xyz / tc.w );
+      return shadow_extreme_quality_fused( tc.xyz / tc.w );
 #else // SUN_QUALITY<4
 #ifdef SM_4_1
       return dx10_1_hw_hq_7x7( tc.xyz / tc.w );
@@ -779,6 +797,17 @@ float shadow_dx10_1_sunshafts( float4 tc, float2 pos2d )
    {
       return shadow_hw( tc );
    }
+}
+
+float shadow_dx10_1_sunshafts_projected(float3 tc)
+{
+   float minmax = s_smap_minmax.SampleLevel(smp_nofilter, tc.xy, 0).x;
+   bool umbra = (minmax < 0) && (tc.z > -minmax);
+
+   [branch] if (umbra)
+      return 0.0;
+
+   return shadow_hw_projected(tc);
 }
 
 #endif

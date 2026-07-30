@@ -1,0 +1,124 @@
+#include "common.h"
+
+#undef ULTRA_SHADOWS_ON
+#undef USE_ULTRA_SHADOWS
+
+#define RAY_PATH	2.0h
+#define JITTER_TEXTURE_SIZE	64.0f
+
+
+#ifdef	SUN_SHAFTS_QUALITY
+	#if SUN_SHAFTS_QUALITY==1
+		#define RAY_SAMPLES	20
+		#define	JITTER_SUN_SHAFTS
+	#elif SUN_SHAFTS_QUALITY==2
+		#define	FILTER_LOW
+		#define RAY_SAMPLES	40
+	#elif SUN_SHAFTS_QUALITY==3
+		#define	FILTER_LOW
+		#define RAY_SAMPLES	80
+		#define	JITTER_SUN_SHAFTS
+	#endif
+#endif
+
+#ifndef	FILTER_LOW
+#ifdef USE_MINMAX_SM
+#define SM_MINMAX
+#endif
+#endif
+
+#include "shadow.h"
+
+float4	volume_range;	//	x - near plane, y - far plane
+float4	sun_shafts_intensity;
+uniform	float4	screen_res;
+
+#ifdef MSAA_OPTIMIZATION
+//#ifdef GBUFFER_OPTIMIZATION
+//float4 	main (float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX ) : SV_Target
+//#else
+float4 	main (v2p_volume  I, uint iSample : SV_SAMPLEINDEX  ) : SV_Target
+//#endif
+#else
+//#ifdef GBUFFER_OPTIMIZATION
+//float4 	main (float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position ) : SV_Target
+//#else
+float4 	main (v2p_volume  I) : SV_Target
+//#endif
+#endif
+{
+	float2	tc  = I.tc.xy/I.tc.w;
+	float4	pos2d = I.hpos;
+
+#ifndef	SUN_SHAFTS_QUALITY
+	return float4(0,0,0,0);
+#else	//	SUN_SHAFTS_QUALITY
+
+	float3	P = gbuffer_load_position( GLD_P(tc, pos2d, ISAMPLE) );
+
+#ifndef	JITTER_SUN_SHAFTS
+//	Fixed ray length, fixed step dencity
+//	float3	direction = (RAY_PATH/RAY_SAMPLES)*normalize(P);
+//	Variable ray length, variable step dencity
+	float3	direction = P/RAY_SAMPLES;
+#else	//	JITTER_SUN_SHAFTS
+//	float2	tcJ = I.tcJ;
+//	Variable ray length, variable step dencity, use jittering
+	//float4	J0 	= tex2D		(jitter0,tcJ);
+	float4	J0 	= jitter0.Sample( smp_jitter, tc*screen_res.x*1.f/JITTER_TEXTURE_SIZE );
+	float	coeff = (RAY_SAMPLES - 1*J0.x)/(RAY_SAMPLES*RAY_SAMPLES);
+	float3	direction = P*coeff;
+//	float3	direction = P/(RAY_SAMPLES+(J0.x*4-2));
+#endif	//	JITTER_SUN_SHAFTS
+
+	float	depth = P.z;
+	float	deltaDepth = direction.z;
+
+	float4	currentH = mul(m_shadow, float4(P, 1));
+	float3	current = currentH.xyz / currentH.w;
+	float3	delta = mul(m_shadow, float4(direction, 0)).xyz / currentH.w;
+
+	float	res = 0;
+	float	max_density = sun_shafts_intensity;
+	float	density = max_density/RAY_SAMPLES;
+
+	if (depth<0.0001)
+		res = max_density;
+
+	[loop]
+	for ( int i=0; i<RAY_SAMPLES; ++i )
+	{
+		if (depth <= 0.3)
+			break;
+
+#ifndef	FILTER_LOW
+#ifndef SM_MINMAX
+		res += density * shadow_hw_projected(current);
+#else
+		res += density * shadow_dx10_1_sunshafts_projected(current);
+#endif
+#else	//	FILTER_LOW
+		res += density * sample_hw_pcf_projected(current, float2(0, 0));
+#endif	//	FILTER_LOW
+
+		depth -= deltaDepth;
+		current -= delta;
+	}
+
+//*
+	float fSturation = -Ldynamic_dir.z;
+
+	//	Normalize dot product to
+	fSturation	= 0.5*fSturation+0.5;
+	//	Map saturation to 0.2..1
+	fSturation	= 0.80*fSturation+0.20;
+
+	res		*= fSturation;
+/**/
+
+	float4 sunColor = float4(1,1,1,1);
+	sunColor.xyz = normalize(Vibrance(L_hemi_color.rgb,1));
+
+	return res*sunColor;
+#endif	//	SUN_SHAFTS_QUALITY
+}
