@@ -3,7 +3,6 @@
 
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Rain.h"
-#include "Layers/xrRender_R2/rain_gpu_profile.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -46,20 +45,8 @@ void dxRainRender::Copy(IRainRender& _in) { *this = *(dxRainRender*)&_in; }
 void dxRainRender::Render(CEffect_Rain& owner)
 {
     float factor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
-    if (strstr(Core.Params, "-qa_force_rain"))
-        factor = 1.f;
     if (factor < EPS_L)
         return;
-
-#if defined(USE_DX11)
-    static QaGpuTimestampProfiler<2> gpuProfiler(
-        "rain_effects", {"falling_drops", "splash_particles"});
-    static QaCpuIntervalProfiler<4> cpuProfiler(
-        "rain_effects", {"grow_items", "drops_update_build", "drops_submit", "splash_update_build_submit"});
-    ID3D11DeviceContext* gpuContext = HW.get_context(CHW::IMM_CTX_ID);
-    cpuProfiler.Begin();
-    gpuProfiler.Begin(gpuContext);
-#endif
 
     const u32 desired_items = iFloor(0.5f * (1.f + factor) * float(max_desired_items));
 
@@ -74,10 +61,6 @@ void dxRainRender::Render(CEffect_Rain& owner)
             owner.items.push_back(one);
         }
     }
-
-#if defined(USE_DX11)
-    cpuProfiler.Mark();
-#endif
 
     // visual
     const float factor_visual = factor / 2.f + .5f;
@@ -95,14 +78,11 @@ void dxRainRender::Render(CEffect_Rain& owner)
     upper.set(Device.vCameraPosition.x, Device.vCameraPosition.y + source_offset, Device.vCameraPosition.z);
     src_plane.build(upper, norm);
 
-    // perform update
-    u32 vOffset;
-    FVF::LIT* verts = (FVF::LIT*)RImplementation.Vertex.Lock(desired_items * 4, hGeom_Rain->vb_stride, vOffset);
-    FVF::LIT* start = verts;
     const Fvector& vEye = Device.vCameraPosition;
+    const float dt = Device.fTimeDelta;
+
     for (u32 I = 0; I < desired_items; I++)
     {
-        // physics and time control
         CEffect_Rain::Item& one = owner.items[I];
 
         if (one.dwTime_Hit < Device.dwTimeGlobal)
@@ -110,10 +90,6 @@ void dxRainRender::Render(CEffect_Rain& owner)
         if (one.dwTime_Life < Device.dwTimeGlobal)
             owner.Born(one, source_radius);
 
-        // последняя дельта ??
-        //.		float xdt		= float(one.dwTime_Hit-Device.dwTimeGlobal)/1000.f;
-        //.		float dt		= Device.fTimeDelta;//xdt<Device.fTimeDelta?xdt:Device.fTimeDelta;
-        float dt = Device.fTimeDelta;
         one.P.mad(one.D, one.fSpeed * dt);
         Fvector wdir;
         wdir.set(one.P.x - vEye.x, 0, one.P.z - vEye.z);
@@ -165,6 +141,15 @@ void dxRainRender::Render(CEffect_Rain& owner)
             }
             //.			Device.Statistic->TEST3.End();
         }
+    }
+
+    u32 vOffset;
+    FVF::LIT* verts = (FVF::LIT*)RImplementation.Vertex.Lock(desired_items * 4, hGeom_Rain->vb_stride, vOffset);
+    FVF::LIT* start = verts;
+    for (u32 I = 0; I < desired_items; I++)
+    {
+        CEffect_Rain::Item& one = owner.items[I];
+
         // Build line
         Fvector& pos_head = one.P;
         Fvector pos_trail;
@@ -201,10 +186,6 @@ void dxRainRender::Render(CEffect_Rain& owner)
     u32 vCount = (u32)(verts - start);
     RImplementation.Vertex.Unlock(vCount, hGeom_Rain->vb_stride);
 
-#if defined(USE_DX11)
-    cpuProfiler.Mark();
-#endif
-
     // Render if needed
     if (vCount)
     {
@@ -218,20 +199,10 @@ void dxRainRender::Render(CEffect_Rain& owner)
         RCache.set_CullMode(CULL_CCW);
     }
 
-#if defined(USE_DX11)
-    cpuProfiler.Mark();
-    gpuProfiler.Mark(gpuContext);
-#endif
-
     // Particles
     CEffect_Rain::Particle* P = owner.particle_active;
     if (!P)
     {
-#if defined(USE_DX11)
-        gpuProfiler.Mark(gpuContext);
-        gpuProfiler.End(gpuContext);
-        cpuProfiler.End();
-#endif
         return;
     }
 
@@ -309,11 +280,6 @@ void dxRainRender::Render(CEffect_Rain& owner)
         }
     }
 
-#if defined(USE_DX11)
-    gpuProfiler.Mark(gpuContext);
-    gpuProfiler.End(gpuContext);
-    cpuProfiler.End();
-#endif
 }
 
 const Fsphere& dxRainRender::GetDropBounds() const { return DM_Drop->bv_sphere; }

@@ -1,19 +1,10 @@
 #include "stdafx.h"
-#include "rain_gpu_profile.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
 void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
 {
-#if defined(USE_DX11)
-    static QaGpuTimestampProfiler<2> gpuProfiler(
-        "rain_wet_surface", {"patch_normal", "apply_normal_gloss"});
-    ID3D11DeviceContext* gpuContext = HW.get_context(cmd_list.context_id);
-#endif
-
     float fRainFactor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
-    if (strstr(Core.Params, "-qa_force_rain"))
-        fRainFactor = 1.f;
 
     // Common calc for quad-rendering
     u32 Offset;
@@ -243,13 +234,9 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
         //			HW.pDevice->SetSamplerState	( 0, D3DSAMP_MIPMAPLODBIAS, FOURCC_GET1 );
         //		}
 
-#if defined(USE_DX11)
-        gpuProfiler.Begin(gpuContext);
-#endif
-
 #if defined(USE_DX11) && RENDER == R_R4
         const bool useInPlaceUav = RImplementation.o.gbuffer_opt && !RImplementation.o.msaa &&
-            rt_Position->pUAView && rt_Color->pUAView && !strstr(Core.Params, "-qa_disable_rain_uav");
+            rt_Position->pUAView && rt_Color->pUAView;
         if (useInPlaceUav)
         {
             u_setrt(cmd_list, nullptr, nullptr, nullptr, rt_MSAADepth);
@@ -267,9 +254,6 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
             cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 3, 0, 1);
             cmd_list.set_PixelUAVs();
 
-            gpuProfiler.Mark(gpuContext);
-            gpuProfiler.Mark(gpuContext);
-            gpuProfiler.End(gpuContext);
         }
         else
 #endif
@@ -340,10 +324,6 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
             }
         }
 
-#if defined(USE_DX11)
-        gpuProfiler.Mark(gpuContext);
-#endif
-
         //	Apply normal and gloss
         cmd_list.set_Element(s_rain->E[2]);
 
@@ -395,10 +375,6 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
             }
         }
 
-#if defined(USE_DX11)
-        gpuProfiler.Mark(gpuContext);
-        gpuProfiler.End(gpuContext);
-#endif
         }
 
         //	TODO: DX11: Check if DX11 has analog for NV DBT

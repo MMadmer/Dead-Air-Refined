@@ -130,8 +130,6 @@ void CEffect_Rain::OnFrame()
 
     // Parse states
     float factor = g_pGamePersistent->Environment().CurrentEnv.rain_density;
-    if (strstr(Core.Params, "-qa_force_rain"))
-        factor = 1.f;
     static float hemi_factor = 0.f;
 #ifndef _EDITOR
     IGameObject* E = g_pGameLevel->CurrentViewEntity();

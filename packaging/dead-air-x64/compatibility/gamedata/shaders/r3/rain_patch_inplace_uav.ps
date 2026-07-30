@@ -24,29 +24,9 @@ float SampleRainShadow(float4 tc, float2 tcJ)
 
     const float scale = 4.0 / float(SMAP_size);
     const float4 jitter = jitter0.SampleLevel(smp_linear, tcJ, 0.0) * scale;
-    const int shadowMapSize = int(SMAP_size);
-    const int2 maximumPixel = shadowMapSize - 1;
-    float result = 0.0;
-
-    [unroll]
-    for (int jitterIndex = 0; jitterIndex < 2; ++jitterIndex)
-    {
-        const float2 offset = jitterIndex ? jitter.wz : jitter.xy;
-        const int2 basePixel = int2(floor((tc.xy + offset) * shadowMapSize - 0.5));
-
-        [unroll]
-        for (int y = 0; y < 2; ++y)
-        {
-            [unroll]
-            for (int x = 0; x < 2; ++x)
-            {
-                const int2 samplePixel = clamp(basePixel + int2(x, y), int2(0, 0), maximumPixel);
-                result += step(tc.z, s_smap.Load(int3(samplePixel, 0)).x);
-            }
-        }
-    }
-
-    return result * 0.125;
+    const float first = s_smap.SampleCmpLevelZero(smp_smap, tc.xy + jitter.xy, tc.z);
+    const float second = s_smap.SampleCmpLevelZero(smp_smap, tc.xy + jitter.wz, tc.z);
+    return (first + second) * 0.5;
 }
 
 void main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position)
