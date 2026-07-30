@@ -42,7 +42,27 @@ void light::vis_prepare(CBackend& cmd_list)
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
         skiptest = true;
 
-    if (skiptest || Device.vCameraPosition.distance_to(spatial.sphere.P) <= (spatial.sphere.R * 1.01f + safe_area))
+    bool conservativeOmnipart = false;
+    if (flags.type == IRender_Light::OMNIPART)
+    {
+        // Split point lights share one parent volume; their face spheres are not independent light bounds.
+        conservativeOmnipart =
+            Device.vCameraPosition.distance_to(position) <= (range * 1.01f + safe_area);
+        if (!conservativeOmnipart)
+        {
+            u32 planeMask = 0xffffffff;
+            const EFC_Visible parentVisibility =
+                RImplementation.ViewBase.testSphere(position, range, planeMask);
+
+            // A screen-clipped volume query can miss every sample while the parent still reaches the viewport.
+            conservativeOmnipart = parentVisibility == fcvPartial &&
+                !RImplementation.ViewBase.testSphere_dirty(position, EPS_L);
+        }
+    }
+
+    const bool cameraInsideVolume =
+        Device.vCameraPosition.distance_to(spatial.sphere.P) <= (spatial.sphere.R * 1.01f + safe_area);
+    if (skiptest || conservativeOmnipart || cameraInsideVolume)
     { // small error
         vis.visible = true;
         vis.pending = false;
