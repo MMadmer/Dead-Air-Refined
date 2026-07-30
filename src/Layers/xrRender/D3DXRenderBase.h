@@ -81,9 +81,10 @@ public:
             return R_dsgraph_structure::INVALID_CONTEXT_ID;
         const auto id = static_cast<u32>(std::countr_zero(availableContexts));
         contexts_used.set(id, true);
+        // Backend invalidation is context-specific, so select the target before resetting its state.
+        contexts_pool[id].cmd_list.context_id = alloc_cmd_list ? id : CHW::IMM_CTX_ID;
         contexts_pool[id].reset();
         contexts_pool[id].context_id = id;
-        contexts_pool[id].cmd_list.context_id = alloc_cmd_list ? id : CHW::IMM_CTX_ID;
         return id;
     }
 

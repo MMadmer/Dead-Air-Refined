@@ -90,15 +90,9 @@ void CLight_Compute_XFORM_and_VIS::compute_xf_spot(light* L)
     // float	g_beta		= 2*rad2deg		(atanf(tan_beta));
     // Msg				("x(%f) : a(%f), b(%f)",x,g_alpha,g_beta);
 
-    // _min(L->cone + deg2rad(4.5f), PI*0.98f) - Here, it is needed to enlarge the shadow map frustum to include also
-    // displaced pixels and the pixels neighbor to the examining one.
-    float tan_shift;
-    if (L->flags.type == IRender_Light::POINT)
-        tan_shift = deg2rad(11.5f);
-    else
-        tan_shift = deg2rad(3.5f);
-
-    L->X.S.project.build_projection(L->cone + tan_shift, 1.f, L->virtual_size, L->range + EPS_S);
+    // Point-light cubemap faces must match the exact 90-degree accumulation volumes.
+    const float coneShift = L->flags.type == IRender_Light::OMNIPART ? EPS_S : deg2rad(3.5f);
+    L->X.S.project.build_projection(L->cone + coneShift, 1.f, L->virtual_size, L->range + EPS_S);
     L->X.S.combine.mul(L->X.S.project, L->X.S.view);
 }
 } // namespace xray::render::RENDER_NAMESPACE
