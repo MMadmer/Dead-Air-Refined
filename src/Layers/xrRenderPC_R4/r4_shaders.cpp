@@ -559,26 +559,37 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     if (FAILED(_result))
     {
         includer Includer;
-        LPD3DBLOB pShaderBuf = NULL;
-        LPD3DBLOB pErrorBuf = NULL;
+        LPD3DBLOB pShaderBuf = nullptr;
+        LPD3DBLOB pErrorBuf = nullptr;
+        u32 compileFlags = Flags;
+        if (strstr(Core.Params, "-shader_warnings_as_errors"))
+            compileFlags |= D3DCOMPILE_WARNINGS_ARE_ERRORS;
+
         _result = HW.D3DCompile(fs->pointer(), fs->length(), "", options.data(),
-            &Includer, pFunctionName, pTarget, Flags, 0, &pShaderBuf, &pErrorBuf);
+            &Includer, pFunctionName, pTarget, compileFlags, 0, &pShaderBuf, &pErrorBuf);
 
         if (FAILED(_result) && pErrorBuf)
         {
             cpcstr str = static_cast<cpcstr>(pErrorBuf->GetBufferPointer());
             if (strstr(str, "error X3523")) // is there a better way?
             {
-                pErrorBuf = nullptr;
-                Flags |= D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
+                _RELEASE(pShaderBuf);
+                _RELEASE(pErrorBuf);
+                compileFlags |= D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
                 _result = HW.D3DCompile(fs->pointer(), fs->length(), "", options.data(),
-                    &Includer, pFunctionName, pTarget, Flags, 0, &pShaderBuf, &pErrorBuf);
+                    &Includer, pFunctionName, pTarget, compileFlags, 0, &pShaderBuf, &pErrorBuf);
             }
         }
 
         if (SUCCEEDED(_result))
         {
-            const bool dx9compatibility = Flags & D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
+            if (pErrorBuf && strstr(Core.Params, "-log_shader_warnings"))
+            {
+                Log("! Shader compiler warning: ", file_name);
+                Log(static_cast<LPCSTR>(pErrorBuf->GetBufferPointer()));
+            }
+
+            const bool dx9compatibility = compileFlags & D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
             IWriter* file = FS.w_open(file_name);
 
             file->w_u32(dx9compatibility);
@@ -603,6 +614,9 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             else
                 Msg("Can't compile shader hr=0x%08x", _result);
         }
+
+        _RELEASE(pShaderBuf);
+        _RELEASE(pErrorBuf);
     }
 
     return _result;
