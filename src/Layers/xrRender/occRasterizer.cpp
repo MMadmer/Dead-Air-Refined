@@ -198,16 +198,23 @@ void occRasterizer::on_dbg_render()
 #endif
 }
 
-static BOOL test_Level(occD* depth, int dim, float _x0, float _y0, float _x1, float _y1, occD z)
+static BOOL test_Level(occD* depth, int dim, u32 level, float _x0, float _y0, float _x1, float _y1, occD z)
 {
-    int x0 = iFloor(_x0 * dim + .5f);
-    clamp(x0, 0, dim - 1);
-    int x1 = iFloor(_x1 * dim + .5f);
-    clamp(x1, x0, dim - 1);
-    int y0 = iFloor(_y0 * dim + .5f);
-    clamp(y0, 0, dim - 1);
-    int y1 = iFloor(_y1 * dim + .5f);
-    clamp(y1, y0, dim - 1);
+    // Map the exact level-0 footprint outward so coarse rejection cannot omit edge pixels.
+    int x0 = iFloor(_x0 * occ_dim_0 + .5f);
+    clamp(x0, 0, occ_dim_0 - 1);
+    int x1 = iFloor(_x1 * occ_dim_0 + .5f);
+    clamp(x1, x0, occ_dim_0 - 1);
+    int y0 = iFloor(_y0 * occ_dim_0 + .5f);
+    clamp(y0, 0, occ_dim_0 - 1);
+    int y1 = iFloor(_y1 * occ_dim_0 + .5f);
+    clamp(y1, y0, occ_dim_0 - 1);
+
+    x0 >>= level;
+    x1 >>= level;
+    y0 >>= level;
+    y1 >>= level;
+    VERIFY(dim == occ_dim_0 >> level);
 
     const __m128i queryDepth = _mm_set1_epi32(z);
     for (int y = y0; y <= y1; y++)
@@ -234,12 +241,12 @@ BOOL occRasterizer::test(float _x0, float _y0, float _x1, float _y1, float _z)
     const float height = (_y1 - _y0) * occ_dim_0;
     const float span = _max(width, height);
 
-    if (span >= 16.0f && !test_Level(get_depth_level(3), occ_dim_3, _x0, _y0, _x1, _y1, z))
+    if (span >= 16.0f && !test_Level(get_depth_level(3), occ_dim_3, 3, _x0, _y0, _x1, _y1, z))
         return FALSE;
-    if (span >= 8.0f && !test_Level(get_depth_level(2), occ_dim_2, _x0, _y0, _x1, _y1, z))
+    if (span >= 8.0f && !test_Level(get_depth_level(2), occ_dim_2, 2, _x0, _y0, _x1, _y1, z))
         return FALSE;
-    if (span >= 4.0f && !test_Level(get_depth_level(1), occ_dim_1, _x0, _y0, _x1, _y1, z))
+    if (span >= 4.0f && !test_Level(get_depth_level(1), occ_dim_1, 1, _x0, _y0, _x1, _y1, z))
         return FALSE;
-    return test_Level(get_depth_level(0), occ_dim_0, _x0, _y0, _x1, _y1, z);
+    return test_Level(get_depth_level(0), occ_dim_0, 0, _x0, _y0, _x1, _y1, z);
 }
 } // namespace xray::render::RENDER_NAMESPACE
