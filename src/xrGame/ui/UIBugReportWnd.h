@@ -29,6 +29,7 @@ private:
     void OnCancel(CUIWindow*, void*);
     void OnMessageOk(CUIWindow*, void*);
     void ShowResult(bool success, pcstr detail = nullptr);
+    void ClearForm();
     bool InputIsValid() const;
     void UpdateCounters();
 

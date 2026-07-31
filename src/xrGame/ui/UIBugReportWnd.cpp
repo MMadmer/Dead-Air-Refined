@@ -83,10 +83,7 @@ void CUIBugReportWnd::Show(bool status)
     if (status && BugReportService::GetState() != BugReportService::State::Sending)
     {
         BugReportService::Reset();
-        m_title->ClearText();
-        m_description->ClearText();
-        m_attachDump->SetCheck(true);
-        m_status->SetText("");
+        ClearForm();
         m_closeAfterMessage = false;
         m_title->CaptureFocus(true);
     }
@@ -167,7 +164,10 @@ void CUIBugReportWnd::OnCancel(CUIWindow*, void*)
 void CUIBugReportWnd::OnMessageOk(CUIWindow*, void*)
 {
     if (m_closeAfterMessage)
+    {
+        ClearForm();
         HideDialog();
+    }
     m_closeAfterMessage = false;
 }
 
@@ -185,6 +185,15 @@ void CUIBugReportWnd::ShowResult(bool success, pcstr detail)
     }
     m_messageBox->SetText(text.c_str());
     m_messageBox->ShowDialog(true);
+}
+
+void CUIBugReportWnd::ClearForm()
+{
+    m_title->ClearText();
+    m_description->ClearText();
+    m_attachDump->SetCheck(true);
+    m_status->SetText("");
+    UpdateCounters();
 }
 
 bool CUIBugReportWnd::InputIsValid() const
