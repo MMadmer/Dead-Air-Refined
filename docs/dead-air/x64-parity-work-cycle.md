@@ -233,5 +233,9 @@ Verified:
   `5D425106FAE3C93846EDB9DC1AFF89F56E49B49BED0F681B7993EE4AAE372FF8`.
 - Removing the standalone installation deleted the runtime and all 14 base
   archives while preserving the test `appdata` directory and its saved game.
+- The standalone packaging path described above was retained only as historical
+  validation evidence and was removed from the 0.9.0 distribution. Current
+  installers contain only the Refined patch for an existing Dead Air or
+  Dead Air: Refined installation.
 - Every game, setup, uninstaller, launcher, compiler, and linker process was
   stopped after the final verification.

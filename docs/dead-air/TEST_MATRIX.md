@@ -19,11 +19,9 @@
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
 | Dependency audit | 41-file release runtime | Pass, no missing local DLLs |
 | GUI upgrade installer | Final `Dead Air: Refined 0.9.0` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
-| GUI standalone installer | Clean 0.98b payload in a new empty root | Pass, 41 runtime files, 14 base XDB files, and the compatibility XDB matched |
 | Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |
-| Installed EXE uninstaller | Standalone mode | Pass, runtime and base XDB removed; user `appdata` preserved |
 | Refined version rollback | Typed `refined-version` snapshot selected through the uninstaller | Pass, saved runtime restored by SHA-256 while the original x86 backup remained reserved for removal |
-| Standalone runtime smoke | Freshly installed clean 0.98b root | Pass, loaded `x64_da_newgame`, handled Escape, and remained responsive for 120 seconds |
+| Patch-only distribution | Installer contents | Pass, no original Dead Air root files or base XDB archives included |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Manual diagnostic report | Loaded `async_benchmark_1`, hidden desktop | Pass, valid anonymous ZIP with system, hardware, runtime, content, log, configuration, and minidump data |
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |

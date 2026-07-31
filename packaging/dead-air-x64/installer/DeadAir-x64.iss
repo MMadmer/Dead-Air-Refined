@@ -1,9 +1,6 @@
 #ifndef RepoRoot
   #error RepoRoot must point to the DeadAir-x64 repository.
 #endif
-#ifndef StandaloneSource
-  #error StandaloneSource must point to a clean Dead Air 0.98b source.
-#endif
 #ifndef PortVersion
   #define PortVersion "0.9.0"
 #endif
@@ -59,9 +56,7 @@ OutputDir={#OutputDirectory}
 OutputBaseFilename=Dead-Air-Refined-{#PortVersion}-Setup
 Compression=none
 SolidCompression=no
-DiskSpanning=yes
-DiskSliceSize=2000000000
-SlicesPerDisk=1
+DiskSpanning=no
 CreateAppDir=yes
 DirExistsWarning=no
 
@@ -78,29 +73,6 @@ Source: "{#CompatibilityArchive}"; DestDir: "{app}\database"; Flags: ignoreversi
 Source: "{#LauncherPath}"; DestDir: "{app}"; DestName: "Uninstall Dead Air Refined.exe"; Flags: ignoreversion
 Source: "{#InstallerRoot}\runtime-files.txt"; Flags: dontcopy
 Source: "{#InstallerRoot}\runtime-files.txt"; DestDir: "{app}\.dead-air-x64"; Flags: ignoreversion
-
-#ifndef QuickTest
-Source: "{#StandaloneSource}\credits.txt"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\debug.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\fsgame.ltx"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\help.html"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\readme.txt"; DestDir: "{app}"; Flags: ignoreversion; Check: IsStandaloneMode
-
-Source: "{#StandaloneSource}\database\configs.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\levels.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\levels.xdb1"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\levels.xdb2"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\levels.xdb3"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\levels.xdb4"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\meshes.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\movie.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\sounds.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\sounds.xdb1"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\textures.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\textures.xdb1"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\textures.xdb2"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-Source: "{#StandaloneSource}\database\xtra.xdb0"; DestDir: "{app}\database"; Flags: ignoreversion; Check: IsStandaloneMode
-#endif
 
 [Icons]
 Name: "{group}\Dead Air Refined"; Filename: "{app}\xrEngine.exe"; WorkingDir: "{app}"
@@ -120,8 +92,6 @@ Type: dirifempty; Name: "{app}"
 
 [Code]
 const
-  UpgradeMode = 0;
-  StandaloneMode = 1;
   Scs32BitBinary = 0;
   Scs64BitBinary = 6;
   UninstallActionCancel = 0;
@@ -129,7 +99,6 @@ const
   UninstallActionRollback = 2;
 
 var
-  ModePage: TInputOptionWizardPage;
   BackupPage: TInputOptionWizardPage;
   RuntimeFiles: TArrayOfString;
   ManagedFiles: TArrayOfString;
@@ -145,11 +114,6 @@ var
 
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
-
-function ModeParameter: String;
-begin
-  Result := Lowercase(Trim(ExpandConstant('{param:MODE|}')));
-end;
 
 function TargetParameter: String;
 begin
@@ -256,68 +220,11 @@ begin
     exit;
   end;
 
-  if ModeParameter = 'standalone' then
-  begin
-    Result := ExpandConstant('{sd}\Games\Dead Air Refined');
-    exit;
-  end;
-
   ExistingDirectory := ExistingDeadAirDirectory;
   if ExistingDirectory <> '' then
     Result := ExistingDirectory
   else
     Result := ExpandConstant('{sd}\Games\Dead Air');
-end;
-
-function IsStandaloneMode: Boolean;
-begin
-  Result := ModePage.SelectedValueIndex = StandaloneMode;
-end;
-
-function IsUpgradeMode: Boolean;
-begin
-  Result := not IsStandaloneMode;
-end;
-
-function InstallModeName: String;
-begin
-  if IsStandaloneMode then
-    Result := 'standalone'
-  else
-    Result := 'upgrade';
-end;
-
-function IsDirectoryEmpty(DirectoryName: String): Boolean;
-var
-  FindRecord: TFindRec;
-begin
-  Result := True;
-  if not DirExists(DirectoryName) then
-    exit;
-
-  if FindFirst(AddBackslash(DirectoryName) + '*', FindRecord) then
-  begin
-    try
-      repeat
-        if (FindRecord.Name <> '.') and (FindRecord.Name <> '..') then
-        begin
-          Result := False;
-          exit;
-        end;
-      until not FindNext(FindRecord);
-    finally
-      FindClose(FindRecord);
-    end;
-  end;
-end;
-
-function IsOwnInstallation(DirectoryName: String; ExpectedMode: String): Boolean;
-var
-  StoredMode: AnsiString;
-begin
-  Result :=
-    LoadStringFromFile(AddBackslash(DirectoryName) + '.dead-air-x64\install-mode.txt', StoredMode) and
-    (CompareText(Trim(String(StoredMode)), ExpectedMode) = 0);
 end;
 
 function ValidateUpgradeDirectory(DirectoryName: String): String;
@@ -343,44 +250,13 @@ begin
   end;
 end;
 
-function ValidateStandaloneDirectory(DirectoryName: String): String;
-begin
-  Result := '';
-  if IsOwnInstallation(DirectoryName, 'upgrade') then
-  begin
-    Result := 'Эта папка используется обновлённой x86-установкой. Выберите режим обновления существующей игры.';
-    exit;
-  end;
-
-  if not IsOwnInstallation(DirectoryName, 'standalone') and
-     not IsDirectoryEmpty(DirectoryName) then
-  begin
-    Result :=
-      'Для самостоятельной версии требуется новая или пустая папка.' + #13#10 +
-      'Установщик не объединяет чистую Dead Air 0.98b с файлами другой установки.';
-  end;
-end;
-
 function ValidateSelectedDirectory: String;
 begin
-  if IsStandaloneMode then
-    Result := ValidateStandaloneDirectory(WizardDirValue)
-  else
-    Result := ValidateUpgradeDirectory(WizardDirValue);
+  Result := ValidateUpgradeDirectory(WizardDirValue);
 end;
 
 procedure InitializeWizard;
 begin
-  ModePage := CreateInputOptionPage(
-    wpWelcome,
-    'Тип установки',
-    'Как установить Dead Air: Refined?',
-    'Выберите обновление существующей игры или новую самостоятельную установку.',
-    True,
-    False);
-  ModePage.Add('Обновить существующую установленную игру');
-  ModePage.Add('Выполнить новую самостоятельную установку');
-
   BackupPage := CreateInputOptionPage(
     wpSelectDir,
     'Резервная копия',
@@ -391,20 +267,8 @@ begin
   BackupPage.Add('Создать резервную копию текущей версии');
   BackupPage.Values[0] := BackupParameterEnabled;
 
-  if ModeParameter = 'standalone' then
-    ModePage.SelectedValueIndex := StandaloneMode
-  else
-    ModePage.SelectedValueIndex := UpgradeMode;
-
   if TargetParameter <> '' then
     WizardForm.DirEdit.Text := TargetParameter;
-end;
-
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result :=
-    (PageID = BackupPage.ID) and
-    IsStandaloneMode;
 end;
 
 function NextButtonClick(CurrentPageId: Integer): Boolean;
@@ -412,14 +276,6 @@ var
   ValidationError: String;
 begin
   Result := True;
-
-  if CurrentPageId = ModePage.ID then
-  begin
-    if IsStandaloneMode then
-      WizardForm.DirEdit.Text := ExpandConstant('{sd}\Games\Dead Air Refined')
-    else
-      WizardForm.DirEdit.Text := GetDefaultDirName('');
-  end;
 
   if CurrentPageId = wpSelectDir then
   begin
@@ -707,7 +563,7 @@ begin
   BuildManagedFiles;
 
   ControlDirectory := AddBackslash(WizardDirValue) + '.dead-air-x64';
-  if IsUpgradeMode and BackupPage.Values[0] then
+  if BackupPage.Values[0] then
   begin
     if CurrentVersionName(WizardDirValue) = 'original-x86' then
       Result := PrepareOriginalX86Backup(WizardDirValue)
@@ -725,7 +581,7 @@ begin
 
   if not SaveStringToFile(
     AddBackslash(ControlDirectory) + 'install-mode.txt',
-    InstallModeName,
+    'upgrade',
     False) then
   begin
     Result := 'Не удалось записать режим установки.';

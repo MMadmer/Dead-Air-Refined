@@ -50,8 +50,8 @@ rollback verification are complete.
   package.
 - Completed a 15.29-minute Agroprom soak at 3.04 GiB private memory without a
   fatal error, assertion, packet overflow, hang, or memory growth.
-- Built the final `0.9.0` archive from the clean output and verified all 41
-  packaged hashes.
+- Built the final patch-only `0.9.0` installer from the clean output and
+  verified all packaged hashes.
 - Installed the final archive over an isolated x86 root and loaded the latest
   existing x86 save with 22,958 spawn points and 27,198 objects.
 - Uninstalled it and restored all 13 original x86 runtime files by SHA-256,

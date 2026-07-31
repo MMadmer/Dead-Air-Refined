@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$PortVersion = "0.9.0",
-    [string]$StandaloneSource = "D:\Games\Dead Air",
+    [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
 )
@@ -37,24 +37,6 @@ $innoBootstrap = Join-Path $innoRoot "innosetup-7.0.2-x64.exe"
 $innoBootstrapUrl =
     "https://github.com/jrsoftware/issrc/releases/download/is-7_0_2/innosetup-7.0.2-x64.exe"
 $innoBootstrapSha256 = "5AD54CA3DEF786F8F4212552E54CC6D8D61329E2D24A1CFEE0571D42C2684FF1"
-$baseDatabaseFiles = @(
-    "configs.xdb0",
-    "levels.xdb0",
-    "levels.xdb1",
-    "levels.xdb2",
-    "levels.xdb3",
-    "levels.xdb4",
-    "meshes.xdb0",
-    "movie.xdb0",
-    "sounds.xdb0",
-    "sounds.xdb1",
-    "textures.xdb0",
-    "textures.xdb1",
-    "textures.xdb2",
-    "xtra.xdb0"
-)
-$baseRootFiles = @("credits.txt", "debug.cmd", "fsgame.ltx", "help.html", "readme.txt")
-
 function Assert-PathInside {
     param(
         [Parameter(Mandatory)]
@@ -125,7 +107,7 @@ function Build-UninstallLauncher {
 }
 
 function Build-CompatibilityArchive {
-    $converter = Join-Path $StandaloneSource "tools\AXRToolset\bin\converter.exe"
+    $converter = [IO.Path]::GetFullPath($ConverterPath)
     if (-not (Test-Path -LiteralPath $converter -PathType Leaf)) {
         throw "AXRToolset converter was not found: $converter"
     }
@@ -208,23 +190,6 @@ if ($manifestDifference) {
     throw "runtime-files.txt does not match the x64 Release output:`n$($manifestDifference | Out-String)"
 }
 
-$missingStandaloneFiles = [Collections.Generic.List[string]]::new()
-foreach ($fileName in $baseRootFiles) {
-    $path = Join-Path $StandaloneSource $fileName
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        $missingStandaloneFiles.Add($path)
-    }
-}
-foreach ($fileName in $baseDatabaseFiles) {
-    $path = Join-Path (Join-Path $StandaloneSource "database") $fileName
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        $missingStandaloneFiles.Add($path)
-    }
-}
-if ($missingStandaloneFiles.Count) {
-    throw "The standalone Dead Air 0.98b source is incomplete:`n$($missingStandaloneFiles -join "`n")"
-}
-
 Initialize-InnoSetupCompiler
 Build-UninstallLauncher
 Build-CompatibilityArchive
@@ -242,7 +207,6 @@ New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 
 $compilerArguments = @(
     "/DRepoRoot=$repositoryRoot",
-    "/DStandaloneSource=$([IO.Path]::GetFullPath($StandaloneSource))",
     "/DPortVersion=$PortVersion",
     "/DOutputDirectory=$outputRoot",
     "/DLauncherPath=$launcherOutput",
