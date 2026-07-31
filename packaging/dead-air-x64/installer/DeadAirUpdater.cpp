@@ -631,6 +631,34 @@ bool apply_payload(const std::filesystem::path& gameDirectory, const std::filesy
     return true;
 }
 
+bool synchronize_payload(const std::filesystem::path& gameDirectory, const std::filesystem::path& stage,
+    const Manifest& manifest)
+{
+    for (const PayloadFile& file : manifest.files)
+    {
+        const std::filesystem::path destination = gameDirectory / file.relativePath;
+        std::error_code error;
+        const bool matches = std::filesystem::is_regular_file(destination, error) && !error &&
+            std::filesystem::file_size(destination, error) == file.size && !error &&
+            sha256_file(destination) == file.hash;
+        if (!matches && !copy_atomically(stage / file.relativePath, destination))
+            return false;
+    }
+
+    for (const PayloadFile& file : manifest.files)
+    {
+        const std::filesystem::path destination = gameDirectory / file.relativePath;
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(destination, error) || error ||
+            std::filesystem::file_size(destination, error) != file.size || error ||
+            sha256_file(destination) != file.hash)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::wstring quote_argument(std::wstring_view value)
 {
     std::wstring result = L"\"";
@@ -790,18 +818,27 @@ int apply_update(const Arguments& arguments)
         return 16;
     }
 
+    // Run the installer outside its destination so Inno Setup can safely refresh its uninstall data.
     const std::filesystem::path maintenance =
-        arguments.gameDirectory / L".dead-air-x64" / L"Dead-Air-Refined-Maintenance.exe";
+        stage / L".dead-air-x64" / L"Dead-Air-Refined-Maintenance.exe";
+    const std::filesystem::path maintenanceLog = cache / L"maintenance.log";
     const std::wstring maintenanceArguments = L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /BACKUP=no /TARGET=" +
-        quote_argument(arguments.gameDirectory.wstring());
+        quote_argument(arguments.gameDirectory.wstring()) + L" /LOG=" + quote_argument(maintenanceLog.wstring());
     if (!run_and_wait(maintenance, maintenanceArguments, arguments.gameDirectory))
     {
         restore_backup(arguments.gameDirectory, *backup, scope);
         return 17;
     }
 
-    if (!start_finish_process(arguments.gameDirectory, cache, arguments.restartCommand))
+    // Inno Setup may remove payload files that are absent from its maintenance-only file table.
+    if (!synchronize_payload(arguments.gameDirectory, stage, *manifest))
+    {
+        restore_backup(arguments.gameDirectory, *backup, scope);
         return 18;
+    }
+
+    if (!start_finish_process(arguments.gameDirectory, cache, arguments.restartCommand))
+        return 19;
     return 0;
 }
 }

@@ -1,9 +1,0 @@
-pending review:
-- changed-files:
-  - any-glob-to-any-file:
-    - '!**/*'
-
-ready to merge:
-- changed-files:
-  - any-glob-to-any-file:
-    - '**/*'

@@ -18,7 +18,7 @@
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
 | Dependency audit | 44-file release package | Pass, no missing local DLLs |
-| GUI upgrade installer | Final `Dead Air: Refined 0.9.0` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
+| GUI upgrade installer | Final `Dead Air: Refined 1.0.0` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
 | Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |
 | Refined version rollback | Typed `refined-version` snapshot selected through the uninstaller | Pass, saved runtime restored by SHA-256 while the original x86 backup remained reserved for removal |
 | Maintenance wizard | Installer-style fixed-size layout and silent action paths | Pass, standard header artwork persisted and both rollback and removal completed without leftovers |

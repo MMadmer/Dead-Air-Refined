@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "0.9.0",
+    [string]$PortVersion = "1.0.0",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
@@ -121,7 +121,7 @@ function Build-NativeHelpers {
     $developerPrompt = Get-VisualStudioDeveloperPrompt
     $command =
         'call "' + $developerPrompt + '" -arch=x64 -host_arch=x64 && ' +
-        'cl.exe /nologo /O2 /EHsc /std:c++20 /MT /W4 /WX /DUNICODE /D_UNICODE ' +
+        'cl.exe /nologo /O2 /EHsc /std:c++20 /utf-8 /MT /W4 /WX /DUNICODE /D_UNICODE ' +
         '/Fo:"' + $launcherObject + '" /Fe:"' + $launcherOutput + '" "' + $launcherSource + '" ' +
         '/link /SUBSYSTEM:WINDOWS shell32.lib user32.lib'
     & cmd.exe /d /s /c $command
@@ -136,7 +136,7 @@ function Build-NativeHelpers {
         'call "' + $developerPrompt + '" -arch=x64 -host_arch=x64 && ' +
         'cl.exe /nologo /c /O2 /MD /W3 /WX /TC /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
         '/I"' + $zlibInclude + '" /Fo:"' + $ioWin32Object + '" "' + $ioWin32Source + '" && ' +
-        'cl.exe /nologo /c /O2 /EHsc /std:c++20 /MD /W4 /WX /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
+        'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MD /W4 /WX /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
         '/I"' + $zlibInclude + '" /Fo:"' + $updaterObject + '" "' + $updaterSource + '" && ' +
         'link.exe /nologo /OUT:"' + $updaterOutput + '" /SUBSYSTEM:WINDOWS ' +
         '"' + $updaterObject + '" "' + $ioWin32Object + '" "' + $zlibLibrary + '" bcrypt.lib shell32.lib user32.lib'

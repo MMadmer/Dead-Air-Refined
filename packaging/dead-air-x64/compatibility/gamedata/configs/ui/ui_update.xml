@@ -16,10 +16,13 @@
         <progress_text x="306" y="304" width="412" height="24">
             <text font="letterica16" align="c" vert_align="c"/>
         </progress_text>
-        <progress x="326" y="342" width="372" height="12" horz="1" min="0" max="100" pos="0">
-            <progress>
-                <texture>ui_patch_progress</texture>
+        <progress x="326" y="342" width="372" height="9" horz="1" min="0" max="100" pos="0">
+            <progress stretch="1">
+                <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
             </progress>
+            <background stretch="1">
+                <texture a="220">ui_inGame2_hint_wnd_bar</texture>
+            </background>
         </progress>
         <error x="306" y="300" width="412" height="62">
             <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="220" g="100" b="90"/>

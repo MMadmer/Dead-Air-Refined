@@ -2,7 +2,7 @@
   #error RepoRoot must point to the DeadAir-x64 repository.
 #endif
 #ifndef PortVersion
-  #define PortVersion "0.9.0"
+  #define PortVersion "1.0.0"
 #endif
 #ifndef OutputDirectory
   #define OutputDirectory AddBackslash(RepoRoot) + "artifacts\installer"

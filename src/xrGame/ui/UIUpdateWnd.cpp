@@ -38,6 +38,7 @@ bool CUIUpdateWnd::Init()
     m_progress = UIHelper::CreateProgressBar(xml, "main:progress", this);
     m_action = UIHelper::Create3tButton(xml, "main:action", this);
     m_cancel = UIHelper::Create3tButton(xml, "main:cancel", this);
+    m_actionTwoButtonX = m_action->GetWndPos().x;
 
     m_action->SetWindowName("action");
     m_cancel->SetWindowName("cancel");
@@ -142,6 +143,13 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
         m_action->Enable(available || ready || failed);
         m_cancel->Show(CanDismiss(snapshot.state));
         m_cancel->Enable(CanDismiss(snapshot.state));
+
+        if (m_action->IsShown())
+        {
+            Fvector2 position = m_action->GetWndPos();
+            position.x = m_cancel->IsShown() ? m_actionTwoButtonX : (GetWidth() - m_action->GetWidth()) * 0.5f;
+            m_action->SetWndPos(position);
+        }
     }
 
     if (downloading || ready)
@@ -152,7 +160,7 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
         m_progressText->SetText(text);
         const float progress = snapshot.totalBytes ?
             100.f * static_cast<float>(snapshot.downloadedBytes) / static_cast<float>(snapshot.totalBytes) : 0.f;
-        m_progress->SetProgressPos(std::clamp(progress, 0.f, 100.f));
+        m_progress->ForceSetProgressPos(std::clamp(progress, 0.f, 100.f));
         m_action->Enable(ready);
     }
 }

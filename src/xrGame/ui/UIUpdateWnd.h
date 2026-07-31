@@ -36,6 +36,7 @@ private:
     CUIProgressBar* m_progress{};
     CUI3tButton* m_action{};
     CUI3tButton* m_cancel{};
+    float m_actionTwoButtonX{};
     UpdateService::State m_lastState{UpdateService::State::Idle};
     xr_string m_lastVersion;
 };
