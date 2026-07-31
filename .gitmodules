@@ -3,7 +3,7 @@
 	url = https://github.com/OpenXRay/luafilesystem.git
 [submodule "lua-marshal"]
 	path = lua-marshal
-	url = https://github.com/OpenXRay/lua-marshal.git
+	url = https://github.com/MMadmer/Dead-Air-Refined.git
 [submodule "lua-pack"]
 	path = lua-pack
 	url = https://github.com/OpenXRay/lua-pack.git
