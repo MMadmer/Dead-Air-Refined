@@ -120,6 +120,12 @@ void CUIBugReportWnd::Update()
     }
 }
 
+void CUIBugReportWnd::SendMessage(CUIWindow* window, s16 message, void* data)
+{
+    CUIWndCallback::OnEvent(window, message, data);
+    inherited::SendMessage(window, message, data);
+}
+
 bool CUIBugReportWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
 {
     if (keyboardAction == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik) &&

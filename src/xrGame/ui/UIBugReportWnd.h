@@ -20,6 +20,7 @@ public:
     bool Init();
     void Show(bool status) override;
     void Update() override;
+    void SendMessage(CUIWindow* window, s16 message, void* data) override;
     bool OnKeyboardAction(int dik, EUIMessages keyboardAction) override;
     pcstr GetDebugType() override { return "CUIBugReportWnd"; }
 
