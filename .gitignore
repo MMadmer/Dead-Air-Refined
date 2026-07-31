@@ -1,0 +1,74 @@
+# exclude all dot files except .git, appveyor and travis files
+.*
+!.git*
+!.appveyor*
+!.editorconfig
+!.vscode
+
+# exclude binaries and temporary files
+[Bb]in/
+[Bb]uild*/
+!tools/build/
+!tools/build/**
+[Aa]rtifacts/
+
+# Root-level output from local build, installer, and QA runs.
+/*.log
+/*.pid
+/*.obj
+/_qa-*
+
+# Local bootstrap tools are downloaded and signature-checked by the build setup.
+tools/nuget/
+tools/third_party/
+tools/sysinternals/
+src/packages/
+[Tt]est_root/
+[Tt]est_root_*/
+[Tt]est_install_root/
+[Tt]est_patch_apply/
+__pycache__/
+*.py[cod]
+
+# Reverse-engineering databases, compiler intermediates, and crash dumps.
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.pch
+*.ipch
+*.iobj
+*.ipdb
+*.ilk
+*.dmp
+*.mdmp
+*.tmp
+
+# User-specific files
+*.user
+*.user.props
+*.nvuser
+*.PVS-Studio.*
+src/xrGame/ui/BugReportSecrets.local.h
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.diagsession
+
+# Local performance captures and profile-guided build data.
+/_analysis/
+*.etl
+*.pgc
+*.pgd
+
+# Local packaging and deployment staging.
+/dist/
+/release/
+/staging/
+
+# exclude doxygen output
+doc/doxygen/html/*

@@ -1,0 +1,51 @@
+Source: openxray
+Section: games
+Priority: optional
+Maintainer: lya Orlov <eagleivg@mail.ru>
+Build-Depends:
+ cmake,
+ build-essential,
+ libglew-dev,
+ libegl1-mesa-dev,
+ libgles2-mesa-dev,
+ libopenal-dev,
+ libcrypto++-dev,
+ libfreeimage-dev,
+ libfreeimageplus-dev,
+ libogg-dev,
+ libtheora-dev,
+ libvorbis-dev,
+ liblzo2-dev,
+ libjpeg-dev,
+ libncurses5-dev,
+ gcc-14,
+ libpcre3-dev,
+ libsdl2-dev,
+ g++-14,
+ debhelper,
+Build-Conflicts:
+ libmimalloc-dev,
+Homepage: https://github.com/OpenXRay/xray-16
+Description: X-Ray Engine 1.6 expansion
+ X-Ray Engine sources based on version 1.6.02. The original engine is used in S.T.A.L.K.E.R.: Call of Pripyat game released by GSC Game World.
+
+Package: openxray
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ openxray-data (= ${source:Version}),
+Pre-Depends: ${misc:Pre-Depends}
+Description: ${source:Synopsis}
+ ${source:Extended-Description}
+
+Package: openxray-data
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+Description: X-Ray Engine data files (modules, templates and documentation)
+ ${source:Extended-Description}
+ .
+ This package provides openxray architecture independent data files (modules, templates, documentation etc.). Unless you have openxray installed, you probably do not need this package.

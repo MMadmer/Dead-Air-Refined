@@ -1,0 +1,117 @@
+# Dead Air: Refined diagnostic reports
+
+## Purpose
+
+The engine creates the same network-ready report format for:
+
+- an unhandled crash;
+- a manually selected running session.
+
+Manual capture is available through the `session_report` console command. Crash
+capture is automatic. Reports are written to `$app_data_root$/session_reports`.
+The directory keeps no more than 10 reports and removes the oldest report only
+after a newer report is ready.
+
+The main and in-game menus also expose a native bug-report form. It submits a
+title, the baked product version and a description to the Refined Report Hub over HTTPS and can optionally
+create and attach the same anonymous session-report ZIP. Submission runs on a
+worker thread, so a slow or unavailable network does not stall the game loop.
+The title accepts up to 200 characters and requires at least 5 non-whitespace
+characters; the description accepts up to 10,000 and requires at least 20.
+Both menus render `Dead Air: Refined v<version>` in the bottom-right corner
+from the same native version constant used by uploads and diagnostic manifests.
+
+Public builds receive their upload credential through the ignored
+`src/xrGame/ui/BugReportSecrets.local.h` build-time header. The repository
+fallback deliberately contains no credential, and report contents or
+authorization headers must never be written to the engine log.
+
+## Container
+
+Each report is a standard Deflate ZIP named:
+
+```text
+dar-report-session-<UTC>-<random>.zip
+dar-report-crash-<UTC>-<random>.zip
+```
+
+The ZIP contains:
+
+| Entry | Required | Contents |
+| --- | --- | --- |
+| `report.json` | yes | Stable machine-readable manifest |
+| `session.dmp` | yes | Compact minidump without raw stack memory or data segments |
+| `session.log` | when available | Last 4 MiB of the sanitized engine log |
+| `user.ltx` | when available | Sanitized user configuration |
+| `fsgame.ltx` | when available | Sanitized filesystem configuration |
+
+`report.json` uses schema `dead-air-refined.session-report/1`. A receiver should
+reject unknown major schemas instead of guessing field semantics.
+
+## Diagnostic coverage
+
+The manifest records:
+
+- product version, build commit, build ID, architecture and executable SHA-256;
+- exception code, faulting module, module RVA and thread ID for crash reports;
+- anonymous `module + RVA` stack frames;
+- loaded module names, image sizes, timestamps and selected binary hashes;
+- Windows version, CPU model, topology and supported instruction sets;
+- GPU, driver version, D3D feature level and memory capacities;
+- physical RAM, commit, disk space and system/session uptime;
+- process memory, virtual-address layout, I/O totals, handles and thread count;
+- current and aggregate CPU, I/O, FPS, frame-time and render-time load;
+- current local and non-local GPU memory budget and usage;
+- texture, model, sound-cache and Lua memory;
+- ALife, online and pending-release object counts;
+- XDB archives and loose content with safe relative names, sizes, timestamps and
+  hashes for diagnostically important files.
+
+The developer must retain the matching PDB files for public builds. The report
+contains enough `build + module + RVA` information to symbolize a stack without
+shipping PDB files to players.
+
+## Privacy contract
+
+The sender-facing report excludes:
+
+- user and computer names;
+- user profile, installation and application-data paths;
+- command-line and environment contents;
+- player identity and save payload;
+- raw stack memory and module data segments;
+- e-mail addresses, network addresses and credential-like configuration values.
+
+Text attachments preserve structure while replacing sensitive values with
+markers. Module, PDB and content paths retain only safe file names or relative
+content paths. The minidump keeps thread contexts and module metadata but not
+raw stack pages.
+
+## Go receiver contract
+
+A future bot should treat the ZIP as untrusted input:
+
+1. Limit the compressed upload to 8 MiB and the expanded total to 16 MiB.
+2. Allow only the five entry names documented above.
+3. Reject duplicate names, nested paths, absolute paths and `..` components.
+4. Parse `report.json` before accepting other entries.
+5. Require the schema, report ID, type, product version, build ID and executable hash.
+6. Verify `dump.sha256` against `session.dmp`.
+7. Group crashes by build ID, exception code, module and module RVA.
+8. Store the original ZIP unchanged so future symbolization can be repeated.
+
+The current validated manual and crash reports are approximately 58-61 KiB.
+The upper limits leave room for a much larger real-world log while remaining
+small enough for Discord transport.
+
+## Validation
+
+The release implementation passed:
+
+- a hidden manual report from a loaded Dead Air save;
+- a real unhandled access violation in a release build;
+- ZIP and JSON parsing;
+- `MDMP` signature and dump SHA-256 validation;
+- ASCII and UTF-16 privacy scans of every ZIP entry;
+- 13-to-10 report rotation while retaining the newest report;
+- a `Release|x64` build with warnings treated as errors.

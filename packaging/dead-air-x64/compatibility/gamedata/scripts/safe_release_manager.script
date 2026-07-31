@@ -1,0 +1,89 @@
+local objects_to_release = {}
+
+local function make_handle(se_obj)
+	return {
+		name = se_obj:name(),
+		clsid = se_obj:clsid(),
+		queued_at = time_global(),
+		offline_requested = false
+	}
+end
+
+function release(se_obj)
+	if not se_obj or not se_obj.id or se_obj.id == 0 or se_obj.id == 65535 then
+		return false
+	end
+
+	local current = objects_to_release[se_obj.id]
+	if current and current.name == se_obj:name() and current.clsid == se_obj:clsid() then
+		return true
+	end
+	objects_to_release[se_obj.id] = make_handle(se_obj)
+	return true
+end
+
+local function matches_handle(se_obj, handle)
+	return se_obj and se_obj:name() == handle.name and se_obj:clsid() == handle.clsid
+end
+
+function execute_destroy_callback()
+	if is_empty(objects_to_release) then
+		return false
+	end
+
+	local sim = alife()
+	for id, handle in pairs(objects_to_release) do
+		local se_obj = sim:object(id)
+		if not matches_handle(se_obj, handle) then
+			objects_to_release[id] = nil
+		elseif se_obj.online then
+			sim:set_switch_online(id, false)
+			sim:set_switch_offline(id, true)
+			se_obj:switch_offline()
+			handle.offline_requested = true
+		elseif not level.object_by_id(id) then
+			if db.storage[id] then
+				db.storage[id] = nil
+			end
+			sim:release(se_obj)
+			objects_to_release[id] = nil
+		end
+	end
+	return false
+end
+
+function pending_count()
+	local count = 0
+	for _ in pairs(objects_to_release) do
+		count = count + 1
+	end
+	return count
+end
+
+local function actor_on_reinit()
+	AddUniqueCall(execute_destroy_callback)
+end
+
+local function save_state(data)
+	data.objects_to_release = objects_to_release
+end
+
+local function load_state(data)
+	objects_to_release = data.objects_to_release or {}
+	data.objects_to_release = nil
+	for id, handle in pairs(objects_to_release) do
+		local se_obj = alife():object(id)
+		local legacy_name = type(handle) == "string" and handle or nil
+		if legacy_name and se_obj and se_obj:name() == legacy_name then
+			objects_to_release[id] = make_handle(se_obj)
+		elseif type(handle) ~= "table" or not matches_handle(se_obj, handle) then
+			objects_to_release[id] = nil
+		end
+	end
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_reinit", actor_on_reinit)
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+end

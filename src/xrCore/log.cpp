@@ -1,0 +1,269 @@
+#include "stdafx.h"
+#pragma hdrstop
+
+#include <time.h>
+#include "resource.h"
+#include "log.h"
+#include "xrCore/Threading/Lock.hpp"
+
+bool LogExecCB = true;
+string_path log_file_name{};
+bool no_log = true;
+#ifdef CONFIG_PROFILE_LOCKS
+Lock logCS(MUTEX_PROFILE_ID(log));
+#else // CONFIG_PROFILE_LOCKS
+Lock logCS;
+#endif // CONFIG_PROFILE_LOCKS
+xr_vector<xr_string> LogFile;
+LogCallback LogCB = nullptr;
+
+bool ForceFlushLog = false;
+IWriter* LogWriter = nullptr;
+
+void FlushLog()
+{
+    if (no_log)
+        return;
+
+    ScopeLock scope{ &logCS };
+    if (LogWriter)
+        LogWriter->flush();
+}
+
+void AddOne(pcstr split)
+{
+    ScopeLock scope{ &logCS };
+
+    OutputDebugString(split);
+    OutputDebugString("\n");
+
+    LogFile.push_back(split);
+
+    // exec CallBack
+    if (LogExecCB && LogCB)
+        LogCB(split);
+
+    if (LogWriter)
+    {
+        LogWriter->w_printf("%s\r\n", split);
+
+        if (ForceFlushLog)
+            FlushLog();
+    }
+}
+
+void Log(pcstr s)
+{
+    int i, j;
+
+    const u32 length = xr_strlen(s);
+    pstr split = static_cast<pstr>(xr_alloca((length + 1) * sizeof(char)));
+    for (i = 0, j = 0; s[i] != 0; i++)
+    {
+        if (s[i] == '\n')
+        {
+            split[j] = 0; // end of line
+            if (split[0] == 0)
+            {
+                split[0] = ' ';
+                split[1] = 0;
+            }
+            AddOne(split);
+            j = 0;
+        }
+        else
+        {
+            split[j++] = s[i];
+        }
+    }
+    split[j] = 0;
+    AddOne(split);
+}
+
+void __cdecl Msg(pcstr format, ...)
+{
+    va_list mark;
+    string2048 buf;
+    va_start(mark, format);
+    const int sz = std::vsnprintf(buf, sizeof(buf) - 1, format, mark);
+    buf[sizeof(buf) - 1] = 0;
+    va_end(mark);
+    if (sz)
+        Log(buf);
+}
+
+void Log(pcstr msg, pcstr dop)
+{
+    if (!dop)
+    {
+        Log(msg);
+        return;
+    }
+
+    const u32 buffer_size = (xr_strlen(msg) + 1 + xr_strlen(dop) + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+    strconcat(buffer_size, buf, msg, " ", dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, int dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 11 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %i", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, unsigned int dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 10 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %u", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, long dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 64 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %li", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, unsigned long dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 64 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %lu", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, long long dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 64 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %lli", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, unsigned long long dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 64 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %llu", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, float dop)
+{
+    // actually, float string representation should be no more, than 40 characters,
+    // but we will count with slight overhead
+    const u32 buffer_size = (xr_strlen(msg) + 1 + 64 + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s %f", msg, dop);
+    Log(buf);
+}
+
+void Log(pcstr msg, const Fvector& dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 2 + 3 * (64 + 1) + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s (%f,%f,%f)", msg, VPUSH(dop));
+    Log(buf);
+}
+
+void Log(pcstr msg, const Fmatrix& dop)
+{
+    const u32 buffer_size = (xr_strlen(msg) + 2 + 4 * (4 * (64 + 1) + 1) + 1) * sizeof(char);
+    pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
+
+    xr_sprintf(buf, buffer_size, "%s:\n%f,%f,%f,%f\n%f,%f,%f,%f\n%f,%f,%f,%f\n%f,%f,%f,%f\n", msg, dop.i.x, dop.i.y,
+        dop.i.z, dop._14_, dop.j.x, dop.j.y, dop.j.z, dop._24_, dop.k.x, dop.k.y, dop.k.z, dop._34_, dop.c.x, dop.c.y,
+        dop.c.z, dop._44_);
+    Log(buf);
+}
+
+void LogWinErr(pcstr msg, long err_code) { Msg("%s: %s", msg, xrDebug::ErrorToString(err_code)); }
+LogCallback SetLogCB(const LogCallback& cb)
+{
+    ScopeLock scope{ &logCS };
+    const LogCallback result = LogCB;
+    LogCB = cb;
+    return (result);
+}
+
+pcstr log_name() { return (log_file_name); }
+
+void CreateLog(bool nl)
+{
+    ZoneScoped;
+    LogFile.reserve(1000);
+
+    no_log = nl;
+
+    const bool unique_logs = strstr(Core.Params, "-unique_logs");
+
+    if (unique_logs)
+    {
+        string32 TimeBuf;
+        using namespace std::chrono;
+        const auto now = system_clock::now();
+        const auto time = system_clock::to_time_t(now);
+        std::strftime(TimeBuf, sizeof(TimeBuf), "%d-%m-%y_%H-%M-%S", std::localtime(&time));
+        strconcat(log_file_name, Core.ApplicationName, "_", Core.UserName, "_", TimeBuf, ".log");
+    }
+    else
+    {
+        strconcat(log_file_name, Core.ApplicationName, "_", Core.UserName, ".log");
+    }
+
+    if (FS.path_exist("$logs$"))
+        FS.update_path(log_file_name, "$logs$", log_file_name);
+
+    if (no_log)
+        return;
+
+    if (!unique_logs)
+    {
+        // Alun: Backup existing log
+        const xr_string backup_logFName = EFS.ChangeFileExt(log_file_name, ".bkp");
+        FS.file_rename(log_file_name, backup_logFName.c_str(), true);
+        //-Alun
+    }
+
+    if (const auto w = FS.w_open(log_file_name))
+    {
+        for (u32 it = 0; it < LogFile.size(); it++)
+        {
+            cpcstr s = LogFile[it].c_str();
+            w->w_printf("%s\r\n", s ? s : "");
+        }
+        w->flush();
+
+        ScopeLock scope{ &logCS };
+        LogWriter = w;
+    }
+
+    if (strstr(Core.Params, "-force_flushlog"))
+        ForceFlushLog = true;
+}
+
+void CloseLog(void)
+{
+    ZoneScoped;
+    FlushLog();
+
+    ScopeLock scope{ &logCS };
+    if (LogWriter)
+        FS.w_close(LogWriter);
+
+    LogFile.clear();
+}

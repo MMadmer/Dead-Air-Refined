@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <background x="272" y="176" width="480" height="286" stretch="1">
+            <texture>ui_frame_error</texture>
+        </background>
+        <caption x="298" y="194" width="428" height="32">
+            <text font="graffiti22" align="c" vert_align="c">st_update_available_caption</text>
+        </caption>
+        <message x="306" y="240" width="412" height="62">
+            <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
+        </message>
+        <size x="306" y="311" width="412" height="24">
+            <text font="letterica16" align="c" vert_align="c"/>
+        </size>
+        <progress_text x="306" y="304" width="412" height="24">
+            <text font="letterica16" align="c" vert_align="c"/>
+        </progress_text>
+        <progress x="326" y="342" width="372" height="12" horz="1" min="0" max="100" pos="0">
+            <progress>
+                <texture>ui_patch_progress</texture>
+            </progress>
+        </progress>
+        <error x="306" y="300" width="412" height="62">
+            <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="220" g="100" b="90"/>
+        </error>
+        <action x="322" y="398" width="235" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_update_download</text>
+        </action>
+        <cancel x="575" y="398" width="125" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">ui_mm_cancel</text>
+        </cancel>
+    </main>
+</w>

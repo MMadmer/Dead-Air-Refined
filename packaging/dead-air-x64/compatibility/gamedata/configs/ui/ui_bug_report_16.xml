@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <background x="390" y="55" width="350" height="380" stretch="1">
+            <texture>ui_frame_error</texture>
+        </background>
+        <caption x="410" y="70" width="310" height="30">
+            <text font="graffiti22" align="c" vert_align="c">st_bug_report_caption</text>
+        </caption>
+        <title_label x="410" y="108" width="220" height="20">
+            <text font="letterica16" align="l" vert_align="c">st_bug_report_title</text>
+        </title_label>
+        <title_counter x="630" y="108" width="90" height="20">
+            <text font="letterica16" align="r" vert_align="c">0/200</text>
+        </title_counter>
+        <title x="410" y="130" width="310" height="28" max_symb_count="200" stretch="1">
+            <text x="6" y="0" font="letterica16" align="l" vert_align="c"/>
+            <texture>ui_inGame2_edit_box_1</texture>
+        </title>
+        <description_label x="410" y="170" width="220" height="20">
+            <text font="letterica16" align="l" vert_align="c">st_bug_report_description</text>
+        </description_label>
+        <description_counter x="615" y="170" width="105" height="20">
+            <text font="letterica16" align="r" vert_align="c">0/10000</text>
+        </description_counter>
+        <description x="410" y="192" width="310" height="105" max_symb_count="10000" multiline="1" stretch="1">
+            <text x="6" y="6" width="298" height="93" font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+            <texture>ui_inGame2_edit_box_1</texture>
+        </description>
+        <attach_dump x="410" y="312" width="25" height="19" stretch="1">
+            <texture>ui_inGame2_checkbox</texture>
+        </attach_dump>
+        <attach_label x="440" y="310" width="280" height="23">
+            <text font="letterica16" align="l" vert_align="c">st_bug_report_attach_dump</text>
+        </attach_label>
+        <status x="410" y="340" width="310" height="20">
+            <text font="letterica16" align="c" vert_align="c"/>
+        </status>
+        <submit x="420" y="380" width="175" height="28" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_bug_report_submit</text>
+        </submit>
+        <cancel x="610" y="380" width="100" height="28" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">ui_mm_cancel</text>
+        </cancel>
+    </main>
+</w>

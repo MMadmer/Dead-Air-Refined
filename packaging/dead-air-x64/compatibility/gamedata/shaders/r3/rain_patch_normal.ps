@@ -1,0 +1,93 @@
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+
+Texture3D s_water;
+Texture2D s_waterFall;
+float4 RainDensity;
+
+float2 SampleSplashNormal(float2 tc, float time)
+{
+    return (s_water.SampleBias(smp_base, float3(tc, time), -3.0).wz - 0.5) * 6.0;
+}
+
+float2 SampleFlowNormal(float2 tc)
+{
+    return (s_waterFall.Sample(smp_base, tc).xy - 0.5) * 0.6;
+}
+
+#ifndef ISAMPLE
+#define ISAMPLE 0
+#endif
+
+#ifdef GBUFFER_OPTIMIZATION
+#ifdef MSAA_OPTIMIZATION
+float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX) : SV_Target
+#else
+float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position) : SV_Target
+#endif
+#else
+#ifdef MSAA_OPTIMIZATION
+float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, uint iSample : SV_SAMPLEINDEX) : SV_Target
+#else
+float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
+#endif
+#endif
+{
+#ifdef GBUFFER_OPTIMIZATION
+#ifdef MSAA_OPTIMIZATION
+    gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, iSample);
+#else
+    gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, ISAMPLE);
+#endif
+#else
+#ifdef MSAA_OPTIMIZATION
+    gbuffer_data gbd = gbuffer_load_data(tc, iSample);
+#else
+    gbuffer_data gbd = gbuffer_load_data(tc, ISAMPLE);
+#endif
+#endif
+
+    const float4 position = float4(gbd.P, 1.0);
+    float3 normal = normalize(gbd.N);
+    const float distanceFade = 1.0 - smoothstep(5.0, 20.0, position.z);
+    const float upwardFacing = -dot(Ldynamic_dir.xyz, normal);
+    const float rainCoverage =
+        distanceFade * distanceFade * RainDensity.x * saturate(upwardFacing * 10.0 + 5.5);
+
+    // Reject pixels that cannot receive rain before the expensive shadow lookup.
+    [branch]
+    if (rainCoverage <= 0.0)
+        return float4(normal, 1.0);
+
+    const float4 shadowPosition = mul(m_shadow, position);
+    const float3 worldPosition = mul(m_sunmask, position);
+    const float3 worldNormal = mul((float3x3)m_sunmask, normal);
+    float wetness = shadow_rain(shadowPosition, worldPosition.xz - worldNormal.xz) * rainCoverage;
+    [branch]
+    if (wetness <= 0.0)
+        return float4(normal, 1.0);
+
+    const float upwardWeight = max(0.0, upwardFacing);
+    const float angleFactor = 0.05 * ceil(10.0 * (1.0 - upwardWeight));
+    const float flowTime = worldPosition.y * 0.5 + timers.x * angleFactor;
+
+    const float2 splash = SampleSplashNormal(worldPosition.xz, timers.x * 3.0);
+    const float2 flowX = SampleFlowNormal(float2(worldPosition.z * 0.5, flowTime));
+    const float2 flowZ = SampleFlowNormal(float2(worldPosition.x * 0.5, flowTime));
+    const float xWeight = abs(worldNormal.x);
+    const float zWeight = abs(worldNormal.z);
+
+    float3 water;
+    water.x = splash.x * upwardWeight + flowZ.y * zWeight;
+    water.y = flowX.x * xWeight + flowZ.x * zWeight;
+    water.z = splash.y * upwardWeight + flowX.y * xWeight;
+    water *= wetness;
+
+    normal = normalize(normal + mul((float3x3)m_V, water));
+    wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
+
+    // Store the final multiplier so the apply pass only performs bandwidth work.
+    const float colorIntensity = max(1.0 - sqrt(wetness), 0.5);
+    return float4(normal, colorIntensity);
+}

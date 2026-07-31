@@ -1,0 +1,128 @@
+local MIN_RELEASE_DISTANCE = 5625
+local BODY_MAX_COUNT = 5
+local STAY_TIME = 180000
+
+local RB_manager
+
+function get_release_body_manager()
+	if not RB_manager then
+		RB_manager = Crelease_body()
+	end
+	return RB_manager
+end
+
+local function has_known_info(obj)
+	local spawn_ini = obj.spawn_ini and obj:spawn_ini()
+	local filename = spawn_ini and spawn_ini:r_string_ex("logic", "cfg")
+	local state = db.storage[obj:id()]
+	local char_ini = filename and ini_file(filename) or state and state.ini
+	local section_logic = state and state.section_logic
+	local known_info = section_logic and char_ini and char_ini:r_string_ex(section_logic, "known_info") or "known_info"
+
+	if char_ini and char_ini:section_exist(known_info) then
+		return true
+	end
+	return spawn_ini and spawn_ini:section_exist(known_info) or false
+end
+
+class "Crelease_body"
+
+function Crelease_body:__init()
+	self.release_objects_table = {}
+	self.keep_items_table = {}
+	self.size = 0
+
+	local death_ini = ini_file("misc\\death_generic.ltx")
+	if not death_ini:section_exist("keep_items") then
+		printf("There is no section [keep_items] in death_generic.ltx")
+	end
+	for index = 0, death_ini:line_count("keep_items") - 1 do
+		local _, section = death_ini:r_line_ex("keep_items", index, "", "")
+		self.keep_items_table[section] = true
+	end
+end
+
+function Crelease_body:can_release(obj)
+	if IsMonster(obj) then
+		return true
+	end
+	if has_known_info(obj) or get_object_story_id(obj:id()) then
+		return false
+	end
+	for section in pairs(self.keep_items_table) do
+		if obj:object(section) then
+			return false
+		end
+	end
+	return true
+end
+
+function Crelease_body:add_corpse(obj)
+	if not obj then
+		return false
+	end
+	local id = obj:id()
+	if not id or not self:can_release(obj) then
+		return false
+	end
+	if not self.release_objects_table[id] then
+		self.release_objects_table[id] = {name = obj:name(), clsid = obj:clsid()}
+		self.size = self.size + 1
+		return true
+	end
+	return false
+end
+
+function Crelease_body:moving_dead_body(obj, net_spawn)
+	if not net_spawn and self.size > BODY_MAX_COUNT then
+		self:clear()
+	end
+	self:add_corpse(obj)
+end
+
+local function erase_handle(manager, id)
+	manager.release_objects_table[id] = nil
+	manager.size = math.max(0, manager.size - 1)
+end
+
+function Crelease_body:clear(all, distance)
+	if not db.actor then
+		return
+	end
+	local sim = alife()
+	if not sim then
+		return
+	end
+
+	local actor_position = db.actor:position()
+	distance = distance or MIN_RELEASE_DISTANCE
+	for id, handle in pairs(self.release_objects_table) do
+		if not all and self.size < BODY_MAX_COUNT then
+			return
+		end
+
+		local se_obj = id ~= 0 and id ~= 65535 and sim:object(id)
+		local valid = se_obj and se_obj:name() == handle.name and se_obj:clsid() == handle.clsid
+		valid = valid and (IsStalker(nil, se_obj:clsid()) or IsMonster(nil, se_obj:clsid())) and not se_obj:alive()
+		if not valid then
+			erase_handle(self, id)
+		elseif get_object_story_id(id) then
+			erase_handle(self, id)
+		elseif all then
+			safe_release_manager.release(se_obj)
+			erase_handle(self, id)
+		elseif actor_position:distance_to_sqr(se_obj.position) >= distance then
+			local object = level.object_by_id(id)
+			if object and time_global() - object:death_time() > STAY_TIME and self:can_release(object) then
+				safe_release_manager.release(se_obj)
+				erase_handle(self, id)
+			end
+		end
+	end
+end
+
+function Crelease_body:save(packet)
+end
+
+function Crelease_body:load(reader)
+end

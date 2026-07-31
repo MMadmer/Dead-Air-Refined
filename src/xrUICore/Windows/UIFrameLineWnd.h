@@ -1,0 +1,82 @@
+#pragma once
+
+#include "UIWindow.h"
+
+class CUIStatic;
+
+class XRUICORE_API CUIFrameLineWnd : public CUIWindow, public ITextureOwner
+{
+    typedef CUIWindow inherited;
+
+public:
+    enum RectSegment : u8
+    {
+        flFirst = 0, // Left or top
+        flBack, // Center texture
+        flSecond, // Right or bottom
+        flMax
+    };
+
+    CUIFrameLineWnd(pcstr window_name);
+
+    bool InitTexture(pcstr texture, bool fatal = true) override;
+    bool InitTextureEx(pcstr texture, pcstr shader = "hud" DELIMITER "default", bool fatal = true) override;
+
+    void Draw() override;
+
+    void SetTextureRect(const Frect rect, RectSegment idx)
+    {
+        VERIFY(idx >= flFirst && idx < flMax);
+        if (idx >= flMax)
+            return;
+        m_tex_rect[idx] = rect;
+    }
+
+    void SetTextureRect(const Frect& r) override
+    {
+        // we don't mess with it
+    }
+
+    const Frect& GetTextureRect() const override
+    {
+        return m_tex_rect[flFirst];
+    }
+
+    void SetTextureColor(u32 cl) override { m_texture_color = cl; }
+    u32 GetTextureColor() const override { return m_texture_color; }
+
+    void SetStretchTexture(bool stretch) override { m_bStretchTexture = stretch;}
+    bool GetStretchTexture() override { return m_bStretchTexture; }
+
+    void SetTextureVisible(bool value) { m_bTextureVisible = value; }
+    void SetShader(const ui_shader& sh)
+    {
+        for (auto& shader : m_shader)
+            shader = sh;
+    }
+
+    bool IsHorizontal() const { return bHorizontal; }
+    void SetHorizontal(bool horiz) { bHorizontal = horiz; }
+
+    CUIStatic* GetTitleText(bool create_on_demand = false);
+
+    pcstr GetDebugType() override { return "CUIFrameLineWnd"; }
+    bool FillDebugTree(const CUIDebugState& debugState) override;
+    void FillDebugInfo() override;
+
+protected:
+    void DrawElements() const;
+
+    u32 m_texture_color{ color_argb(255, 255, 255, 255) };
+    bool m_bTextureVisible{ false };
+    bool m_bStretchTexture{ true };
+    bool bHorizontal{ true };
+
+    Frect m_tex_rect[flMax]{};
+    ui_shader m_shader[flMax]{};
+
+    CUIStatic* m_title_text{};
+
+private:
+    DECLARE_SCRIPT_REGISTER_FUNCTION(CUIWindow);
+};

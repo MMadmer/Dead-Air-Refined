@@ -1,0 +1,5 @@
+xrCore/.GitInfo.hpp
+
+# exclude binaries and temporary files
+packages/
+_ReSharper.Caches/

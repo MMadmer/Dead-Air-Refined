@@ -1,0 +1,62 @@
+AI:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/xrAICore/**/*
+    - src/xrGame/ai/**/*
+
+Documentation:
+- changed-files:
+  - any-glob-to-any-file:
+    - docs/**/*
+
+External (3rd party):
+- changed-files:
+  - any-glob-to-any-file:
+    - Externals/**/*
+
+Game assets:
+- changed-files:
+  - any-glob-to-any-file:
+    - res/**/*
+
+Infrastructure:
+- changed-files:
+  - any-glob-to-any-file:
+    - .github/**/*
+
+Physics:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/xrPhysics/**/*
+
+Renderer:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/Layers/**/*
+
+DirectX:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/Layers/xrRenderDX*
+    - src/Layers/xrRenderPC_R1
+    - src/Layers/xrRenderPC_R2
+    - src/Layers/xrRenderPC_R4
+
+OpenGL:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/Layers/xrRenderGL
+    - src/Layers/xrRenderPC_GL
+
+Sound:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/xrSound/**/*
+
+UI:
+- changed-files:
+  - any-glob-to-any-file:
+    - src/xrUICore/**/*
+    - src/xrGame/ui/**/*
+
+

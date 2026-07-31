@@ -1,0 +1,421 @@
+local function make_empty_state()
+	return {
+		se_object = {},
+		game_object = {},
+		actor_contacts = {}
+	}
+end
+
+local m_data = make_empty_state()
+local format_magic = "DAX64SC2"
+local format_version = 2
+
+local function adler32(data)
+	local a = 1
+	local b = 0
+	for index = 1, #data do
+		a = (a + string.byte(data, index)) % 65521
+		b = (b + a) % 65521
+	end
+	return b * 65536 + a
+end
+
+local function has_persistent_payload(tbl)
+	for key, value in pairs(tbl) do
+		if key ~= "name" and value ~= nil then
+			if type(value) ~= "table" or not is_empty(value) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function on_pstor_load_all(obj, packet)
+	local id = obj:id()
+	local state = get_game_object_state(obj, false)
+	if state and db.storage[id] then
+		if state.pstor_all then
+			db.storage[id].pstor = state.pstor_all
+			state.pstor_all = nil
+		end
+		if state.pstor_ctime then
+			db.storage[id].pstor_ctime = state.pstor_ctime
+			state.pstor_ctime = nil
+		end
+	end
+end
+
+local function install_portable_ctime_persistence()
+	local metatable = getmetatable(game.CTime())
+	if not metatable then
+		return
+	end
+
+	metatable.__persist = function(self)
+		local year, month, day, hour, minute, second, millisecond = 0, 0, 0, 0, 0, 0, 0
+		if self and self.get then
+			year, month, day, hour, minute, second, millisecond =
+				self:get(year, month, day, hour, minute, second, millisecond)
+		end
+		return string.format(
+			"local value=game.CTime();value:set(%d,%d,%d,%d,%d,%d,%d);return value",
+			year,
+			month,
+			day,
+			hour,
+			minute,
+			second,
+			millisecond
+		)
+	end
+end
+
+function on_game_start()
+	if not USE_MARSHAL then
+		return
+	end
+	install_portable_ctime_persistence()
+	RegisterScriptCallback("on_pstor_load_all", on_pstor_load_all)
+end
+
+local capture_prepare_state
+
+function CALifeStorageManager_capture_prepare_begin(fname)
+	if not USE_MARSHAL then
+		return false
+	end
+
+	m_data.GAME_VERSION = GAME_VERSION
+	SendScriptCallback("save_state", m_data)
+	capture_prepare_state = {
+		stage = 1,
+		storage_key = next(db.storage),
+		game_key = next(m_data.game_object),
+		inner_key = nil,
+		prune_collection = 1,
+		prune_key = nil
+	}
+	return true
+end
+
+function CALifeStorageManager_capture_prepare_step(item_budget)
+	local state = capture_prepare_state
+	if not state then
+		return true
+	end
+
+	local remaining = math.max(1, tonumber(item_budget) or 1)
+	while remaining > 0 do
+		if state.stage == 1 then
+			local id = state.storage_key
+			if id == nil then
+				state.stage = 2
+			else
+				state.storage_key = next(db.storage, id)
+				local stored = db.storage[id]
+				if m_data.game_object[id] and stored then
+					if stored.pstor and not is_empty(stored.pstor) then
+						m_data.game_object[id].pstor_all = stored.pstor
+					end
+					if stored.pstor_ctime and not is_empty(stored.pstor_ctime) then
+						m_data.game_object[id].pstor_ctime = stored.pstor_ctime
+					end
+				end
+				remaining = remaining - 1
+			end
+		elseif state.stage == 2 then
+			local id = state.game_key
+			if id == nil then
+				state.stage = 3
+				state.prune_key = next(m_data.game_object)
+			else
+				local object_state = m_data.game_object[id]
+				local key = state.inner_key or next(object_state)
+				if key == nil then
+					state.game_key = next(m_data.game_object, id)
+				else
+					local next_key = next(object_state, key)
+					local value = object_state[key]
+					if type(value) == "table" and is_empty(value) then
+						object_state[key] = nil
+					end
+					if next_key == nil then
+						state.game_key = next(m_data.game_object, id)
+						state.inner_key = nil
+					else
+						state.inner_key = next_key
+					end
+					remaining = remaining - 1
+				end
+			end
+		elseif state.stage == 3 then
+			local collection_name = state.prune_collection == 1 and "game_object" or "se_object"
+			local collection = m_data[collection_name]
+			local id = state.prune_key
+			if id == nil then
+				if state.prune_collection == 1 then
+					state.prune_collection = 2
+					state.prune_key = next(m_data.se_object)
+				else
+					capture_prepare_state = nil
+					return true
+				end
+			else
+				state.prune_key = next(collection, id)
+				local object_state = collection[id]
+				if type(object_state) ~= "table" or not has_persistent_payload(object_state) then
+					collection[id] = nil
+				end
+				remaining = remaining - 1
+			end
+		end
+	end
+
+	return false
+end
+
+function CALifeStorageManager_capture_prepare(fname)
+	if not CALifeStorageManager_capture_prepare_begin(fname) then
+		return false
+	end
+
+	while not CALifeStorageManager_capture_prepare_step(1024) do
+	end
+	return true
+end
+
+function CALifeStorageManager_capture_encode()
+	local ok, data = pcall(marshal.encode, m_data)
+	if not ok or not data then
+		printf("Error: Unable to encode custom save data: %s", tostring(data))
+		return false
+	end
+
+	return data
+end
+
+function CALifeStorageManager_capture_save(fname)
+	if not CALifeStorageManager_capture_prepare(fname) then
+		return false
+	end
+
+	return CALifeStorageManager_capture_encode()
+end
+
+function CALifeStorageManager_before_save(fname, save_id)
+	local data = CALifeStorageManager_capture_save(fname)
+	if not data then
+		return false
+	end
+
+	local save_path = getFS():update_path("$game_saves$", "")
+	lfs.mkdir(save_path)
+	local suffix = save_id and "." .. tostring(save_id) .. ".tmp" or ""
+	local path = save_path .. fname:sub(1, -6):lower() .. ".scoc" .. suffix
+	local savegame = io.open(path, "wb")
+	if io.type(savegame) ~= "file" then
+		printf("Error: Unable to write to %s", path)
+		return false
+	end
+
+	savegame:write(data)
+	savegame:flush()
+	savegame:close()
+
+	local validation = io.open(path, "rb")
+	if io.type(validation) ~= "file" then
+		return false
+	end
+	local size = validation:seek("end")
+	validation:close()
+	return size and size > 0
+end
+
+function CALifeStorageManager_save(fname)
+end
+
+local function load_legacy(savegame)
+	savegame:seek("set", 0)
+	local data = savegame:read("*all")
+	if not data or data == "" then
+		return nil
+	end
+
+	local ok, decoded = pcall(marshal.decode, data)
+	if not ok or type(decoded) ~= "table" then
+		return nil
+	end
+	return decoded
+end
+
+local function read_decimal(line, offset)
+	local length = #line
+	while offset <= length do
+		local byte = string.byte(line, offset)
+		if byte ~= 32 and byte ~= 9 then
+			break
+		end
+		offset = offset + 1
+	end
+
+	local value
+	while offset <= length do
+		local byte = string.byte(line, offset)
+		if byte < 48 or byte > 57 then
+			break
+		end
+		value = (value or 0) * 10 + byte - 48
+		offset = offset + 1
+	end
+	return value, offset
+end
+
+local function parse_block_header(header)
+	if type(header) ~= "string" then
+		return
+	end
+
+	local key_size, offset = read_decimal(header, 1)
+	local data_size
+	data_size, offset = read_decimal(header, offset)
+	local checksum
+	checksum, offset = read_decimal(header, offset)
+	if not key_size or not data_size or not checksum then
+		return
+	end
+
+	while offset <= #header do
+		local byte = string.byte(header, offset)
+		if byte ~= 13 and byte ~= 32 and byte ~= 9 then
+			return
+		end
+		offset = offset + 1
+	end
+	return key_size, data_size, checksum
+end
+
+local function load_versioned(savegame, expected_save_id)
+	local version = tonumber(savegame:read("*line"))
+	local save_id = savegame:read("*line")
+	local block_count = tonumber(savegame:read("*line"))
+	if version ~= format_version or save_id ~= expected_save_id or not block_count then
+		return nil
+	end
+
+	local result = {}
+	for _ = 1, block_count do
+		local header = savegame:read("*line")
+		local key_size, data_size, checksum = parse_block_header(header)
+		if not key_size or not data_size or not checksum then
+			printf("Warning: Invalid custom save block header " .. tostring(_) .. ": " .. tostring(header))
+			return nil
+		end
+
+		local key = savegame:read(key_size)
+		local data = savegame:read(data_size)
+		if not key or #key ~= key_size or not data or #data ~= data_size or adler32(data) ~= checksum then
+			printf("Warning: Invalid custom save block payload " .. tostring(_) .. " (" .. tostring(key) .. ")")
+			return nil
+		end
+
+		local ok, decoded = pcall(marshal.decode, data)
+		if not ok then
+			printf("Warning: Unable to decode custom save block " .. tostring(key) .. ": " .. tostring(decoded))
+			return nil
+		end
+		result[key] = decoded
+	end
+	return result
+end
+
+local function load_custom_state(path, expected_save_id)
+	local savegame = io.open(path, "rb")
+	if io.type(savegame) ~= "file" then
+		return nil
+	end
+
+	local magic = savegame:read("*line")
+	local result
+	if magic == format_magic then
+		result = load_versioned(savegame, expected_save_id)
+	else
+		result = load_legacy(savegame)
+	end
+	savegame:close()
+	return result
+end
+
+function CALifeStorageManager_load(fname, save_id)
+	if not USE_MARSHAL then
+		return
+	end
+
+	local path = fname:sub(1, -6) .. ".scoc"
+	local loaded = load_custom_state(path, save_id)
+	if not loaded then
+		loaded = load_custom_state(path .. ".bak", save_id)
+	end
+
+	if type(loaded) ~= "table" then
+		printf("Warning: Custom save data is missing or damaged for %s; optional state was reset", path)
+		m_data = make_empty_state()
+	else
+		m_data = loaded
+		m_data.se_object = m_data.se_object or {}
+		m_data.game_object = m_data.game_object or {}
+		m_data.actor_contacts = m_data.actor_contacts or {}
+	end
+
+	SendScriptCallback("load_state", m_data)
+end
+
+function get_state()
+	return m_data
+end
+
+function decode(data)
+	local ok, decoded = pcall(marshal.decode, data)
+	if ok then
+		return decoded
+	end
+	return nil
+end
+
+function get_game_object_state(obj, create_if_missing)
+	if not obj then
+		return
+	end
+
+	local id = obj:id()
+	local name = obj:name()
+	local state = m_data.game_object[id]
+	if state and state.name ~= name then
+		m_data.game_object[id] = nil
+		state = nil
+	end
+	if not state and create_if_missing then
+		state = {name = name}
+		m_data.game_object[id] = state
+	end
+	return state
+end
+
+function get_se_obj_state(se_obj, create_if_missing)
+	if not se_obj then
+		return
+	end
+
+	local id = se_obj.id
+	local name = se_obj:name()
+	local state = m_data.se_object[id]
+	if state and state.name ~= name then
+		m_data.se_object[id] = nil
+		state = nil
+	end
+	if not state and create_if_missing then
+		state = {name = name}
+		m_data.se_object[id] = state
+	end
+	return state
+end

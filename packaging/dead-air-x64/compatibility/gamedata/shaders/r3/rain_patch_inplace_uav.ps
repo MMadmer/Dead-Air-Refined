@@ -1,0 +1,82 @@
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+
+RWTexture2D<float4> rw_position : register(u0);
+RWTexture2D<float4> rw_color : register(u1);
+Texture3D s_water;
+Texture2D s_waterFall;
+float4 RainDensity;
+
+float2 SampleSplashNormal(float2 tc, float time)
+{
+    return (s_water.SampleLevel(smp_base, float3(tc, time), 0.0).wz - 0.5) * 6.0;
+}
+
+float2 SampleFlowNormal(float2 tc)
+{
+    return (s_waterFall.SampleLevel(smp_base, tc, 0.0).xy - 0.5) * 0.6;
+}
+
+float SampleRainShadow(float4 tc, float2 tcJ)
+{
+    tc.xyz /= tc.w;
+
+    const float scale = 4.0 / float(SMAP_size);
+    const float4 jitter = jitter0.SampleLevel(smp_linear, tcJ, 0.0) * scale;
+    const float first = s_smap.SampleCmpLevelZero(smp_smap, tc.xy + jitter.xy, tc.z);
+    const float second = s_smap.SampleCmpLevelZero(smp_smap, tc.xy + jitter.wz, tc.z);
+    return (first + second) * 0.5;
+}
+
+void main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position)
+{
+    const int2 pixel = int2(pos2d.xy);
+    float4 packedPosition = rw_position[pixel];
+    float4 albedo = rw_color[pixel];
+    const float3 position =
+        float3(packedPosition.z * (pos2d.xy * pos_decompression_params.zw - pos_decompression_params.xy),
+            packedPosition.z);
+    float3 normal = normalize(gbuf_unpack_normal(packedPosition.xy));
+    const float distanceFade = 1.0 - smoothstep(5.0, 20.0, position.z);
+    const float upwardFacing = -dot(Ldynamic_dir.xyz, normal);
+    const float rainCoverage =
+        distanceFade * distanceFade * RainDensity.x * saturate(upwardFacing * 10.0 + 5.5);
+
+    [branch]
+    if (rainCoverage <= 0.0)
+        return;
+
+    const float4 viewPosition = float4(position, 1.0);
+    const float4 shadowPosition = mul(m_shadow, viewPosition);
+    const float3 worldPosition = mul(m_sunmask, viewPosition);
+    const float3 worldNormal = mul((float3x3)m_sunmask, normal);
+    float wetness = SampleRainShadow(shadowPosition, worldPosition.xz - worldNormal.xz) * rainCoverage;
+
+    [branch]
+    if (wetness <= 0.0)
+        return;
+
+    const float upwardWeight = max(0.0, upwardFacing);
+    const float angleFactor = 0.05 * ceil(10.0 * (1.0 - upwardWeight));
+    const float flowTime = worldPosition.y * 0.5 + timers.x * angleFactor;
+    const float2 splash = SampleSplashNormal(worldPosition.xz, timers.x * 3.0);
+    const float2 flowX = SampleFlowNormal(float2(worldPosition.z * 0.5, flowTime));
+    const float2 flowZ = SampleFlowNormal(float2(worldPosition.x * 0.5, flowTime));
+    const float xWeight = abs(worldNormal.x);
+    const float zWeight = abs(worldNormal.z);
+
+    float3 water;
+    water.x = splash.x * upwardWeight + flowZ.y * zWeight;
+    water.y = flowX.x * xWeight + flowZ.x * zWeight;
+    water.z = splash.y * upwardWeight + flowX.y * xWeight;
+    water *= wetness;
+
+    normal = normalize(normal + mul((float3x3)m_V, water));
+    wetness *= dot(albedo.rgb, float3(0.33, 0.33, 0.33));
+
+    packedPosition.xy = gbuf_pack_normal(normal);
+    albedo.rgb *= max(1.0 - sqrt(wetness), 0.5);
+    rw_position[pixel] = packedPosition;
+    rw_color[pixel] = albedo;
+}

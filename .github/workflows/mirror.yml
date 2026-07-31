@@ -1,0 +1,37 @@
+name: Mirror
+
+on: [push, delete, workflow_dispatch]
+
+jobs:
+  mirror:
+    if: github.repository == 'OpenXRay/xray-16'
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Bitbucket.org
+        uses: Xottab-DUTY/git-mirror@v1.0.0
+        with:
+          target: git@bitbucket.org:OpenXRay/xray-16.git
+          password: ${{ secrets.RABOTYAGA_BITBUCKET_PRIVATE_SSH_KEY }}
+          push_args: "--tags --prune --force"
+          refspec: "refs/remotes/origin/*:refs/heads/*"
+
+      - name: gitflic.ru
+        uses: Xottab-DUTY/git-mirror@v1.0.0
+        with:
+          target: git@gitflic.ru:openxray/xray-16.git
+          password: ${{ secrets.GITFLIC_PRIVATE_SSH_KEY }}
+          push_args: "--tags --prune --force"
+          refspec: "refs/remotes/origin/*:refs/heads/*"
+
+      - name: abf.io
+        continue-on-error: true
+        uses: Xottab-DUTY/git-mirror@v1.0.0
+        with:
+          target: git@abf.io:openxray/xray-16.git
+          password: ${{ secrets.ABF_IO_PRIVATE_SSH_KEY }}
+          push_args: "--tags --prune --force"
+          refspec: "refs/remotes/origin/*:refs/heads/*"

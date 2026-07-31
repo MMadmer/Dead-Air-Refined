@@ -1,0 +1,170 @@
+#ifndef USE_MSAA
+	Texture2D 			s_distort;
+#else
+	Texture2DMS<float4, MSAA_SAMPLES> s_distort;
+#endif
+
+uniform float4		screen_res;
+uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
+uniform float4 		e_weights;	// x=norm, y=depth, z=clr
+uniform float4 		e_kernel;	// x=norm, y=depth, z=clr
+#define MAXCOF		7.h
+#define EPSDEPTH	0.001h
+
+#include "common.h"
+#include "sweetfx.h"
+#include "blur.h"
+#include "mblur.h"
+#include "dof.h"
+#include "grain.h"
+#include "visor.h"
+#include "visordrops.h"
+#include "lumasharpen.h"
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+#define tmp0 tmp.x
+#define tmp1 tmp.y
+#define tmp2 tmp.z
+#define tmp3 tmp.w
+
+uniform sampler		NormalSampler : register(s0);
+//////////////////////////////////////////////////////////////////////////////////////////
+// Pixel
+
+struct c2_out
+{
+	float4	Color : SV_Target;
+#ifdef USE_MSAA
+	float	Depth : SV_Depth;
+#endif
+};
+
+c2_out main( v2p_aa_AA I )
+{
+	c2_out	res;
+	res.Color = float4(0,0,0,0);
+	int iSample = 0;
+
+#ifndef USE_MSAA
+#ifdef GBUFFER_OPTIMIZATION
+	float depth = gbuffer_load_depth(I.Tex0, I.HPos, iSample);
+#else
+	float depth = gbuffer_load_depth(I.Tex0, iSample);
+#endif
+#else
+#ifdef GBUFFER_OPTIMIZATION
+	gbuffer_data gbd = gbuffer_load_data(I.Tex0, I.HPos, iSample);
+#else
+	gbuffer_data gbd = gbuffer_load_data(I.Tex0, iSample);
+#endif
+	float depth = gbd.P.z;
+#endif
+
+	float centerDepth = depth;
+#ifdef 	USE_DISTORT
+#ifndef USE_MSAA
+	float4 	distort	= s_distort.Sample(smp_rtlinear, I.Tex0);
+#else // USE_MSAA
+	float4 	distort	= s_distort.Load( int3( I.Tex0 * pos_decompression_params2.xy, 0 ), iSample );
+#endif // USE_MSAA
+	float2	offset	= (distort.xy-(127.0h/255.0h))*def_distort;  // fix newtral offset
+	float2	center	= I.Tex0 + offset;
+
+#ifdef GBUFFER_OPTIMIZATION
+	float depth_x = gbuffer_load_depth_offset(I.Tex0, center, I.HPos, iSample);
+#else
+	float depth_x = gbuffer_load_depth_offset(center, iSample);
+#endif
+
+	if ((depth_x + EPSDEPTH) < depth)
+	{
+		center = I.Tex0;
+		centerDepth = depth;
+	}
+	else
+	{
+		centerDepth = depth_x;
+	}
+#else // USE_DISTORT
+	float2	center 	= I.Tex0;
+#endif
+
+	float3 sceneColor = s_image.Sample(smp_rtlinear, center).rgb;
+	float3 img = sceneColor;
+	float4 bloom	= s_bloom.Sample( smp_rtlinear, center);
+
+
+	if (aberration.x != 0)
+		img = ChromaticAberrationBase( img, center, aberration );
+
+	if (lumasharpen.x != 0)
+		img = LumaSharpenPass(img, sceneColor, center, lumasharpen*3);
+
+	img	= dof(img, center, centerDepth);
+
+	img = ACESFilm(img);
+
+	if (vibrance.x != 0)
+		img = Vibrance(img, vibrance+1);
+
+	bloom *= 0.2;
+
+	#ifdef USE_LENS_DIRT
+		float3 dirt = s_dirt.Sample( smp_rtlinear, center);
+
+		//3.5, 10
+		/*
+		float3 dirt_img = dirt*(img*3.5-bloom*10); //combine
+		dirt_img = max(dirt_img,0); //cut black parts
+		if ((depth > 2) && (depth < 1000))
+			dirt_img = lerp(0, dirt_img, 1/(depth-1)); //fade objects
+		dirt_img = Vibrance(dirt_img,0);
+		*/
+		//5, 2
+		float3 bloom_img = dirt*(bloom*4-img*2);
+		bloom_img = max(bloom_img,0);
+		bloom_img = lerp(bloom_img, 0, step(depth,EPSDEPTH));
+		bloom_img = Vibrance(bloom_img,2);
+
+		img += bloom_img;//+dirt_img;
+
+	#endif // OPT_LENS_DIRT
+
+	#ifdef 	USE_DISTORT
+		float3	blurred	= bloom*def_hdr	;
+		img		= lerp	(img,blurred,distort.z);
+	#endif
+
+	#ifdef USE_VIGNETTE
+		img = GrainPass( img, center );
+	#endif // OPT_VIGNETTE
+
+
+	#ifdef USE_TECHICOLOR
+		//img = MoodPass(img);
+		img = TechnicolorPass(img);
+	#endif // USE_TECHICOLOR
+
+	float4 final = combine_bloom		(img,bloom);
+
+	#ifdef USE_LENS_WATER
+		float3 sundir_w = L_sun_dir_w;
+		float4 sunpos = screen_sunpos_diff(sundir_w, screen_sunpos(sundir_w), false);
+		final = visor_drops(center, sceneColor, final, sunpos.xyz, L_sun_dir_e.xyz, lenswater);
+
+		if (lensdirt.x > 0.9)
+		{
+			final = visor_reflect(center, final, centerDepth);
+		}
+	#endif
+
+	res.Color = final;
+
+	#ifdef USE_MSAA
+		float4 ptp = mul(m_P, float4(gbd.P, 1));
+		res.Depth = ptp.w==0?1:ptp.z/ptp.w;
+	#endif
+
+	return res;
+}

@@ -1,0 +1,161 @@
+add_library(xrUICore)
+
+target_sources(xrUICore PRIVATE
+    pch.cpp
+    pch.hpp
+    ui_base.cpp
+    ui_base.h
+    ui_debug.cpp
+    ui_debug.h
+    ui_defs.h
+    ui_export_script.cpp
+    ui_focus.cpp
+    ui_focus.h
+    ui_styles.cpp
+    ui_styles.h
+    uiabstract.h
+    UIMessages.h
+    arrow/ui_arrow.cpp
+    arrow/ui_arrow.h
+    Buttons/UI3tButton.cpp
+    Buttons/UI3tButton.h
+    Buttons/UIBtnHint.cpp
+    Buttons/UIBtnHint.h
+    Buttons/UIButton.cpp
+    Buttons/UIButton.h
+    Buttons/UICheckButton.cpp
+    Buttons/UICheckButton.h
+    Buttons/UIRadioButton.cpp
+    Buttons/UIRadioButton.h
+    Callbacks/UIWndCallback.cpp
+    Callbacks/UIWndCallback.h
+    Callbacks/callback_info.h
+    ComboBox/UIComboBox.cpp
+    ComboBox/UIComboBox.h
+    Cursor/UICursor.cpp
+    Cursor/UICursor.h
+    EditBox/UICustomEdit.cpp
+    EditBox/UICustomEdit.h
+    EditBox/UIEditBox.cpp
+    EditBox/UIEditBox.h
+    EditBox/UIEditBoxEx.cpp
+    EditBox/UIEditBoxEx.h
+    FontManager/FontManager.cpp
+    FontManager/FontManager.h
+    Hint/UIHint.cpp
+    Hint/UIHint.h
+    InteractiveBackground/UIInteractiveBackground.h
+    InteractiveBackground/UI_IB_Static.cpp
+    InteractiveBackground/UI_IB_Static.h
+    Lines/UILine.cpp
+    Lines/UILine.h
+    Lines/UILines.cpp
+    Lines/UILines.h
+    Lines/UISubLine.cpp
+    Lines/UISubLine.h
+    ListBox/UIListBox.cpp
+    ListBox/UIListBox.h
+    ListBox/UIListBoxItem.cpp
+    ListBox/UIListBoxItem.h
+    ListBox/UIListBoxItemMsgChain.cpp
+    ListBox/UIListBoxItemMsgChain.h
+    ListWnd/UIListItem.cpp
+    ListWnd/UIListItem.h
+    ListWnd/UIListItemEx.cpp
+    ListWnd/UIListItemEx.h
+    ListWnd/UIListWnd.cpp
+    ListWnd/UIListWnd.h
+    ListWnd/UIListWnd_inline.h
+    MessageBox/UIMessageBox.cpp
+    MessageBox/UIMessageBox.h
+    Options/UIOptionsItem.cpp
+    Options/UIOptionsItem.h
+    Options/UIOptionsManager.cpp
+    Options/UIOptionsManager.h
+    ProgressBar/UIDoubleProgressBar.cpp
+    ProgressBar/UIDoubleProgressBar.h
+    ProgressBar/UIProgressBar.cpp
+    ProgressBar/UIProgressBar.h
+    ProgressBar/UIProgressShape.cpp
+    ProgressBar/UIProgressShape.h
+    PropertiesBox/UIPropertiesBox.cpp
+    PropertiesBox/UIPropertiesBox.h
+    ScrollBar/UIFixedScrollBar.cpp
+    ScrollBar/UIFixedScrollBar.h
+    ScrollBar/UIScrollBar.cpp
+    ScrollBar/UIScrollBar.h
+    ScrollBar/UIScrollBox.cpp
+    ScrollBar/UIScrollBox.h
+    ScrollView/UIScrollView.cpp
+    ScrollView/UIScrollView.h
+    SpinBox/UICustomSpin.cpp
+    SpinBox/UICustomSpin.h
+    SpinBox/UISpinNum.cpp
+    SpinBox/UISpinNum.h
+    SpinBox/UISpinText.cpp
+    SpinBox/UISpinText.h
+    Static/UIAnimatedStatic.cpp
+    Static/UIAnimatedStatic.h
+    Static/UILanimController.cpp
+    Static/UILanimController.h
+    Static/UIStatic.cpp
+    Static/UIStatic.h
+    Static/UIStaticItem.cpp
+    Static/UIStaticItem.h
+    TabControl/UITabButton.cpp
+    TabControl/UITabButton.h
+    TabControl/UITabControl.cpp
+    TabControl/UITabControl.h
+    TrackBar/UITrackBar.cpp
+    TrackBar/UITrackBar.h
+    Windows/UIFrameLineWnd.cpp
+    Windows/UIFrameLineWnd.h
+    Windows/UIFrameWindow.cpp
+    Windows/UIFrameWindow.h
+    Windows/UIWindow.cpp
+    Windows/UIWindow.h
+    XML/UITextureMaster.cpp
+    XML/UITextureMaster.h
+    XML/UIXmlInitBase.cpp
+    XML/UIXmlInitBase.h
+    XML/xrUIXmlParser.cpp
+    XML/xrUIXmlParser.h
+)
+
+target_include_directories(xrUICore
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/src"
+)
+
+target_link_libraries(xrUICore
+    PRIVATE
+    xrAPI
+    xrScriptEngine
+    xrEngine
+    xrMiscMath
+    xrImGui
+    xrCore
+    xrSound
+)
+
+target_compile_definitions(xrUICore
+    PRIVATE
+    XRUICORE_EXPORTS
+    PURE_DYNAMIC_CAST
+)
+
+set_target_properties(xrUICore PROPERTIES
+    PREFIX ""
+)
+
+target_precompile_headers(xrUICore
+    PRIVATE
+    pch.hpp
+)
+
+if (BUILD_SHARED_LIBS)
+    install(TARGETS xrUICore LIBRARY
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    )
+endif()

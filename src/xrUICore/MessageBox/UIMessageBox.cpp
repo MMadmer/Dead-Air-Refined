@@ -1,0 +1,494 @@
+#include "pch.hpp"
+#include "UIMessageBox.h"
+#include "XML/UIXmlInitBase.h"
+#include "Buttons/UI3tButton.h"
+#include "EditBox/UIEditBox.h"
+
+CUIMessageBox::CUIMessageBox() : CUIStatic("CUIMessageBox")
+{
+    m_UIButtonYesOk = NULL;
+    m_UIButtonNo = NULL;
+    m_UIButtonCancel = NULL;
+    m_UIButtonCopy = NULL;
+    m_UIStaticPicture = NULL;
+    m_UIStaticText = NULL;
+
+    m_UIEditPass = NULL;
+    m_UIEditUserPass = NULL;
+    m_UIEditURL = NULL;
+    m_UIEditHost = NULL;
+    m_UIStaticPass = NULL;
+    m_UIStaticUserPass = NULL;
+    m_UIStaticHost = NULL;
+}
+
+CUIMessageBox::~CUIMessageBox() { Clear(); }
+#define BUTTON_UP_OFFSET 75
+#define BUTTON_WIDTH 140
+
+void CUIMessageBox::Clear()
+{
+    xr_delete(m_UIButtonYesOk);
+    xr_delete(m_UIButtonNo);
+    xr_delete(m_UIButtonCancel);
+    xr_delete(m_UIButtonCopy);
+    xr_delete(m_UIStaticPicture);
+    xr_delete(m_UIStaticText);
+    xr_delete(m_UIEditPass);
+    xr_delete(m_UIEditUserPass);
+    xr_delete(m_UIEditURL);
+    xr_delete(m_UIEditHost);
+    xr_delete(m_UIStaticPass);
+    xr_delete(m_UIStaticUserPass);
+    xr_delete(m_UIStaticHost);
+}
+
+bool CUIMessageBox::OnMouseAction(float x, float y, EUIMessages mouse_action)
+{
+    return inherited::OnMouseAction(x, y, mouse_action);
+}
+
+bool CUIMessageBox::InitMessageBox(LPCSTR box_template)
+{
+    Clear();
+    CUIXml uiXml;
+    uiXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "message_box.xml");
+
+    if (!uiXml.NavigateToNode(box_template))
+        return false;
+
+    string512 str;
+    strconcat(sizeof(str), str, box_template, ":picture");
+    if (uiXml.NavigateToNode(str, 0))
+    {
+        m_UIStaticPicture = xr_new<CUIStatic>("Picture");
+        AttachChild(m_UIStaticPicture);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticPicture);
+    }
+
+    strconcat(sizeof(str), str, box_template, ":message_text");
+    if (uiXml.NavigateToNode(str, 0))
+    {
+        m_UIStaticText = xr_new<CUIStatic>("Text");
+        AttachChild(m_UIStaticText);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticText);
+    }
+
+    xr_strcpy(str, box_template);
+    CUIXmlInitBase::InitStatic(uiXml, str, 0, this);
+
+    LPCSTR _type = uiXml.ReadAttrib(str, 0, "type", nullptr);
+    R_ASSERT4(_type, "Please specify type for message box", str, uiXml.m_xml_file_name);
+
+    if (!_type)       // Assign this if we're debugging engine
+        _type = "ok"; // and know what we are doing
+
+    m_eMessageBoxStyle = MESSAGEBOX_OK;
+    if (0 == xr_stricmp(_type, "ok"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_OK;
+    }
+    else if (0 == xr_stricmp(_type, "yes_no"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_YES_NO;
+    }
+    else if (0 == xr_stricmp(_type, "yes_no_cancel"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_YES_NO_CANCEL;
+    }
+    else if (0 == xr_stricmp(_type, "yes_no_copy"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_YES_NO_COPY;
+    }
+    else if (0 == xr_stricmp(_type, "direct_ip"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_DIRECT_IP;
+    }
+    else if (0 == xr_stricmp(_type, "ra_login"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_RA_LOGIN;
+    }
+    else if (0 == xr_stricmp(_type, "password"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_PASSWORD;
+    }
+    else if (0 == xr_stricmp(_type, "quit_windows"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_QUIT_WINDOWS;
+    }
+    else if (0 == xr_stricmp(_type, "quit_game"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_QUIT_GAME;
+    }
+    else if (0 == xr_stricmp(_type, "info"))
+    {
+        m_eMessageBoxStyle = MESSAGEBOX_INFO;
+    }
+
+    switch (m_eMessageBoxStyle)
+    {
+    case MESSAGEBOX_OK:
+    {
+        strconcat(sizeof(str), str, box_template, ":button_ok");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        m_UIButtonYesOk->SetAccelerator(kQUIT, false, 1); // can be overridden by gamedata
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+        break;
+    }
+    case MESSAGEBOX_INFO:
+        break;
+
+    case MESSAGEBOX_DIRECT_IP:
+        strconcat(sizeof(str), str, box_template, ":cap_host");
+        m_UIStaticHost = xr_new<CUIStatic>("Host");
+        AttachChild(m_UIStaticHost);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticHost);
+
+        strconcat(sizeof(str), str, box_template, ":edit_host");
+        m_UIEditHost = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditHost);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditHost);
+
+        strconcat(sizeof(str), str, box_template, ":cap_password");
+        m_UIStaticPass = xr_new<CUIStatic>("Password");
+        AttachChild(m_UIStaticPass);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticPass);
+
+        strconcat(sizeof(str), str, box_template, ":edit_password");
+        m_UIEditPass = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditPass);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditPass);
+
+        strconcat(sizeof(str), str, box_template, ":button_yes");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+
+        strconcat(sizeof(str), str, box_template, ":button_no");
+        m_UIButtonNo = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonNo);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonNo);
+        // m_message_box_yes_no->func_on_ok = CUIWndCallback::void_function( this, &CUIActorMenu::OnMesBoxYes );
+        break;
+
+    case MESSAGEBOX_PASSWORD:
+    {
+        strconcat(sizeof(str), str, box_template, ":cap_user_password");
+        m_UIStaticUserPass = xr_new<CUIStatic>("User password");
+        AttachChild(m_UIStaticUserPass);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticUserPass);
+
+        strconcat(sizeof(str), str, box_template, ":cap_password");
+        m_UIStaticPass = xr_new<CUIStatic>("Password");
+        AttachChild(m_UIStaticPass);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticPass);
+
+        strconcat(sizeof(str), str, box_template, ":edit_user_password");
+        m_UIEditUserPass = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditUserPass);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditUserPass);
+
+        strconcat(sizeof(str), str, box_template, ":edit_password");
+        m_UIEditPass = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditPass);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditPass);
+
+        strconcat(sizeof(str), str, box_template, ":button_yes");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+
+        strconcat(sizeof(str), str, box_template, ":button_no");
+        m_UIButtonNo = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonNo);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonNo);
+        break;
+    }
+
+    case MESSAGEBOX_RA_LOGIN:
+        strconcat(sizeof(str), str, box_template, ":cap_login");
+        m_UIStaticUserPass = xr_new<CUIStatic>("Login");
+        AttachChild(m_UIStaticUserPass);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticUserPass);
+
+        strconcat(sizeof(str), str, box_template, ":cap_password");
+        m_UIStaticPass = xr_new<CUIStatic>("Password");
+        AttachChild(m_UIStaticPass);
+        CUIXmlInitBase::InitStatic(uiXml, str, 0, m_UIStaticPass);
+
+        strconcat(sizeof(str), str, box_template, ":edit_login");
+        m_UIEditUserPass = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditUserPass);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditUserPass);
+
+        strconcat(sizeof(str), str, box_template, ":edit_password");
+        m_UIEditPass = xr_new<CUIEditBox>();
+        AttachChild(m_UIEditPass);
+        CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditPass);
+
+        m_UIEditUserPass->SetNextFocusCapturer(m_UIEditPass);
+        m_UIEditPass->SetNextFocusCapturer(m_UIEditUserPass);
+        m_UIEditUserPass->CaptureFocus(true);
+        [[fallthrough]];
+    case MESSAGEBOX_QUIT_WINDOWS:
+    case MESSAGEBOX_QUIT_GAME:
+    case MESSAGEBOX_YES_NO:
+    {
+        strconcat(sizeof(str), str, box_template, ":button_yes");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+
+        strconcat(sizeof(str), str, box_template, ":button_no");
+        m_UIButtonNo = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonNo);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonNo);
+        break;
+    }
+
+    case MESSAGEBOX_YES_NO_CANCEL:
+    {
+        strconcat(sizeof(str), str, box_template, ":button_yes");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+
+        strconcat(sizeof(str), str, box_template, ":button_no");
+        m_UIButtonNo = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonNo);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonNo);
+
+        strconcat(sizeof(str), str, box_template, ":button_cancel");
+        m_UIButtonCancel = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonCancel);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonCancel);
+        break;
+    }
+
+    case MESSAGEBOX_YES_NO_COPY:
+    {
+        strconcat(sizeof(str), str, box_template, ":button_yes");
+        m_UIButtonYesOk = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonYesOk);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonYesOk);
+
+        strconcat(sizeof(str), str, box_template, ":button_no");
+        m_UIButtonNo = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonNo);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonNo);
+
+        strconcat(sizeof(str), str, box_template, ":button_copy");
+        m_UIButtonCopy = xr_new<CUI3tButton>();
+        AttachChild(m_UIButtonCopy);
+        CUIXmlInitBase::Init3tButton(uiXml, str, 0, m_UIButtonCopy);
+
+        strconcat(sizeof(str), str, box_template, ":edit_url");
+        if (uiXml.NavigateToNode(str))
+        {
+            m_UIEditURL = xr_new<CUIEditBox>();
+            AttachChild(m_UIEditURL);
+            CUIXmlInitBase::InitEditBox(uiXml, str, 0, m_UIEditURL);
+            //				m_UIEditURL->read_only
+        }
+        break;
+    }
+    } // switch (m_eMessageBoxStyle)
+
+    if (m_UIButtonYesOk)
+    {
+        m_UIButtonYesOk->SetAccelerator(kENTER, false, 2);
+        m_UIButtonYesOk->SetAccelerator(kUI_ACCEPT, false, 3);
+    }
+    if (m_UIButtonNo)
+    {
+        if (!m_UIButtonCancel)
+            m_UIButtonNo->SetAccelerator(kQUIT, false, 2);
+        m_UIButtonNo->SetAccelerator(kUI_BACK, false, 3);
+    }
+    if (m_UIButtonCancel)
+    {
+        m_UIButtonCancel->SetAccelerator(kQUIT, false, 2);
+        m_UIButtonCancel->SetAccelerator(kUI_ACTION_1, false, 3);
+    }
+    if (m_UIButtonCopy)
+    {
+        m_UIButtonCopy->SetAccelerator(kUI_ACTION_1, false, 2);
+    }
+
+    return true;
+}
+
+void CUIMessageBox::OnYesOk()
+{
+    switch (m_eMessageBoxStyle)
+    {
+    case MESSAGEBOX_OK:
+    case MESSAGEBOX_INFO:
+        GetMessageTarget()->SendMessage(m_UIButtonYesOk, MESSAGE_BOX_OK_CLICKED);
+        GetMessageTarget()->SendMessage(this, MESSAGE_BOX_OK_CLICKED);
+        break;
+
+    case MESSAGEBOX_DIRECT_IP:
+    case MESSAGEBOX_RA_LOGIN:
+    case MESSAGEBOX_YES_NO_CANCEL:
+    case MESSAGEBOX_YES_NO_COPY:
+    case MESSAGEBOX_PASSWORD:
+    case MESSAGEBOX_YES_NO:
+        GetMessageTarget()->SendMessage(m_UIButtonYesOk, MESSAGE_BOX_YES_CLICKED);
+        GetMessageTarget()->SendMessage(this, MESSAGE_BOX_YES_CLICKED);
+        break;
+    case MESSAGEBOX_QUIT_WINDOWS: GetMessageTarget()->SendMessage(this, MESSAGE_BOX_QUIT_WIN_CLICKED); break;
+    case MESSAGEBOX_QUIT_GAME: GetMessageTarget()->SendMessage(this, MESSAGE_BOX_QUIT_GAME_CLICKED); break;
+    } // switch (m_eMessageBoxStyle)
+}
+
+void CUIMessageBox::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
+{
+    if (msg == BUTTON_CLICKED)
+    {
+        switch (m_eMessageBoxStyle)
+        {
+        case MESSAGEBOX_OK:
+            if (pWnd == m_UIButtonYesOk)
+            {
+                OnYesOk();
+            }
+            break;
+        case MESSAGEBOX_DIRECT_IP:
+        case MESSAGEBOX_RA_LOGIN:
+        case MESSAGEBOX_PASSWORD:
+        case MESSAGEBOX_YES_NO:
+        case MESSAGEBOX_QUIT_GAME:
+        case MESSAGEBOX_QUIT_WINDOWS:
+            if (pWnd == m_UIButtonYesOk)
+            {
+                OnYesOk();
+            }
+            else if (pWnd == m_UIButtonNo)
+            {
+                GetMessageTarget()->SendMessage(m_UIButtonNo, MESSAGE_BOX_NO_CLICKED);
+                GetMessageTarget()->SendMessage(this, MESSAGE_BOX_NO_CLICKED);
+            }
+            break;
+        case MESSAGEBOX_YES_NO_CANCEL:
+            if (pWnd == m_UIButtonYesOk)
+            {
+                OnYesOk();
+            }
+            else if (pWnd == m_UIButtonNo)
+            {
+                GetMessageTarget()->SendMessage(m_UIButtonNo, MESSAGE_BOX_NO_CLICKED);
+                GetMessageTarget()->SendMessage(this, MESSAGE_BOX_NO_CLICKED);
+            }
+            else if (pWnd == m_UIButtonCancel)
+            {
+                GetMessageTarget()->SendMessage(m_UIButtonCancel, MESSAGE_BOX_CANCEL_CLICKED);
+                GetMessageTarget()->SendMessage(this, MESSAGE_BOX_CANCEL_CLICKED);
+            }
+            break;
+        case MESSAGEBOX_YES_NO_COPY:
+            if (pWnd == m_UIButtonYesOk)
+            {
+                OnYesOk();
+            }
+            else if (pWnd == m_UIButtonNo)
+            {
+                GetMessageTarget()->SendMessage(m_UIButtonNo, MESSAGE_BOX_NO_CLICKED);
+                GetMessageTarget()->SendMessage(this, MESSAGE_BOX_NO_CLICKED);
+            }
+            else if (pWnd == m_UIButtonCopy)
+            {
+                GetMessageTarget()->SendMessage(m_UIButtonCopy, MESSAGE_BOX_COPY_CLICKED);
+                GetMessageTarget()->SendMessage(this, MESSAGE_BOX_COPY_CLICKED);
+            }
+            break;
+        case MESSAGEBOX_INFO:
+            break;
+        } // switch (m_eMessageBoxStyle)
+    }
+    inherited::SendMessage(pWnd, msg, pData);
+}
+
+void CUIMessageBox::SetText(LPCSTR str)
+{
+    R_ASSERT1_CURE(m_UIStaticText, return);
+    m_UIStaticText->SetTextST(str);
+}
+
+LPCSTR CUIMessageBox::GetText() const
+{
+    R_ASSERT1_CURE(m_UIStaticText, return "");
+    return m_UIStaticText->GetText();
+}
+
+LPCSTR CUIMessageBox::GetHost()
+{
+    if (m_UIEditHost)
+    {
+        m_ret_val.clear();
+        xr_string tmp = m_UIEditHost->GetText();
+        xr_string::size_type pos = tmp.find(':');
+
+        if (xr_string::npos != pos)
+        {
+            m_ret_val.assign(tmp.begin(), tmp.begin() + pos);
+            tmp.erase(tmp.begin(), tmp.begin() + pos + 1);
+
+            m_ret_val += "/port=";
+        }
+        m_ret_val += tmp;
+
+        return m_ret_val.c_str();
+    }
+    else
+        return NULL;
+}
+
+LPCSTR CUIMessageBox::GetPassword()
+{
+    if (m_UIEditPass)
+        return m_UIEditPass->GetText();
+    else
+        return NULL;
+}
+
+LPCSTR CUIMessageBox::GetUserPassword()
+{
+    if (m_UIEditUserPass)
+        return m_UIEditUserPass->GetText();
+    else
+        return NULL;
+}
+
+void CUIMessageBox::SetTextEditURL(LPCSTR text)
+{
+    if (m_UIEditURL)
+    {
+        m_UIEditURL->SetText(text);
+    }
+}
+
+LPCSTR CUIMessageBox::GetTextEditURL()
+{
+    if (m_UIEditURL)
+    {
+        return m_UIEditURL->GetText();
+    }
+    return NULL;
+}
+
+void CUIMessageBox::SetUserPasswordMode(bool b)
+{
+    if (m_UIEditUserPass)
+        m_UIEditUserPass->Show(b);
+    if (m_UIStaticUserPass)
+        m_UIStaticUserPass->Show(b);
+}
+void CUIMessageBox::SetPasswordMode(bool b)
+{
+    if (m_UIEditPass)
+        m_UIEditPass->Show(b);
+    if (m_UIStaticPass)
+        m_UIStaticPass->Show(b);
+}

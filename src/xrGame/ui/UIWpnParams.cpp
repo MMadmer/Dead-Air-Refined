@@ -1,0 +1,346 @@
+#include "pch_script.h"
+#include "UIWpnParams.h"
+#include "UIXmlInit.h"
+#include "Level.h"
+#include "game_base_space.h"
+#include "xrScriptEngine/script_engine.hpp"
+#include "inventory_item_object.h"
+#include "UIInventoryUtilities.h"
+#include "Weapon.h"
+#include "UIHelper.h"
+
+struct SLuaWpnParams
+{
+    luabind::functor<float> m_functorRPM;
+    luabind::functor<float> m_functorAccuracy;
+    luabind::functor<float> m_functorDamage;
+    luabind::functor<float> m_functorDamageMP;
+    luabind::functor<float> m_functorHandling;
+    luabind::functor<float> m_functorReliability;
+
+    SLuaWpnParams();
+    ~SLuaWpnParams();
+};
+
+static SLuaWpnParams* g_lua_wpn_params = nullptr;
+
+SLuaWpnParams::SLuaWpnParams()
+{
+    [[maybe_unused]] bool functor_exists;
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetRPM", m_functorRPM);
+    VERIFY(functor_exists);
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetDamage", m_functorDamage);
+    VERIFY(functor_exists);
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetDamageMP", m_functorDamageMP);
+    VERIFY(functor_exists);
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetHandling", m_functorHandling);
+    VERIFY(functor_exists);
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetAccuracy", m_functorAccuracy);
+    VERIFY(functor_exists);
+    functor_exists = GEnv.ScriptEngine->functor("ui_wpn_params.GetReliability", m_functorReliability);
+    VERIFY(functor_exists);
+}
+
+SLuaWpnParams::~SLuaWpnParams() {}
+
+// =====================================================================
+
+CUIWpnParams::CUIWpnParams() : CUIWindow("Weapon Params")
+{
+    AttachChild(&m_textAccuracy);
+    AttachChild(&m_textDamage);
+    AttachChild(&m_textHandling);
+    AttachChild(&m_textRPM);
+
+    AttachChild(&m_progressAccuracy);
+    AttachChild(&m_progressDamage);
+    AttachChild(&m_progressHandling);
+    AttachChild(&m_progressRPM);
+}
+
+bool CUIWpnParams::InitFromXml(CUIXml& xml_doc)
+{
+    if (!xml_doc.NavigateToNode("wpn_params", 0))
+        return false;
+
+    CUIXmlInit::InitWindow(xml_doc, "wpn_params", 0, this);
+
+    m_Prop_line = UIHelper::CreateStatic(xml_doc, "wpn_params:prop_line", this, false);
+
+    m_icon_acc = UIHelper::CreateStatic(xml_doc, "wpn_params:static_accuracy", this, false);
+    m_icon_dam = UIHelper::CreateStatic(xml_doc, "wpn_params:static_damage", this, false);
+    m_icon_han = UIHelper::CreateStatic(xml_doc, "wpn_params:static_handling", this, false);
+    m_icon_rpm = UIHelper::CreateStatic(xml_doc, "wpn_params:static_rpm", this, false);
+    m_iconReliability = UIHelper::CreateStatic(xml_doc, "wpn_params:static_reliability", this, false);
+    m_iconCondition = UIHelper::CreateStatic(xml_doc, "wpn_params:static_condition", this, false);
+
+    CUIXmlInit::InitStatic(xml_doc, "wpn_params:cap_accuracy", 0, &m_textAccuracy);
+    CUIXmlInit::InitStatic(xml_doc, "wpn_params:cap_damage", 0, &m_textDamage);
+    CUIXmlInit::InitStatic(xml_doc, "wpn_params:cap_handling", 0, &m_textHandling);
+    CUIXmlInit::InitStatic(xml_doc, "wpn_params:cap_rpm", 0, &m_textRPM);
+
+    m_progressAccuracy.InitFromXml(xml_doc, "wpn_params:progress_accuracy");
+    m_progressDamage.InitFromXml(xml_doc, "wpn_params:progress_damage");
+    m_progressHandling.InitFromXml(xml_doc, "wpn_params:progress_handling");
+    m_progressRPM.InitFromXml(xml_doc, "wpn_params:progress_rpm");
+
+    if (IsGameTypeSingle())
+    {
+        m_textReliability = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_reliability", this, false);
+        if (xml_doc.NavigateToNode("wpn_params:progress_reliability", 0))
+        {
+            AttachChild(&m_progressReliability);
+            m_progressReliability.InitFromXml(xml_doc, "wpn_params:progress_reliability");
+            m_hasReliability = true;
+        }
+
+        m_textCondition = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_condition", this, false);
+        m_textConditionValue = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_condition2", this, false);
+        m_stAmmo = UIHelper::CreateStatic(xml_doc, "wpn_params:static_ammo", this, false);
+        m_textAmmoCount = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_ammo_count", this, false);
+        m_textAmmoCount2 = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_ammo_count2", this, false);
+        m_textAmmoTypes = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_ammo_types", this, false);
+        m_textAmmoUsedType = UIHelper::CreateStatic(xml_doc, "wpn_params:cap_ammo_used_type", this, false);
+        m_stAmmoType1 = UIHelper::CreateStatic(xml_doc, "wpn_params:static_ammo_type1", this, false);
+        m_stAmmoType2 = UIHelper::CreateStatic(xml_doc, "wpn_params:static_ammo_type2", this, false);
+    }
+    return true;
+}
+
+void CUIWpnParams::SetInfo(CInventoryItem* slot_wpn, CInventoryItem& cur_wpn)
+{
+    if (!g_lua_wpn_params)
+    {
+        class CResetEventCb : public CEventNotifierCallbackWithCid
+        {
+        public:
+            CResetEventCb(CID cid) : CEventNotifierCallbackWithCid(cid) {}
+            void ProcessEvent() override
+            {
+                xr_delete(g_lua_wpn_params);
+                ai().Unsubscribe(GetCid(), CAI_Space::EVENT_SCRIPT_ENGINE_RESET);
+            }
+        };
+
+        g_lua_wpn_params = xr_new<SLuaWpnParams>();
+        ai().template Subscribe<CResetEventCb>(CAI_Space::EVENT_SCRIPT_ENGINE_RESET);
+    }
+
+    LPCSTR cur_section = cur_wpn.object().cNameSect().c_str();
+    string2048 str_upgrades;
+    str_upgrades[0] = 0;
+    cur_wpn.get_upgrades_str(str_upgrades);
+
+    float cur_rpm = iFloor(g_lua_wpn_params->m_functorRPM(cur_section, str_upgrades) * 53.0f) / 53.0f;
+    float cur_accur = iFloor(g_lua_wpn_params->m_functorAccuracy(cur_section, str_upgrades) * 53.0f) / 53.0f;
+    float cur_hand = iFloor(g_lua_wpn_params->m_functorHandling(cur_section, str_upgrades) * 53.0f) / 53.0f;
+    float cur_damage = (GameID() == eGameIDSingle) ?
+        iFloor(g_lua_wpn_params->m_functorDamage(cur_section, str_upgrades) * 53.0f) / 53.0f :
+        iFloor(g_lua_wpn_params->m_functorDamageMP(cur_section, str_upgrades) * 53.0f) / 53.0f;
+    float cur_reliability =
+        iFloor(g_lua_wpn_params->m_functorReliability(cur_section, str_upgrades) * 53.0f) / 53.0f;
+
+    float slot_rpm = cur_rpm;
+    float slot_accur = cur_accur;
+    float slot_hand = cur_hand;
+    float slot_damage = cur_damage;
+    float slot_reliability = cur_reliability;
+
+    if (slot_wpn && (slot_wpn != &cur_wpn))
+    {
+        LPCSTR slot_section = slot_wpn->object().cNameSect().c_str();
+        str_upgrades[0] = 0;
+        slot_wpn->get_upgrades_str(str_upgrades);
+
+        slot_rpm = iFloor(g_lua_wpn_params->m_functorRPM(slot_section, str_upgrades) * 53.0f) / 53.0f;
+        slot_accur = iFloor(g_lua_wpn_params->m_functorAccuracy(slot_section, str_upgrades) * 53.0f) / 53.0f;
+        slot_hand = iFloor(g_lua_wpn_params->m_functorHandling(slot_section, str_upgrades) * 53.0f) / 53.0f;
+        slot_damage = (GameID() == eGameIDSingle) ?
+            iFloor(g_lua_wpn_params->m_functorDamage(slot_section, str_upgrades) * 53.0f) / 53.0f :
+            iFloor(g_lua_wpn_params->m_functorDamageMP(slot_section, str_upgrades) * 53.0f) / 53.0f;
+        slot_reliability =
+            iFloor(g_lua_wpn_params->m_functorReliability(slot_section, str_upgrades) * 53.0f) / 53.0f;
+    }
+
+    m_progressAccuracy.SetTwoPos(cur_accur, slot_accur);
+    m_progressDamage.SetTwoPos(cur_damage, slot_damage);
+    m_progressHandling.SetTwoPos(cur_hand, slot_hand);
+    m_progressRPM.SetTwoPos(cur_rpm, slot_rpm);
+    if (m_hasReliability)
+        m_progressReliability.SetTwoPos(cur_reliability, slot_reliability);
+
+    if (IsGameTypeSingle())
+    {
+        CWeapon* weapon = cur_wpn.cast_weapon();
+        if (!weapon)
+            return;
+
+        xr_string description =
+            StringTable().translate(pSettings->r_string(cur_section, "description")).c_str();
+        description += StringTable().translate("st_condition_type").c_str();
+
+        bool has_condition_type = false;
+        for (u32 bit = 0; bit < 32; ++bit)
+        {
+            if (!(weapon->GetConditionType() & (1u << bit)))
+                continue;
+
+            string64 condition_type;
+            xr_sprintf(condition_type, "st_condition_type_%u", bit + 1);
+            description += StringTable().translate(condition_type).c_str();
+            has_condition_type = true;
+        }
+        if (!has_condition_type)
+            description += StringTable().translate("st_condition_type_0").c_str();
+        cur_wpn.SetItemDescription(description.c_str());
+
+        if (m_textConditionValue)
+        {
+            int condition = iFloor(weapon->GetCondition() * 100.0f);
+            clamp(condition, 0, 99);
+
+            if (condition <= 33)
+                m_textConditionValue->SetTextColor(color_rgba(255, 0, 0, 255));
+            else if (condition <= 66)
+                m_textConditionValue->SetTextColor(color_rgba(255, 255, 0, 255));
+            else
+                m_textConditionValue->SetTextColor(color_rgba(0, 255, 0, 255));
+
+            string128 condition_text;
+            xr_sprintf(condition_text, "%d %%", condition);
+            m_textConditionValue->SetText(condition_text);
+        }
+
+        const int ammo_count = weapon->GetAmmoElapsed();
+        const int magazine_size = weapon->GetAmmoMagSize();
+
+        if (m_textAmmoCount2)
+        {
+            if (ammo_count == magazine_size)
+                m_textAmmoCount2->SetTextColor(color_rgba(0, 255, 0, 255));
+            else if (ammo_count)
+                m_textAmmoCount2->SetTextColor(color_rgba(255, 255, 0, 255));
+            else
+                m_textAmmoCount2->SetTextColor(color_rgba(255, 0, 0, 255));
+
+            string128 str;
+            xr_sprintf(str, sizeof(str), "%d / %d", ammo_count, magazine_size);
+            m_textAmmoCount2->SetText(str);
+        }
+
+        const auto& ammo_types = weapon->m_ammoTypes;
+        if (ammo_types.empty())
+            return;
+
+        if (m_textAmmoUsedType)
+        {
+            string128 str;
+            xr_sprintf(
+                str, sizeof(str), "%s", pSettings->r_string(ammo_types[weapon->GetAmmoType()].c_str(), "inv_name_short"));
+            m_textAmmoUsedType->SetTextST(str);
+        }
+
+        Frect tex_rect;
+        if (m_stAmmoType1)
+        {
+            m_stAmmoType1->SetShader(InventoryUtilities::GetEquipmentIconsShader());
+            tex_rect.x1 = float(pSettings->r_u32(ammo_types[0].c_str(), "inv_grid_x") * INV_GRID_WIDTH);
+            tex_rect.y1 = float(pSettings->r_u32(ammo_types[0].c_str(), "inv_grid_y") * INV_GRID_HEIGHT);
+            tex_rect.x2 = float(pSettings->r_u32(ammo_types[0].c_str(), "inv_grid_width") * INV_GRID_WIDTH);
+            tex_rect.y2 = float(pSettings->r_u32(ammo_types[0].c_str(), "inv_grid_height") * INV_GRID_HEIGHT);
+            tex_rect.rb.add(tex_rect.lt);
+            m_stAmmoType1->SetTextureRect(tex_rect);
+            m_stAmmoType1->TextureOn();
+            m_stAmmoType1->SetStretchTexture(true);
+            m_stAmmoType1->SetWndSize(
+                Fvector2().set((tex_rect.x2 - tex_rect.x1) * UI().get_current_kx(), tex_rect.y2 - tex_rect.y1));
+        }
+
+        if (m_stAmmoType2)
+        {
+            m_stAmmoType2->SetShader(InventoryUtilities::GetEquipmentIconsShader());
+            if (ammo_types.size() == 1 && m_stAmmoType1)
+            {
+                tex_rect.set(0, 0, 1, 1);
+            }
+            else
+            {
+                tex_rect.x1 = float(pSettings->r_u32(ammo_types[1].c_str(), "inv_grid_x") * INV_GRID_WIDTH);
+                tex_rect.y1 = float(pSettings->r_u32(ammo_types[1].c_str(), "inv_grid_y") * INV_GRID_HEIGHT);
+                tex_rect.x2 = float(pSettings->r_u32(ammo_types[1].c_str(), "inv_grid_width") * INV_GRID_WIDTH);
+                tex_rect.y2 = float(pSettings->r_u32(ammo_types[1].c_str(), "inv_grid_height") * INV_GRID_HEIGHT);
+                tex_rect.rb.add(tex_rect.lt);
+            }
+            m_stAmmoType2->SetTextureRect(tex_rect);
+            m_stAmmoType2->TextureOn();
+            m_stAmmoType2->SetStretchTexture(true);
+            m_stAmmoType2->SetWndSize(
+                Fvector2().set((tex_rect.x2 - tex_rect.x1) * UI().get_current_kx(), tex_rect.y2 - tex_rect.y1));
+        }
+    }
+}
+
+bool CUIWpnParams::Check(const shared_str& wpn_section)
+{
+    if (pSettings->line_exist(wpn_section, "fire_dispersion_base"))
+    {
+        //Alundaio: Most likely a fake weapon or melee weapon
+        if (pSettings->line_exist(wpn_section, "ammo_mag_size"))
+            if (pSettings->r_u32(wpn_section, "ammo_mag_size") == 0)
+                return false;
+
+		if (0 == xr_strcmp(pSettings->r_string(wpn_section,"class"), "WP_KNIFE"))
+			return false;
+        if (0 == xr_strcmp(wpn_section, "wpn_addon_silencer"))
+            return false;
+        if (0 == xr_strcmp(wpn_section, "wpn_binoc"))
+            return false;
+        if (0 == xr_strcmp(wpn_section, "mp_wpn_binoc"))
+            return false;
+
+        return true;
+    }
+    return false;
+}
+
+// -------------------------------------------------------------------------------------------------
+
+CUIConditionParams::CUIConditionParams()
+    : CUIWindow("Condition Params"), m_text("Text")
+{
+    AttachChild(&m_progress);
+    AttachChild(&m_text);
+}
+
+bool CUIConditionParams::InitFromXml(CUIXml& xml_doc)
+{
+    if (xml_doc.NavigateToNode("condition_params", 0))
+    {
+        CUIXmlInit::InitWindow(xml_doc, "condition_params", 0, this);
+        CUIXmlInit::InitStatic(xml_doc, "condition_params:caption", 0, &m_text);
+        m_progress.InitFromXml(xml_doc, "condition_params:progress_state");
+        return true;
+    }
+    // SOC
+    if (xml_doc.NavigateToNode("condition_progress", 0))
+    {
+        CUIXmlInit::InitStatic(xml_doc, "static_condition", 0, &m_text, false);
+        m_progress.InitFromXml(xml_doc, "condition_progress");
+        return true;
+    }
+    return false;
+}
+
+void CUIConditionParams::SetInfo(CInventoryItem const* slot_item, CInventoryItem const& cur_item)
+{
+    float cur_value = cur_item.GetConditionToShow() * 100.0f + 1.0f - EPS;
+    float slot_value = cur_value;
+
+    if (slot_item &&
+        (slot_item !=
+            &cur_item) /*&& (cur_item.object().cNameSect()._get() == slot_item->object().cNameSect()._get())*/)
+    {
+        slot_value = slot_item->GetConditionToShow() * 100.0f + 1.0f - EPS;
+    }
+    m_progress.SetTwoPos(cur_value, slot_value);
+}

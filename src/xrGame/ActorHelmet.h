@@ -1,0 +1,56 @@
+#pragma once
+
+#include "inventory_item_object.h"
+
+struct SBoneProtections;
+
+class CHelmet : public CInventoryItemObject
+{
+    using inherited = CInventoryItemObject;
+
+public:
+    CHelmet();
+    virtual ~CHelmet();
+
+    virtual void Load(LPCSTR section);
+
+    virtual void Hit(float P, ALife::EHitType hit_type);
+
+    shared_str m_BonesProtectionSect;
+    shared_str m_NightVisionSect;
+
+    virtual void OnMoveToSlot(const SInvItemPlace& previous_place);
+    virtual void OnMoveToRuck(const SInvItemPlace& previous_place);
+    virtual bool net_Spawn(CSE_Abstract* DC);
+    virtual void net_Export(NET_Packet& P);
+    virtual void net_Import(NET_Packet& P);
+    virtual void OnH_A_Chield();
+
+    [[nodiscard]] float GetDefHitTypeProtection(ALife::EHitType hit_type) const;
+    [[nodiscard]] float GetHitTypeProtection(ALife::EHitType hit_type, s16 element) const;
+    [[nodiscard]] float GetBoneArmor(s16 element) const;
+
+    float HitThroughArmor(float hit_power, s16 element, float ap, bool& add_wound, ALife::EHitType hit_type);
+
+    float m_fPowerLoss;
+    float m_fHealthRestoreSpeed;
+    float m_fRadiationRestoreSpeed;
+    float m_fSatietyRestoreSpeed;
+    float m_fPowerRestoreSpeed;
+    float m_fBleedingRestoreSpeed;
+
+    float m_fShowNearestEnemiesDistance;
+
+    void ReloadBonesProtection();
+    void AddBonesProtection(LPCSTR bones_section);
+
+protected:
+    mutable HitImmunity::HitTypeSVec m_HitTypeProtection;
+    SBoneProtections* m_boneProtection;
+
+protected:
+    virtual bool install_upgrade_impl(LPCSTR section, bool test);
+
+private:
+    DECLARE_SCRIPT_REGISTER_FUNCTION(CGameObject);
+};

@@ -1,0 +1,36 @@
+#include "pch_script.h"
+
+#include "PhraseDialog.h"
+
+void CDialogScriptHelper::AddPrecondition(LPCSTR str) { m_Preconditions.push_back(str); }
+void CDialogScriptHelper::AddAction(LPCSTR str) { m_ScriptActions.push_back(str); }
+void CDialogScriptHelper::AddHasInfo(LPCSTR str) { m_HasInfo.push_back(str); }
+void CDialogScriptHelper::AddDontHasInfo(LPCSTR str) { m_DontHasInfo.push_back(str); }
+void CDialogScriptHelper::AddGiveInfo(LPCSTR str) { m_GiveInfo.push_back(str); }
+void CDialogScriptHelper::AddDisableInfo(LPCSTR str) { m_DisableInfo.push_back(str); }
+
+void CDialogScriptHelper::script_register(lua_State* luaState)
+{
+    using namespace luabind;
+
+    module(luaState)
+    [
+        class_<CPhrase>("CPhrase")
+            .def("GetPhraseScript", &CPhrase::GetScriptHelper),
+
+        class_<CPhraseDialog>("CPhraseDialog")
+            .def("AddPhrase", +[](CPhraseDialog* self, pcstr text, pcstr phrase_id, pcstr prev_phrase_id, int goodwil_level)
+        {
+            return self->AddPhrase(text, phrase_id, prev_phrase_id, goodwil_level);
+        }),
+
+        class_<CDialogScriptHelper>("CPhraseScript")
+            .def("AddPrecondition", &CDialogScriptHelper::AddPrecondition)
+            .def("AddAction", &CDialogScriptHelper::AddAction)
+            .def("AddHasInfo", &CDialogScriptHelper::AddHasInfo)
+            .def("AddDontHasInfo", &CDialogScriptHelper::AddDontHasInfo)
+            .def("AddGiveInfo", &CDialogScriptHelper::AddGiveInfo)
+            .def("AddDisableInfo", &CDialogScriptHelper::AddDisableInfo)
+            .def("SetScriptText", &CDialogScriptHelper::SetScriptText)
+    ];
+}

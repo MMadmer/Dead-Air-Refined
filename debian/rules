@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+ifeq ($(findstring parallel=,$(DEB_BUILD_OPTIONS)),)
+	export DEB_BUILD_OPTIONS+=parallel=$(shell getconf _NPROCESSORS_ONLN)
+endif
+
+%:
+	dh $@ --buildsystem=cmake --parallel
+
+extra_flags += \
+-DCMAKE_C_COMPILER=gcc-14 \
+-DCMAKE_CXX_COMPILER=g++-14 \
+-DCMAKE_BUILD_TYPE="RelWithDebInfo" \
+-DCMAKE_INSTALL_BINDIR="/usr/games" \
+-DCMAKE_INSTALL_RPATH_USE_LINK_PATH=FALSE \
+-DALLOW_RPATH=FALSE \
+-DLUABIND_BUILD_SHARED=TRUE \
+-DDISABLE_PORTABLE_MODE=TRUE
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(extra_flags)
+
+override_dh_clean:
+	rm -rf bin
+	dh_clean
+
+override_dh_missing:
+	dh_missing --fail-missing
+

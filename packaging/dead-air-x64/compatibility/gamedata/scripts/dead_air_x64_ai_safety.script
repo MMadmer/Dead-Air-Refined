@@ -1,0 +1,37 @@
+local original_send_to_nearest_accessible_vertex = utils.send_to_nearest_accessible_vertex
+local original_load_var = utils.load_var
+
+local function load_var(obj, varname, defval)
+	if not db.actor then
+		return defval
+	end
+	return original_load_var(obj, varname, defval)
+end
+
+local function send_to_nearest_accessible_vertex(npc, vertex_id, caller)
+	if not npc then
+		return vertex_id
+	end
+
+	if vertex_id and level.valid_vertex_id(vertex_id) then
+		return original_send_to_nearest_accessible_vertex(npc, vertex_id, caller)
+	end
+
+	local nearest_position = vector()
+	local nearest_vertex_id = npc:accessible_nearest(npc:position(), nearest_position)
+	if nearest_vertex_id and level.valid_vertex_id(nearest_vertex_id) then
+		npc:set_dest_level_vertex_id(nearest_vertex_id)
+		return nearest_vertex_id
+	end
+
+	local current_vertex_id = npc:level_vertex_id()
+	if current_vertex_id and level.valid_vertex_id(current_vertex_id) then
+		npc:set_dest_level_vertex_id(current_vertex_id)
+	end
+	return current_vertex_id
+end
+
+function on_game_start()
+	utils.load_var = load_var
+	utils.send_to_nearest_accessible_vertex = send_to_nearest_accessible_vertex
+end

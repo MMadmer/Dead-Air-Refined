@@ -1,0 +1,66 @@
+//////////////////////////////////////////////////////////////////////////
+// string_table.h: таблица строк, используемых в игре
+//////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include "xrCommon/xr_map.h"
+#include "xrCore/xrstring.h"
+#include "xrCore/xr_token.h"
+
+#include <mutex>
+
+using STRING_ID = shared_str;
+using STRING_VALUE = shared_str;
+
+using STRING_TABLE_MAP = xr_map<STRING_ID, STRING_VALUE>;
+
+struct STRING_TABLE_DATA
+{
+    shared_str m_fontPrefix;
+    shared_str m_sLanguage;
+    shared_str m_sCurrency;
+    STRING_TABLE_MAP m_StringTable;
+};
+
+class ENGINE_API CStringTable final
+{
+public:
+    void Init();
+    static void Destroy();
+
+    [[nodiscard]]
+    STRING_VALUE translate(const STRING_ID& str_id) const;
+
+    [[nodiscard]]
+    STRING_VALUE translate(const STRING_ID& str_id, const STRING_ID& str_id2) const; // returns str_id if no translation found
+
+    bool translate(const STRING_ID& str_id, STRING_VALUE& out) const;
+
+    [[nodiscard]]
+    bool has_translation(const STRING_ID& str_id) const;
+
+    void rescan();
+
+    void ReloadLanguage();
+
+    shared_str GetCurrentLanguage() const;
+    shared_str GetCurrentFontPrefix() const;
+    shared_str GetCurrency() const;
+    xr_token* GetLanguagesToken() const;
+
+    static u32 LanguageID;
+    static string32 LanguageIDInLTX;
+
+private:
+    void Load(LPCSTR xml_file);
+    void FillLanguageToken();
+    void SetLanguage();
+    static STRING_VALUE ParseLine(pcstr str);
+
+    static std::mutex pDataMutex;
+    static xr_unique_ptr<STRING_TABLE_DATA> pData;
+    static xr_vector<xr_token> languagesToken;
+};
+
+ENGINE_API CStringTable& StringTable();

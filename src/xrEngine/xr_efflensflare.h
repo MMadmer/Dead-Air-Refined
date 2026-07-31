@@ -1,0 +1,147 @@
+#pragma once
+
+#include "xrCDB/xr_collide_defs.h"
+
+#include "Include/xrRender/FactoryPtr.h"
+#include "Include/xrRender/LensFlareRender.h"
+
+class ENGINE_API CInifile;
+class ENGINE_API CEnvDescriptorMixer;
+class ENGINE_API CEnvironment;
+
+namespace xray::render
+{
+namespace render_r4
+{
+class dxLensFlareRender;
+}
+namespace render_gl
+{
+class dxLensFlareRender;
+}
+} // namespace xray::render
+
+class ENGINE_API CLensFlareDescriptor
+{
+public:
+    struct SFlare
+    {
+        float fOpacity{};
+        float fRadius{};
+        float fPosition{};
+        shared_str texture;
+        shared_str shader;
+        FactoryPtr<IFlareRender> m_pRender;
+
+        bool ed_show_params(); // ImGui editor
+    };
+
+    struct SSource : public SFlare
+    {
+        bool ignore_color;
+        bool ed_show_params(); // ImGui editor
+    };
+    using FlareVec = xr_vector<SFlare>;
+
+    FlareVec m_Flares;
+
+    enum
+    {
+        flFlare = (1 << 0),
+        flSource = (1 << 1),
+        flGradient = (1 << 2)
+    };
+    Flags32 m_Flags{};
+
+    // source
+    SSource m_Source;
+
+    // gradient
+    SFlare m_Gradient;
+
+    float m_StateBlendUpSpeed;
+    float m_StateBlendDnSpeed;
+
+    void SetGradient(float fMaxRadius, float fOpacity, pcstr tex_name, pcstr sh_name);
+    void SetSource(float fRadius, bool ign_color, pcstr tex_name, pcstr sh_name);
+    void AddFlare(float fRadius, float fOpacity, float fPosition, pcstr tex_name, pcstr sh_name);
+    // ref_shader CreateShader (pcstr tex_name, pcstr sh_name);
+
+    shared_str section;
+
+public:
+    CLensFlareDescriptor(const shared_str& section, CInifile const* pIni);
+    void OnDeviceCreate();
+    void OnDeviceDestroy();
+
+    void ed_show_params(); // ImGui editor
+    void save(CInifile* config) const;
+};
+
+class ENGINE_API CLensFlare
+{
+    friend class xray::render::render_r4::dxLensFlareRender;
+    friend class xray::render::render_gl::dxLensFlareRender;
+
+public:
+    enum
+    {
+        MAX_RAYS = 5
+    };
+
+private:
+    collide::rq_results r_dest;
+#ifndef _EDITOR
+    collide::ray_cache m_ray_cache[MAX_RAYS];
+#endif
+
+protected:
+    float fBlend;
+    u32 dwFrame;
+
+    Fvector vSunDir;
+    Fvector vecLight;
+    Fvector vecX, vecY, vecDir, vecAxis, vecCenter;
+    bool bRender;
+
+    // variable
+    Fcolor LightColor;
+    float fGradientValue;
+
+    FactoryPtr<ILensFlareRender> m_pRender;
+
+    xr_vector<CLensFlareDescriptor*> m_Palette;
+    CLensFlareDescriptor* m_Current;
+    CInifile* m_suns_config{};
+
+public:
+    enum LFState
+    {
+        lfsNone,
+        lfsIdle,
+        lfsHide,
+        lfsShow,
+    };
+
+protected:
+    LFState m_State;
+    float m_StateBlend;
+
+public:
+    CLensFlare();
+    virtual ~CLensFlare();
+
+    void OnFrame(const CEnvDescriptorMixer& currentEnv, float time_factor);
+    void __fastcall Render(bool bSun, bool bFlares, bool bGradient);
+    void OnDeviceCreate();
+    void OnDeviceDestroy();
+
+    CLensFlareDescriptor* AppendDef(shared_str sect);
+
+    void Invalidate() { m_State = lfsNone; }
+
+    [[nodiscard]]
+    auto& GetDescriptors() { return m_Palette; }
+
+    void save(bool soc_style) const;
+};

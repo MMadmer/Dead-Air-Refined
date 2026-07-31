@@ -1,0 +1,117 @@
+local card_game = ui_card_game_21
+local card_game_class = card_game.card_game_21_point
+local original_fill_card_point = card_game_class.FillCardPoint
+local original_play_game = card_game_class.btn_play_game
+local original_send_move = card_game_class.btn_send_move
+local actor_card_count = 0
+local enemy_card_count = 0
+
+local function finish_with_winner(winner)
+	card_game.card_game_21_winner = winner
+	card_game.card_game_21_stage = "end_game"
+end
+
+local function fill_card_point(self, param, name, mask)
+	original_fill_card_point(self, param, name, mask)
+	if string.find(param, "self_", 1, true) then
+		actor_card_count = actor_card_count + 1
+	else
+		enemy_card_count = enemy_card_count + 1
+	end
+end
+
+local function draw_random_card(self, target)
+	local name = card_game.get_random_string(card_game.card_game_21_existing_names)
+	local mask = card_game.get_random_string(card_game.card_game_21_existing_masks)
+	self:FillCardPoint(target, name, mask)
+end
+
+local function play_game(self)
+	actor_card_count = 0
+	enemy_card_count = 0
+	original_play_game(self)
+	if actor_card_count == 2 and card_game.card_game_21_your_points == 22 then
+		finish_with_winner("your")
+	end
+end
+
+local function winner_reward(self)
+	if enemy_card_count == 2 and card_game.card_game_21_enemy_points == 22 then
+		finish_with_winner("enemy")
+		return
+	end
+	if card_game.card_game_21_your_points > 21 then
+		finish_with_winner("enemy")
+	elseif card_game.card_game_21_enemy_points > 21 then
+		finish_with_winner("your")
+	elseif card_game.card_game_21_your_points > card_game.card_game_21_enemy_points then
+		finish_with_winner("your")
+	elseif card_game.card_game_21_your_points < card_game.card_game_21_enemy_points then
+		finish_with_winner("enemy")
+	else
+		finish_with_winner("equally")
+	end
+end
+
+local function actor_busted()
+	if card_game.card_game_21_your_points <= 21 then
+		return false
+	end
+	finish_with_winner("enemy")
+	return true
+end
+
+local function send_move(self)
+	if actor_busted() then
+		return
+	end
+	original_send_move(self)
+end
+
+local function take_else(self)
+	if card_game.card_game_21_take_else == "empty_card" then
+		draw_random_card(self, "self_card_3")
+		card_game.card_game_21_take_else = "1st_card"
+		actor_busted()
+	elseif card_game.card_game_21_take_else == "1st_card" then
+		draw_random_card(self, "self_card_4")
+		card_game.card_game_21_take_else = "2nd_card"
+		actor_busted()
+	elseif card_game.card_game_21_take_else == "2nd_card" then
+		draw_random_card(self, "self_card_5")
+		card_game.card_game_21_take_else = "3rd_card"
+		if not actor_busted() then
+			self:btn_send_move()
+		end
+	end
+end
+
+local function fill_enemy_step(self, step_num)
+	draw_random_card(self, "enemy_card_" .. step_num)
+end
+
+local function continue_game(self)
+	card_game.card_game_21_show_winner = "begin_show"
+	self.winner_box:InitMessageBox("message_box_ok")
+	if card_game.card_game_21_winner == "your" then
+		dialogs.relocate_money(db.actor, card_game.card_game_21_rate, "in")
+		self.winner_box:SetText(card_game.st_21_point_winner_your_1 .. " " .. card_game.card_game_21_rate .. " " .. card_game.st_21_point_winner_your_2 .. " " .. card_game.card_game_21_your_points .. card_game.st_21_point_winner_your_3 .. " " .. card_game.card_game_21_enemy_points .. ".")
+	elseif card_game.card_game_21_winner == "enemy" then
+		dialogs.relocate_money(db.actor, card_game.card_game_21_rate, "out")
+		db.actor:give_money(-card_game.card_game_21_rate)
+		self.winner_box:SetText(card_game.st_21_point_winner_enemy_1 .. " " .. card_game.card_game_21_rate .. " " .. card_game.st_21_point_winner_enemy_2 .. " " .. card_game.card_game_21_your_points .. card_game.st_21_point_winner_enemy_3 .. " " .. card_game.card_game_21_enemy_points .. ".")
+	else
+		self.winner_box:SetText(card_game.st_21_point_winner_equally_1 .. " " .. card_game.card_game_21_your_points .. card_game.st_21_point_winner_equally_2 .. " " .. card_game.card_game_21_enemy_points .. ".")
+	end
+	self.winner_box:ShowDialog(true)
+end
+
+function on_game_start()
+	card_game_class.FillCardPoint = fill_card_point
+	card_game_class.btn_play_game = play_game
+	card_game_class.btn_take_else = take_else
+	card_game_class.btn_send_move = send_move
+	card_game_class.FillEnemyStep = fill_enemy_step
+	card_game_class.winner_reward = winner_reward
+	card_game_class.btn_continue_game = continue_game
+end

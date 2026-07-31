@@ -1,0 +1,611 @@
+#include "stdafx.h"
+#pragma hdrstop
+
+#include "xrDebug.h"
+#include "Debug/CrashReport.h"
+#include "Debug/StackTrace.h"
+#include "os_clipboard.h"
+#include "log.h"
+#include "Threading/ScopeLock.hpp"
+
+#include <SDL.h>
+
+#include <csignal>
+
+#if defined(XR_PLATFORM_WINDOWS)
+#   include <dbghelp.h>
+#   include <direct.h>
+#   include <new.h> // for _set_new_mode
+
+#   include "Debug/dxerr.h"
+#endif
+
+#if defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_APPLE) || defined(XR_PLATFORM_BSD)
+#   if __has_include(<sys/ptrace.h>)
+#       include <sys/ptrace.h>
+#       define PTRACE_AVAILABLE
+
+#       if defined(XR_PLATFORM_APPLE) || defined(XR_PLATFORM_BSD)
+#           define PTRACE_TRACEME PT_TRACE_ME
+#           define PTRACE_DETACH PT_DETACH
+#       endif
+#   endif
+#endif
+
+constexpr SDL_MessageBoxButtonData buttons[] =
+{
+    /* .flags, .buttonid, .text */
+    { 0, (int)AssertionResult::ignore, "Continue"  },
+    { 0, (int)AssertionResult::tryAgain, "Try again" },
+
+    { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT |
+      SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,
+         (int)AssertionResult::abort, "Cancel" }
+};
+
+AssertionResult xrDebug::ShowMessage(pcstr title, pcstr message, bool simpleMode)
+{
+#ifdef XR_PLATFORM_WINDOWS // because Windows default Message box is fancy
+    HWND hwnd = nullptr;
+    if (windowHandler)
+        hwnd = static_cast<HWND>(windowHandler->GetApplicationWindowHandle());
+
+    if (simpleMode)
+    {
+        MessageBox(hwnd, message, title, MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
+        return AssertionResult::ok;
+    }
+
+    const int result = MessageBox(hwnd, message, title,
+        MB_CANCELTRYCONTINUE | MB_ICONERROR | MB_SYSTEMMODAL);
+
+    switch (result)
+    {
+    case IDCANCEL: return AssertionResult::abort;
+    case IDTRYAGAIN: return AssertionResult::tryAgain;
+    case IDCONTINUE: return AssertionResult::ignore;
+    default: return AssertionResult::undefined;
+    }
+#else
+    if (simpleMode)
+    {
+        SDL_Window* parent = windowHandler ? windowHandler->GetApplicationWindow() : nullptr;
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, message, parent);
+        return AssertionResult::ok;
+    }
+
+    SDL_MessageBoxData data =
+    {
+        SDL_MESSAGEBOX_ERROR,
+        windowHandler ? windowHandler->GetApplicationWindow() : nullptr,
+        title, message, SDL_arraysize(buttons), buttons, nullptr
+    };
+
+    int button = -1;
+    SDL_ShowMessageBox(&data, &button);
+    return (AssertionResult)button;
+#endif
+}
+
+SDL_AssertState SDLAssertionHandler(const SDL_AssertData* data,
+    void* /*userdata*/)
+{
+    if (data->always_ignore)
+        return SDL_ASSERTION_ALWAYS_IGNORE;
+
+    static constexpr pcstr desc = "SDL2 assertion triggered";
+    bool alwaysIgnore = false;
+
+    const auto result = xrDebug::Fail(alwaysIgnore,
+        { data->filename, data->linenum, data->function },
+        data->condition, desc);
+
+    switch (result)
+    {
+    case AssertionResult::ignore:
+        return SDL_ASSERTION_ALWAYS_IGNORE;
+
+    case AssertionResult::tryAgain:
+        return SDL_ASSERTION_RETRY;
+
+    case AssertionResult::abort:
+        return SDL_ASSERTION_ABORT;
+
+    case AssertionResult::undefined:
+    case AssertionResult::ok:
+    default:
+        return SDL_ASSERTION_IGNORE;
+    }
+}
+
+IWindowHandler* xrDebug::windowHandler = nullptr;
+IUserConfigHandler* xrDebug::userConfigHandler = nullptr;
+xrDebug::UnhandledExceptionFilter xrDebug::PrevFilter = nullptr;
+xrDebug::OutOfMemoryCallbackFunc xrDebug::OutOfMemoryCallback = nullptr;
+bool xrDebug::ErrorAfterDialog = false;
+bool xrDebug::ShowErrorMessage = true;
+
+#ifdef PROFILE_CRITICAL_SECTIONS
+Lock xrDebug::failLock(MUTEX_PROFILE_ID(xrDebug::Backend));
+#else
+Lock xrDebug::failLock;
+#endif
+
+void xrDebug::LogStackTrace(const char* header)
+{
+    xr_vector<xr_string> stackTrace = BuildStackTrace();
+    Msg("%s", header);
+    for (const auto& frame : stackTrace)
+    {
+        Msg("%s", frame.c_str());
+    }
+}
+
+
+void xrDebug::GatherInfo(char* assertionInfo, size_t bufferSize, const ErrorLocation& loc, const char* expr,
+                         const char* desc, const char* arg1, const char* arg2)
+{
+    char* buffer = assertionInfo;
+    if (!expr)
+        expr = "<no expression>";
+    bool extendedDesc = desc && strchr(desc, '\n');
+    pcstr prefix = "[error] ";
+    const char* oneAboveBuffer = assertionInfo + bufferSize;
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "\nFATAL ERROR\n\n");
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sExpression    : %s\n", prefix, expr);
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sFunction      : %s\n", prefix, loc.Function);
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sFile          : %s\n", prefix, loc.File);
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sLine          : %d\n", prefix, loc.Line);
+    if (extendedDesc)
+    {
+        buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "\n%s\n", desc);
+        if (arg1)
+        {
+            buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%s\n", arg1);
+            if (arg2)
+                buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%s\n", arg2);
+        }
+    }
+    else
+    {
+        buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sDescription   : %s\n", prefix, desc);
+        if (arg1)
+        {
+            if (arg2)
+            {
+                buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sArgument 0    : %s\n", prefix, arg1);
+                buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sArgument 1    : %s\n", prefix, arg2);
+            }
+            else
+                buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sArguments     : %s\n", prefix, arg1);
+        }
+    }
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "\n");
+
+    Log(assertionInfo);
+    FlushLog();
+
+    buffer = assertionInfo;
+#if defined(XR_PLATFORM_WINDOWS)
+    if (DebuggerIsPresent() || !strstr(GetCommandLine(), "-no_call_stack_assert"))
+        return;
+#endif
+
+    Log("stack trace:\n");
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "stack trace:\n\n");
+
+    xr_vector<xr_string> stackTrace = BuildStackTrace();
+    for (size_t i = 2; i < stackTrace.size(); i++)
+        Msg("%s", stackTrace[i].c_str());
+
+    FlushLog();
+    os_clipboard::copy_to_clipboard(assertionInfo);
+}
+
+void xrDebug::Fatal(const ErrorLocation& loc, const char* format, ...)
+{
+    string1024 desc;
+    va_list args;
+    va_start(args, format);
+    vsnprintf(desc, sizeof(desc), format, args);
+    va_end(args);
+    bool ignoreAlways = true;
+    Fail(ignoreAlways, loc, nullptr, "fatal error", desc);
+}
+
+AssertionResult xrDebug::Fail(bool& ignoreAlways, const ErrorLocation& loc, const char* expr, long hresult, const char* arg1,
+                   const char* arg2)
+{
+    return Fail(ignoreAlways, loc, expr, xrDebug::ErrorToString(hresult), arg1, arg2);
+}
+
+AssertionResult xrDebug::Fail(bool& ignoreAlways, const ErrorLocation& loc, const char* expr, const char* desc, const char* arg1,
+                   const char* arg2)
+{
+    ScopeLock lock(&failLock);
+
+    if (windowHandler)
+        windowHandler->OnErrorDialog(true); // Call it only after locking so that multiple threads won't call this function simultaneously.
+
+    ErrorAfterDialog = true;
+    string4096 assertionInfo;
+    GatherInfo(assertionInfo, sizeof(assertionInfo), loc, expr, desc, arg1, arg2);
+
+    if (ShowErrorMessage)
+    {
+        xr_strcat(assertionInfo,
+            "\r\n"
+            "Press CANCEL to abort execution\r\n"
+            "Press TRY AGAIN to continue execution\r\n"
+            "Press CONTINUE to continue execution and ignore all the errors of this type\r\n"
+            "\r\n");
+    }
+
+    FlushLog();
+
+    bool resetFullscreen = false;
+    AssertionResult result = AssertionResult::abort;
+    if (Core.PluginMode)
+        /*result =*/ ShowMessage("X-Ray error", assertionInfo); // Do not assign 'result'
+    else
+    {
+        if (ShowErrorMessage)
+            result = ShowMessage("Fatal error", assertionInfo, false);
+
+        switch (result)
+        {
+        case AssertionResult::tryAgain:
+            ErrorAfterDialog = false;
+            resetFullscreen = !!windowHandler;
+            break;
+
+        case AssertionResult::ignore:
+            ErrorAfterDialog = false;
+            ignoreAlways = true;
+            resetFullscreen = !!windowHandler;
+            break;
+
+        case AssertionResult::undefined:
+            xr_strcat(assertionInfo, SDL_GetError());
+            [[fallthrough]];
+        case AssertionResult::abort:
+            [[fallthrough]];
+        default:
+            if (windowHandler && !DebuggerIsPresent())
+                windowHandler->OnFatalError();
+            DEBUG_BREAK;
+        } // switch (result)
+    }
+
+    if (resetFullscreen)
+        windowHandler->OnErrorDialog(false); // Call it only before unlocking so that multiple threads won't call this function simultaneously.
+
+    return result;
+}
+
+AssertionResult xrDebug::Fail(bool& ignoreAlways, const ErrorLocation& loc, const char* expr, const std::string& desc,
+                   const char* arg1, const char* arg2)
+{
+    return Fail(ignoreAlways, loc, expr, desc.c_str(), arg1, arg2);
+}
+
+[[noreturn]]
+void xrDebug::DoExit(const std::string& message)
+{
+    ScopeLock lock(&failLock);
+
+    if (windowHandler)
+        windowHandler->OnErrorDialog(true);
+
+    FlushLog();
+
+    if (ShowErrorMessage)
+    {
+        const auto result = ShowMessage(Core.ApplicationName, message.c_str(), false);
+        if (result != AssertionResult::abort && DebuggerIsPresent())
+            DEBUG_BREAK;
+    }
+    else
+        ShowMessage(Core.ApplicationName, message.c_str());
+
+    if (windowHandler)
+        windowHandler->OnFatalError();
+
+#if defined(XR_PLATFORM_WINDOWS)
+    TerminateProcess(GetCurrentProcess(), 1);
+#else
+    exit(1);
+#endif
+    // if you're under debugger, you can jump here manually
+    if (windowHandler)
+        windowHandler->OnErrorDialog(false);
+}
+
+pcstr xrDebug::ErrorToString(long code)
+{
+    const char* result = nullptr;
+#if defined(XR_PLATFORM_WINDOWS)
+    static string1024 descStorage;
+    DXGetErrorDescription(code, descStorage, sizeof(descStorage));
+    if (!result)
+    {
+        FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, code, 0, descStorage, sizeof(descStorage) - 1, 0);
+        result = descStorage;
+    }
+#endif
+    return result;
+}
+
+int out_of_memory_handler(size_t size)
+{
+    Memory.release_emergency_reserve();
+
+    xrDebug::OutOfMemoryCallbackFunc cb = xrDebug::GetOutOfMemoryCallback();
+    if (cb)
+        cb();
+    else
+    {
+        Memory.mem_compact();
+        const size_t processHeap = Memory.mem_usage();
+        Msg("* [x-ray]: process heap[%zu K]", processHeap / 1024);
+        if (g_pStringContainer)
+        {
+            const auto [ecoStringsBytes, ecoStringsCount] = g_pStringContainer->stat_economy();
+            Msg("* [x-ray]: shared string savings[%zu K], count[%zu]", ecoStringsBytes / 1024, ecoStringsCount);
+        }
+        if (g_pSharedMemoryContainer)
+            Msg("* [x-ray]: shared memory savings[%zu K]", g_pSharedMemoryContainer->stat_economy());
+        log_vminfo();
+    }
+    xrDebug::Fatal(DEBUG_INFO, "Out of memory. Memory request: %zu K", size / 1024);
+    return 1;
+}
+
+void xrDebug::SetupExceptionHandler()
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    const auto prevMode = SetErrorMode(SEM_NOGPFAULTERRORBOX);
+    SetErrorMode(prevMode | SEM_NOGPFAULTERRORBOX);
+#endif
+    CrashReporter::Initialize();
+}
+
+void xrDebug::OnFilesystemInitialized()
+{
+    CrashReporter::OnFilesystemInitialized();
+}
+
+bool xrDebug::DebuggerIsPresent()
+{
+#ifdef XR_PLATFORM_WINDOWS
+    return IsDebuggerPresent();
+#elif defined(PTRACE_AVAILABLE)
+    if (ptrace(PTRACE_TRACEME, 0, 0, 0) == -1)
+        return true;
+    ptrace(PTRACE_DETACH, 0, 0, 0);
+    return false;
+#else
+    return false;
+#endif
+}
+
+void xrDebug::FormatLastError(char* buffer, const size_t& bufferSize)
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    const int lastErr = GetLastError();
+    if (lastErr == ERROR_SUCCESS)
+    {
+        *buffer = 0;
+        return;
+    }
+    void* msg = nullptr;
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, lastErr,
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (pstr)&msg, 0, nullptr);
+    // XXX nitrocaster: check buffer overflow
+    xr_sprintf(buffer, bufferSize, "[error][%8d]: %s", lastErr, (char*)msg);
+    LocalFree(msg);
+#endif
+}
+
+LONG WINAPI xrDebug::UnhandledFilter(EXCEPTION_POINTERS* exPtrs)
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    ScopeLock lock(&failLock);
+
+    string256 errMsg;
+    FormatLastError(errMsg, sizeof(errMsg));
+    if (!ErrorAfterDialog && !strstr(GetCommandLine(), "-no_call_stack_assert"))
+    {
+        CONTEXT save = *exPtrs->ContextRecord;
+        xr_vector<xr_string> stackTrace = BuildStackTrace(exPtrs->ContextRecord, 1024);
+        *exPtrs->ContextRecord = save;
+        Msg("stack trace:\n");
+#ifdef DEBUG
+        if (!DebuggerIsPresent())
+            os_clipboard::copy_to_clipboard("stack trace:\r\n\r\n");
+#endif
+        string4096 buffer;
+        for (size_t i = 0; i < stackTrace.size(); i++)
+        {
+            Log(stackTrace[i].c_str());
+            xr_sprintf(buffer, sizeof(buffer), "%s\r\n", stackTrace[i].c_str());
+#ifdef DEBUG
+            if (!DebuggerIsPresent())
+                os_clipboard::update_clipboard(buffer);
+#endif
+        }
+        if (*errMsg)
+        {
+            Msg("\n%s", errMsg);
+            xr_strcat(errMsg, "\r\n");
+#ifdef DEBUG
+            if (!DebuggerIsPresent())
+                os_clipboard::update_clipboard(buffer);
+#endif
+        }
+    }
+    FlushLog();
+    const bool reportWritten = CrashReporter::WriteCrash(exPtrs);
+
+    if (reportWritten)
+        Msg("* Anonymous diagnostic report saved to %s", CrashReporter::LatestReportPath());
+    else
+        Msg("! Failed to save anonymous diagnostic report");
+    FlushLog();
+
+    if (windowHandler)
+        windowHandler->OnErrorDialog(true);
+
+    static constexpr pcstr fatalError = "Fatal error";
+
+    AssertionResult msgRes = AssertionResult::abort;
+
+    if (!ErrorAfterDialog && ShowErrorMessage)
+    {
+        static constexpr pcstr msg = "Fatal error occurred\n\n"
+            "Press OK to abort program execution";
+        msgRes = ShowMessage(fatalError, msg);
+    }
+
+    if (msgRes != AssertionResult::abort)
+    {
+        constexpr cpcstr debugger = "Please, attach the debugger to the process"
+            " if you want to debug this fatal error.";
+        ShowMessage("xrDebug", debugger);
+        if (DebuggerIsPresent())
+            DEBUG_BREAK;
+    }
+
+    if (windowHandler)
+        windowHandler->OnFatalError();
+
+    if (windowHandler)
+        windowHandler->OnErrorDialog(false);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+#else
+    return 0;
+#endif
+}
+
+[[noreturn]]
+void xr_terminate()
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    RaiseException(EXCEPTION_NONCONTINUABLE_EXCEPTION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+    TerminateProcess(GetCurrentProcess(), EXCEPTION_NONCONTINUABLE_EXCEPTION);
+#else
+    abort();
+#endif
+}
+
+static void handler_base(const char* reason)
+{
+    xrDebug::LogStackTrace(reason);
+    bool ignoreAlways = false;
+    xrDebug::Fail(ignoreAlways, DEBUG_INFO, nullptr, reason, nullptr, nullptr);
+}
+
+#if defined(XR_PLATFORM_WINDOWS)
+static void invalid_parameter_handler(const wchar_t* expression, const wchar_t* function, const wchar_t* file,
+                                      unsigned int line, uintptr_t reserved)
+{
+    bool ignoreAlways = false;
+    string4096 mbExpression;
+    string4096 mbFunction;
+    string4096 mbFile;
+    size_t convertedChars = 0;
+    if (expression)
+        wcstombs_s(&convertedChars, mbExpression, sizeof(mbExpression), expression, (wcslen(expression) + 1) * 2);
+    else
+        xr_strcpy(mbExpression, "");
+    if (function)
+        wcstombs_s(&convertedChars, mbFunction, sizeof(mbFunction), function, (wcslen(function) + 1) * 2);
+    else
+        xr_strcpy(mbFunction, __FUNCTION__);
+    if (file)
+        wcstombs_s(&convertedChars, mbFile, sizeof(mbFile), file, (wcslen(file) + 1) * 2);
+    else
+    {
+        line = __LINE__;
+        xr_strcpy(mbFile, __FILE__);
+    }
+    xrDebug::Fail(ignoreAlways, {mbFile, int(line), mbFunction}, mbExpression, "invalid parameter");
+}
+#endif
+
+void xrDebug::OnThreadSpawn()
+{
+#ifndef __SANITIZE_ADDRESS__
+    std::signal(SIGINT,  nullptr);
+    std::signal(SIGILL,  +[](int signal) { handler_base("illegal instruction"); });
+    std::signal(SIGFPE,  +[](int signal) { handler_base("floating point error"); });
+#   ifdef DEBUG
+    std::signal(SIGSEGV, +[](int signal) { handler_base("segmentation fault"); });
+#   endif
+    std::signal(SIGABRT, +[](int signal) { handler_base("application is aborting"); });
+    std::signal(SIGTERM, +[](int signal) { handler_base("termination with exit code 3"); });
+
+#   if defined(XR_PLATFORM_WINDOWS)
+    std::signal(SIGABRT_COMPAT, +[](int signal) { handler_base("application is aborting"); });
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _set_invalid_parameter_handler(&invalid_parameter_handler);
+    _set_new_mode(1);
+    _set_new_handler(&out_of_memory_handler);
+    _set_purecall_handler(+[] { handler_base("pure virtual function call"); });
+#   endif
+
+    std::set_terminate(xr_terminate);
+#endif
+}
+
+void xrDebug::OnThreadExit()
+{
+#ifndef __SANITIZE_ADDRESS__
+    std::signal(SIGINT,  nullptr);
+    std::signal(SIGILL,  nullptr);
+    std::signal(SIGFPE,  nullptr);
+    std::signal(SIGSEGV, nullptr);
+    std::signal(SIGABRT, nullptr);
+    std::signal(SIGTERM, nullptr);
+    std::set_terminate(nullptr);
+
+#   if defined(XR_PLATFORM_WINDOWS)
+    std::signal(SIGABRT_COMPAT, nullptr);
+    _set_abort_behavior(0, 0);
+    _set_invalid_parameter_handler(nullptr);
+    _set_new_mode(1);
+    _set_new_handler(nullptr);
+    _set_purecall_handler(nullptr);
+#   endif
+#endif
+}
+
+void xrDebug::Initialize(pcstr commandLine)
+{
+    ZoneScoped;
+    OnThreadSpawn();
+    SetupExceptionHandler();
+    SDL_SetAssertionHandler(SDLAssertionHandler, nullptr);
+    // exception handler to all "unhandled" exceptions
+#if defined(XR_PLATFORM_WINDOWS)
+    PrevFilter = SetUnhandledExceptionFilter(UnhandledFilter);
+#endif
+#ifdef MASTER_GOLD
+    ShowErrorMessage = commandLine && strstr(commandLine, "-show_error_window") &&
+        !strstr(commandLine, "-silent_error_mode");
+#else
+    ShowErrorMessage = !commandLine || !strstr(commandLine, "-silent_error_mode");
+#endif
+}
+
+void xrDebug::Finalize()
+{
+    OnThreadExit();
+    SDL_SetAssertionHandler(nullptr, nullptr);
+#if defined(XR_PLATFORM_WINDOWS)
+    SetUnhandledExceptionFilter(PrevFilter);
+    PrevFilter = nullptr;
+#endif
+    ShowErrorMessage = true;
+}

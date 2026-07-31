@@ -1,0 +1,11 @@
+# top-most EditorConfig file
+root = true
+
+# 4 space indentation
+[*.{cpp,h,hpp}]
+charset = utf-8
+indent_style = space
+indent_size = 4
+
+# newline ending every file
+insert_final_newline = true

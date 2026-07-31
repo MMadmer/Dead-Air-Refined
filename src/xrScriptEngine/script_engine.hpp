@@ -1,0 +1,260 @@
+////////////////////////////////////////////////////////////////////////////
+//	Module 		: script_engine.h
+//	Created 	: 01.04.2004
+//  Modified 	: 01.04.2004
+//	Author		: Dmitriy Iassenev
+//	Description : XRay Script Engine
+////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include "xrCommon/xr_unordered_map.h"
+
+#include "xrCore/Containers/AssociativeVector.hpp"
+#include "xrCore/Threading/Lock.hpp"
+
+#include "xrScriptEngine.hpp"
+#include "ScriptExporter.hpp"
+#include "script_space_forward.hpp"
+#include "Functor.hpp"
+
+#ifndef MASTER_GOLD
+#define USE_DEBUGGER
+#define USE_LUA_STUDIO
+#endif
+
+
+//#define DBG_DISABLE_SCRIPTS
+
+class CScriptProcess;
+class CScriptProfiler;
+class CScriptThread;
+
+#ifdef USE_DEBUGGER
+class CScriptDebugger;
+#endif
+
+enum class ScriptProcessor : u32
+{
+    Level = 0,
+    Game = 1,
+    Dummy = u32(-1),
+};
+
+enum class LuaMessageType : u32
+{
+    Info = 0,
+    Error = 1,
+    Message = 2,
+    HookCall = 3,
+    HookReturn = 4,
+    HookLine = 5,
+    HookCount = 6,
+    HookTailReturn = u32(-1),
+};
+
+extern XRSCRIPTENGINE_API Flags32 g_LuaDebug;
+extern XRSCRIPTENGINE_API int g_LuaDumpDepth;
+
+class XRSCRIPTENGINE_API CScriptEngine
+{
+public:
+    constexpr static cpcstr ARGUMENT_ENGINE_NOJIT = "-nojit";
+    typedef AssociativeVector<ScriptProcessor, CScriptProcess*> CScriptProcessStorage;
+    static const char* const GlobalNamespace;
+
+private:
+    static Lock stateMapLock;
+    static xr_unordered_map<lua_State*, CScriptEngine*> stateMap;
+    lua_State* m_virtual_machine;
+    CScriptThread* m_current_thread;
+    bool m_reload_modules;
+    string128 m_last_no_file;
+    size_t m_last_no_file_length;
+    static string4096 g_ca_stdout;
+    bool logReenterability = false;
+    bool bindingsDumped = false;
+    char* scriptBuffer = nullptr;
+    size_t scriptBufferSize = 0;
+    bool m_is_editor;
+
+protected:
+    CScriptProcessStorage m_script_processes;
+    int m_stack_level;
+
+    CMemoryWriter m_output; // for call stack
+
+#ifdef USE_DEBUGGER
+    CScriptDebugger* m_scriptDebugger{};
+#endif
+
+private:
+    static CScriptEngine* GetInstance(lua_State* state);
+    static bool RegisterState(lua_State* state, CScriptEngine* scriptEngine);
+    static bool UnregisterState(lua_State* state);
+    bool no_file_exists(pcstr file_name, size_t string_length);
+    void add_no_file(pcstr file_name, size_t string_length);
+
+protected:
+    bool parse_namespace(pcstr caNamespaceName, pstr b, size_t b_size, pstr c, size_t c_size);
+    bool do_file(LPCSTR caScriptName, LPCSTR caNameSpaceName);
+    void reinit();
+
+    static constexpr std::pair<cpcstr, cpcstr> get_message_headers(LuaMessageType message)
+    {
+        switch (message)
+        {
+        case LuaMessageType::Info:
+            return { "* [LUA] ", "[INFO]        " };
+
+        case LuaMessageType::Error:
+            return { "! [LUA] ", "[ERROR]       " };
+
+        case LuaMessageType::Message:
+            return { "[LUA] ", "[MESSAGE]     " };
+
+        case LuaMessageType::HookCall:
+            return { "[LUA][HOOK_CALL] ", "[CALL]        " };
+
+        case LuaMessageType::HookReturn:
+            return { "[LUA][HOOK_RETURN] ", "[RETURN]      " };
+
+        case LuaMessageType::HookLine:
+            return { "[LUA][HOOK_LINE] ", "[LINE]        " };
+
+        case LuaMessageType::HookCount:
+            return { "[LUA][HOOK_COUNT] ", "[COUNT]       " };
+
+        case LuaMessageType::HookTailReturn:
+            return { "[LUA][HOOK_TAIL_RETURN] ", "[TAIL_RETURN] " };
+
+        default:
+            NODEFAULT;
+            return {};
+        }
+    }
+
+public:
+    CScriptProfiler* m_profiler;
+
+    lua_State* lua() { return m_virtual_machine; }
+    void current_thread(CScriptThread* thread)
+    {
+        VERIFY(thread && !m_current_thread || !thread);
+        m_current_thread = thread;
+    }
+    CScriptThread* current_thread() const { return m_current_thread; }
+    bool load_buffer(
+        lua_State* L, LPCSTR caBuffer, size_t tSize, LPCSTR caScriptName, LPCSTR caNameSpaceName = nullptr);
+    bool load_file_into_namespace(LPCSTR caScriptName, LPCSTR caNamespaceName);
+    bool namespace_loaded(LPCSTR caName, bool remove_from_stack = true);
+    // check if object exists
+    bool object(LPCSTR caIdentifier, int type);
+    bool object(LPCSTR caNamespaceName, LPCSTR caIdentifier, int type);
+    luabind::object name_space(LPCSTR namespace_name);
+
+    template<typename... Args>
+    int error_log(cpcstr format, Args... args)
+    {
+        string4096 log;
+        const int result = xr_sprintf(log, format, std::forward<Args>(args)...);
+        constexpr cpcstr header = "! [LUA][ERROR] ";
+        Log(header, log);
+        return result;
+    }
+
+    template<typename... Args>
+    int script_log(LuaMessageType message, cpcstr format, Args... args)
+    {
+        int result = 0;
+
+        if (message == LuaMessageType::Error || message == LuaMessageType::Message || g_LuaDebug.test(1))
+        {
+            string4096 log;
+            result = xr_sprintf(log, format, std::forward<Args>(args)...);
+
+            auto [logHeader, luaLogHeader] = get_message_headers(message);
+            Log(logHeader, log);
+            m_output.w(luaLogHeader, xr_strlen(luaLogHeader));
+            m_output.w(log, xr_strlen(log));
+            m_output.w("\r\n", sizeof("\r\n"));
+        }
+
+        if (message == LuaMessageType::Error && !logReenterability)
+        {
+            logReenterability = true;
+            print_stack();
+            logReenterability = false;
+        }
+
+        return result;
+    }
+
+    static bool print_output(lua_State* L, pcstr caScriptName, int iErrorCode = 0, pcstr caErrorText = nullptr);
+
+private:
+    static void print_error(lua_State* L, int iErrorCode);
+
+public:
+    static void on_error(lua_State* state);
+
+    void flush_log();
+    void print_stack(lua_State* L = nullptr);
+
+    // Logs current value on the Lua stack
+    // Expands the tables/userdata and logs their contents too
+    void log_value(lua_State* L, pcstr name, int depth);
+
+    using export_func = xray::script_export::export_func;
+
+    CScriptEngine(bool is_editor = false, bool is_with_profiler = false);
+    virtual ~CScriptEngine();
+    void init(export_func exporterFunc, bool loadGlobalNamespace);
+    virtual void unload();
+    static int lua_panic(lua_State* L);
+    static void lua_error(lua_State* L);
+    static int lua_pcall_failed(lua_State* L);
+#if !XRAY_EXCEPTIONS
+    static void lua_cast_failed(lua_State* L, const luabind::type_id& info);
+#endif
+    static void lua_hook_call(lua_State* L, lua_Debug* dbg);
+    void setup_callbacks();
+    bool load_file(const char* scriptName, const char* namespaceName);
+    CScriptProcess* script_process(const ScriptProcessor& process_id) const;
+    void add_script_process(const ScriptProcessor& process_id, CScriptProcess* script_process);
+    void remove_script_process(const ScriptProcessor& process_id);
+    static int auto_load(lua_State* L);
+    void setup_auto_load();
+    bool process_file_if_exists(LPCSTR file_name, bool warn_if_not_exist);
+    bool process_file(LPCSTR file_name);
+    bool process_file(LPCSTR file_name, bool reload_modules);
+    bool function_object(LPCSTR function_to_call, luabind::object& object, int type = LUA_TFUNCTION);
+    void parse_script_namespace(pcstr name, pstr ns, size_t nsSize, pstr func, size_t funcSize);
+    template <typename TResult>
+    IC bool functor(LPCSTR function_to_call, luabind::functor<TResult>& lua_function);
+#ifdef USE_DEBUGGER
+    void stopDebugger();
+    void restartDebugger();
+    CScriptDebugger* debugger() { return m_scriptDebugger; }
+#endif
+    void collect_all_garbage();
+
+    CScriptProcess* CreateScriptProcess(shared_str name, shared_str scripts);
+    CScriptThread* CreateScriptThread(LPCSTR caNamespaceName, bool do_string = false, bool reload = false);
+    // This function is called from CScriptThread destructor
+    void DestroyScriptThread(const CScriptThread* thread);
+    bool is_editor();
+
+private:
+    DECLARE_SCRIPT_REGISTER_FUNCTION();
+};
+
+template <typename TResult>
+IC bool CScriptEngine::functor(LPCSTR function_to_call, luabind::functor<TResult>& lua_function)
+{
+    luabind::object object;
+    if (!function_object(function_to_call, object))
+        return false;
+    lua_function = object;
+    return true;
+}
