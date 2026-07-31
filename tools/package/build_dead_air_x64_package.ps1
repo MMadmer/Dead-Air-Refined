@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "0.9.0",
     [string]$Configuration = "Release"
 )
 
@@ -9,7 +9,7 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $binaryRoot = Join-Path $repositoryRoot "bin\x64\$Configuration"
 $templateRoot = Join-Path $repositoryRoot "packaging\dead-air-x64"
 $artifactRoot = Join-Path $repositoryRoot "artifacts"
-$packageName = "Dead-Air-x64-$Version"
+$packageName = "Dead-Air-Refined-$Version"
 $stageRoot = Join-Path $artifactRoot $packageName
 $runtimeRoot = Join-Path $stageRoot "runtime"
 $archivePath = Join-Path $artifactRoot "$packageName.zip"
@@ -50,7 +50,7 @@ Copy-Item -LiteralPath (Join-Path $templateRoot "Uninstall-DeadAir-x64.ps1") -De
 Copy-Item -LiteralPath (Join-Path $templateRoot "README_RU.md") -Destination $stageRoot
 
 $manifest = [pscustomobject]@{
-    Name = "Dead Air x64"
+    Name = "Dead Air: Refined"
     Version = $Version
     Architecture = "AMD64"
     Files = $manifestFiles

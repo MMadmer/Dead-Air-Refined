@@ -11,7 +11,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, wchar_t* commandLine, int)
     const DWORD pathLength = GetModuleFileNameW(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
     if (!pathLength || pathLength == executablePath.size())
     {
-        MessageBoxW(nullptr, L"Не удалось определить папку игры.", L"Dead Air x64", MB_OK | MB_ICONERROR);
+        MessageBoxW(nullptr, L"Не удалось определить папку игры.", L"Dead Air: Refined", MB_OK | MB_ICONERROR);
         return 1;
     }
 
@@ -21,7 +21,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, wchar_t* commandLine, int)
     if (!std::filesystem::is_regular_file(uninstaller))
     {
         MessageBoxW(
-            nullptr, L"Встроенный деинсталлятор Dead Air x64 не найден.", L"Dead Air x64", MB_OK | MB_ICONERROR);
+            nullptr, L"Встроенный деинсталлятор Dead Air: Refined не найден.", L"Dead Air: Refined", MB_OK | MB_ICONERROR);
         return 2;
     }
 
@@ -38,7 +38,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, wchar_t* commandLine, int)
     if (!ShellExecuteExW(&executeInfo))
     {
         MessageBoxW(
-            nullptr, L"Не удалось запустить деинсталлятор Dead Air x64.", L"Dead Air x64", MB_OK | MB_ICONERROR);
+            nullptr, L"Не удалось запустить деинсталлятор Dead Air: Refined.", L"Dead Air: Refined", MB_OK | MB_ICONERROR);
         return 3;
     }
 

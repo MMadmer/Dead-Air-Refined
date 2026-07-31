@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "1.0.0",
+    [string]$PortVersion = "0.9.0",
     [string]$StandaloneSource = "D:\Games\Dead Air",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
@@ -13,7 +13,7 @@ if ($PortVersion -notmatch '^\d+\.\d+\.\d+$') {
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $artifactRoot = Join-Path $repositoryRoot "artifacts"
-$packageName = "Dead-Air-0.98b-x64-$PortVersion"
+$packageName = "Dead-Air-Refined-$PortVersion"
 $outputRoot = Join-Path $artifactRoot "$packageName-installer-files"
 $archivePath = Join-Path $artifactRoot "$packageName.zip"
 $runtimeRoot = Join-Path $repositoryRoot "bin\x64\Release"
@@ -278,7 +278,7 @@ if (-not $SkipArchive) {
 
 $installerFiles = Get-ChildItem -LiteralPath $outputRoot -File
 [pscustomobject]@{
-    ProductVersion = "0.98b-x64-$PortVersion"
+    ProductVersion = $PortVersion
     InstallerDirectory = $outputRoot
     InstallerFiles = $installerFiles.Count
     InstallerSizeGB = [math]::Round(($installerFiles | Measure-Object Length -Sum).Sum / 1GB, 3)
