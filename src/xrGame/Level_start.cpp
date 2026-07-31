@@ -12,6 +12,7 @@
 #include "UIGameCustom.h"
 #include "ui/UICDkey.h"
 #include "saved_game_wrapper.h"
+#include "xrCore/Debug/CrashReport.h"
 #include "xrNetServer/NET_Messages.h"
 
 int g_cl_save_demo = 0;
@@ -24,6 +25,7 @@ shared_str CLevel::OpenDemoFile(const char* demo_file_name)
 void CLevel::net_StartPlayDemo() { net_Start(m_demo_server_options.c_str(), "localhost"); }
 bool CLevel::net_Start(const char* op_server, const char* op_client)
 {
+    CrashReporter::BeginOperation("level_start");
     ZoneScoped;
 
     net_start_result_total = TRUE;
@@ -258,13 +260,15 @@ bool CLevel::net_start6()
     BulletManager().Load();
 
     g_pGamePersistent->LoadEnd();
+    CrashReporter::SetLocation(map_data.m_name.c_str());
+    CrashReporter::EndOperation();
 
     if (net_start_result_total)
     {
         if (strstr(Core.Params, "-$"))
         {
             string256 buf{}, cmd{}, param{};
-            const int result = sscanf(strstr(Core.Params, "-$") + 2, "%[^ ] %[^ ] ", cmd, param);
+            const int result = sscanf(strstr(Core.Params, "-$") + 2, "%255s %255s", cmd, param);
             if (result == 2)
             {
                 strconcat(buf, cmd, " ", param);

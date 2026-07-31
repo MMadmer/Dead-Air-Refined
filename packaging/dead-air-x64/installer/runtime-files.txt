@@ -1,6 +1,5 @@
 amd_ags_x64.dll
 AnselSDK64.dll
-BugTrap.dll
 concrt140.dll
 d3dcompiler_47.dll
 discord_game_sdk.dll

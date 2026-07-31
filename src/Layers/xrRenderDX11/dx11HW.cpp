@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "xrCore/Debug/CrashReport.h"
 
 #include "dx11HW.h"
 
@@ -280,6 +281,13 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     const auto memory = Desc.DedicatedVideoMemory;
     Msg("*   Texture memory: %d M", memory / (1024 * 1024));
+
+    string256 adapterName{};
+    WideCharToMultiByte(CP_ACP, 0, Desc.Description, -1, adapterName, std::size(adapterName), nullptr, nullptr);
+    LARGE_INTEGER driverVersion{};
+    m_pAdapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &driverVersion);
+    CrashReporter::SetGpuInfo(adapterName, Desc.VendorId, Desc.DeviceId,
+        Desc.DedicatedVideoMemory, Desc.SharedSystemMemory, FeatureLevel, driverVersion.QuadPart);
 }
 
 bool CHW::CreateSwapChain(HWND hwnd)

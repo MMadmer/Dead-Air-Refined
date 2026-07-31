@@ -41,6 +41,8 @@
 #include "saved_game_wrapper.h"
 #include "xrAICore/Navigation/level_graph.h"
 #include "xrNetServer/NET_Messages.h"
+#include "xrCore/Debug/CrashReport.h"
+#include "xrSound/Sound.h"
 
 #include "CameraLook.h"
 #include "character_hit_animations_params.h"
@@ -190,6 +192,19 @@ void log_stability_memory_stats(bool compact)
             pendingRelease = pendingCount();
     }
 
+    CrashRuntimeTelemetry telemetry;
+    telemetry.textureBytes = size_t(m_base + m_lmaps);
+    telemetry.modelBytes = modelBytes;
+    telemetry.soundBytes = size_t(psSoundCacheSizeMB) * 1024 * 1024;
+    telemetry.luaBytes = luaBytes;
+    telemetry.alifeObjects = static_cast<u32>(alifeObjects);
+    telemetry.onlineObjects = static_cast<u32>(onlineObjects);
+    telemetry.pendingReleaseObjects = pendingRelease;
+    telemetry.fps = Device.GetStats().fFPS;
+    telemetry.frameMilliseconds = Device.fTimeDeltaReal * 1000.f;
+    telemetry.renderMilliseconds = Device.GetStats().RenderTotal.result;
+    CrashReporter::UpdateTelemetry(telemetry);
+
     Msg("* [render]: textures[%zu MiB], models[%zu MiB]", size_t(m_base + m_lmaps) / 1048576, modelBytes / 1048576);
     Msg("* [x-ray]: private[%zu MiB], Lua[%zu MiB]", processHeap / 1048576, luaBytes / 1048576);
     Msg("* [x-ray]: shared string savings[%zu KiB/%zu], shared memory savings[%zu KiB]",
@@ -215,6 +230,23 @@ public:
         xrDebug::SetOutOfMemoryCallback(full_memory_stats);
     };
     virtual void Execute(LPCSTR args) { full_memory_stats(); }
+};
+
+class CCC_SessionReport : public IConsole_Command
+{
+public:
+    explicit CCC_SessionReport(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+
+    void Execute(pcstr) override
+    {
+        log_stability_memory_stats(false);
+        FlushLog();
+        if (CrashReporter::WriteSession())
+            Msg("* Diagnostic session report saved to %s", CrashReporter::LatestReportPath());
+        else
+            Msg("! Failed to save diagnostic session report");
+        FlushLog();
+    }
 };
 
 class CCC_GameDifficulty : public CCC_Token
@@ -1733,18 +1765,6 @@ public:
     }
 };
 
-class CCC_Crash : public IConsole_Command
-{
-public:
-    CCC_Crash(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
-    virtual void Execute(LPCSTR /**args**/)
-    {
-        VERIFY3(false, "This is a test crash", "Do not post it as a bug");
-        int* pointer = 0;
-        *pointer = 0; //-V522
-    }
-};
-
 class CCC_DumpModelBones : public IConsole_Command
 {
 public:
@@ -1899,7 +1919,7 @@ public:
     virtual void Execute(LPCSTR arguments)
     {
         auto mm = MainMenu();
-        if (mm == nullptr)
+        if (!mm)
             return;
 
         SetupCallParams(arguments);
@@ -2180,6 +2200,7 @@ void CCC_RegisterCommands()
     g_OptConCom.Init();
 
     CMD1(CCC_MemStats, "stat_memory");
+    CMD1(CCC_SessionReport, "session_report");
 
     // game
     CMD3(CCC_Mask, "g_crouch_toggle", &psActorFlags, AF_CROUCH_TOGGLE);
@@ -2573,7 +2594,6 @@ void CCC_RegisterCommands()
 
     CMD1(CCC_GSCheckForUpdates, "check_for_updates");
 #ifdef DEBUG
-    CMD1(CCC_Crash, "crash");
     CMD1(CCC_DumpObjects, "dump_all_objects");
     CMD3(CCC_String, "stalker_death_anim", dbg_stalker_death_anim, 32);
     CMD4(CCC_Integer, "death_anim_debug", &death_anim_debug, FALSE, TRUE);

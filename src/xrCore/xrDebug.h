@@ -77,7 +77,6 @@ private:
     static IUserConfigHandler* userConfigHandler;
     static UnhandledExceptionFilter PrevFilter;
     static OutOfMemoryCallbackFunc OutOfMemoryCallback;
-    static string_path BugReportFile;
     static bool ErrorAfterDialog;
     static bool ShowErrorMessage;
 
@@ -100,7 +99,6 @@ public:
     static void SetOutOfMemoryCallback(OutOfMemoryCallbackFunc cb) { OutOfMemoryCallback = cb; }
     static bool WouldShowErrorMessage() { return ShowErrorMessage; }
     static pcstr ErrorToString(long code);
-    static void SetBugReportFile(const char* fileName);
     static void GatherInfo(char* assertionInfo, size_t bufferSize, const ErrorLocation& loc, const char* expr,
                            const char* desc, const char* arg1 = nullptr, const char* arg2 = nullptr);
     static void Fatal(const ErrorLocation& loc, const char* format, ...);
@@ -123,7 +121,6 @@ private:
     static void FormatLastError(char* buffer, const size_t& bufferSize);
     static void SetupExceptionHandler();
     static LONG WINAPI UnhandledFilter(EXCEPTION_POINTERS* exPtrs);
-    static void WINAPI PreErrorHandler(INT_PTR);
 };
 
 // forward declaration

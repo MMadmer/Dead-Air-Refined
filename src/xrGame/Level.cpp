@@ -50,6 +50,7 @@
 #include "xrPhysics/console_vars.h"
 #include "xrNetServer/NET_Messages.h"
 #include "xrEngine/GameFont.h"
+#include "xrCore/Debug/CrashReport.h"
 
 #ifdef DEBUG
 #include "level_debug.h"
@@ -77,7 +78,7 @@ CLevel::CLevel()
 {
     ZoneScoped;
 
-    g_bDebugEvents = strstr(Core.Params, "-debug_ge") != nullptr;
+    g_bDebugEvents = !!strstr(Core.Params, "-debug_ge");
     game_events = xr_new<NET_Queue_Event>();
     eChangeRP = Engine.Event.Handler_Attach("LEVEL:ChangeRP", this);
     eDemoPlay = Engine.Event.Handler_Attach("LEVEL:PlayDEMO", this);
@@ -591,6 +592,8 @@ void CLevel::OnFrame()
         log_stability_memory_stats(false);
         nextMemoryTelemetry = telemetryTime + 60000;
     }
+    CrashReporter::SamplePerformance(Device.GetStats().fFPS,
+        Device.fTimeDeltaReal * 1000.f, Device.GetStats().RenderTotal.result);
 }
 
 int psLUA_GCSTEP = 100; // 10

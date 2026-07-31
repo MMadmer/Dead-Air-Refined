@@ -95,6 +95,7 @@ struct StackTraceBuilder
     StackTraceBuilder();
     ~StackTraceBuilder();
 
+    bool GetNextStackFrameAddress(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, DWORD64& address);
     bool GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, xr_string& frameStr);
 
     bool IsInitialized{};
@@ -134,13 +135,9 @@ StackTraceBuilder::~StackTraceBuilder()
 
 bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, xr_string& frameStr)
 {
-    BOOL result = stackWalk(MACHINE_TYPE, GetCurrentProcess(), GetCurrentThread(), stackFrame, threadCtx, nullptr,
-        symFunctionTableAccess, symGetModuleBase, nullptr);
-
-    if (result == FALSE || stackFrame->AddrPC.Offset == 0)
-    {
+    DWORD64 address = 0;
+    if (!GetNextStackFrameAddress(stackFrame, threadCtx, address))
         return false;
-    }
 
     frameStr.clear();
     string512 formatBuff;
@@ -148,7 +145,7 @@ bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEX
     ///
     /// Module name
     ///
-    HINSTANCE hModule = (HINSTANCE)symGetModuleBase(GetCurrentProcess(), stackFrame->AddrPC.Offset);
+    HINSTANCE hModule = (HINSTANCE)symGetModuleBase(GetCurrentProcess(), address);
     if (hModule && GetModuleFileName(hModule, formatBuff, _countof(formatBuff)))
     {
         frameStr.append(formatBuff);
@@ -157,7 +154,7 @@ bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEX
     ///
     /// Address
     ///
-    xr_sprintf(formatBuff, _countof(formatBuff), " at %p", stackFrame->AddrPC.Offset);
+    xr_sprintf(formatBuff, _countof(formatBuff), " at %p", address);
     frameStr.append(formatBuff);
 
     ///
@@ -169,7 +166,7 @@ bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEX
     functionInfo->MaxNameLength = sizeof(arrSymBuffer) - sizeof(*functionInfo) + 1;
     DWORD_PTR dwFunctionOffset;
 
-    result = symGetSymFromAddr(GetCurrentProcess(), stackFrame->AddrPC.Offset, &dwFunctionOffset, functionInfo);
+    BOOL result = symGetSymFromAddr(GetCurrentProcess(), address, &dwFunctionOffset, functionInfo);
 
     if (result)
     {
@@ -191,7 +188,7 @@ bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEX
     IMAGEHLP_LINE sourceInfo = {};
     sourceInfo.SizeOfStruct = sizeof(sourceInfo);
 
-    result = symGetLineFromAddr(GetCurrentProcess(), stackFrame->AddrPC.Offset, &dwLineOffset, &sourceInfo);
+    result = symGetLineFromAddr(GetCurrentProcess(), address, &dwLineOffset, &sourceInfo);
 
     if (result)
     {
@@ -210,27 +207,25 @@ bool StackTraceBuilder::GetNextStackFrameString(LPSTACKFRAME stackFrame, PCONTEX
     return true;
 }
 
-xr_vector<xr_string> BuildStackTrace(PCONTEXT threadCtx, u16 maxFramesCount)
+bool StackTraceBuilder::GetNextStackFrameAddress(LPSTACKFRAME stackFrame, PCONTEXT threadCtx, DWORD64& address)
 {
-    ScopeLock Lock(&s_dbghelp_lock);
+    const BOOL result = stackWalk(MACHINE_TYPE, GetCurrentProcess(), GetCurrentThread(), stackFrame, threadCtx, nullptr,
+        symFunctionTableAccess, symGetModuleBase, nullptr);
+    if (result == FALSE || stackFrame->AddrPC.Offset == 0)
+        return false;
 
-    StackTraceBuilder builder;
-    if (!builder.IsInitialized)
-        return {};
+    address = stackFrame->AddrPC.Offset;
+    return true;
+}
 
-    xr_vector<xr_string> traceResult;
-    xr_string frameStr;
-
-    traceResult.reserve(maxFramesCount);
-
+STACKFRAME MakeInitialStackFrame(PCONTEXT threadCtx)
+{
     STACKFRAME stackFrame{};
     stackFrame.AddrPC.Mode = AddrModeFlat;
     stackFrame.AddrStack.Mode = AddrModeFlat;
     stackFrame.AddrFrame.Mode = AddrModeFlat;
     stackFrame.AddrBStore.Mode = AddrModeFlat;
 
-    // https://learn.microsoft.com/en-us/windows/win32/api/dbghelp/ns-dbghelp-stackframe
-    // https://github.com/reactos/reactos/blob/master/base/applications/drwtsn32/stacktrace.cpp
 #if defined XR_ARCHITECTURE_X86
     stackFrame.AddrPC.Offset = threadCtx->Eip;
     stackFrame.AddrStack.Offset = threadCtx->Esp;
@@ -255,12 +250,65 @@ xr_vector<xr_string> BuildStackTrace(PCONTEXT threadCtx, u16 maxFramesCount)
 #   error CPU architecture is not supported.
 #endif
 
-    while (builder.GetNextStackFrameString(&stackFrame, threadCtx, frameStr) && traceResult.size() <= maxFramesCount)
+    return stackFrame;
+}
+
+xr_vector<xr_string> BuildStackTrace(PCONTEXT threadCtx, u16 maxFramesCount)
+{
+    ScopeLock Lock(&s_dbghelp_lock);
+
+    StackTraceBuilder builder;
+    if (!builder.IsInitialized)
+        return {};
+
+    xr_vector<xr_string> traceResult;
+    xr_string frameStr;
+
+    traceResult.reserve(maxFramesCount);
+
+    STACKFRAME stackFrame = MakeInitialStackFrame(threadCtx);
+
+    while (builder.GetNextStackFrameString(&stackFrame, threadCtx, frameStr) && traceResult.size() < maxFramesCount)
     {
         traceResult.emplace_back(std::move(frameStr));
     }
 
     return traceResult;
+}
+
+xr_vector<AnonymousStackFrame> BuildAnonymousStackTrace(PCONTEXT threadCtx, u16 maxFramesCount)
+{
+    ScopeLock lock(&s_dbghelp_lock);
+
+    StackTraceBuilder builder;
+    if (!builder.IsInitialized)
+        return {};
+
+    xr_vector<AnonymousStackFrame> result;
+    result.reserve(maxFramesCount);
+
+    STACKFRAME stackFrame = MakeInitialStackFrame(threadCtx);
+    DWORD64 address = 0;
+    while (builder.GetNextStackFrameAddress(&stackFrame, threadCtx, address) && result.size() < maxFramesCount)
+    {
+        const DWORD64 moduleBase = symGetModuleBase(GetCurrentProcess(), address);
+        if (!moduleBase)
+            continue;
+
+        string_path modulePath{};
+        if (!GetModuleFileNameA(reinterpret_cast<HMODULE>(moduleBase), modulePath, std::size(modulePath)))
+            continue;
+
+        pcstr moduleName = modulePath;
+        if (pcstr slash = strrchr(modulePath, '\\'))
+            moduleName = slash + 1;
+        if (pcstr slash = strrchr(moduleName, '/'))
+            moduleName = slash + 1;
+
+        result.push_back({moduleName, static_cast<uintptr_t>(address - moduleBase)});
+    }
+
+    return result;
 }
 
 xr_vector<xr_string> BuildStackTrace(u16 maxFramesCount)

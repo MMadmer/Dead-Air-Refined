@@ -58,7 +58,7 @@ These components cannot be replaced with an unrelated modern library without cha
 | OPCODE | X-Ray compatibility fork | Coupled to the ODE and game collision ABI. It is compiled as part of the warning-clean solution. |
 | NVIDIA Ansel | 1.6.490 | NVIDIA discontinued the standalone Ansel SDK. The last compatible SDK remains delay-loaded. |
 | Discord Game SDK | packaged SDK snapshot | Discord discontinued public Game SDK distribution. The integration remains optional at runtime. |
-| BugTrap | X-Ray x64 build | The engine ABI and crash-handler integration are custom. Replacing it requires a separate crash-reporting migration. |
+| Diagnostic reports | Engine-native implementation | BugTrap was removed from the runtime. Dead Air: Refined now creates compact anonymous session and crash reports without an external crash-handler DLL. |
 | DirectPlay and EAX headers | Windows legacy SDK interfaces | Compatibility declarations, not independently versioned runtime libraries. |
 
 ## Build policy

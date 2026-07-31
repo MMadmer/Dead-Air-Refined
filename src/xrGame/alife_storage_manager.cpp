@@ -20,6 +20,7 @@
 #include "saved_game_wrapper.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCore/Threading/ThreadUtil.h"
+#include "xrCore/Debug/CrashReport.h"
 #include "autosave_manager.h"
 #include "UIGameCustom.h"
 #include "xrUICore/Static/UIStatic.h"
@@ -37,6 +38,13 @@ extern string_path g_last_saved_game;
 
 namespace
 {
+class DiagnosticOperation
+{
+public:
+    explicit DiagnosticOperation(pcstr name) { CrashReporter::BeginOperation(name); }
+    ~DiagnosticOperation() { CrashReporter::EndOperation(); }
+};
+
 constexpr u32 saveSidecarMagic = 0x31564F53;
 constexpr u32 saveSidecarVersion = 1;
 
@@ -818,6 +826,7 @@ void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
 
 void CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
 {
+    const DiagnosticOperation operation("save_game");
     pcstr gameSaveExtension = SAVE_EXTENSION;
     if (ShadowOfChernobylMode || ClearSkyMode)
         gameSaveExtension = SAVE_EXTENSION_LEGACY;
@@ -1039,6 +1048,7 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
 
 bool CALifeStorageManager::load(LPCSTR save_name_no_check)
 {
+    const DiagnosticOperation operation("load_game");
     wait_for_pending_saves();
 
     pcstr gameSaveExtension = SAVE_EXTENSION;
@@ -1072,7 +1082,6 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     FS.update_path(file_name, "$game_saves$", m_save_name);
 
     xr_strcpy(g_last_saved_game, save_name);
-    xrDebug::SetBugReportFile(file_name);
 
     IReader* stream = FS.r_open(file_name);
     if (!stream)

@@ -64,7 +64,7 @@ int StackoverflowFilter(const int exceptionCode)
 int APIENTRY WinMain(HINSTANCE inst, HINSTANCE prevInst, char* commandLine, int cmdShow)
 {
     int result = 0;
-    // BugTrap can't handle stack overflow exception, so handle it here
+    // Recover enough stack space before entering the regular fatal-error path.
     __try
     {
         result = entry_point(commandLine);

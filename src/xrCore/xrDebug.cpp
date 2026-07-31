@@ -2,6 +2,7 @@
 #pragma hdrstop
 
 #include "xrDebug.h"
+#include "Debug/CrashReport.h"
 #include "Debug/StackTrace.h"
 #include "os_clipboard.h"
 #include "log.h"
@@ -15,12 +16,6 @@
 #   include <dbghelp.h>
 #   include <direct.h>
 #   include <new.h> // for _set_new_mode
-#   include <errorrep.h> // ReportFault
-
-#   define USE_BUG_TRAP
-#   ifdef USE_BUG_TRAP
-#       include "BugTrap.h"
-#   endif
 
 #   include "Debug/dxerr.h"
 #endif
@@ -127,7 +122,6 @@ IWindowHandler* xrDebug::windowHandler = nullptr;
 IUserConfigHandler* xrDebug::userConfigHandler = nullptr;
 xrDebug::UnhandledExceptionFilter xrDebug::PrevFilter = nullptr;
 xrDebug::OutOfMemoryCallbackFunc xrDebug::OutOfMemoryCallback = nullptr;
-string_path xrDebug::BugReportFile;
 bool xrDebug::ErrorAfterDialog = false;
 bool xrDebug::ShowErrorMessage = true;
 
@@ -136,8 +130,6 @@ Lock xrDebug::failLock(MUTEX_PROFILE_ID(xrDebug::Backend));
 #else
 Lock xrDebug::failLock;
 #endif
-
-void xrDebug::SetBugReportFile(const char* fileName) { xr_strcpy(BugReportFile, fileName); }
 
 void xrDebug::LogStackTrace(const char* header)
 {
@@ -264,13 +256,13 @@ AssertionResult xrDebug::Fail(bool& ignoreAlways, const ErrorLocation& loc, cons
         {
         case AssertionResult::tryAgain:
             ErrorAfterDialog = false;
-            resetFullscreen = windowHandler != nullptr;
+            resetFullscreen = !!windowHandler;
             break;
 
         case AssertionResult::ignore:
             ErrorAfterDialog = false;
             ignoreAlways = true;
-            resetFullscreen = windowHandler != nullptr;
+            resetFullscreen = !!windowHandler;
             break;
 
         case AssertionResult::undefined:
@@ -279,11 +271,6 @@ AssertionResult xrDebug::Fail(bool& ignoreAlways, const ErrorLocation& loc, cons
         case AssertionResult::abort:
             [[fallthrough]];
         default:
-#ifdef USE_BUG_TRAP
-            BT_SetUserMessage(assertionInfo);
-#endif
-            // calling DEBUG_BREAK with no debugger will trigger BugTrap
-            // we must hide the window
             if (windowHandler && !DebuggerIsPresent())
                 windowHandler->OnFatalError();
             DEBUG_BREAK;
@@ -374,106 +361,18 @@ int out_of_memory_handler(size_t size)
     return 1;
 }
 
-extern pcstr log_name();
-
-void WINAPI xrDebug::PreErrorHandler(INT_PTR)
-{
-#if defined(USE_BUG_TRAP) && defined(XR_PLATFORM_WINDOWS)
-    if (xr_FS && FS.m_Flags.test(CLocatorAPI::flReady))
-    {
-        string_path cfg_full_name;
-        __try
-        {
-            // Code below copied from CCC_LoadCFG::Execute (xr_ioc_cmd.cpp)
-            // XXX: Refactor Console to accept user config filename on initialization or even construction!
-            // XXX: Maybe refactor CCC_LoadCFG, move code for loading user.ltx into a generic function
-            const auto cfg_name = userConfigHandler ? userConfigHandler->GetUserConfigFileName() : "user.ltx";
-            FS.update_path(cfg_full_name, "$app_data_root$", cfg_name);
-
-            if (!FS.exist(cfg_full_name))
-                FS.update_path(cfg_full_name, "$fs_root$", cfg_name);
-
-            if (!FS.exist(cfg_full_name))
-                xr_strcpy(cfg_full_name, cfg_name);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-            xr_strcpy(cfg_full_name, "user.ltx");
-        }
-        BT_AddLogFile(cfg_full_name);
-    }
-
-    if (*BugReportFile)
-        BT_AddLogFile(BugReportFile);
-
-    BT_SaveSnapshot(nullptr);
-#endif
-}
-
 void xrDebug::SetupExceptionHandler()
 {
-#if defined(USE_BUG_TRAP) && defined(XR_PLATFORM_WINDOWS)
-    const auto commandLine = GetCommandLine();
-
-    // disable 'appname has stopped working' popup dialog
+#if defined(XR_PLATFORM_WINDOWS)
     const auto prevMode = SetErrorMode(SEM_NOGPFAULTERRORBOX);
     SetErrorMode(prevMode | SEM_NOGPFAULTERRORBOX);
-    BT_InstallSehFilter();
-
-    if (!GEnv.isDedicatedServer && !strstr(commandLine, "-silent_error_mode"))
-        BT_SetActivityType(BTA_SHOWUI);
-    else
-        BT_SetActivityType(BTA_SAVEREPORT);
-    BT_SetDialogMessage(BTDM_INTRO2,
-                        "This is OpenXRay crash reporting client. "
-                        "To help the development process, "
-                        "please Submit Bug or save report and email it manually (button More...)."
-                        "\r\n"
-                        "Many thanks in advance and sorry for the inconvenience.");
-    BT_SetPreErrHandler(PreErrorHandler, 0);
-    BT_SetAppName("OpenXRay");
-    BT_SetReportFormat(BTRF_TEXT);
-    BT_SetFlags(BTF_DETAILEDMODE | BTF_ATTACHREPORT);
-
-    auto minidumpFlags = MiniDumpWithDataSegs|
-        MiniDumpWithIndirectlyReferencedMemory |
-        MiniDumpScanMemory |
-        MiniDumpWithProcessThreadData |
-        MiniDumpWithThreadInfo;
-
-    if (strstr(commandLine, "-full_memory_dump"))
-        minidumpFlags |= MiniDumpWithFullMemory | MiniDumpIgnoreInaccessibleMemory;
-    else if (strstr(commandLine, "-detailed_minidump"))
-        minidumpFlags |= MiniDumpWithIndirectlyReferencedMemory;
-
-    BT_SetDumpType(minidumpFlags);
-    //BT_SetSupportEMail("cop-crash-report@stalker-game.com");
-    BT_SetSupportEMail("openxray@yahoo.com");
-    BT_SetSupportURL("https://github.com/OpenXRay/xray-16/issues");
 #endif
+    CrashReporter::Initialize();
 }
 
 void xrDebug::OnFilesystemInitialized()
 {
-#ifdef USE_BUG_TRAP
-    string_path path{};
-    FS.update_path(path, "$logs$", "", false);
-    if (!path[0] || path[0] != _DELIMITER && path[1] != ':') // relative path
-    {
-        string_path currentDir;
-        _getcwd(currentDir, sizeof(currentDir));
-        string_path relDir;
-        xr_strcpy(relDir, path);
-        strconcat(path, currentDir, DELIMITER, relDir);
-    }
-    xr_strcat(path, log_name());
-    BT_AddLogFile(path);
-
-    if (FS.update_path(path, "$app_data_root$", "reports", false))
-    {
-        BT_SetReportFilePath(path);
-    }
-#endif
+    CrashReporter::OnFilesystemInitialized();
 }
 
 bool xrDebug::DebuggerIsPresent()
@@ -546,6 +445,13 @@ LONG WINAPI xrDebug::UnhandledFilter(EXCEPTION_POINTERS* exPtrs)
         }
     }
     FlushLog();
+    const bool reportWritten = CrashReporter::WriteCrash(exPtrs);
+
+    if (reportWritten)
+        Msg("* Anonymous diagnostic report saved to %s", CrashReporter::LatestReportPath());
+    else
+        Msg("! Failed to save anonymous diagnostic report");
+    FlushLog();
 
     if (windowHandler)
         windowHandler->OnErrorDialog(true);
@@ -561,12 +467,7 @@ LONG WINAPI xrDebug::UnhandledFilter(EXCEPTION_POINTERS* exPtrs)
         msgRes = ShowMessage(fatalError, msg);
     }
 
-    BT_SetUserMessage(fatalError);
-    BT_SaveSnapshotEx(exPtrs, nullptr);
-
-    const auto reportRes = ReportFault(exPtrs, 0);
-    if (msgRes != AssertionResult::abort ||
-        reportRes == frrvLaunchDebugger)
+    if (msgRes != AssertionResult::abort)
     {
         constexpr cpcstr debugger = "Please, attach the debugger to the process"
             " if you want to debug this fatal error.";
@@ -575,40 +476,28 @@ LONG WINAPI xrDebug::UnhandledFilter(EXCEPTION_POINTERS* exPtrs)
             DEBUG_BREAK;
     }
 
-    // Typically, PrevFilter is BugTrap filter
-    if (PrevFilter)
-    {
-        if (windowHandler)
-            windowHandler->OnFatalError();
-        PrevFilter(exPtrs);
-    }
+    if (windowHandler)
+        windowHandler->OnFatalError();
 
     if (windowHandler)
         windowHandler->OnErrorDialog(false);
 
-    return EXCEPTION_CONTINUE_SEARCH;
+    return EXCEPTION_EXECUTE_HANDLER;
 #else
     return 0;
 #endif
 }
 
-#ifndef USE_BUG_TRAP
 [[noreturn]]
 void xr_terminate()
 {
 #if defined(XR_PLATFORM_WINDOWS)
-    if (strstr(GetCommandLine(), "-silent_error_mode"))
-        exit(-1);
+    RaiseException(EXCEPTION_NONCONTINUABLE_EXCEPTION, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+    TerminateProcess(GetCurrentProcess(), EXCEPTION_NONCONTINUABLE_EXCEPTION);
+#else
+    abort();
 #endif
-    //ScopeLock lock(&failLock);
-
-    string4096 assertionInfo;
-    xrDebug::GatherInfo(assertionInfo,sizeof(assertionInfo), DEBUG_INFO, nullptr, "Unexpected application termination");
-    xr_strcat(assertionInfo, "Press OK to abort execution\r\n");
-    xrDebug::ShowMessage("Fatal Error", assertionInfo);
-    exit(-1);
 }
-#endif // USE_BUG_TRAP
 
 static void handler_base(const char* reason)
 {
@@ -666,11 +555,7 @@ void xrDebug::OnThreadSpawn()
     _set_purecall_handler(+[] { handler_base("pure virtual function call"); });
 #   endif
 
-#   ifdef USE_BUG_TRAP
-    BT_SetTerminate();
-#   else
     std::set_terminate(xr_terminate);
-#   endif
 #endif
 }
 
@@ -699,7 +584,6 @@ void xrDebug::OnThreadExit()
 void xrDebug::Initialize(pcstr commandLine)
 {
     ZoneScoped;
-    *BugReportFile = 0;
     OnThreadSpawn();
     SetupExceptionHandler();
     SDL_SetAssertionHandler(SDLAssertionHandler, nullptr);
@@ -708,7 +592,10 @@ void xrDebug::Initialize(pcstr commandLine)
     PrevFilter = SetUnhandledExceptionFilter(UnhandledFilter);
 #endif
 #ifdef MASTER_GOLD
-    ShowErrorMessage = commandLine ? !!strstr(commandLine, "-show_error_window") : false;
+    ShowErrorMessage = commandLine && strstr(commandLine, "-show_error_window") &&
+        !strstr(commandLine, "-silent_error_mode");
+#else
+    ShowErrorMessage = !commandLine || !strstr(commandLine, "-silent_error_mode");
 #endif
 }
 
@@ -717,9 +604,8 @@ void xrDebug::Finalize()
     OnThreadExit();
     SDL_SetAssertionHandler(nullptr, nullptr);
 #if defined(XR_PLATFORM_WINDOWS)
-    SetUnhandledExceptionFilter(nullptr);
+    SetUnhandledExceptionFilter(PrevFilter);
+    PrevFilter = nullptr;
 #endif
-#ifdef MASTER_GOLD
-    ShowErrorMessage = false;
-#endif
+    ShowErrorMessage = true;
 }

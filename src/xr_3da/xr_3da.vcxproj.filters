@@ -41,9 +41,6 @@
     <Natvis Include="..\OpenXRay.natvis" />
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="..\..\sdk\binaries\$(PlatformShortName)\BugTrap.dll">
-      <Filter>dependencies</Filter>
-    </CopyFileToFolders>
     <CopyFileToFolders Condition="'$(Platform)'=='Win32'" Include="..\..\sdk\binaries\$(PlatformShortName)\libcrypto-3.dll">
       <Filter>dependencies</Filter>
     </CopyFileToFolders>

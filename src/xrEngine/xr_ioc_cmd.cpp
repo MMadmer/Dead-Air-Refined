@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "xrCore/Debug/CrashReport.h"
 #include "IGame_Level.h"
 
 #include "XR_IOConsole.h"
@@ -219,7 +220,7 @@ void CCC_LoadCFG::Execute(pcstr args)
     IReader* F = FS.r_open(cfg_full_name);
 
     string1024 str;
-    if (F != nullptr)
+    if (F)
     {
         while (!F->eof())
         {
@@ -582,6 +583,7 @@ public:
         }
 
         inherited::Execute(args);
+        CrashReporter::SetRenderer(args);
 
         cmd_lock = true;
     }
