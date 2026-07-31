@@ -1,14 +1,12 @@
 [submodule "Externals/LuaJIT"]
 	path = Externals/LuaJIT
-	url = https://github.com/OpenXRay/LuaJIT.git
-	branch = v2.1
+	url = https://github.com/MMadmer/Dead-Air-Refined.git
 [submodule "Externals/luabind"]
 	path = Externals/luabind
-	url = https://github.com/OpenXRay/luabind-deboostified.git
-	branch = xray
+	url = https://github.com/MMadmer/Dead-Air-Refined.git
 [submodule "Externals/GameSpy"]
 	path = Externals/GameSpy
-	url = https://github.com/OpenXRay/GameSpy.git
+	url = https://github.com/MMadmer/Dead-Air-Refined.git
 [submodule "Externals/AGS_SDK"]
 	path = Externals/AGS_SDK
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/AGS_SDK.git
@@ -24,7 +22,7 @@
 	branch = docking
 [submodule "Externals/xrLuaFix"]
 	path = Externals/xrLuaFix
-	url = https://github.com/OpenXRay/xrLuaFix.git
+	url = https://github.com/MMadmer/Dead-Air-Refined.git
 [submodule "Externals/sse2rvv"]
 	path = Externals/sse2rvv
 	url = https://github.com/pattonkan/sse2rvv.git
