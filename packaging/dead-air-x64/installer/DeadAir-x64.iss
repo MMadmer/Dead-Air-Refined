@@ -282,7 +282,7 @@ begin
     ValidationError := ValidateSelectedDirectory;
     if ValidationError <> '' then
     begin
-      MsgBox(ValidationError, mbError, MB_OK);
+      SuppressibleMsgBox(ValidationError, mbError, MB_OK, IDOK);
       Result := False;
     end;
   end;
