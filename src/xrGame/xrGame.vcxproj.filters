@@ -5829,6 +5829,15 @@
     <ClInclude Include="ui\UIMessageBoxEx.h">
       <Filter>UI\UIWindows\MessageBox</Filter>
     </ClInclude>
+    <ClInclude Include="ui\BugReportConfig.h">
+      <Filter>UI\UIWindows\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\BugReportService.h">
+      <Filter>UI\UIWindows\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\UIBugReportWnd.h">
+      <Filter>UI\UIWindows\Windows</Filter>
+    </ClInclude>
     <ClInclude Include="ui\UIDialogWnd.h">
       <Filter>UI\UIWindows\Windows</Filter>
     </ClInclude>
@@ -9015,6 +9024,12 @@
     </ClCompile>
     <ClCompile Include="ui\UIMessageBoxEx.cpp">
       <Filter>UI\UIWindows\MessageBox</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\BugReportService.cpp">
+      <Filter>UI\UIWindows\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\UIBugReportWnd.cpp">
+      <Filter>UI\UIWindows\Windows</Filter>
     </ClCompile>
     <ClCompile Include="ui\UIDialogWnd.cpp">
       <Filter>UI\UIWindows\Windows</Filter>

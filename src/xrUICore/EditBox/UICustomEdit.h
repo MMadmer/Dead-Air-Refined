@@ -39,6 +39,7 @@ public:
     virtual void Enable(bool status);
 
     void SetPasswordMode(bool mode = true);
+    void SetMultilineMode(bool mode = true);
 
     pcstr GetDebugType() override { return "CUICustomEdit"; }
 
@@ -49,6 +50,7 @@ protected:
     void press_escape();
     void press_commit();
     void press_tab();
+    void insert_newline();
 
 protected:
     typedef fastdelegate::FastDelegate0<void> Callback;
@@ -66,6 +68,7 @@ protected:
     bool m_bInputFocus;
     bool m_force_update;
     bool m_read_mode;
+    bool m_multiline{};
 
     CUICustomEdit* m_next_focus_capturer;
 };

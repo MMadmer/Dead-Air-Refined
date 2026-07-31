@@ -51,6 +51,7 @@ __pycache__/
 *.user.props
 *.nvuser
 *.PVS-Studio.*
+src/xrGame/ui/BugReportSecrets.local.h
 
 # Visual Studio profiler
 *.psess

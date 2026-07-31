@@ -2,6 +2,7 @@
 #include "MainMenu.h"
 #include "ui/UIDialogWnd.h"
 #include "ui/UIMessageBoxEx.h"
+#include "ui/UIBugReportWnd.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/CameraManager.h"
@@ -157,6 +158,7 @@ CMainMenu::~CMainMenu()
     xr_delete(g_statHint);
 
     xr_delete(m_startDialog);
+    xr_delete(m_bugReportDialog);
 
     xr_delete(m_account_mngr);
     xr_delete(m_login_mngr);
@@ -660,6 +662,21 @@ bool CMainMenu::FillDebugTree(const CUIDebugState& debugState)
 }
 
 void CMainMenu::SwitchToMultiplayerMenu() { m_startDialog->Dispatch(2, 1); };
+void CMainMenu::ShowBugReportDialog()
+{
+    if (!m_bugReportDialog)
+    {
+        m_bugReportDialog = xr_new<CUIBugReportWnd>();
+        if (!m_bugReportDialog->Init())
+        {
+            xr_delete(m_bugReportDialog);
+            Msg("! Failed to initialize the bug report window");
+            return;
+        }
+    }
+    m_bugReportDialog->ShowDialog(true);
+}
+
 void CMainMenu::DestroyInternal(bool bForce)
 {
     if (m_startDialog && ((m_deactivated_frame < Device.dwFrame + 4) || bForce))

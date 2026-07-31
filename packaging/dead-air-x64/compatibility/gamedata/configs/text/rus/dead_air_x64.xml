@@ -39,4 +39,34 @@
     <string id="ui_mm_auto_continue_on_load_hint">
         <text>Автоматически продолжает игру после завершения загрузки без ожидания нажатия клавиши.</text>
     </string>
+    <string id="ui_mm_bug_report">
+        <text>Отправить bug report</text>
+    </string>
+    <string id="st_bug_report_caption">
+        <text>Отправка bug report</text>
+    </string>
+    <string id="st_bug_report_title">
+        <text>Заголовок (минимум 5 символов)</text>
+    </string>
+    <string id="st_bug_report_description">
+        <text>Описание (минимум 20 символов)</text>
+    </string>
+    <string id="st_bug_report_attach_dump">
+        <text>Прикрепить анонимный дамп</text>
+    </string>
+    <string id="st_bug_report_submit">
+        <text>Отправить bug report</text>
+    </string>
+    <string id="st_bug_report_collecting">
+        <text>Сбор анонимного дампа...</text>
+    </string>
+    <string id="st_bug_report_sending">
+        <text>Отправка отчёта...</text>
+    </string>
+    <string id="st_bug_report_success">
+        <text>Bug report успешно отправлен.</text>
+    </string>
+    <string id="st_bug_report_failed">
+        <text>Не удалось отправить bug report.</text>
+    </string>
 </string_table>

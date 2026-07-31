@@ -167,21 +167,34 @@ void CUIMMShniaga::CreateList(xr_vector<CUIStatic*>& lst, CUIXml& xml_doc, LPCST
     XML_NODE tab_node = xml_doc.NavigateToNode(path, 0);
     xml_doc.SetLocalRoot(tab_node);
 
+    const auto createButton = [&](pcstr name, pcstr caption)
+    {
+        auto* button = xr_new<CUIStatic>("Button");
+        button->SetWndPos(Fvector2().set(0, 0));
+        button->SetWndSize(Fvector2().set(m_view->GetDesiredChildWidth(), button_height));
+        button->SetFont(pF);
+        button->SetTextComplexMode(false);
+        button->SetTextST(caption);
+        button->SetTextColor(color);
+        button->SetTextAlignment(CGameFont::alCenter);
+        button->SetVTextAlignment(valCenter);
+        button->SetWindowName(name);
+        button->SetMessageTarget(this);
+        lst.push_back(button);
+    };
+
+    const bool mainPage = std::string_view(path).starts_with("menu_main");
+    bool bugButtonAdded = false;
     for (int i = 0; i < nodes_num; ++i)
     {
-        auto* st = xr_new<CUIStatic>("Button");
-        st->SetWndPos(Fvector2().set(0, 0));
-        st->SetWndSize(Fvector2().set(m_view->GetDesiredChildWidth(), button_height));
-        st->SetFont(pF);
-        st->SetTextComplexMode(false);
-        st->SetTextST(xml_doc.ReadAttrib("btn", i, "caption"));
-        st->SetTextColor(color);
-        st->SetTextAlignment(CGameFont::alCenter);
-        st->SetVTextAlignment(valCenter);
-        st->SetWindowName(xml_doc.ReadAttrib("btn", i, "name"));
-        st->SetMessageTarget(this);
-
-        lst.push_back(st);
+        const pcstr name = xml_doc.ReadAttrib("btn", i, "name");
+        if (mainPage && !bugButtonAdded &&
+            (xr_strcmp(name, "btn_quit_to_mm") == 0 || xr_strcmp(name, "btn_quit") == 0))
+        {
+            createButton("btn_bug_report", "ui_mm_bug_report");
+            bugButtonAdded = true;
+        }
+        createButton(name, xml_doc.ReadAttrib("btn", i, "caption"));
     }
     xml_doc.SetLocalRoot(xml_doc.GetRoot());
 }
@@ -384,6 +397,8 @@ void CUIMMShniaga::OnBtnClick()
         ShowNewGame();
     else if (0 == xr_strcmp("btn_new_back", m_selected->WindowName()))
         ShowMain();
+    else if (0 == xr_strcmp("btn_bug_report", m_selected->WindowName()))
+        MainMenu()->ShowBugReportDialog();
     else
         GetMessageTarget()->SendMessage(m_selected, BUTTON_CLICKED);
 }

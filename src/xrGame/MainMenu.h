@@ -4,6 +4,7 @@ class CUIWindow;
 class CUIDialogWnd;
 class CUICursor;
 class CUIMessageBoxEx;
+class CUIBugReportWnd;
 class CGameSpy_HTTP;
 class CGameSpy_Full;
 
@@ -116,6 +117,7 @@ protected:
     shared_str m_cdkey;
 
     xr_vector<CUIMessageBoxEx*> m_pMB_ErrDlgs;
+    CUIBugReportWnd* m_bugReportDialog{};
     bool ReloadUI();
 
 public:
@@ -172,6 +174,7 @@ public:
     bool FillDebugTree(const CUIDebugState& debugState) override;
 
     void SwitchToMultiplayerMenu();
+    void ShowBugReportDialog();
 
     void OnPatchCheck(bool success);
 

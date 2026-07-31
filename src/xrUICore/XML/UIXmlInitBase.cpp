@@ -890,6 +890,10 @@ bool CUIXmlInitBase::InitCustomEdit(CUIXml& xml_doc, pcstr path, int index, CUIC
     {
         pWnd->SetPasswordMode();
     }
+    if (xml_doc.ReadAttribInt(path, index, "multiline", 0))
+    {
+        pWnd->SetMultilineMode();
+    }
     return true;
 }
 

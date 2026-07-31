@@ -28,6 +28,8 @@
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |
 | Diagnostic privacy scan | All ZIP entries, ASCII and UTF-16 | Pass, no user name, computer name, profile path, game path, e-mail address, or IP address |
 | Diagnostic rotation | 13 pre-existing reports plus one new report | Pass, newest report retained and total reduced to 10 |
+| Native bug-report layouts | 4:3 and widescreen XML, all child bounds checked against the panel | Pass, zero out-of-panel controls |
+| Bug-report upload contract | Live Report Hub, multipart title/description plus valid anonymous diagnostic ZIP | Pass, HTTP 201, attachment accepted, QA reports deleted |
 | Rollback | Restore the selected version-independent snapshot by SHA-256 and remove added files | Pass, zero mismatches or leftovers |
 
 ## Runtime acceptance rules

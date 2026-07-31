@@ -82,6 +82,7 @@ public:
     pcstr str_before_mark() const { return m_buf1; }
     pcstr str_mark() const { return m_buf2; }
     pcstr str_after_mark() const { return m_buf3; }
+    size_t cursor_position() const { return m_cur_pos; }
     void set_edit(pcstr str);
     void set_selected_mode(bool status) { m_unselected_mode = !status; }
     bool get_selected_mode() const { return !m_unselected_mode; }
@@ -141,7 +142,7 @@ private:
     enum
     {
         MIN_BUF_SIZE = 8,
-        MAX_BUF_SIZE = 4096
+        MAX_BUF_SIZE = 16384
     };
     size_t m_buffer_size;
 

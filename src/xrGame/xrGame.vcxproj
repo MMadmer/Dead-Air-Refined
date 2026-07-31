@@ -1253,6 +1253,8 @@
     <ClInclude Include="ui\UIAchievements.h" />
     <ClInclude Include="ui\UIActorInfo.h" />
     <ClInclude Include="ui\UIActorMenu.h" />
+    <ClInclude Include="ui\BugReportConfig.h" />
+    <ClInclude Include="ui\BugReportService.h" />
     <ClInclude Include="ui\UIActorStateInfo.h" />
     <ClInclude Include="ui\UIArtefactPanel.h" />
     <ClInclude Include="ui\UIBoosterInfo.h" />
@@ -1300,6 +1302,7 @@
     <ClInclude Include="ui\UIMapWndActions.h" />
     <ClInclude Include="ui\UIMapWndActionsSpace.h" />
     <ClInclude Include="ui\UIMessageBoxEx.h" />
+    <ClInclude Include="ui\UIBugReportWnd.h" />
     <ClInclude Include="ui\UIMessagesWindow.h" />
     <ClInclude Include="ui\UIMMShniaga.h" />
     <ClInclude Include="ui\UIMoneyIndicator.h" />
@@ -3066,6 +3069,7 @@
     </ClCompile>
     <ClCompile Include="ui\UIActorInfo.cpp" />
     <ClCompile Include="ui\UIActorMenu.cpp" />
+    <ClCompile Include="ui\BugReportService.cpp" />
     <ClCompile Include="ui\UIActorMenuDeadBodySearch.cpp" />
     <ClCompile Include="ui\UIActorMenuInitialize.cpp" />
     <ClCompile Include="ui\UIActorMenuInventory.cpp" />
@@ -3169,6 +3173,7 @@
     <ClCompile Include="ui\UIMapWnd2.cpp" />
     <ClCompile Include="ui\UIMapWndActions.cpp" />
     <ClCompile Include="ui\UIMessageBoxEx.cpp" />
+    <ClCompile Include="ui\UIBugReportWnd.cpp" />
     <ClCompile Include="ui\UIMessagesWindow.cpp" />
     <ClCompile Include="ui\UIMMShniaga.cpp" />
     <ClCompile Include="ui\UIMoneyIndicator.cpp" />

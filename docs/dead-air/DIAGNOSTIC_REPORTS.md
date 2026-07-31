@@ -12,6 +12,18 @@ capture is automatic. Reports are written to `$app_data_root$/session_reports`.
 The directory keeps no more than 10 reports and removes the oldest report only
 after a newer report is ready.
 
+The main and in-game menus also expose a native bug-report form. It submits a
+title and description to the Refined Report Hub over HTTPS and can optionally
+create and attach the same anonymous session-report ZIP. Submission runs on a
+worker thread, so a slow or unavailable network does not stall the game loop.
+The title accepts up to 200 characters and requires at least 5 non-whitespace
+characters; the description accepts up to 10,000 and requires at least 20.
+
+Public builds receive their upload credential through the ignored
+`src/xrGame/ui/BugReportSecrets.local.h` build-time header. The repository
+fallback deliberately contains no credential, and report contents or
+authorization headers must never be written to the engine log.
+
 ## Container
 
 Each report is a standard Deflate ZIP named:

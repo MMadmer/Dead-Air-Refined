@@ -94,6 +94,29 @@ void CUICustomEdit::InitCustomEdit(Fvector2 pos, Fvector2 size)
 
 void CUICustomEdit::SetPasswordMode(bool mode) { TextItemControl()->SetPasswordMode(mode); }
 
+void CUICustomEdit::SetMultilineMode(bool mode)
+{
+    m_multiline = mode;
+    TextItemControl()->SetVTextAlignment(mode ? valTop : valCenter);
+    TextItemControl()->SetTextComplexMode(mode);
+    TextItemControl()->SetCutWordsMode(!mode);
+    TextItemControl()->SetUseNewLineMode(mode);
+
+    if (mode)
+    {
+        ec().assign_callback(SDL_SCANCODE_RETURN, text_editor::ks_free, Callback(this, &CUICustomEdit::insert_newline));
+        ec().assign_callback(
+            SDL_SCANCODE_KP_ENTER, text_editor::ks_free, Callback(this, &CUICustomEdit::insert_newline));
+    }
+    else
+    {
+        ec().assign_callback(SDL_SCANCODE_RETURN, text_editor::ks_free, Callback(this, &CUICustomEdit::press_commit));
+        ec().assign_callback(
+            SDL_SCANCODE_KP_ENTER, text_editor::ks_free, Callback(this, &CUICustomEdit::press_commit));
+    }
+    m_force_update = true;
+}
+
 void CUICustomEdit::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
 {
     //кто-то другой захватил клавиатуру
@@ -170,6 +193,17 @@ void CUICustomEdit::Draw()
     Fvector2 pos, out;
     GetAbsolutePos(pos);
     CGameFont* font = TextItemControl()->m_pFont;
+
+    if (m_multiline)
+    {
+        xr_string displayed = ec().str_edit();
+        if (m_bInputFocus)
+            displayed.insert(ec().cursor_position(), 1, '_');
+        TextItemControl()->SetText(displayed.c_str());
+        inherited::Draw();
+        font->OnRender();
+        return;
+    }
 
     if (ec().need_update() || m_force_update)
     {
@@ -263,6 +297,7 @@ void CUICustomEdit::Enable(bool status)
 // =======================================================
 
 void CUICustomEdit::nothing(){};
+void CUICustomEdit::insert_newline() { ec().insert_character('\n'); }
 
 void CUICustomEdit::press_escape()
 {
