@@ -39,6 +39,9 @@ public static class HiddenDesktopCaptureNative
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetThreadDesktop(IntPtr desktop);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool EnumDesktopWindows(IntPtr desktop, EnumWindowsProc callback, IntPtr parameter);
 
@@ -66,6 +69,7 @@ public static class HiddenDesktopCaptureNative
         Exception failure = null;
         var captureThread = new Thread(() =>
         {
+            IntPtr previousDpiContext = SetThreadDpiAwarenessContext(new IntPtr(-4));
             try
             {
                 if (!SetThreadDesktop(desktop))
@@ -104,6 +108,11 @@ public static class HiddenDesktopCaptureNative
             {
                 failure = exception;
             }
+            finally
+            {
+                if (previousDpiContext != IntPtr.Zero)
+                    SetThreadDpiAwarenessContext(previousDpiContext);
+            }
         });
         captureThread.IsBackground = true;
         captureThread.Start();
@@ -126,6 +135,7 @@ public static class HiddenDesktopCaptureNative
         Exception failure = null;
         var captureThread = new Thread(() =>
         {
+            IntPtr previousDpiContext = SetThreadDpiAwarenessContext(new IntPtr(-4));
             try
             {
                 if (!SetThreadDesktop(desktop))
@@ -157,6 +167,11 @@ public static class HiddenDesktopCaptureNative
             catch (Exception exception)
             {
                 failure = exception;
+            }
+            finally
+            {
+                if (previousDpiContext != IntPtr.Zero)
+                    SetThreadDpiAwarenessContext(previousDpiContext);
             }
         });
         captureThread.IsBackground = true;

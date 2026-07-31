@@ -84,9 +84,10 @@ Filename: "{app}\xrEngine.exe"; Description: "Запустить Dead Air: Refin
 
 [InstallDelete]
 Type: files; Name: "{app}\Uninstall Dead Air x64.exe"
+Type: files; Name: "{app}\.dead-air-x64\maintenance-small.bmp"
 
 [UninstallDelete]
-Type: files; Name: "{app}\.dead-air-x64\maintenance-small.bmp"
+Type: files; Name: "{app}\.dead-air-x64\maintenance-small.png"
 Type: dirifempty; Name: "{app}\.dead-air-x64"
 Type: dirifempty; Name: "{app}\database"
 Type: dirifempty; Name: "{app}"
@@ -98,6 +99,10 @@ const
   UninstallActionCancel = 0;
   UninstallActionRemove = 1;
   UninstallActionRollback = 2;
+  MaintenanceFooterHeight = 74;
+  SmCxFrame = 32;
+  SmCyCaption = 4;
+  SmCxPaddedBorder = 92;
 
 var
   BackupPage: TInputOptionWizardPage;
@@ -112,9 +117,21 @@ var
   DeleteBackupsCheck: TNewCheckBox;
   SelectedBackupDirectory: String;
   SelectedDeleteBackups: Boolean;
+  MaintenanceForm: TSetupForm;
+  MaintenanceContentPanel: TPanel;
+  MaintenanceFooterPanel: TPanel;
+  MaintenanceOkButton: TNewButton;
+  MaintenanceCancelButton: TNewButton;
+  MaintenanceButtonWidth: Integer;
 
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
+
+function GetDpiForWindow(Window: HWND): Cardinal;
+  external 'GetDpiForWindow@user32.dll stdcall';
+
+function GetSystemMetricsForDpi(Index: Integer; Dpi: Cardinal): Integer;
+  external 'GetSystemMetricsForDpi@user32.dll stdcall';
 
 function TargetParameter: String;
 begin
@@ -856,6 +873,34 @@ begin
     BackupDirectoryEdit.Text := SelectedDirectory;
 end;
 
+procedure LayoutMaintenanceForm(Sender: TObject);
+var
+  Dpi: Cardinal;
+  BorderSize: Integer;
+  ClientWidth: Integer;
+  ClientHeight: Integer;
+begin
+  Dpi := GetDpiForWindow(MaintenanceForm.Handle);
+  if Dpi = 0 then
+    Dpi := 96;
+  BorderSize := GetSystemMetricsForDpi(SmCxFrame, Dpi) +
+    GetSystemMetricsForDpi(SmCxPaddedBorder, Dpi);
+  ClientWidth := MaintenanceForm.ClientWidth - 2 * BorderSize;
+  ClientHeight := MaintenanceForm.ClientHeight -
+    GetSystemMetricsForDpi(SmCyCaption, Dpi) - 2 * BorderSize;
+
+  MaintenanceContentPanel.SetBounds(
+    0, 0, ClientWidth, ClientHeight - MaintenanceFooterHeight);
+  MaintenanceFooterPanel.SetBounds(
+    0, ClientHeight - MaintenanceFooterHeight, ClientWidth, MaintenanceFooterHeight);
+  MaintenanceCancelButton.SetBounds(
+    ClientWidth - MaintenanceButtonWidth - ScaleX(10),
+    18, MaintenanceButtonWidth, 36);
+  MaintenanceOkButton.SetBounds(
+    MaintenanceCancelButton.Left - MaintenanceButtonWidth - ScaleX(6),
+    18, MaintenanceButtonWidth, 36);
+end;
+
 function ShowUninstallActionDialog: Integer;
 var
   ActionForm: TSetupForm;
@@ -873,33 +918,33 @@ var
   ImagePath: String;
 begin
   Result := UninstallActionCancel;
-  ActionForm := CreateCustomForm(500, 355, False, True);
+  ActionForm := CreateCustomForm(500, 377, False, True);
   try
     ActionForm.Caption := 'Удаление — Dead Air: Refined {#PortVersion}';
     ActionForm.Position := poScreenCenter;
 
     FooterPanel := TPanel.Create(ActionForm);
     FooterPanel.Parent := ActionForm;
-    FooterPanel.Align := alBottom;
-    FooterPanel.Height := 47;
     FooterPanel.BevelOuter := bvNone;
     FooterPanel.Color := clBtnFace;
+    FooterPanel.ParentBackground := False;
 
     FooterSeparator := TBevel.Create(ActionForm);
     FooterSeparator.Parent := FooterPanel;
     FooterSeparator.Align := alTop;
-    FooterSeparator.Height := 2;
+    FooterSeparator.Height := ScaleY(2);
     FooterSeparator.Shape := bsTopLine;
 
     ContentPanel := TPanel.Create(ActionForm);
     ContentPanel.Parent := ActionForm;
-    ContentPanel.Align := alClient;
     ContentPanel.BevelOuter := bvNone;
     ContentPanel.Color := clWhite;
+    ContentPanel.ParentBackground := False;
 
     TitleLabel := TNewStaticText.Create(ActionForm);
     TitleLabel.Parent := ContentPanel;
-    TitleLabel.SetBounds(18, 11, ContentPanel.Width - 90, 20);
+    TitleLabel.SetBounds(ScaleX(18), ScaleY(11),
+      ActionForm.ClientWidth - ScaleX(90), ScaleY(20));
     TitleLabel.AutoSize := False;
     TitleLabel.Color := clWhite;
     TitleLabel.Font.Style := [fsBold];
@@ -907,24 +952,28 @@ begin
 
     SubtitleLabel := TNewStaticText.Create(ActionForm);
     SubtitleLabel.Parent := ContentPanel;
-    SubtitleLabel.SetBounds(34, 31, ContentPanel.Width - 106, 20);
+    SubtitleLabel.SetBounds(ScaleX(34), ScaleY(31),
+      ActionForm.ClientWidth - ScaleX(106), ScaleY(20));
     SubtitleLabel.AutoSize := False;
     SubtitleLabel.Color := clWhite;
     SubtitleLabel.Caption := 'Удаление или восстановление Dead Air: Refined';
 
-    ImagePath := ExpandConstant('{app}\.dead-air-x64\maintenance-small.bmp');
+    ImagePath := ExpandConstant('{app}\.dead-air-x64\maintenance-small.png');
     if FileExists(ImagePath) then
     begin
       HeaderImage := TBitmapImage.Create(ActionForm);
       HeaderImage.Parent := ContentPanel;
-      HeaderImage.SetBounds(ContentPanel.Width - 60, 7, 50, 50);
+      HeaderImage.SetBounds(ActionForm.ClientWidth - ScaleX(60), ScaleY(7),
+        ScaleX(50), ScaleY(50));
+      HeaderImage.BackColor := clNone;
       HeaderImage.Stretch := True;
-      HeaderImage.Bitmap.LoadFromFile(ImagePath);
+      HeaderImage.PngImage.LoadFromFile(ImagePath);
     end;
 
     DescriptionLabel := TNewStaticText.Create(ActionForm);
     DescriptionLabel.Parent := ContentPanel;
-    DescriptionLabel.SetBounds(34, 76, ContentPanel.Width - 68, 42);
+    DescriptionLabel.SetBounds(ScaleX(34), ScaleY(76),
+      ActionForm.ClientWidth - ScaleX(68), ScaleY(42));
     DescriptionLabel.AutoSize := False;
     DescriptionLabel.Color := clWhite;
     DescriptionLabel.WordWrap := True;
@@ -933,7 +982,8 @@ begin
 
     RemovePatchRadio := TNewRadioButton.Create(ActionForm);
     RemovePatchRadio.Parent := ContentPanel;
-    RemovePatchRadio.SetBounds(34, 128, ContentPanel.Width - 68, 22);
+    RemovePatchRadio.SetBounds(ScaleX(34), ScaleY(128),
+      ActionForm.ClientWidth - ScaleX(68), ScaleY(22));
     if OriginalX86BackupAvailable(ExpandConstant('{app}')) then
       RemovePatchRadio.Caption := 'Удалить программу и восстановить исходную версию игры'
     else
@@ -943,31 +993,36 @@ begin
 
     DeleteBackupsCheck := TNewCheckBox.Create(ActionForm);
     DeleteBackupsCheck.Parent := ContentPanel;
-    DeleteBackupsCheck.SetBounds(50, 157, ContentPanel.Width - 84, 22);
+    DeleteBackupsCheck.SetBounds(ScaleX(50), ScaleY(157),
+      ActionForm.ClientWidth - ScaleX(84), ScaleY(22));
     DeleteBackupsCheck.Caption := 'Удалить также сохранённые версии программы';
     DeleteBackupsCheck.Checked := DeleteBackupsParameterEnabled;
 
     RollbackPatchRadio := TNewRadioButton.Create(ActionForm);
     RollbackPatchRadio.Parent := ContentPanel;
-    RollbackPatchRadio.SetBounds(34, 199, ContentPanel.Width - 68, 22);
+    RollbackPatchRadio.SetBounds(ScaleX(34), ScaleY(199),
+      ActionForm.ClientWidth - ScaleX(68), ScaleY(22));
     RollbackPatchRadio.Caption := 'Восстановить ранее установленную версию';
     RollbackPatchRadio.OnClick := @UpdateUninstallActionControls;
 
     BackupLabel := TNewStaticText.Create(ActionForm);
     BackupLabel.Parent := ContentPanel;
-    BackupLabel.SetBounds(50, 228, ContentPanel.Width - 84, 19);
+    BackupLabel.SetBounds(ScaleX(50), ScaleY(228),
+      ActionForm.ClientWidth - ScaleX(84), ScaleY(19));
     BackupLabel.AutoSize := False;
     BackupLabel.Color := clWhite;
     BackupLabel.Caption := 'Папка резервной копии:';
 
     BackupDirectoryEdit := TNewEdit.Create(ActionForm);
     BackupDirectoryEdit.Parent := ContentPanel;
-    BackupDirectoryEdit.SetBounds(50, 250, ContentPanel.Width - 150, 23);
+    BackupDirectoryEdit.SetBounds(ScaleX(50), ScaleY(250),
+      ActionForm.ClientWidth - ScaleX(150), ScaleY(23));
     BackupDirectoryEdit.Text := BackupDirectoryParameter;
 
     BackupBrowseButton := TNewButton.Create(ActionForm);
     BackupBrowseButton.Parent := ContentPanel;
-    BackupBrowseButton.SetBounds(ContentPanel.Width - 92, 249, 74, 25);
+    BackupBrowseButton.SetBounds(ActionForm.ClientWidth - ScaleX(92), ScaleY(249),
+      ScaleX(74), ScaleY(25));
     BackupBrowseButton.Caption := 'Обзор...';
     BackupBrowseButton.OnClick := @BrowseBackupDirectory;
 
@@ -984,8 +1039,13 @@ begin
     CancelButton.ModalResult := mrCancel;
 
     ButtonWidth := ActionForm.CalculateButtonWidth([OkButton.Caption, CancelButton.Caption]);
-    CancelButton.SetBounds(FooterPanel.Width - ButtonWidth - 10, 12, ButtonWidth, 25);
-    OkButton.SetBounds(CancelButton.Left - ButtonWidth - 6, 12, ButtonWidth, 25);
+    MaintenanceForm := ActionForm;
+    MaintenanceContentPanel := ContentPanel;
+    MaintenanceFooterPanel := FooterPanel;
+    MaintenanceOkButton := OkButton;
+    MaintenanceCancelButton := CancelButton;
+    MaintenanceButtonWidth := ButtonWidth;
+    ActionForm.OnShow := @LayoutMaintenanceForm;
 
     UpdateUninstallActionControls(nil);
     if ActionForm.ShowModal = mrOk then
@@ -1009,8 +1069,8 @@ begin
   if CurrentStep <> ssPostInstall then
     exit;
 
-  ImagePath := ExpandConstant('{app}\.dead-air-x64\maintenance-small.bmp');
-  WizardForm.WizardSmallBitmapImage.Bitmap.SaveToFile(ImagePath);
+  ImagePath := ExpandConstant('{app}\.dead-air-x64\maintenance-small.png');
+  WizardForm.WizardSmallBitmapImage.PngImage.SaveToFile(ImagePath);
 end;
 
 function InitializeUninstall: Boolean;
