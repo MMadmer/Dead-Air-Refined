@@ -21,6 +21,7 @@
 | GUI upgrade installer | Final `Dead Air: Refined 0.9.0` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
 | Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |
 | Refined version rollback | Typed `refined-version` snapshot selected through the uninstaller | Pass, saved runtime restored by SHA-256 while the original x86 backup remained reserved for removal |
+| Maintenance wizard | Installer-style fixed-size layout and silent action paths | Pass, standard header artwork persisted and both rollback and removal completed without leftovers |
 | Patch-only distribution | Installer contents and target validation | Pass, no original Dead Air files included and an empty target is rejected |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Manual diagnostic report | Loaded `async_benchmark_1`, hidden desktop | Pass, valid anonymous ZIP with system, hardware, runtime, content, log, configuration, and minidump data |
