@@ -1,6 +1,7 @@
 #include "StdAfx.h"
 #include "BugReportService.h"
 #include "BugReportConfig.h"
+#include "xrCore/ProductVersion.h"
 
 #ifdef XR_PLATFORM_WINDOWS
 #include <winhttp.h>
@@ -166,13 +167,15 @@ bool send_request(const xr_string& title, const xr_string& description, pcstr at
     body.reserve(title.size() + description.size() + attachment.size() + 1024);
     append_part(body, boundary, "title", title);
     append_part(body, boundary, "description", description);
+    append_part(body, boundary, "version", DeadAirRefined::Version);
     if (attachmentPath && *attachmentPath)
         append_attachment(body, boundary, attachment);
     append_bytes(body, "--");
     append_bytes(body, boundary);
     append_bytes(body, "--\r\n");
 
-    HINTERNET session = WinHttpOpen(L"Dead Air Refined/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    const std::wstring userAgent = L"Dead Air Refined/" + std::wstring(DeadAirRefined::VersionWide);
+    HINTERNET session = WinHttpOpen(userAgent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!session)
     {

@@ -205,6 +205,7 @@ public:
     CEventNotifierCallback::CID m_script_reset_event_cid;
 
 private:
+    void DrawProductVersion();
     DECLARE_SCRIPT_REGISTER_FUNCTION(CDialogHolder, CUIDialogWnd, CUIWindow);
 };
 

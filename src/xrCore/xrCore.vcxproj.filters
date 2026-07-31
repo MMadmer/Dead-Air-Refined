@@ -725,6 +725,9 @@
     <ClInclude Include="Debug\CrashReport.h">
       <Filter>Debug core</Filter>
     </ClInclude>
+    <ClInclude Include="ProductVersion.h">
+      <Filter>Kernel</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="xrCore.rc">

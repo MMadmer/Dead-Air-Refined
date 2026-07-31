@@ -3,6 +3,7 @@
 #pragma code_page(65001)
 
 #include "resource.h"
+#include "../xrCore/ProductVersion.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -83,8 +84,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_NEUTRAL
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,6,0,2
- PRODUCTVERSION 1,6,0,2
+ FILEVERSION DAR_VERSION_RESOURCE
+ PRODUCTVERSION DAR_VERSION_RESOURCE
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -99,14 +100,14 @@ BEGIN
     BEGIN
         BLOCK "000004b0"
         BEGIN
-            VALUE "CompanyName", "GSC Game World"
-            VALUE "FileDescription", "X-Ray 1.6 Engine"
-            VALUE "FileVersion", "1.6.02"
+            VALUE "CompanyName", "Dead Air: Refined"
+            VALUE "FileDescription", "Dead Air: Refined x64"
+            VALUE "FileVersion", DAR_VERSION_STRING
             VALUE "InternalName", "xrEngine"
             VALUE "LegalCopyright", "Copyright © 2009 GSC Game World"
             VALUE "OriginalFilename", "xrEngine.exe"
-            VALUE "ProductName", "S.T.A.L.K.E.R.: Call Of Pripyat"
-            VALUE "ProductVersion", "1.6.02"
+            VALUE "ProductName", "Dead Air: Refined"
+            VALUE "ProductVersion", DAR_VERSION_STRING
         END
     END
     BLOCK "VarFileInfo"

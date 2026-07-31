@@ -3,6 +3,7 @@
 
 #include "CrashReport.h"
 #include "StackTrace.h"
+#include "xrCore/ProductVersion.h"
 #include "xrCore/LocatorAPI.h"
 #include "xrCore/_math.h"
 #include "xrCore/log.h"
@@ -1421,7 +1422,9 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
         "\"excluded\":[\"command_line\",\"environment\",\"player_identity\",\"save_payload\","
         "\"raw_stack_memory\"],\"path_policy\":\"module_and_content_names_only\"}");
 
-    json.append(",\"build\":{\"product\":\"Dead Air: Refined\",\"architecture\":\"x64\",\"commit\":");
+    json.append(",\"build\":{\"product\":\"Dead Air: Refined\",\"version\":");
+    append_json_string(json, DeadAirRefined::Version);
+    json.append(",\"architecture\":\"x64\",\"commit\":");
     append_json_ansi(json, Core.GetBuildCommit());
     json.append(",\"build_id\":");
     append_number(json, Core.GetBuildId());

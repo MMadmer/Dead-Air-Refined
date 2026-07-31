@@ -19,6 +19,7 @@
 #include "xrGameSpy/xrGameSpy.h"
 #include "CdkeyDecode/cdkeydecode.h"
 #include "xrCore/os_clipboard.h"
+#include "xrCore/ProductVersion.h"
 #include "xrGame/game_type.h"
 
 #include "DemoInfo.h"
@@ -490,6 +491,7 @@ void CMainMenu::OnRender()
     if (!OnRenderPPUI_query())
     {
         DoRenderDialogs();
+        DrawProductVersion();
         UI().RenderFont();
     }
 }
@@ -507,6 +509,7 @@ void CMainMenu::OnRenderPPUI_main()
     if (OnRenderPPUI_query())
     {
         DoRenderDialogs();
+        DrawProductVersion();
         UI().RenderFont();
     }
 
@@ -675,6 +678,17 @@ void CMainMenu::ShowBugReportDialog()
         }
     }
     m_bugReportDialog->ShowDialog(true);
+}
+
+void CMainMenu::DrawProductVersion()
+{
+    CGameFont* font = UI().Font().pFontGraffiti19Russian;
+    if (!font)
+        return;
+
+    font->SetAligment(CGameFont::alRight);
+    font->SetColor(color_rgba(135, 123, 116, 255));
+    font->OutI(0.97f, 0.927f, "%s v%s", DeadAirRefined::ProductName, DeadAirRefined::Version);
 }
 
 void CMainMenu::DestroyInternal(bool bForce)

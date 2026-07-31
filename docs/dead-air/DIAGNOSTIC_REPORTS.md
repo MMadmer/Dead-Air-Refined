@@ -13,11 +13,13 @@ The directory keeps no more than 10 reports and removes the oldest report only
 after a newer report is ready.
 
 The main and in-game menus also expose a native bug-report form. It submits a
-title and description to the Refined Report Hub over HTTPS and can optionally
+title, the baked product version and a description to the Refined Report Hub over HTTPS and can optionally
 create and attach the same anonymous session-report ZIP. Submission runs on a
 worker thread, so a slow or unavailable network does not stall the game loop.
 The title accepts up to 200 characters and requires at least 5 non-whitespace
 characters; the description accepts up to 10,000 and requires at least 20.
+Both menus render `Dead Air: Refined v<version>` in the bottom-right corner
+from the same native version constant used by uploads and diagnostic manifests.
 
 Public builds receive their upload credential through the ignored
 `src/xrGame/ui/BugReportSecrets.local.h` build-time header. The repository
@@ -50,7 +52,7 @@ reject unknown major schemas instead of guessing field semantics.
 
 The manifest records:
 
-- build commit, build ID, architecture and executable SHA-256;
+- product version, build commit, build ID, architecture and executable SHA-256;
 - exception code, faulting module, module RVA and thread ID for crash reports;
 - anonymous `module + RVA` stack frames;
 - loaded module names, image sizes, timestamps and selected binary hashes;
@@ -93,7 +95,7 @@ A future bot should treat the ZIP as untrusted input:
 2. Allow only the five entry names documented above.
 3. Reject duplicate names, nested paths, absolute paths and `..` components.
 4. Parse `report.json` before accepting other entries.
-5. Require the schema, report ID, type, build ID and executable hash.
+5. Require the schema, report ID, type, product version, build ID and executable hash.
 6. Verify `dump.sha256` against `session.dmp`.
 7. Group crashes by build ID, exception code, module and module RVA.
 8. Store the original ZIP unchanged so future symbolization can be repeated.
