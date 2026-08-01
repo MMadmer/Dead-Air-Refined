@@ -84,6 +84,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             }
             nrmPasses.clear();
             map.clear();
+            cachedNormalPasses[_priority][iPass] = nullptr;
+            cachedNormalItems[_priority][iPass] = nullptr;
         }
     }
 
@@ -130,6 +132,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             }
             matPasses.clear();
             map.clear();
+            cachedMatrixPasses[_priority][iPass] = nullptr;
+            cachedMatrixItems[_priority][iPass] = nullptr;
         }
     }
 

@@ -89,7 +89,7 @@ public:
     ID3DInputLayout* m_pInputLayout;
     SDeclaration* m_pInputLayoutDecl;
     ID3DBlob* m_pInputLayoutSignature;
-    u32 dummy0; // Padding to avoid warning
+    u32 texture_slice_epoch{};
     u32 dummy1; // Padding to avoid warning
     u32 dummy2; // Padding to avoid warning
 #endif

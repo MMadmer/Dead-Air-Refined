@@ -10,18 +10,33 @@ CRestrictions g_mp_restrictions;
 
 shared_str g_ranks[_RANK_COUNT];
 
+namespace
+{
+std::once_flag rankInitializationFlag;
+std::mutex missingRankMutex;
+xr_unordered_map<shared_str, bool> missingRanks;
+thread_local xr_unordered_map<shared_str, u32> rankCache;
+
+void initialize_ranks()
+{
+    string32 rankSection;
+    for (u32 i = 0; i < _RANK_COUNT; ++i)
+    {
+        xr_sprintf(rankSection, "rank_%u", i);
+        g_ranks[i] = pSettings->r_string(rankSection, "available_items");
+    }
+}
+}
+
 u32 get_rank(const shared_str& section)
 {
+    std::call_once(rankInitializationFlag, initialize_ranks);
+
+    const auto cachedRank = rankCache.find(section);
+    if (cachedRank != rankCache.end())
+        return cachedRank->second;
+
     int res = -1;
-    if (g_ranks[0].size() == 0)
-    { // load
-        string32 buff;
-        for (int i = 0; i < _RANK_COUNT; i++)
-        {
-            xr_sprintf(buff, "rank_%d", i);
-            g_ranks[i] = pSettings->r_string(buff, "available_items");
-        }
-    }
     for (u32 i = 0; i < _RANK_COUNT; i++)
     {
         if (strstr(g_ranks[i].c_str(), section.c_str()))
@@ -34,12 +49,16 @@ u32 get_rank(const shared_str& section)
     //R_ASSERT3(res != -1, "cannot find rank for", section.c_str());
     if (res == -1)
     {
-        Msg("! Setting rank to 0. Cannot find rank for: [%s]", section.c_str());
+        std::lock_guard lock(missingRankMutex);
+        if (missingRanks.emplace(section, true).second)
+            Msg("! Setting rank to 0. Cannot find rank for: [%s]", section.c_str());
         // Xottab_DUTY: I'm not sure if it's save to leave it -1
         res = 0;
     }
 
-    return res;
+    const u32 rank = static_cast<u32>(res);
+    rankCache.emplace(section, rank);
+    return rank;
 }
 
 void CRestrictions::InitGroups()

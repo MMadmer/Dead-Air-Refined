@@ -130,8 +130,7 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     for (u32 iPass = 0; iPass < sh->passes.size(); ++iPass)
     {
         SPass* pass = sh->passes[iPass]._get();
-        mapMatrix_T& map = mapMatrixPasses[sh->flags.iPriority / 2][iPass];
-        mapMatrixItems& matrixItems = map[pass];
+        mapMatrixItems& matrixItems = get_matrix_pass_items(sh->flags.iPriority / 2, iPass, pass);
 
         // Create common node
         // NOTE: Invisible elements exist only in R1
@@ -230,8 +229,7 @@ void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual)
     for (u32 iPass = 0; iPass < sh->passes.size(); ++iPass)
     {
         SPass* pass = sh->passes[iPass]._get();
-        mapNormal_T& map = mapNormalPasses[sh->flags.iPriority / 2][iPass];
-        mapNormalItems& normalItems = map[pass];
+        mapNormalItems& normalItems = get_normal_pass_items(sh->flags.iPriority / 2, iPass, pass);
 
         normalItems.emplace_back(_NormalItem{ SSA, pVisual });
 

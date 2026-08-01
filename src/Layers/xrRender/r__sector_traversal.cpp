@@ -198,11 +198,14 @@ void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R
         {
             Fvector dir2portal;
             dir2portal.sub(PORTAL->S.P, i_vBase);
-            float R = PORTAL->S.R;
-            float distSQ = dir2portal.square_magnitude();
-            float ssa = R * R / distSQ;
+            const float radius = PORTAL->S.R;
+            const float distSQ = dir2portal.square_magnitude();
+            const float ssaUpperBound = radius * radius / distSQ;
+            if (ssaUpperBound < r_ssaDISCARD)
+                continue;
+
             dir2portal.div(_sqrt(distSQ));
-            ssa *= _abs(PORTAL->P.n.dotproduct(dir2portal));
+            const float ssa = ssaUpperBound * _abs(PORTAL->P.n.dotproduct(dir2portal));
             if (ssa < r_ssaDISCARD)
                 continue;
 
@@ -220,7 +223,7 @@ void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R
         S.assign(&*POLY.begin(), POLY.size());
         D.clear();
         sPoly* P = F.ClipPoly(S, D);
-        if (nullptr == P)
+        if (!P)
             continue;
 
         // Scissor and optimized HOM-testing

@@ -112,6 +112,7 @@ public:
 
 #if defined(USE_DX11)
     ID3DShaderResourceView* get_SRView() const { return m_pSRView; }
+    static u32 get_slice_epoch();
 #endif
 
 #if defined(USE_DX11)

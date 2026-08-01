@@ -49,6 +49,7 @@ void CBackend::Invalidate()
 {
 #if defined(USE_DX11)
     constants.discard_pending();
+    texture_slice_epoch = 0;
 #endif
 
     pRT[0] = 0;
@@ -193,6 +194,15 @@ void CBackend::set_Textures(STextureList* textures_list)
 {
     if (T == textures_list)
     {
+        if (!textures_list)
+            return;
+
+#if defined(USE_DX11)
+        const u32 currentSliceEpoch = CTexture::get_slice_epoch();
+        if (texture_slice_epoch == currentSliceEpoch)
+            return;
+#endif
+
         // A reused list can only require work when a pixel resource switched its array slice.
         for (const auto& [loadId, texture] : *textures_list)
         {
@@ -207,6 +217,9 @@ void CBackend::set_Textures(STextureList* textures_list)
             surface->bind(*this, loadId);
             surface->last_slice = surface->curr_slice;
         }
+#if defined(USE_DX11)
+        texture_slice_epoch = currentSliceEpoch;
+#endif
         return;
     }
 
@@ -482,6 +495,10 @@ void CBackend::set_Textures(STextureList* textures_list)
     }
     last_texture_cs = static_cast<s8>(newLastCs);
 #endif // USE_DX11
+
+#if defined(USE_DX11)
+    texture_slice_epoch = CTexture::get_slice_epoch();
+#endif
 }
 
 #if defined(USE_DX11)

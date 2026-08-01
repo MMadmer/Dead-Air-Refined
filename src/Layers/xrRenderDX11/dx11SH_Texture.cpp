@@ -13,6 +13,11 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+namespace
+{
+std::atomic<u32> textureSliceEpoch{ 1 };
+}
+
 void resptrcode_texture::create(LPCSTR _name) { _set(RImplementation.Resources->_CreateTexture(_name)); }
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -317,9 +322,16 @@ void CTexture::apply_normal(CBackend& cmd_list, u32 dwStage) const
 
 void CTexture::set_slice(int slice)
 {
-    m_pSRView = (slice < 0) ? srv_all : srv_per_slice[slice];
+    ID3DShaderResourceView* sliceView = (slice < 0) ? srv_all : srv_per_slice[slice];
+    if (curr_slice == slice && m_pSRView == sliceView)
+        return;
+
+    m_pSRView = sliceView;
     curr_slice = slice;
+    textureSliceEpoch.fetch_add(1, std::memory_order_relaxed);
 }
+
+u32 CTexture::get_slice_epoch() { return textureSliceEpoch.load(std::memory_order_relaxed); }
 
 void CTexture::Preload()
 {
