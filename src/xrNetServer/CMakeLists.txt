@@ -6,8 +6,6 @@ target_sources(xrNetServer PRIVATE
     ip_filter.h
     NET_AuthCheck.cpp
     NET_AuthCheck.h
-    #NET_Client.cpp
-    #NET_Client.h
     NET_Common.cpp
     NET_Common.h
     NET_Compressor.cpp
@@ -16,15 +14,17 @@ target_sources(xrNetServer PRIVATE
     NET_Log.h
     NET_Messages.h
     NET_PlayersMonitor.h
-    #NET_Server.cpp
-    #NET_Server.h
     NET_Shared.h
     stdafx.cpp
     stdafx.h
-    empty/NET_Client.cpp
-    empty/NET_Client.h
-    empty/NET_Server.cpp
-    empty/NET_Server.h
+    $<$<PLATFORM_ID:Windows>:NET_Client.cpp>
+    $<$<PLATFORM_ID:Windows>:NET_Client.h>
+    $<$<PLATFORM_ID:Windows>:NET_Server.cpp>
+    $<$<PLATFORM_ID:Windows>:NET_Server.h>
+    $<$<NOT:$<PLATFORM_ID:Windows>>:empty/NET_Client.cpp>
+    $<$<NOT:$<PLATFORM_ID:Windows>>:empty/NET_Client.h>
+    $<$<NOT:$<PLATFORM_ID:Windows>>:empty/NET_Server.cpp>
+    $<$<NOT:$<PLATFORM_ID:Windows>>:empty/NET_Server.h>
 )
 
 target_include_directories(xrNetServer
@@ -36,6 +36,8 @@ target_include_directories(xrNetServer
 target_link_libraries(xrNetServer
     PRIVATE
     xrCore
+    $<$<PLATFORM_ID:Windows>:ws2_32>
+    $<$<PLATFORM_ID:Windows>:dxguid>
 )
 
 target_compile_definitions(xrNetServer

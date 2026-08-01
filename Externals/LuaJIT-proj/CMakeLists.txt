@@ -6,6 +6,10 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+if (POLICY CMP0194)
+    cmake_policy(SET CMP0194 NEW)
+endif()
+
 project(xrLuaJIT C CXX ASM)
 
 # Version
@@ -75,18 +79,25 @@ execute_process(
 
 add_library(xrLuaJIT)
 
-# Compiler options
-set(CCOPT_OPT_LEVEL "-O3")
-
-set(CCOPT "${CMAKE_C_FLAGS} ${CCOPT_OPT_LEVEL}")
-
-if (XRAY_USE_ASAN)
-    set(CCOPT "${CCOPT} -fno-stack-protector")
-else()
-    set(CCOPT "${CCOPT} -fomit-frame-pointer -fno-stack-protector")
+if (WIN32 AND BUILD_SHARED_LIBS)
+    target_compile_definitions(xrLuaJIT PRIVATE LUA_BUILD_AS_DLL)
 endif()
 
-set(CCOPT "${CCOPT} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE")
+# Compiler options
+if (MSVC)
+    set(CCOPT "${CMAKE_C_FLAGS} /D_FILE_OFFSET_BITS=64 /D_LARGEFILE_SOURCE /U_FORTIFY_SOURCE")
+    target_compile_options(xrLuaJIT PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
+else()
+    set(CCOPT "${CMAKE_C_FLAGS} -O3")
+
+    if (XRAY_USE_ASAN)
+        set(CCOPT "${CCOPT} -fno-stack-protector")
+    else()
+        set(CCOPT "${CCOPT} -fomit-frame-pointer -fno-stack-protector")
+    endif()
+
+    set(CCOPT "${CCOPT} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE")
+endif()
 
 string(REPLACE " " ";" CCOPT "${CCOPT}")
 
@@ -137,12 +148,28 @@ set(CCOPTIONS "${CCOPT};${XCFLAGS}")
 
 target_compile_options(xrLuaJIT PRIVATE ${CCOPTIONS})
 
-execute_process(
-    COMMAND ${CMAKE_C_COMPILER} ${CCOPTIONS} -E lj_arch.h -dM
-    WORKING_DIRECTORY "${LUAJIT_DIR}"
-    OUTPUT_VARIABLE TESTARCH_OUTPUT
-    ERROR_VARIABLE TESTARCH_ERROR
-)
+if (MSVC)
+    if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "The MSVC CMake build supports only x64 LuaJIT.")
+    endif()
+
+    if (LUAJIT_DISABLE_GC64)
+        set(TESTARCH_OUTPUT
+            "LJ_TARGET_X64 LJ_LE 1 LJ_ARCH_BITS 64 LJ_HASJIT 1 LJ_HASFFI 1 LJ_ARCH_HASFPU 1 LJ_FR2 0"
+        )
+    else()
+        set(TESTARCH_OUTPUT
+            "LJ_TARGET_X64 LJ_LE 1 LJ_ARCH_BITS 64 LJ_HASJIT 1 LJ_HASFFI 1 LJ_ARCH_HASFPU 1 LJ_FR2 1"
+        )
+    endif()
+else()
+    execute_process(
+        COMMAND ${CMAKE_C_COMPILER} ${CCOPTIONS} -E lj_arch.h -dM
+        WORKING_DIRECTORY "${LUAJIT_DIR}"
+        OUTPUT_VARIABLE TESTARCH_OUTPUT
+        ERROR_VARIABLE TESTARCH_ERROR
+    )
+endif()
 
 if(NOT "${TESTARCH_ERROR}" STREQUAL "")
     message("TESTARCH_ERROR=${TESTARCH_ERROR}")
@@ -184,7 +211,7 @@ string(APPEND TARGET_ARCH "-DLUAJIT_TARGET=LUAJIT_ARCH_${TARGET_LJARCH}")
 # TODO: add PREFIX, TARGET_XCFLAGS, TARGET_DYNXLDOPTS, MULTILIB here (lines 289-302 in Makefile)
 # TODO: use TARGET_STRIP flags?
 
-if (WIN32)
+if (WIN32 AND NOT MSVC)
     #string(APPEND TARGET_STRIP "--strip-unneeded")
 
     target_link_options(xrLuaJIT
@@ -327,7 +354,7 @@ set(BUILDVM_ARCH "${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h")
 
 # Generate buildvm arch header
 set(MINILUA_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/HostBuildTools/minilua")
-set(MINILUA_FILE "${MINILUA_BINARY_DIR}/minilua")
+set(MINILUA_FILE "${MINILUA_BINARY_DIR}/minilua${CMAKE_EXECUTABLE_SUFFIX}")
 
 add_custom_command(
     OUTPUT "${MINILUA_FILE}"
@@ -338,6 +365,7 @@ add_custom_command(
         -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
         -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
         -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${MINILUA_BINARY_DIR}
         -DLUAJIT_DIR=${LUAJIT_DIR}
         -DLUA_USE_POSIX=${LUA_USE_POSIX}
         -DHOST_ACFLAGS="${HOST_ACFLAGS}"
@@ -347,7 +375,7 @@ add_custom_command(
 
 add_custom_command(OUTPUT ${BUILDVM_ARCH}
     COMMAND "${MINILUA_FILE}" ${DASM} ${DASM_FLAGS} -o ${BUILDVM_ARCH} ${DASM_DASC}
-    DEPENDS "${MINILUA_FILE}"
+    DEPENDS "${MINILUA_FILE}" "${DASM}" "${DASM_DASC}"
 )
 
 add_custom_target(buildvm_arch
@@ -360,7 +388,7 @@ set_target_properties(buildvm_arch PROPERTIES
 
 # Buildvm
 set(BUILDVM_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/HostBuildTools/buildvm")
-set(BUILDVM_FILE "${BUILDVM_BINARY_DIR}/buildvm")
+set(BUILDVM_FILE "${BUILDVM_BINARY_DIR}/buildvm${CMAKE_EXECUTABLE_SUFFIX}")
 
 add_custom_command(
     OUTPUT "${BUILDVM_FILE}"
@@ -370,11 +398,13 @@ add_custom_command(
         -S${CMAKE_CURRENT_SOURCE_DIR}/HostBuildTools/buildvm
         -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
         -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${BUILDVM_BINARY_DIR}
         -DLUAJIT_DIR=${LUAJIT_DIR}
         -DBUILDVM_ARCH=${BUILDVM_ARCH}
         -DHOST_ACFLAGS="${HOST_ACFLAGS}"
         -DHOST_ALDFLAGS="${HOST_ALDFLAGS}"
     COMMAND ${CMAKE_COMMAND} --build ${BUILDVM_BINARY_DIR} --config Release --verbose
+    DEPENDS "${BUILDVM_ARCH}"
 )
 
 add_custom_target(buildvm
@@ -411,7 +441,7 @@ macro(add_buildvm_target target mode)
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${target}"
         COMMAND "${BUILDVM_FILE}" ARGS -m ${mode} -o ${CMAKE_CURRENT_BINARY_DIR}/${target} ${ARGN}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        DEPENDS buildvm ${ARGN}
+        DEPENDS buildvm "${BUILDVM_FILE}" ${ARGN}
     )
 endmacro()
 
@@ -574,12 +604,12 @@ target_link_libraries(xrLuaJIT
     $<$<BOOL:${LUA_USE_DLOPEN}>:dl>
 )
 
-target_compile_options(xrLuaJIT
-    PRIVATE
-    -Wno-comment
-)
+if (NOT MSVC)
+    target_compile_options(xrLuaJIT PRIVATE -Wno-comment)
+endif()
 
 set_target_properties(xrLuaJIT PROPERTIES
+    OUTPUT_NAME "LuaJIT"
     PREFIX ""
     UNITY_BUILD OFF
 )

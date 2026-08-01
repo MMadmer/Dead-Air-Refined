@@ -16,6 +16,8 @@ add_compile_definitions($<$<CONFIG:ReleaseMasterGold>:_HAS_EXCEPTIONS=0>)
 
 # Enable debug information for all configurations
 add_compile_options(/Zi)
+add_compile_options($<$<CONFIG:Mixed>:/Od> $<$<CONFIG:Mixed>:/Ob0>)
+add_compile_options($<$<CONFIG:ReleaseMasterGold>:/O2> $<$<CONFIG:ReleaseMasterGold>:/Ob2>)
 
 # Enable SSE2 for 32-bit build
 # (on x64 it's always enabled and produces error if try to to enable it)
@@ -30,5 +32,7 @@ add_compile_options(
 
 # The MSVC linker settings:
 add_link_options("/LARGEADDRESSAWARE")
+add_link_options($<$<NOT:$<CONFIG:ReleaseMasterGold>>:/DEBUG:FULL>)
+add_link_options($<$<CONFIG:Release,ReleaseMasterGold>:/OPT:REF> $<$<CONFIG:Release,ReleaseMasterGold>:/OPT:ICF>)
 
 set(XRAY_DISABLE_WARNINGS "/w")

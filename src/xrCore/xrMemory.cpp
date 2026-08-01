@@ -17,10 +17,6 @@
 #include <sys/resource.h>
 #endif
 
-#if defined(XR_PLATFORM_WINDOWS)
-#   define USE_MIMALLOC
-#endif
-
 #if defined(USE_MIMALLOC)
     #include "mimalloc.h"
 

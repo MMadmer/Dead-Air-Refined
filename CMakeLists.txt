@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.23)
 
+if (POLICY CMP0194)
+    cmake_policy(SET CMP0194 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0194 NEW)
+endif()
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PreProjectInit)
 
@@ -20,8 +26,21 @@ option(XRAY_ENABLE_TRACY "Enable tracy profiler"      OFF)
 
 include(XRay.Build)
 include(XRay.Packaging)
+include(XRay.Dependencies)
 
+set(_xray_ipo_release "${CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE}")
+set(_xray_ipo_release_master_gold "${CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASEMASTERGOLD}")
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASEMASTERGOLD OFF)
 add_subdirectory(Externals)
+if (MEMORY_ALLOCATOR STREQUAL "mimalloc" AND NOT TARGET mimalloc)
+    message(FATAL_ERROR "The mimalloc allocator was requested but its target is unavailable.")
+endif()
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE "${_xray_ipo_release}")
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASEMASTERGOLD "${_xray_ipo_release_master_gold}")
+unset(_xray_ipo_release)
+unset(_xray_ipo_release_master_gold)
+
 add_subdirectory(src)
 add_subdirectory(res)
 add_subdirectory(misc)

@@ -125,15 +125,23 @@ cannot run inside the 64-bit process and require an x64 build.
 Requirements:
 
 - Windows x64;
-- Visual Studio with the Desktop development with C++ workload;
+- CMake 3.23 or newer;
+- Ninja;
+- Visual Studio Build Tools with the Desktop development with C++ workload;
 - PowerShell 7 or Windows PowerShell;
 - initialized Git submodules.
 
-Build the runtime from the repository root:
+Initialize the source dependencies and build the runtime from the repository root:
 
 ```powershell
-tools\build\build_x64.ps1
+git submodule update --init --recursive
+tools\build\build_x64.ps1 -Configuration Release -Clean
 ```
+
+The wrapper enters the MSVC x64 developer environment and runs the canonical
+`windows-x64` CMake preset with Ninja Multi-Config. Incremental builds can omit
+`-Clean`. The available configurations are `Debug`, `Mixed`, `Release`, and
+`ReleaseMasterGold`.
 
 Build the patch installer and automatic-update archive:
 

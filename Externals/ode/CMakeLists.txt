@@ -1,6 +1,7 @@
 add_library(xrODE)
 
 target_sources(xrODE PRIVATE
+    $<$<PLATFORM_ID:Windows>:config/msvcdefs.def>
     ode/src/array.cpp
     ode/src/array.h
     ode/src/Bounder33.cpp
@@ -92,6 +93,7 @@ target_compile_definitions(xrODE
 )
 
 set_target_properties(xrODE PROPERTIES
+    OUTPUT_NAME "ODE"
     PREFIX ""
     UNITY_BUILD OFF
 )

@@ -1,7 +1,8 @@
-# exclude all dot files except .git, appveyor and travis files
+# Exclude root dot files except repository and editor configuration.
 .*
 !.git*
-!.appveyor*
+!.github
+!.github/**
 !.editorconfig
 !.vscode
 
@@ -18,11 +19,9 @@
 /*.obj
 /_qa-*
 
-# Local bootstrap tools are downloaded and signature-checked by the build setup.
-tools/nuget/
+# Local bootstrap tools are downloaded and signature-checked by the packaging setup.
 tools/third_party/
 tools/sysinternals/
-src/packages/
 [Tt]est_root/
 [Tt]est_root_*/
 [Tt]est_install_root/

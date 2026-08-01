@@ -29,3 +29,15 @@
 [submodule "Externals/zlib"]
 	path = Externals/zlib
 	url = https://github.com/madler/zlib.git
+[submodule "Externals/SDL"]
+	path = Externals/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "Externals/DirectXMath"]
+	path = Externals/DirectXMath
+	url = https://github.com/microsoft/DirectXMath.git
+[submodule "Externals/DirectXTex"]
+	path = Externals/DirectXTex
+	url = https://github.com/microsoft/DirectXTex.git
+[submodule "Externals/mimalloc"]
+	path = Externals/mimalloc
+	url = https://github.com/microsoft/mimalloc.git

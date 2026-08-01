@@ -18,6 +18,14 @@ target_sources(xrImGui PRIVATE
     "${IMGUI_DIR}/imstb_truetype.h"
 )
 
+if (WIN32)
+    target_sources(xrImGui PRIVATE
+        "${IMGUI_DIR}/backends/imgui_impl_dx11.cpp"
+        "${IMGUI_DIR}/backends/imgui_impl_dx11.h"
+    )
+    target_link_libraries(xrImGui PRIVATE d3d11)
+endif()
+
 target_include_directories(xrImGui
     PUBLIC
     "${IMGUI_DIR}"

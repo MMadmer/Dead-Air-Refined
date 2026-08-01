@@ -1,5 +1,9 @@
 add_executable(xr_3da)
 
+if (WIN32)
+    set_property(TARGET xr_3da PROPERTY WIN32_EXECUTABLE TRUE)
+endif()
+
 target_sources(xr_3da PRIVATE
     entry_point.cpp
     stdafx.h
@@ -30,12 +34,19 @@ target_link_libraries(xr_3da
     xrAPI
     xrEngine
     xrRender_GL
+    xrRenderPC_R4
     xrGame
 )
 
 set_target_properties(xr_3da PROPERTIES
+    OUTPUT_NAME "xrEngine"
+    PDB_NAME "XR_3DA"
     PREFIX ""
 )
+
+if (WIN32)
+    xray_stage_windows_runtime(xr_3da)
+endif()
 
 install(TARGETS xr_3da RUNTIME
     DESTINATION "${CMAKE_INSTALL_BINDIR}"

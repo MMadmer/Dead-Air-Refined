@@ -19,9 +19,9 @@ rollback verification are complete.
 ## Work completed
 
 - Built a complete AMD64 runtime: all 41 shipped EXE/DLL files are x64.
-- Added a reproducible `Release` build entry point at
-  `tools/build/build_x64.ps1`, including required external-library
-  compatibility patches.
+- Added a reproducible CMake and Ninja build entry point at
+  `tools/build/build_x64.ps1` for all four runtime configurations, including
+  required external-library compatibility patches and runtime staging.
 - Mounted all existing Dead Air archives and loose overrides without
   repacking or converting content.
 - Restored the complete Dead Air native/Lua API surface. The automated binding

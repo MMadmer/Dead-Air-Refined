@@ -132,21 +132,17 @@ target_sources_grouped(
     TARGET xrCore
     NAME "Debug core"
     FILES
+    Debug/CrashReport.cpp
+    Debug/CrashReport.h
+    Debug/dxerr.cpp
+    Debug/dxerr.h
+    Debug/DXGetErrorDescription.inl
+    Debug/DXGetErrorString.inl
+    Debug/DXTrace.inl
     xrDebug.cpp
     xrDebug.h
     xrDebug_macros.h
 )
-
-#target_sources_grouped(
-#    TARGET xrCore
-#    NAME "Debug core\\DxErr"
-#    FILES
-#    Debug/dxerr.cpp
-#    Debug/dxerr.h
-#    Debug/DXGetErrorDescription.inl
-#    Debug/DXGetErrorString.inl
-#    Debug/DXTrace.inl
-#)
 
 target_sources_grouped(
     TARGET xrCore
@@ -449,20 +445,30 @@ target_include_directories(xrCore
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src"
-    "${CMAKE_SOURCE_DIR}/Externals/mimalloc/include"
 )
+
+if (WIN32)
+    target_include_directories(xrCore SYSTEM PUBLIC
+        "${XRAY_SDK_INCLUDE_DIR}"
+        "${XRAY_SDK_INCLUDE_DIR}/AL"
+    )
+endif()
 
 target_link_libraries(xrCore
     PUBLIC
-    pthread
+    $<$<NOT:$<PLATFORM_ID:Windows>>:pthread>
     $<$<PLATFORM_ID:FreeBSD,OpenBSD,NetBSD,DragonFlyBSD>:execinfo>
     SDL2::SDL2
 
     PRIVATE
     xrMiscMath
+    ZLIB::ZLIBSTATIC
+    MINIZIP::minizipstatic
+    OpenSSL::Crypto
     $<$<STREQUAL:${MEMORY_ALLOCATOR},mimalloc>:mimalloc>
     $<$<BOOL:${JPEG_FOUND}>:JPEG::JPEG>
     LZO::LZO
+    $<$<PLATFORM_ID:Windows>:bcrypt>
 )
 
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" AND NOT CMAKE_SYSTEM_NAME STREQUAL "NetBSD" AND NOT WIN32 AND NOT HAIKU)

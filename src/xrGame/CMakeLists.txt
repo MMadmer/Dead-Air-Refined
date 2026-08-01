@@ -247,8 +247,8 @@ target_sources(xrGame PRIVATE
     animation_script_callback.h
     animation_utils.cpp
     animation_utils.h
-    #AnselManager.cpp
-    #AnselManager.h
+    AnselManager.cpp
+    AnselManager.h
     anticheat_dumpable_object.h
     antirad.cpp
     antirad.h
@@ -2470,6 +2470,18 @@ target_sources(xrGame PRIVATE
     ../xrServerEntities/xrServer_Space.h
 )
 
+target_sources(xrGame PRIVATE
+    "${CMAKE_SOURCE_DIR}/Externals/GameSpy/src/GameSpy/md5c.c"
+    ui/BugReportService.cpp
+    ui/BugReportService.h
+    ui/UIBugReportWnd.cpp
+    ui/UIBugReportWnd.h
+    ui/UIUpdateWnd.cpp
+    ui/UIUpdateWnd.h
+    ui/UpdateService.cpp
+    ui/UpdateService.h
+)
+
 target_include_directories(xrGame
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -2497,7 +2509,13 @@ target_link_libraries(xrGame
     xrCDB
     xrPhysics
     xrNetServer
+    NVIDIA::Ansel
+    $<$<PLATFORM_ID:Windows>:delayimp>
 )
+
+if (WIN32)
+    target_link_options(xrGame PRIVATE "/DELAYLOAD:AnselSDK64.dll")
+endif()
 
 target_compile_definitions(xrGame
     PUBLIC

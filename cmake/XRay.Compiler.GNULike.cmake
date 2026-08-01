@@ -140,29 +140,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-Og)
 endif()
 
-if (NOT WIN32)
-    find_package(SDL2 2.0.18 REQUIRED)
-    find_package(OpenAL REQUIRED)
-    find_package(JPEG)
-    find_package(Ogg REQUIRED)
-    find_package(Vorbis REQUIRED)
-    find_package(Theora REQUIRED)
-    find_package(LZO REQUIRED)
-    find_package(mimalloc NAMES mimalloc2 mimalloc2.0 mimalloc)
-endif()
-
-# Memory allocator option
-if (mimalloc_FOUND)
-    set(MEMORY_ALLOCATOR "mimalloc" CACHE STRING "Use specific memory allocator (mimalloc/standard)")
-else()
-    set(MEMORY_ALLOCATOR "standard" CACHE STRING "Use specific memory allocator (mimalloc/standard)")
-endif()
-set_property(CACHE MEMORY_ALLOCATOR PROPERTY STRINGS "mimalloc" "standard")
-
-if (MEMORY_ALLOCATOR STREQUAL "mimalloc" AND NOT mimalloc_FOUND)
-    message(FATAL_ERROR "mimalloc allocator requested but not found. Please, install mimalloc package or select standard allocator.")
-endif()
-
 message(STATUS "Using ${MEMORY_ALLOCATOR} memory allocator")
 
 get_property(LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)

@@ -30,11 +30,11 @@ target_include_directories(buildvm
 	${LUAJIT_DIR}
 )
 
-target_compile_options(buildvm
-	PRIVATE
-	${HOST_ACFLAGS}
-    -Wno-discarded-qualifiers
-)
+target_compile_options(buildvm PRIVATE ${HOST_ACFLAGS})
+
+if (NOT MSVC)
+    target_compile_options(buildvm PRIVATE -Wno-discarded-qualifiers)
+endif()
 
 target_link_options(buildvm
     PRIVATE

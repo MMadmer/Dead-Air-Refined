@@ -85,6 +85,7 @@ target_compile_definitions(xrOPCODE
 )
 
 set_target_properties(xrOPCODE PROPERTIES
+    OUTPUT_NAME "OPCODE"
     PREFIX ""
 )
 
