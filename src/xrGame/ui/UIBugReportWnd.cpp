@@ -98,11 +98,22 @@ void CUIBugReportWnd::Update()
     inherited::Update();
     UpdateCounters();
 
-    const bool serverAvailable =
-        BugReportService::GetAvailability() == BugReportService::Availability::Available;
-    m_serverStatus->SetText(StringTable().translate(serverAvailable ?
-        "st_bug_report_server_available" : "st_bug_report_server_unavailable").c_str());
-    m_serverStatus->SetTextColor(serverAvailable ? color_rgba(100, 220, 100, 255) : color_rgba(230, 80, 80, 255));
+    const BugReportService::Availability availability = BugReportService::GetAvailability();
+    if (availability == BugReportService::Availability::Checking)
+    {
+        m_serverStatus->SetText(StringTable().translate("st_bug_report_server_checking").c_str());
+        m_serverStatus->SetTextColor(color_rgba(230, 200, 80, 255));
+    }
+    else if (availability == BugReportService::Availability::Available)
+    {
+        m_serverStatus->SetText(StringTable().translate("st_bug_report_server_available").c_str());
+        m_serverStatus->SetTextColor(color_rgba(100, 220, 100, 255));
+    }
+    else
+    {
+        m_serverStatus->SetText(StringTable().translate("st_bug_report_server_unavailable").c_str());
+        m_serverStatus->SetTextColor(color_rgba(230, 80, 80, 255));
+    }
 
     const BugReportService::State state = BugReportService::GetState();
     const bool sending = state == BugReportService::State::Sending;

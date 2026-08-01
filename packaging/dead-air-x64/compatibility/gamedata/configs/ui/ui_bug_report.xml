@@ -33,11 +33,11 @@
         <attach_label x="300" y="310" width="280" height="23">
             <text font="letterica16" align="l" vert_align="c">st_bug_report_attach_dump</text>
         </attach_label>
-        <server_status_label x="270" y="338" width="115" height="20">
+        <server_status_label x="270" y="338" width="62" height="20">
             <text font="letterica16" align="l" vert_align="c">st_bug_report_server_status</text>
         </server_status_label>
-        <server_status x="385" y="338" width="195" height="20">
-            <text font="letterica16" align="l" vert_align="c">st_bug_report_server_unavailable</text>
+        <server_status x="332" y="338" width="248" height="20">
+            <text font="letterica16" align="l" vert_align="c">st_bug_report_server_checking</text>
         </server_status>
         <status x="270" y="360" width="310" height="20">
             <text font="letterica16" align="c" vert_align="c"/>

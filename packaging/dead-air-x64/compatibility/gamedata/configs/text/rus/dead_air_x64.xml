@@ -57,6 +57,9 @@
     <string id="st_bug_report_server_status">
         <text>Статус сервера:</text>
     </string>
+    <string id="st_bug_report_server_checking">
+        <text>ожидание ответа</text>
+    </string>
     <string id="st_bug_report_server_available">
         <text>работает</text>
     </string>
