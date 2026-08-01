@@ -55,7 +55,7 @@ UsePreviousGroup=no
 UsePreviousTasks=no
 Uninstallable=yes
 UninstallFilesDir={app}\.dead-air-x64
-UninstallLogMode=append
+UninstallLogMode=overwrite
 UninstallDisplayName={#ProductName} {#PortVersion}
 UninstallDisplayIcon={app}\xrEngine.exe
 OutputDir={#OutputDirectory}
@@ -115,6 +115,8 @@ const
   UninstallActionCancel = 0;
   UninstallActionRemove = 1;
   UninstallActionRollback = 2;
+  SynchronizeAccess = $00100000;
+  InfiniteTimeout = $FFFFFFFF;
   MaintenanceFooterHeight = 74;
   SmCxFrame = 32;
   SmCyCaption = 4;
@@ -140,6 +142,18 @@ var
   MaintenanceCancelButton: TNewButton;
   MaintenanceButtonWidth: Integer;
 
+function GetCurrentProcessId: Cardinal;
+  external 'GetCurrentProcessId@kernel32.dll stdcall';
+
+function OpenProcess(DesiredAccess: Cardinal; InheritHandle: Boolean; ProcessId: Cardinal): THandle;
+  external 'OpenProcess@kernel32.dll stdcall';
+
+function WaitForSingleObject(Handle: THandle; Milliseconds: Cardinal): Cardinal;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+
+function CloseHandle(Handle: THandle): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
 
@@ -163,22 +177,8 @@ begin
 end;
 
 function CommandLineParameter(Name: String; DefaultValue: String): String;
-var
-  Index: Integer;
-  Argument: String;
-  Prefix: String;
 begin
-  Result := DefaultValue;
-  Prefix := '/' + Uppercase(Name) + '=';
-  for Index := 1 to ParamCount do
-  begin
-    Argument := ParamStr(Index);
-    if CompareText(Copy(Argument, 1, Length(Prefix)), Prefix) = 0 then
-    begin
-      Result := Copy(Argument, Length(Prefix) + 1, MaxInt);
-      exit;
-    end;
-  end;
+  Result := ExpandConstant('{param:' + Name + '|' + DefaultValue + '}');
 end;
 
 function UninstallActionParameter: String;
@@ -813,24 +813,14 @@ begin
   SetArrayLength(CurrentManagedFiles, 0);
   LoadManagedFilesFromControl(DirectoryName, CurrentManagedFiles);
 
-  // Remove both version scopes before restoring the snapshot's exact file set.
+  // Build the union so files absent from the selected snapshot can be removed after restoration.
   SetArrayLength(FilesToRemove, 0);
   for Index := 0 to GetArrayLength(CurrentManagedFiles) - 1 do
     AppendUniqueString(FilesToRemove, Trim(CurrentManagedFiles[Index]));
   for Index := 0 to GetArrayLength(RestoreScope) - 1 do
     AppendUniqueString(FilesToRemove, Trim(RestoreScope[Index]));
 
-  for Index := 0 to GetArrayLength(FilesToRemove) - 1 do
-  begin
-    FileName := Trim(FilesToRemove[Index]);
-    TargetPath := AddBackslash(DirectoryName) + FileName;
-    if FileExists(TargetPath) and not DeleteFile(TargetPath) then
-    begin
-      MsgBox('Не удалось заменить текущий файл: ' + FileName, mbError, MB_OK);
-      exit;
-    end;
-  end;
-
+  // Overwrite snapshot files without deleting the working installation first.
   for Index := 0 to GetArrayLength(PresentFiles) - 1 do
   begin
     FileName := Trim(PresentFiles[Index]);
@@ -844,6 +834,20 @@ begin
         'Выбранная резервная копия не изменена.',
         mbError,
         MB_OK);
+      exit;
+    end;
+  end;
+
+  for Index := 0 to GetArrayLength(FilesToRemove) - 1 do
+  begin
+    FileName := Trim(FilesToRemove[Index]);
+    if StringArrayContains(PresentFiles, FileName) then
+      continue;
+
+    TargetPath := AddBackslash(DirectoryName) + FileName;
+    if FileExists(TargetPath) and not DeleteFile(TargetPath) then
+    begin
+      MsgBox('Не удалось удалить файл текущей версии: ' + FileName, mbError, MB_OK);
       exit;
     end;
   end;
@@ -867,6 +871,107 @@ begin
   end;
 
   Result := True;
+end;
+
+function QuoteParameter(Value: String): String;
+begin
+  Result := '"' + Value + '"';
+end;
+
+function WaitForProcess(ProcessId: Cardinal): Boolean;
+var
+  ProcessHandle: THandle;
+begin
+  Result := True;
+  if ProcessId = 0 then
+    exit;
+
+  ProcessHandle := OpenProcess(SynchronizeAccess, False, ProcessId);
+  if ProcessHandle = 0 then
+    exit;
+
+  Result := WaitForSingleObject(ProcessHandle, InfiniteTimeout) = 0;
+  CloseHandle(ProcessHandle);
+end;
+
+procedure ScheduleRollbackCleanup(BackupDirectory: String);
+var
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  // The setup bootstrap owns its source file until this process has exited.
+  Parameters := '/D /Q /C ping 127.0.0.1 -n 3 >NUL & del /F /Q ' +
+    QuoteParameter(AddBackslash(BackupDirectory) + 'Dead-Air-Refined-Rollback.exe') + ' ' +
+    QuoteParameter(AddBackslash(BackupDirectory) + 'rollback-helper.log');
+  Exec(ExpandConstant('{cmd}'), Parameters, '', SW_HIDE, ewNoWait, ResultCode);
+end;
+
+function StartRollbackHelper(BackupDirectory: String; Quiet: Boolean): Boolean;
+var
+  InstalledHelper: String;
+  TemporaryHelper: String;
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  Result := False;
+  InstalledHelper := ExpandConstant('{app}\.dead-air-x64\Dead-Air-Refined-Maintenance.exe');
+  TemporaryHelper := AddBackslash(BackupDirectory) + 'Dead-Air-Refined-Rollback.exe';
+
+  if not FileExists(InstalledHelper) or
+     not CopyFile(InstalledHelper, TemporaryHelper, False) then
+  begin
+    MsgBox('Не удалось подготовить восстановление выбранной версии.', mbError, MB_OK);
+    exit;
+  end;
+
+  Parameters := '/CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DELETEAFTERINSTALL' +
+    ' /ROLLBACKTARGET=' + QuoteParameter(ExpandConstant('{app}')) +
+    ' /BACKUPDIR=' + QuoteParameter(BackupDirectory) +
+    ' /WAITPID=' + IntToStr(GetCurrentProcessId) +
+    ' /LOG=' + QuoteParameter(AddBackslash(BackupDirectory) + 'rollback-helper.log');
+  if Quiet then
+    Parameters := Parameters + ' /ROLLBACKQUIET=yes';
+  Result := Exec(TemporaryHelper, Parameters, '', SW_HIDE, ewNoWait, ResultCode);
+  if not Result then
+  begin
+    DeleteFile(TemporaryHelper);
+    MsgBox('Не удалось запустить восстановление выбранной версии.', mbError, MB_OK);
+  end;
+end;
+
+function InitializeSetup: Boolean;
+var
+  RollbackTarget: String;
+  RollbackBackup: String;
+  WaitProcessId: Cardinal;
+  Quiet: Boolean;
+begin
+  Result := True;
+  RollbackTarget := RemoveBackslashUnlessRoot(
+    Trim(CommandLineParameter('ROLLBACKTARGET', '')));
+  if RollbackTarget = '' then
+    exit;
+
+  Result := False;
+  RollbackBackup := RemoveBackslashUnlessRoot(
+    Trim(CommandLineParameter('BACKUPDIR', '')));
+  WaitProcessId := StrToIntDef(CommandLineParameter('WAITPID', '0'), 0);
+  Quiet := CompareText(CommandLineParameter('ROLLBACKQUIET', 'no'), 'yes') = 0;
+  if (RollbackBackup = '') or not WaitForProcess(WaitProcessId) then
+  begin
+    MsgBox('Не удалось подготовить восстановление выбранной версии.', mbError, MB_OK);
+    exit;
+  end;
+
+  if RestoreBackupSnapshot(RollbackTarget, RollbackBackup) then
+  begin
+    if not Quiet then
+      MsgBox(
+        'Ранее установленная версия Dead Air: Refined успешно восстановлена.',
+        mbInformation,
+        MB_OK);
+    ScheduleRollbackCleanup(RollbackBackup);
+  end;
 end;
 
 procedure RemoveX64Runtime(DirectoryName: String);
@@ -1109,6 +1214,7 @@ begin
   SelectedBackupDirectory := '';
   SelectedDeleteBackups := False;
   ActionName := UninstallActionParameter;
+  Log('Maintenance action: ' + ActionName);
 
   if ActionName = 'remove' then
     Action := UninstallActionRemove
@@ -1125,6 +1231,7 @@ begin
     BackupDirectory := BackupDirectoryParameter;
     if BackupDirectory = '' then
       BackupDirectory := SelectedBackupDirectory;
+    Log('Rollback backup: ' + BackupDirectory);
 
     if BackupDirectory = '' then
     begin
@@ -1132,12 +1239,7 @@ begin
       exit;
     end;
 
-    if RestoreBackupSnapshot(ExpandConstant('{app}'), BackupDirectory) and
-       (ActionName = 'ask') then
-      MsgBox(
-        'Ранее установленная версия Dead Air: Refined успешно восстановлена.',
-        mbInformation,
-        MB_OK);
+    StartRollbackHelper(BackupDirectory, ActionName <> 'ask');
     exit;
   end;
 
