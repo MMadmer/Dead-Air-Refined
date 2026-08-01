@@ -145,6 +145,12 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
     if (m_changing_level)
         return (false);
 
+    if (!CALifeStorageManager::wait_for_pending_saves())
+    {
+        Msg("! Level transition cancelled because a pending save failed");
+        return false;
+    }
+
     luabind::functor<void> funct;
     if (GEnv.ScriptEngine->functor("_G.CALifeUpdateManager__on_before_change_level", funct))
         funct(&net_packet);
@@ -199,14 +205,15 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
 
     string256 autoave_name;
     strconcat(sizeof(autoave_name), autoave_name, Core.UserName, " - ", "autosave");
+    const xr_string originalServerCommandLine = m_server_command_line->c_str();
     LPCSTR temp0 = strchr(m_server_command_line->c_str(), '/');
     VERIFY(temp0);
     string256 temp;
     *m_server_command_line = strconcat(sizeof(temp), temp, autoave_name, temp0);
 
-    save(autoave_name);
+    const bool saveQueued = save(autoave_name);
     // The transition snapshot must capture the temporary destination state before it is restored.
-    CALifeStorageManager::wait_for_pending_saves();
+    const bool saveSucceeded = saveQueued && CALifeStorageManager::wait_for_pending_saves();
 
     graph().actor()->m_tGraphID = safe_graph_vertex_id;
     graph().actor()->m_tNodeID = safe_level_vertex_id;
@@ -221,6 +228,14 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
         holder->m_tNodeID = holder_safe_level_vertex_id;
         holder->o_Position = holder_safe_position;
         holder->o_Angle = holder_safe_angles;
+    }
+
+    if (!saveSucceeded)
+    {
+        *m_server_command_line = originalServerCommandLine.c_str();
+        m_changing_level = false;
+        Msg("! Level transition cancelled because its autosave could not be committed");
+        return false;
     }
 
     return (true);
@@ -267,10 +282,14 @@ void CALifeUpdateManager::load(LPCSTR game_name, bool no_assert, bool new_only)
 
     xr_strcpy(g_last_saved_game, game_name);
 
-    if (new_only || !CALifeStorageManager::load(game_name))
+    if (new_only)
     {
-        R_ASSERT3(new_only || (no_assert && xr_strlen(game_name)), "Cannot find the specified saved game ", game_name);
         new_game(game_name);
+    }
+    else if (!CALifeStorageManager::load(game_name))
+    {
+        R_ASSERT3(no_assert && xr_strlen(game_name), "Cannot find the specified saved game ", game_name);
+        return;
     }
 
     if (g_pGameLevel)

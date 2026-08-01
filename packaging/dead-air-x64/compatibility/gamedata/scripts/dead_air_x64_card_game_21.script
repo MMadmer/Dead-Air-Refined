@@ -1,8 +1,9 @@
-local card_game = ui_card_game_21
-local card_game_class = card_game.card_game_21_point
-local original_fill_card_point = card_game_class.FillCardPoint
-local original_play_game = card_game_class.btn_play_game
-local original_send_move = card_game_class.btn_send_move
+local card_game
+local card_game_class
+local original_fill_card_point
+local original_play_game
+local original_send_move
+local patched = false
 local actor_card_count = 0
 local enemy_card_count = 0
 
@@ -107,6 +108,15 @@ local function continue_game(self)
 end
 
 function on_game_start()
+	if patched or not ui_card_game_21 or not ui_card_game_21.card_game_21_point then
+		return
+	end
+
+	card_game = ui_card_game_21
+	card_game_class = card_game.card_game_21_point
+	original_fill_card_point = card_game_class.FillCardPoint
+	original_play_game = card_game_class.btn_play_game
+	original_send_move = card_game_class.btn_send_move
 	card_game_class.FillCardPoint = fill_card_point
 	card_game_class.btn_play_game = play_game
 	card_game_class.btn_take_else = take_else
@@ -114,4 +124,5 @@ function on_game_start()
 	card_game_class.FillEnemyStep = fill_enemy_step
 	card_game_class.winner_reward = winner_reward
 	card_game_class.btn_continue_game = continue_game
+	patched = true
 end

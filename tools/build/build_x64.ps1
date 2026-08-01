@@ -19,12 +19,12 @@ function Apply-RequiredPatch {
         [string]$Patch
     )
 
-    & git -C $Repository apply --reverse --check $Patch 2>$null
+    & git -C $Repository apply --reverse --check --ignore-space-change --ignore-whitespace $Patch 2>$null
     if ($LASTEXITCODE -eq 0) {
         return
     }
 
-    & git -C $Repository apply --check $Patch
+    & git -C $Repository apply --check --ignore-space-change --ignore-whitespace $Patch
     if ($LASTEXITCODE -ne 0) {
         throw "Required patch cannot be applied: $Patch"
     }

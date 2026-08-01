@@ -78,10 +78,10 @@ public:
     IDXGISwapChain* m_pSwapChain = nullptr;
     D3D_FEATURE_LEVEL FeatureLevel;
     bool Valid = true;
-    bool ComputeShadersSupported;
-    bool DoublePrecisionFloatShaderOps;
-    bool SAD4ShaderInstructions;
-    bool ExtendedDoublesShaderInstructions;
+    bool ComputeShadersSupported{};
+    bool DoublePrecisionFloatShaderOps{};
+    bool SAD4ShaderInstructions{};
+    bool ExtendedDoublesShaderInstructions{};
 
     ID3DDeviceContext* d3d_contexts_pool[R__NUM_CONTEXTS]{};
 

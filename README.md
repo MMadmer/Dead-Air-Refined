@@ -5,7 +5,7 @@ project provides a native 64-bit Windows runtime, improves stability and
 performance, modernizes the engine dependency stack, and adds integrated
 installation, diagnostics, bug reporting, and automatic updates.
 
-Current release: **1.0.0**
+Current release: **1.0.1**
 
 Required game: **Dead Air 0.98b or Dead Air Revolution II**
 
@@ -57,7 +57,7 @@ Detailed implementation and validation records are available in
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
-3. Download `Dead-Air-Refined-1.0.0-Setup.exe` from the latest release.
+3. Download `Dead-Air-Refined-1.0.1-Setup.exe` from the latest release.
 4. Select the root game directory containing `xrEngine.exe`, `fsgame.ltx`, and
    the `database` directory.
 5. Keep backup creation enabled unless the current Refined installation is
@@ -138,7 +138,7 @@ tools\build\build_x64.ps1
 Build the patch installer and automatic-update archive:
 
 ```powershell
-tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.0.0
+tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.0.1
 ```
 
 Generated release files are written to `artifacts` and are not tracked by Git.

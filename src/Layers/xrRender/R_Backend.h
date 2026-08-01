@@ -287,7 +287,6 @@ public:
 
 #if defined(USE_DX11)
     IC void set_RT(ID3DRenderTargetView* RT, u32 ID = 0);
-    IC void set_PixelUAVs(ID3D11UnorderedAccessView* first = nullptr, ID3D11UnorderedAccessView* second = nullptr);
     IC void set_ZB(ID3DDepthStencilView* ZB);
     IC void get_ZB_dimensions(ID3DDepthStencilView* ZB, bool msaa, u32& width, u32& height);
     IC ID3DRenderTargetView* get_RT(u32 ID = 0);
@@ -617,8 +616,6 @@ private:
     ID3DUserDefinedAnnotation* pAnnotation{ nullptr };
 
     bool m_bChangedRTorZB;
-    ID3D11UnorderedAccessView* m_pixelUavs[2]{};
-    bool m_pixelUavsActive{};
 
 public:
     dx11StateManager StateManager;

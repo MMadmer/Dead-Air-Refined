@@ -35,11 +35,11 @@ private:
 public:
     CALifeStorageManager(IPureServer* server, LPCSTR section);
     virtual ~CALifeStorageManager();
-    static void process_async_save_completions();
-    static void wait_for_pending_saves();
+    static bool process_async_save_completions();
+    static bool wait_for_pending_saves();
     static bool save_capture_active();
     bool load(LPCSTR save_name = 0);
-    void save(LPCSTR save_name = 0, bool update_name = true);
+    bool save(LPCSTR save_name = 0, bool update_name = true);
     void save(NET_Packet& net_packet);
 };
 

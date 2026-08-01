@@ -28,6 +28,7 @@
 #include <array>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -69,8 +70,21 @@ struct AsyncSaveCompletion
     u32 compressedSize{};
     float captureMilliseconds{};
     float backgroundMilliseconds{};
+    std::string errorStage;
+    u32 errorCode{};
     bool succeeded{};
 };
+
+thread_local u32 lastNativeError{};
+
+void capture_native_error()
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    lastNativeError = GetLastError();
+#else
+    lastNativeError = errno;
+#endif
+}
 
 bool native_file_exists(pcstr path)
 {
@@ -86,7 +100,10 @@ bool native_remove_file(pcstr path)
     if (!native_file_exists(path))
         return true;
 #if defined(XR_PLATFORM_WINDOWS)
-    return DeleteFileA(path) != FALSE;
+    const bool removed = DeleteFileA(path) != FALSE;
+    if (!removed)
+        capture_native_error();
+    return removed;
 #else
     return unlink(path) == 0;
 #endif
@@ -95,7 +112,10 @@ bool native_remove_file(pcstr path)
 bool native_replace_file(pcstr source, pcstr destination)
 {
 #if defined(XR_PLATFORM_WINDOWS)
-    return MoveFileExA(source, destination, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+    const bool replaced = MoveFileExA(source, destination, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+    if (!replaced)
+        capture_native_error();
+    return replaced;
 #else
     return rename(source, destination) == 0;
 #endif
@@ -107,9 +127,14 @@ bool native_flush_file(pcstr path)
     const HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
     if (file == INVALID_HANDLE_VALUE)
+    {
+        capture_native_error();
         return false;
+    }
 
     const bool flushed = FlushFileBuffers(file) != FALSE;
+    if (!flushed)
+        capture_native_error();
     CloseHandle(file);
     return flushed;
 #else
@@ -129,7 +154,10 @@ bool native_write_file(pcstr path, const void* data, size_t size)
     const HANDLE file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
     if (file == INVALID_HANDLE_VALUE)
+    {
+        capture_native_error();
         return false;
+    }
 
     const auto* cursor = static_cast<const u8*>(data);
     size_t remaining = size;
@@ -140,6 +168,9 @@ bool native_write_file(pcstr path, const void* data, size_t size)
         DWORD written = 0;
         if (!WriteFile(file, cursor, blockSize, &written, nullptr) || written != blockSize)
         {
+            capture_native_error();
+            if (!lastNativeError)
+                lastNativeError = ERROR_WRITE_FAULT;
             succeeded = false;
             break;
         }
@@ -147,7 +178,11 @@ bool native_write_file(pcstr path, const void* data, size_t size)
         remaining -= written;
     }
 
-    succeeded = succeeded && FlushFileBuffers(file) != FALSE;
+    if (succeeded && !FlushFileBuffers(file))
+    {
+        capture_native_error();
+        succeeded = false;
+    }
     CloseHandle(file);
     return succeeded;
 #else
@@ -378,6 +413,7 @@ AsyncSaveCompletion execute_save_job(AsyncSaveJob&& job)
         validationData.data(), validationData.size(), compressedData.data(), compressedData.size());
     if (decodedSize != sourceSize || memcmp(validationData.data(), sourceData, sourceSize) != 0)
     {
+        completion.errorStage = "compression validation";
         completion.backgroundMilliseconds = timer.GetElapsed_sec() * 1000.f;
         return completion;
     }
@@ -394,12 +430,24 @@ AsyncSaveCompletion execute_save_job(AsyncSaveJob&& job)
     xr_sprintf(saveIdText, "%016llx", static_cast<unsigned long long>(job.saveId));
     std::string scopTemp = job.finalName + "." + saveIdText + ".tmp";
 
-    if (!native_write_file(scopTemp.c_str(), saveFile.data(), saveFile.size()) ||
-        (job.customDataExpected && !job.customTempPrepared &&
-            !native_write_file(job.customTempName.c_str(), job.customData.data(), job.customData.size())) ||
-        !commit_save_pair(job.finalName.c_str(), scopTemp.c_str(), job.customTempName.c_str(),
+    bool written = native_write_file(scopTemp.c_str(), saveFile.data(), saveFile.size());
+    if (!written)
+        completion.errorStage = "write save data";
+    if (written && job.customDataExpected && !job.customTempPrepared)
+    {
+        written = native_write_file(job.customTempName.c_str(), job.customData.data(), job.customData.size());
+        if (!written)
+            completion.errorStage = "write script save data";
+    }
+    if (written && !commit_save_pair(job.finalName.c_str(), scopTemp.c_str(), job.customTempName.c_str(),
             job.customDataExpected))
     {
+        written = false;
+        completion.errorStage = "commit save files";
+    }
+    if (!written)
+    {
+        completion.errorCode = lastNativeError;
         native_remove_file(scopTemp.c_str());
         if (job.customDataExpected)
             native_remove_file(job.customTempName.c_str());
@@ -570,7 +618,7 @@ CALifeStorageManager::~CALifeStorageManager()
         activeStorageManager = nullptr;
 }
 
-void CALifeStorageManager::process_async_save_completions()
+bool CALifeStorageManager::process_async_save_completions()
 {
     if (activeStorageManager)
     {
@@ -586,15 +634,18 @@ void CALifeStorageManager::process_async_save_completions()
 
     auto completions = async_save_coordinator().take_completions();
     if (completions.empty())
-        return;
+        return true;
 
+    bool allSucceeded = true;
     refresh_save_index();
     for (const auto& completion : completions)
     {
         if (!completion.succeeded)
         {
-            Msg("! Asynchronous save transaction failed for '%s'; the previous save pair was preserved",
-                completion.saveName.c_str());
+            allSucceeded = false;
+            Msg("! Asynchronous save transaction failed for '%s' during %s (system error %u); the previous save pair was preserved",
+                completion.saveName.c_str(), completion.errorStage.empty() ? "unknown stage" : completion.errorStage.c_str(),
+                completion.errorCode);
             show_save_status(StringTable().translate("st_game_save_failed").c_str());
             continue;
         }
@@ -618,9 +669,10 @@ void CALifeStorageManager::process_async_save_completions()
                 afterSave(completion.saveName.c_str());
         }
     }
+    return allSucceeded;
 }
 
-void CALifeStorageManager::wait_for_pending_saves()
+bool CALifeStorageManager::wait_for_pending_saves()
 {
     while (activeStorageManager && activeStorageManager->m_save_requests &&
         !activeStorageManager->m_save_requests->pending.empty())
@@ -633,7 +685,7 @@ void CALifeStorageManager::wait_for_pending_saves()
         activeStorageManager->process_save_captures(flt_max);
     }
     async_save_coordinator().wait();
-    process_async_save_completions();
+    return process_async_save_completions();
 }
 
 void CALifeStorageManager::process_save_requests(float budgetMilliseconds)
@@ -824,7 +876,7 @@ void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
     }
 }
 
-void CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
+bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
 {
     const DiagnosticOperation operation("save_game");
     pcstr gameSaveExtension = SAVE_EXTENSION;
@@ -832,6 +884,18 @@ void CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
         gameSaveExtension = SAVE_EXTENSION_LEGACY;
 
     LPCSTR game_saves_path = FS.get_path("$game_saves$")->m_Path;
+
+    std::error_code directoryError;
+    const std::filesystem::path saveDirectory(game_saves_path);
+    if ((!std::filesystem::exists(saveDirectory, directoryError) &&
+            !std::filesystem::create_directories(saveDirectory, directoryError)) ||
+        directoryError || !std::filesystem::is_directory(saveDirectory, directoryError))
+    {
+        const u32 errorCode = directoryError ? directoryError.value() : ERROR_DIRECTORY;
+        Msg("! Cannot prepare the save directory (system error %u)", errorCode);
+        show_save_status(StringTable().translate("st_game_save_failed").c_str());
+        return false;
+    }
 
     string_path save_name;
     strncpy_s(save_name, sizeof(save_name), save_name_no_check,
@@ -850,7 +914,7 @@ void CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
         if (!xr_strlen(m_save_name))
         {
             Log("There is no file name specified!");
-            return;
+            return false;
         }
     }
 
@@ -998,6 +1062,7 @@ void CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name)
 
     if (!update_name)
         xr_strcpy(m_save_name, saveBackup);
+    return true;
 }
 
 void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR file_name, u64 save_id)

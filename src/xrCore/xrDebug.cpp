@@ -141,6 +141,26 @@ void xrDebug::LogStackTrace(const char* header)
     }
 }
 
+static pcstr source_path_for_report(pcstr path)
+{
+    if (!path)
+        return "<unknown>";
+
+    // Preserve the repository-relative path without exposing the build machine root.
+    if (pcstr source = strstr(path, "\\src\\"))
+        return source + 1;
+    if (pcstr source = strstr(path, "/src/"))
+        return source + 1;
+
+    pcstr fileName = path;
+    for (pcstr cursor = path; *cursor; ++cursor)
+    {
+        if (*cursor == '\\' || *cursor == '/')
+            fileName = cursor + 1;
+    }
+    return fileName;
+}
+
 
 void xrDebug::GatherInfo(char* assertionInfo, size_t bufferSize, const ErrorLocation& loc, const char* expr,
                          const char* desc, const char* arg1, const char* arg2)
@@ -154,7 +174,8 @@ void xrDebug::GatherInfo(char* assertionInfo, size_t bufferSize, const ErrorLoca
     buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "\nFATAL ERROR\n\n");
     buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sExpression    : %s\n", prefix, expr);
     buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sFunction      : %s\n", prefix, loc.Function);
-    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sFile          : %s\n", prefix, loc.File);
+    buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sFile          : %s\n", prefix,
+        source_path_for_report(loc.File));
     buffer += xr_sprintf(buffer, oneAboveBuffer - buffer, "%sLine          : %d\n", prefix, loc.Line);
     if (extendedDesc)
     {

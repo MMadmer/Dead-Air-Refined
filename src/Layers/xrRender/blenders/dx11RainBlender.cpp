@@ -154,23 +154,6 @@ void CBlender_rain::Compile(CBlender_Compile& C)
 
         break;
 
-#if RENDER == R_R4
-    case 4: // Patch packed normal and albedo in place
-        C.r_Pass("stub_notransform_2uv", "rain_patch_inplace_uav", false, TRUE, FALSE, FALSE);
-        C.PassSET_ZB(TRUE, FALSE, TRUE);
-
-        C.r_dx11Texture("s_smap", r2_RT_smap_rain);
-        C.r_dx11Sampler("smp_linear");
-        C.r_dx11Sampler("smp_base");
-        jitter(C);
-        C.r_dx11Sampler("smp_smap");
-        C.r_dx11Texture("s_water", "water\\water_SBumpVolume");
-        C.r_dx11Texture("s_waterFall", "water\\water_flowing_nmap");
-
-        C.r_End();
-        break;
-#endif
-
     }
 
     RImplementation.m_SMAPSize = RImplementation.o.smapsize;
