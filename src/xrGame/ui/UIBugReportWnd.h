@@ -40,6 +40,7 @@ private:
     CUI3tButton* m_cancel{};
     CUIStatic* m_titleCounter{};
     CUIStatic* m_descriptionCounter{};
+    CUIStatic* m_serverStatus{};
     CUIStatic* m_status{};
     CUIMessageBoxEx* m_messageBox{};
     bool m_closeAfterMessage{};

@@ -54,6 +54,7 @@ bool CUIBugReportWnd::Init()
     UIHelper::CreateStatic(xml, "main:title_label", this);
     UIHelper::CreateStatic(xml, "main:description_label", this);
     UIHelper::CreateStatic(xml, "main:attach_label", this);
+    UIHelper::CreateStatic(xml, "main:server_status_label", this);
 
     m_title = UIHelper::CreateEditBox(xml, "main:title", this);
     m_description = UIHelper::CreateEditBox(xml, "main:description", this);
@@ -62,6 +63,7 @@ bool CUIBugReportWnd::Init()
     m_cancel = UIHelper::Create3tButton(xml, "main:cancel", this);
     m_titleCounter = UIHelper::CreateStatic(xml, "main:title_counter", this);
     m_descriptionCounter = UIHelper::CreateStatic(xml, "main:description_counter", this);
+    m_serverStatus = UIHelper::CreateStatic(xml, "main:server_status", this);
     m_status = UIHelper::CreateStatic(xml, "main:status", this);
 
     m_submit->SetWindowName("submit");
@@ -83,6 +85,7 @@ void CUIBugReportWnd::Show(bool status)
     if (status && BugReportService::GetState() != BugReportService::State::Sending)
     {
         BugReportService::Reset();
+        BugReportService::CheckAvailability();
         ClearForm();
         m_closeAfterMessage = false;
         m_title->CaptureFocus(true);
@@ -94,6 +97,12 @@ void CUIBugReportWnd::Update()
 {
     inherited::Update();
     UpdateCounters();
+
+    const bool serverAvailable =
+        BugReportService::GetAvailability() == BugReportService::Availability::Available;
+    m_serverStatus->SetText(StringTable().translate(serverAvailable ?
+        "st_bug_report_server_available" : "st_bug_report_server_unavailable").c_str());
+    m_serverStatus->SetTextColor(serverAvailable ? color_rgba(100, 220, 100, 255) : color_rgba(230, 80, 80, 255));
 
     const BugReportService::State state = BugReportService::GetState();
     const bool sending = state == BugReportService::State::Sending;

@@ -22,12 +22,16 @@ struct ServiceState
     {
         if (worker.joinable())
             worker.join();
+        if (availabilityWorker.joinable())
+            availabilityWorker.join();
     }
 
     std::atomic<BugReportService::State> state{BugReportService::State::Idle};
     std::mutex messageMutex;
     xr_string message;
     std::thread worker;
+    std::atomic<BugReportService::Availability> availability{BugReportService::Availability::Unavailable};
+    std::thread availabilityWorker;
 };
 
 ServiceState& service()
@@ -264,6 +268,35 @@ bool send_request(const xr_string& title, const xr_string& description, pcstr at
     return true;
 }
 
+bool check_availability()
+{
+    const std::wstring userAgent = L"Dead Air Refined/" + std::wstring(DeadAirRefined::VersionWide);
+    HINTERNET session = WinHttpOpen(userAgent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session)
+        return false;
+
+    WinHttpSetTimeouts(session, 3000, 5000, 5000, 5000);
+    HINTERNET connection = WinHttpConnect(session, BugReportConfig::Host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"HEAD", BugReportConfig::SubmitPath, nullptr,
+        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
+
+    const bool received = request && WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+        WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(request, nullptr);
+    DWORD status = 0;
+    DWORD statusSize = sizeof(status);
+    const bool queried = received && WinHttpQueryHeaders(request,
+        WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
+        &status, &statusSize, WINHTTP_NO_HEADER_INDEX);
+
+    if (request)
+        WinHttpCloseHandle(request);
+    if (connection)
+        WinHttpCloseHandle(connection);
+    WinHttpCloseHandle(session);
+    return queried && status >= 200 && status < 500;
+}
+
 void set_result(BugReportService::State state, xr_string message)
 {
     ServiceState& instance = service();
@@ -329,9 +362,33 @@ void BugReportService::Reset()
     }
     instance.state.store(State::Idle, std::memory_order_release);
 }
+
+void BugReportService::CheckAvailability()
+{
+    ServiceState& instance = service();
+    if (instance.availability.load(std::memory_order_acquire) == Availability::Checking)
+        return;
+    if (instance.availabilityWorker.joinable())
+        instance.availabilityWorker.join();
+
+    instance.availability.store(Availability::Checking, std::memory_order_release);
+    instance.availabilityWorker = std::thread([]
+    {
+        ServiceState& instance = service();
+        instance.availability.store(check_availability() ? Availability::Available : Availability::Unavailable,
+            std::memory_order_release);
+    });
+}
+
+BugReportService::Availability BugReportService::GetAvailability()
+{
+    return service().availability.load(std::memory_order_acquire);
+}
 #else
 bool BugReportService::Submit(pcstr, pcstr, pcstr) { return false; }
 BugReportService::State BugReportService::GetState() { return State::Failed; }
 xr_string BugReportService::GetMessage() { return "Bug reports are supported only on Windows"; }
 void BugReportService::Reset() {}
+void BugReportService::CheckAvailability() {}
+BugReportService::Availability BugReportService::GetAvailability() { return Availability::Unavailable; }
 #endif
