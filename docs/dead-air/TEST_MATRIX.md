@@ -14,6 +14,11 @@
 | Lua binding parity | Original x86 exports vs x64 exports | Pass, zero missing |
 | Screen-space sun shafts | R4 renderer | Pass, all shader stages compiled |
 | FXAA | R4 renderer | Pass, both shader stages compiled |
+| Visor drops and reflections | R4 renderer, `r2_lenswater` and `r2_lensdirt` enabled | Pass only when `combine_2_naa` compiles without fallback shaders and the world remains visible |
+| PDA script tabs | Widescreen PDA, relations tab and one native tab | Pass only when text placement remains stable, tabs accept input, and no Lua/UI lifecycle error is logged |
+| Debug script tabs | Debug mode, spawner plus every available non-spawner tab | Pass only when each tab is created, drawn, and switched without Lua/UI lifecycle errors |
+| Outfit and helmet night vision | Equipped NV-capable outfit and helmet, R4 renderer | Pass only when both activation paths start and stop the configured post-process effector |
+| Third-party script compatibility | Binding parity fixture plus a representative packed or loose addon | Pass only when the addon starts without missing export, signature, or Lua ownership errors |
 | Level transition | Underground to Agroprom | Pass |
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |

@@ -151,11 +151,16 @@ c2_out main( v2p_aa_AA I )
 	#ifdef USE_LENS_WATER
 		float3 sundir_w = L_sun_dir_w;
 		float4 sunpos = screen_sunpos_diff(sundir_w, screen_sunpos(sundir_w), false);
-		final = visor_drops(center, sceneColor, final, sunpos.xyz, L_sun_dir_e.xyz, lenswater);
+		final = visor_drops(center, s_image.Sample(smp_rtlinear, center), final, sunpos.xyz, L_sun_dir_e.xyz, lenswater);
 
 		if (lensdirt.x > 0.9)
 		{
-			final = visor_reflect(center, final, centerDepth);
+		#ifndef USE_MSAA
+			float visorDepth = s_position.SampleLevel(smp_rtlinear, float3(center, 0), 0).z;
+		#else
+			float visorDepth = s_position.Load(int2(center * pos_decompression_params2.xy), iSample).z;
+		#endif
+			final = visor_reflect(center, final, visorDepth);
 		}
 	#endif
 

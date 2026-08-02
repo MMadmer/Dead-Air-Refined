@@ -642,6 +642,10 @@ void CUIStatic::script_register(lua_State* luaState)
             .def("SetFont", &CUIStatic::SetFont)
             .def("GetFont", &CUIStatic::GetFont)
 
+            .def("SetTextColor", +[](CUIStatic* self, u32 color)
+            {
+                self->SetTextColor(color);
+            })
             .def("SetTextColor", +[](CUIStatic* self, int a, int r, int g, int b)
             {
                 self->SetTextColor(color_argb(a, r, g, b));

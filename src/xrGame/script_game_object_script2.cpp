@@ -109,6 +109,7 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("kill", (void (CScriptGameObject::*)(CScriptGameObject*))&CScriptGameObject::Kill)
         .def("kill", (void (CScriptGameObject::*)(CScriptGameObject*, bool))(&CScriptGameObject::Kill))
         .def("hit", &CScriptGameObject::Hit)
+        .def("has_animated_visual", &CScriptGameObject::has_animated_visual)
         .def("play_cycle", (void (CScriptGameObject::*)(LPCSTR))(&CScriptGameObject::play_cycle))
         .def("play_cycle", (void (CScriptGameObject::*)(LPCSTR, bool))(&CScriptGameObject::play_cycle))
         .def("fov", &CScriptGameObject::GetFOV)

@@ -163,6 +163,7 @@ public:
     CScriptGameObject* Parent() const;
     void Hit(CScriptHit* tLuaHit);
     int clsid() const;
+    bool has_animated_visual() const;
     void play_cycle(LPCSTR anim, bool mix_in);
     void play_cycle(LPCSTR anim);
     Fvector Center();

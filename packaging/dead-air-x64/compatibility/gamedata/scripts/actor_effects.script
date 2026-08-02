@@ -1,0 +1,510 @@
+local device = device
+local ammo_r = 1
+--local xr_sound = xr_sound
+--local system_ini = system_ini
+--local time_global = time_global
+local upd_time = 0
+local helmet_active = 0
+local opt = actor_effects_data.options
+local wpn_fx = actor_effects_data.wpn_fx
+local string = string
+local math = math
+local effect_outfit = "none"
+local effect_helm = "none"
+local effect_backpack = "none"
+
+local time_disabled = 0
+local force_breath = nil
+
+
+function on_game_start()
+	--RegisterScriptCallback("actor_on_info_callback",process_pda_infoportion)
+	RegisterScriptCallback("actor_on_item_use",use_item_obj)
+	RegisterScriptCallback("actor_on_update",update)
+	RegisterScriptCallback("actor_on_first_update",init)
+end
+
+local item_fx = actor_effects_data.item_fx
+local item_in_use = {}
+local item_not_in_use = true
+
+
+function init()
+	if not db.actor then return end
+	if db.actor:item_in_slot(7) then
+		effect_outfit = db.actor:item_in_slot(7):id()
+	end
+
+	if db.actor:item_in_slot(12) then
+		effect_helm = db.actor:item_in_slot(12):id()
+	end
+
+	if db.actor:item_in_slot(15) then
+		effect_backpack = db.actor:item_in_slot(15):id()
+	end
+
+	actor_effects_data.update_fx()
+	wpn_fx = actor_effects_data.wpn_fx
+end
+
+function use_item_obj(item)
+	if (item) then
+		use_item(item:section())
+	end
+end
+
+function disable_effects_timer(n)
+	time_disabled = time_global() + n
+end
+
+function bad_breath()
+	force_breath = true
+end
+
+function use_item(name)
+
+	if (axr_main.config:r_value("mm_options","enable_extra_animations",1,false) == false) then return end
+
+	--printf("-- use item")
+	if item_fx[name] and (time_global() > time_disabled) then
+		--printf("itemfx = true")
+		local t = tostring(time_global())
+		item_not_in_use = false
+		item_in_use[t] = {}
+		for k, v in pairs(item_fx[name]) do
+			item_in_use[t][k] = v
+		end
+	end
+end
+
+function update()
+	if db.actor then
+		local tg = time_global()
+		if tg > upd_time then
+			upd_time = tg+180
+			actor_condition()
+		end
+
+		ammo_check()
+		use_item_update()
+		outfit_update()
+	end
+end
+
+
+function outfit_update()
+	--printf("outfit_update")
+	if not db.actor then return end
+
+	local outfit = "none"
+	if db.actor:item_in_slot(7) then
+		outfit = db.actor:item_in_slot(7):id()
+	end
+
+	if not (outfit == effect_outfit) then
+		effect_outfit = outfit
+		if not has_alife_info("BAR_ARENA_FIGHT") then
+			use_item("outfit")
+		end
+	end
+
+	local helm = "none"
+	if db.actor:item_in_slot(12) then
+		helm = db.actor:item_in_slot(12):id()
+	end
+
+	if not (helm == effect_helm) then
+		effect_helm = helm
+		if not has_alife_info("BAR_ARENA_FIGHT") then
+			use_item("helm")
+		end
+	end
+
+	local backpack = "none"
+	if db.actor:item_in_slot(15) then
+		backpack = db.actor:item_in_slot(15):id()
+	end
+
+	if not (backpack == effect_backpack) then
+		effect_backpack = backpack
+		if not has_alife_info("BAR_ARENA_FIGHT") and (effect_backpack ~= "none") then
+			use_item("outfit")
+		end
+	end
+end
+
+function use_item_update()
+	--printf("use_item_update")
+	if item_not_in_use then
+		return
+	end
+
+	local in_use = 0
+	for k, t in pairs(item_in_use) do
+		in_use = in_use+1
+		local remove = true
+		local tg = time_global()-tonumber(k)
+		for milli, action in pairs(t) do
+			remove = false
+			if tg > milli then
+				assert(loadstring(action))()
+				--db.actor:give_game_news(tostring(tg), action, "ui_iconsTotal_grouping", 0, 5000, 0)
+				item_in_use[k][milli] = nil
+			end
+		end
+		if remove then
+			in_use = in_use-1
+			item_in_use[k] = nil
+		end
+	end
+	item_not_in_use = (in_use==0)
+end
+
+local no_drop_items = opt.health.no_drop_wnp
+local wpn_snd = false
+
+local shotc = 1
+local shott = 0
+
+function shoot_effect(wpn)
+
+	--printf("SHOOT")
+
+	if shott and shott < time_global() then
+		shotc = 1
+		shott = nil
+	end
+
+	--local sect = wpn:section()
+	local sect = system_ini():r_string_ex(wpn:section(),"repair_type")
+
+	if not (sect and wpn_fx[sect]) then
+		return
+	end
+
+	if wpn_snd then
+		local snd_obj = sound_object("weapons\\"..wpn_snd)
+		snd_obj:play(db.actor,0,sound_object.s2d)
+	end
+	local anims = {}
+	local s = wpn_fx[sect].s
+	local sc = #s
+
+	if sc > 1 then
+		if wpn_fx[sect].r == 1 then
+			s = s[math.random(#s)]
+		elseif wpn_fx[sect].r == 2 then
+			if shotc == 1 then
+				s = s[1]
+			else
+				s = s[math.random(2,#s)]
+			end
+		else
+			sc = shotc <= sc and shotc or (sc > 2 and math.random(sc-1,sc)) or sc
+			s = s[sc]
+		end
+	else
+		s = s[1]
+	end
+
+	for i,v in pairs(wpn_fx[sect].e) do
+		cnt,r = math.modf(v[1])
+		if r ~= 0 and cnt > 4 then --fmb
+			cnt = cnt-cnt*math.random(0,r*100)/100 --fmb
+			cnt,r = math.modf(cnt)
+		end
+
+		if r ~= 0 and math.random() < r then
+			cnt = cnt+1
+		end
+
+		if cnt > 0 then
+			table.insert(anims,{e = i,d = v[2] or math.random(0,1),c = cnt})
+		end
+	end
+	for i,a in ipairs(anims) do
+		local n = string.format([[shoot\s%s_e%s_%s.anm]],s,a.e,a.d)
+		for ii=1,a.c do
+			level.add_cam_effector(n,math.random(5000,8000),false,"")
+		end
+	end
+	for k,v in pairs(wpn_fx[sect].p) do
+		local eid = math.random(5000,8000)
+		level.add_pp_effector(string.format([[shoot\%s_s%s.ppe]],k,s), eid, false)
+		if v > 0 then
+			level.set_pp_effector_factor(eid,v)
+		end
+	end
+	shotc = shotc+1
+	shott = time_global()+100
+end
+
+local wpn_r = 0
+local wpn_id = -1
+local ammo_current = -1
+local stpk = net_packet()
+local ammo_class = {}
+local ammo_test = {}
+
+function ammo_check()
+	--printf("ammo_check")
+	local wpn = rx_utils.item_is_fa(db.actor:active_item()) and db.actor:active_item()
+
+	if not wpn then return end
+
+	local sect = system_ini():r_string_ex(wpn:section(),"repair_type")
+
+	if wpn_fx[sect] then
+		local id = wpn:id()
+		local sobj = alife_object(id)
+		if sobj then
+			local t = {upgrades = {}}
+			stpk:w_begin(0)
+			sobj:STATE_Write(stpk)
+			stpk:r_seek(2)
+			t.gvid = stpk:r_u16()
+			t.obs32u1 = stpk:r_float()
+			t.obs32u2 = stpk:r_s32()
+			t.lvid = stpk:r_s32()
+			t.oflags = stpk:r_s32()
+			t.custom = stpk:r_stringZ()
+			t.sid = stpk:r_s32()
+			t.obs32u3 = stpk:r_s32()
+			t.visual = stpk:r_stringZ()
+			t.vsu8u1 = stpk:r_u8()
+			t.condition = stpk:r_float()
+			local len = stpk:r_s32()
+			for i=1,len,1 do
+				table.insert(t.upgrades,stpk:r_stringZ())
+			end
+			t.ammo_current = stpk:r_u16()
+			t.condition_type = stpk:r_u32()
+			t.ammo_elapsed = stpk:r_u16()
+			t.weapon_state = stpk:r_u8() or 0
+			t.addon_flags = stpk:r_u8()
+			t.ammo_type = stpk:r_u8()
+--			t.xz1 = stpk:r_u8()
+
+			if wpn_id~=id then
+				wpn_id = id
+				wpn_snd = false
+				shotc = 1
+				ammo_class = {}
+				ammo_test = {}
+				wpn_r = system_ini():r_string(wpn:section(), "cam_dispersion")
+				ammo_r = system_ini():r_string(wpn:section(), "ammo_class")
+				for w in string.gmatch(ammo_r, "[_%-%.%w]+") do
+					table.insert(ammo_test, w)
+					w = system_ini():r_string(w, "impair")
+					table.insert(ammo_class, w)
+				end
+				ammo_r = 1
+				local disp = wpn_r
+				for k, v in pairs(t.upgrades) do
+					k = system_ini():r_string(v, "property")
+					if k == "prop_recoil" then
+						v = system_ini():r_string(v, "section")
+						disp = disp + system_ini():r_string(v, "cam_dispersion")
+					elseif  k == "prop_calibre" then
+						ammo_test = {}
+						ammo_class = {}
+						v = system_ini():r_string(v, "section")
+						v = system_ini():r_string(v, "ammo_class")
+						for w in string.gmatch(v, "[_%-%.%w]+") do
+							table.insert(ammo_test, w)
+							w = system_ini():r_string(w, "impair")
+							table.insert(ammo_class, w)
+						end
+					end
+				end
+				wpn_r = disp / wpn_r
+				ammo_current = -1
+			end
+--			db.actor:give_game_news(tostring(t.sid), tostring(t.oflags), "ui_iconsTotal_grouping", 0, 5000, 0)
+			local ammo_in_mag =  wpn:get_ammo_in_magazine()
+
+			if t.addon_flags > 3 then
+				wpn_snd = wpn_fx[sect]["shoot_sil"]
+			else
+				wpn_snd = wpn_fx[sect]["shoot"]
+			end
+			wpn_snd = wpn_snd and wpn_snd[t.ammo_type]
+			ammo_r = math.sqrt((ammo_class[t.ammo_type+1] or 1) ^3) * wpn_r
+
+			if ammo_current ~= ammo_in_mag and t.weapon_state == 5 then
+				--shoot_effect(wpn)
+				ammo_current = ammo_in_mag
+			end
+		else
+			wpn_id = -1
+		end
+	end
+end
+
+local prev_health = 0
+local actor_speed_time = 0
+function hit_effect()
+	local cur_health = db.actor.health
+	local delta_health = (prev_health-cur_health)*100
+	if delta_health > opt.health.little_delta then
+		actor_speed_time = math.min(32, actor_speed_time+delta_health*opt.speed.k_health)
+		level.add_pp_effector(opt.health.little_ppe, 2011, false)
+		level.set_pp_effector_factor(2011, delta_health)
+		if delta_health > opt.health.middle_delta then
+			local cameffs,sounds
+			if delta_health > opt.health.huge_delta then
+
+				--level.add_pp_effector(opt.health.huge_ppe, 2012, false)
+				level.set_pp_effector_factor(2012, delta_health)
+				--cameffs = opt.health.huge_anm
+				sounds = opt.health.huge_snd
+			else
+				cameffs = opt.health.middle_anm
+				sounds = opt.health.middle_snd
+			end
+			if not shott then
+				level.add_cam_effector("camera_effects\\"..cameffs[math.random(#cameffs)]..".anm",999,false,"")
+			end
+			local snd_obj = sound_object("actor\\"..sounds[math.random(#sounds)])
+			snd_obj:play(db.actor,0,sound_object.s2d)
+			if math.random(100) < (delta_health*opt.health.drop_wnp_prob) then
+				local active_item = db.actor:active_item()
+				if active_item and not no_drop_items[active_item:section()] then
+					db.actor:drop_item(active_item)
+				end
+			end
+		end
+	end
+	prev_health = cur_health
+end
+
+local health_play = 0
+local gas_play = 0
+local run_play = 0
+local snd_tg = 0
+local breath_sound = nil
+local actor_speed = {x=0, y=0, z=0}
+
+function actor_condition()
+	local tg = time_global()
+	local radiation = db.actor.radiation
+	local cam_dist = db.actor:bone_position("bip01_head"):distance_to_sqr(device().cam_pos)
+	local pos = db.actor:position()
+	local speed = (pos.x - actor_speed.x)^2+(pos.y - actor_speed.y)^2+(pos.z - actor_speed.z)^2
+	actor_speed.x = pos.x
+	actor_speed.y = pos.y
+	actor_speed.z = pos.z
+	if radiation > 0 then
+		if radiation > opt.radiation_ppe_threshold then
+			level.add_pp_effector("radiation.ppe", 2020, true)
+		else
+			level.remove_pp_effector(2020)
+		end
+		level.set_pp_effector_factor(2020, radiation)
+		if math.random()<radiation then
+			radiation = radiation>0.5 and math.random()<radiation/1.3 and "click3" or math.random(8)
+
+			if (db.actor:object("geiger")) then
+				local snd = sound_object("detectors\\geiger_"..radiation)
+				snd:play(db.actor,0,sound_object.s2d)
+			end
+		end
+	end
+
+	if speed > opt.speed.mini then
+		actor_speed_time = actor_speed_time + opt.speed.inc
+	elseif actor_speed_time > opt.speed.dec then
+		actor_speed_time = actor_speed_time - opt.speed.dec
+	end
+	actor_speed_time = math.min(32, actor_speed_time + db.actor.bleeding*opt.speed.k_bleed)
+
+	--printf("mask: "..tostring(dinamic_hud.ismask()))
+	--printf("cfg: "..tostring(axr_main.config:r_value("mm_options","enable_mask_hud",1,false)))
+
+	if (dinamic_hud.ismask()) and (axr_main.config:r_value("mm_options","enable_mask_hud",1,false) == true) then
+		--printf("mask")
+		breath_mask()
+	else
+		--printf("nomask")
+		breath_nomask(actor_speed_time)
+	end
+end
+
+function breath_mask()
+	local tg = time_global()
+	if tg>snd_tg then
+		gas_play = gas_play+1
+		if gas_play > 8 then gas_play = 1 end
+		local cond = (db.actor.health > 0.2) and math.ceil((1.01-db.actor.power)*3+actor_speed_time/8) or 8
+		cond = force_breath and 8 or cond
+		breath_sound = sound_object("actor\\gas_breath_"..cond.."_"..gas_play)
+		snd_tg = tg+breath_sound:length()*1.25
+		breath_sound:play(db.actor,0,sound_object.s2d)
+		force_breath = nil
+
+		--printf(cond)
+
+		if (gas_play%2 == 0) or (cond == 8) then
+			local blur = 1.6-cond/20
+			dinamic_hud.reset_blurs(1,blur)
+		end
+	end
+end
+
+function breath_nomask(actor_speed_time)
+	local tg = time_global()
+	local health = db.actor.health
+
+	if tg < snd_tg or health < 0 then return end
+
+	if health > opt.health.level2 and not force_breath then
+		if actor_speed_time > opt.speed.time_mini  or db.actor.power < opt.speed.stamina or run_play == 1 then
+			run_play = run_play+1
+			if run_play > 2 then run_play = 1 end
+			breath_sound = sound_object("actor\\run_"..math.ceil(3*actor_speed_time/44).."_"..run_play)
+			breath_sound:play(db.actor,0,sound_object.s2d)
+			snd_tg = tg+breath_sound:length()*1.15
+		else
+			run_play = 2
+		end
+		return
+	end
+
+	health = force_breath and 0 or health
+
+	if health <= opt.health.level1 then
+		health = 1
+		if math.random()<0.1 then
+			health_play = 0
+		else
+			health_play = health_play+1
+			if health_play > 4 then health_play = 1 end
+		end
+	else
+		health = 2
+		health_play = health_play+1
+		if health_play > 4 then health_play = 1 end
+	end
+
+
+	snd_tg = tg+opt.health.injury_snd["_"..health.."_"..health_play]
+	breath_sound = sound_object("actor\\health_"..health.."_"..health_play)
+	breath_sound:play(db.actor,0,sound_object.s2d)
+	force_breath = nil
+end
+
+
+function use_helmet()
+	dinamic_hud.helmet_switch()
+end
+
+local weapon_hidden = 0
+function use_weapon(f)
+	local hidden = weapon_hidden
+	weapon_hidden = weapon_hidden + f * 2 - 1
+	if weapon_hidden == 0 then
+		db.actor:restore_weapon()
+	elseif hidden == 0 then
+		db.actor:hide_weapon()
+	end
+end

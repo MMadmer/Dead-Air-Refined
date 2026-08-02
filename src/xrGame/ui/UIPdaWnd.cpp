@@ -276,7 +276,6 @@ void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)
     {
         if (UIMainPdaFrame->IsChild(m_pActiveDialog))
             UIMainPdaFrame->DetachChild(m_pActiveDialog);
-        UIMainPdaFrame->SetKeyboardCapture(nullptr, true);
         m_pActiveDialog->Show(false);
     }
 
@@ -305,10 +304,7 @@ void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)
     if (GEnv.ScriptEngine->functor("pda.set_active_subdialog", functor))
     {
         if (CUIDialogWndEx* scriptWnd = functor(section.c_str()))
-        {
-            scriptWnd->SetHolder(CurrentDialogHolder());
             m_pActiveDialog = scriptWnd;
-        }
     }
 
     if (m_pActiveDialog)
@@ -319,7 +315,6 @@ void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)
 
         if (!UIMainPdaFrame->IsChild(m_pActiveDialog))
             UIMainPdaFrame->AttachChild(m_pActiveDialog);
-        UIMainPdaFrame->SetKeyboardCapture(m_pActiveDialog, true);
         m_pActiveDialog->Show(true);
         m_sActiveSection = section;
         SetActiveCaption();

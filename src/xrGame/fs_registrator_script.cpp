@@ -111,8 +111,10 @@ public:
 
 FS_file_list_ex::FS_file_list_ex(LPCSTR path, u32 flags, LPCSTR mask)
 {
-    FS_Path* P = FS.get_path(path);
-    P->m_Flags.set(FS_Path::flNeedRescan, TRUE);
+    FS_Path* rootPath{};
+    // Absolute paths are used by the shipped debug editors.
+    if (FS.get_path(path, &rootPath))
+        rootPath->m_Flags.set(FS_Path::flNeedRescan, TRUE);
     FS.m_Flags.set(CLocatorAPI::flNeedCheck, TRUE);
     FS.rescan_pathes();
 

@@ -1,0 +1,41 @@
+function install_debug_tab_factory()
+	if not (ui_debug_main and ui_debug_main.debug_ui) then
+		return
+	end
+
+	ui_debug_main.debug_ui.CreateTab = function(self, id)
+		self.tab_list[id] = true
+		self["dlg_" .. id] = ui_debug_main["debug_ui_" .. id](self, self.binds)
+		self["dlg_" .. id]:InitControls(0, 0, self.xml, self)
+		self["dlg_" .. id]:Show(false)
+		self.dialog:AttachChild(self["dlg_" .. id])
+		self.xml:InitWindow("tab_size", 0, self["dlg_" .. id])
+	end
+end
+
+function install_recursive_file_scan()
+	if not (lua_extensions) then
+		return
+	end
+
+	lua_extensions.recurse_subdirectories_and_execute = function(root, extensions, callback, ...)
+		local masks = {}
+		for _, extension in ipairs(extensions) do
+			masks[#masks + 1] = "*." .. extension
+		end
+
+		local files = getFS():file_list_open_ex(root, FS.FS_ListFiles, table.concat(masks, ","))
+		for index = 0, files:Size() - 1 do
+			local relative_path = files:GetAt(index):NameFull()
+			local directory, filename = string.match(relative_path, "^(.*[\\/])([^\\/]+)$")
+			if not (filename) then
+				directory = ""
+				filename = relative_path
+			end
+			callback(root .. "\\" .. directory, filename, ...)
+		end
+	end
+end
+
+install_debug_tab_factory()
+install_recursive_file_scan()

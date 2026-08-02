@@ -94,7 +94,8 @@ bool CUIRankingWnd::Init()
     std::ignore = UIHelper::CreateStatic(xml, "center_background", this, false);
     std::ignore = UIHelper::CreateFrameWindow(xml, "down_background", this, false);
 
-    if (xml.NavigateToNode("actor_ch_info"))
+    const bool has_actor_summary = xml.NavigateToNode("actor_ch_info") && xml.NavigateToNode("money_caption");
+    if (has_actor_summary)
     {
         m_actor_ch_info = xr_new<CUICharacterInfo>();
         m_actor_ch_info->SetAutoDelete(true);
@@ -113,7 +114,8 @@ bool CUIRankingWnd::Init()
         }
     }
 
-    std::ignore = UIHelper::CreateFrameWindow(xml, "actor_icon_over", this, false);
+    if (has_actor_summary)
+        std::ignore = UIHelper::CreateFrameWindow(xml, "actor_icon_over", this, false);
 
     auto* money_caption = UIHelper::CreateStatic(xml, "money_caption", this, false);
     m_money_value = UIHelper::CreateStatic(xml, "money_value", this, false);

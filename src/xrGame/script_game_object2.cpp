@@ -133,6 +133,11 @@ void CScriptGameObject::set_item(
             queue_size, queue_interval, queue_interval);
 }
 
+bool CScriptGameObject::has_animated_visual() const
+{
+    return smart_cast<IKinematicsAnimated*>(object().Visual());
+}
+
 void CScriptGameObject::play_cycle(LPCSTR anim, bool mix_in)
 {
     IKinematicsAnimated* sa = smart_cast<IKinematicsAnimated*>(object().Visual());

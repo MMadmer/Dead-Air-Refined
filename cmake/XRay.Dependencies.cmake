@@ -75,15 +75,26 @@ if (WIN32)
         )
         list(APPEND _runtime_files "${_d3dcompiler_runtime}")
 
+        get_filename_component(_vc_root "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        foreach(_parent RANGE 1 6)
+            get_filename_component(_vc_root "${_vc_root}" DIRECTORY)
+        endforeach()
+
         file(GLOB _vc_runtime_directories LIST_DIRECTORIES TRUE
             "$ENV{VCToolsRedistDir}/x64/Microsoft.VC*.CRT"
+            "${_vc_root}/Redist/MSVC/*/x64/Microsoft.VC*.CRT"
         )
         file(GLOB _openmp_runtime_directories LIST_DIRECTORIES TRUE
             "$ENV{VCToolsRedistDir}/x64/Microsoft.VC*.OpenMP"
+            "${_vc_root}/Redist/MSVC/*/x64/Microsoft.VC*.OpenMP"
         )
         file(GLOB _cxxamp_runtime_directories LIST_DIRECTORIES TRUE
             "$ENV{VCToolsRedistDir}/x64/Microsoft.VC*.CXXAMP"
+            "${_vc_root}/Redist/MSVC/*/x64/Microsoft.VC*.CXXAMP"
         )
+        list(SORT _vc_runtime_directories COMPARE NATURAL ORDER DESCENDING)
+        list(SORT _openmp_runtime_directories COMPARE NATURAL ORDER DESCENDING)
+        list(SORT _cxxamp_runtime_directories COMPARE NATURAL ORDER DESCENDING)
         if (NOT _vc_runtime_directories OR NOT _openmp_runtime_directories OR NOT _cxxamp_runtime_directories)
             message(FATAL_ERROR "The Visual C++ x64 redistributable files could not be located.")
         endif()
