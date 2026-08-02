@@ -230,7 +230,10 @@ void CUIPdaWnd::Show(bool status)
         }
 
         if (!m_sActiveSection.empty())
+        {
             SetActiveSubdialog(m_sActiveSection);
+            UITabControl->SetActiveTab(m_sActiveSection);
+        }
         else
         {
             cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
@@ -259,7 +262,6 @@ void CUIPdaWnd::Show(bool status)
 void CUIPdaWnd::SelectActiveSubdialog(const shared_str& section)
 {
     m_sActiveSection = section;
-    UITabControl->SetActiveTab(section);
 }
 
 void CUIPdaWnd::Update()
