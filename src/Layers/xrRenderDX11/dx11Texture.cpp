@@ -256,7 +256,7 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
             string_path gameTexturePath;
             if (!FS.exist(gameTexturePath, "$game_textures$", fname, ".dds"))
             {
-                Msg("! Fallback to default bump map: %s", fname);
+                Msg("* Fallback to default bump map: %s", fname);
                 if (strstr(fname, "_bump#"))
                     R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return nullptr);
                 else

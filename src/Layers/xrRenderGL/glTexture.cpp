@@ -75,7 +75,7 @@ GLuint CRender::texture_load(LPCSTR fRName, u32& ret_msize, GLenum& ret_desc)
 
         if (!FS.exist(fn, "$game_textures$", fname, ".dds") && strstr(fname, "_bump"))
         {
-            Msg("! Fallback to default bump map: %s", fname);
+            Msg("* Fallback to default bump map: %s", fname);
             if (strstr(fname, "_bump#"))
                 R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return 0);
             else

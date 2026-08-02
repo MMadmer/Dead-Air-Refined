@@ -874,8 +874,6 @@ void CActor::SwitchNightVision()
         }
     }
 
-    if (CTorch* torch = smart_cast<CTorch*>(inventory().ItemFromSlot(TORCH_SLOT)))
-        torch->SwitchNightVision();
 }
 
 void CActor::SwitchTorch()
