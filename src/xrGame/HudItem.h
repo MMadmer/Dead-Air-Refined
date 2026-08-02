@@ -20,13 +20,16 @@ class CHUDState
 public:
     enum EHudStates
     {
-        eHidden = 0,
-        eIdle,
+        eIdle = 0,
         eShowing,
         eHiding,
+        eHidden,
         eBore,
         eLastBaseState = eBore,
     };
+
+    // Dead Air scripts and saves rely on the original numeric state layout.
+    static_assert(eIdle == 0 && eShowing == 1 && eHiding == 2 && eHidden == 3 && eBore == 4);
 
 private:
     u32 m_hud_item_state;
