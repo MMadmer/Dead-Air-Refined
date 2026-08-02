@@ -31,6 +31,7 @@
 #include "HUDManager.h"
 #include "Weapon.h"
 #include "GamePersistent.h"
+#include "xrScriptEngine/script_engine.hpp"
 
 bool g_bAutoClearCrouch = true;
 
@@ -117,7 +118,10 @@ void CActor::IR_OnKeyboardPress(int cmd)
     case kCAM_3: cam_Set(eacFreeLook); break;
     case kNIGHT_VISION:
     {
-        SwitchNightVision();
+        luabind::functor<void> scriptedNightVision;
+        // Dead Air handles this action in its raw-key callback before actor input.
+        if (!GEnv.ScriptEngine->functor("itms_manager.on_key_press", scriptedNightVision))
+            SwitchNightVision();
         break;
     }
     case kTORCH:
