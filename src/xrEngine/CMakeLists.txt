@@ -399,14 +399,6 @@ target_sources_grouped(
 #    xrLoadSurface.cpp
 #)
 
-target_sources(xrEngine
-    PRIVATE
-    ClientServer.txt
-    "Effects description.txt"
-    features.txt
-    TODO.txt
-)
-
 target_include_directories(xrEngine
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"

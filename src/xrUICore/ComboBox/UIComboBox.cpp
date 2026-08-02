@@ -115,8 +115,14 @@ CUIListBoxItem* CUIComboBox::AddItem_(LPCSTR str, int _data)
 
 void CUIComboBox::OnListItemSelect()
 {
-    m_text.SetText(m_list_box.GetSelectedText());
     CUIListBoxItem* itm = m_list_box.GetSelectedItem();
+    if (!itm)
+    {
+        ShowList(false);
+        return;
+    }
+
+    m_text.SetText(m_list_box.GetSelectedText());
 
     const int bk_itoken_id = m_itoken_id;
 
@@ -214,6 +220,9 @@ void CUIComboBox::SetItemIDX(int idx)
 {
     m_list_box.SetSelectedIDX(idx);
     CUIListBoxItem* itm = m_list_box.GetSelectedItem();
+    if (!itm)
+        return;
+
     m_itoken_id = (int)(__int64)itm->GetData();
 
     m_text.SetText(m_list_box.GetSelectedText());
@@ -230,6 +239,8 @@ void CUIComboBox::SetItemToken(int tok_id)
 bool CUIComboBox::SetNextItemSelected(bool next, bool loop)
 {
     const auto lastItem = (int)m_list_box.GetSize() - 1;
+    if (lastItem < 0)
+        return false;
 
     int idx = (int)m_list_box.GetSelectedIDX();
 

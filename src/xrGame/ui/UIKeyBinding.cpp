@@ -49,7 +49,43 @@ void CUIKeyBinding::FillUpList(CUIXml& xml_doc_ui, LPCSTR path_ui)
     CUIXml xml_doc;
     xml_doc.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, m_isGamepadBinds ? "ui_keybinding_gamepad.xml" : "ui_keybinding.xml");
 
-    int groupsCount = xml_doc.GetNodesNum("", 0, "group");
+    const bool addMapBinding = !m_isGamepadBinds && !IsActionExist("map", xml_doc);
+    const int groupsCount = xml_doc.GetNodesNum("", 0, "group");
+
+    const auto addCommand = [&](LPCSTR commandId, LPCSTR command)
+    {
+        CUIStatic* item = xr_new<CUIStatic>(commandId);
+        CUIXmlInit::InitStatic(xml_doc_ui, strconcat(sizeof(buf), buf, path_ui, ":scroll_view:item_key"), 0, item);
+        item->TextItemControl()->SetTextST(commandId);
+        m_scroll_wnd->AddWindow(item, true);
+
+#ifdef DEBUG
+        if (kNOTBINDED == ActionNameToId(command))
+        {
+            Msg("action [%s] not exist. update data", command);
+            return;
+        }
+#endif
+
+        float itemWidth = m_header[1].GetWidth() - 3.0f;
+        float itemPos = m_header[1].GetWndPos().x;
+        CUIEditKeyBind* editKB = m_isGamepadBinds ? xr_new<CUIEditKeyBind>(false, true) : xr_new<CUIEditKeyBind>(true);
+        editKB->SetAutoDelete(true);
+        editKB->InitKeyBind(Fvector2().set(itemPos, 0.0f), Fvector2().set(itemWidth, item->GetWndSize().y));
+        editKB->AssignProps(command, m_isGamepadBinds ? "key_binding_gamepad" : "key_binding");
+        item->AttachChild(editKB);
+
+        if (!m_isGamepadBinds)
+        {
+            itemWidth = m_header[2].GetWidth() - 3.0f;
+            itemPos = m_header[2].GetWndPos().x;
+            editKB = xr_new<CUIEditKeyBind>(false);
+            editKB->SetAutoDelete(true);
+            editKB->InitKeyBind(Fvector2().set(itemPos, 0.0f), Fvector2().set(itemWidth, item->GetWndSize().y));
+            editKB->AssignProps(command, "key_binding");
+            item->AttachChild(editKB);
+        }
+    };
 
     for (int i = 0; i < groupsCount; ++i)
     {
@@ -69,51 +105,14 @@ void CUIKeyBinding::FillUpList(CUIXml& xml_doc_ui, LPCSTR path_ui)
 
         for (int j = 0; j < commandsCount; ++j)
         {
-            // first field of list item
             shared_str command_id = xml_doc.ReadAttrib("command", j, "id");
-
-            item = xr_new<CUIStatic>(command_id.c_str());
-            CUIXmlInit::InitStatic(xml_doc_ui, strconcat(sizeof(buf), buf, path_ui, ":scroll_view:item_key"), 0, item);
-            item->TextItemControl()->SetTextST(command_id.c_str());
-            m_scroll_wnd->AddWindow(item, true);
-
             shared_str exe = xml_doc.ReadAttrib("command", j, "exe");
-
-#ifdef DEBUG
-            if (kNOTBINDED == ActionNameToId(exe.c_str()))
-            {
-                Msg("action [%s] not exist. update data", exe.c_str());
-                continue;
-            }
-#endif
-
-            float item_width = m_header[1].GetWidth() - 3.0f;
-            float item_pos = m_header[1].GetWndPos().x;
-            CUIEditKeyBind* editKB;
-            if (!m_isGamepadBinds)
-                editKB = xr_new<CUIEditKeyBind>(true);
-            else
-                editKB = xr_new<CUIEditKeyBind>(false, true);
-            editKB->SetAutoDelete(true);
-            editKB->InitKeyBind(Fvector2().set(item_pos, 0.0f), Fvector2().set(item_width, item->GetWndSize().y));
-            if (!m_isGamepadBinds)
-                editKB->AssignProps(exe, "key_binding");
-            else
-                editKB->AssignProps(exe, "key_binding_gamepad");
-            item->AttachChild(editKB);
-
-            if (!m_isGamepadBinds)
-            {
-                item_width = m_header[2].GetWidth() - 3.0f;
-                item_pos = m_header[2].GetWndPos().x;
-                editKB = xr_new<CUIEditKeyBind>(false);
-                editKB->SetAutoDelete(true);
-                editKB->InitKeyBind(Fvector2().set(item_pos, 0.0f), Fvector2().set(item_width, item->GetWndSize().y));
-                editKB->AssignProps(exe, "key_binding");
-                item->AttachChild(editKB);
-            }
+            addCommand(command_id.c_str(), exe.c_str());
         }
         xml_doc.SetLocalRoot(xml_doc.GetRoot());
+
+        if (addMapBinding && grp_name == "kb_grp_inventory")
+            addCommand("kb_map", "map");
     }
 #ifdef DEBUG
     CheckStructure(xml_doc);
@@ -170,6 +169,7 @@ void CUIKeyBinding::CheckStructure(CUIXml& xml_doc)
             break;
     }
 }
+#endif
 
 bool CUIKeyBinding::IsActionExist(LPCSTR action, CUIXml& xml_doc)
 {
@@ -199,4 +199,3 @@ bool CUIKeyBinding::IsActionExist(LPCSTR action, CUIXml& xml_doc)
     }
     return ret;
 }
-#endif

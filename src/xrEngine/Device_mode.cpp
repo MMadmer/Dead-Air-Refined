@@ -150,8 +150,9 @@ void CRenderDevice::UpdateWindowProps()
     }
     else if (b_is_Ready)
     {
+        SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
         SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
-        SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN);
+        SDL_SetWindowBordered(m_sdlWnd, SDL_FALSE);
 
         SDL_DisplayMode mode;
         SDL_GetWindowDisplayMode(m_sdlWnd, &mode);
@@ -159,6 +160,7 @@ void CRenderDevice::UpdateWindowProps()
         mode.h = psDeviceMode.Height;
         mode.refresh_rate = psDeviceMode.RefreshRate;
         SDL_SetWindowDisplayMode(m_sdlWnd, &mode);
+        SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN);
     }
 
     SDL_PumpEvents();

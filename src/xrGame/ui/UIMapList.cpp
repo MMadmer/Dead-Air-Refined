@@ -209,10 +209,9 @@ const char* CUIMapList::GetCommandLine(LPCSTR player_name)
     if (m_pWeatherSelector)
     {
         const auto selected = m_pWeatherSelector->GetSelectedIDX();
-        if (selected != u32(-1))
+        const auto& weathers = gMapListHelper.GetGameWeathers();
+        if (selected < weathers.size())
         {
-            const auto& weathers = gMapListHelper.GetGameWeathers();
-
             m_command += "/estime=";
             m_command += weathers[selected].StartTime.c_str();
         }

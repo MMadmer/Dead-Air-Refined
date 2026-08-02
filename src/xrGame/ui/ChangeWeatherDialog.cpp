@@ -25,6 +25,12 @@ ButtonListDialog::ButtonListDialog(pcstr window_name)
 
 void ButtonListDialog::Initialize(int buttonCount)
 {
+    if (!buttons.empty())
+    {
+        R_ASSERT2(static_cast<int>(buttons.size()) == buttonCount, "Button count changed after dialog initialization");
+        return;
+    }
+
     buttons.reserve(buttonCount);
     for (int i = 0; i < buttonCount; i++)
     {
@@ -108,6 +114,9 @@ void ChangeWeatherDialog::InitChangeWeather(CUIXml& xmlDoc)
 
 void ChangeWeatherDialog::OnButtonClick(int i)
 {
+    if (i < 0 || static_cast<u32>(i) >= weathers.size())
+        return;
+
     string1024 command;
     xr_sprintf(command, "cl_votestart changeweather %s %s", weathers[i].Name.c_str(), weathers[i].Time.c_str());
     Console->Execute(command);

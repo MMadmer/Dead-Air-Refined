@@ -18,12 +18,12 @@ public:
 
 protected:
     void FillUpList(CUIXml& xml_doc, LPCSTR path);
+    bool IsActionExist(LPCSTR action, CUIXml& xml_doc);
 
     void OnKeyMapChanged() override;
 
 #ifdef DEBUG
     void CheckStructure(CUIXml& xml_doc);
-    bool IsActionExist(LPCSTR action, CUIXml& xml_doc);
 #endif
 
 protected:
