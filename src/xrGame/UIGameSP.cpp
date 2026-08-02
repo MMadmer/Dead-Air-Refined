@@ -121,11 +121,11 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
     {
     case kACTIVE_JOBS:
     {
-        if (!pActor->inventory_disabled())
+        if (!pActor->inventory_disabled() && !PdaMenu->IsShown())
         {
-            if (!PdaMenu->IsShown())
-                PdaMenu->SelectActiveSubdialog("eptTasks");
-            ShowPdaMenu();
+            HideActorMenu();
+            PdaMenu->ShowDialog(true);
+            PdaMenu->SetActiveSubdialog("eptTasks");
         }
         break;
     }

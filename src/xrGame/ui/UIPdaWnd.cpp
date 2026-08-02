@@ -229,17 +229,9 @@ void CUIPdaWnd::Show(bool status)
             actor->CInventoryOwner::OnReceiveInfo("ui_pda");
         }
 
-        if (!m_sActiveSection.empty())
-        {
-            SetActiveSubdialog(m_sActiveSection);
-            UITabControl->SetActiveTab(m_sActiveSection);
-        }
-        else
-        {
-            cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
-            SetActiveSubdialog(subdialog);
-            UITabControl->SetActiveTab(subdialog);
-        }
+        cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
+        SetActiveSubdialog(subdialog);
+        UITabControl->SetActiveTab(subdialog);
     }
     else
     {
@@ -257,11 +249,6 @@ void CUIPdaWnd::Show(bool status)
         g_btnHint->Discard();
         g_statHint->Discard();
     }
-}
-
-void CUIPdaWnd::SelectActiveSubdialog(const shared_str& section)
-{
-    m_sActiveSection = section;
 }
 
 void CUIPdaWnd::Update()

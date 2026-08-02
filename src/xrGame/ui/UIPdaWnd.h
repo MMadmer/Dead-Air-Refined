@@ -83,7 +83,6 @@ public:
     void SetActiveDialog(CUIWindow* wnd) { m_pActiveDialog = wnd; }
     CUIWindow* GetActiveDialog() const { return m_pActiveDialog; }
     pcstr GetActiveSection() const { return m_sActiveSection.c_str(); }
-    void SelectActiveSubdialog(const shared_str& section);
     void SetActiveSubdialog(const shared_str& section);
     CUITabControl* GetTabControl() const { return UITabControl; }
 
