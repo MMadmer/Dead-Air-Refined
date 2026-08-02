@@ -25,6 +25,7 @@ ENGINE_API bool g_bBenchmark = false;
 string512 g_sBenchmarkName;
 
 int ps_fps_limit = 501;
+// Retained for existing user.ltx files; frame pacing now uses the global limit in every game state.
 int ps_fps_limit_in_menu = 60;
 
 bool g_bLoaded = false;
@@ -358,9 +359,6 @@ void CRenderDevice::ProcessFrame()
 
     if (GEnv.isDedicatedServer)
         updateDelta = 1000 / g_svDedicateServerUpdateReate;
-
-    else if (Paused() || g_pGameLevel == nullptr)
-        updateDelta = 1000 / ps_fps_limit_in_menu;
 
     if (frameTime < updateDelta)
         Sleep(updateDelta - frameTime);
