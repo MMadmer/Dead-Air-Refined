@@ -90,9 +90,9 @@ void CLight_Compute_XFORM_and_VIS::compute_xf_spot(light* L)
     // float	g_beta		= 2*rad2deg		(atanf(tan_beta));
     // Msg				("x(%f) : a(%f), b(%f)",x,g_alpha,g_beta);
 
-    // Point-light cubemap faces must match the exact 90-degree accumulation volumes.
-    const float coneShift = L->flags.type == IRender_Light::OMNIPART ? EPS_S : deg2rad(3.5f);
-    L->X.S.project.build_projection(L->cone + coneShift, 1.f, L->virtual_size, L->range + EPS_S);
+    // Match the original Dead Air projection: filtered cubemap faces need a stable overlap and near plane.
+    const float shadowCone = std::min(L->cone + deg2rad(5.f), PI * 0.98f);
+    L->X.S.project.build_projection(shadowCone, 1.f, SMAP_near_plane, L->range + EPS_S);
     L->X.S.combine.mul(L->X.S.project, L->X.S.view);
 }
 } // namespace xray::render::RENDER_NAMESPACE

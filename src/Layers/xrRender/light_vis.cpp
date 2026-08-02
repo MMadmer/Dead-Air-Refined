@@ -42,27 +42,24 @@ void light::vis_prepare(CBackend& cmd_list)
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
         skiptest = true;
 
-    bool conservativeOmnipart = false;
+    Fvector queryCenter = spatial.sphere.P;
+    float queryRadius = spatial.sphere.R;
     if (flags.type == IRender_Light::OMNIPART)
     {
         // Split point lights share one parent volume; their face spheres are not independent light bounds.
-        conservativeOmnipart =
-            Device.vCameraPosition.distance_to(position) <= (range * 1.01f + safe_area);
-        if (!conservativeOmnipart)
-        {
-            u32 planeMask = 0xffffffff;
-            const EFC_Visible parentVisibility =
-                RImplementation.ViewBase.testSphere(position, range, planeMask);
-
-            // A screen-clipped volume query can miss every sample while the parent still reaches the viewport.
-            conservativeOmnipart = parentVisibility == fcvPartial &&
-                !RImplementation.ViewBase.testSphere_dirty(position, EPS_L);
-        }
+        queryCenter = position;
+        queryRadius = range;
     }
 
+    u32 planeMask = 0xffffffff;
+    const EFC_Visible viewVisibility =
+        RImplementation.ViewBase.testSphere(queryCenter, queryRadius, planeMask);
+
+    // The original renderer kept clipped local lights alive; edge-clipped GPU queries are unreliable on the x64 path.
+    const bool screenClippedVolume = viewVisibility == fcvPartial;
     const bool cameraInsideVolume =
-        Device.vCameraPosition.distance_to(spatial.sphere.P) <= (spatial.sphere.R * 1.01f + safe_area);
-    if (skiptest || conservativeOmnipart || cameraInsideVolume)
+        Device.vCameraPosition.distance_to(queryCenter) <= (queryRadius * 1.01f + safe_area);
+    if (skiptest || screenClippedVolume || cameraInsideVolume)
     { // small error
         vis.visible = true;
         vis.pending = false;

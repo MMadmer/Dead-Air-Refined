@@ -237,16 +237,8 @@ static BOOL test_Level(occD* depth, int dim, u32 level, float _x0, float _y0, fl
 BOOL occRasterizer::test(float _x0, float _y0, float _x1, float _y1, float _z)
 {
     const occD z = df_2_s32up(_z) + 1;
-    const float width = (_x1 - _x0) * occ_dim_0;
-    const float height = (_y1 - _y0) * occ_dim_0;
-    const float span = _max(width, height);
 
-    if (span >= 16.0f && !test_Level(get_depth_level(3), occ_dim_3, 3, _x0, _y0, _x1, _y1, z))
-        return FALSE;
-    if (span >= 8.0f && !test_Level(get_depth_level(2), occ_dim_2, 2, _x0, _y0, _x1, _y1, z))
-        return FALSE;
-    if (span >= 4.0f && !test_Level(get_depth_level(1), occ_dim_1, 1, _x0, _y0, _x1, _y1, z))
-        return FALSE;
+    // Coarse HOM levels can reject bounds that slide across the viewport edge.
     return test_Level(get_depth_level(0), occ_dim_0, 0, _x0, _y0, _x1, _y1, z);
 }
 } // namespace xray::render::RENDER_NAMESPACE
