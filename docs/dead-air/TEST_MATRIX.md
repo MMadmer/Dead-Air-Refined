@@ -31,7 +31,7 @@
 | Raw update archive | Manifest schema, exact file set, per-file size and SHA-256 | Pass, 51 ZIP entries and 46 payload files including maintenance and uninstall components |
 | Saved-game preservation | Fresh install without `appdata` plus repeat install with an existing save sentinel | Pass, `appdata\savedgames` created and sentinel SHA-256 unchanged |
 | External updater | Isolated installed root, backup, apply, maintenance, cleanup | Pass, prior version snapshot created, obsolete sentinel removed, cache deleted, uninstaller regenerated |
-| GitHub release absence | Public releases API with no published releases | Pass, empty list accepted without an update candidate |
+| Empty release list | Isolated update response with no valid stable release | Pass, accepted without an update candidate or blocking the menu |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Manual diagnostic report | Loaded `async_benchmark_1`, hidden desktop | Pass, valid anonymous ZIP with system, hardware, runtime, content, log, configuration, and minidump data |
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |

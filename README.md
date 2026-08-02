@@ -41,7 +41,7 @@ provenance statement.
   decompression, and runtime lookup structures.
 - Expanded multicore execution for independent AI, pathfinding, physics,
   particle, sound, and renderer work.
-- Updated third-party libraries and a warning-clean `Release|x64` build.
+- Updated third-party libraries and a warning-clean x64 `Release` build.
 - Improved windowed, borderless, and exclusive-fullscreen display modes.
 - Engine-native anonymous diagnostic reports and a bug-report form available in
   both the main menu and the in-game menu.
@@ -50,17 +50,18 @@ provenance statement.
 - Patch installer with versioned backups, rollback to an earlier Refined build,
   and restoration of the original 32-bit runtime during removal.
 
-Detailed implementation and validation records are available in
-[`docs/dead-air`](docs/dead-air).
+Development and validation rules are defined in
+[`PROJECT_RULES.md`](PROJECT_RULES.md). Technical specifications are available
+in [`docs/dead-air`](docs/dead-air).
 
 ## Installation
 
 Download only one release asset. Most users need
 `Dead-Air-Refined-1.0.2-Setup.exe`; it supports both first-time installation
-and manual upgrades from an earlier Refined version. The
-`Dead-Air-Refined-1.0.2-Update.zip` asset is downloaded and applied by the
-built-in updater and should not be downloaded or extracted manually. You do
-not need both files.
+and manual upgrades from an earlier Refined version. Use
+`Dead-Air-Refined-1.0.2-Update.zip` when you prefer a fully manual installation:
+extract it into the game root and replace the existing files. The built-in
+updater downloads the same ZIP automatically. You do not need both files.
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
@@ -86,8 +87,8 @@ After confirmation, the updater closes the game, creates a versioned backup,
 replaces the runtime files, updates the maintenance utility, removes its cache,
 and starts the updated game.
 
-The installer remains the recommended option for manual installation. The
-`Update.zip` asset is intended for the integrated updater.
+The installer remains the recommended option. The `Update.zip` asset can also
+be extracted manually or used by the integrated updater.
 
 ## Backups, rollback, and removal
 
@@ -162,11 +163,11 @@ Dependency versions and compatibility pins are recorded in
 
 ## Project documentation
 
-- [`PORT_STATUS.md`](docs/dead-air/PORT_STATUS.md) — port scope and completed
-  compatibility work.
+- [`PROJECT_RULES.md`](PROJECT_RULES.md) — authoritative development, QA,
+  compatibility, commit, and release rules.
 - [`TEST_MATRIX.md`](docs/dead-air/TEST_MATRIX.md) — release validation matrix.
-- [`MULTICORE_OPTIMIZATION_PLAN.md`](docs/dead-air/MULTICORE_OPTIMIZATION_PLAN.md)
-  — multicore audit and implemented task batches.
+- [`AUTO_UPDATE.md`](docs/dead-air/AUTO_UPDATE.md) — update archive and client
+  protocol.
 - [`DIAGNOSTIC_REPORTS.md`](docs/dead-air/DIAGNOSTIC_REPORTS.md) — diagnostic
   archive format and privacy guarantees.
 - [`DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md) — dependency versions and

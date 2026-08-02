@@ -6,18 +6,18 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 
 | Component | Revision | Notes |
 | --- | --- | --- |
-| AMD AGS SDK | `v6.3.1` (`086c47ed8`) | Current public release. |
-| DirectXMath | `jun2026` (`93e6399d6d`) | Header-only SIMD math library built from pinned source. |
+| AMD AGS SDK | `v6.3.1` (`086c47ed8`) | Pinned public SDK source. |
+| DirectXMath | `93e6399d6d` (`may2026-5-g93e6399`) | Header-only SIMD math library built from pinned source. |
 | DirectXTex | `oct2025` (`232bbf2e39`) | Static texture-processing library built from pinned source. |
-| Dear ImGui | docking `b334d19b6` | Current docking branch, based on 1.92.9. |
-| GameSpy | `5597a6c582` | Current OpenXRay fork plus local x64 warning fixes. |
-| GLI | `3542f8830` | Current upstream revision. |
+| Dear ImGui | docking `b334d19b6` | Pinned docking revision based on 1.92.9. |
+| GameSpy | `5597a6c582` | Pinned OpenXRay fork plus local x64 warning fixes. |
+| GLI | `3542f8830` | Pinned upstream revision. |
 | LuaJIT | `ade7495df8` | Dead Air bytecode compatibility is applied by the canonical build wrapper. |
-| Luabind | `ffb1e5adb8` | Current Dead Air integration revision. |
+| Luabind | `ffb1e5adb8` | Pinned Dead Air integration revision. |
 | mimalloc | `v3.4.3` (`152fbf2634`) | Static allocator built from pinned source for each configuration. |
 | SDL2 | `2.32.8` (`98d1f3a45a`) | Shared runtime and headers built from pinned source. |
-| SSE2NEON | `3b70b3727` | Current upstream revision. |
-| SSE2RVV | `f1ab91659` | Current upstream revision. |
+| SSE2NEON | `3b70b3727` | Pinned upstream revision. |
+| SSE2RVV | `f1ab91659` | Pinned upstream revision. |
 | xrLuaFix | `e0fadfd9d1` | Lua marshal compatibility is applied by the canonical build wrapper. |
 | zlib | `v1.3.2` (`da607da73`) | Built with warnings enabled and treated as errors. |
 
@@ -28,8 +28,8 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | parallel-hashmap | master `48f4c5fb0` | Swiss-table containers used by engine lookup structures. |
 | Tracy | 0.13.1 | Client source only. |
 | GLAD | 2.0.8 | Regenerated for the existing OpenGL/GLES API surface. |
-| DirectXMesh | may2026 `8c6fdb1c` | Current `FlexibleVertexFormat.h` with the existing X-Ray integration retained. |
-| NVAPI | `cd6918f6` | Current public SDK headers and x64 import library. |
+| DirectXMesh | may2026 `8c6fdb1c` | Pinned `FlexibleVertexFormat.h` with the existing X-Ray integration retained. |
+| NVAPI | `cd6918f6` | Pinned public SDK headers and x64 import library. |
 
 ## Built and packaged x64 libraries
 
@@ -40,8 +40,8 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | OpenAL Soft | 1.25.2 package | The official package still reports 1.25.1 in its Windows version resource. |
 | libogg | 1.3.6 (`06a5e026`) | Rebuilt with embedded debug information and the dynamic MSVC runtime. |
 | libvorbis | 1.3.7 (`e3c9861f`) | Rebuilt with embedded debug information and the dynamic MSVC runtime. |
-| libtheora | `28fd5ec7` | Current upstream revision, rebuilt with the dynamic MSVC runtime. |
-| LZO | 2.10 | Latest upstream release, rebuilt with the dynamic MSVC runtime. |
+| libtheora | `28fd5ec7` | Pinned upstream revision, rebuilt with the dynamic MSVC runtime. |
+| LZO | 2.10 | Packaged compatibility build using the dynamic MSVC runtime. |
 
 ## Compatibility-pinned components
 
@@ -63,4 +63,6 @@ These components cannot be replaced with an unrelated modern library without cha
 - Engine sources use warnings-as-errors.
 - Third-party libraries are rebuilt with the dynamic MSVC runtime where the engine owns their allocation boundary.
 - Local compatibility changes are kept as explicit commits or small project-level patches.
-- Downloaded source trees and build tools live under `_work` and are not part of the repository or release package.
+- Temporary downloads remain outside tracked source. Bootstrapped local tools
+  live under ignored `tools/third_party`; build and package output lives under
+  ignored `build` and `artifacts`.

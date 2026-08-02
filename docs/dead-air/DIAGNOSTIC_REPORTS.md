@@ -114,4 +114,4 @@ The release implementation passed:
 - `MDMP` signature and dump SHA-256 validation;
 - ASCII and UTF-16 privacy scans of every ZIP entry;
 - 13-to-10 report rotation while retaining the newest report;
-- a `Release|x64` build with warnings treated as errors.
+- a CMake x64 `Release` build with warnings treated as errors.

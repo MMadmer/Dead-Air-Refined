@@ -6,8 +6,10 @@ Each published version uses one GitHub Release whose tag is a strict Semantic
 Version in `MAJOR.MINOR.PATCH` form. The release contains both distribution
 formats:
 
-- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Setup.exe` for manual installation;
-- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update.zip` for automatic updating.
+- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Setup.exe` for the recommended guided
+  installation;
+- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update.zip` for manual extraction or
+  automatic updating.
 
 The game reads the public release list for
 `MMadmer/Dead-Air-Refined`. Drafts, prereleases, malformed tags and releases
@@ -74,8 +76,5 @@ archive also contains empty `appdata/` and `appdata/savedgames/` directory
 entries. The updater and installer create this user-data path when absent and
 never include, replace or remove existing save files.
 
-## Publication policy
-
-Building the installer and update archive is a local packaging operation. The
-build scripts do not publish repositories, tags, releases or assets. GitHub
-publication is performed separately after explicit authorization.
+Publication and verification rules are defined in
+[`PROJECT_RULES.md`](../../PROJECT_RULES.md).

@@ -24,11 +24,13 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 **Dead Air: Refined diagnostic report**
-Please attach the newest ZIP from `_appdata_/session_reports`. You can create one for a running session with the `session_report` console command.
+Please attach the newest ZIP from `_appdata_/session_reports`. For a running
+session, create one with the `session_report` console command.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. Windows 10 or Ubuntu 18.10]
- - OpenXRay build version [e.g. 421]
+**System (please complete the following information):**
+ - Windows version: [e.g. Windows 11 24H2]
+ - Dead Air: Refined version: [e.g. 1.0.2]
+ - Renderer and GPU:
 
 **Additional context**
 Add any other context about the problem here.
