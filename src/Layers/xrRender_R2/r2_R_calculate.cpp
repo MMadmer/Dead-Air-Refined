@@ -113,7 +113,7 @@ void CRender::Calculate()
     // Check if we touch some light even trough portal
     static xr_vector<ISpatial*> spatial_lights;
     g_pGamePersistent->SpatialSpace.q_sphere(spatial_lights, 0, STYPE_LIGHTSOURCE, Device.vCameraPosition, EPS_L);
-    for (auto spatial : spatial_lights)
+    const auto add_spatial_light = [&](ISpatial* spatial)
     {
         auto& spatialData = spatial->GetSpatialData();
         if (spatialData.type & STYPEFLAG_INVALIDSECTOR)
@@ -123,13 +123,29 @@ void CRender::Calculate()
         }
         const auto sector_id = spatialData.sector_id;
         if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
-            continue; // disassociated from S/P structure
+            return; // disassociated from S/P structure
 
         VERIFY(spatialData.type & STYPE_LIGHTSOURCE);
         // lightsource
         light* L = (light*)spatial->dcast_Light();
         VERIFY(L);
         Lights.add_light(L);
+    };
+    for (auto spatial : spatial_lights)
+        add_spatial_light(spatial);
+
+    // Keep nearby local shadows alive while their source crosses the viewport edge.
+    constexpr float localLightFrustumGuard = 5.f;
+    g_pGamePersistent->SpatialSpace.q_sphere(
+        spatial_lights, 0, STYPE_LIGHTSOURCE, Device.vCameraPosition, localLightFrustumGuard);
+    for (auto spatial : spatial_lights)
+    {
+        light* L = (light*)spatial->dcast_Light();
+        VERIFY(L);
+        if (!L->flags.bShadow || (L->flags.type != IRender_Light::POINT && L->flags.type != IRender_Light::SPOT))
+            continue;
+
+        add_spatial_light(spatial);
     }
 
     TaskScheduler->Wait(*ProcessHOMTask);

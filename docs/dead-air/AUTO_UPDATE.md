@@ -69,7 +69,10 @@ version=MAJOR.MINOR.PATCH
 ```
 
 The manifest must list every regular payload file exactly once. The ZIP may
-contain only those files, directory entries and the manifest itself.
+contain only those files, directory entries and the manifest itself. Every
+archive also contains empty `appdata/` and `appdata/savedgames/` directory
+entries. The updater and installer create this user-data path when absent and
+never include, replace or remove existing save files.
 
 ## Publication policy
 

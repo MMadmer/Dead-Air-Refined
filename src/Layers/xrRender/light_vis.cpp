@@ -36,30 +36,13 @@ void light::vis_prepare(CBackend& cmd_list)
 
     // Msg	("sc[%f,%f,%f]/c[%f,%f,%f] - sr[%f]/r[%f]",VPUSH(spatial.center),VPUSH(position),spatial.radius,range);
     // Msg	("dist:%f, sa:%f",Device.vCameraPosition.distance_to(spatial.center),safe_area);
-    bool skiptest = false;
+    // DX11 edge-clipped queries can report false zeroes and make an entire shadowed light blink.
+    bool skiptest = flags.bShadow;
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_UNSHADOWED) && !flags.bShadow)
         skiptest = true;
-    if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
-        skiptest = true;
 
-    Fvector queryCenter = spatial.sphere.P;
-    float queryRadius = spatial.sphere.R;
-    if (flags.type == IRender_Light::OMNIPART)
-    {
-        // Split point lights share one parent volume; their face spheres are not independent light bounds.
-        queryCenter = position;
-        queryRadius = range;
-    }
-
-    u32 planeMask = 0xffffffff;
-    const EFC_Visible viewVisibility =
-        RImplementation.ViewBase.testSphere(queryCenter, queryRadius, planeMask);
-
-    // The original renderer kept clipped local lights alive; edge-clipped GPU queries are unreliable on the x64 path.
-    const bool screenClippedVolume = viewVisibility == fcvPartial;
-    const bool cameraInsideVolume =
-        Device.vCameraPosition.distance_to(queryCenter) <= (queryRadius * 1.01f + safe_area);
-    if (skiptest || screenClippedVolume || cameraInsideVolume)
+    if (skiptest ||
+        Device.vCameraPosition.distance_to(spatial.sphere.P) <= (spatial.sphere.R * 1.01f + safe_area))
     { // small error
         vis.visible = true;
         vis.pending = false;

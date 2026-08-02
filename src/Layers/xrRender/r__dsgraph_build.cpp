@@ -875,10 +875,15 @@ void R_dsgraph_structure::build_subspace()
                 float lod = L->get_LOD();
                 if (lod > EPS_L)
                 {
-                    // TODO: check for HOM flag
-                    vis_data& vis = L->get_homdata();
-                    if (RImplementation.HOM.visible(vis))
+                    // Shadowed light bounds become unreliable HOM candidates while crossing the viewport edge.
+                    if (L->flags.bShadow)
                         RImplementation.Lights.add_light(L);
+                    else
+                    {
+                        vis_data& vis = L->get_homdata();
+                        if (RImplementation.HOM.visible(vis))
+                            RImplementation.Lights.add_light(L);
+                    }
                 }
                 continue;
             }

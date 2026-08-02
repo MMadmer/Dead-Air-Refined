@@ -23,12 +23,13 @@
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
 | Dependency audit | 44-file release package | Pass, no missing local DLLs |
-| GUI upgrade installer | Final `Dead Air: Refined 1.0.1` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
+| GUI upgrade installer | Final `Dead Air: Refined 1.0.2` package over an isolated x86 root | Pass, all 41 runtime hashes matched |
 | Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |
 | Refined version rollback | Typed `refined-version` snapshot selected through the uninstaller | Pass, saved runtime restored by SHA-256 while the original x86 backup remained reserved for removal |
 | Maintenance wizard | Installer-style fixed-size layout and silent action paths | Pass, standard header artwork persisted and both rollback and removal completed without leftovers |
 | Patch-only distribution | Installer contents and target validation | Pass, no original Dead Air files included and an empty target is rejected |
-| Raw update archive | Manifest schema, exact file set, per-file size and SHA-256 | Pass, 49 ZIP entries and 46 payload files including maintenance and uninstall components |
+| Raw update archive | Manifest schema, exact file set, per-file size and SHA-256 | Pass, 51 ZIP entries and 46 payload files including maintenance and uninstall components |
+| Saved-game preservation | Fresh install without `appdata` plus repeat install with an existing save sentinel | Pass, `appdata\savedgames` created and sentinel SHA-256 unchanged |
 | External updater | Isolated installed root, backup, apply, maintenance, cleanup | Pass, prior version snapshot created, obsolete sentinel removed, cache deleted, uninstaller regenerated |
 | GitHub release absence | Public releases API with no published releases | Pass, empty list accepted without an update candidate |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |

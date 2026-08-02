@@ -2,7 +2,7 @@
   #error RepoRoot must point to the DeadAir-x64 repository.
 #endif
 #ifndef PortVersion
-  #define PortVersion "1.0.1"
+  #define PortVersion "1.0.2"
 #endif
 #ifndef OutputDirectory
   #define OutputDirectory AddBackslash(RepoRoot) + "artifacts\installer"
@@ -87,6 +87,9 @@ Source: "{#MaintenancePath}"; DestDir: "{app}\.dead-air-x64"; DestName: "Dead-Ai
 #endif
 Source: "{#InstallerRoot}\runtime-files.txt"; Flags: dontcopy
 Source: "{#InstallerRoot}\runtime-files.txt"; DestDir: "{app}\.dead-air-x64"; Flags: ignoreversion
+
+[Dirs]
+Name: "{app}\appdata\savedgames"; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\Dead Air Refined"; Filename: "{app}\xrEngine.exe"; WorkingDir: "{app}"

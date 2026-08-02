@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "1.0.1",
+    [string]$PortVersion = "1.0.2",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
@@ -183,6 +183,7 @@ function New-UpdateArchive {
     New-Item -ItemType Directory -Path $rawOutputRoot -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $rawOutputRoot "database") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $rawOutputRoot ".dead-air-x64") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $rawOutputRoot "appdata\savedgames") -Force | Out-Null
 
     foreach ($file in $manifestFiles) {
         Copy-Item -LiteralPath (Join-Path $runtimeRoot $file) -Destination $rawOutputRoot

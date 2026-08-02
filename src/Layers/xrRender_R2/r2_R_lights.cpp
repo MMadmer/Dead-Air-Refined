@@ -195,16 +195,10 @@ void CRender::render_lights(light_Package& LP)
                 }
             };
 
-            // calculate
-            if (o.mt_calculate)
-            {
-                data.task = &TaskScheduler->AddTask(calc_lights);
-            }
-            else
-            {
-                calc_lights();
-            }
+            // Match the original local-shadow ordering so visibility caches never migrate between render contexts.
+            calc_lights();
             lights_queue.emplace_back(data);
+            flush_lights();
         }
         flush_lights(); // in case if something left
 
