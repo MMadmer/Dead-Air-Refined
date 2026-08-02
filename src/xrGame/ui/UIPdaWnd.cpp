@@ -7,6 +7,7 @@
 #include "UIInventoryUtilities.h"
 
 #include "Level.h"
+#include "Actor.h"
 #include "UIGameCustom.h"
 
 #include "xrUICore/Static/UIStatic.h"
@@ -221,7 +222,12 @@ void CUIPdaWnd::Show(bool status)
     inherited::Show(status);
     if (status)
     {
-        InventoryUtilities::SendInfoToActor("ui_pda");
+        if (CActor* actor = smart_cast<CActor*>(Level().CurrentEntity()))
+        {
+            // PDA visibility is transient; the generic callback rebuilds all rankings synchronously.
+            actor->CInventoryOwner::OnDisableInfo("ui_pda_hide");
+            actor->CInventoryOwner::OnReceiveInfo("ui_pda");
+        }
 
         if (!m_sActiveSection.empty())
             SetActiveSubdialog(m_sActiveSection);
@@ -234,7 +240,11 @@ void CUIPdaWnd::Show(bool status)
     }
     else
     {
-        InventoryUtilities::SendInfoToActor("ui_pda_hide");
+        if (CActor* actor = smart_cast<CActor*>(Level().CurrentEntity()))
+        {
+            actor->CInventoryOwner::OnDisableInfo("ui_pda");
+            actor->CInventoryOwner::OnReceiveInfo("ui_pda_hide");
+        }
         CurrentGameUI()->UIMainIngameWnd->SetFlashIconState_(CUIMainIngameWnd::efiPdaTask, false);
         if (m_pActiveDialog)
         {
@@ -244,6 +254,12 @@ void CUIPdaWnd::Show(bool status)
         g_btnHint->Discard();
         g_statHint->Discard();
     }
+}
+
+void CUIPdaWnd::SelectActiveSubdialog(const shared_str& section)
+{
+    m_sActiveSection = section;
+    UITabControl->SetActiveTab(section);
 }
 
 void CUIPdaWnd::Update()
@@ -269,8 +285,15 @@ void CUIPdaWnd::Update()
 
 void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)
 {
-    //if (m_sActiveSection == section)
-    //    return;
+    if (m_sActiveSection == section && m_pActiveDialog && m_pActiveDialog->IsShown())
+        return;
+
+    if (section == "eptRanking")
+    {
+        luabind::functor<void> calculateRankings;
+        if (GEnv.ScriptEngine->functor("pda.calculate_rankings", calculateRankings))
+            calculateRankings();
+    }
 
     if (m_pActiveDialog)
     {
