@@ -962,10 +962,47 @@ void CWeapon::renderable_Render(u32 context_id, IRenderable* root)
     inherited::renderable_Render(context_id, root);
 }
 
-void CWeapon::renderable_RenderShadow(u32 context_id, IRenderable* root)
+void CWeapon::renderable_RenderShadow(u32 context_id, IRenderable* root, IKinematics* parent_visual,
+    const Fmatrix& parent_transform, int bone_l, int bone_r, int bone_r2)
 {
+    if (!parent_visual || bone_r == -1 || !Visual())
+        return;
+
     ScopeLock lock{ &render_lock };
-    inherited::renderable_Render(context_id, root);
+
+    CEntityAlive* parent = smart_cast<CEntityAlive*>(H_Parent());
+    if ((HandDependence() == hd1Hand) || (GetState() == eReload) || (parent && !parent->g_Alive()))
+        bone_l = bone_r2;
+
+    if (bone_l == -1)
+        return;
+
+    const Fmatrix& left = parent_visual->LL_GetTransform(u16(bone_l));
+    const Fmatrix& right = parent_visual->LL_GetTransform(u16(bone_r));
+
+    Fmatrix weapon_transform;
+    Fvector direction;
+    direction.sub(left.c, right.c);
+
+    if (fis_zero(direction.magnitude()))
+    {
+        weapon_transform.set(parent_transform);
+        weapon_transform.c.set(right.c);
+    }
+    else
+    {
+        direction.normalize();
+        Fvector right_axis;
+        right_axis.crossproduct(right.j, direction);
+        Fvector normal;
+        normal.crossproduct(direction, right_axis);
+        normal.normalize();
+        weapon_transform.set(right_axis, normal, direction, right.c);
+        weapon_transform.mulA_43(parent_transform);
+    }
+
+    weapon_transform.mulB_43(m_strapped_mode ? m_StrapOffset : m_Offset);
+    GEnv.Render->add_Visual(context_id, root, Visual(), weapon_transform);
 }
 
 void CWeapon::signal_HideComplete()

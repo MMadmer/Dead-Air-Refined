@@ -664,8 +664,8 @@ protected:
 
     struct ShadowBoneBinding
     {
-        IKinematics* source{};
         u16 source_id{ u16(-1) };
+        Fmatrix transform{ Fidentity };
     };
 
     IRenderVisual* m_shadow_visual{};

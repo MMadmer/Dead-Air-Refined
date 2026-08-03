@@ -50,7 +50,8 @@ public:
     virtual void shedule_Update(u32 dt);
 
     void renderable_Render(u32 context_id, IRenderable* root) override;
-    void renderable_RenderShadow(u32 context_id, IRenderable* root);
+    void renderable_RenderShadow(u32 context_id, IRenderable* root, IKinematics* parent_visual,
+        const Fmatrix& parent_transform, int bone_l, int bone_r, int bone_r2);
     void render_hud_mode() override;
     float GetHudFov();
     bool need_renderable() override;

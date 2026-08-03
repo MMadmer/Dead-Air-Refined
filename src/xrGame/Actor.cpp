@@ -1581,10 +1581,10 @@ void CActor::renderable_RenderBody(u32 context_id, IRenderable* root)
 void CActor::ShadowBoneCallback(CBoneInstance* bone)
 {
     auto* binding = static_cast<ShadowBoneBinding*>(bone->callback_param());
-    if (!binding || !binding->source || binding->source_id == u16(-1))
+    if (!binding || binding->source_id == u16(-1))
         return;
 
-    bone->mTransform = binding->source->LL_GetTransform(binding->source_id);
+    bone->mTransform = binding->transform;
 }
 
 void CActor::DestroyShadowVisual()
@@ -1619,12 +1619,12 @@ void CActor::RebuildShadowVisual()
         return;
     }
 
+    m_shadow_kinematics->LL_SetBonesVisible(u64(-1));
     const u16 bone_count = m_shadow_kinematics->LL_BoneCount();
     m_shadow_bones.resize(bone_count);
     for (u16 bone_id = 0; bone_id < bone_count; ++bone_id)
     {
         ShadowBoneBinding& binding = m_shadow_bones[bone_id];
-        binding.source = source;
         binding.source_id = source->LL_BoneID(m_shadow_kinematics->LL_BoneName_dbg(bone_id));
         m_shadow_kinematics->LL_GetBoneInstance(bone_id).set_callback(
             bctCustom, ShadowBoneCallback, &binding, binding.source_id != u16(-1));
@@ -1636,8 +1636,20 @@ void CActor::renderable_RenderShadow(u32 context_id, IRenderable* root)
     IKinematics* source = smart_cast<IKinematics*>(Visual());
     if (source && m_shadow_visual && m_shadow_kinematics)
     {
+        const u64 visible_bones = source->LL_GetBonesVisible();
+        source->LL_SetBonesVisible(u64(-1));
         source->CalculateBones(TRUE);
+
+        for (ShadowBoneBinding& binding : m_shadow_bones)
+        {
+            if (binding.source_id != u16(-1))
+                binding.transform = source->LL_GetTransform(binding.source_id);
+        }
+
+        source->LL_SetBonesVisible(visible_bones);
+        source->CalculateBones_Invalidate();
         m_shadow_kinematics->CalculateBones_Invalidate();
+        m_shadow_kinematics->CalculateBones(TRUE);
         GEnv.Render->add_Visual(context_id, root, m_shadow_visual, XFORM());
     }
     else
@@ -1647,8 +1659,25 @@ void CActor::renderable_RenderShadow(u32 context_id, IRenderable* root)
 
     CInventoryItem* active_item = inventory().ActiveItem();
     CWeapon* weapon = active_item ? active_item->object().cast_weapon() : nullptr;
-    if (weapon)
-        weapon->renderable_RenderShadow(context_id, root);
+    if (!weapon || !source || !m_shadow_kinematics)
+        return;
+
+    int source_bone_l = -1;
+    int source_bone_r = -1;
+    int source_bone_r2 = -1;
+    g_WeaponBones(source_bone_l, source_bone_r, source_bone_r2);
+
+    const auto shadow_bone_id = [source, this](int source_bone)
+    {
+        if (source_bone == -1)
+            return -1;
+
+        const u16 bone_id = m_shadow_kinematics->LL_BoneID(source->LL_BoneName_dbg(u16(source_bone)));
+        return bone_id == u16(-1) ? -1 : int(bone_id);
+    };
+
+    weapon->renderable_RenderShadow(context_id, root, m_shadow_kinematics, XFORM(), shadow_bone_id(source_bone_l),
+        shadow_bone_id(source_bone_r), shadow_bone_id(source_bone_r2));
 }
 
 void CActor::renderable_Render(u32 context_id, IRenderable* root)
