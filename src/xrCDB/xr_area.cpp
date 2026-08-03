@@ -73,9 +73,11 @@ void prune_inactive_level_caches(const std::filesystem::path& activeCacheFile)
             continue;
 #endif
 
-        // Level collision caches are disposable and only the active level benefits from a warm reload.
-        std::filesystem::remove_all(entry.path(), error);
-        if (!error)
+        // Keep the virtual file index synchronized with files removed from disk.
+        const std::string directory = entry.path().string() + DELIMITER;
+        FS.dir_delete(directory.c_str(), true);
+        const bool stillExists = std::filesystem::exists(entry.path(), error);
+        if (!error && !stillExists)
             ++removedDirectories;
         else
             error.clear();
