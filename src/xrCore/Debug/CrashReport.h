@@ -33,4 +33,6 @@ XRCORE_API void SamplePerformance(float fps, float frameMilliseconds, float rend
 XRCORE_API bool WriteCrash(_EXCEPTION_POINTERS* exceptionPointers);
 XRCORE_API bool WriteSession();
 XRCORE_API pcstr LatestReportPath();
+XRCORE_API pcstr PendingCrashReportPath();
+XRCORE_API bool MarkCrashReportHandled(pcstr reportPath);
 }

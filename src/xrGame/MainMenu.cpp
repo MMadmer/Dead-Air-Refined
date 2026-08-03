@@ -21,6 +21,7 @@
 #include "xrGameSpy/xrGameSpy.h"
 #include "CdkeyDecode/cdkeydecode.h"
 #include "xrCore/os_clipboard.h"
+#include "xrCore/Debug/CrashReport.h"
 #include "xrCore/ProductVersion.h"
 #include "xrGame/game_type.h"
 
@@ -591,8 +592,11 @@ void CMainMenu::OnFrame()
 
     if (IsActive())
     {
-        CheckUpdateDialog();
-        CheckForErrorDlg();
+        if (!CheckCrashReportDialog())
+        {
+            CheckUpdateDialog();
+            CheckForErrorDlg();
+        }
         if (m_Flags.test(flNeedUIRestart))
         {
             m_Flags.set(flNeedUIRestart, false);
@@ -673,7 +677,7 @@ bool CMainMenu::FillDebugTree(const CUIDebugState& debugState)
 }
 
 void CMainMenu::SwitchToMultiplayerMenu() { m_startDialog->Dispatch(2, 1); };
-void CMainMenu::ShowBugReportDialog()
+bool CMainMenu::EnsureBugReportDialog()
 {
     if (!m_bugReportDialog)
     {
@@ -682,10 +686,31 @@ void CMainMenu::ShowBugReportDialog()
         {
             xr_delete(m_bugReportDialog);
             Msg("! Failed to initialize the bug report window");
-            return;
+            return false;
         }
     }
-    m_bugReportDialog->ShowDialog(true);
+    return true;
+}
+
+void CMainMenu::ShowBugReportDialog()
+{
+    if (EnsureBugReportDialog())
+        m_bugReportDialog->ShowManual();
+}
+
+bool CMainMenu::CheckCrashReportDialog()
+{
+    if (m_crashReportChecked)
+        return m_bugReportDialog && m_bugReportDialog->IsCrashReportPromptShown();
+
+    m_crashReportChecked = true;
+    const pcstr reportPath = CrashReporter::PendingCrashReportPath();
+    if (!reportPath || !*reportPath || !EnsureBugReportDialog())
+        return false;
+
+    Msg("* Crash report notification shown");
+    m_bugReportDialog->ShowCrashReport(reportPath);
+    return true;
 }
 
 void CMainMenu::CheckUpdateDialog()

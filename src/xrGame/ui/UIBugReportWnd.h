@@ -18,6 +18,9 @@ public:
     ~CUIBugReportWnd() override;
 
     bool Init();
+    void ShowManual();
+    void ShowCrashReport(pcstr reportPath);
+    bool IsCrashReportPromptShown() const;
     void Show(bool status) override;
     void Update() override;
     void SendMessage(CUIWindow* window, s16 message, void* data) override;
@@ -30,12 +33,15 @@ private:
     void OnMessageOk(CUIWindow*, void*);
     void ShowResult(bool success, pcstr detail = nullptr);
     void ClearForm();
+    void AcknowledgeCrashReport();
+    void UpdateReportMode();
     bool InputIsValid() const;
     void UpdateCounters();
 
     CUIEditBox* m_title{};
     CUIEditBox* m_description{};
     CUICheckButton* m_attachDump{};
+    CUIStatic* m_attachLabel{};
     CUI3tButton* m_submit{};
     CUI3tButton* m_cancel{};
     CUIStatic* m_titleCounter{};
@@ -43,5 +49,7 @@ private:
     CUIStatic* m_serverStatus{};
     CUIStatic* m_status{};
     CUIMessageBoxEx* m_messageBox{};
+    xr_string m_crashReportPath;
+    bool m_crashReportMode{};
     bool m_closeAfterMessage{};
 };

@@ -53,7 +53,7 @@ bool CUIBugReportWnd::Init()
     UIHelper::CreateStatic(xml, "main:caption", this);
     UIHelper::CreateStatic(xml, "main:title_label", this);
     UIHelper::CreateStatic(xml, "main:description_label", this);
-    UIHelper::CreateStatic(xml, "main:attach_label", this);
+    m_attachLabel = UIHelper::CreateStatic(xml, "main:attach_label", this);
     UIHelper::CreateStatic(xml, "main:server_status_label", this);
 
     m_title = UIHelper::CreateEditBox(xml, "main:title", this);
@@ -80,6 +80,25 @@ bool CUIBugReportWnd::Init()
     return true;
 }
 
+void CUIBugReportWnd::ShowManual()
+{
+    m_crashReportMode = false;
+    m_crashReportPath.clear();
+    ShowDialog(true);
+}
+
+void CUIBugReportWnd::ShowCrashReport(pcstr reportPath)
+{
+    m_crashReportMode = true;
+    m_crashReportPath = reportPath ? reportPath : "";
+    ShowDialog(true);
+}
+
+bool CUIBugReportWnd::IsCrashReportPromptShown() const
+{
+    return m_crashReportMode && IsShown();
+}
+
 void CUIBugReportWnd::Show(bool status)
 {
     if (status && BugReportService::GetState() != BugReportService::State::Sending)
@@ -87,10 +106,16 @@ void CUIBugReportWnd::Show(bool status)
         BugReportService::Reset();
         BugReportService::CheckAvailability();
         ClearForm();
+        UpdateReportMode();
         m_closeAfterMessage = false;
         m_title->CaptureFocus(true);
     }
     inherited::Show(status);
+    if (!status)
+    {
+        m_crashReportMode = false;
+        m_crashReportPath.clear();
+    }
 }
 
 void CUIBugReportWnd::Update()
@@ -121,12 +146,13 @@ void CUIBugReportWnd::Update()
     m_cancel->Enable(!sending);
     m_title->Enable(!sending);
     m_description->Enable(!sending);
-    m_attachDump->Enable(!sending);
+    m_attachDump->Enable(!sending && !m_crashReportMode);
     m_status->SetText(sending ? StringTable().translate("st_bug_report_sending").c_str() : "");
 
     if (state == BugReportService::State::Succeeded)
     {
         BugReportService::Reset();
+        AcknowledgeCrashReport();
         ShowResult(true);
     }
     else if (state == BugReportService::State::Failed)
@@ -148,6 +174,7 @@ bool CUIBugReportWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
     if (keyboardAction == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik) &&
         BugReportService::GetState() != BugReportService::State::Sending)
     {
+        AcknowledgeCrashReport();
         HideDialog();
         return true;
     }
@@ -159,8 +186,8 @@ void CUIBugReportWnd::OnSubmit(CUIWindow*, void*)
     if (!InputIsValid() || BugReportService::GetState() == BugReportService::State::Sending)
         return;
 
-    string_path attachment{};
-    if (m_attachDump->GetCheck())
+    xr_string attachment = m_crashReportPath;
+    if (!m_crashReportMode && m_attachDump->GetCheck())
     {
         m_status->SetText(StringTable().translate("st_bug_report_collecting").c_str());
         if (!CrashReporter::WriteSession())
@@ -168,17 +195,20 @@ void CUIBugReportWnd::OnSubmit(CUIWindow*, void*)
             ShowResult(false, "Diagnostic report creation failed");
             return;
         }
-        xr_strcpy(attachment, CrashReporter::LatestReportPath());
+        attachment = CrashReporter::LatestReportPath();
     }
 
-    if (!BugReportService::Submit(m_title->GetText(), m_description->GetText(), attachment))
+    if (!BugReportService::Submit(m_title->GetText(), m_description->GetText(), attachment.c_str()))
         ShowResult(false, "The upload could not be started");
 }
 
 void CUIBugReportWnd::OnCancel(CUIWindow*, void*)
 {
     if (BugReportService::GetState() != BugReportService::State::Sending)
+    {
+        AcknowledgeCrashReport();
         HideDialog();
+    }
 }
 
 void CUIBugReportWnd::OnMessageOk(CUIWindow*, void*)
@@ -214,6 +244,26 @@ void CUIBugReportWnd::ClearForm()
     m_attachDump->SetCheck(true);
     m_status->SetText("");
     UpdateCounters();
+}
+
+void CUIBugReportWnd::AcknowledgeCrashReport()
+{
+    if (!m_crashReportMode || m_crashReportPath.empty())
+        return;
+    if (!CrashReporter::MarkCrashReportHandled(m_crashReportPath.c_str()))
+        Msg("! Failed to mark the crash report as handled");
+}
+
+void CUIBugReportWnd::UpdateReportMode()
+{
+    m_attachDump->Show(!m_crashReportMode);
+    const pcstr label = m_crashReportMode ? "st_bug_report_crash_dump_attached" : "st_bug_report_attach_dump";
+    m_attachLabel->SetText(StringTable().translate(label).c_str());
+
+    Fvector2 position = m_attachLabel->GetWndPos();
+    position.x = m_crashReportMode ? m_attachDump->GetWndPos().x : m_attachDump->GetWndPos().x + 30.f;
+    m_attachLabel->SetWndPos(position);
+    m_attachLabel->SetWidth(m_crashReportMode ? 310.f : 280.f);
 }
 
 bool CUIBugReportWnd::InputIsValid() const

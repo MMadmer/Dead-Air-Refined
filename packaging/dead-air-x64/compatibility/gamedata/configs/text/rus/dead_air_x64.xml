@@ -54,6 +54,9 @@
     <string id="st_bug_report_attach_dump">
         <text>Прикрепить анонимный дамп</text>
     </string>
+    <string id="st_bug_report_crash_dump_attached">
+        <text>Прикладывается анонимный дамп краша</text>
+    </string>
     <string id="st_bug_report_server_status">
         <text>Статус сервера:</text>
     </string>

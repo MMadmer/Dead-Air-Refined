@@ -33,7 +33,10 @@ extern pcstr log_name();
 namespace
 {
 constexpr pcstr ReportPrefix = "dar-report-";
+constexpr pcstr CrashReportPrefix = "dar-report-crash-";
 constexpr pcstr LegacyReportPrefix = "dar-crash-";
+constexpr pcstr HandledCrashMarkerName = "handled-crash-report.txt";
+constexpr pcstr HandledCrashMarkerTemporaryName = "handled-crash-report.tmp";
 constexpr size_t MaximumReports = 10;
 constexpr size_t MaximumStackFrames = 96;
 constexpr size_t MaximumLogBytes = 4 * 1024 * 1024;
@@ -178,6 +181,7 @@ std::atomic_flag sampleWriter = ATOMIC_FLAG_INIT;
 SampleState sampleState;
 string_path reportDirectory{};
 string_path latestReportPath{};
+string_path pendingCrashReportPath{};
 ULONGLONG sessionStartTick{};
 
 template <typename Callback>
@@ -347,6 +351,98 @@ void ensure_report_directory()
 bool is_report_name(std::string_view name)
 {
     return name.starts_with(ReportPrefix) || name.starts_with(LegacyReportPrefix);
+}
+
+bool is_crash_report_name(std::string_view name)
+{
+    return name.starts_with(CrashReportPrefix) && has_suffix(name, ".zip");
+}
+
+std::string_view file_name(pcstr path)
+{
+    const std::string_view value = path ? path : "";
+    const size_t separator = value.find_last_of("\\/");
+    return separator == std::string_view::npos ? value : value.substr(separator + 1);
+}
+
+xr_string read_handled_crash_name()
+{
+    const xr_string markerPath = make_path(HandledCrashMarkerName);
+    HANDLE file = CreateFileA(markerPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return {};
+
+    char value[MAX_PATH]{};
+    DWORD read = 0;
+    const bool success = ReadFile(file, value, sizeof(value) - 1, &read, nullptr) && read < sizeof(value);
+    CloseHandle(file);
+    if (!success)
+        return {};
+
+    value[read] = '\0';
+    return value;
+}
+
+bool write_handled_crash_name(std::string_view name)
+{
+    if (name.empty() || name.size() >= MAX_PATH)
+        return false;
+
+    const xr_string markerPath = make_path(HandledCrashMarkerName);
+    const xr_string temporaryPath = make_path(HandledCrashMarkerTemporaryName);
+    HANDLE file = CreateFileA(temporaryPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+        FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return false;
+
+    DWORD written = 0;
+    const bool saved = WriteFile(file, name.data(), static_cast<DWORD>(name.size()), &written, nullptr) &&
+        written == static_cast<DWORD>(name.size()) && FlushFileBuffers(file);
+    CloseHandle(file);
+    if (!saved)
+    {
+        DeleteFileA(temporaryPath.c_str());
+        return false;
+    }
+
+    const bool replaced = !!MoveFileExA(temporaryPath.c_str(), markerPath.c_str(),
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (!replaced)
+        DeleteFileA(temporaryPath.c_str());
+    return replaced;
+}
+
+xr_string find_pending_crash_report()
+{
+    ensure_report_directory();
+    const xr_string pattern = make_path("dar-report-crash-*.zip");
+
+    WIN32_FIND_DATAA data{};
+    HANDLE find = FindFirstFileA(pattern.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return {};
+
+    xr_string newestPath;
+    xr_string newestName;
+    FILETIME newestWriteTime{};
+    do
+    {
+        if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !is_crash_report_name(data.cFileName))
+            continue;
+        if (newestPath.empty() || CompareFileTime(&newestWriteTime, &data.ftLastWriteTime) < 0)
+        {
+            newestPath = make_path(data.cFileName);
+            newestName = data.cFileName;
+            newestWriteTime = data.ftLastWriteTime;
+        }
+    }
+    while (FindNextFileA(find, &data));
+    FindClose(find);
+
+    if (newestName.empty() || newestName == read_handled_crash_name())
+        return {};
+    return newestPath;
 }
 
 std::vector<ReportFile> enumerate_reports(bool removeTemporaryFiles)
@@ -2037,6 +2133,24 @@ pcstr CrashReporter::LatestReportPath()
 {
     return latestReportPath;
 }
+
+pcstr CrashReporter::PendingCrashReportPath()
+{
+    const xr_string pending = find_pending_crash_report();
+    xr_strcpy(pendingCrashReportPath, pending.c_str());
+    return pendingCrashReportPath;
+}
+
+bool CrashReporter::MarkCrashReportHandled(pcstr reportPath)
+{
+    const std::string_view name = file_name(reportPath);
+    if (!is_crash_report_name(name) || !write_handled_crash_name(name))
+        return false;
+
+    if (file_name(pendingCrashReportPath) == name)
+        pendingCrashReportPath[0] = '\0';
+    return true;
+}
 #else
 void CrashReporter::Initialize() {}
 void CrashReporter::OnFilesystemInitialized() {}
@@ -2050,4 +2164,6 @@ void CrashReporter::SamplePerformance(float, float, float) {}
 bool CrashReporter::WriteCrash(_EXCEPTION_POINTERS*) { return false; }
 bool CrashReporter::WriteSession() { return false; }
 pcstr CrashReporter::LatestReportPath() { return ""; }
+pcstr CrashReporter::PendingCrashReportPath() { return ""; }
+bool CrashReporter::MarkCrashReportHandled(pcstr) { return false; }
 #endif

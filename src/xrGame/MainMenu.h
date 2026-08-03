@@ -120,6 +120,7 @@ protected:
     xr_vector<CUIMessageBoxEx*> m_pMB_ErrDlgs;
     CUIBugReportWnd* m_bugReportDialog{};
     CUIUpdateWnd* m_updateDialog{};
+    bool m_crashReportChecked{};
     bool ReloadUI();
 
 public:
@@ -207,6 +208,8 @@ public:
     CEventNotifierCallback::CID m_script_reset_event_cid;
 
 private:
+    bool EnsureBugReportDialog();
+    bool CheckCrashReportDialog();
     void CheckUpdateDialog();
     void DrawProductVersion();
     DECLARE_SCRIPT_REGISTER_FUNCTION(CDialogHolder, CUIDialogWnd, CUIWindow);

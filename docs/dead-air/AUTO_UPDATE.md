@@ -38,6 +38,10 @@ until the next game launch. During download, the dialog displays transferred and
 total mebibytes together with a progress bar. Installation remains unavailable
 until the complete archive has passed size and SHA-256 verification.
 
+An unhandled-crash report prompt has priority over the update dialog. The update
+check may finish in the background, but its dialog remains queued until the
+crash report has been submitted successfully or explicitly declined.
+
 The version comparison uses the product version compiled into the engine. The
 updater does not modify or infer that version independently.
 

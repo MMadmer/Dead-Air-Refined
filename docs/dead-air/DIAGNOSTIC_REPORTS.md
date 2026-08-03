@@ -21,6 +21,13 @@ characters; the description accepts up to 10,000 and requires at least 20.
 Both menus render `Dead Air: Refined v<version>` in the bottom-right corner
 from the same native version constant used by uploads and diagnostic manifests.
 
+After an unhandled crash, the next startup selects the newest unhandled
+`dar-report-crash-*.zip` and opens the same report form before other startup
+dialogs. The crash attachment is mandatory and is the exact ZIP that triggered
+the prompt. A successful submission or an explicit decline records that report
+as handled; failed submissions remain retryable, and an already handled crash
+does not prompt again.
+
 Public builds receive their upload credential through the ignored
 `src/xrGame/ui/BugReportSecrets.local.h` build-time header. The repository
 fallback deliberately contains no credential, and report contents or
