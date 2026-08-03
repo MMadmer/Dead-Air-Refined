@@ -30,6 +30,8 @@ public:
 private:
     void OnSubmit(CUIWindow*, void*);
     void OnCancel(CUIWindow*, void*);
+    void OnCrashPromptYes(CUIWindow*, void*);
+    void OnCrashPromptNo(CUIWindow*, void*);
     void OnMessageOk(CUIWindow*, void*);
     void ShowResult(bool success, pcstr detail = nullptr);
     void ClearForm();
@@ -40,6 +42,7 @@ private:
 
     CUIEditBox* m_title{};
     CUIEditBox* m_description{};
+    CUIStatic* m_caption{};
     CUICheckButton* m_attachDump{};
     CUIStatic* m_attachLabel{};
     CUI3tButton* m_submit{};
@@ -48,6 +51,7 @@ private:
     CUIStatic* m_descriptionCounter{};
     CUIStatic* m_serverStatus{};
     CUIStatic* m_status{};
+    CUIMessageBoxEx* m_crashPrompt{};
     CUIMessageBoxEx* m_messageBox{};
     xr_string m_crashReportPath;
     bool m_crashReportMode{};

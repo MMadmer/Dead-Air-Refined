@@ -37,8 +37,11 @@ CUIBugReportWnd::CUIBugReportWnd() : CUIDialogWnd(CUIBugReportWnd::GetDebugType(
 
 CUIBugReportWnd::~CUIBugReportWnd()
 {
+    if (m_crashPrompt && m_crashPrompt->IsShown())
+        m_crashPrompt->HideDialog();
     if (m_messageBox && m_messageBox->IsShown())
         m_messageBox->HideDialog();
+    xr_delete(m_crashPrompt);
     xr_delete(m_messageBox);
 }
 
@@ -50,7 +53,7 @@ bool CUIBugReportWnd::Init()
 
     CUIXmlInit::InitWindow(xml, "main", 0, this);
     UIHelper::CreateStatic(xml, "main:background", this);
-    UIHelper::CreateStatic(xml, "main:caption", this);
+    m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     UIHelper::CreateStatic(xml, "main:title_label", this);
     UIHelper::CreateStatic(xml, "main:description_label", this);
     m_attachLabel = UIHelper::CreateStatic(xml, "main:attach_label", this);
@@ -73,6 +76,9 @@ bool CUIBugReportWnd::Init()
     AddCallback(m_submit, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUIBugReportWnd::OnSubmit));
     AddCallback(m_cancel, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUIBugReportWnd::OnCancel));
 
+    m_crashPrompt = xr_new<CUIMessageBoxEx>();
+    m_crashPrompt->func_on_ok = CUIWndCallback::void_function(this, &CUIBugReportWnd::OnCrashPromptYes);
+    m_crashPrompt->func_on_no = CUIWndCallback::void_function(this, &CUIBugReportWnd::OnCrashPromptNo);
     m_messageBox = xr_new<CUIMessageBoxEx>();
     m_messageBox->func_on_ok = CUIWndCallback::void_function(this, &CUIBugReportWnd::OnMessageOk);
     m_title->SetNextFocusCapturer(m_description);
@@ -91,12 +97,21 @@ void CUIBugReportWnd::ShowCrashReport(pcstr reportPath)
 {
     m_crashReportMode = true;
     m_crashReportPath = reportPath ? reportPath : "";
-    ShowDialog(true);
+    if (!m_crashPrompt->InitMessageBox("message_box_yes_no"))
+    {
+        Msg("! Failed to initialize the crash report confirmation");
+        ShowDialog(true);
+        return;
+    }
+
+    m_crashPrompt->SetText(StringTable().translate("st_crash_report_detected_prompt").c_str());
+    m_crashPrompt->ShowDialog(true);
 }
 
 bool CUIBugReportWnd::IsCrashReportPromptShown() const
 {
-    return m_crashReportMode && IsShown();
+    return m_crashReportMode && ((m_crashPrompt && m_crashPrompt->IsShown()) || IsShown() ||
+        (m_messageBox && m_messageBox->IsShown()));
 }
 
 void CUIBugReportWnd::Show(bool status)
@@ -211,6 +226,19 @@ void CUIBugReportWnd::OnCancel(CUIWindow*, void*)
     }
 }
 
+void CUIBugReportWnd::OnCrashPromptYes(CUIWindow*, void*)
+{
+    if (m_crashReportMode)
+        ShowDialog(true);
+}
+
+void CUIBugReportWnd::OnCrashPromptNo(CUIWindow*, void*)
+{
+    AcknowledgeCrashReport();
+    m_crashReportMode = false;
+    m_crashReportPath.clear();
+}
+
 void CUIBugReportWnd::OnMessageOk(CUIWindow*, void*)
 {
     if (m_closeAfterMessage)
@@ -256,6 +284,8 @@ void CUIBugReportWnd::AcknowledgeCrashReport()
 
 void CUIBugReportWnd::UpdateReportMode()
 {
+    const pcstr caption = m_crashReportMode ? "st_crash_report_caption" : "st_bug_report_caption";
+    m_caption->SetText(StringTable().translate(caption).c_str());
     m_attachDump->Show(!m_crashReportMode);
     const pcstr label = m_crashReportMode ? "st_bug_report_crash_dump_attached" : "st_bug_report_attach_dump";
     m_attachLabel->SetText(StringTable().translate(label).c_str());

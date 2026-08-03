@@ -22,11 +22,12 @@ Both menus render `Dead Air: Refined v<version>` in the bottom-right corner
 from the same native version constant used by uploads and diagnostic manifests.
 
 After an unhandled crash, the next startup selects the newest unhandled
-`dar-report-crash-*.zip` and opens the same report form before other startup
-dialogs. The crash attachment is mandatory and is the exact ZIP that triggered
-the prompt. A successful submission or an explicit decline records that report
-as handled; failed submissions remain retryable, and an already handled crash
-does not prompt again.
+`dar-report-crash-*.zip` and first displays a native yes/no confirmation before
+other startup dialogs. Choosing yes opens the report form with the `Отправка
+crash report` caption. The crash attachment is mandatory and is the exact ZIP
+that triggered the prompt. Choosing no, cancelling the form, or completing a
+submission records that report as handled; failed submissions remain retryable,
+and an already handled crash does not prompt again.
 
 Public builds receive their upload credential through the ignored
 `src/xrGame/ui/BugReportSecrets.local.h` build-time header. The repository

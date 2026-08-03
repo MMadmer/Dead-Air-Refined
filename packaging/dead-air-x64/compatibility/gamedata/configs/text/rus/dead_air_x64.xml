@@ -45,6 +45,12 @@
     <string id="st_bug_report_caption">
         <text>Отправка bug report</text>
     </string>
+    <string id="st_crash_report_caption">
+        <text>Отправка crash report</text>
+    </string>
+    <string id="st_crash_report_detected_prompt">
+        <text>Обнаружен аварийный выход из игры. Отправить отчёт об этом?</text>
+    </string>
     <string id="st_bug_report_title">
         <text>Заголовок (минимум 5 символов)</text>
     </string>

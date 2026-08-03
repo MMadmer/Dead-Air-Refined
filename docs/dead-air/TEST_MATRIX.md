@@ -35,7 +35,7 @@
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Manual diagnostic report | Loaded `async_benchmark_1`, hidden desktop | Pass, valid anonymous ZIP with system, hardware, runtime, content, log, configuration, and minidump data |
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |
-| Crash-report startup prompt | Newest unhandled `dar-report-crash-*.zip` plus a mocked 1.0.5 update | Pass, the crash form was the only startup modal and retained that exact ZIP as its mandatory attachment |
+| Crash-report startup prompt | Newest unhandled `dar-report-crash-*.zip` plus a mocked 1.0.5 update | Pass only when the native yes/no confirmation opens first, yes opens the `Отправка crash report` form, and that exact ZIP remains mandatory |
 | Crash-report acknowledgement | Handled marker followed by a second menu launch | Pass, the same ZIP did not prompt again and the deferred 1.0.5 update dialog opened |
 | Diagnostic privacy scan | All ZIP entries, ASCII and UTF-16 | Pass, no user name, computer name, profile path, game path, e-mail address, or IP address |
 | Diagnostic rotation | 13 pre-existing reports plus one new report | Pass, newest report retained and total reduced to 10 |
