@@ -372,6 +372,7 @@ void CUIPdaWnd::Show_SecondTaskWnd(bool status)
         if (status)
         {
             SetActiveSubdialog("eptTasks");
+            UITabControl->SetActiveTab("eptTasks");
         }
         pUITaskWnd->Show_TaskListWnd(status);
     }
@@ -382,14 +383,20 @@ void CUIPdaWnd::Show_MapWnd(bool status)
     if (pUIMapWnd)
     {
         if (status)
+        {
             SetActiveSubdialog("eptMap");
+            UITabControl->SetActiveTab("eptMap");
+        }
         return;
     }
 
     if (pUITaskWnd)
     {
         if (status)
+        {
             SetActiveSubdialog("eptTasks");
+            UITabControl->SetActiveTab("eptTasks");
+        }
         pUITaskWnd->Show_TaskListWnd(false);
     }
 }

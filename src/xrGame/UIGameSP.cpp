@@ -101,13 +101,6 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
     if (inherited::IR_UIOnKeyboardPress(dik))
         return true;
 
-    if (IsBinded(kACTIVE_JOBS, dik))
-    {
-        if (PdaMenu->IsShown())
-            PdaMenu->Show_SecondTaskWnd(true);
-        return true;
-    }
-
     if (Device.Paused())
         return false;
 
