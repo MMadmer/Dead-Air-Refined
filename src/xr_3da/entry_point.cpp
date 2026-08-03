@@ -45,6 +45,7 @@ struct tracy_raii
 
 int entry_point(pcstr commandLine)
 {
+    StartupProfileBegin();
     tracy_raii raii;
     auto* game = strstr(commandLine, "-nogame") ? nullptr : &xrGame;
 

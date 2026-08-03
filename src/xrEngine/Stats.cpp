@@ -227,6 +227,7 @@ void CStats::OnRender()
 #ifdef DEBUG
     if (g_stats_flags.is(st_sound))
     {
+        GEnv.DU->EnsureDeviceResources();
         CSound_stats_ext snd_stat_ext;
         GEnv.Sound->statistic(0, &snd_stat_ext);
         auto _I = snd_stat_ext.items.begin();

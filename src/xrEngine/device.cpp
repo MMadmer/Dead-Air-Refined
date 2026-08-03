@@ -10,6 +10,7 @@
 
 #include "IGame_Level.h"
 #include "IGame_Persistent.h"
+#include "x_ray.h"
 
 #include "xrScriptEngine/script_space.hpp"
 
@@ -98,6 +99,7 @@ void CRenderDevice::RenderEnd(void)
     // end scene
     g_bRendering = false;
     GEnv.Render->End();
+    StartupProfileFinishAfterPresent();
 
     vCameraPositionSaved = vCameraPosition;
     vCameraDirectionSaved = vCameraDirection;

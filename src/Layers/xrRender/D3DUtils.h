@@ -48,6 +48,7 @@ class ECORE_API CDrawUtilities : public CDUInterface, public pureRender
     SPrimitiveBuffer m_SolidBox;
     SPrimitiveBuffer m_WireBox;
     CGameFont* m_Font;
+    bool m_deviceResourcesReady{};
 
 public:
     ref_geom vs_L;
@@ -77,7 +78,7 @@ public:
         m_Font = nullptr;
     }
 
-    void OnDeviceCreate();
+    void EnsureDeviceResources() override;
     virtual void OnDeviceDestroy();
 
     void UpdateGrid(int number_of_cell, float square_size, int subdiv = 10);

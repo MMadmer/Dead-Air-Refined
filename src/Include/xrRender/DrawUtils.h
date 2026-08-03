@@ -21,6 +21,7 @@ struct Fobb;
 class ECORE_API CDUInterface
 {
 public:
+    virtual void EnsureDeviceResources() = 0;
     //----------------------------------------------------
     virtual void DrawCross(const Fvector& p, float szx1, float szy1, float szz1, float szx2, float szy2,
         float szz2, u32 clr, BOOL bRot45 = false) = 0;

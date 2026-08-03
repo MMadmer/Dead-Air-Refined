@@ -72,8 +72,6 @@ void IGame_Persistent::OnAppStart()
 #ifndef _EDITOR
     Environment().load();
 #endif
-
-    Level_Scan();
 }
 
 void IGame_Persistent::OnAppEnd()
@@ -115,6 +113,7 @@ void IGame_Persistent::Level_Append(pcstr folder)
 void IGame_Persistent::Level_Scan()
 {
     ZoneScoped;
+    levelsScanned = true;
 
     for (auto& level : Levels)
     {
@@ -149,6 +148,9 @@ void IGame_Persistent::Level_Set(u32 id)
 int IGame_Persistent::Level_ID(pcstr name, pcstr ver, bool bSet)
 {
     ZoneScoped;
+
+    if (!levelsScanned)
+        Level_Scan();
 
     int result = -1;
     bool arch_res = false;

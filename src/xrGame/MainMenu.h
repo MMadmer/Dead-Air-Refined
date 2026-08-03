@@ -103,11 +103,11 @@ public:
     Patch_Dawnload_Progress m_sPDProgress;
     Patch_Dawnload_Progress* GetPatchProgress() { return &m_sPDProgress; }
     void CancelDownload();
-    gamespy_gp::account_manager* GetAccountMngr() { return m_account_mngr; }
-    gamespy_gp::login_manager* GetLoginMngr() { return m_login_mngr; }
-    gamespy_profile::profile_store* GetProfileStore() { return m_profile_store; }
+    gamespy_gp::account_manager* GetAccountMngr();
+    gamespy_gp::login_manager* GetLoginMngr();
+    gamespy_profile::profile_store* GetProfileStore();
 
-    CGameSpy_Full* GetGS() const { return m_pGameSpyFull; }
+    CGameSpy_Full* GetGS();
 
 protected:
     EErrorDlg m_NeedErrDialog;
@@ -208,6 +208,8 @@ public:
     CEventNotifierCallback::CID m_script_reset_event_cid;
 
 private:
+    bool EnsureGameSpy();
+    CUIMessageBoxEx* EnsureErrorDialog(EErrorDlg type);
     bool EnsureBugReportDialog();
     bool CheckCrashReportDialog();
     void CheckUpdateDialog();

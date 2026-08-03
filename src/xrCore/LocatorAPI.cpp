@@ -23,6 +23,133 @@
 #include <mutex>
 
 constexpr size_t VFS_STANDARD_FILE = std::numeric_limits<size_t>::max();
+constexpr u32 VFS_INDEX_CACHE_MAGIC = 0x31494656;
+constexpr u32 VFS_INDEX_CACHE_VERSION = 5;
+constexpr u32 MAX_VFS_INDEX_ENTRIES = 2'000'000;
+
+namespace
+{
+struct VfsIndexEntry
+{
+    xr_string name;
+    u32 crc{};
+    u32 ptr{};
+    u32 sizeReal{};
+    u32 sizeCompressed{};
+};
+
+bool GetArchiveChunkSignature(const CLocatorAPI::archive& archive, u32 chunkId, u32& chunkSize, u32& chunkCrc)
+{
+    size_t position = 0;
+    while (archive.size - position >= sizeof(u32) * 2)
+    {
+        u32 type;
+        u32 size;
+        std::memcpy(&type, archive.mappedBase + position, sizeof(type));
+        std::memcpy(&size, archive.mappedBase + position + sizeof(type), sizeof(size));
+        position += sizeof(u32) * 2;
+        if (size > archive.size - position)
+            return false;
+        if ((type & ~CFS_CompressMark) == chunkId)
+        {
+            chunkSize = size;
+            chunkCrc = crc32(archive.mappedBase + position, size);
+            return true;
+        }
+        position += size;
+    }
+    return false;
+}
+
+bool ReadVfsIndexString(IReader& reader, xr_string& value)
+{
+    if (reader.eof())
+        return false;
+
+    const void* terminator = std::memchr(reader.pointer(), 0, reader.elapsed());
+    if (!terminator)
+        return false;
+    const size_t length = static_cast<const u8*>(terminator) - static_cast<const u8*>(reader.pointer());
+    if (length >= sizeof(string_path))
+        return false;
+
+    reader.r_stringZ(value);
+    return true;
+}
+
+bool LoadVfsIndexCache(pcstr cachePath, const CLocatorAPI::archive& archive, u32 chunkSize, u32 chunkCrc,
+    xr_vector<VfsIndexEntry>& entries)
+{
+    IReader* reader = FS.r_open(cachePath);
+    if (!reader)
+        return false;
+
+    bool valid = reader->elapsed() >= static_cast<intptr_t>(sizeof(u32) * 6 + sizeof(u64));
+    u32 count = 0;
+    if (valid)
+    {
+        valid = reader->r_u32() == VFS_INDEX_CACHE_MAGIC;
+        valid = valid && reader->r_u32() == VFS_INDEX_CACHE_VERSION;
+        valid = valid && reader->r_u64() == archive.size;
+        valid = valid && reader->r_u32() == archive.modif;
+        valid = valid && reader->r_u32() == chunkSize;
+        valid = valid && reader->r_u32() == chunkCrc;
+        count = reader->r_u32();
+        valid = valid && count <= MAX_VFS_INDEX_ENTRIES;
+    }
+
+    if (valid)
+        entries.reserve(count);
+    for (u32 i = 0; valid && i < count; ++i)
+    {
+        VfsIndexEntry entry;
+        valid = ReadVfsIndexString(*reader, entry.name);
+        valid = valid && reader->elapsed() >= static_cast<intptr_t>(sizeof(u32) * 4);
+        if (valid)
+        {
+            entry.crc = reader->r_u32();
+            entry.ptr = reader->r_u32();
+            entry.sizeReal = reader->r_u32();
+            entry.sizeCompressed = reader->r_u32();
+            valid = entry.ptr <= archive.size && entry.sizeCompressed <= archive.size - entry.ptr;
+        }
+        if (valid)
+            entries.push_back(std::move(entry));
+    }
+    valid = valid && reader->eof();
+    FS.r_close(reader);
+
+    if (!valid)
+        entries.clear();
+    return valid;
+}
+
+void SaveVfsIndexCache(pcstr cachePath, const CLocatorAPI::archive& archive, u32 chunkSize, u32 chunkCrc,
+    const xr_vector<VfsIndexEntry>& entries)
+{
+    CMemoryWriter writer;
+    writer.w_u32(VFS_INDEX_CACHE_MAGIC);
+    writer.w_u32(VFS_INDEX_CACHE_VERSION);
+    writer.w_u64(archive.size);
+    writer.w_u32(archive.modif);
+    writer.w_u32(chunkSize);
+    writer.w_u32(chunkCrc);
+    writer.w_u32(static_cast<u32>(entries.size()));
+    for (const VfsIndexEntry& entry : entries)
+    {
+        writer.w_stringZ(entry.name);
+        writer.w_u32(entry.crc);
+        writer.w_u32(entry.ptr);
+        writer.w_u32(entry.sizeReal);
+        writer.w_u32(entry.sizeCompressed);
+    }
+
+    xr_string temporaryPath = cachePath;
+    temporaryPath += ".tmp";
+    if (writer.save_to(temporaryPath.c_str()))
+        FS.file_rename(temporaryPath.c_str(), cachePath, true);
+}
+}
 
 const u32 BIG_FILE_READER_WINDOW_SIZE = 1024 * 1024;
 
@@ -451,19 +578,35 @@ void CLocatorAPI::LoadArchive(archive& A, pcstr entrypoint)
 
     // Read FileSystem
     A.open();
-    IReader* hdr = open_chunk(A.hSrcFile, 1, A.path.c_str(), A.size, shouldDecrypt);
+    u32 chunkSize = 0;
+    u32 chunkCrc = 0;
+    R_ASSERT3(GetArchiveChunkSignature(A, 1, chunkSize, chunkCrc), "Invalid archive index", A.path.c_str());
 
-    R_ASSERT(hdr);
+    string64 cacheName;
+    xr_sprintf(cacheName, "vfs-index-%08x.cache", path_crc32(A.path.c_str(), A.path.size()));
+    string_path cachePath;
+    update_path(cachePath, "$app_data_root$", cacheName);
 
-    while (!hdr->eof())
+    xr_vector<VfsIndexEntry> entries;
+    if (!LoadVfsIndexCache(cachePath, A, chunkSize, chunkCrc, entries))
     {
-        archive_file_header header{ *hdr };
-
-        string_path full;
-        strconcat(full, fs_entry_point, header.name);
-        Register(full, A.vfs_idx, header.crc, header.ptr, header.size_real, header.size_compr, A.modif);
+        IReader* hdr = open_chunk(A.hSrcFile, 1, A.path.c_str(), A.size, shouldDecrypt);
+        R_ASSERT(hdr);
+        while (!hdr->eof())
+        {
+            archive_file_header header{ *hdr };
+            entries.push_back({ header.name, header.crc, header.ptr, header.size_real, header.size_compr });
+        }
+        hdr->close();
+        SaveVfsIndexCache(cachePath, A, chunkSize, chunkCrc, entries);
     }
-    hdr->close();
+
+    for (const VfsIndexEntry& entry : entries)
+    {
+        string_path full;
+        strconcat(full, fs_entry_point, entry.name.c_str());
+        Register(full, A.vfs_idx, entry.crc, entry.ptr, entry.sizeReal, entry.sizeCompressed, A.modif);
+    }
 } //-V773
 
 void CLocatorAPI::archive::open()

@@ -12,6 +12,7 @@
 #include "screenshot_server.h"
 #include "xrNetServer/NET_AuthCheck.h"
 #include "xrNetServer/NET_Messages.h"
+#include "xrEngine/x_ray.h"
 
 LPCSTR xrServer::get_map_download_url(LPCSTR level_name, LPCSTR level_version)
 {
@@ -70,6 +71,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
         xr_auth_strings_t tmp_ignore;
         xr_auth_strings_t tmp_check;
         fill_auth_check_params(tmp_ignore, tmp_check);
+        InitializeSettingsAuth();
         FS.auth_generate(tmp_ignore, tmp_check);
     }
 #ifdef DEBUG

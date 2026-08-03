@@ -56,6 +56,9 @@ void CRenderDevice::FillVideoModes()
 {
     ZoneScoped;
 
+    if (!vid_monitor_token.empty())
+        return;
+
     const int displayCount = SDL_GetNumVideoDisplays();
     R_ASSERT3(displayCount > 0, "Failed to find display", SDL_GetError());
 
@@ -208,36 +211,24 @@ void CRenderDevice::SelectResolution(const bool windowed)
     }
     else if (!windowed) // check if safe for fullscreen
     {
-        string256 buf;
-        xr_sprintf(buf, "%ux%u (%dHz)", psDeviceMode.Width, psDeviceMode.Height, psDeviceMode.RefreshRate);
-
-        auto modes = vid_mode_token[psDeviceMode.Monitor];
-        const auto it = std::find_if(modes.begin(), modes.end(), [&buf](const xr_token& token)
+        SDL_DisplayMode requested =
         {
-            return token.name && xr_strcmp(token.name, buf) == 0;
-        });
+            SDL_PIXELFORMAT_UNKNOWN,
+            static_cast<int>(psDeviceMode.Width),
+            static_cast<int>(psDeviceMode.Height),
+            static_cast<int>(psDeviceMode.RefreshRate),
+            nullptr
+        };
 
-        if (it == modes.end()) // not found
+        SDL_DisplayMode closest;
+        if (!SDL_GetClosestDisplayMode(psDeviceMode.Monitor, &requested, &closest))
         {
-            SDL_DisplayMode current =
-            {
-                SDL_PIXELFORMAT_UNKNOWN,
-                (int)psDeviceMode.Width,
-                (int)psDeviceMode.Height,
-                (int)psDeviceMode.RefreshRate,
-                nullptr
-            };
-
-            SDL_DisplayMode closest; // try closest or fallback to desktop mode
-            if (!SDL_GetClosestDisplayMode(psDeviceMode.Monitor, &current, &closest))
-            {
-                SDL_GetCurrentDisplayMode(psDeviceMode.Monitor, &closest);
-            }
-
-            psDeviceMode.Width = closest.w;
-            psDeviceMode.Height = closest.h;
-            psDeviceMode.RefreshRate = closest.refresh_rate;
+            SDL_GetCurrentDisplayMode(psDeviceMode.Monitor, &closest);
         }
+
+        psDeviceMode.Width = closest.w;
+        psDeviceMode.Height = closest.h;
+        psDeviceMode.RefreshRate = closest.refresh_rate;
     }
 
     dwWidth = psDeviceMode.Width;

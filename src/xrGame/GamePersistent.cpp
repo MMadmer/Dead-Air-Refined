@@ -2,6 +2,7 @@
 #include "GamePersistent.h"
 #include "xrCore/FMesh.hpp"
 #include "xrEngine/XR_IOConsole.h"
+#include "xrEngine/x_ray.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "Include/xrRender/Kinematics.h"
 #include "xrEngine/profiler.h"
@@ -108,6 +109,7 @@ void CGamePersistent::OnAppStart()
 
     // load game materials
     GMLib.Load(); // XXX: not ready to be loaded in parallel. Crashes on Linux, rare crashes on Windows and bugs with water became mercury on Windows.
+    StartupProfileCheckpoint("Game materials loaded");
 
     // init game globals
 #ifndef XR_PLATFORM_WINDOWS
@@ -123,18 +125,15 @@ void CGamePersistent::OnAppStart()
         m_pLoadingScreen = xr_new<NullLoadingScreen>();
     else
         m_pLoadingScreen = xr_new<UILoadingScreen>();
+    StartupProfileCheckpoint("Game UI and main menu created");
 
     inherited::OnAppStart();
-
-#ifdef XR_PLATFORM_WINDOWS
-    ansel = xr_new<AnselManager>();
-    ansel->Load();
-    ansel->Init();
-#endif
+    StartupProfileCheckpoint("Environment initialized");
 
 #ifdef XR_PLATFORM_WINDOWS
     TaskScheduler->Wait(initializeGlobals);
 #endif
+    StartupProfileCheckpoint("Game globals initialized");
 }
 
 void CGamePersistent::OnAppEnd()
@@ -174,6 +173,15 @@ void CGamePersistent::Disconnect()
 
 void CGamePersistent::OnGameStart()
 {
+#ifdef XR_PLATFORM_WINDOWS
+    if (!ansel)
+    {
+        ansel = xr_new<AnselManager>();
+        ansel->Load();
+        ansel->Init();
+    }
+#endif
+
     inherited::OnGameStart();
     UpdateGameType();
 }

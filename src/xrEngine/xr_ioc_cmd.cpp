@@ -347,8 +347,21 @@ class CCC_VidMonitor : public CCC_Token
 public:
     CCC_VidMonitor(pcstr name) : CCC_Token(name, &psDeviceMode.Monitor, nullptr) {}
 
+    void Execute(pcstr args) override
+    {
+        int monitor = -1;
+        if (sscanf(args, "%d", &monitor) == 1 && monitor >= 0 && monitor < SDL_GetNumVideoDisplays())
+        {
+            psDeviceMode.Monitor = static_cast<u32>(monitor);
+            return;
+        }
+
+        Msg("! Wrong video monitor [%s]", args);
+    }
+
     const xr_token* GetToken() noexcept override
     {
+        Device.FillVideoModes();
         return vid_monitor_token.data();
     }
 };
@@ -383,6 +396,7 @@ public:
 
     const xr_token* GetToken() noexcept override
     {
+        Device.FillVideoModes();
         return vid_mode_token[psDeviceMode.Monitor].data();
     }
 

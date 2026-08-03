@@ -107,6 +107,7 @@ private:
     };
 
     xr_vector<sLevelInfo> Levels;
+    bool levelsScanned{};
     u32 Level_Current{ u32(-1) };
 
     void Level_Append(pcstr lname);

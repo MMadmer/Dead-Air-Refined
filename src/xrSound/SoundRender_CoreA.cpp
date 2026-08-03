@@ -88,7 +88,9 @@ void CSoundRender_CoreA::_initialize()
 
 #if defined(XR_HAS_EAX)
     // Check for EAX extension
-    if (deviceDesc.props.eax && !m_effects)
+    const bool supportsEax = alIsExtensionPresent("EAX5.0") || alIsExtensionPresent("EAX4.0") ||
+        alIsExtensionPresent("EAX3.0") || alIsExtensionPresent("EAX2.0");
+    if (supportsEax && !m_effects)
     {
         m_effects = xr_new<CSoundRender_EffectsA_EAX>();
         if (!m_effects->initialized())

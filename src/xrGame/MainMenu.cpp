@@ -7,6 +7,7 @@
 #include "ui/UpdateService.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
+#include "xrEngine/x_ray.h"
 #include "xrEngine/CameraManager.h"
 #include "xrEngine/xr_level_controller.h"
 #include "xrUICore/XML/UITextureMaster.h"
@@ -120,35 +121,12 @@ CMainMenu::CMainMenu()
     GetPlayerName();
     GetCDKeyFromRegistry();
     m_demo_info_loader = NULL;
+    m_pMB_ErrDlgs.resize(ErrMax);
 
     if (!GEnv.isDedicatedServer)
     {
         g_btnHint = xr_new<CUIButtonHint>();
         g_statHint = xr_new<CUIButtonHint>();
-        m_pGameSpyFull = xr_new<CGameSpy_Full>();
-
-        for (cpcstr name : ErrMsgBoxTemplate)
-        {
-            CUIMessageBoxEx* msgBox = m_pMB_ErrDlgs.emplace_back(xr_new<CUIMessageBoxEx>());
-            if (!msgBox->InitMessageBox(name))
-            {
-                m_pMB_ErrDlgs.pop_back();
-                xr_delete(msgBox);
-            }
-        }
-
-        CUIMessageBoxEx* downloadMsg = m_pMB_ErrDlgs[DownloadMPMap];
-        if (downloadMsg)
-        {
-            downloadMsg->AddCallbackStr("button_copy", MESSAGE_BOX_COPY_CLICKED,
-                CUIWndCallback::void_function(this, &CMainMenu::OnDownloadMPMap_CopyURL));
-            downloadMsg->AddCallbackStr(
-                "button_yes", MESSAGE_BOX_YES_CLICKED, CUIWndCallback::void_function(this, &CMainMenu::OnDownloadMPMap));
-        }
-
-        m_account_mngr = xr_new<gamespy_gp::account_manager>(m_pGameSpyFull->GetGameSpyGP());
-        m_login_mngr = xr_new<gamespy_gp::login_manager>(m_pGameSpyFull);
-        m_profile_store = xr_new<gamespy_profile::profile_store>();
     }
 
     Device.seqFrame.Add(this, REG_PRIORITY_LOW - 1000);
@@ -233,7 +211,6 @@ void CMainMenu::Activate(bool bActivate)
         };
         Device.seqRender.Add(this, 4); // 1-console 2-cursor 3-tutorial
 
-        Console->Execute("stat_memory");
     }
     else
     {
@@ -496,6 +473,7 @@ void CMainMenu::OnRender()
         return;
 
     GEnv.Render->RenderMenu();
+    StartupProfileMenuRendered();
     if (!OnRenderPPUI_query())
     {
         DoRenderDialogs();
@@ -522,6 +500,7 @@ void CMainMenu::OnRenderPPUI_main()
     }
 
     UI().pp_stop();
+    StartupProfileMenuRendered();
 }
 
 void CMainMenu::OnRenderPPUI_PP()
@@ -538,6 +517,7 @@ void CMainMenu::OnRenderPPUI_PP()
         window->Draw();
 
     UI().pp_stop();
+    StartupProfileMenuRendered();
 }
 /*
 void CMainMenu::StartStopMenu(CUIDialogWnd* pDialog, bool bDoHideIndicators)
@@ -577,7 +557,7 @@ void CMainMenu::OnFrame()
             Console->Show();
     }
 
-    if (IsActive() || m_sPDProgress.IsInProgress)
+    if ((IsActive() || m_sPDProgress.IsInProgress) && m_pGameSpyFull)
     {
         GSUpdateStatus status = m_pGameSpyFull->Update();
         if (status != GSUpdateStatus::ConnectingToMaster)
@@ -644,7 +624,8 @@ void CMainMenu::CheckForErrorDlg()
 {
     if (m_NeedErrDialog == ErrNoError)
         return;
-    m_pMB_ErrDlgs[m_NeedErrDialog]->ShowDialog(false);
+    if (CUIMessageBoxEx* dialog = EnsureErrorDialog(m_NeedErrDialog))
+        dialog->ShowDialog(false);
     m_NeedErrDialog = ErrNoError;
 };
 
@@ -676,7 +657,72 @@ bool CMainMenu::FillDebugTree(const CUIDebugState& debugState)
 #endif
 }
 
-void CMainMenu::SwitchToMultiplayerMenu() { m_startDialog->Dispatch(2, 1); };
+void CMainMenu::SwitchToMultiplayerMenu()
+{
+    if (EnsureGameSpy())
+        m_startDialog->Dispatch(2, 1);
+}
+
+bool CMainMenu::EnsureGameSpy()
+{
+    if (m_pGameSpyFull)
+        return true;
+    if (GEnv.isDedicatedServer)
+        return false;
+
+    m_pGameSpyFull = xr_new<CGameSpy_Full>();
+    m_account_mngr = xr_new<gamespy_gp::account_manager>(m_pGameSpyFull->GetGameSpyGP());
+    m_login_mngr = xr_new<gamespy_gp::login_manager>(m_pGameSpyFull);
+    m_profile_store = xr_new<gamespy_profile::profile_store>();
+    return true;
+}
+
+CUIMessageBoxEx* CMainMenu::EnsureErrorDialog(EErrorDlg type)
+{
+    if (type < 0 || type >= ErrMax)
+        return nullptr;
+    if (m_pMB_ErrDlgs[type])
+        return m_pMB_ErrDlgs[type];
+
+    CUIMessageBoxEx* dialog = xr_new<CUIMessageBoxEx>();
+    if (!dialog->InitMessageBox(ErrMsgBoxTemplate[type]))
+    {
+        xr_delete(dialog);
+        return nullptr;
+    }
+
+    if (type == DownloadMPMap)
+    {
+        dialog->AddCallbackStr("button_copy", MESSAGE_BOX_COPY_CLICKED,
+            CUIWndCallback::void_function(this, &CMainMenu::OnDownloadMPMap_CopyURL));
+        dialog->AddCallbackStr(
+            "button_yes", MESSAGE_BOX_YES_CLICKED, CUIWndCallback::void_function(this, &CMainMenu::OnDownloadMPMap));
+    }
+
+    m_pMB_ErrDlgs[type] = dialog;
+    return dialog;
+}
+
+gamespy_gp::account_manager* CMainMenu::GetAccountMngr()
+{
+    return EnsureGameSpy() ? m_account_mngr : nullptr;
+}
+
+gamespy_gp::login_manager* CMainMenu::GetLoginMngr()
+{
+    return EnsureGameSpy() ? m_login_mngr : nullptr;
+}
+
+gamespy_profile::profile_store* CMainMenu::GetProfileStore()
+{
+    return EnsureGameSpy() ? m_profile_store : nullptr;
+}
+
+CGameSpy_Full* CMainMenu::GetGS()
+{
+    return EnsureGameSpy() ? m_pGameSpyFull : nullptr;
+}
+
 bool CMainMenu::EnsureBugReportDialog()
 {
     if (!m_bugReportDialog)
@@ -762,7 +808,8 @@ void CMainMenu::OnPatchCheck(bool success)
 {
     if (!success)
     {
-        m_pMB_ErrDlgs[NoNewPatch]->ShowDialog(false);
+        if (CUIMessageBoxEx* dialog = EnsureErrorDialog(NoNewPatch))
+            dialog->ShowDialog(false);
         return;
     }
     if (m_sPDProgress.IsInProgress)
@@ -787,8 +834,11 @@ void CMainMenu::OnSessionTerminate(LPCSTR reason)
         STRCONCAT(text, str, " ", reason);
     }
 
-    m_pMB_ErrDlgs[SessionTerminate]->SetText(StringTable().translate(text).c_str());
-    SetErrorDialog(CMainMenu::SessionTerminate);
+    if (CUIMessageBoxEx* dialog = EnsureErrorDialog(SessionTerminate))
+    {
+        dialog->SetText(StringTable().translate(text).c_str());
+        SetErrorDialog(CMainMenu::SessionTerminate);
+    }
 }
 
 void CMainMenu::OnLoadError(LPCSTR module)
@@ -797,8 +847,11 @@ void CMainMenu::OnLoadError(LPCSTR module)
     string1024 Text;
     strconcat(sizeof(Text), Text, str, " ");
     xr_strcat(Text, sizeof(Text), module);
-    m_pMB_ErrDlgs[LoadingError]->SetText(Text);
-    SetErrorDialog(CMainMenu::LoadingError);
+    if (CUIMessageBoxEx* dialog = EnsureErrorDialog(LoadingError))
+    {
+        dialog->SetText(Text);
+        SetErrorDialog(CMainMenu::LoadingError);
+    }
 }
 
 void CMainMenu::CancelDownload()
@@ -867,7 +920,7 @@ LPCSTR DelHyphens(LPCSTR c)
 bool CMainMenu::IsCDKeyIsValid()
 {
 #ifdef XR_PLATFORM_WINDOWS
-    if (!m_pGameSpyFull || !m_pGameSpyFull->GetGameSpyHTTP())
+    if (!EnsureGameSpy() || !m_pGameSpyFull->GetGameSpyHTTP())
         return false;
     string64 CDKey = "";
     GetCDKey_FromRegistry(CDKey);
@@ -900,20 +953,20 @@ bool CMainMenu::ValidateCDKey()
 
 void CMainMenu::Show_CTMS_Dialog()
 {
-    if (!m_pMB_ErrDlgs[ConnectToMasterServer])
+    CUIMessageBoxEx* dialog = EnsureErrorDialog(ConnectToMasterServer);
+    if (!dialog || dialog->IsShown())
         return;
-    if (m_pMB_ErrDlgs[ConnectToMasterServer]->IsShown())
-        return;
-    m_pMB_ErrDlgs[ConnectToMasterServer]->ShowDialog(false);
+    dialog->ShowDialog(false);
 }
 
 void CMainMenu::Hide_CTMS_Dialog()
 {
-    if (!m_pMB_ErrDlgs[ConnectToMasterServer])
+    CUIMessageBoxEx* dialog = m_pMB_ErrDlgs[ConnectToMasterServer];
+    if (!dialog)
         return;
-    if (!m_pMB_ErrDlgs[ConnectToMasterServer]->IsShown())
+    if (!dialog->IsShown())
         return;
-    m_pMB_ErrDlgs[ConnectToMasterServer]->HideDialog();
+    dialog->HideDialog();
 }
 
 LPCSTR CMainMenu::GetGSVer()
@@ -925,7 +978,7 @@ LPCSTR CMainMenu::GetGSVer()
 
 LPCSTR CMainMenu::GetPlayerName()
 {
-    gamespy_gp::login_manager* l_mngr = GetLoginMngr();
+    gamespy_gp::login_manager* l_mngr = m_login_mngr;
     gamespy_gp::profile const* tmp_prof = l_mngr ? l_mngr->get_current_profile() : NULL;
 
     if (tmp_prof)
@@ -953,7 +1006,7 @@ void CMainMenu::Show_DownloadMPMap(LPCSTR text, LPCSTR url)
 {
     m_downloaded_mp_map_url._set(url);
 
-    if (CUIMessageBoxEx* downloadMsg = m_pMB_ErrDlgs[DownloadMPMap])
+    if (CUIMessageBoxEx* downloadMsg = EnsureErrorDialog(DownloadMPMap))
     {
         downloadMsg->SetText(text);
         downloadMsg->SetTextEditURL(url);

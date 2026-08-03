@@ -18,6 +18,7 @@
 #include "ui/UIPdaWnd.h"
 #include "xrNetServer/NET_AuthCheck.h"
 #include "xrNetServer/NET_Messages.h"
+#include "xrEngine/x_ray.h"
 #include "alife_storage_manager.h"
 
 #include "xrPhysics/PhysicsCommon.h"
@@ -387,6 +388,7 @@ bool CLevel::Connect2Server(const char* options)
         xr_auth_strings_t tmp_ignore;
         xr_auth_strings_t tmp_check;
         fill_auth_check_params(tmp_ignore, tmp_check);
+        InitializeSettingsAuth();
         FS.auth_generate(tmp_ignore, tmp_check);
     }
 

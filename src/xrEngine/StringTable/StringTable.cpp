@@ -8,13 +8,57 @@
 
 constexpr pcstr OPENXRAY_XML = "openxray.xml";
 
+namespace
+{
+constexpr u32 STRING_TABLE_CACHE_MAGIC = 0x31435453;
+constexpr u32 STRING_TABLE_CACHE_VERSION = 2;
+constexpr u32 MAX_CACHED_STRINGS = 1'000'000;
+constexpr size_t MAX_CACHED_STRING_LENGTH = 1024 * 1024;
+
+struct LocalizationFile
+{
+    xr_string name;
+    STRING_TABLE_MAP strings;
+};
+
+u32 CalculateCacheSignature(const FS_FileSet& files, pcstr language)
+{
+    u32 signature = crc32(&STRING_TABLE_CACHE_VERSION, sizeof(STRING_TABLE_CACHE_VERSION));
+    signature = crc32(language, xr_strlen(language), signature);
+    for (const FS_File& file : files)
+    {
+        signature = crc32(file.name.data(), file.name.size(), signature);
+        signature = crc32(&file.size, sizeof(file.size), signature);
+        signature = crc32(&file.time_write, sizeof(file.time_write), signature);
+    }
+    return signature;
+}
+
+bool ReadCachedString(IReader& reader, xr_string& value)
+{
+    if (reader.eof())
+        return false;
+
+    const void* terminator = std::memchr(reader.pointer(), 0, reader.elapsed());
+    if (!terminator)
+        return false;
+
+    const size_t length = static_cast<const u8*>(terminator) - static_cast<const u8*>(reader.pointer());
+    if (length > MAX_CACHED_STRING_LENGTH)
+        return false;
+
+    reader.r_stringZ(value);
+    return true;
+}
+
+}
+
 CStringTable& StringTable()
 {
     static CStringTable string_table;
     return string_table;
 }
 
-std::mutex CStringTable::pDataMutex;
 xr_unique_ptr<STRING_TABLE_DATA> CStringTable::pData{};
 u32 CStringTable::LanguageID = std::numeric_limits<u32>::max();
 string32 CStringTable::LanguageIDInLTX{};
@@ -59,14 +103,42 @@ void CStringTable::Init()
     xr_sprintf(files_mask, "text" DELIMITER "%s" DELIMITER "*.xml", pData->m_sLanguage.c_str());
     FS.file_list(fset, "$game_config$", FS_ListFiles, files_mask);
 
-    xr_parallel_for_each(fset, [this](const FS_File& it)
-    {
-        string_path fn, ext;
-        _splitpath(it.name.c_str(), nullptr, nullptr, fn, ext);
-        xr_strcat(fn, ext);
+    string_path cacheName;
+    xr_sprintf(cacheName, "string-table-%s.cache", pData->m_sLanguage.c_str());
+    string_path cachePath;
+    FS.update_path(cachePath, "$app_data_root$", cacheName);
+    const u32 signature = CalculateCacheSignature(fset, pData->m_sLanguage.c_str());
 
-        Load(fn);
-    });
+    if (!LoadCache(cachePath, signature, pData->m_StringTable))
+    {
+        xr_vector<LocalizationFile> files;
+        files.reserve(fset.size());
+        for (const FS_File& file : fset)
+        {
+            string_path name, extension;
+            _splitpath(file.name.c_str(), nullptr, nullptr, name, extension);
+            xr_strcat(name, extension);
+            files.push_back({ name, {} });
+        }
+
+        xr_parallel_for_each(files, [this](LocalizationFile& file)
+        {
+            Load(file.name.c_str(), file.strings);
+        });
+
+        for (LocalizationFile& file : files)
+        {
+            for (const auto& [id, value] : file.strings)
+            {
+#ifndef MASTER_GOLD
+                if (pData->m_StringTable.find(id) != pData->m_StringTable.end())
+                    Msg("* String table override [%s]", id.c_str());
+#endif
+                pData->m_StringTable[id] = value;
+            }
+        }
+        SaveCache(cachePath, signature, pData->m_StringTable);
+    }
 
     if (!translate("st_currency", pData->m_sCurrency) &&
         !translate("ui_st_money_descr", pData->m_sCurrency) && // OGSR
@@ -206,7 +278,7 @@ shared_str CStringTable::GetCurrency() const
 
 xr_token* CStringTable::GetLanguagesToken() const { return languagesToken.data(); }
 
-void CStringTable::Load(LPCSTR xml_file_full)
+void CStringTable::Load(LPCSTR xml_file_full, STRING_TABLE_MAP& strings)
 {
     ZoneScoped;
 
@@ -232,18 +304,77 @@ void CStringTable::Load(LPCSTR xml_file_full)
             continue;
         }
 
-        [[maybe_unused]] bool duplicate{};
         const STRING_VALUE str_val = ParseLine(string_text); // NOLINT
-        {
-            std::lock_guard guard{ pDataMutex };
 #ifndef MASTER_GOLD
-            duplicate = pData->m_StringTable.find(string_name) != pData->m_StringTable.end();
-#endif
-            pData->m_StringTable[string_name] = str_val;
-        }
-#ifndef MASTER_GOLD
-        if (duplicate)
+        if (strings.find(string_name) != strings.end())
             Msg("* String table override [%s]", string_name);
+#endif
+        strings[string_name] = str_val;
+    }
+}
+
+bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& strings)
+{
+    IReader* reader = FS.r_open(cachePath);
+    if (!reader)
+        return false;
+
+    STRING_TABLE_MAP cachedStrings;
+    bool valid = reader->elapsed() >= static_cast<intptr_t>(sizeof(u32) * 4);
+    u32 count = 0;
+    if (valid)
+    {
+        valid = reader->r_u32() == STRING_TABLE_CACHE_MAGIC;
+        valid = valid && reader->r_u32() == STRING_TABLE_CACHE_VERSION;
+        valid = valid && reader->r_u32() == signature;
+        count = reader->r_u32();
+        valid = valid && count <= MAX_CACHED_STRINGS;
+    }
+
+    for (u32 i = 0; valid && i < count; ++i)
+    {
+        xr_string id;
+        xr_string value;
+        valid = ReadCachedString(*reader, id) && ReadCachedString(*reader, value);
+        if (valid)
+            valid = cachedStrings.emplace(id.c_str(), value.c_str()).second;
+    }
+    valid = valid && reader->eof();
+    FS.r_close(reader);
+
+    if (!valid)
+        return false;
+
+    strings.swap(cachedStrings);
+#ifndef MASTER_GOLD
+    Msg("StringTable: loaded cache with %u strings", count);
+#endif
+    return true;
+}
+
+void CStringTable::SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings)
+{
+    CMemoryWriter writer;
+    writer.w_u32(STRING_TABLE_CACHE_MAGIC);
+    writer.w_u32(STRING_TABLE_CACHE_VERSION);
+    writer.w_u32(signature);
+    writer.w_u32(static_cast<u32>(strings.size()));
+    for (const auto& [id, value] : strings)
+    {
+        writer.w_stringZ(id);
+        writer.w_stringZ(value);
+    }
+
+    xr_string temporaryPath = cachePath;
+    temporaryPath += ".tmp";
+    if (writer.save_to(temporaryPath.c_str()))
+    {
+        FS.file_rename(temporaryPath.c_str(), cachePath, true);
+    }
+    else
+    {
+#ifndef MASTER_GOLD
+        Msg("! StringTable: failed to update cache [%s]", cachePath);
 #endif
     }
 }

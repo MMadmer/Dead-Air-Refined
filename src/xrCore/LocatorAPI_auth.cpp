@@ -28,6 +28,7 @@ u64 CLocatorAPI::auth_get()
 void CLocatorAPI::auth_runtime(void* params)
 {
 	m_auth_lock->Enter();
+    VERIFY(pSettingsAuth);
     auth_options* _o = (auth_options*)params;
 
     CMemoryWriter writer;

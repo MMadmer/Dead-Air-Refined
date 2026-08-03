@@ -14,6 +14,12 @@ namespace discord
 class Core;
 }
 
+ENGINE_API void InitializeSettingsAuth();
+ENGINE_API void StartupProfileBegin();
+ENGINE_API void StartupProfileCheckpoint(pcstr stage);
+ENGINE_API void StartupProfileMenuRendered();
+ENGINE_API void StartupProfileFinishAfterPresent();
+
 // definition
 class ENGINE_API CApplication final
 {
@@ -26,6 +32,7 @@ class ENGINE_API CApplication final
 private:
     std::mutex m_discord_lock;
     discord::Core* m_discord_core{};
+    bool m_discord_initialization_attempted{};
 
 private:
     GameModule* m_game_module{};
@@ -37,7 +44,7 @@ private:
     void HideSplash();
 
     void InitializeDiscord();
-    void UpdateDiscordStatus();
+    void UpdateDiscordStatus(bool initializeIfNeeded);
 
 public:
     // Other

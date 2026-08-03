@@ -53,6 +53,27 @@ ENGINE_API string_path g_sLaunchWorkingFolder{};
 
 namespace
 {
+constexpr size_t MAX_STARTUP_PROFILE_ENTRIES = 32;
+
+struct StartupProfileEntry
+{
+    pcstr stage{};
+    std::chrono::steady_clock::time_point time{};
+};
+
+struct StartupProfileState
+{
+    std::chrono::steady_clock::time_point start{};
+    std::array<StartupProfileEntry, MAX_STARTUP_PROFILE_ENTRIES> entries{};
+    size_t count{};
+    size_t reportedCount{};
+    bool started{};
+    bool menuRendered{};
+    bool finished{};
+};
+
+StartupProfileState startupProfile;
+
 struct PathIncludePred
 {
 private:
@@ -68,6 +89,56 @@ public:
         return allow_to_include_path(*ignored, path);
     }
 };
+}
+
+void StartupProfileBegin()
+{
+    startupProfile = {};
+    startupProfile.start = std::chrono::steady_clock::now();
+    startupProfile.started = true;
+}
+
+void StartupProfileCheckpoint(pcstr stage)
+{
+    if (!startupProfile.started || startupProfile.finished || startupProfile.count == startupProfile.entries.size())
+        return;
+
+    startupProfile.entries[startupProfile.count++] = { stage, std::chrono::steady_clock::now() };
+
+    // Logging becomes available after Core initializes, so the second checkpoint also reports SDL initialization.
+    if (startupProfile.count < 2)
+        return;
+
+    while (startupProfile.reportedCount < startupProfile.count)
+    {
+        const size_t index = startupProfile.reportedCount++;
+        const auto previous = index ? startupProfile.entries[index - 1].time : startupProfile.start;
+        const auto stageElapsed =
+            std::chrono::duration<double, std::milli>(startupProfile.entries[index].time - previous);
+        const auto totalElapsed =
+            std::chrono::duration<double, std::milli>(startupProfile.entries[index].time - startupProfile.start);
+        Msg("* Startup checkpoint: %7.2f ms stage, %7.2f ms total - %s",
+            stageElapsed.count(), totalElapsed.count(), startupProfile.entries[index].stage);
+    }
+}
+
+void StartupProfileMenuRendered()
+{
+    startupProfile.menuRendered = true;
+}
+
+void StartupProfileFinishAfterPresent()
+{
+    if (!startupProfile.started || !startupProfile.menuRendered || startupProfile.finished)
+        return;
+
+    StartupProfileCheckpoint("First menu frame presented");
+    startupProfile.finished = true;
+
+    const auto total =
+        std::chrono::duration<double, std::milli>(startupProfile.entries[startupProfile.count - 1].time - startupProfile.start);
+    Msg("* Startup profile total: %.2f ms", total.count());
+    FlushLog();
 }
 
 template <typename T>
@@ -117,14 +188,7 @@ void InitSettings()
 {
     ZoneScoped;
 
-    xr_auth_strings_t ignoredPaths, checkedPaths;
-    fill_auth_check_params(ignoredPaths, checkedPaths); //TODO port xrNetServer to Linux
-    PathIncludePred includePred(&ignoredPaths);
-    CInifile::allow_include_func_t includeFilter;
-    includeFilter.bind(&includePred, &PathIncludePred::IsIncluded);
-
     InitConfig(pSettings, "system.ltx");
-    InitConfig(pSettingsAuth, "system.ltx", true, true, true, false, 0, includeFilter);
     InitConfig(pSettingsOpenXRay, "openxray.ltx", false, true, true, false);
     InitConfig(pGameIni, "game.ltx");
 
@@ -148,6 +212,21 @@ void InitSettings()
         else if (xr_strcmpi("unlock", gameMode) == 0)
             set_free_mode();
     }
+}
+
+void InitializeSettingsAuth()
+{
+    static std::mutex settingsAuthMutex;
+    std::lock_guard guard{ settingsAuthMutex };
+    if (pSettingsAuth)
+        return;
+
+    xr_auth_strings_t ignoredPaths, checkedPaths;
+    fill_auth_check_params(ignoredPaths, checkedPaths); //TODO port xrNetServer to Linux
+    PathIncludePred includePred(&ignoredPaths);
+    CInifile::allow_include_func_t includeFilter;
+    includeFilter.bind(&includePred, &PathIncludePred::IsIncluded);
+    InitConfig(pSettingsAuth, "system.ltx", true, true, true, false, 0, includeFilter);
 }
 
 void InitConsole()
@@ -220,6 +299,7 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
             flags |= SDL_INIT_GAMECONTROLLER;
         R_ASSERT3(SDL_Init(flags) == 0, "Unable to initialize SDL", SDL_GetError());
     }
+    StartupProfileCheckpoint("SDL initialized");
 
 #ifdef XR_PLATFORM_WINDOWS
     AccessibilityShortcuts shortcuts;
@@ -240,9 +320,12 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
         pInput = xr_new<CInput>(captureInput);
     });
 
-    const auto& createSoundDevicesList = TaskManager::AddTask([]
+    std::atomic_bool soundConfigurationReady{};
+    const auto& initializeSound = TaskManager::AddTask([&soundConfigurationReady]
     {
         Engine.Sound.CreateDevicesList();
+        soundConfigurationReady.wait(false, std::memory_order_acquire);
+        Engine.Sound.Create();
     });
 
     pcstr fsltx = "-fsltx ";
@@ -254,8 +337,10 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     }
 
     Core.Initialize("OpenXRay", commandLine, true, *fsgame ? fsgame : nullptr);
+    StartupProfileCheckpoint("Filesystem initialized");
 
     InitSettings();
+    StartupProfileCheckpoint("Settings initialized");
     // Adjust player & computer name for Asian
     if (pSettings->line_exist("string_table", "no_native_input"))
     {
@@ -264,26 +349,32 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     }
 
     Device.InitializeImGui();
-    Device.FillVideoModes();
     TaskScheduler->Wait(inputTask);
     InitConsole();
+    StartupProfileCheckpoint("Input, ImGui and console initialized");
 
     Engine.Initialize(game, modules);
+    StartupProfileCheckpoint("Renderer selected");
     Device.Initialize();
+    StartupProfileCheckpoint("Application window initialized");
 
     Console->OnDeviceInitialize();
 
     execUserScript();
-    InitializeDiscord();
+    StartupProfileCheckpoint("User configuration applied");
 
-    TaskScheduler->Wait(createSoundDevicesList);
-    Engine.Sound.Create();
+    soundConfigurationReady.store(true, std::memory_order_release);
+    soundConfigurationReady.notify_one();
+    StartupProfileCheckpoint("Sound initialization released");
 
     // ...command line for auto start
     pcstr startArgs = strstr(Core.Params, "-start ");
+    pcstr loadArgs = strstr(Core.Params, "-load ");
+    if (startArgs || loadArgs)
+        TaskScheduler->Wait(initializeSound);
+
     if (startArgs)
         Console->Execute(startArgs + 1);
-    pcstr loadArgs = strstr(Core.Params, "-load ");
     if (loadArgs)
         Console->Execute(loadArgs + 1);
 
@@ -294,7 +385,10 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     });
 
     Device.Create();
+    StartupProfileCheckpoint("Render device created");
+    TaskScheduler->Wait(initializeSound);
     TaskScheduler->Wait(createLightAnim);
+    StartupProfileCheckpoint("Sound and light animations initialized");
 
     if (game)
     {
@@ -302,10 +396,12 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
         g_pGamePersistent = game->create_persistent();
         R_ASSERT(g_pGamePersistent);
     }
+    StartupProfileCheckpoint("Game persistent created");
     if (g_pGamePersistent)
         g_pGamePersistent->OnAppStart();
     else
         Console->Show();
+    StartupProfileCheckpoint("Application startup completed");
 
     FrameMarkEnd(FRAME_MARK_APPLICATION_STARTUP);
 }
@@ -432,7 +528,7 @@ int CApplication::Run()
 
         Device.ProcessFrame();
 
-        UpdateDiscordStatus();
+        UpdateDiscordStatus(true);
         FrameMarkEnd(FRAME_MARK_APPLICATION_RUN);
     } // while (!SDL_QuitRequested())
 
@@ -479,7 +575,7 @@ void CApplication::SplashProc()
     }
     while (!m_should_exit.load(std::memory_order_acquire))
     {
-        UpdateDiscordStatus();
+        UpdateDiscordStatus(false);
         Sleep(SPLASH_FRAMERATE);
     }
 }
@@ -504,7 +600,7 @@ void CApplication::InitializeDiscord()
 {
 #ifdef USE_DISCORD_INTEGRATION
     ZoneScoped;
-    discord::Core* core;
+    discord::Core* core{};
     discord::Core::Create(DISCORD_APP_ID, discord::CreateFlags::NoRequireDiscord, &core);
 
 #   ifndef MASTER_GOLD
@@ -541,9 +637,15 @@ void CApplication::InitializeDiscord()
 #endif
 }
 
-void CApplication::UpdateDiscordStatus()
+void CApplication::UpdateDiscordStatus(bool initializeIfNeeded)
 {
 #ifdef USE_DISCORD_INTEGRATION
+    if (initializeIfNeeded && !m_discord_initialization_attempted)
+    {
+        m_discord_initialization_attempted = true;
+        InitializeDiscord();
+    }
+
     if (!m_discord_core)
         return;
 

@@ -2,6 +2,7 @@
 
 #include "Common/object_broker.h"
 
+#include "xrCommon/xr_hash_map.h"
 #include "xrUICore/XML/xrUIXmlParser.h"
 
 // T_INIT -  класс где определена статическая InitXmlIdToIndex
@@ -128,6 +129,7 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
     string_path xml_file;
     int count = _GetItemCount(file_str);
     int index = 0;
+    xr_flat_hash_map<shared_str, u8> knownIds;
     for (int it = 0; it < count; ++it)
     {
         _GetItem(file_str, it, xml_file);
@@ -156,15 +158,8 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
                 continue;
             }
 
-            //проверить ID на уникальность
-            T_VECTOR::iterator t_it = m_pItemDataVector->begin();
-            for (; m_pItemDataVector->end() != t_it; ++t_it)
-            {
-                if (shared_str((*t_it).id) == shared_str(item_name))
-                    break;
-            }
-
-            if (m_pItemDataVector->end() != t_it)
+            const shared_str itemId = item_name;
+            if (!knownIds.emplace(itemId, 0).second)
             {
 #ifndef MASTER_GOLD
                 Msg("! duplicate %s with id[%s] in %s", tag_name, item_name, xml_file_full);
@@ -173,7 +168,7 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
             }
 
             ITEM_DATA data;
-            data.id = item_name;
+            data.id = itemId;
             data.index = index;
             data.pos_in_file = i;
             //.				data.file_name		= xml_file;

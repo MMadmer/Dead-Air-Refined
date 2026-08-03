@@ -192,9 +192,13 @@ void CDrawUtilities::UpdateGrid(int number_of_cell, float square_size, int subdi
     }
 }
 
-void CDrawUtilities::OnDeviceCreate()
+void CDrawUtilities::EnsureDeviceResources()
 {
+    if (m_deviceResourcesReady)
+        return;
+
     ZoneScoped;
+    m_deviceResourcesReady = true;
     Device.seqRender.Add(this, REG_PRIORITY_LOW - 1000);
 
     m_SolidBox.CreateFromData(D3DPT_TRIANGLELIST, DU_BOX_NUMFACES, D3DFVF_XYZ | D3DFVF_DIFFUSE, du_box_vertices,
@@ -258,6 +262,10 @@ void CDrawUtilities::OnDeviceCreate()
 
 void CDrawUtilities::OnDeviceDestroy()
 {
+    if (!m_deviceResourcesReady)
+        return;
+
+    m_deviceResourcesReady = false;
     Device.seqRender.Remove(this);
     xr_delete(m_Font);
     m_SolidBox.Destroy();
