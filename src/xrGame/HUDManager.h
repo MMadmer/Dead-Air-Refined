@@ -21,6 +21,7 @@ public:
     virtual void OnEvent(EVENT E, u64 P1, u64 P2);
 
     virtual void Render_First(u32 context_id);
+    virtual void Render_ActorShadow(u32 context_id);
     virtual void Render_Last(u32 context_id);
     virtual void OnFrame();
 

@@ -301,7 +301,16 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
                 if (mstate_real & mcClimb)
                     scale *= m_fClimbFactor;
                 if (mstate_real & mcSprint)
-                    scale *= m_fSprintFactor;
+                {
+                    float sprint_factor = m_fSprintFactor;
+                    if (const PIItem active_item = inventory().ActiveItem())
+                    {
+                        float weight_penalty = active_item->Weight() / 10.f;
+                        clamp(weight_penalty, 0.f, 0.5f);
+                        sprint_factor -= weight_penalty;
+                    }
+                    scale *= sprint_factor;
+                }
 
                 if (mstate_real & (mcLStrafe | mcRStrafe) && !(mstate_real & mcCrouch))
                 {
@@ -526,15 +535,14 @@ void CActor::g_cl_Orientate(u32 mstate_rl, float dt)
     }
     else
     {
-        // if camera rotated more than 45 degrees - align model with it
-        float ty = angle_normalize(r_torso.yaw);
-        if (_abs(r_model_yaw - ty) > PI_DIV_4)
+        const float ty = angle_normalize(r_torso.yaw);
+        const float yaw_delta = angle_difference_signed(r_model_yaw, ty);
+        if (_abs(yaw_delta) > PI_DIV_6)
         {
-            r_model_yaw_dest = ty;
-            //
+            r_model_yaw_dest = angle_normalize(ty + (yaw_delta > 0.f ? PI_DIV_6 : -PI_DIV_6));
             mstate_real |= mcTurn;
         }
-        if (_abs(r_model_yaw - r_model_yaw_dest) < EPS_L)
+        if (angle_difference(r_model_yaw, r_model_yaw_dest) < EPS_L)
         {
             mstate_real &= ~mcTurn;
         }

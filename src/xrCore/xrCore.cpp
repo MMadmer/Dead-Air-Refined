@@ -19,7 +19,7 @@
 
 #include <SDL.h>
 
-#if __has_include(".GitInfo.hpp")
+#if !defined(GIT_INFO_CURRENT_COMMIT) && !defined(GIT_INFO_CURRENT_BRANCH) && __has_include(".GitInfo.hpp")
 #include ".GitInfo.hpp"
 #endif
 

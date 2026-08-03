@@ -30,14 +30,19 @@ void CInventoryBox::OnEvent(NET_Packet& P, u16 type)
         u16 id;
         P.r_u16(id);
         IGameObject* itm = Level().Objects.net_Find(id);
-        VERIFY(itm);
-        m_items.push_back(id);
+        CInventoryItem* pIItem = smart_cast<CInventoryItem*>(itm);
+        if (!itm || !pIItem)
+        {
+            Msg("! Inventory box [%u] rejected invalid item [%u]", ID(), id);
+            break;
+        }
+
+        if (std::find(m_items.begin(), m_items.end(), id) == m_items.end())
+            m_items.push_back(id);
         itm->H_SetParent(this);
         itm->setVisible(FALSE);
         itm->setEnabled(FALSE);
 
-        CInventoryItem* pIItem = smart_cast<CInventoryItem*>(itm);
-        VERIFY(pIItem);
         if (CurrentGameUI())
         {
             if (CurrentGameUI()->GetActorMenu().GetMenuMode() == mmDeadBodySearch)
@@ -55,11 +60,13 @@ void CInventoryBox::OnEvent(NET_Packet& P, u16 type)
         u16 id;
         P.r_u16(id);
         IGameObject* itm = Level().Objects.net_Find(id);
-        VERIFY(itm);
-        xr_vector<u16>::iterator it;
-        it = std::find(m_items.begin(), m_items.end(), id);
-        VERIFY(it != m_items.end());
-        m_items.erase(it);
+        std::erase(m_items, id);
+
+        if (!itm)
+        {
+            Msg("! Inventory box [%u] released unavailable item [%u]", ID(), id);
+            break;
+        }
 
         bool just_before_destroy = !P.r_eof() && P.r_u8();
         bool dont_create_shell = (type == GE_TRADE_SELL) || just_before_destroy;
@@ -69,7 +76,8 @@ void CInventoryBox::OnEvent(NET_Packet& P, u16 type)
         if (m_in_use)
         {
             CGameObject* GO = smart_cast<CGameObject*>(itm);
-            Actor()->callback(GameObject::eInvBoxItemTake)(this->lua_game_object(), GO->lua_game_object());
+            if (GO)
+                Actor()->callback(GameObject::eInvBoxItemTake)(this->lua_game_object(), GO->lua_game_object());
         }
     }
     break;
@@ -97,7 +105,13 @@ bool CInventoryBox::net_Spawn(CSE_Abstract* DC)
     return TRUE;
 }
 
-void CInventoryBox::net_Relcase(IGameObject* O) { inherited::net_Relcase(O); }
+void CInventoryBox::net_Relcase(IGameObject* O)
+{
+    if (O)
+        std::erase(m_items, O->ID());
+
+    inherited::net_Relcase(O);
+}
 #include "inventory_item.h"
 void CInventoryBox::AddAvailableItems(TIItemContainer& items_container) const
 {
@@ -107,7 +121,11 @@ void CInventoryBox::AddAvailableItems(TIItemContainer& items_container) const
     for (; it != it_e; ++it)
     {
         PIItem itm = smart_cast<PIItem>(Level().Objects.net_Find(*it));
-        VERIFY(itm);
+        if (!itm)
+        {
+            Msg("! Inventory box [%u] skipped unavailable item [%u]", ID(), *it);
+            continue;
+        }
         items_container.push_back(itm);
     }
 }
