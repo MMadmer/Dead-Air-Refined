@@ -30,7 +30,7 @@
 class Task;
 
 constexpr float VIEWPORT_NEAR = 0.2f;
-constexpr float HUD_VIEWPORT_NEAR = VIEWPORT_NEAR;
+constexpr float HUD_VIEWPORT_NEAR = 0.005f;
 
 class ENGINE_API CRenderDevice : public IWindowHandler
 {

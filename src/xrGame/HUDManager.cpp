@@ -65,11 +65,12 @@ void CHUDManager::Render_First(u32 context_id)
     if (!A || !A->HUDview())
         return;
 
+    // R1 keeps the actor hidden and renders only its shadow; newer renderers draw the first-person body.
     {
         const auto root = O->H_Root();
         ScopeLock lock{ &render_lock };
-        root->renderable_Invisible(true);
-        O->renderable_Render(context_id, root);
+        root->renderable_Invisible(GEnv.Render->GenerationIsR1());
+        A->renderable_RenderBody(context_id, root);
         root->renderable_Invisible(false);
     }
 }

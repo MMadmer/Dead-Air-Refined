@@ -1569,10 +1569,15 @@ void CActor::shedule_Update(u32 DT)
     Check_for_AutoPickUp();
 };
 #include "debug_renderer.h"
-void CActor::renderable_Render(u32 context_id, IRenderable* root)
+void CActor::renderable_RenderBody(u32 context_id, IRenderable* root)
 {
     VERIFY(_valid(XFORM()));
     inherited::renderable_Render(context_id, root);
+}
+
+void CActor::renderable_Render(u32 context_id, IRenderable* root)
+{
+    renderable_RenderBody(context_id, root);
     CInventoryOwner::renderable_Render(context_id, root);
 }
 

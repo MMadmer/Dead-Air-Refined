@@ -101,6 +101,7 @@ public:
     virtual void OnEvent(NET_Packet& P, u16 type);
 
     // Render
+    void renderable_RenderBody(u32 context_id, IRenderable* root);
     void renderable_Render(u32 context_id, IRenderable* root) override;
     virtual bool renderable_ShadowGenerate();
     void feel_sound_new(IGameObject* who, int type, const CSound_UserDataPtr& user_data,
