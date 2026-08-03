@@ -238,6 +238,8 @@ void CUIPdaWnd::Show(bool status)
             cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
             SetActiveSubdialog(subdialog);
             UITabControl->SetActiveTab(subdialog);
+            if (pUITaskWnd)
+                pUITaskWnd->Show_TaskListWnd(true);
         }
     }
     else
