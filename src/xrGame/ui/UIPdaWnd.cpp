@@ -229,9 +229,16 @@ void CUIPdaWnd::Show(bool status)
             actor->CInventoryOwner::OnReceiveInfo("ui_pda");
         }
 
-        cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
-        SetActiveSubdialog(subdialog);
-        UITabControl->SetActiveTab(subdialog);
+        if (m_sActiveSection.size())
+        {
+            SetActiveSubdialog(m_sActiveSection);
+        }
+        else
+        {
+            cpcstr subdialog = pUIMapWnd && !pUITaskWnd ? "eptMap" : "eptTasks";
+            SetActiveSubdialog(subdialog);
+            UITabControl->SetActiveTab(subdialog);
+        }
     }
     else
     {
@@ -376,6 +383,14 @@ void CUIPdaWnd::Show_MapWnd(bool status)
     {
         if (status)
             SetActiveSubdialog("eptMap");
+        return;
+    }
+
+    if (pUITaskWnd)
+    {
+        if (status)
+            SetActiveSubdialog("eptTasks");
+        pUITaskWnd->Show_TaskListWnd(false);
     }
 }
 
