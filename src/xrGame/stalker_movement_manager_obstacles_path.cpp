@@ -168,8 +168,11 @@ void stalker_movement_manager_obstacles::build_level_path()
 
             if (!pure_search_result)
             {
+                m_last_fail_time = Device.dwTimeGlobal;
+                m_failed_to_build_path = true;
+                restore_current_state();
 #ifndef MASTER_GOLD
-                Msg("! level_path().failed() during navigation");
+                Msg("! level path search failed for %s", object().cName().c_str());
 #endif // #ifndef MASTER_GOLD
                 break;
             }

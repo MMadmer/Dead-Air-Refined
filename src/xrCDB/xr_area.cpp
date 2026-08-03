@@ -5,6 +5,8 @@
 #include "Common/LevelStructure.hpp"
 #include "xrEngine/xr_collide_form.h"
 
+#include <filesystem>
+
 
 //----------------------------------------------------------------------
 // Class	: CObjectSpaceData
@@ -15,6 +17,76 @@ thread_local collide::rq_results CObjectSpaceData::r_temp;
 thread_local xr_vector<ISpatial*> CObjectSpaceData::r_spatial;
 
 using namespace collide;
+
+namespace
+{
+void prune_inactive_level_caches(const std::filesystem::path& activeCacheFile)
+{
+    const std::filesystem::path activeDirectory = activeCacheFile.parent_path();
+    const std::filesystem::path cacheRoot = activeDirectory.parent_path();
+    if (activeDirectory.empty() || cacheRoot.empty() || activeCacheFile.filename() != "objspace.bin" ||
+        cacheRoot.filename() != "cdb_cache")
+        return;
+
+    std::error_code error;
+    std::filesystem::directory_iterator iterator(
+        cacheRoot, std::filesystem::directory_options::skip_permission_denied, error);
+    const std::filesystem::directory_iterator end;
+    if (error)
+        return;
+
+    u32 removedDirectories = 0;
+    for (; iterator != end; iterator.increment(error))
+    {
+        if (error)
+            break;
+
+        const std::filesystem::directory_entry& entry = *iterator;
+        if (entry.path() == activeDirectory)
+            continue;
+
+        const std::filesystem::file_status status = entry.symlink_status(error);
+        if (error)
+        {
+            error.clear();
+            continue;
+        }
+
+        if (status.type() != std::filesystem::file_type::directory)
+            continue;
+
+        bool containsCacheFile = false;
+        for (const char* cacheFile : {"objspace.bin", "hom.bin", "portals.bin"})
+        {
+            containsCacheFile = std::filesystem::is_regular_file(entry.path() / cacheFile, error);
+            if (containsCacheFile)
+                break;
+            error.clear();
+        }
+
+        if (!containsCacheFile)
+            continue;
+
+#ifdef _WIN32
+        const DWORD attributes = GetFileAttributesW(entry.path().c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            continue;
+#endif
+
+        // Level collision caches are disposable and only the active level benefits from a warm reload.
+        std::filesystem::remove_all(entry.path(), error);
+        if (!error)
+            ++removedDirectories;
+        else
+            error.clear();
+    }
+
+#ifndef MASTER_GOLD
+    if (removedDirectories)
+        Msg("* Removed %u inactive level cache director%s", removedDirectories, removedDirectories == 1 ? "y" : "ies");
+#endif
+}
+} // namespace
 
 //----------------------------------------------------------------------
 // Class	: CObjectSpace
@@ -157,6 +229,9 @@ void CObjectSpace::Create(Fvector* verts, CDB::TRI* tris, const hdrCFORM& H,
 
     strconcat(file_name, "cdb_cache" DELIMITER, FS.get_path("$level$")->m_Add, "objspace.bin");
     FS.update_path(file_name, "$app_data_root$", file_name);
+
+    if (use_cache)
+        prune_inactive_level_caches(std::filesystem::path(file_name));
 
     if (use_cache && cacheStream)
     {
