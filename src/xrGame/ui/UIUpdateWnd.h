@@ -6,6 +6,7 @@
 
 class CUI3tButton;
 class CUIProgressBar;
+class CUIScrollView;
 class CUIStatic;
 
 class CUIUpdateWnd final : public CUIDialogWnd, public CUIWndCallback
@@ -31,6 +32,8 @@ private:
     CUIStatic* m_caption{};
     CUIStatic* m_message{};
     CUIStatic* m_size{};
+    CUIScrollView* m_changes{};
+    CUIStatic* m_changesText{};
     CUIStatic* m_progressText{};
     CUIStatic* m_error{};
     CUIProgressBar* m_progress{};
@@ -39,4 +42,5 @@ private:
     float m_actionTwoButtonX{};
     UpdateService::State m_lastState{UpdateService::State::Idle};
     xr_string m_lastVersion;
+    xr_string m_lastChanges;
 };

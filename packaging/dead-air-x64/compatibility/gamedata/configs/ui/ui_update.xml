@@ -1,22 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <w>
     <main x="0" y="0" width="1024" height="768">
-        <background x="272" y="176" width="480" height="286" stretch="1">
+        <background x="242" y="159" width="540" height="450" stretch="1">
             <texture>ui_frame_error</texture>
         </background>
-        <caption x="298" y="194" width="428" height="32">
+        <caption x="268" y="178" width="488" height="32">
             <text font="graffiti22" align="c" vert_align="c">st_update_available_caption</text>
         </caption>
-        <message x="306" y="240" width="412" height="62">
+        <message x="274" y="220" width="476" height="48">
             <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
         </message>
-        <size x="306" y="311" width="412" height="24">
+        <size x="274" y="274" width="476" height="24">
             <text font="letterica16" align="c" vert_align="c"/>
         </size>
-        <progress_text x="306" y="304" width="412" height="24">
+        <changes x="274" y="310" width="476" height="215" always_show_scroll="1" vert_interval="4"
+                 right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
+        <changes_text x="0" y="0" width="448" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+        </changes_text>
+        <progress_text x="274" y="350" width="476" height="24">
             <text font="letterica16" align="c" vert_align="c"/>
         </progress_text>
-        <progress x="326" y="342" width="372" height="9" horz="1" min="0" max="100" pos="0">
+        <progress x="306" y="388" width="412" height="9" horz="1" min="0" max="100" pos="0">
             <progress stretch="1">
                 <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
             </progress>
@@ -24,14 +29,14 @@
                 <texture a="220">ui_inGame2_hint_wnd_bar</texture>
             </background>
         </progress>
-        <error x="306" y="300" width="412" height="62">
+        <error x="274" y="338" width="476" height="62">
             <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="220" g="100" b="90"/>
         </error>
-        <action x="322" y="398" width="235" height="30" stretch="1">
+        <action x="292" y="550" width="270" height="30" stretch="1">
             <texture>ui_inGame2_Mp_bigbuttone</texture>
             <text font="letterica16" align="c" vert_align="c">st_update_download</text>
         </action>
-        <cancel x="575" y="398" width="125" height="30" stretch="1">
+        <cancel x="582" y="550" width="150" height="30" stretch="1">
             <texture>ui_inGame2_Mp_bigbuttone</texture>
             <text font="letterica16" align="c" vert_align="c">ui_mm_cancel</text>
         </cancel>

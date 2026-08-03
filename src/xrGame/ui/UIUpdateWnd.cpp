@@ -7,6 +7,7 @@
 #include "xrEngine/xr_input.h"
 #include "xrUICore/Buttons/UI3tButton.h"
 #include "xrUICore/ProgressBar/UIProgressBar.h"
+#include "xrUICore/ScrollView/UIScrollView.h"
 #include "xrUICore/Static/UIStatic.h"
 
 namespace
@@ -14,6 +15,12 @@ namespace
 double mebibytes(u64 bytes)
 {
     return static_cast<double>(bytes) / (1024.0 * 1024.0);
+}
+
+bool is_russian_language()
+{
+    const shared_str language = StringTable().GetCurrentLanguage();
+    return language && (xr_strcmp(language.c_str(), "rus") == 0 || xr_strcmp(language.c_str(), "ru") == 0);
 }
 }
 
@@ -33,6 +40,11 @@ bool CUIUpdateWnd::Init()
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
     m_size = UIHelper::CreateStatic(xml, "main:size", this);
+    m_changes = UIHelper::CreateScrollView(xml, "main:changes", this);
+    m_changesText = xr_new<CUIStatic>("Update changelog");
+    CUIXmlInit::InitStatic(xml, "main:changes_text", 0, m_changesText);
+    m_changesText->SetWidth(m_changes->GetDesiredChildWidth());
+    m_changes->AddWindow(m_changesText, true);
     m_progressText = UIHelper::CreateStatic(xml, "main:progress_text", this);
     m_error = UIHelper::CreateStatic(xml, "main:error", this);
     m_progress = UIHelper::CreateProgressBar(xml, "main:progress", this);
@@ -56,6 +68,7 @@ void CUIUpdateWnd::Show(bool status)
     {
         m_lastState = UpdateService::State::Idle;
         m_lastVersion.clear();
+        m_lastChanges.clear();
         Refresh(UpdateService::GetSnapshot());
     }
 }
@@ -108,11 +121,13 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
     const bool ready = snapshot.state == UpdateService::State::Ready;
     const bool failed = snapshot.state == UpdateService::State::DownloadFailed ||
         snapshot.state == UpdateService::State::ApplyFailed;
+    const xr_string& changes = is_russian_language() ? snapshot.changesRu : snapshot.changesEn;
 
-    if (snapshot.state != m_lastState || snapshot.version != m_lastVersion)
+    if (snapshot.state != m_lastState || snapshot.version != m_lastVersion || changes != m_lastChanges)
     {
         m_lastState = snapshot.state;
         m_lastVersion = snapshot.version;
+        m_lastChanges = changes;
 
         string512 text{};
         if (available)
@@ -125,6 +140,9 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
                 mebibytes(snapshot.totalBytes));
             m_size->SetText(text);
             m_action->SetText(StringTable().translate("st_update_download").c_str());
+            m_changesText->SetText(changes.c_str());
+            m_changesText->AdjustHeightToText();
+            m_changes->ScrollToBegin();
         }
         else
         {
@@ -136,6 +154,7 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
 
         m_error->SetText(failed ? StringTable().translate("st_update_failed").c_str() : "");
         m_size->Show(available);
+        m_changes->Show(available && !changes.empty());
         m_progressText->Show(downloading || ready);
         m_progress->Show(downloading || ready);
         m_error->Show(failed);

@@ -55,6 +55,7 @@ struct ReleaseAsset
 struct Release
 {
     xr_string tag;
+    xr_string body;
     bool draft{};
     bool prerelease{};
     xr_vector<ReleaseAsset> assets;
@@ -76,6 +77,8 @@ struct ServiceState
     std::mutex dataMutex;
     xr_string version;
     xr_string message;
+    xr_string changesEn;
+    xr_string changesRu;
     xr_string downloadUrl;
     xr_string digest;
     std::filesystem::path archivePath;
@@ -371,6 +374,16 @@ bool parse_release(JsonReader& reader, Release& release)
             if (!reader.ReadString(release.tag))
                 return false;
         }
+        else if (key == "body")
+        {
+            if (reader.Peek('"'))
+            {
+                if (!reader.ReadString(release.body))
+                    return false;
+            }
+            else if (!reader.SkipValue())
+                return false;
+        }
         else if (key == "draft")
         {
             if (!reader.ReadBool(release.draft))
@@ -639,6 +652,86 @@ bool valid_digest(std::string_view digest)
     });
 }
 
+std::string_view trim_markdown_line(std::string_view line)
+{
+    while (!line.empty() && (line.front() == ' ' || line.front() == '\t' || line.front() == '\r'))
+        line.remove_prefix(1);
+    while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
+        line.remove_suffix(1);
+    return line;
+}
+
+xr_string extract_release_changes(
+    std::string_view body, std::string_view languageHeading, std::string_view changesHeading)
+{
+    enum class ParseState
+    {
+        SeekingLanguage,
+        SeekingChanges,
+        Collecting
+    };
+
+    ParseState state = ParseState::SeekingLanguage;
+    xr_string result;
+    while (!body.empty())
+    {
+        const size_t end = body.find('\n');
+        const std::string_view line = trim_markdown_line(body.substr(0, end));
+        if (end == std::string_view::npos)
+            body = {};
+        else
+            body.remove_prefix(end + 1);
+
+        if (line.starts_with("## "))
+        {
+            if (state == ParseState::SeekingLanguage)
+            {
+                if (line == languageHeading)
+                    state = ParseState::SeekingChanges;
+            }
+            else if (state == ParseState::SeekingChanges && line == changesHeading)
+                state = ParseState::Collecting;
+            else
+                break;
+            continue;
+        }
+
+        if (state != ParseState::Collecting || line.size() < 3 ||
+            !((line[0] == '*' || line[0] == '-') && line[1] == ' '))
+        {
+            continue;
+        }
+
+        constexpr size_t MaximumChangelogBytes = 32 * 1024;
+        const std::string_view item = trim_markdown_line(line.substr(2));
+        const size_t extraBytes = item.size() + (result.empty() ? 2 : 3);
+        if (item.empty() || result.size() + extraBytes > MaximumChangelogBytes)
+            continue;
+        if (!result.empty())
+            result.push_back('\n');
+        result.append("- ");
+        result.append(item.data(), item.size());
+    }
+    return result;
+}
+
+xr_string utf8_to_windows_1251(std::string_view value)
+{
+    const std::wstring wide = utf8_to_wide(value);
+    if (wide.empty())
+        return {};
+
+    const int length = WideCharToMultiByte(1251, WC_NO_BEST_FIT_CHARS, wide.data(), static_cast<int>(wide.size()),
+        nullptr, 0, "?", nullptr);
+    if (length <= 0)
+        return {};
+
+    xr_string result(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(1251, WC_NO_BEST_FIT_CHARS, wide.data(), static_cast<int>(wide.size()),
+        result.data(), length, "?", nullptr);
+    return result;
+}
+
 std::optional<std::pair<Release, ReleaseAsset>> select_update(const xr_vector<Release>& releases, xr_string& error)
 {
     const auto current = parse_version(DeadAirRefined::Version);
@@ -718,6 +811,9 @@ void check_worker()
     {
         std::lock_guard lock(instance.dataMutex);
         instance.version = update->first.tag;
+        instance.changesEn = extract_release_changes(update->first.body, "## EN", "## Changes");
+        instance.changesRu = utf8_to_windows_1251(
+            extract_release_changes(update->first.body, "## RU", "## Изменения"));
         instance.downloadUrl = update->second.url;
         instance.digest = update->second.digest;
         instance.message.clear();
@@ -726,6 +822,8 @@ void check_worker()
     instance.downloadedBytes.store(0, std::memory_order_release);
     Msg("* Update available: %s -> %s (%llu bytes)", DeadAirRefined::Version,
         update->first.tag.c_str(), static_cast<unsigned long long>(update->second.size));
+    Msg("* Update changelog: EN %zu bytes, RU %zu bytes",
+        instance.changesEn.size(), instance.changesRu.size());
     instance.state.store(UpdateService::State::Available, std::memory_order_release);
 }
 
@@ -1064,6 +1162,8 @@ UpdateService::Snapshot UpdateService::GetSnapshot()
         std::lock_guard lock(instance.dataMutex);
         snapshot.version = instance.version;
         snapshot.message = instance.message;
+        snapshot.changesEn = instance.changesEn;
+        snapshot.changesRu = instance.changesRu;
     }
     return snapshot;
 }

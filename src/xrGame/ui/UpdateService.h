@@ -21,6 +21,8 @@ struct Snapshot
     State state{State::Idle};
     xr_string version;
     xr_string message;
+    xr_string changesEn;
+    xr_string changesRu;
     u64 downloadedBytes{};
     u64 totalBytes{};
 };

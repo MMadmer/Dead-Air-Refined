@@ -20,6 +20,12 @@ The update archive must have a non-zero size and a GitHub-provided SHA-256
 digest. The archive contains the same installed payload as the setup program,
 including the updater, maintenance program and uninstaller launcher.
 
+The release description follows the bilingual template in `PROJECT_RULES.md`.
+The English `## Changes` list must be inside `## EN`, and the Russian
+`## Изменения` list must be inside `## RU`. Only bullet items from those exact
+sections are shown by the client; installation instructions and the other
+language are never included in the update dialog.
+
 References:
 
 - [GitHub REST API for releases](https://docs.github.com/en/rest/releases/releases)
@@ -33,10 +39,13 @@ empty release list, a network error or the absence of a valid newer release does
 not open a dialog and does not block the menu.
 
 When a newer version is available, the native C++ dialog displays the installed
-version, available version and download size. Declining the offer dismisses it
-until the next game launch. During download, the dialog displays transferred and
-total mebibytes together with a progress bar. Installation remains unavailable
-until the complete archive has passed size and SHA-256 verification.
+version, available version, download size and the release changes in a scroll
+view. It selects Russian changes only when the active string-table language is
+`rus` or `ru`; every other language uses the English section. Declining the
+offer dismisses it until the next game launch. During download, the dialog
+displays transferred and total mebibytes together with a progress bar.
+Installation remains unavailable until the complete archive has passed size
+and SHA-256 verification.
 
 An unhandled-crash report prompt has priority over the update dialog. The update
 check may finish in the background, but its dialog remains queued until the
