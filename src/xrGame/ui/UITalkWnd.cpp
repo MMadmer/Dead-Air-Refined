@@ -351,9 +351,6 @@ void CUITalkWnd::SwitchToUpgrade()
 
 bool CUITalkWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
 {
-    if (inherited::OnKeyboardAction(dik, keyboard_action))
-        return true;
-
     if (keyboard_action == WINDOW_KEY_PRESSED)
     {
         if (IsBinded(kUSE, dik) || IsBinded(kQUIT, dik) || IsBinded(kUI_BACK, dik, EKeyContext::UI))
@@ -364,7 +361,8 @@ bool CUITalkWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
                 return true;
             }
         }
-        else if (IsBinded(kTALK_SWITCH_TO_TRADE, dik, EKeyContext::Talk))
+        else if (IsBinded(kSPRINT_TOGGLE, dik) ||
+            (pInput->IsCurrentInputTypeController() && IsBinded(kTALK_SWITCH_TO_TRADE, dik, EKeyContext::Talk)))
         {
             if (!m_pOthersInvOwner->NeedOsoznanieMode())
             {
@@ -403,7 +401,7 @@ bool CUITalkWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
         } // switch (GetBindedAction(dik, EKeyContext::UI))
     }
 
-    return false;
+    return inherited::OnKeyboardAction(dik, keyboard_action);
 }
 
 bool CUITalkWnd::OnControllerAction(int axis, const ControllerAxisState& state, EUIMessages controller_action)

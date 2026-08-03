@@ -439,8 +439,22 @@ void CUIActorMenu::OnPressUserKey(bool take)
     case mmUndefined: break;
     case mmInventory: break;
     case mmTrade:
-        //		OnBtnPerformTrade( this, 0 );
+    {
+        if (m_pPartnerInvOwner->SpecificCharacter().barter_mode())
+        {
+            OnBtnPerformTrade(this, nullptr);
+            break;
+        }
+
+        const bool has_items_to_buy = m_pLists[eTradePartnerList]->ItemsCount() != 0;
+        const bool has_items_to_sell = m_pLists[eTradeActorList]->ItemsCount() != 0;
+
+        if (has_items_to_buy && (!has_items_to_sell || take))
+            OnBtnPerformTradeBuy(this, nullptr);
+        else if (has_items_to_sell)
+            OnBtnPerformTradeSell(this, nullptr);
         break;
+    }
     case mmUpgrade: TrySetCurUpgrade(); break;
     case mmDeadBodySearch:
     {
