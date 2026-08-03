@@ -69,10 +69,31 @@ void CHUDManager::Render_First(u32 context_id)
     {
         const auto root = O->H_Root();
         ScopeLock lock{ &render_lock };
+        const bool was_invisible = root->renderable_Invisible();
         root->renderable_Invisible(GEnv.Render->GenerationIsR1());
         A->renderable_RenderBody(context_id, root);
-        root->renderable_Invisible(false);
+        root->renderable_Invisible(was_invisible);
     }
+}
+
+void CHUDManager::Render_ActorShadow(u32 context_id)
+{
+    ZoneScoped;
+
+    if (!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2 | HUD_DRAW_RT2) || !pUIGame)
+        return;
+
+    IGameObject* object = g_pGameLevel->CurrentViewEntity();
+    CActor* actor = smart_cast<CActor*>(object);
+    if (!actor || !actor->HUDview())
+        return;
+
+    const auto root = object->H_Root();
+    ScopeLock lock{ &render_lock };
+    const bool was_invisible = root->renderable_Invisible();
+    root->renderable_Invisible(false);
+    actor->renderable_RenderShadow(context_id, root);
+    root->renderable_Invisible(was_invisible);
 }
 
 bool need_render_hud()

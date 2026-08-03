@@ -962,6 +962,12 @@ void CWeapon::renderable_Render(u32 context_id, IRenderable* root)
     inherited::renderable_Render(context_id, root);
 }
 
+void CWeapon::renderable_RenderShadow(u32 context_id, IRenderable* root)
+{
+    ScopeLock lock{ &render_lock };
+    inherited::renderable_Render(context_id, root);
+}
+
 void CWeapon::signal_HideComplete()
 {
     if (H_Parent())

@@ -26,6 +26,7 @@
 #include "clsid_game.h"
 #include "game_cl_base_weapon_usage_statistic.h"
 #include "Grenade.h"
+#include "Weapon.h"
 #include "Torch.h"
 
 // breakpoints
@@ -228,6 +229,8 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 CActor::~CActor()
 {
+    DestroyShadowVisual();
+
     xr_delete(m_location_manager);
     xr_delete(m_memory);
 
@@ -1573,6 +1576,79 @@ void CActor::renderable_RenderBody(u32 context_id, IRenderable* root)
 {
     VERIFY(_valid(XFORM()));
     inherited::renderable_Render(context_id, root);
+}
+
+void CActor::ShadowBoneCallback(CBoneInstance* bone)
+{
+    auto* binding = static_cast<ShadowBoneBinding*>(bone->callback_param());
+    if (!binding || !binding->source || binding->source_id == u16(-1))
+        return;
+
+    bone->mTransform = binding->source->LL_GetTransform(binding->source_id);
+}
+
+void CActor::DestroyShadowVisual()
+{
+    m_shadow_bones.clear();
+    m_shadow_kinematics = nullptr;
+    if (m_shadow_visual)
+        GEnv.Render->model_Delete(m_shadow_visual);
+}
+
+void CActor::RebuildShadowVisual()
+{
+    DestroyShadowVisual();
+
+    IKinematics* source = smart_cast<IKinematics*>(Visual());
+    if (!source)
+        return;
+
+    xr_string visual_name = cNameVisual().c_str();
+    CCustomOutfit* outfit = GetOutfit();
+    if (outfit && pSettings->line_exist(outfit->cNameSect(), "npc_visual"))
+        visual_name = pSettings->r_string(outfit->cNameSect(), "npc_visual");
+
+    if (!strext(visual_name.c_str()))
+        visual_name += ".ogf";
+
+    m_shadow_visual = GEnv.Render->model_Create(visual_name.c_str());
+    m_shadow_kinematics = smart_cast<IKinematics*>(m_shadow_visual);
+    if (!m_shadow_kinematics)
+    {
+        DestroyShadowVisual();
+        return;
+    }
+
+    const u16 bone_count = m_shadow_kinematics->LL_BoneCount();
+    m_shadow_bones.resize(bone_count);
+    for (u16 bone_id = 0; bone_id < bone_count; ++bone_id)
+    {
+        ShadowBoneBinding& binding = m_shadow_bones[bone_id];
+        binding.source = source;
+        binding.source_id = source->LL_BoneID(m_shadow_kinematics->LL_BoneName_dbg(bone_id));
+        m_shadow_kinematics->LL_GetBoneInstance(bone_id).set_callback(
+            bctCustom, ShadowBoneCallback, &binding, binding.source_id != u16(-1));
+    }
+}
+
+void CActor::renderable_RenderShadow(u32 context_id, IRenderable* root)
+{
+    IKinematics* source = smart_cast<IKinematics*>(Visual());
+    if (source && m_shadow_visual && m_shadow_kinematics)
+    {
+        source->CalculateBones(TRUE);
+        m_shadow_kinematics->CalculateBones_Invalidate();
+        GEnv.Render->add_Visual(context_id, root, m_shadow_visual, XFORM());
+    }
+    else
+    {
+        renderable_RenderBody(context_id, root);
+    }
+
+    CInventoryItem* active_item = inventory().ActiveItem();
+    CWeapon* weapon = active_item ? active_item->object().cast_weapon() : nullptr;
+    if (weapon)
+        weapon->renderable_RenderShadow(context_id, root);
 }
 
 void CActor::renderable_Render(u32 context_id, IRenderable* root)

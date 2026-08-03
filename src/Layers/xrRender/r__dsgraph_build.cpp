@@ -972,7 +972,7 @@ void R_dsgraph_structure::build_subspace()
                             continue;
 
                         // renderable
-                        g_pGameLevel->pHUD->Render_First(context_id);
+                        g_pGameLevel->pHUD->Render_ActorShadow(context_id);
                     }
                 } while (0);
             }

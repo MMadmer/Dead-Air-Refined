@@ -28,6 +28,7 @@ class ENGINE_API XR_NOVTABLE CCustomHUD
 {
 public:
     virtual void Render_First(u32 context_id) = 0;
+    virtual void Render_ActorShadow(u32 context_id) = 0;
     virtual void Render_Last(u32 context_id) = 0;
 
     virtual void OnFrame() = 0;
