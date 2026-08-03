@@ -33,8 +33,13 @@ CUIInventoryCellItem::CUIInventoryCellItem(CInventoryItem* itm)
     inherited::SetTextureRect(rect);
     inherited::SetStretchTexture(true);
 
+    // Dead Air uses zero-based layers, while Revolution starts them at one.
+    string32 first_layer;
+    xr_sprintf(first_layer, "0%s", detail::ICON_LAYER_FIELD);
+    const u8 first_layer_index = pSettings->line_exist(itm->m_section_id, first_layer) ? 0 : 1;
+
     //Alundaio; Layered icon
-    for (u8 i = 0; i < 255; ++i)
+    for (u16 i = first_layer_index; i < 255; ++i)
     {
         string32 layer_str;
         xr_sprintf(layer_str, "%u%s", i, detail::ICON_LAYER_FIELD);
