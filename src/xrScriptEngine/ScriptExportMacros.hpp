@@ -10,6 +10,19 @@
 
 #define MAKE_WRAPPER_NAME(cls) cls##_wrapper
 
+inline bool has_valid_lua_wrapper_self(const luabind::wrap_base& wrapper)
+{
+    const auto& self = luabind::detail::wrap_access::ref(wrapper);
+    lua_State* luaState = self.state();
+    if (!luaState)
+        return false;
+
+    self.get(luaState);
+    const bool valid = lua_type(luaState, -1) == LUA_TUSERDATA;
+    lua_pop(luaState, 1);
+    return valid;
+}
+
 #define DEFINE_LUA_WRAPPER_HEADER_0(cls)                                  \
     struct MAKE_WRAPPER_NAME(cls) : public cls, public luabind::wrap_base \
     {                                                                     \
@@ -62,6 +75,8 @@
 #define DEFINE_LUA_WRAPPER_CONST_METHOD_0(v_func_name, ret_type) \
     virtual ret_type v_func_name() const noexcept\
     {                                                            \
+        if (!has_valid_lua_wrapper_self(*this))                   \
+            return self_type::inherited::v_func_name();           \
         try                                                      \
         {                                                        \
             return luabind::call_member<ret_type>(this, #v_func_name);    \
