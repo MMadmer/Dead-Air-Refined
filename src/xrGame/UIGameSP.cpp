@@ -100,6 +100,7 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
 {
     if (inherited::IR_UIOnKeyboardPress(dik))
         return true;
+
     if (Device.Paused())
         return false;
 
@@ -119,30 +120,11 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
 
     switch (GetBindedAction(dik))
     {
-    case kACTIVE_JOBS:
-    {
-        if (!pActor->inventory_disabled() && !PdaMenu->IsShown())
-        {
-            HideActorMenu();
-            PdaMenu->ShowDialog(true);
-            PdaMenu->SetActiveSubdialog("eptTasks");
-        }
-        break;
-    }
     case kMAP:
     {
         if (!pActor->inventory_disabled())
         {
             PdaMenu->Show_MapWnd(true);
-            ShowPdaMenu();
-        }
-        break;
-    }
-    case kCONTACTS:
-    {
-        if (!pActor->inventory_disabled())
-        {
-            PdaMenu->Show_ContactsWnd(true);
             ShowPdaMenu();
         }
         break;
