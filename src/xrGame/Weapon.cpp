@@ -589,6 +589,12 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
     SetState(E->wpn_state);
     SetNextState(E->wpn_state);
 
+    if (m_ammoType >= m_ammoTypes.size())
+    {
+        Msg("! Weapon '%s' has invalid saved ammo type %u; using type 0", cNameSect().c_str(), m_ammoType);
+        m_ammoType = 0;
+    }
+
     m_DefaultCartridge.Load(m_ammoTypes[m_ammoType].c_str(), m_ammoType);
     if (iAmmoElapsed)
     {

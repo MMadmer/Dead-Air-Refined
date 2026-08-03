@@ -54,7 +54,9 @@ void CEatableItem::load(IReader& packet)
 {
     inherited::load(packet);
 
-    m_iRemainingUses = packet.r_u8();
+    // Legacy Dead Air saves omit this byte for some spawned consumables.
+    if (packet.elapsed())
+        m_iRemainingUses = packet.r_u8();
 }
 
 void CEatableItem::save(NET_Packet& packet)
