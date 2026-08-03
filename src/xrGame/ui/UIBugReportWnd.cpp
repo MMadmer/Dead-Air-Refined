@@ -168,6 +168,7 @@ void CUIBugReportWnd::Update()
     {
         BugReportService::Reset();
         AcknowledgeCrashReport();
+        HideDialog();
         ShowResult(true);
     }
     else if (state == BugReportService::State::Failed)
