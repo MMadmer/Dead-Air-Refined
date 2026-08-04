@@ -239,19 +239,29 @@ function Build-CompatibilityArchive {
     $localizedTextPath =
         Join-Path $compatibilityStageGameRoot "configs\text\rus\dead_air_x64.xml"
     $utf8 = [Text.UTF8Encoding]::new($false, $true)
-    $localizedText = [IO.File]::ReadAllText($localizedTextPath, $utf8)
-    $localizedText = $localizedText.Replace('encoding="utf-8"', 'encoding="windows-1251"')
     [Text.Encoding]::RegisterProvider([Text.CodePagesEncodingProvider]::Instance)
     $windows1251 = [Text.Encoding]::GetEncoding(
         1251,
         [Text.EncoderExceptionFallback]::new(),
         [Text.DecoderExceptionFallback]::new()
     )
+    try {
+        $localizedText = [IO.File]::ReadAllText($localizedTextPath, $utf8)
+    }
+    catch [Text.DecoderFallbackException] {
+        $localizedText = [IO.File]::ReadAllText($localizedTextPath, $windows1251)
+    }
+    $localizedText = $localizedText.Replace('encoding="utf-8"', 'encoding="windows-1251"')
     [IO.File]::WriteAllText($localizedTextPath, $localizedText, $windows1251)
 
     $gravityGunScriptPath =
         Join-Path $compatibilityStageGameRoot "scripts\bind_gr_gun.script"
-    $gravityGunScript = [IO.File]::ReadAllText($gravityGunScriptPath, $utf8)
+    try {
+        $gravityGunScript = [IO.File]::ReadAllText($gravityGunScriptPath, $utf8)
+    }
+    catch [Text.DecoderFallbackException] {
+        $gravityGunScript = [IO.File]::ReadAllText($gravityGunScriptPath, $windows1251)
+    }
     [IO.File]::WriteAllText($gravityGunScriptPath, $gravityGunScript, $windows1251)
 
     & $converter -pack -xdb -xdb_ud $compatibilityUserData -out $compatibilityArchive $compatibilityStageGameRoot
