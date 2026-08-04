@@ -9,6 +9,29 @@
 #include "IGame_Level.h"
 #include "Common/object_broker.h"
 #include "Common/LevelGameDef.h"
+#include "xrCommon/xr_hash_map.h"
+
+#include <atomic>
+
+namespace
+{
+// Keep recovered weather data outside the exported descriptor layout.
+xr_flat_hash_map<const CEnvDescriptor*, float> descriptor_sun_reflections;
+std::atomic<float> current_sun_reflection{0.f};
+
+float get_sun_reflection(const CEnvDescriptor& descriptor)
+{
+    const auto it = descriptor_sun_reflections.find(&descriptor);
+    return it != descriptor_sun_reflections.end() ? it->second : 0.f;
+}
+
+void set_sun_reflection(const CEnvDescriptor& descriptor, float value)
+{
+    descriptor_sun_reflections[&descriptor] = value;
+}
+} // namespace
+
+float GetCurrentSunReflection() { return current_sun_reflection.load(std::memory_order_relaxed); }
 
 void CEnvModifier::load(IReader* fs, u32 version)
 {
@@ -251,6 +274,7 @@ void CEnvAmbient::load(
 //-----------------------------------------------------------------------------
 CEnvDescriptor::CEnvDescriptor(shared_str const& identifier) : m_identifier(identifier)
 {
+    set_sun_reflection(*this, 0.f);
     dont_save = false;
 
     exec_time = 0.0f;
@@ -290,6 +314,8 @@ CEnvDescriptor::CEnvDescriptor(shared_str const& identifier) : m_identifier(iden
 
     env_ambient = nullptr;
 }
+
+CEnvDescriptor::~CEnvDescriptor() { descriptor_sun_reflections.erase(this); }
 
 #define C_CHECK(C)                                                           \
     if (C.x < 0 || C.x > 2 || C.y < 0 || C.y > 2 || C.z < 0 || C.z > 2)      \
@@ -402,6 +428,7 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
 
     m_fSunShaftsIntensity = config.read_if_exists<float>(identifier, "sun_shafts_intensity", 0.0);
     m_fWaterIntensity = config.read_if_exists<float>(identifier, "water_intensity", 1.0);
+    set_sun_reflection(*this, config.read_if_exists<float>(identifier, "sun_reflection", 0.0f));
 
     m_fTreeAmplitude = 0.005f;
     if (config.line_exist(identifier, "trees_amplitude")) // Lost Alpha config
@@ -483,6 +510,7 @@ void CEnvDescriptor::save(CInifile& config, pcstr section /*= nullptr*/) const
     }
     config.w_float    (identifier, "sun_azimuth",               sun_azimuth);
     config.w_float    (identifier, "sun_shafts_intensity",      m_fSunShaftsIntensity);
+    config.w_float    (identifier, "sun_reflection",             get_sun_reflection(*this));
 
     config.w_string   (identifier, thunderbolt_collection_name, thunderbolt ? thunderbolt->section.c_str() : "");
     config.w_float    (identifier, thunderbolt_duration_name,   bolt_duration);
@@ -492,6 +520,16 @@ void CEnvDescriptor::save(CInifile& config, pcstr section /*= nullptr*/) const
 
     config.w_float    (identifier, "wind_direction",            rad2deg(wind_direction));
     config.w_float    (identifier, "wind_velocity",             wind_velocity);
+}
+
+void CEnvDescriptor::copy(const CEnvDescriptor& src)
+{
+    const float saved_exec_time = exec_time;
+    const float saved_exec_time_loaded = exec_time_loaded;
+    *this = src;
+    exec_time = saved_exec_time;
+    exec_time_loaded = saved_exec_time_loaded;
+    set_sun_reflection(*this, get_sun_reflection(src));
 }
 
 void CEnvDescriptor::on_device_create()
@@ -562,6 +600,9 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
 
     m_fSunShaftsIntensity = fi * A.m_fSunShaftsIntensity + f * B.m_fSunShaftsIntensity;
     m_fWaterIntensity = fi * A.m_fWaterIntensity + f * B.m_fWaterIntensity;
+    const float sun_reflection = fi * get_sun_reflection(A) + f * get_sun_reflection(B);
+    set_sun_reflection(*this, sun_reflection);
+    current_sun_reflection.store(sun_reflection, std::memory_order_relaxed);
 
     // trees
     m_fTreeAmplitude = fi * A.m_fTreeAmplitude + f * B.m_fTreeAmplitude;

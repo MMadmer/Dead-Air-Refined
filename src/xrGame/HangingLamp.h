@@ -30,6 +30,7 @@ private:
     BOOL m_bState;
 
     ref_glow glow_render;
+    ref_sound m_break_sound;
 
     float fHealth;
     float fBrightness;

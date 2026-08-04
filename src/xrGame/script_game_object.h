@@ -867,6 +867,8 @@ public:
     void SetSpatialType(u32 sptype);
     u8 GetRestrictionType();
     void SetRestrictionType(u8 type);
+    Fmatrix* GetTransform() const;
+    Fmatrix* GetBoneTransform(LPCSTR bone_name) const;
 
     void RemoveDanger(const CDangerObject& dobject);
 

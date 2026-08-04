@@ -27,6 +27,7 @@ void CSE_ALifeInventoryItem::script_register(lua_State* luaState)
             {
                 ta->add_upgrade(str);
             })
+            .def_readwrite("condition", &CSE_ALifeInventoryItem::m_fCondition)
     ];
 }
 
@@ -81,6 +82,10 @@ void CSE_ALifeItemWeapon::script_register(lua_State* luaState)
             .def("set_ammo_elapsed", &CSE_ALifeItemWeapon::set_ammo_elapsed)
             .def("get_ammo_elapsed", &CSE_ALifeItemWeapon::get_ammo_elapsed)
             .def("get_ammo_magsize", &CSE_ALifeItemWeapon::get_ammo_magsize)
+            .def_readwrite("grenade_launcher_status", &CSE_ALifeItemWeapon::m_grenade_launcher_status)
+            .def_readwrite("silencer_status", &CSE_ALifeItemWeapon::m_silencer_status)
+            .def_readwrite("scope_status", &CSE_ALifeItemWeapon::m_scope_status)
+            .def_readwrite("ammo_type", &CSE_ALifeItemWeapon::ammo_type)
             .def("get_addon_flags", &CSE_ALifeItemWeapon::get_addon_flags)
     ];
 }

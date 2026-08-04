@@ -36,6 +36,8 @@ CCustomZone::CCustomZone(void)
     m_pLight = NULL;
     m_pIdleLight = NULL;
     m_pIdleLAnim = NULL;
+    m_fLightShadow = false;
+    m_fLightVolumetric = false;
     m_fLightVolumetricQuality = 1.f;
     m_fLightVolumetricIntensity = 1.f;
     m_fLightVolumetricDistance = 1.f;
@@ -271,6 +273,8 @@ void CCustomZone::Load(LPCSTR section)
         m_fLightTime = pSettings->r_float(section, "light_time");
         m_fLightTimeLeft = 0;
 
+        m_fLightShadow = pSettings->read_if_exists<bool>(section, "light_shadow", false);
+        m_fLightVolumetric = pSettings->read_if_exists<bool>(section, "light_volumetric", false);
         m_fLightHeight = pSettings->r_float(section, "light_height");
     }
 
@@ -1037,6 +1041,8 @@ void CCustomZone::StartBlowoutLight()
 
     m_pLight->set_color(m_LightColor.r, m_LightColor.g, m_LightColor.b);
     m_pLight->set_range(m_fLightRange);
+    m_pLight->set_shadow(m_fLightShadow);
+    m_pLight->set_volumetric(m_fLightVolumetric);
 
     Fvector pos = Position();
     pos.y += m_fLightHeight;

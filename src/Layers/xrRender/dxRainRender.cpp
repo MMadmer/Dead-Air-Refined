@@ -7,7 +7,7 @@
 namespace xray::render::RENDER_NAMESPACE
 {
 //	Warning: duplicated in rain.cpp
-static const int max_desired_items = 2500;
+static const int max_desired_items = 3500;
 static const float source_radius = 12.5f;
 static const float source_offset = 40.f;
 static const float max_distance = source_offset * 1.25f;

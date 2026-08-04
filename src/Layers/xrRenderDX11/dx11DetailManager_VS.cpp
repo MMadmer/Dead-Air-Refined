@@ -49,8 +49,9 @@ void CDetailManager::hw_Render(CBackend& cmd_list)
     float tm_rot2 = m_time_rot_2;
 
     Fvector4 dir1, dir2;
-    dir1.set(_sin(tm_rot1), 0, _cos(tm_rot1), 0).normalize().mul(swing_current.amp1);
-    dir2.set(_sin(tm_rot2), 0, _cos(tm_rot2), 0).normalize().mul(swing_current.amp2);
+    const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
+    dir1.set(_sin(tm_rot1), 0, _cos(tm_rot1), 0).normalize().mul(0.1f + environment.wind_velocity * 0.0016f);
+    dir2.set(_sin(tm_rot2), 0, _cos(tm_rot2), 0).normalize().mul(0.05f + environment.wind_velocity * 0.0008f);
 
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);

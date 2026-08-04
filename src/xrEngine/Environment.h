@@ -194,17 +194,11 @@ public:
     CEnvAmbient* env_ambient;
 
     CEnvDescriptor(shared_str const& identifier);
+    ~CEnvDescriptor();
 
     void load(CEnvironment& environment, const CInifile& config, pcstr section = nullptr);
     void save(CInifile& config, pcstr section = nullptr) const;
-    void copy(const CEnvDescriptor& src)
-    {
-        float tm0 = exec_time;
-        float tm1 = exec_time_loaded;
-        *this = src;
-        exec_time = tm0;
-        exec_time_loaded = tm1;
-    }
+    void copy(const CEnvDescriptor& src);
 
     void ed_show_params(const CEnvironment& env); // ImGui editor
 
@@ -235,6 +229,8 @@ public:
 
     void ed_show_params(const CEnvironment& env); // ImGui editor
 };
+
+ENGINE_API float GetCurrentSunReflection();
 
 class ENGINE_API CEnvironment : public xray::editor::ide_tool
 {

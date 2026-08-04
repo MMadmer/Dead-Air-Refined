@@ -148,6 +148,19 @@ bool CUIActorMenu::ToDeadBodyBag(CUICellItem* itm, bool b_use_cursor_pos)
     PIItem quest_item = (PIItem)itm->m_pData;
     if (quest_item->IsQuestItem())
         return false;
+    if (m_pPartnerInvOwner && m_pPartnerInvOwner->is_alive())
+    {
+        luabind::functor<bool> can_move_to_partner;
+        if (GEnv.ScriptEngine->functor("actor_menu_inventory.CUIActorMenu_CanMoveToPartner", can_move_to_partner))
+        {
+            const float item_weight = quest_item->Weight();
+            const float partner_weight = m_pPartnerInvOwner->inventory().CalcTotalWeight();
+            const float partner_max_weight = m_pPartnerInvOwner->MaxCarryWeight();
+            if (!can_move_to_partner(m_pPartnerInvOwner->cast_game_object()->lua_game_object(),
+                    quest_item->object().lua_game_object(), 0, 0, item_weight, partner_weight, partner_max_weight))
+                return false;
+        }
+    }
     if (!m_pPartnerInvOwner)
     {
         luabind::functor<bool> can_take;

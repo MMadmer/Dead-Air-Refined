@@ -160,6 +160,8 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("get_ammo_total", &CScriptGameObject::GetSuitableAmmoTotal)
         .def("set_ammo_elapsed", &CScriptGameObject::SetAmmoElapsed)
         //Alundaio
+        .def("get_transform", &CScriptGameObject::GetTransform)
+        .def("get_bone_transform", &CScriptGameObject::GetBoneTransform)
         .def("use", &CScriptGameObject::Use)
         .def("start_trade", &CScriptGameObject::StartTrade)
         .def("start_upgrade", &CScriptGameObject::StartUpgrade)

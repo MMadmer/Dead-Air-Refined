@@ -1662,4 +1662,19 @@ void CScriptGameObject::SetRestrictionType(u8 type)
             Level().space_restriction_manager().register_restrictor(restr, RestrictionSpace::ERestrictorTypes(type));
     }
 }
+
+Fmatrix* CScriptGameObject::GetTransform() const { return &object().XFORM(); }
+
+Fmatrix* CScriptGameObject::GetBoneTransform(LPCSTR bone_name) const
+{
+    IKinematics* kinematics = smart_cast<IKinematics*>(object().Visual());
+    if (!kinematics)
+        return nullptr;
+
+    const u16 bone_id = kinematics->LL_BoneID(bone_name);
+    if (bone_id == BI_NONE)
+        return nullptr;
+
+    return &kinematics->LL_GetTransform(bone_id);
+}
 //-Alundaio

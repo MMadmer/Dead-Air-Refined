@@ -241,7 +241,7 @@ public:
     u16 get_ammo_elapsed();
     void set_ammo_elapsed(u16 count);
     u16 get_ammo_magsize();
-    u8 get_addon_flags() const { return m_addon_flags.get(); }
+    Flags8& get_addon_flags() { return m_addon_flags; }
     void clone_addons(CSE_ALifeItemWeapon* parent);
 
     virtual BOOL Net_Relevant();

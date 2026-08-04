@@ -215,7 +215,9 @@ bool CUIInventoryUpgradeWnd::install_item(CInventoryItem& inv_item, bool can_upg
     m_scheme_wnd->DetachAll();
     if (m_back)
         m_back->DetachAll();
-    m_btn_repair->Enable((inv_item.GetCondition() < 0.99f));
+    const bool allow_repair =
+        pSettings->read_if_exists<bool>(inv_item.m_section_id.c_str(), "allow_repair", true);
+    m_btn_repair->Enable(inv_item.GetCondition() < 0.99f && allow_repair);
 
     if (!can_upgrade)
     {

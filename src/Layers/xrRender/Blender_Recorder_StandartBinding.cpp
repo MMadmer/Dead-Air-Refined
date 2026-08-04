@@ -331,6 +331,14 @@ static class cl_screen_res : public R_constant_setup
     }
 } binder_screen_res;
 
+static class cl_various : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, GetCurrentSunReflection(), 0.f, 0.f, 0.f);
+    }
+} binder_various;
+
 // SM_TODO: cmd_list.hemi заменить на более "логичное" место
 static class cl_hud_params : public R_constant_setup //--#SM+#--
 {
@@ -429,6 +437,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("L_ambient", &binder_amb_color);
 #endif
     r_Constant("screen_res", &binder_screen_res);
+    r_Constant("various", &binder_various);
 
     // detail
     // if (bDetail  && detail_scaler)

@@ -324,6 +324,13 @@ bool CUIActorMenu::CanMoveToPartner(PIItem pItem)
     {
         return false;
     }
+
+    luabind::functor<bool> can_move_to_partner;
+    if (GEnv.ScriptEngine->functor("actor_menu_inventory.CUIActorMenu_CanMoveToPartner", can_move_to_partner) &&
+        !can_move_to_partner(m_pPartnerInvOwner->cast_game_object()->lua_game_object(),
+            pItem->object().lua_game_object(), r1, r2, itmWeight, partner_inv_weight, partner_max_weight))
+        return false;
+
     return true;
 }
 

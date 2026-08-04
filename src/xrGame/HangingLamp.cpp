@@ -17,7 +17,7 @@
 //////////////////////////////////////////////////////////////////////
 
 CHangingLamp::CHangingLamp() { Init(); }
-CHangingLamp::~CHangingLamp() {}
+CHangingLamp::~CHangingLamp() { m_break_sound.destroy(); }
 void CHangingLamp::Init()
 {
     fHealth = 100.f;
@@ -88,6 +88,10 @@ bool CHangingLamp::net_Spawn(CSE_Abstract* DC)
         ambient_bone = K->LL_BoneID(lamp->light_ambient_bone.c_str());
         VERIFY(ambient_bone != BI_NONE);
         CForm = xr_new<CCF_Skeleton>(this);
+
+        CInifile* user_data = K->LL_UserData();
+        if (user_data && user_data->section_exist("sound") && user_data->line_exist("sound", "break_sound"))
+            m_break_sound.create(user_data->r_string("sound", "break_sound"), st_Effect, sg_SourceType);
     }
     fBrightness = lamp->brightness;
     Fcolor clr(lamp->color);
@@ -341,8 +345,11 @@ void CHangingLamp::Hit(SHit* pHDS)
     else
         fHealth -= pHDS->damage() * 100.f;
 
-    if (bWasAlive && (!Alive()))
+    if (bWasAlive && !Alive())
+    {
+        m_break_sound.play_at_pos(0, Position());
         TurnOff();
+    }
 }
 
 static BONE_P_MAP bone_map = BONE_P_MAP();

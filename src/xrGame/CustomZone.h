@@ -258,6 +258,8 @@ protected:
     float m_fLightTime;
     float m_fLightTimeLeft;
     float m_fLightHeight;
+    bool m_fLightShadow;
+    bool m_fLightVolumetric;
     float m_fLightVolumetricQuality;
     float m_fLightVolumetricIntensity;
     float m_fLightVolumetricDistance;

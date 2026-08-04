@@ -26,6 +26,8 @@ void CGrenade::Load(LPCSTR section)
     CExplosive::Load(section);
 
     m_sounds.LoadSound(section, "snd_checkout", "sndCheckout", false, m_eSoundCheckout);
+    m_sounds.LoadSound(section, "snd_draw", "sndShow", true, SOUND_TYPE_WEAPON_RECHARGING);
+    m_sounds.LoadSound(section, "snd_holster", "sndHide", true, SOUND_TYPE_WEAPON_RECHARGING);
 
     //////////////////////////////////////
     //время убирания оружия с уровня
@@ -140,6 +142,24 @@ void CGrenade::DiscardState()
         u32 state = GetState();
         if (state == eReady || state == eThrow)
             OnStateSwitch(eIdle, state);
+    }
+}
+
+void CGrenade::OnStateSwitch(u32 state, u32 old_state)
+{
+    inherited::OnStateSwitch(state, old_state);
+
+    Fvector center;
+    switch (state)
+    {
+    case eShowing:
+        Center(center);
+        PlaySound("sndShow", center);
+        break;
+    case eHiding:
+        Center(center);
+        PlaySound("sndHide", center);
+        break;
     }
 }
 

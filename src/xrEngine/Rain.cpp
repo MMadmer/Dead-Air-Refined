@@ -17,15 +17,15 @@
 //static const int max_desired_items = 2500;
 //static const float source_radius = 12.5f;
 static const float source_offset = 40.f;
-static const float max_distance = source_offset * 1.25f;
+static const float max_distance = source_offset * 2.25f;
 //static const float sink_offset = -(max_distance - source_offset);
 //static const float drop_length = 5.f;
 //static const float drop_width = 0.30f;
-static const float drop_angle = 3.0f;
-static const float drop_max_angle = deg2rad(10.f);
-static const float drop_max_wind_vel = 20.0f;
-static const float drop_speed_min = 40.f;
-static const float drop_speed_max = 80.f;
+static const float drop_angle = 15.0f;
+static const float drop_max_angle = deg2rad(30.f);
+static const float drop_max_wind_vel = 40.0f;
+static const float drop_speed_min = 15.f;
+static const float drop_speed_max = 40.f;
 
 const int max_particles = 1000;
 //const int particles_cache = 400;
@@ -61,9 +61,9 @@ void CEffect_Rain::Born(Item& dest, float radius)
 
     Fvector axis;
     axis.set(0, -1, 0);
-    float gust = g_pGamePersistent->Environment().wind_strength_factor / 10.f;
-    float k = g_pGamePersistent->Environment().CurrentEnv.wind_velocity * gust / drop_max_wind_vel;
-    clamp(k, 0.f, 1.f);
+    const float wind = g_pGamePersistent->Environment().CurrentEnv.wind_velocity * 2.f;
+    const float gust = 0.5f / 10.f;
+    float k = wind * gust / drop_max_wind_vel;
     float pitch = drop_max_angle * k - PI_DIV_2;
     axis.setHP(g_pGamePersistent->Environment().CurrentEnv.wind_direction, pitch);
 
@@ -73,8 +73,9 @@ void CEffect_Rain::Born(Item& dest, float radius)
     dist = _sqrt(dist) * radius;
     float x = dist * _cos(angle);
     float z = dist * _sin(angle);
+    const float pitch_offset = source_offset - wind / 34.285f;
     dest.D.random_dir(axis, deg2rad(drop_angle));
-    dest.P.set(x + view.x - dest.D.x * source_offset, source_offset + view.y, z + view.z - dest.D.z * source_offset);
+    dest.P.set(x + view.x - dest.D.x * pitch_offset, pitch_offset + view.y, z + view.z - dest.D.z * pitch_offset);
     // dest.P.set (x+view.x,height+view.y,z+view.z);
     dest.fSpeed = ::Random.randF(drop_speed_min, drop_speed_max);
 

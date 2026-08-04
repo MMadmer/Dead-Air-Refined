@@ -8,6 +8,7 @@ class CStateManagerPoltergeist;
 class CPoltergeisMovementManager;
 class CPolterSpecialAbility;
 class CPolterTele;
+class CLAItem;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -126,6 +127,16 @@ private:
     float get_detection_speed_factor();
     float get_detection_success_level();
     float get_post_process_factor() const;
+
+    ref_light m_light_render;
+    CLAItem* m_lanim = nullptr;
+    u16 m_light_bone = BI_NONE;
+    float m_light_range = 0.f;
+    float m_light_brightness = 0.f;
+    float m_light_angle = 0.f;
+    bool m_light_volumetric = false;
+    bool m_light_shadow = false;
+    Fcolor m_light_color;
 
 public:
 #ifdef DEBUG
