@@ -272,7 +272,18 @@ void CActorCondition::UpdateCondition()
     UpdateSatiety();
     UpdateBoosters();
 
+    const float item_effect_scale = GetItemEffectTimeScale() - 1.0f;
+    const float health_adjustment = GetActiveBoosterValue(eBoostHpRestore) * item_effect_scale;
+    const float bleeding_adjustment = GetActiveBoosterValue(eBoostBleedingRestore) * item_effect_scale;
+    const float radiation_adjustment = GetActiveBoosterValue(eBoostRadiationRestore) * item_effect_scale;
+
+    m_change_v.m_fV_HealthRestore += health_adjustment;
+    m_change_v.m_fV_WoundIncarnation += bleeding_adjustment;
+    m_change_v.m_fV_Radiation += radiation_adjustment;
     inherited::UpdateCondition();
+    m_change_v.m_fV_HealthRestore -= health_adjustment;
+    m_change_v.m_fV_WoundIncarnation -= bleeding_adjustment;
+    m_change_v.m_fV_Radiation -= radiation_adjustment;
 
     if (IsGameTypeSingle())
         UpdateTutorialThresholds();
@@ -295,12 +306,15 @@ void CActorCondition::UpdateCondition()
 
 void CActorCondition::UpdateBoosters()
 {
+    const float game_time_factor = IsGameTypeSingle() ? Level().GetGameTimeFactor() : 1.0f;
+    const float booster_delta = !fis_zero(game_time_factor) ? m_fDeltaTime / game_time_factor : 0.0f;
+
     for (u8 i = 0; i < eBoostMaxCount; i++)
     {
         BOOSTER_MAP::iterator it = m_booster_influences.find((EBoostParams)i);
         if (it != m_booster_influences.end())
         {
-            it->second.fBoostTime -= m_fDeltaTime / (IsGameTypeSingle() ? Level().GetGameTimeFactor() : 1.0f);
+            it->second.fBoostTime -= booster_delta;
             if (it->second.fBoostTime <= 0.0f)
             {
                 DisableBoostParameters(it->second);
@@ -415,12 +429,42 @@ float CActorCondition::GetZoneDanger() const
     return sum;
 }
 
-void CActorCondition::UpdateRadiation() { inherited::UpdateRadiation(); }
+float CActorCondition::GetActiveBoosterValue(EBoostParams type) const
+{
+    const auto it = m_booster_influences.find(type);
+    return it != m_booster_influences.end() ? it->second.fBoostValue : 0.0f;
+}
+
+float CActorCondition::GetItemEffectTimeScale() const
+{
+    if (!IsGameTypeSingle())
+        return 1.0f;
+
+    const float current_factor = Level().GetGameTimeFactor();
+    if (fis_zero(current_factor))
+        return 1.0f;
+
+    static const float normal_factor = pSettings->read_if_exists<float>("alife", "normal_time_factor", 1.0f);
+    return normal_factor / current_factor;
+}
+
+void CActorCondition::UpdateRadiation()
+{
+    const float adjustment = GetActiveBoosterValue(eBoostRadiationRestore) * (GetItemEffectTimeScale() - 1.0f);
+    m_change_v.m_fV_Radiation += adjustment;
+    inherited::UpdateRadiation();
+    m_change_v.m_fV_Radiation -= adjustment;
+}
+
 void CActorCondition::UpdateSatiety()
 {
+    const float power_adjustment = GetActiveBoosterValue(eBoostPowerRestore) * (GetItemEffectTimeScale() - 1.0f);
+    m_fV_SatietyPower += power_adjustment;
+
     if (!IsGameTypeSingle())
     {
         m_fDeltaPower += m_fV_SatietyPower * m_fDeltaTime;
+        m_fV_SatietyPower -= power_adjustment;
         return;
     }
 
@@ -437,6 +481,8 @@ void CActorCondition::UpdateSatiety()
         m_fDeltaHealth += m_fV_SatietyHealth * satiety_health_koef * m_fDeltaTime;
         m_fDeltaPower += m_fV_SatietyPower * m_fSatiety * m_fDeltaTime;
     }
+
+    m_fV_SatietyPower -= power_adjustment;
 }
 
 CWound* CActorCondition::ConditionHit(SHit* pHDS)

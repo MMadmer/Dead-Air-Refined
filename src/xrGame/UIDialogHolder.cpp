@@ -130,14 +130,20 @@ void CDialogHolder::RemoveDialogToRender(CUIWindow* pDialog)
 {
     dlgItem itm(pDialog);
     itm.enabled = true;
-    xr_vector<dlgItem>::iterator it = std::find(m_dialogsToRender.begin(), m_dialogsToRender.end(), itm);
 
-    if (it != m_dialogsToRender.end())
+    const auto disable = [&itm](xr_vector<dlgItem>& dialogs)
     {
-        (*it).wnd->Show(false);
-        (*it).wnd->Enable(false);
-        (*it).enabled = false;
-    }
+        const auto it = std::find(dialogs.begin(), dialogs.end(), itm);
+        if (it == dialogs.end())
+            return;
+
+        it->wnd->Show(false);
+        it->wnd->Enable(false);
+        it->enabled = false;
+    };
+
+    disable(m_dialogsToRender);
+    disable(m_dialogsToRender_new);
 }
 
 void CDialogHolder::DoRenderDialogs()

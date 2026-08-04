@@ -504,6 +504,34 @@ bool CInventory::Ruck(PIItem pIItem, bool strict_placement)
 
     return true;
 }
+
+bool CInventory::RepackBelt()
+{
+    TIItemContainer candidates = m_belt;
+    std::sort(candidates.begin(), candidates.end(), GreaterRoomInRuck);
+
+    TIItemContainer packed;
+    TIItemContainer overflow;
+    const u32 width = BeltWidth();
+
+    for (PIItem item : candidates)
+    {
+        if (width && packed.size() < width && FreeRoom_inBelt(packed, item, width, 1))
+            packed.push_back(item);
+        else
+            overflow.push_back(item);
+    }
+
+    if (overflow.empty())
+        return false;
+
+    // Commit the valid subset first so Ruck can move overflow without reprocessing it as belt content.
+    m_belt = std::move(packed);
+    for (PIItem item : overflow)
+        Ruck(item, true);
+
+    return true;
+}
 /*
 void CInventory::Activate_deffered	(u32 slot, u32 _frame)
 {

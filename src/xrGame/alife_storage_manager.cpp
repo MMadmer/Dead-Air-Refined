@@ -653,6 +653,7 @@ bool CALifeStorageManager::process_async_save_completions()
         Msg("* Game %s is successfully saved to file '%s' (capture %.3f ms, background %.3f ms)",
             completion.saveName.c_str(), completion.finalName.c_str(),
             completion.captureMilliseconds, completion.backgroundMilliseconds);
+        CrashReporter::SetSavePath(completion.finalName.c_str());
 
         std::string displayName = completion.saveName;
         const size_t extension = displayName.rfind('.');
@@ -1146,6 +1147,29 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     string_path file_name;
     FS.update_path(file_name, "$game_saves$", m_save_name);
 
+    string_path previous_report_save{};
+    if (*saveBackup)
+        FS.update_path(previous_report_save, "$game_saves$", saveBackup);
+
+    // Keep the attempted save available to the crash handler, but restore the active save after a normal load failure.
+    struct ReportSaveGuard
+    {
+        string_path previous{};
+        bool loaded{};
+
+        ReportSaveGuard(pcstr oldPath, pcstr newPath)
+        {
+            xr_strcpy(previous, oldPath ? oldPath : "");
+            CrashReporter::SetSavePath(newPath);
+        }
+
+        ~ReportSaveGuard()
+        {
+            if (!loaded)
+                CrashReporter::SetSavePath(previous);
+        }
+    } reportSave(previous_report_save, file_name);
+
     xr_strcpy(g_last_saved_game, save_name);
 
     IReader* stream = FS.r_open(file_name);
@@ -1223,6 +1247,7 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     VERIFY(graph().actor());
 
     Msg("* Game %s is successfully loaded from file '%s' (%.3fs)", save_name, file_name, timer.GetElapsed_sec());
+    reportSave.loaded = true;
 
     return (true);
 }

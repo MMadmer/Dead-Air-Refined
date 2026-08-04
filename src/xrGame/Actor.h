@@ -102,7 +102,6 @@ public:
 
     // Render
     void renderable_RenderBody(u32 context_id, IRenderable* root);
-    void renderable_RenderShadow(u32 context_id, IRenderable* root);
     void renderable_Render(u32 context_id, IRenderable* root) override;
     virtual bool renderable_ShadowGenerate();
     void feel_sound_new(IGameObject* who, int type, const CSound_UserDataPtr& user_data,
@@ -661,20 +660,6 @@ private:
     // DEBUG INFO
 protected:
     CStatGraph* pStatGraph;
-
-    struct ShadowBoneBinding
-    {
-        u16 source_id{ u16(-1) };
-        Fmatrix transform{ Fidentity };
-    };
-
-    IRenderVisual* m_shadow_visual{};
-    IKinematics* m_shadow_kinematics{};
-    xr_vector<ShadowBoneBinding> m_shadow_bones;
-
-    static void ShadowBoneCallback(CBoneInstance* bone);
-    void RebuildShadowVisual();
-    void DestroyShadowVisual();
 
     shared_str m_DefaultVisualOutfit;
 

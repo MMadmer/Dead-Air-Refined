@@ -420,6 +420,7 @@ void CUIActorMenu::InitCellForSlot(u16 slot_idx)
 
 void CUIActorMenu::InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyBagList /*= false*/)
 {
+    m_pActorInvOwner->inventory().RepackBelt();
     ClearAllLists();
     m_pMouseCapturer = NULL;
     m_UIPropertiesBox->Hide();

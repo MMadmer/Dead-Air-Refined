@@ -944,40 +944,6 @@ void R_dsgraph_structure::build_subspace()
 
         if (g_pGameLevel)
         {
-#if RENDER != R_R1
-            // Actor Shadow (Sun + Light)
-            if (o.phase == CRender::PHASE_SMAP && ps_r__common_flags.test(RFLAG_ACTOR_SHADOW))
-            {
-                do
-                {
-                    IGameObject* viewEntity = g_pGameLevel->CurrentViewEntity();
-                    if (!viewEntity)
-                        break;
-                    auto& spatialData = viewEntity->GetSpatialData();
-                    if (spatialData.type & STYPEFLAG_INVALIDSECTOR)
-                    {
-                        const auto& entityPosition = viewEntity->spatial_sector_point();
-                        viewEntity->spatial_updatesector(detect_sector(entityPosition));
-                    }
-                    const auto sector_id = spatialData.sector_id;
-                    if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
-                        break; // disassociated from S/P structure
-                    CSector* sector = Sectors[sector_id];
-                    if (PortalTraverser.i_marker != sector->r_marker)
-                        break; // inactive (untouched) sector
-                    for (const CFrustum& view : sector->r_frustums)
-                    {
-                        if (!view.testSphere_dirty(
-                            spatialData.sphere.P, spatialData.sphere.R))
-                            continue;
-
-                        // renderable
-                        g_pGameLevel->pHUD->Render_ActorShadow(context_id);
-                    }
-                } while (0);
-            }
-#endif
-
             if (o.is_main_pass)
                 g_pGameLevel->pHUD->Render_Last(context_id);
         }

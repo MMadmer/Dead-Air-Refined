@@ -129,7 +129,6 @@
   или при подозрении на устаревшие артефакты.
 - После чистой или рабочей incremental-сборки выполнить повторную
   incremental-сборку и убедиться, что работы или ошибок не осталось.
-- Проверять оба поставляемых renderer-модуля: R4 и OpenGL.
 - Развёртывать полный список из
   `packaging/dead-air-x64/installer/runtime-files.txt`, а не отдельную DLL, если
   пачка затрагивает общую версию или зависимости.
@@ -207,19 +206,37 @@
 Шаблон тела релиза:
 
 ```markdown
+## EN
+
 ## Changes
 
-- [Short user-visible fix or improvement]
-- [Short user-visible fix or improvement]
+* [Short user-visible fix or improvement]
+* [Short user-visible fix or improvement]
 
 ## Installation
 
 Choose one option:
 
-- **Setup** — recommended guided installation.
-- **Update ZIP** — manual installation or updater payload.
+* **Setup** — recommended guided installation.
+* **Update ZIP** — manual installation or updater payload.
 
 Do not install both. Existing saves are preserved.
+---
+## RU
+
+## Изменения
+
+* [Краткое описание исправления или улучшения, заметного пользователю]
+* [Краткое описание исправления или улучшения, заметного пользователю]
+
+## Установка
+
+Выберите один вариант:
+
+* **Setup** — рекомендуемая пошаговая установка.
+* **Update ZIP** — ручная установка или архив для встроенного средства обновления.
+
+Не устанавливайте оба варианта. Существующие сохранения будут сохранены.
 ```
 
 ## 11. Документация

@@ -42,6 +42,11 @@ public:
     pcstr GetDebugType() override { return "CUIOutfitInfo"; }
 
 protected:
+    void UpdateCondition(float condition);
+
     xr_unordered_map<ALife::EHitType, CUIOutfitImmunity*> m_items;
+    CUIStatic* m_iconCondition{};
+    CUIStatic* m_textCondition{};
+    CUIStatic* m_textConditionValue{};
     Fvector2 m_start_pos{};
 }; // class CUIOutfitInfo

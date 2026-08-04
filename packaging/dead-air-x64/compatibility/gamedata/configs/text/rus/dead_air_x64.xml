@@ -1,16 +1,16 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="windows-1251"?>
 <string_table>
     <string id="ui_mm_window_mode">
-        <text>Р РµР¶РёРј РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ</text>
+        <text>Режим отображения</text>
     </string>
     <string id="st_opt_windowed">
-        <text>РћРєРѕРЅРЅС‹Р№</text>
+        <text>Оконный</text>
     </string>
     <string id="st_opt_fullscreen_borderless">
-        <text>РџРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№ РІ РѕРєРЅРµ</text>
+        <text>Полноэкранный в окне</text>
     </string>
     <string id="st_opt_fullscreen">
-        <text>РџРѕР»РЅРѕСЌРєСЂР°РЅРЅС‹Р№</text>
+        <text>Полноэкранный</text>
     </string>
     <string id="st_opt_renderer_r2">
         <text>Dx9 R2</text>
@@ -28,97 +28,97 @@
         <text>OpenGL</text>
     </string>
     <string id="ui_mm_level_texture_unload">
-        <text>Р’С‹РіСЂСѓР¶Р°С‚СЊ С‚РµРєСЃС‚СѓСЂС‹ Р»РѕРєР°С†РёРё</text>
+        <text>Выгружать текстуры локации</text>
     </string>
     <string id="ui_mm_level_texture_unload_hint">
-        <text>РћСЃРІРѕР±РѕР¶РґР°РµС‚ РІРёРґРµРѕРїР°РјСЏС‚СЊ Рё РѕРїРµСЂР°С‚РёРІРЅСѓСЋ РїР°РјСЏС‚СЊ РїРѕСЃР»Рµ РІС‹С…РѕРґР° СЃ Р»РѕРєР°С†РёРё. РњРѕР¶РµС‚ РЅРµРјРЅРѕРіРѕ СѓРІРµР»РёС‡РёС‚СЊ РІСЂРµРјСЏ СЃР»РµРґСѓСЋС‰РµР№ Р·Р°РіСЂСѓР·РєРё.</text>
+        <text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
     </string>
     <string id="ui_mm_auto_continue_on_load">
-        <text>РРіСЂР°: РђРІС‚РѕСЃС‚Р°СЂС‚ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё</text>
+        <text>Игра: Автостарт после загрузки</text>
     </string>
     <string id="ui_mm_auto_continue_on_load_hint">
-        <text>РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРѕРґРѕР»Р¶Р°РµС‚ РёРіСЂСѓ РїРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ Р·Р°РіСЂСѓР·РєРё, РїСЂРѕРїСѓСЃРєР°СЏ РѕР¶РёРґР°РЅРёРµ РЅР°Р¶Р°С‚РёСЏ Р»СЋР±РѕР№ РєР»Р°РІРёС€Рё.</text>
+        <text>Автоматически продолжает игру после завершения загрузки, пропуская ожидание нажатия любой клавиши.</text>
     </string>
     <string id="ui_mm_bug_report">
-        <text>РћС‚РїСЂР°РІРёС‚СЊ bug report</text>
+        <text>Отправить bug report</text>
     </string>
     <string id="st_bug_report_caption">
-        <text>РћС‚РїСЂР°РІРєР° bug report</text>
+        <text>Отправка bug report</text>
     </string>
     <string id="st_crash_report_caption">
-        <text>РћС‚РїСЂР°РІРєР° crash report</text>
+        <text>Отправка crash report</text>
     </string>
     <string id="st_crash_report_detected_prompt">
-        <text>РћР±РЅР°СЂСѓР¶РµРЅ Р°РІР°СЂРёР№РЅС‹Р№ РІС‹С…РѕРґ РёР· РёРіСЂС‹. РћС‚РїСЂР°РІРёС‚СЊ РѕС‚С‡С‘С‚ РѕР± СЌС‚РѕРј?</text>
+        <text>Обнаружен аварийный выход из игры. Отправить отчёт об этом?</text>
     </string>
     <string id="st_bug_report_title">
-        <text>Р—Р°РіРѕР»РѕРІРѕРє (РјРёРЅРёРјСѓРј 5 СЃРёРјРІРѕР»РѕРІ)</text>
+        <text>Заголовок (минимум 5 символов)</text>
     </string>
     <string id="st_bug_report_description">
-        <text>РћРїРёСЃР°РЅРёРµ (РјРёРЅРёРјСѓРј 20 СЃРёРјРІРѕР»РѕРІ)</text>
+        <text>Описание (минимум 20 символов)</text>
     </string>
     <string id="st_bug_report_attach_dump">
-        <text>РџСЂРёРєСЂРµРїРёС‚СЊ Р°РЅРѕРЅРёРјРЅС‹Р№ РґР°РјРї</text>
+        <text>Прикрепить анонимный дамп</text>
     </string>
     <string id="st_bug_report_crash_dump_attached">
-        <text>РџСЂРёРєР»Р°РґС‹РІР°РµС‚СЃСЏ Р°РЅРѕРЅРёРјРЅС‹Р№ РґР°РјРї РєСЂР°С€Р°</text>
+        <text>Прикладывается анонимный дамп краша</text>
     </string>
     <string id="st_bug_report_server_status">
-        <text>РЎС‚Р°С‚СѓСЃ СЃРµСЂРІРµСЂР°:</text>
+        <text>Статус сервера:</text>
     </string>
     <string id="st_bug_report_server_checking">
-        <text>РѕР¶РёРґР°РЅРёРµ РѕС‚РІРµС‚Р°</text>
+        <text>ожидание ответа</text>
     </string>
     <string id="st_bug_report_server_available">
-        <text>СЂР°Р±РѕС‚Р°РµС‚</text>
+        <text>работает</text>
     </string>
     <string id="st_bug_report_server_unavailable">
-        <text>РЅРµРґРѕСЃС‚СѓРїРµРЅ</text>
+        <text>недоступен</text>
     </string>
     <string id="st_bug_report_submit">
-        <text>РћС‚РїСЂР°РІРёС‚СЊ bug report</text>
+        <text>Отправить bug report</text>
     </string>
     <string id="st_bug_report_collecting">
-        <text>РЎР±РѕСЂ Р°РЅРѕРЅРёРјРЅРѕРіРѕ РґР°РјРїР°...</text>
+        <text>Сбор анонимного дампа...</text>
     </string>
     <string id="st_bug_report_sending">
-        <text>РћС‚РїСЂР°РІРєР° РѕС‚С‡С‘С‚Р°...</text>
+        <text>Отправка отчёта...</text>
     </string>
     <string id="st_bug_report_success">
-        <text>Bug report СѓСЃРїРµС€РЅРѕ РѕС‚РїСЂР°РІР»РµРЅ.</text>
+        <text>Bug report успешно отправлен.</text>
     </string>
     <string id="st_bug_report_failed">
-        <text>РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ bug report.</text>
+        <text>Не удалось отправить bug report.</text>
     </string>
     <string id="st_update_available_caption">
-        <text>Р”РѕСЃС‚СѓРїРЅРѕ РѕР±РЅРѕРІР»РµРЅРёРµ</text>
+        <text>Доступно обновление</text>
     </string>
     <string id="st_update_available_message">
-        <text>РўРµРєСѓС‰Р°СЏ РІРµСЂСЃРёСЏ: %s
-РќРѕРІР°СЏ РІРµСЂСЃРёСЏ: %s</text>
+        <text>Текущая версия: %s
+Новая версия: %s</text>
     </string>
     <string id="st_update_size">
-        <text>Р Р°Р·РјРµСЂ Р·Р°РіСЂСѓР·РєРё: %.1f РњР‘</text>
+        <text>Размер загрузки: %.1f МБ</text>
     </string>
     <string id="st_update_download">
-        <text>РћР±РЅРѕРІРёС‚СЊ</text>
+        <text>Обновить</text>
     </string>
     <string id="st_update_progress_caption">
-        <text>РћР±РЅРѕРІР»РµРЅРёРµ</text>
+        <text>Обновление</text>
     </string>
     <string id="st_update_progress">
-        <text>Р—Р°РіСЂСѓР¶РµРЅРѕ %.1f РёР· %.1f РњР‘</text>
+        <text>Загружено %.1f из %.1f МБ</text>
     </string>
     <string id="st_update_ready">
-        <text>РћР±РЅРѕРІР»РµРЅРёРµ Р·Р°РіСЂСѓР¶РµРЅРѕ Рё РіРѕС‚РѕРІРѕ Рє СѓСЃС‚Р°РЅРѕРІРєРµ.</text>
+        <text>Обновление загружено и готово к установке.</text>
     </string>
     <string id="st_update_restart">
-        <text>РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ Рё РѕР±РЅРѕРІРёС‚СЊ</text>
+        <text>Перезапустить и обновить</text>
     </string>
     <string id="st_update_retry">
-        <text>РџРѕРІС‚РѕСЂРёС‚СЊ</text>
+        <text>Повторить</text>
     </string>
     <string id="st_update_failed">
-        <text>РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РІРµСЂС€РёС‚СЊ РѕРїРµСЂР°С†РёСЋ РѕР±РЅРѕРІР»РµРЅРёСЏ. РџРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ.</text>
+        <text>Не удалось завершить операцию обновления. Повторите попытку.</text>
     </string>
 </string_table>

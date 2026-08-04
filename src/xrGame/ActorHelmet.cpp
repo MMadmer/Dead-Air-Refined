@@ -249,6 +249,7 @@ float CHelmet::HitThroughArmor(float hit_power, s16 element, float ap, bool& add
     {
     default:
     case SBoneProtections::HitFractionActorCOP:
+    case SBoneProtections::HitFractionActorCS:
     {
         if (hit_type == ALife::eHitTypeFireWound)
         {
@@ -281,73 +282,14 @@ float CHelmet::HitThroughArmor(float hit_power, s16 element, float ap, bool& add
         }
         else
         {
-            float one = 0.1f;
-            if (hit_type == ALife::eHitTypeStrike ||
-                hit_type == ALife::eHitTypeWound ||
-                hit_type == ALife::eHitTypeWound_2 ||
-                hit_type == ALife::eHitTypeExplosion)
-            {
-                one = 1.0f;
-            }
-            const float protect = GetDefHitTypeProtection(hit_type);
-            NewHitPower -= protect * one;
-
-            if (NewHitPower < 0.f)
-                NewHitPower = 0.f;
-        }
-
-        //увеличить изношенность шлема
-        Hit(hit_power, hit_type);
-        break;
-    }
-    case SBoneProtections::HitFractionActorCS:
-    {
-        if (hit_type == ALife::eHitTypeFireWound)
-        {
-            const float BoneArmor = m_boneProtection->getBoneArmor(element) * GetCondition();
-
-            if (ap > EPS && ap > BoneArmor)
-            {
-                //пуля пробила бронь
-                const float d_ap = ap - BoneArmor;
-                NewHitPower *= (d_ap / ap);
-
-                if (NewHitPower < m_boneProtection->m_fHitFrac)
-                    NewHitPower = m_boneProtection->m_fHitFrac;
-
-                if (!IsGameTypeSingle())
-                {
-                    NewHitPower *= m_boneProtection->getBoneProtection(element);
-                }
-
-                if (NewHitPower < 0.0f)
-                    NewHitPower = 0.0f;
-            }
-            else
-            {
-                //пуля НЕ пробила бронь
-                NewHitPower *= m_boneProtection->m_fHitFrac;
-                add_wound = false; //раны нет
-            }
-        }
-        else
-        {
-            float one = 0.1f;
-            if (hit_type == ALife::eHitTypeWound ||
-                hit_type == ALife::eHitTypeWound_2 ||
-                hit_type == ALife::eHitTypeExplosion)
-            {
-                one = 1.0f;
-            }
-
-            const float protect = GetHitTypeProtection(hit_type, element);
-            NewHitPower -= protect * one;
+            // Original Dead Air applies the full condition-scaled helmet protection to non-bullet hits.
+            NewHitPower -= GetDefHitTypeProtection(hit_type);
             if (NewHitPower < 0.0f)
                 NewHitPower = 0.0f;
         }
 
         //увеличить изношенность шлема
-        Hit(NewHitPower, hit_type);
+        Hit(hit_power, hit_type);
         break;
     }
     case SBoneProtections::HitFraction:

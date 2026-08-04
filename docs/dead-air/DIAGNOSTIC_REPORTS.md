@@ -14,7 +14,7 @@ after a newer report is ready.
 
 The main and in-game menus also expose a native bug-report form. It submits a
 title, the baked product version and a description to the Refined Report Hub over HTTPS and can optionally
-create and attach the same anonymous session-report ZIP. Submission runs on a
+create and attach the same session-report ZIP. Submission runs on a
 worker thread, so a slow or unavailable network does not stall the game loop.
 The title accepts up to 200 characters and requires at least 5 non-whitespace
 characters; the description accepts up to 10,000 and requires at least 20.
@@ -52,9 +52,14 @@ The ZIP contains:
 | `session.log` | when available | Last 4 MiB of the sanitized engine log |
 | `user.ltx` | when available | Sanitized user configuration |
 | `fsgame.ltx` | when available | Sanitized filesystem configuration |
+| `save.scop` | when a save is active | Verbatim main save payload |
+| `save.scoc` | when present | Verbatim script/custom save payload |
 
 `report.json` uses schema `dead-air-refined.session-report/1`. A receiver should
-reject unknown major schemas instead of guessing field semantics.
+reject unknown major schemas instead of guessing field semantics. The optional
+`save.files` array records the exact size and SHA-256 of every included save
+component. The collector opens the complete save group before hashing or ZIP
+creation so a concurrent atomic save cannot mix components from two revisions.
 
 ## Diagnostic coverage
 
@@ -86,11 +91,12 @@ The sender-facing report excludes:
 - user and computer names;
 - user profile, installation and application-data paths;
 - command-line and environment contents;
-- player identity and save payload;
+- player identity outside the verbatim save payload;
 - raw stack memory and module data segments;
 - e-mail addresses, network addresses and credential-like configuration values.
 
-Text attachments preserve structure while replacing sensitive values with
+Save attachments are included unchanged and can contain player-created data;
+they are therefore not anonymous. Other text attachments preserve structure while replacing sensitive values with
 markers. Module, PDB and content paths retain only safe file names or relative
 content paths. The minidump keeps thread contexts and module metadata but not
 raw stack pages.
@@ -99,12 +105,13 @@ raw stack pages.
 
 A future bot should treat the ZIP as untrusted input:
 
-1. Limit the compressed upload to 8 MiB and the expanded total to 16 MiB.
-2. Allow only the five entry names documented above.
+1. Limit the compressed upload to 5 MiB and the expanded total to 16 MiB.
+2. Allow only the seven entry names documented above.
 3. Reject duplicate names, nested paths, absolute paths and `..` components.
 4. Parse `report.json` before accepting other entries.
 5. Require the schema, report ID, type, product version, build ID and executable hash.
-6. Verify `dump.sha256` against `session.dmp`.
+6. Verify `dump.sha256` against `session.dmp` and every `save.files` hash against
+   its verbatim ZIP entry.
 7. Group crashes by build ID, exception code, module and module RVA.
 8. Store the original ZIP unchanged so future symbolization can be repeated.
 

@@ -34,7 +34,8 @@ private:
     CActorDeathEffector* m_death_effector;
     void UpdateTutorialThresholds();
     void UpdateSatiety();
-    virtual void UpdateRadiation();
+    void UpdateRadiation() override;
+    float GetActiveBoosterValue(EBoostParams type) const;
 
 public:
     CActorCondition(CActor* object);
@@ -111,6 +112,7 @@ public:
     IC float const& SatietyCritical() { return m_fSatietyCritical; }
     float GetZoneMaxPower(ALife::EInfluenceType type) const;
     float GetZoneMaxPower(ALife::EHitType hit_type) const;
+    float GetItemEffectTimeScale() const;
 
     bool DisableSprint(SHit* pHDS);
     bool PlayHitSound(SHit* pHDS);

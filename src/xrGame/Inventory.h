@@ -49,6 +49,7 @@ public:
     bool Slot(u16 slot_id, PIItem pIItem, bool bNotActivate = false, bool strict_placement = false);
     bool Belt(PIItem pIItem, bool strict_placement = false);
     bool Ruck(PIItem pIItem, bool strict_placement = false);
+    bool RepackBelt();
 
     bool InSlot(const CInventoryItem* pIItem) const;
     bool InBelt(const CInventoryItem* pIItem) const;

@@ -26,6 +26,7 @@ XRCORE_API void SetRenderer(pcstr renderer);
 XRCORE_API void SetGpuInfo(pcstr name, u32 vendorId, u32 deviceId, u64 dedicatedBytes, u64 sharedBytes,
     u32 featureLevel, u64 driverVersion);
 XRCORE_API void SetLocation(pcstr location);
+XRCORE_API void SetSavePath(pcstr path);
 XRCORE_API void BeginOperation(pcstr operation);
 XRCORE_API void EndOperation();
 XRCORE_API void UpdateTelemetry(const CrashRuntimeTelemetry& telemetry);

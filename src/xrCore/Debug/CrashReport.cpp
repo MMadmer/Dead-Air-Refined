@@ -74,6 +74,7 @@ struct RuntimeContext
     string128 location{"unknown"};
     string64 activity{"startup"};
     string64 lastOperation{"startup"};
+    string_path savePath{};
     string256 gpuName{"unknown"};
     u32 gpuVendorId{};
     u32 gpuDeviceId{};
@@ -159,6 +160,14 @@ struct Attachment
 {
     pcstr name;
     const xr_string* data;
+};
+
+struct SaveAttachment
+{
+    xr_string name;
+    HANDLE file{INVALID_HANDLE_VALUE};
+    u64 size{};
+    xr_string sha256;
 };
 
 struct SampleState
@@ -850,6 +859,132 @@ xr_string sha256_file(const std::wstring& path)
     return result;
 }
 
+xr_string sha256_handle(HANDLE file)
+{
+    LARGE_INTEGER beginning{};
+    if (!SetFilePointerEx(file, beginning, nullptr, FILE_BEGIN))
+        return {};
+
+    BCRYPT_ALG_HANDLE algorithm{};
+    BCRYPT_HASH_HANDLE hash{};
+    DWORD objectLength = 0;
+    DWORD hashLength = 0;
+    DWORD resultLength = 0;
+    xr_string result;
+
+    NTSTATUS status = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    if (status >= 0)
+        status = BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
+            reinterpret_cast<PUCHAR>(&objectLength), sizeof(objectLength), &resultLength, 0);
+    if (status >= 0)
+        status = BCryptGetProperty(algorithm, BCRYPT_HASH_LENGTH,
+            reinterpret_cast<PUCHAR>(&hashLength), sizeof(hashLength), &resultLength, 0);
+
+    std::vector<u8> object(objectLength);
+    std::vector<u8> digest(hashLength);
+    if (status >= 0)
+        status = BCryptCreateHash(algorithm, &hash, object.data(), objectLength, nullptr, 0, 0);
+
+    std::array<u8, 64 * 1024> buffer{};
+    while (status >= 0)
+    {
+        DWORD read = 0;
+        if (!ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
+        {
+            status = static_cast<NTSTATUS>(-1);
+            break;
+        }
+        if (!read)
+            break;
+        status = BCryptHashData(hash, buffer.data(), read, 0);
+    }
+
+    if (status >= 0)
+        status = BCryptFinishHash(hash, digest.data(), hashLength, 0);
+
+    if (status >= 0)
+    {
+        static constexpr char hex[] = "0123456789abcdef";
+        result.reserve(digest.size() * 2);
+        for (const u8 byte : digest)
+        {
+            result.push_back(hex[byte >> 4]);
+            result.push_back(hex[byte & 0x0f]);
+        }
+    }
+
+    if (hash)
+        BCryptDestroyHash(hash);
+    if (algorithm)
+        BCryptCloseAlgorithmProvider(algorithm, 0);
+    SetFilePointerEx(file, beginning, nullptr, FILE_BEGIN);
+    return result;
+}
+
+void close_save_attachments(std::vector<SaveAttachment>& attachments)
+{
+    for (SaveAttachment& attachment : attachments)
+    {
+        if (attachment.file != INVALID_HANDLE_VALUE)
+            CloseHandle(attachment.file);
+        attachment.file = INVALID_HANDLE_VALUE;
+    }
+    attachments.clear();
+}
+
+std::vector<SaveAttachment> open_save_attachments(pcstr mainPath)
+{
+    std::vector<SaveAttachment> attachments;
+    if (!mainPath || !*mainPath)
+        return attachments;
+
+    std::filesystem::path source = mainPath;
+    const std::array extensions{".scop", ".scoc"};
+    for (const pcstr extension : extensions)
+    {
+        std::filesystem::path path = source;
+        path.replace_extension(extension);
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || attributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            if (extension == extensions.front())
+                return {};
+            continue;
+        }
+
+        HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            close_save_attachments(attachments);
+            return {};
+        }
+
+        LARGE_INTEGER size{};
+        if (!GetFileSizeEx(file, &size) || size.QuadPart < 0)
+        {
+            CloseHandle(file);
+            close_save_attachments(attachments);
+            return {};
+        }
+
+        SaveAttachment attachment;
+        attachment.name = "save";
+        attachment.name += extension;
+        attachment.file = file;
+        attachment.size = static_cast<u64>(size.QuadPart);
+        attachment.sha256 = sha256_handle(file);
+        if (attachment.sha256.empty())
+        {
+            CloseHandle(file);
+            close_save_attachments(attachments);
+            return {};
+        }
+        attachments.push_back(std::move(attachment));
+    }
+    return attachments;
+}
+
 std::vector<ModuleInfo> enumerate_modules(uintptr_t exceptionAddress, size_t& faultingModule)
 {
     std::vector<ModuleInfo> modules;
@@ -1492,7 +1627,7 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
     const RuntimeContext& context, const SystemSnapshot& system, const xrMemoryStatistics& memory,
     const xr_vector<AnonymousStackFrame>& stack, const std::vector<ModuleInfo>& modules,
     size_t faultingModule, const ContentSnapshot& content, pcstr dumpSha256,
-    bool hasLog, bool hasUserConfig, bool hasFsConfig)
+    bool hasLog, bool hasUserConfig, bool hasFsConfig, std::span<const SaveAttachment> saves)
 {
     const EXCEPTION_RECORD* exception = exceptionPointers ? exceptionPointers->ExceptionRecord : nullptr;
     const DWORD code = exception ? exception->ExceptionCode : 0;
@@ -1514,9 +1649,9 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
     append_json_string(json, kind == ReportKind::Crash ? "crash" : "manual");
     json.append(",\"created_utc\":");
     append_json_string(json, createdUtc);
-    json.append(",\"privacy\":{\"anonymous\":true,\"method\":\"replace-identifiers-preserve-structure\","
-        "\"excluded\":[\"command_line\",\"environment\",\"player_identity\",\"save_payload\","
-        "\"raw_stack_memory\"],\"path_policy\":\"module_and_content_names_only\"}");
+    json.append(",\"privacy\":{\"anonymous\":false,\"method\":\"replace-identifiers-preserve-structure\","
+        "\"excluded\":[\"command_line\",\"environment\",\"player_identity\",\"raw_stack_memory\"],"
+        "\"save_policy\":\"verbatim-active-save\",\"path_policy\":\"module_and_content_names_only\"}");
 
     json.append(",\"build\":{\"product\":\"Dead Air: Refined\",\"version\":");
     append_json_string(json, DeadAirRefined::Version);
@@ -1737,7 +1872,33 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
         json.append(",\"user.ltx\"");
     if (hasFsConfig)
         json.append(",\"fsgame.ltx\"");
+    for (const SaveAttachment& save : saves)
+    {
+        json.push_back(',');
+        append_json_string(json, save.name);
+    }
     json.push_back(']');
+
+    json.append(",\"save\":");
+    if (saves.empty())
+        json.append("null");
+    else
+    {
+        json.append("{\"files\":[");
+        for (size_t index = 0; index != saves.size(); ++index)
+        {
+            if (index)
+                json.push_back(',');
+            json.append("{\"file\":");
+            append_json_string(json, saves[index].name);
+            json.append(",\"size\":");
+            append_number(json, saves[index].size);
+            json.append(",\"sha256\":");
+            append_json_string(json, saves[index].sha256);
+            json.push_back('}');
+        }
+        json.append("]}");
+    }
 
     json.append(",\"stack\":[");
     for (size_t index = 0; index != stack.size(); ++index)
@@ -1868,7 +2029,39 @@ bool add_zip_file(zipFile archive, pcstr name, pcstr sourcePath)
     return result;
 }
 
-bool write_zip(pcstr path, const xr_string& manifest, pcstr dumpPath, std::span<const Attachment> attachments)
+bool add_zip_handle(zipFile archive, const SaveAttachment& attachment)
+{
+    LARGE_INTEGER beginning{};
+    if (!SetFilePointerEx(attachment.file, beginning, nullptr, FILE_BEGIN) ||
+        zipOpenNewFileInZip64(archive, attachment.name.c_str(), nullptr, nullptr, 0, nullptr, 0, nullptr,
+            Z_DEFLATED, Z_BEST_COMPRESSION, attachment.size >= std::numeric_limits<u32>::max()) != ZIP_OK)
+    {
+        return false;
+    }
+
+    bool result = true;
+    std::array<u8, 64 * 1024> buffer{};
+    while (true)
+    {
+        DWORD read = 0;
+        if (!ReadFile(attachment.file, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr))
+        {
+            result = false;
+            break;
+        }
+        if (!read)
+            break;
+        if (zipWriteInFileInZip(archive, buffer.data(), read) != ZIP_OK)
+        {
+            result = false;
+            break;
+        }
+    }
+    return zipCloseFileInZip(archive) == ZIP_OK && result;
+}
+
+bool write_zip(pcstr path, const xr_string& manifest, pcstr dumpPath, std::span<const Attachment> attachments,
+    std::span<const SaveAttachment> saves)
 {
     zipFile archive = zipOpen64(path, APPEND_STATUS_CREATE);
     if (!archive)
@@ -1881,6 +2074,11 @@ bool write_zip(pcstr path, const xr_string& manifest, pcstr dumpPath, std::span<
         if (result && attachment.data && !attachment.data->empty())
             result = add_zip_buffer(
                 archive, attachment.name, attachment.data->data(), attachment.data->size());
+    }
+    for (const SaveAttachment& save : saves)
+    {
+        if (result)
+            result = add_zip_handle(archive, save);
     }
     result = zipClose(archive, nullptr) == ZIP_OK && result;
     return result;
@@ -1925,6 +2123,7 @@ bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
         auto stack = BuildAnonymousStackTrace(&contextCopy, MaximumStackFrames);
 
         const RuntimeContext context = snapshot_context();
+        auto saves = open_save_attachments(context.savePath);
         const SystemSnapshot system = capture_system_snapshot(context);
         const Sanitizer sanitizer;
         const ContentSnapshot content = capture_content_snapshot(sanitizer);
@@ -1940,13 +2139,14 @@ bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
         const xr_string dumpSha256 = sha256_file(std::filesystem::path(dumpPath).wstring());
         const xr_string manifest = build_manifest(reportId.c_str(), kind, exceptionPointers, context, system,
             Memory.statistics(), stack, modules, faultingModule, content, dumpSha256.c_str(),
-            !sanitizedLog.empty(), !sanitizedUserConfig.empty(), !sanitizedFsConfig.empty());
+            !sanitizedLog.empty(), !sanitizedUserConfig.empty(), !sanitizedFsConfig.empty(), saves);
 
         const std::array attachments{
             Attachment{"session.log", &sanitizedLog},
             Attachment{"user.ltx", &sanitizedUserConfig},
             Attachment{"fsgame.ltx", &sanitizedFsConfig}};
-        result = write_zip(zipPath.c_str(), manifest, dumpPath.c_str(), attachments);
+        result = write_zip(zipPath.c_str(), manifest, dumpPath.c_str(), attachments, saves);
+        close_save_attachments(saves);
     }
 
     DeleteFileA(dumpPath.c_str());
@@ -2009,6 +2209,14 @@ void CrashReporter::SetLocation(pcstr location)
     update_context([location](RuntimeContext& context)
     {
         copy_context_string(context.location, std::size(context.location), location);
+    });
+}
+
+void CrashReporter::SetSavePath(pcstr path)
+{
+    update_context([path](RuntimeContext& context)
+    {
+        xr_strcpy(context.savePath, std::size(context.savePath), path ? path : "");
     });
 }
 

@@ -1,0 +1,59 @@
+local flicker_until = 0
+local next_flicker = 0
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_update", update)
+end
+
+function update()
+	if not db.actor then return end
+
+	local torch = db.actor:object("device_torch")
+	local battery = db.actor:object("wpn_upd")
+	if not (torch and battery and itms_manager) then return end
+
+	local torch_type = itms_manager.TorchType
+	if torch_type ~= 1 and torch_type ~= 2 then
+		if flicker_until ~= 0 and itms_manager.Torch2 then
+			torch:enable_torch2(true)
+		end
+		flicker_until = 0
+		next_flicker = 0
+		return
+	end
+
+	torch:torch_set_animation("empty")
+
+	local condition = battery:condition()
+	if condition <= 0.05 or not itms_manager.Torch2 then
+		flicker_until = 0
+		next_flicker = 0
+		return
+	end
+	if condition >= 0.3 then
+		if flicker_until ~= 0 then
+			torch:enable_torch2(true)
+		end
+		flicker_until = 0
+		next_flicker = 0
+		return
+	end
+
+	local now = time_global()
+	if flicker_until > now then
+		torch:enable_torch2(false)
+		return
+	end
+
+	if flicker_until ~= 0 then
+		torch:enable_torch2(true)
+		flicker_until = 0
+	end
+
+	if next_flicker == 0 then
+		next_flicker = now + math.random(350, 1400)
+	elseif now >= next_flicker then
+		flicker_until = now + math.random(45, 110)
+		next_flicker = now + math.random(350, 1400)
+	end
+end

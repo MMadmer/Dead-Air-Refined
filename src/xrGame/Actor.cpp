@@ -26,7 +26,6 @@
 #include "clsid_game.h"
 #include "game_cl_base_weapon_usage_statistic.h"
 #include "Grenade.h"
-#include "Weapon.h"
 #include "Torch.h"
 
 // breakpoints
@@ -229,8 +228,6 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 CActor::~CActor()
 {
-    DestroyShadowVisual();
-
     xr_delete(m_location_manager);
     xr_delete(m_memory);
 
@@ -1578,108 +1575,6 @@ void CActor::renderable_RenderBody(u32 context_id, IRenderable* root)
     inherited::renderable_Render(context_id, root);
 }
 
-void CActor::ShadowBoneCallback(CBoneInstance* bone)
-{
-    auto* binding = static_cast<ShadowBoneBinding*>(bone->callback_param());
-    if (!binding || binding->source_id == u16(-1))
-        return;
-
-    bone->mTransform = binding->transform;
-}
-
-void CActor::DestroyShadowVisual()
-{
-    m_shadow_bones.clear();
-    m_shadow_kinematics = nullptr;
-    if (m_shadow_visual)
-        GEnv.Render->model_Delete(m_shadow_visual);
-}
-
-void CActor::RebuildShadowVisual()
-{
-    DestroyShadowVisual();
-
-    IKinematics* source = smart_cast<IKinematics*>(Visual());
-    if (!source)
-        return;
-
-    xr_string visual_name = cNameVisual().c_str();
-    CCustomOutfit* outfit = GetOutfit();
-    if (outfit && pSettings->line_exist(outfit->cNameSect(), "npc_visual"))
-        visual_name = pSettings->r_string(outfit->cNameSect(), "npc_visual");
-
-    if (!strext(visual_name.c_str()))
-        visual_name += ".ogf";
-
-    m_shadow_visual = GEnv.Render->model_Create(visual_name.c_str());
-    m_shadow_kinematics = smart_cast<IKinematics*>(m_shadow_visual);
-    if (!m_shadow_kinematics)
-    {
-        DestroyShadowVisual();
-        return;
-    }
-
-    m_shadow_kinematics->LL_SetBonesVisible(u64(-1));
-    const u16 bone_count = m_shadow_kinematics->LL_BoneCount();
-    m_shadow_bones.resize(bone_count);
-    for (u16 bone_id = 0; bone_id < bone_count; ++bone_id)
-    {
-        ShadowBoneBinding& binding = m_shadow_bones[bone_id];
-        binding.source_id = source->LL_BoneID(m_shadow_kinematics->LL_BoneName_dbg(bone_id));
-        m_shadow_kinematics->LL_GetBoneInstance(bone_id).set_callback(
-            bctCustom, ShadowBoneCallback, &binding, binding.source_id != u16(-1));
-    }
-}
-
-void CActor::renderable_RenderShadow(u32 context_id, IRenderable* root)
-{
-    IKinematics* source = smart_cast<IKinematics*>(Visual());
-    if (source && m_shadow_visual && m_shadow_kinematics)
-    {
-        const u64 visible_bones = source->LL_GetBonesVisible();
-        source->LL_SetBonesVisible(u64(-1));
-        source->CalculateBones(TRUE);
-
-        for (ShadowBoneBinding& binding : m_shadow_bones)
-        {
-            if (binding.source_id != u16(-1))
-                binding.transform = source->LL_GetTransform(binding.source_id);
-        }
-
-        source->LL_SetBonesVisible(visible_bones);
-        source->CalculateBones_Invalidate();
-        m_shadow_kinematics->CalculateBones_Invalidate();
-        m_shadow_kinematics->CalculateBones(TRUE);
-        GEnv.Render->add_Visual(context_id, root, m_shadow_visual, XFORM());
-    }
-    else
-    {
-        renderable_RenderBody(context_id, root);
-    }
-
-    CInventoryItem* active_item = inventory().ActiveItem();
-    CWeapon* weapon = active_item ? active_item->object().cast_weapon() : nullptr;
-    if (!weapon || !source || !m_shadow_kinematics)
-        return;
-
-    int source_bone_l = -1;
-    int source_bone_r = -1;
-    int source_bone_r2 = -1;
-    g_WeaponBones(source_bone_l, source_bone_r, source_bone_r2);
-
-    const auto shadow_bone_id = [source, this](int source_bone)
-    {
-        if (source_bone == -1)
-            return -1;
-
-        const u16 bone_id = m_shadow_kinematics->LL_BoneID(source->LL_BoneName_dbg(u16(source_bone)));
-        return bone_id == u16(-1) ? -1 : int(bone_id);
-    };
-
-    weapon->renderable_RenderShadow(context_id, root, m_shadow_kinematics, XFORM(), shadow_bone_id(source_bone_l),
-        shadow_bone_id(source_bone_r), shadow_bone_id(source_bone_r2));
-}
-
 void CActor::renderable_Render(u32 context_id, IRenderable* root)
 {
     renderable_RenderBody(context_id, root);
@@ -1688,7 +1583,8 @@ void CActor::renderable_Render(u32 context_id, IRenderable* root)
 
 bool CActor::renderable_ShadowGenerate()
 {
-    if (m_holder)
+    // The hidden first-person body must not leave an orphaned world shadow.
+    if (m_holder || (Level().CurrentViewEntity() == this && HUDview()))
         return FALSE;
 
     return inherited::renderable_ShadowGenerate();
@@ -2025,7 +1921,8 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
     }
     else
     {
-        f_update_time = update_time;
+        // Keep item rates calibrated to Dead Air's normal game-time factor when the day speed changes.
+        f_update_time = update_time * 2.0f * conditions().GetItemEffectTimeScale();
         update_time = 0.0f;
     }
 
@@ -2051,6 +1948,16 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
     }
 
     CCustomOutfit* outfit = GetOutfit();
+    CHelmet* helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+    if (helmet)
+    {
+        conditions().ChangeBleeding(helmet->m_fBleedingRestoreSpeed * f_update_time);
+        conditions().ChangeHealth(helmet->m_fHealthRestoreSpeed * f_update_time);
+        conditions().ChangePower(helmet->m_fPowerRestoreSpeed * f_update_time);
+        conditions().ChangeSatiety(helmet->m_fSatietyRestoreSpeed * f_update_time);
+        conditions().ChangeRadiation(helmet->m_fRadiationRestoreSpeed * f_update_time);
+    }
+
     if (outfit)
     {
         conditions().ChangeBleeding(outfit->m_fBleedingRestoreSpeed * f_update_time);
@@ -2081,6 +1988,11 @@ float CActor::HitArtefactsOnBelt(float hit_power, ALife::EHitType hit_type)
         if (artefact)
             hit_power -= artefact->m_ArtefactHitImmunities.AffectHit(1.0f, hit_type);
     }
+
+    const auto slot_artefact = smart_cast<CArtefact*>(inventory().ItemFromSlot(BACKPACK_SLOT));
+    if (slot_artefact)
+        hit_power -= slot_artefact->m_ArtefactHitImmunities.AffectHit(1.0f, hit_type);
+
     clamp(hit_power, 0.0f, flt_max);
 
     return hit_power;
@@ -2095,6 +2007,11 @@ float CActor::GetProtection_ArtefactsOnBelt(ALife::EHitType hit_type) const
         if (artefact)
             sum += artefact->m_ArtefactHitImmunities.AffectHit(1.0f, hit_type) * artefact->GetCondition();
     }
+
+    const auto slot_artefact = smart_cast<CArtefact*>(inventory().ItemFromSlot(BACKPACK_SLOT));
+    if (slot_artefact)
+        sum += slot_artefact->m_ArtefactHitImmunities.AffectHit(1.0f, hit_type) * slot_artefact->GetCondition();
+
     return sum;
 }
 
@@ -2252,6 +2169,10 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
         }
 
         const auto outfit = GetOutfit();
+        const auto helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+            res += helmet->m_fHealthRestoreSpeed;
+
         if (outfit)
             res += outfit->m_fHealthRestoreSpeed;
 
@@ -2267,6 +2188,10 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
         }
 
         const auto outfit = GetOutfit();
+        const auto helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+            res += helmet->m_fRadiationRestoreSpeed;
+
         if (outfit)
             res += outfit->m_fRadiationRestoreSpeed;
 
@@ -2284,6 +2209,10 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
         }
 
         const auto outfit = GetOutfit();
+        const auto helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+            res += helmet->m_fSatietyRestoreSpeed;
+
         if (outfit)
             res += outfit->m_fSatietyRestoreSpeed;
 
@@ -2291,7 +2220,7 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
     }
     case ALife::ePowerRestoreSpeed:
     {
-        res = conditions().GetSatietyPower();
+        res = conditions().GetSatietyPower() * conditions().GetSatiety();
 
         for (auto& it : inventory().m_belt)
         {
@@ -2299,6 +2228,13 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
             if (artefact)
                 res += artefact->m_fPowerRestoreSpeed * artefact->GetCondition();
         }
+        const auto helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+        {
+            VERIFY(!fis_zero(helmet->m_fPowerLoss));
+            res = (res + helmet->m_fPowerRestoreSpeed) / helmet->m_fPowerLoss;
+        }
+
         auto outfit = GetOutfit();
         if (outfit)
         {
@@ -2323,6 +2259,10 @@ float CActor::GetRestoreSpeed(ALife::EConditionRestoreType const& type)
         }
 
         const auto outfit = GetOutfit();
+        const auto helmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+            res += helmet->m_fBleedingRestoreSpeed;
+
         if (outfit)
             res += outfit->m_fBleedingRestoreSpeed;
 

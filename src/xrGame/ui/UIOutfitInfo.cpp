@@ -129,6 +129,10 @@ void CUIOutfitInfo::InitFromXml(CUIXml& xml_doc)
     strconcat(buf, base_str, ":prop_line");
     const auto prop_line = UIHelper::CreateStatic(xml_doc, buf, this, false);
 
+    m_iconCondition = UIHelper::CreateStatic(xml_doc, "outfit_info:static_condition", this, false);
+    m_textCondition = UIHelper::CreateStatic(xml_doc, "outfit_info:cap_condition", this, false);
+    m_textConditionValue = UIHelper::CreateStatic(xml_doc, "outfit_info:cap_condition2", this, false);
+
     if (prop_line)
         m_start_pos = { 0.0f, prop_line->GetWndPos().y + prop_line->GetWndSize().y };
     else if (caption)
@@ -161,6 +165,26 @@ void CUIOutfitInfo::InitFromXml(CUIXml& xml_doc)
     }
 
     AdjustElements();
+}
+
+void CUIOutfitInfo::UpdateCondition(float condition)
+{
+    if (!m_textConditionValue)
+        return;
+
+    int percent = iFloor(condition * 100.0f);
+    clamp(percent, 0, 100);
+
+    if (percent <= 33)
+        m_textConditionValue->SetTextColor(color_rgba(255, 0, 0, 255));
+    else if (percent <= 66)
+        m_textConditionValue->SetTextColor(color_rgba(255, 255, 0, 255));
+    else
+        m_textConditionValue->SetTextColor(color_rgba(0, 255, 0, 255));
+
+    string32 text;
+    xr_sprintf(text, "%d %%", percent);
+    m_textConditionValue->SetText(text);
 }
 
 void CUIOutfitInfo::AdjustElements()
@@ -197,6 +221,7 @@ void CUIOutfitInfo::UpdateInfo(CCustomOutfit* cur_outfit, CCustomOutfit* slot_ou
     }
 
     const bool is_cs_cop = cur_outfit->GetHitFracType() != SBoneProtections::HitFraction;
+    UpdateCondition(cur_outfit->GetConditionToShow());
 
     for (auto& [hit_type, item] : m_items)
     {
@@ -261,6 +286,8 @@ void CUIOutfitInfo::UpdateInfo(CHelmet* cur_helmet, CHelmet* slot_helmet)
     {
         return;
     }
+
+    UpdateCondition(cur_helmet->GetConditionToShow());
 
     for (auto& [hit_type, item] : m_items)
     {

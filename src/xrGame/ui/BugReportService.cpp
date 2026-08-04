@@ -158,7 +158,7 @@ bool send_request(const xr_string& title, const xr_string& description, pcstr at
     xr_vector<u8> attachment;
     if (!read_attachment(attachmentPath, attachment))
     {
-        error = "The diagnostic report could not be read or exceeds 1 MiB";
+        error = "The diagnostic report could not be read or exceeds 5 MiB";
         return false;
     }
 

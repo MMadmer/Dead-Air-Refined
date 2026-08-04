@@ -554,20 +554,56 @@ void CSE_ALifeItemWeapon::UPDATE_Write(NET_Packet& tNetPacket)
 
 void CSE_ALifeItemWeapon::STATE_Read(NET_Packet& tNetPacket, u16 size)
 {
+    // Bound optional weapon fields to this object's state chunk so legacy stashes can omit the tail safely.
+    const bool has_packet_bounds = !tNetPacket.inistream && size >= sizeof(u16);
+    const u32 state_start = tNetPacket.r_tell();
+    const u32 state_size = has_packet_bounds ? _min(u32(size - sizeof(u16)), tNetPacket.r_elapsed()) : 0;
+    const u32 state_end = state_start + state_size;
+
     inherited::STATE_Read(tNetPacket, size);
+
+    const auto can_read = [&](u32 bytes)
+    {
+        if (!has_packet_bounds)
+            return true;
+
+        const u32 position = tNetPacket.r_tell();
+        return position <= state_end && bytes <= state_end - position;
+    };
+
+    constexpr u32 base_weapon_state_size = sizeof(u16) * 2 + sizeof(u8);
+    if (!can_read(base_weapon_state_size))
+    {
+        Msg("! Weapon '%s' has no saved weapon state; using configured defaults", s_name.c_str());
+        return;
+    }
+
     tNetPacket.r_u16(a_current);
     tNetPacket.r_u16(a_elapsed);
     tNetPacket.r_u8(wpn_state);
 
     if (m_wVersion > 40)
+    {
+        if (!can_read(sizeof(u8)))
+            return;
         tNetPacket.r_u8(m_addon_flags.flags);
+    }
 
     if (m_wVersion > 46)
+    {
+        if (!can_read(sizeof(u8)))
+            return;
         tNetPacket.r_u8(ammo_type);
+    }
 
     if (m_wVersion > 122)
     {
+        if (!can_read(sizeof(u8)))
+            return;
         a_elapsed_grenades.unpack_from_byte(tNetPacket.r_u8());
+
+        if (!can_read(sizeof(u32)))
+            return;
         tNetPacket.r_u32(m_condition_type);
     }
 }

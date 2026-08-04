@@ -109,7 +109,7 @@ void CCustomOutfit::Load(LPCSTR section)
 
     m_full_icon_name = pSettings->r_string(section, "full_icon_name");
     m_artefact_count = READ_IF_EXISTS(pSettings, r_u32, section, "artefact_count", 0);
-    clamp(m_artefact_count, (u32)0, (u32)5);
+    clamp(m_artefact_count, (u32)0, (u32)7);
 
     m_BonesProtectionSect = READ_IF_EXISTS(pSettings, r_string, section, "bones_koeff_protection", "");
     bIsHelmetAvaliable = !!READ_IF_EXISTS(pSettings, r_bool, section, "helmet_avaliable", true);
@@ -160,6 +160,7 @@ float CCustomOutfit::HitThroughArmor(float hit_power, s16 element, float ap, boo
     {
     default:
     case SBoneProtections::HitFractionActorCOP:
+    case SBoneProtections::HitFractionActorCS:
     {
         if (hit_type == ALife::eHitTypeFireWound)
         {
@@ -192,73 +193,14 @@ float CCustomOutfit::HitThroughArmor(float hit_power, s16 element, float ap, boo
         }
         else
         {
-            float one = 0.1f;
-            if (hit_type == ALife::eHitTypeStrike ||
-                hit_type == ALife::eHitTypeWound ||
-                hit_type == ALife::eHitTypeWound_2 ||
-                hit_type == ALife::eHitTypeExplosion)
-            {
-                one = 1.0f;
-            }
-            const float protect = GetDefHitTypeProtection(hit_type);
-            NewHitPower -= protect * one;
-
-            if (NewHitPower < 0.f)
-                NewHitPower = 0.f;
-        }
-
-        //увеличить изношенность костюма
-        Hit(hit_power, hit_type);
-        break;
-    }
-    case SBoneProtections::HitFractionActorCS:
-    {
-        if (hit_type == ALife::eHitTypeFireWound)
-        {
-            const float BoneArmor = GetBoneArmor(element) * GetCondition();
-
-            if (ap > EPS && ap > BoneArmor)
-            {
-                //пуля пробила бронь
-                const float d_ap = ap - BoneArmor;
-                NewHitPower *= (d_ap / ap);
-
-                if (NewHitPower < m_boneProtection.m_fHitFrac)
-                    NewHitPower = m_boneProtection.m_fHitFrac;
-
-                if (!IsGameTypeSingle())
-                {
-                    NewHitPower *= m_boneProtection.getBoneProtection(element);
-                }
-
-                if (NewHitPower < 0.0f)
-                    NewHitPower = 0.0f;
-            }
-            else
-            {
-                //пуля НЕ пробила бронь
-                NewHitPower *= m_boneProtection.m_fHitFrac;
-                add_wound = false; //раны нет
-            }
-        }
-        else
-        {
-            float one = 0.1f;
-            if (hit_type == ALife::eHitTypeWound ||
-                hit_type == ALife::eHitTypeWound_2 ||
-                hit_type == ALife::eHitTypeExplosion)
-            {
-                one = 1.0f;
-            }
-
-            const float protect = GetHitTypeProtection(hit_type, element);
-            NewHitPower -= protect * one;
+            // Original Dead Air applies the full condition-scaled outfit protection to non-bullet hits.
+            NewHitPower -= GetDefHitTypeProtection(hit_type);
             if (NewHitPower < 0.0f)
                 NewHitPower = 0.0f;
         }
 
         //увеличить изношенность костюма
-        Hit(NewHitPower, hit_type);
+        Hit(hit_power, hit_type);
         break;
     }
     case SBoneProtections::HitFraction:
@@ -461,7 +403,7 @@ bool CCustomOutfit::install_upgrade_impl(LPCSTR section, bool test)
     clamp(m_fPowerLoss, 0.0f, 1.0f);
 
     result |= process_if_exists(section, "artefact_count", &CInifile::r_u32, m_artefact_count, test);
-    clamp(m_artefact_count, (u32)0, (u32)5);
+    clamp(m_artefact_count, (u32)0, (u32)7);
 
     return result;
 }
