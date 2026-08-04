@@ -1,0 +1,580 @@
+--------------------------------------------------------------------------------
+-- AtmosFear options dialog ----------------------------------------------------
+-- Made by Cromm Cruac ---------------------------------------------------------
+-- for AtmosFear 3 -------------------------------------------------------------
+-- 25.06.2011 ------------------------------------------------------------------
+-- Modified by Alundaio
+	-- added INI support to remove dependency on savegame
+	-- removed fallout manager
+--------------------------------------------------------------------------------
+
+config = nil
+
+function on_game_start()
+
+end
+
+class "af_options_dialog" (CUIScriptWnd)
+function af_options_dialog:__init() super()
+
+	config = config or ini_file_ex("atmosfear_options.ltx",true)
+	level_weathers.atmosfear_init()
+
+	local function file_exists(name)
+	   local f=io.open(name,"r")
+	   if f~=nil then f:close() return true else return false end
+	end
+
+	self.default_settings = ini_file_ex("atmosfear_default_settings.ltx",true)
+
+	-- Create INI if sections are missing
+	local need_save
+
+	if (not self.default_settings:section_exist("atmosfear_default_parameters")) then
+		for level,v in pairs(level_weathers.valid_levels) do
+			self.default_settings:w_value("atmosfear_default_parameters","opt_"..level.."_period_good",random_choice("clear","foggy","cloudy","rainy","stormy","veryfoggy"))
+			self.default_settings:w_value("atmosfear_default_parameters","opt_"..level.."_period_bad",random_choice("clear","foggy","cloudy","rainy","stormy","veryfoggy"))
+			self.default_settings:w_value("atmosfear_default_parameters","opt_"..level.."_period_good_length",random_choice(4,6,8))
+			self.default_settings:w_value("atmosfear_default_parameters","opt_"..level.."_period_bad_length",random_choice(4,6,8))
+		end
+
+		self.default_settings:w_value("atmosfear_default_parameters","opt_enable_blowout",1)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_blowout_freq",48)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_blowout_task","give")
+		self.default_settings:w_value("atmosfear_default_parameters","opt_enable_fallout",0)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_fallout_freq",12)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_fallout_task","give")
+		self.default_settings:w_value("atmosfear_default_parameters","opt_enable_psi_storm",1)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_psi_storm_freq",24)
+		self.default_settings:w_value("atmosfear_default_parameters","opt_psi_storm_task","give")
+
+		self.default_settings:w_value("atmosfear_default_parameters","opt_weather_balance_presets","balance_default")
+		self.default_settings:w_value("atmosfear_default_parameters","opt_weather_length_presets","length_default")
+
+		self.default_settings:w_value("atmosfear_default_parameters","opt_god_mode","false")
+		need_save = true
+	end
+
+	if (not self.default_settings:section_exist("atmosfear_option_names")) then
+		self.default_settings:w_value("atmosfear_option_names","veryfoggy","st_list_periods_veryfoggy")
+		self.default_settings:w_value("atmosfear_option_names","cloudy","st_list_periods_cloudy")
+		self.default_settings:w_value("atmosfear_option_names","balance_bad","st_list_weather_balance_preset_bad")
+		self.default_settings:w_value("atmosfear_option_names","dontgive","st_list_task_none")
+		self.default_settings:w_value("atmosfear_option_names","balance_good","st_list_weather_balance_preset_good")
+		self.default_settings:w_value("atmosfear_option_names","96","st_list_freq_96")
+		self.default_settings:w_value("atmosfear_option_names","48","st_list_freq_48")
+		self.default_settings:w_value("atmosfear_option_names","24","st_list_freq_24")
+		self.default_settings:w_value("atmosfear_option_names","12","st_list_freq_12")
+		self.default_settings:w_value("atmosfear_option_names","length_custom","st_list_weather_length_preset_custom")
+		self.default_settings:w_value("atmosfear_option_names","balance_custom","st_list_weather_balance_preset_custom")
+		self.default_settings:w_value("atmosfear_option_names","length_default","st_list_weather_length_preset_default")
+		self.default_settings:w_value("atmosfear_option_names","clear","st_list_periods_clear")
+		self.default_settings:w_value("atmosfear_option_names","balance_default","st_list_weather_balance_preset_default")
+		self.default_settings:w_value("atmosfear_option_names","stormy","st_list_periods_stormy")
+		self.default_settings:w_value("atmosfear_option_names","length_long","st_list_weather_length_preset_long")
+		self.default_settings:w_value("atmosfear_option_names","rainy","st_list_periods_rainy")
+		self.default_settings:w_value("atmosfear_option_names","foggy","st_list_periods_foggy")
+		self.default_settings:w_value("atmosfear_option_names","length_short","st_list_weather_length_preset_short")
+		self.default_settings:w_value("atmosfear_option_names","give","st_list_task_give")
+		need_save = true
+	end
+
+	if (not self.default_settings:section_exist("list_blowout_task")) then
+		self.default_settings:w_value("list_blowout_task","list_task_give",0)
+		self.default_settings:w_value("list_blowout_task","list_task_none",1)
+		need_save = true
+	end
+
+	---[[
+	if not (self.default_settings:section_exist("list_fallout_task")) then
+		self.default_settings:w_value("list_fallout_task","list_task_give",0)
+		self.default_settings:w_value("list_fallout_task","list_task_none",1)
+		need_save = true
+	end
+	--]]
+
+	if (not self.default_settings:section_exist("list_psi_storm_task")) then
+		self.default_settings:w_value("list_psi_storm_task","list_task_give",0)
+		self.default_settings:w_value("list_psi_storm_task","list_task_none",1)
+		need_save = true
+	end
+
+	if (not self.default_settings:section_exist("atmosfear_preset_length_short")) then
+		for level,v in pairs(level_weathers.valid_levels) do
+			self.default_settings:w_value("atmosfear_preset_length_short",level.."_period_good_length",3)
+			self.default_settings:w_value("atmosfear_preset_length_short",level.."_period_bad_length",3)
+		end
+		need_save = true
+	end
+
+	if (not self.default_settings:section_exist("atmosfear_preset_length_long")) then
+		for level,v in pairs(level_weathers.valid_levels) do
+			self.default_settings:w_value("atmosfear_preset_length_long",level.."_period_good_length",3)
+			self.default_settings:w_value("atmosfear_preset_length_long",level.."_period_bad_length",3)
+		end
+		need_save = true
+	end
+
+
+	if (not self.default_settings:section_exist("list_periods")) then
+		self.default_settings:w_value("list_periods","list_periods_veryfoggy",6)
+		self.default_settings:w_value("list_periods","list_periods_stormy",5)
+		self.default_settings:w_value("list_periods","list_periods_clear",0)
+		self.default_settings:w_value("list_periods","list_periods_rainy",4)
+		self.default_settings:w_value("list_periods","list_periods_cloudy",3)
+		self.default_settings:w_value("list_periods","list_periods_foggy",2)
+		need_save = true
+	end
+
+
+	if (not self.default_settings:section_exist("list_blowout_freq")) then
+		self.default_settings:w_value("list_blowout_freq","list_freq_48",2)
+		self.default_settings:w_value("list_blowout_freq","list_freq_24",1)
+		self.default_settings:w_value("list_blowout_freq","list_freq_12",0)
+		self.default_settings:w_value("list_blowout_freq","list_freq_96",3)
+		need_save = true
+	end
+
+	---[[
+	if not (self.default_settings:section_exist("list_fallout_freq")) then
+		self.default_settings:w_value("list_fallout_freq","list_freq_48",2)
+		self.default_settings:w_value("list_fallout_freq","list_freq_24",1)
+		self.default_settings:w_value("list_fallout_freq","list_freq_12",0)
+		self.default_settings:w_value("list_fallout_freq","list_freq_96",3)
+		need_save = true
+	end
+	--]]
+
+	if (not self.default_settings:section_exist("list_psi_storm_freq")) then
+		self.default_settings:w_value("list_psi_storm_freq","list_freq_48",2)
+		self.default_settings:w_value("list_psi_storm_freq","list_freq_24",1)
+		self.default_settings:w_value("list_psi_storm_freq","list_freq_12",0)
+		self.default_settings:w_value("list_psi_storm_freq","list_freq_96",3)
+		need_save = true
+	end
+
+	if (need_save) then
+		self.default_settings:save()
+	end
+
+	--self.m_preconditions	= {}
+    self:InitControls()
+    self:InitCallBacks()
+end
+
+function af_options_dialog:__finalize()
+
+end
+
+function af_options_dialog:InitControls()
+	self:SetWndRect				(Frect():set(0,0,1024,768))
+	self:Enable					(true)
+
+	local xml					= CScriptXmlInit()
+	xml:ParseFile				("ui_mm_atmosfear_options.xml")
+
+	xml:InitStatic				("background", self)
+	self.dialog					= xml:InitStatic("main_dialog:dialog", self)
+
+	-- main dialog
+	local btn
+	btn = xml:Init3tButton		("main_dialog:btn_accept", self.dialog)
+	self:Register				(btn, "btn_accept")
+	btn = xml:Init3tButton		("main_dialog:btn_cancel", self.dialog)
+	self:Register				(btn, "btn_cancel")
+	btn = xml:Init3tButton		("main_dialog:btn_weather_options", self.dialog)
+	self:Register				(btn, "btn_weather_options")
+	btn = xml:Init3tButton		("main_dialog:btn_event_options", self.dialog)
+	self:Register				(btn, "btn_event_options")
+
+	self.dlg_event				= af_opt_event()
+	self.dlg_event:InitControls	(0,0, xml, self)
+	self.dlg_event:Show			(false)
+	self.dialog:AttachChild		(self.dlg_event)
+	xml:InitWindow				("tab_size", 0, self.dlg_event)
+
+	self.dlg_weather				= af_opt_weather()
+	self.dlg_weather:InitControls	(0,0, xml, self)
+	self.dlg_weather:Show			(false)
+	self.dialog:AttachChild		(self.dlg_weather)
+	xml:InitWindow				("tab_size", 0, self.dlg_weather)
+
+	self:SetCurrentValues()
+
+end
+
+--######################################################################################################################
+--#									REGISTER OPTIONS
+--######################################################################################################################
+
+function af_options_dialog:OptionsFromIni(combo, section)
+	combo:ClearList()
+	local options = self.default_settings:collect_section(section)
+	local inv_options = {}
+	if options~=nil then
+		for option, value in pairs(options) do
+			inv_options[value+1]=option
+		end
+		--table.sort(inv_options)
+		for value, option in pairs(inv_options) do
+			combo:AddItem(game.translate_string("st_"..option), value-1)
+		end
+	end
+end
+
+function af_options_dialog:RegisterCheck(xml, dialog, name, dialogObj)
+	self["check_"..name] = xml:InitCheck(dialog..":check_"..name, dialogObj)
+	self:Register (self["check_"..name], "check_"..name)
+end
+
+function af_options_dialog:RegisterCombo(xml, dialog, name, ini_section, dialogObj)
+	self["list_"..name] = xml:InitComboBox	(dialog..":list_"..name, dialogObj)
+	self["list_"..name]:ClearList()
+	self["list_"..name]:SetAutoDelete(true)
+	if ini_section == nil then
+		ini_section = name
+	end
+	self:OptionsFromIni(self["list_"..name], "list_"..ini_section)
+	self:Register (self["list_"..name], "list_"..name)
+end
+
+function af_options_dialog:RegisterPeriodCombo(xml, dialog, name, ini_section, dialogObj)
+	self["list_"..name] = xml:InitComboBox	(dialog..":list_period", dialogObj)
+	self["list_"..name]:ClearList()
+	self["list_"..name]:SetAutoDelete(true)
+	if ini_section == nil then
+		ini_section = name
+	end
+	self:OptionsFromIni(self["list_"..name], "list_"..ini_section)
+	self:Register (self["list_"..name], "list_"..name)
+	self["list_"..name]:SetText("list_"..name)
+end
+
+function af_options_dialog:RegisterTrack(xml, dialog, name, dialogObj)
+	local combo = xml:InitTrackBar	(dialog..":"..name, dialogObj)
+	self:Register (combo, name)
+	return combo
+end
+
+
+--######################################################################################################################
+--#								GET/SET FUNCTIONS
+--######################################################################################################################
+
+function af_options_dialog:SetComboValue(option_name,af_option)
+	local combo = self["list_"..option_name]
+	if af_option==nil then
+		af_option=self.default_settings:r_value("atmosfear_option_names","opt_"..option_name)
+	end
+	if af_option and self.default_settings:line_exist("atmosfear_option_names",af_option) then
+		local option = self.default_settings:r_value("atmosfear_option_names",af_option)
+		combo:SetText(game.translate_string(option))
+	else
+		combo:SetText("option not found")
+	end
+end
+
+function af_options_dialog:SetRadioValue(radio_name,af_option)
+	local radio = self["radio_"..radio_name]
+	if af_option==nil then
+		af_option=config:r_value("atmosfear_current_parameters","opt_"..radio_name)
+	end
+	if radio~=nil and af_option~=nil then
+		radio:SetActiveTab(af_option)
+	end
+end
+
+function af_options_dialog:SetLengthRadioValue(radio_name,af_option)
+	local radio = self["radio_"..radio_name]
+	if af_option==nil then
+		af_option=config:r_value("atmosfear_current_parameters","opt_"..radio_name)
+	end
+	if radio~=nil and af_option~=nil then
+		radio:SetActiveTab(af_option)
+	end
+end
+
+function af_options_dialog:SetCheckValue(name,af_option)
+	local checkbox = self["check_"..name]
+	if af_option==nil then
+		af_option=config:r_value("atmosfear_current_parameters","opt_"..name)
+	end
+	if checkbox~=nil and af_option~=nil then
+		if (tonumber(af_option)==1) then
+			checkbox:SetCheck(true)
+		else
+			checkbox:SetCheck(false)
+		end
+	end
+end
+
+function af_options_dialog:GetComboValue(option_name)
+	local selected = self["list_"..option_name]:GetText()
+
+	local parameters = self.default_settings:collect_section("atmosfear_option_names")
+	for option, name in pairs(parameters) do
+		if game.translate_string(name)==selected then
+			return option
+		end
+	end
+end
+
+function af_options_dialog:GetRadioValue(option_name)
+	local selected = self["radio_"..option_name]:GetActiveId()
+	return selected
+end
+
+function af_options_dialog:GetCheckValue(option_name)
+	local selected = self["check_"..option_name]:GetCheck()
+	if selected then
+		return 1
+	else
+		return 0
+	end
+end
+
+function af_options_dialog:SetComboOption(option_name, number)
+	config:w_value("atmosfear_current_parameters","opt_"..option_name,number and tonumber(self:GetComboValue(option_name)) or self:GetComboValue(option_name))
+end
+
+function af_options_dialog:SetRadioOption(option_name, number)
+	config:w_value("atmosfear_current_parameters","opt_"..option_name,number and tonumber(self:GetRadioValue(option_name)) or self:GetRadioValue(option_name))
+end
+
+function af_options_dialog:SetCheckOption(option_name, number)
+	config:w_value("atmosfear_current_parameters","opt_"..option_name,self:GetCheckValue(option_name))
+end
+
+--######################################################################################################################
+--#								SETTING VALUES
+--######################################################################################################################
+
+function af_options_dialog:SetCurrentValues()
+
+	for level,v in pairs(level_weathers.valid_levels) do
+		self:SetComboValue(level.."_period_good", config:r_value("atmosfear_current_parameters","opt_"..level.."_period_good",0,"clear"))
+		self:SetComboValue(level.."_period_bad", config:r_value("atmosfear_current_parameters","opt_"..level.."_period_bad",0,"rainy"))
+		self:SetRadioValue(level.."_period_good_length", config:r_value("atmosfear_current_parameters","opt_"..level.."_period_good_length",0,"6"))
+		self:SetRadioValue(level.."_period_bad_length",	config:r_value("atmosfear_current_parameters","opt_"..level.."_period_bad_length",0,"6"))
+	end
+
+	self:SetCheckValue("enable_blowout",			config:r_value("atmosfear_current_parameters","opt_enable_blowout",0,"1"))
+	self:SetComboValue("blowout_freq",				config:r_value("atmosfear_current_parameters","opt_blowout_freq",0,"48"))
+	self:SetComboValue("blowout_task",				config:r_value("atmosfear_current_parameters","opt_blowout_task",0,"give"))
+	self:SetCheckValue("enable_fallout",			config:r_value("atmosfear_current_parameters","opt_enable_fallout",0,"0"))
+	self:SetComboValue("fallout_freq",				config:r_value("atmosfear_current_parameters","opt_fallout_freq",0,"12"))
+	self:SetComboValue("fallout_task",				config:r_value("atmosfear_current_parameters","opt_fallout_task",0,"give"))
+	self:SetCheckValue("enable_psi_storm",			config:r_value("atmosfear_current_parameters","opt_enable_psi_storm",0,"1"))
+	self:SetComboValue("psi_storm_freq",			config:r_value("atmosfear_current_parameters","opt_psi_storm_freq",0,"24"))
+	self:SetComboValue("psi_storm_task",			config:r_value("atmosfear_current_parameters","opt_psi_storm_task",0,"give"))
+
+	self.dlg_weather:Show		(true)
+end
+
+function af_options_dialog:SetDefaultValues()
+
+	for level,v in pairs(level_weathers.valid_levels) do
+		self:SetComboValue(level.."_period_good", self.default_settings:r_value("atmosfear_default_parameters","opt_"..level.."_period_good",0,"clear"))
+		self:SetComboValue(level.."_period_bad", self.default_settings:r_value("atmosfear_default_parameters","opt_"..level.."_period_bad",0,"rainy"))
+		self:SetRadioValue(level.."_period_good_length", self.default_settings:r_value("atmosfear_default_parameters","opt_"..level.."_period_good_length",0,"6"))
+		self:SetRadioValue(level.."_period_bad_length",	self.default_settings:r_value("atmosfear_default_parameters","opt_"..level.."_period_bad_length",0,"6"))
+	end
+
+	self:SetCheckValue("enable_blowout",			self.default_settings:r_value("atmosfear_default_parameters","opt_enable_blowout",0,"1"))
+	self:SetComboValue("blowout_freq",				self.default_settings:r_value("atmosfear_default_parameters","opt_blowout_freq",0,"48"))
+	self:SetComboValue("blowout_task",				self.default_settings:r_value("atmosfear_default_parameters","opt_blowout_task",0,"give"))
+	self:SetCheckValue("enable_fallout",			self.default_settings:r_value("atmosfear_default_parameters","opt_enable_fallout",0,"0"))
+	self:SetComboValue("fallout_freq",				self.default_settings:r_value("atmosfear_default_parameters","opt_fallout_freq",0,"12"))
+	self:SetComboValue("fallout_task",				self.default_settings:r_value("atmosfear_default_parameters","opt_fallout_task",0,"give"))
+	self:SetCheckValue("enable_psi_storm",			self.default_settings:r_value("atmosfear_default_parameters","opt_enable_psi_storm",0,"1"))
+	self:SetComboValue("psi_storm_freq",			self.default_settings:r_value("atmosfear_default_parameters","opt_psi_storm_freq",0,"24"))
+	self:SetComboValue("psi_storm_task",			self.default_settings:r_value("atmosfear_default_parameters","opt_psi_storm_task",0,"give"))
+end
+
+function af_options_dialog:InitCallBacks()
+	self:AddCallback("btn_accept",							ui_events.BUTTON_CLICKED,	self.OnBtnAccept,			self)
+	self:AddCallback("btn_cancel",							ui_events.BUTTON_CLICKED,	self.OnBtnCancel,			self)
+	self:AddCallback("btn_weather_options",					ui_events.BUTTON_CLICKED,	self.OnBtnWeatherOptions,	self)
+	self:AddCallback("btn_event_options",					ui_events.BUTTON_CLICKED,	self.OnBtnEventOptions,		self)
+end
+
+--######################################################################################################################
+--#								CALLBACK FUNCTIONS
+--######################################################################################################################
+
+function af_options_dialog:OnBtnWeatherOptions()
+	self.dlg_weather:Show		(true)
+	self.dlg_event:Show			(false)
+end
+
+function af_options_dialog:OnBtnEventOptions()
+	self.dlg_weather:Show		(false)
+	self.dlg_event:Show			(true)
+end
+
+function af_options_dialog:OnBtnAccept()
+
+	for level,v in pairs(level_weathers.valid_levels) do
+		self:SetComboOption(level.."_period_good",false)
+		self:SetComboOption(level.."_period_bad",false)
+	end
+
+	if (config:r_value("atmosfear_current_parameters","opt_enable_blowout") and self:GetCheckValue("enable_blowout")==1) or config:r_value("atmosfear_current_parameters","opt_blowout_freq")~=tonumber(self:GetComboValue("blowout_freq")) then
+		self:SetComboOption("blowout_freq",true)
+		if (level.present()) then
+			surge_manager.SurgeManager:new_surge_time(true)
+		end
+	end
+
+	if (config:r_value("atmosfear_current_parameters","opt_enable_psi_storm") == 0 and self:GetCheckValue("enable_psi_storm")==1) or config:r_value("atmosfear_current_parameters","opt_psi_storm_freq")~=tonumber(self:GetComboValue("psi_storm_freq")) then
+		self:SetComboOption("psi_storm_freq",true)
+		if (level.present()) then
+			if (psi_storm_manager) then psi_storm_manager.PsiStormManager:new_psi_storm_time(true) end
+		end
+	end
+
+	self:SetComboOption("fallout_freq",true)
+	self:SetCheckOption("enable_blowout",true)
+	self:SetCheckOption("enable_fallout",false)
+	self:SetCheckOption("enable_psi_storm",true)
+	self:SetComboOption("blowout_task",false)
+	self:SetComboOption("fallout_task",false)
+	self:SetComboOption("psi_storm_task",false)
+
+	self.dlg_weather:Show		(false)
+	self.dlg_event:Show			(false)
+	self.owner:ShowDialog(true)
+	self:HideDialog()
+	self.owner:Show(true)
+
+	config:save()
+
+	if level.present() then
+		level_weathers.get_weather_manager():select_weather(true,true)
+	end
+end
+
+function af_options_dialog:OnBtnCancel()
+	self.dlg_weather:Show		(false)
+	self.dlg_event:Show			(false)
+	self.owner:ShowDialog(true)
+	self:HideDialog()
+	self.owner:Show(true)
+end
+
+function af_options_dialog:OnKeyboard(dik, keyboard_action)
+	local res = CUIScriptWnd.OnKeyboard(self,dik,keyboard_action)
+
+	if res==false then
+
+		local bind = dik_to_bind(dik)
+
+		if keyboard_action == ui_events.WINDOW_KEY_PRESSED then
+			if dik == DIK_keys.DIK_ESCAPE then
+				self.dlg_weather:Show		(false)
+				self.dlg_event:Show			(false)
+				self.owner:ShowDialog(true)
+				self:HideDialog()
+				self.owner:Show(true)
+			end
+			if dik==DIK_keys.DIK_RETURN then
+				self:OnBtnAccept()
+			end
+
+		end
+	end
+
+	return res
+end
+
+function af_options_dialog:Update()
+	CUIScriptWnd.Update(self)
+end
+
+--######################################################################################################################
+--#													af_opt_event													#
+--######################################################################################################################
+
+class "af_opt_event" (CUIWindow)
+
+function af_opt_event:__init() super()
+end
+
+function af_opt_event:__finalize()
+end
+
+function af_opt_event:InitControls(x, y, xml, handler)
+	self:SetWndPos(vector2():set(x,y))
+	self:SetWndSize(vector2():set(624,411))
+	self:SetAutoDelete(true)
+
+	xml:InitStatic				("event_dialog:cap_af_blowout", self)
+	xml:InitStatic				("event_dialog:cap_af_fallout", self)
+	xml:InitStatic				("event_dialog:cap_af_psi_storm", self)
+	xml:InitStatic				("event_dialog:cap_check_enable_blowout", self)
+	xml:InitStatic				("event_dialog:cap_check_enable_fallout", self)
+	xml:InitStatic				("event_dialog:cap_check_enable_psi_storm", self)
+	xml:InitStatic				("event_dialog:cap_blowout_freq", self)
+	xml:InitStatic				("event_dialog:cap_blowout_task", self)
+	xml:InitStatic				("event_dialog:cap_fallout_freq", self)
+	xml:InitStatic				("event_dialog:cap_fallout_task", self)
+	xml:InitStatic				("event_dialog:cap_psi_storm_freq", self)
+	xml:InitStatic				("event_dialog:cap_psi_storm_task", self)
+
+	handler:RegisterCheck(xml, "event_dialog", "enable_blowout", self)
+	handler:RegisterCheck(xml, "event_dialog", "enable_fallout", self)
+	handler:RegisterCheck(xml, "event_dialog", "enable_psi_storm", self)
+
+	handler:RegisterCombo(xml, "event_dialog", "blowout_freq", nil, self)
+	handler:RegisterCombo(xml, "event_dialog", "fallout_freq", nil, self)
+	handler:RegisterCombo(xml, "event_dialog", "psi_storm_freq", nil, self)
+
+	handler:RegisterCombo(xml, "event_dialog", "blowout_task", nil, self)
+	handler:RegisterCombo(xml, "event_dialog", "psi_storm_task", nil, self)
+	handler:RegisterCombo(xml, "event_dialog", "fallout_task", nil, self)
+end
+
+--######################################################################################################################
+--#													af_opt_weather													#
+--######################################################################################################################
+
+class "af_opt_weather" (CUIWindow)
+
+function af_opt_weather:__init() super()
+end
+
+function af_opt_weather:__finalize()
+end
+
+
+function af_opt_weather:InitControls(x, y, xml, handler)
+
+	local step=77
+	local _st
+	local _el
+	self:SetWndPos(vector2():set(x,y))
+	self:SetWndSize(vector2():set(624,411))
+	self:SetAutoDelete(true)
+
+	self.scroll_v = xml:InitScrollView("weather_dialog:scroll_v", self)
+
+	local k = 0
+	for level_name,v in pairs(level_weathers.valid_levels) do
+		k = k + 1
+		_st = xml:InitStatic("weather_dialog:templ_item", nil)
+		_el=xml:InitStatic("weather_dialog:cap_name", _st)
+		_el:SetWndPos(vector2():set(0,0))
+		_el:TextControl():SetTextST(level_name)
+		_el:TextControl():SetTextColor(GetARGB(255, 95, 92, 79))
+		_el:TextControl():SetFont(GetFontLetterica16Russian())
+
+
+		handler:RegisterPeriodCombo(xml, "weather_dialog", level_name.."_period_good", "periods", _st)
+		handler["list_"..level_name.."_period_good"]:SetWndPos(vector2():set(10,21))
+		handler:RegisterPeriodCombo(xml, "weather_dialog", level_name.."_period_bad", "periods", _st)
+		handler["list_"..level_name.."_period_bad"]:SetWndPos(vector2():set(140,21))
+
+		self.scroll_v:AddWindow(_st, true)
+	end
+
+end

@@ -823,7 +823,7 @@ void CLevel::script_register(lua_State* luaState)
         def("patrol_path_exists", patrol_path_exists),
         def("vertex_position", vertex_position),
         def("valid_vertex_id", valid_vertex_id),
-        def("name", +[]() { return Level().name().c_str(); }),
+        def("name", +[]() { return g_pGameLevel ? Level().name().c_str() : ""; }),
         def("prefetch_sound", prefetch_sound),
 
         def("client_spawn_manager", get_client_spawn_manager),
