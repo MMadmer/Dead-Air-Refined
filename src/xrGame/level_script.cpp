@@ -140,24 +140,30 @@ ESingleGameDifficulty get_game_difficulty() { return g_SingleGameDifficulty; }
 u32 get_time_days()
 {
     u32 year = 0, month = 0, day = 0, hours = 0, mins = 0, secs = 0, milisecs = 0;
-    split_time((g_pGameLevel && Level().game) ? Level().GetGameTime() : ai().alife().time_manager().game_time(), year,
-        month, day, hours, mins, secs, milisecs);
+    const auto gameTime =
+        (g_pGameLevel && Level().game) ? Level().GetGameTime() :
+        ai().get_alife()              ? ai().alife().time_manager().game_time() : ALife::_TIME_ID{};
+    split_time(gameTime, year, month, day, hours, mins, secs, milisecs);
     return day;
 }
 
 u32 get_time_hours()
 {
     u32 year = 0, month = 0, day = 0, hours = 0, mins = 0, secs = 0, milisecs = 0;
-    split_time((g_pGameLevel && Level().game) ? Level().GetGameTime() : ai().alife().time_manager().game_time(), year,
-        month, day, hours, mins, secs, milisecs);
+    const auto gameTime =
+        (g_pGameLevel && Level().game) ? Level().GetGameTime() :
+        ai().get_alife()              ? ai().alife().time_manager().game_time() : ALife::_TIME_ID{};
+    split_time(gameTime, year, month, day, hours, mins, secs, milisecs);
     return hours;
 }
 
 u32 get_time_minutes()
 {
     u32 year = 0, month = 0, day = 0, hours = 0, mins = 0, secs = 0, milisecs = 0;
-    split_time((g_pGameLevel && Level().game) ? Level().GetGameTime() : ai().alife().time_manager().game_time(), year,
-        month, day, hours, mins, secs, milisecs);
+    const auto gameTime =
+        (g_pGameLevel && Level().game) ? Level().GetGameTime() :
+        ai().get_alife()              ? ai().alife().time_manager().game_time() : ALife::_TIME_ID{};
+    split_time(gameTime, year, month, day, hours, mins, secs, milisecs);
     return mins;
 }
 

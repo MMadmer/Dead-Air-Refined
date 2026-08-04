@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "1.1.0",
+    [string]$PortVersion = "1.1.1",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
