@@ -7,6 +7,10 @@ Provides:
 ---------
 
 * s = marshal.encode(v[, constants])    - serializes a value to a byte stream
+* state = marshal.encode_begin(v[, constants]) - begins resumable serialization
+* done = marshal.encode_step(state[, operations]) - advances resumable serialization
+* size = marshal.encode_size(state) - returns the completed byte-stream size
+* done, chunk = marshal.encode_read(state[, bytes]) - reads the completed byte stream in chunks
 * t = marshal.decode(s[, constants])    - deserializes a byte stream to a value
 * t = marshal.clone(orig[, constants])  - deep clone a value (deep for tables and functions)
 
