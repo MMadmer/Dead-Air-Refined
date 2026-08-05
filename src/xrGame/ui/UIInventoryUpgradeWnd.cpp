@@ -35,6 +35,11 @@
 
 const LPCSTR g_inventory_upgrade_xml = "inventory_upgrade.xml";
 
+namespace
+{
+constexpr u32 weaponConditionMagazineRemoved = 1u << 26;
+}
+
 CUIInventoryUpgradeWnd::Scheme::Scheme() {}
 CUIInventoryUpgradeWnd::Scheme::~Scheme() { delete_data(cells); }
 // =============================================================================================
@@ -217,7 +222,9 @@ bool CUIInventoryUpgradeWnd::install_item(CInventoryItem& inv_item, bool can_upg
         m_back->DetachAll();
     const bool allow_repair =
         pSettings->read_if_exists<bool>(inv_item.m_section_id.c_str(), "allow_repair", true);
-    m_btn_repair->Enable(inv_item.GetCondition() < 0.99f && allow_repair);
+    CWeapon* weapon = smart_cast<CWeapon*>(&inv_item);
+    const u32 repairableCondition = weapon ? weapon->GetConditionType() & ~weaponConditionMagazineRemoved : 0;
+    m_btn_repair->Enable((inv_item.GetCondition() < 0.99f || repairableCondition != 0) && allow_repair);
 
     if (!can_upgrade)
     {

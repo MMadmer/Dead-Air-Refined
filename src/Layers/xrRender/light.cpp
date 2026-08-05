@@ -62,12 +62,13 @@ light::~light()
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
 void light::set_texture(LPCSTR name)
 {
-    if ((nullptr == name) || (0 == name[0]))
+    if (!name || !name[0])
     {
         // default shaders
         s_spot.destroy();
         s_point.destroy();
         s_volumetric.destroy();
+        s_volumetric_unshadowed.destroy();
         return;
     }
 
@@ -82,6 +83,7 @@ void light::set_texture(LPCSTR name)
     s_volumetric.create("accum_volumetric", name);
 #else //    (RENDER!=R_R3) && (RENDER!=R_R4) && (RENDER!=R_GL)
     s_volumetric.create("accum_volumetric_nomsaa", name);
+    s_volumetric_unshadowed.create("accum_volumetric_unshadowed", name);
     if (RImplementation.o.msaa)
     {
         u32 bound = 1;
@@ -324,14 +326,21 @@ Fvector cmDir [6] = { { 1.f, 0.f, 0.f }, {-1.f, 0.f, 0.f }, { 0.f, 1.f,  0.f }, 
 
 void light::Export(light_Package& package)
 {
-    if (flags.bShadow)
+    const bool shadowEnabled = flags.bShadow && !RImplementation.o.noshadows && ps_r_lighting_quality > 0;
+    const bool volumetricEnabled = flags.bVolumetric && RImplementation.o.advancedpp &&
+        ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
+    if (shadowEnabled || volumetricEnabled)
     {
         switch (flags.type)
         {
         case IRender_Light::POINT:
         {
-            // tough: create/update 6 shadowed lights
-            if (nullptr == omnipart[0])
+            // Render unshadowed point lighting once; the six cube faces are volume-only.
+            if (!shadowEnabled)
+                package.v_point.push_back(this);
+
+            // Create or update the six cube faces.
+            if (!omnipart[0])
                 for (auto& p_light : omnipart)
                     p_light = xr_new<light>();
             for (int f = 0; f < 6; f++)
@@ -340,7 +349,7 @@ void light::Export(light_Package& package)
                 Fvector R;
                 R.crossproduct(cmNorm[f], cmDir[f]);
                 L->set_type(IRender_Light::OMNIPART);
-                L->set_shadow(true);
+                L->set_shadow(shadowEnabled);
                 L->set_position(position);
                 L->set_rotation(cmDir[f], R);
                 L->set_cone(PI_DIV_2);
@@ -350,6 +359,8 @@ void light::Export(light_Package& package)
                 L->spatial.sector_id = spatial.sector_id; //. dangerous?
                 L->s_spot = s_spot;
                 L->s_point = s_point;
+                L->s_volumetric = s_volumetric;
+                L->s_volumetric_unshadowed = s_volumetric_unshadowed;
 
 // Holger - do we need to export msaa stuff as well ?
 #if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
@@ -375,11 +386,13 @@ void light::Export(light_Package& package)
                 L->set_volumetric_intensity(m_volumetric_intensity);
                 L->set_volumetric_distance(m_volumetric_distance);
 
-                package.v_shadowed.push_back(L);
+                (shadowEnabled ? package.v_shadowed : package.v_spot).push_back(L);
             }
         }
         break;
-        case IRender_Light::SPOT: package.v_shadowed.push_back(this); break;
+        case IRender_Light::SPOT:
+            (shadowEnabled ? package.v_shadowed : package.v_spot).push_back(this);
+            break;
         }
     }
     else
@@ -408,6 +421,10 @@ float light::get_LOD() const
 {
     if (!flags.bShadow)
         return 1;
+#if RENDER != R_R1
+    if (RImplementation.o.noshadows || ps_r_lighting_quality == 0)
+        return 1;
+#endif
     const float distSQ = Device.vCameraPosition.distance_to_sqr(spatial.sphere.P) + EPS;
     const float ssa = ps_r2_slight_fade * spatial.sphere.R / distSQ;
     const float lod = _sqrt(clampr((ssa - r_ssaGLOD_end) / (r_ssaGLOD_start - r_ssaGLOD_end), 0.f, 1.f));

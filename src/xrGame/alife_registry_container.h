@@ -23,12 +23,22 @@ private:
     typedef registry_type_list TYPE_LIST;
 
 public:
+    struct SaveState
+    {
+        u32 phase{};
+        bool initialized{};
+        bool completed{};
+    };
+
     template <typename T>
     IC T& operator()(const T*);
     template <typename T>
     IC const T& operator()(const T*) const;
     virtual void load(IReader& file_stream);
     virtual void save(IWriter& memory_stream);
+    void begin_save(IWriter& memory_stream, SaveState& state);
+    [[nodiscard]] bool continue_save(
+        IWriter& memory_stream, SaveState& state, float budgetMilliseconds);
 };
 
 #include "alife_registry_container_inline.h"

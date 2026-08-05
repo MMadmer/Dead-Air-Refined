@@ -44,6 +44,8 @@ manager::manager()
 
 manager::~manager()
 {
+    Invalidate();
+
     xr_delete(m_thunderbolts);
     xr_delete(m_ambients);
     xr_delete(m_sound_channels);
@@ -188,6 +190,7 @@ void manager::create_mixer()
 
 void manager::unload()
 {
+    Invalidate();
     WeatherCycles.clear();
     WeatherFXs.clear();
     Modifiers.clear();

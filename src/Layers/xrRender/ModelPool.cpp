@@ -110,11 +110,13 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register)
         xr_strcpy(fn, N);
     }
 
-// Actual loading
+    static const bool extraLog = strstr(Core.Params, "-extralog");
 #ifdef DEBUG
-    if (bLogging)
+    if (bLogging || extraLog)
+#else
+    if (extraLog)
+#endif
         Msg("- Uncached model loading: %s", fn);
-#endif // DEBUG
 
     IReader* data = FS.r_open(fn);
     ogf_header H;

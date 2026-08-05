@@ -35,6 +35,7 @@ public:
     UIBoosterInfoItem();
 
     void Init(CUIXml& xml, LPCSTR section);
+    void SetDisplayFormat(float magnitude, bool showSign, pcstr unit, pcstr positiveTexture, pcstr negativeTexture);
     void SetCaption(LPCSTR name);
     void SetValue(float value);
 

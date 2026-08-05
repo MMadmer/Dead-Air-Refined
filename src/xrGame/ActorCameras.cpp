@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "Actor.h"
+#include "ActorCondition.h"
 #include "xrEngine/CameraBase.h"
 #ifdef DEBUG
 #include "PHDebug.h"
@@ -290,7 +291,8 @@ void CActor::cam_Update(float dt, float fFOV)
     {
         CWeapon* weapon = smart_cast<CWeapon*>(inventory().ActiveItem());
         const float hud_fov = cam_active == eacFirstEye && weapon ? weapon->GetHudFov() : psHUD_FOV_def;
-        psHUD_FOV = hud_fov * 100.0f / Device.fFOV;
+        const float healthFactor = 0.7f + 0.3f * clampr(conditions().GetHealth(), 0.0f, 1.0f);
+        psHUD_FOV = hud_fov * 100.0f / (Device.fFOV * healthFactor);
     }
 
     if ((mstate_real & mcClimb) && (cam_active != eacFreeLook))

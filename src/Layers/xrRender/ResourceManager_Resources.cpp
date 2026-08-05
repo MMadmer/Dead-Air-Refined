@@ -4,6 +4,14 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if defined(USE_DX11)
+namespace texture_residency
+{
+void mark_requested(const CTexture* texture);
+void forget(const CTexture* texture);
+}
+#endif
+
 void fix_texture_name(pstr fn);
 
 void simplify_texture(string_path& fn)
@@ -231,9 +239,10 @@ void CResourceManager::DBG_VerifyGeoms()
 CTexture* CResourceManager::_CreateTexture(LPCSTR _Name)
 {
     // DBG_VerifyTextures	();
-    if (0 == xr_strcmp(_Name, "null"))
+    if (!_Name || !_Name[0])
         return nullptr;
-    R_ASSERT(_Name && _Name[0]);
+    if (!xr_strcmp(_Name, "null"))
+        return nullptr;
     string_path Name;
     xr_strcpy(Name, _Name); //. andy if (strext(Name)) *strext(Name)=0;
     fix_texture_name(Name);
@@ -246,11 +255,19 @@ CTexture* CResourceManager::_CreateTexture(LPCSTR _Name)
     pstr N = pstr(Name);
     auto I = m_textures.find(N);
     if (I != m_textures.end())
+    {
+#if defined(USE_DX11)
+        texture_residency::mark_requested(I->second);
+#endif
         return I->second;
+    }
 
     CTexture* T = xr_new<CTexture>();
     T->dwFlags |= xr_resource_flagged::RF_REGISTERED;
     m_textures.emplace(T->set_name(Name), T);
+#if defined(USE_DX11)
+    texture_residency::mark_requested(T);
+#endif
     T->Preload();
     if (Device.b_is_Ready && !bDeferredLoad)
         T->Load();
@@ -263,6 +280,9 @@ void CResourceManager::_DeleteTexture(const CTexture* T)
 
     if (0 == (T->dwFlags & xr_resource_flagged::RF_REGISTERED))
         return;
+#if defined(USE_DX11)
+    texture_residency::forget(T);
+#endif
     pstr N = pstr(T->cName.c_str());
     map_Texture::iterator I = m_textures.find(N);
     if (I != m_textures.end())

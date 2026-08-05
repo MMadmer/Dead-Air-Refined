@@ -13,6 +13,19 @@ ENGINE_API Fvector2 g_current_font_scale = {1.0f, 1.0f};
 #include "Include/xrRender/RenderFactory.h"
 #include "Include/xrRender/FontRender.h"
 
+namespace
+{
+// Keep the conversion buffers off the render-thread stack without per-call allocations.
+struct FontWideScratch
+{
+    xr_wide_char text[MAX_MB_CHARS];
+    xr_wide_char positions[MAX_MB_CHARS];
+    xr_wide_char binding[MAX_MB_CHARS];
+};
+
+thread_local FontWideScratch fontWideScratch;
+}
+
 CGameFont::CGameFont(pcstr section, u8 flags)
 {
     pFontRender = GEnv.RenderFactory->CreateFontRender();
@@ -231,7 +244,8 @@ u16 CGameFont::GetCutLengthPos(float fTargetWidth, pcstr pszText)
 {
     VERIFY(pszText);
 
-    xr_wide_char wsStr[MAX_MB_CHARS], wsPos[MAX_MB_CHARS];
+    auto& wsStr = fontWideScratch.text;
+    auto& wsPos = fontWideScratch.positions;
     float fCurWidth = 0.0f, fDelta = 0.0f;
 
     u16 len = mbhMulti2Wide(wsStr, wsPos, MAX_MB_CHARS, pszText);
@@ -257,7 +271,8 @@ u16 CGameFont::SplitByWidth(u16* puBuffer, u16 uBufferSize, float fTargetWidth, 
 {
     VERIFY(puBuffer && uBufferSize && pszText);
 
-    xr_wide_char wsStr[MAX_MB_CHARS], wsPos[MAX_MB_CHARS];
+    auto& wsStr = fontWideScratch.text;
+    auto& wsPos = fontWideScratch.positions;
     float fCurWidth = 0.0f, fDelta = 0.0f;
     u16 nLines = 0;
 
@@ -358,8 +373,7 @@ float CGameFont::SizeOf_(pcstr s)
 
     if (IsMultibyte())
     {
-        xr_wide_char wsStr[MAX_MB_CHARS];
-
+        auto& wsStr = fontWideScratch.text;
         mbhMulti2Wide(wsStr, NULL, MAX_MB_CHARS, s);
 
         return SizeOf_(wsStr);
@@ -413,7 +427,7 @@ float CGameFont::SizeOf_(const xr_wide_char* wsStr)
 
                 cpcstr binding = GetActionBinding(actionId);
 
-                xr_wide_char wideBinding[MAX_MB_CHARS];
+                auto& wideBinding = fontWideScratch.binding;
                 const u16 bindingLen = mbhMulti2Wide(wideBinding, nullptr, MAX_MB_CHARS, binding);
 
                 for (u16 i = 1; i <= bindingLen; ++i)

@@ -15,6 +15,8 @@
 #include "xrCommon/math_funcs.h"
 #include "xrCommon/xr_stack.h"
 
+#include <cstring>
+
 #define CFS_CompressMark (1ul << 31ul)
 #define CFS_HeaderChunkID (666)
 
@@ -127,6 +129,24 @@ class XRCORE_API CMemoryWriter final : public IWriter
     size_t position;
     size_t mem_size;
     size_t file_size;
+
+    friend ICF void memory_writer_write_packet(
+        CMemoryWriter& writer, u16 size, const void* packetData)
+    {
+        const size_t recordSize = sizeof(size) + size;
+        if (writer.position > writer.mem_size || recordSize > writer.mem_size - writer.position)
+        {
+            writer.w(&size, sizeof(size));
+            writer.w(packetData, size);
+            return;
+        }
+
+        std::memcpy(writer.data + writer.position, &size, sizeof(size));
+        std::memcpy(writer.data + writer.position + sizeof(size), packetData, size);
+        writer.position += recordSize;
+        if (writer.position > writer.file_size)
+            writer.file_size = writer.position;
+    }
 
 public:
     CMemoryWriter()

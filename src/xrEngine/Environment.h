@@ -8,11 +8,21 @@
 #include "xrCommon/xr_map.h"
 #include "xrSound/Sound.h"
 #include "editor_base.h"
+#include "EnvironmentWeatherState.h"
 
 // refs
 class ENGINE_API IRender_Visual;
 class ENGINE_API CInifile;
 class ENGINE_API CEnvironment;
+class ENGINE_API CEnvDescriptor;
+
+namespace environment_detail
+{
+void acquire_resources(CEnvironment& environment, CEnvDescriptor* first, CEnvDescriptor* second);
+void commit_resources(CEnvironment& environment, CEnvDescriptor* first, CEnvDescriptor* second);
+void restore_resources(CEnvironment& environment);
+void release_resources(CEnvironment& environment);
+}
 
 // refs - effects
 class ENGINE_API CEnvironment;
@@ -194,6 +204,10 @@ public:
     CEnvAmbient* env_ambient;
 
     CEnvDescriptor(shared_str const& identifier);
+    CEnvDescriptor(const CEnvDescriptor&) = default;
+    CEnvDescriptor(CEnvDescriptor&&);
+    CEnvDescriptor& operator=(const CEnvDescriptor&) = default;
+    CEnvDescriptor& operator=(CEnvDescriptor&&);
     ~CEnvDescriptor();
 
     void load(CEnvironment& environment, const CInifile& config, pcstr section = nullptr);
@@ -229,8 +243,6 @@ public:
 
     void ed_show_params(const CEnvironment& env); // ImGui editor
 };
-
-ENGINE_API float GetCurrentSunReflection();
 
 class ENGINE_API CEnvironment : public xray::editor::ide_tool
 {
@@ -312,6 +324,8 @@ public:
     float fTimeFactor;
 
     void SelectEnvs(float gt);
+    void SetCurrentEnvironmentPair(CEnvDescriptor* first, CEnvDescriptor* second);
+    void RefreshCurrentEnvironmentResources();
 
     void UpdateAmbient();
     virtual CEnvAmbient* AppendEnvAmb(const shared_str& sect, CInifile const* pIni = nullptr);
@@ -347,6 +361,10 @@ public:
     void SetWeather(shared_str name, bool forced = false);
     shared_str GetWeather() { return CurrentWeatherName; }
     float GetRainVolume();
+    float GetWetness() const;
+    float GetSnowFactor() const;
+    float GetSeason() const;
+    void SetSeason(float factor);
     void ChangeGameTime(float game_time);
     void SetGameTime(float game_time, float time_factor);
 

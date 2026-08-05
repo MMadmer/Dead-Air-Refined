@@ -212,6 +212,7 @@ public:
         }
     }
     virtual const xr_token* GetToken() noexcept { return tokens; }
+    [[nodiscard]] u32 GetValue() const noexcept { return *value; }
     virtual void fill_tips(vecTips& tips, u32 /*mode*/)
     {
         TStatus str;

@@ -687,7 +687,107 @@ void redact_minidump_module_debug_paths(std::byte* base, size_t size, const MINI
     redact_minidump_ascii_path(base, size, module.MiscRecord, offsetof(IMAGE_DEBUG_MISC, Data));
 }
 
-bool redact_minidump_paths(pcstr path)
+bool erase_minidump_location(
+    std::byte* base, size_t size, MINIDUMP_LOCATION_DESCRIPTOR& location)
+{
+    if (!location.DataSize)
+    {
+        location.Rva = 0;
+        return true;
+    }
+    if (!location.Rva || location.Rva > size || location.DataSize > size - location.Rva)
+        return false;
+
+    memset(base + location.Rva, 0, location.DataSize);
+    location = {};
+    return true;
+}
+
+template <typename ThreadList, typename Thread>
+bool erase_minidump_thread_stacks(
+    std::byte* base, size_t size, const MINIDUMP_DIRECTORY& directory)
+{
+    auto* list = rva_pointer<ThreadList>(base, size, directory.Location.Rva);
+    if (!list || directory.Location.Rva > size ||
+        directory.Location.DataSize < offsetof(ThreadList, Threads))
+    {
+        return false;
+    }
+
+    const size_t availableEntries =
+        (directory.Location.DataSize - offsetof(ThreadList, Threads)) / sizeof(Thread);
+    if (list->NumberOfThreads > availableEntries)
+        return false;
+
+    for (ULONG32 index = 0; index != list->NumberOfThreads; ++index)
+    {
+        Thread& thread = list->Threads[index];
+        if (!erase_minidump_location(base, size, thread.Stack.Memory))
+            return false;
+        thread.Stack.StartOfMemoryRange = 0;
+    }
+    return true;
+}
+
+bool erase_minidump_memory_list(
+    std::byte* base, size_t size, const MINIDUMP_DIRECTORY& directory)
+{
+    auto* list = rva_pointer<MINIDUMP_MEMORY_LIST>(base, size, directory.Location.Rva);
+    if (!list || directory.Location.Rva > size ||
+        directory.Location.DataSize < offsetof(MINIDUMP_MEMORY_LIST, MemoryRanges))
+    {
+        return false;
+    }
+
+    const size_t availableEntries =
+        (directory.Location.DataSize - offsetof(MINIDUMP_MEMORY_LIST, MemoryRanges)) /
+        sizeof(MINIDUMP_MEMORY_DESCRIPTOR);
+    if (list->NumberOfMemoryRanges > availableEntries)
+        return false;
+
+    for (ULONG32 index = 0; index != list->NumberOfMemoryRanges; ++index)
+    {
+        MINIDUMP_MEMORY_DESCRIPTOR& range = list->MemoryRanges[index];
+        if (!erase_minidump_location(base, size, range.Memory))
+            return false;
+        range.StartOfMemoryRange = 0;
+    }
+    list->NumberOfMemoryRanges = 0;
+    return true;
+}
+
+bool erase_minidump_memory64_list(
+    std::byte* base, size_t size, const MINIDUMP_DIRECTORY& directory)
+{
+    auto* list = rva_pointer<MINIDUMP_MEMORY64_LIST>(base, size, directory.Location.Rva);
+    if (!list || directory.Location.Rva > size ||
+        directory.Location.DataSize < offsetof(MINIDUMP_MEMORY64_LIST, MemoryRanges))
+    {
+        return false;
+    }
+
+    const size_t availableEntries =
+        (directory.Location.DataSize - offsetof(MINIDUMP_MEMORY64_LIST, MemoryRanges)) /
+        sizeof(MINIDUMP_MEMORY_DESCRIPTOR64);
+    if (list->NumberOfMemoryRanges > availableEntries || list->BaseRva > size)
+        return false;
+
+    u64 payloadRva = list->BaseRva;
+    for (ULONG64 index = 0; index != list->NumberOfMemoryRanges; ++index)
+    {
+        MINIDUMP_MEMORY_DESCRIPTOR64& range = list->MemoryRanges[index];
+        if (range.DataSize > size - payloadRva)
+            return false;
+        memset(base + static_cast<size_t>(payloadRva), 0, static_cast<size_t>(range.DataSize));
+        payloadRva += range.DataSize;
+        range = {};
+    }
+    list->NumberOfMemoryRanges = 0;
+    list->BaseRva = 0;
+    return true;
+}
+
+bool sanitize_minidump(pcstr path)
 {
     HANDLE file = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (file == INVALID_HANDLE_VALUE)
@@ -727,7 +827,17 @@ bool redact_minidump_paths(pcstr path)
         for (ULONG32 index = 0; valid && index != header->NumberOfStreams; ++index)
         {
             const MINIDUMP_DIRECTORY& directory = directories[index];
-            if (directory.StreamType == ModuleListStream)
+            if (directory.StreamType == ThreadListStream)
+            {
+                valid = erase_minidump_thread_stacks<MINIDUMP_THREAD_LIST, MINIDUMP_THREAD>(
+                    base, size, directory);
+            }
+            else if (directory.StreamType == ThreadExListStream)
+            {
+                valid = erase_minidump_thread_stacks<MINIDUMP_THREAD_EX_LIST, MINIDUMP_THREAD_EX>(
+                    base, size, directory);
+            }
+            else if (directory.StreamType == ModuleListStream)
             {
                 auto* list = rva_pointer<MINIDUMP_MODULE_LIST>(base, size, directory.Location.Rva);
                 if (!list || directory.Location.Rva > size)
@@ -763,6 +873,14 @@ bool redact_minidump_paths(pcstr path)
                         entries + static_cast<size_t>(module) * list->SizeOfEntry);
                     redact_minidump_string(base, size, entry->ModuleNameRva);
                 }
+            }
+            else if (directory.StreamType == MemoryListStream)
+            {
+                valid = erase_minidump_memory_list(base, size, directory);
+            }
+            else if (directory.StreamType == Memory64ListStream)
+            {
+                valid = erase_minidump_memory64_list(base, size, directory);
             }
         }
     }
@@ -939,7 +1057,7 @@ std::vector<SaveAttachment> open_save_attachments(pcstr mainPath)
         return attachments;
 
     std::filesystem::path source = mainPath;
-    const std::array extensions{".scop", ".scoc"};
+    const std::array extensions{".scop", ".scoc", ".scov"};
     for (const pcstr extension : extensions)
     {
         std::filesystem::path path = source;
@@ -1211,7 +1329,7 @@ private:
         xr_string lower = line;
         std::ranges::transform(lower, lower.begin(),
             [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
-        constexpr std::array suffixes{".scop", ".scoc", ".sav", ".save"};
+        constexpr std::array suffixes{".scop", ".scoc", ".scov", ".sav", ".save"};
         for (const std::string_view suffix : suffixes)
         {
             size_t found = lower.find(suffix);
@@ -2106,7 +2224,7 @@ bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
     make_report_names(kind, reportId, finalPath, dumpPath, zipPath);
 
     bool result = write_minidump(dumpPath.c_str(), exceptionPointers);
-    result = result && redact_minidump_paths(dumpPath.c_str());
+    result = result && sanitize_minidump(dumpPath.c_str());
 
     if (result)
     {

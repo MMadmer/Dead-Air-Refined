@@ -29,6 +29,7 @@ protected:
     bool m_shot_end;
     bool m_first_shot;
     //	float			m_first_shot_pos;
+    float m_recoil_coeff{1.f};
 
     bool m_actived;
     bool m_single_shot;
@@ -75,7 +76,11 @@ public:
     virtual ~CCameraShotEffector();
 
     virtual bool ProcessCam(SCamEffectorInfo& info);
-    virtual void SetActor(CActor* pActor) { m_pActor = pActor; };
+    virtual void SetActor(CActor* actor)
+    {
+        m_pActor = actor;
+        m_recoil_coeff = actor ? actor->m_fRecoilCoeff : 1.f;
+    }
     virtual CCameraShotEffector* cast_effector_shot() { return this; }
     u16 m_WeaponID;
 };

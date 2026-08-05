@@ -131,7 +131,8 @@ void CMincer::AffectPullAlife(CEntityAlive* EA, const Fvector& throw_in_dir, flo
     float power = Power(dist, Radius());
     // Fvector dir;
     // dir.random_dir(throw_in_dir,2.f*M_PI);
-    if (!smart_cast<CActor*>(EA))
+    CActor* actor = smart_cast<CActor*>(EA);
+    if (!actor || actor->GetfHealth() <= 0.10f)
     {
         Fvector pos_in_bone_space;
         pos_in_bone_space.set(0, 0, 0);

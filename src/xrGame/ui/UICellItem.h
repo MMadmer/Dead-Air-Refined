@@ -89,6 +89,7 @@ public:
     bool m_select_equipped{};
     bool m_cur_mark;
     bool m_has_upgrade;
+    u8 m_select_mode{};
 };
 
 class CUIDragItem final : public CUIWindow, public pureRender, public pureFrame

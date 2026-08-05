@@ -2,6 +2,7 @@
 
 #include "control_combase.h"
 #include "ai_monster_defs.h"
+#include "xrCDB/xr_collide_defs.h"
 
 struct SEventVelocityBounce : public ControlCom::IEventData
 {
@@ -226,4 +227,7 @@ public:
     void clear_override_animation();
     EMotionAnim get_override_animation() const { return m_override_animation; }
     bool has_override_animation() const { return get_override_animation() != eAnimUndefined; }
+
+private:
+    collide::rq_results m_hit_query_results;
 };

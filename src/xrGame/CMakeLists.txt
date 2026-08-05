@@ -1011,6 +1011,13 @@ target_sources(xrGame PRIVATE
     RustyHairArtifact.h
     safe_map_iterator.h
     safe_map_iterator_inline.h
+    save_extension_chunk_ids.h
+    save_extension_container.cpp
+    save_extension_container.h
+    save_extension_gameplay.cpp
+    save_extension_gameplay.h
+    save_transaction_marker.cpp
+    save_transaction_marker.h
     saved_game_wrapper.cpp
     saved_game_wrapper.h
     saved_game_wrapper_inline.h

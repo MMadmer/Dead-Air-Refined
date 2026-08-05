@@ -36,7 +36,7 @@ CScriptThread::CScriptThread(CScriptEngine* scriptEngine, LPCSTR caNamespaceName
     lua_State* engineLua = scriptEngine->lua();
     try
     {
-        string256 S;
+        string4096 S;
         if (!do_string)
         {
             m_script_name = caNamespaceName;

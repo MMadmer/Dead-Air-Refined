@@ -16,9 +16,22 @@
 #include "Level.h"
 #include "Level_Bullet_Manager.h"
 #include "game_cl_single.h"
+#include "xrCommon/xr_hash_map.h"
 
 #define HIT_POWER_EPSILON 0.05f
 #define WALLMARK_SIZE 0.04f
+
+namespace
+{
+xr_flat_hash_map<const CShootingObject*, float> actorShotTimes;
+
+float shot_interval(const float roundsPerMinute, LPCSTR section, LPCSTR key)
+{
+    R_ASSERT3(std::isfinite(roundsPerMinute) && roundsPerMinute >= 0.f,
+        "Invalid shooting rate", make_string("%s[%s]=%g", key, section, roundsPerMinute).c_str());
+    return roundsPerMinute > 0.f ? 60.f / roundsPerMinute : flt_max;
+}
+}
 
 CShootingObject::CShootingObject()
 {
@@ -27,7 +40,7 @@ CShootingObject::CShootingObject()
 
     reinit();
 }
-CShootingObject::~CShootingObject(void) {}
+CShootingObject::~CShootingObject(void) { actorShotTimes.erase(this); }
 void CShootingObject::reinit() { m_pFlameParticles = NULL; }
 void CShootingObject::Load(LPCSTR section)
 {
@@ -39,14 +52,16 @@ void CShootingObject::Load(LPCSTR section)
         m_bLightShotEnabled = true;
 
     //время затрачиваемое на выстрел
-    fOneShotTime = pSettings->r_float(section, "rpm");
+    const float roundsPerMinute = pSettings->r_float(section, "rpm");
 
     //Alundaio: Two-shot burst rpm; used for Abakan/AN-94
-    fModeShotTime = READ_IF_EXISTS(pSettings, r_float, section, "rpm_mode_2", fOneShotTime);
+    const float modeRoundsPerMinute = READ_IF_EXISTS(pSettings, r_float, section, "rpm_mode_2", roundsPerMinute);
+    const float actorRoundsPerMinute = READ_IF_EXISTS(pSettings, r_float, section, "rpm_actor", roundsPerMinute);
 
     // Dead Air uses zero RPM for non-firing weapon-derived items such as binoculars.
-    fOneShotTime = 60.f / fOneShotTime;
-    fModeShotTime = 60.f / fModeShotTime;
+    fOneShotTime = shot_interval(roundsPerMinute, section, "rpm");
+    fModeShotTime = shot_interval(modeRoundsPerMinute, section, "rpm_mode_2");
+    SetActorShotTime(shot_interval(actorRoundsPerMinute, section, "rpm_actor"));
 
     //Cycle down RPM after first 2 shots; used for Abakan/AN-94
     if (pSettings->line_exist(section, "cycle_down"))
@@ -61,6 +76,21 @@ void CShootingObject::Load(LPCSTR section)
     LoadFlameParticles(section, "");
 
     m_air_resistance_factor = READ_IF_EXISTS(pSettings, r_float, section, "air_resistance_factor", 1.f);
+}
+
+float CShootingObject::GetActorShotTime() const
+{
+    const auto it = actorShotTimes.find(this);
+    return it != actorShotTimes.end() ? it->second : fOneShotTime;
+}
+
+void CShootingObject::SetActorShotTime(const float shotTime)
+{
+    R_ASSERT2(std::isfinite(shotTime) && shotTime > 0.f, "Actor shot interval must be positive and finite");
+    if (fsimilar(shotTime, fOneShotTime))
+        actorShotTimes.erase(this);
+    else
+        actorShotTimes.insert_or_assign(this, shotTime);
 }
 
 void CShootingObject::Light_Create()

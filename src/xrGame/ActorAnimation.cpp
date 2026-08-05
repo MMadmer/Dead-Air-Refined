@@ -208,6 +208,7 @@ void SActorState::Create(IKinematicsAnimated* K, LPCSTR base)
     jump_idle = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_jump_idle"));
     landing[0] = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_jump_end"));
     landing[1] = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_jump_end_1"));
+    kick = K->ID_Cycle_Safe("norm_kick");
 
     for (int k = 0; k < 12; ++k)
         m_damage[k] = K->ID_FX(strconcat(sizeof(buf), buf, base, "_damage_", xr_itoa(k, buf1, 10)));
@@ -375,6 +376,7 @@ void CActor::g_SetAnimation(u32 mstate_rl)
 
     //если мы просто стоим на месте
     bool is_standing = false;
+    const bool playKick = IsKickActive() && ST->kick.valid();
 
     // Legs
     if (mstate_rl & mcLanding)
@@ -387,6 +389,8 @@ void CActor::g_SetAnimation(u32 mstate_rl)
         M_legs = ST->jump_idle;
     else if (mstate_rl & mcJump)
         M_legs = ST->jump_begin;
+    else if (playKick)
+        M_legs = ST->kick;
     else if (mstate_rl & mcFwd)
         M_legs = AS->legs_fwd;
     else if (mstate_rl & mcBack)
@@ -398,7 +402,7 @@ void CActor::g_SetAnimation(u32 mstate_rl)
     else
         is_standing = true;
 
-    if (mstate_rl & mcSprint)
+    if ((mstate_rl & mcSprint) && !playKick)
     {
         g_SetSprintAnimation(mstate_rl, M_head, M_torso, M_legs);
         moving_idx = STorsoWpn::eSprint;
@@ -560,6 +564,11 @@ void CActor::g_SetAnimation(u32 mstate_rl)
                     }
                 }
             }
+        }
+        else
+        {
+            // Keep movement-specific torso animation when the actor has no active HUD item.
+            M_torso = ST->m_torso[4].moving[moving_idx];
         }
     }
 

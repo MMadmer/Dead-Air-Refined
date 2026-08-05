@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "1.1.1",
+    [string]$PortVersion = "1.2.0",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
@@ -50,6 +50,10 @@ $compatibilityArchive = Join-Path $launcherOutputRoot "xtra_dead_air_x64.xdb0"
 $compatibilityStageRoot = Join-Path $launcherOutputRoot "compatibility-stage"
 $compatibilityStageGameRoot = Join-Path $compatibilityStageRoot "gamedata"
 $compatibilityVerifyRoot = Join-Path $launcherOutputRoot "compatibility-verify"
+$coreCompatibilityOverrides = @(
+    "scripts\ui_load_dialog.script",
+    "shaders\gl\dof.h"
+)
 $innoRoot = Join-Path $repositoryRoot "tools\third_party\inno-setup"
 $innoCompilerRoot = Join-Path $innoRoot "compiler"
 $innoCompiler = Join-Path $innoCompilerRoot "ISCC.exe"
@@ -236,6 +240,14 @@ function Build-CompatibilityArchive {
     New-Item -ItemType Directory -Path $compatibilityStageGameRoot -Force | Out-Null
     Get-ChildItem -LiteralPath $compatibilityGameRoot | Copy-Item -Destination $compatibilityStageGameRoot -Recurse
 
+    # These core scripts must shadow the original packed Dead Air copies.
+    foreach ($relativePath in $coreCompatibilityOverrides) {
+        $sourcePath = Join-Path $repositoryRoot "res\gamedata\$relativePath"
+        $destinationPath = Join-Path $compatibilityStageGameRoot $relativePath
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destinationPath) -Force | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+    }
+
     $localizedTextPath =
         Join-Path $compatibilityStageGameRoot "configs\text\rus\dead_air_x64.xml"
     $utf8 = [Text.UTF8Encoding]::new($false, $true)
@@ -349,14 +361,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "packaging\dead-air-x64\README_RU.md") -Destination $outputRoot
-$checksums = Get-ChildItem -LiteralPath $outputRoot -File |
+New-UpdateArchive
+
+$checksumFiles = @(Get-ChildItem -LiteralPath $outputRoot -File)
+if (-not $SkipArchive) {
+    $checksumFiles += Get-Item -LiteralPath $archivePath
+}
+$checksums = $checksumFiles |
     Sort-Object Name |
     ForEach-Object {
         "{0} *{1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash, $_.Name
     }
 $checksums | Set-Content -LiteralPath (Join-Path $outputRoot "SHA256SUMS.txt") -Encoding ASCII
-
-New-UpdateArchive
 
 $installerFiles = Get-ChildItem -LiteralPath $outputRoot -File
 [pscustomobject]@{

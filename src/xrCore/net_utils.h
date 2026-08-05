@@ -3,6 +3,7 @@
 #define _INCDEF_NETUTILS_H_
 #include <string.h>
 #include "xrCore/xr_types.h"
+#include "xrCore/xrstring.h"
 #include "client_id.h"
 #include "xrCommon/xr_string.h"
 
@@ -11,7 +12,6 @@ template <class T> struct _vector3;
 typedef _vector3<float> Fvector;
 template <class T> struct _vector4;
 typedef _vector4<float> Fvector4;
-class shared_str;
 
 
 #pragma pack(push, 1)
@@ -76,7 +76,28 @@ struct NET_Buffer
     u32 count;
 };
 
-class XRCORE_API NET_Packet
+namespace net_packet_detail
+{
+static ICF void write_inline(
+    NET_Buffer& buffer, IIniFileStream* inistream, bool wAllow, const void* data, u32 count)
+{
+    R_ASSERT(!inistream || wAllow);
+    VERIFY(data && count);
+    VERIFY(buffer.count + count < NET_PacketSizeLimit);
+    memcpy(buffer.data + buffer.count, data, count);
+    buffer.count += count;
+    VERIFY(buffer.count < NET_PacketSizeLimit);
+}
+}
+
+// Keep the legacy xrCore exports while allowing clients to inline packet primitives.
+#if defined(XRCORE_EXPORTS) || defined(XRAY_STATIC_BUILD)
+#define XRCORE_NET_PACKET_API XRCORE_API
+#else
+#define XRCORE_NET_PACKET_API
+#endif
+
+class XRCORE_NET_PACKET_API NET_Packet
 {
 public:
     IIniFileStream* inistream{};
@@ -94,12 +115,12 @@ public:
 
 public:
     // writing - main
-    IC void write_start()
+    ICF void write_start()
     {
         B.count = 0;
         INI_W(move_begin());
     }
-    IC void w_begin(u16 type)
+    ICF void w_begin(u16 type)
     {
         B.count = 0;
         w_u16(type);
@@ -111,74 +132,75 @@ public:
         W_guard(bool* b) noexcept : guarded(b) { *b = true; }
         ~W_guard() { *guarded = false; }
     };
-	void w(const void* p, u32 count);
+
+    void w(const void* data, u32 count);
     void w_seek(u32 pos, const void* p, u32 count);
-    IC u32 w_tell() { return B.count; }
+    ICF u32 w_tell() { return B.count; }
     // writing - utilities
-    IC void w_float(float a)
+    ICF void w_float(float a)
     {
         W_guard g(&w_allow);
-        w(&a, 4);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 4);
         INI_W(w_float(a));
     } // float
-    IC void w_vec3(const Fvector& a)
+    ICF void w_vec3(const Fvector& a)
     {
         W_guard g(&w_allow);
-        w(&a, 3 * sizeof(float));
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 3 * sizeof(float));
         INI_W(w_vec3(a));
     } // vec3
-    IC void w_vec4(const Fvector4& a)
+    ICF void w_vec4(const Fvector4& a)
     {
         W_guard g(&w_allow);
-        w(&a, 4 * sizeof(float));
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 4 * sizeof(float));
         INI_W(w_vec4(a));
     } // vec4
-    IC void w_u64(u64 a)
+    ICF void w_u64(u64 a)
     {
         W_guard g(&w_allow);
-        w(&a, 8);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 8);
         INI_W(w_u64(a));
     } // qword (8b)
-    IC void w_s64(s64 a)
+    ICF void w_s64(s64 a)
     {
         W_guard g(&w_allow);
-        w(&a, 8);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 8);
         INI_W(w_s64(a));
     } // qword (8b)
-    IC void w_u32(u32 a)
+    ICF void w_u32(u32 a)
     {
         W_guard g(&w_allow);
-        w(&a, 4);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 4);
         INI_W(w_u32(a));
     } // dword (4b)
-    IC void w_s32(s32 a)
+    ICF void w_s32(s32 a)
     {
         W_guard g(&w_allow);
-        w(&a, 4);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 4);
         INI_W(w_s32(a));
     } // dword (4b)
-    IC void w_u16(u16 a)
+    ICF void w_u16(u16 a)
     {
         W_guard g(&w_allow);
-        w(&a, 2);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 2);
         INI_W(w_u16(a));
     } // word (2b)
-    IC void w_s16(s16 a)
+    ICF void w_s16(s16 a)
     {
         W_guard g(&w_allow);
-        w(&a, 2);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 2);
         INI_W(w_s16(a));
     } // word (2b)
-    IC void w_u8(u8 a)
+    ICF void w_u8(u8 a)
     {
         W_guard g(&w_allow);
-        w(&a, 1);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 1);
         INI_W(w_u8(a));
     } // byte (1b)
-    IC void w_s8(s8 a)
+    ICF void w_s8(s8 a)
     {
         W_guard g(&w_allow);
-        w(&a, 1);
+        net_packet_detail::write_inline(B, inistream, w_allow, &a, 1);
         INI_W(w_s8(a));
     } // byte (1b)
 
@@ -188,13 +210,13 @@ public:
     void w_angle8(float a);
     void w_dir(const Fvector& D);
     void w_sdir(const Fvector& D);
-    void w_stringZ(pcstr S)
+    ICF void w_stringZ(pcstr S)
     {
         W_guard g(&w_allow);
-        w(S, (u32)xr_strlen(S) + 1);
+        net_packet_detail::write_inline(B, inistream, w_allow, S, (u32)xr_strlen(S) + 1);
         INI_W(w_stringZ(S));
     }
-    void w_stringZ(const shared_str& p);
+    void w_stringZ(const shared_str& value);
     void w_matrix(Fmatrix& M);
 
     void w_clientID(ClientID& C) { w_u32(C.value()); }
@@ -268,6 +290,30 @@ public:
     void r_matrix(Fmatrix& M);
     void r_clientID(ClientID& C);
 };
+
+namespace net_packet_detail
+{
+static ICF void write_string(NET_Packet& packet, const shared_str& value)
+{
+    NET_Packet::W_guard guard(&packet.w_allow);
+    if (value)
+    {
+        write_inline(packet.B, packet.inistream, packet.w_allow,
+            value.c_str(), static_cast<u32>(value.size() + 1));
+    }
+    else
+    {
+        constexpr u8 terminator = 0;
+        write_inline(packet.B, nullptr, packet.w_allow, &terminator, sizeof(terminator));
+        // Preserve the legacy nested guard state for null shared strings.
+        packet.w_allow = false;
+    }
+    if (packet.inistream)
+        packet.inistream->w_stringZ(value.c_str());
+}
+}
+
+#undef XRCORE_NET_PACKET_API
 
 #pragma pack(pop)
 

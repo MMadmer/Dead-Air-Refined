@@ -123,7 +123,7 @@ void SetCurrentThreadPriorityLevel(priority_level prio)
     case priority_level::highest:       nPriority = THREAD_PRIORITY_HIGHEST; break;
     case priority_level::time_critical: nPriority = THREAD_PRIORITY_TIME_CRITICAL; break;
     }
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    SetThreadPriority(GetCurrentThread(), nPriority);
 }
 
 void SetCurrentProcessPriorityClass(priority_class cls)

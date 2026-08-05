@@ -130,14 +130,16 @@ void CEnvDescriptor::ed_show_params(const CEnvironment& env)
     }
     if (CascadingCollapsingHeader("hemisphere##category", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        if (InputText("sky texture", sky_texture_name))
+        const bool sky_texture_changed = InputText("sky texture", sky_texture_name);
+        const bool sky_texture_edit_finished = ImGui::IsItemDeactivatedAfterEdit();
+        if (sky_texture_changed)
         {
             string_path temp;
             strconcat(temp, sky_texture_name.c_str(), "#small");
             sky_texture_env_name = temp;
-
-            on_device_create();
         }
+        if (sky_texture_edit_finished && (this == env.Current[0] || this == env.Current[1]))
+            const_cast<CEnvironment&>(env).RefreshCurrentEnvironmentResources();
 
         ImGui::ColorEdit3("sky color", reinterpret_cast<float*>(&sky_color));
         ImGui::ColorEdit4("hemi color", reinterpret_cast<float*>(&hemi_color), ImGuiColorEditFlags_AlphaBar);
@@ -150,8 +152,10 @@ void CEnvDescriptor::ed_show_params(const CEnvironment& env)
     }
     if (CascadingCollapsingHeader("clouds##category", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        if (InputText("clouds texture", clouds_texture_name))
-            on_device_create();
+        InputText("clouds texture", clouds_texture_name);
+        const bool clouds_texture_edit_finished = ImGui::IsItemDeactivatedAfterEdit();
+        if (clouds_texture_edit_finished && (this == env.Current[0] || this == env.Current[1]))
+            const_cast<CEnvironment&>(env).RefreshCurrentEnvironmentResources();
 
         ImGui::ColorEdit4("clouds color", reinterpret_cast<float*>(&clouds_color), ImGuiColorEditFlags_AlphaBar);
 
@@ -397,8 +401,22 @@ void CEnvironment::on_tool_frame()
                 const bool target_is_hidden = (ImGui::TableGetColumnFlags(2) & ImGuiTableColumnFlags_IsEnabled) == 0;
 
                 ImGui::TableNextColumn();
-                if (TimeFrameCombo("Time frame##current0", Current[0], CurrentWeather))
+                CEnvDescriptor* selected_current = Current[0];
+                if (TimeFrameCombo("Time frame##current0", selected_current, CurrentWeather))
                 {
+                    if (selected_current)
+                    {
+                        CEnvDescriptor* first = nullptr;
+                        CEnvDescriptor* second = nullptr;
+                        SelectEnvs(CurrentWeather, first, second,
+                            NormalizeTime(selected_current->exec_time + 0.1f));
+                        SetCurrentEnvironmentPair(first, second);
+                    }
+                    else
+                    {
+                        SetCurrentEnvironmentPair(nullptr, nullptr);
+                    }
+
                     // Force set & update the weather in the simplified mode
                     if (target_is_hidden && Current[0])
                     {
@@ -406,7 +424,6 @@ void CEnvironment::on_tool_frame()
                         if (g_pGameLevel)
                             g_pGameLevel->SetEnvironmentGameTimeFactor(iFloor(time * 1000.f), time_factor);
                         SetGameTime(time, time_factor);
-                        Invalidate();
                         lerp();
                     }
                 }
@@ -434,7 +451,22 @@ void CEnvironment::on_tool_frame()
                 ImGui::EndDisabled();
 
                 ImGui::TableNextColumn();
-                TimeFrameCombo("Time frame##current1", Current[1], CurrentWeather);
+                CEnvDescriptor* selected_target = Current[1];
+                if (TimeFrameCombo("Time frame##current1", selected_target, CurrentWeather))
+                {
+                    if (selected_target)
+                    {
+                        CEnvDescriptor* first = nullptr;
+                        CEnvDescriptor* second = nullptr;
+                        SelectEnvs(CurrentWeather, first, second,
+                            NormalizeTime(selected_target->exec_time - 0.1f));
+                        SetCurrentEnvironmentPair(first, second);
+                    }
+                    else
+                    {
+                        SetCurrentEnvironmentPair(nullptr, nullptr);
+                    }
+                }
 
                 ImGui::EndTable();
             }

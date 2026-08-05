@@ -156,6 +156,11 @@ public:
     float m_fAfDetectRadius;
     virtual bool CheckCompatibility(CHudItem* itm);
 
+    enum EDetectorStates
+    {
+        eIdleZoom = eLastBaseState + 1,
+    };
+
     virtual u32 ef_detector_type() const { return 1; };
 protected:
     bool CheckCompatibilityInt(CHudItem* itm, u16* slot_to_activate);

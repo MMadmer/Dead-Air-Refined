@@ -33,6 +33,29 @@
 #include "GamePersistent.h"
 #include "xrScriptEngine/script_engine.hpp"
 
+namespace
+{
+CTorch* FindNightVisionDevice(const CActor& actor)
+{
+    constexpr u16 preferredSlots[]{NVD_SLOT, TORCH_SLOT};
+    for (const u16 slot : preferredSlots)
+    {
+        CTorch* device = smart_cast<CTorch*>(actor.inventory().ItemFromSlot(slot));
+        if (device && device->NightVisionEnabled())
+            return device;
+    }
+
+    for (CAttachableItem* item : actor.attached_objects())
+    {
+        CTorch* device = smart_cast<CTorch*>(item);
+        if (device && device->NightVisionEnabled())
+            return device;
+    }
+
+    return nullptr;
+}
+}
+
 bool g_bAutoClearCrouch = true;
 
 void CActor::IR_OnKeyboardPress(int cmd)
@@ -136,7 +159,7 @@ void CActor::IR_OnKeyboardPress(int cmd)
         if (det_active)
         {
             CCustomDetector* det = smart_cast<CCustomDetector*>(det_active);
-            det->ToggleDetector(g_player_hud->attached_item(0) != NULL);
+            det->ToggleDetector(!!g_player_hud->attached_item(0));
             return;
         }
     }
@@ -161,6 +184,7 @@ void CActor::IR_OnKeyboardPress(int cmd)
             }break;
     */
     case kUSE: ActorUse(); break;
+    case kWPN_FIRE: ActorCarry(); break;
     case kDROP:
         b_DropActivated = TRUE;
         f_DropPower = 0;
@@ -662,7 +686,10 @@ void CActor::ActorUse()
         m_bPickupMode = true;
 
     if (character_physics_support()->movement()->PHCapture())
+    {
         character_physics_support()->movement()->PHReleaseObject();
+        return;
+    }
 
     if (m_pUsableObject && NULL == m_pObjectWeLookingAt->cast_inventory_item())
     {
@@ -722,11 +749,22 @@ void CActor::ActorUse()
 
         if (object && Level().IR_GetKeyState(SDL_SCANCODE_LSHIFT))
         {
-            bool b_allow = !!pSettings->line_exist("ph_capture_visuals", object->cNameVisual());
-            if (b_allow && !character_physics_support()->movement()->PHCapture())
+            bool canCapture = object->ActorCanCapture() && object->m_pPhysicsShell && object->m_pPhysicsShell->isActive();
+            if (canCapture)
             {
-                character_physics_support()->movement()->PHCaptureObject(object, element);
+                const u16 elementCount = object->m_pPhysicsShell->get_ElementsNumber();
+                for (u16 index = 0; index < elementCount; ++index)
+                {
+                    if (object->m_pPhysicsShell->get_ElementByStoreOrder(index)->isFixed())
+                    {
+                        canCapture = false;
+                        break;
+                    }
+                }
             }
+
+            if (canCapture)
+                character_physics_support()->movement()->PHCaptureObject(object, element);
         }
         else
         {
@@ -742,18 +780,66 @@ void CActor::ActorUse()
     }
 }
 
+void CActor::ActorCarry()
+{
+    CPHMovementControl* movement = character_physics_support()->movement();
+    if (movement->PHCapture())
+    {
+        movement->PHReleaseObject();
+        return;
+    }
+
+    if (CInventoryItem* activeItem = inventory().ActiveItem())
+    {
+        CHudItem* hudItem = smart_cast<CHudItem*>(activeItem);
+        if (hudItem && !hudItem->IsHidden())
+            return;
+    }
+
+    if (CInventoryItem* detector = inventory().ItemFromSlot(DETECTOR_SLOT))
+    {
+        CHudItem* hudItem = smart_cast<CHudItem*>(detector);
+        if (hudItem && !hudItem->IsHidden())
+            return;
+    }
+
+    if (m_pUsableObject && !m_pUsableObject->nonscript_usable())
+        return;
+
+    const collide::rq_result& rayQuery = HUD().GetCurrentRayQuery();
+    CPhysicsShellHolder* object = smart_cast<CPhysicsShellHolder*>(rayQuery.O);
+    if (!object || !object->ActorCanCapture() || !object->m_pPhysicsShell || !object->m_pPhysicsShell->isActive())
+        return;
+
+    const u16 elementCount = object->m_pPhysicsShell->get_ElementsNumber();
+    for (u16 index = 0; index < elementCount; ++index)
+    {
+        if (object->m_pPhysicsShell->get_ElementByStoreOrder(index)->isFixed())
+            return;
+    }
+
+    movement->PHCaptureObject(object, static_cast<u16>(rayQuery.element));
+}
+
 BOOL CActor::HUDview() const
 {
     return IsFocused() && (cam_active == eacFirstEye) &&
         ((!m_holder) || (m_holder && m_holder->allowWeapon() && m_holder->HUDView()));
 }
 
-static u16 SlotsToCheck[] = {
-    KNIFE_SLOT, // 0
-    INV_SLOT_2, // 1
-    INV_SLOT_3, // 2
-    GRENADE_SLOT, // 3
-    ARTEFACT_SLOT, // 10
+struct WeaponSlotBinding
+{
+    u16 slot;
+    int action;
+};
+
+static constexpr WeaponSlotBinding SlotsToCheck[] = {
+    {INV_SLOT_2, kWPN_2},
+    {INV_SLOT_3, kWPN_3},
+    {SIDEARM_SLOT, kWPN_5},
+    {KNIFE_SLOT, kWPN_1},
+    {GRENADE_SLOT, kWPN_4},
+    {BINOCULAR_SLOT, kWPN_7},
 };
 
 void CActor::OnNextWeaponSlot()
@@ -765,12 +851,12 @@ void CActor::OnNextWeaponSlot()
     if (ActiveSlot == NO_ACTIVE_SLOT)
         ActiveSlot = KNIFE_SLOT;
 
-    u32 NumSlotsToCheck = sizeof(SlotsToCheck) / sizeof(SlotsToCheck[0]);
+    constexpr u32 NumSlotsToCheck = static_cast<u32>(std::size(SlotsToCheck));
 
     u32 CurSlot = 0;
     for (; CurSlot < NumSlotsToCheck; CurSlot++)
     {
-        if (SlotsToCheck[CurSlot] == ActiveSlot)
+        if (SlotsToCheck[CurSlot].slot == ActiveSlot)
             break;
     };
 
@@ -779,14 +865,9 @@ void CActor::OnNextWeaponSlot()
 
     for (u32 i = CurSlot + 1; i < NumSlotsToCheck; i++)
     {
-        if (inventory().ItemFromSlot(SlotsToCheck[i]))
+        if (inventory().ItemFromSlot(SlotsToCheck[i].slot))
         {
-            if (SlotsToCheck[i] == ARTEFACT_SLOT)
-            {
-                IR_OnKeyboardPress(kARTEFACT);
-            }
-            else
-                IR_OnKeyboardPress(kWPN_1 + i);
+            IR_OnKeyboardPress(SlotsToCheck[i].action);
             return;
         }
     }
@@ -801,28 +882,23 @@ void CActor::OnPrevWeaponSlot()
     if (ActiveSlot == NO_ACTIVE_SLOT)
         ActiveSlot = KNIFE_SLOT;
 
-    u32 NumSlotsToCheck = sizeof(SlotsToCheck) / sizeof(SlotsToCheck[0]);
+    constexpr u32 NumSlotsToCheck = static_cast<u32>(std::size(SlotsToCheck));
     u32 CurSlot = 0;
 
     for (; CurSlot < NumSlotsToCheck; CurSlot++)
     {
-        if (SlotsToCheck[CurSlot] == ActiveSlot)
+        if (SlotsToCheck[CurSlot].slot == ActiveSlot)
             break;
     };
 
     if (CurSlot >= NumSlotsToCheck)
         CurSlot = NumSlotsToCheck - 1; // last in row
 
-    for (s32 i = s32(CurSlot - 1); i >= 0; i--)
+    for (s32 i = static_cast<s32>(CurSlot) - 1; i >= 0; --i)
     {
-        if (inventory().ItemFromSlot(SlotsToCheck[i]))
+        if (inventory().ItemFromSlot(SlotsToCheck[i].slot))
         {
-            if (SlotsToCheck[i] == ARTEFACT_SLOT)
-            {
-                IR_OnKeyboardPress(kARTEFACT);
-            }
-            else
-                IR_OnKeyboardPress(kWPN_1 + i);
+            IR_OnKeyboardPress(SlotsToCheck[i].action);
             return;
         }
     }
@@ -833,16 +909,7 @@ float CActor::GetLookFactor()
     if (m_input_external_handler)
         return m_input_external_handler->mouse_scale_factor();
 
-    float factor = 1.f;
-
-    PIItem pItem = inventory().ActiveItem();
-
-    if (pItem)
-        factor *= pItem->GetControlInertionFactor();
-
-    VERIFY(!fis_zero(factor));
-
-    return factor;
+    return 1.0f;
 }
 
 void CActor::set_input_external_handler(CActorInputHandler* handler)
@@ -867,17 +934,30 @@ void CActor::SwitchNightVision()
     if ((wpn1 && wpn1->IsZoomed()) || (wpn2 && wpn2->IsZoomed()))
         return;
 
-    xr_vector<CAttachableItem*> const& all = CAttachmentOwner::attached_objects();
-    for (CAttachableItem* item : all)
-    {
-        CTorch* torch = smart_cast<CTorch*>(item);
-        if (torch)
-        {
-            torch->SwitchNightVision();
-            return;
-        }
-    }
+    if (CTorch* device = FindNightVisionDevice(*this))
+        device->SwitchNightVision();
+}
 
+void CActor::SwitchNightVision(bool visionOn, bool useSounds)
+{
+    if (CTorch* device = FindNightVisionDevice(*this))
+        device->SwitchNightVision(visionOn, useSounds);
+}
+
+void CActor::RestoreNightVision()
+{
+    if (CTorch* device = FindNightVisionDevice(*this))
+    {
+        device->SwitchNightVision(true, false);
+        if (CNightVisionEffector* nightVision = device->GetNightVision(); nightVision && nightVision->IsActive())
+            nightVision->PlaySounds(CNightVisionEffector::eIdleSound);
+    }
+}
+
+bool CActor::GetNightVisionStatus() const
+{
+    const CTorch* device = FindNightVisionDevice(*this);
+    return device && device->GetNightVisionStatus();
 }
 
 void CActor::SwitchTorch()
@@ -926,7 +1006,7 @@ void CActor::NoClipFly(int cmd)
         if (det_active)
         {
             CCustomDetector* det = smart_cast<CCustomDetector*>(det_active);
-            det->ToggleDetector(g_player_hud->attached_item(0) != NULL);
+            det->ToggleDetector(!!g_player_hud->attached_item(0));
             return;
         }
     }

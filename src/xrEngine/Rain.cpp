@@ -54,6 +54,19 @@ CEffect_Rain::~CEffect_Rain()
     p_destroy();
 }
 
+void CEffect_Rain::InvalidateState()
+{
+    state = stIdle;
+    rain_volume = 0.f;
+    snd_Ambient.stop();
+
+    for (Item& item : items)
+        item.invalidate();
+
+    p_destroy();
+    p_create();
+}
+
 // Born
 void CEffect_Rain::Born(Item& dest, float radius)
 {
@@ -142,6 +155,7 @@ void CEffect_Rain::OnFrame()
         hemi_val = _max(hemi_val, hemi_cube[2]);
         hemi_val = _max(hemi_val, hemi_cube[3]);
         hemi_val = _max(hemi_val, hemi_cube[5]);
+        clamp(hemi_val, 0.f, 1.f);
 
         // float f = 0.9f*hemi_factor + 0.1f*hemi_val;
         float f = hemi_val;
@@ -179,7 +193,7 @@ void CEffect_Rain::OnFrame()
         // sndP.mad (Device.vCameraPosition,Fvector().set(0,1,0),source_offset);
         // snd_Ambient.set_position(sndP);
         rain_volume = factor * hemi_factor;
-        clamp(rain_volume, 0.1f, 1.f);
+        clamp(rain_volume, 0.f, 1.f);
         snd_Ambient.set_volume(rain_volume);
     }
 }

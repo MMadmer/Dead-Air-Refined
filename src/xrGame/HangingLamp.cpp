@@ -1,6 +1,7 @@
 #include "pch_script.h"
 
 #include "HangingLamp.h"
+#include "LightingQuality.h"
 #include "xrEngine/LightAnimLibrary.h"
 #include "xrEngine/xr_collide_form.h"
 #include "xrPhysics/PhysicsShell.h"
@@ -17,7 +18,11 @@
 //////////////////////////////////////////////////////////////////////
 
 CHangingLamp::CHangingLamp() { Init(); }
-CHangingLamp::~CHangingLamp() { m_break_sound.destroy(); }
+CHangingLamp::~CHangingLamp()
+{
+    m_idle_sound.destroy();
+    m_break_sound.destroy();
+}
 void CHangingLamp::Init()
 {
     fHealth = 100.f;
@@ -29,6 +34,9 @@ void CHangingLamp::Init()
     light_ambient = 0;
     glow_render = 0;
     m_bState = 1;
+    m_volumetricRequested = false;
+    m_qualityGatedAmbient = false;
+    m_appliedLightingQuality = u32(-1);
 }
 
 void CHangingLamp::RespawnInit()
@@ -56,9 +64,19 @@ void CHangingLamp::Center(Fvector& C) const
 }
 
 float CHangingLamp::Radius() const { return (renderable.visual) ? renderable.visual->getVisData().sphere.R : EPS; }
-void CHangingLamp::Load(LPCSTR section) { inherited::Load(section); }
+void CHangingLamp::Load(LPCSTR section)
+{
+    inherited::Load(section);
+    m_useExtraLight = pSettings->read_if_exists<bool>(section, "use_extra_light", false);
+    m_extraLightShadow = pSettings->read_if_exists<bool>(section, "use_extra_shadow", false);
+    m_configVolumetricEnabled = pSettings->read_if_exists<bool>(section, "volumetric_enable", false);
+    m_configVolumetricQuality = pSettings->read_if_exists<float>(section, "volumetric_quality", .5f);
+    m_configVolumetricIntensity = pSettings->read_if_exists<float>(section, "volumetric_intensity", .5f);
+}
 void CHangingLamp::net_Destroy()
 {
+    m_idle_sound.destroy();
+
     light_render.destroy();
     light_ambient.destroy();
     glow_render.destroy();
@@ -90,8 +108,13 @@ bool CHangingLamp::net_Spawn(CSE_Abstract* DC)
         CForm = xr_new<CCF_Skeleton>(this);
 
         CInifile* user_data = K->LL_UserData();
-        if (user_data && user_data->section_exist("sound") && user_data->line_exist("sound", "break_sound"))
-            m_break_sound.create(user_data->r_string("sound", "break_sound"), st_Effect, sg_SourceType);
+        if (user_data && user_data->section_exist("sound"))
+        {
+            if (user_data->line_exist("sound", "idle_sound"))
+                m_idle_sound.create(user_data->r_string("sound", "idle_sound"), st_Effect, sg_SourceType);
+            if (user_data->line_exist("sound", "break_sound"))
+                m_break_sound.create(user_data->r_string("sound", "break_sound"), st_Effect, sg_SourceType);
+        }
     }
     fBrightness = lamp->brightness;
     Fcolor clr(lamp->color);
@@ -100,7 +123,9 @@ bool CHangingLamp::net_Spawn(CSE_Abstract* DC)
 
     light_render = GEnv.Render->light_create();
     light_render->set_shadow(!!lamp->flags.is(CSE_ALifeObjectHangingLamp::flCastShadow));
-    light_render->set_volumetric(!!lamp->flags.is(CSE_ALifeObjectHangingLamp::flVolumetric));
+    const bool serverVolumetric = lamp->flags.is(CSE_ALifeObjectHangingLamp::flVolumetric);
+    m_volumetricRequested = serverVolumetric || m_configVolumetricEnabled;
+    light_render->set_volumetric(m_volumetricRequested && GameLighting::Quality() == 4);
     light_render->set_type(
         lamp->flags.is(CSE_ALifeObjectHangingLamp::flTypeSpot) ? IRender_Light::SPOT : IRender_Light::POINT);
     light_render->set_range(lamp->range);
@@ -109,9 +134,12 @@ bool CHangingLamp::net_Spawn(CSE_Abstract* DC)
     light_render->set_cone(lamp->spot_cone_angle);
     light_render->set_texture(lamp->light_texture.c_str());
 
-    light_render->set_volumetric_quality(lamp->m_volumetric_quality);
-    light_render->set_volumetric_intensity(lamp->m_volumetric_intensity);
-    light_render->set_volumetric_distance(lamp->m_volumetric_distance);
+    light_render->set_volumetric_quality(serverVolumetric ? lamp->m_volumetric_quality : m_configVolumetricQuality);
+    light_render->set_volumetric_intensity(
+        serverVolumetric ? lamp->m_volumetric_intensity : m_configVolumetricIntensity);
+    const float configVolumetricDistance = _min(lamp->range, 10.f) / _max(lamp->range, EPS);
+    light_render->set_volumetric_distance(
+        serverVolumetric ? lamp->m_volumetric_distance : configVolumetricDistance);
 
     if (lamp->glow_texture.size())
     {
@@ -121,16 +149,28 @@ bool CHangingLamp::net_Spawn(CSE_Abstract* DC)
         glow_render->set_radius(lamp->glow_radius);
     }
 
-    if (lamp->flags.is(CSE_ALifeObjectHangingLamp::flPointAmbient))
+    const bool serverAmbient = lamp->flags.is(CSE_ALifeObjectHangingLamp::flPointAmbient);
+    m_qualityGatedAmbient = !serverAmbient && m_useExtraLight;
+    if (serverAmbient || m_useExtraLight)
     {
-        ambient_power = lamp->m_ambient_power;
+        ambient_power = serverAmbient ? lamp->m_ambient_power : .35f;
         light_ambient = GEnv.Render->light_create();
         light_ambient->set_type(IRender_Light::POINT);
-        light_ambient->set_shadow(false);
-        clr.mul_rgb(ambient_power);
-        light_ambient->set_range(lamp->m_ambient_radius);
-        light_ambient->set_color(clr);
-        light_ambient->set_texture(lamp->m_ambient_texture.c_str());
+        light_ambient->set_shadow(serverAmbient ? false : m_extraLightShadow);
+        Fcolor ambientColor = clr;
+        ambientColor.mul_rgb(ambient_power);
+        light_ambient->set_range(serverAmbient ? lamp->m_ambient_radius : lamp->range * 3.f);
+        light_ambient->set_color(ambientColor);
+        light_ambient->set_texture(
+            serverAmbient ? lamp->m_ambient_texture.c_str() : lamp->light_texture.c_str());
+
+        if (!serverAmbient)
+        {
+            Fcolor mainColor = clr;
+            mainColor.mul_rgb(.2f);
+            light_render->set_color(mainColor);
+            light_render->set_cone(lamp->spot_cone_angle * .5f);
+        }
     }
 
     fHealth = lamp->m_health;
@@ -214,6 +254,18 @@ void CHangingLamp::UpdateCL()
     if (m_pPhysicsShell)
         m_pPhysicsShell->InterpolateGlobalTransform(&XFORM());
 
+    if (m_idle_sound._feedback())
+        m_idle_sound.set_position(Position());
+
+    const u32 lightingQuality = GameLighting::Quality();
+    if (m_appliedLightingQuality != lightingQuality)
+    {
+        m_appliedLightingQuality = lightingQuality;
+        light_render->set_volumetric(m_volumetricRequested && lightingQuality == 4);
+        if (light_ambient && m_qualityGatedAmbient)
+            light_ambient->set_active(m_bState && lightingQuality > 1);
+    }
+
     if (Alive() && light_render->get_active())
     {
         if (Visual())
@@ -281,7 +333,10 @@ void CHangingLamp::TurnOn()
         return;
 
     Fvector p = XFORM().c;
+    const u32 lightingQuality = GameLighting::Quality();
+    m_appliedLightingQuality = lightingQuality;
     light_render->set_position(p);
+    light_render->set_volumetric(m_volumetricRequested && lightingQuality == 4);
     light_render->set_active(true);
     if (glow_render)
     {
@@ -291,7 +346,7 @@ void CHangingLamp::TurnOn()
     if (light_ambient)
     {
         light_ambient->set_position(p);
-        light_ambient->set_active(true);
+        light_ambient->set_active(!m_qualityGatedAmbient || lightingQuality > 1);
     }
     if (Visual())
     {
@@ -303,6 +358,9 @@ void CHangingLamp::TurnOn()
     }
     processing_activate();
     m_bState = 1;
+
+    if (!m_idle_sound._feedback())
+        m_idle_sound.play_at_pos(nullptr, Position(), sm_Looped);
 }
 
 void CHangingLamp::TurnOff()
@@ -326,6 +384,8 @@ void CHangingLamp::TurnOff()
     }
     processing_deactivate();
     m_bState = 0;
+
+    m_idle_sound.stop();
 }
 
 // void CHangingLamp::Hit(float P,Fvector &dir, IGameObject* who,s16 element,

@@ -37,6 +37,9 @@
 #include "HudItem.h"
 #include "ai_sounds.h"
 #include "ai_space.h"
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
+#include "Bolt.h"
 #include "trade.h"
 #include "Inventory.h"
 
@@ -74,6 +77,7 @@
 #include "ActorHelmet.h"
 #include "ui/UIDragDropReferenceList.h"
 #include "xrCore/xr_token.h"
+#include "xrCommon/xr_hash_map.h"
 
 #include "xrEngine/Rain.h"
 
@@ -86,6 +90,27 @@
 //const float respawn_auto = 7.f;
 
 constexpr float default_feedback_duration = 0.2f;
+
+namespace
+{
+xr_flat_hash_map<const CActor*, float> actorAdrenalineTimes;
+xr_flat_hash_map<u16, SActorAdrenalineSaveState> stagedActorAdrenalineTimes;
+
+u32 actor_section_checksum(pcstr section)
+{
+    return crc32(section, static_cast<u32>(xr_strlen(section)));
+}
+
+struct SprintGearFactors
+{
+    float weapon{};
+    float outfit{};
+};
+
+// Runtime-only factors preserve the actor layout used by legacy saves and native addons.
+xr_flat_hash_map<const CActor*, SprintGearFactors> actorSprintGearFactors;
+xr_flat_hash_map<const CActor*, bool> actorKickModes;
+}
 
 extern float cammera_into_collision_shift;
 extern int g_first_person_death;
@@ -228,6 +253,10 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 CActor::~CActor()
 {
+    actorAdrenalineTimes.erase(this);
+    actorSprintGearFactors.erase(this);
+    actorKickModes.erase(this);
+
     xr_delete(m_location_manager);
     xr_delete(m_memory);
 
@@ -256,6 +285,8 @@ CActor::~CActor()
 
 void CActor::reinit()
 {
+    EndKick();
+    RequestInfiniteBoltRestock();
     character_physics_support()->movement()->CreateCharacter();
     character_physics_support()->movement()->SetPhysicsRefObject(this);
     CEntityAlive::reinit();
@@ -377,8 +408,31 @@ void CActor::Load(LPCSTR section)
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
     m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
 
+    const bool hasSprintWeaponFactor = pSettings->line_exist(section, "sprint_weapon_koef");
+    const bool hasSprintOutfitFactor = pSettings->line_exist(section, "sprint_outfit_koef");
+    R_ASSERT3(hasSprintWeaponFactor == hasSprintOutfitFactor,
+        "Sprint gear coefficients must be defined together", section);
+    if (hasSprintWeaponFactor)
+    {
+        SprintGearFactors sprintGearFactors;
+        sprintGearFactors.weapon = pSettings->r_float(section, "sprint_weapon_koef");
+        sprintGearFactors.outfit = pSettings->r_float(section, "sprint_outfit_koef");
+        R_ASSERT3(std::isfinite(sprintGearFactors.weapon) && sprintGearFactors.weapon >= 0.f,
+            "Invalid sprint gear coefficient", "sprint_weapon_koef");
+        R_ASSERT3(std::isfinite(sprintGearFactors.outfit) && sprintGearFactors.outfit >= 0.f,
+            "Invalid sprint gear coefficient", "sprint_outfit_koef");
+        actorSprintGearFactors.insert_or_assign(this, sprintGearFactors);
+    }
+    else
+    {
+        actorSprintGearFactors.erase(this);
+    }
+
     m_fWalk_StrafeFactor = READ_IF_EXISTS(pSettings, r_float, section, "walk_strafe_coef", 1.0f);
     m_fRun_StrafeFactor = READ_IF_EXISTS(pSettings, r_float, section, "run_strafe_coef", 1.0f);
+
+    m_fZoomInertion = 0.f;
+    m_fRecoilCoeff = 1.f;
 
     m_fCamHeightFactor = pSettings->r_float(section, "camera_height_factor");
     character_physics_support()->movement()->SetJumpUpVelocity(m_fJumpSpeed);
@@ -1049,22 +1103,216 @@ extern ENGINE_API float g_fov;
 
 float CActor::currentFOV()
 {
+    float health = conditions().GetHealth();
+    clamp(health, 0.0f, 1.0f);
+
+    float adrenalineTime = 0.0f;
+    const auto adrenaline = actorAdrenalineTimes.find(this);
+    if (adrenaline != actorAdrenalineTimes.end())
+        adrenalineTime = adrenaline->second;
+
+    const float fovScale = (0.7f + 0.3f * health) * (1.0f + 0.01f * adrenalineTime);
+    float actorFov = g_fov * fovScale;
+    clamp(actorFov, 5.0f, 179.0f);
+
     if (!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2))
-        return g_fov;
+        return actorFov;
 
     CWeapon* pWeapon = smart_cast<CWeapon*>(inventory().ActiveItem());
 
     if (eacFirstEye != cam_active || !pWeapon || !pWeapon->IsZoomed())
-        return g_fov;
+        return actorFov;
 
     const bool hasZoomTexture = pWeapon->ZoomTexture();
     const float zoomFactor = pWeapon->GetZoomFactor();
 
     if (hasZoomTexture && zoomFactor < 1.f)
-        return g_fov;
+        return actorFov;
 
-    const float baseFov = hasZoomTexture ? 75.f : g_fov;
+    float baseFov = (hasZoomTexture ? 75.0f : g_fov) * fovScale;
+    clamp(baseFov, 5.0f, 179.0f);
     return rad2deg(2.f * atanf(tanf(deg2rad(baseFov) * 0.5f) / zoomFactor));
+}
+
+float CActor::SprintMovementFactor(const float activeItemWeight, const float weaponWeight,
+    const float outfitWeight, const float runFactor) const
+{
+    const auto it = actorSprintGearFactors.find(this);
+    if (it == actorSprintGearFactors.end())
+    {
+        // Legacy actor configs store sprint_koef as a multiplier over running speed.
+        float legacyPenalty = activeItemWeight / 10.f;
+        clamp(legacyPenalty, 0.f, 0.5f);
+        return runFactor * _max(m_fSprintFactor - legacyPenalty, 0.3f);
+    }
+
+    float gearPenalty = weaponWeight * it->second.weapon + outfitWeight * it->second.outfit;
+    clamp(gearPenalty, 0.0f, 1.5f);
+    return _max(m_fSprintFactor - gearPenalty, 0.3f);
+}
+
+void CActor::StartKick()
+{
+    actorKickModes.insert_or_assign(this, true);
+}
+
+void CActor::EndKick()
+{
+    actorKickModes.erase(this);
+}
+
+bool CActor::IsKickActive() const
+{
+    return actorKickModes.contains(this);
+}
+
+void CActor::SetAdrenalineTime(float time)
+{
+    R_ASSERT2(std::isfinite(time), "Actor adrenaline time must be finite");
+
+    if (time <= 0.0f)
+    {
+        actorAdrenalineTimes.erase(this);
+        return;
+    }
+
+    actorAdrenalineTimes[this] = time;
+}
+
+void CActor::CollectAdrenalineSaveState(xr_vector<SActorAdrenalineSaveState>& result)
+{
+    SActorAdrenalineSaveCaptureState state;
+    BeginAdrenalineSaveCapture(state);
+    while (!ContinueAdrenalineSaveCapture(state, flt_max))
+    {
+    }
+    result = std::move(state.records);
+}
+
+void CActor::BeginAdrenalineSaveCapture(SActorAdrenalineSaveCaptureState& state)
+{
+    state = {};
+    state.initialized = true;
+    state.completed = !ai().get_alife() ||
+        (actorAdrenalineTimes.empty() && stagedActorAdrenalineTimes.empty());
+}
+
+bool CActor::ContinueAdrenalineSaveCapture(
+    SActorAdrenalineSaveCaptureState& state, float budgetMilliseconds)
+{
+    if (!state.initialized)
+        return false;
+    if (state.completed)
+        return true;
+    if (!(budgetMilliseconds > 0.0f))
+        return false;
+    if (!ai().get_alife())
+    {
+        state.records.clear();
+        state.completed = true;
+        return true;
+    }
+
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    CTimer budgetTimer;
+    if (!unlimitedBudget)
+        budgetTimer.Start();
+
+    u32 batchObjects = 0;
+    while (CSE_ALifeDynamicObject* object = ai().alife().objects().next_save_extension_object(
+        ESaveExtensionObjectType::Actor, state.nextObjectId))
+    {
+        CSE_ALifeCreatureActor* serverActor = static_cast<CSE_ALifeCreatureActor*>(object);
+        const u16 objectId = serverActor->ID;
+
+        if (objectId != u16(-1))
+        {
+            const u32 sectionChecksum = actor_section_checksum(serverActor->s_name.c_str());
+            bool hasLiveRecord = false;
+            CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().Objects.net_Find(objectId)) : nullptr;
+            if (actor)
+            {
+                const auto live = actorAdrenalineTimes.find(actor);
+                if (live != actorAdrenalineTimes.end() && actor->ID() == objectId &&
+                    actor_section_checksum(actor->cNameSect().c_str()) == sectionChecksum &&
+                    std::isfinite(live->second) && live->second > 0.0f)
+                {
+                    state.records.push_back({sectionChecksum, live->second, objectId});
+                    hasLiveRecord = true;
+                }
+            }
+
+            const auto staged = stagedActorAdrenalineTimes.find(objectId);
+            if (!hasLiveRecord && staged != stagedActorAdrenalineTimes.end())
+            {
+                const SActorAdrenalineSaveState& record = staged->second;
+                if (record.sectionChecksum == sectionChecksum && std::isfinite(record.remaining) &&
+                    record.remaining > 0.0f)
+                {
+                    state.records.push_back(record);
+                }
+                else
+                {
+                    stagedActorAdrenalineTimes.erase(staged);
+                }
+            }
+        }
+
+        if (!unlimitedBudget && ++batchObjects == 16)
+        {
+            batchObjects = 0;
+            if (budgetTimer.GetElapsed_sec() * 1000.0f >= budgetMilliseconds)
+                return false;
+        }
+    }
+
+    state.completed = true;
+    return true;
+}
+
+void CActor::StageAdrenalineSaveState(const xr_vector<SActorAdrenalineSaveState>& state)
+{
+    actorAdrenalineTimes.clear();
+    stagedActorAdrenalineTimes.clear();
+    stagedActorAdrenalineTimes.reserve(state.size());
+
+    for (const SActorAdrenalineSaveState& record : state)
+    {
+        if (record.objectId == u16(-1) || !std::isfinite(record.remaining) || record.remaining <= 0.0f)
+            continue;
+
+        stagedActorAdrenalineTimes.insert_or_assign(record.objectId, record);
+    }
+}
+
+void CActor::ClearAdrenalineSaveState()
+{
+    actorAdrenalineTimes.clear();
+    stagedActorAdrenalineTimes.clear();
+}
+
+void CActor::ForgetAdrenalineSaveState(const CSE_Abstract& serverObject)
+{
+    stagedActorAdrenalineTimes.erase(serverObject.ID);
+}
+
+void CActor::ConsumeAdrenalineSaveState(u16 objectId)
+{
+    actorAdrenalineTimes.erase(this);
+
+    const auto staged = stagedActorAdrenalineTimes.find(objectId);
+    if (staged == stagedActorAdrenalineTimes.end())
+        return;
+
+    const SActorAdrenalineSaveState record = staged->second;
+    stagedActorAdrenalineTimes.erase(staged);
+    if (record.objectId != objectId || record.sectionChecksum != actor_section_checksum(cNameSect().c_str()) ||
+        !std::isfinite(record.remaining) || record.remaining <= 0.0f)
+    {
+        return;
+    }
+
+    actorAdrenalineTimes[this] = record.remaining;
 }
 
 void CActor::UpdateCL()
@@ -1089,6 +1337,7 @@ void CActor::UpdateCL()
     }
 
     UpdateInventoryOwner(Device.dwTimeDelta);
+    EnsureInfiniteBoltRestock(*this);
 
     if (m_feel_touch_characters > 0)
     {
@@ -1169,8 +1418,11 @@ void CActor::UpdateCL()
 
             fire_disp_full = m_fdisp_controller.GetCurrentDispertion();
 
-            HUD().SetCrosshairDisp(fire_disp_full, 0.02f);
-            HUD().ShowCrosshair(pWeapon->use_crosshair());
+            if (psHUD_Flags.test(HUD_CROSSHAIR_WEAPON))
+            {
+                HUD().SetCrosshairDisp(fire_disp_full, 0.02f);
+                HUD().ShowCrosshair(pWeapon->use_crosshair());
+            }
 #ifdef DEBUG
             HUD().SetFirstBulletCrosshairDisp(pWeapon->GetFirstBulletDisp());
 #endif
@@ -1179,7 +1431,7 @@ void CActor::UpdateCL()
 
             psHUD_Flags.set(HUD_WEAPON_RT, B);
 
-            B = B && pWeapon->show_crosshair();
+            B = B && (pWeapon->show_crosshair() || cam_active != eacFirstEye);
 
             psHUD_Flags.set(HUD_CROSSHAIR_RT2, B);
 
@@ -1256,6 +1508,14 @@ void CActor::UpdateCL()
 
     if (psActorFlags.test(AF_MULTI_ITEM_PICKUP))
         m_bPickupMode = false;
+
+    const auto adrenaline = actorAdrenalineTimes.find(this);
+    if (adrenaline != actorAdrenalineTimes.end())
+    {
+        adrenaline->second -= Device.fTimeDelta;
+        if (adrenaline->second <= 0.0f)
+            actorAdrenalineTimes.erase(adrenaline);
+    }
 }
 
 float NET_Jump = 0;
@@ -1503,9 +1763,26 @@ void CActor::shedule_Update(u32 DT)
         m_pPersonWeLookingAt = game_object->cast_inventory_owner();
         m_pVehicleWeLookingAt = smart_cast<CHolderCustom*>(game_object);
         CEntityAlive* pEntityAlive = smart_cast<CEntityAlive*>(game_object);
+        CPhysicsShellHolder* physicsObject = smart_cast<CPhysicsShellHolder*>(game_object);
 
         if (GameID() == eGameIDSingle)
         {
+            bool handsBlocked = false;
+            if (CInventoryItem* activeItem = inventory().ActiveItem())
+            {
+                CHudItem* hudItem = smart_cast<CHudItem*>(activeItem);
+                handsBlocked = hudItem && !hudItem->IsHidden();
+            }
+
+            if (!handsBlocked)
+            {
+                if (CInventoryItem* detector = inventory().ItemFromSlot(DETECTOR_SLOT))
+                {
+                    CHudItem* hudItem = smart_cast<CHudItem*>(detector);
+                    handsBlocked = hudItem && !hudItem->IsHidden();
+                }
+            }
+
             if (m_pUsableObject && m_pUsableObject->tip_text())
             {
                 m_sDefaultObjAction = StringTable().translate(m_pUsableObject->tip_text());
@@ -1524,8 +1801,22 @@ void CActor::shedule_Update(u32 DT)
                     }
                     else
                     {
-                        bool b_allow_drag = !!pSettings->line_exist("ph_capture_visuals", pEntityAlive->cNameVisual());
-                        if (b_allow_drag)
+                        bool canDrag = physicsObject && physicsObject->ActorCanCapture() &&
+                            physicsObject->m_pPhysicsShell && physicsObject->m_pPhysicsShell->isActive();
+                        if (canDrag)
+                        {
+                            const u16 elementCount = physicsObject->m_pPhysicsShell->get_ElementsNumber();
+                            for (u16 index = 0; index < elementCount; ++index)
+                            {
+                                if (physicsObject->m_pPhysicsShell->get_ElementByStoreOrder(index)->isFixed())
+                                {
+                                    canDrag = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (canDrag && !handsBlocked)
                         {
                             m_sDefaultObjAction = m_sDeadCharacterUseOrDragAction;
                         }
@@ -1953,7 +2244,8 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
     {
         conditions().ChangeBleeding(helmet->m_fBleedingRestoreSpeed * f_update_time);
         conditions().ChangeHealth(helmet->m_fHealthRestoreSpeed * f_update_time);
-        conditions().ChangePower(helmet->m_fPowerRestoreSpeed * f_update_time);
+        if (mstate_real & mcSprint)
+            conditions().ChangePower(helmet->m_fPowerRestoreSpeed * f_update_time);
         conditions().ChangeSatiety(helmet->m_fSatietyRestoreSpeed * f_update_time);
         conditions().ChangeRadiation(helmet->m_fRadiationRestoreSpeed * f_update_time);
     }
@@ -1962,7 +2254,8 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
     {
         conditions().ChangeBleeding(outfit->m_fBleedingRestoreSpeed * f_update_time);
         conditions().ChangeHealth(outfit->m_fHealthRestoreSpeed * f_update_time);
-        conditions().ChangePower(outfit->m_fPowerRestoreSpeed * f_update_time);
+        if (mstate_real & mcSprint)
+            conditions().ChangePower(outfit->m_fPowerRestoreSpeed * f_update_time);
         conditions().ChangeSatiety(outfit->m_fSatietyRestoreSpeed * f_update_time);
         conditions().ChangeRadiation(outfit->m_fRadiationRestoreSpeed * f_update_time);
     }
@@ -1971,11 +2264,8 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
         CHelmet* pHelmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
         if (!pHelmet)
         {
-            CTorch* pTorch = smart_cast<CTorch*>(inventory().ItemFromSlot(TORCH_SLOT));
-            if (pTorch && pTorch->GetNightVisionStatus())
-            {
-                pTorch->SwitchNightVision(false);
-            }
+            if (GetNightVisionStatus())
+                SwitchNightVision(false);
         }
     }
 }

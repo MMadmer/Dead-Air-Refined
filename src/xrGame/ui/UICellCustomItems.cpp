@@ -21,6 +21,7 @@ struct is_helper_pred
 CUIInventoryCellItem::CUIInventoryCellItem(CInventoryItem* itm)
 {
     m_pData = (void*)itm;
+    m_select_mode = std::min<u32>(pSettings->read_if_exists<u32>(itm->m_section_id, "select_mode", 0), 3);
 
     inherited::SetShader(InventoryUtilities::GetEquipmentIconsShader());
 
@@ -516,11 +517,15 @@ void CUIWeaponCellItem::InitAddon(CUIStatic* s, LPCSTR section, Fvector2 addon_o
         base_scale.y = GetHeight() / (INV_GRID_HEIGHTF * m_grid_size.y);
     }
     Fvector2 cell_size;
-    cell_size.x = pSettings->r_u32(section, "inv_grid_width") * INV_GRID_WIDTHF;
-    cell_size.y = pSettings->r_u32(section, "inv_grid_height") * INV_GRID_HEIGHTF;
+    cell_size.x = pSettings->read_if_exists<u32>(
+        section, "inv_grid_addon_width", pSettings->r_u32(section, "inv_grid_width")) * INV_GRID_WIDTHF;
+    cell_size.y = pSettings->read_if_exists<u32>(
+        section, "inv_grid_addon_height", pSettings->r_u32(section, "inv_grid_height")) * INV_GRID_HEIGHTF;
 
-    tex_rect.x1 = pSettings->r_u32(section, "inv_grid_x") * INV_GRID_WIDTHF;
-    tex_rect.y1 = pSettings->r_u32(section, "inv_grid_y") * INV_GRID_HEIGHTF;
+    tex_rect.x1 = pSettings->read_if_exists<u32>(
+        section, "inv_grid_addon_x", pSettings->r_u32(section, "inv_grid_x")) * INV_GRID_WIDTHF;
+    tex_rect.y1 = pSettings->read_if_exists<u32>(
+        section, "inv_grid_addon_y", pSettings->r_u32(section, "inv_grid_y")) * INV_GRID_HEIGHTF;
 
     tex_rect.rb.add(tex_rect.lt, cell_size);
 

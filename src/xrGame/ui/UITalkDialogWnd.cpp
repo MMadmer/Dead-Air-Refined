@@ -8,6 +8,8 @@
 #include "UITalkWnd.h"
 #include "UIInventoryUtilities.h"
 #include "xrUICore/Buttons/UIBtnHint.h"
+#include "UIGameCustom.h"
+#include "UIMainIngameWnd.h"
 
 #include "game_news.h"
 #include "Level.h"
@@ -32,6 +34,14 @@ CUITalkDialogWnd::CUITalkDialogWnd()
       m_uOurReplicsColor(0) {}
 
 CUITalkDialogWnd::~CUITalkDialogWnd() { xr_delete(m_uiXml); }
+
+void CUITalkDialogWnd::Draw()
+{
+    if (auto* ui = CurrentGameUI(); ui && ui->UIMainIngameWnd)
+        ui->UIMainIngameWnd->DrawMainIndicatorsForInventory();
+
+    inherited::Draw();
+}
 
 void CUITalkDialogWnd::InitTalkDialogWnd()
 {

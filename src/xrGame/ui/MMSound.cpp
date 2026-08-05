@@ -74,12 +74,12 @@ void CMMSound::music_Play()
 
     if (m_music[0] && m_music[1])
     {
-        m_music[0].play_at_pos(nullptr, Fvector().set(-0.5f, 0.f, 0.3f), sm_2D);
-        m_music[1].play_at_pos(nullptr, Fvector().set(+0.5f, 0.f, 0.3f), sm_2D);
+        m_music[0].play_at_pos(nullptr, Fvector().set(-0.5f, 0.f, 0.3f), sm_Looped | sm_2D);
+        m_music[1].play_at_pos(nullptr, Fvector().set(+0.5f, 0.f, 0.3f), sm_Looped | sm_2D);
     }
     else
     {
-        m_music[0].play(nullptr, sm_2D);
+        m_music[0].play(nullptr, sm_Looped | sm_2D);
         m_music[1].destroy();
     }
 }

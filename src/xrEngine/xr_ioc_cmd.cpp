@@ -19,6 +19,7 @@ extern xr_vector<xr_token> vid_monitor_token;
 extern xr_map<u32, xr_vector<xr_token>> vid_mode_token;
 
 const xr_token vid_bpp_token[] = {{"16", 16}, {"32", 32}, {0, 0}};
+const xr_token snd_precache_all_token[] = {{"off", 0}, {"on", 1}, {0, 0}};
 
 void IConsole_Command::InvalidSyntax()
 {
@@ -739,6 +740,58 @@ ENGINE_API shared_str current_player_hud_sect{};
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;
 
+class CCC_VidFpsLock final : public CCC_Token
+{
+    inline static u32 compatibilityValue = 0;
+    inline static xr_token compatibilityTokens[] =
+    {
+        { "st_opt_off", 0 },
+        { "60", 60 },
+        { "144", 144 },
+        { nullptr, 0 },
+    };
+
+    static void SynchronizeValue()
+    {
+        compatibilityValue = ps_fps_limit == 60 || ps_fps_limit == 144 ? ps_fps_limit : 0;
+    }
+
+public:
+    explicit CCC_VidFpsLock(pcstr name) : CCC_Token(name, &compatibilityValue, compatibilityTokens) {}
+
+    void Execute(pcstr args) override
+    {
+        if (!xr_stricmp(args, "st_opt_off") || !xr_stricmp(args, "off") || !xr_strcmp(args, "0"))
+            compatibilityValue = 0;
+        else if (!xr_strcmp(args, "60"))
+            compatibilityValue = 60;
+        else if (!xr_strcmp(args, "144"))
+            compatibilityValue = 144;
+        else
+        {
+            InvalidSyntax();
+            return;
+        }
+
+        ps_fps_limit = compatibilityValue ? static_cast<int>(compatibilityValue) : 501;
+    }
+
+    void GetStatus(TStatus& status) override
+    {
+        SynchronizeValue();
+        CCC_Token::GetStatus(status);
+    }
+
+    void fill_tips(vecTips& tips, u32 mode) override
+    {
+        SynchronizeValue();
+        CCC_Token::fill_tips(tips, mode);
+    }
+
+    // Do not serialize an alias that could override an arbitrary modern FPS limit on reload.
+    void Save(IWriter*) override {}
+};
+
 void CCC_Register()
 {
     // General
@@ -791,6 +844,7 @@ void CCC_Register()
 
     CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 30, 501);
     CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
+    CMD1(CCC_VidFpsLock, "vid_fps_lock");
     CMD3(CCC_Mask, "rs_always_active", &psDeviceFlags, rsAlwaysActive);
     CMD3(CCC_Mask, "rs_v_sync", &psDeviceFlags, rsVSync);
     // CMD3(CCC_Mask, "rs_disable_objects_as_crows",&psDeviceFlags, rsDisableObjectsAsCrows );
@@ -837,6 +891,7 @@ void CCC_Register()
     CMD3(CCC_Mask, "snd_use_float32", &psSoundFlags, ss_UseFloat32);
     CMD4(CCC_Integer, "snd_targets", &psSoundTargets, 4, 256);
     CMD4(CCC_Integer, "snd_cache_size", &psSoundCacheSizeMB, 4, 64);
+    CMD3(CCC_Token, "snd_precache_all", &psSoundPrecacheAll, snd_precache_all_token);
 
 #ifdef DEBUG
     CMD3(CCC_Mask, "snd_stats", &g_stats_flags, st_sound);

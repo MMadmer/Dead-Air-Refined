@@ -18,6 +18,7 @@
 #include "PHDestroyable.h"
 #include "Actor.h"
 #include "Actor_Flags.h"
+#include "Bolt.h"
 #include "CustomZone.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "xrScriptEngine/script_profiler.hpp"
@@ -108,6 +109,7 @@ extern BOOL g_ai_use_old_vision;
 float g_aim_predict_time = 0.40f;
 int g_auto_continue_on_load = 1;
 int g_keypress_on_start_legacy = 1;
+int g_infinite_bolts = 1;
 
 ENGINE_API extern float g_console_sensitive;
 
@@ -686,8 +688,14 @@ void get_files_list(xr_vector<shared_str>& files, LPCSTR dir, LPCSTR file_ext)
 
 class CCC_ALifeSave : public IConsole_Command
 {
+    bool m_showStatus;
+
 public:
-    CCC_ALifeSave(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    CCC_ALifeSave(LPCSTR N, bool showStatus) : IConsole_Command(N), m_showStatus(showStatus)
+    {
+        bEmptyArgsHandled = true;
+    }
+
     virtual void Execute(LPCSTR args)
     {
 #if 0
@@ -715,14 +723,10 @@ public:
         CTimer timer;
         timer.Start();
 #endif
+        bool updateName = false;
         if (!xr_strlen(S))
         {
             strconcat(sizeof(S), S, Core.UserName, " - ", "quicksave");
-            NET_Packet net_packet;
-            net_packet.w_begin(M_SAVE_GAME);
-            net_packet.w_stringZ(S);
-            net_packet.w_u8(0);
-            Level().Send(net_packet, net_flags(TRUE));
         }
         else
         {
@@ -731,19 +735,22 @@ public:
                 Msg("! Save failed: invalid file name - %s", S);
                 return;
             }
-
-            NET_Packet net_packet;
-            net_packet.w_begin(M_SAVE_GAME);
-            net_packet.w_stringZ(S);
-            net_packet.w_u8(1);
-            Level().Send(net_packet, net_flags(TRUE));
+            updateName = true;
         }
+
+        NET_Packet net_packet;
+        net_packet.w_begin(M_SAVE_GAME);
+        net_packet.w_stringZ(S);
+        net_packet.w_u8(u8(updateName));
+        // Legacy packets end after updateName; the reader defaults a missing presentation byte to true.
+        net_packet.w_u8(u8(m_showStatus));
+        Level().Send(net_packet, net_flags(TRUE));
 #ifdef DEBUG
         Msg("Game save overhead  : %f milliseconds", timer.GetElapsed_sec() * 1000.f);
 #endif
         const bool compat = ClearSkyMode || ShadowOfChernobylMode;
         CUIGameCustom* gameUi = CurrentGameUI();
-        if (gameUi)
+        if (m_showStatus && gameUi)
         {
             gameUi->RemoveCustomStatic("game_saved");
             StaticDrawableWrapper* message = gameUi->AddCustomStatic("game_saved", true, compat ? 3.0f : -1.0f);
@@ -2192,6 +2199,34 @@ public:
     }
 };
 
+class CCC_FiniteBolts final : public CCC_Mask
+{
+public:
+    explicit CCC_FiniteBolts(pcstr name) : CCC_Mask(name, &psActorFlags, AF_FINITE_BOLTS) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Mask::Execute(args);
+        g_infinite_bolts = GetValue() ? 0 : 1;
+        if (g_infinite_bolts)
+            RequestInfiniteBoltRestock();
+    }
+};
+
+class CCC_InfiniteBolts final : public CCC_Integer
+{
+public:
+    explicit CCC_InfiniteBolts(pcstr name) : CCC_Integer(name, &g_infinite_bolts, 0, 1) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Integer::Execute(args);
+        psActorFlags.set(AF_FINITE_BOLTS, !GetValue());
+        if (GetValue())
+            RequestInfiniteBoltRestock();
+    }
+};
+
 void CCC_RegisterCommands()
 {
     ZoneScoped;
@@ -2218,7 +2253,8 @@ void CCC_RegisterCommands()
 
 #endif // DEBUG
 
-    CMD1(CCC_ALifeSave, "save"); // save game
+    CMD2(CCC_ALifeSave, "save", true); // save game
+    CMD2(CCC_ALifeSave, "save_silent", false); // save game without UI messages
     CMD1(CCC_ALifeLoadFrom, "load"); // load game from ...
     CMD1(CCC_LoadLastSave, "load_last_save"); // load last saved game from ...
 
@@ -2244,12 +2280,18 @@ void CCC_RegisterCommands()
     psHUD_Flags.set(HUD_INFO, true);
     psHUD_Flags.set(HUD_DRAW_MAP, true);
     psHUD_Flags.set(HUD_DRAW_INFO, true);
+    psHUD_Flags.set(HUD_CROSSHAIR_ITEM, false);
+    psHUD_Flags.set(HUD_CROSSHAIR_WEAPON, true);
+    psHUD_Flags.set(HUD_CROSSHAIR_NEAREST, true);
 
     CMD3(CCC_Mask, "hud_crosshair", &psHUD_Flags, HUD_CROSSHAIR);
     CMD3(CCC_Mask, "hud_crosshair_dist", &psHUD_Flags, HUD_CROSSHAIR_DIST);
     CMD3(CCC_Mask, "hud_draw_map", &psHUD_Flags, HUD_DRAW_MAP);
     CMD3(CCC_Mask, "hud_draw_info", &psHUD_Flags, HUD_DRAW_INFO);
     CMD3(CCC_Mask, "hud_left_handed", &psHUD_Flags, HUD_LEFT_HANDED);
+    CMD3(CCC_Mask, "hud_crosshair_item", &psHUD_Flags, HUD_CROSSHAIR_ITEM);
+    CMD3(CCC_Mask, "hud_crosshair_weapon", &psHUD_Flags, HUD_CROSSHAIR_WEAPON);
+    CMD3(CCC_Mask, "hud_crosshair_nearest", &psHUD_Flags, HUD_CROSSHAIR_NEAREST);
 
     CMD4(CCC_Float, "hud_fov", &psHUD_FOV_def, 0.1f, 1.0f);
     CMD4(CCC_Float, "fov", &g_fov, 5.0f, 180.0f);
@@ -2405,6 +2447,10 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "g_loading_stages", &psActorFlags, AF_LOADING_STAGES);
     CMD3(CCC_Mask, "g_always_use_attitude_sensors", &psActorFlags, AF_ALWAYS_USE_ATTITUDE_SENSORS);
     CMD3(CCC_Mask, "g_use_tracers", &psActorFlags, AF_USE_TRACERS);
+    CMD3(CCC_Mask, "g_open_scopes", &psActorFlags, AF_OPEN_SCOPES);
+    // Keep the legacy finite command and the positive UI option synchronized.
+    CMD1(CCC_FiniteBolts, "g_finite_bolts");
+    CMD1(CCC_InfiniteBolts, "g_infinite_bolts");
 
     CMD4(CCC_Integer, "g_inv_highlight_equipped", &g_inv_highlight_equipped, 0, 1);
     CMD4(CCC_Integer, "g_first_person_death", &g_first_person_death, 0, 1);

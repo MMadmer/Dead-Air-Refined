@@ -165,7 +165,7 @@ void SMusicTrack::Stop()
 //-----------------------------------------------------------------------------
 // level sound manager
 //-----------------------------------------------------------------------------
-CLevelSoundManager::CLevelSoundManager() : m_CurrentTrack(0) { m_NextTrackTime = 0; }
+CLevelSoundManager::CLevelSoundManager() : m_NextTrackTime(0), m_CurrentTrack(-1), m_CurrentVolume(1.f) {}
 
 void CLevelSoundManager::Load()
 {
@@ -266,6 +266,7 @@ void CLevelSoundManager::Update()
                 m_CurrentTrack = indices[idx];
                 SMusicTrack& T = m_MusicTracks[m_CurrentTrack];
                 T.Play();
+                T.SetVolume(m_CurrentVolume);
 #ifdef DEBUG
                 Log("- Play music track:", T.m_DbgName.c_str());
 #endif
@@ -289,4 +290,15 @@ void CLevelSoundManager::Update()
             }
         }
     }
+}
+
+void CLevelSoundManager::SetVolume(float volume)
+{
+    const float clampedVolume = std::clamp(volume, 0.f, 1.f);
+    if (fsimilar(m_CurrentVolume, clampedVolume))
+        return;
+
+    m_CurrentVolume = clampedVolume;
+    if (m_CurrentTrack >= 0 && static_cast<size_t>(m_CurrentTrack) < m_MusicTracks.size())
+        m_MusicTracks[m_CurrentTrack].SetVolume(m_CurrentVolume);
 }

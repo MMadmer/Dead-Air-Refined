@@ -50,12 +50,14 @@ class CLevelSoundManager
     MusicTrackVec m_MusicTracks;
     u32 m_NextTrackTime;
     int m_CurrentTrack;
+    float m_CurrentVolume;
 
 public:
     CLevelSoundManager();
     void Load();
     void Unload();
     void Update();
+    void SetVolume(float volume);
 };
 
 #endif

@@ -136,6 +136,7 @@ void CUICellItem::Update()
         }
         m_upgrade->Show(m_has_upgrade);
     }
+
 }
 
 bool CUICellItem::OnMouseAction(float x, float y, EUIMessages mouse_action)
@@ -221,6 +222,17 @@ CUIDragItem* CUICellItem::CreateDragItem()
 void CUICellItem::SetOwnerList(CUIDragDropListEx* p)
 {
     m_pParentList = p;
+    if (p && m_text)
+    {
+        Ivector2 itemGridSize = GetGridSize();
+        if (p->GetVerticalPlacement())
+            std::swap(itemGridSize.x, itemGridSize.y);
+
+        const Ivector2 cellSize = p->CellSize();
+        const Ivector2 cellSpacing = p->CellsSpacing();
+        const float y = itemGridSize.y * (cellSize.y + cellSpacing.y) - m_text->GetHeight() - 2.f;
+        m_text->SetWndPos({1.f, y});
+    }
     //UpdateConditionProgressBar();
 }
 
@@ -235,6 +247,12 @@ void CUICellItem::UpdateConditionProgressBar()
 
         if (itm && itm->IsUsingCondition())
         {
+            if (itm->object().cast_explosive())
+            {
+                m_pConditionState->Show(false);
+                return;
+            }
+
             float cond = itm->GetCondition();
 
             CEatableItem* eitm = smart_cast<CEatableItem*>(itm);

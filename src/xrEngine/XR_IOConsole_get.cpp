@@ -23,6 +23,11 @@ bool CConsole::GetBool(pcstr cmd) const
     {
         return (ci->GetValue() != 0);
     }
+
+    CCC_Token* ct = dynamic_cast<CCC_Token*>(cc);
+    if (ct)
+        return ct->GetValue() != 0;
+
     return false;
 }
 
@@ -83,6 +88,16 @@ pcstr CConsole::GetString(pcstr cmd) const
 }
 
 pcstr CConsole::GetToken(pcstr cmd) const { return GetString(cmd); }
+bool CConsole::GetTokenValue(pcstr cmd, u32& value) const
+{
+    CCC_Token* token = dynamic_cast<CCC_Token*>(GetCommand(cmd));
+    if (!token)
+        return false;
+
+    value = token->GetValue();
+    return true;
+}
+
 const xr_token* CConsole::GetXRToken(pcstr cmd) const
 {
     IConsole_Command* cc = GetCommand(cmd);

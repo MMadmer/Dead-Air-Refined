@@ -96,6 +96,7 @@ public:
 
     virtual bool Action(u16 cmd, u32 flags);
     bool IsAmmoAvailable();
+    [[nodiscard]] bool HaveAmmoInMagazine() const;
     virtual void UnloadMagazine(bool spawn_ammo = true);
 
     virtual bool GetBriefInfo(II_BriefInfo& info);
@@ -135,9 +136,15 @@ protected:
     float m_condition_coeff;
     u32 m_condition_available;
 
-    //переменная блокирует использование
-    //только разных типов патронов
-    bool m_bLockType;
+    enum EMagazineFlags : u8
+    {
+        mfLockAmmoType = 1u << 0,
+        mfDetachableMagazine = 1u << 1,
+        mfBoltAction = 1u << 2,
+        mfAlwaysLoad = 1u << 3,
+    };
+    static_assert(sizeof(Flags8) == sizeof(bool) && alignof(Flags8) == alignof(bool));
+    Flags8 m_magazine_flags;
 
 public:
     virtual void OnZoomIn();
@@ -149,7 +156,7 @@ public:
     int GetCurrentFireMode() override
     {
         //AVO: fixed crash due to original GSC assumption that CWeaponMagazined will always have firemodes specified in configs.
-        if (HasFireModes())
+        if (!m_aFireModes.empty())
             return m_aFireModes[m_iCurFireMode];
         return 1;
     }

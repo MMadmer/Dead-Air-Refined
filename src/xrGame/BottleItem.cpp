@@ -9,7 +9,7 @@
 #include "entity_alive.h"
 #include "EntityCondition.h"
 
-#define BREAK_POWER 5.f
+constexpr float bottleBreakPower = 0.1f;
 
 CBottleItem::CBottleItem(void) {}
 CBottleItem::~CBottleItem(void) { sndBreaking.destroy(); }
@@ -59,7 +59,7 @@ void CBottleItem::Hit(SHit* pHDS)
 {
     inherited::Hit(pHDS);
 
-    if (pHDS->damage() > BREAK_POWER)
+    if (pHDS->damage() > bottleBreakPower)
     {
         // Generate Expode event
         if (Local())

@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include <limits>
 #include <type_traits>
 #include "xrCore/xrstring.h"
 #include "xrCommon/xr_string.h"
@@ -194,6 +195,30 @@ template <typename T, typename M, typename P>
 IC void save_data(const T& data, M& stream, const P& p)
 {
     CSaver<M, P>::save_data(data, stream, p);
+}
+
+// Arithmetic elements already use their native byte layout, so bulk writes preserve the legacy stream.
+template <typename T, typename Allocator, typename M>
+    requires ((std::is_arithmetic_v<T> || std::is_enum_v<T>) && !std::is_same_v<T, bool>)
+IC void save_data(const xr_vector<T, Allocator>& data, M& stream)
+{
+    stream.w_u32(static_cast<u32>(data.size()));
+    if (data.empty())
+        return;
+
+    VERIFY(data.size() <= std::numeric_limits<u32>::max() / sizeof(T));
+    stream.w(data.data(), static_cast<u32>(data.size() * sizeof(T)));
+}
+
+template <typename T, size_t Size, typename M>
+    requires ((std::is_arithmetic_v<T> || std::is_enum_v<T>) && !std::is_same_v<T, bool>)
+IC void save_data(const svector<T, Size>& data, M& stream)
+{
+    stream.w_u32(data.size());
+    if (data.empty())
+        return;
+
+    stream.w(data.cbegin(), static_cast<u32>(data.size() * sizeof(T)));
 }
 
 template <typename T, typename M>

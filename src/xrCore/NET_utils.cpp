@@ -8,14 +8,9 @@
 
 // writing
 
-void NET_Packet::w(const void* p, u32 count)
+void NET_Packet::w(const void* data, u32 count)
 {
-    R_ASSERT(inistream == NULL || w_allow);
-    VERIFY(p && count);
-    VERIFY(B.count + count < NET_PacketSizeLimit);
-    CopyMemory(&B.data[B.count], p, count);
-    B.count += count;
-    VERIFY(B.count < NET_PacketSizeLimit);
+    net_packet_detail::write_inline(B, inistream, w_allow, data, count);
 }
 
 void NET_Packet::w_float_q16(float a, float min, float max)
@@ -53,20 +48,9 @@ void NET_Packet::w_sdir(const Fvector& D)
     w_float(mag);
 }
 
-void NET_Packet::w_stringZ(const shared_str& p)
+void NET_Packet::w_stringZ(const shared_str& value)
 {
-    W_guard g(&w_allow);
-    if (p.c_str())
-        w(p.c_str(), p.size() + 1);
-    else
-    {
-        IIniFileStream* tmp = inistream;
-        inistream = NULL;
-        w_u8(0);
-        inistream = tmp; // hack -(
-    }
-
-    INI_W(w_stringZ(p.c_str()));
+    net_packet_detail::write_string(*this, value);
 }
 
 void NET_Packet::w_matrix(Fmatrix& M)
@@ -138,8 +122,8 @@ void NET_Packet::r_seek(u32 pos)
 {
     INI_ASSERT(r_seek)
     //AVO: changed changed condition to <= as all net packet script utils are using r_seek(0) to read the entire packet.
-    VERIFY(pos <= B.count);
-    //VERIFY(pos < B.count);
+    CHECK_OR_EXIT(pos <= B.count,
+        make_string("NET_Packet seek overflow: position=%u, size=%u", pos, B.count));
     r_pos = pos;
 }
 
@@ -157,11 +141,13 @@ void NET_Packet::r(void* p, u32 count)
     {
         Msg("! NET_Packet overflow: position=%u, requested=%u, size=%u", r_pos, count, B.count);
         xrDebug::LogStackTrace("NET_Packet overflow");
+        xrDebug::DoExit(make_string(
+            "NET_Packet read overflow: position=%u, requested=%u, size=%u", r_pos, count, B.count));
+        return;
     }
-    VERIFY(r_pos <= B.count && count <= B.count - r_pos);
+
     CopyMemory(p, &B.data[r_pos], count);
     r_pos += count;
-    VERIFY(r_pos <= B.count);
 }
 
 bool NET_Packet::r_eof()
@@ -179,8 +165,16 @@ u32 NET_Packet::r_elapsed()
 void NET_Packet::r_advance(u32 size)
 {
     INI_ASSERT(r_advance)
+    if (r_pos > B.count || size > B.count - r_pos)
+    {
+        Msg("! NET_Packet advance overflow: position=%u, requested=%u, size=%u", r_pos, size, B.count);
+        xrDebug::LogStackTrace("NET_Packet advance overflow");
+        xrDebug::DoExit(make_string(
+            "NET_Packet advance overflow: position=%u, requested=%u, size=%u", r_pos, size, B.count));
+        return;
+    }
+
     r_pos += size;
-    VERIFY(r_pos <= B.count);
 }
 
 // reading - utilities

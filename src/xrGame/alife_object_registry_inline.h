@@ -20,6 +20,7 @@ IC void CALifeObjectRegistry::add(CSE_ALifeDynamicObject* object)
     }
 
     m_objectIndex[object->ID] = object;
+    index_save_extension_object(object);
 }
 
 IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert)
@@ -32,6 +33,10 @@ IC void CALifeObjectRegistry::remove(const ALife::_OBJECT_ID& id, bool no_assert
     }
 
     m_objectIndex[id] = nullptr;
+    const size_t typeWord = id / std::numeric_limits<u64>::digits;
+    const u64 typeBit = u64{1} << (id % std::numeric_limits<u64>::digits);
+    for (auto& typeWords : m_saveExtensionObjectTypes)
+        typeWords[typeWord] &= ~typeBit;
     m_objects.erase(I);
 }
 

@@ -121,19 +121,38 @@ function file_exist(fname)
 	end
 end
 
-function delete_save_game(filename)
-
-	local save_file		= filename .. saved_game_extension
-	local dds_file		= filename .. ".dds"
-
+function delete_save_files(mask)
 	local f = getFS()
+	local flist = f:file_list_open_ex("$game_saves$", bit_or(FS.FS_ListFiles, FS.FS_RootOnly), mask)
+	for index = 0, flist:Size() - 1 do
+		f:file_delete("$game_saves$", flist:GetAt(index):NameFull())
+	end
+end
 
-	f:file_delete("$game_saves$",save_file)
+function delete_save_game(filename)
+	local f = getFS()
+	local extensions = { saved_game_extension, ".scoc", ".scov" }
+	local suffixes = { "", ".bak", ".recover", ".tmp", ".txn" }
 
-	if file_exist(dds_file) then
-		f:file_delete("$game_saves$", dds_file)
+	for _, extension in ipairs(extensions) do
+		for _, suffix in ipairs(suffixes) do
+			local save_file = filename .. extension .. suffix
+			if file_exist(save_file) then
+				f:file_delete("$game_saves$", save_file)
+			end
+		end
 	end
 
+
+	delete_save_files(filename .. saved_game_extension .. ".*.tmp")
+	delete_save_files(filename .. ".scoc.*.tmp")
+	delete_save_files(filename .. ".scoc.*.preserved")
+	delete_save_files(filename .. ".scov.*.tmp")
+
+	local thumbnail = filename .. ".dds"
+	if file_exist(thumbnail) then
+		f:file_delete("$game_saves$", thumbnail)
+	end
 end
 
 function AddTimeDigit(str, dig)

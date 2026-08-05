@@ -211,6 +211,8 @@ game_action actions[] =
     { "talk_log_scroll_up",     kTALK_LOG_SCROLL_UP,        _sp,    EKeyContext::Talk },
     { "talk_log_scroll_down",   kTALK_LOG_SCROLL_DOWN,      _sp,    EKeyContext::Talk },
 
+    { "wpn_8",                  kWPN_8,                     _both },
+
     { nullptr,                  kLASTACTION,                _both }
 };
 

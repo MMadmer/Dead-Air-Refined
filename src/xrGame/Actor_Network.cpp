@@ -27,6 +27,7 @@
 #include "WeaponMagazined.h"
 #include "WeaponKnife.h"
 #include "CustomOutfit.h"
+#include "ActorBackpack.h"
 
 #include "actor_anim_defs.h"
 
@@ -578,6 +579,8 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
         return false;
     if (!inherited::net_Spawn(DC))
         return false;
+
+    ConsumeAdrenalineSaveState(DC->ID);
 
     CSE_ALifeTraderAbstract* pTA = smart_cast<CSE_ALifeTraderAbstract*>(e);
     set_money(pTA->m_dwMoney, false);
@@ -2084,6 +2087,10 @@ bool CActor::InventoryAllowSprint()
 
     CCustomOutfit* pOutfitItem = GetOutfit();
     if (pOutfitItem && !pOutfitItem->IsSprintAllowed())
+        return false;
+
+    CBackpack* backpack = GetBackpack();
+    if (backpack && !backpack->IsSprintAllowed())
         return false;
 
     return true;

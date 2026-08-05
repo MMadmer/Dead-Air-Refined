@@ -47,6 +47,7 @@ private:
      */
     Objects m_primary_crows;
     xr_vector<Objects> m_secondary_crows;
+    Objects update_snapshot;
     ObjectUpdateStatistics stats;
     u32 statsFrame;
 
@@ -91,6 +92,7 @@ private:
 
 public:
     void Update(bool bForce);
+    void ProcessDestroyQueue();
 
     void net_Register(IGameObject* O);
     void net_Unregister(IGameObject* O);
@@ -123,8 +125,12 @@ public:
         std::shared_lock lock(objectStateMutex);
         if (_it < objects_active.size())
             return objects_active[_it];
-        else
-            return objects_sleeping[_it - objects_active.size()];
+
+        _it -= static_cast<u32>(objects_active.size());
+        if (_it < objects_sleeping.size())
+            return objects_sleeping[_it];
+
+        return nullptr;
     }
     bool dump_all_objects();
 

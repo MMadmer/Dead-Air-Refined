@@ -37,6 +37,7 @@ class CTeleWhirlwind : public CTelekinesis
     float m_throw_power;
     CGameObject* m_owner_object;
     PH_IMPACT_STORAGE m_saved_impacts;
+    size_t m_next_impact{};
     shared_str m_destroying_particles;
 
 public:

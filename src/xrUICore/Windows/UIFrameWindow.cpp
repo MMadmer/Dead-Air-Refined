@@ -195,21 +195,18 @@ void CUIFrameWindow::DrawElements()
     u32 rect_count = 4; // lt+rt+lb+rb
     back_len.x = rect.width() - m_tex_rect[fmLT].width() - m_tex_rect[fmRT].width();
     back_len.y = rect.height() - m_tex_rect[fmLT].height() - m_tex_rect[fmRB].height();
-    R_ASSERT(back_len.x + EPS_L >= 0.0f && back_len.y + EPS_L >= 0.0f);
+    back_len.x = _max(back_len.x, 0.f);
+    back_len.y = _max(back_len.y, 0.f);
 
-    u32 cnt = 0;
     if (back_len.x > 0.0f) // top+bottom
-        cnt = 2 * iCeil(back_len.x / m_tex_rect[fmT].width());
-    rect_count += cnt;
+        rect_count += 2 * iCeil(back_len.x / m_tex_rect[fmT].width());
 
     if (back_len.y > 0.0f) // left+right
-        cnt = 2 * iCeil(back_len.y / m_tex_rect[fmL].height());
-    rect_count += cnt;
+        rect_count += 2 * iCeil(back_len.y / m_tex_rect[fmL].height());
 
     if (back_len.x > 0.0f && back_len.y > 0.0f) // back
-        cnt = iCeil(back_len.x / m_tex_rect[fmBK].width()) * iCeil(back_len.y / m_tex_rect[fmBK].height());
-
-    rect_count += cnt;
+        rect_count += iCeil(back_len.x / m_tex_rect[fmBK].width()) *
+            iCeil(back_len.y / m_tex_rect[fmBK].height());
 
     rect_count *= 6;
 

@@ -233,6 +233,7 @@ public:
     } stat;
 
     u32 context_id{ CHW::IMM_CTX_ID };
+    bool detailRendering{};
 
 public:
     CTexture* get_ActiveTexture(u32 stage)

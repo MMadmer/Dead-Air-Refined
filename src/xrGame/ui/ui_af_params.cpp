@@ -4,6 +4,7 @@
 #include "Actor.h"
 #include "ActorCondition.h"
 #include "inventory_item.h"
+#include "Artefact.h"
 #include "Common/object_broker.h"
 #include "UIXmlInit.h"
 #include "UIHelper.h"
@@ -127,7 +128,7 @@ void CUIArtefactParams::SetInfo(const CInventoryItem& pInvItem)
     const auto& af_section = pInvItem.object().cNameSect().c_str();
     const auto& actor_sect = actor->cNameSect().c_str();
     const auto& condition_sect = pSettings->read_if_exists<pcstr>(actor_sect, "condition_sect", actor_sect);
-    const auto& hit_absorbation_sect = pSettings->r_string(af_section, "hit_absorbation_sect");
+    const CArtefact* artefact = pInvItem.object().cast_artefact();
 
     float h = 0.0f;
     if (m_Prop_line)
@@ -158,6 +159,18 @@ void CUIArtefactParams::SetInfo(const CInventoryItem& pInvItem)
             continue;
 
         float val = pSettings->r_float(af_section, restore_section);
+        if (artefact)
+        {
+            switch (id)
+            {
+            case ALife::eHealthRestoreSpeed: val = artefact->GetHealthPower(); break;
+            case ALife::eSatietyRestoreSpeed: val = artefact->GetSatietyPower(); break;
+            case ALife::ePowerRestoreSpeed: val = artefact->GetPowerPower(); break;
+            case ALife::eBleedingRestoreSpeed: val = artefact->GetBleedingPower(); break;
+            case ALife::eRadiationRestoreSpeed: val = artefact->GetRadiationPower(); break;
+            default: break;
+            }
+        }
         if (fis_zero(val))
             continue;
 
@@ -171,14 +184,18 @@ void CUIArtefactParams::SetInfo(const CInventoryItem& pInvItem)
     }
 
     CHitImmunity immunities;
-    immunities.LoadImmunities(hit_absorbation_sect, pSettings, is_soc);
+    if (!artefact)
+    {
+        const shared_str hitAbsorbationSection = pSettings->r_string(af_section, "hit_absorbation_sect");
+        immunities.LoadImmunities(hitAbsorbationSection.c_str(), pSettings, is_soc);
+    }
 
     for (auto [id, immunity_section, immunity_caption, magnitude, sign_inverse, unit] : af_immunity)
     {
         if (!m_immunity_item[id])
             continue;
 
-        float val = immunities.GetHitImmunity(id);
+        float val = artefact ? artefact->ArtefactHitImmunity(id) : immunities.GetHitImmunity(id);
         if (fis_zero(val))
             continue;
 
@@ -193,7 +210,8 @@ void CUIArtefactParams::SetInfo(const CInventoryItem& pInvItem)
 
     if (m_additional_weight)
     {
-        float val = pSettings->r_float(af_section, "additional_inventory_weight");
+        float val = artefact ? artefact->AdditionalInventoryWeight() :
+                               pSettings->r_float(af_section, "additional_inventory_weight");
         if (!fis_zero(val))
         {
             val *= pInvItem.GetCondition();

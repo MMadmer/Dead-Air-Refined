@@ -157,8 +157,13 @@ u32 CTrade::GetItemPrice(PIItem pItem, bool b_buying, bool bFree /*= false*/)
 
     // computing condition factor
     // for "dead" weapon we use 10% from base cost, for "good" weapon we use full base cost
-    const float condition_power = pSettings->r_float("trade", "buy_condition_koeff");
-    const float condition_factor = powf(pItem->GetCondition() * 0.9f + .1f, condition_power);
+    const float default_condition_power = pSettings->r_float("trade", "buy_condition_koeff");
+    const float condition_power =
+        pThis.inv_owner->trade_parameters().item_condition_exponent(b_buying, default_condition_power);
+    float condition_factor = powf(pItem->GetCondition() * 0.9f + 0.11f, condition_power);
+    clamp(condition_factor, 0.0f, 1.0f);
+    if (pItem->GetDrainCondition())
+        condition_factor = 1.0f;
 
     // computing relation factor
     float relation_factor;
@@ -225,8 +230,20 @@ u32 CTrade::GetItemPrice(PIItem pItem, bool b_buying, bool bFree /*= false*/)
     // float deficit_factor = partner.inv_owner->deficit_factor(pItem->object().cNameSect());
     constexpr float deficit_factor = 1.f;
 
+    float extra_factor = 1.0f;
+    luabind::functor<float> extra_factor_callback;
+    if (GEnv.ScriptEngine->functor("trade_manager.get_extra_factor", extra_factor_callback))
+    {
+        CGameObject* item_object = pItem->cast_game_object();
+        VERIFY(item_object);
+        extra_factor = extra_factor_callback(
+            item_object->lua_game_object(), pThis.inv_owner->SpecificCharacter().barter_mode());
+        R_ASSERT2(std::isfinite(extra_factor) && extra_factor >= 0.0f,
+            "trade_manager.get_extra_factor must return a finite non-negative value");
+    }
+
     // total price calculation
-    u32 result = iFloor(base_cost * condition_factor * action_factor * deficit_factor);
+    u32 result = iFloor(base_cost * condition_factor * action_factor * deficit_factor * extra_factor);
 
     // use some script discounts
     luabind::functor<float> func;

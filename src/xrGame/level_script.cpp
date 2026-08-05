@@ -182,6 +182,9 @@ void change_game_time(u32 days, u32 hours, u32 mins)
 
 float high_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 {
+    if (!ai().level_graph().valid_vertex_id(level_vertex_id))
+        return 0.0f;
+
     float y, p;
     direction.getHP(y, p);
     return (ai().level_graph().high_cover_in_direction(y, level_vertex_id));
@@ -189,6 +192,9 @@ float high_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 
 float low_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 {
+    if (!ai().level_graph().valid_vertex_id(level_vertex_id))
+        return 0.0f;
+
     float y, p;
     direction.getHP(y, p);
     return (ai().level_graph().low_cover_in_direction(y, level_vertex_id));
@@ -196,8 +202,14 @@ float low_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 
 float rain_factor() { return (g_pGamePersistent->Environment().CurrentEnv.rain_density); }
 float get_rain_volume() { return g_pGamePersistent->Environment().GetRainVolume(); }
+float get_season_k() { return g_pGamePersistent->Environment().GetSeason(); }
+void set_season_k(float value) { g_pGamePersistent->Environment().SetSeason(value); }
+float snow_factor() { return g_pGamePersistent->Environment().GetSnowFactor(); }
 u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distance)
 {
+    if (!ai().level_graph().valid_vertex_id(level_vertex_id))
+        return u32(-1);
+
     direction.normalize_safe();
     direction.mul(max_distance);
     Fvector start_position = ai().level_graph().vertex_position(level_vertex_id);
@@ -207,7 +219,13 @@ u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distan
     return (ai().level_graph().valid_vertex_id(result) ? result : level_vertex_id);
 }
 
-Fvector vertex_position(u32 level_vertex_id) { return (ai().level_graph().vertex_position(level_vertex_id)); }
+Fvector vertex_position(u32 level_vertex_id)
+{
+    if (!ai().level_graph().valid_vertex_id(level_vertex_id))
+        return {};
+
+    return ai().level_graph().vertex_position(level_vertex_id);
+}
 bool valid_vertex_id(u32 level_vertex_id) { return ai().level_graph().valid_vertex_id(level_vertex_id); }
 void map_add_object_spot(u16 id, LPCSTR spot_type, LPCSTR text)
 {
@@ -355,6 +373,7 @@ void remove_calls_for_object(const luabind::object& lua_object)
 CEnvironment* environment() { return (g_pGamePersistent->pEnvironment); }
 CEnvDescriptor* current_environment(CEnvironment* self) { return &self->CurrentEnv; }
 extern bool g_bDisableAllInput;
+extern bool g_bDisableAllActions;
 void disable_input()
 {
     if (psActorFlags.test(AF_GODMODE) && Actor())
@@ -365,9 +384,17 @@ void disable_input()
     Msg("input disabled");
 #endif // #ifdef DEBUG
 }
+void disable_actions()
+{
+    g_bDisableAllActions = true;
+#ifdef DEBUG
+    Msg("actions disabled");
+#endif // #ifdef DEBUG
+}
 void enable_input()
 {
     g_bDisableAllInput = false;
+    g_bDisableAllActions = false;
 #ifdef DEBUG
     Msg("input enabled");
 #endif // #ifdef DEBUG
@@ -431,6 +458,19 @@ float add_cam_effector2(LPCSTR fn, int id, bool cyclic, LPCSTR cb_func, float ca
     Actor()->Cameras().AddCamEffector(e);
     return e->GetAnimatorLength();
 }
+
+float add_cam_effector3(LPCSTR fn, int id, bool cyclic, LPCSTR cb_func)
+{
+    CAnimatorCamEffectorScriptCB* e = xr_new<CAnimatorCamEffectorScriptCB>(cb_func);
+    e->SetType((ECamEffectorType)id);
+    e->SetCyclic(cyclic);
+    e->Start(fn);
+    e->SetHudAffect(false);
+    Actor()->Cameras().AddCamEffector(e);
+    return e->GetAnimatorLength();
+}
+
+void set_ambient_volume(float volume) { Level().SetAmbientVolume(volume); }
 
 void remove_cam_effector(int id) { Actor()->Cameras().RemoveCamEffector((ECamEffectorType)id); }
 float get_snd_volume() { return psSoundVFactor; }
@@ -812,6 +852,8 @@ void CLevel::script_register(lua_State* luaState)
         def("stop_weather_fx", stop_weather_fx),
 
         def("environment", environment),
+        def("get_season_k", get_season_k),
+        def("set_season_k", set_season_k),
 
         def("set_time_factor", set_time_factor),
         def("get_time_factor", get_time_factor),
@@ -829,6 +871,7 @@ void CLevel::script_register(lua_State* luaState)
         def("vertex_in_direction", vertex_in_direction),
         def("rain_factor", rain_factor),
         def("get_rain_volume", get_rain_volume),
+        def("snow_factor", snow_factor),
         def("patrol_path_exists", patrol_path_exists),
         def("vertex_position", vertex_position),
         def("valid_vertex_id", valid_vertex_id),
@@ -866,6 +909,7 @@ void CLevel::script_register(lua_State* luaState)
         def("remove_calls_for_object", remove_calls_for_object),
         def("present", is_level_present),
         def("disable_input", disable_input),
+        def("disable_actions", disable_actions),
         def("enable_input", enable_input),
         def("spawn_phantom", spawn_phantom),
 
@@ -875,6 +919,7 @@ void CLevel::script_register(lua_State* luaState)
         def("iterate_sounds", &iterate_sounds2),
         def("get_snd_volume", &get_snd_volume),
         def("set_snd_volume", &set_snd_volume),
+        def("set_ambient_volume", &set_ambient_volume),
 
         def("add_cam_effector", &add_cam_effector),
         def("add_cam_effector2", &add_cam_effector2),
@@ -882,6 +927,7 @@ void CLevel::script_register(lua_State* luaState)
         {
             add_cam_effector2(fn, id, cyclic, cb_func, 0.0f);
         }),
+        def("add_cam_effector3", &add_cam_effector3),
 
         def("remove_cam_effector", &remove_cam_effector),
         def("add_pp_effector", &add_pp_effector),

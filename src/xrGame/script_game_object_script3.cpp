@@ -173,9 +173,11 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("torch2_set_offset_y", &CScriptGameObject::torch2_set_offset_y)
         .def("torch2_set_offset_z", &CScriptGameObject::torch2_set_offset_z)
         .def("torch_enabled", &CScriptGameObject::torch_enabled)
+        .def("kick_enable", &CScriptGameObject::kick_enable)
         .def("attachable_item_load_attach", &CScriptGameObject::attachable_item_load_attach)
         .def("weapon_strapped", &CScriptGameObject::weapon_strapped)
         .def("weapon_unstrapped", &CScriptGameObject::weapon_unstrapped)
+        .def("is_ghost", &CScriptGameObject::IsGhost)
 
         //////////////////////////////////////////////////////////////////////////
         // inventory owner
@@ -270,10 +272,15 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
 
         .def("hide_weapon", &CScriptGameObject::HideWeapon)
         .def("restore_weapon", &CScriptGameObject::RestoreWeapon)
+        .def("hide_detector", &CScriptGameObject::HideDetector)
+        .def("hide_detector", +[](CScriptGameObject* self, bool fast) { self->HideDetector(fast); })
+        .def("restore_detector", &CScriptGameObject::RestoreDetector)
+        .def("restore_detector", +[](CScriptGameObject* self, bool fast) { self->RestoreDetector(fast); })
 
         .def("weapon_is_grenadelauncher", &CScriptGameObject::Weapon_IsGrenadeLauncherAttached)
         .def("weapon_is_scope", &CScriptGameObject::Weapon_IsScopeAttached)
         .def("weapon_is_silencer", &CScriptGameObject::Weapon_IsSilencerAttached)
+        .def("weapon_is_scope_texture", &CScriptGameObject::WeaponIsScopeTexture)
 
         .def("weapon_grenadelauncher_status", &CScriptGameObject::Weapon_GrenadeLauncher_Status)
         .def("weapon_scope_status", &CScriptGameObject::Weapon_Scope_Status)
@@ -302,6 +309,7 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         //////////////////////////////////////////////////////////////////////////
         .def("profile_name", &CScriptGameObject::ProfileName)
         .def("character_name", &CScriptGameObject::CharacterName)
+        .def("set_character_name", &CScriptGameObject::SetCharacterName)
         .def("character_icon", &CScriptGameObject::CharacterIcon)
         .def("character_rank", &CScriptGameObject::CharacterRank)
         .def("set_character_rank", &CScriptGameObject::SetCharacterRank)
@@ -461,6 +469,8 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("sell_condition", (void (CScriptGameObject::*)(float, float))(&CScriptGameObject::sell_condition))
         .def("buy_supplies", &CScriptGameObject::buy_supplies)
         .def("buy_item_condition_factor", &CScriptGameObject::buy_item_condition_factor)
+        .def("buy_item_exponent", &CScriptGameObject::buy_item_exponent)
+        .def("sell_item_exponent", &CScriptGameObject::sell_item_exponent)
 
         .def("sound_prefix", (LPCSTR(CScriptGameObject::*)() const)(&CScriptGameObject::sound_prefix))
         .def("sound_prefix", (void (CScriptGameObject::*)(LPCSTR))(&CScriptGameObject::sound_prefix))
@@ -574,11 +584,14 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("can_add_upgrade", &CScriptGameObject::CanAddUpgrade)
         .def("iterate_installed_upgrades", &CScriptGameObject::IterateInstalledUpgrades)
         .def("weapon_in_grenade_mode", &CScriptGameObject::WeaponInGrenadeMode)
+        .def("missile_set_destroy_time", &CScriptGameObject::MissileSetDestroyTime)
 
         // For CHudItem
         .def("play_hud_motion", &CScriptGameObject::PlayHudMotion)
         .def("switch_state", &CScriptGameObject::SwitchState)
         .def("get_state", &CScriptGameObject::GetState)
+        .def("activate_hud_item", &CScriptGameObject::ActivateHudItem)
+        .def("deactivate_hud_item", &CScriptGameObject::DeactivateHudItem)
 
         // For EatableItem
         .def("set_remaining_uses", &CScriptGameObject::SetRemainingUses)
@@ -695,6 +708,7 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("set_actor_runback_coef", &CScriptGameObject::SetActorRunBackCoef)
         .def("set_actor_recoil_coeff", &CScriptGameObject::SetActorRecoilCoeff)
         .def("set_actor_zoom_inertion", &CScriptGameObject::SetActorZoomInertion)
+        .def("set_actor_adrenaline_time", &CScriptGameObject::SetActorAdrenalineTime)
         .def("set_radiation_detector", &CScriptGameObject::SetRadiationDetector)
         .def("get_radiation_detector", &CScriptGameObject::GetRadiationDetector)
         //-AVO

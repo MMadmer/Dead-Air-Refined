@@ -42,9 +42,9 @@ public:
         u32 item_price = u32(-1), pcstr trade_tip = nullptr);
 
     void TryAddConditionInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem);
-    void TryAddWpnInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem);
-    void TryAddArtefactInfo(CInventoryItem& pInvItem);
-    void TryAddOutfitInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem);
+    bool TryAddWpnInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem);
+    bool TryAddArtefactInfo(CInventoryItem& pInvItem);
+    bool TryAddOutfitInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem);
     void TryAddUpgradeInfo(CInventoryItem& pInvItem);
     void TryAddBoosterInfo(CInventoryItem& pInvItem);
 

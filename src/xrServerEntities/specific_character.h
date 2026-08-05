@@ -129,6 +129,7 @@ public:
     int crouch_type() const;
     bool upgrade_mechanic() const;
     bool barter_mode() const;
+    bool trade_barter() const;
     LPCSTR critical_wound_weights() const;
 
     const shared_str& IconName() const { return data()->m_icon_name; };

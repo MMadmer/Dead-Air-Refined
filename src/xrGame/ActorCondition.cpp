@@ -209,16 +209,8 @@ void CActorCondition::UpdateCondition()
 
     if (IsGameTypeSingle())
     {
-        float k_max_power = 1.0f;
-        if (true)
-        {
-            k_max_power =
-                1.0f + std::min(cur_weight, base_weight) / base_weight + std::max(0.0f, (cur_weight - base_weight) / 10.0f);
-        }
-        else
-        {
-            k_max_power = 1.0f;
-        }
+        const float k_max_power =
+            1.0f + std::min(cur_weight, base_weight) / base_weight + std::max(0.0f, (cur_weight - base_weight) / 10.0f);
         SetMaxPower(GetMaxPower() - m_fPowerLeakSpeed * m_fDeltaTime * k_max_power);
     }
 
@@ -288,7 +280,7 @@ void CActorCondition::UpdateCondition()
     if (IsGameTypeSingle())
         UpdateTutorialThresholds();
 
-    if (GetHealth() < 0.05f && m_death_effector == NULL && IsGameTypeSingle())
+    if (GetHealth() < 0.05f && !m_death_effector && IsGameTypeSingle())
     {
         if (pSettings->section_exist("actor_death_effector"))
             m_death_effector = xr_new<CActorDeathEffector>(this, "actor_death_effector");
@@ -340,7 +332,7 @@ void CActorCondition::AffectDamage_InjuriousMaterialAndMonstersInfluence()
 
     float psy_influence = 0;
     float fire_influence = 0;
-    float radiation_influence = GetInjuriousMaterialDamage(); // Get Radiation from Material
+    float radiation_influence = 0.0f;
 
     // Add Radiation and Psy Level from Monsters
     CPda* const pda = m_object->GetPDA();
@@ -361,13 +353,17 @@ void CActorCondition::AffectDamage_InjuriousMaterialAndMonstersInfluence()
         }
     }
 
-    struct
+    const float material_radiation = GetInjuriousMaterialDamage();
+    const struct
     {
         ALife::EHitType type;
         float value;
+        u16 bone;
 
-    } hits[] = {{ALife::eHitTypeRadiation, radiation_influence * one}, {ALife::eHitTypeTelepatic, psy_influence * one},
-        {ALife::eHitTypeBurn, fire_influence * one}};
+    } hits[] = {{ALife::eHitTypeRadiation, radiation_influence * one, BI_NONE},
+        {ALife::eHitTypeTelepatic, psy_influence * one, BI_NONE},
+        {ALife::eHitTypeBurn, fire_influence * one, BI_NONE},
+        {ALife::eHitTypeRadiation, material_radiation * one, u16(Actor()->m_spine)}};
 
     NET_Packet np;
 
@@ -377,14 +373,14 @@ void CActorCondition::AffectDamage_InjuriousMaterialAndMonstersInfluence()
 
         for (size_t i = 0; i < sizeof(hits) / sizeof(hits[0]); ++i)
         {
-            float damage = hits[i].value;
-            ALife::EHitType type = hits[i].type;
+            const float damage = hits[i].value;
+            const ALife::EHitType type = hits[i].type;
 
             if (damage > EPS)
             {
                 SHit HDS = SHit(damage,
                     //.								0.0f,
-                    Fvector().set(0, 1, 0), NULL, BI_NONE, Fvector().set(0, 0, 0), 0.0f, type, 0.0f, false);
+                    Fvector().set(0, 1, 0), nullptr, hits[i].bone, Fvector().set(0, 0, 0), 0.0f, type, 0.0f, false);
 
                 HDS.GenHeader(GE_HIT, m_object->ID());
                 HDS.Write_Packet(np);
@@ -474,12 +470,13 @@ void CActorCondition::UpdateSatiety()
         clamp(m_fSatiety, 0.0f, 1.0f);
     }
 
-    float satiety_health_koef = (m_fSatiety - m_fSatietyCritical) /
-        (m_fSatiety >= m_fSatietyCritical ? 1 - m_fSatietyCritical : m_fSatietyCritical);
+    const float effective_satiety = std::min(m_fSatiety * 2.0f, 1.0f);
+    const float satiety_health_koef = (effective_satiety - m_fSatietyCritical) /
+        (effective_satiety >= m_fSatietyCritical ? 1.0f - m_fSatietyCritical : m_fSatietyCritical);
     if (CanBeHarmed() && !psActorFlags.test(AF_GODMODE_RT))
     {
         m_fDeltaHealth += m_fV_SatietyHealth * satiety_health_koef * m_fDeltaTime;
-        m_fDeltaPower += m_fV_SatietyPower * m_fSatiety * m_fDeltaTime;
+        m_fDeltaPower += m_fV_SatietyPower * effective_satiety * m_fDeltaTime;
     }
 
     m_fV_SatietyPower -= power_adjustment;
@@ -507,9 +504,20 @@ void CActorCondition::ConditionJump(float weight)
 
 void CActorCondition::ConditionWalk(float weight, bool accel, bool sprint)
 {
+    (void)accel;
+    if (!sprint)
+        return;
+
     float power = m_fWalkPower;
     power += m_fWalkWeightPower * weight * (weight > 1.f ? m_fOverweightWalkK : 1.f);
-    power *= m_fDeltaTime * (accel ? (sprint ? m_fSprintK : m_fAccelK) : 1.f);
+
+    constexpr float overweightScale = 0.0015f;
+    const float maxWalkWeight = object().MaxWalkWeight();
+    const float currentWeight = weight * object().MaxCarryWeight();
+    float overweightFactor = (currentWeight - maxWalkWeight) * (maxWalkWeight * overweightScale);
+    clamp(overweightFactor, 0.f, 1.f);
+
+    power *= m_fDeltaTime * (m_fSprintK + overweightFactor * 4.f);
     m_fPower -= HitPowerEffect(power);
 }
 
@@ -834,23 +842,17 @@ bool CActorCondition::PlayHitSound(SHit* pHDS)
 {
     switch (pHDS->hit_type)
     {
-    case ALife::eHitTypeTelepatic: return false; break;
+    case ALife::eHitTypeTelepatic:
+    case ALife::eHitTypeRadiation: return false;
     case ALife::eHitTypeShock:
+    case ALife::eHitTypeBurn:
+    case ALife::eHitTypeLightBurn:
+    case ALife::eHitTypeChemicalBurn: return pHDS->damage() > 1.0f;
     case ALife::eHitTypeStrike:
     case ALife::eHitTypeWound:
     case ALife::eHitTypeExplosion:
     case ALife::eHitTypeFireWound:
-    case ALife::eHitTypeWound_2:
-    case ALife::eHitTypePhysicStrike:
-        return true;
-        break;
-
-    case ALife::eHitTypeRadiation:
-    case ALife::eHitTypeBurn:
-    case ALife::eHitTypeLightBurn:
-    case ALife::eHitTypeChemicalBurn:
-        return (pHDS->damage() > 0.017f); // field zone threshold
-        break;
+    case ALife::eHitTypeWound_2: return pHDS->damage() > 0.1f;
     default: return true;
     }
 }

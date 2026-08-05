@@ -1,6 +1,12 @@
 #pragma once
 #include "Missile.h"
 #include "xrPhysics/DamageSource.h"
+
+class CActor;
+
+void RequestInfiniteBoltRestock();
+void EnsureInfiniteBoltRestock(CActor& actor);
+
 class CBolt : public CMissile, public IDamageSource
 {
     typedef CMissile inherited;
@@ -10,6 +16,7 @@ public:
     CBolt();
     virtual ~CBolt();
 
+    void Load(LPCSTR section) override;
     virtual void OnH_A_Chield();
 
     virtual void SetInitiator(u16 id);
@@ -18,6 +25,7 @@ public:
     virtual void Throw();
     virtual bool Action(u16 cmd, u32 flags);
     virtual bool Useful() const;
+    bool GetBriefInfo(II_BriefInfo& info) override;
     virtual void activate_physic_shell();
 
     virtual bool UsedAI_Locations() { return false; }

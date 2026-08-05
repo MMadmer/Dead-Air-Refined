@@ -9,11 +9,37 @@
 
 CWeaponShotgun::CWeaponShotgun()
 {
-    m_eSoundClose = ESoundTypes(SOUND_TYPE_WEAPON_SHOOTING);
-    m_eSoundAddCartridge = ESoundTypes(SOUND_TYPE_WEAPON_SHOOTING);
+    m_eSoundClose = ESoundTypes(SOUND_TYPE_WEAPON_RECHARGING);
+    m_eSoundAddCartridge = ESoundTypes(SOUND_TYPE_WEAPON_RECHARGING);
 }
 
 CWeaponShotgun::~CWeaponShotgun() {}
+
+bool CWeaponShotgun::net_Spawn(CSE_Abstract* DC)
+{
+    const bool result = inherited::net_Spawn(DC);
+    if (!result)
+        return false;
+
+    CSE_ALifeItemWeaponShotGun* serverWeapon = smart_cast<CSE_ALifeItemWeaponShotGun*>(DC);
+    R_ASSERT2(serverWeapon, make_string("Invalid server entity for shotgun '%s'", cNameSect().c_str()));
+
+    if (serverWeapon->m_AmmoIDs.empty())
+        return result;
+
+    R_ASSERT3(serverWeapon->m_AmmoIDs.size() == m_magazine.size(),
+        "Saved mixed shotgun magazine size does not match ammo count", cNameSect().c_str());
+
+    for (size_t i = 0; i < m_magazine.size(); ++i)
+    {
+        const u8 ammoType = serverWeapon->m_AmmoIDs[i];
+        R_ASSERT3(ammoType < m_ammoTypes.size(), "Saved shotgun cartridge type is out of range", cNameSect().c_str());
+        m_magazine[i].Load(m_ammoTypes[ammoType].c_str(), ammoType);
+    }
+
+    return result;
+}
+
 void CWeaponShotgun::net_Destroy() { inherited::net_Destroy(); }
 void CWeaponShotgun::Load(LPCSTR section)
 {
@@ -36,7 +62,6 @@ void CWeaponShotgun::Load(LPCSTR section)
 void CWeaponShotgun::switch2_Fire()
 {
     inherited::switch2_Fire();
-    bWorking = false;
 }
 
 bool CWeaponShotgun::Action(u16 cmd, u32 flags)
@@ -56,8 +81,11 @@ bool CWeaponShotgun::Action(u16 cmd, u32 flags)
 
 void CWeaponShotgun::OnAnimationEnd(u32 state)
 {
-    if (!m_bTriStateReload || state != eReload)
+    if (!m_bTriStateReload || IsMisfire() || state != eReload)
+    {
+        m_sub_state = eSubstateReloadBegin;
         return inherited::OnAnimationEnd(state);
+    }
 
     switch (m_sub_state)
     {
@@ -89,7 +117,9 @@ void CWeaponShotgun::OnAnimationEnd(u32 state)
 
 void CWeaponShotgun::Reload()
 {
-    if (m_bTriStateReload)
+    if (IsMisfire())
+        inherited::Reload();
+    else if (m_bTriStateReload)
     {
         TriStateReload();
     }
@@ -108,7 +138,7 @@ void CWeaponShotgun::TriStateReload()
 
 void CWeaponShotgun::OnStateSwitch(u32 S, u32 oldState)
 {
-    if (!m_bTriStateReload || S != eReload)
+    if (!m_bTriStateReload || IsMisfire() || S != eReload)
     {
         inherited::OnStateSwitch(S, oldState);
         return;
@@ -154,8 +184,13 @@ void CWeaponShotgun::switch2_AddCartgidge()
 void CWeaponShotgun::switch2_EndReload()
 {
     SetPending(FALSE);
-    PlaySound("sndClose", get_LastFP());
-    PlayAnimCloseWeapon();
+    if (isHUDAnimationExist("anm_close") || isHUDAnimationExist("anim_close_weapon"))
+    {
+        PlaySound("sndClose", get_LastFP());
+        PlayAnimCloseWeapon();
+    }
+    else
+        SwitchState(eIdle);
 }
 
 void CWeaponShotgun::PlayAnimOpenWeapon()
@@ -172,7 +207,7 @@ void CWeaponShotgun::PlayAnimCloseWeapon()
 {
     VERIFY(GetState() == eReload);
 
-    PlayHUDMotion("anm_close", "anim_close_weapon", FALSE, this, GetState());
+    PlayHUDMotion("anm_close", "anim_close_weapon", TRUE, this, GetState());
 }
 
 bool CWeaponShotgun::HaveCartridgeInInventory(u8 cnt)
@@ -264,6 +299,11 @@ void CWeaponShotgun::net_Import(NET_Packet& P)
         u8 LocalAmmoType = P.r_u8();
         if (i >= m_magazine.size())
             continue;
+        if (LocalAmmoType >= m_ammoTypes.size())
+        {
+            Msg("! Shotgun '%s' received invalid cartridge type %u", cNameSect().c_str(), LocalAmmoType);
+            continue;
+        }
         CCartridge& l_cartridge = *(m_magazine.begin() + i);
         if (LocalAmmoType == l_cartridge.m_LocalAmmoType)
             continue;

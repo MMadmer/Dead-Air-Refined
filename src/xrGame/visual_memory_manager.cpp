@@ -412,7 +412,7 @@ bool CVisualMemoryManager::visible(const CGameObject* game_object, float time_de
     }
 
     object->m_update_time = Device.dwTimeGlobal;
-    object->m_value += get_visible_value(game_object, distance, object_distance, time_delta,
+    object->m_value = get_visible_value(game_object, distance, object_distance, time_delta,
         get_object_velocity(game_object, *object), object_luminocity(game_object));
     clamp(object->m_value, 0.f, current_state().m_visibility_threshold + EPS_L);
     object->m_prev_time = get_prev_time(game_object);

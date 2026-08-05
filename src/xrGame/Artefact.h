@@ -8,6 +8,24 @@
 class SArtefactActivation;
 struct SArtefactDetectorsSupport;
 
+inline constexpr u32 artefactOverrideValueCount = 16;
+
+struct SArtefactOverrideSaveState
+{
+    u32 sectionChecksum{};
+    u32 changedMask{};
+    float values[artefactOverrideValueCount]{};
+    u16 objectId{u16(-1)};
+};
+
+struct SArtefactOverrideSaveCaptureState
+{
+    xr_vector<SArtefactOverrideSaveState> records;
+    u32 nextObjectId{};
+    bool initialized{};
+    bool completed{};
+};
+
 class CArtefact : public CHudItemObject, public CPHUpdateObject
 {
     typedef CHudItemObject inherited;
@@ -43,11 +61,21 @@ public:
     float GetPowerPower() const { return m_fPowerRestoreSpeed; }
     float GetBleedingPower() const { return m_fBleedingRestoreSpeed; }
 
-    void SetHealthPower(const float value) { m_fHealthRestoreSpeed = value; }
-    void SetRadiationPower(const float value) { m_fRadiationRestoreSpeed = value; }
-    void SetSatietyPower(const float value) { m_fSatietyRestoreSpeed = value; }
-    void SetPowerPower(const float value) { m_fPowerRestoreSpeed = value; }
-    void SetBleedingPower(const float value) { m_fBleedingRestoreSpeed = value; }
+    void SetRuntimeWeight(float value);
+    void SetHealthPower(float value);
+    void SetRadiationPower(float value);
+    void SetSatietyPower(float value);
+    void SetPowerPower(float value);
+    void SetBleedingPower(float value);
+
+    static void CollectOverrideSaveState(xr_vector<SArtefactOverrideSaveState>& result);
+    static void BeginOverrideSaveCapture(SArtefactOverrideSaveCaptureState& state);
+    [[nodiscard]] static bool ContinueOverrideSaveCapture(
+        SArtefactOverrideSaveCaptureState& state, float budgetMilliseconds);
+    static void StageOverrideSaveState(const xr_vector<SArtefactOverrideSaveState>& state);
+    static void ClearOverrideSaveState();
+    static void ForgetOverrideSaveState(const CSE_Abstract& serverObject);
+    void ConsumeOverrideSaveState(u16 objectId);
 
 protected:
     virtual void UpdateCLChild(){};
@@ -84,15 +112,12 @@ public:
     virtual void PhTune(float step){};
 
     float AdditionalInventoryWeight() const { return m_additional_weight; }
-    void SetAdditionalInventoryWeight(float value) { m_additional_weight = value; }
+    void SetAdditionalInventoryWeight(float value);
     float ArtefactHitImmunity(ALife::EHitType hitType) const
     {
         return m_ArtefactHitImmunities.GetHitImmunity(hitType);
     }
-    void SetArtefactHitImmunity(ALife::EHitType hitType, float value)
-    {
-        m_ArtefactHitImmunities.SetHitImmunity(hitType, value);
-    }
+    void SetArtefactHitImmunity(ALife::EHitType hitType, float value);
     bool m_bCanSpawnZone;
     float m_fHealthRestoreSpeed;
     float m_fRadiationRestoreSpeed;

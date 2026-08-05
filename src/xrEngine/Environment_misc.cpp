@@ -15,23 +15,62 @@
 
 namespace
 {
+struct DescriptorWeatherState
+{
+    float sun_reflection{};
+    float wetness{};
+    float snow_factor{};
+};
+
 // Keep recovered weather data outside the exported descriptor layout.
-xr_flat_hash_map<const CEnvDescriptor*, float> descriptor_sun_reflections;
+xr_flat_hash_map<const CEnvDescriptor*, DescriptorWeatherState> descriptor_weather_states;
 std::atomic<float> current_sun_reflection{0.f};
+std::atomic<float> current_wetness{0.f};
+std::atomic<float> current_snow_factor{0.f};
 
 float get_sun_reflection(const CEnvDescriptor& descriptor)
 {
-    const auto it = descriptor_sun_reflections.find(&descriptor);
-    return it != descriptor_sun_reflections.end() ? it->second : 0.f;
+    const auto it = descriptor_weather_states.find(&descriptor);
+    return it != descriptor_weather_states.end() ? it->second.sun_reflection : 0.f;
+}
+
+DescriptorWeatherState get_weather_state(const CEnvDescriptor& descriptor)
+{
+    const auto it = descriptor_weather_states.find(&descriptor);
+    return it != descriptor_weather_states.end() ? it->second : DescriptorWeatherState{};
 }
 
 void set_sun_reflection(const CEnvDescriptor& descriptor, float value)
 {
-    descriptor_sun_reflections[&descriptor] = value;
+    descriptor_weather_states[&descriptor].sun_reflection = value;
+}
+
+float get_wetness(const CEnvDescriptor& descriptor)
+{
+    const auto it = descriptor_weather_states.find(&descriptor);
+    return it != descriptor_weather_states.end() ? it->second.wetness : 0.f;
+}
+
+void set_wetness(const CEnvDescriptor& descriptor, float value)
+{
+    descriptor_weather_states[&descriptor].wetness = value;
+}
+
+float get_snow_factor(const CEnvDescriptor& descriptor)
+{
+    const auto it = descriptor_weather_states.find(&descriptor);
+    return it != descriptor_weather_states.end() ? it->second.snow_factor : 0.f;
+}
+
+void set_snow_factor(const CEnvDescriptor& descriptor, float value)
+{
+    descriptor_weather_states[&descriptor].snow_factor = value;
 }
 } // namespace
 
 float GetCurrentSunReflection() { return current_sun_reflection.load(std::memory_order_relaxed); }
+float GetCurrentWetness() { return current_wetness.load(std::memory_order_relaxed); }
+float GetCurrentSnowFactor() { return current_snow_factor.load(std::memory_order_relaxed); }
 
 void CEnvModifier::load(IReader* fs, u32 version)
 {
@@ -315,7 +354,10 @@ CEnvDescriptor::CEnvDescriptor(shared_str const& identifier) : m_identifier(iden
     env_ambient = nullptr;
 }
 
-CEnvDescriptor::~CEnvDescriptor() { descriptor_sun_reflections.erase(this); }
+CEnvDescriptor::CEnvDescriptor(CEnvDescriptor&&) = default;
+CEnvDescriptor& CEnvDescriptor::operator=(CEnvDescriptor&&) = default;
+
+CEnvDescriptor::~CEnvDescriptor() { descriptor_weather_states.erase(this); }
 
 #define C_CHECK(C)                                                           \
     if (C.x < 0 || C.x > 2 || C.y < 0 || C.y > 2 || C.z < 0 || C.z > 2)      \
@@ -382,6 +424,12 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
     fog_distance = config.r_float(identifier, "fog_distance");
     rain_density = config.r_float(identifier, "rain_density");
     clamp(rain_density, 0.f, 1.f);
+    const float wetness = config.read_if_exists<float>(identifier, "wet_intensity", rain_density);
+    const float snow_factor = config.read_if_exists<float>(identifier, "snow_intensity", 0.f);
+    R_ASSERT3(_valid(wetness), "Invalid wet intensity in weather descriptor", identifier);
+    R_ASSERT3(_valid(snow_factor), "Invalid snow intensity in weather descriptor", identifier);
+    set_wetness(*this, wetness);
+    set_snow_factor(*this, snow_factor);
     rain_color = config.r_fvector3(identifier, "rain_color");
     wind_velocity = config.r_float(identifier, "wind_velocity");
     wind_direction = deg2rad(config.r_float(identifier, "wind_direction"));
@@ -448,7 +496,6 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
     C_CHECK(ambient);
     C_CHECK(hemi_color);
     C_CHECK(sun_color);
-    on_device_create();
 }
 
 #undef C_CHECK
@@ -490,6 +537,8 @@ void CEnvDescriptor::save(CInifile& config, pcstr section /*= nullptr*/) const
 
     config.w_fvector3 (identifier, "rain_color",                rain_color);
     config.w_float    (identifier, "rain_density",              rain_density);
+    config.w_float    (identifier, "wet_intensity",             get_wetness(*this));
+    config.w_float    (identifier, "snow_intensity",            get_snow_factor(*this));
 
     config.w_fvector3 (identifier, "sky_color",                 sky_color);
     config.w_float    (identifier, "sky_rotation",              rad2deg(sky_rotation));
@@ -529,7 +578,10 @@ void CEnvDescriptor::copy(const CEnvDescriptor& src)
     *this = src;
     exec_time = saved_exec_time;
     exec_time_loaded = saved_exec_time_loaded;
-    set_sun_reflection(*this, get_sun_reflection(src));
+    descriptor_weather_states[this] = get_weather_state(src);
+
+    // WFX copies CPU data, while the active-pair lifecycle owns renderer resources.
+    on_device_destroy();
 }
 
 void CEnvDescriptor::on_device_create()
@@ -600,9 +652,20 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
 
     m_fSunShaftsIntensity = fi * A.m_fSunShaftsIntensity + f * B.m_fSunShaftsIntensity;
     m_fWaterIntensity = fi * A.m_fWaterIntensity + f * B.m_fWaterIntensity;
-    const float sun_reflection = fi * get_sun_reflection(A) + f * get_sun_reflection(B);
-    set_sun_reflection(*this, sun_reflection);
+    const DescriptorWeatherState state_a = get_weather_state(A);
+    const DescriptorWeatherState state_b = get_weather_state(B);
+    DescriptorWeatherState& current_state = descriptor_weather_states[this];
+
+    const float sun_reflection = fi * state_a.sun_reflection + f * state_b.sun_reflection;
+    current_state.sun_reflection = sun_reflection;
     current_sun_reflection.store(sun_reflection, std::memory_order_relaxed);
+
+    const float wetness = fi * state_a.wetness + f * state_b.wetness;
+    const float snow_factor = fi * state_a.snow_factor + f * state_b.snow_factor;
+    current_state.wetness = wetness;
+    current_state.snow_factor = snow_factor;
+    current_wetness.store(wetness, std::memory_order_relaxed);
+    current_snow_factor.store(snow_factor, std::memory_order_relaxed);
 
     // trees
     m_fTreeAmplitude = fi * A.m_fTreeAmplitude + f * B.m_fTreeAmplitude;
@@ -1042,6 +1105,8 @@ void CEnvironment::unload()
 {
     ZoneScoped;
 
+    Invalidate();
+
     // clear weathers
     for (auto& cycle : WeatherCycles)
         for (auto& env : cycle.second)
@@ -1068,7 +1133,6 @@ void CEnvironment::unload()
     CurrentWeather = nullptr;
     CurrentWeatherName = nullptr;
     m_pRender->Clear();
-    Invalidate();
 }
 
 void CEnvironment::ED_Reload()

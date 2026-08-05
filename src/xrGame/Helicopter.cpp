@@ -11,6 +11,7 @@
 #include "script_game_object.h"
 #include "xrEngine/LightAnimLibrary.h"
 #include "xrUICore/ui_base.h"
+#include "xrCommon/xr_hash_map.h"
 
 #ifdef DEBUG
 #include "xrEngine/GameFont.h"
@@ -18,6 +19,20 @@
 
 // 50fps fixed
 float STEP = 0.02f;
+
+namespace
+{
+// Runtime-only configuration keeps helicopter serialization and ABI unchanged.
+struct HelicopterConfig
+{
+    shared_str lightTexture;
+    float lightAngle{};
+    bool lightVolumetric{};
+    ref_sound explosionSound;
+};
+
+xr_flat_hash_map<const CHelicopter*, HelicopterConfig> helicopterConfigs;
+}
 
 CHelicopter::CHelicopter()
 {
@@ -35,6 +50,11 @@ CHelicopter::CHelicopter()
 
 CHelicopter::~CHelicopter()
 {
+    const auto config = helicopterConfigs.find(this);
+    if (config != helicopterConfigs.end())
+        config->second.explosionSound.destroy();
+    helicopterConfigs.erase(this);
+
     HUD_SOUND_ITEM::DestroySound(m_sndShot);
     HUD_SOUND_ITEM::DestroySound(m_sndShotRocket);
 }
@@ -113,6 +133,13 @@ void CHelicopter::Load(LPCSTR section)
 
     m_light_range = pSettings->r_float(section, "light_range");
     m_light_brightness = pSettings->r_float(section, "light_brightness");
+
+    HelicopterConfig& config = helicopterConfigs[this];
+    config.lightAngle = pSettings->r_float(section, "light_angle");
+    config.lightVolumetric = pSettings->r_bool(section, "light_volumetric");
+    config.lightTexture = pSettings->r_string(section, "light_texture");
+    config.explosionSound.destroy();
+    config.explosionSound.create(pSettings->r_string(section, "explode_sound"), st_Effect, sg_SourceType);
 
     m_light_color = pSettings->r_fcolor(section, "light_color");
     m_light_color.a = 1.f;
@@ -223,10 +250,15 @@ bool CHelicopter::net_Spawn(CSE_Abstract* DC)
 
     // lighting
     m_light_render = GEnv.Render->light_create();
-    m_light_render->set_shadow(false);
-    m_light_render->set_type(IRender_Light::POINT);
+    const auto config = helicopterConfigs.find(this);
+    VERIFY(config != helicopterConfigs.end());
+    m_light_render->set_shadow(true);
+    m_light_render->set_type(IRender_Light::SPOT);
     m_light_render->set_range(m_light_range);
     m_light_render->set_color(m_light_color);
+    m_light_render->set_cone(config->second.lightAngle);
+    m_light_render->set_volumetric(config->second.lightVolumetric);
+    m_light_render->set_texture(config->second.lightTexture.c_str());
 
     if (g_Alive())
         processing_activate();
@@ -250,12 +282,22 @@ void CHelicopter::net_Destroy()
     CPHDestroyable::RespawnInit();
     m_engineSound.stop();
     m_brokenSound.stop();
+    const auto config = helicopterConfigs.find(this);
+    if (config != helicopterConfigs.end() && config->second.explosionSound._feedback())
+        config->second.explosionSound.stop();
     CParticlesObject::Destroy(m_pParticle);
     m_light_render.destroy();
     m_movement.net_Destroy();
 #ifdef DEBUG
     Device.seqRender.Remove(this);
 #endif
+}
+
+void CHelicopter::PlayExplosionSound()
+{
+    const auto config = helicopterConfigs.find(this);
+    VERIFY(config != helicopterConfigs.end());
+    config->second.explosionSound.play_at_pos(nullptr, XFORM().c);
 }
 
 void CHelicopter::SpawnInitPhysics(CSE_Abstract* D)

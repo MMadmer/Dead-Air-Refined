@@ -526,7 +526,6 @@ void CLensFlare::OnFrame(const CEnvDescriptorMixer& currentEnv, float time_facto
     vecSx.mul(vecX, fScale);
     vecSy.mul(vecY, fScale);
 
-    IGameObject* o_main = g_pGameLevel->CurrentViewEntity();
     R_ASSERT(_valid(vSunDir));
     STranspParam TP(&m_ray_cache[0], Device.vCameraPosition, vSunDir, 1000.f, EPS_L);
 
@@ -562,7 +561,8 @@ void CLensFlare::OnFrame(const CEnvDescriptorMixer& currentEnv, float time_facto
             {
                 // cache outdated. real query.
                 r_dest.r_clear();
-                if (g_pGameLevel->ObjectSpace.RayQuery(r_dest, RD, material_callback, &TP, NULL, o_main))
+                // Dead Air lets the current view entity participate in flare occlusion.
+                if (g_pGameLevel->ObjectSpace.RayQuery(r_dest, RD, material_callback, &TP, nullptr, nullptr))
                     m_ray_cache[i].result = false;
             }
         }

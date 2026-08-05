@@ -96,6 +96,7 @@ public:
     float GetVolume() { return rain_volume; }
     void Render();
     void OnFrame();
+    void InvalidateState();
 };
 
 #endif // RainH

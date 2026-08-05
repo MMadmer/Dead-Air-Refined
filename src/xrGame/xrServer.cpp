@@ -556,8 +556,8 @@ u32 xrServer::OnMessage(NET_Packet& P, ClientID sender) // Non-Zero means broadc
     break;
     case M_LOAD_GAME:
     {
-        game->load_game(P, sender);
-        SendBroadcast(BroadcastCID, P, net_flags(TRUE, TRUE));
+        if (game->load_game(P, sender))
+            SendBroadcast(BroadcastCID, P, net_flags(TRUE, TRUE));
         VERIFY(verify_entities());
     }
     break;

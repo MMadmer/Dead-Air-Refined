@@ -5,6 +5,9 @@ CWeaponSVD::CWeaponSVD(void) {}
 CWeaponSVD::~CWeaponSVD(void) {}
 void CWeaponSVD::switch2_Fire()
 {
+    if (GetState() == eFire)
+        return;
+
     m_bFireSingleShot = true;
     bWorking = false;
     SetPending(TRUE);

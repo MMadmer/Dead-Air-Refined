@@ -2,6 +2,7 @@
 #include "UITalkWnd.h"
 #include "UITalkDialogWnd.h"
 #include "Actor.h"
+#include "ActorCondition.h"
 #include "trade.h"
 #include "UIGameSP.h"
 #include "PDA.h"
@@ -14,6 +15,94 @@
 #include "xrEngine/CameraBase.h"
 #include "UIXmlInit.h"
 #include "xrUICore/Buttons/UI3tButton.h"
+
+namespace
+{
+size_t utf8_sequence_length(pcstr text, size_t remaining)
+{
+    const u8 lead = static_cast<u8>(text[0]);
+    size_t length = 1;
+    if (lead >= 0xc2 && lead <= 0xdf)
+        length = 2;
+    else if (lead >= 0xe0 && lead <= 0xef)
+        length = 3;
+    else if (lead >= 0xf0 && lead <= 0xf4)
+        length = 4;
+
+    if (length > remaining)
+        return 1;
+    for (size_t index = 1; index < length; ++index)
+    {
+        const u8 byte = static_cast<u8>(text[index]);
+        if ((byte & 0xc0) != 0x80)
+            return 1;
+    }
+    return length;
+}
+
+xr_string distort_dialogue_text(pcstr text, const CActor* actor)
+{
+    xr_string result = text ? text : "";
+    if (!actor || result.empty())
+        return result;
+
+    float psyHealth = actor->conditions().GetPsyHealth();
+    if (!std::isfinite(psyHealth))
+        return result;
+    clamp(psyHealth, 0.0f, 1.0f);
+    if (psyHealth >= 99.0f / 150.0f)
+        return result;
+
+    constexpr char replacementGlyphs[] = {'?', '*', '~'};
+    xr_string distorted;
+    distorted.reserve(result.size());
+
+    for (size_t offset = 0; offset < result.size();)
+    {
+        if (result[offset] == '<')
+        {
+            const size_t end = result.find('>', offset + 1);
+            const size_t length = end == xr_string::npos ? result.size() - offset : end - offset + 1;
+            distorted.append(result.data() + offset, length);
+            offset += length;
+            continue;
+        }
+
+        if (result[offset] == '%' && offset + 2 < result.size() && result[offset + 1] == 'c' &&
+            result[offset + 2] == '[')
+        {
+            const size_t end = result.find(']', offset + 3);
+            const size_t length = end == xr_string::npos ? result.size() - offset : end - offset + 1;
+            distorted.append(result.data() + offset, length);
+            offset += length;
+            continue;
+        }
+
+        if (result[offset] == '\\')
+        {
+            distorted.push_back(result[offset++]);
+            if (offset < result.size())
+            {
+                const size_t length = utf8_sequence_length(result.data() + offset, result.size() - offset);
+                distorted.append(result.data() + offset, length);
+                offset += length;
+            }
+            continue;
+        }
+
+        const u8 byte = static_cast<u8>(result[offset]);
+        const size_t length = utf8_sequence_length(result.data() + offset, result.size() - offset);
+        const bool distortable = byte >= 0x80 || std::isalnum(byte);
+        if (distortable && Random.randI(100) > psyHealth * 150.0f)
+            distorted.push_back(replacementGlyphs[Random.randI(static_cast<s32>(std::size(replacementGlyphs)))]);
+        else
+            distorted.append(result.data() + offset, length);
+        offset += length;
+    }
+
+    return distorted;
+}
+}
 
 CUITalkWnd::CUITalkWnd() : CUIDialogWnd(CUITalkWnd::GetDebugType())
 {
@@ -303,7 +392,9 @@ void CUITalkWnd::AddQuestion(const shared_str& text, const shared_str& value, in
     if (text.size() == 0)
         return;
 
-    UITalkDialogWnd->AddQuestion(StringTable().translate(text).c_str(), value.c_str(), number, b_finalizer);
+    const shared_str translated = StringTable().translate(text);
+    const xr_string displayedText = distort_dialogue_text(translated.c_str(), m_pActor);
+    UITalkDialogWnd->AddQuestion(displayedText.c_str(), value.c_str(), number, b_finalizer);
 }
 
 void CUITalkWnd::AddAnswer(const shared_str& text, LPCSTR SpeakerName)
@@ -316,7 +407,9 @@ void CUITalkWnd::AddAnswer(const shared_str& text, LPCSTR SpeakerName)
     PlaySnd(text.c_str());
 
     bool i_am = (0 == xr_strcmp(SpeakerName, m_pOurInvOwner->Name())); // XXX: not reliable when both persons have same names
-    UITalkDialogWnd->AddAnswer(SpeakerName, StringTable().translate(text).c_str(), i_am);
+    const shared_str translated = StringTable().translate(text);
+    const xr_string displayedText = distort_dialogue_text(translated.c_str(), m_pActor);
+    UITalkDialogWnd->AddAnswer(SpeakerName, displayedText.c_str(), i_am);
 }
 
 void CUITalkWnd::SwitchToTrade()

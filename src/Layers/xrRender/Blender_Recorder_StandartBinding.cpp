@@ -7,6 +7,7 @@
 
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
+#include "xrEngine/EnvironmentWeatherState.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -130,27 +131,21 @@ static cl_VPtexgen binder_VPtexgen;
 #ifndef _EDITOR
 class cl_fog_plane : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            // Plane
-            Fvector4 plane;
-            Fmatrix& M = Device.mFullTransform;
-            plane.x = -(M._14 + M._13);
-            plane.y = -(M._24 + M._23);
-            plane.z = -(M._34 + M._33);
-            plane.w = -(M._44 + M._43);
-            float denom = -1.0f / _sqrt(_sqr(plane.x) + _sqr(plane.y) + _sqr(plane.z));
-            plane.mul(denom);
+        Fvector4 plane;
+        const Fmatrix& M = cmd_list.xforms.m_vp;
+        plane.x = -(M._14 + M._13);
+        plane.y = -(M._24 + M._23);
+        plane.z = -(M._34 + M._33);
+        plane.w = -(M._44 + M._43);
+        const float denom = -1.0f / _sqrt(_sqr(plane.x) + _sqr(plane.y) + _sqr(plane.z));
+        plane.mul(denom);
 
-            // Near/Far
-            float A = g_pGamePersistent->Environment().CurrentEnv.fog_near;
-            float B = 1 / (g_pGamePersistent->Environment().CurrentEnv.fog_far - A);
-            result.set(-plane.x * B, -plane.y * B, -plane.z * B, 1 - (plane.w - A) * B); // view-plane
-        }
+        const float A = g_pGamePersistent->Environment().CurrentEnv.fog_near;
+        const float B = 1 / (g_pGamePersistent->Environment().CurrentEnv.fog_far - A);
+        Fvector4 result;
+        result.set(-plane.x * B, -plane.y * B, -plane.z * B, 1 - (plane.w - A) * B);
         cmd_list.set_c(C, result);
     }
 };
@@ -159,18 +154,13 @@ static cl_fog_plane binder_fog_plane;
 // fog-params
 class cl_fog_params : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            // Near/Far
-            float n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
-            float f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
-            float r = 1 / (f - n);
-            result.set(-n * r, r, r, r);
-        }
+        const float n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
+        const float f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
+        const float r = 1 / (f - n);
+        Fvector4 result;
+        result.set(-n * r, n, f, r);
         cmd_list.set_c(C, result);
     }
 };
@@ -179,15 +169,11 @@ static cl_fog_params binder_fog_params;
 // fog-color
 class cl_fog_color : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.fog_color.x, desc.fog_color.y, desc.fog_color.z, 0);
-        }
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        Fvector4 result;
+        result.set(desc.fog_color.x, desc.fog_color.y, desc.fog_color.z, 0);
         cmd_list.set_c(C, result);
     }
 };
@@ -238,52 +224,46 @@ class cl_eye_N : public R_constant_setup
 };
 static cl_eye_N binder_eye_N;
 
+class cl_inv_v : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, cmd_list.xforms.get_inv_V()); }
+};
+static cl_inv_v binder_inv_v;
+
 #ifndef _EDITOR
 // D-Light0
 class cl_sun0_color : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.sun_color.x, desc.sun_color.y, desc.sun_color.z, 0);
-        }
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        Fvector4 result;
+        result.set(desc.sun_color.x, desc.sun_color.y, desc.sun_color.z, 0);
         cmd_list.set_c(C, result);
     }
 };
 static cl_sun0_color binder_sun0_color;
 class cl_sun0_dir_w : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.sun_dir.x, desc.sun_dir.y, desc.sun_dir.z, 0);
-        }
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        Fvector4 result;
+        result.set(desc.sun_dir.x, desc.sun_dir.y, desc.sun_dir.z, 0);
         cmd_list.set_c(C, result);
     }
 };
 static cl_sun0_dir_w binder_sun0_dir_w;
 class cl_sun0_dir_e : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            Fvector D;
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            Device.mView.transform_dir(D, desc.sun_dir);
-            D.normalize();
-            result.set(D.x, D.y, D.z, 0);
-        }
+        Fvector D;
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        cmd_list.xforms.m_v.transform_dir(D, desc.sun_dir);
+        D.normalize();
+        Fvector4 result;
+        result.set(D.x, D.y, D.z, 0);
         cmd_list.set_c(C, result);
     }
 };
@@ -292,30 +272,22 @@ static cl_sun0_dir_e binder_sun0_dir_e;
 //
 class cl_amb_color : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.ambient.x, desc.ambient.y, desc.ambient.z, desc.weight);
-        }
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        Fvector4 result;
+        result.set(desc.ambient.x, desc.ambient.y, desc.ambient.z, desc.weight);
         cmd_list.set_c(C, result);
     }
 };
 static cl_amb_color binder_amb_color;
 class cl_hemi_color : public R_constant_setup
 {
-    u32 marker;
-    Fvector4 result;
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.hemi_color.x, desc.hemi_color.y, desc.hemi_color.z, desc.hemi_color.w);
-        }
+        const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+        Fvector4 result;
+        result.set(desc.hemi_color.x, desc.hemi_color.y, desc.hemi_color.z, desc.hemi_color.w);
         cmd_list.set_c(C, result);
     }
 };
@@ -335,9 +307,50 @@ static class cl_various : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, GetCurrentSunReflection(), 0.f, 0.f, 0.f);
+        cmd_list.set_c(C, GetCurrentSunReflection(), 0.f, 0.f,
+            g_pGamePersistent->Environment().CurrentEnv.wind_velocity);
     }
 } binder_various;
+
+static class cl_various_rain : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& environment = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, environment.CurrentEnv.rain_density, GetCurrentWetness(),
+            GetCurrentSnowFactor(), GetCurrentSeason());
+    }
+} binder_various_rain;
+
+static class cl_temp : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, ps_r2_temp); }
+} binder_temp;
+
+static class cl_scripted : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_shaders_var_x, ps_shaders_var_y, ps_shaders_var_z, ps_shaders_var_w);
+    }
+} binder_scripted;
+
+static class cl_postprocess_var : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r2_postprocess_var_x, ps_r2_postprocess_var_y,
+            ps_r2_postprocess_var_z, ps_r2_postprocess_var_w);
+    }
+} binder_postprocess_var;
+
+static class cl_lens_var : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r2_lens_var_x, ps_r2_lens_var_y, ps_r2_lens_var_z, ps_r2_lens_var_w);
+    }
+} binder_lens_var;
 
 // SM_TODO: cmd_list.hemi заменить на более "логичное" место
 static class cl_hud_params : public R_constant_setup //--#SM+#--
@@ -352,7 +365,13 @@ static class cl_script_params : public R_constant_setup //--#SM+#--
 
 static class cl_blend_mode : public R_constant_setup //--#SM+#--
 {
-    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, g_pGamePersistent->m_pGShaderConstants->m_blender_mode); }
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fvector4 blenderMode = g_pGamePersistent->m_pGShaderConstants->m_blender_mode;
+        if (cmd_list.detailRendering)
+            blenderMode.w = 1.f;
+        cmd_list.set_c(C, blenderMode);
+    }
 } binder_blend_mode;
 
 class cl_camo_data : public R_constant_setup //--#SM+#--
@@ -426,6 +445,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("eye_position", &binder_eye_P);
     r_Constant("eye_direction", &binder_eye_D);
     r_Constant("eye_normal", &binder_eye_N);
+    r_Constant("m_v2w", &binder_inv_v);
 
 #ifndef _EDITOR
     // global-lighting (env params)
@@ -438,6 +458,11 @@ void CBlender_Compile::SetMapping()
 #endif
     r_Constant("screen_res", &binder_screen_res);
     r_Constant("various", &binder_various);
+    r_Constant("various_rain", &binder_various_rain);
+    r_Constant("temp", &binder_temp);
+    r_Constant("scripted", &binder_scripted);
+    r_Constant("postprocess_var", &binder_postprocess_var);
+    r_Constant("lens_var", &binder_lens_var);
 
     // detail
     // if (bDetail  && detail_scaler)

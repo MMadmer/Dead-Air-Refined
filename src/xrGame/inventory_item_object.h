@@ -53,6 +53,11 @@ public:
     virtual void activate_physic_shell();
     virtual void on_activate_physic_shell();
     virtual void modify_holder_params(float& range, float& fov) const;
+    void SetActivationSpeedOverride(const Fvector& speed);
+    bool HasActivationSpeedOverride() const;
+
+protected:
+    bool ActivationSpeedOverriden(Fvector& dest, bool clear_override) override;
 
 public:
     ////////// network //////////////////////////////////////////////////

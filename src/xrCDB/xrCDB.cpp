@@ -27,7 +27,7 @@ MODEL::MODEL() :
 MODEL::~MODEL()
 {
     syncronize(); // maybe model still in building
-    status = S_INIT;
+    std::atomic_ref(status).store(S_INIT, std::memory_order_release);
     xr_delete(tree);
     xr_free(tris);
     tris_count = 0;
@@ -48,7 +48,7 @@ void MODEL::build(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callback* bc, vo
 {
     ZoneScoped;
 
-    R_ASSERT(S_INIT == status);
+    R_ASSERT(S_INIT == std::atomic_ref<const u32>(status).load(std::memory_order_acquire));
     R_ASSERT((Vcnt >= 4) && (Tcnt >= 2));
 
     _initialize_cpu_thread();
@@ -56,24 +56,20 @@ void MODEL::build(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callback* bc, vo
     if (!strstr(Core.Params, "-mt_cdb"))
     {
         build_internal(V, Vcnt, T, Tcnt, bc, bcp);
-        status = S_READY;
+        std::atomic_ref(status).store(S_READY, std::memory_order_release);
     }
     else
     {
-        Threading::SpawnThread("CDB-construction", [&, this]
+        Threading::SpawnThread("CDB-construction", [this, V, Vcnt, T, Tcnt, bc, bcp]
         {
             ScopeLock lock{ pcs };
             build_internal(V, Vcnt, T, Tcnt, bc, bcp);
-            status = S_READY;
+            std::atomic_ref(status).store(S_READY, std::memory_order_release);
             // Msg("* xrCDB: cform build completed, memory usage: %d K", memory() / 1024);
         });
 
-        while (S_INIT == status)
-        {
-            if (status != S_INIT)
-                break;
-            Sleep(5);
-        }
+        while (S_INIT == std::atomic_ref<const u32>(status).load(std::memory_order_acquire))
+            Sleep(1);
     }
 }
 
@@ -100,7 +96,7 @@ void MODEL::build_internal(Fvector* V, u32 Vcnt, TRI* T, u32 Tcnt, build_callbac
         bc(verts, Vcnt, tris, Tcnt, bcp);
 
     // Release data pointers
-    status = S_BUILD;
+    std::atomic_ref(status).store(S_BUILD, std::memory_order_release);
 
     // Allocate temporary "OPCODE" tris + convert tris to 'pointer' form
     u32* temp_tris = xr_alloc<u32>(tris_count * 3);
@@ -267,7 +263,7 @@ bool MODEL::deserialize(pcstr fileName, bool skipCrc32Check /*= false*/, deseria
     // 4. Load the OPCODE tree
     const bool success = tree->Load(rstream);
     if (success)
-        status = S_READY;
+        std::atomic_ref(status).store(S_READY, std::memory_order_release);
 
     FS.r_close(rstream);
     return success;
@@ -284,12 +280,12 @@ void MODEL::deserialize_tree(IReader* rstream)
     // Load the OPCODE tree
     const bool success = tree->Load(rstream, true, false);
     if (success)
-        status = S_READY;
+        std::atomic_ref(status).store(S_READY, std::memory_order_release);
 }
 
 size_t MODEL::memory()
 {
-    if (S_BUILD == status)
+    if (S_BUILD == std::atomic_ref<const u32>(status).load(std::memory_order_acquire))
     {
         Msg("! xrCDB: model still isn't ready");
         return 0;

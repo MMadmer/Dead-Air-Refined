@@ -50,6 +50,7 @@ XRSOUND_API extern float psSoundTimeFactor; //--#SM+#--
 XRSOUND_API extern Flags32 psSoundFlags;
 XRSOUND_API extern int psSoundTargets;
 XRSOUND_API extern int psSoundCacheSizeMB;
+XRSOUND_API extern u32 psSoundPrecacheAll;
 XRSOUND_API extern u32 snd_device_id;
 
 XRSOUND_API extern ISoundScene* DefaultSoundScene;

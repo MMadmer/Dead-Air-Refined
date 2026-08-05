@@ -171,6 +171,10 @@ void CTexture::surface_set(ID3DBaseTexture* surf)
 
 ID3DBaseTexture* CTexture::surface_get() const
 {
+    // Direct surface consumers need the same lazy residency guarantee as shader binding.
+    if (!flags.bLoaded && Device.b_is_Ready)
+        const_cast<CTexture*>(this)->Load();
+
     if (pSurface)
         pSurface->AddRef();
     return pSurface;

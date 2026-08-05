@@ -49,6 +49,7 @@
 #include "xrEngine/Feel_Touch.h"
 #include "WeaponAmmo.h"
 #include "WeaponMagazinedWGrenade.h"
+#include "Missile.h"
 #include "level_path_manager.h"
 #include "game_path_manager.h"
 //-Alundaio
@@ -959,6 +960,8 @@ CScriptGameObject* CScriptGameObject::GetObjectByIndex(int iIndex) const
     }
 }
 
+bool CScriptGameObject::IsGhost() const { return object().IsGhost(); }
+
 void CScriptGameObject::EnableAnomaly()
 {
     CCustomZone* zone = smart_cast<CCustomZone*>(&object());
@@ -1196,6 +1199,32 @@ void CScriptGameObject::buy_item_condition_factor(float factor)
     }
 
     inventory_owner->trade_parameters().buy_item_condition_factor = factor;
+}
+
+void CScriptGameObject::buy_item_exponent(float factor)
+{
+    CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&object());
+    if (!inventory_owner)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CInventoryOwner : cannot access class member buy_item_exponent!");
+        return;
+    }
+
+    inventory_owner->trade_parameters().set_buy_item_exponent(factor);
+}
+
+void CScriptGameObject::sell_item_exponent(float factor)
+{
+    CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&object());
+    if (!inventory_owner)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CInventoryOwner : cannot access class member sell_item_exponent!");
+        return;
+    }
+
+    inventory_owner->trade_parameters().set_sell_item_exponent(factor);
 }
 
 void sell_condition(CScriptIniFile* ini_file, LPCSTR section)
@@ -1514,10 +1543,38 @@ bool CScriptGameObject::WeaponInGrenadeMode()
     return false;
 }
 
+void CScriptGameObject::MissileSetDestroyTime(u32 time)
+{
+    CMissile* missile = smart_cast<CMissile*>(&object());
+    if (!missile)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CMissile : cannot access class member MissileSetDestroyTime!");
+        return;
+    }
+
+    missile->set_destroy_time(time);
+}
+
+void CScriptGameObject::ActivateHudItem()
+{
+    if (CInventoryItem* item = object().cast_inventory_item())
+        item->ActivateItem();
+}
+
+void CScriptGameObject::DeactivateHudItem()
+{
+    if (CInventoryItem* item = object().cast_inventory_item())
+        item->DeactivateItem();
+}
+
 void CScriptGameObject::SetBoneVisible(pcstr bone_name, bool bVisibility, bool bRecursive)
 {
-    IKinematics* k = object().Visual()->dcast_PKinematics();
+    IRenderVisual* visual = object().Visual();
+    if (!visual)
+        return;
 
+    IKinematics* k = visual->dcast_PKinematics();
     if (!k)
         return;
 
@@ -1531,8 +1588,11 @@ void CScriptGameObject::SetBoneVisible(pcstr bone_name, bool bVisibility, bool b
 
 bool CScriptGameObject::IsBoneVisible(pcstr bone_name)
 {
-    IKinematics* k = object().Visual()->dcast_PKinematics();
+    IRenderVisual* visual = object().Visual();
+    if (!visual)
+        return false;
 
+    IKinematics* k = visual->dcast_PKinematics();
     if (!k)
         return false;
 

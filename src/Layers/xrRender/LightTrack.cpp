@@ -35,6 +35,8 @@ CROS_impl::CROS_impl()
     hemi_smooth = 0.5f;
     sun_value = 0.2f;
     sun_smooth = 0.2f;
+    std::fill(std::begin(hemi_cube), std::end(hemi_cube), 0.f);
+    std::fill(std::begin(hemi_cube_smooth), std::end(hemi_cube_smooth), 0.f);
 
 #if RENDER != R_R1
     last_position.set(0.0f, 0.0f, 0.0f);

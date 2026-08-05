@@ -25,7 +25,7 @@
 
 using namespace StalkerDecisionSpace;
 
-CStalkerPlanner::CStalkerPlanner() { m_affect_cover = false; }
+CStalkerPlanner::CStalkerPlanner() : m_affect_cover(false), m_active(true) {}
 CStalkerPlanner::~CStalkerPlanner() {}
 #ifdef LOG_ACTION
 LPCSTR CStalkerPlanner::action2string(const _action_id_type& action_id)
@@ -62,10 +62,14 @@ void CStalkerPlanner::setup(CAI_Stalker* object)
     set_target_state(target);
 
     m_affect_cover = false;
+    m_active = true;
 }
 
 void CStalkerPlanner::update(u32 time_delta)
 {
+    if (!active())
+        return;
+
 #if defined(LOG_ACTION) && !defined(MASTER_GOLD)
     if ((psAI_Flags.test(aiGOAP) && !m_use_log) || (!psAI_Flags.test(aiGOAP) && m_use_log))
         set_use_log(!!psAI_Flags.test(aiGOAP));

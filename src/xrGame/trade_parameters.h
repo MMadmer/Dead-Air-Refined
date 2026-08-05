@@ -51,7 +51,11 @@ private:
 
 public:
     IC CTradeParameters(const shared_str& section = "trade");
+    ~CTradeParameters();
     IC void clear();
+    void set_buy_item_exponent(float factor);
+    void set_sell_item_exponent(float factor);
+    float item_condition_exponent(bool buying, float fallback) const;
 
 public:
     IC static CTradeParameters& instance();

@@ -89,7 +89,6 @@ void CWeaponPistol::PlayAnimHide()
     VERIFY(GetState() == eHiding);
     if (iAmmoElapsed == 0)
     {
-        PlaySound("sndClose", get_LastFP());
         PlayHUDMotion("anm_hide_empty", "anim_close", TRUE, this, GetState());
     }
     else
@@ -101,11 +100,11 @@ void CWeaponPistol::PlayAnimShoot()
     VERIFY(GetState() == eFire);
     if (iAmmoElapsed > 1)
     {
-        PlayHUDMotion("anm_shots", "anim_shoot", FALSE, this, GetState());
+        PlayHUDMotion("anm_shots", "anim_shoot", TRUE, this, GetState());
     }
     else
     {
-        PlayHUDMotion("anm_shot_l", "anim_shot_last", FALSE, this, GetState());
+        PlayHUDMotion("anm_shot_l", "anim_shot_last", TRUE, this, GetState());
     }
 }
 

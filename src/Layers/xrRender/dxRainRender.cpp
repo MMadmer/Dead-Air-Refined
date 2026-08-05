@@ -10,7 +10,7 @@ namespace xray::render::RENDER_NAMESPACE
 static const int max_desired_items = 3500;
 static const float source_radius = 12.5f;
 static const float source_offset = 40.f;
-static const float max_distance = source_offset * 1.25f;
+static const float max_distance = source_offset * 2.25f;
 static const float sink_offset = -(max_distance - source_offset);
 static const float drop_length = 5.f;
 static const float drop_width = 0.30f;
@@ -63,7 +63,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
     }
 
     // visual
-    const float factor_visual = factor / 2.f + .5f;
+    const float factor_visual = factor;
     const float visual_length = drop_length * factor_visual;
     const float visual_half_length = visual_length * .5f;
     const Fvector3 f_rain_color = g_pGamePersistent->Environment().CurrentEnv.rain_color;

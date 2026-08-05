@@ -47,6 +47,7 @@ void CBackend::OnFrameBegin()
 
 void CBackend::Invalidate()
 {
+    detailRendering = false;
 #if defined(USE_DX11)
     constants.discard_pending();
     texture_slice_epoch = 0;

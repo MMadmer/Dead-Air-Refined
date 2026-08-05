@@ -38,6 +38,7 @@ private:
     CUISequencer* m_intro{};
     EVENT eQuickLoad;
     Fvector m_dof[4]; // 0-dest 1-current 2-from 3-original
+    float m_scopeDofRadius{};
 
     fastdelegate::FastDelegate0<> m_intro_event;
 
@@ -103,6 +104,8 @@ public:
 
     virtual void GetCurrentDof(Fvector3& dof);
     virtual void SetBaseDof(const Fvector3& dof);
+    float GetScopeDofRadius() override;
+    void SetScopeDofRadius(float radius);
     virtual void OnSectorChanged(IRender_Sector::sector_id_t sector);
     virtual void OnAssetsChanged();
 

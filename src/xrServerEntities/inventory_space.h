@@ -21,9 +21,26 @@ enum
     ARTEFACT_SLOT, // artefact
     HELMET_SLOT,
     RESERVED_SLOT,
-    BINOCULAR_SLOT,
-    BACKPACK_SLOT, // backpack
-    SLOTS_COUNT
+    ANIMATION_SLOT = RESERVED_SLOT,
+    BINOCULAR_SLOT = 14,
+    BACKPACK_SLOT = 15, // backpack
+
+    // Keep the legacy dynamic-slot boundary while exposing the 1.0 slot identifiers to code and mods.
+    SLOTS_COUNT = 16,
+    BATTERY_SLOT = 16,
+    POUCH_A1_SLOT = 17,
+    POUCH_A2_SLOT = 18,
+    POUCH_A3_SLOT = 19,
+    POUCH_A4_SLOT = 20,
+    POUCH_B1_SLOT = 21,
+    POUCH_B2_SLOT = 22,
+    POUCH_B3_SLOT = 23,
+    POUCH_B4_SLOT = 24,
+    POUCH_C1_SLOT = 25,
+    POUCH_C2_SLOT = 26,
+    MAP_SLOT = 27,
+    NVD_SLOT = 28,
+    LAST_SLOT = NVD_SLOT
 };
 
 #define RUCK_HEIGHT 280

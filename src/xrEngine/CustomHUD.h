@@ -19,6 +19,9 @@ ENGINE_API extern Flags32 psHUD_Flags;
 #define HUD_DRAW_MAP (1 << 13)
 #define HUD_DRAW_INFO (1 << 14)
 #define HUD_LEFT_HANDED (1 << 15)
+#define HUD_CROSSHAIR_ITEM (1 << 16)
+#define HUD_CROSSHAIR_WEAPON (1 << 17)
+#define HUD_CROSSHAIR_NEAREST (1 << 18)
 
 class IGameObject;
 

@@ -1,0 +1,21 @@
+local function on_init(menu)
+	menu.gameplay_options["infinite_bolts"] = {typ="check"}
+end
+
+local function on_set_values(menu, opt_manager)
+	local option = menu.gameplay_options["infinite_bolts"]
+	if (option and option.ctrl) then
+		option.ctrl:SetCheck(get_console():get_bool("g_infinite_bolts"))
+	end
+end
+
+local function on_accept(menu, opt_manager, console)
+	local option = menu.gameplay_options["infinite_bolts"]
+	if (option and option.ctrl) then
+		console:execute("g_infinite_bolts " .. (option.ctrl:GetCheck() and "1" or "0"))
+	end
+end
+
+RegisterScriptCallback("opt_menu_on_init", on_init)
+RegisterScriptCallback("opt_menu_on_set_values", on_set_values)
+RegisterScriptCallback("opt_menu_on_accept", on_accept)

@@ -10,14 +10,29 @@
 #include "alife_object_registry.h"
 #include "ai_debug.h"
 #include "xrServerEntities/xrMessages.h"
+#include "xrServer_Objects_ALife_Items.h"
+#include "xrServer_Objects_ALife_Monsters.h"
 
-#include <fstream>
-#include <unordered_map>
+#include <bit>
+#if defined(XR_PLATFORM_WINDOWS)
+#include <intrin.h>
+#endif
+
+namespace
+{
+u64 read_save_profile_cycles()
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    return __rdtsc();
+#else
+    return 0;
+#endif
+}
+}
+
 CALifeObjectRegistry::CALifeObjectRegistry(LPCSTR section) {}
 CALifeObjectRegistry::~CALifeObjectRegistry()
 {
-    store_save_costs();
-
     OBJECT_REGISTRY::iterator const B = m_objects.begin();
     OBJECT_REGISTRY::iterator I = B;
     OBJECT_REGISTRY::iterator const E = m_objects.end();
@@ -28,142 +43,75 @@ CALifeObjectRegistry::~CALifeObjectRegistry()
         xr_delete((*I).second);
 }
 
-xr_map<shared_str, CALifeObjectRegistry::SaveCostEstimate>&
-CALifeObjectRegistry::save_section_costs()
+void CALifeObjectRegistry::save(
+    IWriter& memory_stream, CSE_ALifeDynamicObject* object, u32& object_count, NET_Packet& packet)
 {
-    // The cache intentionally lives until process shutdown to avoid shared-string teardown order issues.
-    static auto* costs = new xr_map<shared_str, SaveCostEstimate>();
-    return *costs;
-}
-
-void CALifeObjectRegistry::load_save_costs()
-{
-    static bool loaded = false;
-    if (loaded)
-        return;
-    loaded = true;
-
-    string_path path;
-    FS.update_path(path, "$app_data_root$", "async_save_costs.bin");
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream)
-        return;
-
-    u32 magic = 0;
-    u32 version = 0;
-    u32 count = 0;
-    stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    stream.read(reinterpret_cast<char*>(&version), sizeof(version));
-    stream.read(reinterpret_cast<char*>(&count), sizeof(count));
-    if (!stream || magic != 0x43565341 || version != 4 || count > 100000)
-        return;
-
-    auto& costs = save_section_costs();
-    for (u32 index = 0; index < count; ++index)
-    {
-        u16 length = 0;
-        stream.read(reinterpret_cast<char*>(&length), sizeof(length));
-        if (!stream || !length || length >= 4096)
-            return;
-
-        std::string section(length, '\0');
-        SaveCostEstimate estimate;
-        stream.read(section.data(), length);
-        stream.read(reinterpret_cast<char*>(&estimate.milliseconds), sizeof(estimate.milliseconds));
-        stream.read(reinterpret_cast<char*>(&estimate.packetBytes), sizeof(estimate.packetBytes));
-        if (!stream || !std::isfinite(estimate.milliseconds) || !std::isfinite(estimate.packetBytes) ||
-            estimate.milliseconds <= 0.f || estimate.milliseconds > 100.f ||
-            estimate.packetBytes <= 0.f || estimate.packetBytes > float(std::numeric_limits<u16>::max() * 2u))
-        {
-            return;
-        }
-
-        costs[shared_str(section.c_str())] = estimate;
-    }
-}
-
-void CALifeObjectRegistry::store_save_costs()
-{
-    auto& costs = save_section_costs();
-    if (costs.empty())
-        return;
-
-    string_path path;
-    FS.update_path(path, "$app_data_root$", "async_save_costs.bin");
-    string_path temporaryPath;
-    strconcat(sizeof(temporaryPath), temporaryPath, path, ".tmp");
-
-    std::ofstream stream(temporaryPath, std::ios::binary | std::ios::trunc);
-    if (!stream)
-        return;
-
-    const u32 magic = 0x43565341;
-    const u32 version = 4;
-    u32 count = 0;
-    for (const auto& [section, estimate] : costs)
-    {
-        const size_t sectionLength = xr_strlen(section.c_str());
-        if (sectionLength && sectionLength < std::numeric_limits<u16>::max())
-            ++count;
-    }
-    stream.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-    stream.write(reinterpret_cast<const char*>(&version), sizeof(version));
-    stream.write(reinterpret_cast<const char*>(&count), sizeof(count));
-    for (const auto& [section, estimate] : costs)
-    {
-        const size_t sectionLength = xr_strlen(section.c_str());
-        if (!sectionLength || sectionLength >= std::numeric_limits<u16>::max())
-            continue;
-
-        const u16 length = static_cast<u16>(sectionLength);
-        stream.write(reinterpret_cast<const char*>(&length), sizeof(length));
-        stream.write(section.c_str(), length);
-        stream.write(reinterpret_cast<const char*>(&estimate.milliseconds), sizeof(estimate.milliseconds));
-        stream.write(reinterpret_cast<const char*>(&estimate.packetBytes), sizeof(estimate.packetBytes));
-    }
-    stream.flush();
-    stream.close();
-    if (!stream)
-        return;
-
-#if defined(XR_PLATFORM_WINDOWS)
-    MoveFileExA(temporaryPath, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-#else
-    std::rename(temporaryPath, path);
-#endif
-}
-
-void CALifeObjectRegistry::save(IWriter& memory_stream, CSE_ALifeDynamicObject* object, u32& object_count)
-{
-    save_object(memory_stream, object, object_count);
+    save_object(memory_stream, object, object_count, packet);
 
     for (const ALife::_OBJECT_ID childId : object->children)
     {
         CSE_ALifeDynamicObject* child = this->object(childId, true);
         if (child && child->can_save())
-            save(memory_stream, child, object_count);
+            save(memory_stream, child, object_count, packet);
     }
 }
 
 u32 CALifeObjectRegistry::save_object(
-    IWriter& memory_stream, CSE_ALifeDynamicObject* object, u32& object_count)
+    IWriter& memory_stream, CSE_ALifeDynamicObject* object, u32& object_count, NET_Packet& packet)
 {
-    const u32 startPosition = memory_stream.tell();
     ++object_count;
 
-    NET_Packet tNetPacket;
+    // A reused packet must match the fresh per-object cursor state.
+    packet.r_pos = 0;
+
     // Spawn
-    object->Spawn_Write(tNetPacket, TRUE);
-    memory_stream.w_u16(u16(tNetPacket.B.count));
-    memory_stream.w(tNetPacket.B.data, tNetPacket.B.count);
+    object->Spawn_Write(packet, TRUE);
+    const u32 spawnBytes = packet.B.count;
+    const u16 spawnSize = static_cast<u16>(spawnBytes);
+    memory_stream.w(&spawnSize, sizeof(spawnSize));
+    memory_stream.w(packet.B.data, spawnBytes);
 
     // Update
-    tNetPacket.w_begin(M_UPDATE);
-    object->UPDATE_Write(tNetPacket);
+    packet.w_begin(M_UPDATE);
+    object->UPDATE_Write(packet);
 
-    memory_stream.w_u16(u16(tNetPacket.B.count));
-    memory_stream.w(tNetPacket.B.data, tNetPacket.B.count);
-    return memory_stream.tell() - startPosition;
+    const u32 updateBytes = packet.B.count;
+    const u16 updateSize = static_cast<u16>(updateBytes);
+    memory_stream.w(&updateSize, sizeof(updateSize));
+    memory_stream.w(packet.B.data, updateBytes);
+    return u32(2 * sizeof(u16)) + spawnBytes + updateBytes;
+}
+
+u32 CALifeObjectRegistry::save_object(
+    CMemoryWriter& memory_stream, CSE_ALifeDynamicObject* object, u32& object_count,
+    NET_Packet& packet, SaveObjectProfile* profile)
+{
+    ++object_count;
+
+    // A reused packet must match the fresh per-object cursor state.
+    packet.r_pos = 0;
+
+    const u64 spawnStarted = read_save_profile_cycles();
+    object->Spawn_Write(packet, TRUE);
+    const u64 spawnEnded = read_save_profile_cycles();
+    const u32 spawnBytes = packet.B.count;
+    memory_writer_write_packet(memory_stream, static_cast<u16>(spawnBytes), packet.B.data);
+    const u64 spawnCopyEnded = read_save_profile_cycles();
+
+    packet.w_begin(M_UPDATE);
+    object->UPDATE_Write(packet);
+    const u64 updateEnded = read_save_profile_cycles();
+    const u32 updateBytes = packet.B.count;
+    memory_writer_write_packet(memory_stream, static_cast<u16>(updateBytes), packet.B.data);
+    const u64 updateCopyEnded = read_save_profile_cycles();
+    if (profile)
+    {
+        profile->spawnCycles = spawnEnded - spawnStarted;
+        profile->spawnCopyCycles = spawnCopyEnded - spawnEnded;
+        profile->updateCycles = updateEnded - spawnCopyEnded;
+        profile->updateCopyCycles = updateCopyEnded - updateEnded;
+    }
+    return u32(2 * sizeof(u16)) + spawnBytes + updateBytes;
 }
 
 void CALifeObjectRegistry::save(IWriter& memory_stream)
@@ -190,25 +138,87 @@ void CALifeObjectRegistry::begin_save(IWriter& memory_stream, SaveState& state)
 bool CALifeObjectRegistry::continue_save(
     IWriter& memory_stream, SaveState& state, float budgetMilliseconds)
 {
-    struct BatchSample
+    NET_Packet packet;
+    return continue_save(memory_stream, state, budgetMilliseconds, packet);
+}
+
+void CALifeObjectRegistry::index_save_extension_object(CSE_ALifeDynamicObject* object)
+{
+    ESaveExtensionObjectType type = ESaveExtensionObjectType::Count;
+    if (smart_cast<CSE_ALifeItemWeapon*>(object))
+        type = ESaveExtensionObjectType::Weapon;
+    else if (smart_cast<CSE_ALifeCreatureActor*>(object))
+        type = ESaveExtensionObjectType::Actor;
+    else if (smart_cast<CSE_ALifeItemHelmet*>(object))
+        type = ESaveExtensionObjectType::Helmet;
+    else if (smart_cast<CSE_ALifeItemArtefact*>(object))
+        type = ESaveExtensionObjectType::Artefact;
+
+    constexpr size_t bitsPerWord = std::numeric_limits<u64>::digits;
+    const size_t typeWord = object->ID / bitsPerWord;
+    const u64 typeBit = u64{1} << (object->ID % bitsPerWord);
+    for (auto& typeWords : m_saveExtensionObjectTypes)
+        typeWords[typeWord] &= ~typeBit;
+
+    if (type != ESaveExtensionObjectType::Count)
+        m_saveExtensionObjectTypes[static_cast<size_t>(type)][typeWord] |= typeBit;
+}
+
+CSE_ALifeDynamicObject* CALifeObjectRegistry::next_save_extension_object(
+    ESaveExtensionObjectType type, u32& nextObjectId) const
+{
+    const size_t typeIndex = static_cast<size_t>(type);
+    if (typeIndex >= m_saveExtensionObjectTypes.size())
+        return nullptr;
+
+    constexpr u32 bitsPerWord = std::numeric_limits<u64>::digits;
+    const auto& typeWords = m_saveExtensionObjectTypes[typeIndex];
+    while (nextObjectId < std::numeric_limits<ALife::_OBJECT_ID>::max())
     {
-        SaveCostEstimate* cost{};
-        u32 packetBytes{};
-    };
+        const size_t typeWord = nextObjectId / bitsPerWord;
+        const u32 bitOffset = nextObjectId % bitsPerWord;
+        const u64 candidates = typeWords[typeWord] & (~u64{0} << bitOffset);
+        if (!candidates)
+        {
+            nextObjectId = static_cast<u32>((typeWord + 1) * bitsPerWord);
+            continue;
+        }
+
+        const ALife::_OBJECT_ID objectId = static_cast<ALife::_OBJECT_ID>(
+            typeWord * bitsPerWord + std::countr_zero(candidates));
+        nextObjectId = static_cast<u32>(objectId) + 1;
+        if (CSE_ALifeDynamicObject* object = m_objectIndex[objectId])
+            return object;
+    }
+    return nullptr;
+}
+
+bool CALifeObjectRegistry::continue_save(
+    IWriter& memory_stream, SaveState& state, float budgetMilliseconds, NET_Packet& savePacket)
+{
+    constexpr size_t maxBatchObjects = 8;
+    using SaveClock = CTimerBase::Clock;
+    using SaveDuration = SaveClock::duration;
 
     VERIFY(state.open);
-    CTimer saveTimer;
-    saveTimer.Start();
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    if (!unlimitedBudget && budgetMilliseconds <= 0.f)
+        return false;
+
+    const auto saveStartedAt = SaveClock::now();
+    const SaveDuration workBudget = unlimitedBudget ? SaveDuration::max() :
+        std::chrono::duration_cast<SaveDuration>(
+            std::chrono::duration<float, std::milli>(budgetMilliseconds));
+    const auto budget_exhausted_at = [&](const SaveClock::time_point current)
+    {
+        return !unlimitedBudget && current - saveStartedAt >= workBudget;
+    };
     const auto budget_exhausted = [&]()
     {
-        return budgetMilliseconds != flt_max &&
-            saveTimer.GetElapsed_sec() * 1000.f >= budgetMilliseconds;
+        return budget_exhausted_at(SaveClock::now());
     };
-    load_save_costs();
-    auto& sectionCosts = save_section_costs();
-    // Interned section-name pointers stay stable while the shared-string cache entry exists.
-    static auto* fastSectionCosts = new std::unordered_map<pcstr, SaveCostEstimate*>();
-    const u32 planningObjectLimit = budgetMilliseconds == flt_max ? u32(-1) : 64u;
+    CMemoryWriter* fastMemoryStream = dynamic_cast<CMemoryWriter*>(&memory_stream);
+    const u32 planningObjectLimit = unlimitedBudget ? u32(-1) : 64u;
 
     if (state.planningPhase == 0)
     {
@@ -271,81 +281,54 @@ bool CALifeObjectRegistry::continue_save(
             return false;
     }
 
+    auto schedulerTime = SaveClock::now();
+    if (budget_exhausted_at(schedulerTime))
+        return false;
+
     while (state.nextObjectIndex < state.pendingObjects.size())
     {
-        float predictedWeight = 0.f;
-        const float remainingMilliseconds = budgetMilliseconds == flt_max ? flt_max :
-            std::max(0.01f, budgetMilliseconds - saveTimer.GetElapsed_sec() * 1000.f);
-        const float weightBudget =
-            budgetMilliseconds == flt_max ? flt_max : remainingMilliseconds;
-        xr_vector<BatchSample> samples;
-        samples.reserve(32);
-        u32 batchBytes = 0;
-        CTimer batchTimer;
-        batchTimer.Start();
+        size_t batchObjectCount = 0;
 
-        while (state.nextObjectIndex < state.pendingObjects.size() && samples.size() < 32)
+        while (state.nextObjectIndex < state.pendingObjects.size() && batchObjectCount < maxBatchObjects)
         {
             const ALife::_OBJECT_ID objectId = state.pendingObjects[state.nextObjectIndex];
             CSE_ALifeDynamicObject* object = this->object(objectId, true);
             if (!object || !object->can_save())
             {
                 ++state.nextObjectIndex;
+                if (!unlimitedBudget)
+                {
+                    schedulerTime = SaveClock::now();
+                    if (budget_exhausted_at(schedulerTime))
+                        break;
+                }
                 continue;
             }
 
-            pcstr sectionName = object->name();
-            auto fastCost = fastSectionCosts->find(sectionName);
-            if (fastCost == fastSectionCosts->end())
-            {
-                const auto cost =
-                    sectionCosts.emplace(shared_str(sectionName), SaveCostEstimate{}).first;
-                fastCost = fastSectionCosts->emplace(sectionName, &cost->second).first;
-            }
-            SaveCostEstimate* cost = fastCost->second;
-            const float estimatedMilliseconds =
-                std::max(0.001f, cost ? cost->milliseconds : state.averageObjectMilliseconds);
-            if (!samples.empty() && predictedWeight + estimatedMilliseconds > weightBudget)
-                break;
-
             ++state.nextObjectIndex;
-            const u32 packetBytes = save_object(memory_stream, object, state.objectCount);
-            predictedWeight += estimatedMilliseconds;
-            batchBytes += packetBytes;
-            samples.push_back({cost, packetBytes});
-        }
-
-        const float batchMilliseconds = batchTimer.GetElapsed_sec() * 1000.f;
-        if (batchMilliseconds > state.maxBatchMilliseconds)
-        {
-            state.maxBatchMilliseconds = batchMilliseconds;
-            state.maxBatchObjects = static_cast<u32>(samples.size());
-            state.maxBatchBytes = batchBytes;
-        }
-
-        if (!samples.empty())
-        {
-            const float perObjectShare = 0.25f / float(samples.size());
-            const float safeBatchBytes = float(std::max(1u, batchBytes));
-            for (const BatchSample& sample : samples)
+            if (fastMemoryStream)
             {
-                const float byteShare = 0.75f * float(sample.packetBytes) / safeBatchBytes;
-                const float observedMilliseconds = std::clamp(
-                    batchMilliseconds * (perObjectShare + byteShare), 0.001f, 100.f);
-                if (!sample.cost)
-                    continue;
-
-                sample.cost->milliseconds =
-                    sample.cost->milliseconds * 0.9f + observedMilliseconds * 0.1f;
-                sample.cost->packetBytes =
-                    sample.cost->packetBytes * 0.9f + float(sample.packetBytes) * 0.1f;
+                SaveObjectProfile profile;
+                save_object(*fastMemoryStream, object, state.objectCount, savePacket, &profile);
+                const u64 objectCycles = profile.spawnCycles + profile.spawnCopyCycles +
+                    profile.updateCycles + profile.updateCopyCycles;
+                if (objectCycles > state.heaviestObjectCycles)
+                {
+                    state.heaviestObjectCycles = objectCycles;
+                    state.heaviestObjectId = objectId;
+                    state.heaviestObjectProfile = profile;
+                }
             }
-            state.averageObjectMilliseconds =
-                std::max(0.001f, state.averageObjectMilliseconds * 0.95f +
-                    batchMilliseconds / float(samples.size()) * 0.05f);
+            else
+                save_object(memory_stream, object, state.objectCount, savePacket);
+            ++batchObjectCount;
+
+            schedulerTime = SaveClock::now();
+            if (budget_exhausted_at(schedulerTime))
+                break;
         }
 
-        if (budget_exhausted())
+        if (budget_exhausted_at(schedulerTime))
             return false;
     }
 
@@ -357,31 +340,33 @@ bool CALifeObjectRegistry::continue_save(
     memory_stream.close_chunk();
     state.open = false;
 
-    Msg("* %d objects are successfully saved", state.objectCount);
-    if (state.maxBatchMilliseconds >= 1.f)
-    {
-        Msg("* Heaviest save batch: %u objects, %u bytes, %.3f ms",
-            state.maxBatchObjects, state.maxBatchBytes, state.maxBatchMilliseconds);
-    }
     return true;
 }
 
 CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream)
 {
-    NET_Packet tNetPacket;
+    NET_Packet packet;
+    return get_object(file_stream, packet);
+}
+
+CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream, NET_Packet& packet)
+{
     u16 u_id;
     // Spawn
-    tNetPacket.B.count = file_stream.r_u16();
-    file_stream.r(tNetPacket.B.data, tNetPacket.B.count);
-    tNetPacket.r_begin(u_id);
+    packet.B.count = file_stream.r_u16();
+    CHECK_OR_EXIT(packet.B.count < NET_PacketSizeLimit,
+        make_string("Invalid spawn packet size: %u", packet.B.count));
+    file_stream.r(packet.B.data, packet.B.count);
+    packet.B.data[packet.B.count] = 0;
+    packet.r_begin(u_id);
     R_ASSERT2(M_SPAWN == u_id, "Invalid packet ID (!= M_SPAWN)");
 
     string64 s_name;
-    tNetPacket.r_stringZ(s_name);
+    packet.r_stringZ(s_name);
 #ifdef DEBUG
     if (psAI_Flags.test(aiALife))
     {
-        Msg("Loading object %s [%d]b", s_name, tNetPacket.B.count);
+        Msg("Loading object %s [%d]b", s_name, packet.B.count);
     }
 #endif
     // create entity
@@ -389,14 +374,17 @@ CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream)
     R_ASSERT2(tpSE_Abstract, "Can't create entity.");
     CSE_ALifeDynamicObject* tpALifeDynamicObject = smart_cast<CSE_ALifeDynamicObject*>(tpSE_Abstract);
     R_ASSERT2(tpALifeDynamicObject, "Non-ALife object in the saved game!");
-    tpALifeDynamicObject->Spawn_Read(tNetPacket);
+    tpALifeDynamicObject->Spawn_Read(packet);
 
     // Update
-    tNetPacket.B.count = file_stream.r_u16();
-    file_stream.r(tNetPacket.B.data, tNetPacket.B.count);
-    tNetPacket.r_begin(u_id);
+    packet.B.count = file_stream.r_u16();
+    CHECK_OR_EXIT(packet.B.count < NET_PacketSizeLimit,
+        make_string("Invalid update packet size: %u", packet.B.count));
+    file_stream.r(packet.B.data, packet.B.count);
+    packet.B.data[packet.B.count] = 0;
+    packet.r_begin(u_id);
     R_ASSERT2(M_UPDATE == u_id, "Invalid packet ID (!= M_UPDATE)");
-    tpALifeDynamicObject->UPDATE_Read(tNetPacket);
+    tpALifeDynamicObject->UPDATE_Read(packet);
 
     return (tpALifeDynamicObject);
 }
@@ -408,11 +396,15 @@ void CALifeObjectRegistry::load(IReader& file_stream)
 
     m_objects.clear();
     m_objectIndex.fill(nullptr);
+    for (auto& typeWords : m_saveExtensionObjectTypes)
+        typeWords.fill(0);
 
     u32 count = file_stream.r_u32();
+    // Reuse one packet to avoid clearing 16 KiB for every loaded object.
+    NET_Packet loadPacket;
     for (u32 index = 0; index < count; ++index)
     {
-        CSE_ALifeDynamicObject* object = get_object(file_stream);
+        CSE_ALifeDynamicObject* object = get_object(file_stream, loadPacket);
         add(object);
     }
 

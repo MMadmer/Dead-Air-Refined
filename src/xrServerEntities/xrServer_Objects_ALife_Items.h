@@ -192,7 +192,9 @@ public:
     {
         eWeaponAddonScope = 0x01,
         eWeaponAddonGrenadeLauncher = 0x02,
-        eWeaponAddonSilencer = 0x04
+        eWeaponAddonSilencer = 0x04,
+        eWeaponAddonFlashlight = 0x08,
+        eWeaponAddonLaser = 0x10
     };
 
     EWeaponAddonStatus m_scope_status;
@@ -241,6 +243,8 @@ public:
     u16 get_ammo_elapsed();
     void set_ammo_elapsed(u16 count);
     u16 get_ammo_magsize();
+    void set_condition_type(u32 type) { m_condition_type = type; }
+    u32 get_condition_type() { return m_condition_type; }
     Flags8& get_addon_flags() { return m_addon_flags; }
     void clone_addons(CSE_ALifeItemWeapon* parent);
 

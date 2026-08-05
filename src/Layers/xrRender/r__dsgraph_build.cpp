@@ -51,6 +51,10 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     if (RI.o.vis_intersect && (pVisual->vis.accept_frame != Device.dwFrame))
         return;
     pVisual->vis.accept_frame = Device.dwFrame;
+#else
+    // Ghosts stay in shadow-map passes but never enter regular or distortion graphs.
+    if (root && root->renderable_Invisible() && o.phase != CRender::PHASE_SMAP)
+        return;
 #endif
 
     float distSQ;
@@ -100,8 +104,10 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
 #if RENDER == R_R1
     RI.L_Shadows->add_element(_MatrixItem{ SSA, root, pVisual, xform });
 #endif
+#if RENDER == R_R1
     if (root && root->renderable_Invisible())
         return;
+#endif
 
     // strict-sorting selection
     if (sh->flags.bStrictB2F)
@@ -876,7 +882,13 @@ void R_dsgraph_structure::build_subspace()
                 if (lod > EPS_L)
                 {
                     // Shadowed light bounds become unreliable HOM candidates while crossing the viewport edge.
-                    if (L->flags.bShadow)
+#if RENDER == R_R1
+                    const bool shadowEnabled = L->flags.bShadow;
+#else
+                    const bool shadowEnabled =
+                        L->flags.bShadow && !RImplementation.o.noshadows && ps_r_lighting_quality > 0;
+#endif
+                    if (shadowEnabled)
                         RImplementation.Lights.add_light(L);
                     else
                     {

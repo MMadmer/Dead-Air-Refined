@@ -119,6 +119,7 @@ public:
 
 public:
     CSoundRender_Source* i_create_source(pcstr name);
+    void i_create_all_sources();
 
     void i_destroy_source(CSoundRender_Source* S);
     void i_start(CSoundRender_Emitter* E) const;

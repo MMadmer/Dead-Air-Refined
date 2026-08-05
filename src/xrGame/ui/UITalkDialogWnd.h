@@ -21,6 +21,7 @@ public:
     ~CUITalkDialogWnd() override;
 
     pcstr GetDebugType() override { return "CUITalkDialogWnd"; }
+    void Draw() override;
 
     void InitTalkDialogWnd();
 

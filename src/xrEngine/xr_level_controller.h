@@ -189,11 +189,13 @@ enum EGameActions : u32
     kTALK_LOG_SCROLL_UP,
     kTALK_LOG_SCROLL_DOWN,
 
+    kWPN_8,
     kLASTACTION,
     kNOTBINDED
 };
 
 static_assert(kWPN_7 == 28);
+static_assert(kARTEFACT == 29);
 static_assert(kPDA_TAB6 == 89);
 
 enum class EKeyContext

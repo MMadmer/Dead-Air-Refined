@@ -108,6 +108,7 @@ private:
     ref_shader s_accum_reflected;
     ref_shader s_accum_reflected_msaa[8];
     ref_shader s_accum_volume;
+    ref_shader s_accum_volume_unshadowed;
     ref_shader s_accum_volume_msaa[8];
 
     //	generate min/max
@@ -203,6 +204,9 @@ private:
 
     //	Igor: used for volumetric lights
     bool m_bHasActiveVolumetric;
+    Fmatrix m_mblur_viewproj{};
+    u32 m_mblur_frame{};
+    bool m_mblur_history_valid{};
 
 public:
     CRenderTarget();

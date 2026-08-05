@@ -106,7 +106,6 @@ void CWeaponRevolver::PlayAnimHide()
     VERIFY(GetState()==eHiding);
     if (iAmmoElapsed == 0)
     {
-        PlaySound("sndClose", get_LastFP());
         PlayHUDMotion("anm_hide_empty", true, this, GetState());
     }
     else
@@ -117,9 +116,9 @@ void CWeaponRevolver::PlayAnimShoot()
 {
     VERIFY(GetState()==eFire);
     if (iAmmoElapsed > 1)
-        PlayHUDMotion("anm_shots", false, this, GetState());
+        PlayHUDMotion("anm_shots", true, this, GetState());
     else
-        PlayHUDMotion("anm_shot_l", false, this, GetState());
+        PlayHUDMotion("anm_shot_l", true, this, GetState());
 }
 
 

@@ -364,9 +364,10 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
 
     appendShaderOption(ps_r2_technicolor, "USE_TECHICOLOR", "1");
     appendShaderOption(ps_r2_vignette, "USE_VIGNETTE", "1");
+    appendShaderOption(ps_r2_filmgrain, "USE_FILMGRAIN", "1");
     appendShaderOption(RImplementation.o.advancedpp && ps_r2_lensdirt, "USE_LENS_DIRT", "1");
     appendShaderOption(ps_r2_lenswater, "USE_LENS_WATER", "1");
-    appendShaderOption(ps_r2_reflections, "USE_REFLECTIONS", "1");
+    appendShaderOption(ps_r2_reflections, "USE_REFLECTIONS", ps_r2_reflections > 1 ? "2" : "1");
     appendShaderOption(RImplementation.o.advancedpp && ps_r2_sss_enable, "USE_SSHAFTS", "1");
     appendShaderOption(ps_r2_fxaa, "USE_FXAA", "1");
 

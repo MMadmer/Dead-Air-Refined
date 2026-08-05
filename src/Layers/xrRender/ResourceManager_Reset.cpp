@@ -10,6 +10,13 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if defined(USE_DX11)
+namespace texture_residency
+{
+void clear();
+}
+#endif
+
 void CResourceManager::reset_begin()
 {
     ZoneScoped;
@@ -106,6 +113,9 @@ void mdump(C c)
 CResourceManager::~CResourceManager()
 {
     ShutdownTextureUploadPool();
+#if defined(USE_DX11)
+    texture_residency::clear();
+#endif
     DestroyNecessaryTextures();
 #ifndef MASTER_GOLD
     Dump(false);

@@ -267,7 +267,8 @@ bool CLevel::net_start6()
     {
         if (strstr(Core.Params, "-$"))
         {
-            string256 buf{}, cmd{}, param{};
+            string4096 buf{};
+            string256 cmd{}, param{};
             const int result = sscanf(strstr(Core.Params, "-$") + 2, "%255s %255s", cmd, param);
             if (result == 2)
             {

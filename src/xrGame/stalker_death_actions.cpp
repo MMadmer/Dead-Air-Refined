@@ -20,7 +20,6 @@
 #include "xrEngine/xr_level_controller.h"
 #include "clsid_game.h"
 #include "CharacterPhysicsSupport.h"
-#include "WeaponMagazined.h"
 
 using namespace StalkerDecisionSpace;
 
@@ -65,25 +64,10 @@ void CStalkerActionDead::initialize()
 
     object().inventory().Action(kWPN_FIRE, CMD_START);
 
-    u16 active_slot = object().inventory().GetActiveSlot();
-    if (active_slot == INV_SLOT_3)
-    {
-        CInventoryItem* item = object().inventory().ItemFromSlot(active_slot);
-        if (item)
-        {
-            CWeaponMagazined* weapon = smart_cast<CWeaponMagazined*>(item);
-            VERIFY(weapon);
-            weapon->SetQueueSize(weapon->GetAmmoElapsed());
-        }
-    }
-
     u16 I = object().inventory().FirstSlot();
     u16 E = object().inventory().LastSlot();
     for (; I <= E; ++I)
     {
-        if (I == BOLT_SLOT)
-            continue;
-
         if (I == object().inventory().GetActiveSlot())
             continue;
 
@@ -112,9 +96,6 @@ void CStalkerActionDead::execute()
     u16 E = object().inventory().LastSlot();
     for (; I <= E; ++I)
     {
-        if (I == BOLT_SLOT)
-            continue;
-
         PIItem item = object().inventory().ItemFromSlot(I);
         if (!item)
             continue;

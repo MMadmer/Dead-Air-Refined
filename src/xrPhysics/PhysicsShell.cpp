@@ -226,6 +226,14 @@ void ApplySpawnIniToPhysicShell(CInifile const* ini, CPhysicsShell* physics_shel
         {
             physics_shell->SetIgnoreRagDoll();
         }
+        if (ini->line_exist("collide", "ignore_dynamic"))
+        {
+            physics_shell->SetIgnoreDynamic();
+        }
+        if (ini->line_exist("collide", "disabled"))
+        {
+            physics_shell->DisableCollision();
+        }
 
         // If need, then show here that it is needed to ignore collisions with "animated_object"
         if (ini->line_exist("collide", "ignore_animated_objects"))

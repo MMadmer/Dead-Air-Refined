@@ -157,6 +157,23 @@ CSE_Abstract* CALifeSimulator__spawn_item(CALifeSimulator* self, LPCSTR section,
     return (self->spawn_item(section, position, level_vertex_id, game_vertex_id, ALife::_OBJECT_ID(-1)));
 }
 
+bool CALifeSimulator__is_inventory_item_section(CALifeSimulator* self, LPCSTR section)
+{
+    if (!self || !section || !*section || !pSettings->section_exist(section) ||
+        !pSettings->line_exist(section, "class"))
+    {
+        return false;
+    }
+
+    CSE_Abstract* object = F_entity_Create(section, true);
+    if (!object)
+        return false;
+
+    const bool result = !!smart_cast<CSE_ALifeInventoryItem*>(object);
+    F_entity_Destroy(object);
+    return result;
+}
+
 CSE_Abstract* CALifeSimulator__spawn_item2(CALifeSimulator* self, LPCSTR section, const Fvector& position,
     u32 level_vertex_id, GameGraph::_GRAPH_ID game_vertex_id, ALife::_OBJECT_ID id_parent)
 {
@@ -178,6 +195,9 @@ CSE_Abstract* CALifeSimulator__spawn_item2(CALifeSimulator* self, LPCSTR section
     packet.w_stringZ(section);
 
     CSE_Abstract* item = self->spawn_item(section, position, level_vertex_id, game_vertex_id, id_parent, false);
+    if (!item)
+        return nullptr;
+
     item->Spawn_Write(packet, FALSE);
     self->server().FreeID(item->ID, 0);
     F_entity_Destroy(item);
@@ -236,6 +256,8 @@ CSE_Abstract* CALifeSimulator__spawn_ammo(CALifeSimulator* self, LPCSTR section,
     if (!object || !object->m_bOnline)
     {
         CSE_Abstract* item = self->spawn_item(section, position, level_vertex_id, game_vertex_id, id_parent);
+        if (!item)
+            return nullptr;
 
         CSE_ALifeItemAmmo* ammo = smart_cast<CSE_ALifeItemAmmo*>(item);
         THROW(ammo);
@@ -250,6 +272,8 @@ CSE_Abstract* CALifeSimulator__spawn_ammo(CALifeSimulator* self, LPCSTR section,
     packet.w_stringZ(section);
 
     CSE_Abstract* item = self->spawn_item(section, position, level_vertex_id, game_vertex_id, id_parent, false);
+    if (!item)
+        return nullptr;
 
     CSE_ALifeItemAmmo* ammo = smart_cast<CSE_ALifeItemAmmo*>(item);
     THROW(ammo);
@@ -277,19 +301,22 @@ ALife::_SPAWN_ID CALifeSimulator__spawn_id(CALifeSimulator* self, ALife::_SPAWN_
 void CALifeSimulator__release(CALifeSimulator* self, CSE_Abstract* object, bool)
 {
     VERIFY(self);
-    //	self->release						(object,true);
-
-    THROW(object);
     if (!object)
         return;
 
     CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(object);
     THROW(alife_object);
+    if (!alife_object)
+        return;
     if (!alife_object->m_bOnline)
     {
         self->release(object, true);
         return;
     }
+
+    IGameObject* onlineObject = Level().Objects.net_Find(object->ID);
+    if (!onlineObject || onlineObject->getDestroy())
+        return;
 
     // awful hack, for stohe only
     NET_Packet packet;
@@ -298,6 +325,11 @@ void CALifeSimulator__release(CALifeSimulator* self, CSE_Abstract* object, bool)
     packet.w_u16(GE_DESTROY);
     packet.w_u16(object->ID);
     Level().Send(packet, net_flags(TRUE, TRUE));
+}
+
+void CALifeSimulator__release2(CALifeSimulator* self, CSE_Abstract* object)
+{
+    CALifeSimulator__release(self, object, false);
 }
 
 LPCSTR get_level_name(const CALifeSimulator* self, int level_id)
@@ -386,11 +418,16 @@ CSE_Abstract* try_to_clone_object(CALifeSimulator* self, CSE_Abstract* object, p
 
     CSE_ALifeItemWeaponMagazined * clone = smart_cast<CSE_ALifeItemWeaponMagazined*>(absClone);
     if (!clone)
+    {
+        self->server().FreeID(absClone->ID, 0);
+        F_entity_Destroy(absClone);
         return nullptr;
+    }
 
     clone->wpn_flags = wpnmag->wpn_flags;
     clone->m_addon_flags = wpnmag->m_addon_flags;
     clone->m_fCondition = wpnmag->m_fCondition;
+    clone->m_condition_type = wpnmag->m_condition_type;
     clone->ammo_type = wpnmag->ammo_type;
     clone->m_upgrades = wpnmag->m_upgrades;
     clone->a_elapsed = wpnmag->a_elapsed;
@@ -479,7 +516,9 @@ void CALifeSimulator::script_register(lua_State* luaState)
             .def("create", &CALifeSimulator__spawn_item)
             .def("create", &CALifeSimulator__spawn_item3)
             .def("create_ammo", &CALifeSimulator__spawn_ammo)
+            .def("is_inventory_item_section", &CALifeSimulator__is_inventory_item_section)
             .def("release", &CALifeSimulator__release)
+            .def("release2", &CALifeSimulator__release2)
             .def("spawn_id", &CALifeSimulator__spawn_id)
             .def("actor", &get_actor)
             .def("has_info", &has_info)

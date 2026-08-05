@@ -38,8 +38,10 @@ public:
     static bool process_async_save_completions();
     static bool wait_for_pending_saves();
     static bool save_capture_active();
+    static bool save_capture_reentrant();
+    static bool validate_load_companions(LPCSTR save_name);
     bool load(LPCSTR save_name = 0);
-    bool save(LPCSTR save_name = 0, bool update_name = true);
+    bool save(LPCSTR save_name = 0, bool update_name = true, bool show_status = true);
     void save(NET_Packet& net_packet);
 };
 

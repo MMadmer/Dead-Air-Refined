@@ -17,7 +17,7 @@ XRSOUND_API Flags32 psSoundFlags =
     ss_Hardware | ss_EFX | ss_UseFloat32
 };
 
-XRSOUND_API int psSoundTargets = 32;
+XRSOUND_API int psSoundTargets = 256;
 XRSOUND_API float psSoundOcclusionScale = 0.5f;
 XRSOUND_API float psSoundTimeFactor = 1.0f;
 XRSOUND_API float psSoundCull = 0.01f;
@@ -28,6 +28,7 @@ XRSOUND_API float psSoundVFactor = 1.0f;
 
 XRSOUND_API float psSoundVMusic = 1.f;
 XRSOUND_API int psSoundCacheSizeMB = 32;
+XRSOUND_API u32 psSoundPrecacheAll = 0;
 
 CSoundRender_Core* SoundRender = nullptr;
 
@@ -54,6 +55,9 @@ void CSoundRender_Core::_initialize()
     bPresent = true;
 
     bReady = true;
+
+    if (psSoundPrecacheAll)
+        i_create_all_sources();
 }
 
 void CSoundRender_Core::_clear()

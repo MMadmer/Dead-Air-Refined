@@ -4,6 +4,21 @@
 
 struct SBoneProtections;
 
+struct SHelmetFilterSaveState
+{
+    u16 objectId{};
+    u16 elapsed{};
+    u32 sectionChecksum{};
+};
+
+struct SHelmetFilterSaveCaptureState
+{
+    xr_vector<SHelmetFilterSaveState> records;
+    u32 nextObjectId{};
+    bool initialized{};
+    bool completed{};
+};
+
 class CHelmet : public CInventoryItemObject
 {
     using inherited = CInventoryItemObject;
@@ -43,6 +58,18 @@ public:
 
     void ReloadBonesProtection();
     void AddBonesProtection(LPCSTR bones_section);
+
+    [[nodiscard]] u16 GetFiltersElapsed() const;
+    void SetFiltersElapsed(u16 count);
+    [[nodiscard]] bool UseFilters() const;
+
+    static void CollectFilterSaveState(xr_vector<SHelmetFilterSaveState>& result);
+    static void BeginFilterSaveCapture(SHelmetFilterSaveCaptureState& state);
+    [[nodiscard]] static bool ContinueFilterSaveCapture(
+        SHelmetFilterSaveCaptureState& state, float budgetMilliseconds);
+    static void StageFilterSaveState(const xr_vector<SHelmetFilterSaveState>& state);
+    static void ClearFilterSaveState();
+    static void ForgetFilterSaveState(const CSE_Abstract& serverObject);
 
 protected:
     mutable HitImmunity::HitTypeSVec m_HitTypeProtection;

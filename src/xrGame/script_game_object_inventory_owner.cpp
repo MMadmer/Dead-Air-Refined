@@ -54,6 +54,7 @@
 #include "inventory_item.h"
 #include "CustomOutfit.h"
 #include "ActorBackpack.h"
+#include "Artefact.h"
 #include "inventory_item_impl.h"
 #include "xrServer_Objects_ALife_Items.h"
 #include "xrServerEntities/inventory_space.h"
@@ -679,6 +680,19 @@ LPCSTR CScriptGameObject::CharacterName()
     return pInventoryOwner->Name();
 }
 
+void CScriptGameObject::SetCharacterName(LPCSTR name)
+{
+    CInventoryOwner* inventoryOwner = smart_cast<CInventoryOwner*>(&object());
+    if (!inventoryOwner)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "SetCharacterName available only for InventoryOwner");
+        return;
+    }
+
+    inventoryOwner->SetName(name);
+}
+
 LPCSTR CScriptGameObject::CharacterIcon()
 {
     CInventoryOwner* pInventoryOwner = smart_cast<CInventoryOwner*>(&object());
@@ -1085,11 +1099,17 @@ bool CScriptGameObject::attachable_item_enabled() const
 
 void CScriptGameObject::enable_night_vision(bool value)
 {
+    if (CActor* actor = smart_cast<CActor*>(&object()))
+    {
+        actor->SwitchNightVision(value);
+        return;
+    }
+
     CTorch* torch = smart_cast<CTorch*>(&object());
     if (!torch)
     {
         GEnv.ScriptEngine->script_log(
-            LuaMessageType::Error, "CTorch : cannot access class member enable_night_vision!");
+            LuaMessageType::Error, "CActor or CTorch : cannot access class member enable_night_vision!");
         return;
     }
     torch->SwitchNightVision(value);
@@ -1097,11 +1117,14 @@ void CScriptGameObject::enable_night_vision(bool value)
 
 bool CScriptGameObject::night_vision_enabled() const
 {
+    if (CActor* actor = smart_cast<CActor*>(&object()))
+        return actor->GetNightVisionStatus();
+
     CTorch* torch = smart_cast<CTorch*>(&object());
     if (!torch)
     {
         GEnv.ScriptEngine->script_log(
-            LuaMessageType::Error, "CTorch : cannot access class member enable_night_vision!");
+            LuaMessageType::Error, "CActor or CTorch : cannot access class member night_vision_enabled!");
         return (false);
     }
     return (torch->GetNightVisionStatus());
@@ -1276,6 +1299,21 @@ bool CScriptGameObject::torch_enabled() const
     return (torch->torch_active());
 }
 
+void CScriptGameObject::kick_enable(bool value)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error, "CActor : cannot access class member kick_enable!");
+        return;
+    }
+
+    if (value)
+        actor->StartKick();
+    else
+        actor->EndKick();
+}
+
 void CScriptGameObject::attachable_item_load_attach(LPCSTR section)
 {
     CAttachableItem* attachable_item = smart_cast<CAttachableItem*>(&object());
@@ -1303,6 +1341,41 @@ void CScriptGameObject::RestoreWeapon()
 void CScriptGameObject::HideWeapon()
 {
     Actor()->SetWeaponHideState(INV_STATE_BLOCK_ALL, true);
+}
+
+void CScriptGameObject::HideDetector(bool fast, u16 slot)
+{
+    CActor* actor = Actor();
+    if (!actor)
+        return;
+
+    CInventoryItem* item = actor->inventory().ItemFromSlot(slot);
+    if (CCustomDetector* detector = smart_cast<CCustomDetector*>(item))
+        detector->HideDetector(fast);
+}
+
+void CScriptGameObject::RestoreDetector(bool fast, u16 slot)
+{
+    CActor* actor = Actor();
+    if (!actor)
+        return;
+
+    CInventoryItem* item = actor->inventory().ItemFromSlot(slot);
+    if (CCustomDetector* detector = smart_cast<CCustomDetector*>(item))
+        detector->ShowDetector(fast);
+}
+
+bool CScriptGameObject::WeaponIsScopeTexture()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    if (!weapon)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CWeapon : cannot access class member WeaponIsScopeTexture!");
+        return false;
+    }
+
+    return !!weapon->ZoomTexture();
 }
 
 int CScriptGameObject::Weapon_GrenadeLauncher_Status()
@@ -2159,6 +2232,13 @@ void CScriptGameObject::SetRadiationDetector(bool enabled)
 
 void CScriptGameObject::SetActorRecoilCoeff(float recoil_coeff)
 {
+    if (!std::isfinite(recoil_coeff) || recoil_coeff < 0.f)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "set_actor_recoil_coeff expects a finite non-negative value");
+        return;
+    }
+
     CActor* actor = smart_cast<CActor*>(&object());
     if (!actor)
     {
@@ -2181,6 +2261,19 @@ void CScriptGameObject::SetActorZoomInertion(float zoom_inertion)
     }
 
     actor->m_fZoomInertion = zoom_inertion;
+}
+
+void CScriptGameObject::SetActorAdrenalineTime(float time)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CActor : cannot access class member SetActorAdrenalineTime!");
+        return;
+    }
+
+    actor->SetAdrenalineTime(time);
 }
 
 float CScriptGameObject::GetRadiationDetector() const
@@ -2326,6 +2419,14 @@ void CScriptGameObject::SetWeight(float w)
                                         "CSciptEntity : cannot access class member SetWeight!");
         return;
     }
+
+    CArtefact* artefact = object().cast_artefact();
+    if (artefact)
+    {
+        artefact->SetRuntimeWeight(w);
+        return;
+    }
+
     inventory_item->SetWeight(w);
 }
 

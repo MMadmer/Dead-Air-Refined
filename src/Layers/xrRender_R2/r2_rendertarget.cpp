@@ -511,6 +511,7 @@ CRenderTarget::CRenderTarget()
     {
         s_accum_volume.create("accum_volumetric", "lights" DELIMITER "lights_spot01");
         manually_assign_texture(s_accum_volume, "s_smap", smapTarget);
+        s_accum_volume_unshadowed.create("accum_volumetric_unshadowed", "lights" DELIMITER "lights_spot01");
         accum_volumetric_geom_create();
         g_accum_volumetric.create(D3DFVF_XYZ, g_accum_volumetric_vb, g_accum_volumetric_ib);
     }

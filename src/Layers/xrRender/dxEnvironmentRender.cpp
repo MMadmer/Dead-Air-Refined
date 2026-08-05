@@ -114,6 +114,34 @@ public:
     }
 };
 
+namespace
+{
+void acquire_weather_texture(ref_texture& texture, const shared_str& name, const CEnvDescriptor& owner, pcstr role)
+{
+    string512 context;
+    xr_sprintf(context, "%s: %s", role, name.size() ? name.c_str() : "<empty>");
+    R_ASSERT4(name.size(), "Weather descriptor is missing a required texture", owner.m_identifier.c_str(), context);
+
+    texture.create(name.c_str());
+    R_ASSERT4(texture, "Failed to create weather texture resource", owner.m_identifier.c_str(), context);
+
+    if (!Device.b_is_Ready)
+        return;
+
+    texture->Load();
+#if defined(USE_DX11)
+    ID3DBaseTexture* surface = texture->surface_get();
+    const bool valid = surface;
+    _RELEASE(surface);
+#elif defined(USE_OGL)
+    const bool valid = texture->surface_get();
+#else
+#   error No graphics API selected or enabled!
+#endif
+    R_ASSERT4(valid, "Failed to load weather texture resource", owner.m_identifier.c_str(), context);
+}
+} // namespace
+
 void dxEnvDescriptorRender::Copy(IEnvDescriptorRender& _in) { *this = *(dxEnvDescriptorRender*)&_in; }
 void dxEnvironmentRender::Copy(IEnvironmentRender& _in) { *this = *(dxEnvironmentRender*)&_in; }
 
@@ -124,14 +152,9 @@ particles_systems::library_interface const& dxEnvironmentRender::particles_syste
 
 void dxEnvDescriptorRender::OnDeviceCreate(CEnvDescriptor& owner)
 {
-    if (owner.sky_texture_name.size())
-        sky_texture.create(owner.sky_texture_name.c_str());
-
-    if (owner.sky_texture_env_name.size())
-        sky_texture_env.create(owner.sky_texture_env_name.c_str());
-
-    if (owner.clouds_texture_name.size())
-        clouds_texture.create(owner.clouds_texture_name.c_str());
+    acquire_weather_texture(sky_texture, owner.sky_texture_name, owner, "sky");
+    acquire_weather_texture(sky_texture_env, owner.sky_texture_env_name, owner, "sky environment");
+    acquire_weather_texture(clouds_texture, owner.clouds_texture_name, owner, "clouds");
 }
 
 void dxEnvDescriptorRender::OnDeviceDestroy()
@@ -162,6 +185,20 @@ void dxEnvironmentRender::Clear()
     clouds_r_textures.push_back(zero);
     clouds_r_textures.push_back(zero);
     clouds_r_textures.push_back(zero);
+
+#if defined(USE_DX11)
+    tsky0->surface_set(nullptr);
+    tsky1->surface_set(nullptr);
+    t_envmap_0->surface_set(nullptr);
+    t_envmap_1->surface_set(nullptr);
+#elif defined(USE_OGL)
+    tsky0->surface_set(GL_TEXTURE_CUBE_MAP, 0);
+    tsky1->surface_set(GL_TEXTURE_CUBE_MAP, 0);
+    t_envmap_0->surface_set(GL_TEXTURE_CUBE_MAP, 0);
+    t_envmap_1->surface_set(GL_TEXTURE_CUBE_MAP, 0);
+#else
+#   error No graphics API selected or enabled!
+#endif
 }
 
 void dxEnvironmentRender::lerp(CEnvDescriptorMixer& currentEnv, IEnvDescriptorRender* inA, IEnvDescriptorRender* inB)

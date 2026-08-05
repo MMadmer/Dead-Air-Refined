@@ -12,6 +12,8 @@
 player_hud* g_player_hud = nullptr;
 extern ENGINE_API shared_str current_player_hud_sect;
 
+static float hudInertionFactor = 1.f;
+
 // --#SM+# Begin--
 constexpr float PITCH_OFFSET_R    = 0.0f;   // Насколько сильно ствол смещается вбок (влево) при вертикальных поворотах камеры
 constexpr float PITCH_OFFSET_N    = 0.0f;   // Насколько сильно ствол поднимается\опускается при вертикальных поворотах камеры
@@ -429,7 +431,10 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
                                             m_visual_name.c_str(), anim_name_r)
                                             .c_str());
 
-    const float speed = CalcMotionSpeed(anm->m_base_name, anm->m_anim_speed);
+    float speed = CalcMotionSpeed(anm->m_base_name, anm->m_anim_speed);
+    const std::string_view animationName{ anm_name_b.c_str() };
+    if (animationName.starts_with("anm_show") || animationName.starts_with("anm_hide"))
+        speed = m_parent->inertion_animation_speed(speed);
 
     rnd_idx = (u8)Random.randI(anm->m_animations.size());
     const motion_descr& M = anm->m_animations[rnd_idx];
@@ -729,6 +734,16 @@ u32 player_hud::anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotio
     return motion_length(M, md, speed, itemModel);
 }
 
+float player_hud::inertion_animation_speed(float speed) const
+{
+    return _max(speed / hudInertionFactor, EPS_S);
+}
+
+void player_hud::set_inertion_k(float inertion)
+{
+    hudInertionFactor = std::isfinite(inertion) ? _max(inertion, 0.1f) : 1.f;
+}
+
 void player_hud::update_additional(Fmatrix& trans) const
 {
     if (m_attached_items[0])
@@ -752,7 +767,7 @@ void player_hud::update_inertion(Fmatrix& trans) const
 
         // load params
         hud_item_measures::inertion_params inertion_data;
-        if (pMainHud != NULL)
+        if (pMainHud)
         { // Загружаем параметры инерции из основного худа
             inertion_data.m_pitch_offset_r = pMainHud->m_measures.m_inertion_params.m_pitch_offset_r;
             inertion_data.m_pitch_offset_n = pMainHud->m_measures.m_inertion_params.m_pitch_offset_n;
@@ -793,7 +808,7 @@ void player_hud::update_inertion(Fmatrix& trans) const
 
         // tend to forward
         float _tendto_speed, _origin_offset;
-        if (pMainHud != NULL && pMainHud->m_parent_hud_item->GetCurrentHudOffsetIdx() > 0)
+        if (pMainHud && pMainHud->m_parent_hud_item->GetCurrentHudOffsetIdx() > 0)
         { // Худ в режиме "Прицеливание"
             float factor = pMainHud->m_parent_hud_item->GetInertionFactor();
             _tendto_speed = inertion_data.m_tendto_speed_aim - (inertion_data.m_tendto_speed_aim - inertion_data.m_tendto_speed) * factor;
@@ -807,20 +822,21 @@ void player_hud::update_inertion(Fmatrix& trans) const
         }
 
         // Фактор силы инерции
-        if (pMainHud != NULL)
+        if (pMainHud)
         {
             float power_factor = pMainHud->m_parent_hud_item->GetInertionPowerFactor();
             _tendto_speed *= power_factor;
             _origin_offset *= power_factor;
         }
 
-        st_last_dir.mad(diff_dir, _tendto_speed * Device.fTimeDelta);
+        const float inertionScale = hudInertionFactor * hudInertionFactor;
+        st_last_dir.mad(diff_dir, _tendto_speed / inertionScale * Device.fTimeDelta);
         origin.mad(diff_dir, _origin_offset);
 
         // pitch compensation
         float pitch = angle_normalize_signed(xform.k.getP());
 
-        if (pMainHud != NULL)
+        if (pMainHud)
             pitch *= pMainHud->m_parent_hud_item->GetInertionFactor();
 
         // Отдаление\приближение

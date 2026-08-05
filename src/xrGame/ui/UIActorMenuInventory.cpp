@@ -396,7 +396,7 @@ void CUIActorMenu::InitCellForSlot(u16 slot_idx)
 {
     //VERIFY(KNIFE_SLOT <= slot_idx && slot_idx <= LAST_SLOT);
     PIItem item = m_pActorInvOwner->inventory().ItemFromSlot(slot_idx);
-    if (!item)
+    if (!item || !item->CanShow())
     {
         return;
     }
@@ -438,6 +438,9 @@ void CUIActorMenu::InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyB
 
     for (PIItem item : ruck_list)
     {
+        if (!item->CanShow())
+            continue;
+
         CMPPlayersBag* bag = smart_cast<CMPPlayersBag*>(&item->object());
         if (bag)
             continue;
@@ -495,6 +498,9 @@ void CUIActorMenu::InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyB
     TIItemContainer::iterator ite = m_pActorInvOwner->inventory().m_belt.end();
     for (; itb != ite; ++itb)
     {
+        if (!(*itb)->CanShow())
+            continue;
+
         CUICellItem* itm = create_cell_item(*itb);
         curr_list->SetItem(itm);
         if (m_currMenuMode == mmTrade && m_pPartnerInvOwner)
@@ -544,7 +550,10 @@ bool CUIActorMenu::ToSlotScript(CScriptGameObject* GO, bool force_place, u16 slo
         PIItem pitm = static_cast<PIItem>(i->m_pData);
         if (pitm == iitem)
         {
-            ToSlot(i, force_place, slot_id);
+            if (!ToSlot(i, force_place, slot_id))
+                return false;
+
+            UpdateItemsPlace();
             return true;
         }
     }
@@ -1111,22 +1120,24 @@ void CUIActorMenu::PropertiesBoxForWeapon(CUICellItem* cell_item, PIItem item, b
         {
         }
     }
-    if (smart_cast<CWeaponMagazined*>(pWeapon) && IsGameTypeSingle())
+    CWeaponMagazined* weaponMagazined = smart_cast<CWeaponMagazined*>(pWeapon);
+    if (weaponMagazined && IsGameTypeSingle())
     {
-        bool b = (pWeapon->GetAmmoElapsed() != 0);
-        if (!b)
+        bool hasUnloadableAmmo = weaponMagazined->HaveAmmoInMagazine();
+        if (!hasUnloadableAmmo)
         {
             for (u32 i = 0; i < cell_item->ChildsCount(); ++i)
             {
-                CWeaponMagazined* weap_mag = smart_cast<CWeaponMagazined*>((CWeapon*)cell_item->Child(i)->m_pData);
-                if (weap_mag && weap_mag->GetAmmoElapsed())
+                CWeaponMagazined* childWeapon =
+                    smart_cast<CWeaponMagazined*>(static_cast<CWeapon*>(cell_item->Child(i)->m_pData));
+                if (childWeapon && childWeapon->HaveAmmoInMagazine())
                 {
-                    b = true;
+                    hasUnloadableAmmo = true;
                     break; // for
                 }
             }
         }
-        if (b)
+        if (hasUnloadableAmmo)
         {
             m_UIPropertiesBox->AddItem("st_unload_magazine", NULL, INVENTORY_UNLOAD_MAGAZINE);
             b_show = true;
@@ -1136,87 +1147,26 @@ void CUIActorMenu::PropertiesBoxForWeapon(CUICellItem* cell_item, PIItem item, b
 
 void CUIActorMenu::PropertiesBoxForAddon(PIItem item, bool& b_show)
 {
-    //присоединение аддонов к активному слоту (2 или 3)
-
-    CScope* pScope = smart_cast<CScope*>(item);
-    CSilencer* pSilencer = smart_cast<CSilencer*>(item);
-    CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(item);
-    CInventory* inv = &m_pActorInvOwner->inventory();
-
-    PIItem item_in_slot_2 = inv->ItemFromSlot(INV_SLOT_2);
-    PIItem item_in_slot_3 = inv->ItemFromSlot(INV_SLOT_3);
-
-    if (!item_in_slot_2 && !item_in_slot_3)
+    const CScope* scope = smart_cast<CScope*>(item);
+    const CSilencer* silencer = smart_cast<CSilencer*>(item);
+    const CGrenadeLauncher* grenadeLauncher = smart_cast<CGrenadeLauncher*>(item);
+    if (!scope && !silencer && !grenadeLauncher)
         return;
 
-    if (pScope)
+    cpcstr label = scope ? "st_attach_scope_to_pistol" :
+        silencer ? "st_attach_silencer_to_pistol" : "st_attach_gl_to_rifle";
+    constexpr u16 addonSlots[] = { INV_SLOT_2, INV_SLOT_3, SIDEARM_SLOT };
+    CInventory& inventory = m_pActorInvOwner->inventory();
+    for (const u16 slot : addonSlots)
     {
-        if (item_in_slot_2 && item_in_slot_2->CanAttach(pScope))
-        {
-            shared_str str = StringTable().translate("st_attach_scope_to_pistol");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_2->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_2, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_scope_to_pistol",  (void*)item_in_slot_2,
-            // INVENTORY_ATTACH_ADDON );
-            b_show = true;
-        }
-        if (item_in_slot_3 && item_in_slot_3->CanAttach(pScope))
-        {
-            shared_str str = StringTable().translate("st_attach_scope_to_pistol");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_3->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_3, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_scope_to_rifle",  (void*)item_in_slot_3,
-            // INVENTORY_ATTACH_ADDON );
-            b_show = true;
-        }
-        return;
-    }
+        PIItem target = inventory.ItemFromSlot(slot);
+        if (!target || !target->CanAttach(item))
+            continue;
 
-    if (pSilencer)
-    {
-        if (item_in_slot_2 && item_in_slot_2->CanAttach(pSilencer))
-        {
-            shared_str str = StringTable().translate("st_attach_silencer_to_pistol");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_2->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_2, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_silencer_to_pistol",  (void*)item_in_slot_2,
-            // INVENTORY_ATTACH_ADDON );
-            b_show = true;
-        }
-        if (item_in_slot_3 && item_in_slot_3->CanAttach(pSilencer))
-        {
-            shared_str str = StringTable().translate("st_attach_silencer_to_pistol");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_3->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_3, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_silencer_to_rifle",  (void*)item_in_slot_3,
-            // INVENTORY_ATTACH_ADDON );
-            b_show = true;
-        }
-        return;
-    }
-
-    if (pGrenadeLauncher)
-    {
-        if (item_in_slot_2 && item_in_slot_2->CanAttach(pGrenadeLauncher))
-        {
-            shared_str str = StringTable().translate("st_attach_gl_to_rifle");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_2->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_2, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_gl_to_pistol",  (void*)item_in_slot_2,
-            //INVENTORY_ATTACH_ADDON
-            //);
-            b_show = true;
-        }
-        if (item_in_slot_3 && item_in_slot_3->CanAttach(pGrenadeLauncher))
-        {
-            shared_str str = StringTable().translate("st_attach_gl_to_rifle");
-            xr_sprintf(str, "%s %s", str.c_str(), item_in_slot_3->m_name.c_str());
-            m_UIPropertiesBox->AddItem(str.c_str(), (void*)item_in_slot_3, INVENTORY_ATTACH_ADDON);
-            //			m_UIPropertiesBox->AddItem( "st_attach_gl_to_rifle",  (void*)item_in_slot_3,
-            //INVENTORY_ATTACH_ADDON
-            //);
-            b_show = true;
-        }
+        shared_str text = StringTable().translate(label);
+        xr_sprintf(text, "%s %s", text.c_str(), target->m_name.c_str());
+        m_UIPropertiesBox->AddItem(text.c_str(), target, INVENTORY_ATTACH_ADDON);
+        b_show = true;
     }
 }
 
@@ -1262,68 +1212,24 @@ void CUIActorMenu::PropertiesBoxForUsing(PIItem item, bool& b_show)
         }
     }
 
-    //1st Custom Use action
-    pcstr functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use1_functor", nullptr);
-    if (functor_name)
+    for (u32 index = 0; index < 4; ++index)
     {
-        luabind::functor<pcstr> funct1;
-        if (GEnv.ScriptEngine->functor(functor_name, funct1))
-        {
-            act_str = funct1(GO->lua_game_object());
-            if (act_str)
-            {
-                m_UIPropertiesBox->AddItem(act_str, nullptr, INVENTORY_EAT2_ACTION);
-                b_show = true;
-            }
-        }
-    }
+        string32 functorKey;
+        xr_sprintf(functorKey, "use%u_functor", index + 1);
+        pcstr functorName = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), functorKey, nullptr);
+        if (!functorName)
+            continue;
 
-    // 2nd Custom Use action
-    functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use2_functor", nullptr);
-    if (functor_name)
-    {
-        luabind::functor<pcstr> funct1;
-        if (GEnv.ScriptEngine->functor(functor_name, funct1))
-        {
-            act_str = funct1(GO->lua_game_object());
-            if (act_str)
-            {
-                m_UIPropertiesBox->AddItem(act_str, nullptr, INVENTORY_EAT3_ACTION);
-                b_show = true;
-            }
-        }
-    }
+        luabind::functor<pcstr> captionFunctor;
+        if (!GEnv.ScriptEngine->functor(functorName, captionFunctor))
+            continue;
 
-    // 3rd Custom Use action
-    functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use3_functor", nullptr);
-    if (functor_name)
-    {
-        luabind::functor<pcstr> funct1;
-        if (GEnv.ScriptEngine->functor(functor_name, funct1))
-        {
-            act_str = funct1(GO->lua_game_object());
-            if (act_str)
-            {
-                m_UIPropertiesBox->AddItem(act_str, nullptr, INVENTORY_EAT4_ACTION);
-                b_show = true;
-            }
-        }
-    }
+        act_str = captionFunctor(GO->lua_game_object());
+        if (!act_str)
+            continue;
 
-    // 4th Custom Use action
-    functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use4_functor", nullptr);
-    if (functor_name)
-    {
-        luabind::functor<pcstr> funct1;
-        if (GEnv.ScriptEngine->functor(functor_name, funct1))
-        {
-            act_str = funct1(GO->lua_game_object());
-            if (act_str)
-            {
-                m_UIPropertiesBox->AddItem(act_str, nullptr, INVENTORY_EAT5_ACTION);
-                b_show = true;
-            }
-        }
+        m_UIPropertiesBox->AddItem(act_str, nullptr, INVENTORY_EAT2_ACTION + index);
+        b_show = true;
     }
 }
 
@@ -1385,6 +1291,30 @@ void CUIActorMenu::ProcessPropertiesBoxClicked(CUIWindow* w, void* d)
         return;
     }
     CWeapon* weapon = smart_cast<CWeapon*>(item);
+    const auto detachWeaponAddon = [this, cell_item, weapon](EWeaponConditionType mountType, const auto& getAddonName)
+    {
+        if (!weapon)
+            return;
+
+        const auto detach = [this, mountType, &getAddonName](CWeapon& target, PIItem inventoryItem)
+        {
+            const shared_str addonName = getAddonName(target);
+            DetachAddon(addonName.c_str(), inventoryItem);
+
+            const float condition = std::max(target.GetCondition(), 0.2f);
+            if (::Random.randF(0.f, 0.9f) > condition)
+                target.SetConditionType(target.GetConditionType() | u32(mountType));
+        };
+
+        detach(*weapon, nullptr);
+        for (u32 i = 0; i < cell_item->ChildsCount(); ++i)
+        {
+            PIItem childItem = static_cast<PIItem>(cell_item->Child(i)->m_pData);
+            CWeapon* childWeapon = smart_cast<CWeapon*>(childItem);
+            if (childWeapon)
+                detach(*childWeapon, childItem);
+        }
+    };
 
     switch (m_UIPropertiesBox->GetClickedItem()->GetTAG())
     {
@@ -1394,59 +1324,24 @@ void CUIActorMenu::ProcessPropertiesBoxClicked(CUIWindow* w, void* d)
     case INVENTORY_DONATE_ACTION: DonateCurrentItem(cell_item); break;
     case INVENTORY_EAT_ACTION: TryUseItem(cell_item); break;
     case INVENTORY_EAT2_ACTION:
-    {
-        const CGameObject* GO = smart_cast<CGameObject*>(item);
-        if (cpcstr functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use1_action_functor", nullptr))
-        {
-            luabind::functor<bool> funct1;
-            if (GEnv.ScriptEngine->functor(functor_name, funct1))
-            {
-                if (funct1(GO->lua_game_object()))
-                    TryUseItem(cell_item);
-            }
-        }
-        break;
-    }
     case INVENTORY_EAT3_ACTION:
-    {
-        const CGameObject* GO = smart_cast<CGameObject*>(item);
-        if (cpcstr functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use2_action_functor", nullptr))
-        {
-            luabind::functor<bool> funct2;
-            if (GEnv.ScriptEngine->functor(functor_name, funct2))
-            {
-                if (funct2(GO->lua_game_object()))
-                    TryUseItem(cell_item);
-            }
-        }
-        break;
-    }
     case INVENTORY_EAT4_ACTION:
-    {
-        const CGameObject* GO = smart_cast<CGameObject*>(item);
-        if (cpcstr functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use3_action_functor", nullptr))
-        {
-            luabind::functor<bool> funct3;
-            if (GEnv.ScriptEngine->functor(functor_name, funct3))
-            {
-                if (funct3(GO->lua_game_object()))
-                    TryUseItem(cell_item);
-            }
-        }
-        break;
-    }
     case INVENTORY_EAT5_ACTION:
     {
         const CGameObject* GO = smart_cast<CGameObject*>(item);
-        if (cpcstr functor_name = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), "use4_action_functor", nullptr))
-        {
-            luabind::functor<bool> funct4;
-            if (GEnv.ScriptEngine->functor(functor_name, funct4))
-            {
-                if (funct4(GO->lua_game_object()))
-                    TryUseItem(cell_item);
-            }
-        }
+        if (!GO)
+            break;
+
+        const u32 index = m_UIPropertiesBox->GetClickedItem()->GetTAG() - INVENTORY_EAT2_ACTION;
+        string32 functorKey;
+        xr_sprintf(functorKey, "use%u_action_functor", index + 1);
+        cpcstr functorName = READ_IF_EXISTS(pSettings, r_string, GO->cNameSect(), functorKey, nullptr);
+        if (!functorName)
+            break;
+
+        luabind::functor<bool> actionFunctor;
+        if (GEnv.ScriptEngine->functor(functorName, actionFunctor) && actionFunctor(GO->lua_game_object()))
+            TryUseItem(cell_item);
         break;
     }
     case INVENTORY_DROP_ACTION:
@@ -1472,52 +1367,15 @@ void CUIActorMenu::ProcessPropertiesBoxClicked(CUIWindow* w, void* d)
         break;
     }
     case INVENTORY_DETACH_SCOPE_ADDON:
-        if (weapon)
-        {
-            DetachAddon(weapon->GetScopeName().c_str());
-            for (u32 i = 0; i < cell_item->ChildsCount(); ++i)
-            {
-                CUICellItem* child_itm = cell_item->Child(i);
-                PIItem child_iitm = (PIItem)(child_itm->m_pData);
-                CWeapon* wpn = smart_cast<CWeapon*>(child_iitm);
-                if (child_iitm && wpn)
-                {
-                    DetachAddon(wpn->GetScopeName().c_str(), child_iitm);
-                }
-            }
-        }
+        detachWeaponAddon(eWeaponConditionScopeMount, [](const CWeapon& target) { return target.GetScopeName(); });
         break;
     case INVENTORY_DETACH_SILENCER_ADDON:
-        if (weapon)
-        {
-            DetachAddon(weapon->GetSilencerName().c_str());
-            for (u32 i = 0; i < cell_item->ChildsCount(); ++i)
-            {
-                CUICellItem* child_itm = cell_item->Child(i);
-                PIItem child_iitm = (PIItem)(child_itm->m_pData);
-                CWeapon* wpn = smart_cast<CWeapon*>(child_iitm);
-                if (child_iitm && wpn)
-                {
-                    DetachAddon(wpn->GetSilencerName().c_str(), child_iitm);
-                }
-            }
-        }
+        detachWeaponAddon(eWeaponConditionSilencerMount,
+            [](const CWeapon& target) { return target.GetSilencerName(); });
         break;
     case INVENTORY_DETACH_GRENADE_LAUNCHER_ADDON:
-        if (weapon)
-        {
-            DetachAddon(weapon->GetGrenadeLauncherName().c_str());
-            for (u32 i = 0; i < cell_item->ChildsCount(); ++i)
-            {
-                CUICellItem* child_itm = cell_item->Child(i);
-                PIItem child_iitm = (PIItem)(child_itm->m_pData);
-                CWeapon* wpn = smart_cast<CWeapon*>(child_iitm);
-                if (child_iitm && wpn)
-                {
-                    DetachAddon(wpn->GetGrenadeLauncherName().c_str(), child_iitm);
-                }
-            }
-        }
+        detachWeaponAddon(eWeaponConditionGrenadeLauncherMount,
+            [](const CWeapon& target) { return target.GetGrenadeLauncherName(); });
         break;
     case INVENTORY_RELOAD_MAGAZINE:
         if (weapon)

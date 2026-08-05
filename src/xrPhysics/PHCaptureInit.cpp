@@ -16,8 +16,8 @@ extern class CPHWorld* ph_world;
 bool can_capture(CPHCharacter* a_character, IPhysicsShellHolder* a_taget_object)
 {
     if (!a_taget_object || !a_taget_object->ObjectPPhysicsShell() ||
-        !a_taget_object->ObjectPPhysicsShell()->isActive() || a_taget_object->IsInventoryItem() || !a_character ||
-        !a_character->b_exist || !a_character->PhysicsRefObject() ||
+        !a_taget_object->ObjectPPhysicsShell()->isActive() || !a_character || !a_character->b_exist ||
+        !a_character->PhysicsRefObject() ||
         //! a_character->PhysicsRefObject()->ObjectVisual( )
         !a_character->PhysicsRefObject()->ObjectKinematics())
         return false;

@@ -38,6 +38,7 @@
 #include "doors_door.h"
 #include "doors.h"
 #include "xrNetServer/NET_Messages.h"
+#include "xrCommon/xr_hash_map.h"
 
 extern MagicBox3 MagicMinBox(int iQuantity, const Fvector* akPoint);
 
@@ -48,6 +49,12 @@ extern MagicBox3 MagicMinBox(int iQuantity, const Fvector* akPoint);
 
 static const float base_spu_epsP = 0.05f;
 static const float base_spu_epsR = 0.05f;
+
+namespace
+{
+// Sidecar storage preserves the original object layout and save format.
+xr_flat_hash_map<const CGameObject*, bool> ghostObjects;
+}
 
 CGameObject::CGameObject() : SpatialBase(g_pGamePersistent->SpatialSpace), scriptBinder(this)
 {
@@ -82,6 +89,7 @@ CGameObject::CGameObject() : SpatialBase(g_pGamePersistent->SpatialSpace), scrip
 
 CGameObject::~CGameObject()
 {
+    ghostObjects.erase(this);
     VERIFY(!animation_movement());
     VERIFY(!m_ini_file);
     VERIFY(!m_lua_game_object);
@@ -223,6 +231,10 @@ void CGameObject::Load(LPCSTR section)
     R_ASSERT(section);
     cName_set(section);
     cNameSect_set(section);
+    if (READ_IF_EXISTS(pSettings, r_bool, section, "ghost", false))
+        ghostObjects[this] = true;
+    else
+        ghostObjects.erase(this);
     // Visual and light-track
     if (pSettings->line_exist(section, "visual"))
     {
@@ -242,6 +254,11 @@ void CGameObject::Load(LPCSTR section)
         // self->spatial.type	|=	STYPE_VISIBLEFORAI;
         self->GetSpatialData().type &= ~STYPE_REACTTOSOUND;
     }
+}
+
+bool CGameObject::IsGhost() const
+{
+    return !ghostObjects.empty() && ghostObjects.contains(this);
 }
 
 void CGameObject::PostLoad(LPCSTR section) {}
@@ -1068,7 +1085,16 @@ void CGameObject::renderable_Render(u32 context_id, IRenderable* root)
     //
     MakeMeCrow();
     // ~
+    CGameObject* parent = smart_cast<CGameObject*>(H_Parent());
+    const bool ghost = IsGhost() || (parent && parent->IsGhost());
+    const bool wasInvisible = root && root->renderable_Invisible();
+    if (ghost && root)
+        root->renderable_Invisible(true);
+
     GEnv.Render->add_Visual(context_id, root, Visual(), XFORM());
+
+    if (ghost && root)
+        root->renderable_Invisible(wasInvisible);
     Visual()->getVisData().hom_frame = Device.dwFrame;
 }
 

@@ -236,11 +236,15 @@ void CAI_Stalker::select_items()
     if (!m_can_select_items)
         return;
 
+    if (m_can_select_weapon)
+    {
+        choose_weapon(ALife::eWeaponPriorityTypeKnife);
+        choose_weapon(ALife::eWeaponPriorityTypeSecondary);
+        choose_weapon(ALife::eWeaponPriorityTypePrimary);
+        choose_weapon(ALife::eWeaponPriorityTypeGrenade);
+    }
+
     choose_food();
-    choose_weapon(ALife::eWeaponPriorityTypeKnife);
-    choose_weapon(ALife::eWeaponPriorityTypeSecondary);
-    choose_weapon(ALife::eWeaponPriorityTypePrimary);
-    choose_weapon(ALife::eWeaponPriorityTypeGrenade);
     choose_medikit();
     choose_detector();
     choose_equipment();

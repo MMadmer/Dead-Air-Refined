@@ -23,10 +23,43 @@
 #include "xrGame/game_type.h"
 #include "UIHelper.h"
 
+#include <bit>
+
 extern const LPCSTR g_inventory_upgrade_xml;
 
 #define INV_GRID_WIDTH2 40.0f
 #define INV_GRID_HEIGHT2 40.0f
+
+namespace
+{
+xr_string BuildItemDescription(CInventoryItem& item)
+{
+    xr_string description = item.ItemDescription().c_str();
+    if (!IsGameTypeSingle())
+        return description;
+
+    const CWeapon* weapon = item.cast_weapon();
+    if (!weapon)
+        return description;
+
+    description += StringTable().translate("st_condition_type").c_str();
+    const u32 condition_type = weapon->GetConditionType();
+    if (!condition_type)
+    {
+        description += StringTable().translate("st_condition_type_0").c_str();
+        return description;
+    }
+
+    for (u32 condition_bits = condition_type; condition_bits; condition_bits &= condition_bits - 1)
+    {
+        const u32 bit = std::countr_zero(condition_bits);
+        string64 condition_type_id;
+        xr_sprintf(condition_type_id, "st_condition_type_%u", bit + 1);
+        description += StringTable().translate(condition_type_id).c_str();
+    }
+    return description;
+}
+}
 
 CUIItemInfo::CUIItemInfo() : CUIWindow(CUIItemInfo::GetDebugType())
 {
@@ -285,14 +318,16 @@ void CUIItemInfo::InitItem(CUICellItem* pCellItem, CInventoryItem* pCompareItem,
             descr->SetFont(m_desc_info.pDescFont);
             descr->SetWidth(UIDesc->GetDesiredChildWidth());
             descr->SetTextComplexMode(true);
-            descr->SetText(pInvItem->ItemDescription().c_str());
+            const xr_string description = BuildItemDescription(*pInvItem);
+            descr->SetText(description.c_str());
             descr->AdjustHeightToText();
             UIDesc->AddWindow(descr, !soc_style);
         }
-        TryAddConditionInfo(*pInvItem, pCompareItem);
-        TryAddWpnInfo(*pInvItem, pCompareItem);
-        TryAddArtefactInfo(*pInvItem);
-        TryAddOutfitInfo(*pInvItem, pCompareItem);
+        bool has_specific_info = TryAddWpnInfo(*pInvItem, pCompareItem);
+        has_specific_info |= TryAddArtefactInfo(*pInvItem);
+        has_specific_info |= TryAddOutfitInfo(*pInvItem, pCompareItem);
+        if (!has_specific_info)
+            TryAddConditionInfo(*pInvItem, pCompareItem);
         TryAddUpgradeInfo(*pInvItem);
         TryAddBoosterInfo(*pInvItem);
 
@@ -352,9 +387,7 @@ void CUIItemInfo::TryAddConditionInfo(CInventoryItem& pInvItem, CInventoryItem* 
     if (!UIConditionWnd)
         return;
 
-    CWeapon* weapon = smart_cast<CWeapon*>(&pInvItem);
-    CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&pInvItem);
-    if (weapon || outfit)
+    if (pInvItem.IsUsingCondition())
     {
         UIConditionWnd->SetInfo(pCompareItem, pInvItem);
         if (!IsChild(UIConditionWnd))
@@ -362,34 +395,40 @@ void CUIItemInfo::TryAddConditionInfo(CInventoryItem& pInvItem, CInventoryItem* 
     }
 }
 
-void CUIItemInfo::TryAddWpnInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem)
+bool CUIItemInfo::TryAddWpnInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem)
 {
     if (!UIWpnParams)
-        return;
+        return false;
 
     if (UIWpnParams->Check(pInvItem.object().cNameSect()))
     {
         UIWpnParams->SetInfo(pCompareItem, pInvItem);
         UIDesc->AddWindow(UIWpnParams, false);
+        return true;
     }
+
+    return false;
 }
 
-void CUIItemInfo::TryAddArtefactInfo(CInventoryItem& pInvItem)
+bool CUIItemInfo::TryAddArtefactInfo(CInventoryItem& pInvItem)
 {
     if (!UIArtefactParams)
-        return;
+        return false;
 
-    if (UIArtefactParams->Check(pInvItem.object().cNameSect()))
+    if (pInvItem.object().cast_artefact() && UIArtefactParams->Check(pInvItem.object().cNameSect()))
     {
         UIArtefactParams->SetInfo(pInvItem);
         UIDesc->AddWindow(UIArtefactParams, false);
+        return true;
     }
+
+    return false;
 }
 
-void CUIItemInfo::TryAddOutfitInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem)
+bool CUIItemInfo::TryAddOutfitInfo(CInventoryItem& pInvItem, CInventoryItem* pCompareItem)
 {
     if (!UIOutfitInfo)
-        return;
+        return false;
 
     CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&pInvItem);
     CHelmet* helmet = smart_cast<CHelmet*>(&pInvItem);
@@ -398,13 +437,17 @@ void CUIItemInfo::TryAddOutfitInfo(CInventoryItem& pInvItem, CInventoryItem* pCo
         CCustomOutfit* comp_outfit = smart_cast<CCustomOutfit*>(pCompareItem);
         UIOutfitInfo->UpdateInfo(outfit, comp_outfit);
         UIDesc->AddWindow(UIOutfitInfo, false);
+        return true;
     }
     if (helmet)
     {
         CHelmet* comp_helmet = smart_cast<CHelmet*>(pCompareItem);
         UIOutfitInfo->UpdateInfo(helmet, comp_helmet);
         UIDesc->AddWindow(UIOutfitInfo, false);
+        return true;
     }
+
+    return false;
 }
 
 void CUIItemInfo::TryAddUpgradeInfo(CInventoryItem& pInvItem)

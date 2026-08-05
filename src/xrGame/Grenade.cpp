@@ -190,9 +190,13 @@ void CGrenade::Throw()
     CGrenade* pGrenade = smart_cast<CGrenade*>(m_fake_missile);
     VERIFY(pGrenade);
 
+    u32 destroyTime = m_dwDestroyTimeMax;
+    if (!smart_cast<CActor*>(m_pInventory->GetOwner()))
+        destroyTime += 1500;
+
     if (pGrenade)
     {
-        pGrenade->set_destroy_time(m_dwDestroyTimeMax);
+        pGrenade->set_destroy_time(destroyTime);
         //установить ID того кто кинул гранату
         pGrenade->SetInitiator(H_Parent()->ID());
     }
@@ -257,7 +261,8 @@ void CGrenade::PutNextToSlot()
 
         VERIFY(pNext != this);
 
-        if (pNext && m_pInventory->Slot(pNext->BaseSlot(), pNext))
+        CActor* actor = smart_cast<CActor*>(m_pInventory->GetOwner());
+        if (!actor && pNext && m_pInventory->Slot(pNext->BaseSlot(), pNext))
         {
             pNext->u_EventGen(P, GEG_PLAYER_ITEM2SLOT, pNext->H_Parent()->ID());
             P.w_u16(pNext->ID());
@@ -265,14 +270,6 @@ void CGrenade::PutNextToSlot()
             pNext->u_EventSend(P);
             m_pInventory->SetActiveSlot(pNext->BaseSlot());
         }
-        else
-        {
-            CActor* pActor = smart_cast<CActor*>(m_pInventory->GetOwner());
-
-            if (pActor)
-                pActor->OnPrevWeaponSlot();
-        }
-
         m_thrown = false;
     }
 }

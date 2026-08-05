@@ -13,9 +13,56 @@
 #include "Blender_Recorder.h"
 
 #include <condition_variable>
+#include <optional>
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if defined(USE_DX11)
+namespace texture_residency
+{
+using ExclusionMap = xr_flat_hash_map<const CTexture*, u8>;
+
+std::optional<ExclusionMap>& deferred_upload_exclusions()
+{
+    static std::optional<ExclusionMap> exclusions;
+    return exclusions;
+}
+
+void mark_requested(const CTexture* texture)
+{
+    if (auto& exclusions = deferred_upload_exclusions())
+        exclusions->erase(texture);
+}
+
+void forget(const CTexture* texture)
+{
+    mark_requested(texture);
+}
+
+void exclude(const CTexture* texture)
+{
+    auto& exclusions = deferred_upload_exclusions();
+    if (!exclusions)
+    {
+        exclusions.emplace();
+        exclusions->reserve(2048);
+    }
+    exclusions->try_emplace(texture, 0);
+}
+
+bool is_excluded(const CTexture* texture)
+{
+    const auto& exclusions = deferred_upload_exclusions();
+    return exclusions && exclusions->contains(texture);
+}
+
+void clear()
+{
+    deferred_upload_exclusions().reset();
+}
+}
+#endif
+
 namespace
 {
 class TextureUploadPool final
@@ -140,6 +187,7 @@ size_t texture_upload_worker_count(size_t textureCount)
     return std::min(budgetedWorkers, textureCount);
 }
 
+#if defined(USE_DX11)
 xr_vector<CTexture*> collect_unloaded_textures(const CResourceManager::map_Texture& resources)
 {
     xr_vector<CTexture*> textures;
@@ -147,11 +195,13 @@ xr_vector<CTexture*> collect_unloaded_textures(const CResourceManager::map_Textu
     for (const auto& [name, texture] : resources)
     {
         UNUSED(name);
-        if (!texture->flags.bLoaded)
+        // Unloaded wrappers from prior levels stay cold until a new texture request revives them.
+        if (!texture->flags.bLoaded && !texture_residency::is_excluded(texture))
             textures.push_back(texture);
     }
     return textures;
 }
+#endif
 }
 
 //	Already defined in Texture.cpp
@@ -577,6 +627,7 @@ void CResourceManager::DeferredUnload()
 
 void CResourceManager::BeginLevelTextureTracking()
 {
+#if defined(USE_DX11)
     m_level_persistent_textures.clear();
 
     for (const auto& texture : m_textures)
@@ -584,10 +635,12 @@ void CResourceManager::BeginLevelTextureTracking()
         if (texture.second->flags.bLoaded)
             m_level_persistent_textures.emplace(texture.first);
     }
+#endif
 }
 
 void CResourceManager::UnloadLevelTextures()
 {
+#if defined(USE_DX11)
     auto*& uploadPool = texture_upload_pool();
     if (uploadPool)
         uploadPool->Wait();
@@ -600,7 +653,11 @@ void CResourceManager::UnloadLevelTextures()
         CTexture* resource = texture.second;
         const bool was_loaded_before_level = m_level_persistent_textures.find(texture.first) !=
             m_level_persistent_textures.end();
-        if (!resource->flags.bLoaded || was_loaded_before_level)
+        if (was_loaded_before_level)
+            continue;
+
+        texture_residency::exclude(resource);
+        if (!resource->flags.bLoaded)
             continue;
 
         unloaded_memory += resource->flags.MemoryUsage;
@@ -610,6 +667,7 @@ void CResourceManager::UnloadLevelTextures()
 
     m_level_persistent_textures.clear();
     Msg("* Level texture unload: %u textures, %llu MiB released", unloaded_count, unloaded_memory / 1048576);
+#endif
 }
 
 #ifdef _EDITOR

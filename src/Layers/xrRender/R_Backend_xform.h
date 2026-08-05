@@ -8,6 +8,7 @@ public:
     Fmatrix m_w; // Basic	- world
     Fmatrix m_invw; // derived	- world2local, cached
     Fmatrix m_v; // Basic	- view
+    Fmatrix m_invv; // derived - view2world, cached
     Fmatrix m_p; // Basic	- projection
     Fmatrix m_wv; // Derived	- world2view
     Fmatrix m_vp; // Derived	- view2projection
@@ -23,6 +24,7 @@ public:
 
 private:
     bool m_bInvWValid;
+    bool m_bInvVValid;
 
 public:
     explicit R_xforms(CBackend& cmd_list_in);
@@ -32,6 +34,7 @@ public:
     void set_P(const Fmatrix& m);
     const Fmatrix& get_W() { return m_w; }
     const Fmatrix& get_V() { return m_v; }
+    const Fmatrix& get_inv_V();
     const Fmatrix& get_P() { return m_p; }
     IC void set_c_w(R_constant* C);
     IC void set_c_invw(R_constant* C);

@@ -39,13 +39,39 @@ extern void restore_actor();
 #endif
 
 bool g_bDisableAllInput = false;
+bool g_bDisableAllActions = false;
 extern float g_fTimeFactor;
 
 #define CURRENT_ENTITY() (game ? ((GameID() == eGameIDSingle) ? CurrentEntity() : CurrentControlEntity()) : NULL)
 
+namespace
+{
+constexpr bool is_movement_action(EGameActions action) noexcept
+{
+    switch (action)
+    {
+    case kACCEL:
+    case kCROUCH:
+    case kSPRINT_TOGGLE:
+    case kFWD:
+    case kBACK:
+    case kL_STRAFE:
+    case kR_STRAFE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool is_action_disabled(int key)
+{
+    return g_bDisableAllActions && !is_movement_action(GetBindedAction(key));
+}
+}
+
 void CLevel::IR_OnMouseWheel(float x, float y)
 {
-    if (g_bDisableAllInput)
+    if (g_bDisableAllInput || g_bDisableAllActions)
         return;
 
     /* avo: script callback */
@@ -127,8 +153,9 @@ void CLevel::IR_OnKeyboardPress(int key)
     bool b_ui_exist = !!CurrentGameUI();
 
     EGameActions _curr = GetBindedAction(key);
+    const bool actionDisabled = is_action_disabled(key);
     /* avo: script callback */
-    if (!g_bDisableAllInput && g_actor)
+    if (!g_bDisableAllInput && !actionDisabled && g_actor)
     {
         g_actor->callback(GameObject::eKeyPress)(key);
     }
@@ -156,7 +183,7 @@ void CLevel::IR_OnKeyboardPress(int key)
         return;
     }
 
-    if (g_bDisableAllInput)
+    if (g_bDisableAllInput || actionDisabled)
         return;
 
     switch (_curr)
@@ -443,7 +470,7 @@ void CLevel::IR_OnKeyboardPress(int key)
 
 void CLevel::IR_OnKeyboardRelease(int key)
 {
-    if (!bReady || g_bDisableAllInput)
+    if (!bReady || g_bDisableAllInput || is_action_disabled(key))
         return;
 
     /* avo: script callback */
@@ -475,7 +502,7 @@ void CLevel::IR_OnKeyboardRelease(int key)
 
 void CLevel::IR_OnKeyboardHold(int key)
 {
-    if (g_bDisableAllInput)
+    if (g_bDisableAllInput || is_action_disabled(key))
         return;
 
     /* avo: script callback */
@@ -559,6 +586,9 @@ void CLevel::IR_OnControllerPress(int key, const ControllerAxisState& state)
         return;
     }
 
+    if (is_action_disabled(key))
+        return;
+
     /* avo: script callback */
     if (g_actor)
     {
@@ -596,6 +626,9 @@ void CLevel::IR_OnControllerRelease(int key, const ControllerAxisState& state)
         return;
     }
 
+    if (is_action_disabled(key))
+        return;
+
     /* avo: script callback */
     if (g_actor)
     {
@@ -631,6 +664,9 @@ void CLevel::IR_OnControllerHold(int key, const ControllerAxisState& state)
         IR_OnKeyboardHold(key);
         return;
     }
+
+    if (is_action_disabled(key))
+        return;
 
     /* avo: script callback */
     if (g_actor)

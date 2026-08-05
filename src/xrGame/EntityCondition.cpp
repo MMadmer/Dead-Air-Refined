@@ -11,6 +11,7 @@
 #include "Include/xrRender/Kinematics.h"
 #include "Common/object_broker.h"
 #include "ActorHelmet.h"
+#include "ActorBackpack.h"
 
 #define MAX_HEALTH 1.0f
 #define MIN_HEALTH -0.01f
@@ -324,13 +325,17 @@ float CEntityCondition::HitPowerEffect(float power_loss)
     if (!pInvOwner)
         return power_loss;
 
-    CCustomOutfit* pOutfit = pInvOwner->GetOutfit();
-    if (!pOutfit)
-        return power_loss * 0.5f;
+    const CCustomOutfit* outfit = pInvOwner->GetOutfit();
+    const CHelmet* helmet = smart_cast<CHelmet*>(pInvOwner->inventory().ItemFromSlot(HELMET_SLOT));
+    const CBackpack* backpack = pInvOwner->GetBackpack();
 
-    const float new_power_loss = power_loss * pOutfit->GetPowerLoss();
+    float equipmentFactor = outfit ? outfit->GetPowerLoss() : 0.5f;
+    if (helmet)
+        equipmentFactor *= helmet->m_fPowerLoss;
+    if (backpack)
+        equipmentFactor *= backpack->m_fPowerLoss;
 
-    return new_power_loss;
+    return power_loss * equipmentFactor;
 }
 
 CWound* CEntityCondition::AddWound(float hit_power, ALife::EHitType hit_type, u16 element)
@@ -396,7 +401,7 @@ CWound* CEntityCondition::ConditionHit(SHit* pHDS)
     case ALife::eHitTypeLightBurn:
     case ALife::eHitTypeBurn:
         hit_power *= GetHitImmunity(ALife::eHitTypeBurn) - m_fBoostBurnImmunity;
-        m_fHealthLost = hit_power * m_fHealthHitPart * m_fHitBoneScale;
+        m_fHealthLost = hit_power * m_fHealthHitPart;
         m_fDeltaHealth -= CanBeHarmed() ? m_fHealthLost : 0;
         m_fDeltaPower -= hit_power * m_fPowerHitPart;
         //		bAddWound		=  is_special_hit_2_self;

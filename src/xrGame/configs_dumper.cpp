@@ -82,7 +82,7 @@ static active_objects_t::size_type get_active_objects(active_objects_t& dest)
 
     dest.push_back(tmp_actor);
 
-    for (u16 i = KNIFE_SLOT; i <= GRENADE_SLOT; ++i)
+    for (u16 i = KNIFE_SLOT; i <= SIDEARM_SLOT; ++i)
     {
         VERIFY(dest.capacity() != dest.size());
         if (dest.capacity() == dest.size())

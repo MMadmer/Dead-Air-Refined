@@ -8,8 +8,58 @@
 
 #include "StdAfx.h"
 #include "trade_parameters.h"
+#include "xrCommon/xr_hash_map.h"
+
+namespace
+{
+struct LegacyTradeExponentState
+{
+    float buy{};
+    float sell{};
+    bool hasBuy{};
+    bool hasSell{};
+};
+
+// External state restores the legacy Lua controls without changing CTradeParameters layout.
+xr_flat_hash_map<const CTradeParameters*, LegacyTradeExponentState> legacyTradeExponents;
+}
 
 CTradeParameters* CTradeParameters::m_instance = 0;
+
+CTradeParameters::~CTradeParameters()
+{
+    legacyTradeExponents.erase(this);
+}
+
+void CTradeParameters::set_buy_item_exponent(float factor)
+{
+    R_ASSERT2(std::isfinite(factor), "Trade buy-item exponent must be finite");
+    LegacyTradeExponentState& state = legacyTradeExponents[this];
+    state.buy = factor;
+    state.hasBuy = true;
+}
+
+void CTradeParameters::set_sell_item_exponent(float factor)
+{
+    R_ASSERT2(std::isfinite(factor), "Trade sell-item exponent must be finite");
+    LegacyTradeExponentState& state = legacyTradeExponents[this];
+    state.sell = factor;
+    state.hasSell = true;
+}
+
+float CTradeParameters::item_condition_exponent(bool buying, float fallback) const
+{
+    const auto state = legacyTradeExponents.find(this);
+    if (state == legacyTradeExponents.end())
+        return fallback;
+
+    const bool hasOverride = buying ? state->second.hasBuy : state->second.hasSell;
+    if (!hasOverride)
+        return fallback;
+
+    const float exponent = buying ? state->second.buy : state->second.sell;
+    return exponent > 0.0f ? exponent : 0.75f;
+}
 
 void CTradeParameters::process(action_show, CInifile& ini_file, const shared_str& section)
 {

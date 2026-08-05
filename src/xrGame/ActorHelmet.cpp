@@ -2,9 +2,40 @@
 #include "ActorHelmet.h"
 #include "Actor.h"
 #include "Inventory.h"
-#include "Torch.h"
 #include "BoneProtections.h"
 #include "Include/xrRender/Kinematics.h"
+#include "xrCommon/xr_hash_map.h"
+#include "ai_space.h"
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
+#include "xrServer_Objects_ALife_Items.h"
+
+namespace
+{
+struct HelmetFilterRuntimeState
+{
+    CSE_Abstract* serverEntity{};
+    u16 objectId{u16(-1)};
+    u16 elapsed{};
+    u32 sectionChecksum{};
+    bool enabled{};
+};
+
+// Sidecar maps preserve the legacy helmet and server-entity layouts.
+xr_flat_hash_map<const CHelmet*, HelmetFilterRuntimeState> helmetFilterStates;
+xr_flat_hash_map<const CSE_Abstract*, SHelmetFilterSaveState> persistentHelmetFilterStates;
+xr_flat_hash_map<u16, SHelmetFilterSaveState> stagedHelmetFilterStates;
+
+u32 helmet_section_checksum(pcstr section)
+{
+    return crc32(section, static_cast<u32>(xr_strlen(section)));
+}
+
+CSE_Abstract* persistent_server_entity(u16 objectId)
+{
+    return ai().get_alife() ? ai().alife().objects().object(objectId, true) : nullptr;
+}
+}
 
 CHelmet::CHelmet()
 {
@@ -16,10 +47,19 @@ CHelmet::CHelmet()
     m_boneProtection = xr_new<SBoneProtections>();
 }
 
-CHelmet::~CHelmet() { xr_delete(m_boneProtection); }
+CHelmet::~CHelmet()
+{
+    helmetFilterStates.erase(this);
+    xr_delete(m_boneProtection);
+}
 void CHelmet::Load(LPCSTR section)
 {
     inherited::Load(section);
+
+    HelmetFilterRuntimeState& filterState = helmetFilterStates[this];
+    filterState.enabled = pSettings->read_if_exists<bool>(section, "use_filters", false);
+    filterState.elapsed = filterState.enabled ? 0 : 1;
+    filterState.sectionChecksum = helmet_section_checksum(section);
 
     m_HitTypeProtection[ALife::eHitTypeBurn] = pSettings->r_float(section, "burn_protection");
     m_HitTypeProtection[ALife::eHitTypeStrike] = pSettings->r_float(section, "strike_protection");
@@ -84,6 +124,49 @@ bool CHelmet::net_Spawn(CSE_Abstract* DC)
         ReloadBonesProtection();
 
     BOOL res = inherited::net_Spawn(DC);
+    if (!res || !DC)
+        return res;
+
+    HelmetFilterRuntimeState& filterState = helmetFilterStates[this];
+    filterState.objectId = DC->ID;
+    filterState.serverEntity = persistent_server_entity(filterState.objectId);
+
+    const auto staged = stagedHelmetFilterStates.find(DC->ID);
+    if (staged != stagedHelmetFilterStates.end())
+    {
+        if (filterState.enabled && staged->second.sectionChecksum == filterState.sectionChecksum)
+            filterState.elapsed = staged->second.elapsed;
+        stagedHelmetFilterStates.erase(staged);
+    }
+    else if (filterState.enabled && filterState.serverEntity)
+    {
+        const auto persistent = persistentHelmetFilterStates.find(filterState.serverEntity);
+        if (persistent != persistentHelmetFilterStates.end())
+        {
+            if (persistent->second.objectId == DC->ID &&
+                persistent->second.sectionChecksum == filterState.sectionChecksum)
+            {
+                filterState.elapsed = persistent->second.elapsed;
+            }
+            else
+            {
+                persistentHelmetFilterStates.erase(persistent);
+            }
+        }
+    }
+
+    if (filterState.enabled && filterState.serverEntity)
+    {
+        persistentHelmetFilterStates[filterState.serverEntity] =
+            { DC->ID, filterState.elapsed, filterState.sectionChecksum };
+    }
+    else if (!filterState.enabled)
+    {
+        filterState.elapsed = 1;
+        if (filterState.serverEntity)
+            persistentHelmetFilterStates.erase(filterState.serverEntity);
+    }
+
     return (res);
 }
 
@@ -115,9 +198,8 @@ void CHelmet::OnMoveToSlot(const SInvItemPlace& previous_place)
         CActor* pActor = smart_cast<CActor*>(H_Parent());
         if (pActor)
         {
-            CTorch* pTorch = smart_cast<CTorch*>(pActor->inventory().ItemFromSlot(TORCH_SLOT));
-            if (pTorch && pTorch->GetNightVisionStatus())
-                pTorch->SwitchNightVision(true, false);
+            if (pActor->GetNightVisionStatus())
+                pActor->SwitchNightVision(true, false);
         }
     }
 }
@@ -129,11 +211,7 @@ void CHelmet::OnMoveToRuck(const SInvItemPlace& previous_place)
     {
         CActor* pActor = smart_cast<CActor*>(H_Parent());
         if (pActor)
-        {
-            CTorch* pTorch = smart_cast<CTorch*>(pActor->inventory().ItemFromSlot(TORCH_SLOT));
-            if (pTorch)
-                pTorch->SwitchNightVision(false);
-        }
+            pActor->SwitchNightVision(false);
     }
 }
 
@@ -145,12 +223,169 @@ void CHelmet::Hit(float hit_power, ALife::EHitType hit_type)
 
 float CHelmet::GetDefHitTypeProtection(ALife::EHitType hit_type) const
 {
-    const float base = m_HitTypeProtection[hit_type] * GetCondition();
+    float condition = GetCondition();
+    if (UseFilters() &&
+        (hit_type == ALife::eHitTypeChemicalBurn || hit_type == ALife::eHitTypeRadiation) &&
+        (condition < 0.25f || !GetFiltersElapsed()))
+    {
+        condition = 0.0f;
+    }
+
+    const float base = m_HitTypeProtection[hit_type] * condition;
 
     if (m_boneProtection->m_hitFracType == SBoneProtections::HitFraction)
         return 1.0f - base; // SOC
 
     return base; // CS/COP
+}
+
+u16 CHelmet::GetFiltersElapsed() const
+{
+    const auto state = helmetFilterStates.find(this);
+    return state != helmetFilterStates.end() && state->second.enabled ? state->second.elapsed : 1;
+}
+
+void CHelmet::SetFiltersElapsed(u16 count)
+{
+    HelmetFilterRuntimeState& state = helmetFilterStates[this];
+    state.elapsed = state.enabled ? count : 1;
+
+    if (!state.serverEntity && state.objectId != u16(-1))
+        state.serverEntity = persistent_server_entity(state.objectId);
+    if (state.enabled && state.serverEntity)
+    {
+        persistentHelmetFilterStates[state.serverEntity] =
+            { state.serverEntity->ID, state.elapsed, state.sectionChecksum };
+    }
+}
+
+bool CHelmet::UseFilters() const
+{
+    const auto state = helmetFilterStates.find(this);
+    return state != helmetFilterStates.end() && state->second.enabled;
+}
+
+void CHelmet::CollectFilterSaveState(xr_vector<SHelmetFilterSaveState>& result)
+{
+    SHelmetFilterSaveCaptureState state;
+    BeginFilterSaveCapture(state);
+    while (!ContinueFilterSaveCapture(state, flt_max))
+    {
+    }
+    result = std::move(state.records);
+}
+
+void CHelmet::BeginFilterSaveCapture(SHelmetFilterSaveCaptureState& state)
+{
+    state = {};
+    state.initialized = true;
+    state.completed = !ai().get_alife() ||
+        (persistentHelmetFilterStates.empty() && stagedHelmetFilterStates.empty());
+}
+
+bool CHelmet::ContinueFilterSaveCapture(
+    SHelmetFilterSaveCaptureState& state, float budgetMilliseconds)
+{
+    if (!state.initialized)
+        return false;
+    if (state.completed)
+        return true;
+    if (!(budgetMilliseconds > 0.0f))
+        return false;
+    if (!ai().get_alife())
+    {
+        state.records.clear();
+        state.completed = true;
+        return true;
+    }
+
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    CTimer budgetTimer;
+    if (!unlimitedBudget)
+        budgetTimer.Start();
+
+    u32 batchObjects = 0;
+    while (CSE_ALifeDynamicObject* object = ai().alife().objects().next_save_extension_object(
+        ESaveExtensionObjectType::Helmet, state.nextObjectId))
+    {
+        CSE_ALifeItemHelmet* serverHelmet = static_cast<CSE_ALifeItemHelmet*>(object);
+        const u16 objectId = serverHelmet->ID;
+
+        if (objectId != u16(-1))
+        {
+            const u32 sectionChecksum = helmet_section_checksum(serverHelmet->s_name.c_str());
+            const auto persistent = persistentHelmetFilterStates.find(serverHelmet);
+            auto staged = stagedHelmetFilterStates.find(objectId);
+            bool hasPersistentRecord = false;
+            if (persistent != persistentHelmetFilterStates.end())
+            {
+                const SHelmetFilterSaveState& record = persistent->second;
+                if (record.objectId == objectId && record.elapsed && record.sectionChecksum == sectionChecksum)
+                {
+                    state.records.push_back(record);
+                    hasPersistentRecord = true;
+                }
+                else
+                {
+                    persistentHelmetFilterStates.erase(persistent);
+                }
+            }
+
+            if (!hasPersistentRecord && staged != stagedHelmetFilterStates.end())
+            {
+                const SHelmetFilterSaveState& record = staged->second;
+                if (record.objectId == objectId && record.elapsed && record.sectionChecksum == sectionChecksum)
+                {
+                    state.records.push_back(record);
+                }
+                else
+                {
+                    stagedHelmetFilterStates.erase(staged);
+                }
+            }
+        }
+
+        if (!unlimitedBudget && ++batchObjects == 16)
+        {
+            batchObjects = 0;
+            if (budgetTimer.GetElapsed_sec() * 1000.0f >= budgetMilliseconds)
+                return false;
+        }
+    }
+
+    state.completed = true;
+    return true;
+}
+
+void CHelmet::StageFilterSaveState(const xr_vector<SHelmetFilterSaveState>& state)
+{
+    persistentHelmetFilterStates.clear();
+    stagedHelmetFilterStates.clear();
+    stagedHelmetFilterStates.reserve(state.size());
+    for (const SHelmetFilterSaveState& record : state)
+        stagedHelmetFilterStates.insert_or_assign(record.objectId, record);
+}
+
+void CHelmet::ClearFilterSaveState()
+{
+    helmetFilterStates.clear();
+    persistentHelmetFilterStates.clear();
+    stagedHelmetFilterStates.clear();
+}
+
+void CHelmet::ForgetFilterSaveState(const CSE_Abstract& serverObject)
+{
+    persistentHelmetFilterStates.erase(&serverObject);
+    stagedHelmetFilterStates.erase(serverObject.ID);
+
+    for (auto& [helmet, state] : helmetFilterStates)
+    {
+        if (state.serverEntity != &serverObject)
+            continue;
+
+        state.serverEntity = nullptr;
+        state.objectId = u16(-1);
+    }
 }
 
 float CHelmet::GetHitTypeProtection(ALife::EHitType hit_type, s16 element) const
@@ -251,9 +486,12 @@ float CHelmet::HitThroughArmor(float hit_power, s16 element, float ap, bool& add
     case SBoneProtections::HitFractionActorCOP:
     case SBoneProtections::HitFractionActorCS:
     {
+        const float ba = element == static_cast<s16>(BI_NONE) ? -1.0f : GetBoneArmor(element);
+        if (element != static_cast<s16>(BI_NONE) && ba <= 0.0f)
+            return NewHitPower;
+
         if (hit_type == ALife::eHitTypeFireWound)
         {
-            const float ba = GetBoneArmor(element);
             if (ba < 0.0f)
                 return NewHitPower;
 

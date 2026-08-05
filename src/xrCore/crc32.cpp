@@ -2,6 +2,10 @@
 #pragma hdrstop
 
 #include <array>
+#if defined(_WIN32) && (defined(_M_X64) || defined(_M_IX86))
+#include <intrin.h>
+#endif
+#include <zlib.h>
 
 // Reflects CRC bits in the lookup table
 constexpr u32 reflect(u32 ref, char ch) noexcept
@@ -59,6 +63,31 @@ constexpr std::array<std::array<u32, 256>, 8> generate_crc32_slicing_table() noe
 }
 
 static constexpr auto crc32_table = generate_crc32_slicing_table();
+static constexpr u32 rtlBulkThreshold = 64;
+static constexpr u32 zlibBulkThreshold = 512;
+
+#if defined(_WIN32) && (defined(_M_X64) || defined(_M_IX86))
+using RtlComputeCrc32Function = u32(NTAPI*)(u32, const void*, u32);
+
+static RtlComputeCrc32Function rtl_compute_crc32()
+{
+    static const RtlComputeCrc32Function function = [] {
+        std::array<int, 4> registers{};
+        __cpuid(registers.data(), 1);
+        constexpr int pclmulqdqBit = 1 << 1;
+        if (!(registers[2] & pclmulqdqBit))
+            return RtlComputeCrc32Function{};
+
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (!ntdll)
+            return RtlComputeCrc32Function{};
+
+        // Resolve dynamically so older Windows versions retain the portable path.
+        return reinterpret_cast<RtlComputeCrc32Function>(GetProcAddress(ntdll, "RtlComputeCrc32"));
+    }();
+    return function;
+}
+#endif
 
 static u32 update_crc32(const u8* buffer, u32 len, u32 crc)
 {
@@ -86,14 +115,29 @@ static u32 update_crc32(const u8* buffer, u32 len, u32 crc)
     return crc;
 }
 
+static u32 compute_crc32(const void* buffer, u32 len, u32 startingCrc)
+{
+#if defined(_WIN32) && (defined(_M_X64) || defined(_M_IX86))
+    if (len >= rtlBulkThreshold)
+    {
+        if (const auto function = rtl_compute_crc32())
+            return function(startingCrc, buffer, len);
+    }
+#endif
+
+    if (len >= zlibBulkThreshold)
+        return static_cast<u32>(crc32_z(startingCrc, static_cast<const Bytef*>(buffer), len));
+    return update_crc32(static_cast<const u8*>(buffer), len, 0xffffffff ^ startingCrc) ^ 0xffffffff;
+}
+
 u32 crc32(const void* P, u32 len)
 {
-    return update_crc32(static_cast<const u8*>(P), len, 0xffffffff) ^ 0xffffffff;
+    return compute_crc32(P, len, 0);
 }
 
 u32 crc32(const void* P, u32 len, u32 starting_crc)
 {
-    return update_crc32(static_cast<const u8*>(P), len, 0xffffffff ^ starting_crc) ^ 0xffffffff;
+    return compute_crc32(P, len, starting_crc);
 }
 
 u32 path_crc32(const char* path, u32 len)

@@ -11,6 +11,7 @@
 #include "firedeps.h"
 #include "game_cl_single.h"
 #include "first_bullet_controller.h"
+#include "save_extension_chunk_ids.h"
 
 #include "CameraRecoil.h"
 
@@ -23,6 +24,44 @@ class CParticlesObject;
 class CUIWindow;
 class CBinocularsVision;
 class CNightVisionEffector;
+
+enum EWeaponConditionType : u32
+{
+    eWeaponConditionChamberCycle = 1u << 25,
+    eWeaponConditionMagazineRemoved = 1u << 26,
+    eWeaponConditionFireMode = 1u << 27,
+    eWeaponConditionScopeMount = 1u << 28,
+    eWeaponConditionSilencerMount = 1u << 29,
+    eWeaponConditionGrenadeLauncherMount = 1u << 30,
+    eWeaponConditionSidecarSaveMask = eWeaponConditionChamberCycle | eWeaponConditionMagazineRemoved,
+    eWeaponConditionLegacySaveMask = eWeaponConditionFireMode | eWeaponConditionScopeMount |
+        eWeaponConditionSilencerMount | eWeaponConditionGrenadeLauncherMount,
+    eWeaponConditionExtendedSaveMask = eWeaponConditionSidecarSaveMask | eWeaponConditionLegacySaveMask,
+};
+
+static_assert((eWeaponConditionSidecarSaveMask & eWeaponConditionLegacySaveMask) == 0);
+static_assert(eWeaponConditionSidecarSaveMask == 0x06000000u);
+static_assert(eWeaponConditionLegacySaveMask == 0x78000000u);
+
+// WEX1 also accepts duplicated legacy bits from containers written before legacy ownership was restored.
+inline constexpr u32 weaponExtendedSaveChunkType = SaveExtensionChunkIds::WeaponExtended;
+inline constexpr u16 weaponExtendedSaveChunkVersion = 1;
+
+struct SWeaponExtendedSaveState
+{
+    u16 objectId{u16(-1)};
+    u16 reserved{};
+    u32 sectionChecksum{};
+    u32 extendedMask{};
+};
+
+struct SWeaponExtendedSaveCaptureState
+{
+    xr_vector<SWeaponExtendedSaveState> records;
+    u32 nextObjectId{};
+    bool initialized{};
+    bool completed{};
+};
 
 class CWeapon : public CHudItemObject, public CShootingObject
 {
@@ -46,6 +85,19 @@ public:
     virtual void save(NET_Packet& output_packet);
     virtual void load(IReader& input_packet);
     virtual bool net_SaveRelevant() { return inherited::net_SaveRelevant(); }
+
+    static void CollectExtendedSaveState(xr_vector<SWeaponExtendedSaveState>& result);
+    static void BeginExtendedSaveCapture(SWeaponExtendedSaveCaptureState& state);
+    [[nodiscard]] static bool ContinueExtendedSaveCapture(
+        SWeaponExtendedSaveCaptureState& state, float budgetMilliseconds);
+    static bool EncodeExtendedSaveState(
+        const xr_vector<SWeaponExtendedSaveState>& state, xr_vector<u8>& payload);
+    static bool DecodeExtendedSaveState(
+        const xr_vector<u8>& payload, xr_vector<SWeaponExtendedSaveState>& state);
+    static bool StageExtendedSaveState(const xr_vector<SWeaponExtendedSaveState>& state);
+    static void ClearExtendedSaveState();
+    static void ForgetExtendedSaveState(const CSE_Abstract& serverObject);
+
     virtual void UpdateCL();
     virtual void shedule_Update(u32 dt);
 
@@ -92,6 +144,7 @@ protected:
 
     virtual bool IsHudModeNow();
     void LoadScope(const shared_str& section);
+    shared_str GetScopeTextureName(pcstr section) const;
 
 public:
     void signal_HideComplete();
@@ -124,7 +177,18 @@ public:
     BOOL IsMisfire() const;
     BOOL CheckForMisfire();
     u32 GetConditionType() const { return m_condition_type; }
-    void SetConditionType(u32 condition_type) { m_condition_type = condition_type; }
+    void SetConditionType(u32 condition_type)
+    {
+        if (m_condition_type == condition_type)
+            return;
+
+        m_condition_type = condition_type;
+        m_BriefInfo_CalcFrame = 0;
+    }
+    bool HasConditionType(EWeaponConditionType condition_type) const
+    {
+        return (m_condition_type & condition_type) != 0;
+    }
     bool IsAmmoSuitable(const shared_str& item_section) { return IsNecessaryItem(item_section); }
     LPCSTR GetAmmoName() const
     {
@@ -155,9 +219,9 @@ public:
     virtual bool ScopeAttachable();
     virtual bool SilencerAttachable();
 
-    ALife::EWeaponAddonStatus get_GrenadeLauncherStatus() const { return m_eGrenadeLauncherStatus; }
-    ALife::EWeaponAddonStatus get_ScopeStatus() const { return m_eScopeStatus; }
-    ALife::EWeaponAddonStatus get_SilencerStatus() const { return m_eSilencerStatus; }
+    ALife::EWeaponAddonStatus get_GrenadeLauncherStatus() const;
+    ALife::EWeaponAddonStatus get_ScopeStatus() const;
+    ALife::EWeaponAddonStatus get_SilencerStatus() const;
     virtual bool UseScopeTexture() { return true; };
     //обновление видимости для косточек аддонов
     void UpdateAddonsVisibility();
@@ -516,6 +580,9 @@ public:
     virtual BOOL ParentIsActor();
 
 private:
+    void UpdateScopeDofRadius();
+    void ResetScopeDofRadius();
+
     virtual bool install_upgrade_ammo_class(LPCSTR section, bool test);
     bool install_upgrade_disp(LPCSTR section, bool test);
     bool install_upgrade_hit(LPCSTR section, bool test);
@@ -541,6 +608,7 @@ private:
 
 public:
     virtual void SetActivationSpeedOverride(Fvector const& speed);
+    bool HasActivationSpeedOverride() const;
     bool GetRememberActorNVisnStatus() { return m_bRememberActorNVisnStatus; };
     virtual void EnableActorNVisnAfterZoom();
 

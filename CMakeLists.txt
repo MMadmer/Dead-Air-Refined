@@ -18,6 +18,17 @@ project(OpenXRay
     LANGUAGES CXX C
 )
 
+# CMake 4.x can double-encode the Russian /showIncludes prefix.
+# Ninja then silently loses all header dependencies.
+set(_xray_msvc_russian_showincludes_mojibake "╨Я╤А╨╕╨╝╨╡╤З╨░╨╜╨╕╨╡: ╨▓╨║╨╗╤О╤З╨╡╨╜╨╕╨╡ ╤Д╨░╨╣╨╗╨░:  ")
+if (MSVC AND CMAKE_GENERATOR MATCHES "^Ninja" AND
+    CMAKE_CXX_CL_SHOWINCLUDES_PREFIX STREQUAL "${_xray_msvc_russian_showincludes_mojibake}")
+    set(CMAKE_C_CL_SHOWINCLUDES_PREFIX "Примечание: включение файла:  ")
+    set(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "Примечание: включение файла:  ")
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "Примечание: включение файла:  ")
+endif()
+unset(_xray_msvc_russian_showincludes_mojibake)
+
 option(BUILD_SHARED_LIBS "Build shared libraries"     ${BUILD_SHARED_LIBS_DEFAULT_VALUE})
 
 option(XRAY_USE_LUAJIT   "Use LuaJIT"                 ON)

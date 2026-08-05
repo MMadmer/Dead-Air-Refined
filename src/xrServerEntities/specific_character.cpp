@@ -162,6 +162,7 @@ float CSpecificCharacter::hit_probability_factor() const { return data()->m_fHit
 int CSpecificCharacter::crouch_type() const { return data()->m_crouch_type; }
 bool CSpecificCharacter::upgrade_mechanic() const { return data()->m_upgrade_mechanic; }
 bool CSpecificCharacter::barter_mode() const { return data()->m_barter_mode; }
+bool CSpecificCharacter::trade_barter() const { return barter_mode(); }
 LPCSTR CSpecificCharacter::critical_wound_weights() const { return data()->m_critical_wound_weights.c_str(); }
 
 shared_str CSpecificCharacter::terrain_sect() const { return data()->m_terrain_sect; }

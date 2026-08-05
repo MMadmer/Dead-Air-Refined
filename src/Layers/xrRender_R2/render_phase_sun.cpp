@@ -308,15 +308,18 @@ void render_sun::render()
             bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
                 !dsgraph.mapSorted.empty();
-            if (bNormal || bSpecial)
+            const bool renderDetails = ps_r_sun_details >= detail_shadow_medium &&
+                (cascade_ind == 0 || ps_r_sun_details >= detail_shadow_high) && RImplementation.Details &&
+                RImplementation.Details->HasRenderableDetails();
+            if (bNormal || bSpecial || renderDetails)
             {
                 RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, cascade_ind);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(Fidentity);
                 dsgraph.cmd_list.set_xform_project(sun->X.D[cascade_ind].combine);
                 dsgraph.render_graph(0);
-                if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))
-                    RImplementation.Details->Render(dsgraph.cmd_list);
+                if (renderDetails)
+                    RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
                 sun->X.D[cascade_ind].transluent = FALSE;
                 if (bSpecial)
                 {

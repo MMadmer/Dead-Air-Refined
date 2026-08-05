@@ -1,6 +1,6 @@
 #include "StdAfx.h"
-#include "xrEngine/XR_IOConsole.h"
 #include "CustomZone.h"
+#include "LightingQuality.h"
 #include "Hit.h"
 #include "PHDestroyable.h"
 #include "Actor.h"
@@ -35,7 +35,10 @@ CCustomZone::CCustomZone(void)
     m_pIdleParticles = NULL;
     m_pLight = NULL;
     m_pIdleLight = NULL;
+    m_pIdleLight2 = NULL;
     m_pIdleLAnim = NULL;
+    m_useExtraLight = false;
+    m_idleLightQuality = u32(-1);
     m_fLightShadow = false;
     m_fLightVolumetric = false;
     m_fLightVolumetricQuality = 1.f;
@@ -90,6 +93,8 @@ void CCustomZone::Load(LPCSTR section)
     m_zone_flags.set(eIgnoreNonAlive, pSettings->r_bool(section, "ignore_nonalive"));
     m_zone_flags.set(eIgnoreSmall, pSettings->r_bool(section, "ignore_small"));
     m_zone_flags.set(eIgnoreArtefact, pSettings->r_bool(section, "ignore_artefacts"));
+    m_zone_flags.set(eIgnoreAlive, pSettings->read_if_exists<bool>(section, "ignore_alive", false));
+    m_zone_flags.set(eIgnoreBig, pSettings->read_if_exists<bool>(section, "ignore_big", false));
     m_zone_flags.set(eVisibleByDetector, pSettings->read_if_exists<bool>(section, "visible_by_detector", false));
 
     //загрузить времена для зоны
@@ -350,6 +355,7 @@ void CCustomZone::Load(LPCSTR section)
     m_ef_weapon_type = pSettings->r_u32(section, "ef_weapon_type");
 
     m_zone_flags.set(eAffectPickDOF, pSettings->read_if_exists<bool>(section, "pick_dof_effector", false));
+    m_useExtraLight = pSettings->read_if_exists<bool>(section, "use_extra_light", false);
 }
 
 bool CCustomZone::net_Spawn(CSE_Abstract* DC)
@@ -387,6 +393,12 @@ bool CCustomZone::net_Spawn(CSE_Abstract* DC)
         m_pIdleLight = GEnv.Render->light_create();
         m_pIdleLight->set_shadow(m_zone_flags.test(eIdleLightShadow));
 
+        if (m_useExtraLight)
+        {
+            m_pIdleLight2 = GEnv.Render->light_create();
+            m_pIdleLight2->set_shadow(m_zone_flags.test(eIdleLightShadow));
+        }
+
         if (m_zone_flags.test(eIdleLightVolumetric))
         {
             // m_pIdleLight->set_type				(IRender_Light::SPOT);
@@ -397,7 +409,10 @@ bool CCustomZone::net_Spawn(CSE_Abstract* DC)
         }
     }
     else
+    {
         m_pIdleLight = NULL;
+        m_pIdleLight2 = NULL;
+    }
 
     if (m_zone_flags.test(eBlowoutLight))
     {
@@ -436,6 +451,7 @@ void CCustomZone::net_Destroy()
 
     m_pLight.destroy();
     m_pIdleLight.destroy();
+    m_pIdleLight2.destroy();
 
     CParticlesObject::Destroy(m_pIdleParticles);
 
@@ -649,7 +665,9 @@ void CCustomZone::feel_touch_new(IGameObject* O)
         object_info.small_object = false;
 
     if ((object_info.small_object && m_zone_flags.test(eIgnoreSmall)) ||
+        (!object_info.small_object && m_zone_flags.test(eIgnoreBig)) ||
         (object_info.nonalive_object && m_zone_flags.test(eIgnoreNonAlive)) ||
+        (!object_info.nonalive_object && m_zone_flags.test(eIgnoreAlive)) ||
         (pArtefact && m_zone_flags.test(eIgnoreArtefact)))
         object_info.zone_ignore = true;
     else
@@ -693,7 +711,7 @@ bool CCustomZone::feel_touch_contact(IGameObject* O)
         return (FALSE);
 
     CGameObject* object = smart_cast<CGameObject*>(O);
-    if (!object || !object->IsVisibleForZones())
+    if (!object || !object->IsVisibleForZones() || object->IsGhost())
         return (FALSE);
 
     if (!((CCF_Shape*)GetCForm())->Contact(O))
@@ -761,18 +779,38 @@ void CCustomZone::StartIdleLight()
         pos.y += m_fIdleLightHeight;
         m_pIdleLight->set_position(pos);
         m_pIdleLight->set_active(true);
+
+        if (m_pIdleLight2)
+        {
+            m_idleLightQuality = GameLighting::Quality();
+            m_pIdleLight2->set_range(m_fIdleLightRange * 3.f);
+            m_pIdleLight2->set_position(pos);
+            m_pIdleLight2->set_active(m_idleLightQuality > 1);
+        }
     }
 }
 void CCustomZone::StopIdleLight()
 {
     if (m_pIdleLight)
         m_pIdleLight->set_active(false);
+    if (m_pIdleLight2)
+        m_pIdleLight2->set_active(false);
 }
 
 void CCustomZone::UpdateIdleLight()
 {
     if (!m_pIdleLight || !m_pIdleLight->get_active())
         return;
+
+    if (m_pIdleLight2)
+    {
+        const u32 lightingQuality = GameLighting::Quality();
+        if (m_idleLightQuality != lightingQuality)
+        {
+            m_idleLightQuality = lightingQuality;
+            m_pIdleLight2->set_active(lightingQuality > 1);
+        }
+    }
 
     VERIFY(m_pIdleLAnim);
 
@@ -783,11 +821,24 @@ void CCustomZone::UpdateIdleLight()
 
     float range = m_fIdleLightRange + m_fIdleLightRangeDelta * ::Random.randF(-1.f, 1.f);
     m_pIdleLight->set_range(range);
-    m_pIdleLight->set_color(fclr);
 
     Fvector pos = Position();
     pos.y += m_fIdleLightHeight;
     m_pIdleLight->set_position(pos);
+
+    if (m_pIdleLight2 && m_pIdleLight2->get_active())
+    {
+        Fcolor primaryColor = fclr;
+        Fcolor secondaryColor = fclr;
+        primaryColor.mul_rgb(.7f);
+        secondaryColor.mul_rgb(.35f);
+        m_pIdleLight->set_color(primaryColor);
+        m_pIdleLight2->set_range(range * 3.f);
+        m_pIdleLight2->set_color(secondaryColor);
+        m_pIdleLight2->set_position(pos);
+    }
+    else
+        m_pIdleLight->set_color(fclr);
 }
 
 void CCustomZone::PlayBlowoutParticles()
@@ -1150,7 +1201,11 @@ void CCustomZone::OnMove()
             m_pLight->set_position(Position());
 
         if (m_pIdleLight && m_pIdleLight->get_active())
+        {
             m_pIdleLight->set_position(Position());
+            if (m_pIdleLight2 && m_pIdleLight2->get_active())
+                m_pIdleLight2->set_position(Position());
+        }
     }
 }
 

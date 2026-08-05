@@ -114,70 +114,51 @@ void CActor::SetWeaponHideState(u16 State, bool bSet)
         u_EventSend(P);
     };
 }
-static u16 BestWeaponSlots[] = {
-    INV_SLOT_3, // 2
-    INV_SLOT_2, // 1
-    GRENADE_SLOT, // 3
-    KNIFE_SLOT, // 0
-};
-void CActor::SelectBestWeapon(IGameObject* O)
+static constexpr u16 BestWeaponSlots[]{INV_SLOT_3, INV_SLOT_2, GRENADE_SLOT, KNIFE_SLOT};
+
+void CActor::SelectBestWeapon(IGameObject* object)
 {
-    if (!O)
-        return;
-    if (IsGameTypeSingle())
-        return;
-    // if (Level().CurrentControlEntity() != this) return;
-    // if (OnClient()) return;
-    //-------------------------------------------------
-    CWeapon* pWeapon = smart_cast<CWeapon*>(O);
-    CGrenade* pGrenade = smart_cast<CGrenade*>(O);
-    CArtefact* pArtefact = smart_cast<CArtefact*>(O);
-    CInventoryItem* pIItem = smart_cast<CInventoryItem*>(O);
-    bool NeedToSelectBestWeapon = false;
-
-    if (pArtefact && pArtefact->H_Parent()) // just take an artefact
+    if (!object || IsGameTypeSingle())
         return;
 
-    if ((pWeapon || pGrenade || pArtefact) && pIItem)
+    auto* weapon = smart_cast<CWeapon*>(object);
+    auto* grenade = smart_cast<CGrenade*>(object);
+    auto* artefact = smart_cast<CArtefact*>(object);
+    auto* inventoryItem = smart_cast<CInventoryItem*>(object);
+
+    if (artefact && artefact->H_Parent())
+        return;
+    if ((!weapon && !grenade && !artefact) || !inventoryItem)
+        return;
+
+    // Artifact modes keep an occupied primary slot instead of replacing it on pickup.
+    if (GameID() == eGameIDArtefactHunt || GameID() == eGameIDCaptureTheArtefact)
     {
-        NeedToSelectBestWeapon = true;
-        if ((GameID() == eGameIDArtefactHunt) || (GameID() == eGameIDCaptureTheArtefact)) // only for test...
+        const auto baseSlot = inventoryItem->BaseSlot();
+        if (baseSlot == INV_SLOT_2 || baseSlot == INV_SLOT_3)
         {
-            if (pIItem->BaseSlot() == INV_SLOT_2 || pIItem->BaseSlot() == INV_SLOT_3)
-            {
-                CInventoryItem* pIItemInSlot = inventory().ItemFromSlot(pIItem->BaseSlot());
-                if (pIItemInSlot != NULL && pIItemInSlot != pIItem)
-                    NeedToSelectBestWeapon = false;
-            }
+            CInventoryItem* slottedItem = inventory().ItemFromSlot(baseSlot);
+            if (slottedItem && slottedItem != inventoryItem)
+                return;
         }
     }
-    if (!NeedToSelectBestWeapon)
-        return;
-    //-------------------------------------------------
-    for (int i = 0; i < 4; i++)
+
+    for (const u16 slot : BestWeaponSlots)
     {
-        if (inventory().ItemFromSlot(BestWeaponSlots[i]))
-        {
-            if (inventory().GetActiveSlot() != BestWeaponSlots[i])
-            {
-                PIItem best_item = inventory().ItemFromSlot(BestWeaponSlots[i]);
-                if (best_item && best_item->can_kill())
-                {
-#ifdef DEBUG
-                    Msg("--- Selecting best weapon [%d], Frame[%d]", BestWeaponSlots[i], Device.dwFrame);
-#endif // #ifdef DEBUG
-                    inventory().Activate(BestWeaponSlots[i]);
-                }
-                else
-                {
-#ifdef DEBUG
-                    Msg("--- Weapon is not best...");
-#endif // #ifdef DEBUG
-                }
-            }
+        PIItem candidate = inventory().ItemFromSlot(slot);
+        if (!candidate)
+            continue;
+        if (inventory().GetActiveSlot() == slot)
             return;
-        };
-    };
+        if (!candidate->can_kill())
+            continue;
+
+#ifdef DEBUG
+        Msg("--- Selecting best weapon [%d], Frame[%d]", slot, Device.dwFrame);
+#endif
+        inventory().Activate(slot);
+        return;
+    }
 }
 
 #define ENEMY_HIT_SPOT "mp_hit_sector_location"

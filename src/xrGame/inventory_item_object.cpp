@@ -7,10 +7,19 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "pch_script.h"
+#include "xrCommon/xr_hash_map.h"
 #include "inventory_item_object.h"
 
+namespace
+{
+xr_flat_hash_map<const CInventoryItemObject*, Fvector> activationSpeedOverrides;
+}
+
 CInventoryItemObject::CInventoryItemObject() {}
-CInventoryItemObject::~CInventoryItemObject() {}
+CInventoryItemObject::~CInventoryItemObject()
+{
+    activationSpeedOverrides.erase(this);
+}
 IFactoryObject* CInventoryItemObject::_construct()
 {
     CInventoryItem::_construct();
@@ -22,6 +31,29 @@ void CInventoryItemObject::Load(LPCSTR section)
 {
     CPhysicItem::Load(section);
     CInventoryItem::Load(section);
+}
+
+bool CInventoryItemObject::ActivationSpeedOverriden(Fvector& dest, bool clear_override)
+{
+    const auto override = activationSpeedOverrides.find(this);
+    if (override == activationSpeedOverrides.end())
+        return false;
+
+    dest = override->second;
+    if (clear_override)
+        activationSpeedOverrides.erase(override);
+
+    return true;
+}
+
+void CInventoryItemObject::SetActivationSpeedOverride(const Fvector& speed)
+{
+    activationSpeedOverrides[this] = speed;
+}
+
+bool CInventoryItemObject::HasActivationSpeedOverride() const
+{
+    return activationSpeedOverrides.contains(this);
 }
 /* remove
 LPCSTR CInventoryItemObject::Name			()

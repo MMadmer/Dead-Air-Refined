@@ -18,6 +18,18 @@
 #include "xrUICore/TabControl/UITabControl.h"
 #include "xrGame/ui/UIMainIngameWnd.h"
 #include "eatable_item.h"
+#include "Weapon.h"
+
+namespace
+{
+constexpr u32 weaponConditionMagazineRemoved = 1u << 26;
+
+u32 get_weapon_condition(PIItem item)
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(item);
+    return weapon ? weapon->GetConditionType() : 0;
+}
+}
 
 void CUIActorMenu::TryRepairItem(CUIWindow* w, void* d)
 {
@@ -26,7 +38,9 @@ void CUIActorMenu::TryRepairItem(CUIWindow* w, void* d)
     {
         return;
     }
-    if (item->GetCondition() > 0.99f)
+    const u32 conditionType = get_weapon_condition(item);
+    const u32 repairableCondition = conditionType & ~weaponConditionMagazineRemoved;
+    if (item->GetCondition() > 0.99f && repairableCondition == 0)
     {
         return;
     }
@@ -45,12 +59,12 @@ void CUIActorMenu::TryRepairItem(CUIWindow* w, void* d)
     luabind::functor<bool> funct;
     R_ASSERT2(GEnv.ScriptEngine->functor("inventory_upgrades.can_repair_item", funct),
         make_string("Failed to get functor <inventory_upgrades.can_repair_item>, item = %s", item_name));
-    bool can_repair = funct(item_name, item->GetCondition(), partner);
+    bool can_repair = funct(item_name, item->GetCondition(), conditionType, partner);
 
     luabind::functor<LPCSTR> funct2;
     R_ASSERT2(GEnv.ScriptEngine->functor("inventory_upgrades.question_repair_item", funct2),
         make_string("Failed to get functor <inventory_upgrades.question_repair_item>, item = %s", item_name));
-    LPCSTR question = funct2(item_name, item->GetCondition(), can_repair, partner);
+    LPCSTR question = funct2(item_name, item->GetCondition(), conditionType, can_repair, partner);
 
     if (can_repair)
     {

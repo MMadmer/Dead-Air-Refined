@@ -25,6 +25,7 @@ void CSoundRender_CoreA::_initialize_devices_list()
         Log("! SOUND: OpenAL: No sound devices found.");
         bPresent = false;
         xr_delete(pDeviceList);
+        return;
     }
     bPresent = true;
 }
@@ -88,8 +89,9 @@ void CSoundRender_CoreA::_initialize()
 
 #if defined(XR_HAS_EAX)
     // Check for EAX extension
-    const bool supportsEax = alIsExtensionPresent("EAX5.0") || alIsExtensionPresent("EAX4.0") ||
-        alIsExtensionPresent("EAX3.0") || alIsExtensionPresent("EAX2.0");
+    const bool forceSoftwareAudio = strstr(Core.Params, "-force_sw_audio");
+    const bool supportsEax = !forceSoftwareAudio && (alIsExtensionPresent("EAX5.0") ||
+        alIsExtensionPresent("EAX4.0") || alIsExtensionPresent("EAX3.0") || alIsExtensionPresent("EAX2.0"));
     if (supportsEax && !m_effects)
     {
         m_effects = xr_new<CSoundRender_EffectsA_EAX>();

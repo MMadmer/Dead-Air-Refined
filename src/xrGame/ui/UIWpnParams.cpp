@@ -175,25 +175,6 @@ void CUIWpnParams::SetInfo(CInventoryItem* slot_wpn, CInventoryItem& cur_wpn)
         if (!weapon)
             return;
 
-        xr_string description =
-            StringTable().translate(pSettings->r_string(cur_section, "description")).c_str();
-        description += StringTable().translate("st_condition_type").c_str();
-
-        bool has_condition_type = false;
-        for (u32 bit = 0; bit < 32; ++bit)
-        {
-            if (!(weapon->GetConditionType() & (1u << bit)))
-                continue;
-
-            string64 condition_type;
-            xr_sprintf(condition_type, "st_condition_type_%u", bit + 1);
-            description += StringTable().translate(condition_type).c_str();
-            has_condition_type = true;
-        }
-        if (!has_condition_type)
-            description += StringTable().translate("st_condition_type_0").c_str();
-        cur_wpn.SetItemDescription(description.c_str());
-
         if (m_textConditionValue)
         {
             int condition = iFloor(weapon->GetCondition() * 100.0f);

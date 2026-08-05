@@ -107,9 +107,6 @@ void CRender::Render()
     //.	VERIFY					(g_pGameLevel && g_pGameLevel->pHUD);
     auto& dsgraph = get_imm_context();
 
-    if (g_pGameLevel->pHUD && ps_r__common_flags.test(RFLAG_ACTOR_BODY))
-        g_pGameLevel->pHUD->Render_First(dsgraph.context_id);
-
     //******* Z-prefill calc - DEFERRER RENDERER
     if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
     {
@@ -167,6 +164,15 @@ void CRender::Render()
         Target->phase_scene_prepare();
     }
 
+    // Insert the first-person body only after scene building and the optional depth prepass have finished.
+    if (g_pGameLevel->pHUD && ps_r__common_flags.test(RFLAG_ACTOR_BODY))
+    {
+        dsgraph.o.phase = PHASE_NORMAL;
+        dsgraph.r_pmask(true, true, true);
+        dsgraph.set_Recorder(nullptr);
+        g_pGameLevel->pHUD->Render_First(dsgraph.context_id);
+    }
+
     BOOL split_the_scene_to_minimize_wait = FALSE;
     if (ps_r2_ls_flags.test(R2FLAG_EXP_SPLIT_SCENE))
         split_the_scene_to_minimize_wait = TRUE;
@@ -185,7 +191,7 @@ void CRender::Render()
         dsgraph.render_graph(0);
         dsgraph.render_lods(true, true);
         if (Details)
-            Details->Render(dsgraph.cmd_list);
+            Details->Render(dsgraph.cmd_list, true);
         Target->phase_scene_end();
     }
     else
@@ -284,7 +290,7 @@ void CRender::Render()
         dsgraph.render_hud();
         dsgraph.render_lods(true, true);
         if (Details)
-            Details->Render(dsgraph.cmd_list);
+            Details->Render(dsgraph.cmd_list, true);
         Target->phase_scene_end();
     }
 

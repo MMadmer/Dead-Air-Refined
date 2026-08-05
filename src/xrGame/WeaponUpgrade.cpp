@@ -210,7 +210,28 @@ bool CWeapon::install_upgrade_hit(LPCSTR section, bool test)
     if (result2 && !test)
     {
         VERIFY(rpm > 0.0f);
-        fOneShotTime = 60.0f / rpm;
+        const float newShotTime = 60.0f / rpm;
+        const float newActorShotTime = GetActorShotTime() - fOneShotTime + newShotTime;
+        fOneShotTime = newShotTime;
+        SetActorShotTime(newActorShotTime);
+    }
+    result |= result2;
+
+    float modeRpm = 60.0f / fModeShotTime;
+    result2 = process_if_exists(section, "rpm_mode_2", &CInifile::r_float, modeRpm, test);
+    if (result2 && !test)
+    {
+        VERIFY(modeRpm > 0.0f);
+        fModeShotTime = 60.0f / modeRpm;
+    }
+    result |= result2;
+
+    float actorRpm = 60.0f / GetActorShotTime();
+    result2 = process_if_exists(section, "rpm_actor", &CInifile::r_float, actorRpm, test);
+    if (result2 && !test)
+    {
+        VERIFY(actorRpm > 0.0f);
+        SetActorShotTime(60.0f / actorRpm);
     }
     result |= result2;
 

@@ -22,6 +22,14 @@ https://github.com/OpenXRay/xray-16
 
 The local Git remote named `upstream` points to this repository.
 
+## Dead Air source reference
+
+Lanforse provided the surviving unfinished Dead Air 1.0 source tree together
+with its matching early CoC x64 engine baseline. Refined used the pair as a
+comparative reference to isolate Dead Air-authored changes, with the released
+0.98b binary/decompilation retained as the compatibility authority. The CoC
+x64 tree was not imported as Refined's engine foundation.
+
 ## Refined history
 
 The public Dead Air: Refined history records project-specific release states.
@@ -35,4 +43,5 @@ source provenance.
 Original copyright notices, dependency licenses, submodule histories, and
 third-party acknowledgements remain part of the source distribution. The
 project README also identifies OpenXRay as the engine foundation and credits
-the Dead Air developers and community.
+the Dead Air developers and community, including Lanforse for preserving and
+sharing the surviving source reference.

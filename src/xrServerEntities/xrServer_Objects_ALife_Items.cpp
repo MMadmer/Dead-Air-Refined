@@ -13,6 +13,9 @@
 #include "Common/object_broker.h"
 #include "xrCore/Animation/Bone.hpp"
 
+constexpr u32 weaponSidecarConditionSaveMask = (1u << 25) | (1u << 26);
+static_assert((weaponSidecarConditionSaveMask & 0x78000000u) == 0);
+
 #ifdef XRGAME_EXPORTS
 #ifdef DEBUG
 #define PHPH_DEBUG
@@ -494,6 +497,7 @@ CSE_ALifeItemWeapon::CSE_ALifeItemWeapon(LPCSTR caSection) : CSE_ALifeItem(caSec
     wpn_flags = 0;
     wpn_state = 0;
     ammo_type = 0;
+    m_bZoom = 0;
 
     m_fHitPower = pSettings->r_float(caSection, "hit_power");
     m_tHitType = ALife::g_tfString2HitType(pSettings->r_string(caSection, "hit_type"));
@@ -605,6 +609,7 @@ void CSE_ALifeItemWeapon::STATE_Read(NET_Packet& tNetPacket, u16 size)
         if (!can_read(sizeof(u32)))
             return;
         tNetPacket.r_u32(m_condition_type);
+        m_condition_type &= ~weaponSidecarConditionSaveMask;
     }
 }
 
@@ -617,7 +622,7 @@ void CSE_ALifeItemWeapon::STATE_Write(NET_Packet& tNetPacket)
     tNetPacket.w_u8(m_addon_flags.get());
     tNetPacket.w_u8(ammo_type);
     tNetPacket.w_u8(a_elapsed_grenades.pack_to_byte());
-    tNetPacket.w_u32(m_condition_type);
+    tNetPacket.w_u32(m_condition_type & ~weaponSidecarConditionSaveMask);
 }
 
 void CSE_ALifeItemWeapon::OnEvent(NET_Packet& tNetPacket, u16 type, u32 time, ClientID sender)
@@ -695,15 +700,23 @@ void CSE_ALifeItemWeaponShotGun::UPDATE_Read(NET_Packet& P)
 
     m_AmmoIDs.clear();
     u8 AmmoCount = P.r_u8();
+    const u32 magazineSize = pSettings->read_if_exists<u32>(s_name, "ammo_mag_size", 0);
+    m_AmmoIDs.reserve(std::min<u32>(AmmoCount, magazineSize));
     for (u8 i = 0; i < AmmoCount; i++)
     {
-        m_AmmoIDs.push_back(P.r_u8());
+        const u8 ammoType = P.r_u8();
+        if (i < magazineSize)
+            m_AmmoIDs.push_back(ammoType);
     }
+
+    if (AmmoCount > magazineSize)
+        Msg("! Shotgun server entity '%s' rejected %u excess cartridge ids", s_name.c_str(), AmmoCount - magazineSize);
 }
 void CSE_ALifeItemWeaponShotGun::UPDATE_Write(NET_Packet& P)
 {
     inherited::UPDATE_Write(P);
 
+    R_ASSERT2(m_AmmoIDs.size() <= std::numeric_limits<u8>::max(), "Shotgun cartridge id list exceeds packet format");
     P.w_u8(u8(m_AmmoIDs.size()));
     for (u32 i = 0; i < m_AmmoIDs.size(); i++)
     {
@@ -788,7 +801,9 @@ void CSE_ALifeItemWeaponMagazinedWGL::FillProps(LPCSTR pref, PropItemVec& items)
 ////////////////////////////////////////////////////////////////////////////
 CSE_ALifeItemAmmo::CSE_ALifeItemAmmo(LPCSTR caSection) : CSE_ALifeItem(caSection)
 {
-    a_elapsed = m_boxSize = (u16)pSettings->r_s32(caSection, "box_size");
+    m_boxSize = static_cast<u16>(pSettings->r_s32(caSection, "box_size"));
+    a_elapsed = static_cast<u16>(std::clamp(
+        pSettings->read_if_exists<s32>(caSection, "box_current", m_boxSize), 0, static_cast<s32>(m_boxSize)));
     if (pSettings->section_exist(caSection) && pSettings->line_exist(caSection, "visual"))
         set_visual(pSettings->r_string(caSection, "visual"));
 }
@@ -830,7 +845,9 @@ void CSE_ALifeItemAmmo::FillProps(LPCSTR pref, PropItemVec& values)
 
 bool CSE_ALifeItemAmmo::can_switch_online() const /* noexcept */ { return inherited::can_switch_online(); }
 bool CSE_ALifeItemAmmo::can_switch_offline() const /* noexcept */
-{ return (inherited::can_switch_offline() && a_elapsed != 0); }
+{
+    return inherited::can_switch_offline();
+}
 ////////////////////////////////////////////////////////////////////////////
 // CSE_ALifeItemDetector
 ////////////////////////////////////////////////////////////////////////////
@@ -1007,8 +1024,14 @@ void CSE_ALifeItemExplosive::FillProps(LPCSTR pref, PropItemVec& items) { inheri
 ////////////////////////////////////////////////////////////////////////////
 CSE_ALifeItemBolt::CSE_ALifeItemBolt(LPCSTR caSection) : CSE_ALifeItem(caSection)
 {
-    m_flags.set(flUseSwitches, false);
-    m_flags.set(flSwitchOffline, false);
+    const bool infinite = READ_IF_EXISTS(pSettings, r_bool, caSection, "infinite", true);
+    if (infinite)
+    {
+        m_flags.set(flUseSwitches, false);
+        m_flags.set(flSwitchOffline, false);
+        m_flags.set(flCanSave, false);
+    }
+
     m_ef_weapon_type = READ_IF_EXISTS(pSettings, r_u32, caSection, "ef_weapon_type", u32(-1));
 }
 
@@ -1025,7 +1048,7 @@ void CSE_ALifeItemBolt::UPDATE_Write(NET_Packet& tNetPacket) { inherited::UPDATE
 void CSE_ALifeItemBolt::UPDATE_Read(NET_Packet& tNetPacket) { inherited::UPDATE_Read(tNetPacket); };
 bool CSE_ALifeItemBolt::can_save() const /* noexcept */
 {
-    return false; //! attached());
+    return !!m_flags.is(flCanSave);
 }
 bool CSE_ALifeItemBolt::used_ai_locations() const /* noexcept */ { return false; }
 #ifndef MASTER_GOLD

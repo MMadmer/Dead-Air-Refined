@@ -295,7 +295,7 @@ template <class Object>
 void ChimeraAttackState<Object>::set_turn_animation()
 {
     bool const rotate_right = this->object->control().direction().is_from_right(m_target);
-    this->object->anim().set_override_animation(rotate_right ? eAnimFastStandTurnRight : eAnimFastStandTurnLeft, 0);
+    this->object->anim().set_override_animation(rotate_right ? eAnimRunTurnRight : eAnimRunTurnLeft, 0);
 }
 
 template <class Object>

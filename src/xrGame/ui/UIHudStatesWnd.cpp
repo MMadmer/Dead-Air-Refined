@@ -19,6 +19,7 @@
 #include "PDA.h"
 #include "WeaponMagazinedWGrenade.h"
 #include "xrUICore/XML/UITextureMaster.h"
+#include "xrEngine/CustomHUD.h"
 
 CUIHudStatesWnd::CUIHudStatesWnd()
     : CUIWindow(CUIHudStatesWnd::GetDebugType()), m_b_force_update(true)
@@ -263,6 +264,11 @@ void CUIHudStatesWnd::UpdateHealth(CActor* actor)
     //		m_timer_1sec = Device.dwTimeGlobal;
     //	}
 
+    const bool drawInfo = psHUD_Flags.test(HUD_DRAW_INFO);
+    m_ui_health_bar->Show(drawInfo);
+    if (m_ui_stamina_bar)
+        m_ui_stamina_bar->Show(drawInfo);
+
     const float cur_health = actor->GetfHealth();
     m_ui_health_bar->SetProgressPos(iCeil(cur_health * 100.0f * 35.f) / 35.f);
     if (_abs(cur_health - m_last_health) > m_health_blink)
@@ -344,6 +350,7 @@ void CUIHudStatesWnd::UpdateHealth(CActor* actor)
 
 void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
 {
+    const bool drawInfo = psHUD_Flags.test(HUD_DRAW_INFO);
     PIItem item = actor->inventory().ActiveItem();
     if (item)
     {
@@ -362,20 +369,20 @@ void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
 
         if (m_ui_weapon_cur_ammo)
         {
-            m_ui_weapon_cur_ammo->Show(true);
+            m_ui_weapon_cur_ammo->Show(drawInfo);
             m_ui_weapon_cur_ammo->SetText(m_item_info.cur_ammo.c_str());
         }
 
         if (m_ui_weapon_fmj_ammo)
         {
-            m_ui_weapon_fmj_ammo->Show(true);
+            m_ui_weapon_fmj_ammo->Show(drawInfo);
             m_ui_weapon_fmj_ammo->SetText(m_item_info.fmj_ammo.c_str());
             m_ui_weapon_fmj_ammo->SetTextColor(color_rgba(238, 155, 23, 150));
         }
 
         if (m_ui_weapon_ap_ammo)
         {
-            m_ui_weapon_ap_ammo->Show(true);
+            m_ui_weapon_ap_ammo->Show(drawInfo);
             m_ui_weapon_ap_ammo->SetText(m_item_info.ap_ammo.c_str());
             m_ui_weapon_ap_ammo->SetTextColor(color_rgba(238, 155, 23, 150));
         }
@@ -383,14 +390,14 @@ void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
         //Alundaio: Third ammo type and also set text color for each ammo type
         if (m_ui_weapon_third_ammo)
         {
-            m_ui_weapon_third_ammo->Show(true);
+            m_ui_weapon_third_ammo->Show(drawInfo);
             m_ui_weapon_third_ammo->SetText(m_item_info.third_ammo.c_str());
             m_ui_weapon_third_ammo->SetTextColor(color_rgba(238, 155, 23, 150));
         }
 
         if (m_ui_weapon_sign_ammo)
         {
-            if (m_item_info.cur_ammo.size() && m_item_info.total_ammo.size())
+            if (drawInfo && m_item_info.cur_ammo.size() && m_item_info.total_ammo.size())
             {
                 string64 temp;
                 xr_sprintf(temp, "%s/%s", m_item_info.cur_ammo.c_str(), m_item_info.total_ammo.c_str());
@@ -422,11 +429,11 @@ void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
             }
         }
 
-        m_fire_mode->Show(true);
+        m_fire_mode->Show(drawInfo);
 
         if (m_ui_grenade)
         {
-            m_ui_grenade->Show(true);
+            m_ui_grenade->Show(drawInfo);
 
             m_ui_grenade->SetText(m_item_info.grenade.c_str());
 
@@ -480,7 +487,7 @@ void CUIHudStatesWnd::SetAmmoIcon(const shared_str& sect_name)
     if (!m_ui_weapon_icon)
         return;
 
-    if (!sect_name.size())
+    if (!sect_name.size() || !psHUD_Flags.test(HUD_DRAW_INFO))
     {
         m_ui_weapon_icon->Show(false);
         return;

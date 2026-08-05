@@ -323,16 +323,9 @@ void CRenderTarget::accum_volumetric(CBackend& cmd_list, light* L)
 
     phase_vol_accumulator(cmd_list);
 
-    ref_shader shader;
-    //ref_shader* shader_msaa;
-
-    shader = L->s_volumetric;
-    //shader_msaa = L->s_volumetric_msaa;
+    ref_shader shader = L->flags.bShadow ? L->s_volumetric : L->s_volumetric_unshadowed;
     if (!shader)
-    {
-        shader = s_accum_volume;
-        //shader_msaa = s_accum_volume_msaa;
-    }
+        shader = L->flags.bShadow ? s_accum_volume : s_accum_volume_unshadowed;
 
     // *** assume accumulator setted up ***
     // *****************************	Mask by stencil		*************************************
@@ -361,71 +354,57 @@ void CRenderTarget::accum_volumetric(CBackend& cmd_list, light* L)
     Fmatrix mFrustumSrc;
     CFrustum ClipFrustum;
     {
-        float smapsize = float(RImplementation.o.smapsize);
-        float fTexelOffs = (.5f / smapsize);
-        float view_dim = float(L->X.S.size - 2) / smapsize;
-        float view_sx = float(L->X.S.posX + 1) / smapsize;
-        float view_sy = float(L->X.S.posY + 1) / smapsize;
-        float fRange = float(1.f) * ps_r2_ls_depth_scale;
-        float fBias = ps_r2_ls_depth_bias;
+        const float smapSize = float(RImplementation.o.smapsize);
+        const float texelOffset = .5f / smapSize;
+        const float depthRange = ps_r2_ls_depth_scale;
+        const float depthBias = ps_r2_ls_depth_bias;
+        const auto makeTexelAdjust = [&](float viewDim, float viewX, float viewY)
+        {
 #ifdef USE_DX11
-        Fmatrix m_TexelAdjust =
-        {
-            view_dim / 2.f, 0.0f, 0.0f, 0.0f,
-            0.0f, -view_dim / 2.f, 0.0f, 0.0f,
-            0.0f, 0.0f, fRange, 0.0f,
-            view_dim / 2.f + view_sx + fTexelOffs, view_dim / 2.f + view_sy + fTexelOffs, fBias, 1.0f
-        };
+            return Fmatrix{
+                viewDim / 2.f, 0.f, 0.f, 0.f,
+                0.f, -viewDim / 2.f, 0.f, 0.f,
+                0.f, 0.f, depthRange, 0.f,
+                viewDim / 2.f + viewX + texelOffset,
+                viewDim / 2.f + viewY + texelOffset,
+                depthBias, 1.f
+            };
 #elif defined(USE_OGL)
-        Fmatrix m_TexelAdjust =
-        {
-            view_dim / 2.f, 0.0f, 0.0f, 0.0f,
-            0.0f, view_dim / 2.f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.5f * fRange, 0.0f,
-            view_dim / 2.f + view_sx + fTexelOffs, view_dim / 2.f + view_sy + fTexelOffs, 0.5f + fBias, 1.0f
-        };
+            return Fmatrix{
+                viewDim / 2.f, 0.f, 0.f, 0.f,
+                0.f, viewDim / 2.f, 0.f, 0.f,
+                0.f, 0.f, .5f * depthRange, 0.f,
+                viewDim / 2.f + viewX + texelOffset,
+                viewDim / 2.f + viewY + texelOffset,
+                .5f + depthBias, 1.f
+            };
 #else
 #   error No graphics API selected or enabled!
 #endif
+        };
 
-        // compute xforms
-        Fmatrix xf_view = L->X.S.view;
+        const Fmatrix xfView = L->X.S.view;
         Fmatrix xf_project;
-        xf_project.mul(m_TexelAdjust, L->X.S.project);
-        m_Shadow.mul(xf_view, Device.mInvView);
-        m_Shadow.mulA_44(xf_project);
-
-        // lmap
-        view_dim = 1.f;
-        view_sx = 0.f;
-        view_sy = 0.f;
-#ifdef USE_DX11
-        Fmatrix m_TexelAdjust2 =
-        {
-            view_dim / 2.f, 0.0f, 0.0f, 0.0f,
-            0.0f, -view_dim / 2.f, 0.0f, 0.0f,
-            0.0f, 0.0f, fRange, 0.0f,
-            view_dim / 2.f + view_sx + fTexelOffs, view_dim / 2.f + view_sy + fTexelOffs, fBias, 1.0f
-        };
-#elif defined(USE_OGL)
-        Fmatrix m_TexelAdjust2 =
-        {
-            view_dim / 2.f, 0.0f, 0.0f, 0.0f,
-            0.0f, view_dim / 2.f, 0.0f, 0.0f,
-            0.0f, 0.0f, 0.5f * fRange, 0.0f,
-            view_dim / 2.f + view_sx + fTexelOffs, view_dim / 2.f + view_sy + fTexelOffs, 0.5f + fBias, 1.0f
-        };
-#else
-#   error No graphics API selected or enabled!
-#endif
-
-        // compute xforms
-        xf_project.mul(m_TexelAdjust2, L->X.S.project);
-        m_Lmap.mul(xf_view, Device.mInvView);
+        const Fmatrix lmapAdjust = makeTexelAdjust(1.f, 0.f, 0.f);
+        xf_project.mul(lmapAdjust, L->X.S.project);
+        m_Lmap.mul(xfView, Device.mInvView);
         m_Lmap.mulA_44(xf_project);
 
+        if (L->flags.bShadow)
+        {
+            const float viewDim = float(L->X.S.size - 2) / smapSize;
+            const float viewX = float(L->X.S.posX + 1) / smapSize;
+            const float viewY = float(L->X.S.posY + 1) / smapSize;
+            const Fmatrix shadowAdjust = makeTexelAdjust(viewDim, viewX, viewY);
+            xf_project.mul(shadowAdjust, L->X.S.project);
+            m_Shadow.mul(xfView, Device.mInvView);
+            m_Shadow.mulA_44(xf_project);
+        }
+        else
+            m_Shadow = m_Lmap;
+
         // Compute light frustum in world space
-        mFrustumSrc.mul(L->X.S.project, xf_view);
+        mFrustumSrc.mul(L->X.S.project, xfView);
         ClipFrustum.CreateFromMatrix(mFrustumSrc, FRUSTUM_P_ALL);
         //	Adjust frustum far plane
         //	4 - far, 5 - near

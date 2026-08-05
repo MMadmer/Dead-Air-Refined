@@ -24,6 +24,7 @@ void R_xforms::set_W(const Fmatrix& m)
 void R_xforms::set_V(const Fmatrix& m)
 {
     m_v.set(m);
+    m_bInvVValid = false;
     m_wv.mul_43(m_v, m_w);
     m_vp.mul(m_p, m_v);
     m_wvp.mul(m_p, m_wv);
@@ -37,6 +38,18 @@ void R_xforms::set_V(const Fmatrix& m)
         cmd_list.set_c(c_wvp, m_wvp);
     cmd_list.set_xform(D3DTS_VIEW, m);
 }
+
+const Fmatrix& R_xforms::get_inv_V()
+{
+    if (!m_bInvVValid)
+    {
+        m_invv.invert(m_v);
+        m_bInvVValid = true;
+    }
+
+    return m_invv;
+}
+
 void R_xforms::set_P(const Fmatrix& m)
 {
     m_p.set(m);
@@ -82,10 +95,12 @@ R_xforms::R_xforms(CBackend& cmd_list_in)
     m_w.identity();
     m_invw.identity();
     m_v.identity();
+    m_invv.identity();
     m_p.identity();
     m_wv.identity();
     m_vp.identity();
     m_wvp.identity();
     m_bInvWValid = true;
+    m_bInvVValid = true;
 }
 } // namespace xray::render::RENDER_NAMESPACE

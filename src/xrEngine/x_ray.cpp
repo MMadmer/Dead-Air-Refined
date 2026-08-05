@@ -411,7 +411,10 @@ CApplication::~CApplication()
     FrameMarkStart(FRAME_MARK_APPLICATION_SHUTDOWN);
 
     if (g_pGamePersistent)
+    {
+        Device.PreCache(0, false);
         g_pGamePersistent->OnAppEnd();
+    }
 
     if (m_game_module)
         m_game_module->destroy_persistent(g_pGamePersistent);

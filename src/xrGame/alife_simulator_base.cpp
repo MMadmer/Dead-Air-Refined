@@ -22,6 +22,7 @@
 #include "xrAICore/Navigation/level_graph.h"
 #include "inventory_upgrade_manager.h"
 #include "Level.h"
+#include "save_extension_gameplay.h"
 
 #ifdef DEBUG
 #include "alife_simulator_base_inline.h"
@@ -53,6 +54,8 @@ CALifeSimulatorBase::~CALifeSimulatorBase() { VERIFY(!m_initialized); }
 void CALifeSimulatorBase::destroy() { unload(); }
 void CALifeSimulatorBase::unload()
 {
+    SaveExtensionGameplay::clear_state();
+    SaveExtensionContainer::clear_loaded_chunks();
     xr_delete(m_objects);
     xr_delete(m_header);
     xr_delete(m_time_manager);
@@ -89,8 +92,28 @@ void CALifeSimulatorBase::reload(LPCSTR section)
 CSE_Abstract* CALifeSimulatorBase::spawn_item(LPCSTR section, const Fvector& position, u32 level_vertex_id,
     GameGraph::_GRAPH_ID game_vertex_id, u16 parent_id, bool registration)
 {
-    CSE_Abstract* abstract = F_entity_Create(section);
-    R_ASSERT3(abstract, "Cannot find item with section", section);
+    if (!section || !*section)
+    {
+        Msg("! Cannot spawn an ALife item without a section name");
+        return nullptr;
+    }
+
+    CSE_Abstract* abstract = F_entity_Create(section, true);
+    if (!abstract)
+    {
+        Msg("! Cannot find an entity class for section [%s]", section);
+        return nullptr;
+    }
+
+    CSE_ALifeDynamicObject* dynamic_object = smart_cast<CSE_ALifeDynamicObject*>(abstract);
+    if (!dynamic_object)
+    {
+        Msg("! Cannot spawn non-ALife section [%s] through alife():create", section);
+        if (GEnv.ScriptEngine)
+            GEnv.ScriptEngine->print_stack();
+        F_entity_Destroy(abstract);
+        return nullptr;
+    }
 
     abstract->s_name = section;
     //. abstract->s_gameid          = u8(GAME_SINGLE);
@@ -113,13 +136,13 @@ CSE_Abstract* CALifeSimulatorBase::spawn_item(LPCSTR section, const Fvector& pos
     xr_strcat(s_name_replace, xr_itoa(abstract->ID, S1, 10));
     abstract->set_name_replace(s_name_replace);
 
-    CSE_ALifeDynamicObject* dynamic_object = smart_cast<CSE_ALifeDynamicObject*>(abstract);
-    VERIFY(dynamic_object);
-
     //оружие спавним с полным магазинои
     CSE_ALifeItemWeapon* weapon = smart_cast<CSE_ALifeItemWeapon*>(dynamic_object);
     if (weapon)
+    {
         weapon->a_elapsed = weapon->get_ammo_magsize();
+        weapon->m_condition_type = 0;
+    }
 
     dynamic_object->m_tNodeID = level_vertex_id;
     dynamic_object->m_tGraphID = game_vertex_id;

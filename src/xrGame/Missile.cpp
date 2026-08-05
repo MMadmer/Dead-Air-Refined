@@ -161,8 +161,8 @@ void CMissile::OnH_A_Chield()
 {
     inherited::OnH_A_Chield();
 
-    //	if(!m_fake_missile && !smart_cast<CMissile*>(H_Parent()))
-    //		spawn_fake_missile	();
+    if (!m_fake_missile && !smart_cast<CMissile*>(H_Parent()))
+        spawn_fake_missile();
 }
 
 void CMissile::OnH_B_Independent(bool just_before_destroy)
@@ -194,16 +194,6 @@ void CMissile::UpdateCL()
     m_dwStateTime += Device.dwTimeDelta;
 
     inherited::UpdateCL();
-
-    CActor* pActor = smart_cast<CActor*>(H_Parent());
-    if (pActor && !pActor->AnyMove() && this == pActor->inventory().ActiveItem())
-    {
-        if (!GamePersistent().GetHudTuner().is_active() && GetState() == eIdle && (Device.dwTimeGlobal - m_dw_curr_substate_time > 20000))
-        {
-            SwitchState(eBore);
-            ResetSubStateTime();
-        }
-    }
 
     if (GetState() == eReady)
     {

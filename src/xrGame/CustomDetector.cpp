@@ -13,6 +13,28 @@
 #include "ParticlesObject.h"
 #include "xrEngine/LightAnimLibrary.h"
 #include "Include/xrRender/Kinematics.h"
+#include "xrCommon/xr_hash_map.h"
+
+namespace
+{
+struct DetectorExtendedConfig
+{
+    bool lightEnableFromIdle{};
+    bool lightDisableFromIdle{};
+    bool lightHudOnly{};
+    bool lightStateControlled{};
+    bool idleZoom{};
+};
+
+xr_flat_hash_map<const CCustomDetector*, DetectorExtendedConfig> detectorExtendedConfigs;
+
+const DetectorExtendedConfig& detector_extended_config(const CCustomDetector* detector)
+{
+    static const DetectorExtendedConfig defaults;
+    const auto config = detectorExtendedConfigs.find(detector);
+    return config != detectorExtendedConfigs.end() ? config->second : defaults;
+}
+}
 
 ITEM_INFO::ITEM_INFO() : snd_time(0), cur_period(0)
 {
@@ -32,22 +54,19 @@ bool CCustomDetector::CheckCompatibilityInt(CHudItem* itm, u16* slot_to_activate
         return true;
 
     CInventoryItem& iitm = itm->item();
-    u32 slot = iitm.BaseSlot();
-    bool bres = (slot == INV_SLOT_2 || slot == KNIFE_SLOT || slot == BOLT_SLOT);
+    const u32 slot = iitm.BaseSlot();
+    bool bres = (slot == INV_SLOT_2 || slot == INV_SLOT_3 || slot == KNIFE_SLOT || slot == BOLT_SLOT ||
+        slot == SIDEARM_SLOT || slot == ANIMATION_SLOT) && iitm.IsSingleHanded();
     if (!bres && slot_to_activate)
     {
         *slot_to_activate = NO_ACTIVE_SLOT;
-        if (m_pInventory->ItemFromSlot(BOLT_SLOT))
-            *slot_to_activate = BOLT_SLOT;
-
-        if (m_pInventory->ItemFromSlot(KNIFE_SLOT))
-            *slot_to_activate = KNIFE_SLOT;
-
-        if (m_pInventory->ItemFromSlot(INV_SLOT_3) && m_pInventory->ItemFromSlot(INV_SLOT_3)->BaseSlot() != INV_SLOT_3)
-            *slot_to_activate = INV_SLOT_3;
-
-        if (m_pInventory->ItemFromSlot(INV_SLOT_2) && m_pInventory->ItemFromSlot(INV_SLOT_2)->BaseSlot() != INV_SLOT_3)
-            *slot_to_activate = INV_SLOT_2;
+        constexpr u16 compatibleSlots[] = { BOLT_SLOT, KNIFE_SLOT, SIDEARM_SLOT, INV_SLOT_3, INV_SLOT_2 };
+        for (const u16 compatibleSlot : compatibleSlots)
+        {
+            const PIItem candidate = m_pInventory->ItemFromSlot(compatibleSlot);
+            if (candidate && candidate->IsSingleHanded())
+                *slot_to_activate = compatibleSlot;
+        }
 
         if (*slot_to_activate != NO_ACTIVE_SLOT)
             bres = true;
@@ -81,8 +100,20 @@ bool CCustomDetector::CheckCompatibility(CHudItem* itm)
 
 void CCustomDetector::HideDetector(bool bFastMode)
 {
-    if (GetState() == eIdle)
-        ToggleDetector(bFastMode);
+    if (GetState() != eIdle)
+        return;
+
+    if (!bFastMode)
+    {
+        ToggleDetector(false);
+        return;
+    }
+
+    SwitchState(eHidden);
+    if (m_light)
+        m_light->set_active(false);
+    TurnDetectorInternal(false);
+    g_player_hud->detach_item(this);
 }
 
 void CCustomDetector::ShowDetector(bool bFastMode)
@@ -125,10 +156,23 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
     inherited::OnStateSwitch(S, oldState);
     UpdateHudParticles(S == eIdle);
 
+    const DetectorExtendedConfig& config = detector_extended_config(this);
+    const auto enableLight = [this]()
+    {
+        if (!m_light || m_light->get_active())
+            return;
+
+        m_light->set_active(true);
+        if (m_sounds.FindSoundItem("sndSwitch", false))
+            m_sounds.PlaySound("sndSwitch", Fvector().set(0.f, 0.f, 0.f), this, true, false);
+    };
+
     switch (S)
     {
     case eShowing:
     {
+        if (config.lightStateControlled && !config.lightEnableFromIdle)
+            enableLight();
         g_player_hud->attach_item(this);
         m_sounds.PlaySound("sndShow", Fvector().set(0, 0, 0), this, true, false);
         PlayHUDMotion(m_bFastAnimMode ? "anm_show_fast" : "anm_show", "anim_show", FALSE /*TRUE*/, this, GetState());
@@ -137,6 +181,8 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
     break;
     case eHiding:
     {
+        if (config.lightStateControlled && config.lightDisableFromIdle && m_light)
+            m_light->set_active(false);
         if (oldState != eHiding)
         {
             m_sounds.PlaySound("sndHide", Fvector().set(0, 0, 0), this, true, false);
@@ -151,6 +197,21 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
         SetPending(FALSE);
     }
     break;
+    case eIdleZoom:
+    {
+        if (config.idleZoom)
+        {
+            if (config.lightStateControlled && config.lightEnableFromIdle)
+                enableLight();
+            PlayHUDMotion("anm_zoom", "anim_idle", TRUE, nullptr, GetState());
+            SetPending(FALSE);
+        }
+        else
+        {
+            SwitchState(eIdle);
+        }
+    }
+    break;
     }
 }
 
@@ -161,14 +222,24 @@ void CCustomDetector::OnAnimationEnd(u32 state)
     {
     case eShowing:
     {
+        const DetectorExtendedConfig& config = detector_extended_config(this);
+        if (config.lightStateControlled && config.lightEnableFromIdle && m_light)
+        {
+            const bool wasActive = m_light->get_active();
+            m_light->set_active(true);
+            if (!wasActive && m_sounds.FindSoundItem("sndSwitch", false))
+                m_sounds.PlaySound("sndSwitch", Fvector().set(0.f, 0.f, 0.f), this, true, false);
+        }
         SwitchState(eIdle);
         if (IsUsingCondition() && m_fDecayRate > 0.f)
-            this->SetCondition(-m_fDecayRate);
+            ChangeCondition(-m_fDecayRate);
     }
     break;
     case eHiding:
     {
         SwitchState(eHidden);
+        if (m_light)
+            m_light->set_active(false);
         TurnDetectorInternal(false);
         g_player_hud->detach_item(this);
     }
@@ -202,6 +273,7 @@ CCustomDetector::CCustomDetector()
 
 CCustomDetector::~CCustomDetector()
 {
+    detectorExtendedConfigs.erase(this);
     m_artefacts.destroy();
     TurnDetectorInternal(false);
     CParticlesObject::Destroy(m_hud_particles);
@@ -217,22 +289,28 @@ bool CCustomDetector::net_Spawn(CSE_Abstract* DC)
     IKinematics* visual = smart_cast<IKinematics*>(Visual());
     R_ASSERT(visual);
 
-    m_light_bone = visual->LL_BoneID(m_light_bone_name);
-    m_light = GEnv.Render->light_create();
-    m_light->set_shadow(m_light_shadow);
-    m_light->set_type(m_light_spot ? IRender_Light::SPOT : IRender_Light::POINT);
-    m_light->set_range(m_light_range);
-    m_light->set_color(m_light_color);
-    m_light->set_cone(m_light_angle);
-    m_light->set_texture(m_light_texture.c_str());
-    m_light->set_volumetric(m_light_volumetric);
-    m_light->set_active(m_light_enabled);
+    const DetectorExtendedConfig& config = detector_extended_config(this);
+    if (m_light_enabled)
+    {
+        m_light_bone = visual->LL_BoneID(m_light_bone_name);
+        m_light = GEnv.Render->light_create();
+        m_light->set_shadow(m_light_shadow);
+        m_light->set_type(m_light_spot ? IRender_Light::SPOT : IRender_Light::POINT);
+        m_light->set_range(m_light_range);
+        m_light->set_color(m_light_color);
+        m_light->set_cone(m_light_angle);
+        m_light->set_texture(m_light_texture.c_str());
+        m_light->set_volumetric(m_light_volumetric);
+        m_light->set_active(!config.lightHudOnly);
+    }
 
     if (m_particles_enabled)
     {
+        CParticlesPlayer::LoadParticles(visual);
         m_particles_bone = visual->LL_BoneID(m_particles_bone_name);
-        R_ASSERT(m_particles_bone != BI_NONE);
-        if (m_particles_name.size())
+        if (m_particles_bone == BI_NONE)
+            Msg("! Detector '%s' has no particle bone '%s'", cNameSect().c_str(), m_particles_bone_name.c_str());
+        else if (m_particles_name.size() && xr_strcmp(m_particles_name.c_str(), "none"))
             StartParticles(m_particles_name, m_particles_bone, Fvector().set(0.0f, 1.0f, 0.0f), ID(), -1, false);
     }
 
@@ -259,8 +337,19 @@ void CCustomDetector::Load(LPCSTR section)
 
     m_sounds.LoadSound(section, "snd_draw", "sndShow");
     m_sounds.LoadSound(section, "snd_holster", "sndHide");
+    if (pSettings->line_exist(section, "snd_switch"))
+        m_sounds.LoadSound(section, "snd_switch", "sndSwitch");
 
-    m_light_enabled = pSettings->r_bool(section, "light_enabled");
+    const bool lightEnabled = pSettings->r_bool(section, "light_enabled");
+    DetectorExtendedConfig& config = detectorExtendedConfigs[this];
+    config.lightEnableFromIdle = pSettings->read_if_exists<bool>(section, "light_enable_from_idle", lightEnabled);
+    config.lightDisableFromIdle = pSettings->read_if_exists<bool>(section, "light_disable_from_idle", lightEnabled);
+    config.lightHudOnly = pSettings->read_if_exists<bool>(section, "light_hud_only", false);
+    config.lightStateControlled = lightEnabled || pSettings->line_exist(section, "light_enable_from_idle") ||
+        pSettings->line_exist(section, "light_disable_from_idle");
+    config.idleZoom = HudSection().size() && pSettings->line_exist(HudSection().c_str(), "anm_zoom");
+
+    m_light_enabled = lightEnabled;
     m_light_range = pSettings->r_float(section, "light_range");
     m_light_brightness = pSettings->r_float(section, "light_brightness");
     m_light_angle = pSettings->r_float(section, "light_angle");
@@ -293,17 +382,16 @@ void CCustomDetector::shedule_Update(u32 dt)
     Fvector P;
     P.set(H_Parent()->Position());
 
-    if (IsUsingCondition() && GetCondition() <= 0.01f)
-        return;
-
-    m_artefacts.feel_touch_update(P, m_fAfDetectRadius);
+    const float detection_radius = IsUsingCondition() && GetCondition() <= 0.01f ? 0.f : m_fAfDetectRadius;
+    m_artefacts.feel_touch_update(P, detection_radius);
 }
 
 bool CCustomDetector::IsWorking() { return m_bWorking && H_Parent() && H_Parent() == Level().CurrentViewEntity(); }
 void CCustomDetector::UpfateWork()
 {
     UpdateAf();
-    m_ui->update();
+    if (m_ui)
+        m_ui->update();
 }
 
 void CCustomDetector::UpdateVisibility()
@@ -323,11 +411,29 @@ void CCustomDetector::UpdateVisibility()
             CWeapon* wpn = smart_cast<CWeapon*>(i0->m_parent_hud_item);
             if (wpn)
             {
-                u32 state = wpn->GetState();
-                if (wpn->IsZoomed() || state == CWeapon::eReload || state == CWeapon::eSwitch)
+                const u32 weaponState = wpn->GetState();
+                const DetectorExtendedConfig& config = detector_extended_config(this);
+                if (weaponState == CWeapon::eReload || weaponState == CWeapon::eSwitch)
                 {
                     HideDetector(true);
                     m_bNeedActivation = true;
+                }
+                else if (wpn->IsZoomed())
+                {
+                    if (config.idleZoom)
+                    {
+                        if (GetState() != eIdleZoom)
+                            SwitchState(eIdleZoom);
+                    }
+                    else
+                    {
+                        HideDetector(true);
+                        m_bNeedActivation = true;
+                    }
+                }
+                else if (GetState() == eIdleZoom)
+                {
+                    SwitchState(eIdle);
                 }
             }
         }
@@ -358,6 +464,8 @@ void CCustomDetector::UpdateCL()
     UpdateVisibility();
     if (!IsWorking())
         return;
+
+    DrainCondition(Device.fTimeDelta);
     UpfateWork();
 }
 
@@ -376,8 +484,9 @@ void CCustomDetector::OnH_B_Independent(bool just_before_destroy)
 
     m_artefacts.clear();
     if (m_light)
-        m_light->set_active(true);
-    if (m_particles_enabled && m_particles_name.size())
+        m_light->set_active(m_light_enabled && !detector_extended_config(this).lightHudOnly);
+    if (m_particles_enabled && m_particles_bone != BI_NONE && m_particles_name.size() &&
+        xr_strcmp(m_particles_name.c_str(), "none"))
         StartParticles(m_particles_name, m_particles_bone, Fvector().set(0.0f, 1.0f, 0.0f), ID(), -1, false);
     CParticlesObject::Destroy(m_hud_particles);
 
@@ -397,6 +506,8 @@ void CCustomDetector::OnMoveToRuck(const SInvItemPlace& prev)
         SwitchState(eHidden);
         g_player_hud->detach_item(this);
     }
+    if (m_light)
+        m_light->set_active(false);
     TurnDetectorInternal(false);
     StopCurrentAnimWithoutCallback();
 }
@@ -425,14 +536,18 @@ void CCustomDetector::UpdateHudParticles(bool active)
     if (!m_hud_particles_enabled)
         return;
 
-    if (!active)
+    if (!active || !m_particles_name.size() || !xr_strcmp(m_particles_name.c_str(), "none"))
     {
         CParticlesObject::Destroy(m_hud_particles);
         return;
     }
 
-    m_hud_particles = CParticlesObject::Create(pSettings->r_string(cNameSect(), "particles"), FALSE);
-    m_hud_particles->Play(true);
+    if (!m_hud_particles)
+    {
+        m_hud_particles = CParticlesObject::Create(m_particles_name.c_str(), FALSE);
+        if (m_hud_particles)
+            m_hud_particles->Play(true);
+    }
 }
 
 void CCustomDetector::UpdateDeviceEffects()
@@ -465,6 +580,16 @@ void CCustomDetector::UpdateDeviceEffects()
                     animated.mul_rgb(m_light_brightness);
                     m_light->set_color(animated);
                 }
+            }
+
+            attachable_hud_item* hudItem = HudItemData();
+            if (hudItem)
+            {
+                firedeps dependencies;
+                hudItem->setup_firedeps(dependencies);
+                m_light->set_position(dependencies.vLastFP2);
+                m_light->set_rotation(
+                    dependencies.m_FireParticlesXForm.k, dependencies.m_FireParticlesXForm.i);
             }
         }
     }

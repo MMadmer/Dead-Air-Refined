@@ -104,6 +104,7 @@ protected:
 
 public:
     virtual bool register_schedule() const;
+    bool ActorCanCapture() const;
 
 public:
     virtual void on_physics_disable();

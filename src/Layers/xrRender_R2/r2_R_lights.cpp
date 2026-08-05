@@ -65,6 +65,22 @@ void CRender::render_lights(light_Package& LP)
     }
 
     auto& cmd_list = get_imm_context().cmd_list;
+    const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
+        ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
+    const auto accumulateUnshadowedSpot = [&](light* L)
+    {
+        const bool volumeOnlyPointFace =
+            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow;
+        LR.compute_xf_spot(L);
+        if (!volumeOnlyPointFace)
+        {
+            Target->accum_spot(cmd_list, L);
+            render_indirect(L);
+        }
+        if (volumetricLightsEnabled && L->flags.bVolumetric)
+            Target->accum_volumetric(cmd_list, L);
+    };
+
     Target->rt_smap_depth->set_slice_read(0);
 
     PIX_EVENT(SHADOWED_LIGHTS);
@@ -106,7 +122,9 @@ void CRender::render_lights(light_Package& LP)
             const bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             const bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
                 !dsgraph.mapSorted.empty();
-            if (bNormal || bSpecial)
+            const bool renderDetails = ps_r_sun_details >= detail_shadow_high && Details &&
+                Details->HasRenderableDetails();
+            if (bNormal || bSpecial || renderDetails)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
@@ -117,8 +135,8 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
                 dsgraph.cmd_list.set_xform_project(L->X.S.project);
                 dsgraph.render_graph(0);
-                if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))
-                    Details->Render(dsgraph.cmd_list);
+                if (renderDetails)
+                    Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
                 L->X.S.transluent = FALSE;
                 if (bSpecial)
                 {
@@ -233,11 +251,7 @@ void CRender::render_lights(light_Package& LP)
             LP.v_spot.pop_back();
             L2->vis_update();
             if (L2->vis.visible)
-            {
-                LR.compute_xf_spot(L2);
-                Target->accum_spot(cmd_list, L2);
-                render_indirect(L2);
-            }
+                accumulateUnshadowedSpot(L2);
         }
 
         PIX_EVENT(SPOT_LIGHTS_ACCUM_VOLUMETRIC);
@@ -253,7 +267,7 @@ void CRender::render_lights(light_Package& LP)
             }
 
             PIX_EVENT(ACCUM_VOLUMETRIC);
-            if (RImplementation.o.advancedpp && ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS))
+            if (volumetricLightsEnabled)
                 for (light* p_light : L_spot_s)
                     Target->accum_volumetric(cmd_list, p_light);
 
@@ -287,11 +301,7 @@ void CRender::render_lights(light_Package& LP)
         {
             p_light->vis_update();
             if (p_light->vis.visible)
-            {
-                LR.compute_xf_spot(p_light);
-                render_indirect(p_light);
-                Target->accum_spot(cmd_list, p_light);
-            }
+                accumulateUnshadowedSpot(p_light);
         }
         Lvec.clear();
     }

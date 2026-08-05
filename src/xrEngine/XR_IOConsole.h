@@ -132,6 +132,7 @@ public:
     int GetInteger(pcstr cmd, int& min, int& max) const;
     pcstr GetString(pcstr cmd) const;
     pcstr GetToken(pcstr cmd) const;
+    bool GetTokenValue(pcstr cmd, u32& value) const;
     const xr_token* GetXRToken(pcstr cmd) const;
     Fvector GetFVector(pcstr cmd) const;
     Fvector* GetFVectorPtr(pcstr cmd) const;

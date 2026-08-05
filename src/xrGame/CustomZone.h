@@ -108,11 +108,15 @@ protected:
         eUseSecondaryHit = (1 << 17),
         eVisibleByDetector = (1 << 18),
         eSpawnBlowoutArtefacts = (1 << 19),
+        eIgnoreAlive = (1 << 20),
+        eIgnoreBig = (1 << 21),
     };
 
     u32 m_owner_id;
     u32 m_ttl;
     Flags32 m_zone_flags;
+    bool m_useExtraLight;
+    u32 m_idleLightQuality;
 
     //максимальная сила заряда зоны
     float m_fMaxPower;
@@ -241,6 +245,7 @@ protected:
 
     //подсветка idle состояния
     ref_light m_pIdleLight;
+    ref_light m_pIdleLight2;
     Fcolor m_IdleLightColor;
     float m_fIdleLightRange;
     float m_fIdleLightRangeDelta;

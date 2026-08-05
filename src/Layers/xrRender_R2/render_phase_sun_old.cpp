@@ -446,13 +446,17 @@ void render_sun_old::render_sun()
         bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
         bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
             !dsgraph.mapSorted.empty();
-        if (bNormal || bSpecial)
+        const bool renderDetails = ps_r_sun_details >= detail_shadow_high && RImplementation.Details &&
+            RImplementation.Details->HasRenderableDetails();
+        if (bNormal || bSpecial || renderDetails)
         {
             RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, SE_SUN_FAR);
             dsgraph.cmd_list.set_xform_world(Fidentity);
             dsgraph.cmd_list.set_xform_view(Fidentity);
             dsgraph.cmd_list.set_xform_project(sun->X.D[SE_SUN_FAR].combine);
             dsgraph.render_graph(0);
+            if (renderDetails)
+                RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
             sun->X.D[SE_SUN_FAR].transluent = FALSE;
             if (bSpecial)
             {
@@ -670,15 +674,17 @@ void render_sun_old::render_sun_near()
         bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
         bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
             !dsgraph.mapSorted.empty();
-        if (bNormal || bSpecial)
+        const bool renderDetails = ps_r_sun_details >= detail_shadow_medium && RImplementation.Details &&
+            RImplementation.Details->HasRenderableDetails();
+        if (bNormal || bSpecial || renderDetails)
         {
             RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, SE_SUN_NEAR);
             dsgraph.cmd_list.set_xform_world(Fidentity);
             dsgraph.cmd_list.set_xform_view(Fidentity);
             dsgraph.cmd_list.set_xform_project(sun->X.D[SE_SUN_NEAR].combine);
             dsgraph.render_graph(0);
-            if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))
-                RImplementation.Details->Render(dsgraph.cmd_list);
+            if (renderDetails)
+                RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
             sun->X.D[SE_SUN_NEAR].transluent = FALSE;
             if (bSpecial)
             {

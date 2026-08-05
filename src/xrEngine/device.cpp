@@ -26,13 +26,25 @@ ENGINE_API bool g_bBenchmark = false;
 string512 g_sBenchmarkName;
 
 int ps_fps_limit = 501;
-// Retained for existing user.ltx files; frame pacing now uses the global limit in every game state.
+// Retained for existing user.ltx files; frame pacing uses the global limit in every game state.
 int ps_fps_limit_in_menu = 60;
 
 bool g_bLoaded = false;
 ref_light precache_light = 0;
 
 using namespace xray;
+
+namespace
+{
+void destroy_precache_light()
+{
+    if (!precache_light)
+        return;
+
+    precache_light->set_active(false);
+    precache_light.destroy();
+}
+}
 
 bool CRenderDevice::RenderBegin()
 {
@@ -77,11 +89,7 @@ void CRenderDevice::RenderEnd(void)
         if (!dwPrecacheFrame)
         {
             GEnv.Render->updateGamma();
-            if (precache_light)
-            {
-                precache_light->set_active(false);
-                precache_light.destroy();
-            }
+            destroy_precache_light();
             GEnv.Sound->set_master_volume(1.f);
             GEnv.Render->ResourcesDestroyNecessaryTextures();
             Memory.mem_compact();
@@ -119,7 +127,12 @@ void CRenderDevice::PreCache(u32 amount, bool wait_user_input)
         amount = 0;
 
     dwPrecacheFrame = dwPrecacheTotal = amount;
-    if (amount && !precache_light && g_pGameLevel && g_loading_events.empty())
+    if (!amount)
+    {
+        destroy_precache_light();
+        return;
+    }
+    if (!precache_light && g_pGameLevel && g_loading_events.empty())
     {
         precache_light = GEnv.Render->light_create();
         precache_light->set_shadow(false);
@@ -269,7 +282,7 @@ void CRenderDevice::ProcessFrame()
     if (!BeforeFrame())
         return;
 
-    const u64 frameStartTime = TimerGlobal.GetElapsed_ms();
+    const auto frameStartTime = CTimerBase::Clock::now();
 
     FrameMove();
 
@@ -354,16 +367,13 @@ void CRenderDevice::ProcessFrame()
 
     TaskScheduler->Wait(processSeqParallel);
 
-    const u64 frameEndTime = TimerGlobal.GetElapsed_ms();
-    const u64 frameTime = frameEndTime - frameStartTime;
+    const int configuredLimit = GEnv.isDedicatedServer ? g_svDedicateServerUpdateReate : ps_fps_limit;
 
-    u32 updateDelta = 1000 / ps_fps_limit;
-
-    if (GEnv.isDedicatedServer)
-        updateDelta = 1000 / g_svDedicateServerUpdateReate;
-
-    if (frameTime < updateDelta)
-        Sleep(updateDelta - frameTime);
+    // Preserve sub-millisecond frame intervals instead of truncating 1000 / FPS.
+    const int frameLimit = std::max(configuredLimit, 1);
+    const auto frameDuration = std::chrono::duration_cast<CTimerBase::Clock::duration>(
+        std::chrono::duration<double>(1.0 / frameLimit));
+    std::this_thread::sleep_until(frameStartTime + frameDuration);
 
     if (!b_is_Active)
         Sleep(1);

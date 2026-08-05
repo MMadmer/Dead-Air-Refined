@@ -11,11 +11,14 @@
 #include "alife_space.h"
 #include "xrAICore/Navigation/game_graph_space.h"
 
+#include <memory>
+
 class CSavedGameWrapper
 {
 public:
     typedef ALife::_TIME_ID _TIME_ID;
     typedef GameGraph::_LEVEL_ID _LEVEL_ID;
+    static constexpr size_t maxSourceSize = 512ull * 1024 * 1024;
 
     struct SaveMetadata
     {
@@ -23,6 +26,23 @@ public:
         size_t compressedSize{};
         u64 saveId{};
         bool protectedFormat{};
+    };
+
+    struct PreparedSource
+    {
+        const u8* data{};
+        size_t size{};
+        pcstr path{};
+        std::shared_ptr<const void> lifetime;
+
+        explicit operator bool() const { return data && size && path && lifetime; }
+    };
+
+    enum class PreparedLoadResult
+    {
+        Unavailable,
+        Invalid,
+        Ready
     };
 
 private:
@@ -37,10 +57,19 @@ public:
     static bool saved_game_exist(LPCSTR saved_game_name);
     static bool valid_saved_game(IReader& stream);
     static bool valid_saved_game(LPCSTR saved_game_name);
+    static bool recover_interrupted_save_file_for_commit(LPCSTR main_name);
+    static bool recover_interrupted_save(LPCSTR saved_game_name);
+    static bool recover_interrupted_transactions();
     static bool read_metadata(IReader& stream, SaveMetadata& metadata);
     static void begin_async_load(LPCSTR saved_game_name);
     static bool consume_async_load(
         LPCSTR saved_game_name, xr_vector<u8>& source_data, SaveMetadata& metadata);
+    static bool consume_async_load(LPCSTR saved_game_name, xr_vector<u8>& source_data,
+        SaveMetadata& metadata, u64& source_file_size, u32& source_file_checksum);
+    static bool consume_async_load(LPCSTR saved_game_name, PreparedSource& source_data,
+        SaveMetadata& metadata, u64& source_file_size, u32& source_file_checksum);
+    static PreparedLoadResult consume_prepared_load(LPCSTR saved_game_name, PreparedSource& source_data,
+        SaveMetadata& metadata, u64& source_file_size, u32& source_file_checksum);
     inline const _TIME_ID& game_time() const;
     inline const _LEVEL_ID& level_id() const;
     inline LPCSTR level_name() const;

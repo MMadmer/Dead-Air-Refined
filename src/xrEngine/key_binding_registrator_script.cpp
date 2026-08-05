@@ -71,6 +71,7 @@ void key_binding_registrator::script_register(lua_State* luaState)
                 value("kWPN_5",                     int(kWPN_5)),
                 value("kWPN_6",                     int(kWPN_6)),
                 value("kWPN_7",                     int(kWPN_7)),
+                value("kWPN_8",                     int(kWPN_8)),
                 value("kARTEFACT",                  int(kARTEFACT)),
                 value("kWPN_NEXT",                  int(kWPN_NEXT)),
                 value("kWPN_FIRE",                  int(kWPN_FIRE)),

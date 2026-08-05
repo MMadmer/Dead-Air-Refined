@@ -17,6 +17,10 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if defined(USE_DX11)
+void flush_gamesave_screenshots();
+#endif
+
 CRender RImplementation;
 
 //////////////////////////////////////////////////////////////////////////
@@ -526,6 +530,7 @@ void CRender::create()
 void CRender::destroy()
 {
 #if defined(USE_DX11)
+    flush_gamesave_screenshots();
     FluidManager.Destroy();
 #endif
     q_sync_point.Destroy();
@@ -626,7 +631,10 @@ void CRender::OnCameraUpdated()
 
     ProcessHOMTask = &HOM.DispatchMTRender();
     if (Details)
+    {
+        Details->UpdateRenderState();
         Details->DispatchMTCalc();
+    }
 }
 
 void CRender::OnFrame()

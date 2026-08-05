@@ -38,6 +38,21 @@ class CWeaponList;
 class CEffectorBobbing;
 class CHolderCustom;
 struct SShootingEffector;
+
+struct SActorAdrenalineSaveState
+{
+    u32 sectionChecksum{};
+    float remaining{};
+    u16 objectId{u16(-1)};
+};
+
+struct SActorAdrenalineSaveCaptureState
+{
+    xr_vector<SActorAdrenalineSaveState> records;
+    u32 nextObjectId{};
+    bool initialized{};
+    bool completed{};
+};
 struct SSleepEffector;
 class CSleepEffectorPP;
 class CInventoryBox;
@@ -252,6 +267,15 @@ public:
     s32 GetZoomRndSeed() { return m_ZoomRndSeed; };
     void SetShotRndSeed(s32 Seed = 0);
     s32 GetShotRndSeed() { return m_ShotRndSeed; };
+    void SetAdrenalineTime(float time);
+    static void CollectAdrenalineSaveState(xr_vector<SActorAdrenalineSaveState>& result);
+    static void BeginAdrenalineSaveCapture(SActorAdrenalineSaveCaptureState& state);
+    [[nodiscard]] static bool ContinueAdrenalineSaveCapture(
+        SActorAdrenalineSaveCaptureState& state, float budgetMilliseconds);
+    static void StageAdrenalineSaveState(const xr_vector<SActorAdrenalineSaveState>& state);
+    static void ClearAdrenalineSaveState();
+    static void ForgetAdrenalineSaveState(const CSE_Abstract& serverObject);
+    void ConsumeAdrenalineSaveState(u16 objectId);
 public:
     void detach_Vehicle();
     void steer_Vehicle(float angle);
@@ -266,6 +290,7 @@ protected:
 
     bool use_Vehicle(CHolderCustom* object);
     void ActorUse();
+    void ActorCarry();
 
 protected:
     BOOL m_bAnimTorsoPlayed;
@@ -440,6 +465,8 @@ public:
     float m_fCrouchFactor;
     float m_fClimbFactor;
     float m_fSprintFactor;
+    float SprintMovementFactor(
+        float activeItemWeight, float weaponWeight, float outfitWeight, float runFactor) const;
     float m_fBreath{0.2f};
     float m_fRecoilCoeff{1.0f};
     float m_fZoomInertion{};
@@ -721,7 +748,13 @@ public:
     virtual void OnNextWeaponSlot();
     virtual void OnPrevWeaponSlot();
     void SwitchNightVision();
+    void SwitchNightVision(bool visionOn, bool useSounds = true);
+    void RestoreNightVision();
+    bool GetNightVisionStatus() const;
     void SwitchTorch();
+    void StartKick();
+    void EndKick();
+    [[nodiscard]] bool IsKickActive() const;
 
 #ifndef MASTER_GOLD
     void NoClipFly(int cmd);

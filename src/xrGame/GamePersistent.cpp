@@ -35,6 +35,7 @@
 #include "AnselManager.h"
 #include "alife_storage_manager.h"
 #include "xrCore/Threading/TaskManager.hpp"
+#include "xrEngine/xr_ioc_cmd.h"
 
 #include "xrPhysics/IPHWorld.h"
 
@@ -806,6 +807,8 @@ void CGamePersistent::SetPickableEffectorDOF(bool bSet)
 
 void CGamePersistent::GetCurrentDof(Fvector3& dof) { dof = m_dof[1]; }
 void CGamePersistent::SetBaseDof(const Fvector3& dof) { m_dof[0] = m_dof[1] = m_dof[2] = m_dof[3] = dof; }
+float CGamePersistent::GetScopeDofRadius() { return m_scopeDofRadius; }
+void CGamePersistent::SetScopeDofRadius(float radius) { m_scopeDofRadius = std::clamp(radius, 0.f, 2.f); }
 void CGamePersistent::SetEffectorDOF(const Fvector& needed_dof)
 {
     if (m_bPickableDOF)
@@ -820,26 +823,43 @@ void CGamePersistent::RestoreEffectorDOF() { SetEffectorDOF(m_dof[3]); }
 //	m_dof		[4];	// 0-dest 1-current 2-from 3-original
 void CGamePersistent::UpdateDof()
 {
-    float minFloat;
-    float maxFloat;
-    int minInteger;
-    int maxInteger;
-    m_bPickableDOF = Console->GetBool("r2_dof_pickable");
-    const float transitionTime = Console->GetFloat("r2_dof_time", minFloat, maxFloat);
-    const int diffNear = Console->GetInteger("r2_dof_diff_near", minInteger, maxInteger);
-    const int diffFar = Console->GetInteger("r2_dof_diff_far", minInteger, maxInteger);
+    static CCC_Integer* pickableCommand{};
+    static CCC_Float* transitionTimeCommand{};
+    static CCC_Integer* diffNearCommand{};
+    static CCC_Integer* diffFarCommand{};
+
+    // Cache the renderer-owned commands without linking xrGame to a concrete renderer DLL.
+    if (!pickableCommand)
+        pickableCommand = dynamic_cast<CCC_Integer*>(Console->GetCommand("r2_dof_pickable"));
+    if (!transitionTimeCommand)
+        transitionTimeCommand = dynamic_cast<CCC_Float*>(Console->GetCommand("r2_dof_time"));
+    if (!diffNearCommand)
+        diffNearCommand = dynamic_cast<CCC_Integer*>(Console->GetCommand("r2_dof_diff_near"));
+    if (!diffFarCommand)
+        diffFarCommand = dynamic_cast<CCC_Integer*>(Console->GetCommand("r2_dof_diff_far"));
+    if (!pickableCommand || !transitionTimeCommand || !diffNearCommand || !diffFarCommand)
+        return;
+
+    m_bPickableDOF = pickableCommand->GetValue() != 0;
 
     if (m_bPickableDOF)
     {
         Fvector pick_dof;
         pick_dof.y = HUD().GetCurrentRayQuery().range;
-        pick_dof.x = pick_dof.y + static_cast<float>(diffNear);
-        pick_dof.z = pick_dof.y + static_cast<float>(diffFar);
+        pick_dof.x = pick_dof.y + static_cast<float>(diffNearCommand->GetValue());
+        pick_dof.z = pick_dof.y + static_cast<float>(diffFarCommand->GetValue());
         m_dof[0] = pick_dof;
         m_dof[2] = m_dof[1]; // current
     }
     if (m_dof[1].similar(m_dof[0]))
         return;
+
+    const float transitionTime = transitionTimeCommand->GetValue();
+    if (transitionTime <= EPS)
+    {
+        m_dof[1] = m_dof[0];
+        return;
+    }
 
     float td = Device.fTimeDelta;
     Fvector diff;

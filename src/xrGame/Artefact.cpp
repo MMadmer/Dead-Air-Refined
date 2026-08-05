@@ -18,10 +18,147 @@
 #include "artefact_activation.h"
 
 #include "ai_space.h"
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
 #include "xrAICore/Navigation/PatrolPath/patrol_path.h"
 #include "xrAICore/Navigation/PatrolPath/patrol_path_storage.h"
+#include "xrCommon/xr_hash_map.h"
 
 #define FASTMODE_DISTANCE (50.f) // distance to camera from sphere, when zone switches to fast update sequence
+
+namespace
+{
+enum EArtefactOverrideValue : u32
+{
+    eOverrideWeight,
+    eOverrideHealth,
+    eOverrideRadiation,
+    eOverrideSatiety,
+    eOverridePower,
+    eOverrideBleeding,
+    eOverrideAdditionalWeight,
+    eOverrideBurn,
+    eOverrideStrike,
+    eOverrideShock,
+    eOverrideWound,
+    eOverrideRadiationImmunity,
+    eOverrideTelepatic,
+    eOverrideChemicalBurn,
+    eOverrideExplosion,
+    eOverrideFireWound,
+};
+
+static_assert(eOverrideFireWound + 1 == artefactOverrideValueCount);
+constexpr u32 artefactOverrideKnownMask = (1u << artefactOverrideValueCount) - 1u;
+
+struct ArtefactOverrideRuntimeState
+{
+    CSE_Abstract* serverEntity{};
+    u32 sectionChecksum{};
+    u32 changedMask{};
+    u16 objectId{u16(-1)};
+};
+
+// Side maps keep runtime overrides without changing the legacy object or save layouts.
+xr_flat_hash_map<const CArtefact*, ArtefactOverrideRuntimeState> artefactOverrideStates;
+xr_flat_hash_map<const CSE_Abstract*, SArtefactOverrideSaveState> persistentArtefactOverrides;
+xr_flat_hash_map<u16, SArtefactOverrideSaveState> stagedArtefactOverrides;
+
+u32 artefact_section_checksum(pcstr section)
+{
+    return crc32(section, static_cast<u32>(xr_strlen(section)));
+}
+
+CSE_Abstract* artefact_server_entity(u16 objectId)
+{
+    return ai().get_alife() ? ai().alife().objects().object(objectId, true) : nullptr;
+}
+
+u32 artefact_immunity_override_index(ALife::EHitType hitType)
+{
+    switch (hitType)
+    {
+    case ALife::eHitTypeBurn: return eOverrideBurn;
+    case ALife::eHitTypeStrike: return eOverrideStrike;
+    case ALife::eHitTypeShock: return eOverrideShock;
+    case ALife::eHitTypeWound: return eOverrideWound;
+    case ALife::eHitTypeRadiation: return eOverrideRadiationImmunity;
+    case ALife::eHitTypeTelepatic: return eOverrideTelepatic;
+    case ALife::eHitTypeChemicalBurn: return eOverrideChemicalBurn;
+    case ALife::eHitTypeExplosion: return eOverrideExplosion;
+    case ALife::eHitTypeFireWound: return eOverrideFireWound;
+    default: return artefactOverrideValueCount;
+    }
+}
+
+SArtefactOverrideSaveState make_artefact_override_record(
+    const CArtefact& artefact, const ArtefactOverrideRuntimeState& state)
+{
+    SArtefactOverrideSaveState record;
+    record.sectionChecksum = state.sectionChecksum;
+    record.changedMask = state.changedMask & artefactOverrideKnownMask;
+    record.objectId = state.objectId;
+    record.values[eOverrideWeight] = artefact.Weight();
+    record.values[eOverrideHealth] = artefact.GetHealthPower();
+    record.values[eOverrideRadiation] = artefact.GetRadiationPower();
+    record.values[eOverrideSatiety] = artefact.GetSatietyPower();
+    record.values[eOverridePower] = artefact.GetPowerPower();
+    record.values[eOverrideBleeding] = artefact.GetBleedingPower();
+    record.values[eOverrideAdditionalWeight] = artefact.AdditionalInventoryWeight();
+    record.values[eOverrideBurn] = artefact.ArtefactHitImmunity(ALife::eHitTypeBurn);
+    record.values[eOverrideStrike] = artefact.ArtefactHitImmunity(ALife::eHitTypeStrike);
+    record.values[eOverrideShock] = artefact.ArtefactHitImmunity(ALife::eHitTypeShock);
+    record.values[eOverrideWound] = artefact.ArtefactHitImmunity(ALife::eHitTypeWound);
+    record.values[eOverrideRadiationImmunity] = artefact.ArtefactHitImmunity(ALife::eHitTypeRadiation);
+    record.values[eOverrideTelepatic] = artefact.ArtefactHitImmunity(ALife::eHitTypeTelepatic);
+    record.values[eOverrideChemicalBurn] = artefact.ArtefactHitImmunity(ALife::eHitTypeChemicalBurn);
+    record.values[eOverrideExplosion] = artefact.ArtefactHitImmunity(ALife::eHitTypeExplosion);
+    record.values[eOverrideFireWound] = artefact.ArtefactHitImmunity(ALife::eHitTypeFireWound);
+    return record;
+}
+
+bool artefact_override_values_are_finite(const SArtefactOverrideSaveState& record)
+{
+    const u32 knownMask = record.changedMask & artefactOverrideKnownMask;
+    for (u32 index = 0; index < artefactOverrideValueCount; ++index)
+    {
+        if ((knownMask & (1u << index)) && !std::isfinite(record.values[index]))
+            return false;
+    }
+    return true;
+}
+
+void sync_artefact_override(const CArtefact* artefact)
+{
+    const auto runtime = artefactOverrideStates.find(artefact);
+    if (runtime == artefactOverrideStates.end() || !runtime->second.serverEntity)
+        return;
+
+    if (!(runtime->second.changedMask & artefactOverrideKnownMask))
+    {
+        persistentArtefactOverrides.erase(runtime->second.serverEntity);
+        return;
+    }
+
+    persistentArtefactOverrides.insert_or_assign(
+        runtime->second.serverEntity, make_artefact_override_record(*artefact, runtime->second));
+}
+
+void mark_artefact_override(CArtefact* artefact, u32 index)
+{
+    ArtefactOverrideRuntimeState& state = artefactOverrideStates[artefact];
+    if (!state.sectionChecksum)
+        state.sectionChecksum = artefact_section_checksum(artefact->cNameSect().c_str());
+    if (state.objectId == u16(-1) && artefact->ID() != u16(-1))
+    {
+        state.objectId = artefact->ID();
+        state.serverEntity = artefact_server_entity(state.objectId);
+    }
+
+    state.changedMask |= 1u << index;
+    sync_artefact_override(artefact);
+}
+}
 
 #define CHOOSE_MAX(x, inst_x, y, inst_y, z, inst_z) \
     if (x > y)                                      \
@@ -48,10 +185,18 @@ CArtefact::CArtefact()
     shedule.t_max = 50;
 }
 
-CArtefact::~CArtefact() {}
+CArtefact::~CArtefact()
+{
+    artefactOverrideStates.erase(this);
+}
+
 void CArtefact::Load(LPCSTR section)
 {
     inherited::Load(section);
+
+    ArtefactOverrideRuntimeState& overrideState = artefactOverrideStates[this];
+    overrideState = {};
+    overrideState.sectionChecksum = artefact_section_checksum(section);
 
     if (pSettings->line_exist(section, "particles"))
         m_sParticlesName = pSettings->r_string(section, "particles");
@@ -81,12 +226,298 @@ void CArtefact::Load(LPCSTR section)
     m_additional_weight = pSettings->read_if_exists<float>(section, "additional_inventory_weight", 0.0f);
 }
 
+void CArtefact::SetRuntimeWeight(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact weight override must be finite");
+    m_weight = value;
+    mark_artefact_override(this, eOverrideWeight);
+}
+
+void CArtefact::SetHealthPower(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact health override must be finite");
+    m_fHealthRestoreSpeed = value;
+    mark_artefact_override(this, eOverrideHealth);
+}
+
+void CArtefact::SetRadiationPower(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact radiation override must be finite");
+    m_fRadiationRestoreSpeed = value;
+    mark_artefact_override(this, eOverrideRadiation);
+}
+
+void CArtefact::SetSatietyPower(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact satiety override must be finite");
+    m_fSatietyRestoreSpeed = value;
+    mark_artefact_override(this, eOverrideSatiety);
+}
+
+void CArtefact::SetPowerPower(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact power override must be finite");
+    m_fPowerRestoreSpeed = value;
+    mark_artefact_override(this, eOverridePower);
+}
+
+void CArtefact::SetBleedingPower(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact bleeding override must be finite");
+    m_fBleedingRestoreSpeed = value;
+    mark_artefact_override(this, eOverrideBleeding);
+}
+
+void CArtefact::SetAdditionalInventoryWeight(float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact inventory-weight override must be finite");
+    m_additional_weight = value;
+    mark_artefact_override(this, eOverrideAdditionalWeight);
+}
+
+void CArtefact::SetArtefactHitImmunity(ALife::EHitType hitType, float value)
+{
+    R_ASSERT2(std::isfinite(value), "Artefact immunity override must be finite");
+    m_ArtefactHitImmunities.SetHitImmunity(hitType, value);
+
+    const u32 index = artefact_immunity_override_index(hitType);
+    if (index < artefactOverrideValueCount)
+        mark_artefact_override(this, index);
+}
+
+void CArtefact::CollectOverrideSaveState(xr_vector<SArtefactOverrideSaveState>& result)
+{
+    SArtefactOverrideSaveCaptureState state;
+    BeginOverrideSaveCapture(state);
+    while (!ContinueOverrideSaveCapture(state, flt_max))
+    {
+    }
+    result = std::move(state.records);
+}
+
+void CArtefact::BeginOverrideSaveCapture(SArtefactOverrideSaveCaptureState& state)
+{
+    state = {};
+    state.initialized = true;
+    state.completed = !ai().get_alife() ||
+        (persistentArtefactOverrides.empty() && stagedArtefactOverrides.empty());
+}
+
+bool CArtefact::ContinueOverrideSaveCapture(
+    SArtefactOverrideSaveCaptureState& state, float budgetMilliseconds)
+{
+    if (!state.initialized)
+        return false;
+    if (state.completed)
+        return true;
+    if (!(budgetMilliseconds > 0.0f))
+        return false;
+    if (!ai().get_alife())
+    {
+        state.records.clear();
+        state.completed = true;
+        return true;
+    }
+
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    CTimer budgetTimer;
+    if (!unlimitedBudget)
+        budgetTimer.Start();
+
+    u32 batchObjects = 0;
+    while (CSE_ALifeDynamicObject* object = ai().alife().objects().next_save_extension_object(
+        ESaveExtensionObjectType::Artefact, state.nextObjectId))
+    {
+        CSE_ALifeItemArtefact* serverArtefact = static_cast<CSE_ALifeItemArtefact*>(object);
+        const u16 objectId = serverArtefact->ID;
+
+        if (objectId != u16(-1))
+        {
+            SArtefactOverrideSaveState record;
+            bool hasRecord = false;
+            const u32 sectionChecksum = artefact_section_checksum(serverArtefact->s_name.c_str());
+
+            const auto staged = stagedArtefactOverrides.find(objectId);
+            if (staged != stagedArtefactOverrides.end())
+            {
+                if (staged->second.objectId == objectId && staged->second.sectionChecksum == sectionChecksum &&
+                    (staged->second.changedMask & artefactOverrideKnownMask) &&
+                    artefact_override_values_are_finite(staged->second))
+                {
+                    record = staged->second;
+                    hasRecord = true;
+                }
+                else
+                {
+                    stagedArtefactOverrides.erase(staged);
+                }
+            }
+
+            const auto persistent = persistentArtefactOverrides.find(serverArtefact);
+            if (persistent != persistentArtefactOverrides.end())
+            {
+                if (persistent->second.objectId == objectId && persistent->second.sectionChecksum == sectionChecksum &&
+                    (persistent->second.changedMask & artefactOverrideKnownMask) &&
+                    artefact_override_values_are_finite(persistent->second))
+                {
+                    record = persistent->second;
+                    hasRecord = true;
+                }
+                else
+                {
+                    persistentArtefactOverrides.erase(persistent);
+                }
+            }
+
+            CArtefact* artefact =
+                g_pGameLevel ? smart_cast<CArtefact*>(Level().Objects.net_Find(objectId)) : nullptr;
+            if (artefact)
+            {
+                const auto live = artefactOverrideStates.find(artefact);
+                if (live != artefactOverrideStates.end() && live->second.serverEntity == serverArtefact &&
+                    live->second.objectId == objectId && live->second.sectionChecksum == sectionChecksum &&
+                    (live->second.changedMask & artefactOverrideKnownMask))
+                {
+                    SArtefactOverrideSaveState liveRecord = make_artefact_override_record(*artefact, live->second);
+                    if (artefact_override_values_are_finite(liveRecord))
+                    {
+                        record = std::move(liveRecord);
+                        hasRecord = true;
+                    }
+                }
+            }
+
+            if (hasRecord)
+                state.records.push_back(std::move(record));
+        }
+
+        if (!unlimitedBudget && ++batchObjects == 16)
+        {
+            batchObjects = 0;
+            if (budgetTimer.GetElapsed_sec() * 1000.0f >= budgetMilliseconds)
+                return false;
+        }
+    }
+
+    state.completed = true;
+    return true;
+}
+
+void CArtefact::StageOverrideSaveState(const xr_vector<SArtefactOverrideSaveState>& state)
+{
+    artefactOverrideStates.clear();
+    persistentArtefactOverrides.clear();
+    stagedArtefactOverrides.clear();
+    stagedArtefactOverrides.reserve(state.size());
+
+    for (const SArtefactOverrideSaveState& source : state)
+    {
+        SArtefactOverrideSaveState record = source;
+        record.changedMask &= artefactOverrideKnownMask;
+        if (record.objectId == u16(-1) || !record.changedMask || !artefact_override_values_are_finite(record))
+            continue;
+
+        stagedArtefactOverrides.insert_or_assign(record.objectId, record);
+    }
+}
+
+void CArtefact::ClearOverrideSaveState()
+{
+    artefactOverrideStates.clear();
+    persistentArtefactOverrides.clear();
+    stagedArtefactOverrides.clear();
+}
+
+void CArtefact::ForgetOverrideSaveState(const CSE_Abstract& serverObject)
+{
+    persistentArtefactOverrides.erase(&serverObject);
+    stagedArtefactOverrides.erase(serverObject.ID);
+
+    for (auto& [artefact, state] : artefactOverrideStates)
+    {
+        if (state.serverEntity != &serverObject)
+            continue;
+
+        state.serverEntity = nullptr;
+        state.objectId = u16(-1);
+    }
+}
+
+void CArtefact::ConsumeOverrideSaveState(u16 objectId)
+{
+    ArtefactOverrideRuntimeState& state = artefactOverrideStates[this];
+    state.objectId = objectId;
+    state.sectionChecksum = artefact_section_checksum(cNameSect().c_str());
+    state.serverEntity = artefact_server_entity(objectId);
+    state.changedMask = 0;
+
+    SArtefactOverrideSaveState record;
+    bool hasRecord = false;
+    const auto staged = stagedArtefactOverrides.find(objectId);
+    if (staged != stagedArtefactOverrides.end())
+    {
+        record = staged->second;
+        stagedArtefactOverrides.erase(staged);
+        hasRecord = true;
+    }
+    else if (state.serverEntity)
+    {
+        const auto persistent = persistentArtefactOverrides.find(state.serverEntity);
+        if (persistent != persistentArtefactOverrides.end())
+        {
+            record = persistent->second;
+            hasRecord = true;
+        }
+    }
+
+    if (state.serverEntity)
+        persistentArtefactOverrides.erase(state.serverEntity);
+    if (!hasRecord || record.objectId != objectId || record.sectionChecksum != state.sectionChecksum ||
+        !artefact_override_values_are_finite(record))
+    {
+        return;
+    }
+
+    const u32 mask = record.changedMask & artefactOverrideKnownMask;
+    for (u32 index = 0; index < artefactOverrideValueCount; ++index)
+    {
+        if (!(mask & (1u << index)))
+            continue;
+
+        const float value = record.values[index];
+        switch (index)
+        {
+        case eOverrideWeight: SetRuntimeWeight(value); break;
+        case eOverrideHealth: SetHealthPower(value); break;
+        case eOverrideRadiation: SetRadiationPower(value); break;
+        case eOverrideSatiety: SetSatietyPower(value); break;
+        case eOverridePower: SetPowerPower(value); break;
+        case eOverrideBleeding: SetBleedingPower(value); break;
+        case eOverrideAdditionalWeight: SetAdditionalInventoryWeight(value); break;
+        case eOverrideBurn: SetArtefactHitImmunity(ALife::eHitTypeBurn, value); break;
+        case eOverrideStrike: SetArtefactHitImmunity(ALife::eHitTypeStrike, value); break;
+        case eOverrideShock: SetArtefactHitImmunity(ALife::eHitTypeShock, value); break;
+        case eOverrideWound: SetArtefactHitImmunity(ALife::eHitTypeWound, value); break;
+        case eOverrideRadiationImmunity: SetArtefactHitImmunity(ALife::eHitTypeRadiation, value); break;
+        case eOverrideTelepatic: SetArtefactHitImmunity(ALife::eHitTypeTelepatic, value); break;
+        case eOverrideChemicalBurn: SetArtefactHitImmunity(ALife::eHitTypeChemicalBurn, value); break;
+        case eOverrideExplosion: SetArtefactHitImmunity(ALife::eHitTypeExplosion, value); break;
+        case eOverrideFireWound: SetArtefactHitImmunity(ALife::eHitTypeFireWound, value); break;
+        default: break;
+        }
+    }
+}
+
 bool CArtefact::net_Spawn(CSE_Abstract* DC)
 {
     if (pSettings->read_if_exists<bool>(cNameSect(), "can_be_controlled", false))
         m_detectorObj = xr_new<SArtefactDetectorsSupport>(this);
 
-    bool result = inherited::net_Spawn(DC);
+    const bool result = inherited::net_Spawn(DC);
+    if (!result || !DC)
+        return result;
+
+    ConsumeOverrideSaveState(DC->ID);
     SwitchAfParticles(true);
 
     StartLights();

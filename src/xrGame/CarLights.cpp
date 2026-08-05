@@ -178,12 +178,17 @@ bool CCarLights::IsLight(u16 bone_id)
 }
 bool CCarLights::findLight(u16 bone_id, SCarLight*& light)
 {
-    auto e = m_lights.end();
-    SCarLight find_light;
-    find_light.bone_id = bone_id;
-    auto i = std::find_if(m_lights.begin(), e, SFindLightPredicate(&find_light));
-    light = *i;
-    return i != e;
+    const auto end = m_lights.end();
+    const auto found = std::find_if(
+        m_lights.begin(), end, [bone_id](const SCarLight* candidate) { return candidate->bone_id == bone_id; });
+    if (found == end)
+    {
+        light = nullptr;
+        return false;
+    }
+
+    light = *found;
+    return true;
 }
 CCarLights::~CCarLights()
 {

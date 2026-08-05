@@ -26,9 +26,9 @@
 using namespace InventoryUtilities;
 
 // what to block
-u16 INV_STATE_LADDER = (1 << INV_SLOT_3 | 1 << SIDEARM_SLOT);
-u16 INV_STATE_CAR = INV_STATE_LADDER;
 u16 INV_STATE_BLOCK_ALL = 0xffff;
+u16 INV_STATE_LADDER = INV_STATE_BLOCK_ALL;
+u16 INV_STATE_CAR = INV_STATE_LADDER;
 u16 INV_STATE_INV_WND = INV_STATE_BLOCK_ALL;
 u16 INV_STATE_BUY_MENU = INV_STATE_BLOCK_ALL;
 int g_auto_ammo_unload = 0;
@@ -285,7 +285,21 @@ bool CInventory::DropItem(CGameObject* pObj, bool just_before_destroy, bool dont
         if (Level().CurrentViewEntity() == pActor_owner)
             CurrentGameUI()->OnInventoryAction(pIItem, GE_OWNERSHIP_REJECT);
     };
-    pObj->H_SetParent(0, dont_create_shell);
+    const CActor* actorOwner = smart_cast<const CActor*>(m_pOwner);
+    CInventoryItemObject* itemObject = smart_cast<CInventoryItemObject*>(pObj);
+    if (actorOwner && itemObject && !just_before_destroy)
+    {
+        CWeapon* weapon = itemObject->cast_weapon();
+        if (!(weapon ? weapon->HasActivationSpeedOverride() : itemObject->HasActivationSpeedOverride()))
+        {
+            Fvector direction = actorOwner->Direction();
+            direction.y = -M_SQRT1_2;
+            direction.normalize_safe();
+            itemObject->SetActivationSpeedOverride(direction * 7.0f);
+        }
+    }
+
+    pObj->H_SetParent(nullptr, dont_create_shell);
     return true;
 }
 
@@ -293,6 +307,9 @@ bool CInventory::DropItem(CGameObject* pObj, bool just_before_destroy, bool dont
 bool CInventory::Slot(u16 slot_id, PIItem pIItem, bool bNotActivate, bool strict_placement)
 {
     VERIFY(pIItem);
+
+    if (slot_id == NO_ACTIVE_SLOT || slot_id >= m_slots.size())
+        return false;
 
     if (ItemFromSlot(slot_id) == pIItem)
         return false;
@@ -584,7 +601,7 @@ void CInventory::Activate(u16 slot, bool bForce)
         }
         else
         {
-            if (slot == GRENADE_SLOT) // fake for grenade
+            if (!smart_cast<CActor*>(m_pOwner) && slot == GRENADE_SLOT) // fake for grenade
             {
                 PIItem gr = SameSlot(GRENADE_SLOT, NULL, true);
                 if (gr)
@@ -737,6 +754,9 @@ bool CInventory::Action(u16 cmd, u32 flags)
         }
     }
     break;
+    case kWPN_8:
+        b_send_event = true;
+        break;
     case kARTEFACT:
     {
         b_send_event = true;
@@ -846,7 +866,7 @@ void CInventory::Update()
 
             m_iActiveSlot = GetNextActiveSlot();
         }
-        if (GetNextActiveSlot() != NO_ACTIVE_SLOT &&
+        else if (GetNextActiveSlot() != NO_ACTIVE_SLOT &&
             ActiveItem() &&
             ActiveItem()->cast_hud_item() &&
             ActiveItem()->cast_hud_item()->IsHidden())
@@ -1007,9 +1027,14 @@ float CInventory::TotalWeight() const
 
 float CInventory::CalcTotalWeight()
 {
-    float weight = 0;
-    for (TIItemContainer::const_iterator it = m_all.begin(); m_all.end() != it; ++it)
-        weight += (*it)->Weight();
+    constexpr float equippedWeightFactor = 0.3f;
+
+    float weight = 0.0f;
+    for (const PIItem item : m_all)
+    {
+        const bool isEquipped = item->CurrPlace() == eItemPlaceSlot && ItemFromSlot(item->CurrSlot()) == item;
+        weight += item->Weight() * (isEquipped ? equippedWeightFactor : 1.0f);
+    }
 
     m_fTotalWeight = weight;
     return m_fTotalWeight;
@@ -1186,7 +1211,7 @@ bool CInventory::InRuck(const CInventoryItem* pIItem) const
 
 bool CInventory::CanPutInSlot(PIItem pIItem, u16 slot_id) const
 {
-    if (!m_bSlotsUseful)
+    if (!m_bSlotsUseful || slot_id == NO_ACTIVE_SLOT || slot_id >= m_slots.size())
         return false;
 
     if (!GetOwner()->CanPutInSlot(pIItem, slot_id))
@@ -1206,10 +1231,7 @@ bool CInventory::CanPutInSlot(PIItem pIItem, u16 slot_id) const
             return false;
     }
 
-    if (slot_id != NO_ACTIVE_SLOT && NULL == ItemFromSlot(slot_id))
-        return true;
-
-    return false;
+    return !ItemFromSlot(slot_id);
 }
 //проверяет можем ли поместить вещь на пояс,
 //при этом реально ничего не меняется
@@ -1320,6 +1342,9 @@ void CInventory::AddAvailableItems(TIItemContainer& items_container, bool for_tr
     for (TIItemContainer::const_iterator it = m_ruck.begin(); m_ruck.end() != it; ++it)
     {
         PIItem pIItem = *it;
+        if (!pIItem->CanShow())
+            continue;
+
         if (!for_trade || pIItem->CanTrade())
         {
             if (bOverride)
@@ -1340,6 +1365,9 @@ void CInventory::AddAvailableItems(TIItemContainer& items_container, bool for_tr
         for (TIItemContainer::const_iterator it = m_belt.begin(); m_belt.end() != it; ++it)
         {
             PIItem pIItem = *it;
+            if (!pIItem->CanShow())
+                continue;
+
             if (!for_trade || pIItem->CanTrade())
             {
                 if (bOverride)
@@ -1363,9 +1391,9 @@ void CInventory::AddAvailableItems(TIItemContainer& items_container, bool for_tr
         for (; I <= E; ++I)
         {
             PIItem item = ItemFromSlot(I);
-            if (item && (!for_trade || item->CanTrade()))
+            if (item && item->CanShow() && (!for_trade || item->CanTrade()))
             {
-                if (!SlotIsPersistent(I) || item->BaseSlot() == GRENADE_SLOT)
+                if (!SlotIsPersistent(I))
                 {
                     if (bOverride)
                     {

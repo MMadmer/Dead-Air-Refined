@@ -774,24 +774,28 @@ bool CInifile::section_exist(const shared_str& S) const { return section_exist(S
 //--------------------------------------------------------------------------------------
 CInifile::Sect& CInifile::r_section(pcstr S) const
 {
+    const pcstr fileName = m_file_name[0] ? m_file_name : "<memory>";
+    CHECK_OR_EXIT(S && S[0], make_string("Can't read an unnamed section from '%s'.", fileName));
+
     char section[256];
     xr_strcpy(section, sizeof section, S);
     xr_strlwr(section);
     Sect* found = find_section(section);
-    if (!found)
-        xrDebug::Fatal(DEBUG_INFO, "Can't find section '%s'.", S);
+    CHECK_OR_EXIT(found, make_string("Can't find section '%s' in '%s'.", S, fileName));
     return *found;
 }
 
 pcstr CInifile::r_string(pcstr S, pcstr L) const
 {
     Sect const& I = r_section(S);
+    const pcstr fileName = m_file_name[0] ? m_file_name : "<memory>";
+    CHECK_OR_EXIT(L && L[0], make_string("Can't read an unnamed variable from section [%s] in '%s'.", S, fileName));
+
     const auto item = I.LineIndex.find(L);
     if (item != I.LineIndex.end())
         return I.Data[item->second].second.c_str();
 
-    xrDebug::Fatal(DEBUG_INFO, "Can't find variable %s in [%s]", L, S);
-    return nullptr;
+    xrDebug::DoExit(make_string("Can't find variable '%s' in section [%s] in '%s'.", L, S, fileName));
 }
 
 shared_str CInifile::r_string_wb(pcstr S, pcstr L) const

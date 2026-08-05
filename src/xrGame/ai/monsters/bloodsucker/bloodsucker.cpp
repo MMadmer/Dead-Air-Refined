@@ -387,8 +387,6 @@ void CAI_Bloodsucker::LookDirection(Fvector to_dir, float bone_turn_speed)
 
 void CAI_Bloodsucker::ActivateVampireEffector()
 {
-    Actor()->Cameras().AddCamEffector(
-        xr_new<CVampireCameraEffector>(6.0f, get_head_position(this), get_head_position(Actor())));
     Actor()->Cameras().AddPPEffector(xr_new<CVampirePPEffector>(pp_vampire_effector, 6.0f));
 }
 

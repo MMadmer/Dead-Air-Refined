@@ -52,7 +52,7 @@ void dxRender_Visual::Load(const char* N, IReader* data, u32)
     }
     else
     {
-        FATAL("Invalid visual");
+        FATAL_F("Invalid visual %s", N);
     }
 
     // Shader

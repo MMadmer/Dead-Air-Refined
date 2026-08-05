@@ -100,13 +100,28 @@ void CLevel::g_sv_Spawn(CSE_Abstract* E)
     else
         psNET_Flags.set(NETFLAG_MINIMIZEUPDATES, FALSE);
 
+    if (IGameObject* existing = Objects.net_Find(E->ID))
+    {
+        if (!existing->getDestroy())
+            FATAL(make_string("Attempted to spawn duplicate live object [%s][%u]",
+                existing->cName().c_str(), existing->ID()).c_str());
+
+        Msg("[%s]: finishing queued destruction of %s[%u] before ID reuse",
+            __FUNCTION__, existing->cName().c_str(), existing->ID());
+        Objects.ProcessDestroyQueue();
+        R_ASSERT2(!Objects.net_Find(E->ID), "Queued object still exists after ProcessDestroyQueue");
+    }
+
     // Client spawn
     //	T.Start		();
     IGameObject* O = Objects.Create(E->s_name.c_str());
 // Msg				("--spawn--CREATE: %f ms",1000.f*T.GetAsync());
 
 //	T.Start		();
-    if (0 == O || (!O->net_Spawn(E)))
+    if (!O)
+        FATAL(make_string("Object factory returned no instance for spawn section [%s]", E->s_name.c_str()).c_str());
+
+    if (!O->net_Spawn(E))
     {
         O->net_Destroy();
         if (!GEnv.isDedicatedServer)

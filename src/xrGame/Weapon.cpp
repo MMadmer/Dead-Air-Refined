@@ -29,6 +29,10 @@
 #include "xrNetServer/NET_Messages.h"
 #include "xrCore/xr_token.h"
 #include "GamePersistent.h"
+#include "xrCommon/xr_hash_map.h"
+#include "ai_space.h"
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
 
 #define WEAPON_REMOVE_TIME 60000
 #define ROTATION_TIME 0.25f
@@ -37,6 +41,101 @@ constexpr pcstr WPN_SCOPE = "wpn_scope";
 constexpr pcstr WPN_SILENCER = "wpn_silencer";
 constexpr pcstr WPN_GRENADE_LAUNCHER = "wpn_launcher";
 constexpr pcstr WPN_GRENADE_LAUNCHER_SOC = "wpn_grenade_launcher";
+
+namespace
+{
+constexpr size_t weaponExtendedSaveHeaderSize = sizeof(u32);
+constexpr size_t weaponExtendedSaveRecordSize = 2 * sizeof(u16) + 2 * sizeof(u32);
+
+struct WeaponExtendedRuntimeState
+{
+    const CWeapon* weapon{};
+    CSE_ALifeItemWeapon* serverEntity{};
+    u32 sectionChecksum{};
+    u32 legacyCompatibilityMask{};
+    shared_str ammoSection;
+    float ammoMisfireChance{};
+};
+
+xr_flat_hash_map<u16, WeaponExtendedRuntimeState> liveWeaponExtendedStates;
+xr_flat_hash_map<u16, SWeaponExtendedSaveState> stagedWeaponExtendedStates;
+CWeapon* scopeDofPublisher{};
+
+u32 weapon_section_checksum(pcstr section)
+{
+    return section ? crc32(section, static_cast<u32>(xr_strlen(section))) : 0;
+}
+
+CSE_ALifeItemWeapon* persistent_weapon_entity(u16 objectId)
+{
+    if (!ai().get_alife())
+        return nullptr;
+
+    return smart_cast<CSE_ALifeItemWeapon*>(ai().alife().objects().object(objectId, true));
+}
+
+float weapon_ammo_misfire_chance(CWeapon& weapon)
+{
+    if (weapon.m_ammoType >= weapon.m_ammoTypes.size())
+        return 0.f;
+
+    const shared_str& ammoSection = weapon.m_ammoTypes[weapon.m_ammoType];
+    const auto state = liveWeaponExtendedStates.find(weapon.ID());
+    if (state != liveWeaponExtendedStates.end() && state->second.weapon == &weapon)
+    {
+        WeaponExtendedRuntimeState& runtime = state->second;
+        if (runtime.ammoSection != ammoSection)
+        {
+            runtime.ammoSection = ammoSection;
+            runtime.ammoMisfireChance = clampr(
+                pSettings->read_if_exists<float>(ammoSection, "misfire_chance", 0.f), 0.f, 0.99f);
+        }
+        return runtime.ammoMisfireChance;
+    }
+
+    return clampr(pSettings->read_if_exists<float>(ammoSection, "misfire_chance", 0.f), 0.f, 0.99f);
+}
+
+bool valid_weapon_extended_record(const SWeaponExtendedSaveState& record)
+{
+    return record.objectId != u16(-1) && !record.reserved && record.extendedMask &&
+        !(record.extendedMask & ~u32(eWeaponConditionExtendedSaveMask));
+}
+
+void write_weapon_extended_u16(u8*& cursor, const u16 value)
+{
+    cursor[0] = static_cast<u8>(value);
+    cursor[1] = static_cast<u8>(value >> 8);
+    cursor += sizeof(value);
+}
+
+void write_weapon_extended_u32(u8*& cursor, const u32 value)
+{
+    cursor[0] = static_cast<u8>(value);
+    cursor[1] = static_cast<u8>(value >> 8);
+    cursor[2] = static_cast<u8>(value >> 16);
+    cursor[3] = static_cast<u8>(value >> 24);
+    cursor += sizeof(value);
+}
+
+u16 read_weapon_extended_u16(const u8*& cursor)
+{
+    const u16 value = static_cast<u16>(cursor[0]) |
+        static_cast<u16>(static_cast<u16>(cursor[1]) << 8);
+    cursor += sizeof(value);
+    return value;
+}
+
+u32 read_weapon_extended_u32(const u8*& cursor)
+{
+    const u32 value = static_cast<u32>(cursor[0]) |
+        (static_cast<u32>(cursor[1]) << 8) |
+        (static_cast<u32>(cursor[2]) << 16) |
+        (static_cast<u32>(cursor[3]) << 24);
+    cursor += sizeof(value);
+    return value;
+}
+}
 
 BOOL b_toggle_weapon_aim = FALSE;
 
@@ -136,11 +235,22 @@ CWeapon::CWeapon()
 
 CWeapon::~CWeapon()
 {
+    ResetScopeDofRadius();
+
+    const auto state = liveWeaponExtendedStates.find(ID());
+    if (state != liveWeaponExtendedStates.end() && state->second.weapon == this)
+        liveWeaponExtendedStates.erase(state);
+
     xr_delete(m_UIScope);
     delete_data(m_scopes);
 }
 
-void CWeapon::Hit(SHit* pHDS) { inherited::Hit(pHDS); }
+void CWeapon::Hit(SHit* pHDS)
+{
+    const float condition = GetCondition();
+    inherited::Hit(pHDS);
+    SetCondition(condition);
+}
 void CWeapon::UpdateXForm()
 {
     if (Device.dwFrame == dwXF_Frame)
@@ -476,11 +586,11 @@ void CWeapon::Load(LPCSTR section)
     else if (m_eScopeStatus == ALife::eAddonPermanent)
     {
         m_zoom_params.m_fScopeZoomFactor = pSettings->r_float(cNameSect(), "scope_zoom_factor");
-        if (!GEnv.isDedicatedServer)
+        const shared_str scopeTexture = GetScopeTextureName(cNameSect().c_str());
+        if (!GEnv.isDedicatedServer && scopeTexture.size())
         {
             m_UIScope = xr_new<CUIWindow>("Scope UI");
-            shared_str scope_tex_name = pSettings->r_string(cNameSect(), "scope_texture");
-            LoadScope(scope_tex_name);
+            LoadScope(scopeTexture);
         }
     }
 
@@ -549,6 +659,13 @@ void CWeapon::LoadScope(const shared_str& section)
     CUIXmlInit::InitWindow(*pWpnScopeXml, section.c_str(), 0, m_UIScope);
 }
 
+shared_str CWeapon::GetScopeTextureName(pcstr section) const
+{
+    const pcstr key = psActorFlags.test(AF_OPEN_SCOPES) ? "scope_texture_open" : "scope_texture";
+    const pcstr texture = READ_IF_EXISTS(pSettings, r_string, section, key, nullptr);
+    return texture ? texture : "";
+}
+
 void CWeapon::LoadFireParams(LPCSTR section)
 {
     cam_recoil.Dispersion = deg2rad(pSettings->r_float(section, "cam_dispersion"));
@@ -585,7 +702,35 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
     iAmmoElapsed = E->a_elapsed;
     m_flagsAddOnState = E->m_addon_flags.get();
     m_ammoType = E->ammo_type;
+    const u32 sectionChecksum = weapon_section_checksum(E->s_name.c_str());
     m_condition_type = E->m_condition_type;
+    u32 legacyCompatibilityMask{};
+
+    const auto staged = stagedWeaponExtendedStates.find(DC->ID);
+    if (staged != stagedWeaponExtendedStates.end())
+    {
+        if (staged->second.sectionChecksum == sectionChecksum)
+        {
+            // Legacy WEX1 bits are additive because fixed saves keep their authoritative value in legacy streams.
+            legacyCompatibilityMask = staged->second.extendedMask & u32(eWeaponConditionLegacySaveMask);
+            m_condition_type = (m_condition_type & ~u32(eWeaponConditionSidecarSaveMask)) |
+                (staged->second.extendedMask & u32(eWeaponConditionSidecarSaveMask)) |
+                legacyCompatibilityMask;
+        }
+        else
+        {
+            m_condition_type &= ~u32(eWeaponConditionSidecarSaveMask);
+            Msg("! Ignoring mismatched extended weapon state for '%s'[%u]", E->s_name.c_str(), DC->ID);
+        }
+        stagedWeaponExtendedStates.erase(staged);
+    }
+
+    E->m_condition_type = m_condition_type;
+    CSE_ALifeItemWeapon* serverEntity = persistent_weapon_entity(DC->ID);
+    if (serverEntity)
+        serverEntity->m_condition_type = m_condition_type;
+    liveWeaponExtendedStates.insert_or_assign(
+        DC->ID, WeaponExtendedRuntimeState{ this, serverEntity, sectionChecksum, legacyCompatibilityMask });
     SetState(E->wpn_state);
     SetNextState(E->wpn_state);
 
@@ -619,6 +764,12 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
 
 void CWeapon::net_Destroy()
 {
+    ResetScopeDofRadius();
+
+    const auto state = liveWeaponExtendedStates.find(ID());
+    if (state != liveWeaponExtendedStates.end() && state->second.weapon == this)
+        liveWeaponExtendedStates.erase(state);
+
     inherited::net_Destroy();
 
     //удалить объекты партиклов
@@ -721,7 +872,8 @@ void CWeapon::save(NET_Packet& output_packet)
     save_data(m_ammoType, output_packet);
     save_data(m_zoom_params.m_bIsZoomModeNow, output_packet);
     save_data(m_bRememberActorNVisnStatus, output_packet);
-    save_data(m_condition_type, output_packet);
+    const u32 legacyConditionType = m_condition_type & ~u32(eWeaponConditionSidecarSaveMask);
+    save_data(legacyConditionType, output_packet);
 }
 
 void CWeapon::load(IReader& input_packet)
@@ -740,7 +892,212 @@ void CWeapon::load(IReader& input_packet)
         OnZoomOut();
 
     load_data(m_bRememberActorNVisnStatus, input_packet);
-    load_data(m_condition_type, input_packet);
+    u32 legacyConditionType{};
+    load_data(legacyConditionType, input_packet);
+
+    const auto state = liveWeaponExtendedStates.find(ID());
+    const u32 legacyCompatibilityMask = state != liveWeaponExtendedStates.end() && state->second.weapon == this ?
+        state->second.legacyCompatibilityMask : 0;
+    SetConditionType((legacyConditionType & ~u32(eWeaponConditionSidecarSaveMask)) |
+        (m_condition_type & u32(eWeaponConditionSidecarSaveMask)) | legacyCompatibilityMask);
+
+    if (state != liveWeaponExtendedStates.end() && state->second.weapon == this)
+    {
+        state->second.legacyCompatibilityMask = 0;
+        if (state->second.serverEntity)
+            state->second.serverEntity->m_condition_type = m_condition_type;
+    }
+}
+
+void CWeapon::CollectExtendedSaveState(xr_vector<SWeaponExtendedSaveState>& result)
+{
+    SWeaponExtendedSaveCaptureState state;
+    BeginExtendedSaveCapture(state);
+    while (!ContinueExtendedSaveCapture(state, flt_max))
+    {
+    }
+    result = std::move(state.records);
+}
+
+void CWeapon::BeginExtendedSaveCapture(SWeaponExtendedSaveCaptureState& state)
+{
+    state = {};
+    state.initialized = true;
+    state.completed = !ai().get_alife();
+}
+
+bool CWeapon::ContinueExtendedSaveCapture(
+    SWeaponExtendedSaveCaptureState& state, float budgetMilliseconds)
+{
+    if (!state.initialized)
+        return false;
+    if (state.completed)
+        return true;
+    if (!(budgetMilliseconds > 0.f))
+        return false;
+    if (!ai().get_alife())
+    {
+        state.records.clear();
+        state.completed = true;
+        return true;
+    }
+
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    CTimer budgetTimer;
+    if (!unlimitedBudget)
+        budgetTimer.Start();
+
+    u32 batchObjects = 0;
+    while (CSE_ALifeDynamicObject* object = ai().alife().objects().next_save_extension_object(
+        ESaveExtensionObjectType::Weapon, state.nextObjectId))
+    {
+        CSE_ALifeItemWeapon* serverEntity = static_cast<CSE_ALifeItemWeapon*>(object);
+        const u16 objectId = serverEntity->ID;
+
+        if (objectId != u16(-1))
+        {
+            const u32 sectionChecksum = weapon_section_checksum(serverEntity->s_name.c_str());
+            u32 extendedMask = serverEntity->m_condition_type & u32(eWeaponConditionSidecarSaveMask);
+
+            const auto staged = stagedWeaponExtendedStates.find(objectId);
+            if (staged != stagedWeaponExtendedStates.end())
+            {
+                if (staged->second.sectionChecksum == sectionChecksum)
+                {
+                    // Keep legacy duplicates until the offline object is spawned and can migrate them safely.
+                    extendedMask = staged->second.extendedMask;
+                    serverEntity->m_condition_type |=
+                        staged->second.extendedMask & u32(eWeaponConditionLegacySaveMask);
+                }
+                else
+                    stagedWeaponExtendedStates.erase(staged);
+            }
+
+            const auto live = liveWeaponExtendedStates.find(objectId);
+            if (live != liveWeaponExtendedStates.end() && live->second.weapon &&
+                live->second.serverEntity == serverEntity && live->second.sectionChecksum == sectionChecksum &&
+                live->second.weapon->ID() == objectId)
+            {
+                extendedMask = live->second.weapon->GetConditionType() & u32(eWeaponConditionSidecarSaveMask);
+                serverEntity->m_condition_type =
+                    (serverEntity->m_condition_type & ~u32(eWeaponConditionSidecarSaveMask)) | extendedMask;
+            }
+
+            if (extendedMask)
+                state.records.push_back({ objectId, 0, sectionChecksum, extendedMask });
+        }
+
+        if (!unlimitedBudget && ++batchObjects == 16)
+        {
+            batchObjects = 0;
+            if (budgetTimer.GetElapsed_sec() * 1000.f >= budgetMilliseconds)
+                return false;
+        }
+    }
+
+    state.completed = true;
+    return true;
+}
+
+bool CWeapon::EncodeExtendedSaveState(
+    const xr_vector<SWeaponExtendedSaveState>& state, xr_vector<u8>& payload)
+{
+    payload.clear();
+    if (state.size() > std::numeric_limits<u16>::max())
+        return false;
+
+    u16 previousId{};
+    for (size_t i = 0; i < state.size(); ++i)
+    {
+        if (!valid_weapon_extended_record(state[i]) || (i && state[i].objectId <= previousId))
+            return false;
+        previousId = state[i].objectId;
+    }
+
+    payload.resize(weaponExtendedSaveHeaderSize + state.size() * weaponExtendedSaveRecordSize);
+    u8* cursor = payload.data();
+    const u32 count = static_cast<u32>(state.size());
+    write_weapon_extended_u32(cursor, count);
+    for (const SWeaponExtendedSaveState& record : state)
+    {
+        write_weapon_extended_u16(cursor, record.objectId);
+        write_weapon_extended_u16(cursor, record.reserved);
+        write_weapon_extended_u32(cursor, record.sectionChecksum);
+        write_weapon_extended_u32(cursor, record.extendedMask);
+    }
+    return true;
+}
+
+bool CWeapon::DecodeExtendedSaveState(
+    const xr_vector<u8>& payload, xr_vector<SWeaponExtendedSaveState>& state)
+{
+    state.clear();
+    if (payload.size() < weaponExtendedSaveHeaderSize)
+        return false;
+
+    const u8* cursor = payload.data();
+    const u32 count = read_weapon_extended_u32(cursor);
+    if (count > std::numeric_limits<u16>::max() ||
+        static_cast<size_t>(count) != (payload.size() - weaponExtendedSaveHeaderSize) / weaponExtendedSaveRecordSize ||
+        payload.size() != weaponExtendedSaveHeaderSize + static_cast<size_t>(count) * weaponExtendedSaveRecordSize)
+    {
+        return false;
+    }
+
+    xr_vector<SWeaponExtendedSaveState> decoded;
+    decoded.reserve(count);
+    xr_flat_hash_map<u16, bool> decodedIds;
+    decodedIds.reserve(count);
+    for (u32 i = 0; i < count; ++i)
+    {
+        SWeaponExtendedSaveState record;
+        record.objectId = read_weapon_extended_u16(cursor);
+        record.reserved = read_weapon_extended_u16(cursor);
+        record.sectionChecksum = read_weapon_extended_u32(cursor);
+        record.extendedMask = read_weapon_extended_u32(cursor);
+        if (!valid_weapon_extended_record(record) || !decodedIds.emplace(record.objectId, true).second)
+            continue;
+
+        decoded.push_back(record);
+    }
+
+    std::sort(decoded.begin(), decoded.end(), [](const SWeaponExtendedSaveState& left,
+        const SWeaponExtendedSaveState& right) { return left.objectId < right.objectId; });
+
+    state = std::move(decoded);
+    return true;
+}
+
+bool CWeapon::StageExtendedSaveState(const xr_vector<SWeaponExtendedSaveState>& state)
+{
+    u16 previousId{};
+    for (size_t i = 0; i < state.size(); ++i)
+    {
+        if (!valid_weapon_extended_record(state[i]) || (i && state[i].objectId <= previousId))
+        {
+            stagedWeaponExtendedStates.clear();
+            return false;
+        }
+        previousId = state[i].objectId;
+    }
+
+    stagedWeaponExtendedStates.clear();
+    stagedWeaponExtendedStates.reserve(state.size());
+    for (const SWeaponExtendedSaveState& record : state)
+        stagedWeaponExtendedStates.emplace(record.objectId, record);
+    return true;
+}
+
+void CWeapon::ClearExtendedSaveState()
+{
+    liveWeaponExtendedStates.clear();
+    stagedWeaponExtendedStates.clear();
+}
+
+void CWeapon::ForgetExtendedSaveState(const CSE_Abstract& serverObject)
+{
+    liveWeaponExtendedStates.erase(serverObject.ID);
+    stagedWeaponExtendedStates.erase(serverObject.ID);
 }
 
 void CWeapon::OnEvent(NET_Packet& P, u16 type)
@@ -792,6 +1149,7 @@ void CWeapon::shedule_Update(u32 dT)
 
 void CWeapon::OnH_B_Independent(bool just_before_destroy)
 {
+    ResetScopeDofRadius();
     RemoveShotEffector();
 
     inherited::OnH_B_Independent(just_before_destroy);
@@ -880,6 +1238,7 @@ bool CWeapon::AllowBore() { return true; }
 void CWeapon::UpdateCL()
 {
     inherited::UpdateCL();
+    UpdateScopeDofRadius();
     UpdateHUDAddonsVisibility();
     //подсветка от выстрела
     UpdateLight();
@@ -909,17 +1268,30 @@ void CWeapon::UpdateCL()
 
     if (m_zoom_params.m_pNight_vision && !need_renderable())
     {
-        if (!m_zoom_params.m_pNight_vision->IsActive())
+        CActor* pA = smart_cast<CActor*>(H_Parent());
+        if (pA && !m_zoom_params.m_pNight_vision->IsActive())
         {
-            CActor* pA = smart_cast<CActor*>(H_Parent());
-            R_ASSERT(pA);
-            CTorch* pTorch = smart_cast<CTorch*>(pA->inventory().ItemFromSlot(TORCH_SLOT));
-            if (pTorch && pTorch->GetNightVisionStatus())
+            if (pA->GetNightVisionStatus())
             {
-                m_bRememberActorNVisnStatus = pTorch->GetNightVisionStatus();
-                pTorch->SwitchNightVision(false, false);
+                m_bRememberActorNVisnStatus = true;
+                pA->SwitchNightVision(false, false);
             }
             m_zoom_params.m_pNight_vision->Start(m_zoom_params.m_sUseZoomPostprocess, pA, false);
+        }
+
+        if (pA && m_zoom_params.m_pNight_vision->IsActive())
+        {
+            Fvector highlightPosition = pA->Position();
+            highlightPosition.y += 1.5f;
+            if (HudItemData())
+            {
+                firedeps dependencies;
+                HudItemData()->setup_firedeps(dependencies);
+                highlightPosition = dependencies.vLastFP2;
+                m_zoom_params.m_pNight_vision->SetHighlightRotation(
+                    dependencies.m_FireParticlesXForm.k, dependencies.m_FireParticlesXForm.i);
+            }
+            m_zoom_params.m_pNight_vision->SetHighlightPosition(highlightPosition);
         }
     }
     else if (m_bRememberActorNVisnStatus)
@@ -938,14 +1310,7 @@ void CWeapon::EnableActorNVisnAfterZoom()
         pA = g_actor;
 
     if (pA)
-    {
-        CTorch* pTorch = smart_cast<CTorch*>(pA->inventory().ItemFromSlot(TORCH_SLOT));
-        if (pTorch)
-        {
-            pTorch->SwitchNightVision(true, false);
-            pTorch->GetNightVision()->PlaySounds(CNightVisionEffector::eIdleSound);
-        }
-    }
+        pA->RestoreNightVision();
 }
 
 bool CWeapon::need_renderable() { return !(IsZoomed() && ZoomTexture() && !IsRotatingToZoom()); }
@@ -1282,21 +1647,21 @@ BOOL CWeapon::CheckForMisfire()
     if (OnClient())
         return FALSE;
 
-    float probability = 0.f;
+    float probability = weapon_ammo_misfire_chance(*this);
     if (m_condition_type & 0x8000)
-        probability += 0.03f;
+        probability += 0.01f;
     if (m_condition_type & 0x10000)
-        probability += 0.05f;
+        probability += 0.02f;
     if (m_condition_type & 0x40000)
-        probability += 0.03f;
+        probability += 0.01f;
     if (m_condition_type & 0x80000)
-        probability += 0.05f;
+        probability += 0.02f;
     if (m_condition_type & 0x200000)
         probability += 0.03f;
     if (m_condition_type & 0x400000)
-        probability += 0.05f;
+        probability += 0.07f;
     if (m_condition_type & 0x800000)
-        probability += 0.15f;
+        probability += 0.10f;
     if (m_condition_type & 0x200)
         probability += 0.99f;
     if (m_condition_type & 0x4000)
@@ -1307,7 +1672,7 @@ BOOL CWeapon::CheckForMisfire()
         probability += 0.99f;
 
     clamp(probability, 0.f, 0.99f);
-    if (::Random.randF(0.f, 1.f) < probability)
+    if (::Random.randF(0.f, 1.f) < probability && GetAmmoElapsed() > 1)
     {
         FireEnd();
 
@@ -1345,9 +1710,36 @@ bool CWeapon::IsSilencerAttached() const
         ALife::eAddonPermanent == m_eSilencerStatus;
 }
 
-bool CWeapon::GrenadeLauncherAttachable() { return (ALife::eAddonAttachable == m_eGrenadeLauncherStatus); }
-bool CWeapon::ScopeAttachable() { return (ALife::eAddonAttachable == m_eScopeStatus); }
-bool CWeapon::SilencerAttachable() { return (ALife::eAddonAttachable == m_eSilencerStatus); }
+ALife::EWeaponAddonStatus CWeapon::get_GrenadeLauncherStatus() const
+{
+    if (m_eGrenadeLauncherStatus != ALife::eAddonPermanent && !IsGrenadeLauncherAttached() &&
+        HasConditionType(eWeaponConditionGrenadeLauncherMount))
+        return ALife::eAddonDisabled;
+
+    return m_eGrenadeLauncherStatus;
+}
+
+ALife::EWeaponAddonStatus CWeapon::get_ScopeStatus() const
+{
+    if (m_eScopeStatus != ALife::eAddonPermanent && !IsScopeAttached() &&
+        HasConditionType(eWeaponConditionScopeMount))
+        return ALife::eAddonDisabled;
+
+    return m_eScopeStatus;
+}
+
+ALife::EWeaponAddonStatus CWeapon::get_SilencerStatus() const
+{
+    if (m_eSilencerStatus != ALife::eAddonPermanent && !IsSilencerAttached() &&
+        HasConditionType(eWeaponConditionSilencerMount))
+        return ALife::eAddonDisabled;
+
+    return m_eSilencerStatus;
+}
+
+bool CWeapon::GrenadeLauncherAttachable() { return get_GrenadeLauncherStatus() == ALife::eAddonAttachable; }
+bool CWeapon::ScopeAttachable() { return get_ScopeStatus() == ALife::eAddonAttachable; }
+bool CWeapon::SilencerAttachable() { return get_SilencerStatus() == ALife::eAddonAttachable; }
 
 
 void CWeapon::UpdateHUDAddonsVisibility()
@@ -1358,6 +1750,9 @@ void CWeapon::UpdateHUDAddonsVisibility()
     static shared_str wpn_silencer = WPN_SILENCER;
     static shared_str wpn_grenade_launcher = WPN_GRENADE_LAUNCHER;
     static shared_str wpn_grenade_launcher_soc = WPN_GRENADE_LAUNCHER_SOC;
+    const auto scope_status = get_ScopeStatus();
+    const auto silencer_status = get_SilencerStatus();
+    const auto grenade_launcher_status = get_GrenadeLauncherStatus();
 
     // actor only
     if (!GetHUDmode())
@@ -1365,42 +1760,42 @@ void CWeapon::UpdateHUDAddonsVisibility()
 
     //.	return;
 
-    if (ScopeAttachable())
+    if (scope_status == ALife::eAddonAttachable)
     {
         HudItemData()->set_bone_visible(wpn_scope, IsScopeAttached());
     }
 
-    if (m_eScopeStatus == ALife::eAddonDisabled)
+    if (scope_status == ALife::eAddonDisabled)
     {
         HudItemData()->set_bone_visible(wpn_scope, FALSE, TRUE);
     }
-    else if (m_eScopeStatus == ALife::eAddonPermanent)
+    else if (scope_status == ALife::eAddonPermanent)
         HudItemData()->set_bone_visible(wpn_scope, TRUE, TRUE);
 
-    if (SilencerAttachable())
+    if (silencer_status == ALife::eAddonAttachable)
     {
         HudItemData()->set_bone_visible(wpn_silencer, IsSilencerAttached());
     }
-    if (m_eSilencerStatus == ALife::eAddonDisabled)
+    if (silencer_status == ALife::eAddonDisabled)
     {
         HudItemData()->set_bone_visible(wpn_silencer, FALSE, TRUE);
     }
-    else if (m_eSilencerStatus == ALife::eAddonPermanent)
+    else if (silencer_status == ALife::eAddonPermanent)
         HudItemData()->set_bone_visible(wpn_silencer, TRUE, TRUE);
 
     bool use_soc_name{};
     if (HudItemData()->m_model->LL_BoneID(wpn_grenade_launcher) == BI_NONE)
         use_soc_name = HudItemData()->m_model->LL_BoneID(wpn_grenade_launcher_soc) != BI_NONE;
 
-    if (GrenadeLauncherAttachable())
+    if (grenade_launcher_status == ALife::eAddonAttachable)
     {
         HudItemData()->set_bone_visible((use_soc_name ? wpn_grenade_launcher_soc : wpn_grenade_launcher), IsGrenadeLauncherAttached());
     }
-    if (m_eGrenadeLauncherStatus == ALife::eAddonDisabled)
+    if (grenade_launcher_status == ALife::eAddonDisabled)
     {
         HudItemData()->set_bone_visible((use_soc_name ? wpn_grenade_launcher_soc : wpn_grenade_launcher), FALSE, TRUE);
     }
-    else if (m_eGrenadeLauncherStatus == ALife::eAddonPermanent)
+    else if (grenade_launcher_status == ALife::eAddonPermanent)
         HudItemData()->set_bone_visible((use_soc_name ? wpn_grenade_launcher_soc : wpn_grenade_launcher), TRUE, TRUE);
 }
 
@@ -1413,6 +1808,9 @@ void CWeapon::UpdateAddonsVisibility()
     static shared_str wpn_silencer = WPN_SILENCER;
     static shared_str wpn_grenade_launcher = WPN_GRENADE_LAUNCHER;
     static shared_str wpn_grenade_launcher_soc = WPN_GRENADE_LAUNCHER_SOC;
+    const auto scope_status = get_ScopeStatus();
+    const auto silencer_status = get_SilencerStatus();
+    const auto grenade_launcher_status = get_GrenadeLauncherStatus();
 
     UpdateHUDAddonsVisibility();
 
@@ -1446,10 +1844,11 @@ void CWeapon::UpdateAddonsVisibility()
         }
     };
 
-    checkBone(wpn_scope, m_eScopeStatus, CSE_ALifeItemWeapon::eWeaponAddonScope);
-    checkBone(wpn_silencer, m_eSilencerStatus, CSE_ALifeItemWeapon::eWeaponAddonSilencer);
-    checkBone(wpn_grenade_launcher, m_eGrenadeLauncherStatus, CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher);
-    checkBone(wpn_grenade_launcher_soc, m_eGrenadeLauncherStatus, CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher);
+    checkBone(wpn_scope, scope_status, CSE_ALifeItemWeapon::eWeaponAddonScope);
+    checkBone(wpn_silencer, silencer_status, CSE_ALifeItemWeapon::eWeaponAddonSilencer);
+    checkBone(wpn_grenade_launcher, grenade_launcher_status, CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher);
+    checkBone(
+        wpn_grenade_launcher_soc, grenade_launcher_status, CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher);
 
     pWeaponVisual->CalculateBones_Invalidate();
     pWeaponVisual->CalculateBones(TRUE);
@@ -1498,6 +1897,7 @@ void CWeapon::OnZoomIn()
 void CWeapon::OnZoomOut()
 {
     m_zoom_params.m_bIsZoomModeNow = false;
+    ResetScopeDofRadius();
     m_fRTZoomFactor = GetZoomFactor(); // store current
     m_zoom_params.m_fCurrentZoomFactor = g_fov;
 
@@ -1525,6 +1925,36 @@ CUIWindow* CWeapon::ZoomTexture()
         return m_UIScope;
     else
         return nullptr;
+}
+
+void CWeapon::UpdateScopeDofRadius()
+{
+    const bool shouldPublish = g_pGameLevel && m_pInventory && m_pInventory->ActiveItem() == this &&
+        H_Parent() == Level().CurrentViewEntity() && IsZoomed() && ZoomTexture() && !IsRotatingToZoom() &&
+        m_zoom_params.m_bZoomDofEnabled;
+    if (!shouldPublish)
+    {
+        ResetScopeDofRadius();
+        return;
+    }
+
+    if (!g_pGamePersistent)
+        return;
+
+    const float radius = psActorFlags.test(AF_OPEN_SCOPES) ? 2.f : 1.f;
+    if (scopeDofPublisher != this || GamePersistent().GetScopeDofRadius() != radius)
+        GamePersistent().SetScopeDofRadius(radius);
+    scopeDofPublisher = this;
+}
+
+void CWeapon::ResetScopeDofRadius()
+{
+    if (scopeDofPublisher != this)
+        return;
+
+    scopeDofPublisher = nullptr;
+    if (g_pGamePersistent && GamePersistent().GetScopeDofRadius() != 0.f)
+        GamePersistent().SetScopeDofRadius(0.f);
 }
 
 void CWeapon::SwitchState(u32 S)
@@ -1626,22 +2056,29 @@ bool CWeapon::ActivationSpeedOverriden(Fvector& dest, bool clear_override)
 {
     if (m_activation_speed_is_overriden)
     {
+        dest = m_overriden_activation_speed;
         if (clear_override)
         {
             m_activation_speed_is_overriden = false;
+            Fvector unused;
+            inherited::ActivationSpeedOverriden(unused, true);
         }
 
-        dest = m_overriden_activation_speed;
         return true;
     }
 
-    return false;
+    return inherited::ActivationSpeedOverriden(dest, clear_override);
 }
 
 void CWeapon::SetActivationSpeedOverride(Fvector const& speed)
 {
     m_overriden_activation_speed = speed;
     m_activation_speed_is_overriden = true;
+}
+
+bool CWeapon::HasActivationSpeedOverride() const
+{
+    return m_activation_speed_is_overriden || inherited::HasActivationSpeedOverride();
 }
 
 void CWeapon::activate_physic_shell()
@@ -1781,10 +2218,13 @@ void CWeapon::UpdateHudAdditonal(Fmatrix& trans)
         hud_rotation.translate_over(curr_offs);
         trans.mulB_43(hud_rotation);
 
-        if (pActor->IsZoomAimingMode())
-            m_zoom_params.m_fZoomRotationFactor += Device.fTimeDelta / m_zoom_params.m_fZoomRotateTime;
-        else
-            m_zoom_params.m_fZoomRotationFactor -= Device.fTimeDelta / m_zoom_params.m_fZoomRotateTime;
+        const float rawControlInertion = GetControlInertionFactor();
+        const float controlInertion = std::isfinite(rawControlInertion) ? _max(rawControlInertion, 0.1f) : 1.f;
+        const float baseZoomRotateTime = std::isfinite(m_zoom_params.m_fZoomRotateTime) ?
+            _max(m_zoom_params.m_fZoomRotateTime, EPS_S) : ROTATION_TIME;
+        const float zoomRotateTime = baseZoomRotateTime * controlInertion;
+        const float zoomDirection = pActor->IsZoomAimingMode() ? 1.f : -1.f;
+        m_zoom_params.m_fZoomRotationFactor += zoomDirection * Device.fTimeDelta / zoomRotateTime;
 
         clamp(m_zoom_params.m_fZoomRotationFactor, 0.f, 1.f);
     }
@@ -1911,7 +2351,10 @@ float CWeapon::Weight() const
 }
 
 bool CWeapon::show_crosshair() { return !IsPending() && (!IsZoomed() || !ZoomHideCrosshair()); }
-bool CWeapon::show_indicators() { return !(IsZoomed() && ZoomTexture()); }
+bool CWeapon::show_indicators()
+{
+    return !(IsZoomed() && ZoomTexture() && !psActorFlags.test(AF_OPEN_SCOPES));
+}
 float CWeapon::GetConditionToShow() const
 {
     return (GetCondition()); // powf(GetCondition(),4.0f));

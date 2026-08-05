@@ -69,7 +69,14 @@ void CWeapon::FireTrace(const Fvector& P, const Fvector& D)
     //повысить изношенность оружия с учетом влияния конкретного патрона
     //	float Deterioration = GetWeaponDeterioration();
     //	Msg("Deterioration = %f", Deterioration);
-    ChangeCondition(-GetWeaponDeterioration() * l_cartridge.param_s.impair);
+    // Mechanical faults accelerate wear while keeping the original serialized fault mask unchanged.
+    const u32 condition_type = GetConditionType();
+    const float fault_wear_multiplier = 1.f +
+        0.2f * static_cast<float>((condition_type & (1u << 0)) != 0) +
+        0.4f * static_cast<float>((condition_type & (1u << 1)) != 0) +
+        0.1f * static_cast<float>((condition_type & (1u << 8)) != 0) +
+        0.1f * static_cast<float>((condition_type & (1u << 13)) != 0);
+    ChangeCondition(-GetWeaponDeterioration() * l_cartridge.param_s.impair * fault_wear_multiplier);
 
     float fire_disp = 0.f;
     CActor* tmp_actor = NULL;

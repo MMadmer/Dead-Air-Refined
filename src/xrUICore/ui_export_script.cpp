@@ -736,7 +736,8 @@ void CUIButton::script_register(lua_State* luaState)
                 self->SetWndRect({ x, y, width, height });
                 self->InitTexture(texture);
             })
-            .def(constructor<>()),
+            .def(constructor<>())
+            .def("GetButtonState", &CUIButton::GetButtonState),
 
         class_<CUI3tButton, CUIButton>("CUI3tButton")
             .def(constructor<>()),

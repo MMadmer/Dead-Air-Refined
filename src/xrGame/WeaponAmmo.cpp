@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "xrCommon/xr_hash_map.h"
 #include "WeaponAmmo.h"
 #include "xrPhysics/PhysicsShell.h"
 #include "xrServer_Objects_ALife_Items.h"
@@ -11,6 +12,36 @@
 #include "Level.h"
 
 #define BULLET_MANAGER_SECTION "bullet_manager"
+
+namespace
+{
+struct AmmoBoxConfig
+{
+    float emptyWeight{};
+    u32 emptyCost{};
+    bool perRoundWeight{};
+    bool perRoundCost{};
+    bool keepEmpty{};
+};
+
+xr_flat_hash_map<shared_str, AmmoBoxConfig> ammoBoxConfigs;
+
+const AmmoBoxConfig& ammo_box_config(const shared_str& section)
+{
+    const auto [it, inserted] = ammoBoxConfigs.try_emplace(section);
+    if (!inserted)
+        return it->second;
+
+    AmmoBoxConfig& config = it->second;
+    config.perRoundWeight = pSettings->line_exist(section, "box_weight");
+    config.perRoundCost = pSettings->line_exist(section, "box_cost");
+    config.emptyWeight = pSettings->read_if_exists<float>(section, "box_weight", 0.f);
+    config.emptyCost = pSettings->read_if_exists<u32>(section, "box_cost", 0);
+    config.keepEmpty = pSettings->read_if_exists<bool>(
+        section, "keep_empty_box", config.perRoundWeight || config.perRoundCost);
+    return config;
+}
+}
 
 void CCartridge::Load(LPCSTR section, u8 LocalAmmoType)
 {
@@ -74,6 +105,9 @@ float CCartridge::Weight() const
     float res = 0;
     if (s)
     {
+        if (pSettings->line_exist(s, "box_weight"))
+            return std::max(pSettings->r_float(s, "inv_weight"), 0.f);
+
         float box = pSettings->r_float(s, "box_size");
         if (box > 0)
         {
@@ -87,6 +121,7 @@ float CCartridge::Weight() const
 void CWeaponAmmo::Load(LPCSTR section)
 {
     inherited::Load(section);
+    ammo_box_config(m_section_id);
 
     cartridge_param.kDist = pSettings->r_float(section, "k_dist");
     cartridge_param.kDisp = pSettings->r_float(section, "k_disp");
@@ -151,8 +186,7 @@ void CWeaponAmmo::OnH_B_Independent(bool just_before_destroy)
 
 bool CWeaponAmmo::Useful() const
 {
-    // Если IItem еще не полностью использованый, вернуть true
-    return !!m_boxCurr;
+    return m_boxCurr || ammo_box_config(m_section_id).keepEmpty;
 }
 /*
 s32 CWeaponAmmo::Sort(PIItem pIItem)
@@ -237,20 +271,21 @@ CInventoryItem* CWeaponAmmo::can_make_killing(const CInventory* inventory) const
 
 float CWeaponAmmo::Weight() const
 {
-    if (m_boxSize > 0)
-    {
-        float res = inherited::Weight();
-        res *= (float)m_boxCurr / (float)m_boxSize;
-        return res;
-    }
-    return 0.f;
+    const AmmoBoxConfig& config = ammo_box_config(m_section_id);
+    if (config.perRoundWeight)
+        return config.emptyWeight + inherited::Weight() * m_boxCurr;
+
+    return m_boxSize ? inherited::Weight() * static_cast<float>(m_boxCurr) / m_boxSize : 0.f;
 }
 
 u32 CWeaponAmmo::Cost() const
 {
-    u32 res = inherited::Cost();
+    const AmmoBoxConfig& config = ammo_box_config(m_section_id);
+    if (config.perRoundCost)
+    {
+        const u64 total = static_cast<u64>(config.emptyCost) + static_cast<u64>(inherited::Cost()) * m_boxCurr;
+        return static_cast<u32>(std::min<u64>(total, std::numeric_limits<u32>::max()));
+    }
 
-    res = iFloor(res * (float)m_boxCurr / (float)m_boxSize + 0.5f);
-
-    return res;
+    return m_boxSize ? iFloor(inherited::Cost() * static_cast<float>(m_boxCurr) / m_boxSize + 0.5f) : 0;
 }

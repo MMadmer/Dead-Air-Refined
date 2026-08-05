@@ -143,6 +143,25 @@ public:
             return;
         }
 
+        complete_front_gpu_capture(context);
+    }
+
+    void flush_gpu_captures()
+    {
+        if (gpuCaptures.empty())
+            return;
+
+        ID3D11DeviceContext* context = HW.get_context(CHW::IMM_CTX_ID);
+        context->Flush();
+        while (!gpuCaptures.empty())
+            complete_front_gpu_capture(context);
+    }
+
+private:
+    void complete_front_gpu_capture(ID3D11DeviceContext* context)
+    {
+        GamesaveGpuCapture& capture = *gpuCaptures.front();
+
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (FAILED(context->Map(capture.staging, 0, D3D11_MAP_READ, 0, &mapped)))
         {
@@ -170,7 +189,6 @@ public:
         gpuCaptures.pop_front();
     }
 
-private:
     static bool write_file(pcstr name, const void* data, size_t size)
     {
         const HANDLE file = CreateFileA(name, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
@@ -253,10 +271,13 @@ private:
     bool stopping{};
 };
 
+std::unique_ptr<GamesaveScreenshotQueue> gamesaveScreenshotQueue;
+
 GamesaveScreenshotQueue& gamesave_screenshot_queue()
 {
-    static GamesaveScreenshotQueue queue;
-    return queue;
+    if (!gamesaveScreenshotQueue)
+        gamesaveScreenshotQueue = std::make_unique<GamesaveScreenshotQueue>();
+    return *gamesaveScreenshotQueue;
 }
 }
 
@@ -373,6 +394,16 @@ _end_:
 
 void CRender::ProcessGamesaveScreenshots()
 {
-    gamesave_screenshot_queue().process_gpu_captures();
+    if (gamesaveScreenshotQueue)
+        gamesaveScreenshotQueue->process_gpu_captures();
+}
+
+void flush_gamesave_screenshots()
+{
+    if (!gamesaveScreenshotQueue)
+        return;
+
+    gamesaveScreenshotQueue->flush_gpu_captures();
+    gamesaveScreenshotQueue.reset();
 }
 } // namespace xray::render::RENDER_NAMESPACE

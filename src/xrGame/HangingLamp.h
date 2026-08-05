@@ -28,8 +28,17 @@ private:
     CLAItem* lanim;
     float ambient_power;
     BOOL m_bState;
+    bool m_useExtraLight{};
+    bool m_extraLightShadow{};
+    bool m_configVolumetricEnabled{};
+    bool m_volumetricRequested{};
+    bool m_qualityGatedAmbient{};
+    u32 m_appliedLightingQuality{u32(-1)};
+    float m_configVolumetricQuality{.5f};
+    float m_configVolumetricIntensity{.5f};
 
     ref_glow glow_render;
+    ref_sound m_idle_sound;
     ref_sound m_break_sound;
 
     float fHealth;

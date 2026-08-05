@@ -9,6 +9,11 @@
 | Clean Dead Air new game | Base archives, no DAR2 archives | Pass |
 | Clean Dead Air x64 save/reload | `x64_da_newgame` | Pass |
 | Existing DAR2 x86 save | Latest `admin - quicksave9` | Pass |
+| Original 0.98b pair without `.scov` | `legacy098.scop/.scoc`, exact x86-reference bytes | Pass, 27,634 objects loaded; new Refined save committed and loaded in a separate process; original hashes unchanged and no sidecar added |
+| Refined save in original 0.98b | Isolated original x86 runtime and Refined-generated `serializer_ab_01` | Pass for load, 22,958 spawn points / 27,625 objects; the original renderer stalled after load before it could perform the requested resave |
+| Lua save API compatibility | Ten legacy `before_save` mutations plus synchronous `capture_encode == false` | Pass, exact `.scoc` results, failed capture preserved the previous trio, zero transaction residue |
+| Malformed extension quickload | Valid active `l01_escape` world plus structurally invalid target `.scov` | Pass, load rejected before broadcast; level and actor ID remained unchanged |
+| Save transaction fault models | 33 deterministic I/O/fallback cases and 10 durable crash checkpoints | Pass, production ordering verifier matched the implementation |
 | Packed addon | DA Inventory Sort XDB | Pass |
 | Loose addon | DAR2 Oxygen HUD scripts/UI | Pass |
 | Lua binding parity | Original x86 exports vs x64 exports | Pass, zero missing |
@@ -38,7 +43,7 @@
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |
 | Crash-report startup prompt | Newest unhandled `dar-report-crash-*.zip` plus a mocked 1.0.5 update | Pass only when the native yes/no confirmation opens first, yes opens the `Отправка crash report` form, and that exact ZIP remains mandatory |
 | Crash-report acknowledgement | Handled marker followed by a second menu launch | Pass, the same ZIP did not prompt again and the deferred 1.0.5 update dialog opened |
-| Diagnostic privacy scan | All ZIP entries, ASCII and UTF-16 | Pass, no user name, computer name, profile path, game path, e-mail address, or IP address |
+| Diagnostic privacy scan | All non-save ZIP entries, ASCII and UTF-16 | Pass, no user name, computer name, profile path, game path, e-mail address, or IP address |
 | Diagnostic rotation | 13 pre-existing reports plus one new report | Pass, newest report retained and total reduced to 10 |
 | Native bug-report layouts | 4:3 and widescreen XML, all child bounds checked against the panel | Pass, zero out-of-panel controls |
 | Bug-report upload contract | Live Report Hub, multipart title/description plus valid anonymous diagnostic ZIP | Pass, HTTP 201, attachment accepted, QA reports deleted |

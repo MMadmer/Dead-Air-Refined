@@ -18,14 +18,35 @@
 #include "ActorEffector.h"
 #include "CustomOutfit.h"
 #include "ActorHelmet.h"
+#include "xrCommon/xr_hash_map.h"
 
 constexpr pcstr TORCH_DEFINITION = "torch_definition";
 static const float TORCH_INERTION_CLAMP = PI_DIV_6;
 static const float TORCH_INERTION_SPEED_MIN = 0.5f;
-static Fvector TORCH_OFFSET = {-0.2f, +0.1f, -0.3f};
-static Fvector TORCH_OFFSET2 = {-0.2f, +0.1f, -0.3f};
+static const Fvector TORCH_OFFSET = {-0.2f, +0.1f, -0.3f};
+static const Fvector TORCH_OFFSET2 = {-0.2f, +0.1f, -0.3f};
 static const Fvector OMNI_OFFSET = {-0.2f, +0.1f, -0.1f};
 static const float OPTIMIZATION_DISTANCE = 100.f;
+
+namespace
+{
+struct TorchExtendedConfig
+{
+    Fvector omniOffset{OMNI_OFFSET};
+    Fvector torch2Offset{TORCH_OFFSET2};
+    float inertionSpeedMin{TORCH_INERTION_SPEED_MIN};
+    float inertionSpeedMax{};
+    bool hasInertionSpeedMax{};
+};
+
+// Keep opt-in 1.0 tuning out of CTorch's native layout.
+xr_flat_hash_map<const CTorch*, TorchExtendedConfig> torchExtendedConfigs;
+
+TorchExtendedConfig& torch_extended_config(const CTorch* torch)
+{
+    return torchExtendedConfigs.try_emplace(torch).first->second;
+}
+}
 
 CTorch::CTorch()
     : fBrightness(1.f), lanim(nullptr), guid_bone(BI_NONE),
@@ -38,6 +59,7 @@ CTorch::CTorch()
       m_bNightVisionEnabled(false), m_bNightVisionOn(false), m_night_vision(nullptr)
 {
     m_prev_hp.set(0, 0);
+    m_torch_offset = TORCH_OFFSET;
     m_torch_color.set(0.f, 0.f, 0.f, 0.f);
     m_torch2_color.set(0.f, 0.f, 0.f, 0.f);
 
@@ -52,13 +74,14 @@ CTorch::CTorch()
     // because we don't have dynamic lighting in it.
     if (GEnv.Render->GenerationIsR1())
     {
-        TORCH_OFFSET.x = 0;
-        TORCH_OFFSET.z = 0;
+        m_torch_offset.x = 0.f;
+        m_torch_offset.z = 0.f;
     }
 }
 
 CTorch::~CTorch()
 {
+    torchExtendedConfigs.erase(this);
     light_render.destroy();
     light_render2.destroy();
     light_omni.destroy();
@@ -82,6 +105,24 @@ void CTorch::Load(LPCSTR section)
 {
     inherited::Load(section);
     light_trace_bone = pSettings->r_string(section, "light_trace_bone");
+    m_torch_offset = READ_IF_EXISTS(pSettings, r_fvector3, section, "torch_offset", TORCH_OFFSET);
+
+    TorchExtendedConfig& config = torch_extended_config(this);
+    config.omniOffset = READ_IF_EXISTS(pSettings, r_fvector3, section, "omni_offset", OMNI_OFFSET);
+    config.inertionSpeedMin = _max(
+        0.f, READ_IF_EXISTS(pSettings, r_float, section, "torch_inertion_speed_min", TORCH_INERTION_SPEED_MIN));
+    config.hasInertionSpeedMax = pSettings->line_exist(section, "torch_inertion_speed_max");
+    if (config.hasInertionSpeedMax)
+    {
+        config.inertionSpeedMax = _max(
+            config.inertionSpeedMin, pSettings->r_float(section, "torch_inertion_speed_max"));
+    }
+
+    if (GEnv.Render->GenerationIsR1())
+    {
+        m_torch_offset.x = 0.f;
+        m_torch_offset.z = 0.f;
+    }
 
     m_bNightVisionEnabled = !!pSettings->r_bool(section, "night_vision");
 
@@ -290,19 +331,19 @@ void CTorch::SetTorchColorA(float value)
 void CTorch::SetTorchOffsetX(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET.x = value;
+        m_torch_offset.x = value;
 }
 
 void CTorch::SetTorchOffsetY(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET.y = value;
+        m_torch_offset.y = value;
 }
 
 void CTorch::SetTorchOffsetZ(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET.z = value;
+        m_torch_offset.z = value;
 }
 
 void CTorch::SetTorchAnimation(LPCSTR value)
@@ -375,19 +416,19 @@ void CTorch::SetTorch2ColorA(float value)
 void CTorch::SetTorch2OffsetX(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET2.x = value;
+        torch_extended_config(this).torch2Offset.x = value;
 }
 
 void CTorch::SetTorch2OffsetY(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET2.y = value;
+        torch_extended_config(this).torch2Offset.y = value;
 }
 
 void CTorch::SetTorch2OffsetZ(float value)
 {
     if (!OnClient())
-        TORCH_OFFSET2.z = value;
+        torch_extended_config(this).torch2Offset.z = value;
 }
 
 bool CTorch::torch_active() const { return (m_switched_on); }
@@ -466,7 +507,9 @@ bool CTorch::net_Spawn(CSE_Abstract* DC)
     // else
     //	SwitchNightVision	(false, false);
 
-    m_delta_h = PI_DIV_2 - atan((range * 0.5f) / _abs(TORCH_OFFSET.x));
+    m_delta_h = fis_zero(m_torch_offset.x) ?
+        0.f :
+        PI_DIV_2 - atan((range * 0.5f) / _abs(m_torch_offset.x));
 
     return (TRUE);
 }
@@ -482,7 +525,6 @@ void CTorch::net_Destroy()
 void CTorch::OnH_A_Chield()
 {
     inherited::OnH_A_Chield();
-    m_focus.set(Position());
 }
 
 void CTorch::OnH_B_Independent(bool just_before_destroy)
@@ -495,9 +537,31 @@ void CTorch::OnH_B_Independent(bool just_before_destroy)
     m_sounds.StopAllSounds();
 }
 
+void CTorch::OnMoveToRuck(const SInvItemPlace& prev)
+{
+    inherited::OnMoveToRuck(prev);
+    if (prev.type != eItemPlaceSlot)
+        return;
+
+    Switch(false);
+    SwitchNightVision(false);
+}
+
 void CTorch::UpdateCL()
 {
     inherited::UpdateCL();
+
+    CActor* actor = nullptr;
+    if (m_night_vision && m_night_vision->IsActive())
+    {
+        actor = smart_cast<CActor*>(H_Parent());
+        if (actor)
+        {
+            Fvector highlightPosition = actor->Position();
+            highlightPosition.y += 1.5f;
+            m_night_vision->SetHighlightPosition(highlightPosition);
+        }
+    }
 
     if (!m_switched_on)
         return;
@@ -507,9 +571,19 @@ void CTorch::UpdateCL()
 
     if (H_Parent())
     {
-        CActor* actor = smart_cast<CActor*>(H_Parent());
+        const TorchExtendedConfig& config = torch_extended_config(this);
+        if (!actor)
+            actor = smart_cast<CActor*>(H_Parent());
         if (actor)
+        {
+            DrainCondition(Device.fTimeDelta);
+            if (GetCondition() <= 0.f)
+            {
+                Switch(false);
+                return;
+            }
             smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones_Invalidate();
+        }
 
         if (H_Parent()->XFORM().c.distance_to_sqr(Device.vCameraPosition) < _sqr(OPTIMIZATION_DISTANCE) ||
             GameID() != eGameIDSingle)
@@ -528,50 +602,40 @@ void CTorch::UpdateCL()
 
         if (actor)
         {
-            m_prev_hp.x = angle_inertion_var(m_prev_hp.x, -actor->cam_FirstEye()->yaw, TORCH_INERTION_SPEED_MIN,
-                m_torch_inertion + TORCH_INERTION_SPEED_MIN, TORCH_INERTION_CLAMP, Device.fTimeDelta);
-            m_prev_hp.y = angle_inertion_var(m_prev_hp.y, -actor->cam_FirstEye()->pitch, TORCH_INERTION_SPEED_MIN,
-                m_torch_inertion + TORCH_INERTION_SPEED_MIN, TORCH_INERTION_CLAMP, Device.fTimeDelta);
+            const CCameraBase* camera = actor->active_cam() == eacLookAt ? actor->cam_Active() : actor->cam_FirstEye();
+            const float inertionSpeedMax = config.hasInertionSpeedMax ?
+                config.inertionSpeedMax : _max(config.inertionSpeedMin, m_torch_inertion + config.inertionSpeedMin);
+            m_prev_hp.x = angle_inertion_var(m_prev_hp.x, -camera->yaw, config.inertionSpeedMin,
+                inertionSpeedMax, TORCH_INERTION_CLAMP, Device.fTimeDelta);
+            m_prev_hp.y = angle_inertion_var(m_prev_hp.y, -camera->pitch, config.inertionSpeedMin,
+                inertionSpeedMax, TORCH_INERTION_CLAMP, Device.fTimeDelta);
 
             Fvector dir, right, up;
             dir.setHP(m_prev_hp.x + m_delta_h, m_prev_hp.y);
             Fvector::generate_orthonormal_basis_normalized(dir, up, right);
 
-            if (true)
-            {
-                Fvector offset = M.c;
-                offset.mad(M.i, TORCH_OFFSET.x);
-                offset.mad(M.j, TORCH_OFFSET.y);
-                offset.mad(M.k, TORCH_OFFSET.z);
-                light_render->set_position(offset);
+            Fvector offset = M.c;
+            offset.mad(M.i, m_torch_offset.x);
+            offset.mad(M.j, m_torch_offset.y);
+            offset.mad(M.k, m_torch_offset.z);
+            light_render->set_position(offset);
 
-                offset = M.c;
-                offset.mad(M.i, TORCH_OFFSET2.x);
-                offset.mad(M.j, TORCH_OFFSET2.y);
-                offset.mad(M.k, TORCH_OFFSET2.z);
-                light_render2->set_position(offset);
+            offset = M.c;
+            offset.mad(M.i, config.torch2Offset.x);
+            offset.mad(M.j, config.torch2Offset.y);
+            offset.mad(M.k, config.torch2Offset.z);
+            light_render2->set_position(offset);
 
-                if (true /*false*/)
-                {
-                    offset = M.c;
-                    offset.mad(M.i, OMNI_OFFSET.x);
-                    offset.mad(M.j, OMNI_OFFSET.y);
-                    offset.mad(M.k, OMNI_OFFSET.z);
-                    light_omni->set_position(offset);
-                }
-            } // if (true)
+            offset = M.c;
+            offset.mad(M.i, config.omniOffset.x);
+            offset.mad(M.j, config.omniOffset.y);
+            offset.mad(M.k, config.omniOffset.z);
+            light_omni->set_position(offset);
             glow_render->set_position(M.c);
 
-            if (true)
-            {
-                light_render->set_rotation(dir, right);
-                light_render2->set_rotation(dir, right);
-
-                if (true /*false*/)
-                {
-                    light_omni->set_rotation(dir, right);
-                }
-            } // if (true)
+            light_render->set_rotation(dir, right);
+            light_render2->set_rotation(dir, right);
+            light_omni->set_rotation(dir, right);
             glow_render->set_direction(dir);
 
         } // if(actor)
@@ -586,10 +650,10 @@ void CTorch::UpdateCL()
                 light_render2->set_active(false);
 
                 Fvector offset = M.c;
-                offset.mad(M.i, OMNI_OFFSET.x);
-                offset.mad(M.j, OMNI_OFFSET.y);
-                offset.mad(M.k, OMNI_OFFSET.z);
-                light_omni->set_position(M.c);
+                offset.mad(M.i, config.omniOffset.x);
+                offset.mad(M.j, config.omniOffset.y);
+                offset.mad(M.k, config.omniOffset.z);
+                light_omni->set_position(offset);
                 light_omni->set_rotation(M.k, M.i);
             } // if (can_use_dynamic_lights())
 
@@ -698,19 +762,59 @@ void CTorch::enable(bool value)
         Switch(false);
 }
 
-CNightVisionEffector::CNightVisionEffector(const shared_str& section) : m_pActor(NULL)
+CNightVisionEffector::CNightVisionEffector(const shared_str& section)
+    : m_pActor(nullptr)
 {
     m_sounds.LoadSound(section.c_str(), "snd_night_vision_on", "NightVisionOnSnd", false, SOUND_TYPE_ITEM_USING);
     m_sounds.LoadSound(section.c_str(), "snd_night_vision_off", "NightVisionOffSnd", false, SOUND_TYPE_ITEM_USING);
     m_sounds.LoadSound(section.c_str(), "snd_night_vision_idle", "NightVisionIdleSnd", true, SOUND_TYPE_ITEM_USING);
     m_sounds.LoadSound(
         section.c_str(), "snd_night_vision_broken", "NightVisionBrokenSnd", false, SOUND_TYPE_ITEM_USING);
+
+    if (!pSettings->read_if_exists<bool>(section, "night_vision_highlight", true))
+        return;
+
+    m_highlight = GEnv.Render->light_create();
+    m_highlight->set_type(IRender_Light::POINT);
+    m_highlight->set_shadow(false);
+    m_highlight->set_range(clampr(
+        pSettings->read_if_exists<float>(section, "night_vision_highlight_range", 60.f), 0.1f, 1000.f));
+    m_highlight->set_cone(0.4f);
+
+    Fvector color;
+    color.set(0.1f, 0.1f, 0.1f);
+    color = READ_IF_EXISTS(pSettings, r_fvector3, section, "night_vision_highlight_color", color);
+    m_highlight->set_color(
+        clampr(color.x, 0.f, 1.f), clampr(color.y, 0.f, 1.f), clampr(color.z, 0.f, 1.f));
+    m_highlight->set_active(false);
+}
+
+CNightVisionEffector::~CNightVisionEffector()
+{
+    if (!m_highlight)
+        return;
+
+    m_highlight->set_active(false);
+    m_highlight.destroy();
 }
 
 void CNightVisionEffector::Start(const shared_str& sect, CActor* pA, bool play_sound)
 {
     m_pActor = pA;
-    AddEffector(m_pActor, effNightvision, sect);
+    if (!m_pActor)
+        return;
+
+    if (!IsActive())
+        AddEffector(m_pActor, effNightvision, sect);
+
+    if (m_highlight)
+    {
+        Fvector position = m_pActor->Position();
+        position.y += 1.5f;
+        m_highlight->set_position(position);
+        m_highlight->set_active(true);
+    }
+
     if (play_sound)
     {
         PlaySounds(eStartSound);
@@ -720,6 +824,12 @@ void CNightVisionEffector::Start(const shared_str& sect, CActor* pA, bool play_s
 
 void CNightVisionEffector::Stop(const float factor, bool play_sound)
 {
+    if (m_highlight)
+        m_highlight->set_active(false);
+
+    m_sounds.StopSound("NightVisionOnSnd");
+    m_sounds.StopSound("NightVisionIdleSnd");
+
     if (!m_pActor)
         return;
     CEffectorPP* pp = m_pActor->Cameras().GetPPEffector((EEffectorPPType)effNightvision);
@@ -728,9 +838,6 @@ void CNightVisionEffector::Stop(const float factor, bool play_sound)
         pp->Stop(factor);
         if (play_sound)
             PlaySounds(eStopSound);
-
-        m_sounds.StopSound("NightVisionOnSnd");
-        m_sounds.StopSound("NightVisionIdleSnd");
     }
 }
 
@@ -739,12 +846,16 @@ bool CNightVisionEffector::IsActive()
     if (!m_pActor)
         return false;
     CEffectorPP* pp = m_pActor->Cameras().GetPPEffector((EEffectorPPType)effNightvision);
-    return (pp != NULL);
+    return pp;
 }
 
 void CNightVisionEffector::OnDisabled(CActor* pA, bool play_sound)
 {
     m_pActor = pA;
+    if (m_highlight)
+        m_highlight->set_active(false);
+    m_sounds.StopSound("NightVisionOnSnd");
+    m_sounds.StopSound("NightVisionIdleSnd");
     if (play_sound)
         PlaySounds(eBrokeSound);
 }
@@ -773,4 +884,16 @@ void CNightVisionEffector::PlaySounds(EPlaySounds which)
     break;
     default: NODEFAULT;
     }
+}
+
+void CNightVisionEffector::SetHighlightPosition(Fvector position)
+{
+    if (m_highlight)
+        m_highlight->set_position(position);
+}
+
+void CNightVisionEffector::SetHighlightRotation(Fvector direction, Fvector right)
+{
+    if (m_highlight)
+        m_highlight->set_rotation(direction, right);
 }

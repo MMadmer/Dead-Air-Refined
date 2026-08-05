@@ -8,6 +8,8 @@
 #include "DetailFormat.h"
 #include "DetailModel.h"
 
+class CFrustum;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 #ifdef _EDITOR
@@ -34,9 +36,6 @@ const int dm_obj_in_slot = 4;
 //const float dm_fade = float(2 * dm_size) - .5f;
 const float dm_slot_size = DETAIL_SLOT_SIZE;
 
-//AVO: detail radius
-//const u32 dm_max_cache_size = 62001; // assuming max dm_size = 124
-constexpr auto dm_max_cache_size = 62001 * 2; // assuming max dm_size = 248
 extern u32 dm_size;
 extern u32 dm_cache1_line;
 extern u32 dm_cache_line;
@@ -67,6 +66,12 @@ public:
     };
 
     using SlotItemVec = xr_vector<SlotItem*>;
+
+    struct VisiblePart
+    {
+        SlotItemVec* items;
+        vis_data* bounds;
+    };
 
     struct SlotPart
     { //
@@ -115,7 +120,8 @@ public:
         }
     };
 
-    typedef xr_vector<xr_vector<SlotItemVec*>> vis_list;
+    using VisiblePartVec = xr_vector<VisiblePart>;
+    using vis_list = xr_vector<VisiblePartVec>;
     typedef svector<CDetail*, dm_max_objects> DetailVec;
     typedef DetailVec::iterator DetailIt;
     typedef poolSS<SlotItem, 4096> PSS;
@@ -138,6 +144,9 @@ public:
     float m_time_rot_2;
     float m_time_pos;
     float m_global_time_old;
+    Fvector4 m_wind_dir1{};
+    Fvector4 m_wind_dir2{};
+    u32 m_render_state_frame{u32(-1)};
 
     IReader* dtFS;
     DetailHeader dtH;
@@ -157,7 +166,7 @@ public:
     //AVO: detail draw radius
     CacheSlot1** cache_level1;
     Slot*** cache; // grid-cache itself
-    svector<Slot*, dm_max_cache_size> cache_task; // non-unpacked slots
+    xr_vector<Slot*> cache_task; // non-unpacked slots
     Slot* cache_pool; // just memory for slots
 
     int cache_cx;
@@ -180,7 +189,7 @@ public:
     ref_geom soft_Geom;
     void soft_Load();
     void soft_Unload();
-    void soft_Render();
+    void soft_Render(const CFrustum* frustum);
 
     // Hardware processor
     ref_geom hw_Geom;
@@ -200,8 +209,10 @@ public:
     void hw_Load_Geom();
     void hw_Load_Shaders();
     void hw_Unload();
-    void hw_Render(CBackend& cmd_list);
-    void hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, const Fvector4& wave, const Fvector4& wind, u32 var_id, u32 lod_id);
+    void hw_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum);
+    void hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, const Fvector4& wave,
+        const Fvector4& wind, u32 var_id, u32 lod_id, bool collectStats, const CFrustum* frustum);
+    bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum) const;
 
     // get unpacked slot
     DetailSlot& QueryDB(int sx, int sz);
@@ -220,7 +231,9 @@ public:
     int w2cg_Z(int z) { return cache_cz - dm_size + (dm_cache_line - 1 - z); }
     void Load();
     void Unload();
-    void Render(CBackend& cmd_list);
+    bool HasRenderableDetails() const;
+    void UpdateRenderState();
+    void Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum = nullptr);
 
     /// MT stuff
     Task* m_calc_task{};

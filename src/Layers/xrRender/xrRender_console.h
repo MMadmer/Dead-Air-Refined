@@ -36,7 +36,18 @@ enum
 extern ECORE_API u32 ps_r_sun_quality; //	=	0;
 extern ECORE_API u32 ps_r_water_reflection; //	=	0;
 extern ECORE_API const xr_token qsun_quality_token[];
+extern ECORE_API u32 ps_r_sun_details;
+extern ECORE_API const xr_token qsun_details_token[];
+extern ECORE_API u32 ps_r_lighting_quality;
+extern ECORE_API const xr_token qlighting_quality_token[];
 extern ECORE_API const xr_token qwater_reflection_quality_token[];
+
+enum DetailShadowQuality : u32
+{
+    detail_shadow_off,
+    detail_shadow_medium,
+    detail_shadow_high,
+};
 
 extern ECORE_API u32 ps_r3_msaa; //	=	0;
 extern ECORE_API const xr_token qmsaa_token[];
@@ -106,6 +117,7 @@ enum
 
 // R2
 extern ECORE_API bool ps_r2_sun_static;
+extern ECORE_API BOOL ps_r2_sun_complex;
 extern ECORE_API bool ps_r2_advanced_pp; // advanced post process and effects
 
 extern ECORE_API float ps_r2_ssaLOD_A;
@@ -173,6 +185,7 @@ extern ECORE_API int ps_r2_dof_diff_far;
 
 extern ECORE_API int ps_r2_technicolor;
 extern ECORE_API int ps_r2_vignette;
+extern ECORE_API BOOL ps_r2_filmgrain;
 extern ECORE_API int ps_r2_reflections;
 extern ECORE_API int ps_r2_lensdirt;
 extern ECORE_API int ps_r2_lenswater;
@@ -182,6 +195,19 @@ extern ECORE_API float ps_r2_lensdirt_value;
 extern ECORE_API float ps_r2_lenswater_value;
 extern ECORE_API float ps_r2_lumasharpen;
 extern ECORE_API Fvector4 ps_r2_temp;
+extern ECORE_API float ps_shaders_var_x;
+extern ECORE_API float ps_shaders_var_y;
+extern ECORE_API float ps_shaders_var_z;
+extern ECORE_API float ps_shaders_var_w;
+extern ECORE_API float ps_r2_postprocess_var_x;
+extern ECORE_API float ps_r2_postprocess_var_y;
+extern ECORE_API float ps_r2_postprocess_var_z;
+extern ECORE_API float ps_r2_postprocess_var_w;
+extern ECORE_API float ps_r2_lens_var_x;
+extern ECORE_API float ps_r2_lens_var_y;
+extern ECORE_API float ps_r2_lens_var_z;
+extern ECORE_API float ps_r2_lens_var_w;
+extern ECORE_API BOOL ps_detail_scale_on_fade;
 
 extern ECORE_API float ps_r3_dyn_wet_surf_near; // 10.0f
 extern ECORE_API float ps_r3_dyn_wet_surf_far; // 30.0f

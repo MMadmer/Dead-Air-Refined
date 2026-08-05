@@ -167,6 +167,7 @@ public:
     IC const CSpecificCharacter& SpecificCharacter() const { return CharacterInfo().m_SpecificCharacter; };
     bool InfinitiveMoney() { return CharacterInfo().m_SpecificCharacter.MoneyDef().inf_money; }
     //установка группировки на клиентском и серверном объкте
+    void SetName(LPCSTR new_name);
     virtual void SetCommunity(CHARACTER_COMMUNITY_INDEX);
     virtual void SetRank(CHARACTER_RANK_VALUE);
     virtual void ChangeRank(CHARACTER_RANK_VALUE);

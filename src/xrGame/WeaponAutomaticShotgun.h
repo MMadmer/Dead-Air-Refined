@@ -12,6 +12,7 @@ public:
 
     virtual void Load(LPCSTR section);
 
+    bool net_Spawn(CSE_Abstract* DC) override;
     virtual void net_Export(NET_Packet& P);
     virtual void net_Import(NET_Packet& P);
 

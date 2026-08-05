@@ -536,6 +536,34 @@ void CPhysicsShellHolder::BonceDamagerCallback(float& damage_factor)
         damage_factor = phs->BonceDamageFactor();
 }
 
+bool CPhysicsShellHolder::ActorCanCapture() const
+{
+    constexpr LPCSTR captureSection = "ph_capture_visuals";
+    LPCSTR visualName = cNameVisual().c_str();
+    if (!visualName || !visualName[0] || !pSettings->section_exist(captureSection))
+        return false;
+
+    string_path visualPath;
+    xr_strcpy(visualPath, visualName);
+    for (LPSTR character = visualPath; *character; ++character)
+    {
+        if (*character == '/')
+            *character = '\\';
+    }
+
+    while (true)
+    {
+        if (pSettings->line_exist(captureSection, visualPath))
+            return true;
+
+        LPSTR separator = strrchr(visualPath, '\\');
+        if (!separator)
+            return false;
+
+        *separator = '\0';
+    }
+}
+
 #ifdef DEBUG
 std::string CPhysicsShellHolder::dump(EDumpType type) const
 {

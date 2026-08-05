@@ -62,7 +62,7 @@ void CActor::OnEvent(NET_Packet& P, u16 type)
             Msg("--- Actor [%d][%s]  %s  [%d][%s]", ID(), Name(), act, _GO->ID(), _GO->cNameSect().c_str());
 #endif // MP_LOGGING
 
-            inventory().Take(_GO, false, true);
+            inventory().Take(_GO, true, true);
 
             SelectBestWeapon(Obj);
         }
@@ -318,7 +318,7 @@ void CActor::OnEvent(NET_Packet& P, u16 type)
             Msg("! Error: No object to attach holder [%d]", id);
             break;
         }
-        VERIFY(m_holder == NULL);
+        VERIFY(!m_holder);
         CHolderCustom* holder = smart_cast<CHolderCustom*>(O);
         if (!holder->Engaged())
             use_Holder(holder);

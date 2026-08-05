@@ -7,6 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "pch_script.h"
+#include "xrCommon/xr_hash_map.h"
 #include "inventory_item.h"
 #include "inventory_item_impl.h"
 #include "Inventory.h"
@@ -31,7 +32,11 @@
 constexpr pcstr INV_NAME_KEY = "inv_name";
 constexpr pcstr INV_NAME_SHORT_KEY = "inv_name_short";
 constexpr pcstr DESCRIPTION_KEY = "description";
-extern int g_normalize_mouse_sens;
+
+namespace
+{
+xr_flat_hash_map<const CInventoryItem*, float> conditionDrainRates;
+}
 
 net_updateInvData* CInventoryItem::NetSync()
 {
@@ -51,6 +56,8 @@ CInventoryItem::CInventoryItem()
     m_flags.set(FCanTake, TRUE);
     m_flags.set(FCanTrade, m_can_trade);
     m_flags.set(FUsingCondition, FALSE);
+    m_flags.set(FSystemItem, FALSE);
+    m_flags.set(FNoStack, FALSE);
 
     m_ItemCurrPlace.value = 0;
     m_ItemCurrPlace.type = eItemPlaceUndefined;
@@ -63,6 +70,7 @@ CInventoryItem::CInventoryItem()
 
 CInventoryItem::~CInventoryItem()
 {
+    conditionDrainRates.erase(this);
     delete_data(m_net_updateData);
 
 #ifndef MASTER_GOLD
@@ -114,17 +122,25 @@ void CInventoryItem::Load(LPCSTR section)
     m_flags.set(FCanTake, READ_IF_EXISTS(pSettings, r_bool, section, "can_take", TRUE));
     m_flags.set(FCanTrade, m_can_trade);
     m_flags.set(FIsQuestItem, READ_IF_EXISTS(pSettings, r_bool, section, "quest_item", FALSE));
+    m_flags.set(FSystemItem, READ_IF_EXISTS(pSettings, r_bool, section, "system_item", FALSE));
+    m_flags.set(FNoStack, READ_IF_EXISTS(pSettings, r_bool, section, "dont_stack", FALSE));
 
     // Added by Axel, to enable optional condition use on any item
     m_flags.set(FUsingCondition, READ_IF_EXISTS(pSettings, r_bool, section, "use_condition", false));
 
     m_highlight_equipped = READ_IF_EXISTS(pSettings, r_bool, section, "highlight_equipped", false);
 
+    const float conditionDrain = pSettings->read_if_exists<float>(section, "condition_drain", 0.f);
+    if (conditionDrain > 0.f)
+        conditionDrainRates[this] = conditionDrain;
+    else
+        conditionDrainRates.erase(this);
+
     if (BaseSlot() != NO_ACTIVE_SLOT || Belt())
     {
         m_flags.set(FRuckDefault, pSettings->read_if_exists<bool>(section, "default_to_ruck", true));
         m_flags.set(FAllowSprint, pSettings->read_if_exists<bool>(section, "sprint_allowed", true));
-        m_fControlInertionFactor = g_normalize_mouse_sens ? 1.0f : pSettings->read_if_exists<float>(section, "control_inertion_factor", 1.0f);
+        m_fControlInertionFactor = pSettings->read_if_exists<float>(section, "control_inertion_factor", 1.0f);
     }
     m_icon_name = READ_IF_EXISTS(pSettings, r_string, section, "icon_name", NULL);
 }
@@ -143,6 +159,20 @@ void CInventoryItem::ChangeCondition(float fDeltaCondition)
 {
     m_fCondition += fDeltaCondition;
     clamp(m_fCondition, 0.f, 1.f);
+}
+
+void CInventoryItem::DrainCondition(float deltaSeconds)
+{
+    const auto it = conditionDrainRates.find(this);
+    if (it == conditionDrainRates.end() || deltaSeconds <= 0.f || m_fCondition <= 0.f)
+        return;
+
+    ChangeCondition(-it->second * deltaSeconds);
+}
+
+bool CInventoryItem::GetDrainCondition() const
+{
+    return conditionDrainRates.contains(this);
 }
 
 void CInventoryItem::Hit(SHit* pHDS)

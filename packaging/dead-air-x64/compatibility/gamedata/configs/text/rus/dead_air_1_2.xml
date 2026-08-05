@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+    <string id="ui_mm_infinite_bolts">
+        <text>Игра: Бесконечные болты</text>
+    </string>
+    <string id="ui_mm_infinite_bolts_hint">
+        <text>Болты не расходуются. Если болты закончились, доступный болт появится при включении этой опции.</text>
+    </string>
+</string_table>

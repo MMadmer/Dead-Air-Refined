@@ -487,13 +487,17 @@ void render_sun_old::render_sun()
         bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
         bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
             !dsgraph.mapSorted.empty();
-        if (bNormal || bSpecial)
+        const bool renderDetails = ps_r_sun_details >= detail_shadow_high && RImplementation.Details &&
+            RImplementation.Details->HasRenderableDetails();
+        if (bNormal || bSpecial || renderDetails)
         {
             RImplementation.Target->phase_smap_direct(RCache, sun, SE_SUN_FAR);
             RCache.set_xform_world(Fidentity);
             RCache.set_xform_view(Fidentity);
             RCache.set_xform_project(sun->X.D[0].combine);
             dsgraph.render_graph(0);
+            if (renderDetails)
+                RImplementation.Details->Render(RCache, false, &dsgraph.o.view_frustum);
             sun->X.D[0].transluent = FALSE;
             if (bSpecial)
             {
@@ -677,15 +681,17 @@ void render_sun_old::render_sun_near()
         bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
         bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
             !dsgraph.mapSorted.empty();
-        if (bNormal || bSpecial)
+        const bool renderDetails = ps_r_sun_details >= detail_shadow_medium && RImplementation.Details &&
+            RImplementation.Details->HasRenderableDetails();
+        if (bNormal || bSpecial || renderDetails)
         {
             RImplementation.Target->phase_smap_direct(RCache, sun, SE_SUN_NEAR);
             RCache.set_xform_world(Fidentity);
             RCache.set_xform_view(Fidentity);
             RCache.set_xform_project(sun->X.D[0].combine);
             dsgraph.render_graph(0);
-            if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))
-                RImplementation.Details->Render(RCache);
+            if (renderDetails)
+                RImplementation.Details->Render(RCache, false, &dsgraph.o.view_frustum);
             sun->X.D[0].transluent = FALSE;
             if (bSpecial)
             {

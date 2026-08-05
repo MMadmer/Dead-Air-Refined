@@ -54,7 +54,7 @@ void CRenderTarget::phase_ssao()
     RCache.set_Element(s_ssao->E[0]);
     RCache.set_Geometry(g_combine);
 
-    RCache.set_c("m_v2w", Device.mInvView);
+    RCache.set_c("m_v2w", RCache.xforms.get_inv_V());
     RCache.set_c("ssao_noise_tile_factor", fSSAONoise);
     RCache.set_c("ssao_kernel_size", fSSAOKernelSize);
     RCache.set_c("resolution", _w, _h, 1.0f / _w, 1.0f / _h);
@@ -136,7 +136,7 @@ void CRenderTarget::phase_downsamp()
         // Draw
         RCache.set_Element(s_ssao->E[1]);
         RCache.set_Geometry(g_combine);
-        RCache.set_c("m_v2w", Device.mInvView);
+        RCache.set_c("m_v2w", RCache.xforms.get_inv_V());
 
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
     }

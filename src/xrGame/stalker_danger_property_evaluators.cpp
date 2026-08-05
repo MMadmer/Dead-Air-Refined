@@ -15,6 +15,7 @@
 #include "memory_manager.h"
 #include "danger_manager.h"
 #include "agent_manager.h"
+#include "agent_enemy_manager.h"
 #include "agent_member_manager.h"
 #include "stalker_movement_manager_smart_cover.h"
 #include "cover_evaluators.h"
@@ -269,6 +270,10 @@ _value_type CStalkerPropertyEvaluatorEnemyWounded::evaluate()
     const CAI_Stalker* stalker = smart_cast<const CAI_Stalker*>(enemy);
     if (!stalker)
         return (false);
+
+    const ALife::_OBJECT_ID processorId = object().agent_manager().enemy().wounded_processor(enemy);
+    if (processorId != object().ID())
+        return false;
 
     return (stalker->wounded(&object().movement().restrictions()));
 }

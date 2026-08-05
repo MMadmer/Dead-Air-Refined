@@ -62,16 +62,17 @@ void CHUDManager::Render_First(u32 context_id)
     if (0 == O)
         return;
     CActor* A = smart_cast<CActor*>(O);
-    if (!A || !A->HUDview())
+    if (!A || !A->HUDview() || (A->MovingState() & mcClimb))
         return;
 
     // R1 keeps the actor hidden and renders only its shadow; newer renderers draw the first-person body.
     {
         const auto root = O->H_Root();
         ScopeLock lock{ &render_lock };
+        const bool wasInvisible = root->renderable_Invisible();
         root->renderable_Invisible(GEnv.Render->GenerationIsR1());
         A->renderable_RenderBody(context_id, root);
-        root->renderable_Invisible(false);
+        root->renderable_Invisible(wasInvisible);
     }
 }
 

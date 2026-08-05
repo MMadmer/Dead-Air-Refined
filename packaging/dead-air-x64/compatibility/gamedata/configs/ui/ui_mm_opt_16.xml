@@ -818,7 +818,7 @@
         hint="ui_mm_auto_continue_on_load_hint">
         <options_item entry="auto_continue_on_load" group="mm_opt_gameplay"/>
       </check_auto_continue_on_load>
-			
+
 		<check_show_tracers x="162" y="0" width="30" height="21">
 			<options_item entry="g_use_tracers" group="mm_opt_gameplay"/>
 		</check_show_tracers>

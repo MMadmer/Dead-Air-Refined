@@ -318,7 +318,11 @@ float CInventoryOwner::MaxCarryWeight() const
 
     const CCustomOutfit* outfit = GetOutfit();
     if (outfit)
-        ret += outfit->m_additional_weight2;
+        ret += outfit->m_additional_weight2 * outfit->GetCondition();
+
+    const CBackpack* backpack = GetBackpack();
+    if (backpack)
+        ret += backpack->m_additional_weight2 * backpack->GetCondition();
 
     return ret;
 }
@@ -363,6 +367,20 @@ void CInventoryOwner::LostPdaContact(CInventoryOwner* pInvOwner) {}
 u16 CInventoryOwner::object_id() const { return smart_cast<const CGameObject*>(this)->ID(); }
 //////////////////////////////////////////////////////////////////////////
 //установка группировки на клиентском и серверном объкте
+
+void CInventoryOwner::SetName(LPCSTR new_name)
+{
+    CEntityAlive* entityAlive = smart_cast<CEntityAlive*>(this);
+    VERIFY(entityAlive);
+
+    CSE_Abstract* serverEntity = ai().alife().objects().object(entityAlive->ID(), false);
+    if (!serverEntity)
+        return;
+
+    m_game_name = new_name;
+    if (CSE_ALifeTraderAbstract* trader = smart_cast<CSE_ALifeTraderAbstract*>(serverEntity))
+        trader->m_character_name = new_name;
+}
 
 void CInventoryOwner::SetCommunity(CHARACTER_COMMUNITY_INDEX new_community)
 {

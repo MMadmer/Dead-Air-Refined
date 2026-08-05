@@ -62,6 +62,8 @@ void CWeaponKnife::Load(LPCSTR section)
     // verify class
     inherited::Load(section);
 
+    m_sounds.LoadSound(section, "snd_draw", "sndShow", true, SOUND_TYPE_WEAPON_RECHARGING);
+    m_sounds.LoadSound(section, "snd_holster", "sndHide", true, SOUND_TYPE_WEAPON_RECHARGING);
     fWallmarkSize = pSettings->r_float(section, "wm_size");
     m_sounds.LoadSound(section, "snd_shoot", "sndShot", false, SOUND_TYPE_WEAPON_SHOOTING);
 
@@ -79,7 +81,7 @@ void CWeaponKnife::Load(LPCSTR section)
         { "splash2_dist", "spash2_dist", FieldTypes::t_float, &m_Hit2Distance }, // GSC was too lazy to fix the typos!!!
 
         { "splash1_radius", "spash1_radius", FieldTypes::t_float, &m_Hit1SplashRadius },
-        { "splash2_radius", "spash2_radius", FieldTypes::t_float, &m_Hit1SplashRadius },
+        { "splash2_radius", "spash2_radius", FieldTypes::t_float, &m_Hit2SplashRadius },
 
         { "splash1_hits_count", nullptr, FieldTypes::t_u32, &m_Splash1HitsCount },
         { "splash1_pervictim_hcount", nullptr, FieldTypes::t_u32, &m_Splash1PerVictimsHCount },
@@ -148,7 +150,8 @@ void CWeaponKnife::Load(LPCSTR section)
 
     oldStrikeMethod = successCount == 0;
 
-    knife_material_idx = GMLib.GetMaterialIdx(KNIFE_MATERIAL_NAME);
+    knife_material_idx = GMLib.GetMaterialIdx(
+        READ_IF_EXISTS(pSettings, r_string, section, "material", KNIFE_MATERIAL_NAME));
 
 #ifdef DEBUG
     m_dbg_data.m_pick_vectors.reserve(std::max(m_Splash1HitsCount, m_Splash2HitsCount));
@@ -174,21 +177,7 @@ void CWeaponKnife::OnStateSwitch(u32 S, u32 oldState)
         //-------------------------------------------
         m_eHitType = m_eHitType_1;
         // fHitPower		= fHitPower_1;
-        if (ParentIsActor())
-        {
-            if (GameID() == eGameIDSingle)
-            {
-                fCurrentHit = fvHitPower_1[g_SingleGameDifficulty];
-            }
-            else
-            {
-                fCurrentHit = fvHitPower_1[egdMaster];
-            }
-        }
-        else
-        {
-            fCurrentHit = fvHitPower_1[egdMaster];
-        }
+        fCurrentHit = fvHitPower_1[egdMaster];
         fHitImpulse_cur = fHitImpulse_1;
         //-------------------------------------------
         switch2_Attacking(S);
@@ -199,21 +188,7 @@ void CWeaponKnife::OnStateSwitch(u32 S, u32 oldState)
         //-------------------------------------------
         m_eHitType = m_eHitType_2;
         // fHitPower		= fHitPower_2;
-        if (ParentIsActor())
-        {
-            if (GameID() == eGameIDSingle)
-            {
-                fCurrentHit = fvHitPower_2[g_SingleGameDifficulty];
-            }
-            else
-            {
-                fCurrentHit = fvHitPower_2[egdMaster];
-            }
-        }
-        else
-        {
-            fCurrentHit = fvHitPower_2[egdMaster];
-        }
+        fCurrentHit = fvHitPower_2[egdMaster];
         fHitImpulse_cur = fHitImpulse_2;
         //-------------------------------------------
         switch2_Attacking(S);
@@ -383,9 +358,9 @@ void CWeaponKnife::switch2_Attacking(u32 state)
         return;
 
     if (state == eFire)
-        PlayHUDMotion("anm_attack", "anim_shoot1_start", FALSE, this, state);
+        PlayHUDMotion("anm_attack", "anim_shoot1_start", TRUE, this, state);
     else // eFire2
-        PlayHUDMotion("anm_attack2", "anim_shoot2_start", FALSE, this, state);
+        PlayHUDMotion("anm_attack2", "anim_shoot2_start", TRUE, this, state);
 
     // XXX: could check it once at initialization stage (could use something like CHudItem::isHUDAnimationExist())
     attackMotionMarksAvailable = !m_current_motion_def->marks.empty();
@@ -405,6 +380,7 @@ void CWeaponKnife::switch2_Hiding()
 {
     FireEnd();
     VERIFY(GetState() == eHiding);
+    PlaySound("sndHide", get_LastFP());
     PlayHUDMotion("anm_hide", "anim_hide", TRUE, this, GetState());
 }
 
@@ -417,6 +393,7 @@ void CWeaponKnife::switch2_Hidden()
 void CWeaponKnife::switch2_Showing()
 {
     VERIFY(GetState() == eShowing);
+    PlaySound("sndShow", get_LastFP());
     PlayHUDMotion("anm_show", "anim_draw", FALSE, this, GetState());
 }
 
@@ -469,40 +446,6 @@ void CWeaponKnife::LoadFireParams(LPCSTR section)
         fvHitPower_2[egdMaster]; //изначально параметры для других уровней сложности такие же
     fvHitPowerCritical_2[egdNovice] = fvHitPowerCritical_2[egdStalker] = fvHitPowerCritical_2[egdVeteran] =
         fvHitPowerCritical_2[egdMaster]; //изначально параметры для других уровней сложности такие же
-
-    int num_game_diff_param = _GetItemCount(s_sHitPower_2.c_str()); //узнаём количество параметров для хитов
-    if (num_game_diff_param > 1) //если задан второй параметр хита
-    {
-        fvHitPower_2[egdVeteran] =
-            (float)atof(_GetItem(s_sHitPower_2.c_str(), 1, buffer)); //то вычитываем его для уровня ветерана
-    }
-    if (num_game_diff_param > 2) //если задан третий параметр хита
-    {
-        fvHitPower_2[egdStalker] =
-            (float)atof(_GetItem(s_sHitPower_2.c_str(), 2, buffer)); //то вычитываем его для уровня сталкера
-    }
-    if (num_game_diff_param > 3) //если задан четвёртый параметр хита
-    {
-        fvHitPower_2[egdNovice] =
-            (float)atof(_GetItem(s_sHitPower_2.c_str(), 3, buffer)); //то вычитываем его для уровня новичка
-    }
-
-    num_game_diff_param = _GetItemCount(s_sHitPowerCritical_2.c_str()); //узнаём количество параметров
-    if (num_game_diff_param > 1) //если задан второй параметр хита
-    {
-        fvHitPowerCritical_2[egdVeteran] =
-            (float)atof(_GetItem(s_sHitPowerCritical_2.c_str(), 1, buffer)); //то вычитываем его для уровня ветерана
-    }
-    if (num_game_diff_param > 2) //если задан третий параметр хита
-    {
-        fvHitPowerCritical_2[egdStalker] =
-            (float)atof(_GetItem(s_sHitPowerCritical_2.c_str(), 2, buffer)); //то вычитываем его для уровня сталкера
-    }
-    if (num_game_diff_param > 3) //если задан четвёртый параметр хита
-    {
-        fvHitPowerCritical_2[egdNovice] =
-            (float)atof(_GetItem(s_sHitPowerCritical_2.c_str(), 3, buffer)); //то вычитываем его для уровня новичка
-    }
 
     fHitImpulse_2 = pSettings->r_float(section, "hit_impulse_2");
     m_eHitType_2 = ALife::g_tfString2HitType(pSettings->r_string(section, "hit_type_2"));

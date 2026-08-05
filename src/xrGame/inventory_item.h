@@ -84,6 +84,8 @@ protected:
         FInInterpolate = (1 << 10),
         FIsQuestItem = (1 << 11),
         FIsHelperItem = (1 << 12),
+        FSystemItem = (1 << 13),
+        FNoStack = (1 << 14),
     };
 
     Flags16 m_flags;
@@ -144,6 +146,8 @@ public:
     BOOL IsInvalid() const;
 
     BOOL IsQuestItem() const { return m_flags.test(FIsQuestItem); }
+    bool CanShow() const { return !m_flags.test(FSystemItem); }
+    bool CanStack() const { return !m_flags.test(FNoStack); }
     virtual u32 Cost() const { return m_cost; }
     //			u32					Cost				()	const	{ return m_cost; }
     virtual float Weight() const { return m_weight; }
@@ -172,6 +176,8 @@ public:
     virtual float GetConditionToShow() const { return GetCondition(); }
     IC void SetCondition(float val) { m_fCondition = val; }
     void ChangeCondition(float fDeltaCondition);
+    void DrainCondition(float deltaSeconds);
+    bool GetDrainCondition() const;
 
     u16 BaseSlot() const { return m_ItemCurrPlace.base_slot_id; }
     u16 CurrSlot() const { return m_ItemCurrPlace.slot_id; }
@@ -297,6 +303,7 @@ public:
     bool verify_upgrade(LPCSTR section);
     bool install_upgrade(LPCSTR section);
     void pre_install_upgrade();
+    void pre_install_upgrade(LPCSTR section);
 
 #ifdef DEBUG
     void log_upgrades();

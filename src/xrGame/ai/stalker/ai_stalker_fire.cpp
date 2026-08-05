@@ -380,27 +380,27 @@ void CAI_Stalker::Hit(SHit* pHDS)
 
     if (g_Alive() && (!m_hit_callback || m_hit_callback(&HDS)))
     {
-        float const damage_factor = invulnerable() ? 0.f : 100.f;
-        memory().hit().add(damage_factor * HDS.damage(), HDS.direction(), HDS.who, HDS.boneID);
+        CScriptHit lua_hit;
+        lua_hit.m_fPower = HDS.power;
+        lua_hit.m_fImpulse = HDS.impulse;
+        lua_hit.m_tDirection = HDS.direction();
+        lua_hit.m_tHitType = HDS.hit_type;
+        const CGameObject* draftsman = smart_cast<const CGameObject*>(HDS.who);
+        lua_hit.m_tpDraftsman = draftsman ? draftsman->lua_game_object() : nullptr;
+
+        luabind::functor<bool> before_hit;
+        if (GEnv.ScriptEngine->functor("_G.CAI_Stalker__BeforeHitCallback", before_hit) &&
+            !before_hit(lua_game_object(), &lua_hit, HDS.boneID))
+            return;
+
+        HDS.power = lua_hit.m_fPower;
+        HDS.impulse = lua_hit.m_fImpulse;
+        HDS.dir = lua_hit.m_tDirection;
+        HDS.hit_type = static_cast<ALife::EHitType>(lua_hit.m_tHitType);
+
+        const float damageFactor = invulnerable() ? 0.f : 100.f;
+        memory().hit().add(damageFactor * HDS.damage(), HDS.direction(), HDS.who, HDS.boneID);
     }
-
-    CScriptHit lua_hit;
-    lua_hit.m_fPower = HDS.power;
-    lua_hit.m_fImpulse = HDS.impulse;
-    lua_hit.m_tDirection = HDS.direction();
-    lua_hit.m_tHitType = HDS.hit_type;
-    const CGameObject* draftsman = smart_cast<const CGameObject*>(HDS.who);
-    lua_hit.m_tpDraftsman = draftsman ? draftsman->lua_game_object() : nullptr;
-
-    luabind::functor<bool> before_hit;
-    if (GEnv.ScriptEngine->functor("_G.CAI_Stalker__BeforeHitCallback", before_hit) &&
-        !before_hit(lua_game_object(), &lua_hit, HDS.boneID))
-        return;
-
-    HDS.power = lua_hit.m_fPower;
-    HDS.impulse = lua_hit.m_fImpulse;
-    HDS.dir = lua_hit.m_tDirection;
-    HDS.hit_type = static_cast<ALife::EHitType>(lua_hit.m_tHitType);
 
     // conditions().health()			= 1.f;
 
@@ -450,32 +450,32 @@ void CAI_Stalker::update_best_item_info_impl()
     if (GEnv.ScriptEngine->functor("ai_stalker.update_best_weapon", funct))
     {
         CGameObject* cur_itm = smart_cast<CGameObject*>(m_best_item_to_kill);
-        CScriptGameObject* GO = funct(lua_game_object(),cur_itm ? cur_itm->lua_game_object() : nullptr);
-        CInventoryItem* bw = GO ? smart_cast<CInventoryItem*>(&GO->object()): nullptr;
+        CScriptGameObject* GO = funct(lua_game_object(), cur_itm ? cur_itm->lua_game_object() : nullptr);
+        CInventoryItem* bw = GO ? smart_cast<CInventoryItem*>(&GO->object()) : nullptr;
         if (bw)
         {
+            m_item_actuality = true;
             m_best_item_to_kill = bw;
             m_best_ammo = bw;
+            m_best_item_value = flt_max;
             return;
         }
     }
 
     ai().ef_storage().alife_evaluation(false);
-    /* Alundaio: This is what causes stalkers to switch weapons during combat; It's stupid
     if (m_item_actuality && m_best_item_to_kill && m_best_item_to_kill->can_kill())
     {
-        if (!memory().enemy().selected())
+        const CEntityAlive* enemy = memory().enemy().selected();
+        if (!enemy)
             return;
 
         ai().ef_storage().non_alife().member() = this;
-        ai().ef_storage().non_alife().enemy() = memory().enemy().selected() ? memory().enemy().selected() : this;
+        ai().ef_storage().non_alife().enemy() = enemy;
         ai().ef_storage().non_alife().member_item() = &m_best_item_to_kill->object();
-        float value;
-        value = ai().ef_storage().m_pfWeaponEffectiveness->ffGetValue();
+        const float value = ai().ef_storage().m_pfWeaponEffectiveness->ffGetValue();
         if (fsimilar(value, m_best_item_value))
             return;
     }
-    */
 
     // initialize parameters
     m_item_actuality = true;
@@ -794,25 +794,18 @@ void CAI_Stalker::update_can_kill_info()
 
 bool CAI_Stalker::undetected_anomaly()
 {
-    return (
-        inside_anomaly() || brain().CStalkerPlanner::m_storage.property(StalkerDecisionSpace::eWorldPropertyAnomaly));
+    return inside_anomaly();
 }
 
 bool CAI_Stalker::inside_anomaly()
 {
-    xr_vector<IGameObject*>::const_iterator I = feel_touch.begin();
-    xr_vector<IGameObject*>::const_iterator E = feel_touch.end();
-    for (; I != E; ++I)
+    for (IGameObject* object : feel_touch)
     {
-        CCustomZone* zone = smart_cast<CCustomZone*>(*I);
-        if (zone && (zone->restrictor_type() != RestrictionSpace::eRestrictorTypeNone))
-        {
-            if (smart_cast<CRadioactiveZone*>(zone))
-                continue;
-
+        CCustomZone* zone = smart_cast<CCustomZone*>(object);
+        if (zone && !smart_cast<CRadioactiveZone*>(zone))
             return (true);
-        }
     }
+
     return (false);
 }
 

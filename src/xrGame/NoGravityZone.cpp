@@ -5,8 +5,6 @@
 #include "PHMovementControl.h"
 
 #include "CharacterPhysicsSupport.h"
-// extern CPHWorld	*ph_world;
-#include "xrPhysics/IPHWorld.h"
 void CNoGravityZone::enter_Zone(SZoneObjectInfo& io)
 {
     inherited::enter_Zone(io);
@@ -25,7 +23,7 @@ void CNoGravityZone::UpdateWorkload(u32 dt)
 }
 void CNoGravityZone::switchGravity(SZoneObjectInfo& io, bool val)
 {
-    if (io.object->getDestroy())
+    if (io.object->getDestroy() || (io.zone_ignore && !val))
         return;
     CPhysicsShellHolder* sh = smart_cast<CPhysicsShellHolder*>(io.object);
     if (!sh)
@@ -33,16 +31,10 @@ void CNoGravityZone::switchGravity(SZoneObjectInfo& io, bool val)
     CPhysicsShell* shell = sh->PPhysicsShell();
     if (shell && shell->isActive())
     {
+        const bool gravityWasEnabled = shell->get_ApplyByGravity();
         shell->set_ApplyByGravity(val);
-        if (!val && shell->get_ApplyByGravity())
-        {
-            CPhysicsElement* e = shell->get_ElementByStoreOrder(u16(Random.randI(0, shell->get_ElementsNumber())));
-            if (e->isActive())
-            {
-                e->applyImpulseTrace(Fvector().random_point(e->getRadius()), Fvector().random_dir(),
-                    shell->getMass() * physics_world()->Gravity() * fixed_step, e->m_SelfID);
-            }
-        }
+        if (!val && gravityWasEnabled)
+            shell->applyImpulse(Fvector().set(0.f, 1.f, 0.f), 0.1f);
         // shell->SetAirResistance(0.f,0.f);
         // shell->set_DynamicScales(1.f);
         return;
@@ -53,11 +45,5 @@ void CNoGravityZone::switchGravity(SZoneObjectInfo& io, bool val)
         CPHMovementControl* mc = ea->character_physics_support()->movement();
         mc->SetApplyGravity(BOOL(val));
         mc->SetForcedPhysicsControl(!val);
-        if (!val && mc->Environment() == CPHMovementControl::peOnGround)
-        {
-            Fvector gn;
-            mc->GroundNormal(gn);
-            mc->ApplyImpulse(gn, mc->GetMass() * physics_world()->Gravity() * fixed_step);
-        }
     }
 }

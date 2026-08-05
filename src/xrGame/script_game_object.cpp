@@ -20,6 +20,7 @@
 #include "movement_manager.h"
 #include "entity_alive.h"
 #include "WeaponMagazined.h"
+#include "ActorHelmet.h"
 #include "xrMessages.h"
 #include "Inventory.h"
 #include "script_ini_file.h"
@@ -450,6 +451,24 @@ u32 CScriptGameObject::GetWeaponConditionType()
 {
     CWeapon* weapon = smart_cast<CWeapon*>(&object());
     return weapon ? weapon->GetConditionType() : 0;
+}
+
+bool CScriptGameObject::IsWeaponAmmoInMagazine()
+{
+    const CWeaponMagazined* weapon = smart_cast<const CWeaponMagazined*>(&object());
+    return weapon && weapon->HaveAmmoInMagazine();
+}
+
+void CScriptGameObject::SetHelmetFiltersElapsed(u16 time)
+{
+    if (CHelmet* helmet = smart_cast<CHelmet*>(&object()))
+        helmet->SetFiltersElapsed(time);
+}
+
+u16 CScriptGameObject::GetHelmetFiltersElapsed()
+{
+    const CHelmet* helmet = smart_cast<const CHelmet*>(&object());
+    return helmet ? helmet->GetFiltersElapsed() : 0;
 }
 
 CUIWindow* CScriptGameObject::Get3dUI()

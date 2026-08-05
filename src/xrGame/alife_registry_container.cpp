@@ -18,8 +18,9 @@ struct RegistryHelper;
 template <typename TContainer>
 struct RegistryHelper<TContainer, Loki::NullType>
 {
-    static void Save(TContainer*, IWriter&) {};
     static void Load(TContainer*, IReader&) {};
+    static bool SaveAt(TContainer*, IWriter&, u32, u32&) { return false; }
+    static constexpr u32 serializableCount = 0;
 };
 
 template <typename TContainer, typename Head, typename Tail>
@@ -29,12 +30,22 @@ struct RegistryHelper<TContainer, Loki::Typelist<Head, Tail>>
         object_type_traits::is_base_and_derived<ISerializable, Head>::value &&
         !std::is_same_v<Head, CKnownContactsRegistry> &&
         !std::is_same_v<Head, CEncyclopediaRegistry>;
+    static constexpr u32 serializableCount =
+        RegistryHelper<TContainer, Tail>::serializableCount + (isSerializable ? 1u : 0u);
 
-    static void Save(TContainer* self, IWriter& writer)
+    static bool SaveAt(TContainer* self, IWriter& writer, u32 target, u32& index)
     {
-        RegistryHelper<TContainer, Tail>::Save(self, writer);
+        if (RegistryHelper<TContainer, Tail>::SaveAt(self, writer, target, index))
+            return true;
         if constexpr (isSerializable)
-            self->Head::save(writer);
+        {
+            if (index++ == target)
+            {
+                self->Head::save(writer);
+                return true;
+            }
+        }
+        return false;
     };
 
     static void Load(TContainer* self, IReader& reader)
@@ -57,7 +68,47 @@ void CALifeRegistryContainer::load(IReader& file_stream)
 
 void CALifeRegistryContainer::save(IWriter& memory_stream)
 {
+    SaveState state;
+    begin_save(memory_stream, state);
+    while (!continue_save(memory_stream, state, flt_max))
+    {
+    }
+}
+
+void CALifeRegistryContainer::begin_save(IWriter& memory_stream, SaveState& state)
+{
+    state = {};
     memory_stream.open_chunk(REGISTRY_CHUNK_DATA);
-    RegistryHelper<CALifeRegistryContainer, TYPE_LIST>::Save(this, memory_stream);
+    state.initialized = true;
+}
+
+bool CALifeRegistryContainer::continue_save(
+    IWriter& memory_stream, SaveState& state, float budgetMilliseconds)
+{
+    if (!state.initialized)
+        return false;
+    if (state.completed)
+        return true;
+    if (!(budgetMilliseconds > 0.f))
+        return false;
+
+    using Helper = RegistryHelper<CALifeRegistryContainer, TYPE_LIST>;
+    const bool unlimitedBudget = budgetMilliseconds == flt_max;
+    CTimer budgetTimer;
+    if (!unlimitedBudget)
+        budgetTimer.Start();
+
+    while (state.phase < Helper::serializableCount)
+    {
+        u32 index = 0;
+        R_ASSERT2(Helper::SaveAt(this, memory_stream, state.phase, index),
+            "Invalid ALife registry save phase");
+        ++state.phase;
+        if (!unlimitedBudget && budgetTimer.GetElapsed_sec() * 1000.f >= budgetMilliseconds)
+            return false;
+    }
+
     memory_stream.close_chunk();
+    state.completed = true;
+    return true;
 }

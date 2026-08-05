@@ -7,11 +7,24 @@
 #include "ActorCondition.h"
 #include "UIXmlInit.h"
 #include "UIHelper.h"
+#include "xrCommon/xr_hash_map.h"
+
+namespace
+{
+// Side storage preserves the legacy UI object layout.
+xr_flat_hash_map<const CUIBoosterInfo*, UIBoosterInfoItem*> instantBleedingItems;
+}
 
 CUIBoosterInfo::CUIBoosterInfo() : CUIWindow(CUIBoosterInfo::GetDebugType()) {}
 
 CUIBoosterInfo::~CUIBoosterInfo()
 {
+    if (const auto bleeding = instantBleedingItems.find(this); bleeding != instantBleedingItems.end())
+    {
+        xr_delete(bleeding->second);
+        instantBleedingItems.erase(bleeding);
+    }
+
     delete_data(m_booster_items);
     xr_delete(m_booster_satiety);
     xr_delete(m_booster_radiation);
@@ -61,15 +74,26 @@ bool CUIBoosterInfo::InitFromXml(CUIXml& xml)
     m_booster_satiety->SetCaption(name);
     xml.SetLocalRoot(base_node);
 
-    if (xml.NavigateToNode("boost_radiation"))
-    {
-        m_booster_radiation = xr_new<UIBoosterInfoItem>();
-        m_booster_radiation->Init(xml, "boost_radiation");
-        m_booster_radiation->SetAutoDelete(false);
-        name = StringTable().translate("ui_inv_radiation").c_str();
-        m_booster_radiation->SetCaption(name);
-        xml.SetLocalRoot(base_node);
-    }
+    auto [bleeding, inserted] = instantBleedingItems.try_emplace(this);
+    if (!inserted)
+        xr_delete(bleeding->second);
+    bleeding->second = xr_new<UIBoosterInfoItem>();
+    bleeding->second->Init(xml, "boost_bleeding_restore");
+    bleeding->second->SetDisplayFormat(1250.0f, false, "st_ml_min",
+        "ui_am_prop_restore_bleeding", "ui_am_prop_bleeding_restore");
+    bleeding->second->SetAutoDelete(false);
+    name = StringTable().translate("ui_inv_bleeding").c_str();
+    bleeding->second->SetCaption(name);
+    xml.SetLocalRoot(base_node);
+
+    m_booster_radiation = xr_new<UIBoosterInfoItem>();
+    m_booster_radiation->Init(xml, "boost_radiation_restore");
+    m_booster_radiation->SetDisplayFormat(10000.0f, true, "st_msv",
+        "ui_am_prop_radiation_protection", "ui_am_prop_radiation_immunity");
+    m_booster_radiation->SetAutoDelete(false);
+    name = StringTable().translate("ui_inv_radiation").c_str();
+    m_booster_radiation->SetCaption(name);
+    xml.SetLocalRoot(base_node);
 
     m_booster_anabiotic = xr_new<UIBoosterInfoItem>();
     m_booster_anabiotic->Init(xml, "boost_anabiotic");
@@ -174,6 +198,22 @@ void CUIBoosterInfo::SetInfo(shared_str const& section)
         }
     }
 
+    if (const auto bleeding = instantBleedingItems.find(this);
+        bleeding != instantBleedingItems.end() && pSettings->line_exist(section.c_str(), "wounds_heal_perc"))
+    {
+        val = pSettings->r_float(section, "wounds_heal_perc");
+        if (!fis_zero(val))
+        {
+            bleeding->second->SetValue(val);
+            pos.set(bleeding->second->GetWndPos());
+            pos.y = h;
+            bleeding->second->SetWndPos(pos);
+
+            h += bleeding->second->GetWndSize().y;
+            AttachChild(bleeding->second);
+        }
+    }
+
     if (m_booster_radiation && pSettings->line_exist(section.c_str(), "eat_radiation"))
     {
         val = pSettings->r_float(section, "eat_radiation");
@@ -250,6 +290,16 @@ void UIBoosterInfoItem::Init(CUIXml& xml, LPCSTR section)
         m_texture_plus._set(texture_plus);
         VERIFY(m_texture_plus.size());
     }
+}
+
+void UIBoosterInfoItem::SetDisplayFormat(
+    float magnitude, bool showSign, pcstr unit, pcstr positiveTexture, pcstr negativeTexture)
+{
+    m_magnitude = magnitude;
+    m_show_sign = showSign;
+    m_unit_str._set(StringTable().translate(unit));
+    m_texture_plus._set(positiveTexture);
+    m_texture_minus._set(negativeTexture);
 }
 
 void UIBoosterInfoItem::SetCaption(LPCSTR name) { m_caption->TextItemControl()->SetText(name); }

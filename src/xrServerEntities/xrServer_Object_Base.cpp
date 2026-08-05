@@ -157,7 +157,7 @@ void CSE_Abstract::Spawn_Write(NET_Packet& tNetPacket, BOOL bLocal)
 {
     // generic
     tNetPacket.w_begin(M_SPAWN);
-    tNetPacket.w_stringZ(s_name);
+    net_packet_detail::write_string(tNetPacket, s_name);
     tNetPacket.w_stringZ(s_name_replace ? s_name_replace : "");
     tNetPacket.w_u8(0);
     tNetPacket.w_u8(s_RP);

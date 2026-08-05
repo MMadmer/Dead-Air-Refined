@@ -156,6 +156,8 @@ void CHitMemoryManager::add(const CHitObject& _hit_object)
     VERIFY(m_hits);
     if (!object().g_Alive())
         return;
+    if (!m_stalker)
+        return;
 
     CHitObject hit_object = _hit_object;
     hit_object.m_squad_mask.set(m_stalker->agent_manager().member().mask(m_stalker), TRUE);

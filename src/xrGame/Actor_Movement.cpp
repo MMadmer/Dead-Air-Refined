@@ -12,6 +12,7 @@
 #include "ActorCondition.h"
 #include "game_cl_base.h"
 #include "WeaponMagazined.h"
+#include "CustomOutfit.h"
 #include "CharacterPhysicsSupport.h"
 #include "ActorEffector.h"
 #include "static_cast_checked.hpp"
@@ -76,11 +77,13 @@ void CActor::g_cl_ValidateMState(float dt, u32 mstate_wf)
                 {
                     m_fLandingTime = s_fLandingTime1;
                     mstate_real |= mcLanding;
+                    callback(GameObject::eActorLand1)(lua_game_object());
                 }
                 else
                 {
                     m_fLandingTime = s_fLandingTime2;
                     mstate_real |= mcLanding2;
+                    callback(GameObject::eActorLand2)(lua_game_object());
                 }
             }
         }
@@ -288,37 +291,49 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
             if (scale > EPS)
             {
                 scale = m_fWalkAccel / scale;
-                if (bAccelerated)
+
+                const float maxWalkWeight = MaxWalkWeight();
+                float overweight =
+                    (inventory().TotalWeight() - maxWalkWeight) * (maxWalkWeight * 0.0015f);
+                clamp(overweight, 0.0f, 1.0f);
+
+                float movementFactor = 1.0f;
+                if (mstate_real & mcSprint)
+                {
+                    const PIItem activeItem = inventory().ActiveItem();
+                    const float activeItemWeight = activeItem ? activeItem->Weight() : 0.f;
+                    float weaponWeight = 0.0f;
+                    const auto activeWeapon = smart_cast<const CWeaponMagazined*>(activeItem);
+                    if (activeWeapon)
+                        weaponWeight = activeWeapon->Weight();
+
+                    const CCustomOutfit* outfit = GetOutfit();
+                    const float outfitWeight = outfit ? outfit->Weight() : 0.f;
+                    const float runFactor = std::lerp(
+                        mstate_real & mcBack ? m_fRunBackFactor : m_fRunFactor, 0.3f, overweight);
+                    movementFactor =
+                        SprintMovementFactor(activeItemWeight, weaponWeight, outfitWeight, runFactor);
+                }
+                else if (bAccelerated)
+                {
+                    movementFactor = mstate_real & mcBack ? m_fRunBackFactor : m_fRunFactor;
+                    movementFactor = std::lerp(movementFactor, 0.3f, overweight);
+                }
+                else
+                {
                     if (mstate_real & mcBack)
-                        scale *= m_fRunBackFactor;
-                    else
-                        scale *= m_fRunFactor;
-                else if (mstate_real & mcBack)
-                    scale *= m_fWalkBackFactor;
+                        movementFactor = m_fWalkBackFactor;
+                    else if (mstate_real & (mcLStrafe | mcRStrafe) && !(mstate_real & mcCrouch))
+                        movementFactor = m_fWalk_StrafeFactor;
+                    movementFactor *= std::lerp(1.0f, 0.3f, overweight);
+                }
+
+                scale *= movementFactor;
 
                 if (mstate_real & mcCrouch)
                     scale *= m_fCrouchFactor;
                 if (mstate_real & mcClimb)
                     scale *= m_fClimbFactor;
-                if (mstate_real & mcSprint)
-                {
-                    float sprint_factor = m_fSprintFactor;
-                    if (const PIItem active_item = inventory().ActiveItem())
-                    {
-                        float weight_penalty = active_item->Weight() / 10.f;
-                        clamp(weight_penalty, 0.f, 0.5f);
-                        sprint_factor -= weight_penalty;
-                    }
-                    scale *= sprint_factor;
-                }
-
-                if (mstate_real & (mcLStrafe | mcRStrafe) && !(mstate_real & mcCrouch))
-                {
-                    if (bAccelerated)
-                        scale *= m_fRun_StrafeFactor;
-                    else
-                        scale *= m_fWalk_StrafeFactor;
-                }
 
                 CBackpack* backpack = GetBackpack();
                 if (backpack)
@@ -336,28 +351,26 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
 
     if (IsGameTypeSingle() && cam_eff_factor > EPS)
     {
-        LPCSTR state_anm = NULL;
+        pcstr stateAnimation{};
 
-        if (mstate_real & mcSprint && !(mstate_old & mcSprint))
-            state_anm = "sprint";
-        else if (mstate_real & mcLStrafe && !(mstate_old & mcLStrafe))
-            state_anm = "strafe_left";
+        if (mstate_real & mcLStrafe && !(mstate_old & mcLStrafe))
+            stateAnimation = "strafe_left";
         else if (mstate_real & mcRStrafe && !(mstate_old & mcRStrafe))
-            state_anm = "strafe_right";
+            stateAnimation = "strafe_right";
         else if (mstate_real & mcFwd && !(mstate_old & mcFwd))
-            state_anm = "move_fwd";
+            stateAnimation = "go_front";
         else if (mstate_real & mcBack && !(mstate_old & mcBack))
-            state_anm = "move_back";
+            stateAnimation = "go_back";
 
-        if (state_anm)
+        if (stateAnimation)
         { // play moving cam effect
-            CActor* control_entity = smart_cast<CActor*>(Level().CurrentControlEntity());
+            auto* control_entity = smart_cast<CActor*>(Level().CurrentControlEntity());
             R_ASSERT2(control_entity, "current control entity is NULL");
             CEffectorCam* ec = control_entity->Cameras().GetCamEffector(eCEActorMoving);
-            if (NULL == ec)
+            if (!ec)
             {
                 string_path eff_name;
-                xr_sprintf(eff_name, sizeof(eff_name), "%s.anm", state_anm);
+                xr_sprintf(eff_name, sizeof(eff_name), "%s.anm", stateAnimation);
                 string_path ce_path;
                 string_path anm_name;
                 strconcat(sizeof(anm_name), anm_name, "camera_effects" DELIMITER "actor_move" DELIMITER, eff_name);
@@ -389,10 +402,6 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
 
 void CActor::g_Orientate(u32 mstate_rl, float dt)
 {
-    static float fwd_l_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "fwd_l_strafe_yaw"));
-    static float back_l_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "back_l_strafe_yaw"));
-    static float fwd_r_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "fwd_r_strafe_yaw"));
-    static float back_r_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "back_r_strafe_yaw"));
     static float l_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "l_strafe_yaw"));
     static float r_strafe_yaw = deg2rad(pSettings->r_float(ACTOR_ANIM_SECT, "r_strafe_yaw"));
 
@@ -407,18 +416,6 @@ void CActor::g_Orientate(u32 mstate_rl, float dt)
     }
     switch (mstate_rl & mcAnyMove)
     {
-    case mcFwd + mcLStrafe:
-        calc_yaw = +fwd_l_strafe_yaw; //+PI_DIV_4;
-        break;
-    case mcBack + mcRStrafe:
-        calc_yaw = +back_r_strafe_yaw; //+PI_DIV_4;
-        break;
-    case mcFwd + mcRStrafe:
-        calc_yaw = -fwd_r_strafe_yaw; //-PI_DIV_4;
-        break;
-    case mcBack + mcLStrafe:
-        calc_yaw = -back_l_strafe_yaw; //-PI_DIV_4;
-        break;
     case mcLStrafe:
         calc_yaw = +l_strafe_yaw; //+PI_DIV_3-EPS_L;
         break;
@@ -449,7 +446,9 @@ void CActor::g_Orientate(u32 mstate_rl, float dt)
     }
     if (!fsimilar(tgt_roll, r_torso_tgt_roll, EPS))
     {
-        angle_lerp(r_torso_tgt_roll, tgt_roll, PI_MUL_2, dt);
+        const float actorHeight = CurrentHeight > 0.f ? CurrentHeight : CameraHeight();
+        r_torso_tgt_roll =
+            angle_inertion_var(r_torso_tgt_roll, tgt_roll, 0.f, actorHeight * PI_MUL_2, PI_DIV_2, dt);
         r_torso_tgt_roll = angle_normalize_signed(r_torso_tgt_roll);
     }
 }
@@ -539,7 +538,8 @@ void CActor::g_cl_Orientate(u32 mstate_rl, float dt)
         const float yaw_delta = angle_difference_signed(r_model_yaw, ty);
         if (_abs(yaw_delta) > PI_DIV_6)
         {
-            r_model_yaw_dest = angle_normalize(ty + (yaw_delta > 0.f ? PI_DIV_6 : -PI_DIV_6));
+            r_model_yaw = angle_normalize(ty + (yaw_delta > 0.f ? PI_DIV_6 : -PI_DIV_6));
+            r_model_yaw_dest = ty;
             mstate_real |= mcTurn;
         }
         if (angle_difference(r_model_yaw, r_model_yaw_dest) < EPS_L)
@@ -627,15 +627,6 @@ bool CActor::CanMove()
         }
         return false;
     }
-    else if (conditions().IsCantWalkWeight())
-    {
-        if (mstate_wishful & mcAnyMove)
-        {
-            CurrentGameUI()->AddCustomStatic("cant_walk_weight", true);
-        }
-        return false;
-    }
-
     if (IsTalking())
         return false;
     else
@@ -655,7 +646,6 @@ void CActor::StopAnyMove()
 
 bool CActor::is_jump() { return ((mstate_real & (mcJump | mcFall | mcLanding | mcLanding2)) != 0); }
 //максимальный переносимы вес
-#include "CustomOutfit.h"
 float CActor::MaxCarryWeight() const
 {
     float res = inventory().GetMaxWeight();
@@ -669,6 +659,7 @@ float CActor::MaxWalkWeight() const
     max_w += get_additional_weight();
     return max_w;
 }
+
 #include "Artefact.h"
 float CActor::get_additional_weight() const
 {

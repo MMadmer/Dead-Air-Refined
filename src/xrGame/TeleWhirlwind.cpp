@@ -30,7 +30,11 @@ CTelekineticObject* CTeleWhirlwind::activate(
     else
         return 0;
 }
-void CTeleWhirlwind::clear_impacts() { m_saved_impacts.clear(); }
+void CTeleWhirlwind::clear_impacts()
+{
+    m_saved_impacts.clear();
+    m_next_impact = 0;
+}
 void CTeleWhirlwind::clear() { inherited::clear(); }
 void CTeleWhirlwind::add_impact(const Fvector& dir, float val)
 {
@@ -40,22 +44,34 @@ void CTeleWhirlwind::add_impact(const Fvector& dir, float val)
     point.set(0.f, 0.f, 0.f);
     m_saved_impacts.push_back(SPHImpact(force, point, 0));
 }
-void CTeleWhirlwind::reserve_impact(const size_t count) { m_saved_impacts.reserve(count); }
+void CTeleWhirlwind::reserve_impact(const size_t count)
+{
+    // Compact once per batch instead of shifting the vector for every destroyed fragment.
+    if (m_next_impact)
+    {
+        m_saved_impacts.erase(m_saved_impacts.begin(), m_saved_impacts.begin() + m_next_impact);
+        m_next_impact = 0;
+    }
+    m_saved_impacts.reserve(m_saved_impacts.size() + count);
+}
 void CTeleWhirlwind::set_throw_power(float throw_pow) { m_throw_power = throw_pow; }
 void CTeleWhirlwind::draw_out_impact(Fvector& dir, float& val)
 {
-    VERIFY2(m_saved_impacts.size(), "NO IMPACTS ADDED!");
-
-    if (m_saved_impacts.empty())
+    if (m_next_impact >= m_saved_impacts.size())
+    {
+        dir.set(0.f, 0.f, 0.f);
+        val = 0.f;
         return;
+    }
 
-    dir.set(m_saved_impacts[0].force);
+    dir.set(m_saved_impacts[m_next_impact++].force);
     val = dir.magnitude();
 
     // Swartz
     //if (!fis_zero(val))
     //    dir.mul(1.f / val);
-    m_saved_impacts.erase(m_saved_impacts.begin());
+    if (m_next_impact == m_saved_impacts.size())
+        clear_impacts();
 }
 
 void CTeleWhirlwind::clear_notrelevant()

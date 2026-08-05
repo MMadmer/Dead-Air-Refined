@@ -312,7 +312,7 @@ void CAI_Stalker::reload(LPCSTR section)
 
     LPCSTR queue_sect = READ_IF_EXISTS(pSettings, r_string, cNameSect().c_str(), "fire_queue_section", nullptr);
 
-    if (!queue_sect || xr_strcmp(queue_sect, "") != 0 || !pSettings->section_exist(queue_sect))
+    if (!queue_sect || !*queue_sect || !pSettings->section_exist(queue_sect))
     {
         queue_sect = cNameSect().c_str();
     }
@@ -460,7 +460,6 @@ void CAI_Stalker::Die(IGameObject* who)
 
     if (m_death_sound_enabled)
     {
-        sound().set_sound_mask((u32)eStalkerSoundMaskDie);
         if (is_special_killer(who))
             sound().play(eStalkerSoundDieInAnomaly);
         else
@@ -1326,19 +1325,22 @@ bool CAI_Stalker::unlimited_ammo() { return infinite_ammo() && CObjectHandler::p
 void CAI_Stalker::ResetBoneProtections(pcstr imm_sect, pcstr bone_sect)
 {
     IKinematics* pKinematics = smart_cast<IKinematics*>(Visual());
-    CInifile* ini = pKinematics->LL_UserData();
-    if (ini)
-    {
-        if (imm_sect || ini->section_exist("immunities"))
-        {
-            imm_sect = imm_sect ? imm_sect : ini->r_string("immunities", "immunities_sect");
-            conditions().LoadImmunities(imm_sect, pSettings);
-        }
+    if (!pKinematics)
+        return;
 
-        if (bone_sect || ini->line_exist("bone_protection", "bones_protection_sect"))
-        {
-            bone_sect = ini->r_string("bone_protection", "bones_protection_sect");
-            m_boneHitProtection->reload(bone_sect, pKinematics);
-        }
+    CInifile* ini = pKinematics->LL_UserData();
+
+    if (imm_sect || (ini && ini->section_exist("immunities")))
+    {
+        const pcstr section = imm_sect ? imm_sect : ini->r_string("immunities", "immunities_sect");
+        conditions().LoadImmunities(section, pSettings);
+    }
+
+    if (bone_sect || (ini && ini->line_exist("bone_protection", "bones_protection_sect")))
+    {
+        const pcstr section = bone_sect ? bone_sect : ini->r_string("bone_protection", "bones_protection_sect");
+        if (!m_boneHitProtection)
+            m_boneHitProtection = xr_new<SBoneProtections>();
+        m_boneHitProtection->reload(section, pKinematics);
     }
 }

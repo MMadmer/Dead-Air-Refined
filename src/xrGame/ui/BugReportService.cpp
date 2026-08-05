@@ -89,8 +89,7 @@ bool read_attachment(pcstr path, xr_vector<u8>& data)
         return false;
 
     LARGE_INTEGER size{};
-    const bool validSize = GetFileSizeEx(file, &size) && size.QuadPart >= 0 &&
-        static_cast<u64>(size.QuadPart) <= BugReportConfig::AttachmentMaximum;
+    const bool validSize = GetFileSizeEx(file, &size) && size.QuadPart >= 0;
     if (!validSize)
     {
         CloseHandle(file);
@@ -158,7 +157,7 @@ bool send_request(const xr_string& title, const xr_string& description, pcstr at
     xr_vector<u8> attachment;
     if (!read_attachment(attachmentPath, attachment))
     {
-        error = "The diagnostic report could not be read or exceeds 5 MiB";
+        error = "The diagnostic report could not be read";
         return false;
     }
 

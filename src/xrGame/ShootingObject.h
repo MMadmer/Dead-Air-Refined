@@ -63,6 +63,8 @@ protected:
     float fOneShotTime{};
     float fModeShotTime;
     bool bCycleDown;
+    float GetActorShotTime() const;
+    void SetActorShotTime(float shotTime);
     Fvector4 fvHitPower{};
     Fvector4 fvHitPowerCritical{};
     float fHitImpulse;

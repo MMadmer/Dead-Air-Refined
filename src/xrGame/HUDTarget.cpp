@@ -25,7 +25,6 @@
 namespace detail::hud_target
 {
 static constexpr auto C_DEFAULT = color_rgba(0xff, 0xff, 0xff, 0x80);
-static constexpr auto C_SIZE = 0.025f;
 static constexpr auto NEAR_LIM = 0.5f;
 
 static constexpr auto SHOW_INFO_SPEED = 0.5f;
@@ -45,7 +44,6 @@ CHUDTarget::CHUDTarget()
 {
     fuzzyShowInfo = 0.f;
     PP.RQ.range = 0.f;
-    hShader->create("hud" DELIMITER "cursor", "ui" DELIMITER "cursor");
 
     PP.RQ.set(NULL, 0.f, -1);
 
@@ -126,24 +124,14 @@ void CHUDTarget::Render()
     VERIFY(g_bRendering);
 
     IGameObject* O = Level().CurrentEntity();
-    if (0 == O)
+    if (!O)
         return;
     CEntity* E = smart_cast<CEntity*>(O);
-    if (0 == E)
+    if (!E)
         return;
-
-    Fvector p1 = Device.vCameraPosition;
-    Fvector dir = Device.vCameraDirection;
 
     // Render cursor
     u32 C = C_DEFAULT;
-
-    Fvector p2;
-    p2.mad(p1, dir, PP.RQ.range);
-    Fvector4 pt;
-    Device.mFullTransform.transform(pt, p2);
-    pt.y = -pt.y;
-    float di_size = C_SIZE / powf(pt.w, .2f);
 
     CGameFont* F = UI().Font().pFontGraffiti19Russian;
     F->SetAligment(CGameFont::alCenter);
@@ -155,8 +143,10 @@ void CHUDTarget::Render()
     if (psHUD_Flags.test(HUD_INFO))
     {
         bool const is_poltergeist = PP.RQ.O && !!smart_cast<CPoltergeist*>(PP.RQ.O);
+        const CEntityAlive* pointedEntity = smart_cast<CEntityAlive*>(PP.RQ.O);
+        const bool isGhost = pointedEntity && pointedEntity->IsGhost();
 
-        if ((PP.RQ.O && PP.RQ.O->getVisible()) || is_poltergeist)
+        if (((PP.RQ.O && PP.RQ.O->getVisible()) || is_poltergeist) && !isGhost)
         {
             CEntityAlive* E = smart_cast<CEntityAlive*>(PP.RQ.O);
             CEntityAlive* pCurEnt = smart_cast<CEntityAlive*>(Level().CurrentEntity());
@@ -166,11 +156,11 @@ void CHUDTarget::Render()
             {
                 CInventoryOwner* our_inv_owner = smart_cast<CInventoryOwner*>(pCurEnt);
 
-                if (E && E->g_Alive() && E->cast_base_monster())
+                if (E && E->g_Alive() && E->cast_base_monster() && !E->IsGhost())
                 {
                     C = C_ON_ENEMY;
                 }
-                else if (E && E->g_Alive() && !E->cast_base_monster())
+                else if (E && E->g_Alive() && !E->cast_base_monster() && !E->IsGhost())
                 {
                     CInventoryOwner* others_inv_owner = smart_cast<CInventoryOwner*>(E);
 
@@ -262,40 +252,7 @@ void CHUDTarget::Render()
 #endif
     }
 
-    //отрендерить кружочек или крестик
-    if (!m_bShowCrosshair)
-    {
-        GEnv.UIRender->StartPrimitive(6, IUIRender::ptTriList, UI().m_currentPointType);
-
-        Fvector2 scr_size;
-        scr_size.set(float(Device.dwWidth), float(Device.dwHeight));
-        float size_x = scr_size.x * di_size;
-        float size_y = scr_size.y * di_size;
-
-        size_y = size_x;
-
-        float w_2 = scr_size.x / 2.0f;
-        float h_2 = scr_size.y / 2.0f;
-
-        // Convert to screen coords
-        float cx = (pt.x + 1) * w_2;
-        float cy = (pt.y + 1) * h_2;
-
-        //	TODO: return code back to indexed rendering since we use quads
-        //	Tri 1
-        GEnv.UIRender->PushPoint(cx - size_x, cy + size_y, 0, C, 0, 1);
-        GEnv.UIRender->PushPoint(cx - size_x, cy - size_y, 0, C, 0, 0);
-        GEnv.UIRender->PushPoint(cx + size_x, cy + size_y, 0, C, 1, 1);
-        //	Tri 2
-        GEnv.UIRender->PushPoint(cx + size_x, cy + size_y, 0, C, 1, 1);
-        GEnv.UIRender->PushPoint(cx - size_x, cy - size_y, 0, C, 0, 0);
-        GEnv.UIRender->PushPoint(cx + size_x, cy - size_y, 0, C, 1, 0);
-
-        // unlock VB and Render it as triangle LIST
-        GEnv.UIRender->SetShader(*hShader);
-        GEnv.UIRender->FlushPrimitive();
-    }
-    else
+    if (m_bShowCrosshair)
     {
         //отрендерить прицел
         HUDCrosshair.cross_color = C;

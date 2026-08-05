@@ -16,7 +16,7 @@ void CDetailManager::soft_Load()
 }
 
 void CDetailManager::soft_Unload() { soft_Geom.destroy(); }
-void CDetailManager::soft_Render()
+void CDetailManager::soft_Render(const CFrustum* frustum)
 {
     ZoneScoped;
     // Render itself
@@ -33,12 +33,15 @@ void CDetailManager::soft_Render()
         u32 vCount_Object = Object.number_vertices;
         u32 iCount_Object = Object.number_indices;
 
-        xr_vector<SlotItemVec*>& _vis = m_visibles[0][O];
-        xr_vector<SlotItemVec*>::iterator _vI = _vis.begin();
-        xr_vector<SlotItemVec*>::iterator _vE = _vis.end();
+        VisiblePartVec& _vis = m_visibles[0][O];
+        VisiblePartVec::iterator _vI = _vis.begin();
+        VisiblePartVec::iterator _vE = _vis.end();
         for (; _vI != _vE; _vI++)
         {
-            SlotItemVec* items = *_vI;
+            if (!IsPartVisible(*_vI, frustum))
+                continue;
+
+            SlotItemVec* items = _vI->items;
             u32 vCount_Total = items->size() * vCount_Object;
             // calculate lock count needed
             u32 lock_count = vCount_Total / vs_size;
@@ -148,8 +151,6 @@ void CDetailManager::soft_Render()
                 RCache.Render(D3DPT_TRIANGLELIST, vBase, 0, vCount_Lock, iBase, dwNumPrimitives);
             }
         }
-        // Clean up
-        _vis.clear();
     }
 }
 

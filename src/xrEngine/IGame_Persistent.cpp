@@ -330,7 +330,7 @@ void IGame_Persistent::OnGameStart()
 #ifndef _EDITOR
     LoadTitle("st_prefetching_objects");
     if (strstr(Core.Params, "-prefetch"))
-        Msg("! Global -prefetch is disabled by the stability build; resources load on demand");
+        Prefetch();
 #endif
 }
 

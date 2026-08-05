@@ -109,6 +109,7 @@ CDetailManager::CDetailManager() : xrc("detail manager")
     dm_fade = dm_current_fade;
     ps_r__Detail_density = ps_current_detail_density;
     ps_current_detail_height = ps_r__Detail_height;
+    cache_task.reserve(dm_cache_size);
     cache_level1 = (CacheSlot1**)xr_malloc(dm_cache1_line * sizeof(CacheSlot1*));
     for (u32 i = 0; i < dm_cache1_line; ++i)
     {
@@ -377,8 +378,9 @@ void CDetailManager::UpdateVisibleM()
                         for (auto& siIT : sp.items)
                         {
                             SlotItem& Item = *siIT;
-                            float scale = Item.scale_calculated = Item.scale * alpha_i;
-                            float ssa = scale * scale * Rq_drcp;
+                            const float fade = ps_detail_scale_on_fade ? 1.f : alpha_i;
+                            const float scale = Item.scale_calculated = Item.scale * fade;
+                            const float ssa = scale * scale * Rq_drcp;
                             if (ssa < r_ssaDISCARD)
                             {
                                 continue;
@@ -403,21 +405,21 @@ void CDetailManager::UpdateVisibleM()
                         auto& visibleItems = m_visibles[0][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[0].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back(&sp.r_items[0]);
+                        visibleItems.push_back({&sp.r_items[0], &S.vis});
                     }
                     if (!sp.r_items[1].empty())
                     {
                         auto& visibleItems = m_visibles[1][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[1].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back(&sp.r_items[1]);
+                        visibleItems.push_back({&sp.r_items[1], &S.vis});
                     }
                     if (!sp.r_items[2].empty())
                     {
                         auto& visibleItems = m_visibles[2][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[2].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back(&sp.r_items[2]);
+                        visibleItems.push_back({&sp.r_items[2], &S.vis});
                     }
                 }
             }
@@ -433,39 +435,86 @@ bool CDetailManager::UseVS() const
     return HW.Caps.geometry_major >= 1 && !RImplementation.o.ffp;
 }
 
-void CDetailManager::Render(CBackend& cmd_list)
+bool CDetailManager::HasRenderableDetails() const
 {
 #ifndef _EDITOR
-    if (!dtFS)
-        return;
-    if (!psDeviceFlags.is(rsDrawDetails))
-        return;
+    return dtFS && psDeviceFlags.is(rsDrawDetails);
+#else
+    return true;
 #endif
+}
 
-    ZoneScoped;
+bool CDetailManager::IsPartVisible(const VisiblePart& part, const CFrustum* frustum) const
+{
+    if (!frustum)
+        return true;
 
-    TaskScheduler->Wait(*m_calc_task);
+    u32 mask = frustum->getMask();
+    return frustum->testSAABB(part.bounds->sphere.P, part.bounds->sphere.R, part.bounds->box.data(), mask) != fcvNone;
+}
 
-    RImplementation.BasicStats.DetailRender.Begin();
-    g_pGamePersistent->m_pGShaderConstants->m_blender_mode.w = 1.0f; //--#SM+#-- Флаг начала рендера травы [begin of grass render]
+void CDetailManager::UpdateRenderState()
+{
+    if (m_render_state_frame == Device.dwFrame)
+        return;
+    m_render_state_frame = Device.dwFrame;
 
 #ifndef _EDITOR
-    float factor = g_pGamePersistent->Environment().wind_strength_factor;
+    const float factor = g_pGamePersistent->Environment().wind_strength_factor;
 #else
-    float factor = 0.3f;
+    constexpr float factor = 0.3f;
 #endif
     swing_current.lerp(swing_desc[0], swing_desc[1], factor);
 
+    float delta = Device.fTimeGlobal - m_global_time_old;
+    if (delta < 0.f || delta > 1.f)
+        delta = 0.03f;
+    m_global_time_old = Device.fTimeGlobal;
+
+    m_time_rot_1 += PI_MUL_2 * delta / swing_current.rot1;
+    m_time_rot_2 += PI_MUL_2 * delta / swing_current.rot2;
+    m_time_pos += delta * swing_current.speed;
+
+    const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
+    m_wind_dir1.set(_sin(m_time_rot_1), 0.f, _cos(m_time_rot_1), 0.f)
+        .normalize()
+        .mul(0.1f + environment.wind_velocity * 0.0016f);
+    m_wind_dir2.set(_sin(m_time_rot_2), 0.f, _cos(m_time_rot_2), 0.f)
+        .normalize()
+        .mul(0.05f + environment.wind_velocity * 0.0008f);
+}
+
+void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)
+{
+    if (!HasRenderableDetails())
+        return;
+
+    ZoneScoped;
+
+#ifdef _EDITOR
+    UpdateRenderState();
+#endif
+    TaskScheduler->Wait(*m_calc_task);
+
+    if (collectStats)
+    {
+        RImplementation.BasicStats.DetailRender.Begin();
+        RImplementation.BasicStats.DetailCount = 0;
+    }
+
     cmd_list.set_CullMode(CULL_NONE);
     cmd_list.set_xform_world(Fidentity);
+    const bool previousDetailRendering = cmd_list.detailRendering;
+    cmd_list.detailRendering = true;
     if (UseVS())
-        hw_Render(cmd_list);
+        hw_Render(cmd_list, collectStats, frustum);
     else
-        soft_Render();
+        soft_Render(frustum);
+    cmd_list.detailRendering = previousDetailRendering;
     cmd_list.set_CullMode(CULL_CCW);
 
-    g_pGamePersistent->m_pGShaderConstants->m_blender_mode.w = 0.0f; //--#SM+#-- Флаг конца рендера травы [end of grass render]
-    RImplementation.BasicStats.DetailRender.End();
+    if (collectStats)
+        RImplementation.BasicStats.DetailRender.End();
 }
 
 void CDetailManager::DispatchMTCalc()

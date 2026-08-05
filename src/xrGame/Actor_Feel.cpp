@@ -172,9 +172,9 @@ void CActor::PickupModeUpdate_COD()
         ISpatial* spatial = ISpatialResult[o_it];
         CInventoryItem* pIItem = smart_cast<CInventoryItem*>(spatial->dcast_GameObject());
 
-        if (0 == pIItem)
+        if (!pIItem)
             continue;
-        if (pIItem->object().H_Parent() != NULL)
+        if (pIItem->object().H_Parent())
             continue;
         if (!pIItem->CanTake())
             continue;
@@ -227,6 +227,22 @@ void CActor::PickupModeUpdate_COD()
 
     CurrentGameUI()->UIMainIngameWnd->SetPickUpItem(pNearestItem);
 
+    if (pNearestItem)
+    {
+        if (psHUD_Flags.test(HUD_CROSSHAIR_ITEM))
+            PickupInfoDraw(pNearestItem->cast_game_object());
+
+        if (psHUD_Flags.test(HUD_CROSSHAIR_NEAREST))
+        {
+            HUD().SetCrosshairDisp(0.0f);
+            HUD().ShowCrosshair(true);
+        }
+    }
+    else if (psHUD_Flags.test(HUD_CROSSHAIR_NEAREST))
+    {
+        HUD().ShowCrosshair(false);
+    }
+
     if (pNearestItem && m_bPickupMode)
     {
         CGameObject* pUsableObject = smart_cast<CGameObject*>(pNearestItem);
@@ -269,7 +285,7 @@ void CActor::Check_for_AutoPickUp()
         ISpatial* spatial = ISpatialResult[o_it];
         CInventoryItem* pIItem = smart_cast<CInventoryItem*>(spatial->dcast_GameObject());
 
-        if (0 == pIItem)
+        if (!pIItem)
             continue;
         if (!pIItem->CanTake())
             continue;
@@ -309,7 +325,7 @@ void CActor::PickupInfoDraw(IGameObject* object)
     Fvector4 v_res;
     Fvector shift;
 
-    draw_str = item->NameItem();
+    draw_str = item->NameShort();
     shift.set(0, 0, 0);
 
     res.transform(v_res, shift);

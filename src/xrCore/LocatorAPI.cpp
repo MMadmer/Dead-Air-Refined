@@ -1429,7 +1429,9 @@ size_t CLocatorAPI::file_list(FS_FileSet& dest, pcstr path, u32 flags /*= FS_Lis
                     continue;
             }
             FS_File file;
-            if (flags & FS_ClampExt)
+            if (flags & FS_FullName)
+                file.name = entry.name;
+            else if (flags & FS_ClampExt)
                 file.name = EFS.ChangeFileExt(entry_begin, "");
             else
                 file.name = entry_begin;

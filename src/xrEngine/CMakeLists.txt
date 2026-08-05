@@ -1,5 +1,9 @@
 add_library(xrEngine)
 
+if (WIN32 AND BUILD_SHARED_LIBS)
+    target_sources(xrEngine PRIVATE xrEngine.def)
+endif()
+
 target_sources_grouped(
     TARGET xrEngine
     NAME "editor"
@@ -134,6 +138,7 @@ target_sources_grouped(
     FILES
     Environment.cpp
     Environment.h
+    EnvironmentWeatherState.h
     Environment_editor.cpp
     Environment_misc.cpp
     Environment_render.cpp

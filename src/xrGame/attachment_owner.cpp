@@ -48,10 +48,19 @@ void CAttachmentOwner::net_Destroy()
 
 void CAttachmentOwner::renderable_Render(u32 context_id, IRenderable* root)
 {
+    CGameObject* owner = smart_cast<CGameObject*>(this);
+    const bool ghost = owner && owner->IsGhost();
+    const bool wasInvisible = root && root->renderable_Invisible();
+    if (ghost && root)
+        root->renderable_Invisible(true);
+
     xr_vector<CAttachableItem*>::iterator I = m_attached_objects.begin();
     xr_vector<CAttachableItem*>::iterator E = m_attached_objects.end();
     for (; I != E; ++I)
         (*I)->renderable_Render(context_id, root);
+
+    if (ghost && root)
+        root->renderable_Invisible(wasInvisible);
 }
 
 void AttachmentCallback(IKinematics* tpKinematics)

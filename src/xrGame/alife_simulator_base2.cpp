@@ -17,6 +17,7 @@
 #include "alife_schedule_registry.h"
 #include "alife_smart_terrain_registry.h"
 #include "alife_group_registry.h"
+#include "save_extension_gameplay.h"
 
 using namespace ALife;
 
@@ -60,6 +61,9 @@ void CALifeSimulatorBase::register_object(CSE_ALifeDynamicObject* object, bool a
 void CALifeSimulatorBase::unregister_object(CSE_ALifeDynamicObject* object, bool alife_query)
 {
     object->on_unregister();
+
+    // Sidecar state must die with its ALife generation before IDs can be reused.
+    SaveExtensionGameplay::forget_object(*object);
 
     CSE_ALifeInventoryItem* item = smart_cast<CSE_ALifeInventoryItem*>(object);
     if (item && item->attached())

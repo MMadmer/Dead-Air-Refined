@@ -259,6 +259,7 @@ public:
     virtual void Hit(SHit* pHDS) override {}
     virtual void SetHitInfo(IGameObject* who, IGameObject* weapon, s16 element, Fvector Pos, Fvector Dir) override {}
     virtual bool BonePassBullet(int boneID) override { return FALSE; }
+    bool IsGhost() const;
     //игровое имя объекта
     virtual LPCSTR Name() const override;
     // Active/non active

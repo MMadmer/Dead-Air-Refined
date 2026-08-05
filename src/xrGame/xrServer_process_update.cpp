@@ -41,8 +41,9 @@ void xrServer::Process_update(NET_Packet& P, ClientID sender)
                 string16 tmp;
                 CLSID2TEXT(E->m_tClassID, tmp);
                 xrDebug::Fatal(DEBUG_INFO,
-                    "Beer from the creator of '%s'; initiator: 0x%08x, r_tell() = %d, pos = %d, objectID = %d", tmp,
-                    CL->ID.value(), P.r_tell(), _pos, E->ID);
+                    "Size from '%s' CSE_* UPDATE_Read does not match its net_Export: initiator = 0x%08x, "
+                    "r_tell() = %d, pos = %d, objectID = %d, expected = %u, actual = %u",
+                    tmp, CL->ID.value(), P.r_tell(), _pos, E->ID, size, P.r_tell() - _pos);
             }
         }
         else

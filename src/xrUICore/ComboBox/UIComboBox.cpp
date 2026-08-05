@@ -93,7 +93,6 @@ void CUIComboBox::InitComboBox(Fvector2 pos, float width)
     else if (CUITextureMaster::ItemExist("ui_cb_listline_e"))
         m_list_box.SetSelectionTexture("ui_cb_listline");
 
-    // The original combo frame has an almost fully transparent center.
     if (!m_list_frame.InitTexture("ui_inGame2_listbox", false))
         m_list_frame.InitTexture("ui_cb_listbox", false);
 

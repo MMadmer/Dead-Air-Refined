@@ -667,18 +667,20 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
             if (dwCount)
             {
 #ifndef _EDITOR
-                Fmatrix Pold = Device.mProject;
-                Fmatrix FTold = Device.mFullTransform;
-                if (GetHudMode())
+                const bool hudMode = GetHudMode();
+                const Fmatrix oldProject = cmd_list.xforms.m_p;
+                if (hudMode)
                 {
-                    Device.mProject.build_projection(
+                    Fmatrix hudProject;
+                    hudProject.build_projection(
                         deg2rad(psHUD_FOV * Device.fFOV), Device.fASPECT, HUD_VIEWPORT_NEAR,
                         g_pGamePersistent->Environment().CurrentEnv.far_plane);
 
-                    Device.mFullTransform.mul(Device.mProject, Device.mView);
-                    cmd_list.set_xform_project(Device.mProject);
+                    Fmatrix hudFull;
+                    hudFull.mul(hudProject, cmd_list.xforms.m_v);
+                    cmd_list.set_xform_project(hudProject);
                     RImplementation.rmNear(cmd_list);
-                    ApplyTexgen(cmd_list, Device.mFullTransform);
+                    ApplyTexgen(cmd_list, hudFull);
                 }
 #endif
 
@@ -691,13 +693,11 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
                 cmd_list.Render(D3DPT_TRIANGLELIST, dwOffset, 0, dwCount, 0, dwCount / 2);
                 cmd_list.set_CullMode(CULL_CCW);
 #ifndef _EDITOR
-                if (GetHudMode())
+                if (hudMode)
                 {
                     RImplementation.rmNormal(cmd_list);
-                    Device.mProject = Pold;
-                    Device.mFullTransform = FTold;
-                    cmd_list.set_xform_project(Device.mProject);
-                    ApplyTexgen(cmd_list, Device.mFullTransform);
+                    cmd_list.set_xform_project(oldProject);
+                    ApplyTexgen(cmd_list, cmd_list.xforms.m_vp);
                 }
 #endif
             }

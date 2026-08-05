@@ -91,7 +91,7 @@ CUIArtefactDetectorSimple::~CUIArtefactDetectorSimple()
 
 void CUIArtefactDetectorSimple::Flash(bool bOn, float fRelPower)
 {
-    if (!m_parent->HudItemData())
+    if (!m_parent->HudItemData() || m_flash_bone == BI_NONE || !m_flash_light)
         return;
 
     IKinematics* K = m_parent->HudItemData()->m_model;
@@ -135,8 +135,10 @@ void CUIArtefactDetectorSimple::setup_internals()
     m_flash_bone = K->LL_BoneID("light_bone_2");
     m_on_off_bone = K->LL_BoneID("light_bone_1");
 
-    K->LL_SetBoneVisible(m_flash_bone, FALSE, TRUE);
-    K->LL_SetBoneVisible(m_on_off_bone, TRUE, TRUE);
+    if (m_flash_bone != BI_NONE)
+        K->LL_SetBoneVisible(m_flash_bone, FALSE, TRUE);
+    if (m_on_off_bone != BI_NONE)
+        K->LL_SetBoneVisible(m_on_off_bone, TRUE, TRUE);
 
     m_pOnOfLAnim = LALib.FindItem("det_on_off");
     m_pFlashLAnim = LALib.FindItem("det_flash");
@@ -148,7 +150,7 @@ void CUIArtefactDetectorSimple::update()
 
     if (m_parent->HudItemData())
     {
-        if (m_flash_bone == BI_NONE)
+        if (!m_flash_light)
             setup_internals();
 
         if (m_turn_off_flash_time && m_turn_off_flash_time < Device.dwTimeGlobal)

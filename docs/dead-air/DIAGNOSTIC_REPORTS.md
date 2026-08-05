@@ -54,9 +54,11 @@ The ZIP contains:
 | `fsgame.ltx` | when available | Sanitized filesystem configuration |
 | `save.scop` | when a save is active | Verbatim main save payload |
 | `save.scoc` | when present | Verbatim script/custom save payload |
+| `save.scov` | when present | Verbatim versioned project-extension payload |
 
-`report.json` uses schema `dead-air-refined.session-report/1`. A receiver should
-reject unknown major schemas instead of guessing field semantics. The optional
+`report.json` uses schema `dead-air-refined.session-report/1`. Metadata consumers
+should interpret only fields they understand; the upload service preserves
+unknown schemas and exposes unsupported or missing fields as absent. The optional
 `save.files` array records the exact size and SHA-256 of every included save
 component. The collector opens the complete save group before hashing or ZIP
 creation so a concurrent atomic save cannot mix components from two revisions.
@@ -103,17 +105,20 @@ raw stack pages.
 
 ## Go receiver contract
 
-A future bot should treat the ZIP as untrusted input:
+The receiver treats every ZIP as untrusted input without restricting its payload:
 
 1. Limit the compressed upload to 5 MiB and the expanded total to 16 MiB.
-2. Allow only the seven entry names documented above.
-3. Reject duplicate names, nested paths, absolute paths and `..` components.
-4. Parse `report.json` before accepting other entries.
-5. Require the schema, report ID, type, product version, build ID and executable hash.
-6. Verify `dump.sha256` against `session.dmp` and every `save.files` hash against
-   its verbatim ZIP entry.
-7. Group crashes by build ID, exception code, module and module RVA.
-8. Store the original ZIP unchanged so future symbolization can be repeated.
+2. Accept arbitrary entry names, nested paths, duplicates and payload types; the
+   server never extracts entries to the filesystem.
+3. Stream every entry once and reject invalid ZIP structure, unsupported
+   compression, size mismatches or checksum failures.
+4. Scan a root `report.json` on a best-effort basis when present. Missing,
+   malformed, partial and unknown-schema manifests remain valid uploads.
+5. Bound every scanned metadata value before storing or displaying it.
+6. Derive a crash category only from a recognized `type: crash`; otherwise use
+   the backward-compatible manual category.
+7. Store the original ZIP unchanged so future inspection and symbolization can
+   be repeated.
 
 The current validated manual and crash reports are approximately 58-61 KiB.
 The upper limits leave room for a much larger real-world log while remaining
@@ -127,6 +132,6 @@ The release implementation passed:
 - a real unhandled access violation in a release build;
 - ZIP and JSON parsing;
 - `MDMP` signature and dump SHA-256 validation;
-- ASCII and UTF-16 privacy scans of every ZIP entry;
+- ASCII and UTF-16 privacy scans of every non-save ZIP entry;
 - 13-to-10 report rotation while retaining the newest report;
 - a CMake x64 `Release` build with warnings treated as errors.

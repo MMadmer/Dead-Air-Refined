@@ -458,7 +458,10 @@ public:
     using ChildFacesVec = xr_vector<FacesVec>;
     ChildFacesVec child_faces; // shared
 
-    explicit CBoneData(u16 ID) : SelfID(ID) { VERIFY(SelfID != BI_NONE); }
+    explicit CBoneData(u16 ID) : SelfID(ID), ParentID(u16(-1)), game_mtl_idx(u16(-1)), mass(0.f)
+    {
+        VERIFY(SelfID != BI_NONE);
+    }
     virtual ~CBoneData() = default;
 #ifdef DEBUG
     typedef svector<int, 128> BoneDebug;

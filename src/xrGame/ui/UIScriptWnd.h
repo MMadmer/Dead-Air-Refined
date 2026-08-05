@@ -26,6 +26,8 @@ public:
 
     void AddCallback(pcstr control_id, s16 event, const luabind::functor<void>& lua_function);
     void AddCallback(pcstr control_id, s16 event, const luabind::functor<void>& functor, const luabind::object& object);
+    void Draw() override;
+    bool NeedCenterCursor() const override { return false; }
 
     template <typename T>
     T* GetControl(pcstr name);

@@ -5,7 +5,7 @@ project provides a native 64-bit Windows runtime, improves stability and
 performance, modernizes the engine dependency stack, and adds integrated
 installation, diagnostics, bug reporting, and automatic updates.
 
-Current release: **1.0.4**
+Current release: **1.2.0**
 
 Required game: **Dead Air 0.98b or Dead Air Revolution II**
 
@@ -57,15 +57,15 @@ in [`docs/dead-air`](docs/dead-air).
 ## Installation
 
 Download only one release asset. Most users need
-`Dead-Air-Refined-1.0.4-Setup.exe`; it supports both first-time installation
+`Dead-Air-Refined-1.2.0-Setup.exe`; it supports both first-time installation
 and manual upgrades from an earlier Refined version. Use
-`Dead-Air-Refined-1.0.4-Update.zip` when you prefer a fully manual installation:
+`Dead-Air-Refined-1.2.0-Update.zip` when you prefer a fully manual installation:
 extract it into the game root and replace the existing files. The built-in
 updater downloads the same ZIP automatically. You do not need both files.
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
-3. Download `Dead-Air-Refined-1.0.4-Setup.exe` from the latest release.
+3. Download `Dead-Air-Refined-1.2.0-Setup.exe` from the latest release.
 4. Select the root game directory containing `xrEngine.exe`, `fsgame.ltx`, and
    the `database` directory.
 5. Keep backup creation enabled unless the current Refined installation is
@@ -127,6 +127,11 @@ Dead Air: Refined preserves the established content loading order and supports
 packed and loose addons that use the standard `database`, `gamedata`, and `MODS`
 paths. Existing 32-bit saves remain compatible.
 
+Refined-specific persistent state is stored in one optional, forward-compatible
+`.scov` companion. The original `.scop` and `.scoc` formats remain unchanged,
+and unknown chunks are preserved across saves. See
+[`docs/dead-air/SAVE_COMPATIBILITY.md`](docs/dead-air/SAVE_COMPATIBILITY.md).
+
 Native 32-bit plugins and addons that replace engine executables or DLL files
 cannot run inside the 64-bit process and require an x64 build.
 
@@ -156,7 +161,7 @@ The wrapper enters the MSVC x64 developer environment and runs the canonical
 Build the patch installer and automatic-update archive:
 
 ```powershell
-tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.0.4
+tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.2.0
 ```
 
 Generated release files are written to `artifacts` and are not tracked by Git.
@@ -172,6 +177,8 @@ Dependency versions and compatibility pins are recorded in
   protocol.
 - [`DIAGNOSTIC_REPORTS.md`](docs/dead-air/DIAGNOSTIC_REPORTS.md) — diagnostic
   archive format and privacy guarantees.
+- [`SAVE_COMPATIBILITY.md`](docs/dead-air/SAVE_COMPATIBILITY.md) — original-save
+  compatibility, extension chunks, and atomic transaction format.
 - [`DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md) — dependency versions and
   build policy.
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
@@ -179,8 +186,9 @@ Dependency versions and compatibility pins are recorded in
 ## Credits
 
 Special thanks to the Dead Air developers for creating the game and its systems,
-and to the Dead Air community for long-term testing, addons, research, and
-technical documentation.
+to Lanforse for preserving and sharing the surviving Dead Air 1.0 source
+reference, and to the Dead Air community for long-term testing, addons,
+research, and technical documentation.
 
 Dead Air: Refined also incorporates work from the OpenXRay project and its
 contributors. Individual third-party components retain their respective

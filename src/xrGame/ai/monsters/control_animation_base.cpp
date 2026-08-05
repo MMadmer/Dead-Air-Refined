@@ -11,11 +11,42 @@
 #include "monster_event_manager.h"
 #include "control_jump.h"
 #include "sound_player.h"
+#include "material_manager.h"
+#include "Actor.h"
 
 // DEBUG purpose only
 constexpr pcstr dbg_action_name_table[] = {"ACT_STAND_IDLE", "ACT_SIT_IDLE", "ACT_LIE_IDLE", "ACT_WALK_FWD", "ACT_WALK_BKWD",
     "ACT_RUN", "ACT_EAT", "ACT_SLEEP", "ACT_REST", "ACT_DRAG", "ACT_ATTACK", "ACT_STEAL", "ACT_LOOK_AROUND",
     "ACT_JUMP"};
+
+namespace
+{
+struct SMonsterMeleeTrace
+{
+    const CBaseMonster* holder;
+    const CEntityAlive* enemy;
+    bool can_hit_enemy = false;
+};
+
+// Continue through the attacker and passable static materials, then stop at the target or first blocker.
+bool monster_melee_trace_callback(collide::rq_result& result, void* data)
+{
+    auto& trace = *static_cast<SMonsterMeleeTrace*>(data);
+    if (result.O)
+    {
+        if (result.O == trace.holder)
+            return true;
+
+        if (result.O == trace.enemy)
+            trace.can_hit_enemy = true;
+
+        return false;
+    }
+
+    const CDB::TRI* triangle = Level().ObjectSpace.GetStaticTris() + result.element;
+    return GMLib.GetMaterialByIdx(triangle->material)->Flags.is(SGameMtl::flPassable);
+}
+}
 
 CControlAnimationBase::CControlAnimationBase()
 {
@@ -23,6 +54,7 @@ CControlAnimationBase::CControlAnimationBase()
     m_override_animation_index = (u32)-1;
 
     init_anim_storage();
+    m_hit_query_results.r_results().reserve(8);
 }
 
 CControlAnimationBase::~CControlAnimationBase() { free_anim_storage(); }
@@ -619,7 +651,7 @@ void CControlAnimationBase::check_hit(MotionID motion, float time_perc)
     // определить дистанцию до врага
     Fvector d;
     d.sub(enemy->Position(), m_object->Position());
-    if (d.magnitude() > params.dist)
+    if (m_object->Position().distance_to_sqr(enemy->Position()) > _sqr(params.dist))
         should_hit = false;
 
     // проверка на  Field-Of-Hit
@@ -640,6 +672,27 @@ void CControlAnimationBase::check_hit(MotionID motion, float time_perc)
 
     if (!is_angle_between(p, from, to))
         should_hit = false;
+
+    if (should_hit && smart_cast<const CActor*>(enemy))
+    {
+        Fvector center;
+        Fvector enemy_center;
+        m_object->Center(center);
+        enemy->Center(enemy_center);
+
+        Fvector direction;
+        direction.sub(enemy_center, center);
+        const float range = direction.magnitude();
+        if (range > EPS)
+        {
+            direction.mul(1.f / range);
+            const collide::ray_defs ray(center, direction, range, CDB::OPT_CULL, collide::rqtBoth);
+            SMonsterMeleeTrace trace{m_object, enemy};
+            Level().ObjectSpace.RayQuery(
+                m_hit_query_results, ray, monster_melee_trace_callback, &trace, nullptr, m_object);
+            should_hit = trace.can_hit_enemy;
+        }
+    }
 
     if (should_hit)
         m_object->HitEntity(enemy, params.hit_power, params.impulse, params.impulse_dir);

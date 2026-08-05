@@ -198,13 +198,18 @@ void CRenderTarget::phase_combine()
     Fmatrix m_previous, m_current;
     Fvector2 m_blur_scale;
     {
-        static Fmatrix m_saved_viewproj;
-
         // (new-camera) -> (world) -> (old_viewproj)
-        m_previous.mul(m_saved_viewproj, Device.mInvView);
+        const bool historyValid = m_mblur_history_valid && m_mblur_frame + 1 == Device.dwFrame;
         m_current.set(Device.mProject);
-        m_saved_viewproj.set(Device.mFullTransform);
-        float scale = ps_r2_mblur / 2.f;
+        if (historyValid)
+            m_previous.mul(m_mblur_viewproj, Device.mInvView);
+        else
+            m_previous.set(m_current);
+
+        m_mblur_viewproj.set(Device.mFullTransform);
+        m_mblur_frame = Device.dwFrame;
+        m_mblur_history_valid = true;
+        const float scale = historyValid ? ps_r2_mblur / 2.f : 0.f;
         m_blur_scale.set(scale, -scale).div(12.f);
     }
 
@@ -297,7 +302,7 @@ void CRenderTarget::phase_combine()
         // RCache.set_Geometry			(g_combine_VP		);
         RCache.set_Geometry(g_combine);
 
-        RCache.set_c("m_v2w", Device.mInvView);
+        RCache.set_c("m_v2w", RCache.xforms.get_inv_V());
         RCache.set_c("L_ambient", ambclr);
 
         RCache.set_c("Ldynamic_color", sunclr);
@@ -526,7 +531,8 @@ void CRenderTarget::phase_combine()
         g_pGamePersistent->GetCurrentDof(dof);
         RCache.set_c("dof_params", dof.x, dof.y, dof.z, ps_r2_dof_sky);
         //.		RCache.set_c				("dof_params",	ps_r2_dof.x, ps_r2_dof.y, ps_r2_dof.z, ps_r2_dof_sky);
-        RCache.set_c("dof_kernel", vDofKernel.x, vDofKernel.y, ps_r2_dof_kernel_size, 0.f);
+        RCache.set_c("dof_kernel", vDofKernel.x, vDofKernel.y, ps_r2_dof_kernel_size,
+            g_pGamePersistent->GetScopeDofRadius());
 
         RCache.set_Geometry(g_aa_AA);
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);

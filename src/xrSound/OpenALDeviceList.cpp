@@ -37,6 +37,9 @@ ALDeviceList::ALDeviceList()
 
 void ALDeviceList::IterateAndAddDevicesString(pcstr devices)
 {
+    if (!devices)
+        return;
+
     // Opening every endpoint can block for seconds; capabilities are queried only for the selected device.
     while (*devices != '\0')
     {
@@ -53,13 +56,16 @@ void ALDeviceList::Enumerate()
     // have a set of vectors storing the device list, selection status, spec version #
     // -- empty all the lists and reserve space for 10 devices
     m_devices.clear();
+    m_devices.reserve(10);
+    m_defaultDeviceName[0] = '\0';
 
     // grab function pointers for 1.1-API functions, and if successful proceed to enumerate all devices
     if (alcIsExtensionPresent(nullptr, "ALC_ENUMERATE_ALL_EXT"))
     {
-        pcstr devices = (pstr)alcGetString(nullptr, ALC_ALL_DEVICES_SPECIFIER);
+        pcstr devices = alcGetString(nullptr, ALC_ALL_DEVICES_SPECIFIER);
 
-        xr_strcpy(m_defaultDeviceName, alcGetString(nullptr, ALC_DEFAULT_ALL_DEVICES_SPECIFIER));
+        if (pcstr defaultDeviceName = alcGetString(nullptr, ALC_DEFAULT_ALL_DEVICES_SPECIFIER))
+            xr_strcpy(m_defaultDeviceName, defaultDeviceName);
         Log("SOUND: OpenAL: system default sound device name is", m_defaultDeviceName);
 
         IterateAndAddDevicesString(devices);
@@ -67,34 +73,11 @@ void ALDeviceList::Enumerate()
     // grab function pointers for 1.0-API functions, and if successful proceed to enumerate all devices
     else if (alcIsExtensionPresent(nullptr, "ALC_ENUMERATION_EXT"))
     {
-        pcstr devices = (pstr)alcGetString(nullptr, ALC_DEVICE_SPECIFIER);
+        pcstr devices = alcGetString(nullptr, ALC_DEVICE_SPECIFIER);
 
-        xr_strcpy(m_defaultDeviceName, alcGetString(nullptr, ALC_DEFAULT_DEVICE_SPECIFIER));
+        if (pcstr defaultDeviceName = alcGetString(nullptr, ALC_DEFAULT_DEVICE_SPECIFIER))
+            xr_strcpy(m_defaultDeviceName, defaultDeviceName);
         Log("SOUND: OpenAL: system default sound device name is", m_defaultDeviceName);
-
-#if defined(XR_PLATFORM_WINDOWS)
-        // Xottab_DUTY
-        // The problem from 2000s described below should not be relevant for Linux,
-        // but still the case on Windows in 2022. And it probably won't be ever fixed...
-
-        // ManowaR
-        // "Generic Hardware" device on software AC'97 codecs introduce
-        // high CPU usage ( up to 30% ) as a consequence - freezes, FPS drop
-        // So if default device is "Generic Hardware" which maps to DirectSound3D interface
-        // We re-assign it to "Generic Software" to get use of old good DirectSound interface
-        // This makes 3D-sound processing unusable on cheap AC'97 codecs
-        // Also we assume that if "Generic Hardware" exists, than "Generic Software" is also exists
-        // Maybe wrong
-
-        constexpr pcstr AL_GENERIC_HARDWARE = "Generic Hardware";
-        constexpr pcstr AL_GENERIC_SOFTWARE = "Generic Software";
-
-        if (0 == xr_stricmp(m_defaultDeviceName, AL_GENERIC_HARDWARE))
-        {
-            xr_strcpy(m_defaultDeviceName, AL_GENERIC_SOFTWARE);
-            Log("SOUND: OpenAL: default sound device name set to", m_defaultDeviceName);
-        }
-#endif
 
         IterateAndAddDevicesString(devices);
     }
@@ -102,6 +85,17 @@ void ALDeviceList::Enumerate()
     {
         Msg("~ SOUND: OpenAL: EnumerationExtension NOT Present");
     }
+
+#if defined(XR_PLATFORM_WINDOWS)
+    constexpr pcstr AL_GENERIC_HARDWARE = "Generic Hardware";
+    constexpr pcstr AL_GENERIC_SOFTWARE = "Generic Software";
+
+    if (strstr(Core.Params, "-force_sw_audio") && xr_stricmp(m_defaultDeviceName, AL_GENERIC_HARDWARE) == 0)
+    {
+        xr_strcpy(m_defaultDeviceName, AL_GENERIC_SOFTWARE);
+        Log("SOUND: OpenAL: default sound device name set to", m_defaultDeviceName);
+    }
+#endif
 
     // make token
     const auto _cnt = GetNumDevices();
@@ -140,6 +134,12 @@ pcstr ALDeviceList::GetDeviceName(size_t index) const
 
 void ALDeviceList::SelectBestDevice()
 {
+    if (GetNumDevices() == 0)
+    {
+        Msg("SOUND: Can't select device. List empty");
+        return;
+    }
+
     int best_majorVersion = -1;
     int best_minorVersion = -1;
     int majorVersion;
@@ -165,15 +165,11 @@ void ALDeviceList::SelectBestDevice()
         }
         if (new_device_id == (u32)-1)
         {
-            R_ASSERT(GetNumDevices() != 0);
             new_device_id = 0; // first
         }
         snd_device_id = new_device_id;
     }
-    if (GetNumDevices() == 0)
-        Msg("SOUND: Can't select device. List empty");
-    else
-        Msg("SOUND: Selected device is %s", GetDeviceName(snd_device_id));
+    Msg("SOUND: Selected device is %s", GetDeviceName(snd_device_id));
 }
 
 /*

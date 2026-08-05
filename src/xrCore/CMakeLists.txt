@@ -1,5 +1,9 @@
 add_library(xrCore)
 
+if (WIN32 AND BUILD_SHARED_LIBS)
+    target_sources(xrCore PRIVATE xrCore.def)
+endif()
+
 target_sources_grouped(
     TARGET xrCore
     NAME "Animation"

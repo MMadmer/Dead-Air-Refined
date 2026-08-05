@@ -14,7 +14,7 @@ float3	dof(float3 img, float2 center)
 
 // x - near y - focus z - far w - sky distance
 uniform float4	dof_params;
-uniform float3	dof_kernel;	// x,y - resolution pre-scaled z - just kernel size
+uniform float4	dof_kernel;	// x,y - resolution pre-scaled z - kernel size w - scope DOF radius
 
 float DOFFactor(float depth)
 {
@@ -26,6 +26,22 @@ float DOFFactor(float depth)
 	float 	blur 		= blur_near+blur_far;
 	blur*=blur;
 	return blur;
+}
+
+float ScopeDOFFactor(float2 center)
+{
+	float2 scopeOffset = center - float2(0.5, 0.5);
+	scopeOffset.x *= pos_decompression_params2.x / pos_decompression_params2.y;
+	return saturate(dot(scopeOffset, scopeOffset) * dof_kernel.w * dof_kernel.w);
+}
+
+float CombinedDOFFactor(float depth, float2 center)
+{
+	float depthFactor = DOFFactor(depth);
+	if (dof_kernel.w <= 0.0)
+		return depthFactor;
+
+	return max(depthFactor, ScopeDOFFactor(center));
 }
 
 
@@ -40,7 +56,7 @@ float3	dof(float3 img, float2 center)
 	float 	depth		= texelFetch(s_position, int2( center * pos_decompression_params2.xy ), 0).z;
 #endif
 	if (depth <= EPSDEPTHDOF)	depth = dof_params.w;
-	float	blur 		= DOFFactor(depth);
+	float	blur 		= CombinedDOFFactor(depth, center);
 
 	//float blur = 1;
 	//	const amount of blur: define controlled
@@ -80,7 +96,7 @@ float3	dof(float3 img, float2 center)
 		float 	tap_depth 	= texelFetch(s_position, int2( tap* pos_decompression_params2.xy ), 0).z;
 #endif
 		if (tap_depth <= EPSDEPTHDOF)	tap_depth = dof_params.w;
-		float 	tap_contrib	= DOFFactor(tap_depth);
+		float 	tap_contrib	= CombinedDOFFactor(tap_depth, tap);
 		sum 		+= tap_color.rgb	* tap_contrib;
 		contrib		+= tap_contrib;
 	}

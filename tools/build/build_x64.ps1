@@ -25,12 +25,31 @@ function Apply-RequiredPatch {
         [Parameter(Mandatory)]
         [string]$Repository,
         [Parameter(Mandatory)]
-        [string]$Patch
+        [string]$Patch,
+        [string]$AppliedFile,
+        [string[]]$AppliedMarkers = @()
     )
 
     & git -C $Repository apply --reverse --check --ignore-space-change --ignore-whitespace $Patch 2>$null
     if ($LASTEXITCODE -eq 0) {
         return
+    }
+
+    if ($AppliedFile -and $AppliedMarkers.Count -gt 0) {
+        $appliedPath = Join-Path $Repository $AppliedFile
+        if (Test-Path -LiteralPath $appliedPath) {
+            $appliedSource = [System.IO.File]::ReadAllText($appliedPath)
+            $hasAllMarkers = $true
+            foreach ($marker in $AppliedMarkers) {
+                if ($appliedSource.IndexOf($marker, [System.StringComparison]::Ordinal) -lt 0) {
+                    $hasAllMarkers = $false
+                    break
+                }
+            }
+            if ($hasAllMarkers) {
+                return
+            }
+        }
     }
 
     & git -C $Repository apply --check --ignore-space-change --ignore-whitespace $Patch
@@ -76,7 +95,14 @@ Apply-RequiredPatch `
     -Patch (Join-Path $repositoryRoot "patches\luajit-dead-air-bytecode.patch")
 Apply-RequiredPatch `
     -Repository (Join-Path $repositoryRoot "Externals\xrLuaFix\lua-marshal") `
-    -Patch (Join-Path $repositoryRoot "patches\lua-marshal-decode-error.patch")
+    -Patch (Join-Path $repositoryRoot "patches\lua-marshal-decode-error.patch") `
+    -AppliedFile "lmarshal.c" `
+    -AppliedMarkers @(
+        "static void mar_encode_source_callback(",
+        "portable callback source is too long",
+        "__persist must return a function or Lua source string",
+        "cannot decode persisted Lua function: %s"
+    )
 
 if ($Clean) {
     Remove-BuildDirectory -Path $buildDirectory

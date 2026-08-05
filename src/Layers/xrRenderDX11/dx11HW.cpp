@@ -56,8 +56,9 @@ void CHW::CreateD3D()
 {
     ZoneScoped;
 
-    hDXGI = XRay::LoadModule("dxgi");
-    hD3D = XRay::LoadModule("d3d11");
+    // Driver workers can outlive device teardown and still execute runtime callbacks.
+    hDXGI = XRay::LoadModule("dxgi", true);
+    hD3D = XRay::LoadModule("d3d11", true);
     if (!hD3D->IsLoaded() || !hDXGI->IsLoaded())
     {
         Valid = false;
@@ -82,15 +83,6 @@ void CHW::DestroyD3D()
 
     _SHOW_REF("refCount:m_pFactory", m_pFactory);
     _RELEASE(m_pFactory);
-
-    // Manually close and unload additional DLLs
-    // To make it work with DXVK, etc.
-    hD3D->Close();
-    hDXGI->Close();
-    if (auto hModule = GetModuleHandleA("d3d11.dll"))
-        FreeLibrary(hModule);
-    if (auto hModule = GetModuleHandleA("dxgi.dll"))
-        FreeLibrary(hModule);
 }
 
 void CHW::CreateDevice(SDL_Window* sdlWnd)

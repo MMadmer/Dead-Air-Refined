@@ -26,32 +26,10 @@ void CDetailManager::hw_Load_Shaders()
     hwc_s_array = T1.get("array");
 }
 
-void CDetailManager::hw_Render(CBackend& cmd_list)
+void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)
 {
     ZoneScoped;
     using namespace detail_manager;
-
-    // Render-prepare
-    //	Update timer
-    //	Can't use Device.fTimeDelta since it is smoothed! Don't know why, but smoothed value looks more choppy!
-    float fDelta = Device.fTimeGlobal - m_global_time_old;
-    if ((fDelta < 0) || (fDelta > 1))
-        fDelta = 0.03f;
-    m_global_time_old = Device.fTimeGlobal;
-
-    m_time_rot_1 += (PI_MUL_2 * fDelta / swing_current.rot1);
-    m_time_rot_2 += (PI_MUL_2 * fDelta / swing_current.rot2);
-    m_time_pos += fDelta * swing_current.speed;
-
-    // float		tm_rot1		= (PI_MUL_2*Device.fTimeGlobal/swing_current.rot1);
-    // float		tm_rot2		= (PI_MUL_2*Device.fTimeGlobal/swing_current.rot2);
-    float tm_rot1 = m_time_rot_1;
-    float tm_rot2 = m_time_rot_2;
-
-    Fvector4 dir1, dir2;
-    const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
-    dir1.set(_sin(tm_rot1), 0, _cos(tm_rot1), 0).normalize().mul(0.1f + environment.wind_velocity * 0.0016f);
-    dir2.set(_sin(tm_rot2), 0, _cos(tm_rot2), 0).normalize().mul(0.05f + environment.wind_velocity * 0.0008f);
 
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);
@@ -70,7 +48,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list)
     // RCache.set_c			(&*hwc_wind,	dir1); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	1, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir1, 1, 0);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir1, 1, 0, collectStats, frustum);
 
     // Wave1
     // wave.set				(1.f/3.f,		1.f/7.f,	1.f/5.f,	Device.fTimeGlobal*swing_current.speed);
@@ -79,18 +57,19 @@ void CDetailManager::hw_Render(CBackend& cmd_list)
     // RCache.set_c			(&*hwc_wind,	dir2); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	2, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir2, 2, 0);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 2, 0, collectStats, frustum);
 
     // Still
     consts.set(scale, scale, scale, 1.f);
     // RCache.set_c			(&*hwc_s_consts,scale,		scale,		scale,				1.f);
     // RCache.set_c			(&*hwc_s_xform,	Device.mFullTransform);
     // hw_Render_dump			(&*hwc_s_array,	0, 1, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir2, 0, 1);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 0, 1, collectStats, frustum);
 }
 
 void CDetailManager::hw_Render_dump(CBackend& cmd_list,
-    const Fvector4& consts, const Fvector4& wave, const Fvector4& wind, u32 var_id, u32 lod_id)
+    const Fvector4& consts, const Fvector4& wave, const Fvector4& wind, u32 var_id, u32 lod_id,
+    const bool collectStats, const CFrustum* frustum)
 {
     ZoneScoped;
 
@@ -100,15 +79,13 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     static shared_str strArray("array");
     static shared_str strXForm("xform");
 
-    RImplementation.BasicStats.DetailCount = 0;
-
     vis_list& list = m_visibles[var_id];
 
     // Iterate
     for (const u8 objectId : m_visibleObjectIds[var_id])
     {
         CDetail& Object = *objects[objectId];
-        xr_vector<SlotItemVec*>& vis = list[objectId];
+        VisiblePartVec& vis = list[objectId];
         const u32 vOffset = m_objectVertexOffsets[objectId];
         const u32 iOffset = m_objectIndexOffsets[objectId];
         for (u32 iPass = 0; iPass < Object.shader->E[lod_id]->passes.size(); ++iPass)
@@ -123,7 +100,7 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             cmd_list.set_c(strConsts, consts);
             cmd_list.set_c(strWave, wave);
             cmd_list.set_c(strDir2D, wind);
-            cmd_list.set_c(strXForm, Device.mFullTransform);
+            cmd_list.set_c(strXForm, cmd_list.xforms.m_wvp);
 
             // ref_constant constArray = RCache.get_c(strArray);
             // VERIFY(constArray);
@@ -141,9 +118,12 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
             u32 dwBatch = 0;
 
-            for (SlotItemVec* items : vis)
+            for (const VisiblePart& part : vis)
             {
-                for (SlotItem* item : *items)
+                if (!IsPartVisible(part, frustum))
+                    continue;
+
+                for (SlotItem* item : *part.items)
                 {
                     SlotItem& Instance = *item;
                     u32 base = dwBatch * 4;
@@ -169,7 +149,8 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                     if (dwBatch == hw_BatchSize)
                     {
                         // flush
-                        RImplementation.BasicStats.DetailCount += dwBatch;
+                        if (collectStats)
+                            RImplementation.BasicStats.DetailCount += dwBatch;
                         u32 dwCNT_verts = dwBatch * Object.number_vertices;
                         u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
                             // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;
@@ -193,7 +174,8 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             // flush if necessary
             if (dwBatch)
             {
-                RImplementation.BasicStats.DetailCount += dwBatch;
+                if (collectStats)
+                    RImplementation.BasicStats.DetailCount += dwBatch;
                 u32 dwCNT_verts = dwBatch * Object.number_vertices;
                 u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
                     // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;

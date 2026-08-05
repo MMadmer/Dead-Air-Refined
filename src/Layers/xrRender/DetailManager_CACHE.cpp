@@ -175,7 +175,7 @@ void CDetailManager::cache_Update(int v_x, int v_z, Fvector& view)
             // Decompress and remove task
             const u32 bestId = cache_task.size() - 1;
             cache_Decompress(cache_task[bestId]);
-            cache_task.erase(bestId);
+            cache_task.pop_back();
         }
     }
     else
@@ -213,7 +213,7 @@ void CDetailManager::cache_Update(int v_x, int v_z, Fvector& view)
             }
         }
 
-        // Because indexes become invalid after an erase, sort them and process in the reverse order to erase everything correctly
+        // Descending indexes keep swap-removal from moving an unprocessed selection.
         std::sort(bestIndexes, bestIndexes + dm_max_decompress);
 
         for (int i = dm_max_decompress - 1; i >= 0; --i)
@@ -224,7 +224,8 @@ void CDetailManager::cache_Update(int v_x, int v_z, Fvector& view)
             {
                 // Decompress and remove task
                 cache_Decompress(cache_task[bestId]);
-                cache_task.erase(bestId);
+                cache_task[bestId] = cache_task.back();
+                cache_task.pop_back();
             }
         }
     }

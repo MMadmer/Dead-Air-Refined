@@ -275,24 +275,21 @@ void CObjectList::Update(bool bForce)
             stats.Active = objects_active.size();
             stats.Total = objects_active.size() + objects_sleeping.size();
 
-            u32 const objects_count = workload->size();
-            IGameObject** objects = (IGameObject**)xr_alloca(objects_count * sizeof(IGameObject*));
-            std::copy(workload->begin(), workload->end(), objects);
+            // Reuse heap storage so large ALife populations cannot exhaust the frame thread stack.
+            update_snapshot.assign(workload->begin(), workload->end());
 
             m_primary_crows.clear();
 
-            IGameObject** b = objects;
-            IGameObject** e = objects + objects_count;
-            for (IGameObject** i = b; i != e; ++i)
+            for (IGameObject* object : update_snapshot)
             {
-                (*i)->IAmNotACrowAnyMore();
-                (*i)->SetCrowUpdateFrame(u32(-1));
+                object->IAmNotACrowAnyMore();
+                object->SetCrowUpdateFrame(u32(-1));
             }
 
-            for (IGameObject** i = b; i != e; ++i)
+            for (IGameObject* object : update_snapshot)
             {
-                (*i)->PreUpdateCL();
-                SingleUpdate(*i);
+                object->PreUpdateCL();
+                SingleUpdate(object);
             }
 
             //--#SM+#-- PostUpdateCL для всех клиентских объектов [for crowed and non-crowed]
@@ -306,51 +303,50 @@ void CObjectList::Update(bool bForce)
         }
     }
 
-    // Destroy
-    if (!destroy_queue.empty())
+    ProcessDestroyQueue();
+}
+
+void CObjectList::ProcessDestroyQueue()
+{
+    if (destroy_queue.empty())
+        return;
+
+    ZoneScopedN("net_Relcase");
+
+    for (IGameObject* object : objects_active)
+        for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
+            object->net_Relcase(*destroyed);
+
+    for (IGameObject* object : objects_sleeping)
+        for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
+            object->net_Relcase(*destroyed);
+
+    for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
+        g_pGameLevel->Sound->object_relcase(*destroyed);
+
+    for (auto callback = m_relcase_callbacks.begin(); callback != m_relcase_callbacks.end(); ++callback)
     {
-        ZoneScopedN("net_Relcase");
-
-        // Info
-        for (Objects::iterator oit = objects_active.begin(); oit != objects_active.end(); ++oit)
-            for (int it = destroy_queue.size() - 1; it >= 0; it--)
-            {
-                (*oit)->net_Relcase(destroy_queue[it]);
-            }
-        for (Objects::iterator oit = objects_sleeping.begin(); oit != objects_sleeping.end(); ++oit)
-            for (int it = destroy_queue.size() - 1; it >= 0; it--)
-                (*oit)->net_Relcase(destroy_queue[it]);
-
-        for (int it = destroy_queue.size() - 1; it >= 0; it--)
-            g_pGameLevel->Sound->object_relcase(destroy_queue[it]);
-
-        RELCASE_CALLBACK_VEC::iterator it = m_relcase_callbacks.begin();
-        const RELCASE_CALLBACK_VEC::iterator ite = m_relcase_callbacks.end();
-        for (; it != ite; ++it)
-        {
-            VERIFY(*(*it).m_ID == (it - m_relcase_callbacks.begin()));
-            for (auto& dit : destroy_queue)
-            {
-                (*it).m_Callback(dit);
-                g_pGameLevel->pHUD->net_Relcase(dit);
-            }
-        }
-
-        // Destroy
-        for (int it = destroy_queue.size() - 1; it >= 0; it--)
-        {
-            IGameObject* O = destroy_queue[it];
-// Msg ("Object [%x]", O);
-#ifdef DEBUG
-            if (debug_destroy)
-                Msg("Destroying object[%x][%x] [%d][%s] frame[%d]", dynamic_cast<void*>(O), O, O->ID(), O->cName().c_str(),
-                    Device.dwFrame);
-#endif // DEBUG
-            O->net_Destroy();
-            Destroy(O);
-        }
-        destroy_queue.clear();
+        VERIFY(*callback->m_ID == callback - m_relcase_callbacks.begin());
+        for (IGameObject* destroyed : destroy_queue)
+            callback->m_Callback(destroyed);
     }
+
+    for (IGameObject* destroyed : destroy_queue)
+        g_pGameLevel->pHUD->net_Relcase(destroyed);
+
+    for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
+    {
+        IGameObject* object = *destroyed;
+#ifdef DEBUG
+        if (debug_destroy)
+            Msg("Destroying object[%x][%x] [%d][%s] frame[%d]", dynamic_cast<void*>(object), object,
+                object->ID(), object->cName().c_str(), Device.dwFrame);
+#endif
+        object->net_Destroy();
+        Destroy(object);
+    }
+
+    destroy_queue.clear();
 }
 
 void CObjectList::net_Register(IGameObject* O)

@@ -15,7 +15,11 @@
 #define CBaseAction CActionBase<_object_type>
 
 TEMPLATE_SPECIALIZATION
-IC CBaseAction::CActionBase(_object_type* object, LPCSTR action_name) { init(object, action_name); }
+IC CBaseAction::CActionBase(_object_type* object, LPCSTR action_name)
+    : m_start_level_time(0), m_start_game_time(0), m_first_time(false)
+{
+    init(object, action_name);
+}
 TEMPLATE_SPECIALIZATION
 CBaseAction::~CActionBase() {}
 TEMPLATE_SPECIALIZATION

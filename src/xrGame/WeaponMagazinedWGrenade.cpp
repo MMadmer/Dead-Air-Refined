@@ -191,8 +191,6 @@ bool CWeaponMagazinedWGrenade::Action(u16 cmd, u32 flags)
         {
             if (iAmmoElapsed)
                 LaunchGrenade();
-            else
-                Reload();
 
             if (GetState() == eIdle)
                 OnEmptyClick();
@@ -384,23 +382,58 @@ void CWeaponMagazinedWGrenade::FireEnd()
 
 void CWeaponMagazinedWGrenade::OnMagazineEmpty()
 {
-    if (GetState() == eIdle)
+    if (m_bGrenadeMode)
     {
-        OnEmptyClick();
+        if (GetState() == eIdle)
+            OnEmptyClick();
     }
+    else
+        inherited::OnMagazineEmpty();
 }
 
 void CWeaponMagazinedWGrenade::ReloadMagazine()
 {
+    if (!m_bGrenadeMode)
+    {
+        inherited::ReloadMagazine();
+        return;
+    }
+
+    // Grenade mode shares the container but not the rifle's transient magazine state.
+    constexpr u32 primary_magazine_conditions =
+        eWeaponConditionChamberCycle | eWeaponConditionMagazineRemoved;
+    const u32 saved_primary_conditions = GetConditionType() & primary_magazine_conditions;
+    SetConditionType(GetConditionType() & ~primary_magazine_conditions);
+
     inherited::ReloadMagazine();
 
     //перезарядка подствольного гранатомета
-    if (iAmmoElapsed && !getRocketCount() && m_bGrenadeMode)
+    if (iAmmoElapsed && !getRocketCount())
     {
         shared_str fake_grenade_name = pSettings->r_string(m_ammoTypes[m_ammoType].c_str(), "fake_grenade_name");
 
         CRocketLauncher::SpawnRocket(fake_grenade_name.c_str(), this);
     }
+
+    SetConditionType((GetConditionType() & ~primary_magazine_conditions) | saved_primary_conditions);
+}
+
+void CWeaponMagazinedWGrenade::UnloadMagazine(bool spawn_ammo)
+{
+    if (!m_bGrenadeMode)
+    {
+        inherited::UnloadMagazine(spawn_ammo);
+        return;
+    }
+
+    const u32 condition_type = GetConditionType();
+    // The launcher must unload fully even when the rifle uses a detachable magazine.
+    const bool detachable_magazine = m_magazine_flags.test(mfDetachableMagazine);
+    m_magazine_flags.set(mfDetachableMagazine, false);
+
+    inherited::UnloadMagazine(spawn_ammo);
+    m_magazine_flags.set(mfDetachableMagazine, detachable_magazine);
+    SetConditionType(condition_type);
 }
 
 void CWeaponMagazinedWGrenade::OnStateSwitch(u32 S, u32 oldState)
@@ -429,12 +462,6 @@ void CWeaponMagazinedWGrenade::OnAnimationEnd(u32 state)
     case eSwitch: { SwitchState(eIdle);
     }
     break;
-    case eFire:
-    {
-        if (m_bGrenadeMode)
-            Reload();
-    }
-    break;
     }
     inherited::OnAnimationEnd(state);
 }
@@ -455,7 +482,8 @@ bool CWeaponMagazinedWGrenade::CanAttach(PIItem pIItem)
 {
     CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(pIItem);
 
-    if (pGrenadeLauncher && ALife::eAddonAttachable == m_eGrenadeLauncherStatus &&
+    if (pGrenadeLauncher && GrenadeLauncherAttachable() &&
+        !HasConditionType(eWeaponConditionGrenadeLauncherMount) &&
         0 == (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) &&
         !xr_strcmp(m_sGrenadeLauncherName.c_str(), pIItem->object().cNameSect()))
         return true;
@@ -466,6 +494,7 @@ bool CWeaponMagazinedWGrenade::CanAttach(PIItem pIItem)
 bool CWeaponMagazinedWGrenade::CanDetach(LPCSTR item_section_name)
 {
     if (ALife::eAddonAttachable == m_eGrenadeLauncherStatus &&
+        !HasConditionType(eWeaponConditionGrenadeLauncherMount) &&
         0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) &&
         !xr_strcmp(m_sGrenadeLauncherName.c_str(), item_section_name))
         return true;
@@ -477,7 +506,8 @@ bool CWeaponMagazinedWGrenade::Attach(PIItem pIItem, bool b_send_event)
 {
     CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(pIItem);
 
-    if (pGrenadeLauncher && ALife::eAddonAttachable == m_eGrenadeLauncherStatus &&
+    if (pGrenadeLauncher && GrenadeLauncherAttachable() &&
+        !HasConditionType(eWeaponConditionGrenadeLauncherMount) &&
         0 == (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) &&
         !xr_strcmp(m_sGrenadeLauncherName.c_str(), pIItem->object().cNameSect()))
     {
@@ -506,6 +536,7 @@ bool CWeaponMagazinedWGrenade::Attach(PIItem pIItem, bool b_send_event)
 bool CWeaponMagazinedWGrenade::Detach(LPCSTR item_section_name, bool b_spawn_item)
 {
     if (ALife::eAddonAttachable == m_eGrenadeLauncherStatus &&
+        !HasConditionType(eWeaponConditionGrenadeLauncherMount) &&
         0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonGrenadeLauncher) &&
         !xr_strcmp(m_sGrenadeLauncherName.c_str(), item_section_name))
     {
@@ -596,12 +627,14 @@ void CWeaponMagazinedWGrenade::PlayAnimReload()
         {
             if (isHUDAnimationExist("anm_reload_misfire_w_gl"))
                 PlayHUDMotion("anm_reload_misfire_w_gl", true, this, state);
+            else if (isHUDAnimationExist("anm_reload_empty_w_gl"))
+                PlayHUDMotion("anm_reload_empty_w_gl", true, this, state);
             else
                 PlayHUDMotion("anm_reload_w_gl", "anim_reload_gl", true, this, state);
         }
         else
         {
-            if (iAmmoElapsed == 0)
+            if (iAmmoElapsed == 0 || HasConditionType(eWeaponConditionChamberCycle))
             {
                 if (isHUDAnimationExist("anm_reload_empty_w_gl"))
                     PlayHUDMotion("anm_reload_empty_w_gl", true, this, state);
@@ -722,13 +755,13 @@ void CWeaponMagazinedWGrenade::PlayAnimShoot()
 {
     if (m_bGrenadeMode)
     {
-        PlayHUDMotion("anm_shots_g", "anim_shoot_g", FALSE, this, eFire);
+        PlayHUDMotion("anm_shots_g", "anim_shoot_g", TRUE, this, eFire);
     }
     else
     {
         VERIFY(GetState() == eFire);
         if (IsGrenadeLauncherAttached())
-            PlayHUDMotion("anm_shots_w_gl", "anim_shoot_gl", FALSE, this, GetState());
+            PlayHUDMotion("anm_shots_w_gl", "anim_shoot_gl", TRUE, this, GetState());
         else
             inherited::PlayAnimShoot();
     }
@@ -869,7 +902,7 @@ bool CWeaponMagazinedWGrenade::install_upgrade_ammo_class(LPCSTR section, bool t
     }
     result |= result2;
 
-    return result2;
+    return result;
 }
 
 bool CWeaponMagazinedWGrenade::install_upgrade_impl(LPCSTR section, bool test)
@@ -942,6 +975,12 @@ bool CWeaponMagazinedWGrenade::GetBriefInfo(II_BriefInfo& info)
             info.fire_mode._set(int_str);
         }
     }
+    else
+        info.fire_mode._set("");
+
+    if (!m_bGrenadeMode && (HasConditionType(eWeaponConditionChamberCycle) || bMisfire))
+        info.fire_mode._set("X");
+
     if (m_pInventory->ModifyFrame() <= m_BriefInfo_CalcFrame)
         return false;
 

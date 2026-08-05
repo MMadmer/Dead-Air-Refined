@@ -282,7 +282,10 @@ void CEntityAlive::Hit(SHit* pHDS)
             StartBloodDrops(pWound);
     }
 
-    if (HDS.hit_type != ALife::eHitTypeTelepatic)
+    const bool createsBloodWallmark = HDS.hit_type == ALife::eHitTypeWound ||
+        HDS.hit_type == ALife::eHitTypeFireWound || HDS.hit_type == ALife::eHitTypeStrike ||
+        HDS.hit_type == ALife::eHitTypeExplosion;
+    if (createsBloodWallmark && !IsGhost())
     {
         //добавить кровь на стены
         BloodyWallmarks(HDS.damage(), HDS.dir, HDS.bone(), HDS.p_in_bone_space);

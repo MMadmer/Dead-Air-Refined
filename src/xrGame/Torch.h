@@ -25,7 +25,7 @@ protected:
     ref_light light_render2;
     ref_light light_omni;
     ref_glow glow_render;
-    Fvector m_focus;
+    Fvector m_torch_offset;
     Fcolor m_torch_color;
     Fcolor m_torch2_color;
     float m_torch_inertion;
@@ -45,6 +45,7 @@ public:
 
     virtual void OnH_A_Chield();
     virtual void OnH_B_Independent(bool just_before_destroy);
+    virtual void OnMoveToRuck(const SInvItemPlace& prev);
 
     virtual void UpdateCL();
 
@@ -86,7 +87,8 @@ public:
     void SwitchNightVision();
     void SwitchNightVision(bool light_on, bool use_sounds = true);
 
-    bool GetNightVisionStatus() { return m_bNightVisionOn; }
+    bool NightVisionEnabled() const { return m_bNightVisionEnabled; }
+    bool GetNightVisionStatus() const { return m_bNightVisionOn; }
     CNightVisionEffector* GetNightVision() { return m_night_vision; }
 protected:
     bool m_bNightVisionEnabled;
@@ -118,6 +120,7 @@ class CNightVisionEffector
 {
     CActor* m_pActor;
     HUD_SOUND_COLLECTION m_sounds;
+    ref_light m_highlight;
 
 public:
     enum EPlaySounds
@@ -128,9 +131,12 @@ public:
         eBrokeSound
     };
     CNightVisionEffector(const shared_str& sect);
+    ~CNightVisionEffector();
     void Start(const shared_str& sect, CActor* pA, bool play_sound = true);
     void Stop(const float factor, bool play_sound = true);
     bool IsActive();
     void OnDisabled(CActor* pA, bool play_sound = true);
     void PlaySounds(EPlaySounds which);
+    void SetHighlightPosition(Fvector position);
+    void SetHighlightRotation(Fvector direction, Fvector right);
 };

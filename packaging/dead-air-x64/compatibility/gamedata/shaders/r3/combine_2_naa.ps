@@ -136,9 +136,9 @@ c2_out main( v2p_aa_AA I )
 		img		= lerp	(img,blurred,distort.z);
 	#endif
 
-	#ifdef USE_VIGNETTE
+	#if defined(USE_VIGNETTE) || defined(USE_FILMGRAIN)
 		img = GrainPass( img, center );
-	#endif // OPT_VIGNETTE
+	#endif
 
 
 	#ifdef USE_TECHICOLOR

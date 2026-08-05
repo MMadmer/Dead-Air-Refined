@@ -162,9 +162,12 @@ float CCustomOutfit::HitThroughArmor(float hit_power, s16 element, float ap, boo
     case SBoneProtections::HitFractionActorCOP:
     case SBoneProtections::HitFractionActorCS:
     {
+        const float ba = element == static_cast<s16>(BI_NONE) ? -1.0f : GetBoneArmor(element);
+        if (element != static_cast<s16>(BI_NONE) && ba <= 0.0f)
+            return NewHitPower;
+
         if (hit_type == ALife::eHitTypeFireWound)
         {
-            const float ba = GetBoneArmor(element);
             if (ba < 0.0f)
                 return NewHitPower;
 
@@ -227,7 +230,6 @@ float CCustomOutfit::HitThroughArmor(float hit_power, s16 element, float ap, boo
 }
 
 bool CCustomOutfit::BonePassBullet(int boneID) { return m_boneProtection.getBonePassBullet(s16(boneID)); }
-#include "Torch.h"
 void CCustomOutfit::OnMoveToSlot(const SInvItemPlace& prev)
 {
     if (m_pInventory)
@@ -238,9 +240,8 @@ void CCustomOutfit::OnMoveToSlot(const SInvItemPlace& prev)
             ApplySkinModel(pActor, true, false);
             if (prev.type == eItemPlaceSlot && !bIsHelmetAvaliable)
             {
-                CTorch* pTorch = smart_cast<CTorch*>(pActor->inventory().ItemFromSlot(TORCH_SLOT));
-                if (pTorch && pTorch->GetNightVisionStatus())
-                    pTorch->SwitchNightVision(true, false);
+                if (pActor->GetNightVisionStatus())
+                    pActor->SwitchNightVision(true, false);
             }
             PIItem pHelmet = pActor->inventory().ItemFromSlot(HELMET_SLOT);
             if (pHelmet && !bIsHelmetAvaliable)
@@ -312,9 +313,8 @@ void CCustomOutfit::OnMoveToRuck(const SInvItemPlace& prev)
         if (pActor)
         {
             ApplySkinModel(pActor, false, false);
-            CTorch* pTorch = smart_cast<CTorch*>(pActor->inventory().ItemFromSlot(TORCH_SLOT));
-            if (pTorch && !bIsHelmetAvaliable)
-                pTorch->SwitchNightVision(false);
+            if (!bIsHelmetAvaliable)
+                pActor->SwitchNightVision(false);
         }
     }
 };

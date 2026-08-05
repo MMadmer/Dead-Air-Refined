@@ -977,6 +977,9 @@ void CUIMainIngameWnd::UpdateBoosterIndicators(const CEntityCondition::BOOSTER_M
     flags |= LA_ONLYALPHA;
     flags |= LA_TEXTURECOLOR;
 
+    if (!psHUD_Flags.test(HUD_DRAW_INFO))
+        return;
+
     for(const auto& [_, booster] : influences)
     {
         switch (booster.m_type)

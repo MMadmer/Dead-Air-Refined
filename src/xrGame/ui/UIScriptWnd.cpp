@@ -2,9 +2,23 @@
 #include "UIScriptWnd.h"
 #include "Common/object_broker.h"
 #include "xrUICore/Callbacks/callback_info.h"
+#include "UIGameCustom.h"
+#include "UIMainIngameWnd.h"
+#include "Level.h"
 
 CUIDialogWndEx::CUIDialogWndEx() : CUIDialogWnd("CUIDialogWndEx") {}
 CUIDialogWndEx::~CUIDialogWndEx() { delete_data(m_callbacks); }
+
+void CUIDialogWndEx::Draw()
+{
+    if (g_pGameLevel)
+    {
+        if (auto* ui = CurrentGameUI(); ui && ui->UIMainIngameWnd)
+            ui->UIMainIngameWnd->DrawMainIndicatorsForInventory();
+    }
+
+    inherited::Draw();
+}
 
 void CUIDialogWndEx::Register(CUIWindow* pChild) { pChild->SetMessageTarget(this); }
 void CUIDialogWndEx::Register(CUIWindow* pChild, pcstr name)

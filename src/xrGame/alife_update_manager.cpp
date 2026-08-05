@@ -23,6 +23,7 @@
 #include "mt_config.h"
 #include "xrNetServer/NET_Messages.h"
 #include "alife_storage_manager.h"
+#include "saved_game_wrapper.h"
 
 using namespace ALife;
 
@@ -311,23 +312,18 @@ void CALifeUpdateManager::reload(LPCSTR section)
 
 bool CALifeUpdateManager::load_game(LPCSTR game_name, bool no_assert)
 {
-    CALifeStorageManager::wait_for_pending_saves();
-
+    if (CALifeStorageManager::save_capture_reentrant())
     {
-        string_path temp, file_name;
-        strconcat(sizeof(temp), temp, game_name, SAVE_EXTENSION);
-        FS.update_path(file_name, "$game_saves$", temp);
-        if (!FS.exist(file_name))
-        {
-            strconcat(sizeof(temp), temp, game_name, SAVE_EXTENSION_LEGACY);
-            FS.update_path(file_name, "$game_saves$", temp);
-            if (!FS.exist(file_name))
-            {
-                R_ASSERT3(no_assert, "There is no saved game ", game_name);
-                return (false);
-            }
-        }
+        Msg("! Reentrant game load request was rejected during save capture");
+        return false;
     }
+    if (!CSavedGameWrapper::valid_saved_game(game_name))
+    {
+        R_ASSERT3(no_assert, "There is no saved game ", game_name);
+        return false;
+    }
+    if (!CALifeStorageManager::validate_load_companions(game_name))
+        return false;
 
     string512 S, S1;
     xr_strcpy(S, m_server_command_line->c_str());

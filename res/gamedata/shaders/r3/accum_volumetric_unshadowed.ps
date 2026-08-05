@@ -1,0 +1,42 @@
+#include "common.h"
+
+struct v2p
+{
+    float3 lightToPos : TEXCOORD0;
+    float3 vPos : TEXCOORD1;
+    float fDensity : TEXCOORD2;
+};
+
+uniform float4 m_lmap[2];
+uniform float4x4 m_shadow;
+Texture2D s_noise;
+
+#ifndef MSAA_OPTIMIZATION
+float4 main(v2p I) : SV_Target
+#else
+float4 main(v2p I, uint iSample : SV_SAMPLEINDEX) : SV_Target
+#endif
+{
+    float4 position = float4(I.vPos, 1.0);
+    float4 projected = mul(m_shadow, position);
+    projected.x = dot(position, m_lmap[0]);
+    projected.y = dot(position, m_lmap[1]);
+    const float4 lightmap = s_lmap.Sample(smp_rtlinear, projected.xy / projected.w);
+
+    const float radiusSquared = dot(I.lightToPos, I.lightToPos);
+    const float attenuation = saturate(1.0 - radiusSquared * Ldynamic_pos.w);
+
+    projected.xy /= projected.w * 3.0;
+    const float time = timers.z * 0.1;
+    projected.x += time;
+    float4 noise = s_noise.Sample(smp_linear, projected.xy);
+    projected.x -= time;
+    projected.y -= time * 0.70091;
+    noise *= s_noise.Sample(smp_linear, projected.xy);
+    noise = noise * 0.5 + 0.5;
+
+    float3 result = I.fDensity * attenuation;
+    result *= lightmap.rgb;
+    result *= Ldynamic_color.rgb * noise.rgb;
+    return float4(result, 0.0);
+}

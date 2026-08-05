@@ -76,6 +76,10 @@ u16 find_bone_id(vecBones* bones, shared_str nm)
 //-----------------------------------------------------------------------
 BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
 {
+    static const bool extraLog = strstr(Core.Params, "-extralog");
+    if (extraLog)
+        Msg("Loading motion %s", N);
+
     m_id = N;
 
     bool bRes = true;

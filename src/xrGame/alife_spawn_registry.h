@@ -29,8 +29,7 @@ public:
     typedef AssociativeVector<ALife::_SPAWN_STORY_ID, ALife::_OBJECT_ID> SPAWN_STORY_IDS;
     struct SaveState
     {
-        SPAWN_GRAPH::vertex_iterator current;
-        SPAWN_GRAPH::vertex_iterator end;
+        size_t updateWordOffset{};
     };
 
 private:
@@ -42,6 +41,7 @@ private:
     SPAWN_IDS m_temp0;
     SPAWN_IDS m_temp1;
     SPAWN_STORY_IDS m_spawn_story_ids;
+    xr_vector<u32> m_save_update_words;
 
 private:
     IReader* m_file;

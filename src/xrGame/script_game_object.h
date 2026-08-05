@@ -397,6 +397,8 @@ public:
 
     void HideWeapon();
     void RestoreWeapon();
+    void HideDetector(bool fast, u16 slot = 9);
+    void RestoreDetector(bool fast, u16 slot = 9);
     void AllowSprint(bool b);
 
     bool Weapon_IsGrenadeLauncherAttached();
@@ -414,6 +416,7 @@ public:
     int CharacterRank();
     int CharacterReputation();
 
+    void SetCharacterName(LPCSTR name);
     void SetCharacterRank(int);
     void ChangeCharacterRank(int);
     void ChangeCharacterReputation(int);
@@ -632,8 +635,10 @@ public:
     void torch2_set_offset_y(float value);
     void torch2_set_offset_z(float value);
     bool torch_enabled() const;
+    void kick_enable(bool value);
 
     void attachable_item_load_attach(LPCSTR section);
+    bool IsGhost() const;
     // CustomZone
     void EnableAnomaly();
     void DisableAnomaly();
@@ -694,6 +699,8 @@ public:
     void show_condition(CScriptIniFile* ini_file, LPCSTR section);
     void buy_supplies(CScriptIniFile* ini_file, LPCSTR section);
     void buy_item_condition_factor(float factor);
+    void buy_item_exponent(float factor);
+    void sell_item_exponent(float factor);
 
     LPCSTR sound_prefix() const;
     void sound_prefix(LPCSTR sound_prefix);
@@ -892,6 +899,10 @@ public:
     LPCSTR GetAmmoName();
     void SetWeaponConditionType(u32 condition_type);
     u32 GetWeaponConditionType();
+    bool IsWeaponAmmoInMagazine();
+    bool WeaponIsScopeTexture();
+    void SetHelmetFiltersElapsed(u16 time);
+    u16 GetHelmetFiltersElapsed();
     CUIWindow* Get3dUI();
     void Reset3dUI();
 
@@ -910,6 +921,7 @@ public:
     bool CanInstallUpgrade(pcstr upgrade) const;
     void IterateInstalledUpgrades(luabind::functor<void> functor);
     bool WeaponInGrenadeMode();
+    void MissileSetDestroyTime(u32 time);
 
     //Car
     CScriptGameObject* GetAttachedVehicle();
@@ -920,6 +932,8 @@ public:
     u32 PlayHudMotion(pcstr M, bool mixIn, u32 state);
     void SwitchState(u32 state);
     u32 GetState();
+    void ActivateHudItem();
+    void DeactivateHudItem();
 
     //Works for anything with visual
     bool IsBoneVisible(pcstr bone_name);
@@ -977,6 +991,7 @@ public:
     void SetActorRunBackCoef(float run_back_coef);
     void SetActorRecoilCoeff(float recoil_coeff);
     void SetActorZoomInertion(float zoom_inertion);
+    void SetActorAdrenalineTime(float time);
     void SetRadiationDetector(bool enabled);
     float GetRadiationDetector() const;
 

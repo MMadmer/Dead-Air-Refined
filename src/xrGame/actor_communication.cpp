@@ -266,7 +266,6 @@ void CActor::NewPdaContact(CInventoryOwner* pInvOwner)
     const bool isMonster = entityAlive->cast_base_monster(); // no sound for monsters
     CurrentGameUI()->UIMainIngameWnd->AnimateContacts(isAlive && !isMonster);
 
-    Level().MapManager().AddRelationLocation(pInvOwner);
 }
 
 void CActor::LostPdaContact(CInventoryOwner* pInvOwner)

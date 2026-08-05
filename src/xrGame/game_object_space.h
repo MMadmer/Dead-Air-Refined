@@ -89,6 +89,8 @@ enum ECallbackType : u32
     // X-Ray Extensions:
     eMouseWheel = 126,
     eMouseMove  = 127,
+    eActorLand1 = 128,
+    eActorLand2 = 129,
 
     eDummy = u32(-1),
 };

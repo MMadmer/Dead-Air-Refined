@@ -64,42 +64,13 @@ void CEnvironment::RenderLast()
 void CEnvironment::OnDeviceCreate()
 {
     m_pRender->OnDeviceCreate();
-
-    // weathers
-    for (auto& cycle : WeatherCycles)
-    {
-        for (auto& envDescriptor : cycle.second)
-            envDescriptor->on_device_create();
-    }
-
-    // effects
-    for (auto& cycle : WeatherFXs)
-    {
-        for (auto& envDescriptor : cycle.second)
-            envDescriptor->on_device_create();
-    }
-
-    Invalidate();
+    environment_detail::restore_resources(*this);
     OnFrame();
 }
 
 void CEnvironment::OnDeviceDestroy()
 {
-    m_pRender->OnDeviceDestroy();
-
-    // weathers
-    for (auto& cycle : WeatherCycles)
-    {
-        for (auto& envDescriptor : cycle.second)
-            envDescriptor->on_device_destroy();
-    }
-
-    // effects
-    for (auto& cycle : WeatherFXs)
-    {
-        for (auto& envDescriptor : cycle.second)
-            envDescriptor->on_device_destroy();
-    }
-
+    environment_detail::release_resources(*this);
     CurrentEnv.on_device_destroy();
+    m_pRender->OnDeviceDestroy();
 }

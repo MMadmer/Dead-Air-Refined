@@ -1070,6 +1070,12 @@ void CStalkerActionSuddenAttack::execute()
         return;
     }
 
+    if (smart_cast<const CCustomMonster*>(enemy))
+    {
+        m_storage->set_property(eWorldPropertyUseSuddenness, false);
+        return;
+    }
+
     CMemoryInfo mem_object = object().memory().memory(enemy);
 
     if (!mem_object.m_object)

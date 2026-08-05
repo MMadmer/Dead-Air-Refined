@@ -77,7 +77,7 @@ class XRCDB_API MODEL : Noncopyable
 private:
     Lock* pcs;
     Opcode::OPCODE_Model* tree{};
-    volatile u32 status{ S_INIT }; // 0=ready, 1=init, 2=building
+    u32 status{ S_INIT }; // 0=ready, 1=init, 2=building
     u32 model_crc32{};
 
     // tris
@@ -106,7 +106,7 @@ public:
 
     void syncronize() const
     {
-        if (S_READY != status)
+        if (S_READY != std::atomic_ref<const u32>(status).load(std::memory_order_acquire))
             syncronize_impl();
     }
 

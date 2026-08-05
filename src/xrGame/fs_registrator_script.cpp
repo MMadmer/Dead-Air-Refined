@@ -3,6 +3,7 @@
 #include "xrCore/LocatorAPI.h"
 
 #include "base_client_classes_wrappers.h"
+#include "saved_game_wrapper.h"
 
 LPCSTR get_file_age_str(CLocatorAPI* fs, LPCSTR nm);
 CLocatorAPI* getFS() { return &FS; }
@@ -111,6 +112,9 @@ public:
 
 FS_file_list_ex::FS_file_list_ex(LPCSTR path, u32 flags, LPCSTR mask)
 {
+    if (!xr_strcmp(path, "$game_saves$"))
+        CSavedGameWrapper::recover_interrupted_transactions();
+
     FS_Path* rootPath{};
     // Absolute paths are used by the shipped debug editors.
     if (FS.get_path(path, &rootPath))
@@ -157,11 +161,15 @@ FS_file_list_ex file_list_open_ex(CLocatorAPI* fs, LPCSTR path, u32 flags, LPCST
 
 FS_file_list file_list_open_script(CLocatorAPI* fs, LPCSTR initial, u32 flags)
 {
+    if (!xr_strcmp(initial, "$game_saves$"))
+        CSavedGameWrapper::recover_interrupted_transactions();
     return FS_file_list(fs->file_list_open(initial, flags));
 }
 
 FS_file_list file_list_open_script_2(CLocatorAPI* fs, LPCSTR initial, LPCSTR folder, u32 flags)
 {
+    if (!xr_strcmp(initial, "$game_saves$"))
+        CSavedGameWrapper::recover_interrupted_transactions();
     return FS_file_list(fs->file_list_open(initial, folder, flags));
 }
 
@@ -236,7 +244,8 @@ void fs_registrator::script_register(lua_State* luaState)
                 value("FS_ListFiles", int(FS_ListFiles)),
                 value("FS_ListFolders", int(FS_ListFolders)),
                 value("FS_ClampExt", int(FS_ClampExt)),
-                value("FS_RootOnly", int(FS_RootOnly))
+                value("FS_RootOnly", int(FS_RootOnly)),
+                value("FS_FullName", int(FS_FullName))
             ]
             .enum_("FSType")
             [

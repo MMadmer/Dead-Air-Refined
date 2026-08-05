@@ -18,7 +18,7 @@ float calculate_dof_factor(float2 center)
 
 // x - near y - focus z - far w - sky distance
 float4	dof_params;
-float3	dof_kernel;	// x,y - resolution pre-scaled z - just kernel size
+float4	dof_kernel;	// x,y - resolution pre-scaled z - kernel size w - scope DOF radius
 
 float DOFFactor(float depth, float2 reciprocalRange)
 {
@@ -26,6 +26,22 @@ float DOFFactor(float depth, float2 reciprocalRange)
 	float2 blur = saturate(distanceToFocus * reciprocalRange);
 	float combinedBlur = blur.x + blur.y;
 	return combinedBlur * combinedBlur;
+}
+
+float ScopeDOFFactor(float2 center)
+{
+	float2 scopeOffset = center - float2(0.5f, 0.5f);
+	scopeOffset.x *= pos_decompression_params2.x / pos_decompression_params2.y;
+	return saturate(dot(scopeOffset, scopeOffset) * dof_kernel.w * dof_kernel.w);
+}
+
+float CombinedDOFFactor(float depth, float2 reciprocalRange, float2 center)
+{
+	float depthFactor = DOFFactor(depth, reciprocalRange);
+	if (dof_kernel.w <= 0.f)
+		return depthFactor;
+
+	return max(depthFactor, ScopeDOFFactor(center));
 }
 
 float calculate_dof_factor(float2 center)
@@ -39,7 +55,7 @@ float calculate_dof_factor(float2 center)
 	if (depth <= EPSDEPTH)	depth = dof_params.w;
 
 	float2 reciprocalRange = rcp(float2(dof_params.z - dof_params.y, dof_params.x - dof_params.y));
-	float factor = DOFFactor(depth, reciprocalRange);
+	float factor = CombinedDOFFactor(depth, reciprocalRange, center);
 
 	return factor;
 }
@@ -50,7 +66,7 @@ float3	dof(float3 image, float2 center, float centerDepth)
 		centerDepth = dof_params.w;
 
 	float2 reciprocalRange = rcp(float2(dof_params.z - dof_params.y, dof_params.x - dof_params.y));
-	float	blur 		= DOFFactor(centerDepth, reciprocalRange);
+	float	blur 		= CombinedDOFFactor(centerDepth, reciprocalRange, center);
 	float2 	scale 	= float2	(.5f / 1024.h, .5f / 768.h) * (dof_kernel.z * blur);
 	float2 	o  [12];
 		o[0]	= float2(-0.326212f , -0.405810f)*scale;
@@ -79,7 +95,7 @@ float3	dof(float3 image, float2 center, float centerDepth)
       float 	tap_depth 	= s_position.Load( int3( tap* pos_decompression_params2.xy,0),0).z;
 #endif
 		[flatten] if (tap_depth <= EPSDEPTH)	tap_depth = dof_params.w;
-		float 	tap_contrib	= DOFFactor(tap_depth, reciprocalRange);
+		float 	tap_contrib	= CombinedDOFFactor(tap_depth, reciprocalRange, tap);
 
 
 		sum 		+= tap_color	* tap_contrib;

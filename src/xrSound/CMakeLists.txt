@@ -1,5 +1,9 @@
 add_library(xrSound)
 
+if (WIN32 AND BUILD_SHARED_LIBS)
+    target_sources(xrSound PRIVATE xrSound.def)
+endif()
+
 target_sources_grouped(
     TARGET xrSound
     NAME "Core"

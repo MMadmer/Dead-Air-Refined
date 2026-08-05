@@ -357,6 +357,10 @@ CSE_ALifeObject::CSE_ALifeObject(LPCSTR caSection) : CSE_Abstract(caSection)
 #endif
     m_flags.set(flOfflineNoMove, false);
     seed(u32(CPU::QPC() & 0xffffffff));
+
+    static const bool extraLog = strstr(Core.Params, "-extralog");
+    if (extraLog)
+        Msg("CSE_ALifeObject::CSE_ALifeObject %s", caSection);
 }
 
 #ifdef XRGAME_EXPORTS

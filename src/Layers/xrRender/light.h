@@ -55,6 +55,7 @@ public:
     ref_shader s_spot;
     ref_shader s_point;
     ref_shader s_volumetric;
+    ref_shader s_volumetric_unshadowed;
 
 #if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
     ref_shader s_spot_msaa[8];

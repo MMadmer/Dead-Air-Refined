@@ -32,6 +32,12 @@ IC void construct_string(pstr result, u32 const result_size, const xr_vector<ALi
     for (; I != E; ++I)
     {
         CSE_ALifeDynamicObject* object = ai().alife().objects().object(*I);
+        if (!object)
+        {
+            Msg("![E] CRestrictedObject::construct_string: cannot find restriction object %u", u32(*I));
+            continue;
+        }
+
         if (ai().game_graph().vertex(object->m_tGraphID)->level_id() != ai().level_graph().level_id())
             continue;
 

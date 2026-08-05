@@ -186,6 +186,9 @@ public:
     ICF u32 GameType() { return m_game_params.m_e_game_type; };
     virtual void DumpStatistics(class IGameFont& font, class IPerformanceAlert* alert);
     virtual bool CanBePaused() { return true; }
+
+    // Append interface extensions to preserve existing virtual slots.
+    virtual float GetScopeDofRadius() { return 0.f; }
 };
 
 class IMainMenu

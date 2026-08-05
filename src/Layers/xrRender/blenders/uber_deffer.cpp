@@ -6,7 +6,7 @@ namespace xray::render::RENDER_NAMESPACE
 void fix_texture_name(pstr fn);
 
 void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOOL _aref, LPCSTR _detail_replace,
-    bool DO_NOT_FINISH)
+    bool DO_NOT_FINISH, bool zwrite)
 {
     // Uber-parse
     string256 fname, fnameA, fnameB;
@@ -152,7 +152,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
 
         VERIFY(strstr(vs, "bump") != 0);
         VERIFY(strstr(ps, "bump") != 0);
-        C.r_TessPass(vs, hs, ds, "null", ps, FALSE);
+        C.r_TessPass(vs, hs, ds, "null", ps, FALSE, TRUE, zwrite);
         RImplementation.clearAllShaderOptions();
         u32 stage = C.r_dx11Sampler("smp_bump_ds");
         if (stage != -1)
@@ -171,7 +171,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     }
     else
     {
-        C.r_Pass(vs, ps, FALSE);
+        C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
     }
     // C.r_Sampler("s_base", C.L_textures[0], false, D3DTADDRESS_WRAP,
     // D3DTEXF_ANISOTROPIC,D3DTEXF_LINEAR,
@@ -209,7 +209,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
         C.r_dx11Sampler("smp_rtlinear");
     }
 #elif defined(USE_OGL)
-    C.r_Pass(vs, ps, FALSE);
+    C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
     VERIFY(C.L_textures[0].size());
     if (bump)
     {
@@ -246,7 +246,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
 }
 
 #if defined(USE_DX11)
-void uber_shadow(CBlender_Compile& C, LPCSTR _vspec)
+void uber_shadow(CBlender_Compile& C, LPCSTR _vspec, LPCSTR detailReplace)
 {
     // Uber-parse
     string256 fname, fnameA, fnameB;
@@ -270,7 +270,7 @@ void uber_shadow(CBlender_Compile& C, LPCSTR _vspec)
     }
 
     string256 vs, dt;
-    xr_strcpy(dt, sizeof(dt), C.detail_texture ? C.detail_texture : "");
+    xr_strcpy(dt, sizeof(dt), detailReplace ? detailReplace : (C.detail_texture ? C.detail_texture : ""));
 
     // detect detail bump
     string256 texDetailBump = {'\0'};

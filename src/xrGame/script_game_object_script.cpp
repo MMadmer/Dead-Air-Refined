@@ -85,6 +85,8 @@ void CScriptGameObject::script_register(lua_State* luaState)
                 value("action_particle", int(GameObject::eActionTypeParticle)),
                 value("action_object", int(GameObject::eActionTypeObject)),
                 value("actor_sleep", int(GameObject::eActorSleep)),
+                value("actor_land1", int(GameObject::eActorLand1)),
+                value("actor_land2", int(GameObject::eActorLand2)),
                 value("helicopter_on_point", int(GameObject::eHelicopterOnPoint)),
                 value("helicopter_on_hit", int(GameObject::eHelicopterOnHit)),
                 value("on_item_take", int(GameObject::eOnItemTake)),

@@ -30,6 +30,17 @@ const LPCSTR st_months[12] = // StringTable for GetDateAsString()
     {"month_january", "month_february", "month_march", "month_april", "month_may", "month_june", "month_july",
         "month_august", "month_september", "month_october", "month_november", "month_december"};
 
+namespace
+{
+float displayed_max_weight(CInventoryOwner* inventoryOwner)
+{
+    if (const CActor* actor = smart_cast<CActor*>(inventoryOwner))
+        return actor->MaxWalkWeight();
+
+    return inventoryOwner->MaxCarryWeight();
+}
+}
+
 ui_shader* g_BuyMenuShader = NULL;
 ui_shader* g_EquipmentIconsShader = NULL;
 ui_shader* g_MPCharIconsShader = NULL;
@@ -374,8 +385,8 @@ void InventoryUtilities::UpdateWeight(CUIStatic& wnd, CInventoryOwner* pInvOwner
     R_ASSERT(pInvOwner);
     string128 buf;
 
-    float total = pInvOwner->inventory().CalcTotalWeight();
-    float max = pInvOwner->MaxCarryWeight();
+    const float total = pInvOwner->inventory().CalcTotalWeight();
+    const float max = displayed_max_weight(pInvOwner);
 
     string16 cl;
 
@@ -402,8 +413,8 @@ void InventoryUtilities::UpdateWeightStr(CUIStatic& wnd, CUIStatic& wnd_max, CIn
     R_ASSERT(pInvOwner);
     string128 buf;
 
-    float total = pInvOwner->inventory().CalcTotalWeight();
-    float max = pInvOwner->MaxCarryWeight();
+    const float total = pInvOwner->inventory().CalcTotalWeight();
+    const float max = displayed_max_weight(pInvOwner);
 
     LPCSTR kg_str = StringTable().translate("st_kg").c_str();
     xr_sprintf(buf, "%.1f %s", total, kg_str);

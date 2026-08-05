@@ -10,7 +10,9 @@ param(
     [string]$DesktopName = 'DeadAirQA',
 
     [ValidateRange(1, 3600)]
-    [int]$TimeoutSeconds = 180
+    [int]$TimeoutSeconds = 180,
+
+    [string]$ExitCodeFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,6 +97,9 @@ public static class HiddenDesktopProcess
     private static extern bool TerminateProcess(IntPtr process, int exitCode);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -163,7 +168,13 @@ public static class HiddenDesktopProcess
         focusThread.Join(16000);
     }
 
-    public static int Run(string filePath, string arguments, string desktopName, int timeoutSeconds, Action<int> onStarted)
+    public static int Run(
+        string filePath,
+        string arguments,
+        string desktopName,
+        int timeoutSeconds,
+        Action<int> onStarted,
+        Action<uint> onExited)
     {
         const int desktopAllAccess = 0x01FF;
         const int createNewProcessGroup = 0x00000200;
@@ -221,6 +232,10 @@ public static class HiddenDesktopProcess
             if (waitResult != waitObject)
                 throw new Win32Exception(Marshal.GetLastWin32Error());
 
+            if (!GetExitCodeProcess(processInformation.hProcess, out uint exitCode))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            onExited(exitCode);
+
             return processInformation.dwProcessId;
         }
         finally
@@ -245,5 +260,11 @@ Add-Type -TypeDefinition $nativeSource -Language CSharp
     {
         param($processId)
         Set-Content -LiteralPath $ProcessIdFile -Value $processId -Encoding ascii
+    },
+    {
+        param($exitCode)
+        if ($ExitCodeFile) {
+            Set-Content -LiteralPath $ExitCodeFile -Value $exitCode -Encoding ascii
+        }
     }
 )

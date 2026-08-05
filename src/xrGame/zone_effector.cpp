@@ -5,6 +5,7 @@
 #include "xrEngine/CameraManager.h"
 #include "Actor.h"
 #include "ActorEffector.h"
+#include "ActorHelmet.h"
 #include "PostprocessAnimator.h"
 #include "CustomOutfit.h"
 
@@ -77,9 +78,13 @@ void CZoneEffector::Update(float dist, float r, ALife::EHitType hit_type)
     float protection = 0.f;
     if (m_pActor)
     {
-        CCustomOutfit* outfit = m_pActor->GetOutfit();
+        const CCustomOutfit* outfit = m_pActor->GetOutfit();
         if (outfit)
-            protection = outfit->GetDefHitTypeProtection(hit_type);
+            protection += outfit->GetDefHitTypeProtection(hit_type);
+
+        const CHelmet* helmet = smart_cast<const CHelmet*>(m_pActor->inventory().ItemFromSlot(HELMET_SLOT));
+        if (helmet)
+            protection += helmet->GetDefHitTypeProtection(hit_type);
     }
     if (m_pp_effector)
     {

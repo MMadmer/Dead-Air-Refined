@@ -6,6 +6,22 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+static void CompileTerrainDepthPrepass(
+    CBlender_Compile& C, [[maybe_unused]] bool highQuality, [[maybe_unused]] LPCSTR detailName)
+{
+#if RENDER == R_R2
+    C.r_Pass("shadow_direct_base", "shadow_direct_base", FALSE, TRUE, TRUE, FALSE);
+    C.r_Sampler("s_base", C.L_textures[0]);
+#elif RENDER == R_GL
+    C.r_Pass("shadow_direct_base", "null", FALSE, TRUE, TRUE, FALSE);
+#else
+    // Match tessellated displacement in both terrain passes.
+    uber_shadow(C, highQuality ? "impl" : "base", detailName);
+#endif
+    C.r_ColorWriteEnable(false, false, false, false);
+    C.r_End();
+}
+
 CBlender_BmmD::CBlender_BmmD()
 {
     description.CLS = B_BmmD;
@@ -82,7 +98,8 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
     switch (C.iElement)
     {
     case SE_R2_NORMAL_HQ: // deffer
-        uber_deffer(C, true, "impl", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+        CompileTerrainDepthPrepass(C, true, oT2_Name[0] ? oT2_Name : nullptr);
+        uber_deffer(C, true, "impl", "impl", false, oT2_Name[0] ? oT2_Name : nullptr, true, false);
         C.r_Sampler("s_mask", mask);
         C.r_Sampler("s_lmap", C.L_textures[1]);
 
@@ -111,7 +128,8 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     case SE_R2_NORMAL_LQ: // deffer
-        uber_deffer(C, false, "base", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+        CompileTerrainDepthPrepass(C, false, oT2_Name[0] ? oT2_Name : nullptr);
+        uber_deffer(C, false, "base", "impl", false, oT2_Name[0] ? oT2_Name : nullptr, true, false);
         C.r_Sampler("s_lmap", C.L_textures[1]);
         C.r_End();
         break;
@@ -139,7 +157,8 @@ void	CBlender_BmmD::Compile	(CBlender_Compile& C)
 	switch(C.iElement)
 	{
 	case SE_R2_NORMAL_HQ: 		// deffer
-		uber_deffer		(C, true,	"impl","impl",false,oT2_Name[0]?oT2_Name:0,true);
+		CompileTerrainDepthPrepass(C, true, oT2_Name[0] ? oT2_Name : nullptr);
+		uber_deffer		(C, true,	"impl","impl",false,oT2_Name[0] ? oT2_Name : nullptr,true,false);
 		C.r_Sampler		("s_mask",	mask);
 		C.r_Sampler		("s_lmap",	C.L_textures[1]);
 
@@ -167,7 +186,8 @@ void	CBlender_BmmD::Compile	(CBlender_Compile& C)
 		C.r_End			();
 		break;
 	case SE_R2_NORMAL_LQ: 		// deffer
-		uber_deffer		(C, false,	"base","impl",false,oT2_Name[0]?oT2_Name:0,true);
+		CompileTerrainDepthPrepass(C, false, oT2_Name[0] ? oT2_Name : nullptr);
+		uber_deffer		(C, false,	"base","impl",false,oT2_Name[0] ? oT2_Name : nullptr,true,false);
 
 		C.r_Sampler		("s_lmap",	C.L_textures[1]);
 
@@ -196,7 +216,8 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
     switch (C.iElement)
     {
     case SE_R2_NORMAL_HQ: // deffer
-        uber_deffer(C, true, "impl", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+        CompileTerrainDepthPrepass(C, true, oT2_Name[0] ? oT2_Name : nullptr);
+        uber_deffer(C, true, "impl", "impl", false, oT2_Name[0] ? oT2_Name : nullptr, true, false);
         // C.r_Sampler		("s_mask",	mask);
         // C.r_Sampler		("s_lmap",	C.L_textures[1]);
 
@@ -244,7 +265,8 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     case SE_R2_NORMAL_LQ: // deffer
-        uber_deffer(C, false, "base", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+        CompileTerrainDepthPrepass(C, false, oT2_Name[0] ? oT2_Name : nullptr);
+        uber_deffer(C, false, "base", "impl", false, oT2_Name[0] ? oT2_Name : nullptr, true, false);
 
         // C.r_Sampler		("s_lmap",	C.L_textures[1]);
 

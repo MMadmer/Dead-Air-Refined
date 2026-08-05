@@ -5,6 +5,27 @@
 #include "xr_object.h"
 #include "xrServerEntities/smart_cast.h"
 
+namespace
+{
+IGameObject* create_prefab_instance(pcstr name)
+{
+    CHECK_OR_EXIT(name && name[0], "Cannot create a game object without a prefab section name.");
+    CHECK_OR_EXIT(pSettings, "Cannot create a game object before the settings are loaded.");
+
+    const pcstr settingsName = pSettings->fname()[0] ? pSettings->fname() : "<memory>";
+    CHECK_OR_EXIT(pSettings->section_exist(name),
+        make_string("Cannot create game object: prefab section '%s' is missing from '%s'.", name, settingsName));
+    CHECK_OR_EXIT(pSettings->line_exist(name, "class"),
+        make_string(
+            "Cannot create game object: prefab section '%s' has no 'class' entry in '%s'.", name, settingsName));
+
+    const auto cls = pSettings->r_clsid(name, "class");
+    auto* object = smart_cast<IGameObject*>(NEW_INSTANCE(cls));
+    CHECK_OR_EXIT(object, make_string("Cannot create game object for prefab section '%s'.", name));
+    return object;
+}
+}
+
 IGame_ObjectPool::IGame_ObjectPool(void) {}
 IGame_ObjectPool::~IGame_ObjectPool(void) { R_ASSERT(m_PrefetchObjects.empty()); }
 void IGame_ObjectPool::prefetch()
@@ -20,9 +41,8 @@ void IGame_ObjectPool::prefetch()
     CInifile::Sect const& sect = pSettings->r_section(section);
     for (const auto& item : sect.Data)
     {
-        CLASS_ID CLS = pSettings->r_clsid(item.first.c_str(), "class");
         p_count++;
-        IGameObject* pObject = smart_cast<IGameObject*>(NEW_INSTANCE(CLS));
+        auto* pObject = create_prefab_instance(item.first.c_str());
         pObject->Load(item.first.c_str());
         VERIFY2(pObject->cNameSect().c_str(), item.first.c_str());
         m_PrefetchObjects.push_back(pObject);
@@ -42,8 +62,7 @@ void IGame_ObjectPool::clear()
 
 IGameObject* IGame_ObjectPool::create(pcstr name)
 {
-    CLASS_ID CLS = pSettings->r_clsid(name, "class");
-    IGameObject* O = smart_cast<IGameObject*>(NEW_INSTANCE(CLS));
+    auto* O = create_prefab_instance(name);
     O->cNameSect_set(name);
     O->Load(name);
     O->PostLoad(name); //--#SM+#--

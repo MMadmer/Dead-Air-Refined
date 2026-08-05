@@ -80,10 +80,19 @@ function on_game_start()
 end
 
 local capture_prepare_state
+local capture_encode_state
+local capture_encode_chunk
+local capture_encode_size
+local capture_encode_phase
 
 function CALifeStorageManager_capture_prepare_begin(fname)
+	capture_encode_state = nil
+	capture_encode_chunk = nil
+	capture_encode_size = nil
+	capture_encode_phase = nil
 	if not USE_MARSHAL then
-		return false
+		capture_prepare_state = nil
+		return true
 	end
 
 	m_data.GAME_VERSION = GAME_VERSION
@@ -97,6 +106,86 @@ function CALifeStorageManager_capture_prepare_begin(fname)
 		prune_key = nil
 	}
 	return true
+end
+
+function CALifeStorageManager_capture_encode_begin()
+	capture_encode_state = nil
+	capture_encode_chunk = nil
+	capture_encode_size = nil
+	capture_encode_phase = nil
+	if not USE_MARSHAL then
+		capture_encode_state = false
+		capture_encode_size = 0
+		return true
+	end
+
+	local ok, state = pcall(marshal.encode_begin, m_data)
+	if not ok or not state then
+		printf("Error: Unable to begin incremental custom save encoding: %s", tostring(state))
+		return false
+	end
+
+	capture_encode_state = state
+	capture_encode_phase = 1
+	return true
+end
+
+function CALifeStorageManager_capture_encode_step(item_budget)
+	if capture_encode_state == false then
+		return 2
+	end
+	if not capture_encode_state then
+		return -1
+	end
+
+	if capture_encode_phase == 1 then
+		local ok, completed = pcall(marshal.encode_step, capture_encode_state, item_budget)
+		if not ok then
+			printf("Error: Unable to incrementally encode custom save data: %s", tostring(completed))
+			capture_encode_state = nil
+			capture_encode_phase = nil
+			return -1
+		end
+		if not completed then
+			return 0
+		end
+
+		local size_ok, encoded_size = pcall(marshal.encode_size, capture_encode_state)
+		if not size_ok or type(encoded_size) ~= "number" then
+			printf("Error: Unable to query incremental custom save size: %s", tostring(encoded_size))
+			capture_encode_state = nil
+			capture_encode_phase = nil
+			return -1
+		end
+		capture_encode_size = encoded_size
+		capture_encode_phase = 2
+	end
+
+	local ok, completed, chunk = pcall(marshal.encode_read, capture_encode_state, 64 * 1024)
+	if not ok or type(chunk) ~= "string" then
+		printf("Error: Unable to read incrementally encoded custom save data: %s", tostring(completed))
+		capture_encode_state = nil
+		capture_encode_phase = nil
+		return -1
+	end
+
+	capture_encode_chunk = chunk
+	if completed then
+		capture_encode_state = nil
+		capture_encode_phase = nil
+		return 2
+	end
+	return 1
+end
+
+function CALifeStorageManager_capture_encode_result()
+	local chunk = capture_encode_chunk
+	capture_encode_chunk = nil
+	return chunk
+end
+
+function CALifeStorageManager_capture_encode_size()
+	return capture_encode_size
 end
 
 function CALifeStorageManager_capture_prepare_step(item_budget)
@@ -186,6 +275,10 @@ function CALifeStorageManager_capture_prepare(fname)
 end
 
 function CALifeStorageManager_capture_encode()
+	if not USE_MARSHAL then
+		return nil
+	end
+
 	local ok, data = pcall(marshal.encode, m_data)
 	if not ok or not data then
 		printf("Error: Unable to encode custom save data: %s", tostring(data))

@@ -50,13 +50,23 @@ void CWeaponShotEffector::Shot(CWeapon* weapon)
     }
     m_single_shot = (weapon->GetCurrentFireMode() == 1);
 
+    constexpr u32 highRecoilMask = 1u << 6;
+    constexpr u32 mediumRecoilMask = 1u << 7;
+    const u32 condition = weapon->GetConditionType();
+    float conditionRecoil = 1.f;
+    if (condition & highRecoilMask)
+        conditionRecoil += 0.6f;
+    if (condition & mediumRecoilMask)
+        conditionRecoil += 0.4f;
+
     float angle = m_cam_recoil.Dispersion * weapon->cur_silencer_koef.cam_dispersion;
     angle += m_cam_recoil.DispersionInc * weapon->cur_silencer_koef.cam_disper_inc * (float)m_shot_numer;
-    Shot2(angle);
+    Shot2(angle * conditionRecoil);
 }
 
 void CWeaponShotEffector::Shot2(float angle)
 {
+    angle *= m_recoil_coeff;
     m_angle_vert +=
         angle * (m_cam_recoil.DispersionFrac + m_Random.randF(-1.0f, 1.0f) * (1.0f - m_cam_recoil.DispersionFrac));
 
@@ -190,6 +200,8 @@ CCameraShotEffector::CCameraShotEffector(const CameraRecoil& cam_recoil) : CEffe
 CCameraShotEffector::~CCameraShotEffector() {}
 bool CCameraShotEffector::ProcessCam(SCamEffectorInfo& info)
 {
+    if (m_pActor)
+        m_recoil_coeff = m_pActor->m_fRecoilCoeff;
     Update();
     return TRUE;
 }

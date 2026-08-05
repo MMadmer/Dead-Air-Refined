@@ -242,6 +242,7 @@ private:
 
 public:
     void PrefetchSound(const char* name);
+    void SetAmbientVolume(float volume);
 
 protected:
     bool net_start_result_total;

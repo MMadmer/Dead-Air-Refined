@@ -239,10 +239,19 @@ bool CInventoryItem::install_upgrade_impl(LPCSTR section, bool test)
 
 void CInventoryItem::pre_install_upgrade()
 {
+    pre_install_upgrade(nullptr);
+}
+
+void CInventoryItem::pre_install_upgrade(LPCSTR section)
+{
     CWeaponMagazined* wm = smart_cast<CWeaponMagazined*>(this);
     if (wm)
     {
-        wm->UnloadMagazine();
+        const bool changesAmmoClass = section && pSettings->line_exist(section, "ammo_class");
+        const bool shrinksMagazine = section && pSettings->line_exist(section, "ammo_mag_size") &&
+            pSettings->r_s32(section, "ammo_mag_size") < 0;
+        if (!section || changesAmmoClass || shrinksMagazine)
+            wm->UnloadMagazine();
 
         CWeaponMagazinedWGrenade* wg = smart_cast<CWeaponMagazinedWGrenade*>(this);
         if (wg)

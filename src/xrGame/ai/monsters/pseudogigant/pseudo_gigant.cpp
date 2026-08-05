@@ -245,7 +245,7 @@ void CPseudoGigant::on_threaten_execute()
     CActor* pA = const_cast<CActor*>(smart_cast<const CActor*>(EnemyMan.get_enemy()));
     if (!pA)
         return;
-    if ((pA->MovingState() & ACTOR_DEFS::mcJump) != 0)
+    if (pA->MovingState() & (ACTOR_DEFS::mcJump | ACTOR_DEFS::mcFall))
         return;
 
     float dist_to_enemy = pA->Position().distance_to(Position());
@@ -276,14 +276,19 @@ void CPseudoGigant::on_threaten_execute()
     HS.GenHeader(GE_HIT, pA->ID()); //	u_EventGen	(l_P,GE_HIT, pA->ID());
     HS.whoID = (ID()); //	l_P.w_u16	(ID());
     HS.weaponID = (ID()); //	l_P.w_u16	(ID());
-    HS.dir = (Fvector().set(0.f, 1.f, 0.f)); //	l_P.w_dir	(Fvector().set(0.f,1.f,0.f));
+
+    Fvector hit_direction;
+    hit_direction.sub(pA->Position(), Position());
+    hit_direction.y = 1.f;
+    hit_direction.normalize_safe();
+    HS.dir = hit_direction; //	l_P.w_dir	(Fvector().set(0.f,1.f,0.f));
     HS.power = (hit_value); //	l_P.w_float	(m_kick_damage);
     HS.boneID = (smart_cast<IKinematics*>(
         pA->Visual())->LL_GetBoneRoot()); //	l_P.w_s16	(smart_cast<IKinematics*>(pA->Visual())->LL_GetBoneRoot());
     HS.p_in_bone_space = (Fvector().set(0.f, 0.f, 0.f)); //	l_P.w_vec3	(Fvector().set(0.f,0.f,0.f));
     HS.impulse = (80 * pA->character_physics_support()->movement()->GetMass()); //	l_P.w_float	(20 *
                                                                                 //pA->movement_control()->GetMass());
-    HS.hit_type = (ALife::eHitTypeStrike); //	l_P.w_u16	( u16(ALife::eHitTypeWound) );
+    HS.hit_type = (ALife::eHitTypeExplosion); //	l_P.w_u16	( u16(ALife::eHitTypeWound) );
     HS.Write_Packet(l_P);
     u_EventSend(l_P);
 }

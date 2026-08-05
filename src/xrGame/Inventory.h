@@ -45,7 +45,10 @@ public:
 
     IC u16 FirstSlot() const { return KNIFE_SLOT; }
     IC u16 LastSlot() const { return m_iLastSlot; } // not "end"
-    IC bool SlotIsPersistent(u16 slot_id) const { return m_slots[slot_id].m_bPersistent; }
+    IC bool SlotIsPersistent(u16 slot_id) const
+    {
+        return slot_id < m_slots.size() && m_slots[slot_id].m_bPersistent;
+    }
     bool Slot(u16 slot_id, PIItem pIItem, bool bNotActivate = false, bool strict_placement = false);
     bool Belt(PIItem pIItem, bool strict_placement = false);
     bool Ruck(PIItem pIItem, bool strict_placement = false);

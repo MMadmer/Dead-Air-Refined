@@ -13,6 +13,11 @@
 #include "ai_space.h"
 #include "xrAICore/Navigation/game_graph.h"
 
+namespace
+{
+constexpr size_t spawnUpdateBatchWords = 16 * 1024;
+} // namespace
+
 CALifeSpawnRegistry::CALifeSpawnRegistry(LPCSTR section)
 {
     m_spawn_name = "";
@@ -49,8 +54,7 @@ void CALifeSpawnRegistry::begin_save(IWriter& memory_stream, SaveState& state)
     memory_stream.close_chunk();
 
     memory_stream.open_chunk(1);
-    state.current = m_spawns.vertices().begin();
-    state.end = m_spawns.vertices().end();
+    state.updateWordOffset = 0;
 }
 
 bool CALifeSpawnRegistry::continue_save(IWriter& memory_stream, SaveState& state, float budgetMilliseconds)
@@ -58,15 +62,16 @@ bool CALifeSpawnRegistry::continue_save(IWriter& memory_stream, SaveState& state
     CTimer budgetTimer;
     budgetTimer.Start();
 
-    while (state.current != state.end)
+    while (state.updateWordOffset < m_save_update_words.size())
     {
-        SPAWN_GRAPH::CVertex* vertex = state.current->second;
-        ++state.current;
-        memory_stream.open_chunk(vertex->vertex_id());
-        vertex->data()->save_update(memory_stream);
-        memory_stream.close_chunk();
+        const size_t batchWords = std::min(
+            spawnUpdateBatchWords, m_save_update_words.size() - state.updateWordOffset);
 
-        if (budgetMilliseconds != flt_max &&
+        // Spawn updates are empty in this save format, so copy their prebuilt chunk headers in large batches.
+        memory_stream.w(m_save_update_words.data() + state.updateWordOffset, batchWords * sizeof(u32));
+        state.updateWordOffset += batchWords;
+
+        if (state.updateWordOffset != m_save_update_words.size() && budgetMilliseconds != flt_max &&
             budgetTimer.GetElapsed_sec() * 1000.f >= budgetMilliseconds)
         {
             return false;
@@ -167,14 +172,8 @@ void CALifeSpawnRegistry::load(IReader& file_stream, xrGUID* save_guid)
 
 void CALifeSpawnRegistry::save_updates(IWriter& stream)
 {
-    SPAWN_GRAPH::vertex_iterator I = m_spawns.vertices().begin();
-    SPAWN_GRAPH::vertex_iterator E = m_spawns.vertices().end();
-    for (; I != E; ++I)
-    {
-        stream.open_chunk((*I).second->vertex_id());
-        (*I).second->data()->save_update(stream);
-        stream.close_chunk();
-    }
+    if (!m_save_update_words.empty())
+        stream.w(m_save_update_words.data(), m_save_update_words.size() * sizeof(u32));
 }
 
 void CALifeSpawnRegistry::load_updates(IReader& stream)
@@ -226,10 +225,16 @@ void CALifeSpawnRegistry::build_root_spawns()
 
 void CALifeSpawnRegistry::build_story_spawns()
 {
+    m_save_update_words.clear();
+    m_save_update_words.reserve(m_spawns.vertex_count() * 2);
+
     SPAWN_GRAPH::const_vertex_iterator I = m_spawns.vertices().begin();
     SPAWN_GRAPH::const_vertex_iterator E = m_spawns.vertices().end();
     for (; I != E; ++I)
     {
+        m_save_update_words.emplace_back(static_cast<u32>((*I).second->vertex_id()));
+        m_save_update_words.emplace_back(0);
+
         CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(&(*I).second->data()->object());
         VERIFY(object);
         if (object->m_spawn_story_id == INVALID_SPAWN_STORY_ID)

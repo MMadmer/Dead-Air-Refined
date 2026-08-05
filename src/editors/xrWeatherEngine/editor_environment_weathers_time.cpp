@@ -223,7 +223,8 @@ void time::sky_texture_setter(pcstr value)
     string_path st_env;
     strconcat(sizeof(st_env), st_env, value, "#small");
     sky_texture_env_name = st_env;
-    m_pDescriptor->OnDeviceCreate(*this);
+    if (this == m_manager.Current[0] || this == m_manager.Current[1])
+        m_manager.RefreshCurrentEnvironmentResources();
 }
 
 pcstr time::clouds_texture_getter() const { return (clouds_texture_name.c_str()); }
@@ -233,7 +234,8 @@ void time::clouds_texture_setter(pcstr value)
         return;
 
     clouds_texture_name = value;
-    m_pDescriptor->OnDeviceCreate(*this);
+    if (this == m_manager.Current[0] || this == m_manager.Current[1])
+        m_manager.RefreshCurrentEnvironmentResources();
 }
 
 float time::sky_rotation_getter() const { return (rad2deg(sky_rotation)); }

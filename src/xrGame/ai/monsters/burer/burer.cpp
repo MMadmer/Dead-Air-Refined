@@ -354,7 +354,7 @@ void CBurer::UpdateGraviObject()
                 impulse_dir.normalize();
 
                 HitEntity(m_gravi_object.enemy, m_gravi.hit_power, m_gravi.impulse_to_enemy, impulse_dir,
-                    ALife::eHitTypeStrike, false);
+                    ALife::eHitTypeExplosion, false);
                 m_gravi_object.deactivate();
                 return;
             }

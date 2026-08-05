@@ -12,6 +12,11 @@ extern int g_inv_highlight_equipped;
 
 CUIDragItem* CUIDragDropListEx::m_drag_item = NULL;
 
+namespace
+{
+u32 lastDragScrollTime{};
+}
+
 void CUICell::Clear()
 {
     m_bMainItem = false;
@@ -443,8 +448,25 @@ void CUIDragDropListEx::Update()
         Fvector2 cp = GetUICursor().GetCursorPosition();
         if (wndRect.in(cp))
         {
-            if (NULL == m_drag_item->BackList())
+            if (!m_drag_item->BackList())
                 m_drag_item->SetBackList(this);
+
+            constexpr u32 dragScrollInterval = 80;
+            const float edgeSize = std::min(float(CellSize().y), wndRect.height() * 0.25f);
+            if (m_vScrollBar->IsShown() && edgeSize > 0.0f &&
+                Device.dwTimeContinual - lastDragScrollTime >= dragScrollInterval)
+            {
+                if (cp.y >= wndRect.y2 - edgeSize)
+                {
+                    m_vScrollBar->TryScrollInc();
+                    lastDragScrollTime = Device.dwTimeContinual;
+                }
+                else if (cp.y <= wndRect.y1 + edgeSize)
+                {
+                    m_vScrollBar->TryScrollDec();
+                    lastDragScrollTime = Device.dwTimeContinual;
+                }
+            }
         }
         else if (this == m_drag_item->BackList())
             m_drag_item->SetBackList(NULL);
@@ -523,8 +545,8 @@ void CUIDragDropListEx::SetMaxCellsCapacity(const Ivector2& c)
     const Ivector2& curCap = CellsCapacity();
     if (curCap.x > c.x || curCap.y > c.y)
     {
-        const int newX = std::clamp(curCap.x, curCap.x, c.x);
-        const int newY = std::clamp(curCap.y, curCap.y, c.y);
+        const int newX = std::min(curCap.x, c.x);
+        const int newY = std::min(curCap.y, c.y);
         SetCellsCapacity({ newX, newY });
     }
 }
@@ -653,19 +675,20 @@ bool CUICellContainer::AddSimilar(CUICellItem* itm)
 
     //Alundaio: Don't stack equipped items
     PIItem iitem = (PIItem)itm->m_pData;
+    if (iitem && !iitem->CanStack())
+        return false;
+
     if (iitem && iitem->m_pInventory)
     {
         if (g_inv_highlight_equipped)
             if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
                 return false;
 
-        if (pSettings->line_exist(iitem->m_section_id, "dont_stack") && pSettings->r_bool(iitem->m_section_id, "dont_stack"))
-            return false;
     }
     //-Alundaio
 
     CUICellItem* i = FindSimilar(itm);
-    if (i == nullptr || i == itm || itm->ChildsCount() > 0)
+    if (!i || i == itm || itm->ChildsCount() > 0)
         return false;
 
     i->PushChild(itm);
@@ -685,14 +708,15 @@ CUICellItem* CUICellContainer::FindSimilar(CUICellItem* itm)
 #endif
         //Alundaio: Don't stack equipped items
         PIItem iitem = (PIItem)i->m_pData;
+        if (iitem && !iitem->CanStack())
+            continue;
+
         if (iitem && iitem->m_pInventory)
         {
             if (g_inv_highlight_equipped)
                 if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
                     continue;
 
-            if (pSettings->line_exist(iitem->m_section_id, "dont_stack") && pSettings->r_bool(iitem->m_section_id, "dont_stack"))
-                continue;
         }
         //-Alundaio
 
@@ -1062,6 +1086,40 @@ void CUICellContainer::Draw()
 
     GEnv.UIRender->StartPrimitive(max_prim_cnt, IUIRender::ptTriList, UI().m_currentPointType);
 
+    Ivector2 dragCell{-1, -1};
+    Ivector2 dragSize{};
+    bool highlightDragArea = CUIDragDropListEx::m_drag_item &&
+        CUIDragDropListEx::m_drag_item->BackList() == m_pParentDragDropList;
+    if (highlightDragArea)
+    {
+        CUICellItem* draggedItem = CUIDragDropListEx::m_drag_item->ParentItem();
+        dragCell = PickCell(m_pParentDragDropList->GetDragItemPosition());
+        dragSize = draggedItem->GetGridSize();
+        if (m_pParentDragDropList->GetVerticalPlacement())
+            std::swap(dragSize.x, dragSize.y);
+
+        Ivector2 lastDragCell;
+        lastDragCell.set(dragCell.x + dragSize.x - 1, dragCell.y + dragSize.y - 1);
+        highlightDragArea = dragSize.x > 0 && dragSize.y > 0 && ValidCell(dragCell) && ValidCell(lastDragCell);
+
+        if (highlightDragArea)
+        {
+            const bool sameList = draggedItem->OwnerList() == m_pParentDragDropList;
+            for (int x = dragCell.x; highlightDragArea && x <= lastDragCell.x; ++x)
+            {
+                for (int y = dragCell.y; y <= lastDragCell.y; ++y)
+                {
+                    CUICell& cell = GetCellAt({x, y});
+                    if (!cell.Empty() && (!sameList || cell.m_item != draggedItem))
+                    {
+                        highlightDragArea = false;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     //	u32 cell_i = 0;
     for (int x = 0; x <= tgt_cells.width(); ++x)
     {
@@ -1076,7 +1134,19 @@ void CUICellContainer::Draw()
             CUICell& ui_cell = GetCellAt(cpos);
 
             u8 select_mode = 0;
-            if (!ui_cell.Empty())
+            if (highlightDragArea)
+            {
+                if (dragCell.x >= 0 && dragCell.y >= 0 && cpos.x >= dragCell.x &&
+                    cpos.x < dragCell.x + dragSize.x && cpos.y >= dragCell.y && cpos.y < dragCell.y + dragSize.y)
+                {
+                    select_mode = 1;
+                }
+                else if (!ui_cell.Empty())
+                {
+                    select_mode = 3;
+                }
+            }
+            else if (!ui_cell.Empty())
             {
                 if (ui_cell.m_item->m_cur_mark)
                     select_mode = 2;
@@ -1086,6 +1156,8 @@ void CUICellContainer::Draw()
                     select_mode = 3;
                 else if (ui_cell.m_item->m_select_equipped && g_inv_highlight_equipped)
                     select_mode = 2;
+                else
+                    select_mode = ui_cell.m_item->m_select_mode;
             }
 
             Fvector2 tp;

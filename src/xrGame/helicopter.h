@@ -275,6 +275,7 @@ protected:
 
 public:
     void ExplodeHelicopter();
+    void PlayExplosionSound();
 
     CHelicopter();
     virtual ~CHelicopter();

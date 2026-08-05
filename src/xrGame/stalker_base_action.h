@@ -33,3 +33,12 @@ public:
         return (*m_object);
     }
 };
+
+class CStalkerActionAlreadyDead final : public CStalkerActionBase
+{
+    using inherited = CStalkerActionBase;
+
+public:
+    CStalkerActionAlreadyDead(CAI_Stalker* object, LPCSTR action_name = "");
+    void execute() override;
+};
