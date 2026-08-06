@@ -807,32 +807,7 @@ bool CUIActorMenu::ToBelt(CUICellItem* itm, bool b_use_cursor_pos)
         // ColorizeItem						(itm, false);
         return true;
     }
-    else
-    { // in case belt slot is busy
-        if (!iitem->Belt() || m_pActorInvOwner->inventory().BeltWidth() == 0)
-            return false;
-
-        CUIDragDropListEx* belt_list = NULL;
-        if (b_use_cursor_pos)
-            belt_list = CUIDragDropListEx::m_drag_item->BackList();
-        else
-            return false;
-
-        Ivector2 belt_cell_pos = belt_list->PickCell(GetUICursor().GetCursorPosition());
-        if (belt_cell_pos.x == -1 && belt_cell_pos.y == -1)
-            return false;
-
-        //		PIItem	_iitem						= m_pActorInvOwner->inventory().ItemFromSlot(slot_id);
-
-        CUICellItem* slot_cell = belt_list->GetCellAt(belt_cell_pos).m_item;
-        //		VERIFY								(slot_cell && ((PIItem)slot_cell->m_pData)==_iitem);
-
-        bool result = ToBag(slot_cell, false);
-        VERIFY(result);
-
-        result = ToBelt(itm, b_use_cursor_pos);
-        return result;
-    }
+    return false;
 }
 CUIDragDropListEx* CUIActorMenu::GetSlotList(u16 slot_idx)
 {
