@@ -10,6 +10,10 @@
 #include "xrUICore/Cursor/UICursor.h"
 #include "game_base_space.h"
 #include "Level.h"
+#include "agent_manager.h"
+#include "ai/monsters/basemonster/base_monster.h"
+#include "ai/monsters/ai_monster_squad_manager.h"
+#include "ai/stalker/ai_stalker.h"
 #include "ParticlesObject.h"
 #include "game_base_space.h"
 #include "stalker_animation_data_storage.h"
@@ -466,6 +470,40 @@ void CGamePersistent::update_game_loaded()
     xr_delete(m_intro);
     load_screen_renderer.Stop();
     start_game_intro();
+}
+
+void CGamePersistent::OnObjectsRelcaseBatch(const xr_vector<IGameObject*>& objects)
+{
+    if (g_monster_squad)
+        g_monster_squad->remove_links(objects);
+
+    xr_set<CAgentManager*> agentManagers;
+    const u32 objectCount = Level().Objects.o_count();
+    for (u32 i = 0; i < objectCount; ++i)
+    {
+        IGameObject* object = Level().Objects.o_get_by_iterator(i);
+        CAI_Stalker* stalker = object->cast_stalker();
+        if (stalker && stalker->g_Alive())
+            agentManagers.insert(&stalker->agent_manager());
+    }
+
+    for (CAgentManager* agentManager : agentManagers)
+    {
+        for (IGameObject* object : objects)
+            agentManager->remove_links(object);
+    }
+}
+
+void CGamePersistent::OnObjectsRelcaseBatchComplete()
+{
+    const u32 objectCount = Level().Objects.o_count();
+    for (u32 i = 0; i < objectCount; ++i)
+    {
+        IGameObject* object = Level().Objects.o_get_by_iterator(i);
+        CBaseMonster* monster = object->cast_base_monster();
+        if (monster && monster->g_Alive())
+            monster->UpdateMemory();
+    }
 }
 
 void CGamePersistent::start_game_intro()

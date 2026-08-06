@@ -214,16 +214,12 @@ void CScriptBinder::net_Relcase(IGameObject* object)
     if (!m_object)
         return;
 
-    CGameObject* game_object = smart_cast<CGameObject*>(object);
-    if (game_object)
+    try
     {
-        try
-        {
-            m_object->net_Relcase(game_object->lua_game_object());
-        }
-        catch (...)
-        {
-            clear();
-        }
+        m_object->net_Relcase(object->lua_game_object());
+    }
+    catch (...)
+    {
+        clear();
     }
 }

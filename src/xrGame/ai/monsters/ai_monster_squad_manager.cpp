@@ -108,17 +108,18 @@ void CMonsterSquadManager::update(CEntity* entity)
     }
 }
 
-void CMonsterSquadManager::remove_links(IGameObject* O)
+void CMonsterSquadManager::remove_links(const xr_vector<IGameObject*>& objects)
 {
-    for (u32 team_id = 0; team_id < team.size(); team_id++)
+    const xr_set<const IGameObject*> objectSet(objects.begin(), objects.end());
+
+    for (const auto& levels : team)
     {
-        for (u32 squad_id = 0; squad_id < team[team_id].size(); squad_id++)
+        for (const auto& squads : levels)
         {
-            for (u32 group_id = 0; group_id < team[team_id][squad_id].size(); group_id++)
+            for (CMonsterSquad* squad : squads)
             {
-                CMonsterSquad* squad = team[team_id][squad_id][group_id];
                 if (squad)
-                    squad->remove_links(O);
+                    squad->remove_links(objectSet);
             }
         }
     }

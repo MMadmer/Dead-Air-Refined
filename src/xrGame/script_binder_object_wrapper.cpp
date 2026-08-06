@@ -119,7 +119,7 @@ bool CScriptBinderObjectWrapper::net_SaveRelevant_static(CScriptBinderObject* sc
 
 void CScriptBinderObjectWrapper::net_Relcase(CScriptGameObject* object)
 {
-    if (m_netRelcaseCheckFrame != Device.dwFrame)
+    if (m_netRelcaseCheckFrame == u32(-1))
     {
         // Match luabind's virtual dispatch selection without invoking empty Lua or native fallbacks.
         const auto& self = luabind::detail::wrap_access::ref(*this);
@@ -130,7 +130,7 @@ void CScriptBinderObjectWrapper::net_Relcase(CScriptGameObject* object)
         m_hasNetRelcaseOverride =
             !luabind::detail::is_luabind_function(luaState, -1) && !is_empty_lua_function(luaState);
         lua_pop(luaState, 2);
-        m_netRelcaseCheckFrame = Device.dwFrame;
+        m_netRelcaseCheckFrame = 0;
     }
 
     if (!m_hasNetRelcaseOverride)

@@ -20,6 +20,7 @@
 #include "ShadersExternalData.h" //--#SM+#--
 
 class IGame_Level;
+class IGameObject;
 class IRenderVisual;
 class ILoadingScreen;
 class IMainMenu;
@@ -189,6 +190,8 @@ public:
 
     // Append interface extensions to preserve existing virtual slots.
     virtual float GetScopeDofRadius() { return 0.f; }
+    virtual void OnObjectsRelcaseBatch(const xr_vector<IGameObject*>& /*objects*/) {}
+    virtual void OnObjectsRelcaseBatchComplete() {}
 };
 
 class IMainMenu

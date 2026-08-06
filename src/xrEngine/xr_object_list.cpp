@@ -313,6 +313,10 @@ void CObjectList::ProcessDestroyQueue()
 
     ZoneScopedN("net_Relcase");
 
+    // Process shared links once before individual objects handle the destruction batch.
+    if (g_pGamePersistent)
+        g_pGamePersistent->OnObjectsRelcaseBatch(destroy_queue);
+
     for (IGameObject* object : objects_active)
         for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
             object->net_Relcase(*destroyed);
@@ -320,6 +324,9 @@ void CObjectList::ProcessDestroyQueue()
     for (IGameObject* object : objects_sleeping)
         for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
             object->net_Relcase(*destroyed);
+
+    if (g_pGamePersistent)
+        g_pGamePersistent->OnObjectsRelcaseBatchComplete();
 
     for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
         g_pGameLevel->Sound->object_relcase(*destroyed);

@@ -30,7 +30,7 @@ public:
 
     void update(CEntity* entity);
 
-    void remove_links(IGameObject* O);
+    void remove_links(const xr_vector<IGameObject*>& objects);
 };
 
 IC CMonsterSquadManager& monster_squad();

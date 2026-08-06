@@ -108,6 +108,8 @@ public:
     void SetScopeDofRadius(float radius);
     virtual void OnSectorChanged(IRender_Sector::sector_id_t sector);
     virtual void OnAssetsChanged();
+    void OnObjectsRelcaseBatch(const xr_vector<IGameObject*>& objects) override;
+    void OnObjectsRelcaseBatchComplete() override;
 
     CHudTuner GetHudTuner() { return m_hudTuner; }
 };

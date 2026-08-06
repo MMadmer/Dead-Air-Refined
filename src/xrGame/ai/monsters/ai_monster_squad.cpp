@@ -162,27 +162,25 @@ void CMonsterSquad::UpdateSquadCommands()
     ProcessIdle();
 }
 
-void CMonsterSquad::remove_links(IGameObject* O)
+void CMonsterSquad::remove_links(const xr_set<const IGameObject*>& objects)
 {
-    // Удалить все цели, объекты которых невалидны или ушли в оффлайн
-    for (auto it_goal = m_goals.begin(); it_goal != m_goals.end(); ++it_goal)
+    for (auto& goalPair : m_goals)
     {
-        SMemberGoal goal = it_goal->second;
-        if (goal.entity == O)
+        SMemberGoal& goal = goalPair.second;
+        if (goal.entity && objects.find(goal.entity) != objects.end())
         {
-            it_goal->second.entity = 0;
-            it_goal->second.type = MG_None;
+            goal.entity = nullptr;
+            goal.type = MG_None;
         }
     }
 
-    // Удалить все цели, объекты которых невалидны или ушли в оффлайн
-    for (MEMBER_COMMAND_MAP_IT it = m_commands.begin(); it != m_commands.end(); ++it)
+    for (auto& commandPair : m_commands)
     {
-        SSquadCommand com = it->second;
-        if (com.entity == O)
+        SSquadCommand& command = commandPair.second;
+        if (command.entity && objects.find(command.entity) != objects.end())
         {
-            it->second.entity = 0;
-            it->second.type = SC_NONE;
+            command.entity = nullptr;
+            command.type = SC_NONE;
         }
     }
 }

@@ -1141,7 +1141,6 @@ void CAI_Stalker::net_Relcase(IGameObject* O)
     if (!g_Alive())
         return;
 
-    agent_manager().remove_links(O);
     m_pPhysics_support->in_NetRelcase(O);
 }
 

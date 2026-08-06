@@ -115,7 +115,7 @@ public:
 
     void UpdateSquadCommands();
 
-    void remove_links(IGameObject* O);
+    void remove_links(const xr_set<const IGameObject*>& objects);
 
     // return count of monsters in radius for object
     u8 get_count(const CEntity* object, float radius);
