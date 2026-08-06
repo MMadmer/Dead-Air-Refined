@@ -112,7 +112,6 @@ xr_flat_hash_map<const CActor*, SprintGearFactors> actorSprintGearFactors;
 xr_flat_hash_map<const CActor*, bool> actorKickModes;
 }
 
-extern float cammera_into_collision_shift;
 extern int g_first_person_death;
 
 string32 ACTOR_DEFS::g_quick_use_slots[4] = {};
@@ -323,7 +322,6 @@ void set_box(LPCSTR section, CPHMovementControl& mc, u32 box_num)
     vBOX_center = pSettings->r_fvector3(section, buff);
     strconcat(sizeof(buff), buff, "ph_box", xr_itoa(box_num, buff1, 10), "_size");
     vBOX_size = pSettings->r_fvector3(section, buff);
-    vBOX_size.y += cammera_into_collision_shift / 2.f;
     bb.set(vBOX_center, vBOX_center);
     bb.grow(vBOX_size);
     mc.SetBox(box_num, bb);
