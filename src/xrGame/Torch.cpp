@@ -551,18 +551,6 @@ void CTorch::UpdateCL()
 {
     inherited::UpdateCL();
 
-    CActor* actor = nullptr;
-    if (m_night_vision && m_night_vision->IsActive())
-    {
-        actor = smart_cast<CActor*>(H_Parent());
-        if (actor)
-        {
-            Fvector highlightPosition = actor->Position();
-            highlightPosition.y += 1.5f;
-            m_night_vision->SetHighlightPosition(highlightPosition);
-        }
-    }
-
     if (!m_switched_on)
         return;
 
@@ -572,8 +560,7 @@ void CTorch::UpdateCL()
     if (H_Parent())
     {
         const TorchExtendedConfig& config = torch_extended_config(this);
-        if (!actor)
-            actor = smart_cast<CActor*>(H_Parent());
+        CActor* actor = smart_cast<CActor*>(H_Parent());
         if (actor)
         {
             DrainCondition(Device.fTimeDelta);
@@ -770,32 +757,6 @@ CNightVisionEffector::CNightVisionEffector(const shared_str& section)
     m_sounds.LoadSound(section.c_str(), "snd_night_vision_idle", "NightVisionIdleSnd", true, SOUND_TYPE_ITEM_USING);
     m_sounds.LoadSound(
         section.c_str(), "snd_night_vision_broken", "NightVisionBrokenSnd", false, SOUND_TYPE_ITEM_USING);
-
-    if (!pSettings->read_if_exists<bool>(section, "night_vision_highlight", true))
-        return;
-
-    m_highlight = GEnv.Render->light_create();
-    m_highlight->set_type(IRender_Light::POINT);
-    m_highlight->set_shadow(false);
-    m_highlight->set_range(clampr(
-        pSettings->read_if_exists<float>(section, "night_vision_highlight_range", 60.f), 0.1f, 1000.f));
-    m_highlight->set_cone(0.4f);
-
-    Fvector color;
-    color.set(0.1f, 0.1f, 0.1f);
-    color = READ_IF_EXISTS(pSettings, r_fvector3, section, "night_vision_highlight_color", color);
-    m_highlight->set_color(
-        clampr(color.x, 0.f, 1.f), clampr(color.y, 0.f, 1.f), clampr(color.z, 0.f, 1.f));
-    m_highlight->set_active(false);
-}
-
-CNightVisionEffector::~CNightVisionEffector()
-{
-    if (!m_highlight)
-        return;
-
-    m_highlight->set_active(false);
-    m_highlight.destroy();
 }
 
 void CNightVisionEffector::Start(const shared_str& sect, CActor* pA, bool play_sound)
@@ -807,14 +768,6 @@ void CNightVisionEffector::Start(const shared_str& sect, CActor* pA, bool play_s
     if (!IsActive())
         AddEffector(m_pActor, effNightvision, sect);
 
-    if (m_highlight)
-    {
-        Fvector position = m_pActor->Position();
-        position.y += 1.5f;
-        m_highlight->set_position(position);
-        m_highlight->set_active(true);
-    }
-
     if (play_sound)
     {
         PlaySounds(eStartSound);
@@ -824,9 +777,6 @@ void CNightVisionEffector::Start(const shared_str& sect, CActor* pA, bool play_s
 
 void CNightVisionEffector::Stop(const float factor, bool play_sound)
 {
-    if (m_highlight)
-        m_highlight->set_active(false);
-
     m_sounds.StopSound("NightVisionOnSnd");
     m_sounds.StopSound("NightVisionIdleSnd");
 
@@ -852,8 +802,6 @@ bool CNightVisionEffector::IsActive()
 void CNightVisionEffector::OnDisabled(CActor* pA, bool play_sound)
 {
     m_pActor = pA;
-    if (m_highlight)
-        m_highlight->set_active(false);
     m_sounds.StopSound("NightVisionOnSnd");
     m_sounds.StopSound("NightVisionIdleSnd");
     if (play_sound)
@@ -884,16 +832,4 @@ void CNightVisionEffector::PlaySounds(EPlaySounds which)
     break;
     default: NODEFAULT;
     }
-}
-
-void CNightVisionEffector::SetHighlightPosition(Fvector position)
-{
-    if (m_highlight)
-        m_highlight->set_position(position);
-}
-
-void CNightVisionEffector::SetHighlightRotation(Fvector direction, Fvector right)
-{
-    if (m_highlight)
-        m_highlight->set_rotation(direction, right);
 }

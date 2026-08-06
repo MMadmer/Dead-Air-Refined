@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<string_table>
+    <string id="ui_mm_pause_in_background">
+        <text>Игра: пауза в фоне</text>
+    </string>
+</string_table>

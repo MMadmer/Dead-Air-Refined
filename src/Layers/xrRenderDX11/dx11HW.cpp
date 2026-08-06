@@ -6,7 +6,10 @@
 #include "StateManager/dx11SamplerStateCache.h"
 #include "dx11TextureUtils.h"
 
+#include <dwmapi.h>
 #include <SDL_syswm.h>
+
+extern ENGINE_API int g_pause_in_background;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -245,6 +248,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     }
 
     const HWND hwnd = info.info.win.window;
+    InstallWindowProc(hwnd);
 
     if (!CreateSwapChain2(hwnd))
     {
@@ -421,6 +425,9 @@ bool CHW::ThisInstanceIsGlobal() const
 
 void CHW::DestroyDevice()
 {
+    RestoreWindowProc();
+    ReleaseBackgroundPreviewResources();
+
     if (ThisInstanceIsGlobal()) // only if we are global HW
     {
         RSManager.ClearStateArray();
@@ -461,6 +468,9 @@ void CHW::DestroyDevice()
 void CHW::Reset()
 {
     ZoneScoped;
+    SetBackgroundPreviewEnabled(false);
+    ReleaseBackgroundPreviewResources();
+
     DXGI_SWAP_CHAIN_DESC& cd = m_ChainDesc;
     const bool bWindowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
     cd.Windowed = bWindowed;
@@ -526,11 +536,21 @@ void CHW::Present()
 {
     const bool bUseVSync = psDeviceFlags.test(rsVSync);
 
+    UpdateBackgroundPreview();
+
     switch (m_pSwapChain->Present(bUseVSync ? 1 : 0, 0))
     {
     case DXGI_STATUS_OCCLUDED:
+        if (g_pause_in_background)
+            presentTestState = PresentTestState::Occluded;
+        break;
+
+    case DXGI_ERROR_DEVICE_RESET:
+        presentTestState = PresentTestState::DeviceReset;
+        break;
+
     case DXGI_ERROR_DEVICE_REMOVED:
-        doPresentTest = true;
+        presentTestState = PresentTestState::DeviceRemoved;
         break;
     }
 
@@ -541,12 +561,28 @@ void CHW::Present()
 
 DeviceState CHW::GetDeviceState()
 {
-    if (doPresentTest)
+    if (presentTestState == PresentTestState::DeviceReset)
+        return DeviceState::NeedReset;
+
+    if (presentTestState == PresentTestState::DeviceRemoved)
     {
+        FATAL("Graphics driver was updated or GPU was physically removed from computer.\n"
+              "Please, restart the game.");
+        return DeviceState::Lost;
+    }
+
+    if (presentTestState == PresentTestState::Occluded)
+    {
+        if (!g_pause_in_background)
+        {
+            presentTestState = PresentTestState::None;
+            return DeviceState::Normal;
+        }
+
         switch (m_pSwapChain->Present(0, DXGI_PRESENT_TEST))
         {
         case S_OK:
-            doPresentTest = false;
+            presentTestState = PresentTestState::None;
             break;
 
         case DXGI_STATUS_OCCLUDED:
@@ -554,9 +590,11 @@ DeviceState CHW::GetDeviceState()
             return DeviceState::Lost;
 
         case DXGI_ERROR_DEVICE_RESET:
+            presentTestState = PresentTestState::DeviceReset;
             return DeviceState::NeedReset;
 
         case DXGI_ERROR_DEVICE_REMOVED:
+            presentTestState = PresentTestState::DeviceRemoved;
             FATAL("Graphics driver was updated or GPU was physically removed from computer.\n"
                   "Please, restart the game.");
             break;
@@ -564,5 +602,318 @@ DeviceState CHW::GetDeviceState()
     }
 
     return DeviceState::Normal;
+}
+
+LRESULT CALLBACK CHW::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    LRESULT result{};
+    if (HW.outputWindow == hwnd && HW.HandleDwmMessage(message, lParam, result))
+        return result;
+
+    if (HW.previousWindowProc)
+        return CallWindowProc(HW.previousWindowProc, hwnd, message, wParam, lParam);
+
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
+bool CHW::HandleDwmMessage(const UINT message, const LPARAM lParam, LRESULT& result)
+{
+    if (!backgroundPreviewEnabled)
+        return false;
+
+    if (message != WM_DWMSENDICONICTHUMBNAIL && message != WM_DWMSENDICONICLIVEPREVIEWBITMAP)
+        return false;
+
+    backgroundPreviewRequestedUntil = GetTickCount64() + 250;
+    if (!backgroundPreviewBitmap)
+        return false;
+
+    HRESULT status{};
+    if (message == WM_DWMSENDICONICTHUMBNAIL)
+    {
+        const auto thumbnail = CreateScaledBackgroundPreview(HIWORD(lParam), LOWORD(lParam));
+        if (!thumbnail)
+            return false;
+
+        status = DwmSetIconicThumbnail(outputWindow, thumbnail, 0);
+        DeleteObject(thumbnail);
+    }
+    else
+    {
+        RECT clientRect{};
+        if (!GetClientRect(outputWindow, &clientRect))
+            return false;
+
+        const u32 clientWidth = static_cast<u32>(std::max(clientRect.right - clientRect.left, 1L));
+        const u32 clientHeight = static_cast<u32>(std::max(clientRect.bottom - clientRect.top, 1L));
+        HBITMAP preview = backgroundPreviewBitmap;
+        if (backgroundPreviewWidth > clientWidth || backgroundPreviewHeight > clientHeight)
+            preview = CreateScaledBackgroundPreview(clientWidth, clientHeight);
+        if (!preview)
+            return false;
+
+        status = DwmSetIconicLivePreviewBitmap(outputWindow, preview, nullptr, DWM_SIT_DISPLAYFRAME);
+        if (preview != backgroundPreviewBitmap)
+            DeleteObject(preview);
+    }
+
+    if (FAILED(status))
+        return false;
+
+    result = 0;
+    return true;
+}
+
+void CHW::InstallWindowProc(const HWND hwnd)
+{
+    if (!ThisInstanceIsGlobal() || outputWindow)
+        return;
+
+    SetLastError(ERROR_SUCCESS);
+    const LONG_PTR previous = SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WindowProc));
+    if (!previous && GetLastError() != ERROR_SUCCESS)
+    {
+        Msg("! Failed to install the background preview window procedure: %lu", GetLastError());
+        return;
+    }
+
+    outputWindow = hwnd;
+    previousWindowProc = reinterpret_cast<WNDPROC>(previous);
+}
+
+void CHW::RestoreWindowProc()
+{
+    SetBackgroundPreviewEnabled(false);
+    if (outputWindow && previousWindowProc)
+        SetWindowLongPtr(outputWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(previousWindowProc));
+
+    outputWindow = nullptr;
+    previousWindowProc = nullptr;
+}
+
+void CHW::UpdateBackgroundPreview()
+{
+    if (!outputWindow)
+        return;
+
+    const bool enabled = !g_pause_in_background && IsIconic(outputWindow);
+    SetBackgroundPreviewEnabled(enabled);
+    if (!enabled)
+        return;
+
+    ID3D11DeviceContext* context = get_context(CHW::IMM_CTX_ID);
+    if (backgroundPreviewCopyPending)
+    {
+        // Never stall the render thread for a taskbar preview readback.
+        const HRESULT copyState = context->GetData(
+            backgroundPreviewReady, nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        if (copyState == S_OK)
+        {
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            if (SUCCEEDED(context->Map(backgroundPreviewStaging, 0, D3D11_MAP_READ, 0, &mapped)))
+            {
+                auto* destination = static_cast<u8*>(backgroundPreviewBits);
+                for (u32 row = 0; row < backgroundPreviewHeight; ++row)
+                {
+                    const auto* source = static_cast<const u8*>(mapped.pData) + row * mapped.RowPitch;
+                    auto* target = destination + row * backgroundPreviewWidth * 4;
+                    for (u32 column = 0; column < backgroundPreviewWidth; ++column)
+                    {
+                        if (backgroundPreviewFormat == DXGI_FORMAT_R8G8B8A8_UNORM ||
+                            backgroundPreviewFormat == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+                        {
+                            target[0] = source[2];
+                            target[1] = source[1];
+                            target[2] = source[0];
+                        }
+                        else
+                        {
+                            target[0] = source[0];
+                            target[1] = source[1];
+                            target[2] = source[2];
+                        }
+                        target[3] = 255;
+                        source += 4;
+                        target += 4;
+                    }
+                }
+                context->Unmap(backgroundPreviewStaging, 0);
+                DwmInvalidateIconicBitmaps(outputWindow);
+            }
+            backgroundPreviewCopyPending = false;
+        }
+        else if (FAILED(copyState))
+            backgroundPreviewCopyPending = false;
+    }
+
+    const u64 now = GetTickCount64();
+    if (backgroundPreviewCopyPending || now > backgroundPreviewRequestedUntil ||
+        now - backgroundPreviewLastCapture < 33)
+        return;
+
+    ID3D11Texture2D* backBuffer{};
+    if (FAILED(m_pSwapChain->GetBuffer(
+            CurrentBackBuffer, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backBuffer))))
+        return;
+
+    if (EnsureBackgroundPreviewResources(backBuffer))
+    {
+        context->CopyResource(backgroundPreviewStaging, backBuffer);
+        context->End(backgroundPreviewReady);
+        backgroundPreviewCopyPending = true;
+        backgroundPreviewLastCapture = now;
+    }
+    _RELEASE(backBuffer);
+}
+
+void CHW::SetBackgroundPreviewEnabled(const bool enabled)
+{
+    if (backgroundPreviewEnabled == enabled)
+        return;
+
+    backgroundPreviewEnabled = enabled;
+    const BOOL value = enabled ? TRUE : FALSE;
+    // DWM requests fresh bitmaps only while the minimized preview is active.
+    DwmSetWindowAttribute(outputWindow, DWMWA_FORCE_ICONIC_REPRESENTATION, &value, sizeof(value));
+    DwmSetWindowAttribute(outputWindow, DWMWA_HAS_ICONIC_BITMAP, &value, sizeof(value));
+
+    if (enabled)
+    {
+        backgroundPreviewRequestedUntil = GetTickCount64() + 250;
+        DwmInvalidateIconicBitmaps(outputWindow);
+    }
+    else
+        ReleaseBackgroundPreviewResources();
+}
+
+bool CHW::EnsureBackgroundPreviewResources(ID3D11Texture2D* source)
+{
+    D3D11_TEXTURE2D_DESC sourceDescription{};
+    source->GetDesc(&sourceDescription);
+    const bool supportedFormat = sourceDescription.Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+        sourceDescription.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
+        sourceDescription.Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+        sourceDescription.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+    if (!supportedFormat)
+        return false;
+
+    if (backgroundPreviewStaging && backgroundPreviewWidth == sourceDescription.Width &&
+        backgroundPreviewHeight == sourceDescription.Height &&
+        backgroundPreviewFormat == sourceDescription.Format)
+        return true;
+
+    ReleaseBackgroundPreviewResources();
+
+    D3D11_TEXTURE2D_DESC stagingDescription = sourceDescription;
+    stagingDescription.MipLevels = 1;
+    stagingDescription.ArraySize = 1;
+    stagingDescription.SampleDesc.Count = 1;
+    stagingDescription.SampleDesc.Quality = 0;
+    stagingDescription.Usage = D3D11_USAGE_STAGING;
+    stagingDescription.BindFlags = 0;
+    stagingDescription.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    stagingDescription.MiscFlags = 0;
+    if (FAILED(pDevice->CreateTexture2D(&stagingDescription, nullptr, &backgroundPreviewStaging)))
+        return false;
+
+    D3D11_QUERY_DESC queryDescription{D3D11_QUERY_EVENT, 0};
+    if (FAILED(pDevice->CreateQuery(&queryDescription, &backgroundPreviewReady)))
+    {
+        ReleaseBackgroundPreviewResources();
+        return false;
+    }
+
+    BITMAPINFO bitmapInfo{};
+    bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bitmapInfo.bmiHeader.biWidth = static_cast<LONG>(sourceDescription.Width);
+    bitmapInfo.bmiHeader.biHeight = -static_cast<LONG>(sourceDescription.Height);
+    bitmapInfo.bmiHeader.biPlanes = 1;
+    bitmapInfo.bmiHeader.biBitCount = 32;
+    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+    backgroundPreviewBitmap = CreateDIBSection(
+        nullptr, &bitmapInfo, DIB_RGB_COLORS, &backgroundPreviewBits, nullptr, 0);
+    if (!backgroundPreviewBitmap)
+    {
+        ReleaseBackgroundPreviewResources();
+        return false;
+    }
+
+    backgroundPreviewFormat = sourceDescription.Format;
+    backgroundPreviewWidth = sourceDescription.Width;
+    backgroundPreviewHeight = sourceDescription.Height;
+    return true;
+}
+
+void CHW::ReleaseBackgroundPreviewResources()
+{
+    backgroundPreviewCopyPending = false;
+    _RELEASE(backgroundPreviewReady);
+    _RELEASE(backgroundPreviewStaging);
+    if (backgroundPreviewBitmap)
+        DeleteObject(backgroundPreviewBitmap);
+    backgroundPreviewBitmap = nullptr;
+    backgroundPreviewBits = nullptr;
+    backgroundPreviewFormat = DXGI_FORMAT_UNKNOWN;
+    backgroundPreviewWidth = 0;
+    backgroundPreviewHeight = 0;
+    backgroundPreviewLastCapture = 0;
+    backgroundPreviewRequestedUntil = 0;
+}
+
+HBITMAP CHW::CreateScaledBackgroundPreview(const u32 maxWidth, const u32 maxHeight) const
+{
+    if (!backgroundPreviewBits || !maxWidth || !maxHeight)
+        return nullptr;
+
+    u32 width = maxWidth;
+    u32 height = static_cast<u32>(
+        static_cast<u64>(backgroundPreviewHeight) * maxWidth / backgroundPreviewWidth);
+    if (height > maxHeight)
+    {
+        height = maxHeight;
+        width = static_cast<u32>(
+            static_cast<u64>(backgroundPreviewWidth) * maxHeight / backgroundPreviewHeight);
+    }
+    width = std::max(width, 1u);
+    height = std::max(height, 1u);
+
+    BITMAPINFO destinationInfo{};
+    destinationInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    destinationInfo.bmiHeader.biWidth = static_cast<LONG>(width);
+    destinationInfo.bmiHeader.biHeight = -static_cast<LONG>(height);
+    destinationInfo.bmiHeader.biPlanes = 1;
+    destinationInfo.bmiHeader.biBitCount = 32;
+    destinationInfo.bmiHeader.biCompression = BI_RGB;
+
+    void* destinationBits{};
+    const HBITMAP bitmap = CreateDIBSection(
+        nullptr, &destinationInfo, DIB_RGB_COLORS, &destinationBits, nullptr, 0);
+    if (!bitmap)
+        return nullptr;
+
+    BITMAPINFO sourceInfo{};
+    sourceInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    sourceInfo.bmiHeader.biWidth = static_cast<LONG>(backgroundPreviewWidth);
+    sourceInfo.bmiHeader.biHeight = -static_cast<LONG>(backgroundPreviewHeight);
+    sourceInfo.bmiHeader.biPlanes = 1;
+    sourceInfo.bmiHeader.biBitCount = 32;
+    sourceInfo.bmiHeader.biCompression = BI_RGB;
+
+    const HDC deviceContext = CreateCompatibleDC(nullptr);
+    const HGDIOBJ previousBitmap = SelectObject(deviceContext, bitmap);
+    SetStretchBltMode(deviceContext, HALFTONE);
+    SetBrushOrgEx(deviceContext, 0, 0, nullptr);
+    const int copied = StretchDIBits(deviceContext, 0, 0, width, height, 0, 0,
+        backgroundPreviewWidth, backgroundPreviewHeight, backgroundPreviewBits,
+        &sourceInfo, DIB_RGB_COLORS, SRCCOPY);
+    SelectObject(deviceContext, previousBitmap);
+    DeleteDC(deviceContext);
+
+    if (copied == GDI_ERROR)
+    {
+        DeleteObject(bitmap);
+        return nullptr;
+    }
+    return bitmap;
 }
 } // namespace xray::render::RENDER_NAMESPACE

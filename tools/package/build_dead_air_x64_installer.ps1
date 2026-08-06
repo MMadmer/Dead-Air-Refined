@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PortVersion = "1.2.0",
+    [string]$PortVersion = "1.2.1",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
     [switch]$SkipArchive
@@ -248,8 +248,6 @@ function Build-CompatibilityArchive {
         Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
     }
 
-    $localizedTextPath =
-        Join-Path $compatibilityStageGameRoot "configs\text\rus\dead_air_x64.xml"
     $utf8 = [Text.UTF8Encoding]::new($false, $true)
     [Text.Encoding]::RegisterProvider([Text.CodePagesEncodingProvider]::Instance)
     $windows1251 = [Text.Encoding]::GetEncoding(
@@ -257,14 +255,18 @@ function Build-CompatibilityArchive {
         [Text.EncoderExceptionFallback]::new(),
         [Text.DecoderExceptionFallback]::new()
     )
-    try {
-        $localizedText = [IO.File]::ReadAllText($localizedTextPath, $utf8)
+    foreach ($localizedTextName in @("dead_air_x64.xml", "dead_air_1_2_1.xml")) {
+        $localizedTextPath =
+            Join-Path $compatibilityStageGameRoot "configs\text\rus\$localizedTextName"
+        try {
+            $localizedText = [IO.File]::ReadAllText($localizedTextPath, $utf8)
+        }
+        catch [Text.DecoderFallbackException] {
+            $localizedText = [IO.File]::ReadAllText($localizedTextPath, $windows1251)
+        }
+        $localizedText = $localizedText.Replace('encoding="utf-8"', 'encoding="windows-1251"')
+        [IO.File]::WriteAllText($localizedTextPath, $localizedText, $windows1251)
     }
-    catch [Text.DecoderFallbackException] {
-        $localizedText = [IO.File]::ReadAllText($localizedTextPath, $windows1251)
-    }
-    $localizedText = $localizedText.Replace('encoding="utf-8"', 'encoding="windows-1251"')
-    [IO.File]::WriteAllText($localizedTextPath, $localizedText, $windows1251)
 
     $gravityGunScriptPath =
         Join-Path $compatibilityStageGameRoot "scripts\bind_gr_gun.script"

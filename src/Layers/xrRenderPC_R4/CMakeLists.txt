@@ -32,6 +32,8 @@ target_link_libraries(xrRenderPC_R4
     AMD::AGS
     d3dcompiler
     dxguid
+    dwmapi
+    gdi32
 )
 
 target_compile_definitions(xrRenderPC_R4

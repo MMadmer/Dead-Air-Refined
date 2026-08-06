@@ -1,18 +1,30 @@
 local function on_init(menu)
 	menu.gameplay_options["infinite_bolts"] = {typ="check"}
+	menu.gameplay_options["pause_in_background"] = {typ="check"}
 end
 
 local function on_set_values(menu, opt_manager)
-	local option = menu.gameplay_options["infinite_bolts"]
-	if (option and option.ctrl) then
-		option.ctrl:SetCheck(get_console():get_bool("g_infinite_bolts"))
+	local console = get_console()
+	local infinite_bolts = menu.gameplay_options["infinite_bolts"]
+	if (infinite_bolts and infinite_bolts.ctrl) then
+		infinite_bolts.ctrl:SetCheck(console:get_bool("g_infinite_bolts"))
+	end
+
+	local pause_in_background = menu.gameplay_options["pause_in_background"]
+	if (pause_in_background and pause_in_background.ctrl) then
+		pause_in_background.ctrl:SetCheck(console:get_bool("g_pause_in_background"))
 	end
 end
 
 local function on_accept(menu, opt_manager, console)
-	local option = menu.gameplay_options["infinite_bolts"]
-	if (option and option.ctrl) then
-		console:execute("g_infinite_bolts " .. (option.ctrl:GetCheck() and "1" or "0"))
+	local infinite_bolts = menu.gameplay_options["infinite_bolts"]
+	if (infinite_bolts and infinite_bolts.ctrl) then
+		console:execute("g_infinite_bolts " .. (infinite_bolts.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local pause_in_background = menu.gameplay_options["pause_in_background"]
+	if (pause_in_background and pause_in_background.ctrl) then
+		console:execute("g_pause_in_background " .. (pause_in_background.ctrl:GetCheck() and "1" or "0"))
 	end
 end
 

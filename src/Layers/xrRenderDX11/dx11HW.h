@@ -54,6 +54,17 @@ private:
 
     bool ThisInstanceIsGlobal() const;
 
+    static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+    bool HandleDwmMessage(UINT message, LPARAM lParam, LRESULT& result);
+    void InstallWindowProc(HWND hwnd);
+    void RestoreWindowProc();
+
+    void UpdateBackgroundPreview();
+    void SetBackgroundPreviewEnabled(bool enabled);
+    bool EnsureBackgroundPreviewResources(ID3D11Texture2D* source);
+    void ReleaseBackgroundPreviewResources();
+    HBITMAP CreateScaledBackgroundPreview(u32 maxWidth, u32 maxHeight) const;
+
 public:
     ICF ID3DDeviceContext* get_context(u32 context_id)
     {
@@ -102,8 +113,31 @@ public:
 #endif
     TracyD3D11Ctx profiler_ctx{}; // TODO: this should be one per d3d11 context
 private:
+    enum class PresentTestState : u8
+    {
+        None,
+        Occluded,
+        DeviceReset,
+        DeviceRemoved
+    };
+
     DXGI_SWAP_CHAIN_DESC m_ChainDesc; // DevPP equivalent
-    bool doPresentTest{};
+    PresentTestState presentTestState{};
+
+    HWND outputWindow{};
+    WNDPROC previousWindowProc{};
+    bool backgroundPreviewEnabled{};
+    ID3D11Texture2D* backgroundPreviewStaging{};
+    ID3D11Query* backgroundPreviewReady{};
+    HBITMAP backgroundPreviewBitmap{};
+    void* backgroundPreviewBits{};
+    DXGI_FORMAT backgroundPreviewFormat{DXGI_FORMAT_UNKNOWN};
+    u32 backgroundPreviewWidth{};
+    u32 backgroundPreviewHeight{};
+    bool backgroundPreviewCopyPending{};
+    u64 backgroundPreviewLastCapture{};
+    u64 backgroundPreviewRequestedUntil{};
+
     XRay::Module hD3DCompiler;
     XRay::Module hDXGI;
     XRay::Module hD3D;

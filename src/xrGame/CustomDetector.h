@@ -199,6 +199,7 @@ protected:
 
     void UpdateHudParticles(bool active);
     void UpdateDeviceEffects();
+    bool UsesActorTorchLightProxy();
 };
 
 class CZoneList : public CDetectList<CCustomZone>

@@ -1279,20 +1279,6 @@ void CWeapon::UpdateCL()
             m_zoom_params.m_pNight_vision->Start(m_zoom_params.m_sUseZoomPostprocess, pA, false);
         }
 
-        if (pA && m_zoom_params.m_pNight_vision->IsActive())
-        {
-            Fvector highlightPosition = pA->Position();
-            highlightPosition.y += 1.5f;
-            if (HudItemData())
-            {
-                firedeps dependencies;
-                HudItemData()->setup_firedeps(dependencies);
-                highlightPosition = dependencies.vLastFP2;
-                m_zoom_params.m_pNight_vision->SetHighlightRotation(
-                    dependencies.m_FireParticlesXForm.k, dependencies.m_FireParticlesXForm.i);
-            }
-            m_zoom_params.m_pNight_vision->SetHighlightPosition(highlightPosition);
-        }
     }
     else if (m_bRememberActorNVisnStatus)
     {

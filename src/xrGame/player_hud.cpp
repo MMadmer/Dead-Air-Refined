@@ -47,8 +47,7 @@ void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_
 
     for (const auto& [name, anm] : _sect.Data)
     {
-        if (0 == strncmp(name.c_str(), "anm_",  sizeof("anm_")  - 1) ||
-            0 == strncmp(name.c_str(), "anim_", sizeof("anim_") - 1))
+        if (0 == strncmp(name.c_str(), "anm_", sizeof("anm_") - 1))
         {
             player_hud_motion pm;
 

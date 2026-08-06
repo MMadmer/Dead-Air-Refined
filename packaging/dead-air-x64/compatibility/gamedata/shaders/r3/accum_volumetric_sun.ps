@@ -105,17 +105,6 @@ float4 	main (v2p_volume  I) : SV_Target
 		current -= delta;
 	}
 
-//*
-	float fSturation = -Ldynamic_dir.z;
-
-	//	Normalize dot product to
-	fSturation	= 0.5*fSturation+0.5;
-	//	Map saturation to 0.2..1
-	fSturation	= 0.80*fSturation+0.20;
-
-	res		*= fSturation;
-/**/
-
 	float4 sunColor = float4(1,1,1,1);
 	sunColor.xyz = normalize(Vibrance(L_hemi_color.rgb,1));
 

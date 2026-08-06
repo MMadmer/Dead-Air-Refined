@@ -46,6 +46,7 @@ class CUIArtefactDetectorSimple final : public CUIArtefactDetectorBase
     u16 m_flash_bone;
     u16 m_on_off_bone;
     u32 m_turn_off_flash_time;
+    bool m_lights_initialized{};
 
     ref_light m_flash_light;
     ref_light m_on_off_light;

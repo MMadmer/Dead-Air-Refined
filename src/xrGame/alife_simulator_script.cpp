@@ -52,6 +52,8 @@ CSE_ALifeDynamicObject* alife_object(const CALifeSimulator* self, ALife::_OBJECT
 CSE_ALifeDynamicObject* alife_object(const CALifeSimulator* self, pcstr name)
 {
     VERIFY(self);
+    if (!name)
+        return nullptr;
 
     for (CALifeObjectRegistry::OBJECT_REGISTRY::const_iterator it = self->objects().objects().begin();
          it != self->objects().objects().end(); ++it)

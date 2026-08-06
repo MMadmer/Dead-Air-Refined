@@ -10,6 +10,7 @@
 #include "xrUICore/Windows/UIWindow.h"
 #include "player_hud.h"
 #include "Weapon.h"
+#include "Torch.h"
 #include "ParticlesObject.h"
 #include "xrEngine/LightAnimLibrary.h"
 #include "Include/xrRender/Kinematics.h"
@@ -159,7 +160,7 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
     const DetectorExtendedConfig& config = detector_extended_config(this);
     const auto enableLight = [this]()
     {
-        if (!m_light || m_light->get_active())
+        if (!m_light || m_light->get_active() || UsesActorTorchLightProxy())
             return;
 
         m_light->set_active(true);
@@ -223,7 +224,7 @@ void CCustomDetector::OnAnimationEnd(u32 state)
     case eShowing:
     {
         const DetectorExtendedConfig& config = detector_extended_config(this);
-        if (config.lightStateControlled && config.lightEnableFromIdle && m_light)
+        if (config.lightStateControlled && config.lightEnableFromIdle && m_light && !UsesActorTorchLightProxy())
         {
             const bool wasActive = m_light->get_active();
             m_light->set_active(true);
@@ -301,7 +302,7 @@ bool CCustomDetector::net_Spawn(CSE_Abstract* DC)
         m_light->set_cone(m_light_angle);
         m_light->set_texture(m_light_texture.c_str());
         m_light->set_volumetric(m_light_volumetric);
-        m_light->set_active(!config.lightHudOnly);
+        m_light->set_active(!H_Parent() && !config.lightHudOnly);
     }
 
     if (m_particles_enabled)
@@ -552,6 +553,9 @@ void CCustomDetector::UpdateHudParticles(bool active)
 
 void CCustomDetector::UpdateDeviceEffects()
 {
+    if (m_light && H_Parent() && (!IsWorking() || UsesActorTorchLightProxy()))
+        m_light->set_active(false);
+
     if (m_light && m_light->get_active())
     {
         if (!m_light_enabled)
@@ -606,6 +610,21 @@ void CCustomDetector::UpdateDeviceEffects()
             m_hud_particles->UpdateParent(transform, Fvector().set(0.0f, 0.0f, 0.0f));
         }
     }
+}
+
+bool CCustomDetector::UsesActorTorchLightProxy()
+{
+    // Dead Air mirrors these detector lights through the actor's torch.
+    const std::string_view section = cNameSect().c_str();
+    if (section != "device_flashlight" && !section.starts_with("device_glowstick"))
+        return false;
+
+    CActor* actor = smart_cast<CActor*>(H_Parent());
+    if (!actor)
+        return false;
+
+    CTorch* torch = smart_cast<CTorch*>(actor->inventory().ItemFromSlot(TORCH_SLOT));
+    return torch && torch->torch_active();
 }
 
 bool CAfList::feel_touch_contact(IGameObject* O)

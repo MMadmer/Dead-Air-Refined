@@ -704,11 +704,11 @@ xr_string extract_release_changes(
 
         constexpr size_t MaximumChangelogBytes = 32 * 1024;
         const std::string_view item = trim_markdown_line(line.substr(2));
-        const size_t extraBytes = item.size() + (result.empty() ? 2 : 3);
+        const size_t extraBytes = item.size() + (result.empty() ? 2 : 4);
         if (item.empty() || result.size() + extraBytes > MaximumChangelogBytes)
             continue;
         if (!result.empty())
-            result.push_back('\n');
+            result.append("\\n");
         result.append("- ");
         result.append(item.data(), item.size());
     }

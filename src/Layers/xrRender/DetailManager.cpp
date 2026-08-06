@@ -136,6 +136,8 @@ CDetailManager::~CDetailManager()
 {
     ZoneScoped;
 
+    WaitForCalc();
+
     for (u32 i = 0; i < dm_cache_size; ++i)
         cache_pool[i].~Slot();
     xr_free(cache_pool);
@@ -246,6 +248,8 @@ void CDetailManager::Load()
 void CDetailManager::Unload()
 {
     ZoneScoped;
+    WaitForCalc();
+
     if (UseVS())
         hw_Unload();
     else
@@ -494,7 +498,7 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
 #ifdef _EDITOR
     UpdateRenderState();
 #endif
-    TaskScheduler->Wait(*m_calc_task);
+    WaitForCalc();
 
     if (collectStats)
     {
@@ -517,22 +521,34 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
         RImplementation.BasicStats.DetailRender.End();
 }
 
+void CDetailManager::WaitForCalc()
+{
+    if (!m_calc_task)
+        return;
+
+    TaskScheduler->Wait(*m_calc_task);
+    m_calc_task = nullptr;
+    m_calc_running.store(false, std::memory_order_release);
+}
+
 void CDetailManager::DispatchMTCalc()
 {
-    m_calc_task = &TaskScheduler->AddTask([this]
-    {
 #ifndef _EDITOR
-        if (!RImplementation.Details)
-            return; // possibly deleted
-        if (!dtFS)
-            return;
-        if (!psDeviceFlags.is(rsDrawDetails))
-            return;
+    if (!dtFS || !psDeviceFlags.is(rsDrawDetails))
+        return;
 #endif
 
+    if (m_calc_scheduled_frame == Device.dwFrame || m_calc_running.exchange(true, std::memory_order_acq_rel))
+        return;
+
+    m_calc_scheduled_frame = Device.dwFrame;
+    const Fvector eye = Device.vCameraPosition;
+
+    m_calc_task = &TaskScheduler->AddTask([this, eye]
+    {
         ZoneScoped;
 
-        EYE = Device.vCameraPosition;
+        EYE = eye;
 
         const int s_x = iFloor(EYE.x / dm_slot_size + .5f);
         const int s_z = iFloor(EYE.z / dm_slot_size + .5f);
@@ -542,6 +558,7 @@ void CDetailManager::DispatchMTCalc()
         RImplementation.BasicStats.DetailCache.End();
 
         UpdateVisibleM();
+        m_calc_running.store(false, std::memory_order_release);
     });
 }
 } // namespace xray::render::RENDER_NAMESPACE

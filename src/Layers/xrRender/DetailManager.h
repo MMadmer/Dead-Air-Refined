@@ -237,7 +237,10 @@ public:
 
     /// MT stuff
     Task* m_calc_task{};
+    std::atomic_bool m_calc_running{};
+    u32 m_calc_scheduled_frame{u32(-1)};
 
+    void WaitForCalc();
     void DispatchMTCalc();
 
     CDetailManager();

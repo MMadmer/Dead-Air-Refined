@@ -28,6 +28,7 @@ string512 g_sBenchmarkName;
 int ps_fps_limit = 501;
 // Retained for existing user.ltx files; frame pacing uses the global limit in every game state.
 int ps_fps_limit_in_menu = 60;
+extern int g_pause_in_background;
 
 bool g_bLoaded = false;
 ref_light precache_light = 0;
@@ -261,7 +262,8 @@ void CRenderDevice::DoRender()
         Statistic->Show();
 
         ImGui::Render();
-        m_imgui_render->Render(ImGui::GetDrawData());
+        if (ImDrawData* drawData = ImGui::GetDrawData())
+            m_imgui_render->Render(drawData);
         UpdateViewports();
 
         RenderEnd(); // Present goes here
@@ -645,10 +647,10 @@ void CRenderDevice::OnWindowActivate(SDL_Window* window, bool activated)
     else
         pInput->GrabInput(false);
 
-    const bool active = activated || psDeviceFlags.test(rsAlwaysActive);
+    const bool active = activated || !g_pause_in_background || psDeviceFlags.test(rsAlwaysActive);
     b_is_Active = active;
 
-    // Keep worker tasks running when the explicit always-active mode is enabled.
+    // Keep worker tasks running while full background execution is enabled.
     if (active != b_is_InFocus)
     {
         b_is_InFocus = active;

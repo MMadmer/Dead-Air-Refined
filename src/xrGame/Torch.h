@@ -120,7 +120,6 @@ class CNightVisionEffector
 {
     CActor* m_pActor;
     HUD_SOUND_COLLECTION m_sounds;
-    ref_light m_highlight;
 
 public:
     enum EPlaySounds
@@ -131,12 +130,9 @@ public:
         eBrokeSound
     };
     CNightVisionEffector(const shared_str& sect);
-    ~CNightVisionEffector();
     void Start(const shared_str& sect, CActor* pA, bool play_sound = true);
     void Stop(const float factor, bool play_sound = true);
     bool IsActive();
     void OnDisabled(CActor* pA, bool play_sound = true);
     void PlaySounds(EPlaySounds which);
-    void SetHighlightPosition(Fvector position);
-    void SetHighlightRotation(Fvector direction, Fvector right);
 };

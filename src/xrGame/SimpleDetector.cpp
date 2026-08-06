@@ -91,7 +91,7 @@ CUIArtefactDetectorSimple::~CUIArtefactDetectorSimple()
 
 void CUIArtefactDetectorSimple::Flash(bool bOn, float fRelPower)
 {
-    if (!m_parent->HudItemData() || m_flash_bone == BI_NONE || !m_flash_light)
+    if (!m_parent->HudItemData() || m_flash_bone == BI_NONE)
         return;
 
     IKinematics* K = m_parent->HudItemData()->m_model;
@@ -106,25 +106,35 @@ void CUIArtefactDetectorSimple::Flash(bool bOn, float fRelPower)
         K->LL_SetBoneVisible(m_flash_bone, FALSE, TRUE);
         m_turn_off_flash_time = 0;
     }
-    if (bOn != m_flash_light->get_active())
+    if (m_flash_light && bOn != m_flash_light->get_active())
         m_flash_light->set_active(bOn);
 }
 
 void CUIArtefactDetectorSimple::setup_internals()
 {
-    R_ASSERT(!m_flash_light);
-    m_flash_light = GEnv.Render->light_create();
-    m_flash_light->set_shadow(false);
-    m_flash_light->set_type(IRender_Light::POINT);
-    m_flash_light->set_range(pSettings->r_float(m_parent->HudItemData()->m_sect_name, "flash_light_range"));
-    m_flash_light->set_hud_mode(true);
+    R_ASSERT(!m_lights_initialized);
+    m_lights_initialized = true;
 
-    R_ASSERT(!m_on_off_light);
-    m_on_off_light = GEnv.Render->light_create();
-    m_on_off_light->set_shadow(false);
-    m_on_off_light->set_type(IRender_Light::POINT);
-    m_on_off_light->set_range(pSettings->r_float(m_parent->HudItemData()->m_sect_name, "onoff_light_range"));
-    m_on_off_light->set_hud_mode(true);
+    const shared_str& hudSection = m_parent->HudItemData()->m_sect_name;
+    const float flashLightRange = pSettings->r_float(hudSection, "flash_light_range");
+    if (flashLightRange > 0.f)
+    {
+        m_flash_light = GEnv.Render->light_create();
+        m_flash_light->set_shadow(false);
+        m_flash_light->set_type(IRender_Light::POINT);
+        m_flash_light->set_range(flashLightRange);
+        m_flash_light->set_hud_mode(true);
+    }
+
+    const float onOffLightRange = pSettings->r_float(hudSection, "onoff_light_range");
+    if (onOffLightRange > 0.f)
+    {
+        m_on_off_light = GEnv.Render->light_create();
+        m_on_off_light->set_shadow(false);
+        m_on_off_light->set_type(IRender_Light::POINT);
+        m_on_off_light->set_range(onOffLightRange);
+        m_on_off_light->set_hud_mode(true);
+    }
 
     IKinematics* K = m_parent->HudItemData()->m_model;
     R_ASSERT(K);
@@ -150,7 +160,7 @@ void CUIArtefactDetectorSimple::update()
 
     if (m_parent->HudItemData())
     {
-        if (!m_flash_light)
+        if (!m_lights_initialized)
             setup_internals();
 
         if (m_turn_off_flash_time && m_turn_off_flash_time < Device.dwTimeGlobal)
@@ -158,15 +168,18 @@ void CUIArtefactDetectorSimple::update()
 
         firedeps fd;
         m_parent->HudItemData()->setup_firedeps(fd);
-        if (m_flash_light->get_active())
+        if (m_flash_light && m_flash_light->get_active())
             m_flash_light->set_position(fd.vLastFP);
 
-        m_on_off_light->set_position(fd.vLastFP2);
-        if (!m_on_off_light->get_active())
-            m_on_off_light->set_active(true);
+        if (m_on_off_light)
+        {
+            m_on_off_light->set_position(fd.vLastFP2);
+            if (!m_on_off_light->get_active())
+                m_on_off_light->set_active(true);
 
-        int frame = 0;
-        const u32 clr = m_pOnOfLAnim->CalculateRGB(Device.fTimeGlobal, frame);
-        m_on_off_light->set_color(Fcolor(clr));
+            int frame = 0;
+            const u32 clr = m_pOnOfLAnim->CalculateRGB(Device.fTimeGlobal, frame);
+            m_on_off_light->set_color(Fcolor(clr));
+        }
     }
 }

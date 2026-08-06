@@ -38,6 +38,11 @@ void CEatableItem::Load(LPCSTR section)
 
     m_iRemainingUses = m_iMaxUses = READ_IF_EXISTS(pSettings, r_u8, section, "max_uses", 1);
     m_bRemoveAfterUse = READ_IF_EXISTS(pSettings, r_bool, section, "remove_after_use", true);
+
+    // Single-use consumables must not inherit the generic item's no-stack default.
+    if (m_iMaxUses == 1)
+        m_flags.set(FNoStack, false);
+
     m_fWeightFull = m_weight;
     m_fWeightEmpty = READ_IF_EXISTS(pSettings, r_float, section, "empty_weight", 0.0f);
 

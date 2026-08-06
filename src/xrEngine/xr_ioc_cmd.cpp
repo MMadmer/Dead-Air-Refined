@@ -715,6 +715,7 @@ public:
 ENGINE_API float g_fov = 67.5f;
 ENGINE_API float psHUD_FOV = 0.375f;
 ENGINE_API float psHUD_FOV_def = 0.375f;
+ENGINE_API int g_pause_in_background = 0;
 
 // extern int psSkeletonUpdate;
 extern int rsDVB_Size;
@@ -844,6 +845,7 @@ void CCC_Register()
 
     CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 30, 501);
     CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
+    CMD4(CCC_Integer, "g_pause_in_background", &g_pause_in_background, 0, 1);
     CMD1(CCC_VidFpsLock, "vid_fps_lock");
     CMD3(CCC_Mask, "rs_always_active", &psDeviceFlags, rsAlwaysActive);
     CMD3(CCC_Mask, "rs_v_sync", &psDeviceFlags, rsVSync);
