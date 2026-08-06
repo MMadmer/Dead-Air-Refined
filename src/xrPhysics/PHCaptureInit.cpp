@@ -41,7 +41,7 @@ bool can_capture(CPHCharacter* a_character, IPhysicsShellHolder* a_taget_object,
     // IKinematics* K=	smart_cast<IKinematics*>( a_taget_object->ObjectVisual( ) );
     IKinematics* K = a_taget_object->ObjectKinematics();
 
-    if (!K || !K->LL_GetBoneInstance(a_taget_element).callback_param())
+    if (!K || a_taget_element >= K->LL_BoneCount() || !K->LL_GetBoneInstance(a_taget_element).callback_param())
         return false;
     return true;
 }

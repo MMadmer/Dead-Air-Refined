@@ -125,9 +125,10 @@ void STorsoWpn::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
     attack_zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_0"));
     fire_idle = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
     fire_end = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_2"));
-    all_attack_0 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_0"));
-    all_attack_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_1"));
-    all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_2"));
+    // Dead Air 1.0 keeps stationary attacks off the legs so crouched meshes stay outside the first-person camera.
+    all_attack_0 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_0"));
+    all_attack_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
+    all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_2"));
 }
 void SAnimState::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
 {

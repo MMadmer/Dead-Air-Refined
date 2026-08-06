@@ -685,13 +685,41 @@ void CActor::ActorUse()
     if (!psActorFlags.test(AF_MULTI_ITEM_PICKUP))
         m_bPickupMode = true;
 
-    if (character_physics_support()->movement()->PHCapture())
+    CPHMovementControl* movement = character_physics_support()->movement();
+    if (movement->PHCapture())
     {
-        character_physics_support()->movement()->PHReleaseObject();
+        movement->PHReleaseObject();
         return;
     }
 
-    if (m_pUsableObject && NULL == m_pObjectWeLookingAt->cast_inventory_item())
+    if (Level().IR_GetKeyState(SDL_SCANCODE_LSHIFT))
+    {
+        const collide::rq_result& rayQuery = HUD().GetCurrentRayQuery();
+        CPhysicsShellHolder* object = smart_cast<CPhysicsShellHolder*>(rayQuery.O);
+        bool canCapture = object && object->ActorCanCapture() && object->m_pPhysicsShell &&
+            object->m_pPhysicsShell->isActive();
+        if (canCapture)
+        {
+            const u16 elementCount = object->m_pPhysicsShell->get_ElementsNumber();
+            for (u16 index = 0; index < elementCount; ++index)
+            {
+                if (object->m_pPhysicsShell->get_ElementByStoreOrder(index)->isFixed())
+                {
+                    canCapture = false;
+                    break;
+                }
+            }
+        }
+
+        // Dragging and opening corpse UI in one use action leaves the corpse owned by two systems.
+        if (canCapture)
+        {
+            movement->PHCaptureObject(object, static_cast<u16>(rayQuery.element));
+            return;
+        }
+    }
+
+    if (m_pUsableObject && m_pObjectWeLookingAt && !m_pObjectWeLookingAt->cast_inventory_item())
     {
         m_pUsableObject->use(this);
     }
@@ -741,33 +769,10 @@ void CActor::ActorUse()
             }
         }
 
-        collide::rq_result& RQ = HUD().GetCurrentRayQuery();
-        CPhysicsShellHolder* object = smart_cast<CPhysicsShellHolder*>(RQ.O);
-        u16 element = BI_NONE;
-        if (object)
-            element = (u16)RQ.element;
-
-        if (object && Level().IR_GetKeyState(SDL_SCANCODE_LSHIFT))
+        if (!Level().IR_GetKeyState(SDL_SCANCODE_LSHIFT))
         {
-            bool canCapture = object->ActorCanCapture() && object->m_pPhysicsShell && object->m_pPhysicsShell->isActive();
-            if (canCapture)
-            {
-                const u16 elementCount = object->m_pPhysicsShell->get_ElementsNumber();
-                for (u16 index = 0; index < elementCount; ++index)
-                {
-                    if (object->m_pPhysicsShell->get_ElementByStoreOrder(index)->isFixed())
-                    {
-                        canCapture = false;
-                        break;
-                    }
-                }
-            }
-
-            if (canCapture)
-                character_physics_support()->movement()->PHCaptureObject(object, element);
-        }
-        else
-        {
+            const collide::rq_result& rayQuery = HUD().GetCurrentRayQuery();
+            CPhysicsShellHolder* object = smart_cast<CPhysicsShellHolder*>(rayQuery.O);
             if (object && smart_cast<CHolderCustom*>(object))
             {
                 NET_Packet P;

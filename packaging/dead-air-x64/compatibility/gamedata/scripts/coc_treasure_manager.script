@@ -119,6 +119,13 @@ end
 ------------------------------------------------------------------------------------------------------------------
 --							PRIVATE
 ------------------------------------------------------------------------------------------------------------------
+local function send_treasure_if_available(param,id)
+	local sim = alife()
+	if (id and sim and sim:object(id)) then
+		news_manager.send_treasure(param,id)
+	end
+end
+
 local function on_game_load()
 	if (caches_count > 0) then
 		return
@@ -165,7 +172,7 @@ local function actor_on_item_take_from_box(box,itm)
 		end
 		level.map_remove_object_spot(box:id(), "treasure")
 		xr_statistic.inc_counter("stashes_found")
-		news_manager.send_treasure(1, box:id())
+		send_treasure_if_available(1,box:id())
 
 		local box_name = box:name()
 
@@ -389,7 +396,7 @@ function create_random_stash(no_spot,hint,bonus_items)
 		-- create map spot
 		if (no_spot ~= true and level.map_has_object_spot(id,"treasure") == 0) then
 			level.map_add_object_spot_ser(id, "treasure", hint or "")
-			news_manager.send_treasure(0, id)
+			send_treasure_if_available(0,id)
 		end
 		caches[id] = table.concat(stash_items,",")
 	else
@@ -448,7 +455,7 @@ function drx_create_random_stash( no_spot, hint, bonus_items, bonus_lottery )
 			-- Create map spot:
 			if ( no_spot ~= true and level.map_has_object_spot( id, "treasure" ) == 0 ) then
 				level.map_add_object_spot_ser( id, "treasure", hint or "" )
-				news_manager.send_treasure( 0, id )
+				send_treasure_if_available(0,id)
 			end
 
 			-- Switch cache true, indicating it has treasure:
@@ -471,7 +478,7 @@ function drx_create_random_stash( no_spot, hint, bonus_items, bonus_lottery )
 	-- Create map spot:
 	if ( no_spot ~= true and level.map_has_object_spot( id, "treasure" ) == 0 ) then
 		level.map_add_object_spot_ser( id, "treasure", hint or "" )
-		news_manager.send_treasure( 0, id )
+		send_treasure_if_available(0,id)
 	end
 
 	math.random()

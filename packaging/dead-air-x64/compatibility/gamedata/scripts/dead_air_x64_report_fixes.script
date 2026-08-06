@@ -1,0 +1,47 @@
+local original_fill_list
+local original_take_all
+local patched = false
+
+local function save_empty_mutant_loot(self)
+	self.loot = {}
+	utils.save_var(self.obj, "loot", self.loot)
+	utils.se_obj_save_var(self.obj:id(), self.obj:name(), "se_loot", self.loot)
+end
+
+local function fill_mutant_loot(self)
+	local looted = utils.se_obj_load_var(self.obj:id(), self.obj:name(), "looted") == "true"
+	if looted then
+		local loot = utils.load_var(self.obj, "loot", nil)
+		if not loot then
+			loot = utils.se_obj_load_var(self.obj:id(), self.obj:name(), "se_loot")
+		end
+
+		-- Older saves can contain a looted corpse with the nil marker that used to regenerate its loot.
+		if not loot then
+			save_empty_mutant_loot(self)
+		end
+	end
+
+	return original_fill_list(self)
+end
+
+local function take_all_mutant_loot(self)
+	local had_loot = self.loot ~= nil
+	original_take_all(self)
+	if had_loot and utils.se_obj_load_var(self.obj:id(), self.obj:name(), "looted") == "true" then
+		save_empty_mutant_loot(self)
+	end
+end
+
+function on_game_start()
+	local loot_class = ui_mutant_loot and ui_mutant_loot.loot_ui
+	if patched or not loot_class or not loot_class.FillList or not loot_class.OnButton_ok_all then
+		return
+	end
+
+	original_fill_list = loot_class.FillList
+	original_take_all = loot_class.OnButton_ok_all
+	loot_class.FillList = fill_mutant_loot
+	loot_class.OnButton_ok_all = take_all_mutant_loot
+	patched = true
+end
