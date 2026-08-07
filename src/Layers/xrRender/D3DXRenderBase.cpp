@@ -18,58 +18,6 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if RENDER == R_R4
-namespace
-{
-void accumulate_render_element(R_statistics_element& destination, const R_statistics_element& source)
-{
-    destination.verts += source.verts;
-    destination.dips += source.dips;
-}
-
-void accumulate_backend_stats(CBackend::_stats& destination, const CBackend::_stats& source)
-{
-    destination.render.calls += source.render.calls;
-    destination.render.verts += source.render.verts;
-    destination.render.polys += source.render.polys;
-    destination.compute.calls += source.compute.calls;
-    destination.compute.groups_x += source.compute.groups_x;
-    destination.compute.groups_y += source.compute.groups_y;
-    destination.compute.groups_z += source.compute.groups_z;
-    destination.vs += source.vs;
-    destination.ps += source.ps;
-    destination.gs += source.gs;
-    destination.hs += source.hs;
-    destination.ds += source.ds;
-    destination.cs += source.cs;
-    destination.pp += source.pp;
-    destination.decl += source.decl;
-    destination.vb += source.vb;
-    destination.ib += source.ib;
-    destination.states += source.states;
-    destination.textures += source.textures;
-    destination.matrices += source.matrices;
-    destination.constants += source.constants;
-    destination.xforms += source.xforms;
-    destination.target_rt += source.target_rt;
-    destination.target_zb += source.target_zb;
-
-    accumulate_render_element(destination.r.s_static, source.r.s_static);
-    accumulate_render_element(destination.r.s_flora, source.r.s_flora);
-    accumulate_render_element(destination.r.s_flora_lods, source.r.s_flora_lods);
-    accumulate_render_element(destination.r.s_details, source.r.s_details);
-    accumulate_render_element(destination.r.s_ui, source.r.s_ui);
-    accumulate_render_element(destination.r.s_dynamic, source.r.s_dynamic);
-    accumulate_render_element(destination.r.s_dynamic_sw, source.r.s_dynamic_sw);
-    accumulate_render_element(destination.r.s_dynamic_inst, source.r.s_dynamic_inst);
-    accumulate_render_element(destination.r.s_dynamic_1B, source.r.s_dynamic_1B);
-    accumulate_render_element(destination.r.s_dynamic_2B, source.r.s_dynamic_2B);
-    accumulate_render_element(destination.r.s_dynamic_3B, source.r.s_dynamic_3B);
-    accumulate_render_element(destination.r.s_dynamic_4B, source.r.s_dynamic_4B);
-}
-} // namespace
-#endif
-
 #ifdef USE_RENDERDOC
 RENDERDOC_API_1_0_0* g_renderdoc_api;
 #endif
@@ -313,21 +261,12 @@ bool D3DXRenderBase::GetForceGPU_REF()
 }
 u32 D3DXRenderBase::GetCacheStatPolys()
 {
-#if RENDER == R_R4
-    u32 polygons{};
-    for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
-        polygons += contexts_pool[id].cmd_list.stat.render.polys;
-    return polygons;
-#else
     return RCache.stat.render.polys;
-#endif
 }
 void D3DXRenderBase::Begin()
 {
     HW.BeginScene();
 #if RENDER == R_R4
-    for (u32 id = 0; id < R__NUM_PARALLEL_CONTEXTS; ++id)
-        ZeroMemory(&contexts_pool[id].cmd_list.stat, sizeof(contexts_pool[id].cmd_list.stat));
     auto& immediate = get_imm_context().cmd_list;
     immediate.OnFrameBegin();
     immediate.set_CullMode(CULL_CW);
@@ -423,13 +362,6 @@ void D3DXRenderBase::DumpStatistics(IGameFont& font, IPerformanceAlert* alert)
 {
     BasicStats.FrameEnd();
     auto renderTotal = Device.GetStats().RenderTotal.result;
-#if RENDER == R_R4
-    CBackend::_stats combinedStats{};
-    for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
-        accumulate_backend_stats(combinedStats, contexts_pool[id].cmd_list.stat);
-#else
-    const CBackend::_stats& combinedStats = RCache.stat;
-#endif
 #define PPP(a) (100.f * float(a) / renderTotal)
     font.OutNext("*** RENDER:   %2.2fms", renderTotal);
     font.OutNext("Calc:         %2.2fms, %2.1f%%", BasicStats.Culling.result, PPP(BasicStats.Culling.result));
@@ -456,7 +388,7 @@ void D3DXRenderBase::DumpStatistics(IGameFont& font, IPerformanceAlert* alert)
     font.OutNext("- culled:     %u", BasicStats.OcclusionCulled);
 #undef PPP
     font.OutSkip();
-    const auto& rcstats = combinedStats;
+    const auto& rcstats = RCache.stat;
     font.OutNext("Vertices:     %d/%d", rcstats.render.verts, rcstats.render.calls ? rcstats.render.verts / rcstats.render.calls : 0);
     font.OutNext("Polygons:     %d/%d", rcstats.render.polys, rcstats.render.calls ? rcstats.render.polys / rcstats.render.calls : 0);
     font.OutNext("DIP/DP:       %d", rcstats.render.calls);

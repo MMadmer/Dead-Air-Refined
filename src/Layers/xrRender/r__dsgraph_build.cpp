@@ -25,37 +25,6 @@ float r_ssaLOD_A, r_ssaLOD_B;
 float r_ssaGLOD_start, r_ssaGLOD_end;
 float r_ssaHZBvsTEX;
 
-struct StaticGeometryThreshold
-{
-    float volume;
-    float distance;
-};
-
-static constexpr StaticGeometryThreshold staticGeometryThresholds[][5] =
-{
-    { { 10.f, 150.f }, { 100.f, 200.f }, { 500.f, 250.f }, { 2500.f, 350.f }, { 7000.f, 400.f } },
-    { { 25.f, 50.f }, { 200.f, 150.f }, { 1000.f, 200.f }, { 2500.f, 300.f }, { 7000.f, 400.f } },
-    { { 50.f, 50.f }, { 400.f, 150.f }, { 1500.f, 200.f }, { 5000.f, 300.f }, { 20000.f, 350.f } },
-};
-
-ICF bool is_static_geometry_valuable(const dxRender_Visual* visual)
-{
-    if (ps_r_optimize_static == geometry_optimization_off)
-        return true;
-
-    const u32 quality = _min(ps_r_optimize_static, u32(geometry_optimization_high));
-    const float volume = visual->vis.sphere.volume();
-    const float distance = Device.vCameraPosition.distance_to(visual->vis.sphere.P) + EPS;
-    const float adjustedDistance = distance * Device.fFOV / 67.f;
-
-    for (const auto& threshold : staticGeometryThresholds[quality - 1])
-    {
-        if (volume < threshold.volume && adjustedDistance > threshold.distance)
-            return false;
-    }
-    return true;
-}
-
 ICF float CalcSSA(float& distSQ, Fvector& C, dxRender_Visual* V)
 {
     float R = V->vis.sphere.R + 0;
@@ -378,13 +347,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
 {
     ZoneScoped;
 
-    if (pVisual->vis.marker[context_id] == marker)
-        return;
-
     if (o.use_hom && !RImplementation.HOM.visible(pVisual->vis))
-        return;
-
-    if (!is_static_geometry_valuable(pVisual))
         return;
 
     // Visual is 100% visible - simply add it
@@ -392,12 +355,6 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
     {
     case MT_PARTICLE_GROUP:
     {
-        if (defer_static_main_thread_work)
-        {
-            deferred_static_visuals.push_back({ pVisual, {}, 0, false });
-            return;
-        }
-
         // Xottab_DUTY: for dynamic objects we need matrixб
         // which is nullptr, when we use add_leafs_Static
         Log("Dynamic particles added via static procedure. Please, contact Xottab_DUTY and tell him about the issue.");
@@ -432,12 +389,6 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
     case MT_SKELETON_ANIM:
     case MT_SKELETON_RIGID:
     {
-        if (defer_static_main_thread_work)
-        {
-            deferred_static_visuals.push_back({ pVisual, {}, 0, false });
-            return;
-        }
-
         // Add all children, doesn't perform any tests
         CKinematics* pV = (CKinematics*)pVisual;
         pV->CalculateBones(TRUE);
@@ -601,9 +552,6 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
 
     vis_data& vis = pVisual->vis;
 
-    if (vis.marker[context_id] == marker)
-        return;
-
     // Check frustum visibility and calculate distance to visual's center
     const EFC_Visible VIS = view.testSAABB(vis.sphere.P, vis.sphere.R, vis.box.data(), planes);
     if (fcvNone == VIS)
@@ -612,20 +560,11 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     if (o.use_hom && !RImplementation.HOM.visible(vis))
         return;
 
-    if (!is_static_geometry_valuable(pVisual))
-        return;
-
     // If we get here visual is visible or partially visible
     switch (pVisual->Type)
     {
     case MT_PARTICLE_GROUP:
     {
-        if (defer_static_main_thread_work)
-        {
-            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial });
-            return;
-        }
-
         // Xottab_DUTY: for dynamic objects we need matrix,
         // which is nullptr, when we use add_Static
         Log("Dynamic particles added via static procedure. Please, contact Xottab_DUTY and tell him about the issue.");
@@ -676,12 +615,6 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     case MT_SKELETON_ANIM:
     case MT_SKELETON_RIGID:
     {
-        if (defer_static_main_thread_work)
-        {
-            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial });
-            return;
-        }
-
         // Add all children, doesn't perform any tests
         CKinematics* pV = (CKinematics*)pVisual;
         pV->CalculateBones(TRUE);
@@ -784,12 +717,10 @@ void R_dsgraph_structure::unload()
 
 
 // sub-space rendering - main procedure
-bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
+void R_dsgraph_structure::build_subspace()
 {
     ZoneScoped;
 
-    deferred_static_visuals.clear();
-    defer_static_main_thread_work = defer_main_thread_work;
     marker++; // !!! critical here
 
     if (o.precise_portals && RImplementation.rmPortals)
@@ -809,8 +740,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
     {
         if (g_pGameLevel)
             g_pGameLevel->pHUD->Render_Last(context_id);
-        defer_static_main_thread_work = false;
-        return false;
+        return;
     }
 
     // Traverse sector/portal structure
@@ -859,23 +789,6 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
             }
         }
     }
-
-    return true;
-}
-
-void R_dsgraph_structure::build_subspace_dynamic()
-{
-    ZoneScoped;
-
-    defer_static_main_thread_work = false;
-    for (const auto& deferred : deferred_static_visuals)
-    {
-        if (deferred.partial)
-            add_static(deferred.visual, deferred.view, deferred.planes);
-        else
-            add_leafs_static(deferred.visual);
-    }
-    deferred_static_visuals.clear();
 
     const bool collect_dynamic_any = (o.spatial_types != 0) && psDeviceFlags.test(rsDrawDynamic);
 
@@ -1048,11 +961,13 @@ void R_dsgraph_structure::build_subspace_dynamic()
         }
     }
 
-}
-
-void R_dsgraph_structure::build_subspace()
-{
-    if (build_subspace_static(false))
-        build_subspace_dynamic();
+#if 0
+    // wait for static geo collecting to be done.
+    for (auto* task : static_geo_tasks)
+    {
+        if (task)
+            TaskScheduler->Wait(*task);
+    }
+#endif
 }
 } // namespace xray::render::RENDER_NAMESPACE

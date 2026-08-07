@@ -162,9 +162,7 @@ void CActor::PickupModeUpdate_COD()
     frustum.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB | FRUSTUM_P_FAR);
 
     ISpatialResult.clear();
-    const Fvector pickupQueryHalfSize{2.0f, 2.0f, 2.0f};
-    // CGameObject centers its spatial sphere on Center(), so this box cannot reject an item within 2 m.
-    g_pGamePersistent->SpatialSpace.q_box(ISpatialResult, 0, STYPE_COLLIDEABLE, Position(), pickupQueryHalfSize);
+    g_pGamePersistent->SpatialSpace.q_frustum(ISpatialResult, 0, STYPE_COLLIDEABLE, frustum);
 
     float maxlen = 1000.0f;
     CInventoryItem* pNearestItem = NULL;
@@ -172,11 +170,6 @@ void CActor::PickupModeUpdate_COD()
     for (u32 o_it = 0; o_it < ISpatialResult.size(); o_it++)
     {
         ISpatial* spatial = ISpatialResult[o_it];
-        Fsphere& spatialSphere = spatial->GetSpatialData().sphere;
-        u32 frustumMask = frustum.getMask();
-        if (fcvNone == frustum.testSphere(spatialSphere.P, spatialSphere.R, frustumMask))
-            continue;
-
         CInventoryItem* pIItem = smart_cast<CInventoryItem*>(spatial->dcast_GameObject());
 
         if (!pIItem)

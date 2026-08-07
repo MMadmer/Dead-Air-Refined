@@ -387,37 +387,6 @@ IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, 
     PGO(Msg("PGO:DIP:%dv/%df", countV, PC));
 }
 
-IC void CBackend::RenderInstanced(
-    D3DPRIMITIVETYPE T, u32 baseV, u32 /*startV*/, u32 countV, u32 startI, u32 PC,
-    u32 instanceCount)
-{
-    VERIFY(instanceCount);
-
-    D3D_PRIMITIVE_TOPOLOGY topology = TranslateTopology(T);
-    const u32 indexCount = GetIndexCount(T, PC);
-
-    if (hs || ds)
-    {
-        R_ASSERT(topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        topology = D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
-    }
-
-    stat.render.calls++;
-    stat.render.verts += countV * instanceCount;
-    stat.render.polys += PC * instanceCount;
-
-    ApplyPrimitieTopology(topology);
-    SRVSManager.Apply(context_id);
-    ApplyRTandZB();
-    ApplyVertexLayout();
-    StateManager.Apply();
-    constants.flush();
-    HW.get_context(context_id)->DrawIndexedInstanced(
-        indexCount, instanceCount, startI, baseV, 0);
-
-    PGO(Msg("PGO:DIP:%dv/%df", countV * instanceCount, PC * instanceCount));
-}
-
 IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 startV, u32 PC)
 {
     //  TODO: DX11: Remove triangle fan usage from the engine
@@ -640,26 +609,26 @@ ICF void CBackend::set_VS(SVS* _vs)
     set_VS(_vs->sh, _vs->cName.c_str());
 }
 
-IC bool CBackend::UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers],
-    dx11ConstantBuffer* const desired[MaxCBuffers], u32& uiMin, u32& uiMax)
+IC bool CBackend::CBuffersNeedUpdate(
+    ref_cbuffer buf1[MaxCBuffers], ref_cbuffer buf2[MaxCBuffers], u32& uiMin, u32& uiMax)
 {
-    bool changed = false;
-    for (u32 i = 0; i < MaxCBuffers; ++i)
+    bool bRes = false;
+    int i = 0;
+    while ((i < MaxCBuffers) && (buf1[i] == buf2[i]))
+        ++i;
+
+    uiMin = i;
+
+    for (; i < MaxCBuffers; ++i)
     {
-        if (desired[i])
-            constants.queue_for_flush(*desired[i]);
-
-        if (current[i]._get() == desired[i])
-            continue;
-
-        if (!changed)
-            uiMin = i;
-        uiMax = i;
-        current[i]._set(desired[i]);
-        changed = true;
+        if (buf1[i] != buf2[i])
+        {
+            bRes = true;
+            uiMax = i;
+        }
     }
 
-    return changed;
+    return bRes;
 }
 
 IC void CBackend::set_Constants(R_constant_table* C)
@@ -668,7 +637,6 @@ IC void CBackend::set_Constants(R_constant_table* C)
     if (ctable == C)
         return;
     ctable = C;
-    lmaterial_base_constant = C ? C->get("s_base")._get() : nullptr;
     xforms.unmap();
     hemi.unmap();
     tree.unmap();
@@ -676,22 +644,97 @@ IC void CBackend::set_Constants(R_constant_table* C)
     LOD.unmap();
 #endif
     StateManager.UnmapConstants();
-    if (!C)
+    if (0 == C)
         return;
 
     PGO(Msg("PGO:c-table"));
 
     //  Setup constant tables
     {
-        static_assert(MaxCBuffers == R_constant_table::ConstantBufferCount);
-        const R_constant_table::cb_binding_layout& bindings = C->getConstantBufferBindings(context_id);
+        ref_cbuffer aPixelConstants[MaxCBuffers];
+        ref_cbuffer aVertexConstants[MaxCBuffers];
+        ref_cbuffer aGeometryConstants[MaxCBuffers];
+#ifdef USE_DX11
+        ref_cbuffer aHullConstants[MaxCBuffers];
+        ref_cbuffer aDomainConstants[MaxCBuffers];
+        ref_cbuffer aComputeConstants[MaxCBuffers];
+#endif
+
+        for (int i = 0; i < MaxCBuffers; ++i)
+        {
+            aPixelConstants[i] = m_aPixelConstants[i];
+            aVertexConstants[i] = m_aVertexConstants[i];
+            aGeometryConstants[i] = m_aGeometryConstants[i];
+
+#ifdef USE_DX11
+            aHullConstants[i] = m_aHullConstants[i];
+            aDomainConstants[i] = m_aDomainConstants[i];
+            aComputeConstants[i] = m_aComputeConstants[i];
+#endif
+
+            m_aPixelConstants[i] = 0;
+            m_aVertexConstants[i] = 0;
+            m_aGeometryConstants[i] = 0;
+
+#ifdef USE_DX11
+            m_aHullConstants[i] = 0;
+            m_aDomainConstants[i] = 0;
+            m_aComputeConstants[i] = 0;
+#endif
+        }
+        R_constant_table::cb_table::iterator it = C->m_CBTable[context_id].begin();
+        R_constant_table::cb_table::iterator end = C->m_CBTable[context_id].end();
+        for (; it != end; ++it)
+        {
+            // ID3DxxBuffer*    pBuffer = (it->second)->GetBuffer();
+            u32 uiBufferIndex = it->first;
+            dx11ConstantBuffer& constantBuffer = *it->second;
+
+            if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferPixelShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aPixelConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+            else if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferVertexShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aVertexConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+            else if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferGeometryShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aGeometryConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+#ifdef USE_DX11
+            else if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferHullShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aHullConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+            else if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferDomainShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aDomainConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+            else if ((uiBufferIndex & CB_BufferTypeMask) == CB_BufferComputeShader)
+            {
+                VERIFY((uiBufferIndex & CB_BufferIndexMask) < MaxCBuffers);
+                m_aComputeConstants[uiBufferIndex & CB_BufferIndexMask] = it->second;
+            }
+#endif
+            else
+                VERIFY("Invalid enumeration");
+
+            if (constantBuffer.NeedsFlush())
+                constants.queue_for_flush(constantBuffer);
+        }
 
         ID3DBuffer* tempBuffer[MaxCBuffers];
 
         u32 uiMin;
         u32 uiMax;
 
-        if (UpdateConstantBuffers(m_aPixelConstants, bindings.pixel, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aPixelConstants, aPixelConstants, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -706,7 +749,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->PSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aVertexConstants, bindings.vertex, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aVertexConstants, aVertexConstants, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -720,7 +763,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->VSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aGeometryConstants, bindings.geometry, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aGeometryConstants, aGeometryConstants, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -734,7 +777,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->GSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aHullConstants, bindings.hull, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aHullConstants, aHullConstants, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -748,7 +791,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->HSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aDomainConstants, bindings.domain, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aDomainConstants, aDomainConstants, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -762,7 +805,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->DSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aComputeConstants, bindings.compute, uiMin, uiMax))
+        if (CBuffersNeedUpdate(m_aComputeConstants, aComputeConstants, uiMin, uiMax))
         {
             ++uiMax;
 

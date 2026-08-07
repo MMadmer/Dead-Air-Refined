@@ -16,20 +16,10 @@ smapvis::~smapvis()
 }
 void smapvis::invalidate()
 {
-    if (testQ_id != u32(-1))
-        RImplementation.occq_cancel(testQ_id);
-
     state = state_counting;
-    testQ_V = nullptr;
-    testQ_frame = u32(-1);
+    testQ_V = 0;
     frame_sleep = Device.dwFrame + ps_r__LightSleepFrames;
     invisible.clear();
-}
-void smapvis::begin(u32 graph_id)
-{
-    VERIFY(graph_id < R__NUM_CONTEXTS);
-    id = static_cast<int>(graph_id);
-    begin();
 }
 void smapvis::begin()
 {
@@ -42,8 +32,8 @@ void smapvis::begin()
         break;
     case state_working:
         // mark already known to be invisible visuals, set breakpoint
-        testQ_V = nullptr;
-        testQ_id = u32(-1);
+        testQ_V = 0;
+        testQ_id = 0;
         mark();
         dsgraph.set_Feedback(this, test_current);
         break;
@@ -114,8 +104,7 @@ void smapvis::flushoccq()
         test_current++;
     }
 
-    testQ_V = nullptr;
-    testQ_frame = u32(-1);
+    testQ_V = 0;
 
     if (test_current == test_count)
     {

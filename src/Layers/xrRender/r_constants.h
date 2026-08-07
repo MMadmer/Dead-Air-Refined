@@ -184,27 +184,12 @@ public:
     typedef std::pair<u32, ref_cbuffer> cb_table_record;
     typedef xr_vector<cb_table_record> cb_table;
     cb_table m_CBTable[R__NUM_CONTEXTS];
-
-    static constexpr u32 ConstantBufferCount = 14;
-
-    struct cb_binding_layout
-    {
-        dx11ConstantBuffer* pixel[ConstantBufferCount]{};
-        dx11ConstantBuffer* vertex[ConstantBufferCount]{};
-        dx11ConstantBuffer* geometry[ConstantBufferCount]{};
-        dx11ConstantBuffer* hull[ConstantBufferCount]{};
-        dx11ConstantBuffer* domain[ConstantBufferCount]{};
-        dx11ConstantBuffer* compute[ConstantBufferCount]{};
-    };
 #endif
 
 private:
     void fatal(LPCSTR s);
 
 #if defined(USE_DX11)
-    cb_binding_layout m_CBBindings[R__NUM_CONTEXTS]{};
-
-    void rebuildConstantBufferBindings();
     BOOL parseConstants(ID3DShaderReflectionConstantBuffer* pTable, u32 destination);
     BOOL parseResources(ID3DShaderReflection* pReflection, int ResNum, u32 destination);
 #endif
@@ -216,13 +201,6 @@ public:
     void clear();
     BOOL parse(void* desc, u32 destination);
     void merge(R_constant_table* C);
-#if defined(USE_DX11)
-    const cb_binding_layout& getConstantBufferBindings(u32 contextId) const
-    {
-        VERIFY(contextId < R__NUM_CONTEXTS);
-        return m_CBBindings[contextId];
-    }
-#endif
     ref_constant get(pcstr name, u16 type = u16(-1)) const; // slow search
     ref_constant get(const shared_str& name, u16 type = u16(-1)) const; // fast search
 

@@ -70,7 +70,7 @@ ref_constant R_constant_table::get(const shared_str& S, u16 type /*= u16(-1)*/) 
 /// !!!!!!!!FIX THIS FOR DX11!!!!!!!!!
 void R_constant_table::merge(R_constant_table* T)
 {
-    if (!T)
+    if (nullptr == T)
         return;
 
     if (T->dx9compatibility)
@@ -138,7 +138,6 @@ void R_constant_table::merge(R_constant_table* T)
         for (u32 i = 0; i < T->m_CBTable[id].size(); ++i)
             m_CBTable[id].push_back((T->m_CBTable[id])[i]);
     }
-    rebuildConstantBufferBindings();
 #endif
 }
 
@@ -153,39 +152,8 @@ void R_constant_table::clear()
     {
         m_CBTable[id].clear();
     }
-    rebuildConstantBufferBindings();
 #endif
 }
-
-#if defined(USE_DX11)
-void R_constant_table::rebuildConstantBufferBindings()
-{
-    for (u32 contextId = 0; contextId < R__NUM_CONTEXTS; ++contextId)
-    {
-        cb_binding_layout& bindings = m_CBBindings[contextId];
-        bindings = {};
-
-        for (const cb_table_record& record : m_CBTable[contextId])
-        {
-            const u32 index = record.first & CB_BufferIndexMask;
-            dx11ConstantBuffer* buffer = record.second._get();
-            VERIFY(index < ConstantBufferCount);
-            VERIFY(buffer);
-
-            switch (record.first & CB_BufferTypeMask)
-            {
-            case CB_BufferPixelShader: bindings.pixel[index] = buffer; break;
-            case CB_BufferVertexShader: bindings.vertex[index] = buffer; break;
-            case CB_BufferGeometryShader: bindings.geometry[index] = buffer; break;
-            case CB_BufferHullShader: bindings.hull[index] = buffer; break;
-            case CB_BufferDomainShader: bindings.domain[index] = buffer; break;
-            case CB_BufferComputeShader: bindings.compute[index] = buffer; break;
-            default: NODEFAULT;
-            }
-        }
-    }
-}
-#endif
 
 BOOL R_constant_table::equal(R_constant_table& C)
 {
