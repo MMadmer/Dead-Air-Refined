@@ -10,6 +10,8 @@
 
 #include "alife_simulator_base.h"
 
+#include <span>
+
 class NET_Packet;
 struct SaveCaptureQueue;
 struct SaveRequestQueue;
@@ -28,7 +30,9 @@ protected:
 private:
     void process_save_requests(float budget_milliseconds);
     void process_save_captures(float budget_milliseconds);
-    void load(void* buffer, const u32& buffer_size, LPCSTR file_name, u64 save_id);
+    void load(void* buffer, const u32& buffer_size, LPCSTR file_name, u64 save_id,
+        bool custom_present, std::span<const u8> custom_data,
+        bool custom_backup_present, std::span<const u8> custom_backup_data);
     std::unique_ptr<SaveCaptureQueue> m_save_captures;
     std::unique_ptr<SaveRequestQueue> m_save_requests;
 

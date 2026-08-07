@@ -74,6 +74,8 @@ enum class UpdateResult
 
 [[nodiscard]] FileSignature make_signature(std::span<const u8> contents);
 [[nodiscard]] SignatureResult read_file_signature(pcstr path, FileSignature& result);
+[[nodiscard]] LoadResult load(std::span<const u8> contents,
+    const FileSignature& actualScop, const FileSignature& actualScoc, Container& result);
 [[nodiscard]] LoadResult load(
     pcstr path, const FileSignature& actualScop, const FileSignature& actualScoc, Container& result);
 [[nodiscard]] bool build(const Binding& binding, const ChunkList& chunks, xr_vector<u8>& result);

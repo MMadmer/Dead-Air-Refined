@@ -196,15 +196,33 @@ bool native_file_exists(pcstr path)
 #endif
 }
 
+#if defined(XR_PLATFORM_WINDOWS)
+bool native_clear_read_only(pcstr path)
+{
+    const DWORD attributes = GetFileAttributesA(path);
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_READONLY))
+        return false;
+    return SetFileAttributesA(path, attributes & ~FILE_ATTRIBUTE_READONLY) != FALSE;
+}
+#endif
+
 bool native_remove_file(pcstr path)
 {
     if (!native_file_exists(path))
         return true;
 #if defined(XR_PLATFORM_WINDOWS)
-    const bool removed = DeleteFileA(path) != FALSE;
-    if (!removed)
-        capture_native_error();
-    return removed;
+    if (DeleteFileA(path))
+        return true;
+    const DWORD error = GetLastError();
+    if (error == ERROR_ACCESS_DENIED && native_clear_read_only(path))
+    {
+        if (DeleteFileA(path))
+            return true;
+        lastNativeError = GetLastError();
+        return false;
+    }
+    lastNativeError = error;
+    return false;
 #else
     return unlink(path) == 0;
 #endif
@@ -213,10 +231,19 @@ bool native_remove_file(pcstr path)
 bool native_replace_file(pcstr source, pcstr destination)
 {
 #if defined(XR_PLATFORM_WINDOWS)
-    const bool replaced = MoveFileExA(source, destination, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
-    if (!replaced)
-        capture_native_error();
-    return replaced;
+    constexpr DWORD flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    if (MoveFileExA(source, destination, flags))
+        return true;
+    const DWORD error = GetLastError();
+    if (error == ERROR_ACCESS_DENIED && native_clear_read_only(destination))
+    {
+        if (MoveFileExA(source, destination, flags))
+            return true;
+        lastNativeError = GetLastError();
+        return false;
+    }
+    lastNativeError = error;
+    return false;
 #else
     return rename(source, destination) == 0;
 #endif
@@ -353,18 +380,22 @@ bool native_write_transaction_temp(pcstr path, const void* data, size_t size)
 bool native_copy_file(pcstr source, pcstr destination)
 {
 #if defined(XR_PLATFORM_WINDOWS)
-    if (!CopyFileExA(source, destination, nullptr, nullptr, nullptr, COPY_FILE_NO_BUFFERING))
+    bool copied = CopyFileExA(source, destination, nullptr, nullptr, nullptr, COPY_FILE_NO_BUFFERING) != FALSE;
+    DWORD copyError = copied ? ERROR_SUCCESS : GetLastError();
+    if (!copied && copyError == ERROR_ACCESS_DENIED && native_clear_read_only(destination))
     {
-        const DWORD copyError = GetLastError();
-        const bool bufferingRequired = copyError == ERROR_INVALID_FUNCTION ||
-            copyError == ERROR_INVALID_PARAMETER || copyError == ERROR_NOT_SUPPORTED ||
-            copyError == ERROR_CALL_NOT_IMPLEMENTED;
-        if (!bufferingRequired || !CopyFileA(source, destination, FALSE))
-        {
-            lastNativeError = bufferingRequired ? GetLastError() : copyError;
-            return false;
-        }
+        copied = CopyFileExA(source, destination, nullptr, nullptr, nullptr, COPY_FILE_NO_BUFFERING) != FALSE;
+        copyError = copied ? ERROR_SUCCESS : GetLastError();
     }
+    const bool bufferingRequired = copyError == ERROR_INVALID_FUNCTION ||
+        copyError == ERROR_INVALID_PARAMETER || copyError == ERROR_NOT_SUPPORTED ||
+        copyError == ERROR_CALL_NOT_IMPLEMENTED;
+    if (!copied && (!bufferingRequired || !CopyFileA(source, destination, FALSE)))
+    {
+        lastNativeError = bufferingRequired ? GetLastError() : copyError;
+        return false;
+    }
+    native_clear_read_only(destination);
 #else
     std::error_code error;
     std::filesystem::copy_file(
@@ -2088,14 +2119,27 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
     return true;
 }
 
-void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR file_name, u64 save_id)
+void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR file_name, u64 save_id,
+    bool custom_present, std::span<const u8> custom_data,
+    bool custom_backup_present, std::span<const u8> custom_backup_data)
 {
     string32 saveIdText;
     xr_sprintf(saveIdText, "%016llx", static_cast<unsigned long long>(save_id));
 
     luabind::functor<void> funct;
     if (GEnv.ScriptEngine->functor("alife_storage_manager.CALifeStorageManager_load", funct))
-        funct(file_name, (pcstr)saveIdText);
+    {
+        const auto makeLuaString = [](std::span<const u8> contents)
+        {
+            if (contents.empty())
+                return luabind::string{};
+            return luabind::string(reinterpret_cast<const char*>(contents.data()), contents.size());
+        };
+        const luabind::string customData = makeLuaString(custom_data);
+        const luabind::string customBackupData = makeLuaString(custom_backup_data);
+        funct(file_name, static_cast<pcstr>(saveIdText), custom_present, customData,
+            custom_backup_present, customBackupData);
+    }
 
     IReader source(buffer, buffer_size);
     header().load(source);
@@ -2298,25 +2342,26 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     void* source_data = const_cast<u8*>(preparedSource.data);
     scopSignature = {preparedScopSize, preparedScopChecksum, true};
 
+    const auto companionContents = [](const CSavedGameWrapper::PreparedCompanion& companion)
+    {
+        return std::span<const u8>(companion.data, companion.size);
+    };
+
     SaveExtensionContainer::ChunkList loadedExtensionChunks;
     SaveExtensionContainer::FileSignature scocSignature;
     string_path customName;
     make_custom_save_name(file_name, customName);
-    const auto scocSignatureResult = SaveExtensionContainer::read_file_signature(customName, scocSignature);
-    if (scocSignatureResult == SaveExtensionContainer::SignatureResult::Error)
-    {
-        Msg("! Cannot read custom save companion '%s'", customName);
-        xr_strcpy(m_save_name, saveBackup);
-        return false;
-    }
+    if (preparedSource.custom.present)
+        scocSignature = SaveExtensionContainer::make_signature(companionContents(preparedSource.custom));
 
     string_path sidecarName;
     make_companion_save_name(file_name, SaveExtensionContainer::extension, sidecarName);
     SaveExtensionContainer::Container extensions;
-    const auto extensionResult =
-        SaveExtensionContainer::load(sidecarName, scopSignature, scocSignature, extensions);
-    if (extensionResult == SaveExtensionContainer::LoadResult::IoError ||
-        extensionResult == SaveExtensionContainer::LoadResult::Invalid)
+    const auto extensionResult = preparedSource.extensions.present ?
+        SaveExtensionContainer::load(
+            companionContents(preparedSource.extensions), scopSignature, scocSignature, extensions) :
+        SaveExtensionContainer::LoadResult::Missing;
+    if (extensionResult == SaveExtensionContainer::LoadResult::Invalid)
     {
         Msg("! Cannot load save extensions '%s'", sidecarName);
         xr_strcpy(m_save_name, saveBackup);
@@ -2342,7 +2387,9 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     const u64 effectiveSaveId = metadata.protectedFormat ||
             extensionResult != SaveExtensionContainer::LoadResult::Valid ?
         metadata.saveId : extensions.binding.saveId;
-    load(source_data, source_count, file_name, effectiveSaveId);
+    load(source_data, source_count, file_name, effectiveSaveId,
+        preparedSource.custom.present, companionContents(preparedSource.custom),
+        preparedSource.customBackup.present, companionContents(preparedSource.customBackup));
 
     groups().on_after_game_load();
 

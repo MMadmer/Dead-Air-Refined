@@ -972,15 +972,22 @@ CSavedGameWrapper::PreparedLoadResult CSavedGameWrapper::consume_prepared_load(L
     PreparedSource& source_data, SaveMetadata& metadata, u64& source_file_size, u32& source_file_checksum)
 {
     source_data = {};
-    for (u32 attempt = 0; attempt != 2; ++attempt)
+    for (u32 attempt = 0; attempt != 3; ++attempt)
     {
         std::shared_future<PreparedSavePtr> pending = request_prepared_save(saved_game_name);
         if (!pending.valid())
             continue;
 
         PreparedSavePtr prepared = pending.get();
-        if (!prepared || prepared->name != saved_game_name)
+        if (!prepared)
             continue;
+        if (prepared->name != saved_game_name)
+        {
+            evict_prepared_save(prepared->identity);
+            pending = {};
+            prepared.reset();
+            continue;
+        }
         if (prepared->status == PreparedSaveData::Status::Invalid)
             return PreparedLoadResult::Invalid;
         if (prepared->status != PreparedSaveData::Status::Ready || !prepared->source ||
@@ -992,7 +999,15 @@ CSavedGameWrapper::PreparedLoadResult CSavedGameWrapper::consume_prepared_load(L
             continue;
         }
 
+        bool compatibilityLease = false;
         SaveSnapshotPtr pathGuard = open_save_snapshot(prepared->identity.path.c_str(), true);
+        if (!pathGuard)
+        {
+            // The prepared handle still pins immutable bytes when another process blocks delete-share denial.
+            pathGuard = open_save_snapshot(prepared->identity.path.c_str(), false);
+            if (pathGuard)
+                compatibilityLease = true;
+        }
         if (!pathGuard || (!pathGuard->identity.strong && !ensure_signature(*pathGuard)) ||
             !same_identity(prepared->identity, pathGuard->identity))
         {
@@ -1002,7 +1017,7 @@ CSavedGameWrapper::PreparedLoadResult CSavedGameWrapper::consume_prepared_load(L
             continue;
         }
 
-        // Read-share-only guards keep later Windows Lua reads bound to the same save group.
+        // Handle-backed snapshots keep every later reader bound to one verified save group.
         std::array<SaveSnapshotPtr, 3> companionGuards;
         const std::array<pcstr, 3> companionExtensions{
             {".scoc", ".scoc.bak", SaveExtensionContainer::extension}};
@@ -1015,8 +1030,24 @@ CSavedGameWrapper::PreparedLoadResult CSavedGameWrapper::consume_prepared_load(L
             companionGuards[index] = open_save_snapshot(companionPath.string().c_str(), true, &missing);
             if (!companionGuards[index] && !missing)
             {
-                companionsAvailable = false;
-                break;
+                companionGuards[index] = open_save_snapshot(companionPath.string().c_str(), false);
+                if (!companionGuards[index])
+                {
+                    companionsAvailable = false;
+                    break;
+                }
+                compatibilityLease = true;
+            }
+        }
+        if (companionsAvailable)
+        {
+            for (const SaveSnapshotPtr& companion : companionGuards)
+            {
+                if (companion && companion->identity.fileSize && !companion->map())
+                {
+                    companionsAvailable = false;
+                    break;
+                }
             }
         }
         if (!companionsAvailable)
@@ -1032,11 +1063,28 @@ CSavedGameWrapper::PreparedLoadResult CSavedGameWrapper::consume_prepared_load(L
         lifetime->pathGuard = std::move(pathGuard);
         lifetime->companionGuards = std::move(companionGuards);
 
+        if (compatibilityLease)
+        {
+            Msg("! Save group '%s' is in use by another process; using verified compatibility snapshots",
+                saved_game_name);
+        }
+
         evict_prepared_save(prepared->identity);
         pending = {};
         source_data.data = prepared->source.get();
         source_data.size = prepared->metadata.sourceSize;
         source_data.path = prepared->identity.path.c_str();
+        const auto exposeCompanion = [](PreparedCompanion& destination, const SaveSnapshotPtr& snapshot)
+        {
+            if (!snapshot)
+                return;
+            destination.data = snapshot->data;
+            destination.size = static_cast<size_t>(snapshot->identity.fileSize);
+            destination.present = true;
+        };
+        exposeCompanion(source_data.custom, lifetime->companionGuards[0]);
+        exposeCompanion(source_data.customBackup, lifetime->companionGuards[1]);
+        exposeCompanion(source_data.extensions, lifetime->companionGuards[2]);
         source_data.lifetime = std::move(lifetime);
         metadata = prepared->metadata;
         source_file_size = prepared->identity.signature.size;

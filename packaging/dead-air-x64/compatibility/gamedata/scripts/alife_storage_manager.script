@@ -422,12 +422,67 @@ local function load_versioned(savegame, expected_save_id)
 	return result
 end
 
-local function load_custom_state(path, expected_save_id)
-	local savegame = io.open(path, "rb")
-	if io.type(savegame) ~= "file" then
+local function make_string_reader(contents)
+	local offset = 1
+	local length = #contents
+	local reader = {}
+
+	function reader:read(format)
+		if format == "*all" then
+			local result = contents:sub(offset)
+			offset = length + 1
+			return result
+		end
+
+		if format == "*line" then
+			if offset > length then
+				return nil
+			end
+			local line_end = contents:find("\n", offset, true)
+			local result
+			if line_end then
+				result = contents:sub(offset, line_end - 1)
+				offset = line_end + 1
+			else
+				result = contents:sub(offset)
+				offset = length + 1
+			end
+			if result:sub(-1) == "\r" then
+				result = result:sub(1, -2)
+			end
+			return result
+		end
+
+		if type(format) ~= "number" or format < 0 or offset > length then
+			return nil
+		end
+		local result = contents:sub(offset, offset + format - 1)
+		offset = offset + #result
+		return result
+	end
+
+	function reader:seek(whence, position)
+		whence = whence or "cur"
+		position = position or 0
+		local base = whence == "set" and 0 or whence == "cur" and offset - 1 or
+			whence == "end" and length or nil
+		local target = base and base + position or nil
+		if not target or target < 0 or target > length then
+			return nil
+		end
+		offset = target + 1
+		return target
+	end
+
+	return reader
+end
+
+local function load_custom_state_data(contents, expected_save_id)
+	if type(contents) ~= "string" then
 		return nil
 	end
 
+	local savegame = make_string_reader(contents)
 	local magic = savegame:read("*line")
 	local result
 	if magic == format_magic then
@@ -435,19 +490,39 @@ local function load_custom_state(path, expected_save_id)
 	else
 		result = load_legacy(savegame)
 	end
-	savegame:close()
 	return result
 end
 
-function CALifeStorageManager_load(fname, save_id)
+local function load_custom_state(path, expected_save_id)
+	local savegame = io.open(path, "rb")
+	if io.type(savegame) ~= "file" then
+		return nil
+	end
+
+	local contents = savegame:read("*all")
+	savegame:close()
+	return load_custom_state_data(contents, expected_save_id)
+end
+
+function CALifeStorageManager_load(fname, save_id, custom_present, custom_data, backup_present, backup_data)
 	if not USE_MARSHAL then
 		return
 	end
 
 	local path = fname:sub(1, -6) .. ".scoc"
-	local loaded = load_custom_state(path, save_id)
-	if not loaded then
-		loaded = load_custom_state(path .. ".bak", save_id)
+	local loaded
+	if custom_present ~= nil then
+		if custom_present then
+			loaded = load_custom_state_data(custom_data, save_id)
+		end
+		if not loaded and backup_present then
+			loaded = load_custom_state_data(backup_data, save_id)
+		end
+	else
+		loaded = load_custom_state(path, save_id)
+		if not loaded then
+			loaded = load_custom_state(path .. ".bak", save_id)
+		end
 	end
 
 	if type(loaded) ~= "table" then

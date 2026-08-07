@@ -259,7 +259,7 @@ SignatureResult read_file_signature(pcstr path, FileSignature& result)
 {
     result = {};
 #if defined(XR_PLATFORM_WINDOWS)
-    const HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+    const HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (file == INVALID_HANDLE_VALUE)
     {
@@ -334,41 +334,17 @@ SignatureResult read_file_signature(pcstr path, FileSignature& result)
 #endif
 }
 
-LoadResult load(pcstr path, const FileSignature& actualScop, const FileSignature& actualScoc, Container& result)
+LoadResult load(std::span<const u8> contents,
+    const FileSignature& actualScop, const FileSignature& actualScoc, Container& result)
 {
     result = {};
-    IReader* stream = FS.r_open(path);
-    if (!stream)
-    {
-#if defined(XR_PLATFORM_WINDOWS)
-        const DWORD attributes = GetFileAttributesA(path);
-        if (attributes == INVALID_FILE_ATTRIBUTES)
-        {
-            const DWORD error = GetLastError();
-            if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
-                return LoadResult::Missing;
-        }
-#else
-        if (access(path, F_OK) != 0 && errno == ENOENT)
-            return LoadResult::Missing;
-#endif
-        return LoadResult::IoError;
-    }
-
-    const size_t size = stream->length();
+    const size_t size = contents.size();
     if (size < legacyHeaderSize || size > maxContainerSize)
-    {
-        FS.r_close(stream);
         return LoadResult::Invalid;
-    }
 
-    const std::span<const u8> contents(static_cast<const u8*>(stream->pointer()), size);
     u32 version = 0;
     if (!parse_legacy_binding(contents, result.binding, version))
-    {
-        FS.r_close(stream);
         return LoadResult::Invalid;
-    }
 
     LoadResult parsed = LoadResult::Invalid;
     if (version == legacyVersion && size == legacyHeaderSize)
@@ -381,13 +357,61 @@ LoadResult load(pcstr path, const FileSignature& actualScop, const FileSignature
     if (parsed == LoadResult::Valid && !binding_matches(result.binding, actualScop, actualScoc))
         parsed = LoadResult::SignatureMismatch;
 
-    FS.r_close(stream);
     if (parsed != LoadResult::Valid)
     {
         result.chunks.clear();
         result.skippedChunks = 0;
     }
     return parsed;
+}
+
+LoadResult load(pcstr path, const FileSignature& actualScop, const FileSignature& actualScoc, Container& result)
+{
+    result = {};
+#if defined(XR_PLATFORM_WINDOWS)
+    const HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        const DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ?
+            LoadResult::Missing : LoadResult::IoError;
+    }
+
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(file, &fileSize) || fileSize.QuadPart < 0 ||
+        static_cast<u64>(fileSize.QuadPart) > maxContainerSize)
+    {
+        CloseHandle(file);
+        return LoadResult::Invalid;
+    }
+
+    xr_vector<u8> contents(static_cast<size_t>(fileSize.QuadPart));
+    size_t offset = 0;
+    while (offset != contents.size())
+    {
+        const DWORD requested = static_cast<DWORD>(std::min<size_t>(
+            contents.size() - offset, std::numeric_limits<DWORD>::max()));
+        DWORD bytesRead = 0;
+        if (!ReadFile(file, contents.data() + offset, requested, &bytesRead, nullptr) || bytesRead != requested)
+        {
+            CloseHandle(file);
+            return LoadResult::IoError;
+        }
+        offset += bytesRead;
+    }
+    CloseHandle(file);
+    return load(std::span<const u8>(contents.data(), contents.size()), actualScop, actualScoc, result);
+#else
+    IReader* stream = FS.r_open(path);
+    if (!stream)
+        return access(path, F_OK) != 0 && errno == ENOENT ? LoadResult::Missing : LoadResult::IoError;
+
+    const std::span<const u8> contents(static_cast<const u8*>(stream->pointer()), stream->length());
+    const LoadResult loaded = load(contents, actualScop, actualScoc, result);
+    FS.r_close(stream);
+    return loaded;
+#endif
 }
 
 bool build(const Binding& binding, const ChunkList& chunks, xr_vector<u8>& result)

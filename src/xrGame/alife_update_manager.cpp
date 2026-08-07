@@ -204,17 +204,30 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
         holder->o_Angle = graph().actor()->o_Angle;
     }
 
-    string256 autoave_name;
-    strconcat(sizeof(autoave_name), autoave_name, Core.UserName, " - ", "autosave");
+    string256 autosaveName;
+    strconcat(sizeof(autosaveName), autosaveName, Core.UserName, " - ", "autosave");
     const xr_string originalServerCommandLine = m_server_command_line->c_str();
+    string_path originalSaveName;
+    xr_strcpy(originalSaveName, m_save_name);
     LPCSTR temp0 = strchr(m_server_command_line->c_str(), '/');
     VERIFY(temp0);
-    string256 temp;
-    *m_server_command_line = strconcat(sizeof(temp), temp, autoave_name, temp0);
+    const xr_string serverOptions = temp0;
+    const auto saveTransition = [&](pcstr saveName)
+    {
+        string256 commandLine;
+        *m_server_command_line = strconcat(sizeof(commandLine), commandLine, saveName, serverOptions.c_str());
+        return save(saveName) && CALifeStorageManager::wait_for_pending_saves();
+    };
 
-    const bool saveQueued = save(autoave_name);
     // The transition snapshot must capture the temporary destination state before it is restored.
-    const bool saveSucceeded = saveQueued && CALifeStorageManager::wait_for_pending_saves();
+    bool saveSucceeded = saveTransition(autosaveName);
+    if (!saveSucceeded)
+    {
+        string256 recoveryName;
+        xr_sprintf(recoveryName, "%s - autosave-%08x", Core.UserName, Device.dwTimeContinual);
+        Msg("! Retrying the level-transition snapshot under '%s'", recoveryName);
+        saveSucceeded = saveTransition(recoveryName);
+    }
 
     graph().actor()->m_tGraphID = safe_graph_vertex_id;
     graph().actor()->m_tNodeID = safe_level_vertex_id;
@@ -234,7 +247,8 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
     if (!saveSucceeded)
     {
         *m_server_command_line = originalServerCommandLine.c_str();
-        m_changing_level = false;
+        xr_strcpy(m_save_name, originalSaveName);
+        // Keep the transition latched so an automatic changer cannot retry the failed save every frame.
         Msg("! Level transition cancelled because its autosave could not be committed");
         return false;
     }

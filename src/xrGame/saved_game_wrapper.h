@@ -28,11 +28,21 @@ public:
         bool protectedFormat{};
     };
 
+    struct PreparedCompanion
+    {
+        const u8* data{};
+        size_t size{};
+        bool present{};
+    };
+
     struct PreparedSource
     {
         const u8* data{};
         size_t size{};
         pcstr path{};
+        PreparedCompanion custom;
+        PreparedCompanion customBackup;
+        PreparedCompanion extensions;
         std::shared_ptr<const void> lifetime;
 
         explicit operator bool() const { return data && size && path && lifetime; }

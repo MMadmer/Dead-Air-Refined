@@ -186,11 +186,22 @@ complete CRC-32 to match. A legacy `.sav` name is considered only when `.scop`
 is physically missing; access, sharing, and identity failures never trigger a
 fallback to another file.
 
-On Windows, the final load lease prevents replacement of the selected `.scop`
-and every existing `.scoc`, `.scoc.bak`, and `.scov` companion until the native
-and Lua load callbacks finish. The decompressed source is shared directly with
-the ALife reader for that lifetime. Existing public vector-based helpers remain
-available and copy the source before releasing the same lease.
+On Windows, the final load lease normally prevents replacement of the selected
+`.scop` and every existing `.scoc`, `.scoc.bak`, and `.scov` companion until the
+native and Lua load callbacks finish. If another process already has a
+delete-capable handle that makes the strict lease incompatible, loading retains
+verified handle-backed compatibility snapshots instead of treating the valid
+save as missing. The decompressed source and mapped companion bytes are shared
+directly with the native and Lua readers for that lifetime, so `.scoc`,
+`.scoc.bak`, and `.scov` cannot drift away from the verified group. Existing
+public vector-based helpers remain available and copy the source before
+releasing the same lease.
+
+Engine-managed transaction targets and backups are made writable when an
+existing save group carries the Windows read-only attribute. A level transition
+whose conventional autosave still cannot be committed retries once with a
+unique destination name. If both commits fail, the transition remains latched
+instead of submitting the same failing save every frame.
 
 A validated protected `.scop` footer is the authority for the transaction save
 ID used by the versioned `DAX64SC2` Lua companion. An unprotected original
