@@ -48,8 +48,15 @@ end
 
 function on_game_start()
 	local loot_class = ui_mutant_loot and ui_mutant_loot.loot_ui
-	local fill_list = loot_class and rawget(loot_class, "FillList")
-	local take_all = loot_class and rawget(loot_class, "OnButton_ok_all")
+	local function get_class_member(class, name)
+		local ok, value = pcall(function()
+			return class[name]
+		end)
+		return ok and value or nil
+	end
+
+	local fill_list = loot_class and get_class_member(loot_class, "FillList")
+	local take_all = loot_class and get_class_member(loot_class, "OnButton_ok_all")
 	if patched or not fill_list or not take_all then
 		return
 	end
