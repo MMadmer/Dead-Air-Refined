@@ -48,12 +48,14 @@ end
 
 function on_game_start()
 	local loot_class = ui_mutant_loot and ui_mutant_loot.loot_ui
-	if patched or not loot_class or not loot_class.FillList or not loot_class.OnButton_ok_all then
+	local fill_list = loot_class and rawget(loot_class, "FillList")
+	local take_all = loot_class and rawget(loot_class, "OnButton_ok_all")
+	if patched or not fill_list or not take_all then
 		return
 	end
 
-	original_fill_list = loot_class.FillList
-	original_take_all = loot_class.OnButton_ok_all
+	original_fill_list = fill_list
+	original_take_all = take_all
 	loot_class.FillList = fill_mutant_loot
 	loot_class.OnButton_ok_all = take_all_mutant_loot
 	patched = true

@@ -379,8 +379,12 @@ CInifile::~CInifile()
     if (!m_flags.test(eReadOnly) && m_flags.test(eSaveAtEnd) && !save_as())
         Log("!Can't save inifile:", m_file_name);
 
+    xr_set<Sect*> releasedSections;
     for (auto* val : DATA)
     {
+        // A malformed legacy INI can expose the same owned section more than once.
+        if (!val || !releasedSections.insert(val).second)
+            continue;
         xr_delete(val);
     }
 }

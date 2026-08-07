@@ -77,8 +77,14 @@ bool CPatrolPathParams::flag(u32 index, u8 flag_index) const
 
 Flags32 CPatrolPathParams::flags(u32 index) const
 {
-    VERIFY(m_path->vertex(index));
-    return (Flags32().assign(m_path->vertex(index)->data().flags()));
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't get flags for patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return {};
+    }
+    return Flags32().assign(vertex->data().flags());
 }
 
 LPCSTR CPatrolPathParams::name(u32 index) const
