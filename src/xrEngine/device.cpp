@@ -441,6 +441,10 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
             {
                 UpdateWindowRects();
 
+                // Exclusive mode changes are already applied through Reset; ignore stale SDL window sizes.
+                if (psDeviceMode.WindowStyle == rsFullscreen)
+                    break;
+
                 if (static_cast<int>(psDeviceMode.Width) == event.window.data1 &&
                     static_cast<int>(psDeviceMode.Height) == event.window.data2)
                     break; // we don't need to reset device if resolution wasn't really changed

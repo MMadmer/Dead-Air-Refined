@@ -156,6 +156,7 @@ void CRenderDevice::UpdateWindowProps()
         SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
         SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
         SDL_SetWindowBordered(m_sdlWnd, SDL_FALSE);
+        SDL_SetWindowSize(m_sdlWnd, psDeviceMode.Width, psDeviceMode.Height);
 
         SDL_DisplayMode mode;
         SDL_GetWindowDisplayMode(m_sdlWnd, &mode);
