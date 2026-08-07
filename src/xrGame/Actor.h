@@ -30,6 +30,8 @@ class CGameTaskRegistryWrapper;
 class CGameNewsRegistryWrapper;
 class CCharacterPhysicsSupport;
 class CActorCameraManager;
+
+void ConfigureActorCameraYawRotation(float speedDegreesPerSecond, float durationSeconds);
 // refs
 class ENGINE_API CCameraBase;
 class ENGINE_API CBoneInstance;

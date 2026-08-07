@@ -1,6 +1,19 @@
 local original_fill_list
 local original_take_all
+local original_send_script_callback = SendScriptCallback
 local patched = false
+
+function SendScriptCallback(name, ...)
+	if name == "physic_object_on_use_callback" then
+		local object, initiator = ...
+		if type(initiator) == "number" then
+			initiator = level.object_by_id(initiator)
+		end
+		return original_send_script_callback(name, object, initiator)
+	end
+
+	return original_send_script_callback(name, ...)
+end
 
 local function save_empty_mutant_loot(self)
 	self.loot = {}

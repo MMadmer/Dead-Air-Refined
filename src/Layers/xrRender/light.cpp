@@ -34,8 +34,11 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
     s_spot = nullptr;
     s_point = nullptr;
     vis.frame2test = 0; // xffffffff;
-    vis.query_id = 0;
+    vis.query_id = u32(-1);
     vis.query_order = 0;
+    vis.query_frame = 0;
+    vis.query_camera_position.set(0.f, 0.f, 0.f);
+    vis.query_camera_direction.set(0.f, 0.f, 1.f);
     vis.visible = true;
     vis.pending = false;
     for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
@@ -127,6 +130,15 @@ void light::set_active(bool a)
     }
     else
     {
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+        if (vis.pending)
+        {
+            RImplementation.occq_cancel(vis.query_id);
+            vis.pending = false;
+            vis.visible = true;
+            vis.frame2test = 0;
+        }
+#endif
         if (!flags.bActive)
             return;
         flags.bActive = false;
@@ -173,6 +185,14 @@ void light::set_rotation(const Fvector& D, const Fvector& R)
 
 void light::spatial_move()
 {
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+    if (vis.pending)
+        RImplementation.occq_cancel(vis.query_id);
+    vis.pending = false;
+    vis.visible = true;
+    vis.frame2test = 0;
+#endif
+
     switch (flags.type)
     {
     case IRender_Light::REFLECTED:

@@ -26,6 +26,41 @@
 #include "IKLimbsController.h"
 #include "GamePersistent.h"
 
+namespace
+{
+struct CameraYawRotationState
+{
+    float speed{};
+    float remaining{-1.f};
+    bool active{};
+};
+
+CameraYawRotationState cameraYawRotation;
+
+float ConsumeCameraYawRotation(float dt)
+{
+    if (!cameraYawRotation.active)
+        return 0.f;
+
+    const float step = cameraYawRotation.remaining < 0.f ? dt : std::min(dt, cameraYawRotation.remaining);
+    if (cameraYawRotation.remaining >= 0.f)
+    {
+        cameraYawRotation.remaining -= step;
+        if (cameraYawRotation.remaining <= EPS_S)
+            cameraYawRotation.active = false;
+    }
+
+    return deg2rad(cameraYawRotation.speed) * step;
+}
+}
+
+void ConfigureActorCameraYawRotation(float speedDegreesPerSecond, float durationSeconds)
+{
+    cameraYawRotation.speed = speedDegreesPerSecond;
+    cameraYawRotation.remaining = durationSeconds;
+    cameraYawRotation.active = !fis_zero(speedDegreesPerSecond) && (durationSeconds < 0.f || durationSeconds > EPS_S);
+}
+
 void CActor::cam_Set(EActorCameras style)
 {
     CCameraBase* old_cam = cam_Active();
@@ -285,6 +320,9 @@ void CActor::cam_Update(float dt, float fFOV)
         return;
 
     ZoneScoped;
+
+    if (this == Level().CurrentViewEntity())
+        cam_Active()->yaw = angle_normalize_signed(cam_Active()->yaw + ConsumeCameraYawRotation(dt));
 
     if (this == Level().CurrentViewEntity())
     {

@@ -81,6 +81,7 @@ void CBackend::Invalidate()
     cs = 0;
 #endif
     ctable = nullptr;
+    lmaterial_base_constant = nullptr;
 
     T = nullptr;
     M = nullptr;
@@ -576,7 +577,7 @@ void CBackend::OnDeviceDestroy()
 
 void CBackend::apply_lmaterial()
 {
-    R_constant* C = get_c(c_sbase)._get(); // get sampler
+    R_constant* C = lmaterial_base_constant;
     if (!C)
         return;
 

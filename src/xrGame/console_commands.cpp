@@ -2227,6 +2227,32 @@ public:
     }
 };
 
+class CCC_CameraYawRotate final : public IConsole_Command
+{
+public:
+    explicit CCC_CameraYawRotate(LPCSTR name) : IConsole_Command(name) {}
+
+    void Execute(LPCSTR args) override
+    {
+        float speed{};
+        float duration{-1.f};
+        const int parsed = sscanf(args, "%f %f", &speed, &duration);
+        if (parsed < 1 || (parsed > 1 && duration < 0.f && !fsimilar(duration, -1.f)))
+        {
+            Msg("! Usage: %s <degrees_per_second> [duration_seconds], duration -1 means continuous", cName);
+            return;
+        }
+
+        ConfigureActorCameraYawRotation(speed, duration);
+        Msg("* %s: speed=%.3f deg/s, duration=%.3f s", cName, speed, duration);
+    }
+
+    void Info(TInfo& info) override
+    {
+        xr_strcpy(info, "speed_deg_per_second [duration_seconds=-1]");
+    }
+};
+
 void CCC_RegisterCommands()
 {
     ZoneScoped;
@@ -2257,6 +2283,7 @@ void CCC_RegisterCommands()
     CMD2(CCC_ALifeSave, "save_silent", false); // save game without UI messages
     CMD1(CCC_ALifeLoadFrom, "load"); // load game from ...
     CMD1(CCC_LoadLastSave, "load_last_save"); // load last saved game from ...
+    CMD1(CCC_CameraYawRotate, "cam_yaw_rotate");
 
     CMD1(CCC_FlushLog, "flush"); // flush log
     CMD1(CCC_ClearLog, "clear_log");
