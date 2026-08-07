@@ -160,6 +160,50 @@
             <options_item entry="r__unload_level_textures" group="mm_opt_video"/>
         </check_level_texture_unload>
 
+        <cap_color_correction x="15" y="303" width="108" height="18">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_color_correction</text>
+        </cap_color_correction>
+
+        <cap_color_r x="15" y="323" width="108" height="18">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_color_r</text>
+        </cap_color_r>
+        <track_color_r x="143" y="325" width="188" height="16" step="0.01">
+            <options_item entry="r__color_base_r" group="mm_opt_video" depend="runtime"/>
+        </track_color_r>
+        <cap_color_r_val x="335" y="326">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+        </cap_color_r_val>
+
+        <cap_color_g x="15" y="343" width="108" height="18">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_color_g</text>
+        </cap_color_g>
+        <track_color_g x="143" y="345" width="188" height="16" step="0.01">
+            <options_item entry="r__color_base_g" group="mm_opt_video" depend="runtime"/>
+        </track_color_g>
+        <cap_color_g_val x="335" y="346">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+        </cap_color_g_val>
+
+        <cap_color_b x="15" y="363" width="108" height="18">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_color_b</text>
+        </cap_color_b>
+        <track_color_b x="143" y="365" width="188" height="16" step="0.01">
+            <options_item entry="r__color_base_b" group="mm_opt_video" depend="runtime"/>
+        </track_color_b>
+        <cap_color_b_val x="335" y="366">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+        </cap_color_b_val>
+
+        <cap_vibrance x="15" y="383" width="108" height="18">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_vibrance</text>
+        </cap_vibrance>
+        <track_vibrance_val x="143" y="385" width="188" height="16" step="0.1">
+            <options_item entry="r2_vibrance_val" group="mm_opt_video" depend="runtime"/>
+        </track_vibrance_val>
+        <cap_vibrance_val x="335" y="386">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+        </cap_vibrance_val>
+
         <btn_advanced x="338" y="299" width="86" height="24" stretch="1">
             <text r="170" g="170" b="170" align="c" font="letterica16">ui_mm_advanced</text>
             <texture>ui_inGame2_button</texture>

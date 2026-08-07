@@ -151,7 +151,7 @@ void CRenderDevice::UpdateWindowProps()
             SDL_SetWindowPosition(m_sdlWnd, SDL_WINDOWPOS_CENTERED_DISPLAY(psDeviceMode.Monitor),
                 SDL_WINDOWPOS_CENTERED_DISPLAY(psDeviceMode.Monitor));
     }
-    else if (b_is_Ready)
+    else
     {
         SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
         SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
