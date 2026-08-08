@@ -32,6 +32,17 @@ function Get-FileHashValue {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Get-ManifestEntries {
+    param($Entries)
+
+    # Packages built before the database section simply omit it.
+    if (-not $Entries) {
+        return ,@()
+    }
+
+    return @($Entries)
+}
+
 function Test-Amd64Pe {
     param([string]$Path)
 
@@ -57,6 +68,8 @@ function Test-Amd64Pe {
 
 $root = Resolve-GameRoot $GameRoot
 $runtimeRoot = Join-Path $PSScriptRoot "runtime"
+$databaseSourceRoot = Join-Path $PSScriptRoot "database"
+$databaseRoot = Join-Path $root "database"
 $packageManifestPath = Join-Path $PSScriptRoot "package-manifest.json"
 $controlRoot = Join-Path $root ".dead-air-x64"
 $statePath = Join-Path $controlRoot "install-state.json"
@@ -85,15 +98,20 @@ if ($runningEngine) {
 }
 
 $packageManifest = Get-Content -LiteralPath $packageManifestPath -Raw | ConvertFrom-Json
+$runtimeEntries = Get-ManifestEntries $packageManifest.Files
+$databaseEntries = Get-ManifestEntries $packageManifest.DatabaseFiles
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $backupDirectory = Join-Path $controlRoot "backup-$timestamp"
+$databaseBackupDirectory = Join-Path $backupDirectory "database"
 $records = [Collections.Generic.List[object]]::new()
+$databaseRecords = [Collections.Generic.List[object]]::new()
 $installedFiles = [Collections.Generic.List[string]]::new()
+$installedDatabaseFiles = [Collections.Generic.List[string]]::new()
 
 New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
 
 try {
-    foreach ($file in $packageManifest.Files) {
+    foreach ($file in $runtimeEntries) {
         $source = Join-Path $runtimeRoot $file.Name
         $destination = Join-Path $root $file.Name
 
@@ -122,7 +140,34 @@ try {
         })
     }
 
-    foreach ($file in $packageManifest.Files) {
+    foreach ($file in $databaseEntries) {
+        $source = Join-Path $databaseSourceRoot $file.Name
+        $destination = Join-Path $databaseRoot $file.Name
+
+        if (-not (Test-Path -LiteralPath $source)) {
+            throw "Missing database file: $($file.Name)"
+        }
+        if ((Get-FileHashValue $source) -ne $file.Sha256) {
+            throw "Package hash mismatch: database\$($file.Name)"
+        }
+
+        $hadOriginal = Test-Path -LiteralPath $destination
+        $originalHash = $null
+        if ($hadOriginal) {
+            $originalHash = Get-FileHashValue $destination
+            New-Item -ItemType Directory -Path $databaseBackupDirectory -Force | Out-Null
+            Copy-Item -LiteralPath $destination -Destination (Join-Path $databaseBackupDirectory $file.Name) -Force
+        }
+
+        $databaseRecords.Add([pscustomobject]@{
+            Name = $file.Name
+            HadOriginal = $hadOriginal
+            OriginalSha256 = $originalHash
+            InstalledSha256 = $file.Sha256
+        })
+    }
+
+    foreach ($file in $runtimeEntries) {
         $source = Join-Path $runtimeRoot $file.Name
         $destination = Join-Path $root $file.Name
         Copy-Item -LiteralPath $source -Destination $destination -Force
@@ -132,15 +177,36 @@ try {
         }
     }
 
+    foreach ($file in $databaseEntries) {
+        $source = Join-Path $databaseSourceRoot $file.Name
+        $destination = Join-Path $databaseRoot $file.Name
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+        $installedDatabaseFiles.Add($destination)
+        if ((Get-FileHashValue $destination) -ne $file.Sha256) {
+            throw "Installed file verification failed: database\$($file.Name)"
+        }
+    }
+
     $state = [pscustomobject]@{
         Version = $packageManifest.Version
         InstalledAt = (Get-Date).ToString("o")
         BackupDirectory = $backupDirectory
         Files = $records
+        DatabaseFiles = $databaseRecords
     }
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
 catch {
+    foreach ($record in $databaseRecords) {
+        $destination = Join-Path $databaseRoot $record.Name
+        $backup = Join-Path $databaseBackupDirectory $record.Name
+        if ($record.HadOriginal -and (Test-Path -LiteralPath $backup)) {
+            Copy-Item -LiteralPath $backup -Destination $destination -Force
+        }
+        elseif ($installedDatabaseFiles.Contains($destination) -and (Test-Path -LiteralPath $destination)) {
+            Remove-Item -LiteralPath $destination -Force
+        }
+    }
     foreach ($record in $records) {
         $destination = Join-Path $root $record.Name
         $backup = Join-Path $backupDirectory $record.Name
@@ -156,5 +222,8 @@ catch {
 
 Write-Host "Dead Air x64 $($packageManifest.Version) installed successfully."
 Write-Host "Game root: $root"
-Write-Host "Content, saves, gamedata, database, MODS and JSGME state were not changed."
+foreach ($record in $databaseRecords) {
+    Write-Host "Database archive installed: $($record.Name)"
+}
+Write-Host "Saves, gamedata, MODS, JSGME state and other database archives were not changed."
 

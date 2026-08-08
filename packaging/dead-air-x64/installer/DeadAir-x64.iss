@@ -393,6 +393,44 @@ begin
   AppendUniqueString(ManagedFiles, '.dead-air-x64\maintenance-small.png');
 end;
 
+// Files the previous version installed that the incoming one no longer ships (for example
+// xrRender_GL.dll after the OpenGL renderer was dropped). Without this they would stay in the
+// game folder forever: the new managed list does not mention them, so neither the upgrade nor a
+// later uninstall would ever touch them again. A file that replaced an original x86 one is
+// restored from the backup instead of being deleted.
+procedure RemoveObsoleteManagedFiles(DirectoryName: String);
+var
+  PreviousManagedFiles: TArrayOfString;
+  OriginalFiles: TArrayOfString;
+  Index: Integer;
+  FileName: String;
+  TargetPath: String;
+  BackupPath: String;
+begin
+  SetArrayLength(PreviousManagedFiles, 0);
+  if not LoadManagedFilesFromControl(DirectoryName, PreviousManagedFiles) then
+    exit;
+
+  SetArrayLength(OriginalFiles, 0);
+  LoadStringsFromFile(
+    AddBackslash(DirectoryName) + '.dead-air-x64\original-files.txt',
+    OriginalFiles);
+
+  for Index := 0 to GetArrayLength(PreviousManagedFiles) - 1 do
+  begin
+    FileName := Trim(PreviousManagedFiles[Index]);
+    if (FileName = '') or StringArrayContains(ManagedFiles, FileName) then
+      continue;
+
+    TargetPath := AddBackslash(DirectoryName) + FileName;
+    BackupPath := AddBackslash(DirectoryName) + '.dead-air-x64\backup-x86\' + FileName;
+    if StringArrayContains(OriginalFiles, FileName) and FileExists(BackupPath) then
+      CopyFile(BackupPath, TargetPath, False)
+    else if FileExists(TargetPath) then
+      DeleteFile(TargetPath);
+  end;
+end;
+
 function CurrentVersionName(DirectoryName: String): String;
 var
   StoredVersion: AnsiString;
@@ -632,6 +670,11 @@ begin
     Result := 'Не удалось записать режим установки.';
     exit;
   end;
+
+  // Runs before the new list is written: it needs the previous composition to tell what was
+  // dropped. The upgrade backup above already captured the union of both lists, so a rollback
+  // still restores whatever is removed here.
+  RemoveObsoleteManagedFiles(WizardDirValue);
 
   if not SaveStringsToFile(
     AddBackslash(ControlDirectory) + 'managed-files.txt',

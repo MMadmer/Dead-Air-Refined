@@ -32,11 +32,26 @@ function Get-FileHashValue {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Get-StateEntries {
+    param($Entries)
+
+    # Install states written before the database section simply omit it.
+    if (-not $Entries) {
+        return ,@()
+    }
+
+    return @($Entries)
+}
+
 $root = Resolve-GameRoot $GameRoot
 $controlRoot = [IO.Path]::GetFullPath((Join-Path $root ".dead-air-x64"))
 $statePath = Join-Path $controlRoot "install-state.json"
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 $backupDirectory = [IO.Path]::GetFullPath($state.BackupDirectory)
+$databaseRoot = Join-Path $root "database"
+$databaseBackupDirectory = Join-Path $backupDirectory "database"
+$runtimeRecords = Get-StateEntries $state.Files
+$databaseRecords = Get-StateEntries $state.DatabaseFiles
 
 if (-not $backupDirectory.StartsWith(
         $controlRoot + [IO.Path]::DirectorySeparatorChar,
@@ -60,22 +75,44 @@ if ($runningEngine) {
 }
 
 if (-not $Force) {
-    foreach ($record in $state.Files) {
+    foreach ($record in $runtimeRecords) {
         $destination = Join-Path $root $record.Name
         if ((Test-Path -LiteralPath $destination) -and
             (Get-FileHashValue $destination) -ne $record.InstalledSha256) {
             throw "Runtime file was modified after installation: $($record.Name). Use -Force to restore anyway."
         }
     }
+    foreach ($record in $databaseRecords) {
+        $destination = Join-Path $databaseRoot $record.Name
+        if ((Test-Path -LiteralPath $destination) -and
+            (Get-FileHashValue $destination) -ne $record.InstalledSha256) {
+            throw "Database file was modified after installation: $($record.Name). Use -Force to restore anyway."
+        }
+    }
 }
 
-foreach ($record in $state.Files) {
+foreach ($record in $runtimeRecords) {
     $destination = Join-Path $root $record.Name
     $backup = Join-Path $backupDirectory $record.Name
 
     if ($record.HadOriginal) {
         if (-not (Test-Path -LiteralPath $backup)) {
             throw "Original runtime backup is missing: $($record.Name)"
+        }
+        Copy-Item -LiteralPath $backup -Destination $destination -Force
+    }
+    elseif (Test-Path -LiteralPath $destination) {
+        Remove-Item -LiteralPath $destination -Force
+    }
+}
+
+foreach ($record in $databaseRecords) {
+    $destination = Join-Path $databaseRoot $record.Name
+    $backup = Join-Path $databaseBackupDirectory $record.Name
+
+    if ($record.HadOriginal) {
+        if (-not (Test-Path -LiteralPath $backup)) {
+            throw "Original database backup is missing: $($record.Name)"
         }
         Copy-Item -LiteralPath $backup -Destination $destination -Force
     }
@@ -91,5 +128,8 @@ if (-not (Get-ChildItem -LiteralPath $controlRoot -Force)) {
 }
 
 Write-Host "Dead Air x64 was removed and the original x86 runtime was restored."
-Write-Host "Content, saves, gamedata, database, MODS and JSGME state were not changed."
+foreach ($record in $databaseRecords) {
+    Write-Host "Database archive reverted: $($record.Name)"
+}
+Write-Host "Saves, gamedata, MODS, JSGME state and other database archives were not changed."
 
