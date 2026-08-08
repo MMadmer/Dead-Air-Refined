@@ -25,7 +25,8 @@ ENGINE_API bool g_bRendering = false;
 ENGINE_API bool g_bBenchmark = false;
 string512 g_sBenchmarkName;
 
-int ps_fps_limit = 501;
+// 0 means no limit at all, which is what the "off" position of the FPS lock option selects.
+int ps_fps_limit = 0;
 // Retained for existing user.ltx files; frame pacing uses the global limit in every game state.
 int ps_fps_limit_in_menu = 60;
 extern int g_pause_in_background;
@@ -371,11 +372,15 @@ void CRenderDevice::ProcessFrame()
 
     const int configuredLimit = GEnv.isDedicatedServer ? g_svDedicateServerUpdateReate : ps_fps_limit;
 
-    // Preserve sub-millisecond frame intervals instead of truncating 1000 / FPS.
-    const int frameLimit = std::max(configuredLimit, 1);
-    const auto frameDuration = std::chrono::duration_cast<CTimerBase::Clock::duration>(
-        std::chrono::duration<double>(1.0 / frameLimit));
-    std::this_thread::sleep_until(frameStartTime + frameDuration);
+    // Zero disables frame pacing entirely; the limiter used to clamp to 1 fps minimum, so an
+    // "unlimited" setting still slept for its own frame budget every frame.
+    if (configuredLimit > 0)
+    {
+        // Preserve sub-millisecond frame intervals instead of truncating 1000 / FPS.
+        const auto frameDuration = std::chrono::duration_cast<CTimerBase::Clock::duration>(
+            std::chrono::duration<double>(1.0 / configuredLimit));
+        std::this_thread::sleep_until(frameStartTime + frameDuration);
+    }
 
     if (!b_is_Active)
         Sleep(1);

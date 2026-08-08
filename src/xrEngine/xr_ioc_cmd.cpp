@@ -774,7 +774,9 @@ public:
             return;
         }
 
-        ps_fps_limit = compatibilityValue ? static_cast<int>(compatibilityValue) : 501;
+        // "off" means no limit; it used to select 501 fps, so the option never actually
+        // turned frame pacing off.
+        ps_fps_limit = compatibilityValue ? static_cast<int>(compatibilityValue) : 0;
     }
 
     void GetStatus(TStatus& status) override
@@ -843,7 +845,7 @@ void CCC_Register()
 
     CMD1(CCC_Editor, "rs_editor");
 
-    CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 30, 501);
+    CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 0, 501); // 0 = unlimited
     CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
     CMD4(CCC_Integer, "g_pause_in_background", &g_pause_in_background, 0, 1);
     CMD1(CCC_VidFpsLock, "vid_fps_lock");
