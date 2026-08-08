@@ -595,7 +595,14 @@ void CCharacterPhysicsSupport::in_UpdateCL()
     else if (ik_controller())
     {
         update_interactive_anims();
-        ik_controller()->Update();
+
+        // foot-to-terrain probing is invisible beyond ph_ik_dist meters and is the
+        // expensive part of NPC physics; heavy bone posing already hangs on the visual
+        // callback and stays render-driven; the actor is never gated (free cameras)
+        extern float g_ph_ik_dist;
+        const bool collide_limbs = m_eType == etActor || g_ph_ik_dist <= 0.f ||
+            Device.vCameraPosition.distance_to_sqr(m_EntityAlife.Position()) <= g_ph_ik_dist * g_ph_ik_dist;
+        ik_controller()->Update(collide_limbs);
     }
 
 #ifdef DEBUG

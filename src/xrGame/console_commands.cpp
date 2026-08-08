@@ -122,6 +122,13 @@ int g_first_person_death = 0;
 int g_normalize_mouse_sens = 0;
 int g_normalize_upgrade_mouse_sens = 0;
 
+// NPC foot IK ground probing is skipped beyond this camera distance, in meters;
+// 0 keeps the stock always-on behavior (see CCharacterPhysicsSupport::in_UpdateCL)
+float g_ph_ik_dist = 0.f;
+// dead objects get a full visibility recalculation at most once per this many
+// milliseconds; 0 restores the stock every-cycle behavior (see CVisualMemoryManager)
+int g_ai_dead_vision_ms = 1000;
+
 void register_mp_console_commands();
 //-----------------------------------------------------------
 
@@ -2443,7 +2450,10 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "ai_ignore_actor", &psAI_Flags, aiIgnoreActor);
 #endif // MASTER_GOLD
 
+    CMD4(CCC_Integer, "ai_dead_vision_ms", &g_ai_dead_vision_ms, 0, 10000);
+
     // Physics
+    CMD4(CCC_Float, "ph_ik_dist", &g_ph_ik_dist, 0.f, 300.f);
     CMD1(CCC_PHFps, "ph_frequency");
     CMD1(CCC_PHIterations, "ph_iterations");
 

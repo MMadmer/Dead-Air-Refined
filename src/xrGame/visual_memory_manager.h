@@ -12,6 +12,7 @@
 #include "memory_space.h"
 #include "memory_space_impl.h"
 #include "xrCommon/xr_vector.h"
+#include "xrCommon/xr_hash_map.h"
 
 
 class CCustomMonster;
@@ -52,6 +53,10 @@ private:
     RAW_VISIBLES m_visible_objects;
     VISIBLES* m_objects;
     NOT_YET_VISIBLES m_not_yet_visible_objects;
+
+    // next allowed full visibility recalculation per dead object id; transient throttle
+    // state only - never saved, erased with the object (see add_visible_object)
+    xr_flat_hash_map<u16, u32> m_dead_object_check_times;
 
 private:
     DELAYED_VISIBLE_OBJECTS m_delayed_objects;

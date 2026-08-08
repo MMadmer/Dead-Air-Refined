@@ -20,7 +20,7 @@ public:
 
 public:
     void PlayLegs(CBlend* b);
-    void Update();
+    void Update(bool collide_limbs);
     float Shift() { return _object_shift.shift(); }
 private:
     void Calculate();

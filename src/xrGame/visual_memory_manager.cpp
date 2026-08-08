@@ -36,6 +36,8 @@
 
 void SetActorVisibility(u16 who, float value);
 
+extern int g_ai_dead_vision_ms; // console_commands.cpp
+
 struct SRemoveOfflinePredicate
 {
     bool operator()(const CVisibleObject& object) const
@@ -132,6 +134,8 @@ void CVisualMemoryManager::reinit()
     m_not_yet_visible_objects.clear();
     //	m_not_yet_visible_objects.reserve	(100);
 
+    m_dead_object_check_times.clear();
+
     if (m_object)
         m_object->feel_vision_clear();
 
@@ -140,9 +144,13 @@ void CVisualMemoryManager::reinit()
 
 void CVisualMemoryManager::reload(LPCSTR section)
 {
+    // honor the configured cap exactly: the original game ran with the values the data
+    // asks for (32 for stalkers, less for monsters), while the upstream floor of 128
+    // silently overrode every one of them; non-positive values would break the eviction
+    // path in add_visible_object, so they keep the built-in default instead
     const s32 maxObjectCount = pSettings->read_if_exists<s32>(section, "DynamicObjectsCount", -1);
-    if (maxObjectCount > -1)
-        m_max_object_count = std::max<u32>(maxObjectCount, m_max_object_count);
+    if (maxObjectCount > 0)
+        m_max_object_count = u32(maxObjectCount);
 
     if (m_stalker)
     {
@@ -452,6 +460,34 @@ void CVisualMemoryManager::add_visible_object(const IGameObject* object, float t
         return;
     }
 
+    // a dead body keeps its collision form and never leaves the vision set, so every
+    // observer would rerun the full visibility math (including the Lua
+    // get_visible_value hook) against every corpse each cycle; a corpse does not move,
+    // so while its last real check confirmed it visible the known entry is refreshed
+    // exactly the way the ordinary path treats a known visible object, and the real
+    // check reruns once the rest window expires; unconfirmed corpses keep stock cadence
+    if (!fictitious && g_ai_dead_vision_ms > 0 && m_objects)
+    {
+        const CEntityAlive* const entity = smart_cast<const CEntityAlive*>(object);
+        if (entity && !entity->g_Alive())
+        {
+            if (const CGameObject* const dead_object = smart_cast<const CGameObject*>(object))
+            {
+                const auto known = std::find(m_objects->begin(), m_objects->end(), object_id(dead_object));
+                if (known != m_objects->end())
+                {
+                    const auto check = m_dead_object_check_times.find(dead_object->ID());
+                    if (check != m_dead_object_check_times.end() && Device.dwTimeGlobal < check->second)
+                    {
+                        (*known).fill(dead_object, m_object, (*known).m_squad_mask.get() | mask(),
+                            (*known).m_visible.get() | mask());
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     xr_vector<CVisibleObject>::iterator J;
     const CGameObject* game_object;
     const CGameObject* self;
@@ -493,7 +529,17 @@ void CVisualMemoryManager::add_visible_object(const IGameObject* object, float t
     else
     {
         if (!fictitious)
+        {
             (*J).fill(game_object, self, (*J).m_squad_mask.get() | mask(), (*J).m_visible.get() | mask());
+
+            // corpse confirmed visible by a real check: rest the expensive recheck
+            if (g_ai_dead_vision_ms > 0)
+            {
+                const CEntityAlive* const entity_alive = smart_cast<const CEntityAlive*>(game_object);
+                if (entity_alive && !entity_alive->g_Alive())
+                    m_dead_object_check_times[game_object->ID()] = Device.dwTimeGlobal + u32(g_ai_dead_vision_ms);
+            }
+        }
         else
         {
             (*J).m_visible.assign((*J).m_visible.get() | mask());
@@ -620,6 +666,9 @@ void CVisualMemoryManager::remove(const MemorySpace::CVisibleObject* visible_obj
 
 void CVisualMemoryManager::remove_links(IGameObject* object)
 {
+    if (object)
+        m_dead_object_check_times.erase(object->ID());
+
     {
         VERIFY(m_objects);
         VISIBLES::iterator I = std::find_if(m_objects->begin(), m_objects->end(), CVisibleObjectPredicateEx(object));

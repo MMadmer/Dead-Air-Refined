@@ -344,7 +344,7 @@ void CIKLimbsController::PlayLegs(CBlend* b)
         Msg("! No foot stseps for animation: animation name: %s, animation set: %s ", anim_name, anim_set_name);
 #endif
 }
-void CIKLimbsController::Update()
+void CIKLimbsController::Update(bool collide_limbs)
 {
 #ifdef DEBUG
     if (ph_dbg_draw_mask1.test(phDbgIKOff))
@@ -357,6 +357,13 @@ void CIKLimbsController::Update()
     update_blend(m_legs_blend);
 
     _pose_extrapolation.update(m_object->XFORM());
+
+    // track/blend/extrapolation bookkeeping above must run every frame: other systems
+    // rely on it (see stalker animation manager update_tracks gating); only the foot
+    // ground probing below may be skipped for characters too far for it to be seen
+    if (!collide_limbs)
+        return;
+
     xr_vector<CIKLimb>::iterator i = _bone_chains.begin(), e = _bone_chains.end();
     for (; e != i; ++i)
         LimbUpdate(*i);
