@@ -181,6 +181,8 @@ Dependency versions and compatibility pins are recorded in
   compatibility, extension chunks, and atomic transaction format.
 - [`DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md) — dependency versions and
   build policy.
+- [`MODDING.md`](docs/dead-air/MODDING.md) — Refined-specific modding
+  capabilities: loose particle overrides and addon script audit tooling.
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
 
 ## Credits
