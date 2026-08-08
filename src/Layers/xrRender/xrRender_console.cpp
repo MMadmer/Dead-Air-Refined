@@ -168,7 +168,12 @@ Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
 int ps_r__light_shadow_budget = 0; // 0 = unlimited (exact parity with the pre-budget renderer)
-int ps_r__sun_cache_ms = 0; // middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (parity)
+// Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame. Rebuilding every frame
+// re-derives the cascade volume from the camera frustum rays, so under rotation the snapped
+// matrix steps by whole texel quanta and every sun shadow in the scene jumps with it. The
+// reference project ships 100 ms and its picture is stable in motion; cache validity does
+// not depend on the view direction, only on camera translation, sun rotation, and age.
+int ps_r__sun_cache_ms = 100;
 
 float ps_r__Detail_l_ambient = 0.9f;
 float ps_r__Detail_l_aniso = 0.25f;
