@@ -126,9 +126,6 @@ void CRender::render_lights(light_Package& LP)
 
             auto& dsgraph = get_context(batch_id);
 
-            // Dynamic renderables can update bones and game-owned state, so collect them only on the render thread.
-            dsgraph.build_subspace_dynamic();
-
             const bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             const bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
                 !dsgraph.mapSorted.empty();
@@ -213,29 +210,16 @@ void CRender::render_lights(light_Package& LP)
             dsgraph.o.xform = L->X.S.combine;
             dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
 
-            const auto& calc_static_lights = [data]
-            {
-                ZoneScopedN("calc static lights");
-                auto& dsgraph = RImplementation.get_context(data.batch_id);
-                dsgraph.build_subspace_static(true);
-            };
-
-            // Local shadowed lights are built one at a time. Batching several lights through
-            // parallel tasks corrupts their shadow-map content: with a multi-light queue a
-            // face's smap periodically renders with a wrong caster set and its contribution
-            // blinks for seconds (Yanov interiors), regardless of occlusion queries, HOM, or
-            // sun. Serializing only this path fixes the flicker at ~2% frame cost while sun
-            // cascades and rain keep their parallel builds. The exact shared state is still
-            // unidentified; see docs/dead-air/x64-parity-open-issues.md before re-enabling.
-            const bool parallel_static = false;
-            if (parallel_static)
-                data.task = &TaskScheduler->AddTask(calc_static_lights);
-            else
-                calc_static_lights();
+            // Local shadowed lights are built one at a time with the whole caster set
+            // collected in one pass, matching the sequential arrangement the reference
+            // project runs with a stable picture. The split build (static casters in a
+            // task, deferred visuals and dynamics collected later) plus a multi-light
+            // queue is what made a face's smap render with a wrong caster set and dance
+            // while the player moves; see docs/dead-air/x64-parity-open-issues.md.
+            dsgraph.build_subspace();
 
             lights_queue.emplace_back(data);
-            if (!parallel_static)
-                flush_lights();
+            flush_lights();
         }
         flush_lights(); // in case if something left
 

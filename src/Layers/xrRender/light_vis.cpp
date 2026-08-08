@@ -40,15 +40,7 @@ void light::vis_prepare(CBackend& cmd_list)
     bool skiptest = false;
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_UNSHADOWED) && !flags.bShadow)
         skiptest = true;
-
-    // Shadowed lights are never extinguished by an occlusion query. The query answers
-    // "is the light VOLUME visible", but the light's contribution stays visible on
-    // surfaces when the volume is not: a lamp behind a doorway still floods the visible
-    // room. Measured on the light_test save, killing lights by that answer collapses the
-    // accumulated interior light 50-100x on whole view angles while the player moves.
-    // Unshadowed fillers keep the test (their loss is not readable) with the miss-streak
-    // hysteresis below.
-    if (flags.bShadow)
+    if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
         skiptest = true;
 
     // OMNIPART faces are slices of one point-light volume and carry no bounds of their own,
