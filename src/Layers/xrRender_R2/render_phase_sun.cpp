@@ -261,9 +261,18 @@ void render_sun::calculate()
             cull_xform[cascade_ind].transform_dir(shift_proj);
             m_viewport.transform_dir(shift_proj);
 
+            // Dead zone around zero: the stock sign-only snap flips between +4 and -4 texels
+            // whenever the cuboid shift hovers near zero (the sun barely moves per frame), and
+            // with the cascade rebuilt every frame the whole shadow map oscillated by 4 texels
+            // at frame rate - visible as sun shadows shimmering while standing still. A shift
+            // smaller than the alignment step carries no information; snap it to zero instead.
             const float align_granularity = 4.f;
-            shift_proj.x = shift_proj.x > 0 ? align_granularity : -align_granularity;
-            shift_proj.y = shift_proj.y > 0 ? align_granularity : -align_granularity;
+            shift_proj.x = _abs(shift_proj.x) < align_granularity
+                ? 0.f
+                : (shift_proj.x > 0 ? align_granularity : -align_granularity);
+            shift_proj.y = _abs(shift_proj.y) < align_granularity
+                ? 0.f
+                : (shift_proj.y > 0 ? align_granularity : -align_granularity);
             shift_proj.z = 0;
 
             cam_pixel.x = cam_pixel.x / align_granularity - floorf(cam_pixel.x / align_granularity);
@@ -282,6 +291,23 @@ void render_sun::calculate()
             Fmatrix adjust;
             adjust.translate(diff);
             cull_xform[cascade_ind].mulB_44(adjust);
+        }
+
+        // Snap hysteresis. The volume is refit every frame, and actor idle sway keeps the
+        // aligned matrix hovering at a 4-texel grid node boundary, flipping between the two
+        // neighbouring nodes at frame rate - visible as sun shadows shimmering in place at
+        // high fps. Keep the previous frame's matrix bit-exact while the refit stays within
+        // one node of it; a real sun or camera move walks farther and applies immediately.
+        {
+            const Fmatrix& previous = m_sun_cascades[cascade_ind].xform;
+            const float* fresh = &cull_xform[cascade_ind]._11;
+            const float* held = &previous._11;
+            float drift = 0.f;
+            for (int e = 0; e < 16; ++e)
+                drift = _max(drift, _abs(fresh[e] - held[e]));
+            const float neighbour_node = 4.5f * 2.f / float(RImplementation.o.smapsize);
+            if (_valid(drift) && drift < neighbour_node)
+                cull_xform[cascade_ind] = previous;
         }
 
         // The cache decision lands here, before the matrix goes anywhere else: reusing the
@@ -485,6 +511,13 @@ void render_sun::accumulate_cascade(u32 cascade_ind)
     }
 
     dsgraph.cmd_list.submit(); // TODO: move into release (rename to submit?)
+
+    // ExecuteCommandList(..., FALSE) inside submit() clears the immediate context to the
+    // default state, so the immediate backend's state cache must not survive it: otherwise
+    // the next "set the same render target" is skipped as redundant and every deferred
+    // light volume after this point rasterizes into a NULL target - local light vanishes
+    // wholesale at view angles where the submit lands between the sun and the lamps.
+    RCache.Invalidate();
     RImplementation.release_context(dsgraph.context_id);
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -331,6 +331,10 @@ void render_rain::flush()
         auto& dsgraph = RImplementation.get_context(context_id);
 
         dsgraph.cmd_list.submit();
+
+        // ExecuteCommandList(..., FALSE) clears the immediate context; drop the immediate
+        // backend's state cache so subsequent state sets are re-applied for real.
+        RCache.Invalidate();
         RImplementation.release_context(context_id);
     }
 

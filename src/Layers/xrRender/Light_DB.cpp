@@ -147,6 +147,12 @@ light* CLight_DB::Create()
 
 void CLight_DB::add_light(light* L)
 {
+    // A zero-range source lights nothing but still walks the whole pipeline, and its
+    // projection (far = range + epsilon below the near plane) is degenerate. The actor
+    // torch keeps such a light around while switched off.
+    if (L->range <= EPS_L)
+        return;
+
     if (Device.dwFrame == L->frame_render)
         return;
     L->frame_render = Device.dwFrame;

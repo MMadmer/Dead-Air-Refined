@@ -69,8 +69,10 @@ void CRender::render_lights(light_Package& LP)
     }
 
     auto& cmd_list = get_imm_context().cmd_list;
+
     const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
         ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
+
     const auto accumulateUnshadowedSpot = [&](light* L)
     {
         // Volume-only faces exist for the unshadowed-point export case, where the parent in
