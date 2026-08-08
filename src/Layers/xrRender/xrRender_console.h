@@ -58,6 +58,16 @@ extern ECORE_API const xr_token qmsaa__atest_token[];
 extern ECORE_API u32 ps_r3_minmax_sm; //	=	0;
 extern ECORE_API const xr_token qminmax_sm_token[];
 
+enum GeometryOptimizationQuality : u32
+{
+    geometry_optimization_off,
+    geometry_optimization_low,
+    geometry_optimization_medium,
+    geometry_optimization_high,
+};
+
+extern ECORE_API u32 ps_r_optimize_static;
+
 extern ECORE_API int ps_r__LightSleepFrames;
 
 extern ECORE_API float ps_r__Detail_l_ambient;

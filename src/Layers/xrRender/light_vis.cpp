@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Layers/xrRender/light.h"
+#include "Layers/xrRender/r__occlusion.h"
 #include "xrCDB/Intersect.hpp"
 
 namespace xray::render::RENDER_NAMESPACE
@@ -36,22 +37,33 @@ void light::vis_prepare(CBackend& cmd_list)
 
     // Msg	("sc[%f,%f,%f]/c[%f,%f,%f] - sr[%f]/r[%f]",VPUSH(spatial.center),VPUSH(position),spatial.radius,range);
     // Msg	("dist:%f, sa:%f",Device.vCameraPosition.distance_to(spatial.center),safe_area);
-    // DX11 edge-clipped queries can report false zeroes and make an entire shadowed light blink.
-    bool skiptest = flags.bShadow;
+    bool skiptest = false;
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_UNSHADOWED) && !flags.bShadow)
         skiptest = true;
+    if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
+        skiptest = true;
 
-    if (skiptest ||
-        Device.vCameraPosition.distance_to(spatial.sphere.P) <= (spatial.sphere.R * 1.01f + safe_area))
+    const bool cameraInsideVolume = Device.vCameraPosition.distance_to(spatial.sphere.P) <=
+        (spatial.sphere.R * 1.01f + safe_area);
+    if (skiptest || cameraInsideVolume)
     { // small error
+        if (vis.pending)
+            RImplementation.occq_cancel(vis.query_id);
         vis.visible = true;
         vis.pending = false;
         vis.frame2test = frame + ::Random.randI(delay_small_min, delay_small_max);
         return;
     }
 
+    // A query stays owned by this light until its GPU result becomes available.
+    if (vis.pending)
+        return;
+
     // testing
     vis.pending = true;
+    vis.query_frame = frame;
+    vis.query_camera_position.set(Device.vCameraPosition);
+    vis.query_camera_direction.set(Device.vCameraDirection);
     xform_calc();
     cmd_list.set_xform_world(m_xform);
     vis.query_order = RImplementation.occq_begin(vis.query_id);
@@ -78,9 +90,15 @@ void light::vis_update()
         return;
 
     const u32 frame = Device.dwFrame;
-    const auto fragments = RImplementation.occq_get(vis.query_id);
-    // Log					("",fragments);
-    vis.visible = (fragments > cullfragments);
+    R_occlusion::occq_result fragments{};
+    if (!RImplementation.occq_try_get(vis.query_id, fragments))
+        return;
+    const bool recentView = (frame - vis.query_frame) <= 2 &&
+        Device.vCameraPosition.similar(vis.query_camera_position, 0.1f) &&
+        Device.vCameraDirection.dotproduct(vis.query_camera_direction) >= _cos(deg2rad(1.f));
+
+    // A delayed zero is only valid for the view that issued the query.
+    vis.visible = fragments > cullfragments || !recentView;
     vis.pending = false;
     if (vis.visible)
     {

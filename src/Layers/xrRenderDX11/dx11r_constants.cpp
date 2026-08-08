@@ -337,6 +337,7 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
     {
         return xr_strcmp(C1->name, C2->name) < 0;
     });
+    rebuildConstantBufferBindings();
     return TRUE;
 }
 } // namespace xray::render::RENDER_NAMESPACE

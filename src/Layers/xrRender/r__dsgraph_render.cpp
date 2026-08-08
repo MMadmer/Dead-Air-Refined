@@ -1,9 +1,12 @@
 #include "stdafx.h"
 
+#include <functional>
+
 #include "xrEngine/IRenderable.h"
 #include "xrEngine/CustomHUD.h"
 
 #include "FBasicVisual.h"
+#include "FTreeVisual.h"
 #include "SkeletonCustom.h"
 #include "FLOD.h"
 
@@ -20,6 +23,246 @@ ICF float calcLOD(float ssa /*fDistSq*/, float /*R*/)
 {
     return _sqrt(clampr((ssa - r_ssaGLOD_end) / (r_ssaGLOD_start - r_ssaGLOD_end), 0.f, 1.f));
 }
+
+#ifdef USE_DX11
+namespace
+{
+constexpr u32 TreeInstanceBatchCapacity = 64;
+
+struct TreeBatchItem
+{
+    FTreeVisual* visual{};
+    FTreeVisualInstancedDraw draw{};
+    float lod{};
+    u32 lod_bucket{};
+    size_t original_order{};
+};
+
+struct TreeBatchSegment
+{
+    size_t begin{};
+    u32 count{};
+};
+
+struct TreeBatchScratch
+{
+    xr_vector<TreeBatchItem> items;
+    xr_vector<TreeBatchSegment> segments;
+    xr_vector<u8> batched_items;
+};
+
+FTreeVisual* get_tree_visual(dxRender_Visual* visual)
+{
+    switch (visual->Type)
+    {
+    case MT_TREE_ST:
+    case MT_TREE_PM: return static_cast<FTreeVisual*>(visual);
+    default: return nullptr;
+    }
+}
+
+u32 get_lod_bucket(float lod)
+{
+    return u32(clampr<float>(ceil(lod * lod * lod * lod * lod * 8.0f), 1, 7));
+}
+
+bool equal_tree_geometry_state(const TreeBatchItem& left, const TreeBatchItem& right)
+{
+    const SGeometry& left_geometry = *left.draw.geometry;
+    const SGeometry& right_geometry = *right.draw.geometry;
+    return left_geometry.vb == right_geometry.vb &&
+        left_geometry.ib == right_geometry.ib &&
+        left_geometry.dcl._get() == right_geometry.dcl._get() &&
+        left_geometry.vb_stride == right_geometry.vb_stride;
+}
+
+bool equal_tree_draw(const TreeBatchItem& left, const TreeBatchItem& right)
+{
+    return equal_tree_geometry_state(left, right) &&
+        left.draw.base_vertex == right.draw.base_vertex &&
+        left.draw.vertex_count == right.draw.vertex_count &&
+        left.draw.start_index == right.draw.start_index &&
+        left.draw.primitive_count == right.draw.primitive_count &&
+        left.lod_bucket == right.lod_bucket;
+}
+
+bool less_tree_draw(const TreeBatchItem& left, const TreeBatchItem& right)
+{
+    const SGeometry& left_geometry = *left.draw.geometry;
+    const SGeometry& right_geometry = *right.draw.geometry;
+    if (left_geometry.vb != right_geometry.vb)
+        return std::less<VertexBufferHandle>{}(left_geometry.vb, right_geometry.vb);
+    if (left_geometry.ib != right_geometry.ib)
+        return std::less<IndexBufferHandle>{}(left_geometry.ib, right_geometry.ib);
+    if (left_geometry.dcl._get() != right_geometry.dcl._get())
+        return std::less<SDeclaration*>{}(left_geometry.dcl._get(), right_geometry.dcl._get());
+    if (left_geometry.vb_stride != right_geometry.vb_stride)
+        return left_geometry.vb_stride < right_geometry.vb_stride;
+    if (left.draw.base_vertex != right.draw.base_vertex)
+        return left.draw.base_vertex < right.draw.base_vertex;
+    if (left.draw.vertex_count != right.draw.vertex_count)
+        return left.draw.vertex_count < right.draw.vertex_count;
+    if (left.draw.start_index != right.draw.start_index)
+        return left.draw.start_index < right.draw.start_index;
+    if (left.draw.primitive_count != right.draw.primitive_count)
+        return left.draw.primitive_count < right.draw.primitive_count;
+    if (left.lod_bucket != right.lod_bucket)
+        return left.lod_bucket < right.lod_bucket;
+    return left.original_order < right.original_order;
+}
+
+bool get_tree_instance_constants(CBackend& cmd_list, R_constant*& instance_data, R_constant*& instance_control)
+{
+    instance_data = cmd_list.get_c("tree_instance_data")._get();
+    instance_control = cmd_list.get_c("tree_instance_control")._get();
+    if (!instance_data || !instance_control)
+        return false;
+    if (!(instance_data->destination & RC_dest_vertex) || !(instance_control->destination & RC_dest_vertex))
+        return false;
+    const bool valid_data_class = instance_data->vs.cls == RC_1x4 || instance_data->vs.cls == RC_1x4a;
+    if (instance_data->type != RC_float || !valid_data_class ||
+        instance_control->type != RC_float || instance_control->vs.cls != RC_1x4)
+        return false;
+
+    const u32 data_buffer = instance_data->destination & RC_dest_vertex_cb_index_mask;
+    const u32 control_buffer = instance_control->destination & RC_dest_vertex_cb_index_mask;
+    return data_buffer != control_buffer && !instance_data->vs.index && !instance_control->vs.index;
+}
+
+bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
+{
+    R_constant* instance_data{};
+    R_constant* instance_control{};
+    if (!get_tree_instance_constants(cmd_list, instance_data, instance_control))
+        return false;
+    cmd_list.set_c(instance_control, 0.f, 0.f, 0.f, 0.f);
+    if (items.size() < 2)
+        return false;
+
+    static thread_local TreeBatchScratch scratch;
+    xr_vector<TreeBatchItem>& tree_items = scratch.items;
+    tree_items.clear();
+    if (tree_items.capacity() < items.size())
+        tree_items.reserve(items.size());
+    for (size_t index = 0; index < items.size(); ++index)
+    {
+        const _NormalItem& item = items[index];
+        FTreeVisual* tree = get_tree_visual(item.pVisual);
+        if (!tree)
+            continue;
+
+        const float lod = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
+        FTreeVisualInstancedDraw draw;
+        if (!tree->GetInstancedDraw(lod, draw))
+            continue;
+
+        tree_items.push_back(TreeBatchItem{ tree, draw, lod, get_lod_bucket(lod), index });
+    }
+
+    if (tree_items.size() < 2)
+        return false;
+
+    std::sort(tree_items.begin(), tree_items.end(), less_tree_draw);
+
+    xr_vector<TreeBatchSegment>& segments = scratch.segments;
+    segments.clear();
+    for (size_t group_begin = 0; group_begin < tree_items.size();)
+    {
+        size_t group_end = group_begin + 1;
+        while (group_end < tree_items.size() && equal_tree_draw(tree_items[group_begin], tree_items[group_end]))
+            ++group_end;
+
+        size_t batch_begin = group_begin;
+        while (group_end - batch_begin > 1)
+        {
+            u32 instance_count = u32(std::min<size_t>(TreeInstanceBatchCapacity, group_end - batch_begin));
+
+            // Keep a final pair instanced instead of leaving one tree on the scalar fallback path.
+            if (group_end - batch_begin - instance_count == 1)
+                --instance_count;
+
+            segments.push_back(TreeBatchSegment{ batch_begin, instance_count });
+            batch_begin += instance_count;
+        }
+        group_begin = group_end;
+    }
+
+    if (segments.empty())
+        return false;
+
+    static const shared_str instance_data_name = "tree_instance_data";
+    void* validated_vertex_data{};
+    cmd_list.get_ConstantDirect(instance_data_name,
+        TreeInstanceBatchCapacity * sizeof(FTreeVisualInstanceData), &validated_vertex_data, nullptr, nullptr);
+    if (!validated_vertex_data)
+        return false;
+
+    xr_vector<u8>& batched_items = scratch.batched_items;
+    batched_items.assign(items.size(), false);
+    FTreeVisual::SetupInstancedGlobals(cmd_list);
+
+    for (size_t page_begin = 0; page_begin < segments.size();)
+    {
+        size_t page_end = page_begin;
+        u32 page_instance_count{};
+        while (page_end < segments.size() &&
+            page_instance_count + segments[page_end].count <= TreeInstanceBatchCapacity)
+        {
+            page_instance_count += segments[page_end++].count;
+        }
+
+        void* vertex_data{};
+        cmd_list.get_ConstantDirect(instance_data_name,
+            page_instance_count * sizeof(FTreeVisualInstanceData), &vertex_data, nullptr, nullptr);
+        if (!vertex_data)
+            return false;
+
+        auto* instance_storage = static_cast<FTreeVisualInstanceData*>(vertex_data);
+        u32 page_offset{};
+        for (size_t segment_index = page_begin; segment_index < page_end; ++segment_index)
+        {
+            const TreeBatchSegment& segment = segments[segment_index];
+            for (u32 instance = 0; instance < segment.count; ++instance)
+            {
+                TreeBatchItem& item = tree_items[segment.begin + instance];
+                item.visual->FillInstanceData(cmd_list, instance_storage[page_offset + instance]);
+                batched_items[item.original_order] = true;
+            }
+
+            page_offset += segment.count;
+        }
+
+        page_offset = 0;
+        for (size_t segment_index = page_begin; segment_index < page_end; ++segment_index)
+        {
+            const TreeBatchSegment& segment = segments[segment_index];
+            const TreeBatchItem& first = tree_items[segment.begin];
+            cmd_list.set_c(instance_control, 1.f, float(page_offset), 0.f, 0.f);
+            cmd_list.LOD.set_LOD(first.lod);
+            cmd_list.set_Geometry(first.draw.geometry);
+            cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, first.draw.base_vertex, 0,
+                first.draw.vertex_count, first.draw.start_index, first.draw.primitive_count, segment.count);
+            cmd_list.stat.r.s_flora.add(first.draw.vertex_count * segment.count);
+            page_offset += segment.count;
+        }
+
+        page_begin = page_end;
+    }
+
+    cmd_list.set_c(instance_control, 0.f, 0.f, 0.f, 0.f);
+    size_t write_index{};
+    for (size_t read_index = 0; read_index < items.size(); ++read_index)
+    {
+        if (!batched_items[read_index])
+            items[write_index++] = items[read_index];
+    }
+    items.resize(write_index);
+    return true;
+}
+
+
+} // namespace
+#endif
 
 template <class T>
 bool cmp_ssa(const T &lhs, const T &rhs)
@@ -68,6 +311,10 @@ void R_dsgraph_structure::render_graph(u32 _priority)
 
                 if (items.size() > 1)
                     std::sort(items.begin(), items.end(), cmp_ssa<_NormalItem>);
+#ifdef USE_DX11
+                if (render_tree_batches(cmd_list, items) && items.empty())
+                    continue;
+#endif
                 for (const auto& item : items)
                 {
                     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);

@@ -13,12 +13,12 @@ public:
     } state;
     xr_vector<dxRender_Visual*> invisible;
 
-    u32 frame_sleep;
-    u32 test_count;
-    u32 test_current;
-    dxRender_Visual* testQ_V;
-    u32 testQ_id;
-    u32 testQ_frame;
+    u32 frame_sleep{};
+    u32 test_count{};
+    u32 test_current{};
+    dxRender_Visual* testQ_V{};
+    u32 testQ_id{u32(-1)};
+    u32 testQ_frame{u32(-1)};
     int id{-1};
 
 public:
@@ -26,6 +26,7 @@ public:
     ~smapvis();
 
     void invalidate();
+    void begin(u32 graph_id);
     void begin(); // should be called before 'marker++' and before graph-build
     void end();
     void mark();

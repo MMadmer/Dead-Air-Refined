@@ -81,6 +81,16 @@ struct R_dsgraph_structure
     xr_vector<ISpatial*> lstSpatial;
     xr_vector<dxRender_Visual*> lstVisuals;
 
+    struct deferred_static_visual_t
+    {
+        dxRender_Visual* visual{};
+        CFrustum view{};
+        u32 planes{};
+        bool partial{};
+    };
+    xr_vector<deferred_static_visual_t> deferred_static_visuals;
+    bool defer_static_main_thread_work{};
+
     CBackend cmd_list{};
 
     u32 counter_S{};
@@ -162,6 +172,8 @@ struct R_dsgraph_structure
         lstRenderablesOrdered.clear();
         lstSpatial.clear();
         lstVisuals.clear();
+        deferred_static_visuals.clear();
+        defer_static_main_thread_work = false;
 
         for (int i = 0; i < SHADER_PASSES_MAX; ++i)
         {
@@ -247,6 +259,8 @@ struct R_dsgraph_structure
     void render_distort();
     void render_R1_box(IRender_Sector::sector_id_t sector_id, Fbox& _bb, int _element);
 
+    bool build_subspace_static(bool defer_main_thread_work);
+    void build_subspace_dynamic();
     void build_subspace();
 };
 } // namespace xray::render::RENDER_NAMESPACE

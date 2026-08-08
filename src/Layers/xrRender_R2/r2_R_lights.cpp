@@ -107,7 +107,10 @@ void CRender::render_lights(light_Package& LP)
         u32 batch_id{};
     };
     static xr_vector<task_data_t> lights_queue{};
-    lights_queue.reserve(R__NUM_SUN_CASCADES);
+    lights_queue.reserve(R__NUM_PARALLEL_CONTEXTS);
+
+    // Visibility history belongs to the light, while worker graph IDs are transient.
+    constexpr u32 visibility_slot = 0;
 
     const auto& flush_lights = [&]()
     {
@@ -118,6 +121,9 @@ void CRender::render_lights(light_Package& LP)
                 TaskScheduler->Wait(*task);
 
             auto& dsgraph = get_context(batch_id);
+
+            // Dynamic renderables can update bones and game-owned state, so collect them only on the render thread.
+            dsgraph.build_subspace_dynamic();
 
             const bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             const bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
@@ -153,7 +159,7 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_finalclip++;
             }
 
-            L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
+            L->svis[visibility_slot].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
             RImplementation.release_context(batch_id);
         }
 
@@ -193,30 +199,32 @@ void CRender::render_lights(light_Package& LP)
             data.batch_id = batch_id;
             data.L = L;
 
-            const auto& calc_lights = [data]
+            auto& dsgraph = get_context(batch_id);
+            L->svis[visibility_slot].begin(batch_id);
+
+            dsgraph.o.phase = PHASE_SMAP;
+            dsgraph.r_pmask(true, RImplementation.o.Tshadows);
+            dsgraph.o.sector_id = L->spatial.sector_id;
+            dsgraph.o.view_pos = L->position;
+            dsgraph.o.xform = L->X.S.combine;
+            dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+
+            const auto& calc_static_lights = [data]
             {
-                ZoneScopedN("calc lights");
+                ZoneScopedN("calc static lights");
                 auto& dsgraph = RImplementation.get_context(data.batch_id);
-                {
-                    auto* L = data.L;
-
-                    L->svis[data.batch_id].begin();
-
-                    dsgraph.o.phase = PHASE_SMAP;
-                    dsgraph.r_pmask(true, RImplementation.o.Tshadows);
-                    dsgraph.o.sector_id = L->spatial.sector_id;
-                    dsgraph.o.view_pos = L->position;
-                    dsgraph.o.xform = L->X.S.combine;
-                    dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
-
-                    dsgraph.build_subspace();
-                }
+                dsgraph.build_subspace_static(true);
             };
 
-            // Match the original local-shadow ordering so visibility caches never migrate between render contexts.
-            calc_lights();
+            const bool parallel_static = o.mt_calculate && TaskScheduler && TaskScheduler->GetWorkersCount() > 1;
+            if (parallel_static)
+                data.task = &TaskScheduler->AddTask(calc_static_lights);
+            else
+                calc_static_lights();
+
             lights_queue.emplace_back(data);
-            flush_lights();
+            if (!parallel_static)
+                flush_lights();
         }
         flush_lights(); // in case if something left
 

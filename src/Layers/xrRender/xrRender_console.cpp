@@ -145,6 +145,16 @@ const xr_token qmsaa__atest_token[] = {
 u32 ps_r3_minmax_sm = 3; // = 0;
 const xr_token qminmax_sm_token[] = {{"off", 0}, {"on", 1}, {"auto", 2}, {"autodetect", 3}, {nullptr, 0}};
 
+u32 ps_r_optimize_static = geometry_optimization_medium;
+const xr_token q_optimize_static_token[] =
+{
+    { "st_optimize_off", geometry_optimization_off },
+    { "st_optimize_low", geometry_optimization_low },
+    { "st_optimize_med", geometry_optimization_medium },
+    { "st_optimize_high", geometry_optimization_high },
+    { nullptr, 0 }
+};
+
 // “Off”
 // “DX10.0 style [Standard]”
 // “DX10.1 style [Higher quality]”
@@ -833,6 +843,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 8);
 
     CMD4(CCC_Float, "r__geometry_lod", &ps_r__LOD, 0.1f, 2.f);
+    CMD3(CCC_Token, "r__optimize_static_geom", &ps_r_optimize_static, q_optimize_static_token);
     //CMD4(CCC_Float, "r__geometry_lod_pow", &ps_r__LOD_Power, 0, 2);
 
     CMD4(CCC_Float, "r__detail_density", &ps_current_detail_density/*&ps_r__Detail_density*/, 0.1f, 1.f);

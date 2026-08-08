@@ -118,6 +118,7 @@ private:
     // Pixel/Vertex constants
     alignas(16) R_constants constants;
     R_constant_table* ctable;
+    R_constant* lmaterial_base_constant;
 
     // Shaders/State
     ID3DState* state;
@@ -531,6 +532,11 @@ public:
 
     // Rendering
     ICF void Render(D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, u32 startI, u32 PC);
+#ifdef USE_DX11
+    ICF void RenderInstanced(
+        D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, u32 startI, u32 PC,
+        u32 instanceCount);
+#endif
     ICF void Render(D3DPRIMITIVETYPE T, u32 startV, u32 PC);
 
     ICF void submit()
@@ -610,7 +616,8 @@ private:
     void ApplyVertexLayout();
     void ApplyRTandZB();
     void ApplyPrimitieTopology(D3D_PRIMITIVE_TOPOLOGY Topology);
-    bool CBuffersNeedUpdate(ref_cbuffer buf1[MaxCBuffers], ref_cbuffer buf2[MaxCBuffers], u32& uiMin, u32& uiMax);
+    bool UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers],
+        dx11ConstantBuffer* const desired[MaxCBuffers], u32& uiMin, u32& uiMax);
 
 private:
     ID3DBlob* m_pInputSignature{ nullptr };

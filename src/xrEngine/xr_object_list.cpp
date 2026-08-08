@@ -288,16 +288,8 @@ void CObjectList::Update(bool bForce)
 
             for (IGameObject* object : update_snapshot)
             {
-                object->PreUpdateCL();
                 SingleUpdate(object);
             }
-
-            //--#SM+#-- PostUpdateCL для всех клиентских объектов [for crowed and non-crowed]
-            for (auto& object : objects_active)
-                object->PostUpdateCL(false);
-
-            for (auto& object : objects_sleeping)
-                object->PostUpdateCL(true);
 
             stats.Update.End();
         }
