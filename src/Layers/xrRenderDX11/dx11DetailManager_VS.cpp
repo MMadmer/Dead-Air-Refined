@@ -151,11 +151,11 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                         // flush
                         if (collectStats)
                             RImplementation.BasicStats.DetailCount += dwBatch;
+                        // One stored copy drawn dwBatch times instead of dwBatch baked
+                        // copies: the shader takes the matrix index from SV_InstanceID.
                         u32 dwCNT_verts = dwBatch * Object.number_vertices;
-                        u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
-                            // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;
-                            // RCache.get_ConstantCache_Vertex().get_array_f().dirty	(c_base,c_base+dwBatch*4);
-                        cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
+                        cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, vOffset, 0,
+                            Object.number_vertices, iOffset, Object.number_indices / 3, dwBatch);
                         cmd_list.stat.r.s_details.add(dwCNT_verts);
 
                         // restart
@@ -177,10 +177,8 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 if (collectStats)
                     RImplementation.BasicStats.DetailCount += dwBatch;
                 u32 dwCNT_verts = dwBatch * Object.number_vertices;
-                u32 dwCNT_prims = (dwBatch * Object.number_indices) / 3;
-                    // RCache.get_ConstantCache_Vertex().b_dirty				=	TRUE;
-                    // RCache.get_ConstantCache_Vertex().get_array_f().dirty	(c_base,c_base+dwBatch*4);
-                cmd_list.Render(D3DPT_TRIANGLELIST, vOffset, 0, dwCNT_verts, iOffset, dwCNT_prims);
+                cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, vOffset, 0,
+                    Object.number_vertices, iOffset, Object.number_indices / 3, dwBatch);
                 cmd_list.stat.r.s_details.add(dwCNT_verts);
             }
         }

@@ -90,6 +90,12 @@ rewritten, comments and diagnostics replaced; nothing was merged wholesale):
   (`script_game_object.cpp`, `monster_community.cpp`), community fallback
   kept at the documented no-community state instead of the reference's
   first-known-community substitution;
+- hardware grass instancing — from `a262ee42` (`DetailManager_VS.cpp`,
+  `dx11DetailManager_VS.cpp`, detail vertex shaders): one stored mesh copy
+  replicated by DrawIndexedInstanced instead of 61 baked copies; shaders
+  rebuilt on the vanilla Dead Air base extracted from `configs.xdb0`;
+- OpenGL renderer removal — layout from `71011c8d` (build/link/module
+  plumbing only, sources retained in tree);
 - temporal upscaler renderer — documented as an RFC only
   (`docs/dead-air/TEMPORAL_UPSCALER_RFC.md`), no code adapted.
 

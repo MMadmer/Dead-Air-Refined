@@ -48,14 +48,21 @@ void CDetailManager::hw_Load_Geom()
     clamp<size_t>(hw_BatchSize, 0, 64);
     Msg("* [DETAILS] VertexConsts(%u), Batch(%zu)", u32(HW.Caps.geometry.dwRegisters), hw_BatchSize);
 
+    // A batch of 61 bushes used to be drawn from 61 baked copies of the same mesh, each
+    // vertex carrying its copy number for the matrix lookup — a technique from before
+    // hardware instancing. On DX11 one copy is stored and the draw call replicates it
+    // (hw_GeometryCopies() == 1), shrinking the buffers ~61x while the batch itself and
+    // the 61-matrix constant array stay exactly the same.
+    const u32 geometry_copies = u32(hw_GeometryCopies());
+
     // Pre-process objects
     u32 dwVerts = 0;
     u32 dwIndices = 0;
     for (u32 o = 0; o < objects.size(); o++)
     {
         const CDetail& D = *objects[o];
-        dwVerts += D.number_vertices * hw_BatchSize;
-        dwIndices += D.number_indices * hw_BatchSize;
+        dwVerts += D.number_vertices * geometry_copies;
+        dwIndices += D.number_indices * geometry_copies;
     }
     u32 vSize = sizeof(vertHW);
     Msg("* [DETAILS] %d v(%d), %d p", dwVerts, vSize, dwIndices / 3);
@@ -68,7 +75,7 @@ void CDetailManager::hw_Load_Geom()
         for (u32 o = 0; o < objects.size(); o++)
         {
             const CDetail& D = *objects[o];
-            for (u32 batch = 0; batch < hw_BatchSize; batch++)
+            for (u32 batch = 0; batch < geometry_copies; batch++)
             {
                 u32 mid = batch * c_size;
                 for (u32 v = 0; v < D.number_vertices; v++)
@@ -96,7 +103,7 @@ void CDetailManager::hw_Load_Geom()
         {
             const CDetail& D = *objects[o];
             u16 offset = 0;
-            for (u32 batch = 0; batch < hw_BatchSize; batch++)
+            for (u32 batch = 0; batch < geometry_copies; batch++)
             {
                 for (u32 i = 0; i < u32(D.number_indices); i++)
                     *pI++ = u16(u16(D.indices[i]) + u16(offset));

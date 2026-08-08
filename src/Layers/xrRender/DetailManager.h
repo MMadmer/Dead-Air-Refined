@@ -195,6 +195,18 @@ public:
     ref_geom hw_Geom;
     size_t hw_BatchSize;
 
+    // Copies of each detail mesh stored in the HW buffers. DX11 keeps a single copy and
+    // replicates it with DrawIndexedInstanced (the shader reads SV_InstanceID); other
+    // renderers keep hw_BatchSize copies with the copy index baked into every vertex.
+    size_t hw_GeometryCopies() const
+    {
+#ifdef USE_DX11
+        return 1;
+#else
+        return hw_BatchSize;
+#endif
+    }
+
     VertexStagingBuffer hw_VB;
     IndexStagingBuffer hw_IB;
 

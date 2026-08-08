@@ -223,8 +223,8 @@ void CDetailManager::Load()
         {
             m_objectVertexOffsets.push_back(vertexOffset);
             m_objectIndexOffsets.push_back(indexOffset);
-            vertexOffset += hw_BatchSize * object->number_vertices;
-            indexOffset += hw_BatchSize * object->number_indices;
+            vertexOffset += u32(hw_GeometryCopies()) * object->number_vertices;
+            indexOffset += u32(hw_GeometryCopies()) * object->number_indices;
         }
     }
     else
