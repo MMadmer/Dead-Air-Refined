@@ -1,6 +1,6 @@
 LIBRARY xrEngine
 EXPORTS
-    ??0CApplication@@QEAA@PEBDPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$01@std@@@Z @1
+    ??0CApplication@@QEAA@PEBDPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$00@std@@@Z @1
     ??0CAviPlayerCustom@@QEAA@AEBV0@@Z @2
     ??0CAviPlayerCustom@@QEAA@XZ @3
     ??0CCC_Float@@QEAA@$$QEAV0@@Z @4
@@ -540,7 +540,7 @@ EXPORTS
     ?CreateConsoleWnd@CTextConsole@@AEAAXXZ @538
     ?CreateLevel@IGame_Persistent@@UEAAPEAVIGame_Level@@XZ @539
     ?CreateLogWnd@CTextConsole@@AEAAXXZ @540
-    ?CreateRendererList@CEngineAPI@@QEAAXAEBV?$array@PEAVRendererModule@@$01@std@@@Z @541
+    ?CreateRendererList@CEngineAPI@@QEAAXAEBV?$array@PEAVRendererModule@@$00@std@@@Z @541
     ?CurrentEntity@IGame_Level@@QEBAPEAVIGameObject@@XZ @542
     ?CurrentFrame@CTheoraStream@@QEAAPEAUyuv_buffer@@XZ @543
     ?CurrentHeight_@CGameFont@@UEAAMXZ @544
@@ -772,7 +772,7 @@ EXPORTS
     ?InitBackend@ide@editor@xray@@QEAAXXZ @770
     ?InitDefault@CLAItem@@QEAAXXZ @771
     ?Initialize@CConsole@@UEAAXXZ @772
-    ?Initialize@CEngine@@QEAAXPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$01@std@@@Z @773
+    ?Initialize@CEngine@@QEAAXPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$00@std@@@Z @773
     ?Initialize@CEngineAPI@@QEAAXPEAVGameModule@@@Z @774
     ?Initialize@CGameFont@@UEAAXPEBD0@Z @775
     ?Initialize@CRenderDevice@@QEAAXXZ @776

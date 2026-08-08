@@ -37,9 +37,9 @@ void CheckAndSetupRenderer()
         return;
     }
 
-    if (strstr(Core.Params, "-rgl"))
-        Console->Execute("renderer renderer_rgl");
-    else if (strstr(Core.Params, "-r4"))
+    // The -rgl key is gone together with the OpenGL renderer: the mode list is built from
+    // the renderer modules, and only R4 remains.
+    if (strstr(Core.Params, "-r4"))
         Console->Execute("renderer renderer_r4");
     else if (strstr(Core.Params, "-r3"))
         Console->Execute("renderer renderer_r3");
@@ -61,7 +61,7 @@ void CheckAndSetupRenderer()
 
 extern void msCreate(pcstr name);
 
-void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 2>& modules)
+void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 1>& modules)
 {
     ZoneScoped;
 #ifdef DEBUG

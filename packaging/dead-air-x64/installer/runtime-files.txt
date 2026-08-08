@@ -34,7 +34,6 @@ xrMaterialSystem.dll
 xrNetServer.dll
 xrParticles.dll
 xrPhysics.dll
-xrRender_GL.dll
 xrRender_R4.dll
 xrScriptEngine.dll
 xrSound.dll

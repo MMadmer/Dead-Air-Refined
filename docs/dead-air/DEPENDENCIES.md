@@ -27,7 +27,7 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | --- | --- | --- |
 | parallel-hashmap | master `48f4c5fb0` | Swiss-table containers used by engine lookup structures. |
 | Tracy | 0.13.1 | Client source only. |
-| GLAD | 2.0.8 | Regenerated for the existing OpenGL/GLES API surface. |
+| GLAD | 2.0.8 | Vendored under `sdk/include/glad`; compiled only by the OpenGL renderer target, which is removed from the build (sources retained, not built). |
 | DirectXMesh | may2026 `8c6fdb1c` | Pinned `FlexibleVertexFormat.h` with the existing X-Ray integration retained. |
 | NVAPI | `cd6918f6` | Pinned public SDK headers and x64 import library. |
 
