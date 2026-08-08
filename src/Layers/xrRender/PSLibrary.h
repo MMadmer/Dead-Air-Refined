@@ -35,6 +35,9 @@ public:
     bool Load2();
     bool Save2();
 
+    // Loose per-particle overrides from gamedata/particles, applied after particles.xr.
+    void LoadLooseOverrides();
+
 public:
     CPSLibrary() { ; }
     ~CPSLibrary() { ; }

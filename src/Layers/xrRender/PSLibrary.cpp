@@ -27,7 +27,108 @@ void CPSLibrary::OnCreate()
         string_path fn;
         FS.update_path(fn, _game_data_, "particles.xr");
         Load(fn);
+        LoadLooseOverrides();
     }
+}
+
+// Per-particle overrides without rebuilding particles.xr. The whole game ships as one
+// archive, so editing any single effect used to require rebuilding it with tools modders
+// do not have. The single-file parsers (CPEDef::Load2 / CPGDef::Load2, ini-style .pe/.pg)
+// already exist for the editor build; here they run in game too: after the archive is
+// parsed, gamedata/particles is enumerated through the engine VFS and every file replaces
+// the same-named archive definition or is added as a new one.
+//
+// The effect name is the file path without extension relative to the particles directory,
+// so the on-disk layout must mirror the archive names. FindPEDIt/FindPGDIt use binary
+// search in game builds: replacements keep the order, additions append, therefore one
+// re-sort runs after the loop. With no loose files present this is a single VFS listing.
+void CPSLibrary::LoadLooseOverrides()
+{
+    ZoneScoped;
+
+    string_path path;
+    FS.update_path(path, _game_data_, "particles" DELIMITER);
+
+    FS_FileSet files;
+    if (0 == FS.file_list(files, path, FS_ListFiles, "*.pe,*.pg"))
+        return;
+
+    u32 replaced_ped = 0, added_ped = 0, replaced_pgd = 0, added_pgd = 0, failed = 0;
+    bool appended = false;
+
+    string_path fn, p_dir, p_name, p_ext, name;
+    for (const auto& f : files)
+    {
+        xr_sprintf(fn, sizeof(fn), "%s%s", path, f.name.c_str());
+        _splitpath(f.name.c_str(), nullptr, p_dir, p_name, p_ext);
+        xr_sprintf(name, sizeof(name), "%s%s", p_dir, p_name);
+
+        CInifile ini(fn, TRUE, TRUE, FALSE);
+
+        if (0 == xr_stricmp(p_ext, ".pe"))
+        {
+            PS::CPEDef* def = xr_new<PS::CPEDef>();
+            def->m_Name = name;
+            if (!def->Load2(ini))
+            {
+                Msg("! Loose particle effect skipped, failed to parse '%s'", fn);
+                xr_delete(def);
+                ++failed;
+                continue;
+            }
+
+            const PS::PEDIt it = FindPEDIt(name);
+            if (it != m_PEDs.end())
+            {
+                (*it)->DestroyShader();
+                xr_delete(*it);
+                *it = def;
+                ++replaced_ped;
+            }
+            else
+            {
+                m_PEDs.push_back(def);
+                appended = true;
+                ++added_ped;
+            }
+            def->CreateShader();
+        }
+        else if (0 == xr_stricmp(p_ext, ".pg"))
+        {
+            PS::CPGDef* def = xr_new<PS::CPGDef>();
+            def->m_Name = name;
+            if (!def->Load2(ini))
+            {
+                Msg("! Loose particle group skipped, failed to parse '%s'", fn);
+                xr_delete(def);
+                ++failed;
+                continue;
+            }
+
+            const PS::PGDIt it = FindPGDIt(name);
+            if (it != m_PGDs.end())
+            {
+                xr_delete(*it);
+                *it = def;
+                ++replaced_pgd;
+            }
+            else
+            {
+                m_PGDs.push_back(def);
+                appended = true;
+                ++added_pgd;
+            }
+        }
+    }
+
+    if (appended)
+    {
+        std::sort(m_PEDs.begin(), m_PEDs.end(), ped_sort_pred);
+        std::sort(m_PGDs.begin(), m_PGDs.end(), pgd_sort_pred);
+    }
+
+    Msg("* Loose particles: %u effects replaced, %u added; %u groups replaced, %u added; %u failed",
+        replaced_ped, added_ped, replaced_pgd, added_pgd, failed);
 }
 
 void CPSLibrary::OnDestroy()
