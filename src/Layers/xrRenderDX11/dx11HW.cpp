@@ -566,8 +566,25 @@ DeviceState CHW::GetDeviceState()
 
     if (presentTestState == PresentTestState::DeviceRemoved)
     {
-        FATAL("Graphics driver was updated or GPU was physically removed from computer.\n"
-              "Please, restart the game.");
+        // Report what DXGI actually says: a driver update and a physical removal are only two of
+        // the reasons, and the interesting ones (a hung or faulting GPU, an internal driver error,
+        // running out of video memory) are indistinguishable without this.
+        const HRESULT reason = pDevice ? pDevice->GetDeviceRemovedReason() : E_FAIL;
+        pcstr description;
+        switch (reason)
+        {
+        case DXGI_ERROR_DEVICE_HUNG: description = "the GPU stopped responding to commands"; break;
+        case DXGI_ERROR_DEVICE_RESET: description = "the GPU was reset"; break;
+        case DXGI_ERROR_DRIVER_INTERNAL_ERROR: description = "an internal graphics driver error"; break;
+        case DXGI_ERROR_INVALID_CALL: description = "an invalid rendering command"; break;
+        case E_OUTOFMEMORY: description = "the graphics driver ran out of memory"; break;
+        case DXGI_ERROR_DEVICE_REMOVED: description = "the device was removed"; break;
+        default: description = "an unknown reason"; break;
+        }
+        FATAL_F("Rendering device lost: %s (DXGI reason 0x%08X).\n"
+                "This also happens when the graphics driver is updated or the GPU is removed.\n"
+                "Please, restart the game.",
+            description, u32(reason));
         return DeviceState::Lost;
     }
 

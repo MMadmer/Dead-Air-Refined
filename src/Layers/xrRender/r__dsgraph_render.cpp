@@ -271,12 +271,20 @@ bool cmp_ssa(const T &lhs, const T &rhs)
 }
 
 // Sorting by SSA and changes minimizations
+// The old form short-circuited on SPass::equal() before comparing ssa. Two content-equal
+// passes with different ssa values then compared as equivalent while ordering differently
+// against a third pass, which breaks strict weak ordering. std::sort is undefined with such
+// a comparator: introsort's partition loop has no bounds check and relies on the comparator
+// to stop it, so once the data lines up it walks past the end of the vector and dereferences
+// garbage as an SPass* — typically only after tens of thousands of frames. Plain ssa order
+// with the pass pointer as a tie-break is a proper strict weak ordering and keeps the
+// intent: front-to-back by ssa, identical passes (same pointer key) adjacent.
 template <typename T>
 bool cmp_pass(const T& left, const T& right)
 {
-    if (left->first->equal(*right->first))
-        return false;
-    return left->second.ssa > right->second.ssa;
+    if (left->second.ssa != right->second.ssa)
+        return left->second.ssa > right->second.ssa;
+    return left->first < right->first;
 }
 
 void R_dsgraph_structure::render_graph(u32 _priority)
