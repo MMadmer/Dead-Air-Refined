@@ -33,6 +33,9 @@ protected:
 public:
     IC CPatrolPathStorage();
     virtual ~CPatrolPathStorage();
+    // Frees the registry honouring aliases: one path can be mapped under several
+    // names, so every pointer must be deleted exactly once. Details in the .cpp.
+    void destroy_registry();
     virtual void load(IReader& stream);
     virtual void save(IWriter& stream);
 
