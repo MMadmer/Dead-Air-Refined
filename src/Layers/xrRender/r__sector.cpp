@@ -107,7 +107,8 @@ void CPortal::setup(const level_portal_data_t& data, const xr_vector<CSector*>& 
     poly.assign(V, vcnt);
     pFace = face;
     pBack = back;
-    marker = 0xffffffff;
+    std::fill(std::begin(marker), std::end(marker), 0xffffffff);
+    std::fill(std::begin(bDualRender), std::end(bDualRender), FALSE);
 
     Fvector N, T;
     N.set(0, 0, 0);

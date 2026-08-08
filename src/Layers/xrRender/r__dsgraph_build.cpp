@@ -801,7 +801,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
         for (size_t K = 0; K < Sectors_xrc.r_count(); K++)
         {
             CPortal* pPortal = Portals[RImplementation.rmPortals->get_tris()[Sectors_xrc.r_begin()[K].id].dummy];
-            pPortal->bDualRender = TRUE;
+            pPortal->bDualRender[context_id] = TRUE;
         }
     }
 
@@ -814,7 +814,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
     }
 
     // Traverse sector/portal structure
-    PortalTraverser.traverse(Sectors[o.sector_id], o.view_frustum, o.view_pos, o.xform, o.portal_traverse_flags);
+    PortalTraverser.traverse(Sectors[o.sector_id], o.view_frustum, o.view_pos, o.xform, o.portal_traverse_flags, context_id);
 
     // Determine visibility for static geometry hierarchy
 #if 0
@@ -832,14 +832,14 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
 
             const auto &children = static_cast<FHierrarhyVisual*>(root)->children;
 
-            for (u32 v_it = 0; v_it < sector->r_frustums.size(); v_it++)
+            for (u32 v_it = 0; v_it < sector->r_frustums[context_id].size(); v_it++)
             {
 #if 0
                 const auto traverse_children = [&, this](const TaskRange<size_t>& range)
                 {
                     for (size_t id = range.cbegin(); id != range.cend(); ++id)
                     {
-                        const auto& view = sector->r_frustums[v_it];
+                        const auto& view = sector->r_frustums[context_id][v_it];
                         add_static(children[id], view, view.getMask());
                     }
                 };
@@ -853,7 +853,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
                     traverse_children(TaskRange<size_t>(0, children.size()));
                 }
 #else
-                const auto& view = sector->r_frustums[v_it];
+                const auto& view = sector->r_frustums[context_id][v_it];
                 add_static(root, view, view.getMask());
 #endif
             }
@@ -987,11 +987,11 @@ void R_dsgraph_structure::build_subspace_dynamic()
                 continue;
             }
 
-            if (PortalTraverser.i_marker != sector->r_marker)
+            if (PortalTraverser.i_marker != sector->r_marker[context_id])
                 continue; // inactive (untouched) sector
-            for (u32 v_it = 0; v_it < sector->r_frustums.size(); v_it++)
+            for (u32 v_it = 0; v_it < sector->r_frustums[context_id].size(); v_it++)
             {
-                const CFrustum& view = sector->r_frustums[v_it];
+                const CFrustum& view = sector->r_frustums[context_id][v_it];
                 if (!view.testSphere_dirty(sphere.P, sphere.R))
                     continue;
 

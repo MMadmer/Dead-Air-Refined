@@ -43,6 +43,7 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
     vis.query_camera_direction.set(0.f, 0.f, 1.f);
     vis.visible = true;
     vis.pending = false;
+    vis.miss_streak = 0;
     for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
         svis[id].id = id;
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)

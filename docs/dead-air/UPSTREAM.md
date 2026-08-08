@@ -96,6 +96,13 @@ rewritten, comments and diagnostics replaced; nothing was merged wholesale):
   rebuilt on the vanilla Dead Air base extracted from `configs.xdb0`;
 - OpenGL renderer removal — layout from `71011c8d` (build/link/module
   plumbing only, sources retained in tree);
+- local-light visibility stabilization — from `a2373dfe`
+  (`light_vis.cpp`, `light.h`): screen-edge-clipped volumes are treated
+  as visible instead of queried (edge-clipped occlusion queries report
+  false zeroes), OMNIPART faces measure the parent point-light sphere,
+  and a miss-streak hysteresis extinguishes a light only after three
+  consecutive negative queries; the reference's water stencil rework and
+  its shadow-visibility begin(graph_id) removal are not applicable here;
 - temporal upscaler renderer — documented as an RFC only
   (`docs/dead-air/TEMPORAL_UPSCALER_RFC.md`), no code adapted.
 

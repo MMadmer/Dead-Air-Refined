@@ -216,7 +216,14 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.build_subspace_static(true);
             };
 
-            const bool parallel_static = o.mt_calculate && TaskScheduler && TaskScheduler->GetWorkersCount() > 1;
+            // Local shadowed lights are built one at a time. Batching several lights through
+            // parallel tasks corrupts their shadow-map content: with a multi-light queue a
+            // face's smap periodically renders with a wrong caster set and its contribution
+            // blinks for seconds (Yanov interiors), regardless of occlusion queries, HOM, or
+            // sun. Serializing only this path fixes the flicker at ~2% frame cost while sun
+            // cascades and rain keep their parallel builds. The exact shared state is still
+            // unidentified; see docs/dead-air/x64-parity-open-issues.md before re-enabling.
+            const bool parallel_static = false;
             if (parallel_static)
                 data.task = &TaskScheduler->AddTask(calc_static_lights);
             else

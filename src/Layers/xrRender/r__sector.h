@@ -38,8 +38,10 @@ private:
 public:
     Fplane P;
     Fsphere S;
-    u32 marker;
-    BOOL bDualRender;
+    // Parallel graph builds (sun cascades, shadowed lights) traverse portals concurrently;
+    // shared marks would let one context abort another's walk, so each context owns a slot.
+    u32 marker[R__NUM_CONTEXTS];
+    BOOL bDualRender[R__NUM_CONTEXTS];
 
     void setup(const level_portal_data_t& data, const xr_vector<CSector*>& portals);
 
@@ -87,17 +89,23 @@ protected:
 
 public:
     xr_vector<CPortal*> m_portals;
-    xr_vector<CFrustum> r_frustums;
-    xr_vector<_scissor> r_scissors;
-    _scissor r_scissor_merged;
-    u32 r_marker;
+    // Traversal results are written during parallel graph builds; per-context slots keep
+    // one light's sector/frustum list from being clobbered by another running in a task.
+    xr_vector<CFrustum> r_frustums[R__NUM_CONTEXTS];
+    xr_vector<_scissor> r_scissors[R__NUM_CONTEXTS];
+    _scissor r_scissor_merged[R__NUM_CONTEXTS];
+    u32 r_marker[R__NUM_CONTEXTS];
 
 public:
     // Main interface
     dxRender_Visual* root() { return m_root; }
     void setup(const level_sector_data_t& data, const xr_vector<CPortal*>& portals);
 
-    CSector() { m_root = nullptr; }
+    CSector()
+    {
+        m_root = nullptr;
+        std::fill(std::begin(r_marker), std::end(r_marker), 0xffffffff);
+    }
     virtual ~CSector() = default;
 };
 
@@ -114,6 +122,7 @@ public:
 
 public:
     u32 i_marker; // input
+    u32 i_context{R__NUM_PARALLEL_CONTEXTS}; // input: context slot this traversal writes to
     u32 i_options; // input:	culling options
     Fvector i_vBase; // input:	"view" point
     Fmatrix i_mXFORM; // input:	4x4 xform
@@ -124,7 +133,7 @@ public:
 
 public:
     CPortalTraverser();
-    void traverse(IRender_Sector* start, CFrustum& F, Fvector& vBase, Fmatrix& mXFORM, u32 options);
+    void traverse(IRender_Sector* start, CFrustum& F, Fvector& vBase, Fmatrix& mXFORM, u32 options, u32 context_id);
     void traverse_sector(CSector *sector, CFrustum& F, _scissor& R);
     void fade_portal(CPortal* _p, float ssa);
     void fade_render();

@@ -10,9 +10,12 @@ CPortalTraverser::CPortalTraverser() { i_marker = 0xffffffff; }
 xr_vector<IRender_Sector*> dbg_sectors;
 #endif
 
-void CPortalTraverser::traverse(IRender_Sector* start, CFrustum& F, Fvector& vBase, Fmatrix& mXFORM, u32 options)
+void CPortalTraverser::traverse(IRender_Sector* start, CFrustum& F, Fvector& vBase, Fmatrix& mXFORM, u32 options, u32 context_id)
 {
     ZoneScoped;
+
+    VERIFY(context_id < R__NUM_CONTEXTS);
+    i_context = context_id;
 
     Fmatrix m_viewport_01 = {1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, -1.f / 2.f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
         1.f / 2.f + 0 + 0, 1.f / 2.f + 0 + 0, 0.0f, 1.0f};
@@ -43,13 +46,15 @@ void CPortalTraverser::traverse(IRender_Sector* start, CFrustum& F, Fvector& vBa
         for (u32 s = 0; s < r_sectors.size(); s++)
         {
             CSector* S = (CSector*)r_sectors[s];
-            S->r_scissor_merged.invalidate();
-            S->r_scissor_merged.depth = flt_max;
-            for (u32 it = 0; it < S->r_scissors.size(); it++)
+            auto& merged = S->r_scissor_merged[i_context];
+            const auto& scissors = S->r_scissors[i_context];
+            merged.invalidate();
+            merged.depth = flt_max;
+            for (u32 it = 0; it < scissors.size(); it++)
             {
-                S->r_scissor_merged.merge(S->r_scissors[it]);
-                if (S->r_scissors[it].depth < S->r_scissor_merged.depth)
-                    S->r_scissor_merged.depth = S->r_scissors[it].depth;
+                merged.merge(scissors[it]);
+                if (scissors[it].depth < merged.depth)
+                    merged.depth = scissors[it].depth;
             }
         }
     }
@@ -136,7 +141,7 @@ void CPortalTraverser::dbg_draw()
     {
         CSector* S = (CSector*)dbg_sectors[s];
         FVF::L verts[5];
-        Fbox2 bb = S->r_scissor_merged;
+        Fbox2 bb = S->r_scissor_merged[i_context];
         bb.min.x = bb.min.x * 2 - 1;
         bb.max.x = bb.max.x * 2 - 1;
         bb.min.y = (1 - bb.min.y) * 2 - 1;
@@ -155,28 +160,28 @@ void CPortalTraverser::dbg_draw()
 void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R_scissor)
 {
     // Register traversal process sector
-    if (sector->r_marker != i_marker)
+    if (sector->r_marker[i_context] != i_marker)
     {
-        sector->r_marker = i_marker;
+        sector->r_marker[i_context] = i_marker;
         r_sectors.push_back(sector);
-        sector->r_frustums.clear();
-        sector->r_scissors.clear();
+        sector->r_frustums[i_context].clear();
+        sector->r_scissors[i_context].clear();
     }
-    sector->r_frustums.push_back(F);
-    sector->r_scissors.push_back(R_scissor);
+    sector->r_frustums[i_context].push_back(F);
+    sector->r_scissors[i_context].push_back(R_scissor);
 
     // Search visible portals and go through them
     sPoly S, D;
     for (u32 I = 0; I < sector->m_portals.size(); I++)
     {
-        if (sector->m_portals[I]->marker == i_marker)
+        if (sector->m_portals[I]->marker[i_context] == i_marker)
             continue;
 
         CPortal* PORTAL = sector->m_portals[I];
         CSector* pSector;
 
         // Select sector (allow intersecting portals to be finely classified)
-        if (PORTAL->bDualRender)
+        if (PORTAL->bDualRender[i_context])
         {
             pSector = PORTAL->getSector(sector);
         }
@@ -228,7 +233,7 @@ void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R
 
         // Scissor and optimized HOM-testing
         _scissor scissor;
-        if (i_options & CPortalTraverser::VQ_SCISSOR && (!PORTAL->bDualRender))
+        if (i_options & CPortalTraverser::VQ_SCISSOR && (!PORTAL->bDualRender[i_context]))
         {
             // Build scissor rectangle in projection-space
             Fbox2 bb;
@@ -316,8 +321,8 @@ void CPortalTraverser::traverse_sector(CSector* sector, CFrustum& F, _scissor& R
         // Create _new_ frustum and recurse
         CFrustum Clip;
         Clip.CreateFromPortal(P, PORTAL->P.n, i_vBase, i_mXFORM);
-        PORTAL->marker = i_marker;
-        PORTAL->bDualRender = FALSE;
+        PORTAL->marker[i_context] = i_marker;
+        PORTAL->bDualRender[i_context] = FALSE;
         traverse_sector(pSector, Clip, scissor);
     }
 }

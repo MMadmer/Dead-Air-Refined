@@ -43,9 +43,25 @@ void light::vis_prepare(CBackend& cmd_list)
     if (ps_r2_ls_flags.test(R2FLAG_EXP_DONT_TEST_SHADOWED) && flags.bShadow)
         skiptest = true;
 
-    const bool cameraInsideVolume = Device.vCameraPosition.distance_to(spatial.sphere.P) <=
-        (spatial.sphere.R * 1.01f + safe_area);
-    if (skiptest || cameraInsideVolume)
+    // OMNIPART faces are slices of one point-light volume and carry no bounds of their own,
+    // so both edge and inside checks measure the parent sphere.
+    Fvector queryCenter = spatial.sphere.P;
+    float queryRadius = spatial.sphere.R;
+    if (flags.type == IRender_Light::OMNIPART)
+    {
+        queryCenter = position;
+        queryRadius = range;
+    }
+
+    // A volume clipped by the screen edge yields unreliable zeroes (the sampling misses all
+    // pixels while the light still reaches the frame), so treat it as visible and skip the query.
+    u32 planeMask = 0xffffffff;
+    const EFC_Visible viewVisibility = RImplementation.ViewBase.testSphere(queryCenter, queryRadius, planeMask);
+    const bool screenClippedVolume = viewVisibility == fcvPartial;
+
+    const bool cameraInsideVolume =
+        Device.vCameraPosition.distance_to(queryCenter) <= (queryRadius * 1.01f + safe_area);
+    if (skiptest || screenClippedVolume || cameraInsideVolume)
     { // small error
         if (vis.pending)
             RImplementation.occq_cancel(vis.query_id);
@@ -98,15 +114,29 @@ void light::vis_update()
         Device.vCameraDirection.dotproduct(vis.query_camera_direction) >= _cos(deg2rad(1.f));
 
     // A delayed zero is only valid for the view that issued the query.
-    vis.visible = fragments > cullfragments || !recentView;
+    const bool seen = (fragments > cullfragments) || !recentView;
     vis.pending = false;
-    if (vis.visible)
+
+    if (seen)
     {
+        vis.miss_streak = 0;
+        vis.visible = true;
         vis.frame2test = frame + ::Random.randI(delay_large_min, delay_large_max);
+        return;
     }
-    else
+
+    if (vis.miss_streak < 255)
+        ++vis.miss_streak;
+
+    // Hysteresis: a light dies only after several consecutive misses, because a single
+    // near-threshold zero (a few fragments through a doorway) is jitter, not disappearance.
+    if (vis.miss_streak < 3)
     {
         vis.frame2test = frame + 1;
+        return;
     }
+
+    vis.visible = false;
+    vis.frame2test = frame + 1;
 }
 } // namespace xray::render::RENDER_NAMESPACE

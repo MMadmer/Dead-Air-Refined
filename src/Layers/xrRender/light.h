@@ -81,6 +81,9 @@ public:
         Fvector query_camera_direction;
         bool visible; // visible/invisible
         bool pending; // test is still pending
+        // Consecutive "not seen" verdicts; a light dies only after several misses in a row,
+        // because a single near-threshold zero is jitter, not disappearance.
+        u8 miss_streak;
         u16 smap_ID;
     } vis;
 

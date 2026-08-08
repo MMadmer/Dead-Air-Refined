@@ -30,6 +30,10 @@ param(
     [string]$VSync = "off",
     [int]$FpsLimit = 0,
     [int]$TimeoutSeconds = 180,
+    # Extra console-variable lines appended to the generated user.ltx (diagnostics only).
+    [string[]]$ExtraConsole = @(),
+    # Extra engine command-line switches (diagnostics only), e.g. "-no_occq".
+    [string[]]$ExtraArgs = @(),
     [switch]$KeepRuntime
 )
 
@@ -66,7 +70,8 @@ if (Test-Path -LiteralPath $qaRoot) {
     }
     Remove-Item -LiteralPath $qaRoot -Recurse -Force
 }
-foreach ($directory in @($qaRoot, $qaAppData, $qaGameData, $qaSaves, $qaLogs)) {
+$qaShots = Join-Path $qaAppData "screenshots"
+foreach ($directory in @($qaRoot, $qaAppData, $qaGameData, $qaSaves, $qaLogs, $qaShots)) {
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
 }
 
@@ -161,6 +166,9 @@ $userLtx = $userLtx | Where-Object {
 foreach ($key in $overrides.Keys) {
     $userLtx += "$key $($overrides[$key])"
 }
+foreach ($line in $ExtraConsole) {
+    $userLtx += $line
+}
 Set-Content -LiteralPath (Join-Path $qaAppData "user.ltx") -Value $userLtx -Encoding Default
 
 # DPI: the installed executable carries HIGHDPIAWARE, and this copy lives elsewhere, so it
@@ -171,7 +179,8 @@ New-ItemProperty -Path $layersKey -Name $qaEngine -Value "~ HIGHDPIAWARE" -Prope
 
 $arguments = @(
     "-fsltx", "fsgame.ltx",
-    "-always_active", "-silent_error_mode", "-force_flushlog", "-r4",
+    "-always_active", "-silent_error_mode", "-force_flushlog", "-r4"
+) + $ExtraArgs + @(
     "-start", "server($SaveName/single/alife/load)"
 )
 
