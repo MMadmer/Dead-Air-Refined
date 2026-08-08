@@ -121,6 +121,12 @@ void CRender::level_Unload()
     if (!b_loaded)
         return;
 
+#if defined(USE_DX11)
+    // Before anything else: the volumes hang off sector roots and must be detached while the visual
+    // graph is still intact.
+    Unload3DFluid();
+#endif
+
     // HOM
     HOM.Unload();
 
@@ -525,11 +531,30 @@ void CRender::Load3DFluid()
                 VERIFY(pRoot->getType() == MT_HIERRARHY);
 
                 ((FHierrarhyVisual*)pRoot)->children.push_back(pVolume);
+                m_fluid_volumes.push_back({pRoot, pVolume});
             }
         }
 
         FS.r_close(F);
     }
+}
+
+void CRender::Unload3DFluid()
+{
+    for (auto& entry : m_fluid_volumes)
+    {
+        // Detach before releasing: the sector root does keep bDontDelete, but relying on that would
+        // tie this to the destruction order of the visual graph.
+        if (entry.parent && entry.parent->getType() == MT_HIERRARHY)
+            std::erase(static_cast<FHierrarhyVisual*>(entry.parent)->children, entry.volume);
+
+        if (entry.volume)
+        {
+            entry.volume->Release();
+            xr_delete(entry.volume);
+        }
+    }
+    m_fluid_volumes.clear();
 }
 #endif
 } // namespace xray::render::RENDER_NAMESPACE

@@ -347,6 +347,19 @@ private:
 #if RENDER != R_R2
     void Load3DFluid();
 #endif
+#if defined(USE_DX11)
+    void Unload3DFluid();
+
+    // Fluid volumes are parented to a sector root but never enter Visuals, and the root carries
+    // bDontDelete, so no one else can free them. Keep the parent next to the volume: unload detaches
+    // before releasing, which makes the result independent of the visual graph destruction order.
+    struct fluid_volume
+    {
+        dxRender_Visual* parent;
+        dxRender_Visual* volume;
+    };
+    xr_vector<fluid_volume> m_fluid_volumes;
+#endif
 
 public:
     void render_forward();
