@@ -58,10 +58,22 @@ void CLight_Compute_XFORM_and_VIS::compute_xf_spot(light* L)
         const float factor = ps_r2_ls_squality * powf(ssa, .5f) * powf(intensity, 1.f / 16.f) *
             powf(duelDot, .25f) * powf(sizeFactor, .25f) * powf(wideFactor, .5f);
 
-        const u32 size =
-            std::clamp(u32(iFloor(factor * SMAP_adapt_optimal)), SMAP_adapt_min, SMAP_adapt_max);
-        const int epsilon = iCeil(float(size) * .01f);
-        L->X.S.size = _abs(int(size) - cachedSize) >= epsilon ? size : cachedSize;
+        const int raw =
+            int(std::clamp(u32(iFloor(factor * SMAP_adapt_optimal)), SMAP_adapt_min, SMAP_adapt_max));
+
+        // The estimate tracks the view direction, so with a fine threshold camera motion
+        // retunes a dozen shadow maps every frame and the whole atlas repacks - visible as
+        // shadows shimmering all over an interior. Snap to a coarse ladder and leave the
+        // current rung only when the estimate moves well past its midpoint.
+        constexpr int step = 128;
+        if (_abs(raw - cachedSize) >= (step * 3) / 4)
+        {
+            const int snapped = std::clamp((raw + step / 2) / step * step,
+                int(SMAP_adapt_min), int(SMAP_adapt_max));
+            L->X.S.size = u32(snapped);
+        }
+        else
+            L->X.S.size = u32(cachedSize);
     }
     else
         L->X.S.size = SMAP_adapt_max;
