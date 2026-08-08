@@ -400,6 +400,14 @@ void render_sun::render()
                     dsgraph.render_sorted(); // strict-sorted geoms
                 }
             }
+            else
+            {
+                // The accumulate pass samples this slice regardless, and local lights wrote
+                // their atlas into slice 0 last frame. An empty caster graph must therefore
+                // still clear its slice to "no shadow", or the whole sun contribution drowns
+                // in garbage shadows on view angles where the portal walk finds no casters.
+                RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, cascade_ind);
+            }
 
             if (!RImplementation.o.support_rt_arrays)
             {

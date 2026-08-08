@@ -36,7 +36,11 @@ void CRender::render_lights(light_Package& LP)
 
         std::sort(source.begin(), source.end(), [](light* l1, light* l2)
         {
-            return l1->X.S.size > l2->X.S.size;
+            // Deterministic tie-break: with quantized sizes many lights compare equal, and
+            // an unstable order would hand out different atlas rects every frame.
+            if (l1->X.S.size != l2->X.S.size)
+                return l1->X.S.size > l2->X.S.size;
+            return l1 < l2;
         });
 
         for (u16 smap_ID = 0; refactored.size() != total; ++smap_ID)
