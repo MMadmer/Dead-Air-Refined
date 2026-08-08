@@ -130,7 +130,16 @@ private:
         }
 
         if (nodes)
+        {
+            if constexpr (!std::is_pod<T>::value)
+            {
+                // Old nodes were constructed and copied, not moved: destroy them
+                // only after every left/right link is rebased to the new storage.
+                for (value_type* cur = nodes; cur != nodes + limit; ++cur)
+                    cur->~value_type();
+            }
             allocator::deallocate(nodes, limit);
+        }
 
         nodes = newNodes;
         limit = newLimit;
