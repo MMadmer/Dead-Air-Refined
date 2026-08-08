@@ -167,6 +167,8 @@ Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
+int ps_r__light_shadow_budget = 0; // 0 = unlimited (exact parity with the pre-budget renderer)
+int ps_r__sun_cache_ms = 0; // middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (parity)
 
 float ps_r__Detail_l_ambient = 0.9f;
 float ps_r__Detail_l_aniso = 0.25f;
@@ -390,6 +392,18 @@ public:
         CCC_Integer::Execute(args);
         *value = 1;
     }
+};
+
+// Runtime-only experiment control: never persisted, so the parity default survives restarts.
+class CCC_RuntimeInteger final : public CCC_Integer
+{
+public:
+    CCC_RuntimeInteger(pcstr name, int* target, int minimum, int maximum)
+        : CCC_Integer(name, target, minimum, maximum)
+    {
+    }
+
+    void Save(IWriter*) override {}
 };
 
 class CCC_tf_Aniso : public CCC_Integer
@@ -864,6 +878,8 @@ void xrRender_initconsole()
 
     CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
+    CMD4(CCC_RuntimeInteger, "r__sun_cache_ms", &ps_r__sun_cache_ms, 0, 1000);
 
     // R1
     CMD4(CCC_Float, "r1_ssa_lod_a", &ps_r1_ssaLOD_A, 16, 96);

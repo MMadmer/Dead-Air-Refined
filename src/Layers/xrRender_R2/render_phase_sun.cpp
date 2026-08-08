@@ -46,6 +46,36 @@ void render_sun::init()
     o.mt_draw_enabled = RImplementation.o.mt_render;
 }
 
+// Middle/far sun cascades cover a large, mostly static area, yet they are re-culled and
+// re-rendered every frame. With r__sun_cache_ms > 0 the finished map is kept in its atlas
+// slice and reused while it stays valid. Validity is decided by three mandatory checks:
+// camera translation (threshold scales with cascade size), sun rotation (via chord length,
+// stable for near-parallel directions where acos loses precision), and age in milliseconds.
+// Time, not frames: a frame-count TTL degrades most on the slowest machines. The near
+// cascade is never cached: the actor and everything around him live there. Requires
+// rt-array shadow maps so local lights (slice 0) cannot clobber cached slices 1..N.
+bool render_sun::cascade_cache_expired(u32 cascade_ind) const
+{
+    const smap_cache& c = m_smap_cache[cascade_ind];
+    if (!c.valid)
+        return true;
+
+    if (Device.dwTimeGlobal - c.time_ms >= u32(ps_r__sun_cache_ms))
+        return true;
+
+    // 1/32 of the cascade box: ~5 m for the far cascade, where a static-shadow shift of
+    // that magnitude is not readable in the frame.
+    const float move_limit = m_sun_cascades[cascade_ind].size / 32.f;
+    if (Device.vCameraPosition.distance_to(c.cam_pos) > move_limit)
+        return true;
+
+    const float chord = sun->direction.distance_to(c.sun_dir);
+    if (rad2deg(2.f * asinf(chord > 2.f ? 1.f : chord * 0.5f)) > 0.05f)
+        return true;
+
+    return false;
+}
+
 void render_sun::calculate()
 {
     ZoneScoped;
@@ -100,6 +130,17 @@ void render_sun::calculate()
     CFrustum cull_frustum[R__NUM_SUN_CASCADES];
     Fvector3 cull_COP[R__NUM_SUN_CASCADES];
     Fmatrix cull_xform[R__NUM_SUN_CASCADES];
+
+    // One refresh decision for the whole cached group: middle and far blend into each
+    // other, so refreshing one against a stale neighbour would tear the seam. The near
+    // cascade neither caches nor votes — it always renders and would keep the group
+    // permanently fresh otherwise.
+    const bool cache_enabled = ps_r__sun_cache_ms > 0 && RImplementation.o.support_rt_arrays;
+    bool group_refresh = !cache_enabled;
+    if (cache_enabled)
+        for (u32 i = 1; i < R__NUM_SUN_CASCADES; ++i)
+            if (cascade_cache_expired(i))
+                group_refresh = true;
 
     for (u32 cascade_ind = 0; cascade_ind < R__NUM_SUN_CASCADES; ++cascade_ind)
     {
@@ -243,6 +284,25 @@ void render_sun::calculate()
             cull_xform[cascade_ind].mulB_44(adjust);
         }
 
+        // The cache decision lands here, before the matrix goes anywhere else: reusing the
+        // map means reusing the exact matrix it was rendered with, otherwise lighting picks
+        // shadows from a map taken under a different view and they swim across the screen.
+        m_smap_render[cascade_ind] = cascade_ind == 0 || group_refresh;
+        if (m_smap_render[cascade_ind])
+        {
+            if (cache_enabled && cascade_ind > 0)
+            {
+                smap_cache& c = m_smap_cache[cascade_ind];
+                c.xform = cull_xform[cascade_ind];
+                c.cam_pos = Device.vCameraPosition;
+                c.sun_dir = sun->direction;
+                c.time_ms = Device.dwTimeGlobal;
+                c.valid = true;
+            }
+        }
+        else
+            cull_xform[cascade_ind] = m_smap_cache[cascade_ind].xform;
+
         m_sun_cascades[cascade_ind].xform = cull_xform[cascade_ind];
 
         s32 limit = RImplementation.o.smapsize - 1;
@@ -259,6 +319,11 @@ void render_sun::calculate()
     {
         for (u32 cascade_ind = range.begin(); cascade_ind != range.end(); ++cascade_ind)
         {
+            // Cached cascade: culling the scene into the context would be wasted — render()
+            // skips the draw entirely and the atlas slice keeps its contents.
+            if (!m_smap_render[cascade_ind])
+                continue;
+
             // Begin SMAP-render
             auto& dsgraph = RImplementation.get_context(contexts_ids[cascade_ind]);
             {
@@ -302,6 +367,11 @@ void render_sun::render()
 #if defined(USE_DX11)
             //TracyD3D11Zone(HW.profiler_ctx, "render_sun::render_cascade");
 #endif
+
+            // Same skip as in calculate(): the slice already holds the cached map, and
+            // phase_smap_direct would clear it first thing.
+            if (!m_smap_render[cascade_ind])
+                continue;
 
             auto& dsgraph = RImplementation.get_context(contexts_ids[cascade_ind]);
 

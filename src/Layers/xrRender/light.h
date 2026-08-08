@@ -21,6 +21,8 @@ public:
         u32 bShadow : 1;
         u32 bVolumetric : 1;
         u32 bHudMode : 1;
+        // Admitted above r__light_shadow_budget and never demoted (actor's torch).
+        u32 bNeverDemote : 1;
 
     } flags;
     Fvector position;
@@ -47,6 +49,9 @@ public:
     float attenuation2; // Quadratic attenuation
 
     light* omnipart[6];
+    // Set on exported OMNIPART faces: shadow-budget admission is decided per parent so a
+    // point light never renders with a partial cube map.
+    light* omnipart_owner;
     xr_vector<light_indirect> indirect;
     u32 indirect_photons;
 
@@ -120,6 +125,8 @@ public:
     bool get_active() override { return flags.bActive; }
 
     void set_shadow(bool b) override { flags.bShadow = b; }
+
+    void set_never_demote(bool b) override { flags.bNeverDemote = b; }
 
     void set_volumetric(bool b) override { flags.bVolumetric = b; }
 

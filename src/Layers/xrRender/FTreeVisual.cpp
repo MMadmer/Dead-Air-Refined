@@ -136,6 +136,9 @@ struct FTreeVisual_setup
 
 FTreeVisual_setup& GetTreeVisualSetup()
 {
+    // thread_local is only race-free while calculate() stays a pure function of
+    // frame-constant inputs (Device time/frame, CurrentEnv wind). If accumulated
+    // wind state is ever added, switch to shared one-writer publication instead.
     static thread_local FTreeVisual_setup setup;
     if (setup.dwFrame != Device.dwFrame)
         setup.calculate();

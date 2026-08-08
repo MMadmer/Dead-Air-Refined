@@ -10,6 +10,24 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+namespace
+{
+// Lights demoted by the shadow budget keep lighting the scene unshadowed for this frame
+// only. bShadow is persistent game-visible light state, so it is restored on every exit
+// path once the frame's light passes are done. Lights cannot be destroyed mid-Render(),
+// which makes holding the pointers safe for the guard's lifetime.
+struct demoted_shadow_guard
+{
+    xr_vector<light*> lights;
+
+    ~demoted_shadow_guard()
+    {
+        for (light* L : lights)
+            L->flags.bShadow = true;
+    }
+};
+} // namespace
+
 void CRender::RenderMenu()
 {
 #if defined(USE_DX11)
@@ -219,9 +237,114 @@ void CRender::Render()
         dsgraph.cmd_list.set_ZB(Target->rt_MSAADepth->pZRT);
 #endif
     }
+    demoted_shadow_guard demoted;
     {
         PIX_EVENT(DEFER_TEST_LIGHT_VIS);
         light_Package& LP = Lights.package;
+
+        // Bound the number of local shadow maps per frame: every shadowed light re-submits
+        // scene geometry into its own shadow map. Excess lights are demoted to unshadowed
+        // lighting for this frame instead of being dropped. 0 keeps the unlimited behavior.
+        if (ps_r__light_shadow_budget > 0 && LP.v_shadowed.size() > size_t(ps_r__light_shadow_budget))
+        {
+            const size_t budget = size_t(ps_r__light_shadow_budget);
+            const Fvector eye = Device.vCameraPosition;
+
+            // A shadowed point light is exported as six OMNIPART faces; admission must stay
+            // per parent so a light never renders with a partial cube map. Spots group as
+            // themselves. Order of first appearance keeps grouping deterministic.
+            struct shadow_group
+            {
+                const light* key; // omnipart owner or the light itself; compared, never freed mid-frame
+                light* owner; // set only for OMNIPART groups
+                size_t first; // first entry index in v_shadowed
+                size_t count;
+                float score;
+                bool privileged;
+            };
+            xr_vector<shadow_group> groups;
+            groups.reserve(LP.v_shadowed.size());
+            for (size_t i = 0; i < LP.v_shadowed.size(); ++i)
+            {
+                light* L = LP.v_shadowed[i];
+                const light* key = L->omnipart_owner ? L->omnipart_owner : L;
+                if (!groups.empty() && groups.back().key == key)
+                {
+                    ++groups.back().count;
+                    continue;
+                }
+                shadow_group& G = groups.emplace_back();
+                G.key = key;
+                G.owner = L->omnipart_owner;
+                G.first = i;
+                G.count = 1;
+                G.privileged = !!key->flags.bNeverDemote;
+            }
+
+            // Score is camera distance to the light volume edge: standing inside a lamp gives a
+            // negative value and wins. Groups admitted last frame keep a one-sided advantage
+            // (1.5 m or 15% of range), otherwise two near-equal lamps swap shadows every frame
+            // and the difference between shadowed and unshadowed is very visible.
+            static xr_vector<const light*> prev_admitted;
+            for (shadow_group& G : groups)
+            {
+                G.score = G.key->position.distance_to(eye) - G.key->range;
+                if (std::find(prev_admitted.begin(), prev_admitted.end(), G.key) != prev_admitted.end())
+                    G.score -= _max(1.5f, G.key->range * 0.15f);
+            }
+
+            // Privileged groups (the actor's torch) are admitted above the budget. Only the
+            // first `budget` ordinary groups can possibly fit, so a full sort is unnecessary.
+            const auto first_ordinary = std::stable_partition(groups.begin(), groups.end(),
+                [](const shadow_group& G) { return G.privileged; });
+            const auto sort_end = groups.end() - first_ordinary > ptrdiff_t(budget)
+                ? first_ordinary + ptrdiff_t(budget)
+                : groups.end();
+            std::partial_sort(first_ordinary, sort_end, groups.end(),
+                [](const shadow_group& a, const shadow_group& b)
+                { return a.score < b.score || (a.score == b.score && a.key < b.key); });
+
+            xr_vector<light*> admitted;
+            admitted.reserve(LP.v_shadowed.size());
+            prev_admitted.clear();
+            size_t spent = 0;
+            for (const shadow_group& G : groups)
+            {
+                const bool admit = G.privileged || spent + G.count <= budget;
+                if (admit)
+                {
+                    if (!G.privileged)
+                        spent += G.count;
+                    prev_admitted.push_back(G.key);
+                    for (size_t i = 0; i < G.count; ++i)
+                        admitted.push_back(LP.v_shadowed[G.first + i]);
+                    continue;
+                }
+
+                // Demotion mirrors the unshadowed-point export layout exactly: the parent
+                // accumulates diffuse once through v_point, volumetric faces keep their fog
+                // through v_spot, plain faces are covered by the parent and are dropped.
+                // bShadow must be cleared on everything pushed: accum_point/accum_spot select
+                // the shadowed path by this flag and would sample stale shadow-atlas state.
+                if (G.owner)
+                {
+                    G.owner->flags.bShadow = false;
+                    demoted.lights.push_back(G.owner);
+                    LP.v_point.push_back(G.owner);
+                }
+                for (size_t i = 0; i < G.count; ++i)
+                {
+                    light* L = LP.v_shadowed[G.first + i];
+                    L->flags.bShadow = false;
+                    demoted.lights.push_back(L);
+                    if (!G.owner)
+                        LP.v_spot.push_back(L);
+                    else if (L->flags.bVolumetric)
+                        LP.v_spot.push_back(L);
+                }
+            }
+            LP.v_shadowed = std::move(admitted);
+        }
 
         // stats
         Stats.l_shadowed = LP.v_shadowed.size();

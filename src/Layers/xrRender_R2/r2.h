@@ -147,6 +147,26 @@ struct render_sun : public i_render_phase
     bool last_cascade_chain_mode{ false };
 
     u32 contexts_ids[R__NUM_SUN_CASCADES];
+
+    // Experimental middle/far shadow-map reuse (r__sun_cache_ms, default off). A cached map
+    // is only ever sampled with the matrix it was rendered with, so the pair is stored
+    // together. Lifecycle events need no explicit hooks: any pause longer than the TTL
+    // (level load, device reset) expires the slot by age before it can be sampled again.
+    struct smap_cache
+    {
+        Fmatrix xform; // matrix the cached map was rendered with
+        Fvector cam_pos; // camera position at render time
+        Fvector sun_dir; // sun direction at render time
+        u32 time_ms{ 0 };
+        bool valid{ false };
+    };
+    smap_cache m_smap_cache[R__NUM_SUN_CASCADES];
+
+    // Decided once per frame in calculate(), obeyed by render(): skipping the draw must
+    // always pair with keeping the cached matrix.
+    bool m_smap_render[R__NUM_SUN_CASCADES]{};
+
+    bool cascade_cache_expired(u32 cascade_ind) const;
 };
 
 struct render_sun_old : public i_render_phase

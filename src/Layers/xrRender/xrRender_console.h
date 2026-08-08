@@ -69,6 +69,8 @@ enum GeometryOptimizationQuality : u32
 extern ECORE_API u32 ps_r_optimize_static;
 
 extern ECORE_API int ps_r__LightSleepFrames;
+extern ECORE_API int ps_r__light_shadow_budget;
+extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;
 extern ECORE_API float ps_r__Detail_l_aniso;

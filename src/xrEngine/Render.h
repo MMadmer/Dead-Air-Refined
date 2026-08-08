@@ -64,6 +64,9 @@ public:
     virtual void set_color(float r, float g, float b) = 0;
     virtual void set_hud_mode(bool b) = 0;
     virtual bool get_hud_mode() = 0;
+    // Light that r__light_shadow_budget never demotes and that costs no budget slot
+    // (the actor's torch). Not pure: renderers without the budget ignore it.
+    virtual void set_never_demote(bool) {}
     virtual ~IRender_Light();
 };
 struct ENGINE_API resptrcode_light : public resptr_base<IRender_Light>

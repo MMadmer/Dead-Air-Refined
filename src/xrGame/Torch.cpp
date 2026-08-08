@@ -551,6 +551,15 @@ void CTorch::UpdateCL()
 {
     inherited::UpdateCL();
 
+    // Only the light in the actor's hands bypasses the local shadow budget: with a small
+    // budget the slot would go to the nearest wall lamp and the hand light would shine
+    // through walls. NPC and dropped torches compete like any other light. Refreshed every
+    // frame because ownership changes on pickup/drop.
+    const bool actorOwned = !!smart_cast<CActor*>(H_Parent());
+    light_render->set_never_demote(actorOwned);
+    light_render2->set_never_demote(actorOwned);
+    light_omni->set_never_demote(actorOwned);
+
     if (!m_switched_on)
         return;
 

@@ -14,6 +14,7 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
     flags.bShadow = false;
     flags.bVolumetric = false;
     flags.bHudMode = false;
+    flags.bNeverDemote = false;
     position.set(0, -1000, 0);
     direction.set(0, -1, 0);
     right.set(0, 0, 0);
@@ -31,6 +32,7 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
 
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
     ZeroMemory(omnipart, sizeof(omnipart));
+    omnipart_owner = nullptr;
     s_spot = nullptr;
     s_point = nullptr;
     vis.frame2test = 0; // xffffffff;
@@ -368,6 +370,7 @@ void light::Export(light_Package& package)
                 light* L = omnipart[f];
                 Fvector R;
                 R.crossproduct(cmNorm[f], cmDir[f]);
+                L->omnipart_owner = this;
                 L->set_type(IRender_Light::OMNIPART);
                 L->set_shadow(shadowEnabled);
                 L->set_position(position);
