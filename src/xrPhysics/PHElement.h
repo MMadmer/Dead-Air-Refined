@@ -46,6 +46,10 @@ class CPHElement : public CPhysicsElement,
     // ObjectContactCallbackFun*	temp_for_push_out;			//->to shell ??		//aux
     // u32							push_untill;				//->to shell ??		//st
     Flags8 m_flags; //
+    // Invalid-pose containment state for BonesCallBack. Per element on purpose: bone callbacks
+    // are serialized by the renderer's UCalc_Mutex, so unshared state needs no extra sync.
+    u64 m_invalid_pose_report_step{};
+    u32 m_invalid_pose_contained{};
     enum
     {
         flActive = 1 << 0,

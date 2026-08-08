@@ -959,11 +959,42 @@ void CPHElement::BonesCallBack(CBoneInstance* B)
     VERIFY_RMATRIX(B->mTransform);
     VERIFY(valid_pos(B->mTransform.c, phBoundaries));
 
-    CalculateBoneTransform(B->mTransform);
+    // Both source matrices come from ODE and can carry NaN/Inf after a solver failure. The
+    // VERIFYs below vanish in Release, while the renderer keeps a live R_ASSERT2(_valid(...))
+    // on the resulting bone matrix, so a solver glitch used to kill the game. Compute into a
+    // local and publish only a valid result: on failure the bone keeps its previous pose.
+    Fmatrix candidate = B->mTransform;
+    CalculateBoneTransform(candidate);
 
     //	Fmatrix parent;
     //	parent.invert		( m_shell->mXFORM );
     //	B->mTransform.mul_43( parent, mXFORM );
+
+    if (!_valid(candidate))
+    {
+        // Identity only when the stored pose is broken too, otherwise keep the last valid one.
+        if (!_valid(B->mTransform))
+            B->mTransform = Fidentity;
+
+        ++m_invalid_pose_contained;
+
+        // First hit reports immediately, then at most once per 300 world steps per element,
+        // otherwise a permanently broken body floods the log every frame.
+        const u64 now = ph_world ? ph_world->StepsNum() : 0;
+        if (m_invalid_pose_contained == 1 || now - m_invalid_pose_report_step > 300)
+        {
+            m_invalid_pose_report_step = now;
+            IPhysicsShellHolder* owner = PhysicsRefObject();
+            IKinematics* kinematics = m_shell->PKinematics();
+            Msg("! Physics solver produced an invalid bone transform, previous pose kept: object "
+                "'%s', visual '%s', bone '%s', contained %u",
+                owner ? owner->ObjectName() : "unknown", owner ? owner->ObjectNameVisual() : "unknown",
+                kinematics ? kinematics->LL_BoneName_dbg(m_SelfID) : "unknown", m_invalid_pose_contained);
+        }
+        return;
+    }
+
+    B->mTransform = candidate;
 
     VERIFY_RMATRIX(B->mTransform);
     VERIFY(valid_pos(B->mTransform.c, phBoundaries));
