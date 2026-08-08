@@ -69,6 +69,14 @@ void CSE_ALifeOnlineOfflineGroup::register_member(ALife::_OBJECT_ID member_id)
     CSE_ALifeDynamicObject* object = ai().alife().objects().object(member_id);
     CSE_ALifeMonsterAbstract* monster = smart_cast<CSE_ALifeMonsterAbstract*>(object);
     VERIFY(monster);
+    // A corrupt or modded save can list a non-monster ID in the roster; the VERIFY above
+    // vanishes in release and every line below dereferences the cast result.
+    if (!monster)
+    {
+        Msg("! Squad [%d]: member [%d] (%s) is not a monster, skipped", ID, member_id,
+            object ? object->name_replace() : "missing");
+        return;
+    }
     VERIFY(monster->g_Alive());
 
     bool empty = m_members.empty();
