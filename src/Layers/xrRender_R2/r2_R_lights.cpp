@@ -113,9 +113,6 @@ void CRender::render_lights(light_Package& LP)
     static xr_vector<task_data_t> lights_queue{};
     lights_queue.reserve(R__NUM_PARALLEL_CONTEXTS);
 
-    // Visibility history belongs to the light, while worker graph IDs are transient.
-    constexpr u32 visibility_slot = 0;
-
     const auto& flush_lights = [&]()
     {
         ZoneScopedN("flush lights");
@@ -160,7 +157,7 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_finalclip++;
             }
 
-            L->svis[visibility_slot].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
+            L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
             RImplementation.release_context(batch_id);
         }
 
@@ -200,26 +197,34 @@ void CRender::render_lights(light_Package& LP)
             data.batch_id = batch_id;
             data.L = L;
 
-            auto& dsgraph = get_context(batch_id);
-            L->svis[visibility_slot].begin(batch_id);
+            // The svis slot is the context id, fixed at light creation. The old scheme kept
+            // one slot and retargeted it per frame (begin(graph_id)), which let caster state
+            // collected for one graph leak into another and reshadow the light differently
+            // between frames.
+            const auto& calc_lights = [data]
+            {
+                ZoneScopedN("calc lights");
+                auto& dsgraph = RImplementation.get_context(data.batch_id);
+                light* L = data.L;
 
-            dsgraph.o.phase = PHASE_SMAP;
-            dsgraph.r_pmask(true, RImplementation.o.Tshadows);
-            dsgraph.o.sector_id = L->spatial.sector_id;
-            dsgraph.o.view_pos = L->position;
-            dsgraph.o.xform = L->X.S.combine;
-            dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+                L->svis[data.batch_id].begin();
 
-            // Local shadowed lights are built one at a time with the whole caster set
-            // collected in one pass, matching the sequential arrangement the reference
-            // project runs with a stable picture. The split build (static casters in a
-            // task, deferred visuals and dynamics collected later) plus a multi-light
-            // queue is what made a face's smap render with a wrong caster set and dance
-            // while the player moves; see docs/dead-air/x64-parity-open-issues.md.
-            dsgraph.build_subspace();
+                dsgraph.o.phase = PHASE_SMAP;
+                dsgraph.r_pmask(true, RImplementation.o.Tshadows);
+                dsgraph.o.sector_id = L->spatial.sector_id;
+                dsgraph.o.view_pos = L->position;
+                dsgraph.o.xform = L->X.S.combine;
+                dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+
+                dsgraph.build_subspace();
+            };
+
+            if (o.mt_calculate)
+                data.task = &TaskScheduler->AddTask(calc_lights);
+            else
+                calc_lights();
 
             lights_queue.emplace_back(data);
-            flush_lights();
         }
         flush_lights(); // in case if something left
 

@@ -25,12 +25,9 @@ void smapvis::invalidate()
     frame_sleep = Device.dwFrame + ps_r__LightSleepFrames;
     invisible.clear();
 }
-void smapvis::begin(u32 graph_id)
-{
-    VERIFY(graph_id < R__NUM_CONTEXTS);
-    id = static_cast<int>(graph_id);
-    begin();
-}
+// No begin(graph_id) overload on purpose: svis is an array indexed by context and every slot's
+// id is fixed at light creation (light.cpp). Retargeting one slot across contexts let caster
+// state collected for one graph leak into another and reshadow the same light between frames.
 void smapvis::begin()
 {
     auto& dsgraph = RImplementation.get_context(id);

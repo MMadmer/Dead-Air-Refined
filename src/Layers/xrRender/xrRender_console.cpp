@@ -167,13 +167,18 @@ Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
-int ps_r__light_shadow_budget = 0; // 0 = unlimited (exact parity with the pre-budget renderer)
-// Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame. Rebuilding every frame
-// re-derives the cascade volume from the camera frustum rays, so under rotation the snapped
-// matrix steps by whole texel quanta and every sun shadow in the scene jumps with it. The
-// reference project ships 100 ms and its picture is stable in motion; cache validity does
-// not depend on the view direction, only on camera translation, sun rotation, and age.
-int ps_r__sun_cache_ms = 100;
+// The unit is scene passes (one per shadow-map face), and admission is per whole lamp: a
+// shadowed point light is six OMNIPART faces, so 6 admits exactly the nearest full lamp (or up
+// to six spots). The reference build ships capped too (its unit is faces as well), which is the
+// picture that was approved; the actor's torch is admitted above the budget. 0 = unlimited.
+int ps_r__light_shadow_budget = 6;
+// Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
+// volume is fitted to the camera frustum, but cache validity never checks the view direction,
+// so any turn or walk applies sun light through a stale volume: the newly revealed part of
+// the frame stays black until the next rebuild. Proven by an A/B accumulator probe on the
+// light_test save (with 100 ms the frame goes half-dark right after a turn; with 0 it never
+// does). The reference project ships 100 ms, but on our content the hole is plainly visible.
+int ps_r__sun_cache_ms = 0;
 
 float ps_r__Detail_l_ambient = 0.9f;
 float ps_r__Detail_l_aniso = 0.25f;

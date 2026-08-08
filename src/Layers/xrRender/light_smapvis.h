@@ -26,7 +26,6 @@ public:
     ~smapvis();
 
     void invalidate();
-    void begin(u32 graph_id);
     void begin(); // should be called before 'marker++' and before graph-build
     void end();
     void mark();
