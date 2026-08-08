@@ -57,12 +57,18 @@ private:
     u32 m_column_length;
     u32 m_max_x;
     u32 m_max_z;
+    // Transient nearest-vertex index: begin offset of every packed-XZ column in the sorted vertex
+    // array (CSR layout, last entry = vertex count). Left empty when load-time validation of the
+    // sort invariant fails; vertex(position) then keeps the old full scan.
+    xr_vector<u32> m_vertex_column_offsets;
 
 public:
     mutable CStatTimer NodeTime;
 
 private:
+    void build_vertex_column_index();
     u32 vertex(const Fvector& position) const;
+    u32 vertex_full_scan(const Fvector& position) const;
     u32 guess_vertex_id(u32 const& current_vertex_id, Fvector const& position) const;
 
 public:

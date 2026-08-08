@@ -74,8 +74,15 @@ void CSpaceRestrictionComposition::initialize()
     string256 element;
 
     for (u32 i = 0; i < n; ++i)
-        if (!m_space_restriction_holder->restriction(_GetItem(m_space_restrictors.c_str(), i, element))->initialized())
+    {
+        const auto member = m_space_restriction_holder->restriction(_GetItem(m_space_restrictors.c_str(), i, element));
+        // Shapes build their border on demand now, so ask first: only a member whose restrictor
+        // has not spawned yet (a placeholder composition) stays uninitialized and defers us.
+        if (!member->initialized())
+            member->initialize();
+        if (!member->initialized())
             return;
+    }
 
     Fsphere* spheres = (Fsphere*)xr_alloca(n * sizeof(Fsphere));
     for (u32 i = 0; i < n; ++i)

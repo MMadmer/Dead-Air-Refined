@@ -7,6 +7,9 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+
+#include <mutex>
+
 #include "space_restriction_shape.h"
 #include "ai_space.h"
 #include "xrAICore/Navigation/level_graph.h"
@@ -84,6 +87,25 @@ void CSpaceRestrictionShape::fill_shape(const CCF_Shape::shape_def& shape)
 #ifdef DEBUG
     ai().level_graph().iterate_vertices(start, dest, CShapeTestPredicate(this));
 #endif
+}
+
+void CSpaceRestrictionShape::initialize()
+{
+    if (m_initialized)
+        return;
+
+    // Deferred builds run on whichever thread asks first: path builds execute as tasks and the
+    // main thread joins them through TaskScheduler::Wait, so two builders can reach the same
+    // border at once. One process-wide lock is enough - it is taken only until a shape is built,
+    // once per shape, and a ready border is read lock-free through the atomic flag.
+    static std::mutex s_border_build_lock;
+    std::lock_guard lock(s_border_build_lock);
+
+    if (m_initialized)
+        return;
+
+    build_border();
+    m_initialized = true;
 }
 
 void CSpaceRestrictionShape::build_border()
@@ -179,7 +201,8 @@ void CSpaceRestrictionShape::test_correctness()
 
 bool CSpaceRestrictionShape::inside(const Fsphere& sphere)
 {
-    VERIFY(m_initialized);
+    // Pure shape-geometry test: legal before the border is built (the border build itself and
+    // compositions call it on not-yet-initialized shapes).
     VERIFY(m_restrictor);
     return (m_restrictor->inside(sphere));
 }

@@ -36,6 +36,35 @@ extern void release_smart_cast_stats();
 extern void InitHudSoundSettings();
 
 #include "xrEngine/IGame_Persistent.h"
+
+// The first template-profile human spawn of a session otherwise pays for loading every specific
+// character from XML at once (CSE_ALifeTraderAbstract::specific_character enumerates them all).
+// Both tables use auto_delete = false and live until clean_game_globals, so one pass over the
+// same public lookup path here, inside the startup task, turns every later lookup into a read.
+// Character metadata only - no visuals, sounds or other resources are touched.
+static void warmup_character_descriptions()
+{
+    for (int i = 0, e = CSpecificCharacter::GetMaxIndex(); i <= e; ++i)
+    {
+        const shared_str id = CSpecificCharacter::IndexToId(i);
+        if (!id.size())
+            continue;
+
+        CSpecificCharacter character;
+        character.Load(id);
+    }
+
+    for (int i = 0, e = CCharacterInfo::GetMaxIndex(); i <= e; ++i)
+    {
+        const shared_str id = CCharacterInfo::IndexToId(i);
+        if (!id.size())
+            continue;
+
+        CCharacterInfo profile;
+        profile.Load(id);
+    }
+}
+
 void init_game_globals()
 {
     ZoneScoped;
@@ -53,6 +82,8 @@ void init_game_globals()
     CHARACTER_RANK::InitInternal();
     CHARACTER_REPUTATION::InitInternal();
     MONSTER_COMMUNITY::InitInternal();
+
+    warmup_character_descriptions();
 }
 
 void clean_game_globals()

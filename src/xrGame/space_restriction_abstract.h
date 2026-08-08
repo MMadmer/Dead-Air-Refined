@@ -8,11 +8,15 @@
 
 #pragma once
 
+#include <atomic>
+
 class CSpaceRestrictionAbstract
 {
 protected:
     xr_vector<u32> m_border;
-    bool m_initialized;
+    // Publication point for m_border: shapes build it on first use, and the first use can come
+    // from any pathfinding task thread. Readers check the flag before touching the vector.
+    std::atomic<bool> m_initialized;
     xr_vector<u32> m_accessible_neighbour_border;
     bool m_accessible_neighbour_border_actual;
 

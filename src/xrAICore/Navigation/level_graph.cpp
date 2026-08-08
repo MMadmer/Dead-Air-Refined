@@ -39,6 +39,44 @@ void CLevelGraph::Initialize(const char* filePath)
     m_column_length = iFloor((box.vMax.x - box.vMin.x) / header().cell_size() + EPS_L + 1.5f);
     m_access_mask.assign(header().vertex_count(), true);
     unpack_xz(vertex_position(box.vMax), m_max_x, m_max_z);
+    build_vertex_column_index();
+}
+
+// Vertices are stored sorted by packed xz = x * row_length + z, so every x column is one contiguous
+// range of the array. The invariant is validated here instead of assumed: a graph that breaks it
+// simply keeps the old full-scan nearest-vertex search.
+void CLevelGraph::build_vertex_column_index()
+{
+    m_vertex_column_offsets.clear();
+
+    const u32 count = header().vertex_count();
+    if (!count || !m_row_length)
+        return;
+
+    const CLevelVertex* const nodes = m_nodes->begin();
+    const u32 last_column = nodes[count - 1].position().xz() / m_row_length;
+    // A corrupt xz or a degenerate row length would demand an absurd table - keep the fallback.
+    if (last_column >= (1u << 22))
+        return;
+
+    xr_vector<u32> offsets;
+    offsets.reserve(last_column + 2);
+
+    u32 previous_xz = 0;
+    for (u32 i = 0; i < count; ++i)
+    {
+        const u32 xz = nodes[i].position().xz();
+        if (i && xz < previous_xz)
+            return; // not sorted
+        previous_xz = xz;
+
+        const u32 column = xz / m_row_length;
+        while (offsets.size() <= column)
+            offsets.push_back(i);
+    }
+    offsets.push_back(count);
+
+    m_vertex_column_offsets = std::move(offsets);
 }
 
 CLevelGraph::~CLevelGraph()
@@ -46,10 +84,10 @@ CLevelGraph::~CLevelGraph()
     xr_delete(m_nodes);
     FS.r_close(m_reader);
 }
-u32 CLevelGraph::vertex(const Fvector& position) const
+// The old nearest-vertex search: distance to every vertex of the graph. Kept callable as the exact
+// fallback for graphs that failed column-index validation and as the QA oracle for the fast search.
+u32 CLevelGraph::vertex_full_scan(const Fvector& position) const
 {
-    CLevelGraph::CPosition _node_position;
-    vertex_position(_node_position, position);
     float min_dist = flt_max;
     u32 selected;
     set_invalid_vertex(selected);
@@ -61,6 +99,72 @@ u32 CLevelGraph::vertex(const Fvector& position) const
             min_dist = dist;
             selected = i;
         }
+    }
+
+    VERIFY(valid_vertex_id(selected));
+    return (selected);
+}
+
+// Nearest vertex by expanding over packed-XZ columns instead of scanning the whole graph. Result
+// parity with vertex_full_scan: same distance() metric, ties resolve to the lowest vertex id, and
+// the expansion only stops once no unvisited column can hold a closer or equal contour.
+u32 CLevelGraph::vertex(const Fvector& position) const
+{
+    if (m_vertex_column_offsets.empty())
+        return (vertex_full_scan(position));
+
+    const float cell = header().cell_size();
+    const float fractional_column = (position.x - header().box().vMin.x) / cell;
+    // Non-finite input, a degenerate cell size, or a range where float precision could put the
+    // start column off by more than one: let the full scan define the behavior.
+    if (!(fractional_column > -1048576.f && fractional_column < 1048576.f))
+        return (vertex_full_scan(position));
+
+    const int last_column = int(m_vertex_column_offsets.size()) - 2;
+    int center = iFloor(fractional_column);
+    clamp(center, 0, last_column);
+
+    float min_dist = flt_max;
+    u32 selected;
+    set_invalid_vertex(selected);
+
+    for (int radius = 0;; ++radius)
+    {
+        // Every unvisited column lies more than (radius - 1) cells away from the query along X by
+        // vertex centers; a cell contour reaches half a cell back toward the query and the float
+        // start-column estimate may be off by one more, hence the 2.5 cells of slack.
+        if (valid_vertex_id(selected))
+        {
+            const float lower_bound = (float(radius) - 2.5f) * cell;
+            if (lower_bound > 0.f && lower_bound * lower_bound > min_dist)
+                break;
+        }
+
+        const int left = center - radius;
+        const int right = center + radius;
+
+        for (int side = 0; side < 2; ++side)
+        {
+            const int column = side ? right : left;
+            if (column < 0 || column > last_column || (side && !radius))
+                continue;
+
+            const u32 range_end = m_vertex_column_offsets[column + 1];
+            for (u32 id = m_vertex_column_offsets[column]; id < range_end; ++id)
+            {
+                const float dist = distance(id, position);
+                // Strict improvement, plus lowest id wins exact ties: the full scan keeps the
+                // first minimum in ascending id order.
+                if (dist < min_dist || (dist == min_dist && id < selected))
+                {
+                    min_dist = dist;
+                    selected = id;
+                }
+            }
+        }
+
+        if (left <= 0 && right >= last_column)
+            break; // all columns visited
     }
 
     VERIFY(valid_vertex_id(selected));

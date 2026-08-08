@@ -36,17 +36,17 @@ IC float CSpaceRestrictionShape::radius(const CCF_Shape::shape_def& data) const
 #endif
 }
 
+// The border is built on first border() request, not here: build_border walks every level-graph
+// vertex inside the shape bounds, most restrictors are never queried, and the eager build
+// dominated restrictor spawn cost. The base border() already calls initialize() on demand.
 IC CSpaceRestrictionShape::CSpaceRestrictionShape(CSpaceRestrictor* space_restrictor, bool default_restrictor)
 {
     m_default = default_restrictor;
-    m_initialized = true;
+    m_initialized = false;
 
     VERIFY(space_restrictor);
     m_restrictor = space_restrictor;
-
-    build_border();
 }
 
-IC void CSpaceRestrictionShape::initialize() { VERIFY(m_initialized); }
 IC bool CSpaceRestrictionShape::shape() const { return (true); }
 IC bool CSpaceRestrictionShape::default_restrictor() const { return (m_default); }
