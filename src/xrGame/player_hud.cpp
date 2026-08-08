@@ -12,7 +12,6 @@
 player_hud* g_player_hud = nullptr;
 extern ENGINE_API shared_str current_player_hud_sect;
 
-static float hudInertionFactor = 1.f;
 
 // --#SM+# Begin--
 constexpr float PITCH_OFFSET_R    = 0.0f;   // Насколько сильно ствол смещается вбок (влево) при вертикальных поворотах камеры
@@ -430,10 +429,10 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
                                             m_visual_name.c_str(), anim_name_r)
                                             .c_str());
 
-    float speed = CalcMotionSpeed(anm->m_base_name, anm->m_anim_speed);
-    const std::string_view animationName{ anm_name_b.c_str() };
-    if (animationName.starts_with("anm_show") || animationName.starts_with("anm_hide"))
-        speed = m_parent->inertion_animation_speed(speed);
+    // Draw and holster animations run at their configured speed. Scaling them by the item's
+    // control inertion made heavy weapons slow to raise and, with that, slow to fire; the
+    // balance of that Dead Air 1.0 mechanic does not hold up, so it is not applied here.
+    const float speed = CalcMotionSpeed(anm->m_base_name, anm->m_anim_speed);
 
     rnd_idx = (u8)Random.randI(anm->m_animations.size());
     const motion_descr& M = anm->m_animations[rnd_idx];
@@ -733,16 +732,6 @@ u32 player_hud::anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotio
     return motion_length(M, md, speed, itemModel);
 }
 
-float player_hud::inertion_animation_speed(float speed) const
-{
-    return _max(speed / hudInertionFactor, EPS_S);
-}
-
-void player_hud::set_inertion_k(float inertion)
-{
-    hudInertionFactor = std::isfinite(inertion) ? _max(inertion, 0.1f) : 1.f;
-}
-
 void player_hud::update_additional(Fmatrix& trans) const
 {
     if (m_attached_items[0])
@@ -828,8 +817,7 @@ void player_hud::update_inertion(Fmatrix& trans) const
             _origin_offset *= power_factor;
         }
 
-        const float inertionScale = hudInertionFactor * hudInertionFactor;
-        st_last_dir.mad(diff_dir, _tendto_speed / inertionScale * Device.fTimeDelta);
+        st_last_dir.mad(diff_dir, _tendto_speed * Device.fTimeDelta);
         origin.mad(diff_dir, _origin_offset);
 
         // pitch compensation

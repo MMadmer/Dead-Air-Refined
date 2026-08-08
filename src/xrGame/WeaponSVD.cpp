@@ -5,9 +5,7 @@ CWeaponSVD::CWeaponSVD(void) {}
 CWeaponSVD::~CWeaponSVD(void) {}
 void CWeaponSVD::switch2_Fire()
 {
-    if (GetState() == eFire)
-        return;
-
+    // Same as CWeaponMagazined::switch2_Fire: the shot interval paces firing, not the animation.
     m_bFireSingleShot = true;
     bWorking = false;
     SetPending(TRUE);

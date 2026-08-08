@@ -823,9 +823,9 @@ void CWeaponMagazined::switch2_Idle()
 #endif
 void CWeaponMagazined::switch2_Fire()
 {
-    if (GetState() == eFire)
-        return;
-
+    // Dropping the request while the weapon is still in eFire made the single-shot rate depend
+    // on the shot animation instead of rpm, so a slow animation throttled firing well below the
+    // configured interval. The shot interval alone paces firing, as in the original game.
     CInventoryOwner* io = smart_cast<CInventoryOwner*>(H_Parent());
     if (!io)
         return;

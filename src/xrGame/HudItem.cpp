@@ -244,23 +244,11 @@ void CHudItem::OnAnimationEnd(u32 state)
 void CHudItem::PlayAnimBore() { PlayHUDMotion("anm_bore", "anim_idle", TRUE, this, GetState()); }
 bool CHudItem::ActivateItem()
 {
-    if (g_player_hud)
-    {
-        const CInventoryItem* item = smart_cast<const CInventoryItem*>(&object());
-        g_player_hud->set_inertion_k(item ? item->GetControlInertionFactor() : 1.f);
-    }
-
     OnActiveItem();
     return true;
 }
 
-void CHudItem::DeactivateItem()
-{
-    if (g_player_hud)
-        g_player_hud->set_inertion_k(1.f);
-
-    OnHiddenItem();
-}
+void CHudItem::DeactivateItem() { OnHiddenItem(); }
 void CHudItem::OnMoveToRuck(const SInvItemPlace& prev) { SwitchState(eHidden); }
 void CHudItem::SendDeactivateItem() { SendHiddenItem(); }
 void CHudItem::SendHiddenItem()

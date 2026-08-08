@@ -2204,11 +2204,11 @@ void CWeapon::UpdateHudAdditonal(Fmatrix& trans)
         hud_rotation.translate_over(curr_offs);
         trans.mulB_43(hud_rotation);
 
-        const float rawControlInertion = GetControlInertionFactor();
-        const float controlInertion = std::isfinite(rawControlInertion) ? _max(rawControlInertion, 0.1f) : 1.f;
-        const float baseZoomRotateTime = std::isfinite(m_zoom_params.m_fZoomRotateTime) ?
+        // Aiming runs at the weapon's configured rotate time. Scaling it by the item's control
+        // inertion is part of the Dead Air 1.0 weapon slowdown, which is not applied here; the
+        // guard against a zero or non-finite configured time is kept.
+        const float zoomRotateTime = std::isfinite(m_zoom_params.m_fZoomRotateTime) ?
             _max(m_zoom_params.m_fZoomRotateTime, EPS_S) : ROTATION_TIME;
-        const float zoomRotateTime = baseZoomRotateTime * controlInertion;
         const float zoomDirection = pActor->IsZoomAimingMode() ? 1.f : -1.f;
         m_zoom_params.m_fZoomRotationFactor += zoomDirection * Device.fTimeDelta / zoomRotateTime;
 
