@@ -73,8 +73,13 @@ void CRender::render_lights(light_Package& LP)
         ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
     const auto accumulateUnshadowedSpot = [&](light* L)
     {
+        // Volume-only faces exist for the unshadowed-point export case, where the parent in
+        // v_point covers diffuse and the faces carry just the fog. A face demoted by the
+        // shadow budget has no parent in the package and must draw its own diffuse, and its
+        // owner still carries bShadow while the face's own flag is temporarily cleared.
         const bool volumeOnlyPointFace =
-            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow;
+            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow &&
+            L->omnipart_owner && !L->omnipart_owner->flags.bShadow;
         LR.compute_xf_spot(L);
         if (!volumeOnlyPointFace)
         {

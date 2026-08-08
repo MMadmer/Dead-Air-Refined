@@ -36,29 +36,43 @@ struct CameraYawRotationState
 };
 
 CameraYawRotationState cameraYawRotation;
+CameraYawRotationState cameraPitchRotation;
 
-float ConsumeCameraYawRotation(float dt)
+float ConsumeCameraRotation(CameraYawRotationState& state, float dt)
 {
-    if (!cameraYawRotation.active)
+    if (!state.active)
         return 0.f;
 
-    const float step = cameraYawRotation.remaining < 0.f ? dt : std::min(dt, cameraYawRotation.remaining);
-    if (cameraYawRotation.remaining >= 0.f)
+    const float step = state.remaining < 0.f ? dt : std::min(dt, state.remaining);
+    if (state.remaining >= 0.f)
     {
-        cameraYawRotation.remaining -= step;
-        if (cameraYawRotation.remaining <= EPS_S)
-            cameraYawRotation.active = false;
+        state.remaining -= step;
+        if (state.remaining <= EPS_S)
+            state.active = false;
     }
 
-    return deg2rad(cameraYawRotation.speed) * step;
+    return deg2rad(state.speed) * step;
+}
+
+float ConsumeCameraYawRotation(float dt) { return ConsumeCameraRotation(cameraYawRotation, dt); }
+float ConsumeCameraPitchRotation(float dt) { return ConsumeCameraRotation(cameraPitchRotation, dt); }
+
+void ConfigureCameraRotation(CameraYawRotationState& state, float speedDegreesPerSecond, float durationSeconds)
+{
+    state.speed = speedDegreesPerSecond;
+    state.remaining = durationSeconds;
+    state.active = !fis_zero(speedDegreesPerSecond) && (durationSeconds < 0.f || durationSeconds > EPS_S);
 }
 }
 
 void ConfigureActorCameraYawRotation(float speedDegreesPerSecond, float durationSeconds)
 {
-    cameraYawRotation.speed = speedDegreesPerSecond;
-    cameraYawRotation.remaining = durationSeconds;
-    cameraYawRotation.active = !fis_zero(speedDegreesPerSecond) && (durationSeconds < 0.f || durationSeconds > EPS_S);
+    ConfigureCameraRotation(cameraYawRotation, speedDegreesPerSecond, durationSeconds);
+}
+
+void ConfigureActorCameraPitchRotation(float speedDegreesPerSecond, float durationSeconds)
+{
+    ConfigureCameraRotation(cameraPitchRotation, speedDegreesPerSecond, durationSeconds);
 }
 
 void CActor::cam_Set(EActorCameras style)
@@ -322,7 +336,14 @@ void CActor::cam_Update(float dt, float fFOV)
     ZoneScoped;
 
     if (this == Level().CurrentViewEntity())
+    {
         cam_Active()->yaw = angle_normalize_signed(cam_Active()->yaw + ConsumeCameraYawRotation(dt));
+
+        // Pitch goes through Move so the camera's own pitch limits keep applying.
+        const float pitchDelta = ConsumeCameraPitchRotation(dt);
+        if (!fis_zero(pitchDelta))
+            cam_Active()->Move(pitchDelta > 0.f ? kUP : kDOWN, _abs(pitchDelta));
+    }
 
     if (this == Level().CurrentViewEntity())
     {

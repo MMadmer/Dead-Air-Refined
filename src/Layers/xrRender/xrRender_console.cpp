@@ -167,11 +167,11 @@ Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
-// The unit is scene passes (one per shadow-map face), and admission is per whole lamp: a
-// shadowed point light is six OMNIPART faces, so 6 admits exactly the nearest full lamp (or up
-// to six spots). The reference build ships capped too (its unit is faces as well), which is the
-// picture that was approved; the actor's torch is admitted above the budget. 0 = unlimited.
-int ps_r__light_shadow_budget = 6;
+// How many shadow-map faces may render per frame; excess faces keep lighting unshadowed.
+// Per face, exactly as the reference build ships it (its default is 1 as well): one scene
+// pass for the winning face, everything else goes the cheap path. The actor's torch is
+// admitted above the budget. 0 = unlimited (one scene pass per source, stock behavior).
+int ps_r__light_shadow_budget = 1;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of

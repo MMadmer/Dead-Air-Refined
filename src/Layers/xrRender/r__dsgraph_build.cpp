@@ -968,21 +968,9 @@ void R_dsgraph_structure::build_subspace_dynamic()
                 float lod = L->get_LOD();
                 if (lod > EPS_L)
                 {
-                    // Shadowed light bounds become unreliable HOM candidates while crossing the viewport edge.
-#if RENDER == R_R1
-                    const bool shadowEnabled = L->flags.bShadow;
-#else
-                    const bool shadowEnabled =
-                        L->flags.bShadow && !RImplementation.o.noshadows && ps_r_lighting_quality > 0;
-#endif
-                    if (shadowEnabled)
+                    vis_data& vis = L->get_homdata();
+                    if (RImplementation.HOM.visible(vis))
                         RImplementation.Lights.add_light(L);
-                    else
-                    {
-                        vis_data& vis = L->get_homdata();
-                        if (RImplementation.HOM.visible(vis))
-                            RImplementation.Lights.add_light(L);
-                    }
                 }
                 continue;
             }
