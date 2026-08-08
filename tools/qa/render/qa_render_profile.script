@@ -1,0 +1,89 @@
+-- Render QA profile: rotates the camera at a fixed rate on an already loaded level and
+-- reports frame rate once per second, then quits. Input, cursor and actor position are
+-- never automated; only the yaw is driven, through ordinary runtime calls.
+
+local profile_started = false
+local measurement_started = false
+-- Deliberately short: the save starts facing Yanov station, which is the worst-case view of
+-- the route, and the sweep rotates away from it. Changing this changes what is measured.
+local stabilization_ms = 2500
+local measurement_duration_ms = 15000
+local yaw_speed_deg_per_sec = 12
+local loaded_at = 0
+local started_at = 0
+local started_epoch = 0
+local last_sample_at = 0
+local sample_frames = 0
+local total_frames = 0
+local start_direction = 0
+
+local function start_profile()
+    if profile_started then
+        return
+    end
+
+    profile_started = true
+    measurement_started = false
+    get_console():execute("g_pause_in_background 0")
+    get_console():execute("main_menu off")
+    device():pause(false)
+    loaded_at = time_global_async()
+    printf("[RENDER_QA] stabilizing level=%s", level.name())
+
+    level.add_call(function()
+        -- Every frame: the level must not sit paused while the sweep runs.
+        device():pause(false)
+        local now = time_global_async()
+
+        if not measurement_started then
+            if now - loaded_at < stabilization_ms then
+                return false
+            end
+
+            measurement_started = true
+            started_at = now
+            started_epoch = os.time()
+            last_sample_at = now
+            sample_frames = 0
+            total_frames = 0
+            -- Keep the saved pitch: only the horizontal angle is driven from here.
+            start_direction = -device().cam_dir:getH()
+            printf("[RENDER_QA] begin level=%s heading_deg=%s",
+                level.name(), tostring(start_direction * 180 / math.pi))
+        end
+
+        local elapsed = now - started_at
+        local direction = start_direction + elapsed * yaw_speed_deg_per_sec * math.pi / 180000
+        db.actor:set_actor_direction(direction)
+        sample_frames = sample_frames + 1
+        total_frames = total_frames + 1
+
+        if now - last_sample_at >= 1000 then
+            local sample_ms = now - last_sample_at
+            local fps = sample_frames * 1000 / sample_ms
+            printf("[RENDER_QA] sample elapsed_ms=%s heading_deg=%s fps=%s",
+                tostring(elapsed), tostring(-device().cam_dir:getH() * 180 / math.pi), tostring(fps))
+            last_sample_at = now
+            sample_frames = 0
+        end
+
+        -- Wall-clock guard as well: a stalled frame loop must not keep the run alive.
+        if elapsed >= measurement_duration_ms or os.time() - started_epoch >= 30 then
+            local average = 0
+            if elapsed > 0 then
+                average = total_frames * 1000 / elapsed
+            end
+            printf("[RENDER_QA] complete elapsed_ms=%s frames=%s average_fps=%s",
+                tostring(elapsed), tostring(total_frames), tostring(average))
+            get_console():execute("quit")
+            return true
+        end
+        return false
+    end, function() end)
+end
+
+function on_game_start()
+    profile_started = false
+    printf("[RENDER_QA] waiting_for_first_update")
+    RegisterScriptCallback("actor_on_first_update", start_profile)
+end
