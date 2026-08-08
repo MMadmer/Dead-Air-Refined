@@ -306,10 +306,14 @@ void CALifeSimulator__release(CALifeSimulator* self, CSE_Abstract* object, bool)
     if (!object)
         return;
 
+    // A script racing the engine for the same object is not fatal: skip with context instead
+    // of the former THROW that made the guard below unreachable.
     CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(object);
-    THROW(alife_object);
     if (!alife_object)
+    {
+        Msg("! Cannot release non-ALife object [%s][%d]", object->name_replace(), object->ID);
         return;
+    }
     if (!alife_object->m_bOnline)
     {
         self->release(object, true);

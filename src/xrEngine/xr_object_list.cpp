@@ -361,7 +361,9 @@ void CObjectList::net_Register(IGameObject* O)
 void CObjectList::net_Unregister(IGameObject* O)
 {
     // R_ASSERT (O->ID() < 0xffff);
-    if (O->ID() < 0xffff) // demo_spectator can have 0xffff
+    if (O->ID() < 0xffff && map_NETID[O->ID()] == O) // demo_spectator can have 0xffff
+        // IDs are recycled: when a new object has already taken this ID, its registration
+        // must survive the old object's teardown, so only our own slot may be cleared.
         map_NETID[O->ID()] = NULL;
     /*
      xr_map<u32,IGameObject*>::iterator it = map_NETID.find(O->ID());

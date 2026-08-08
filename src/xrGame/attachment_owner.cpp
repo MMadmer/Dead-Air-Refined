@@ -73,13 +73,22 @@ void AttachmentCallback(IKinematics* tpKinematics)
     VERIFY(attachment_owner);
 
     IKinematics* kinematics = smart_cast<IKinematics*>(game_object->Visual());
+    if (!kinematics)
+        return;
 
     xr_vector<CAttachableItem*>::const_iterator I = attachment_owner->attached_objects().begin();
     xr_vector<CAttachableItem*>::const_iterator E = attachment_owner->attached_objects().end();
     for (; I != E; ++I)
     {
+        // The bone comes from the item config by name and may be absent on this owner's
+        // visual: LL_BoneID yields BI_NONE, and LL_GetBoneInstance only VERIFYes the index,
+        // which vanishes in release and reads far past the bone array.
+        const u16 bone_id = (*I)->bone_id();
+        if (bone_id == BI_NONE || bone_id >= kinematics->LL_BoneCount())
+            continue;
+
         (*I)->item().object().XFORM().mul_43(
-            kinematics->LL_GetBoneInstance((*I)->bone_id()).mTransform, (*I)->offset());
+            kinematics->LL_GetBoneInstance(bone_id).mTransform, (*I)->offset());
         (*I)->item().object().XFORM().mulA_43(game_object->XFORM());
     }
 }
@@ -101,10 +110,18 @@ void CAttachmentOwner::attach(CInventoryItem* inventory_item)
         VERIFY(attachable_item);
         CGameObject* game_object = smart_cast<CGameObject*>(this);
         VERIFY(game_object && game_object->Visual());
+
+        // Light schemes attach and detach stalker torches continuously, and the owner can
+        // be caught without a skeletal visual (spawn, level unload, body teardown). The
+        // VERIFY above vanishes in release, and the virtual call below would go through a
+        // null smart_cast result. Skipping the attach is safe: the scheme retries later.
+        IKinematics* owner_kinematics = game_object ? smart_cast<IKinematics*>(game_object->Visual()) : nullptr;
+        if (!owner_kinematics)
+            return;
+
         if (m_attached_objects.empty())
             game_object->add_visual_callback(AttachmentCallback);
-        attachable_item->set_bone_id(
-            smart_cast<IKinematics*>(game_object->Visual())->LL_BoneID(attachable_item->bone_name()));
+        attachable_item->set_bone_id(owner_kinematics->LL_BoneID(attachable_item->bone_name()));
         m_attached_objects.push_back(smart_cast<CAttachableItem*>(inventory_item));
 
         inventory_item->object().setVisible(true);
@@ -165,14 +182,19 @@ void CAttachmentOwner::reattach_items()
     CGameObject* game_object = smart_cast<CGameObject*>(this);
     VERIFY(game_object && game_object->Visual());
 
+    // Visual change is exactly the moment the owner may have no skeletal visual; the
+    // VERIFY vanishes in release and the call below would go through a null pointer.
+    IKinematics* kinematics = game_object ? smart_cast<IKinematics*>(game_object->Visual()) : nullptr;
+    if (!kinematics)
+        return;
+
     xr_vector<CAttachableItem*>::const_iterator I = m_attached_objects.begin();
     xr_vector<CAttachableItem*>::const_iterator E = m_attached_objects.end();
     for (; I != E; ++I)
     {
         CAttachableItem* attachable_item = *I;
         VERIFY(attachable_item);
-        attachable_item->set_bone_id(
-            smart_cast<IKinematics*>(game_object->Visual())->LL_BoneID(attachable_item->bone_name()));
+        attachable_item->set_bone_id(kinematics->LL_BoneID(attachable_item->bone_name()));
     }
 }
 

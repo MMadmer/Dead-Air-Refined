@@ -1917,10 +1917,28 @@ void CSE_ALifeOnlineOfflineGroup::STATE_Read(NET_Packet& tNetPacket, u16 size)
 
 #if 1
     u32 container_size = tNetPacket.r_u32();
+
+    // The count comes straight from the save and used to be applied unchecked: a corrupt or
+    // misaligned packet puts any u32 here and the loop faithfully inserts billions of pairs.
+    // Members are u16 IDs, so the bytes left in the packet give a hard upper bound; beyond
+    // that, a squad of more than 1024 members is certainly garbage. Better to lose one
+    // squad's roster than the session.
+    const u32 max_members = tNetPacket.r_elapsed() / u32(sizeof(ALife::_OBJECT_ID));
+    constexpr u32 sane_member_limit = 1024;
+    if (container_size > max_members || container_size > sane_member_limit)
+    {
+        Msg("! Squad [%d]: saved member count %u exceeds packet payload (%u) or sanity limit, "
+            "roster not restored",
+            ID, container_size, max_members);
+        return;
+    }
+
     for (u32 i = 0; i < container_size; ++i)
     {
         MEMBERS::value_type pair;
         load_data(pair.first, tNetPacket);
+        // The member pointer is unknown here and stays null until register_member; readers
+        // of the roster must tolerate that window (see alife_online_offline_group.cpp).
         pair.second = nullptr;
         m_members.insert(pair);
     }

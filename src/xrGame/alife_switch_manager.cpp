@@ -238,9 +238,14 @@ void CALifeSwitchManager::try_switch_offline(CSE_ALifeDynamicObject* I)
 
 void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
 {
+    // Queue instead of releasing: release() recursively frees the object with its children
+    // and erases them from the level registry this function is being called from. A child
+    // freed here can still be ahead in the traversal, so its stale pointer would be
+    // dereferenced on a later step. IDs are queued, not pointers: while the queue waits,
+    // the object may be released for another reason.
     if (I->redundant())
     {
-        release(I);
+        m_pending_release.push_back(I->ID);
         return;
     }
 
@@ -253,5 +258,26 @@ void CALifeSwitchManager::switch_object(CSE_ALifeDynamicObject* I)
         try_switch_online(I);
 
     if (I->redundant())
-        release(I);
+        m_pending_release.push_back(I->ID);
+}
+
+void CALifeSwitchManager::flush_pending_release()
+{
+    if (m_pending_release.empty())
+        return;
+
+    // Swap into a local vector: release() is recursive, nothing may append to the vector
+    // being iterated. IDs queued while flushing wait for the next safe cycle.
+    OBJECT_VECTOR pending;
+    pending.swap(m_pending_release);
+
+    for (const ALife::_OBJECT_ID id : pending)
+    {
+        // The object may be gone already, released together with its parent while queued.
+        CSE_ALifeDynamicObject* object = objects().object(id, true);
+        if (!object)
+            continue;
+
+        release(object);
+    }
 }

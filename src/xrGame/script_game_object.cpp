@@ -157,9 +157,40 @@ const CScriptEntityAction* CScriptGameObject::GetActionByIndex(u32 action_index)
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
+// Bounded once-per-key reporting for invalid script bone queries: one line per
+// visual+bone pair gives addon authors the full list of offenders without flooding the
+// log from per-frame callers; the cap keeps script-controlled strings from growing the
+// cache without bound.
+static void report_invalid_bone_query(pcstr what, pcstr visual, pcstr bone)
+{
+    static xr_vector<shared_str> reported;
+    if (reported.size() >= 64)
+        return;
+
+    string256 key;
+    xr_sprintf(key, "%s|%s", visual ? visual : "", bone ? bone : "");
+    const shared_str k = key;
+    if (std::find(reported.begin(), reported.end(), k) != reported.end())
+        return;
+
+    reported.push_back(k);
+    Msg("! %s: visual [%s], bone [%s]", what, visual ? visual : "?", bone ? bone : "");
+}
+
 u16 CScriptGameObject::get_bone_id(LPCSTR bone_name) const
 {
-    return object().Visual()->dcast_PKinematics()->LL_BoneID(bone_name);
+    // An object without a skeletal visual made the unchecked dcast dereference null.
+    // BI_NONE is the documented "no such bone" answer, pass it through: scripts are
+    // required to handle it, our job is only not to crash (same policy as SetBoneVisible).
+    IRenderVisual* visual = object().Visual();
+    IKinematics* kinematics = visual ? visual->dcast_PKinematics() : nullptr;
+    if (!kinematics)
+    {
+        report_invalid_bone_query("get_bone_id on a non-skeletal visual",
+            object().cNameVisual().c_str(), bone_name);
+        return BI_NONE;
+    }
+    return kinematics->LL_BoneID(bone_name);
 }
 
 CPhysicsShell* CScriptGameObject::get_physics_shell() const
@@ -311,15 +342,28 @@ u32 CScriptGameObject::get_current_patrol_point_index()
 
 Fvector CScriptGameObject::bone_position(LPCSTR bone_name) const
 {
-    u16 bone_id;
-    if (xr_strlen(bone_name))
-        bone_id = smart_cast<IKinematics*>(object().Visual())->LL_BoneID(bone_name);
-    else
-        bone_id = smart_cast<IKinematics*>(object().Visual())->LL_GetBoneRoot();
+    // Called every frame from script binders. Previously a misspelled bone name indexed
+    // the bone array with BI_NONE (0xFFFF) and a non-skeletal visual dereferenced a null
+    // cast, so one typo in any addon killed the game. The object position is the closest
+    // meaningful fallback for both; the Lua signature stays intact.
+    IKinematics* kinematics = smart_cast<IKinematics*>(object().Visual());
+    if (!kinematics)
+    {
+        report_invalid_bone_query("bone_position on a non-skeletal visual",
+            object().cNameVisual().c_str(), bone_name);
+        return object().Position();
+    }
+
+    const u16 bone_id = xr_strlen(bone_name) ? kinematics->LL_BoneID(bone_name) : kinematics->LL_GetBoneRoot();
+    if (bone_id == BI_NONE || bone_id >= kinematics->LL_BoneCount())
+    {
+        report_invalid_bone_query("bone_position for a missing bone",
+            object().cNameVisual().c_str(), bone_name);
+        return object().Position();
+    }
 
     Fmatrix matrix;
-    matrix.mul_43(
-        object().XFORM(), smart_cast<IKinematics*>(object().Visual())->LL_GetBoneInstance(bone_id).mTransform);
+    matrix.mul_43(object().XFORM(), kinematics->LL_GetBoneInstance(bone_id).mTransform);
     return (matrix.c);
 }
 

@@ -24,9 +24,13 @@ protected:
 
 private:
     OBJECT_VECTOR m_saved_chidren;
+    // IDs of redundant objects found during the level registry traversal; released after it,
+    // because the recursive release would free objects the traversal still has to visit.
+    OBJECT_VECTOR m_pending_release;
 
 protected:
     bool synchronize_location(CSE_ALifeDynamicObject* object);
+    void flush_pending_release();
 
 public:
     void try_switch_online(CSE_ALifeDynamicObject* object);

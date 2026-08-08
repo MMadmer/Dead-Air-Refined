@@ -107,8 +107,11 @@ void CCameraManager::RemoveCamEffector(ECamEffectorType type)
     for (auto it = m_EffectorsCam.begin(); it != m_EffectorsCam.end(); ++it)
         if ((*it)->eType == type)
         {
-            OnEffectorReleased(*it);
+            // Erase before releasing: OnEffectorReleased fires the removal callback, which
+            // can remove another effector and invalidate the iterator being erased here.
+            SBaseEffector* effector = *it;
             m_EffectorsCam.erase(it);
+            OnEffectorReleased(effector);
             return;
         }
 }
@@ -153,12 +156,14 @@ void CCameraManager::RemovePPEffector(EEffectorPPType type)
     for (auto it = m_EffectorsPP.begin(); it != m_EffectorsPP.end(); ++it)
         if ((*it)->Type() == type)
         {
-            if ((*it)->FreeOnRemove())
-            {
-                OnEffectorReleased(*it);
-                // xr_delete (*it);
-            }
+            // Same order as RemoveCamEffector: the removal callback may invalidate `it`.
+            CEffectorPP* effector = *it;
+            const bool free_on_remove = effector->FreeOnRemove();
+
             m_EffectorsPP.erase(it);
+
+            if (free_on_remove)
+                OnEffectorReleased(effector);
             return;
         }
 }
@@ -264,9 +269,13 @@ void CCameraManager::UpdateCamEffectors()
             // Dereferencing reverse iterator returns previous element of the list, r_it.base() returns current element
             // So, we should use base()-1 iterator to delete just processed element. 'Previous' element would be
             // automatically changed after deletion, so r_it would dereferencing to another value, no need to change it
-            OnEffectorReleased(*r_it);
+            // Erase before releasing: the removal callback may remove effectors itself. Removing
+            // another element keeps list iterators valid, and this element is already unlinked,
+            // so the callback can no longer turn the erase below into a double removal.
+            CEffectorCam* effector = *r_it;
             auto r_to_del = r_it.base();
             m_EffectorsCam.erase(--r_to_del);
+            OnEffectorReleased(effector);
         }
     }
 

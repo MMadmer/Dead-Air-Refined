@@ -56,8 +56,23 @@ bool CLevelChanger::net_Spawn(CSE_Abstract* DC)
     if (ai().get_level_graph())
     {
         // XXX: this information should be computed in xrAI
-        ai_location().level_vertex(ai().level_graph().vertex(u32(-1), Position()));
-        ai_location().game_vertex(ai().cross_table().vertex(ai_location().level_vertex_id()).game_vertex_id());
+        const u32 level_vertex = ai().level_graph().vertex(u32(-1), Position());
+        ai_location().level_vertex(level_vertex);
+
+        // vertex() returns u32(-1) for a position outside the level graph, which is common
+        // for changers placed at the very border of a level. cross_table().vertex() only
+        // VERIFYes the index, so in release an invalid id reads far past the mapped file.
+        // The server entity carries a precomputed game vertex, use it as the fallback.
+        if (ai().level_graph().valid_vertex_id(level_vertex))
+            ai_location().game_vertex(ai().cross_table().vertex(level_vertex).game_vertex_id());
+        else
+        {
+            ai_location().game_vertex(l_tpALifeLevelChanger->m_tGraphID);
+            Msg("! Level changer [%s] id [%u] is outside the level graph at [%.2f][%.2f][%.2f], "
+                "game vertex taken from spawn (%u)",
+                l_tpALifeLevelChanger->name_replace(), u32(l_tpALifeLevelChanger->ID), VPUSH(Position()),
+                u32(l_tpALifeLevelChanger->m_tGraphID));
+        }
     }
 
     feel_touch.clear();

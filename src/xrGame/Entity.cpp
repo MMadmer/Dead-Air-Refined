@@ -199,7 +199,10 @@ bool CEntity::net_Spawn(CSE_Abstract* DC)
             MONSTER_COMMUNITY monster_community;
             monster_community.set(pSettings->r_string(cNameSect().c_str(), "species"));
 
-            if (monster_community.team() != NO_COMMUNITY_INDEX)
+            // The sentinel lives in the index: team() returns u8 and could never equal the
+            // old -1 comparison, which made the check always pass. An unknown species now
+            // survives set() with the no-community index and keeps the server-provided team.
+            if (monster_community.index() != NO_MONSTER_COMMUNITY_INDEX)
                 id_Team = monster_community.team();
         }
     }

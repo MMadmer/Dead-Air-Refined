@@ -83,6 +83,8 @@ void CALifeUpdateManager::update_switch()
 
     START_PROFILE("ALife/switch");
     graph().level().update(CSwitchPredicate(this), Device.dwPrecacheFrame > 0);
+    // Safe point: the registry traversal has finished, releases cannot break its iterator.
+    flush_pending_release();
     STOP_PROFILE
 }
 
