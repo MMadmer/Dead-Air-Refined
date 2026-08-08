@@ -5,6 +5,7 @@
 #include "Layers/xrRender/tss.h"
 #include "Layers/xrRender/Blender.h"
 #include "Layers/xrRender/Blender_Recorder.h"
+#include "Layers/xrRender/ResourceManager_ScriptGuard.h"
 //	adopt_compiler don't have = operator And it can't have = operator
 #include "xrScriptEngine/script_engine.hpp"
 #include "xrScriptEngine/script_space.hpp"
@@ -469,59 +470,75 @@ Shader* CResourceManager::_lua_Create(LPCSTR d_shader, LPCSTR s_textures)
     C.detail_texture = nullptr;
     C.detail_scaler = nullptr;
 
-    ScriptEngineLock.Enter();
-    // Compile element	(LOD0 - HQ)
-    if (ScriptEngine.object(s_shader, "normal_hq",LUA_TFUNCTION))
     {
-        // Analyze possibility to detail this shader
-        C.iElement = 0;
-        C.bDetail = m_textures_description.GetDetailTexture(C.L_textures[0], C.detail_texture, C.detail_scaler);
+        // Held by RAII: a throwing shader script used to leak this lock and hang every later compile
+        ScopeLock scriptScope(&ScriptEngineLock);
 
-        if (C.bDetail) S.E[0] = C._lua_Compile(s_shader, "normal_hq");
-        else S.E[0] = C._lua_Compile(s_shader, "normal");
-    }
-    else
-    {
-        if (ScriptEngine.object(s_shader, "normal",LUA_TFUNCTION))
+        // Compile element	(LOD0 - HQ)
+        if (ScriptEngine.object(s_shader, "normal_hq",LUA_TFUNCTION))
         {
+            // Analyze possibility to detail this shader
             C.iElement = 0;
             C.bDetail = m_textures_description.GetDetailTexture(C.L_textures[0], C.detail_texture, C.detail_scaler);
-            S.E[0] = C._lua_Compile(s_shader, "normal");
+
+            if (C.bDetail) S.E[0] = C._lua_Compile(s_shader, "normal_hq");
+            else S.E[0] = C._lua_Compile(s_shader, "normal");
+        }
+        else
+        {
+            if (ScriptEngine.object(s_shader, "normal",LUA_TFUNCTION))
+            {
+                C.iElement = 0;
+                C.bDetail = m_textures_description.GetDetailTexture(C.L_textures[0], C.detail_texture, C.detail_scaler);
+                S.E[0] = C._lua_Compile(s_shader, "normal");
+            }
+        }
+
+        // Compile element	(LOD1)
+        if (ScriptEngine.object(s_shader, "normal",LUA_TFUNCTION))
+        {
+            C.iElement = 1;
+            C.bDetail = m_textures_description.GetDetailTexture(C.L_textures[0], C.detail_texture, C.detail_scaler);
+            S.E[1] = C._lua_Compile(s_shader, "normal");
+        }
+
+        // Compile element
+        if (ScriptEngine.object(s_shader, "l_point",LUA_TFUNCTION))
+        {
+            C.iElement = 2;
+            C.bDetail = false;
+            S.E[2] = C._lua_Compile(s_shader, "l_point");
+        }
+
+        // Compile element
+        if (ScriptEngine.object(s_shader, "l_spot",LUA_TFUNCTION))
+        {
+            C.iElement = 3;
+            C.bDetail = false;
+            S.E[3] = C._lua_Compile(s_shader, "l_spot");
+        }
+
+        // Compile element
+        if (ScriptEngine.object(s_shader, "l_special",LUA_TFUNCTION))
+        {
+            C.iElement = 4;
+            C.bDetail = false;
+            S.E[4] = C._lua_Compile(s_shader, "l_special");
         }
     }
 
-    // Compile element	(LOD1)
-    if (ScriptEngine.object(s_shader, "normal",LUA_TFUNCTION))
+    // An element that threw is missing entirely, so the shader would publish holes the render graph
+    // dereferences. Reuse the stub the missing-shader path already relies on.
+    if (C.bScriptFailed)
     {
-        C.iElement = 1;
-        C.bDetail = m_textures_description.GetDetailTexture(C.L_textures[0], C.detail_texture, C.detail_scaler);
-        S.E[1] = C._lua_Compile(s_shader, "normal");
+        constexpr pcstr fallbackShader = "stub_default";
+        if (0 != xr_strcmp(s_shader, fallbackShader) && _lua_HasShader(fallbackShader))
+        {
+            Msg("! shader [%s] replaced with [%s] after a script failure", s_shader, fallbackShader);
+            return _lua_Create(fallbackShader, s_textures);
+        }
+        FATAL_F("Shader script [%s] failed and no usable fallback exists", s_shader);
     }
-
-    // Compile element
-    if (ScriptEngine.object(s_shader, "l_point",LUA_TFUNCTION))
-    {
-        C.iElement = 2;
-        C.bDetail = false;
-        S.E[2] = C._lua_Compile(s_shader, "l_point");
-    }
-
-    // Compile element
-    if (ScriptEngine.object(s_shader, "l_spot",LUA_TFUNCTION))
-    {
-        C.iElement = 3;
-        C.bDetail = false;
-        S.E[3] = C._lua_Compile(s_shader, "l_spot");
-    }
-
-    // Compile element
-    if (ScriptEngine.object(s_shader, "l_special",LUA_TFUNCTION))
-    {
-        C.iElement = 4;
-        C.bDetail = false;
-        S.E[4] = C._lua_Compile(s_shader, "l_special");
-    }
-    ScriptEngineLock.Leave();
 
     ScopeLock scope(&v_shaders_lock);
     // Search equal in shaders array
@@ -547,11 +564,25 @@ ShaderElement* CBlender_Compile::_lua_Compile(LPCSTR namesp, LPCSTR name)
     pcstr t_0 = L_textures[0].c_str() ? L_textures[0].c_str() : "null";
     pcstr t_1 = L_textures.size() > 1 ? L_textures[1].c_str() : "null";
     pcstr t_d = detail_texture ? detail_texture : "null";
-    object shader = RImplementation.Resources->ScriptEngine.name_space(namesp);
-    functor<void> element = object_cast<functor<void>>(shader[name]);
-    bool bFirstPass = false;
-    adopt_compiler ac = adopt_compiler(this, bFirstPass);
-    element(ac, t_0, t_1, t_d);
+
+    // Namespace lookup, functor cast and the script body all report failures as C++ exceptions;
+    // uncaught they mean terminate, i.e. process loss without a stack, a message or a log line.
+    const bool compiled = run_shader_script(RImplementation.Resources->ScriptEngine.lua(), namesp, name, iElement,
+        [&]
+        {
+            object shader = RImplementation.Resources->ScriptEngine.name_space(namesp);
+            functor<void> element = object_cast<functor<void>>(shader[name]);
+            bool bFirstPass = false;
+            adopt_compiler ac = adopt_compiler(this, bFirstPass);
+            element(ac, t_0, t_1, t_d);
+        });
+
+    if (!compiled)
+    {
+        bScriptFailed = true;
+        return nullptr;
+    }
+
     r_End();
     ShaderElement* _r = RImplementation.Resources->_CreateElement(std::move(E));
     return _r;

@@ -28,6 +28,8 @@ public:
     bool bDetail_Bump;
     BOOL bUseSteepParallax;
     int iElement;
+    // Set when a shader script threw; the half-recorded shader must not be published as-is
+    bool bScriptFailed{};
 
 public:
     CSimulator RS;
