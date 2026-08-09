@@ -151,17 +151,48 @@ void CHUDCrosshair::OnRender()
         // The ring sits where the strokes start, so it grows and shrinks exactly like they do.
         if (psHUD_Flags.test(HUD_CROSSHAIR_DYNAMIC) && x_min > dot_radius)
         {
-            GEnv.UIRender->StartPrimitive(ring_segments * 2, IUIRender::ptLineList, UI().m_currentPointType);
+            // A hairline loop reads as an artefact against bright geometry. The ring is a solid
+            // band instead, followed by bands whose alpha falls off by smoothstep so the outer
+            // edge dissolves rather than ending on a hard line.
+            constexpr u32 fade_bands = 4;
+            const float band_width = dot_radius * 2.0f;
+            const u32 ring_alpha = color_get_A(dot_color);
 
-            for (u32 segment = 0; segment < ring_segments; ++segment)
+            GEnv.UIRender->StartPrimitive(
+                ring_segments * (fade_bands + 1) * 6, IUIRender::ptTriList, UI().m_currentPointType);
+
+            const auto push_band = [&](float inner, float outer, u32 inner_alpha, u32 outer_alpha)
             {
-                const float from = PI_MUL_2 * float(segment) / float(ring_segments);
-                const float to = PI_MUL_2 * float(segment + 1) / float(ring_segments);
+                const u32 inner_color = subst_alpha(dot_color, inner_alpha);
+                const u32 outer_color = subst_alpha(dot_color, outer_alpha);
 
-                GEnv.UIRender->PushPoint(
-                    center.x + x_min * _cos(from), center.y + x_min * _sin(from), 0, dot_color, 0, 0);
-                GEnv.UIRender->PushPoint(
-                    center.x + x_min * _cos(to), center.y + x_min * _sin(to), 0, dot_color, 0, 0);
+                for (u32 segment = 0; segment < ring_segments; ++segment)
+                {
+                    const float from = PI_MUL_2 * float(segment) / float(ring_segments);
+                    const float to = PI_MUL_2 * float(segment + 1) / float(ring_segments);
+                    const float cf = _cos(from), sf = _sin(from);
+                    const float ct = _cos(to), st = _sin(to);
+
+                    GEnv.UIRender->PushPoint(center.x + inner * cf, center.y + inner * sf, 0, inner_color, 0, 0);
+                    GEnv.UIRender->PushPoint(center.x + outer * cf, center.y + outer * sf, 0, outer_color, 0, 0);
+                    GEnv.UIRender->PushPoint(center.x + inner * ct, center.y + inner * st, 0, inner_color, 0, 0);
+
+                    GEnv.UIRender->PushPoint(center.x + outer * cf, center.y + outer * sf, 0, outer_color, 0, 0);
+                    GEnv.UIRender->PushPoint(center.x + outer * ct, center.y + outer * st, 0, outer_color, 0, 0);
+                    GEnv.UIRender->PushPoint(center.x + inner * ct, center.y + inner * st, 0, inner_color, 0, 0);
+                }
+            };
+
+            push_band(x_min, x_min + band_width, ring_alpha, ring_alpha);
+
+            for (u32 band = 0; band < fade_bands; ++band)
+            {
+                const float t_inner = float(band) / float(fade_bands);
+                const float t_outer = float(band + 1) / float(fade_bands);
+                const auto smoothstep = [](float t) { return t * t * (3.0f - 2.0f * t); };
+
+                push_band(x_min + band_width * (1.0f + t_inner), x_min + band_width * (1.0f + t_outer),
+                    u32(ring_alpha * (1.0f - smoothstep(t_inner))), u32(ring_alpha * (1.0f - smoothstep(t_outer))));
             }
 
             GEnv.UIRender->SetShader(*hShader);
