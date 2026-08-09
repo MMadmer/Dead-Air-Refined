@@ -36,7 +36,6 @@ struct CameraYawRotationState
 };
 
 CameraYawRotationState cameraYawRotation;
-CameraYawRotationState cameraPitchRotation;
 
 float ConsumeCameraRotation(CameraYawRotationState& state, float dt)
 {
@@ -55,7 +54,6 @@ float ConsumeCameraRotation(CameraYawRotationState& state, float dt)
 }
 
 float ConsumeCameraYawRotation(float dt) { return ConsumeCameraRotation(cameraYawRotation, dt); }
-float ConsumeCameraPitchRotation(float dt) { return ConsumeCameraRotation(cameraPitchRotation, dt); }
 
 void ConfigureCameraRotation(CameraYawRotationState& state, float speedDegreesPerSecond, float durationSeconds)
 {
@@ -68,11 +66,6 @@ void ConfigureCameraRotation(CameraYawRotationState& state, float speedDegreesPe
 void ConfigureActorCameraYawRotation(float speedDegreesPerSecond, float durationSeconds)
 {
     ConfigureCameraRotation(cameraYawRotation, speedDegreesPerSecond, durationSeconds);
-}
-
-void ConfigureActorCameraPitchRotation(float speedDegreesPerSecond, float durationSeconds)
-{
-    ConfigureCameraRotation(cameraPitchRotation, speedDegreesPerSecond, durationSeconds);
 }
 
 void CActor::cam_Set(EActorCameras style)
@@ -338,11 +331,6 @@ void CActor::cam_Update(float dt, float fFOV)
     if (this == Level().CurrentViewEntity())
     {
         cam_Active()->yaw = angle_normalize_signed(cam_Active()->yaw + ConsumeCameraYawRotation(dt));
-
-        // Pitch goes through Move so the camera's own pitch limits keep applying.
-        const float pitchDelta = ConsumeCameraPitchRotation(dt);
-        if (!fis_zero(pitchDelta))
-            cam_Active()->Move(pitchDelta > 0.f ? kUP : kDOWN, _abs(pitchDelta));
     }
 
     if (this == Level().CurrentViewEntity())

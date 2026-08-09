@@ -9,7 +9,6 @@
 #include <dwmapi.h>
 #include <SDL_syswm.h>
 #include <d3d11sdklayers.h>
-#include "renderdoc_app.h"
 
 extern ENGINE_API int g_pause_in_background;
 
@@ -23,35 +22,6 @@ void dx11_debug_bind_info_queue(ID3D11Device* device)
         device->QueryInterface(__uuidof(ID3D11InfoQueue), reinterpret_cast<void**>(&s_dx11_info_queue));
     if (s_dx11_info_queue)
         Msg("* -dxdebug: D3D11 debug layer active, validator messages will be logged");
-}
-
-// Diagnostics: RenderDoc in-application capture trigger. Lives only when the game runs
-// under the RenderDoc injector (renderdoc.dll already loaded); the console command
-// rdc_capture uses it so QA scripts can capture the exact defective frames.
-static RENDERDOC_API_1_4_1* s_rdoc_api = nullptr;
-static bool s_rdoc_tried = false;
-
-void dx11_rdc_trigger(u32 frames)
-{
-    if (!s_rdoc_tried)
-    {
-        s_rdoc_tried = true;
-        if (HMODULE mod = GetModuleHandleA("renderdoc.dll"))
-        {
-            auto getApi = reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(mod, "RENDERDOC_GetAPI"));
-            if (getApi)
-                getApi(eRENDERDOC_API_Version_1_4_1, reinterpret_cast<void**>(&s_rdoc_api));
-        }
-        Msg(s_rdoc_api ? "* rdc_capture: RenderDoc API bound" : "! rdc_capture: renderdoc.dll is not loaded");
-    }
-    if (!s_rdoc_api)
-        return;
-
-    if (frames <= 1)
-        s_rdoc_api->TriggerCapture();
-    else
-        s_rdoc_api->TriggerMultiFrameCapture(frames);
-    Msg("* rdc_capture: %u frame(s) queued at frame %u", frames, Device.dwFrame);
 }
 
 void dx11_debug_drain_messages(pcstr tag)

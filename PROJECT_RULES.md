@@ -87,7 +87,7 @@
   формальной: если она не может дать результат, это описывается в отчёте, а не
   прячется. Запрещено и требовать новое железо там, где старое справлялось, и
   занижать поведение нового железа ради единообразия со старым.
-- Разные рендеры (`R1`/`R2`/`R3`/`R4`, OpenGL) и режимы вывода поддерживаются
+- Разные рендеры (`R1`/`R2`/`R2.5`/`R3`/`R4`) и режимы вывода поддерживаются
   одновременно: правка в одном backend не должна ломать сборку или поведение
   остальных, а общий код остаётся общим.
 
@@ -370,6 +370,9 @@ Do not install both. Existing saves are preserved.
 - `docs/dead-air/AUTO_UPDATE.md` — release/update protocol.
 - `docs/dead-air/DEPENDENCIES.md` — pinned dependencies и build policy.
 - `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema и privacy contract.
+- `docs/dead-air/MODDING.md` — контракт совместимости для аддонов.
+- `docs/dead-air/SAVE_COMPATIBILITY.md` — бинарный контракт save-группы.
+- `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — открытое предложение, не реализовано.
 - `docs/dead-air/TEST_MATRIX.md` — обязательные release gates.
 - `docs/dead-air/UPSTREAM.md` — provenance и attribution.
 - `docs/dead-air/x64-parity-open-issues.md` — только реально открытые проблемы.

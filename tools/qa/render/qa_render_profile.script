@@ -1,7 +1,7 @@
--- Render QA profile: rotates the camera at a fixed rate on an already loaded level and
--- reports frame rate once per second, then runs a fast symmetric pitch sweep and quits.
--- Input, cursor and actor position are never automated; the yaw is driven through ordinary
--- runtime calls, the pitch through the cam_pitch_rotate console command.
+-- Render QA profile: rotates the camera at a fixed rate on an already loaded level, reports
+-- frame rate once per second and quits. Input, cursor and actor position are never
+-- automated; the yaw is driven through ordinary runtime calls. Yaw only, by rule: the
+-- measurement must not point the actor at the floor.
 
 local profile_started = false
 local measurement_started = false
@@ -17,22 +17,6 @@ local last_sample_at = 0
 local sample_frames = 0
 local total_frames = 0
 local start_direction = 0
-
--- Deep symmetric pitch sweep after the yaw pass: full-blackout regressions of local light
--- trigger at steep up/down angles held for a moment, which a yaw-only sweep never visits.
-local pitch_started = false
-local pitch_index = 0
-local pitch_step_end = 0
-local pitch_plan = {
-    { cmd = "cam_pitch_rotate -80 0.75", wait = 850 },
-    { cmd = nil,                         wait = 700 },
-    { cmd = "cam_pitch_rotate 80 0.75",  wait = 850 },
-    { cmd = nil,                         wait = 700 },
-    { cmd = "cam_pitch_rotate 80 0.75",  wait = 850 },
-    { cmd = nil,                         wait = 700 },
-    { cmd = "cam_pitch_rotate -80 0.75", wait = 850 },
-    { cmd = nil,                         wait = 500 },
-}
 
 local function start_profile()
     if profile_started then
@@ -70,10 +54,8 @@ local function start_profile()
         end
 
         local elapsed = now - started_at
-        if not pitch_started then
-            local direction = start_direction + elapsed * yaw_speed_deg_per_sec * math.pi / 180000
-            db.actor:set_actor_direction(direction)
-        end
+        local direction = start_direction + elapsed * yaw_speed_deg_per_sec * math.pi / 180000
+        db.actor:set_actor_direction(direction)
         sample_frames = sample_frames + 1
         total_frames = total_frames + 1
 
@@ -86,26 +68,8 @@ local function start_profile()
             sample_frames = 0
         end
 
-        if not pitch_started then
-            if elapsed >= measurement_duration_ms then
-                pitch_started = true
-                pitch_index = 0
-                pitch_step_end = now
-                printf("[RENDER_QA] pitch_phase_begin elapsed_ms=%s", tostring(elapsed))
-            end
-        elseif now >= pitch_step_end then
-            pitch_index = pitch_index + 1
-            local step = pitch_plan[pitch_index]
-            if step then
-                if step.cmd then
-                    get_console():execute(step.cmd)
-                end
-                pitch_step_end = now + step.wait
-            end
-        end
-
         -- Wall-clock guard as well: a stalled frame loop must not keep the run alive.
-        if (pitch_started and pitch_index > #pitch_plan) or os.time() - started_epoch >= 45 then
+        if elapsed >= measurement_duration_ms or os.time() - started_epoch >= 45 then
             local average = 0
             if elapsed > 0 then
                 average = total_frames * 1000 / elapsed

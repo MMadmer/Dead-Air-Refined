@@ -458,7 +458,8 @@ void CRender::Render()
     }
 
     // Diagnostics (-dxdebug): messages accumulated up to the sun belong to earlier phases.
-    if (!!strstr(Core.Params, "-dxdebug"))
+    static const bool drainDebugMessages = !!strstr(Core.Params, "-dxdebug");
+    if (drainDebugMessages)
     {
         extern void dx11_debug_drain_messages(pcstr tag);
         dx11_debug_drain_messages("pre_lights");
@@ -477,7 +478,7 @@ void CRender::Render()
     }
 
     // Diagnostics (-dxdebug): drain the D3D11 debug-layer validator messages into the log.
-    if (!!strstr(Core.Params, "-dxdebug"))
+    if (drainDebugMessages)
     {
         extern void dx11_debug_drain_messages(pcstr tag);
         dx11_debug_drain_messages("lights");

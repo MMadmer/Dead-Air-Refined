@@ -5,8 +5,6 @@
 #include "xrEngine/xr_object.h"
 #include "Intersect.hpp"
 
-#include <atomic>
-
 #ifdef DEBUG
 static bool _cdb_bDebug = false;
 extern XRCDB_API bool* cdb_bDebug = &_cdb_bDebug;
@@ -14,25 +12,13 @@ bool bDebug() { return *cdb_bDebug; }
 #endif
 using namespace collide;
 
-// CGameObject::net_Destroy deletes the collision form before the object leaves the spatial
-// base, so a ray query can still find the object inside that window and no query path ever
-// checked either the form or the destroy flag. Crashes arrived as CCF_Skeleton::_RayQuery
-// on a freed form under AI vision queries. The counter stands in for the missing minidump:
-// if it keeps firing, worker threads still catch objects mid-destruction and the remaining
-// cross-thread window needs deferred destruction.
+// An object stays in the spatial base with its destroy flag set until net_Destroy runs at the
+// end of the frame, and net_Destroy frees the collision form. Queries that find the object in
+// that window used to touch the freed form and crash, so they skip it instead.
 IC ICollisionForm* query_cform(IGameObject* collidable)
 {
-    if (!collidable)
+    if (!collidable || collidable->getDestroy())
         return nullptr;
-
-    if (collidable->getDestroy() || !collidable->GetCForm())
-    {
-        static std::atomic<u32> s_hits{};
-        const u32 n = s_hits.fetch_add(1, std::memory_order_relaxed) + 1;
-        if (n <= 5 || (n % 200) == 0)
-            Msg("~ CDB: ray query caught an object mid-destruction, hit %u", n);
-        return nullptr;
-    }
 
     return collidable->GetCForm();
 }
