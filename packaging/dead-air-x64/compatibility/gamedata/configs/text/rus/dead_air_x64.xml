@@ -121,4 +121,10 @@
     <string id="st_update_failed">
         <text>Не удалось завершить операцию обновления. Повторите попытку.</text>
     </string>
+    <string id="ui_mm_fps_limit">
+        <text>Ограничение FPS</text>
+    </string>
+    <string id="st_opt_fps_unlimited">
+        <text>Без ограничений</text>
+    </string>
 </string_table>

@@ -73,10 +73,10 @@
 		    </text_color>
         </list_renderer>
 
-        <cap_preset x="15" y="33" width="108" height="24">
+        <cap_preset x="15" y="27" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_quality_presets</text>
         </cap_preset>
-        <list_presets x="143" y="35" width="188" height="20" list_length="5"  always_show_scroll="0">
+        <list_presets x="143" y="29" width="188" height="20" list_length="5"  always_show_scroll="0">
             <options_item entry="_preset" group="mm_opt_video_preset" depend="restart"/>
             <list_font r="170" g="170" b="170" font="letterica16"/>
             <text_color>
@@ -85,10 +85,10 @@
             </text_color>
         </list_presets>
 
-        <cap_resolution x="15" y="63" width="108" height="24">
+        <cap_resolution x="15" y="51" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_resolution</text>
         </cap_resolution>
-        <list_resolution x="143" y="65" width="188" height="20" list_length="7" always_show_scroll="1">
+        <list_resolution x="143" y="53" width="188" height="20" list_length="7" always_show_scroll="1">
             <options_item entry="vid_mode" group="mm_opt_video" depend="vid"/>
             <list_font r="170" g="170" b="170" font="letterica16"/>
             <text_color>
@@ -97,44 +97,64 @@
             </text_color>
         </list_resolution>
 
-        <cap_gamma x="15" y="93" width="108" height="24">
+        <cap_fps_limit x="15" y="75" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_fps_limit</text>
+        </cap_fps_limit>
+        <list_fps_limit x="143" y="77" width="188" height="20" list_length="9" always_show_scroll="0">
+            <options_item entry="vid_fps_limit" group="mm_opt_video" depend="runtime"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+                <e r="170" g="170" b="170"/>
+                <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_fps_limit>
+
+        <cap_vsync x="15" y="99" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_vsync</text>
+        </cap_vsync>
+        <check_vsync x="136" y="96" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
+        </check_vsync>
+
+        <cap_gamma x="15" y="123" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_gamma</text>
         </cap_gamma>
-        <track_gamma x="143" y="97" width="188" height="16">
+        <track_gamma x="143" y="127" width="188" height="16">
             <options_item entry="rs_c_gamma" group="mm_opt_video" depend="runtime"/>
         </track_gamma>
 
-        <cap_contrast x="15" y="123" width="108" height="24">
+        <cap_contrast x="15" y="147" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_contrast</text>
         </cap_contrast>
-        <track_contrast x="143" y="127" width="188" height="16">
+        <track_contrast x="143" y="151" width="188" height="16">
             <options_item entry="rs_c_contrast" group="mm_opt_video" depend="runtime"/>
           </track_contrast>
 
-        <cap_brightness x="15" y="153" width="108" height="24">
+        <cap_brightness x="15" y="171" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_brightness</text>
           </cap_brightness>
-        <track_brightness x="143" y="157" width="188" height="16">
+        <track_brightness x="143" y="175" width="188" height="16">
             <options_item entry="rs_c_brightness" group="mm_opt_video" depend="runtime"/>
         </track_brightness>
 
-		<cap_fov x="15" y="183" width="108" height="24">
+		<cap_fov x="15" y="195" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_fov</text>
         </cap_fov>
-		<track_fov x="143" y="187" width="188" height="16" step="1">
+		<track_fov x="143" y="199" width="188" height="16" step="1">
             <options_item entry="fov" group="mm_opt_video" depend="runtime"/>
         </track_fov>
-		<cap_fov_value x="335" y="190">
+		<cap_fov_value x="335" y="202">
 			<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
 		</cap_fov_value>
 		
-		<cap_hud_fov x="15" y="213" width="108" height="24">
+		<cap_hud_fov x="15" y="219" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_hud_fov</text>
         </cap_hud_fov>
-		<track_hud_fov x="143" y="217" width="188" height="16" step="0.01">
+		<track_hud_fov x="143" y="223" width="188" height="16" step="0.01">
             <options_item entry="hud_fov" group="mm_opt_video" depend="runtime"/>
         </track_hud_fov>
-		<cap_hud_fov_value x="335" y="220">
+		<cap_hud_fov_value x="335" y="226">
 			<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
 		</cap_hud_fov_value>
 		
@@ -150,11 +170,11 @@
             </text_color>
         </list_window_mode>
 
-        <cap_level_texture_unload x="15" y="273" width="108" height="24"
+        <cap_level_texture_unload x="15" y="267" width="108" height="24"
             hint="ui_mm_level_texture_unload_hint">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_level_texture_unload</text>
         </cap_level_texture_unload>
-        <check_level_texture_unload x="136" y="270" width="35" stretch="1" height="29"
+        <check_level_texture_unload x="136" y="264" width="35" stretch="1" height="29"
             hint="ui_mm_level_texture_unload_hint">
             <texture>ui_inGame2_checkbox</texture>
             <options_item entry="r__unload_level_textures" group="mm_opt_video"/>
@@ -375,23 +395,6 @@
         <track_particles_distance x="147" y="6" width="188" height="16" step="0.1">
             <options_item entry="r2_ls_squality" group="mm_opt_video_adv"/>
         </track_particles_distance>
-
-        <cap_vsync x="15" y="3" width="108" height="24">
-            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_vsync</text>
-        </cap_vsync>
-        <check_vsync x="136" y="0" width="35" stretch="1" height="29">
-	        <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="rs_v_sync" group="mm_opt_video_adv" depend="runtime"/>
-        </check_vsync>
-
-        <cap_60hz x="15" y="3" width="108" height="24">
-            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_60_hz</text>
-        </cap_60hz>
-        <check_60hz x="136" y="0" width="35" stretch="1" height="29">
-	        <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="rs_refresh_60hz" group="mm_opt_video_adv" depend="vid"/>
-        </check_60hz>
-
 
         <cap_sun_shafts x="15" y="3" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_sun_shafts</text>

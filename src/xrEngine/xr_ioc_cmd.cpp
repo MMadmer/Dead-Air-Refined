@@ -384,10 +384,7 @@ public:
             psDeviceMode.Height = h;
 
             if (cnt == 3)
-            {
                 psDeviceMode.RefreshRate = r;
-                m_Refresh60hz.set(fl_Refresh60hz, psDeviceMode.RefreshRate == 60);
-            }
         }
         else
         {
@@ -424,31 +421,7 @@ public:
             tok++;
         }
     }
-
-private:
-    enum { fl_Refresh60hz = 1u << 0u };
-    inline static Flags32 m_Refresh60hz; // for rs_refresh_60hz backwards compatibility
-
-public:
-    class CCC_Refresh60hz final : public CCC_Mask
-    {
-    public:
-        CCC_Refresh60hz(pcstr name) : CCC_Mask(name, &m_Refresh60hz, fl_Refresh60hz)
-        {
-            m_Refresh60hz.set(fl_Refresh60hz, psDeviceMode.RefreshRate == 60);
-        }
-
-        void Execute(pcstr args) override
-        {
-            CCC_Mask::Execute(args);
-            if (GetValue())
-                psDeviceMode.RefreshRate = 60;
-            else
-                psDeviceMode.RefreshRate = 0; // Device will adjust
-        }
-    };
 };
-using CCC_Refresh60hz = CCC_VidMode::CCC_Refresh60hz;
 //-----------------------------------------------------------------------
 class CCC_VidWindowMode final : public CCC_Token
 {
@@ -741,42 +714,53 @@ ENGINE_API shared_str current_player_hud_sect{};
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;
 
-class CCC_VidFpsLock final : public CCC_Token
+class CCC_VidFpsLimit final : public CCC_Token
 {
-    inline static u32 compatibilityValue = 0;
-    inline static xr_token compatibilityTokens[] =
+    inline static u32 selectedValue = 0;
+    inline static xr_token fpsLimitTokens[] =
     {
-        { "st_opt_off", 0 },
+        { "st_opt_fps_unlimited", 0 },
+        { "30", 30 },
         { "60", 60 },
+        { "75", 75 },
+        { "90", 90 },
+        { "120", 120 },
         { "144", 144 },
+        { "165", 165 },
+        { "240", 240 },
         { nullptr, 0 },
     };
 
+    // The console variable rs_fps_limit accepts any value; the menu only offers the presets
+    // above, so anything else is shown as "unlimited" until the player picks from the list.
     static void SynchronizeValue()
     {
-        compatibilityValue = ps_fps_limit == 60 || ps_fps_limit == 144 ? ps_fps_limit : 0;
+        selectedValue = 0;
+        for (const xr_token* token = fpsLimitTokens; token->name; ++token)
+        {
+            if (token->id == ps_fps_limit)
+            {
+                selectedValue = token->id;
+                break;
+            }
+        }
     }
 
 public:
-    explicit CCC_VidFpsLock(pcstr name) : CCC_Token(name, &compatibilityValue, compatibilityTokens) {}
+    explicit CCC_VidFpsLimit(pcstr name) : CCC_Token(name, &selectedValue, fpsLimitTokens) {}
 
     void Execute(pcstr args) override
     {
-        if (!xr_stricmp(args, "st_opt_off") || !xr_stricmp(args, "off") || !xr_strcmp(args, "0"))
-            compatibilityValue = 0;
-        else if (!xr_strcmp(args, "60"))
-            compatibilityValue = 60;
-        else if (!xr_strcmp(args, "144"))
-            compatibilityValue = 144;
-        else
-        {
-            InvalidSyntax();
-            return;
-        }
+        SynchronizeValue(); // a failed token lookup then writes back the current limit
 
-        // "off" means no limit; it used to select 501 fps, so the option never actually
-        // turned frame pacing off.
-        ps_fps_limit = compatibilityValue ? static_cast<int>(compatibilityValue) : 0;
+        // "off" and "st_opt_off" are how older configs and the retired vid_fps_lock alias
+        // spelled the unlimited state.
+        if (!xr_stricmp(args, "st_opt_off") || !xr_stricmp(args, "off") || !xr_strcmp(args, "0"))
+            selectedValue = 0;
+        else
+            CCC_Token::Execute(args); // reports unknown tokens itself and keeps the old value
+
+        ps_fps_limit = static_cast<int>(selectedValue);
     }
 
     void GetStatus(TStatus& status) override
@@ -791,7 +775,7 @@ public:
         CCC_Token::fill_tips(tips, mode);
     }
 
-    // Do not serialize an alias that could override an arbitrary modern FPS limit on reload.
+    // rs_fps_limit is the persisted variable; saving this alias too would fight with it.
     void Save(IWriter*) override {}
 };
 
@@ -848,12 +832,11 @@ void CCC_Register()
     CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 0, 501); // 0 = unlimited
     CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
     CMD4(CCC_Integer, "g_pause_in_background", &g_pause_in_background, 0, 1);
-    CMD1(CCC_VidFpsLock, "vid_fps_lock");
+    CMD1(CCC_VidFpsLimit, "vid_fps_limit");
     CMD3(CCC_Mask, "rs_always_active", &psDeviceFlags, rsAlwaysActive);
     CMD3(CCC_Mask, "rs_v_sync", &psDeviceFlags, rsVSync);
     // CMD3(CCC_Mask, "rs_disable_objects_as_crows",&psDeviceFlags, rsDisableObjectsAsCrows );
     CMD1(CCC_Fullscreen, "rs_fullscreen");
-    CMD1(CCC_Refresh60hz, "rs_refresh_60hz");
     CMD3(CCC_Mask, "rs_stats", &psDeviceFlags, rsStatistic);
     CMD3(CCC_Mask, "rs_fps", &psDeviceFlags, rsShowFPS);
     CMD3(CCC_Mask, "rs_fps_graph", &psDeviceFlags, rsShowFPSGraph);

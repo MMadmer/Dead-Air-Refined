@@ -114,10 +114,10 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_renderer>
 
-		<cap_preset x="240" y="82" width="90" height="21" complex_mode="1" >
-			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_quality_presets</text>			
+		<cap_preset x="240" y="75" width="90" height="21" complex_mode="1" >
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_quality_presets</text>
 		</cap_preset>
-		<list_presets x="320" y="78" width="100" height="21" list_length="5">
+		<list_presets x="320" y="71" width="100" height="21" list_length="5">
 			<options_item entry="_preset" group="mm_opt_video_preset" depend="restart"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -127,10 +127,10 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_presets>
 
-		<cap_resolution x="240" y="121" width="90" height="21" complex_mode="1">
+		<cap_resolution x="240" y="105" width="90" height="21" complex_mode="1">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_resolution</text>
 		</cap_resolution>
-		<list_resolution x="320" y="117" width="100" height="21" always_show_scroll="1">
+		<list_resolution x="320" y="101" width="100" height="21" always_show_scroll="1">
             <options_item entry="vid_mode" group="mm_opt_video" depend="vid"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -140,38 +140,58 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_resolution>
 
-		<cap_gamma x="240" y="159" width="90" height="21">
+		<cap_fps_limit x="240" y="135" width="90" height="21" complex_mode="1">
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fps_limit</text>
+		</cap_fps_limit>
+		<list_fps_limit x="320" y="131" width="100" height="21" list_length="9" always_show_scroll="1">
+            <options_item entry="vid_fps_limit" group="mm_opt_video" depend="runtime"/>
+			<text_color>
+				<e r="220" g="220" b="220"/>
+				<d r="125" g="125" b="125"/>
+			</text_color>
+			<list_font_s r="240" g="240" b="240"/>
+			<list_font	 r="191" g="191" b="191" font="letterica25"/>
+		</list_fps_limit>
+
+		<cap_vsync x="240" y="165" width="90" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
+		</cap_vsync>
+		<check_vsync x="320" y="162" width="30" height="21">
+			<options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
+		</check_vsync>
+
+		<cap_gamma x="240" y="195" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_gamma</text>
 		</cap_gamma>
-		<track_gamma x="320" y="157" width="165" height="21">
+		<track_gamma x="320" y="193" width="165" height="21">
             <options_item entry="rs_c_gamma" group="mm_opt_video" depend="runtime"/>
 		</track_gamma>
 
-		<cap_contrast x="240" y="198" width="90" height="21">
+		<cap_contrast x="240" y="225" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_contrast</text>
 		</cap_contrast>
-		<track_contrast x="320" y="196" width="165" height="21">
+		<track_contrast x="320" y="223" width="165" height="21">
             <options_item entry="rs_c_contrast" group="mm_opt_video" depend="runtime"/>
 		</track_contrast>
 
-		<cap_brightness x="240" y="237" width="90" height="21">
+		<cap_brightness x="240" y="255" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_brightness</text>
 		</cap_brightness>
-		<track_brightness x="320" y="235" width="165" height="21">
+		<track_brightness x="320" y="253" width="165" height="21">
             <options_item entry="rs_c_brightness" group="mm_opt_video" depend="runtime"/>
 		</track_brightness>
 
 
-		<cap_fov x="240" y="276" width="90" height="21">
+		<cap_fov x="240" y="285" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fov</text>
         </cap_fov>
-		<track_fov x="320" y="274" width="165" height="21" step="1">
+		<track_fov x="320" y="283" width="165" height="21" step="1">
             <options_item entry="fov" group="mm_opt_video" depend="runtime"/>
         </track_fov>
-		<cap_fov_value x="490" y="276">
+		<cap_fov_value x="490" y="285">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_fov_value>
-		
+
 		<cap_hud_fov x="240" y="315" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_hud_fov</text>
         </cap_hud_fov>
@@ -181,11 +201,11 @@
 		<cap_hud_fov_value x="490" y="315">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_hud_fov_value>
-		
-		<cap_window_mode x="240" y="354" width="90" height="21">
+
+		<cap_window_mode x="240" y="345" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_window_mode</text>
 		</cap_window_mode>
-		<list_window_mode x="320" y="353" width="165" height="21">
+		<list_window_mode x="320" y="344" width="165" height="21">
             <options_item entry="vid_window_mode" group="mm_opt_video" depend="vid"/>
             <list_font align="l" font="letterica16" r="95" g="92" b="79"/>
             <text_color>
@@ -194,11 +214,11 @@
             </text_color>
 		</list_window_mode>
 
-		<cap_level_texture_unload x="240" y="393" width="90" height="21"
+		<cap_level_texture_unload x="240" y="375" width="90" height="21"
 			hint="ui_mm_level_texture_unload_hint">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_level_texture_unload</text>
 		</cap_level_texture_unload>
-		<check_level_texture_unload x="320" y="390" width="30" height="21"
+		<check_level_texture_unload x="320" y="372" width="30" height="21"
 			hint="ui_mm_level_texture_unload_hint">
 			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
 		</check_level_texture_unload>
@@ -524,21 +544,6 @@
             <options_item entry="r2_reflections" group="mm_opt_video_adv" depend="restart"/>
         </check_reflections>
 		
-        <cap_vsync x="25" y="2" width="90" height="21" complex_mode="1" >
-            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
-        </cap_vsync>
-        <check_vsync x="115" y="0" width="30" height="21">
-            <options_item entry="rs_v_sync" group="mm_opt_video_adv" depend="runtime"/>
-        </check_vsync>
-
-        <cap_60hz x="25" y="2" width="90" height="21" complex_mode="1" >
-            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_60_hz</text>
-        </cap_60hz>
-        <check_60hz x="115" y="0" width="30" height="21">
-            <options_item entry="rs_refresh_60hz" group="mm_opt_video_adv" depend="vid"/>
-        </check_60hz>
-
-
         <cap_sun_shafts x="25" y="2" width="90" height="21" complex_mode="1" >
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_sun_shafts</text>
         </cap_sun_shafts>
