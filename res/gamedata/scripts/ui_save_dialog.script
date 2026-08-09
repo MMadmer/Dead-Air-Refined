@@ -122,12 +122,20 @@ function save_dialog:OnListItemClicked()
 	self:UpdatePreview(item_text)
 end
 
+-- Local copy of the load dialog helper: that one lives in another script namespace and
+-- would tie this dialog to script load order.
+function save_preview_exists(fname)
+	local f = getFS()
+	local flist = f:file_list_open_ex("$game_saves$", bit_or(FS.FS_ListFiles, FS.FS_RootOnly), fname)
+	return flist:Size() > 0
+end
+
 -- Dead Air: Refined - the save dialog shows the same preview the load dialog does.
 function save_dialog:UpdatePreview(item_text)
 	if (not self.picture) then return end
 
 	local r = self.picture:GetTextureRect()
-	if (item_text and file_exist(item_text .. ".dds")) then
+	if (item_text and save_preview_exists(item_text .. ".dds")) then
 		self.picture:InitTexture(item_text)
 	else
 		self.picture:InitTexture("ui\\ui_noise")
