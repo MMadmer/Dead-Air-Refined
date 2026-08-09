@@ -17,6 +17,13 @@ target_sources(xr_3da PRIVATE
     stalker_soc.ico
 )
 
+# The resource compiler gets no dependency scanning, so a version bump would relink the
+# executable while leaving the stale VERSIONINFO in place. Diagnostic reports key off it.
+set_property(
+    SOURCE resource.rc
+    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/src/xrCore/ProductVersion.h"
+)
+
 set_property(
     DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     PROPERTY
