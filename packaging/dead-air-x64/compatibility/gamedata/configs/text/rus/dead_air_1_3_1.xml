@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="windows-1251"?>
 <string_table>
     <string id="ui_mm_crosshair_dot">
-        <text>РРіСЂР°: С‚РѕС‡РєР° РІ РїСЂРёС†РµР»Рµ</text>
+        <text>Игра: Прицел-точка</text>
     </string>
     <string id="ui_mm_crosshair_dot_hint">
-        <text>Р’РѕР·РІСЂР°С‰Р°РµС‚ С‚РѕС‡РєСѓ РІ С†РµРЅС‚СЂРµ СЃС‚Р°С‚РёС‡РµСЃРєРѕРіРѕ РїСЂРёС†РµР»Р°, РєР°Рє РІ РѕСЂРёРіРёРЅР°Р»СЊРЅРѕР№ Dead Air.</text>
+        <text>Статический прицел с точкой в центре, как в оригинальной Dead Air.</text>
     </string>
 </string_table>
