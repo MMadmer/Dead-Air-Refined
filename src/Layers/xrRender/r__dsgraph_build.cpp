@@ -38,7 +38,12 @@ static constexpr StaticGeometryThreshold staticGeometryThresholds[][5] =
     { { 50.f, 50.f }, { 400.f, 150.f }, { 1500.f, 200.f }, { 5000.f, 300.f }, { 20000.f, 350.f } },
 };
 
-ICF bool is_static_geometry_valuable(const dxRender_Visual* visual)
+// A visual kept last frame has to travel this much further out before it is dropped.
+// Without the dead band, weapon sway and head bob alone push objects sitting on a
+// threshold back and forth across it, which reads as flicker.
+static constexpr float staticGeometryStickyScale = 1.15f;
+
+ICF bool is_static_geometry_valuable(dxRender_Visual* visual, u32 context)
 {
     if (ps_r_optimize_static == geometry_optimization_off)
         return true;
@@ -48,11 +53,16 @@ ICF bool is_static_geometry_valuable(const dxRender_Visual* visual)
     const float distance = Device.vCameraPosition.distance_to(visual->vis.sphere.P) + EPS;
     const float adjustedDistance = distance * Device.fFOV / 67.f;
 
+    const bool sticky = (Device.dwFrame - visual->vis.valuable_frame[context]) <= 1;
+    const float distanceScale = sticky ? staticGeometryStickyScale : 1.f;
+
     for (const auto& threshold : staticGeometryThresholds[quality - 1])
     {
-        if (volume < threshold.volume && adjustedDistance > threshold.distance)
+        if (volume < threshold.volume && adjustedDistance > threshold.distance * distanceScale)
             return false;
     }
+
+    visual->vis.valuable_frame[context] = Device.dwFrame;
     return true;
 }
 
@@ -374,7 +384,7 @@ void R_dsgraph_structure::add_leafs_dynamic(IRenderable* root, dxRender_Visual* 
     }
 }
 
-void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
+void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual, bool lod_managed)
 {
     ZoneScoped;
 
@@ -384,7 +394,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
     if (o.use_hom && !RImplementation.HOM.visible(pVisual->vis))
         return;
 
-    if (!is_static_geometry_valuable(pVisual))
+    if (!lod_managed && !is_static_geometry_valuable(pVisual, context_id))
         return;
 
     // Visual is 100% visible - simply add it
@@ -394,7 +404,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
     {
         if (defer_static_main_thread_work)
         {
-            deferred_static_visuals.push_back({ pVisual, {}, 0, false });
+            deferred_static_visuals.push_back({ pVisual, {}, 0, false, lod_managed });
             return;
         }
 
@@ -425,7 +435,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
         {
             //i->vis.obj_data = pV->getVisData().obj_data; // Наследники используют шейдерные данные от родительского визуала
                                                          // [use shader data from parent model, rather than it childrens]
-            add_leafs_static(i);
+            add_leafs_static(i, lod_managed);
         }
     }
     return;
@@ -434,7 +444,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
     {
         if (defer_static_main_thread_work)
         {
-            deferred_static_visuals.push_back({ pVisual, {}, 0, false });
+            deferred_static_visuals.push_back({ pVisual, {}, 0, false, lod_managed });
             return;
         }
 
@@ -445,7 +455,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
         {
             //i->vis.obj_data = pV->getVisData().obj_data; // Наследники используют шейдерные данные от родительского визуала
                                                          // [use shader data from parent model, rather than it childrens]
-            add_leafs_static(i);
+            add_leafs_static(i, lod_managed);
         }
     }
     return;
@@ -472,7 +482,7 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual)
             {
                 //i->vis.obj_data = pV->getVisData().obj_data; // Наследники используют шейдерные данные от родительского визуала
                                                              // [use shader data from parent model, rather than it childrens]
-                add_leafs_static(i);
+                add_leafs_static(i, true);
             }
         }
     }
@@ -595,7 +605,7 @@ BOOL R_dsgraph_structure::add_Dynamic(dxRender_Visual* pVisual, u32 planes) // n
     return TRUE;
 }*/
 
-void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& view, u32 planes)
+void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& view, u32 planes, bool lod_managed)
 {
     ZoneScoped;
 
@@ -612,7 +622,7 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     if (o.use_hom && !RImplementation.HOM.visible(vis))
         return;
 
-    if (!is_static_geometry_valuable(pVisual))
+    if (!lod_managed && !is_static_geometry_valuable(pVisual, context_id))
         return;
 
     // If we get here visual is visible or partially visible
@@ -622,7 +632,7 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     {
         if (defer_static_main_thread_work)
         {
-            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial });
+            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial, lod_managed });
             return;
         }
 
@@ -664,12 +674,12 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
         if (fcvPartial == VIS)
         {
             for (auto& i : pV->children)
-                add_static(i, view, planes);
+                add_static(i, view, planes, lod_managed);
         }
         else
         {
             for (auto& i : pV->children)
-                add_leafs_static(i);
+                add_leafs_static(i, lod_managed);
         }
     }
     break;
@@ -678,7 +688,7 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     {
         if (defer_static_main_thread_work)
         {
-            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial });
+            deferred_static_visuals.push_back({ pVisual, view, planes, VIS == fcvPartial, lod_managed });
             return;
         }
 
@@ -688,12 +698,12 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
         if (fcvPartial == VIS)
         {
             for (auto& i : pV->children)
-                add_static(i, view, planes);
+                add_static(i, view, planes, lod_managed);
         }
         else
         {
             for (auto& i : pV->children)
-                add_leafs_static(i);
+                add_leafs_static(i, lod_managed);
         }
     }
     break;
@@ -717,7 +727,7 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
         {
             // Add all children, perform tests
             for (auto& i : pV->children)
-                add_leafs_static(i);
+                add_leafs_static(i, true);
         }
     }
     break;
@@ -871,9 +881,9 @@ void R_dsgraph_structure::build_subspace_dynamic()
     for (const auto& deferred : deferred_static_visuals)
     {
         if (deferred.partial)
-            add_static(deferred.visual, deferred.view, deferred.planes);
+            add_static(deferred.visual, deferred.view, deferred.planes, deferred.lod_managed);
         else
-            add_leafs_static(deferred.visual);
+            add_leafs_static(deferred.visual, deferred.lod_managed);
     }
     deferred_static_visuals.clear();
 

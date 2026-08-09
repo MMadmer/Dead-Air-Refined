@@ -26,6 +26,10 @@ public:
     // XXX nitrocaster: return (const char *) to reduce string pool spoiling
     virtual shared_str shedule_Name() const = 0;
     virtual bool shedule_Needed() = 0;
+    // The scheduler runs a priority object before anything else on its first step after
+    // registration. Content assumes the actor has initialized the world before any AI
+    // observes it, and the plain queue orders equal due times arbitrarily.
+    virtual bool shedule_Priority() const { return false; }
 };
 
 inline ISheduled::~ISheduled() = default;

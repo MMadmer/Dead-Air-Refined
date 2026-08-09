@@ -103,6 +103,21 @@ Apply-RequiredPatch `
         "__persist must return a function or Lua source string",
         "cannot decode persisted Lua function: %s"
     )
+Apply-RequiredPatch `
+    -Repository (Join-Path $repositoryRoot "Externals\luabind") `
+    -Patch (Join-Path $repositoryRoot "patches\luabind-adopt-raw-pointer.patch") `
+    -AppliedFile "luabind\pointer_traits.hpp" `
+    -AppliedMarkers @(
+        "void release_ownership(T*&)"
+    )
+Apply-RequiredPatch `
+    -Repository (Join-Path $repositoryRoot "Externals\DirectXTex") `
+    -Patch (Join-Path $repositoryRoot "patches\directxtex-cmake4-shader-command.patch") `
+    -AppliedFile "CMakeLists.txt" `
+    -AppliedMarkers @(
+        "cmd /c .\\CompileShaders.cmd",
+        "cmd /c .\\hlsl.cmd"
+    )
 
 if ($Clean) {
     Remove-BuildDirectory -Path $buildDirectory

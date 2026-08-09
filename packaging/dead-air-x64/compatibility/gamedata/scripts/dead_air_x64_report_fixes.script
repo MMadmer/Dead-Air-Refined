@@ -79,6 +79,18 @@ local function take_all_mutant_loot(self)
 	end
 end
 
+-- xr_actor.first_update_time is only assigned once the actor binder reaches its first
+-- update, and that update bails out early while the actor is not alive yet. Every stock
+-- reader treats nil as "not initialized" except the eva_npc_steal_box evaluator, which
+-- adds to it directly and runs from the first frame after a load. Seed the shared field
+-- so the uninitialized case behaves like a fresh first update; the real one overwrites it
+-- a few frames later and the stock timing windows are unaffected.
+local function seed_actor_first_update_time()
+	if xr_actor and xr_actor.first_update_time == nil then
+		xr_actor.first_update_time = time_global()
+	end
+end
+
 local function patch_se_obj_storage()
 	if se_store_patched or not (utils and utils.se_obj_save_var) then
 		return
@@ -112,6 +124,7 @@ local function patch_mutant_loot_ui()
 end
 
 function on_game_start()
+	seed_actor_first_update_time()
 	patch_se_obj_storage()
 	patch_mutant_loot_ui()
 end

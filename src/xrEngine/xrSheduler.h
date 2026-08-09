@@ -15,6 +15,7 @@ private:
         shared_str scheduled_name;
         ISheduled* Object;
         u32 dwPadding; // for align-issues
+        bool priority;
 
         ICF bool operator<(const Item& I) const { return dwTimeForExecute > I.dwTimeForExecute; }
     };
@@ -47,6 +48,7 @@ private:
     xr_vector<ItemReg> Registration;
     ISheduled* m_current_step_obj;
     bool m_processing_now;
+    bool m_priority_pending{}; // a priority object joined the queue and has not run yet
     SchedulerStatistics stats;
 
     IC void Push(Item& I);

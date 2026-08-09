@@ -113,6 +113,9 @@ public:
     virtual void Load(LPCSTR section);
 
     virtual void shedule_Update(u32 T);
+    // Script logic reads actor state that only the actor binder's first update publishes,
+    // so the actor has to reach the scheduler ahead of any AI after a level load.
+    virtual bool shedule_Priority() const override { return true; }
     virtual void UpdateCL();
 
     virtual void OnEvent(NET_Packet& P, u16 type);

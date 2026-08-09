@@ -113,6 +113,10 @@ void CSheduler::internal_Register(ISheduled* object, bool realTime)
     item.dwTimeOfLastExecute = Device.dwTimeGlobal;
     item.scheduled_name = object->shedule_Name();
     item.Object = object;
+    item.priority = object->shedule_Priority();
+
+    if (item.priority && !realTime)
+        m_priority_pending = true;
 
     if (realTime)
     {
@@ -321,6 +325,25 @@ void CSheduler::ProcessStep()
 
     // Normal priority
     const u32 dwTime = Device.dwTimeGlobal;
+
+    // A freshly registered priority object - the actor after a level load - has to take the
+    // first step. Equal due times are ordered arbitrarily by the queue and the budget break
+    // below can defer whatever is left, so AI would otherwise get to run against a world the
+    // actor has not initialized yet. Zeroing the due time hands it to the loop below first
+    // and costs one reheap per registration, not per frame.
+    if (m_priority_pending)
+    {
+        m_priority_pending = false;
+        for (auto& item : Items)
+        {
+            if (item.priority)
+            {
+                item.dwTimeForExecute = 0;
+                std::make_heap(Items.begin(), Items.end());
+                break;
+            }
+        }
+    }
 
 #ifdef DEBUG
     CTimer eTimer;

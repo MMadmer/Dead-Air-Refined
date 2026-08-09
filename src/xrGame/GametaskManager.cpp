@@ -101,10 +101,11 @@ CGameTask* CGameTaskManager::GiveGameTaskToActor(const TASK_ID& id,
 CGameTask* CGameTaskManager::GiveGameTaskToActor(CGameTask* t, u32 timeToComplete, bool bCheckExisting, u32 timer_ttl)
 {
     t->CommitScriptHelperContents();
+    // Re-giving a live task is a normal content idiom: the script mutates the task
+    // it just fetched and hands it back only to refresh the PDA. Not an assert case.
     if (/* bCheckExisting &&*/ HasGameTask(t->m_ID, true))
     {
         Msg("! task [%s] already inprocess", t->m_ID.c_str());
-        VERIFY2(0, make_string("give_task : Task [%s] already inprocess!", t->m_ID.c_str()));
         return NULL;
     }
 

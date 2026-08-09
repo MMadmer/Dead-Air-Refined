@@ -1,6 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
+# Submodule patches must reach the working tree byte-exact: git apply rejects a
+# CRLF patch against LF sources, and these are applied on a fresh clone.
+*.patch text eol=lf
+
 # Custom for Visual Studio
 *.cs     diff=csharp
 *.sln    merge=union

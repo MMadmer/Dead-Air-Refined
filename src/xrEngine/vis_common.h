@@ -14,6 +14,7 @@ public:
     Fsphere sphere; //
     Fbox box; //
     u32 marker[R__NUM_CONTEXTS]; // for different sub-renders
+    u32 valuable_frame[R__NUM_CONTEXTS]; // when the static geometry filter last kept it - hysteresis
     u32 accept_frame; // when it was requisted accepted for main render
     u32 hom_frame; // when to perform test - shedule
     u32 hom_tested; // when it was last time tested
@@ -32,6 +33,7 @@ public:
         sphere.R = 0;
         box.invalidate();
         memset(marker, 0, sizeof(marker));
+        memset(valuable_frame, 0, sizeof(valuable_frame));
         accept_frame = 0;
         hom_frame = 0;
         hom_tested = 0;

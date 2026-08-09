@@ -1,0 +1,26 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 62fe112..fb7bbf3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -224,7 +224,9 @@ if(BUILD_DX11 AND WIN32 AND (NOT (XBOX_CONSOLE_TARGET STREQUAL "durango")))
+             MAIN_DEPENDENCY "${PROJECT_SOURCE_DIR}/DirectXTex/Shaders/CompileShaders.cmd"
+             DEPENDS ${SHADER_SOURCES}
+             COMMENT "Generating HLSL shaders..."
+-            COMMAND ${CMAKE_COMMAND} -E env CompileShadersOutput="${COMPILED_SHADERS}" $<$<BOOL:${DIRECTX_FXC_TOOL}>:LegacyShaderCompiler=${DIRECTX_FXC_TOOL}> CompileShaders.cmd > "${COMPILED_SHADERS}/compileshaders.log"
++            # cmd /c with an explicit relative path: CMake 4.x refuses to spawn .cmd directly, and a
++            # bare name is not looked up in the working directory when NoDefaultCurrentDirectoryInExePath is set
++            COMMAND ${CMAKE_COMMAND} -E env CompileShadersOutput="${COMPILED_SHADERS}" $<$<BOOL:${DIRECTX_FXC_TOOL}>:LegacyShaderCompiler=${DIRECTX_FXC_TOOL}> cmd /c .\\CompileShaders.cmd > "${COMPILED_SHADERS}/compileshaders.log"
+             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/DirectXTex/Shaders"
+             USES_TERMINAL)
+     endif()
+@@ -565,7 +567,9 @@ if(BUILD_SAMPLE AND BUILD_DX11 AND WIN32)
+             MAIN_DEPENDENCY "${PROJECT_SOURCE_DIR}/DDSView/hlsl.cmd"
+             DEPENDS "DDSView/ddsview.hlsl"
+             COMMENT "Generating HLSL shaders for DDSView..."
+-            COMMAND ${CMAKE_COMMAND} -E env CompileShadersOutput="${COMPILED_SHADERS}" $<$<BOOL:${DIRECTX_FXC_TOOL}>:LegacyShaderCompiler=${DIRECTX_FXC_TOOL}> hlsl.cmd > "${COMPILED_SHADERS}/hlsl_ddsview.log"
++            # cmd /c with an explicit relative path: CMake 4.x refuses to spawn .cmd directly, and a
++            # bare name is not looked up in the working directory when NoDefaultCurrentDirectoryInExePath is set
++            COMMAND ${CMAKE_COMMAND} -E env CompileShadersOutput="${COMPILED_SHADERS}" $<$<BOOL:${DIRECTX_FXC_TOOL}>:LegacyShaderCompiler=${DIRECTX_FXC_TOOL}> cmd /c .\\hlsl.cmd > "${COMPILED_SHADERS}/hlsl_ddsview.log"
+             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/DDSView"
+             USES_TERMINAL)
+   endif()

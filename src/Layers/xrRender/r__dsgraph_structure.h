@@ -87,6 +87,7 @@ struct R_dsgraph_structure
         CFrustum view{};
         u32 planes{};
         bool partial{};
+        bool lod_managed{};
     };
     xr_vector<deferred_static_visual_t> deferred_static_visuals;
     bool defer_static_main_thread_work{};
@@ -241,9 +242,12 @@ struct R_dsgraph_structure
     IRender_Sector::sector_id_t detect_sector(const Fvector& P);
     IRender_Sector::sector_id_t detect_sector(const Fvector& P, Fvector& D);
 
-    void add_static(dxRender_Visual* pVisual, const CFrustum& view, u32 planes);
+    // lod_managed marks a subtree hanging off an MT_LOD node: its visibility is already
+    // governed by r_ssaLOD_A/B against the imposter, so the static value filter must not
+    // cull it a second time.
+    void add_static(dxRender_Visual* pVisual, const CFrustum& view, u32 planes, bool lod_managed = false);
     void add_leafs_dynamic(IRenderable* root, dxRender_Visual* pVisual, Fmatrix& xform); // if detected node's full visibility
-    void add_leafs_static(dxRender_Visual* pVisual); // if detected node's full visibility
+    void add_leafs_static(dxRender_Visual* pVisual, bool lod_managed = false); // if detected node's full visibility
 
     void insert_dynamic(IRenderable* root, dxRender_Visual* pVisual, Fmatrix& xform, Fvector& Center);
     void insert_static(dxRender_Visual* pVisual);
