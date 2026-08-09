@@ -19,7 +19,15 @@
 extern CUIGameCustom* CurrentGameUI() { return HUD().GetGameUI(); }
 
 //--------------------------------------------------------------------
-CHUDManager::CHUDManager() : m_pHUDTarget(xr_new<CHUDTarget>()) {}
+CHUDManager::CHUDManager() : m_pHUDTarget(xr_new<CHUDTarget>())
+{
+    // A controller psy hit and a bloodsucker execution hide the HUD for the duration of the
+    // attack and restore it when the attack ends. psHUD_Flags is engine-global, so loading a
+    // save mid-attack destroys the attacker without ever restoring the flag and the player is
+    // left with no HUD until another attack completes. The manager is rebuilt with the level,
+    // so this is the point where a session can no longer owe anyone a restore.
+    psHUD_Flags.set(HUD_DRAW_RT2, TRUE);
+}
 //--------------------------------------------------------------------
 CHUDManager::~CHUDManager()
 {
