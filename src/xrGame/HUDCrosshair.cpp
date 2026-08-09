@@ -103,42 +103,56 @@ void CHUDCrosshair::OnRender()
     Fvector2 scr_size{ float(Device.dwWidth), float(Device.dwHeight) };
     Fvector2 center{ scr_size.x / 2.0f, scr_size.y / 2.0f };
 
-    // Dead Air 0.98b drew a dot in the middle of the static crosshair; the Dead Air 1.0
-    // integration dropped it. Players who want it back get it through hud_crosshair_dot.
-    const bool draw_dot = !!psHUD_Flags.test(HUD_CROSSHAIR_DOT);
+    // hud_crosshair_dot replaces the four strokes with a single centre mark instead of adding
+    // one to them: the request was for a dot-shaped reticle, not for a dot inside the cross.
+    const bool dot_reticle = !!psHUD_Flags.test(HUD_CROSSHAIR_DOT);
 
-    GEnv.UIRender->StartPrimitive(draw_dot ? 10 : 8, IUIRender::ptLineList, UI().m_currentPointType);
-
-    float cross_length = cross_length_perc * scr_size.x;
-    float min_radius = min_radius_perc * scr_size.x;
-    float max_radius = max_radius_perc * scr_size.x;
-
-    clamp(target_radius, min_radius, max_radius);
-
-    float x_min = min_radius + radius;
-    float x_max = x_min + cross_length;
-
-    float y_min = x_min;
-    float y_max = x_max;
-
-    // 0
-    GEnv.UIRender->PushPoint(center.x, center.y + y_min, 0, cross_color, 0, 0);
-    GEnv.UIRender->PushPoint(center.x, center.y + y_max, 0, cross_color, 0, 0);
-    // 1
-    GEnv.UIRender->PushPoint(center.x, center.y - y_min, 0, cross_color, 0, 0);
-    GEnv.UIRender->PushPoint(center.x, center.y - y_max, 0, cross_color, 0, 0);
-    // 2
-    GEnv.UIRender->PushPoint(center.x + x_min, center.y, 0, cross_color, 0, 0);
-    GEnv.UIRender->PushPoint(center.x + x_max, center.y, 0, cross_color, 0, 0);
-    // 3
-    GEnv.UIRender->PushPoint(center.x - x_min, center.y, 0, cross_color, 0, 0);
-    GEnv.UIRender->PushPoint(center.x - x_max, center.y, 0, cross_color, 0, 0);
-
-    if (draw_dot)
+    if (dot_reticle)
     {
-        // point
-        GEnv.UIRender->PushPoint(center.x - 0.5f, center.y, 0, cross_color, 0, 0);
-        GEnv.UIRender->PushPoint(center.x + 0.5f, center.y, 0, cross_color, 0, 0);
+        // A line list would give a one pixel dash, so the dot is a quad. Its size follows the
+        // screen width and never falls below a pixel, otherwise it disappears at high modes.
+        const float half = _max(1.0f, scr_size.x * 0.0008f);
+        const float left = center.x - half, right = center.x + half;
+        const float top = center.y - half, bottom = center.y + half;
+
+        GEnv.UIRender->StartPrimitive(6, IUIRender::ptTriList, UI().m_currentPointType);
+
+        GEnv.UIRender->PushPoint(left, top, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(right, top, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(left, bottom, 0, cross_color, 0, 0);
+
+        GEnv.UIRender->PushPoint(right, top, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(right, bottom, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(left, bottom, 0, cross_color, 0, 0);
+    }
+    else
+    {
+        GEnv.UIRender->StartPrimitive(8, IUIRender::ptLineList, UI().m_currentPointType);
+
+        float cross_length = cross_length_perc * scr_size.x;
+        float min_radius = min_radius_perc * scr_size.x;
+        float max_radius = max_radius_perc * scr_size.x;
+
+        clamp(target_radius, min_radius, max_radius);
+
+        float x_min = min_radius + radius;
+        float x_max = x_min + cross_length;
+
+        float y_min = x_min;
+        float y_max = x_max;
+
+        // 0
+        GEnv.UIRender->PushPoint(center.x, center.y + y_min, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(center.x, center.y + y_max, 0, cross_color, 0, 0);
+        // 1
+        GEnv.UIRender->PushPoint(center.x, center.y - y_min, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(center.x, center.y - y_max, 0, cross_color, 0, 0);
+        // 2
+        GEnv.UIRender->PushPoint(center.x + x_min, center.y, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(center.x + x_max, center.y, 0, cross_color, 0, 0);
+        // 3
+        GEnv.UIRender->PushPoint(center.x - x_min, center.y, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(center.x - x_max, center.y, 0, cross_color, 0, 0);
     }
 
     // render

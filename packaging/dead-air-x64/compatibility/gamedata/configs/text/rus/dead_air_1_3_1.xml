@@ -4,6 +4,6 @@
         <text>Игра: Прицел-точка</text>
     </string>
     <string id="ui_mm_crosshair_dot_hint">
-        <text>Статический прицел с точкой в центре, как в оригинальной Dead Air.</text>
+        <text>Заменяет статический прицел одной точкой в центре экрана.</text>
     </string>
 </string_table>
