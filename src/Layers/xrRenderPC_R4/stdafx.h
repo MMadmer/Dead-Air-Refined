@@ -23,6 +23,11 @@
 #define HAS_DXGI1_4
 #endif
 
+#if __has_include(<dxgi1_5.h>)
+#include <dxgi1_5.h>
+#define HAS_DXGI1_5
+#endif
+
 #if __has_include(<d3d11_2.h>)
 #include <d3d11_2.h>
 #define HAS_DX11_2

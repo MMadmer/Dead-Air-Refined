@@ -53,6 +53,10 @@ private:
     bool CreateSwapChain2(HWND hwnd);
     bool UpdateChainDesc();
 
+    // Set when the swap chain was created with DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, which every
+    // windowed present without vsync then has to repeat.
+    bool m_tearingSupported{};
+
     bool ThisInstanceIsGlobal() const;
 
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);

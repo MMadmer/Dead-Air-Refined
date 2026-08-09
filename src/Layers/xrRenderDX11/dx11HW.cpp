@@ -516,33 +516,77 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     desc.Format = SelectFormat(D3D11_FORMAT_SUPPORT_DISPLAY, formats);
     Caps.fTarget = dx11TextureUtils::ConvertTextureFormat(desc.Format);
 
-    // Buffering
-    BackBufferCount = 1; // For DXGI_SWAP_EFFECT_FLIP_DISCARD we need at least two
-    desc.BufferCount = BackBufferCount;
+    // Buffering. Only buffer 0 is ever rendered into; the flip model needs a second one to hand
+    // to the display while the game draws, and DXGI rotates them internally.
+    BackBufferCount = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 
     // Multisample
     desc.SampleDesc.Count = 1;
     desc.SampleDesc.Quality = 0;
 
-    // Windoze
-    //desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // XXX: tearing glitches with flip presentation model
-    desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
     desc.Scaling = DXGI_SCALING_STRETCH;
 
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fulldesc{};
     fulldesc.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
 
-    // Additional setup
-    desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    // Flip presentation lets the game drive the display directly instead of routing every
+    // windowed frame through the desktop compositor. That is what makes variable refresh work in
+    // borderless and stops a frame limit from beating against DWM's fixed grid - a 120 fps limit
+    // on a 165 Hz panel used to alternate between one and two refreshes per frame. It needs
+    // Windows 10, at least two buffers and a non-MSAA back buffer, so old systems simply fall
+    // back to the copy-based chain below; -no_flip forces that fallback everywhere.
+    m_tearingSupported = false;
+    bool flipModel = !strstr(Core.Params, "-no_flip");
+    if (flipModel)
+    {
+#ifdef HAS_DXGI1_5
+        // Tearing support doubles as the "this is a modern DXGI" probe, and the flag is what
+        // allows an uncapped frame to reach the panel without waiting for the next refresh.
+        IDXGIFactory5* pFactory5{};
+        if (SUCCEEDED(pFactory2->QueryInterface(__uuidof(IDXGIFactory5), (void**)&pFactory5)))
+        {
+            BOOL allowTearing = FALSE;
+            if (SUCCEEDED(pFactory5->CheckFeatureSupport(
+                DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing))))
+                m_tearingSupported = allowTearing != FALSE;
+            _RELEASE(pFactory5);
+        }
+#endif
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc.BufferCount = 2;
+        desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+#ifdef HAS_DXGI1_5
+        if (m_tearingSupported)
+            desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+#endif
+    }
 
     IDXGISwapChain1* swapchain{};
-    const HRESULT result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
+    HRESULT result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
         fulldesc.Windowed ? nullptr : &fulldesc, nullptr, &swapchain);
+
+    if (FAILED(result) && flipModel)
+    {
+        // Pre-Windows 10, or a driver that refuses flip: keep the old behaviour rather than
+        // dropping to the legacy DXGI 1.1 path.
+        flipModel = false;
+        m_tearingSupported = false;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+        desc.BufferCount = 1;
+        desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+        result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
+            fulldesc.Windowed ? nullptr : &fulldesc, nullptr, &swapchain);
+    }
+
     _RELEASE(pFactory2);
 
     if (FAILED(result))
         return false;
+
+    if (ThisInstanceIsGlobal())
+        Msg("* Presentation: %s%s", flipModel ? "flip" : "copy (legacy)",
+            m_tearingSupported ? ", tearing allowed" : "");
 
     m_pSwapChain = swapchain;
 
@@ -691,7 +735,16 @@ void CHW::Present()
 
     UpdateBackgroundPreview();
 
-    switch (m_pSwapChain->Present(bUseVSync ? 1 : 0, 0))
+    // Without vsync a windowed flip chain still waits for the next refresh unless it is told
+    // tearing is acceptable - which is exactly what "vsync off" asks for. Exclusive fullscreen
+    // must not carry the flag.
+    UINT presentFlags = 0;
+#ifdef HAS_DXGI1_5
+    if (!bUseVSync && m_tearingSupported && m_ChainDesc.Windowed)
+        presentFlags |= DXGI_PRESENT_ALLOW_TEARING;
+#endif
+
+    switch (m_pSwapChain->Present(bUseVSync ? 1 : 0, presentFlags))
     {
     case DXGI_STATUS_OCCLUDED:
         if (g_pause_in_background)
