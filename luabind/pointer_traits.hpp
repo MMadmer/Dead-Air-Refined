@@ -85,6 +85,15 @@ namespace luabind {
 			p.release();
 		}
 
+		// A raw pointer instance was never owned by Lua: pointer_holder<T*> only
+		// borrows what C++ handed out, so adopt<N>() has nothing to release here.
+		// Legacy luabind just cleared an ownership flag; throwing instead turns
+		// "pass an engine-owned object back into C++" into a fatal script error.
+		template<typename T>
+		void release_ownership(T*&)
+		{
+		}
+
 		template <class P>
 		void release_ownership(P const&)
 		{
