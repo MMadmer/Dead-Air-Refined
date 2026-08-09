@@ -5,12 +5,37 @@
 #include "xrEngine/xr_object.h"
 #include "Intersect.hpp"
 
+#include <atomic>
+
 #ifdef DEBUG
 static bool _cdb_bDebug = false;
 extern XRCDB_API bool* cdb_bDebug = &_cdb_bDebug;
 bool bDebug() { return *cdb_bDebug; }
 #endif
 using namespace collide;
+
+// CGameObject::net_Destroy deletes the collision form before the object leaves the spatial
+// base, so a ray query can still find the object inside that window and no query path ever
+// checked either the form or the destroy flag. Crashes arrived as CCF_Skeleton::_RayQuery
+// on a freed form under AI vision queries. The counter stands in for the missing minidump:
+// if it keeps firing, worker threads still catch objects mid-destruction and the remaining
+// cross-thread window needs deferred destruction.
+IC ICollisionForm* query_cform(IGameObject* collidable)
+{
+    if (!collidable)
+        return nullptr;
+
+    if (collidable->getDestroy() || !collidable->GetCForm())
+    {
+        static std::atomic<u32> s_hits{};
+        const u32 n = s_hits.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (n <= 5 || (n % 200) == 0)
+            Msg("~ CDB: ray query caught an object mid-destruction, hit %u", n);
+        return nullptr;
+    }
+
+    return collidable->GetCForm();
+}
 
 //--------------------------------------------------------------------------------
 // RayTest - Occluded/No
@@ -45,11 +70,13 @@ bool CObjectSpace::_RayTest(const Fvector& start, const Fvector& dir, float rang
             IGameObject* collidable = spatial->dcast_GameObject();
             if (collidable && (collidable != ignore_object))
             {
-                ECollisionFormType tp = collidable->GetCForm()->Type();
-                if ((tgt & (rqtObject | rqtObstacle)) && (tp == cftObject) &&
-                    collidable->GetCForm()->_RayQuery(Q, r_temp))
+                ICollisionForm* cform = query_cform(collidable);
+                if (!cform)
+                    continue;
+                ECollisionFormType tp = cform->Type();
+                if ((tgt & (rqtObject | rqtObstacle)) && (tp == cftObject) && cform->_RayQuery(Q, r_temp))
                     return TRUE;
-                if ((tgt & rqtShape) && (tp == cftShape) && collidable->GetCForm()->_RayQuery(Q, r_temp))
+                if ((tgt & rqtShape) && (tp == cftShape) && cform->_RayQuery(Q, r_temp))
                     return TRUE;
             }
         }
@@ -149,12 +176,15 @@ bool CObjectSpace::_RayPick(
                 continue;
             if (collidable == ignore_object)
                 continue;
-            ECollisionFormType tp = collidable->GetCForm()->Type();
+            ICollisionForm* pick_cform = query_cform(collidable);
+            if (!pick_cform)
+                continue;
+            ECollisionFormType tp = pick_cform->Type();
             if (((tgt & (rqtObject | rqtObstacle)) && (tp == cftObject)) || ((tgt & rqtShape) && (tp == cftShape)))
             {
                 u32 C = color_xrgb(64, 64, 64);
                 Q.range = R.range;
-                if (collidable->GetCForm()->_RayQuery(Q, r_temp))
+                if (pick_cform->_RayQuery(Q, r_temp))
                 {
                     C = color_xrgb(128, 128, 196);
                     R.set_if_less(r_temp.r_begin());
@@ -220,7 +250,9 @@ bool CObjectSpace::_RayQuery2(collide::rq_results& r_dest, const collide::ray_de
                 continue;
             if (collidable == ignore_object)
                 continue;
-            ICollisionForm* cform = collidable->GetCForm();
+            ICollisionForm* cform = query_cform(collidable);
+            if (!cform)
+                continue;
             ECollisionFormType tp = cform->Type();
             if (((R.tgt & (rqtObject | rqtObstacle)) && (tp == cftObject)) || ((R.tgt & rqtShape) && (tp == cftShape)))
             {
@@ -300,7 +332,9 @@ bool CObjectSpace::_RayQuery3(collide::rq_results& r_dest, const collide::ray_de
                     continue;
                 if (collidable == ignore_object)
                     continue;
-                ICollisionForm* cform = collidable->GetCForm();
+                ICollisionForm* cform = query_cform(collidable);
+                if (!cform)
+                    continue;
                 ECollisionFormType tp = cform->Type();
                 if (((R.tgt & (rqtObject | rqtObstacle)) && (tp == cftObject)) ||
                     ((R.tgt & rqtShape) && (tp == cftShape)))
@@ -407,7 +441,9 @@ bool CObjectSpace::_RayQuery(collide::rq_results& r_dest, const collide::ray_def
                         continue;
                     if (collidable == ignore_object)
                         continue;
-                    ICollisionForm* cform = collidable->GetCForm();
+                    ICollisionForm* cform = query_cform(collidable);
+                    if (!cform)
+                        continue;
                     ECollisionFormType tp = cform->Type();
                     if (((R.tgt & (rqtObject | rqtObstacle)) && (tp == cftObject)) ||
                         ((R.tgt & rqtShape) && (tp == cftShape)))

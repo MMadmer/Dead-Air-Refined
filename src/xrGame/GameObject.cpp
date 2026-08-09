@@ -304,10 +304,13 @@ void CGameObject::net_Destroy()
         smart_cast<IKinematics*>(Visual())->Callback(0, 0);
     //
     VERIFY(getDestroy());
+    // Leave the spatial base before deleting the collision form: ray and sphere queries were
+    // still finding this object in the window between the two, then touched the freed form.
+    // spatial_unregister only detaches the spatial node, it never reads the form or visual.
+    spatial_unregister();
     xr_delete(CForm);
     if (register_schedule())
         shedule_unregister();
-    spatial_unregister();
     // setDestroy (true); // commented in original src
     // remove visual
     cNameVisual_set(0);
