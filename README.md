@@ -5,7 +5,7 @@ project provides a native 64-bit Windows runtime, improves stability and
 performance, modernizes the engine dependency stack, and adds integrated
 installation, diagnostics, bug reporting, and automatic updates.
 
-Current release: **1.2.2**
+Current release: **1.3.1**
 
 Required game: **Dead Air 0.98b or Dead Air Revolution II**
 
@@ -57,15 +57,15 @@ in [`docs/dead-air`](docs/dead-air).
 ## Installation
 
 Download only one release asset. Most users need
-`Dead-Air-Refined-1.2.2-Setup.exe`; it supports both first-time installation
+`Dead-Air-Refined-1.3.1-Setup.exe`; it supports both first-time installation
 and manual upgrades from an earlier Refined version. Use
-`Dead-Air-Refined-1.2.2-Update.zip` when you prefer a fully manual installation:
+`Dead-Air-Refined-1.3.1-Update.zip` when you prefer a fully manual installation:
 extract it into the game root and replace the existing files. The built-in
 updater downloads the same ZIP automatically. You do not need both files.
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
-3. Download `Dead-Air-Refined-1.2.2-Setup.exe` from the latest release.
+3. Download `Dead-Air-Refined-1.3.1-Setup.exe` from the latest release.
 4. Select the root game directory containing `xrEngine.exe`, `fsgame.ltx`, and
    the `database` directory.
 5. Keep backup creation enabled unless the current Refined installation is
@@ -144,24 +144,28 @@ Requirements:
 - Ninja;
 - Visual Studio Build Tools with the Desktop development with C++ workload;
 - PowerShell 7 or Windows PowerShell;
-- initialized Git submodules.
+- Git.
 
-Initialize the source dependencies and build the runtime from the repository root:
+Build the runtime from the repository root:
 
 ```powershell
-git submodule update --init --recursive
-tools\build\build_x64.ps1 -Configuration Release -Clean
+tools\build\build_x64.ps1
 ```
 
-The wrapper enters the MSVC x64 developer environment and runs the canonical
-`windows-x64` CMake preset with Ninja Multi-Config. Incremental builds can omit
-`-Clean`. The available configurations are `Debug`, `Mixed`, `Release`, and
-`ReleaseMasterGold`.
+That is the whole procedure for a fresh clone. The wrapper initializes any
+missing Git submodule, applies the required dependency patches from `patches`,
+enters the MSVC x64 developer environment, and runs the canonical `windows-x64`
+CMake preset with Ninja Multi-Config. Binaries land in `bin\x64\<configuration>`.
+
+`-Configuration` selects `Debug`, `Mixed`, `Release` (the default), or
+`ReleaseMasterGold`. `-Clean` discards the build and output directories first; it
+is only needed after changing CMake files, the toolchain, or dependencies, since
+an ordinary rebuild is incremental and a repeated run does no work.
 
 Build the patch installer and automatic-update archive:
 
 ```powershell
-tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.2.2
+tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.3.1
 ```
 
 Generated release files are written to `artifacts` and are not tracked by Git.
