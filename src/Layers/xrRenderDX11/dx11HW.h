@@ -51,6 +51,7 @@ public:
 private:
     bool CreateSwapChain(HWND hwnd);
     bool CreateSwapChain2(HWND hwnd);
+    bool UpdateChainDesc();
 
     bool ThisInstanceIsGlobal() const;
 

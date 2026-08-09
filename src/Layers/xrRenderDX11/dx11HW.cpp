@@ -457,7 +457,32 @@ bool CHW::CreateSwapChain(HWND hwnd)
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
     const auto hr = m_pFactory->CreateSwapChain(pDevice, &sd, &m_pSwapChain);
-    return SUCCEEDED(hr);
+    if (FAILED(hr))
+        return false;
+
+    // sd already describes what was asked for, so a failed refresh is not fatal here.
+    UpdateChainDesc();
+    return true;
+}
+
+// m_ChainDesc drives every later fullscreen decision (OnAppActivate, OnAppDeactivate, teardown),
+// so it has to mirror the swap chain rather than the request that was made of it: DXGI is free to
+// refuse exclusive fullscreen, and it silently leaves it when the display mode changes underneath.
+bool CHW::UpdateChainDesc()
+{
+    if (!m_pSwapChain || FAILED(m_pSwapChain->GetDesc(&m_ChainDesc)))
+        return false;
+
+    // Only GetFullscreenState knows whether DXGI holds the output right now.
+    BOOL fullscreen{};
+    if (SUCCEEDED(m_pSwapChain->GetFullscreenState(&fullscreen, nullptr)))
+        m_ChainDesc.Windowed = !fullscreen;
+
+    if (ThisInstanceIsGlobal())
+        Msg("* Swap chain: %ux%u, %s", m_ChainDesc.BufferDesc.Width, m_ChainDesc.BufferDesc.Height,
+            m_ChainDesc.Windowed ? "windowed" : "exclusive fullscreen");
+
+    return true;
 }
 
 bool CHW::CreateSwapChain2(HWND hwnd)
@@ -519,17 +544,16 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     if (FAILED(result))
         return false;
 
-    if (FAILED(swapchain->GetDesc(&m_ChainDesc)))
-    {
-        _RELEASE(swapchain);
-        return false;
-    }
     m_pSwapChain = swapchain;
 
     m_pSwapChain->QueryInterface(__uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&m_pSwapChain2));
 
-    if (m_pSwapChain2 && ThisInstanceIsGlobal())
-        Device.PresentationFinished = m_pSwapChain2->GetFrameLatencyWaitableObject();
+    if (!UpdateChainDesc())
+    {
+        _RELEASE(m_pSwapChain2);
+        _RELEASE(m_pSwapChain);
+        return false;
+    }
 
     return true;
 #else // #ifdef HAS_DX11_2
@@ -594,8 +618,14 @@ void CHW::Reset()
 
     DXGI_SWAP_CHAIN_DESC& cd = m_ChainDesc;
     const bool bWindowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
-    cd.Windowed = bWindowed;
-    m_pSwapChain->SetFullscreenState(!bWindowed, NULL);
+
+    // An occupied output, an unsupported mode or a rendering adapter without outputs all make this
+    // fail; swallowing the result leaves the engine convinced it is exclusive when it is not.
+    const HRESULT fullscreenResult = m_pSwapChain->SetFullscreenState(!bWindowed, nullptr);
+    if (FAILED(fullscreenResult))
+        Msg("! [%s] failed to %s exclusive fullscreen: 0x%08x", __FUNCTION__,
+            bWindowed ? "leave" : "enter", fullscreenResult);
+
     DXGI_MODE_DESC& desc = m_ChainDesc.BufferDesc;
     desc.Width = Device.dwWidth;
     desc.Height = Device.dwHeight;
@@ -603,6 +633,8 @@ void CHW::Reset()
     CHK_DX(m_pSwapChain->ResizeTarget(&desc));
     CHK_DX(m_pSwapChain->ResizeBuffers(
         cd.BufferCount, desc.Width, desc.Height, desc.Format, cd.Flags));
+
+    UpdateChainDesc();
 }
 
 void CHW::SetPrimaryAttributes(u32& /*windowFlags*/)

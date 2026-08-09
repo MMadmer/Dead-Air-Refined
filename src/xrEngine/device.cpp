@@ -285,8 +285,6 @@ void CRenderDevice::ProcessFrame()
     if (!BeforeFrame())
         return;
 
-    const auto frameStartTime = CTimerBase::Clock::now();
-
     FrameMove();
 
     OnCameraUpdated();
@@ -374,12 +372,75 @@ void CRenderDevice::ProcessFrame()
 
     // Zero disables frame pacing entirely; the limiter used to clamp to 1 fps minimum, so an
     // "unlimited" setting still slept for its own frame budget every frame.
+    static CTimerBase::Clock::time_point pacingDeadline{};
+    static int pacedLimit = 0;
+
     if (configuredLimit > 0)
     {
         // Preserve sub-millisecond frame intervals instead of truncating 1000 / FPS.
         const auto frameDuration = std::chrono::duration_cast<CTimerBase::Clock::duration>(
             std::chrono::duration<double>(1.0 / configuredLimit));
-        std::this_thread::sleep_until(frameStartTime + frameDuration);
+
+        // Pace against the previous deadline instead of this frame's start: a frame that ran over
+        // budget is then followed by a shorter wait, so the rate holds the target instead of
+        // drifting below it (every overrun used to be lost for good). Re-sync when the limit
+        // changes or a whole frame has already been missed - after a level load or an alt-tab the
+        // engine must not sprint to catch up on a backlog.
+        const auto frameEnd = CTimerBase::Clock::now();
+        if (pacedLimit != configuredLimit || pacingDeadline + frameDuration < frameEnd)
+        {
+            pacedLimit = configuredLimit;
+            pacingDeadline = frameEnd;
+        }
+
+        pacingDeadline += frameDuration;
+        const auto deadline = pacingDeadline;
+
+        // Waiting out the whole budget with sleep_until misses the target badly: the thread wakes
+        // up to a scheduler tick late, so a 120 fps budget (8.3 ms) turned into ~9.3 ms frames,
+        // i.e. 107 fps. Wait on a high-resolution timer instead and spin out the last fraction.
+        // The reserve follows the wake-up latency this machine really shows, so the spin stays as
+        // short as it can be while still absorbing the overshoot.
+        static auto spinReserve = std::chrono::microseconds(600);
+        constexpr auto reserveMin = std::chrono::microseconds(200);
+        constexpr auto reserveMax = std::chrono::microseconds(2000);
+
+        const auto waitTarget = deadline - spinReserve;
+        const auto beforeWait = CTimerBase::Clock::now();
+        if (waitTarget > beforeWait)
+        {
+#if defined(XR_PLATFORM_WINDOWS)
+            static const HANDLE pacingTimer = []
+            {
+                // The high-resolution flag needs Windows 10 1803; the coarse timer is still better
+                // than sleep_until because it does not round the wait up to a tick.
+                if (HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr,
+                    CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS))
+                    return timer;
+                return CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+            }();
+
+            if (pacingTimer)
+            {
+                LARGE_INTEGER due;
+                due.QuadPart = -(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    waitTarget - beforeWait).count() / 100); // negative = relative, 100 ns units
+                if (SetWaitableTimerEx(pacingTimer, &due, 0, nullptr, nullptr, nullptr, 0))
+                    WaitForSingleObject(pacingTimer, INFINITE);
+            }
+#else
+            std::this_thread::sleep_until(waitTarget);
+#endif
+            const auto late = std::chrono::duration_cast<std::chrono::microseconds>(
+                CTimerBase::Clock::now() - waitTarget);
+            spinReserve = std::clamp(std::max(late + std::chrono::microseconds(150),
+                spinReserve - std::chrono::microseconds(20)), reserveMin, reserveMax);
+        }
+
+        // Busy-wait the remainder: yielding here would hand the core to a worker thread for a
+        // whole quantum and overshoot far worse than the reserve being burned.
+        while (CTimerBase::Clock::now() < deadline)
+            YieldProcessor();
     }
 
     if (!b_is_Active)

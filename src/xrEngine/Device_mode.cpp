@@ -153,18 +153,32 @@ void CRenderDevice::UpdateWindowProps()
     }
     else
     {
-        SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
-        SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
-        SDL_SetWindowBordered(m_sdlWnd, SDL_FALSE);
-        SDL_SetWindowSize(m_sdlWnd, psDeviceMode.Width, psDeviceMode.Height);
-
+        // Leaving and re-entering SDL's exclusive fullscreen restores the desktop display mode in
+        // between, which pulls the output out from under the swap chain: DXGI drops exclusive
+        // ownership and with it the vblank pacing of Present. UpdateWindowProps runs on every
+        // reset and on startup, so pay that price only when the requested mode is not applied yet.
         SDL_DisplayMode mode;
         SDL_GetWindowDisplayMode(m_sdlWnd, &mode);
-        mode.w = psDeviceMode.Width;
-        mode.h = psDeviceMode.Height;
-        mode.refresh_rate = psDeviceMode.RefreshRate;
-        SDL_SetWindowDisplayMode(m_sdlWnd, &mode);
-        SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN);
+
+        const Uint32 windowFlags = SDL_GetWindowFlags(m_sdlWnd);
+        const bool exclusiveAlready = (windowFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN;
+        const bool modeApplied = mode.w == static_cast<int>(psDeviceMode.Width) &&
+            mode.h == static_cast<int>(psDeviceMode.Height) &&
+            mode.refresh_rate == static_cast<int>(psDeviceMode.RefreshRate);
+
+        if (!exclusiveAlready || !modeApplied)
+        {
+            SDL_SetWindowFullscreen(m_sdlWnd, SDL_DISABLE);
+            SDL_SetWindowResizable(m_sdlWnd, SDL_FALSE);
+            SDL_SetWindowBordered(m_sdlWnd, SDL_FALSE);
+            SDL_SetWindowSize(m_sdlWnd, psDeviceMode.Width, psDeviceMode.Height);
+
+            mode.w = psDeviceMode.Width;
+            mode.h = psDeviceMode.Height;
+            mode.refresh_rate = psDeviceMode.RefreshRate;
+            SDL_SetWindowDisplayMode(m_sdlWnd, &mode);
+            SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN);
+        }
     }
 
     SDL_PumpEvents();
