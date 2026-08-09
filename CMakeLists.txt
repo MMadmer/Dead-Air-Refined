@@ -43,6 +43,15 @@ set(_xray_ipo_release "${CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE}")
 set(_xray_ipo_release_master_gold "${CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASEMASTERGOLD}")
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE OFF)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASEMASTERGOLD OFF)
+
+# HAVE_SYS_TYPES_H is one cache entry shared by every subproject. SDL bakes it into
+# SDL_config.h with configure_file, which runs the moment SDL is added, while the probe that
+# fills it in belongs to zlib further down the list. On a cold cache SDL therefore records the
+# header as missing and the next configure flips it, rebuilding everything that includes
+# SDL_config.h. Settle the probe before any subproject reads it.
+include(CheckIncludeFile)
+check_include_file("sys/types.h" HAVE_SYS_TYPES_H)
+
 add_subdirectory(Externals)
 if (MEMORY_ALLOCATOR STREQUAL "mimalloc" AND NOT TARGET mimalloc)
     message(FATAL_ERROR "The mimalloc allocator was requested but its target is unavailable.")
