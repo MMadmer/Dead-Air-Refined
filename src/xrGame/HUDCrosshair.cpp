@@ -129,7 +129,12 @@ void CHUDCrosshair::OnRender()
         // follows the screen width and never falls below a pixel, otherwise it disappears at
         // high modes. Half alpha keeps it from covering what the player is aiming at.
         const float dot_radius = _max(1.0f, scr_size.x * 0.0008f);
-        const u32 dot_color = subst_alpha(cross_color, 128);
+
+        // cross_color is tuned for thin strokes; the same value over a filled dot and a band
+        // reads far brighter, so the reticle takes a darker shade of it.
+        constexpr float dot_shade = 0.65f;
+        const u32 dot_color = color_rgba(u32(color_get_R(cross_color) * dot_shade),
+            u32(color_get_G(cross_color) * dot_shade), u32(color_get_B(cross_color) * dot_shade), 128);
 
         GEnv.UIRender->StartPrimitive(dot_segments * 3, IUIRender::ptTriList, UI().m_currentPointType);
 

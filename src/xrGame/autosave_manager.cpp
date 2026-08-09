@@ -72,10 +72,9 @@ void CAutosaveManager::shedule_Update(u32 dt)
     xr_strcat(temp, sizeof(temp), ".dds");
     FS.update_path(S1, "$game_saves$", temp);
 
+    // Not hidden: the file system scanner drops hidden entries, so a hidden preview never
+    // reaches the registry and the load menu can never show it. Manual saves never hid theirs.
     MainMenu()->Screenshot(IRender::SM_FOR_GAMESAVE, S1);
-#ifdef XR_PLATFORM_WINDOWS
-    SetFileAttributes(S1, FILE_ATTRIBUTE_HIDDEN);
-#endif
     const bool compat = ClearSkyMode || ShadowOfChernobylMode;
     CurrentGameUI()->AddCustomStatic("autosave", true, compat ? 3.0f : -1.0f);
 }

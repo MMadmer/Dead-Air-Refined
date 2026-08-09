@@ -24,6 +24,7 @@ function New-DeadAirCompatibilityArchive {
     $compatibilityVerifyRoot = Join-Path $WorkRoot "compatibility-verify"
     $coreCompatibilityOverrides = @(
         "scripts\ui_load_dialog.script",
+        "scripts\ui_save_dialog.script",
         "shaders\gl\dof.h"
     )
 

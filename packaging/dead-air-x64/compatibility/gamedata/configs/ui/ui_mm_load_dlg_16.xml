@@ -1,0 +1,80 @@
+<w>
+	<background x="0" y="0" width="1024" height="768" stretch="1">
+		<auto_static x="0" y="0" width="1024" height="768" stretch="1">
+			<texture x="0" y="0" width="1920" height="1080">ui\ui_static_mm_back_00</texture>
+		</auto_static>
+		<auto_static x="0" y="0" width="1024" height="768" stretch="1">
+			<texture x="0" y="0" width="1920" height="1024">ui\ui_static_mm_back_02</texture>
+		</auto_static>
+	</background>
+	
+	<file_item>
+	    <main width="392" height="40"/>
+	    <fn width="286" height="40"/>
+	    <fd width="88" height="40"/>
+	</file_item>
+	
+	<form x="0" y="0" width="1024" height="768" stretch="1">
+			
+		<caption x="336" y="48" width="500" height="25" complex_mode="0">
+			<text font="letterica25" r="95" g="92" b="79" a="0">ui_mm_load_game</text>
+		</caption>
+		
+		<picture x="108" y="76" width="140" height="117" stretch="1">
+		    <texture width="128" height="128">ui\ui_noise</texture>
+		</picture>
+
+		<auto_static x="108" y="76" width="140" height="117" stretch="1">
+			<texture>ui\ui_da_preview_corners</texture>
+		</auto_static>
+	
+	  <file_caption x="250" y="120" width="240" height="20">
+		  <text font="letterica18" align="c" r="191" g="191" b="191"/>
+	  </file_caption>
+		
+	  <file_data x="250" y="150" width="240" height="50" complex_mode="1">
+		  <text font="letterica18" align="c" r="95" g="92" b="79"/>
+	  </file_data>
+		
+	  <list_frame x="240" y="200" width="200" height="490">
+		  <texture></texture>
+	  </list_frame>
+		
+	  <list x="280" y="210" width="196" height="490" item_height="40" can_select="1">
+		  <font y="0" font="letterica18" r="220" g="220" b="220" />
+	  </list>
+		
+	  <btn_load x="108" y="244" width="157" height="39">
+		  <texture>butt_mm_new</texture>
+		  <text y="0" font="graffiti22">ui_mm_load</text>
+		  <text_color>
+			<e r="220" g="220" b="220"/>				
+			<t r="117" g="114" b="97"/>				
+			<d r="178" g="178" b="125"/>
+			<h r="220" g="220" b="220"/>
+		  </text_color>
+	  </btn_load>
+  		
+	  <btn_delete x="108" y="294" width="157" height="39">
+		  <texture>butt_mm_new</texture>
+		  <text y="0" font="graffiti22">ui_mm_delete</text>
+		  <text_color>
+			<e r="220" g="220" b="220"/>				
+			<t r="0" g="0" b="0"/>				
+			<d r="178" g="178" b="125"/>
+			<h r="220" g="220" b="220"/>
+		  </text_color>
+	  </btn_delete>
+  	
+	  <btn_cancel x="108" y="344" width="157" height="39">
+		  <texture>butt_mm_new</texture>			
+		  <text y="0" font="graffiti22">ui_mm_cancel</text>
+		  <text_color>
+			<e r="220" g="220" b="220"/>				
+			<t r="0" g="0" b="0"/>				
+			<d r="178" g="178" b="125"/>
+			<h r="220" g="220" b="220"/>
+		  </text_color>
+	  </btn_cancel>	
+	</form>
+</w>
