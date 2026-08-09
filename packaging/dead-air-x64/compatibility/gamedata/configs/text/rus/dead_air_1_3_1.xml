@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<string_table>
+    <string id="ui_mm_crosshair_dot">
+        <text>Игра: точка в прицеле</text>
+    </string>
+    <string id="ui_mm_crosshair_dot_hint">
+        <text>Возвращает точку в центре статического прицела, как в оригинальной Dead Air.</text>
+    </string>
+</string_table>

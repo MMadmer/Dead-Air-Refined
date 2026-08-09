@@ -2326,6 +2326,7 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "hud_crosshair_item", &psHUD_Flags, HUD_CROSSHAIR_ITEM);
     CMD3(CCC_Mask, "hud_crosshair_weapon", &psHUD_Flags, HUD_CROSSHAIR_WEAPON);
     CMD3(CCC_Mask, "hud_crosshair_nearest", &psHUD_Flags, HUD_CROSSHAIR_NEAREST);
+    CMD3(CCC_Mask, "hud_crosshair_dot", &psHUD_Flags, HUD_CROSSHAIR_DOT);
 
     CMD4(CCC_Float, "hud_fov", &psHUD_FOV_def, 0.1f, 1.0f);
     CMD4(CCC_Float, "fov", &g_fov, 5.0f, 180.0f);

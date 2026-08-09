@@ -1,6 +1,7 @@
 local function on_init(menu)
 	menu.gameplay_options["infinite_bolts"] = {typ="check"}
 	menu.gameplay_options["pause_in_background"] = {typ="check"}
+	menu.gameplay_options["crosshair_dot"] = {typ="check"}
 end
 
 local function on_set_values(menu, opt_manager)
@@ -14,6 +15,11 @@ local function on_set_values(menu, opt_manager)
 	if (pause_in_background and pause_in_background.ctrl) then
 		pause_in_background.ctrl:SetCheck(console:get_bool("g_pause_in_background"))
 	end
+
+	local crosshair_dot = menu.gameplay_options["crosshair_dot"]
+	if (crosshair_dot and crosshair_dot.ctrl) then
+		crosshair_dot.ctrl:SetCheck(console:get_bool("hud_crosshair_dot"))
+	end
 end
 
 local function on_accept(menu, opt_manager, console)
@@ -25,6 +31,11 @@ local function on_accept(menu, opt_manager, console)
 	local pause_in_background = menu.gameplay_options["pause_in_background"]
 	if (pause_in_background and pause_in_background.ctrl) then
 		console:execute("g_pause_in_background " .. (pause_in_background.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local crosshair_dot = menu.gameplay_options["crosshair_dot"]
+	if (crosshair_dot and crosshair_dot.ctrl) then
+		console:execute("hud_crosshair_dot " .. (crosshair_dot.ctrl:GetCheck() and "1" or "0"))
 	end
 end
 

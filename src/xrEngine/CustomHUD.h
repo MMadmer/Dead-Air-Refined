@@ -22,6 +22,7 @@ ENGINE_API extern Flags32 psHUD_Flags;
 #define HUD_CROSSHAIR_ITEM (1 << 16)
 #define HUD_CROSSHAIR_WEAPON (1 << 17)
 #define HUD_CROSSHAIR_NEAREST (1 << 18)
+#define HUD_CROSSHAIR_DOT (1 << 19)
 
 class IGameObject;
 

@@ -103,7 +103,11 @@ void CHUDCrosshair::OnRender()
     Fvector2 scr_size{ float(Device.dwWidth), float(Device.dwHeight) };
     Fvector2 center{ scr_size.x / 2.0f, scr_size.y / 2.0f };
 
-    GEnv.UIRender->StartPrimitive(8, IUIRender::ptLineList, UI().m_currentPointType);
+    // Dead Air 0.98b drew a dot in the middle of the static crosshair; the Dead Air 1.0
+    // integration dropped it. Players who want it back get it through hud_crosshair_dot.
+    const bool draw_dot = !!psHUD_Flags.test(HUD_CROSSHAIR_DOT);
+
+    GEnv.UIRender->StartPrimitive(draw_dot ? 10 : 8, IUIRender::ptLineList, UI().m_currentPointType);
 
     float cross_length = cross_length_perc * scr_size.x;
     float min_radius = min_radius_perc * scr_size.x;
@@ -129,6 +133,13 @@ void CHUDCrosshair::OnRender()
     // 3
     GEnv.UIRender->PushPoint(center.x - x_min, center.y, 0, cross_color, 0, 0);
     GEnv.UIRender->PushPoint(center.x - x_max, center.y, 0, cross_color, 0, 0);
+
+    if (draw_dot)
+    {
+        // point
+        GEnv.UIRender->PushPoint(center.x - 0.5f, center.y, 0, cross_color, 0, 0);
+        GEnv.UIRender->PushPoint(center.x + 0.5f, center.y, 0, cross_color, 0, 0);
+    }
 
     // render
     GEnv.UIRender->SetShader(*hShader);
