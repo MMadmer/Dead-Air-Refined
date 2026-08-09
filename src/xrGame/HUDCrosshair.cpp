@@ -103,16 +103,31 @@ void CHUDCrosshair::OnRender()
     Fvector2 scr_size{ float(Device.dwWidth), float(Device.dwHeight) };
     Fvector2 center{ scr_size.x / 2.0f, scr_size.y / 2.0f };
 
-    // hud_crosshair_dot replaces the four strokes with a single centre mark instead of adding
-    // one to them: the request was for a dot-shaped reticle, not for a dot inside the cross.
+    // hud_crosshair_dot replaces the four strokes with a centre dot, plus a ring that carries
+    // the spread the strokes would have shown. With the dynamic crosshair off the spread never
+    // moves, so the ring says nothing and is left out.
     const bool dot_reticle = !!psHUD_Flags.test(HUD_CROSSHAIR_DOT);
+
+    float cross_length = cross_length_perc * scr_size.x;
+    float min_radius = min_radius_perc * scr_size.x;
+    float max_radius = max_radius_perc * scr_size.x;
+
+    clamp(target_radius, min_radius, max_radius);
+
+    float x_min = min_radius + radius;
+    float x_max = x_min + cross_length;
+
+    float y_min = x_min;
+    float y_max = x_max;
 
     if (dot_reticle)
     {
+        constexpr u32 dot_segments = 16;
+        constexpr u32 ring_segments = 48;
+
         // A line list would give a one pixel dash, so the dot is a triangle fan. Its radius
         // follows the screen width and never falls below a pixel, otherwise it disappears at
         // high modes. Half alpha keeps it from covering what the player is aiming at.
-        constexpr u32 dot_segments = 16;
         const float dot_radius = _max(1.0f, scr_size.x * 0.0008f);
         const u32 dot_color = subst_alpha(cross_color, 128);
 
@@ -129,22 +144,33 @@ void CHUDCrosshair::OnRender()
             GEnv.UIRender->PushPoint(
                 center.x + dot_radius * _cos(to), center.y + dot_radius * _sin(to), 0, dot_color, 0, 0);
         }
+
+        GEnv.UIRender->SetShader(*hShader);
+        GEnv.UIRender->FlushPrimitive();
+
+        // The ring sits where the strokes start, so it grows and shrinks exactly like they do.
+        if (psHUD_Flags.test(HUD_CROSSHAIR_DYNAMIC) && x_min > dot_radius)
+        {
+            GEnv.UIRender->StartPrimitive(ring_segments * 2, IUIRender::ptLineList, UI().m_currentPointType);
+
+            for (u32 segment = 0; segment < ring_segments; ++segment)
+            {
+                const float from = PI_MUL_2 * float(segment) / float(ring_segments);
+                const float to = PI_MUL_2 * float(segment + 1) / float(ring_segments);
+
+                GEnv.UIRender->PushPoint(
+                    center.x + x_min * _cos(from), center.y + x_min * _sin(from), 0, dot_color, 0, 0);
+                GEnv.UIRender->PushPoint(
+                    center.x + x_min * _cos(to), center.y + x_min * _sin(to), 0, dot_color, 0, 0);
+            }
+
+            GEnv.UIRender->SetShader(*hShader);
+            GEnv.UIRender->FlushPrimitive();
+        }
     }
     else
     {
         GEnv.UIRender->StartPrimitive(8, IUIRender::ptLineList, UI().m_currentPointType);
-
-        float cross_length = cross_length_perc * scr_size.x;
-        float min_radius = min_radius_perc * scr_size.x;
-        float max_radius = max_radius_perc * scr_size.x;
-
-        clamp(target_radius, min_radius, max_radius);
-
-        float x_min = min_radius + radius;
-        float x_max = x_min + cross_length;
-
-        float y_min = x_min;
-        float y_max = x_max;
 
         // 0
         GEnv.UIRender->PushPoint(center.x, center.y + y_min, 0, cross_color, 0, 0);
@@ -158,11 +184,11 @@ void CHUDCrosshair::OnRender()
         // 3
         GEnv.UIRender->PushPoint(center.x - x_min, center.y, 0, cross_color, 0, 0);
         GEnv.UIRender->PushPoint(center.x - x_max, center.y, 0, cross_color, 0, 0);
-    }
 
-    // render
-    GEnv.UIRender->SetShader(*hShader);
-    GEnv.UIRender->FlushPrimitive();
+        // render
+        GEnv.UIRender->SetShader(*hShader);
+        GEnv.UIRender->FlushPrimitive();
+    }
 
     if (!fsimilar(target_radius, radius))
     {
