@@ -17,9 +17,9 @@
 	    <picture x="25" y="83" width="120" height="100" stretch="1">
 		    <texture width="128" height="128">ui\ui_noise</texture>
 	    </picture>
-		<auto_static x="25" y="83" width="120" height="100" stretch="1">
+		<picture_corners x="25" y="83" width="120" height="100" stretch="1">
 			<texture>ui\ui_da_preview_corners</texture>
-		</auto_static>
+		</picture_corners>
 		<auto_static x="24" y="82" width="122" height="102" stretch="1">
 			<texture>ui_inGame2_picture_window</texture>
 		</auto_static>
