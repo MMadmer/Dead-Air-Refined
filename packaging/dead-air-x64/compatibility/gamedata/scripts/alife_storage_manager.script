@@ -21,11 +21,11 @@ local function adler32(data)
 end
 
 local function has_persistent_payload(tbl)
-	for key, value in pairs(tbl) do
-		if key ~= "name" and value ~= nil then
-			if type(value) ~= "table" or not is_empty(value) then
-				return true
-			end
+	-- An empty table is deliberate script state (an exhausted "se_loot" list marks a fully
+	-- dressed corpse), so everything besides the bare name anchor counts as payload.
+	for key in pairs(tbl) do
+		if key ~= "name" then
+			return true
 		end
 	end
 	return false

@@ -1,7 +1,9 @@
 local original_fill_list
 local original_take_all
+local original_se_obj_save_var
 local original_send_script_callback = SendScriptCallback
-local patched = false
+local ui_patched = false
+local se_store_patched = false
 
 function SendScriptCallback(name, ...)
 	if name == "physic_object_on_use_callback" then
@@ -15,6 +17,25 @@ function SendScriptCallback(name, ...)
 	return original_send_script_callback(name, ...)
 end
 
+-- Save capture prunes payload-less {name=...} anchors from the live se_object store, while
+-- stock utils.se_obj_save_var writes only into an already existing entry. Recreate the
+-- anchor for ids still registered in alife so persistent writes are never dropped silently.
+local function se_obj_save_var_with_anchor(id, name, varname, val)
+	if val ~= nil and type(id) == "number" and id < 65535 then
+		local m_data = alife_storage_manager.get_state()
+		local se_object = m_data and m_data.se_object
+		if se_object and not se_object[id] then
+			local sim = alife()
+			local se_obj = sim and sim:object(id)
+			if se_obj then
+				se_object[id] = {name = se_obj:name()}
+			end
+		end
+	end
+
+	return original_se_obj_save_var(id, name, varname, val)
+end
+
 local function save_empty_mutant_loot(self)
 	self.loot = {}
 	utils.save_var(self.obj, "loot", self.loot)
@@ -22,20 +43,32 @@ local function save_empty_mutant_loot(self)
 end
 
 local function fill_mutant_loot(self)
-	local looted = utils.se_obj_load_var(self.obj:id(), self.obj:name(), "looted") == "true"
-	if looted then
-		local loot = utils.load_var(self.obj, "loot", nil)
-		if not loot then
-			loot = utils.se_obj_load_var(self.obj:id(), self.obj:name(), "se_loot")
-		end
+	local id = self.obj:id()
+	local name = self.obj:name()
+	local loot = utils.load_var(self.obj, "loot", nil) or utils.se_obj_load_var(id, name, "se_loot")
+	local looted = utils.se_obj_load_var(id, name, "looted") == "true"
+	local generated = utils.se_obj_load_var(id, name, "loot_generated") == "true"
 
-		-- Older saves can contain a looted corpse with the nil marker that used to regenerate its loot.
-		if not loot then
-			save_empty_mutant_loot(self)
+	-- A corpse rolls its loot exactly once: when older saves lost both stores, present it
+	-- as emptied instead of letting the stock code roll a fresh table.
+	if not loot and (looted or generated) then
+		save_empty_mutant_loot(self)
+	end
+
+	local result = original_fill_list(self)
+
+	if self.loot then
+		-- Marking the very first roll makes the store the only loot source from now on.
+		if not looted and not generated then
+			utils.se_obj_save_var(id, name, "loot_generated", "true")
+		end
+		-- Heal corpses whose persistent list was lost while the client copy survived.
+		if not utils.se_obj_load_var(id, name, "se_loot") then
+			utils.se_obj_save_var(id, name, "se_loot", self.loot)
 		end
 	end
 
-	return original_fill_list(self)
+	return result
 end
 
 local function take_all_mutant_loot(self)
@@ -46,18 +79,28 @@ local function take_all_mutant_loot(self)
 	end
 end
 
-function on_game_start()
+local function patch_se_obj_storage()
+	if se_store_patched or not (utils and utils.se_obj_save_var) then
+		return
+	end
+
+	original_se_obj_save_var = utils.se_obj_save_var
+	utils.se_obj_save_var = se_obj_save_var_with_anchor
+	se_store_patched = true
+end
+
+local function patch_mutant_loot_ui()
 	local loot_class = ui_mutant_loot and ui_mutant_loot.loot_ui
-	local function get_class_member(class, name)
+	local function get_class_member(class, member)
 		local ok, value = pcall(function()
-			return class[name]
+			return class[member]
 		end)
 		return ok and value or nil
 	end
 
 	local fill_list = loot_class and get_class_member(loot_class, "FillList")
 	local take_all = loot_class and get_class_member(loot_class, "OnButton_ok_all")
-	if patched or not fill_list or not take_all then
+	if ui_patched or not fill_list or not take_all then
 		return
 	end
 
@@ -65,5 +108,10 @@ function on_game_start()
 	original_take_all = take_all
 	loot_class.FillList = fill_mutant_loot
 	loot_class.OnButton_ok_all = take_all_mutant_loot
-	patched = true
+	ui_patched = true
+end
+
+function on_game_start()
+	patch_se_obj_storage()
+	patch_mutant_loot_ui()
 end
