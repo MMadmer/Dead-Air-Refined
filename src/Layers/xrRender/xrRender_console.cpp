@@ -832,12 +832,33 @@ public:
 #   endif // MASTER_GOLD
 #endif // (RENDER == R_R3) || (RENDER == R_R4)
 
+#ifdef USE_DX11
+// Diagnostics: queue N RenderDoc frame captures when running under the RenderDoc injector,
+// so QA scripts can capture the exact defective frames from lua.
+class CCC_RdcCapture final : public IConsole_Command
+{
+public:
+    explicit CCC_RdcCapture(LPCSTR name) : IConsole_Command(name) { bEmptyArgsHandled = TRUE; }
+
+    void Execute(LPCSTR args) override
+    {
+        extern void dx11_rdc_trigger(u32 frames);
+        const int frames = atoi(args);
+        dx11_rdc_trigger(u32(frames > 0 ? frames : 1));
+    }
+};
+#endif
+
 //-----------------------------------------------------------------------
 void xrRender_initconsole()
 {
     ZoneScoped;
 
     CMD3(CCC_Preset, "_preset", &ps_Preset, qpreset_token);
+
+#ifdef USE_DX11
+    CMD1(CCC_RdcCapture, "rdc_capture");
+#endif
 
     CMD4(CCC_Integer, "rs_skeleton_update", &psSkeletonUpdate, 2, 128);
 #ifndef MASTER_GOLD

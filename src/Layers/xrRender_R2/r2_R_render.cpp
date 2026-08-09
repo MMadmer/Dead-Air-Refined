@@ -457,6 +457,13 @@ void CRender::Render()
         dsgraph.render_emissive();
     }
 
+    // Diagnostics (-dxdebug): messages accumulated up to the sun belong to earlier phases.
+    if (!!strstr(Core.Params, "-dxdebug"))
+    {
+        extern void dx11_debug_drain_messages(pcstr tag);
+        dx11_debug_drain_messages("pre_lights");
+    }
+
     // Lighting, non dependant on OCCQ
     {
         PIX_EVENT(DEFER_LIGHT_NO_OCCQ);
@@ -467,6 +474,13 @@ void CRender::Render()
     {
         PIX_EVENT(DEFER_LIGHT_OCCQ);
         render_lights(LP_pending);
+    }
+
+    // Diagnostics (-dxdebug): drain the D3D11 debug-layer validator messages into the log.
+    if (!!strstr(Core.Params, "-dxdebug"))
+    {
+        extern void dx11_debug_drain_messages(pcstr tag);
+        dx11_debug_drain_messages("lights");
     }
 
     // Postprocess

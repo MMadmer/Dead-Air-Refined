@@ -8,8 +8,104 @@
 
 #include <dwmapi.h>
 #include <SDL_syswm.h>
+#include <d3d11sdklayers.h>
+#include "renderdoc_app.h"
 
 extern ENGINE_API int g_pause_in_background;
+
+// Diagnostics (-dxdebug): validator message queue of the debug-layer device. Drained into
+// the engine log once per frame from the renderer, so live pipeline errors are named.
+static ID3D11InfoQueue* s_dx11_info_queue = nullptr;
+
+void dx11_debug_bind_info_queue(ID3D11Device* device)
+{
+    if (device)
+        device->QueryInterface(__uuidof(ID3D11InfoQueue), reinterpret_cast<void**>(&s_dx11_info_queue));
+    if (s_dx11_info_queue)
+        Msg("* -dxdebug: D3D11 debug layer active, validator messages will be logged");
+}
+
+// Diagnostics: RenderDoc in-application capture trigger. Lives only when the game runs
+// under the RenderDoc injector (renderdoc.dll already loaded); the console command
+// rdc_capture uses it so QA scripts can capture the exact defective frames.
+static RENDERDOC_API_1_4_1* s_rdoc_api = nullptr;
+static bool s_rdoc_tried = false;
+
+void dx11_rdc_trigger(u32 frames)
+{
+    if (!s_rdoc_tried)
+    {
+        s_rdoc_tried = true;
+        if (HMODULE mod = GetModuleHandleA("renderdoc.dll"))
+        {
+            auto getApi = reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(mod, "RENDERDOC_GetAPI"));
+            if (getApi)
+                getApi(eRENDERDOC_API_Version_1_4_1, reinterpret_cast<void**>(&s_rdoc_api));
+        }
+        Msg(s_rdoc_api ? "* rdc_capture: RenderDoc API bound" : "! rdc_capture: renderdoc.dll is not loaded");
+    }
+    if (!s_rdoc_api)
+        return;
+
+    if (frames <= 1)
+        s_rdoc_api->TriggerCapture();
+    else
+        s_rdoc_api->TriggerMultiFrameCapture(frames);
+    Msg("* rdc_capture: %u frame(s) queued at frame %u", frames, Device.dwFrame);
+}
+
+void dx11_debug_drain_messages(pcstr tag)
+{
+    if (!s_dx11_info_queue)
+        return;
+
+    // Deduplicate within the drain: frames repeat the same handful of complaints hundreds
+    // of times, and the counts per unique message carry all the signal.
+    struct entry
+    {
+        int id;
+        int severity;
+        u32 count;
+        string512 text;
+    };
+    static xr_vector<entry> unique;
+    unique.clear();
+
+    const u64 stored = s_dx11_info_queue->GetNumStoredMessages();
+    for (u64 i = 0; i < stored; ++i)
+    {
+        SIZE_T length = 0;
+        if (FAILED(s_dx11_info_queue->GetMessage(i, nullptr, &length)) || !length)
+            continue;
+        auto* message = static_cast<D3D11_MESSAGE*>(xr_malloc(length));
+        if (SUCCEEDED(s_dx11_info_queue->GetMessage(i, message, &length)))
+        {
+            bool found = false;
+            for (entry& e : unique)
+            {
+                if (e.id == int(message->ID))
+                {
+                    ++e.count;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found && unique.size() < 32)
+            {
+                entry& e = unique.emplace_back();
+                e.id = int(message->ID);
+                e.severity = int(message->Severity);
+                e.count = 1;
+                xr_strcpy(e.text, message->pDescription);
+            }
+        }
+        xr_free(message);
+    }
+    for (const entry& e : unique)
+        Msg("# DXDBG f=%u [%s] sev=%d id=%d x%u %s", Device.dwFrame, tag, e.severity, e.id,
+            e.count, e.text);
+    s_dx11_info_queue->ClearStoredMessages();
+}
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -115,6 +211,12 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         createDeviceFlags |= D3D_CREATE_DEVICE_DEBUG;
 #endif
 
+    // Diagnostics: -dxdebug turns the D3D11 debug layer on in any configuration, so the
+    // validator can name broken pipeline state on live defects. Requires the "Graphics
+    // Tools" optional Windows feature (installed with Visual Studio).
+    if (!!strstr(Core.Params, "-dxdebug"))
+        createDeviceFlags |= D3D_CREATE_DEVICE_DEBUG;
+
     HRESULT R;
 
     D3D_FEATURE_LEVEL featureLevels[] =
@@ -163,8 +265,27 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
             R = createDevice(featureLevels2, std::size(featureLevels2));
     }
 
+    // The debug layer needs the "Graphics Tools" Windows feature; fall back to a plain
+    // device instead of failing the whole renderer when it is missing.
+    if (FAILED(R) && (createDeviceFlags & D3D_CREATE_DEVICE_DEBUG))
+    {
+        Msg("! -dxdebug: debug layer unavailable, creating a regular device");
+        createDeviceFlags &= ~u32(D3D_CREATE_DEVICE_DEBUG);
+        if (DX10Only)
+            R = createDevice(featureLevels3, std::size(featureLevels3));
+        else
+        {
+            R = createDevice(featureLevels, std::size(featureLevels));
+            if (FAILED(R))
+                R = createDevice(featureLevels2, std::size(featureLevels2));
+        }
+    }
+
     if (SUCCEEDED(R))
     {
+        if (createDeviceFlags & D3D_CREATE_DEVICE_DEBUG)
+            dx11_debug_bind_info_queue(pDevice);
+
         pContext->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(&pContext1));
 #ifdef HAS_DX11_3
         pDevice->QueryInterface(__uuidof(ID3D11Device3), reinterpret_cast<void**>(&pDevice3));

@@ -26,7 +26,11 @@ public:
         if (!Buffer.NeedsFlush())
             return;
 
-        if (Buffer.QueueForFlush())
+        // Dedupe against the list itself, not the buffer's queued flag: the flag can desync
+        // from the actual list (a dirty buffer stuck flagged but listed nowhere is never
+        // flushed again, and every draw using it then reads stale GPU constants — observed
+        // as all local lights blacking out at high fps once the camera goes still).
+        if (std::find(dirty_buffers.begin(), dirty_buffers.end(), &Buffer) == dirty_buffers.end())
             dirty_buffers.push_back(&Buffer);
     }
 
