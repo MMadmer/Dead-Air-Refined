@@ -273,9 +273,26 @@ void CKinematicsAnimated::LL_CloseCycle(u16 part, u8 mask_channel /*= (1<<0)*/)
     // blend_cycles[part].clear	(); // ?
 }
 
+// The AI layer hands motion ids across the DLL boundary, and a stale or never-valid one
+// (ID_Cycle_Safe result used unchecked, ids cached across a visual change) indexes m_Motions
+// far out of bounds; the garbage then explodes inside shared_motions::motion_def - the top
+// crash signature of the combat reports. The same hole exists upstream, so refuse the id
+// loudly here instead of dereferencing garbage.
+bool CKinematicsAnimated::motion_id_usable(MotionID motion_ID, pcstr caller)
+{
+    if (motion_ID.valid() && motion_ID.slot < m_Motions.size() &&
+        motion_ID.idx < m_Motions[motion_ID.slot].motions.motion_defs()->size())
+        return true;
+
+    Msg("! MODEL: %s rejected motion id [slot %u, idx %u]: visual has %zu slot(s)", caller,
+        u32(motion_ID.slot), u32(motion_ID.idx), m_Motions.size());
+    return false;
+}
+
 float CKinematicsAnimated::get_animation_length(MotionID motion_ID)
 {
-    VERIFY(motion_ID.slot < m_Motions.size());
+    if (!motion_id_usable(motion_ID, "get_animation_length"))
+        return 0.f;
 
     SMotionsSlot& slot = m_Motions[motion_ID.slot];
 
@@ -396,7 +413,8 @@ CBlend* CKinematicsAnimated::LL_PlayCycle(u16 part, MotionID motion_ID, BOOL bMi
 CBlend* CKinematicsAnimated::LL_PlayCycle(
     u16 part, MotionID motion_ID, BOOL bMixIn, PlayCallback Callback, LPVOID CallbackParam, u8 channel /*=0*/)
 {
-    VERIFY(motion_ID.valid());
+    if (!motion_id_usable(motion_ID, "LL_PlayCycle"))
+        return nullptr;
     CMotionDef* m_def = m_Motions[motion_ID.slot].motions.motion_def(motion_ID.idx);
     VERIFY(m_def);
     return LL_PlayCycle(part, motion_ID, bMixIn, m_def->Accrue(), m_def->Falloff(), m_def->Speed(), m_def->StopAtEnd(),
@@ -412,7 +430,8 @@ CBlend* CKinematicsAnimated::PlayCycle(
 CBlend* CKinematicsAnimated::PlayCycle(
     MotionID motion_ID, BOOL bMixIn, PlayCallback Callback, LPVOID CallbackParam, u8 channel /*= 0*/)
 {
-    VERIFY(motion_ID.valid());
+    if (!motion_id_usable(motion_ID, "PlayCycle"))
+        return nullptr;
     CMotionDef* m_def = m_Motions[motion_ID.slot].motions.motion_def(motion_ID.idx);
     VERIFY(m_def);
     return LL_PlayCycle(m_def->bone_or_part, motion_ID, bMixIn, m_def->Accrue(), m_def->Falloff(), m_def->Speed(),
@@ -422,7 +441,8 @@ CBlend* CKinematicsAnimated::PlayCycle(
 CBlend* CKinematicsAnimated::PlayCycle(
     u16 partition, MotionID motion_ID, BOOL bMixIn, PlayCallback Callback, LPVOID CallbackParam, u8 channel /*= 0*/)
 {
-    VERIFY(motion_ID.valid());
+    if (!motion_id_usable(motion_ID, "PlayCycle(partition)"))
+        return nullptr;
     CMotionDef* m_def = m_Motions[motion_ID.slot].motions.motion_def(motion_ID.idx);
     VERIFY(m_def);
     return LL_PlayCycle(partition, motion_ID, bMixIn, m_def->Accrue(), m_def->Falloff(), m_def->Speed(),
@@ -453,7 +473,8 @@ MotionID CKinematicsAnimated::ID_FX(LPCSTR N)
 }
 CBlend* CKinematicsAnimated::PlayFX(MotionID motion_ID, float power_scale)
 {
-    VERIFY(motion_ID.valid());
+    if (!motion_id_usable(motion_ID, "PlayFX"))
+        return nullptr;
     CMotionDef* m_def = m_Motions[motion_ID.slot].motions.motion_def(motion_ID.idx);
     VERIFY(m_def);
     return LL_PlayFX(m_def->bone_or_part, motion_ID, m_def->Accrue(), m_def->Falloff(), m_def->Speed(),

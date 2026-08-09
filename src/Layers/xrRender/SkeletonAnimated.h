@@ -145,7 +145,17 @@ public:
 #endif
     u16 LL_MotionsSlotCount() { return (u16)m_Motions.size(); }
     const shared_motions& LL_MotionsSlot(u16 idx) { return m_Motions[idx].motions; }
-    ICF CMotionDef* LL_GetMotionDef(MotionID id) { return m_Motions[id.slot].motions.motion_def(id.idx); }
+
+    // Rejects ids that would index m_Motions or its motion defs out of bounds, with a log line
+    // naming the caller; every entry point taking a MotionID from the game layer goes through it.
+    bool motion_id_usable(MotionID motion_ID, pcstr caller);
+
+    ICF CMotionDef* LL_GetMotionDef(MotionID id)
+    {
+        if (!motion_id_usable(id, "LL_GetMotionDef"))
+            return nullptr;
+        return m_Motions[id.slot].motions.motion_def(id.idx);
+    }
     ICF CMotion* LL_GetRootMotion(MotionID id) { return &m_Motions[id.slot].bone_motions[iRoot]->at(id.idx); }
     ICF CMotion* LL_GetMotion(MotionID id, u16 bone_id)
     {

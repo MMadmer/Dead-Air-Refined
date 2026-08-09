@@ -11,6 +11,8 @@ CBlend* PlayMotionByParts(
 {
     CBlend* ret = 0;
     CMotionDef* md = sa->LL_GetMotionDef(motion_ID);
+    if (!md)
+        return nullptr;
 
     if (md->bone_or_part != BI_NONE)
         return sa->LL_PlayCycle(md->bone_or_part, motion_ID, bMixIn, Callback, CallbackParam);
@@ -29,7 +31,9 @@ CBlend* anim_script_callback::play_cycle(IKinematicsAnimated* sa, const shared_s
 {
     MotionID m = sa->LL_MotionID(anim.c_str());
     R_ASSERT(m.valid());
-    if (sa->LL_GetMotionDef(m)->StopAtEnd())
+    CMotionDef* md = sa->LL_GetMotionDef(m);
+    R_ASSERT(md);
+    if (md->StopAtEnd())
     {
         on_end = false;
         on_begin = false;

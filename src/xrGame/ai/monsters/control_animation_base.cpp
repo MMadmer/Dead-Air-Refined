@@ -404,6 +404,10 @@ float CControlAnimationBase::GetAnimSpeed(EMotionAnim anim)
 
     CMotionDef* def = get_motion_def(anim_it, 0);
 
+    // The cycle may be absent from the current visual; a neutral speed keeps the AI running.
+    if (!def)
+        return 1.f;
+
     return (def->Dequantize(def->speed));
 }
 

@@ -106,7 +106,8 @@ void CControlAnimation::play_part(SAnimationPart& part, PlayCallback callback)
 {
     VERIFY(part.get_motion().valid());
 
-    u16 bone_or_part = m_skeleton_animated->LL_GetMotionDef(part.get_motion())->bone_or_part;
+    CMotionDef* motion_def = m_skeleton_animated->LL_GetMotionDef(part.get_motion());
+    u16 bone_or_part = motion_def ? motion_def->bone_or_part : u16(-1);
     if (bone_or_part == u16(-1))
         bone_or_part = m_skeleton_animated->LL_PartID("default");
 
@@ -220,7 +221,8 @@ void CControlAnimation::restart(SAnimationPart& part, PlayCallback callback)
     VERIFY(part.get_motion().valid());
     VERIFY(part.blend);
 
-    u16 bone_or_part = m_skeleton_animated->LL_GetMotionDef(part.get_motion())->bone_or_part;
+    CMotionDef* motion_def = m_skeleton_animated->LL_GetMotionDef(part.get_motion());
+    u16 bone_or_part = motion_def ? motion_def->bone_or_part : u16(-1);
     if (bone_or_part == u16(-1))
         bone_or_part = m_skeleton_animated->LL_PartID("default");
 
@@ -294,7 +296,8 @@ float CControlAnimation::motion_time(MotionID motion_id, IRenderVisual* visual)
     IKinematicsAnimated* skeleton_animated = smart_cast<IKinematicsAnimated*>(visual);
     VERIFY(skeleton_animated);
     CMotionDef* motion_def = skeleton_animated->LL_GetMotionDef(motion_id);
-    VERIFY(motion_def);
+    if (!motion_def)
+        return 0.f;
     CMotion* motion = skeleton_animated->LL_GetRootMotion(motion_id);
     VERIFY(motion);
     return (motion->GetLength() / motion_def->Speed());

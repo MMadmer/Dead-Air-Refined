@@ -700,16 +700,14 @@ void CActor::g_SetAnimation(u32 mstate_rl)
     IKinematicsAnimated* skeleton_animated = smart_cast<IKinematicsAnimated*>(Visual());
 
     CMotionDef* motion0 = skeleton_animated->LL_GetMotionDef(m_current_torso);
-    VERIFY(motion0);
-    if (!(motion0->flags & esmSyncPart))
+    if (!motion0 || !(motion0->flags & esmSyncPart))
         return;
 
     if (!m_current_legs_blend)
         return;
 
     CMotionDef* motion1 = skeleton_animated->LL_GetMotionDef(m_current_legs);
-    VERIFY(motion1);
-    if (!(motion1->flags & esmSyncPart))
+    if (!motion1 || !(motion1->flags & esmSyncPart))
         return;
 
     m_current_torso_blend->timeCurrent =
