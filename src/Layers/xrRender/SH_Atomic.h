@@ -145,7 +145,10 @@ struct ECORE_API SDeclaration : public xr_resource_flagged
 {
 #if defined(USE_DX11)
     //	Maps input signature to input layout
-    xr_map<ID3DBlob*, ID3DInputLayout*> vs_to_layout;
+    // One cache per draw context: a shared tree is rebuilt on insert while other worker
+    // backends may be walking it, so the first decl+shader pair after a level load could
+    // crash a worker thread. Same split as v_constant_buffer and pZRT.
+    xr_map<ID3DBlob*, ID3DInputLayout*> vs_to_layout[R__NUM_CONTEXTS];
     xr_vector<D3D_INPUT_ELEMENT_DESC> dx11_dcl_code;
 #elif defined(USE_OGL)
     GLuint dcl;

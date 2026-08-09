@@ -607,16 +607,19 @@ IC void CBackend::ApplyVertexLayout()
     if (m_pInputLayout && m_pInputLayoutDecl == decl && m_pInputLayoutSignature == m_pInputSignature)
         return;
 
-    auto it = decl->vs_to_layout.find(m_pInputSignature);
+    // This backend's own cache: inserting into a tree shared between contexts races the
+    // other worker backends walking it (see vs_to_layout).
+    auto& layouts = decl->vs_to_layout[context_id];
+    auto it = layouts.find(m_pInputSignature);
 
-    if (it == decl->vs_to_layout.end())
+    if (it == layouts.end())
     {
         ID3DInputLayout* pLayout;
 
         CHK_DX(HW.pDevice->CreateInputLayout(&decl->dx11_dcl_code[0], decl->dx11_dcl_code.size() - 1,
             m_pInputSignature->GetBufferPointer(), m_pInputSignature->GetBufferSize(), &pLayout));
 
-        it = decl->vs_to_layout.insert(std::pair<ID3DBlob*, ID3DInputLayout*>(m_pInputSignature, pLayout)).first;
+        it = layouts.insert(std::pair<ID3DBlob*, ID3DInputLayout*>(m_pInputSignature, pLayout)).first;
     }
 
     m_pInputLayoutDecl = decl;

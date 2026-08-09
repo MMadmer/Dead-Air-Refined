@@ -72,12 +72,18 @@ void CResourceManager::_DeleteVS(const SVS* vs)
     {
         for (const auto& iDecl : v_declarations)
         {
-            const auto iLayout = iDecl->vs_to_layout.find(vs->signature->signature);
-            if (iLayout != iDecl->vs_to_layout.end())
+            // The layout cache is split per context, purge the dying signature from each one.
+            for (u32 ctx = 0; ctx < R__NUM_CONTEXTS; ++ctx)
             {
-                //	Release vertex layout
-                _RELEASE(iLayout->second);
-                iDecl->vs_to_layout.erase(iLayout);
+                auto& layouts = iDecl->vs_to_layout[ctx];
+
+                const auto iLayout = layouts.find(vs->signature->signature);
+                if (iLayout != layouts.end())
+                {
+                    //	Release vertex layout
+                    _RELEASE(iLayout->second);
+                    layouts.erase(iLayout);
+                }
             }
         }
     }

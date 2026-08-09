@@ -185,12 +185,13 @@ SDeclaration::~SDeclaration()
     RImplementation.Resources->_DeleteDecl(this);
     //	Release vertex layout
 #if defined(USE_DX11)
-    xr_map<ID3DBlob*, ID3DInputLayout*>::iterator iLayout;
-    iLayout = vs_to_layout.begin();
-    for (; iLayout != vs_to_layout.end(); ++iLayout)
+    for (u32 ctx = 0; ctx < R__NUM_CONTEXTS; ++ctx)
     {
-        //	Release vertex layout
-        _RELEASE(iLayout->second);
+        for (auto& [signature, layout] : vs_to_layout[ctx])
+        {
+            //	Release vertex layout
+            _RELEASE(layout);
+        }
     }
 #elif defined(USE_OGL)
     glDeleteVertexArrays(1, &dcl);
