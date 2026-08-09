@@ -109,21 +109,26 @@ void CHUDCrosshair::OnRender()
 
     if (dot_reticle)
     {
-        // A line list would give a one pixel dash, so the dot is a quad. Its size follows the
-        // screen width and never falls below a pixel, otherwise it disappears at high modes.
-        const float half = _max(1.0f, scr_size.x * 0.0008f);
-        const float left = center.x - half, right = center.x + half;
-        const float top = center.y - half, bottom = center.y + half;
+        // A line list would give a one pixel dash, so the dot is a triangle fan. Its radius
+        // follows the screen width and never falls below a pixel, otherwise it disappears at
+        // high modes. Half alpha keeps it from covering what the player is aiming at.
+        constexpr u32 dot_segments = 16;
+        const float dot_radius = _max(1.0f, scr_size.x * 0.0008f);
+        const u32 dot_color = subst_alpha(cross_color, 128);
 
-        GEnv.UIRender->StartPrimitive(6, IUIRender::ptTriList, UI().m_currentPointType);
+        GEnv.UIRender->StartPrimitive(dot_segments * 3, IUIRender::ptTriList, UI().m_currentPointType);
 
-        GEnv.UIRender->PushPoint(left, top, 0, cross_color, 0, 0);
-        GEnv.UIRender->PushPoint(right, top, 0, cross_color, 0, 0);
-        GEnv.UIRender->PushPoint(left, bottom, 0, cross_color, 0, 0);
+        for (u32 segment = 0; segment < dot_segments; ++segment)
+        {
+            const float from = PI_MUL_2 * float(segment) / float(dot_segments);
+            const float to = PI_MUL_2 * float(segment + 1) / float(dot_segments);
 
-        GEnv.UIRender->PushPoint(right, top, 0, cross_color, 0, 0);
-        GEnv.UIRender->PushPoint(right, bottom, 0, cross_color, 0, 0);
-        GEnv.UIRender->PushPoint(left, bottom, 0, cross_color, 0, 0);
+            GEnv.UIRender->PushPoint(center.x, center.y, 0, dot_color, 0, 0);
+            GEnv.UIRender->PushPoint(
+                center.x + dot_radius * _cos(from), center.y + dot_radius * _sin(from), 0, dot_color, 0, 0);
+            GEnv.UIRender->PushPoint(
+                center.x + dot_radius * _cos(to), center.y + dot_radius * _sin(to), 0, dot_color, 0, 0);
+        }
     }
     else
     {

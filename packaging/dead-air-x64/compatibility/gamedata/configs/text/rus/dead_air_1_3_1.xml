@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <string_table>
     <string id="ui_mm_crosshair_dot">
-        <text>Игра: Прицел-точка</text>
+        <text>Интерфейс: Прицел-точка</text>
     </string>
     <string id="ui_mm_crosshair_dot_hint">
-        <text>Заменяет статический прицел одной точкой в центре экрана.</text>
+        <text>Заменяет статический прицел круглой точкой в центре экрана.</text>
     </string>
 </string_table>
