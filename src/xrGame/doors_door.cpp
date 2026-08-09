@@ -160,7 +160,17 @@ void door::change_state(actor* initiator)
     if (!m_object.is_spawned())
         return;
 
-    m_object.callback(GameObject::eUseObject)(m_object.lua_game_object(), initiator ? static_cast<CScriptGameObject*>(initiator->lua_game_object()) : nullptr);
+    // The use callback must never hand Lua a nil user: reading who:id() is the first thing every
+    // consumer of it does, so a nil initiator crashes whichever script happens to be registered.
+    // A state change nobody explicitly asked for (the physics finished a movement, see
+    // on_change_state) is still caused by whoever is holding the door open, which is the honest
+    // answer here; with nobody holding it nothing used the door and there is no event to report.
+    actor* const user = initiator ? initiator : (m_initiators.empty() ? nullptr : m_initiators.front());
+    if (!user)
+        return;
+
+    m_object.callback(GameObject::eUseObject)(
+        m_object.lua_game_object(), static_cast<CScriptGameObject*>(user->lua_game_object()));
 #ifdef DEBUG
     if (g_debug_doors)
         Msg("door[%s] started to change its state to [%s]", m_object.cName().c_str(),
@@ -272,7 +282,7 @@ void door::on_change_state(door_state const state)
         return;
     }
 
-    change_state(nullptr); //Alundaio: NULL - no need to know who
+    change_state(nullptr); //Alundaio: NULL - the initiator still holding the door is used instead
 }
 
 #ifdef DEBUG

@@ -140,10 +140,22 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_resolution>
 
-		<cap_fps_limit x="240" y="135" width="90" height="21" complex_mode="1">
+		<cap_window_mode x="240" y="135" width="90" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_window_mode</text>
+		</cap_window_mode>
+		<list_window_mode x="320" y="134" width="165" height="21">
+            <options_item entry="vid_window_mode" group="mm_opt_video" depend="vid"/>
+            <list_font align="l" font="letterica16" r="95" g="92" b="79"/>
+            <text_color>
+                <e r="95" g="92" b="79"/>
+                <d r="70" g="70" b="70"/>
+            </text_color>
+		</list_window_mode>
+
+		<cap_fps_limit x="240" y="165" width="90" height="21" complex_mode="1">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fps_limit</text>
 		</cap_fps_limit>
-		<list_fps_limit x="320" y="131" width="100" height="21" list_length="9" always_show_scroll="1">
+		<list_fps_limit x="320" y="161" width="100" height="21" list_length="9" always_show_scroll="1">
             <options_item entry="vid_fps_limit" group="mm_opt_video" depend="runtime"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -153,66 +165,54 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_fps_limit>
 
-		<cap_vsync x="240" y="165" width="90" height="21">
+		<cap_vsync x="240" y="195" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
 		</cap_vsync>
-		<check_vsync x="320" y="162" width="30" height="21">
+		<check_vsync x="320" y="192" width="30" height="21">
 			<options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
 		</check_vsync>
 
-		<cap_gamma x="240" y="195" width="90" height="21">
+		<cap_gamma x="240" y="225" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_gamma</text>
 		</cap_gamma>
-		<track_gamma x="320" y="193" width="165" height="21">
+		<track_gamma x="320" y="223" width="165" height="21">
             <options_item entry="rs_c_gamma" group="mm_opt_video" depend="runtime"/>
 		</track_gamma>
 
-		<cap_contrast x="240" y="225" width="90" height="21">
+		<cap_contrast x="240" y="255" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_contrast</text>
 		</cap_contrast>
-		<track_contrast x="320" y="223" width="165" height="21">
+		<track_contrast x="320" y="253" width="165" height="21">
             <options_item entry="rs_c_contrast" group="mm_opt_video" depend="runtime"/>
 		</track_contrast>
 
-		<cap_brightness x="240" y="255" width="90" height="21">
+		<cap_brightness x="240" y="285" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_brightness</text>
 		</cap_brightness>
-		<track_brightness x="320" y="253" width="165" height="21">
+		<track_brightness x="320" y="283" width="165" height="21">
             <options_item entry="rs_c_brightness" group="mm_opt_video" depend="runtime"/>
 		</track_brightness>
 
 
-		<cap_fov x="240" y="285" width="90" height="21">
+		<cap_fov x="240" y="315" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fov</text>
         </cap_fov>
-		<track_fov x="320" y="283" width="165" height="21" step="1">
+		<track_fov x="320" y="313" width="165" height="21" step="1">
             <options_item entry="fov" group="mm_opt_video" depend="runtime"/>
         </track_fov>
-		<cap_fov_value x="490" y="285">
+		<cap_fov_value x="490" y="315">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_fov_value>
 
-		<cap_hud_fov x="240" y="315" width="90" height="21">
+		<cap_hud_fov x="240" y="345" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_hud_fov</text>
         </cap_hud_fov>
-		<track_hud_fov x="320" y="313" width="165" height="21" step="0.05">
+		<track_hud_fov x="320" y="343" width="165" height="21" step="0.05">
             <options_item entry="hud_fov" group="mm_opt_video" depend="runtime"/>
         </track_hud_fov>
-		<cap_hud_fov_value x="490" y="315">
+		<cap_hud_fov_value x="490" y="345">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_hud_fov_value>
-
-		<cap_window_mode x="240" y="345" width="90" height="21">
-			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_window_mode</text>
-		</cap_window_mode>
-		<list_window_mode x="320" y="344" width="165" height="21">
-            <options_item entry="vid_window_mode" group="mm_opt_video" depend="vid"/>
-            <list_font align="l" font="letterica16" r="95" g="92" b="79"/>
-            <text_color>
-                <e r="95" g="92" b="79"/>
-                <d r="70" g="70" b="70"/>
-            </text_color>
-		</list_window_mode>
 
 		<cap_level_texture_unload x="240" y="375" width="90" height="21"
 			hint="ui_mm_level_texture_unload_hint">
