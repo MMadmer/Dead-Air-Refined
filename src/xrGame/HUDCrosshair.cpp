@@ -151,25 +151,28 @@ void CHUDCrosshair::OnRender()
         // The ring sits where the strokes start, so it grows and shrinks exactly like they do.
         if (psHUD_Flags.test(HUD_CROSSHAIR_DYNAMIC) && x_min > dot_radius)
         {
-            // A hairline loop reads as an artefact against bright geometry. The ring is a solid
-            // band instead, followed by bands whose alpha falls off by smoothstep so the outer
-            // edge dissolves rather than ending on a hard line.
+            // A hairline loop reads as an artefact against bright geometry, so the ring is a
+            // band. Both edges dissolve through smoothstep alpha - that is what stands in for
+            // antialiasing here, since the UI pass has none - and the segment count follows the
+            // radius so a wide ring does not turn into a polygon.
             constexpr u32 fade_bands = 4;
-            const float band_width = dot_radius * 2.0f;
-            const u32 ring_alpha = color_get_A(dot_color);
+            constexpr u32 ring_alpha = 64;
+            const float band_width = dot_radius * (4.0f / 3.0f);
+            const float edge_width = _max(1.0f, dot_radius * 0.5f);
+            const u32 ring_segments_adaptive = u32(clampr(x_min * 0.6f, 48.0f, 256.0f));
 
-            GEnv.UIRender->StartPrimitive(
-                ring_segments * (fade_bands + 1) * 6, IUIRender::ptTriList, UI().m_currentPointType);
+            GEnv.UIRender->StartPrimitive(ring_segments_adaptive * (fade_bands + 2) * 6,
+                IUIRender::ptTriList, UI().m_currentPointType);
 
             const auto push_band = [&](float inner, float outer, u32 inner_alpha, u32 outer_alpha)
             {
                 const u32 inner_color = subst_alpha(dot_color, inner_alpha);
                 const u32 outer_color = subst_alpha(dot_color, outer_alpha);
 
-                for (u32 segment = 0; segment < ring_segments; ++segment)
+                for (u32 segment = 0; segment < ring_segments_adaptive; ++segment)
                 {
-                    const float from = PI_MUL_2 * float(segment) / float(ring_segments);
-                    const float to = PI_MUL_2 * float(segment + 1) / float(ring_segments);
+                    const float from = PI_MUL_2 * float(segment) / float(ring_segments_adaptive);
+                    const float to = PI_MUL_2 * float(segment + 1) / float(ring_segments_adaptive);
                     const float cf = _cos(from), sf = _sin(from);
                     const float ct = _cos(to), st = _sin(to);
 
@@ -183,6 +186,7 @@ void CHUDCrosshair::OnRender()
                 }
             };
 
+            push_band(x_min - edge_width, x_min, 0, ring_alpha);
             push_band(x_min, x_min + band_width, ring_alpha, ring_alpha);
 
             for (u32 band = 0; band < fade_bands; ++band)
@@ -191,7 +195,7 @@ void CHUDCrosshair::OnRender()
                 const float t_outer = float(band + 1) / float(fade_bands);
                 const auto smoothstep = [](float t) { return t * t * (3.0f - 2.0f * t); };
 
-                push_band(x_min + band_width * (1.0f + t_inner), x_min + band_width * (1.0f + t_outer),
+                push_band(x_min + band_width + band_width * t_inner, x_min + band_width + band_width * t_outer,
                     u32(ring_alpha * (1.0f - smoothstep(t_inner))), u32(ring_alpha * (1.0f - smoothstep(t_outer))));
             }
 
