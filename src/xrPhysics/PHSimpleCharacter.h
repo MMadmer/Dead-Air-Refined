@@ -109,6 +109,9 @@ protected:
 
     bool b_valide_ground_contact;
     bool b_valide_wall_contact;
+    // Whether the current wall contact belongs to something a step assist may climb over:
+    // static geometry or a free physics body, but never a live character capsule.
+    bool m_wall_contact_steppable;
     bool b_on_object;
     bool b_was_on_object;
     bool b_on_ground;
@@ -260,6 +263,12 @@ public:
     virtual void ValidateWalkOn();
     bool ValidateWalkOnMesh();
     bool ValidateWalkOnObject();
+
+protected:
+    bool TryStepAssist();
+    bool StepAssistHeadroomClear();
+
+public:
 
 private:
     void CheckCaptureJoint();

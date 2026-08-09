@@ -168,6 +168,7 @@ CPHSimpleCharacter::CPHSimpleCharacter()
     b_any_contacts = false;
     b_valide_ground_contact = false;
     b_valide_wall_contact = false;
+    m_wall_contact_steppable = false;
     b_jump = false;
     b_exist = false;
     m_mass = 70.f;
@@ -530,6 +531,7 @@ void CPHSimpleCharacter::PhDataUpdate(dReal /**step**/)
     b_any_contacts = false;
     b_valide_ground_contact = false;
     b_valide_wall_contact = false;
+    m_wall_contact_steppable = false;
 
     b_was_on_object = b_on_object;
     b_on_object = false;
@@ -977,6 +979,77 @@ bool CPHSimpleCharacter::ValidateWalkOnMesh()
         }
     }
     return false;
+}
+
+// The mesh test above only sees static geometry, so a corpse or a curb that blocks the wheel
+// never triggers the climb boost and the character just grinds against it. The step assist
+// re-uses the climb boost for any knee-high wall contact whose top is clear of static cover.
+static const float STEP_ASSIST_MIN_RISE = 0.02f;
+static const float STEP_ASSIST_MAX_RISE = 0.4f;
+
+bool CPHSimpleCharacter::StepAssistHeadroomClear()
+{
+    Fvector accel_shift;
+    accel_shift.set(m_acceleration.x, 0.f, m_acceleration.z);
+    const float accel_mag = accel_shift.magnitude();
+    if (!(accel_mag > 0.f))
+        return false;
+    accel_shift.mul(CHWON_ACCLEL_SHIFT / accel_mag);
+
+    Fvector center_forbid;
+    GetPosition(center_forbid);
+    center_forbid.add(accel_shift);
+    center_forbid.y += CHWON_CALL_FB_HIGHT;
+
+    Fvector AABB_forbid;
+    AABB_forbid.set(m_radius, m_radius * 2.f, m_radius);
+    AABB_forbid.mul(CHWON_AABB_FB_FACTOR);
+
+    XRC.box_query(0, inl_ph_world().ObjectSpace().GetStaticModel(), center_forbid, AABB_forbid);
+    for (auto& Res : *XRC.r_get())
+    {
+        SGameMtl* m = GMLib.GetMaterialByIdx(Res.material);
+        if (m->Flags.test(SGameMtl::flPassable))
+            continue;
+        Point vertices[3] = {
+            Point((dReal*)&Res.verts[0]), Point((dReal*)&Res.verts[1]), Point((dReal*)&Res.verts[2])};
+        if (__aabb_tri(Point((float*)&center_forbid), Point((float*)&AABB_forbid), vertices))
+            return false;
+    }
+    return true;
+}
+
+bool CPHSimpleCharacter::TryStepAssist()
+{
+    if (!is_control || b_lose_control || b_jump || b_jumping || b_side_contact)
+        return false;
+    if (m_elevator_state.Active())
+        return false;
+    if (!b_valide_wall_contact || !m_wall_contact_steppable)
+        return false;
+
+    Fvector accel_flat;
+    accel_flat.set(m_acceleration.x, 0.f, m_acceleration.z);
+    const float accel_mag = accel_flat.magnitude();
+    if (!(accel_mag > EPS))
+        return false;
+
+    // The obstacle has to stand in the way: its contact normal points back at the character.
+    Fvector wall_flat;
+    wall_flat.set((float)m_wall_contact_normal[0], 0.f, (float)m_wall_contact_normal[2]);
+    const float wall_mag = wall_flat.magnitude();
+    if (!(wall_mag > EPS))
+        return false;
+    if (wall_flat.dotproduct(accel_flat) > -0.3f * wall_mag * accel_mag)
+        return false;
+
+    Fvector foot_position;
+    GetPosition(foot_position);
+    const float rise = (float)m_wall_contact_position[1] - foot_position.y;
+    if (rise < STEP_ASSIST_MIN_RISE || rise > STEP_ASSIST_MAX_RISE)
+        return false;
+
+    return StepAssistHeadroomClear();
 }
 void CPHSimpleCharacter::SetAcceleration(Fvector accel)
 {
@@ -1560,6 +1633,17 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
     // if(!((g1==m_wheel) || (g2==m_wheel)||(m_elevator_state.ClimbingState())  ))//
     //	return;
 
+    // Step assist may climb static geometry and free bodies (corpses, props), but a live
+    // character capsule must keep blocking, so its contacts are never marked steppable.
+    bool steppable_contact = g1 != m_hat_transform && g2 != m_hat_transform;
+    if (steppable_contact && object)
+    {
+        dxGeomUserData* other_data = bo1 ? retrieveGeomUserData(g2) : retrieveGeomUserData(g1);
+        CPHObject* other_ph_object = other_data ? other_data->ph_object : nullptr;
+        if (other_ph_object && other_ph_object->CastType() == CPHObject::tpCharacter)
+            steppable_contact = false;
+    }
+
     float friction = 1.f;
     if (!object && !b_side_contact)
     {
@@ -1583,6 +1667,7 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
             dVectorSet(m_wall_contact_normal, c->geom.normal);
             dVectorSet(m_wall_contact_position, c->geom.pos);
             b_valide_wall_contact = true;
+            m_wall_contact_steppable = steppable_contact;
         }
     }
     else
@@ -1599,6 +1684,7 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
             dVectorSetInvert(m_wall_contact_normal, normal);
             dVectorSet(m_wall_contact_position, pos);
             b_valide_wall_contact = true;
+            m_wall_contact_steppable = steppable_contact;
         }
     }
     float soft_param = dumping_rate + normal[1] * (1.f - dumping_rate); //=(1.f-normal[1])*dumping_rate +normal[1]

@@ -62,7 +62,13 @@ void CPHActorCharacter::ValidateWalkOn()
     if (LastMaterialIDX() == slide_material_index)
         b_clamb_jump = false;
     else
+    {
         inherited::ValidateWalkOn();
+        // Actor only: corpses and curbs the static mesh test cannot see still deserve the
+        // climb boost, otherwise the player grinds against every knee-high obstacle.
+        if (!b_clamb_jump)
+            b_clamb_jump = TryStepAssist();
+    }
 }
 void SPHCharacterRestrictor::Create(CPHCharacter* ch, dVector3 sizes)
 {
