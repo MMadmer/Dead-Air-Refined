@@ -500,14 +500,27 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fulldesc{};
     fulldesc.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
 
+    // Copy-based chain: the shape every release before the flip model shipped with, and the
+    // fallback whenever a flip chain cannot be created. These must be set unconditionally -
+    // leaving BufferCount at zero makes creation fail outright.
+    desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    desc.BufferCount = 1;
+    desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+
     // Flip presentation lets the game drive the display directly instead of routing every
     // windowed frame through the desktop compositor. That is what makes variable refresh work in
     // borderless and stops a frame limit from beating against DWM's fixed grid - a 120 fps limit
     // on a 165 Hz panel used to alternate between one and two refreshes per frame. It needs
     // Windows 10, at least two buffers and a non-MSAA back buffer, so old systems simply fall
-    // back to the copy-based chain below; -no_flip forces that fallback everywhere.
+    // back to the copy-based chain above; -no_flip forces that fallback everywhere.
+    //
+    // Exclusive fullscreen never gets a flip chain at creation. A flip chain has to be born
+    // windowed, and its tearing flag is only legal while windowed, so asking DXGI for both at
+    // once yields a swap chain that reports success and presents nowhere: the engine renders
+    // every frame and the player keeps looking at the desktop.
     m_tearingSupported = false;
-    bool flipModel = !strstr(Core.Params, "-no_flip");
+    const bool flipAllowed = !strstr(Core.Params, "-no_flip") && fulldesc.Windowed;
+    bool flipModel = flipAllowed;
     if (flipModel)
     {
 #ifdef HAS_DXGI1_5
@@ -525,7 +538,6 @@ bool CHW::CreateSwapChain2(HWND hwnd)
 #endif
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         desc.BufferCount = 2;
-        desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 #ifdef HAS_DXGI1_5
         if (m_tearingSupported)
             desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -639,6 +651,19 @@ void CHW::Reset()
     if (FAILED(fullscreenResult))
         Msg("! [%s] failed to %s exclusive fullscreen: 0x%08x", __FUNCTION__,
             bWindowed ? "leave" : "enter", fullscreenResult);
+
+#ifdef HAS_DXGI1_5
+    // A chain that was born windowed may now be going exclusive fullscreen, where the tearing
+    // flag is not legal. Carrying it across the transition is the same defect as creating a
+    // tearing chain in fullscreen: presentation silently stops reaching the display.
+    if (m_tearingSupported)
+    {
+        if (bWindowed)
+            cd.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        else
+            cd.Flags &= ~UINT(DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING);
+    }
+#endif
 
     DXGI_MODE_DESC& desc = m_ChainDesc.BufferDesc;
     desc.Width = Device.dwWidth;
