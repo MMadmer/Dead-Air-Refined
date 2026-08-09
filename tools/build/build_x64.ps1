@@ -84,7 +84,34 @@ if (-not (Test-Path -LiteralPath $vswhere)) {
     throw "Visual Studio Installer could not be found."
 }
 
-foreach ($submodule in @("Externals\SDL", "Externals\DirectXMath", "Externals\DirectXTex", "Externals\mimalloc")) {
+# A fresh clone has no submodule content, and the patch step below reads several of them.
+# "git submodule status" prefixes every uninitialized entry with "-", including nested ones,
+# so a checkout that is merely on a different commit is left alone.
+function Initialize-Submodules {
+    if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot ".git"))) {
+        return
+    }
+
+    $status = & git -C $repositoryRoot submodule status --recursive 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Submodule state could not be read. Is git installed and is this a git checkout?"
+    }
+
+    if (-not ($status | Where-Object { $_ -match '^-' })) {
+        return
+    }
+
+    Write-Host "Initializing submodules..."
+    & git -C $repositoryRoot submodule update --init --recursive
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to initialize submodules. Run: git submodule update --init --recursive"
+    }
+}
+
+Initialize-Submodules
+
+foreach ($submodule in @("Externals\SDL", "Externals\DirectXMath", "Externals\DirectXTex", "Externals\mimalloc",
+                         "Externals\LuaJIT", "Externals\luabind", "Externals\xrLuaFix", "Externals\xrLuaFix\lua-marshal")) {
     if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot "$submodule\.git"))) {
         throw "Required submodules are missing. Run: git submodule update --init --recursive"
     }
