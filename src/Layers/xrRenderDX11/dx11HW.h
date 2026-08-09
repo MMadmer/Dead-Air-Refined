@@ -128,6 +128,7 @@ private:
 
     DXGI_SWAP_CHAIN_DESC m_ChainDesc; // DevPP equivalent
     PresentTestState presentTestState{};
+    bool deviceRemovedReported{}; // a lost device is polled every frame, report it once
 
     HWND outputWindow{};
     WNDPROC previousWindowProc{};

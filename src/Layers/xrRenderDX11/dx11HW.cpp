@@ -158,6 +158,9 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 {
     ZoneScoped;
 
+    presentTestState = PresentTestState::None;
+    deviceRemovedReported = false;
+
     CreateD3D();
     if (!Valid)
         return;
@@ -767,6 +770,13 @@ DeviceState CHW::GetDeviceState()
 
     if (presentTestState == PresentTestState::DeviceRemoved)
     {
+        // The frame loop keeps polling a lost device, and this state is never cleared, so the
+        // report has to be latched: otherwise it repeats every frame and the diagnostic log
+        // carries several identical fatals instead of the one that matters.
+        if (deviceRemovedReported)
+            return DeviceState::Lost;
+        deviceRemovedReported = true;
+
         // Report what DXGI actually says: a driver update and a physical removal are only two of
         // the reasons, and the interesting ones (a hung or faulting GPU, an internal driver error,
         // running out of video memory) are indistinguishable without this.
@@ -812,10 +822,11 @@ DeviceState CHW::GetDeviceState()
             return DeviceState::NeedReset;
 
         case DXGI_ERROR_DEVICE_REMOVED:
+            // Reported by the latched path above on the next poll, which names the real DXGI
+            // reason. Returning Normal here would have sent the frame loop on to render against
+            // a device that is already gone.
             presentTestState = PresentTestState::DeviceRemoved;
-            FATAL("Graphics driver was updated or GPU was physically removed from computer.\n"
-                  "Please, restart the game.");
-            break;
+            return DeviceState::Lost;
         }
     }
 
