@@ -189,6 +189,9 @@ void xrCore::Initialize(pcstr _ApplicationName, pcstr commandLine, bool init_fs,
         else
             Params = xr_strdup("");
 
+        // Shared string pool diagnostics: verify + sweep statistics on every clean().
+        g_shared_str_debug = !!strstr(Params, "-str_debug");
+
 #if defined(XR_PLATFORM_WINDOWS)
         timeBeginPeriod(1);
         CoInitializeEx(nullptr, COINIT_MULTITHREADED); // needed for OpenAL initialization

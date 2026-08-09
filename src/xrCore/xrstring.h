@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdio>
 
 #include "xr_types.h"
@@ -13,12 +14,23 @@
 #pragma warning(disable : 4200)
 struct XRCORE_API str_value
 {
-    u32 dwReference;
+    // Shared string nodes are copied and released from worker threads (parallel loaders, task
+    // manager), so the counter must be atomic: a single lost increment makes clean() free a node
+    // that is still referenced, and the stale text memory is then recycled into garbage.
+    std::atomic<u32> dwReference;
     u32 dwLength;
     u32 dwCRC;
     str_value* next;
     char value[];
 };
+static_assert(sizeof(std::atomic<u32>) == sizeof(u32) && std::atomic<u32>::is_always_lock_free,
+    "str_value relies on a lock-free 4-byte atomic reference counter");
+
+// Diagnostics for the shared string pool, enabled with the -str_debug command line key.
+XRCORE_API extern bool g_shared_str_debug;
+// Called when a reference release observes a counter that is already zero (double release or
+// a stale shared_str). The node is intentionally left alive; the report identifies the culprit.
+XRCORE_API void shared_str_report_reference_underflow(const str_value* node);
 
 struct XRCORE_API str_value_cmp
 {
@@ -60,27 +72,32 @@ protected:
     // ref-counting
     void _dec() noexcept
     {
-        if (nullptr == p_)
+        if (!p_)
             return;
-        p_->dwReference--;
-        if (0 == p_->dwReference)
+        // fetch_sub returns the pre-decrement count: 1 means this was the final reference.
+        const u32 previous = p_->dwReference.fetch_sub(1, std::memory_order_acq_rel);
+        if (previous <= 1)
+        {
+            if (!previous)
+                shared_str_report_reference_underflow(p_);
             p_ = nullptr;
+        }
     }
 
 public:
     void _set(pcstr rhs)
     {
+        // dock() returns an already-acquired reference taken under the container lock, closing
+        // the window where clean() could sweep a zero-reference node before we adopted it.
         str_value* v = g_pStringContainer->dock(rhs);
-        if (nullptr != v)
-            v->dwReference++;
         _dec();
         p_ = v;
     }
     void _set(shared_str const& rhs) noexcept
     {
         str_value* v = rhs.p_;
-        if (nullptr != v)
-            v->dwReference++;
+        if (v)
+            v->dwReference.fetch_add(1, std::memory_order_relaxed);
         _dec();
         p_ = v;
     }

@@ -8,7 +8,18 @@
 #include "FS_impl.h"
 #include <SDL.h>
 
+#include <new>
+
 XRCORE_API str_container* g_pStringContainer = nullptr;
+XRCORE_API bool g_shared_str_debug = false;
+
+void shared_str_report_reference_underflow(const str_value* node)
+{
+    // Keep the pool usable: log the first few offenders instead of tearing the process down.
+    static std::atomic<u32> reported{};
+    if (reported.fetch_add(1, std::memory_order_relaxed) < 16)
+        Msg("! shared_str: reference underflow on node[%p]", static_cast<const void*>(node));
+}
 
 #if 1
 
@@ -25,13 +36,13 @@ struct str_container_impl
         ZeroMemory(buffer, sizeof(buffer));
     }
 
-    str_value* find(str_value* value, const char* str) const
+    str_value* find(u32 crc, u32 length, pcstr str) const
     {
-        str_value* candidate = buffer[value->dwCRC % buffer_size];
+        str_value* candidate = buffer[crc % buffer_size];
         while (candidate)
         {
-            if (candidate->dwCRC == value->dwCRC && candidate->dwLength == value->dwLength &&
-                !memcmp(candidate->value, str, value->dwLength))
+            if (candidate->dwCRC == crc && candidate->dwLength == length &&
+                !memcmp(candidate->value, str, length))
             {
                 return candidate;
             }
@@ -49,8 +60,9 @@ struct str_container_impl
         *element = value;
     }
 
-    void clean()
+    std::pair<size_t, size_t> clean()
     {
+        size_t freed{}, alive{};
         for (size_t i = 0; i < buffer_size; ++i)
         {
             str_value** current = &buffer[i];
@@ -58,17 +70,22 @@ struct str_container_impl
             while (*current != nullptr)
             {
                 str_value* value = *current;
-                if (!value->dwReference)
+                // Revivals happen exclusively in dock() under the container lock held here,
+                // so a zero count observed now cannot be acquired concurrently.
+                if (!value->dwReference.load(std::memory_order_acquire))
                 {
                     *current = value->next;
                     xr_free(value);
+                    ++freed;
                 }
                 else
                 {
+                    ++alive;
                     current = &value->next;
                 }
             }
         }
+        return { freed, alive };
     }
 
     void verify() const
@@ -98,7 +115,8 @@ struct str_container_impl
             str_value* value = buffer[i];
             while (value)
             {
-                fprintf(f, "ref[%4u]-len[%3u]-crc[%8X] : %s\n", value->dwReference, value->dwLength, value->dwCRC,
+                fprintf(f, "ref[%4u]-len[%3u]-crc[%8X] : %s\n",
+                    value->dwReference.load(std::memory_order_relaxed), value->dwLength, value->dwCRC,
                     value->value);
                 value = value->next;
             }
@@ -113,7 +131,8 @@ struct str_container_impl
             string4096 temp;
             while (value)
             {
-                xr_sprintf(temp, sizeof(temp), "ref[%4u]-len[%3u]-crc[%8X] : %s\n", value->dwReference, value->dwLength,
+                xr_sprintf(temp, sizeof(temp), "ref[%4u]-len[%3u]-crc[%8X] : %s\n",
+                    value->dwReference.load(std::memory_order_relaxed), value->dwLength,
                     value->dwCRC, value->value);
                 f->w_string(temp);
                 value = value->next;
@@ -130,8 +149,9 @@ struct str_container_impl
             while (value)
             {
                 ++count;
-                if (value->dwReference > 1)
-                    bytes += (value->dwReference - 1) * (value->dwLength + 1);
+                const u32 references = value->dwReference.load(std::memory_order_relaxed);
+                if (references > 1)
+                    bytes += (references - 1) * (value->dwLength + 1);
                 value = value->next;
             }
         }
@@ -148,12 +168,8 @@ str_container::str_container() :
 
 str_value* str_container::dock(pcstr value) const
 {
-    if (nullptr == value)
+    if (!value)
         return nullptr;
-
-    impl->cs.Enter();
-
-    str_value* result = nullptr;
 
     // calc len
     const auto s_len = xr_strlen(value);
@@ -161,22 +177,20 @@ str_value* str_container::dock(pcstr value) const
     // The x86 header was smaller, so its page-size check rejected valid Dead Air strings only after moving to x64.
     VERIFY(s_len <= std::numeric_limits<u32>::max());
 
-    // setup find structure
-    char header[sizeof(str_value)];
-    str_value* sv = (str_value*)header;
-    sv->dwReference = 0;
-    sv->dwLength = static_cast<u32>(s_len);
-    sv->dwCRC = crc32(value, s_len);
+    const u32 length = static_cast<u32>(s_len);
+    const u32 crc = crc32(value, s_len);
+
+    impl->cs.Enter();
 
     // search
-    result = impl->find(sv, value);
+    str_value* result = impl->find(crc, length, value);
 
 #ifdef DEBUG
     const bool is_leaked_string = !xr_strcmp(value, "enter leaked string here");
 #endif // DEBUG
 
     // it may be the case, string is not found or has "non-exact" match
-    if (nullptr == result
+    if (!result
 #ifdef DEBUG
         || is_leaked_string
 #endif // DEBUG
@@ -193,12 +207,19 @@ str_value* str_container::dock(pcstr value) const
         }
 #endif // DEBUG
 
-        result->dwReference = 0;
-        result->dwLength = sv->dwLength;
-        result->dwCRC = sv->dwCRC;
+        // Raw storage from xr_malloc: bring the atomic to life already owning the caller's reference.
+        new (&result->dwReference) std::atomic<u32>(1);
+        result->dwLength = length;
+        result->dwCRC = crc;
         CopyMemory(result->value, value, s_len_with_zero);
 
         impl->insert(result);
+    }
+    else
+    {
+        // Acquire under the container lock: clean() holds the same lock, so it can never sweep
+        // a zero-reference node between the lookup above and this revival.
+        result->dwReference.fetch_add(1, std::memory_order_relaxed);
     }
     impl->cs.Leave();
 
@@ -208,7 +229,12 @@ str_value* str_container::dock(pcstr value) const
 void str_container::clean() const
 {
     impl->cs.Enter();
-    impl->clean();
+    // -str_debug: a CRC sweep right before recycling proves whether docked nodes were stomped in place.
+    if (g_shared_str_debug)
+        impl->verify();
+    const auto [freed, alive] = impl->clean();
+    if (g_shared_str_debug)
+        Msg("* [x-ray]: str_debug: clean freed[%zu] nodes, alive[%zu]", freed, alive);
     impl->cs.Leave();
 }
 
