@@ -1416,11 +1416,8 @@ void CActor::UpdateCL()
 
             fire_disp_full = m_fdisp_controller.GetCurrentDispertion();
 
-            if (psHUD_Flags.test(HUD_CROSSHAIR_WEAPON))
-            {
-                HUD().SetCrosshairDisp(fire_disp_full, 0.02f);
-                HUD().ShowCrosshair(pWeapon->use_crosshair());
-            }
+            HUD().SetCrosshairDisp(fire_disp_full, 0.02f);
+            HUD().ShowCrosshair(pWeapon->use_crosshair());
 #ifdef DEBUG
             HUD().SetFirstBulletCrosshairDisp(pWeapon->GetFirstBulletDisp());
 #endif
