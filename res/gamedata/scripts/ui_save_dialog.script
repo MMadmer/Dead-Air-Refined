@@ -79,8 +79,7 @@ function save_dialog:InitControls()
 	--xml:InitFrame					("form:list_frame", self.form)
 
 	self.picture = xml:InitStatic	("form:picture", self.form)
-	-- Created after the picture so the rounded corners draw over it, not under.
-	self.picture_corners = xml:InitStatic	("form:picture_corners", self.form)
+	self.picture:SetTextureRounding(10)
 
 	self.list_box = xml:InitListBox	("form:list", self.form)
 	self.list_box:ShowSelectedItem	(true)

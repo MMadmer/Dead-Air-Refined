@@ -29,10 +29,6 @@
 		<picture x="108" y="76" width="140" height="117" stretch="1">
 		    <texture width="128" height="128">ui\ui_noise</texture>
 		</picture>
-
-		<picture_corners x="108" y="76" width="140" height="117" stretch="1">
-			<texture>ui\ui_da_preview_corners</texture>
-		</picture_corners>
 		
 	  <list_frame x="240" y="200" width="200" height="490">
 		  <texture></texture>

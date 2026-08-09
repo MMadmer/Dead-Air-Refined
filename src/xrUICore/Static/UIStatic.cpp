@@ -133,9 +133,86 @@ void CUIStatic::DrawTexture()
         {
             m_UIStaticItem.Render(GetHeading());
         }
+        else if (m_textureRounding > 0.0f)
+            DrawRoundedTexture(rect);
         else
             m_UIStaticItem.Render();
     }
+}
+
+void CUIStatic::DrawRoundedTexture(const Frect& rect)
+{
+    Fvector2 ts{};
+    GetShader()->GetBaseTextureResolution(ts);
+    if (fis_zero(ts.x) || fis_zero(ts.y))
+    {
+        m_UIStaticItem.Render();
+        return;
+    }
+
+    Fvector2 lt, rb;
+    UI().ClientToScreenScaled(lt, rect.left + m_TextureOffset.x, rect.top + m_TextureOffset.y);
+    UI().ClientToScreenScaled(rb, rect.right + m_TextureOffset.x, rect.bottom + m_TextureOffset.y);
+    UI().AlignPixel(lt.x);
+    UI().AlignPixel(lt.y);
+    UI().AlignPixel(rb.x);
+    UI().AlignPixel(rb.y);
+
+    const float width = rb.x - lt.x;
+    const float height = rb.y - lt.y;
+    if (width <= 0.0f || height <= 0.0f)
+        return;
+
+    const float radius = _min(m_textureRounding, _min(width, height) * 0.5f);
+
+    const Frect& tex = m_UIStaticItem.GetTextureRect();
+    const Fvector2 uv_lt{ tex.x1 / ts.x, tex.y1 / ts.y };
+    const Fvector2 uv_rb{ tex.x2 / ts.x, tex.y2 / ts.y };
+    const u32 color = m_UIStaticItem.GetTextureColor();
+
+    // Screen position carries straight over to a texture coordinate, so a vertex anywhere on the
+    // rounded outline samples exactly what the plain quad would have sampled at that spot.
+    const auto push = [&](float x, float y)
+    {
+        const float u = uv_lt.x + (x - lt.x) / width * (uv_rb.x - uv_lt.x);
+        const float v = uv_lt.y + (y - lt.y) / height * (uv_rb.y - uv_lt.y);
+        GEnv.UIRender->PushPoint(x, y, 0.0f, color, u, v);
+    };
+
+    constexpr u32 corner_segments = 6;
+    xr_vector<Fvector2> outline;
+    outline.reserve((corner_segments + 1) * 4);
+
+    const Fvector2 centers[4] = { { rb.x - radius, lt.y + radius }, { rb.x - radius, rb.y - radius },
+        { lt.x + radius, rb.y - radius }, { lt.x + radius, lt.y + radius } };
+
+    for (u32 corner = 0; corner < 4; ++corner)
+    {
+        const float base = -PI_DIV_2 + PI_DIV_2 * float(corner);
+        for (u32 step = 0; step <= corner_segments; ++step)
+        {
+            const float angle = base + PI_DIV_2 * float(step) / float(corner_segments);
+            outline.emplace_back(Fvector2().set(
+                centers[corner].x + radius * _cos(angle), centers[corner].y + radius * _sin(angle)));
+        }
+    }
+
+    const Fvector2 center{ (lt.x + rb.x) * 0.5f, (lt.y + rb.y) * 0.5f };
+
+    GEnv.UIRender->SetShader(*GetShader());
+    GEnv.UIRender->StartPrimitive(outline.size() * 3, IUIRender::ptTriList, UI().m_currentPointType);
+
+    for (size_t i = 0; i < outline.size(); ++i)
+    {
+        const Fvector2& a = outline[i];
+        const Fvector2& b = outline[(i + 1) % outline.size()];
+
+        push(center.x, center.y);
+        push(a.x, a.y);
+        push(b.x, b.y);
+    }
+
+    GEnv.UIRender->FlushPrimitive();
 }
 
 void CUIStatic::Update()

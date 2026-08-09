@@ -670,6 +670,8 @@ void CUIStatic::script_register(lua_State* luaState)
 
             .def("InitTexture", &CUIStatic::InitTexture)
             .def("InitTexture", +[](CUIStatic* self, pcstr texture) { self->InitTexture(texture); })
+            .def("SetTextureRounding", &CUIStatic::SetTextureRounding)
+            .def("GetTextureRounding", &CUIStatic::GetTextureRounding)
             .def("InitTextureEx", &CUIStatic::InitTextureEx)
             .def("InitTextureEx", +[](CUIStatic* self, pcstr texture, pcstr shader) { self->InitTextureEx(texture, shader); })
 

@@ -68,8 +68,7 @@ function load_dialog:InitControls()
 	xml:InitStatic			("form:caption",self.form)
 
 	self.picture			= xml:InitStatic("form:picture",self.form)
-	-- Created after the picture so the rounded corners draw over it, not under.
-	self.picture_corners	= xml:InitStatic("form:picture_corners",self.form)
+	self.picture:SetTextureRounding(10)
 
 	if GetUIStyleManager():GetCurrentStyleName() == "ui_style_cs" then
 		xml:InitStatic		("form:file_info",self.form)

@@ -69,6 +69,11 @@ public:
     virtual bool InitTexture(pcstr texture, bool fatal = true);
     virtual bool InitTextureEx(pcstr texture, pcstr shader = "hud" DELIMITER "default", bool fatal = true);
     CUIStaticItem* GetStaticItem() { return &m_UIStaticItem; }
+    // Corner radius in screen pixels. A UI overlay can only paint over the corners, never cut
+    // them, so anything that needs the background to show through has to drop the quad and
+    // rasterise a rounded outline instead. Zero keeps the plain quad path.
+    void SetTextureRounding(float radius) { m_textureRounding = radius; }
+    float GetTextureRounding() const { return m_textureRounding; }
     void SetTextureRect_script(Frect* pr) { m_UIStaticItem.SetTextureRect(*pr); }
     const Frect* GetTextureRect_script() { return &m_UIStaticItem.GetTextureRect(); }
     void SetHeadingPivot(const Fvector2& p, const Fvector2& offset, bool fixedLT)
@@ -111,8 +116,11 @@ protected:
 
     CUIStaticItem m_UIStaticItem;
     Fvector2 m_TextureOffset;
+    float m_textureRounding{};
     bool m_bStretchTexture{};
     bool m_bTextureEnable{ true };
+
+    void DrawRoundedTexture(const Frect& rect);
 
     bool m_bHeading{};
     bool m_bConstHeading{};
