@@ -71,3 +71,6 @@ src/xrGame/ui/BugReportSecrets.local.h
 
 # exclude doxygen output
 doc/doxygen/html/*
+
+# Local full-text search index over the docs, regenerated on demand.
+/docs/index.bleve/
