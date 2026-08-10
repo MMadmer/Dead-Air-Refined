@@ -1445,7 +1445,9 @@ float CWeaponMagazined::GetWeaponDeterioration()
     // u32(m_iPrefferedFireMode))
     //		return inherited::GetWeaponDeterioration();
     //	return m_iShotNum*conditionDecreasePerShot;
-    return (m_iShotNum == 1) ? conditionDecreasePerShot : conditionDecreasePerQueueShot;
+    // Floored for the same reason as the base class: stacked reliability upgrades can sum
+    // the configured wear below zero.
+    return _max(0.f, (m_iShotNum == 1) ? conditionDecreasePerShot : conditionDecreasePerQueueShot);
 };
 
 void CWeaponMagazined::save(NET_Packet& output_packet)

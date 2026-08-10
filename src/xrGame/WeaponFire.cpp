@@ -49,7 +49,11 @@ void random_dir(Fvector& tgt_dir, const Fvector& src_dir, float dispersion)
     tgt_dir.add(src_dir, T).normalize();
 }
 
-float CWeapon::GetWeaponDeterioration() { return conditionDecreasePerShot; };
+// Upgrade deltas are summed straight onto the base value, and several stock reliability
+// trees (SKS, G43, M249) add up past zero. A negative wear per shot repairs the weapon as
+// it fires and collapses the fault divisors in TryAddConditionFailure to one, which is a
+// guaranteed jam every shot - the original divided by it outright. Zero is the floor.
+float CWeapon::GetWeaponDeterioration() { return _max(0.f, conditionDecreasePerShot); };
 void CWeapon::FireTrace(const Fvector& P, const Fvector& D)
 {
     VERIFY(m_magazine.size());
