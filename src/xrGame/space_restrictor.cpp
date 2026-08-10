@@ -101,6 +101,11 @@ void CSpaceRestrictor::net_Destroy()
 
 bool CSpaceRestrictor::inside(const Fsphere& sphere) const
 {
+    // prepare() rebuilds the shared sphere/box cache in place, so two path builders reaching
+    // a cold restrictor together reallocate the vectors under each other. The rebuild and the
+    // reads that depend on it belong to the same critical section.
+    std::lock_guard lock(space_restriction_lock());
+
     if (!actual())
         prepare();
 

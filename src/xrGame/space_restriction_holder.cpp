@@ -18,6 +18,8 @@
 CSpaceRestrictionHolder::~CSpaceRestrictionHolder() { clear(); }
 void CSpaceRestrictionHolder::clear()
 {
+    std::lock_guard lock(space_restriction_lock());
+
 #ifndef XR_COMPILER_GCC // At least GCC call destructor of members at call parent destructor
     delete_data(m_restrictions);
 #endif
@@ -86,6 +88,8 @@ shared_str CSpaceRestrictionHolder::normalize_string(shared_str space_restrictor
 
 SpaceRestrictionHolder::CBaseRestrictionPtr CSpaceRestrictionHolder::restriction(shared_str space_restrictors)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     if (!xr_strlen(space_restrictors))
         return (0);
 
@@ -106,6 +110,8 @@ SpaceRestrictionHolder::CBaseRestrictionPtr CSpaceRestrictionHolder::restriction
 void CSpaceRestrictionHolder::register_restrictor(
     CSpaceRestrictor* space_restrictor, const RestrictionSpace::ERestrictorTypes& restrictor_type)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     string4096 m_temp_string;
     shared_str space_restrictors = space_restrictor->cName();
     if (restrictor_type != RestrictionSpace::eDefaultRestrictorTypeNone)
@@ -172,6 +178,8 @@ bool try_remove_string(shared_str& search_string, const shared_str& string_to_se
 
 void CSpaceRestrictionHolder::unregister_restrictor(CSpaceRestrictor* space_restrictor)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     shared_str restrictor_id = space_restrictor->cName();
     RESTRICTIONS::iterator I = m_restrictions.find(restrictor_id);
     VERIFY(I != m_restrictions.end());

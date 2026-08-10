@@ -15,6 +15,12 @@
 #include "ai_space.h"
 #include "xrAICore/Navigation/level_graph.h"
 
+std::recursive_mutex& space_restriction_lock()
+{
+    static std::recursive_mutex lock;
+    return lock;
+}
+
 struct CSpaceRestrictionManager::CClientRestriction
 {
     CRestrictionPtr m_restriction;
@@ -47,6 +53,8 @@ void show_restriction(const CRestrictionPtr& restriction)
 
 void CSpaceRestrictionManager::clear()
 {
+    std::lock_guard lock(space_restriction_lock());
+
     m_clients->clear();
     delete_data(m_space_restrictions);
 
@@ -55,6 +63,8 @@ void CSpaceRestrictionManager::clear()
 
 void CSpaceRestrictionManager::remove_border(ALife::_OBJECT_ID id)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr client_restriction = restriction(id);
     if (client_restriction)
         client_restriction->remove_border();
@@ -78,6 +88,8 @@ shared_str CSpaceRestrictionManager::out_restrictions(ALife::_OBJECT_ID id)
 
 shared_str CSpaceRestrictionManager::base_in_restrictions(ALife::_OBJECT_ID id)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
     return ((*I).second.m_base_in_restrictions);
@@ -85,6 +97,8 @@ shared_str CSpaceRestrictionManager::base_in_restrictions(ALife::_OBJECT_ID id)
 
 shared_str CSpaceRestrictionManager::base_out_restrictions(ALife::_OBJECT_ID id)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
     return ((*I).second.m_base_out_restrictions);
@@ -92,6 +106,8 @@ shared_str CSpaceRestrictionManager::base_out_restrictions(ALife::_OBJECT_ID id)
 
 CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(ALife::_OBJECT_ID id)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
 
@@ -106,6 +122,8 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 
 void CSpaceRestrictionManager::collect_garbage()
 {
+    std::lock_guard lock(space_restriction_lock());
+
     SPACE_RESTRICTIONS::iterator I = m_space_restrictions.begin(), J;
     SPACE_RESTRICTIONS::iterator E = m_space_restrictions.end();
     for (; I != E;)
@@ -125,6 +143,8 @@ void CSpaceRestrictionManager::collect_garbage()
 
 void CSpaceRestrictionManager::restrict(ALife::_OBJECT_ID id, shared_str out_restrictors, shared_str in_restrictors)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     shared_str merged_out_restrictions = out_restrictors;
     shared_str merged_in_restrictions = in_restrictors;
     shared_str _default_out_restrictions = default_out_restrictions();
@@ -148,6 +168,8 @@ void CSpaceRestrictionManager::restrict(ALife::_OBJECT_ID id, shared_str out_res
 
 void CSpaceRestrictionManager::unrestrict(ALife::_OBJECT_ID id)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(I != m_clients->end());
     m_clients->erase(I);
@@ -156,6 +178,8 @@ void CSpaceRestrictionManager::unrestrict(ALife::_OBJECT_ID id)
 
 bool CSpaceRestrictionManager::accessible(ALife::_OBJECT_ID id, const Fsphere& sphere)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr client_restriction = restriction(id);
     if (client_restriction)
         return (client_restriction->accessible(sphere));
@@ -164,6 +188,8 @@ bool CSpaceRestrictionManager::accessible(ALife::_OBJECT_ID id, const Fsphere& s
 
 bool CSpaceRestrictionManager::accessible(ALife::_OBJECT_ID id, u32 level_vertex_id, float radius)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr client_restriction = restriction(id);
     if (client_restriction)
         return (client_restriction->accessible(level_vertex_id, radius));
@@ -173,6 +199,8 @@ bool CSpaceRestrictionManager::accessible(ALife::_OBJECT_ID id, u32 level_vertex
 CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
     shared_str out_restrictors, shared_str in_restrictors)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     string4096 m_temp;
     if (!xr_strlen(out_restrictors) && !xr_strlen(in_restrictors))
         return (0);
@@ -194,6 +222,8 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 
 u32 CSpaceRestrictionManager::accessible_nearest(ALife::_OBJECT_ID id, const Fvector& position, Fvector& result)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr client_restriction = restriction(id);
     VERIFY(client_restriction);
 
@@ -259,6 +289,8 @@ void CSpaceRestrictionManager::difference_restrictions(shared_str& restrictions,
 void CSpaceRestrictionManager::add_restrictions(
     ALife::_OBJECT_ID id, shared_str add_out_restrictions, shared_str add_in_restrictions)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr _client_restriction = restriction(id);
     if (!_client_restriction)
     {
@@ -282,6 +314,8 @@ void CSpaceRestrictionManager::add_restrictions(
 void CSpaceRestrictionManager::remove_restrictions(
     ALife::_OBJECT_ID id, shared_str remove_out_restrictions, shared_str remove_in_restrictions)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr _client_restriction = restriction(id);
     if (!_client_restriction)
         return;
@@ -302,6 +336,8 @@ void CSpaceRestrictionManager::remove_restrictions(
 void CSpaceRestrictionManager::change_restrictions(ALife::_OBJECT_ID id, shared_str add_out_restrictions,
     shared_str add_in_restrictions, shared_str remove_out_restrictions, shared_str remove_in_restrictions)
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CRestrictionPtr _client_restriction = restriction(id);
     if (!_client_restriction)
     {
@@ -327,6 +363,8 @@ void CSpaceRestrictionManager::change_restrictions(ALife::_OBJECT_ID id, shared_
 
 void CSpaceRestrictionManager::on_default_restrictions_changed()
 {
+    std::lock_guard lock(space_restriction_lock());
+
     CLIENT_RESTRICTIONS::const_iterator I = m_clients->begin();
     CLIENT_RESTRICTIONS::const_iterator E = m_clients->end();
     for (; I != E; ++I)

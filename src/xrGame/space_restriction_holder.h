@@ -8,8 +8,17 @@
 
 #pragma once
 
+#include <mutex>
+
 class CSpaceRestrictionBridge;
 class CSpaceRestrictor;
+
+// Every layer of the restriction subsystem caches lazily on first touch - the restrictor's
+// sphere/box lists, a restriction's border, the holder and client maps - and all of it is
+// shared between clients. Frame tasks run several path builders at once, so those first-touch
+// rebuilds collide and tear the cached containers apart. One recursive lock covers the whole
+// subsystem, which lets the layers nest the way they already call each other.
+std::recursive_mutex& space_restriction_lock();
 
 template <typename _1, typename _2>
 class intrusive_ptr;
