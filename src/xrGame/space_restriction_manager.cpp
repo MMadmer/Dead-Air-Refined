@@ -12,6 +12,8 @@
 #include "space_restriction_manager.h"
 #include "space_restriction_bridge.h"
 #include "Common/object_broker.h"
+#include "ai_space.h"
+#include "xrAICore/Navigation/level_graph.h"
 
 struct CSpaceRestrictionManager::CClientRestriction
 {
@@ -92,6 +94,13 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 {
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
+
+    // An unregistered client used to read straight through the end() iterator once VERIFY
+    // compiled out. Every caller here already treats a null restriction as "unrestricted",
+    // so report that instead of walking off the map.
+    if (m_clients->end() == I)
+        return nullptr;
+
     return ((*I).second.m_restriction);
 }
 
@@ -187,6 +196,22 @@ u32 CSpaceRestrictionManager::accessible_nearest(ALife::_OBJECT_ID id, const Fve
 {
     CRestrictionPtr client_restriction = restriction(id);
     VERIFY(client_restriction);
+
+    // Callers only get here after accessible() said no, and accessible() answers yes for an
+    // unrestricted client - so reaching this with no restriction means it was dropped between
+    // the two calls. This was the only member of the class dereferencing the pointer behind a
+    // debug-only VERIFY, which ended the session in release; an unrestricted client can keep
+    // the position it asked about.
+    if (!client_restriction)
+    {
+        static std::atomic<bool> reported{};
+        if (!reported.exchange(true))
+            Msg("! Space restriction for object [%u] vanished mid-query, position kept as accessible", u32(id));
+
+        result = position;
+        return (ai().level_graph().vertex_id(position));
+    }
+
     return (client_restriction->accessible_nearest(position, result));
 }
 
