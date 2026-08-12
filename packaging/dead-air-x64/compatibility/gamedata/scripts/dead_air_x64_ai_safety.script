@@ -36,7 +36,34 @@ local function send_to_nearest_accessible_vertex(npc, vertex_id, caller)
 	return current_vertex_id
 end
 
+-- Condition functions in xr_conditions take the object they ask about as the first argument
+-- and almost all of them index it straight away. Smart terrain job setup runs from an npc's
+-- net_spawn, which happens while the level is still loading its objects and db.actor does not
+-- exist yet, so any logic whose condlist uses one of them killed the session on entering the
+-- level. Answering "not met" is the honest result - the object really is absent - and the
+-- condlist is re-evaluated on every update, so the section resolves normally once it appears.
+local conditions_guarded = false
+
+local function guard_object_conditions()
+	if conditions_guarded then
+		return
+	end
+	conditions_guarded = true
+
+	for name, original in pairs(xr_conditions) do
+		if type(original) == "function" then
+			xr_conditions[name] = function(object, npc, p, ...)
+				if object == nil then
+					return false
+				end
+				return original(object, npc, p, ...)
+			end
+		end
+	end
+end
+
 function on_game_start()
 	utils.load_var = load_var
 	utils.send_to_nearest_accessible_vertex = send_to_nearest_accessible_vertex
+	guard_object_conditions()
 end

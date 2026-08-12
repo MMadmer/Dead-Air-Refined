@@ -142,7 +142,10 @@ void CHudTuner::on_tool_frame()
 
             string128 selectable;
 
-            if (current_hud_item)
+            // The parent item is dropped the moment the weapon is holstered or swapped, which
+            // can happen from inside this very frame - playing a motion from the panel below is
+            // enough to switch state. The pooled hud item outlives it, so re-test both.
+            if (current_hud_item && current_hud_item->m_parent_hud_item)
             {
                 bool is_16x9 = UI().is_widescreen();
                 shared_str m_sect_name = current_hud_item->m_sect_name;
@@ -271,7 +274,8 @@ void CHudTuner::on_tool_frame()
 
         ImGui::NewLine();
 
-        if (current_hud_item && ImGui::CollapsingHeader("Bone and Animation Debugging", ImGuiTreeNodeFlags_DefaultOpen))
+        if (current_hud_item && current_hud_item->m_model && current_hud_item->m_parent_hud_item &&
+            ImGui::CollapsingHeader("Bone and Animation Debugging", ImGuiTreeNodeFlags_DefaultOpen))
         {
             IKinematics* ik = current_hud_item->m_model;
             ImGui::Text("Bone Count = %i", ik->LL_BoneCount());

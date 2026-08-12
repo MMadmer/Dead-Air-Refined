@@ -547,6 +547,17 @@ void CWeapon::Load(LPCSTR section)
         misfireStartProbability = misfireProbability;
         misfireEndProbability   = (misfireProbability + misfireConditionK) * 0.25f;
     }
+
+    // Condition above which a weapon never starts to misfire, so a gun in good repair stays
+    // reliable whatever curve its own section asks for. Data driven rather than a literal
+    // here: a global default in [inventory] that an addon can retune, and a per weapon
+    // override on top of it. 1.0 disables the cap and restores the stock curve.
+    const float misfireCeilingDefault =
+        pSettings->read_if_exists<float>("inventory", "misfire_condition_ceiling", 0.75f);
+    misfireConditionCeiling =
+        pSettings->read_if_exists<float>(section, "misfire_condition_ceiling", misfireCeilingDefault);
+    clamp(misfireConditionCeiling, 0.0f, 1.0f);
+
     conditionDecreasePerShot = pSettings->r_float(section, "condition_shot_dec");
     conditionDecreasePerQueueShot = pSettings->read_if_exists<float>(section, "condition_queue_shot_dec", conditionDecreasePerShot);
 
@@ -1604,25 +1615,32 @@ CWeaponAmmo* CWeapon::GetAmmoForReload(LPCSTR ammo_section) const
 
 float CWeapon::GetConditionMisfireProbability() const
 {
+    const float condition = GetCondition();
+    if (condition > misfireConditionCeiling)
+        return 0.0f;
+
     float mis;
     if (misfireUseOldFormula)
     {
-        if (GetCondition() > 0.95f)
+        if (condition > 0.95f) // the old formula's own floor, kept for a disabled ceiling
             return 0.0f;
-        mis = misfireProbability + powf(1.f - GetCondition(), 3.f) * misfireConditionK;
+        mis = misfireProbability + powf(1.f - condition, 3.f) * misfireConditionK;
     }
     else // modified by Peacemaker [17.10.08]
     {
-        if (GetCondition() > misfireStartCondition)
+        const float startCondition = _min(misfireStartCondition, misfireConditionCeiling);
+        const float endCondition = _min(misfireEndCondition, startCondition);
+
+        if (condition > startCondition)
             return 0.0f;
-        if (GetCondition() < misfireEndCondition)
+        if (condition < endCondition)
             return misfireEndProbability;
         mis = misfireStartProbability +
-            ((misfireStartCondition - GetCondition()) * // condition goes from 1.f to 0.f
+            ((startCondition - condition) * // condition goes from 1.f to 0.f
                 (misfireEndProbability - misfireStartProbability) / // probability goes from 0.f to 1.f
-                ((misfireStartCondition == misfireEndCondition) ? // !!!say "No" to devision by zero
-                    misfireStartCondition :
-                    (misfireStartCondition - misfireEndCondition)));
+                ((startCondition == endCondition) ? // !!!say "No" to devision by zero
+                    startCondition :
+                    (startCondition - endCondition)));
     }
     clamp(mis, 0.0f, 0.99f);
     return mis;

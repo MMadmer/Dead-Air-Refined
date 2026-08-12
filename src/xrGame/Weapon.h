@@ -440,12 +440,16 @@ protected:
     float misfireEndCondition; //изношеность при которой шанс осечки становится константным
     float misfireStartProbability; //шанс осечки при изношености больше чем misfireStartCondition
     float misfireEndProbability; //шанс осечки при изношености больше чем misfireEndCondition
+    //износ, выше которого осечек не бывает вообще (misfire_condition_ceiling)
+    float misfireConditionCeiling{ 1.f };
     float conditionDecreasePerQueueShot; //увеличение изношености при выстреле очередью
     float conditionDecreasePerShot; //увеличение изношености при одиночном выстреле
 
 public:
-    float GetMisfireStartCondition() const { return misfireStartCondition; }
-    float GetMisfireEndCondition() const { return misfireEndCondition; }
+    // Capped like GetConditionMisfireProbability does, so the HUD warning appears exactly
+    // when misfires actually become possible.
+    float GetMisfireStartCondition() const { return _min(misfireStartCondition, misfireConditionCeiling); }
+    float GetMisfireEndCondition() const { return _min(misfireEndCondition, GetMisfireStartCondition()); }
 
 protected:
     struct SPDM

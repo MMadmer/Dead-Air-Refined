@@ -21,5 +21,7 @@ private:
 private:
     ref_shader pShader;
     ref_geom pGeom;
+    // The font's own atlas, kept so its size never has to be read back out of the backend.
+    ref_texture pTexture;
 };
 } // namespace xray::render::RENDER_NAMESPACE

@@ -164,3 +164,27 @@ Rules and limits:
   matches the reference implementation.
 - Bones are returned to the model default when the weapon leaves the player's hands,
   so a weapon that shares its `hud_section` with another one never inherits its state.
+
+## Weapon misfire ceiling
+
+`misfire_condition_ceiling` is the condition above which a weapon never begins to
+misfire, whatever curve its own `misfire_start_condition` describes. It is read from the
+weapon section first and falls back to a global default in `[inventory]`, so an addon can
+retune the whole game in one line and still special-case individual weapons.
+
+```ini
+[inventory]
+misfire_condition_ceiling = 0.75   ; applies to every weapon that does not override it
+
+[wpn_custom_prototype]
+misfire_condition_ceiling = 0.95   ; this one is meant to be unreliable even in good shape
+```
+
+- The engine default is `0.75`. Set `1.0`, globally or per weapon, to disable the cap and
+  get the stock curve back.
+- The cap only ever removes malfunctions relative to the section's own curve. A weapon whose
+  curve already starts below its ceiling keeps its own, lower threshold untouched.
+- The HUD condition warning uses the capped threshold too, so the indicator and the actual
+  behaviour agree.
+- The legacy `misfire_probability` formula keeps its own built-in 0.95 floor even when the
+  ceiling is disabled.

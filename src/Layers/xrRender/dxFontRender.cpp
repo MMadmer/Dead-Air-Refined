@@ -14,12 +14,15 @@ dxFontRender::~dxFontRender()
 {
     pShader.destroy();
     pGeom.destroy();
+    pTexture.destroy();
 }
 
 void dxFontRender::Initialize(cpcstr cShader, cpcstr cTexture)
 {
     pShader.create(cShader, cTexture);
     pGeom.create(FVF::F_TL, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+    if (cTexture && xr_strlen(cTexture))
+        pTexture.create(cTexture);
 }
 
 void dxFontRender::OnRender(CGameFont& owner)
@@ -31,12 +34,29 @@ void dxFontRender::OnRender(CGameFont& owner)
     if (!(owner.uFlags & CGameFont::fsValid))
     {
         R_ASSERT(pShader);
-        R_constant* C = RCache.get_c(c_sbase)._get(); // get sampler
-        CTexture* T = RCache.get_ActiveTexture(C ? C->samp.index : 0);
+
+        // Size the glyph grid from the font's own atlas. Upstream read back whatever texture
+        // happened to be bound in the sampler slot at this moment, which is the font atlas
+        // only once the pass has been applied; otherwise it latches the previous draw's
+        // texture, and fsValid is set once and never cleared, so a wrong size would divide
+        // every glyph UV for the rest of the session. Not observed on the shipped font set -
+        // this closes the hole rather than fixing a reproduced defect.
+        CTexture* T = pTexture ? &*pTexture : nullptr;
+        const bool ownAtlas = T && T->get_Width() && T->get_Height();
+        if (!ownAtlas)
+        {
+            R_constant* C = RCache.get_c(c_sbase)._get(); // get sampler
+            T = RCache.get_ActiveTexture(C ? C->samp.index : 0);
+        }
         R_ASSERT(T);
         owner.vTS.set((int)T->get_Width(), (int)T->get_Height());
         owner.fTCHeight = owner.fHeight / float(owner.vTS.y);
-        owner.uFlags |= CGameFont::fsValid;
+
+        // Latch only once the size came from the font's own atlas. A font can render before
+        // its texture is resident, and the fallback below reads whatever is bound - freezing
+        // that would keep the wrong grid for the rest of the session.
+        if (ownAtlas)
+            owner.uFlags |= CGameFont::fsValid;
     }
 
     for (u32 i = 0; i < owner.strings.size();)

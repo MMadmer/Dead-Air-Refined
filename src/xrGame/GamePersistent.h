@@ -111,7 +111,10 @@ public:
     void OnObjectsRelcaseBatch(const xr_vector<IGameObject*>& objects) override;
     void OnObjectsRelcaseBatchComplete() override;
 
-    CHudTuner GetHudTuner() { return m_hudTuner; }
+    // By reference: returning a copy ran the whole tool through its copy constructor and
+    // destructor on every query - two xr_map copies each, from a dozen call sites per frame,
+    // with the temporary's ~ide_tool reaching into the editor's tool registry.
+    CHudTuner& GetHudTuner() { return m_hudTuner; }
 };
 
 IC CGamePersistent& GamePersistent() { return *((CGamePersistent*)g_pGamePersistent); }
