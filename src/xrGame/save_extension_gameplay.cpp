@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "save_extension_gameplay.h"
+#include "xms_game.h"
 
 #include "Actor.h"
 #include "ActorHelmet.h"
@@ -507,6 +508,8 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
             write_value(cursor, season);
             add_mutation(state.mutations, environmentSeasonChunkType,
                 std::move(seasonPayload), season != 0.f);
+            // XMS module manifest + per-module blobs ride the same capture
+            XmsGame::CollectSaveMutations(state.mutations);
             state.phase = 9;
             state.completed = true;
         }

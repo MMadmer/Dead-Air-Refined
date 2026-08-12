@@ -22,6 +22,8 @@ public:
     ICF float factor_y() const;
     ICF const Fbox& box() const;
     ICF const xrGUID& guid() const;
+    // XMS: ai-map overlays bump the count on a heap copy of the header
+    ICF void xms_set_vertex_count(u32 value) { count = value; }
 };
 
 typedef NodePosition CPosition;

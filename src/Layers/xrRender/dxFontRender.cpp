@@ -51,7 +51,10 @@ void dxFontRender::OnRender(CGameFont& owner)
         while ((i + count) < owner.strings.size())
         {
             u32 L = owner.smart_strlen(owner.strings[i + count].string);
-            auto [aC, aL] = owner.get_actions_text_length(owner.strings[i].string);
+            // Budget the action expansion of the string being added, not of the batch head:
+            // the wrong index under-allocates the vertex buffer whenever a later string
+            // carries an action binding and the first one does not.
+            auto [aC, aL] = owner.get_actions_text_length(owner.strings[i + count].string);
             L += aL - aC * 2;
 
             if ((L + length) < MAX_MB_CHARS)

@@ -12,6 +12,8 @@
 #include "embedded_resources_management.h"
 
 #include "xrCore/Threading/TaskManager.hpp"
+#include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_ltx.h"
 #include "xrNetServer/NET_AuthCheck.h"
 
 #include "IGame_Persistent.h"
@@ -188,9 +190,16 @@ void InitSettings()
 {
     ZoneScoped;
 
+    // XMS: cross-layer duplicate sections merge instead of Fatal while the
+    // config tree is being composed
+    XMS::SetLtxMergeEnabled(XMS::Active());
+
     InitConfig(pSettings, "system.ltx");
     InitConfig(pSettingsOpenXRay, "openxray.ltx", false, true, true, false);
     InitConfig(pGameIni, "game.ltx");
+
+    // module config overlays + .ltxp directive patches on top of system.ltx
+    XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
 
     if (strstr(Core.Params, "-shoc") || strstr(Core.Params, "-soc"))
         set_shoc_mode();

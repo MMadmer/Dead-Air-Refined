@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "XMLDocument.hpp"
+#include "xrCore/XMS/xms_xml.h"
 
 pcstr UI_PATH = UI_PATH_DEFAULT;
 pcstr UI_PATH_WITH_DELIMITER = UI_PATH_DEFAULT_WITH_DELIMITER;
@@ -177,7 +178,12 @@ bool XMLDocument::Load(pcstr path, pcstr xml_filename, bool fatal)
     W.w_stringZ("");
     FS.r_close(F);
 
-    return Set(reinterpret_cast<pcstr>(W.pointer()), fatal);
+    if (!Set(reinterpret_cast<pcstr>(W.pointer()), fatal))
+        return false;
+
+    // XMS module DOM patches ride on the parsed document
+    XMS::ApplyXmlPatches(*this, xml_filename);
+    return true;
 }
 
 bool XMLDocument::Set(pcstr text, bool fatal)

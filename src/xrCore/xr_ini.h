@@ -71,6 +71,11 @@ public:
         Items Data;
         Index LineIndex;
 
+        // XMS: layer that produced the section; per-item layers appear only
+        // after a cross-layer merge (parallel to Data, else empty).
+        u16 xms_layer{0};
+        xr_vector<u16> XmsItemLayers;
+
         bool line_exist(pcstr line, pcstr* value = nullptr);
         void rebuild_index();
     };
@@ -111,6 +116,19 @@ public:
              u32 sect_count = 0, allow_include_func_t allow_include_func = nullptr);
 
     virtual ~CInifile();
+
+    // XMS patch/overlay API. Deliberately ignores the read-only flag: it runs
+    // during composition, before the game reads anything.
+    // Returns true when the key existed before (old value in old_value).
+    bool xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value = nullptr);
+    bool xms_remove_line(pcstr S, pcstr L);
+    bool xms_remove_section(pcstr S);
+    // Creates an empty section (optionally inheriting comma-separated parents
+    // resolved against this ini). No-op when the section exists.
+    bool xms_create_section(pcstr S, pcstr parents_csv);
+    // Parses a physical file into this ini with cross-layer merge semantics.
+    void xms_load_overlay(pcstr physical_path);
+
     bool save_as(pcstr new_fname = nullptr);
     void save_as(IWriter& writer, bool bcheck = false) const;
     void save_at_end(bool b) noexcept { m_flags.set(eSaveAtEnd, b); }

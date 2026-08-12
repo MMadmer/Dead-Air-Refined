@@ -144,13 +144,10 @@ void CVisualMemoryManager::reinit()
 
 void CVisualMemoryManager::reload(LPCSTR section)
 {
-    // honor the configured cap exactly: the original game ran with the values the data
-    // asks for (32 for stalkers, less for monsters), while the upstream floor of 128
-    // silently overrode every one of them; non-positive values would break the eviction
-    // path in add_visible_object, so they keep the built-in default instead
-    const s32 maxObjectCount = pSettings->read_if_exists<s32>(section, "DynamicObjectsCount", -1);
-    if (maxObjectCount > 0)
-        m_max_object_count = u32(maxObjectCount);
+    // DynamicObjectsCount stays unread on purpose: both CoC 1.4.22 and Dead Air 1.0 keep
+    // that line commented out and run every observer on the built-in 128 slots. Honoring
+    // the data (8 for most monsters, 32 for stalkers) evicts live targets from the visible
+    // set in a crowded fight, which reads in game as NPCs ignoring an enemy in front of them.
 
     if (m_stalker)
     {

@@ -140,6 +140,16 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("set_callback", (void (CScriptGameObject::*)(GameObject::ECallbackType))(&CScriptGameObject::SetCallback))
         .def("clear_callbacks", &CScriptGameObject::ClearCallbacks) //Graff46
 
+        // XMS multicast callbacks: many subscribers per slot, keyed by id
+        .def("add_callback", (void (CScriptGameObject::*)(GameObject::ECallbackType, pcstr,
+                                 const luabind::functor<void>&))(&CScriptGameObject::AddCallback))
+        .def("add_callback", (void (CScriptGameObject::*)(GameObject::ECallbackType, pcstr,
+                                 const luabind::functor<void>&, s32))(&CScriptGameObject::AddCallback))
+        .def("add_callback", (void (CScriptGameObject::*)(GameObject::ECallbackType, pcstr,
+                                 const luabind::functor<void>&, s32, const luabind::object&))(
+                                 &CScriptGameObject::AddCallback))
+        .def("remove_callback", &CScriptGameObject::RemoveCallback)
+
         .def("set_patrol_extrapolate_callback",
             (void (CScriptGameObject::*)())(&CScriptGameObject::set_patrol_extrapolate_callback))
         .def("set_patrol_extrapolate_callback", (void (CScriptGameObject::*)(const luabind::functor<bool>&))(

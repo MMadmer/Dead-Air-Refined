@@ -330,7 +330,14 @@ void CActor::cam_Update(float dt, float fFOV)
 
     if (this == Level().CurrentViewEntity())
     {
-        cam_Active()->yaw = angle_normalize_signed(cam_Active()->yaw + ConsumeCameraYawRotation(dt));
+        // Yaw has to keep accumulating unwrapped: camUpdateLadder builds lim_yaw around the
+        // camera's own running yaw, and CCameraFirstEye::Move clamps against it without any
+        // wrap handling. Folding yaw into (-pi, pi] every frame put the value on the far side
+        // of those limits near a +-pi ladder normal, so the next mouse input snapped the view
+        // a radian sideways and walked the actor off the ladder. Only apply a real request.
+        const float yawDelta = ConsumeCameraYawRotation(dt);
+        if (!fis_zero(yawDelta))
+            cam_Active()->yaw += yawDelta;
     }
 
     if (this == Level().CurrentViewEntity())

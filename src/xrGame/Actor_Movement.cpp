@@ -353,14 +353,20 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
     {
         pcstr stateAnimation{};
 
-        if (mstate_real & mcLStrafe && !(mstate_old & mcLStrafe))
+        // Effector names are part of the content contract: the original engine asks for
+        // sprint/move_fwd/move_back and the shipped anim set has none of them, so only the
+        // two strafe effectors ever play. Renaming them to the files that do exist
+        // (go_front/go_back) revived a camera and HUD lurch on every forward/back step.
+        if (mstate_real & mcSprint && !(mstate_old & mcSprint))
+            stateAnimation = "sprint";
+        else if (mstate_real & mcLStrafe && !(mstate_old & mcLStrafe))
             stateAnimation = "strafe_left";
         else if (mstate_real & mcRStrafe && !(mstate_old & mcRStrafe))
             stateAnimation = "strafe_right";
         else if (mstate_real & mcFwd && !(mstate_old & mcFwd))
-            stateAnimation = "go_front";
+            stateAnimation = "move_fwd";
         else if (mstate_real & mcBack && !(mstate_old & mcBack))
-            stateAnimation = "go_back";
+            stateAnimation = "move_back";
 
         if (stateAnimation)
         { // play moving cam effect

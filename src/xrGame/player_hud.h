@@ -144,8 +144,13 @@ public:
     void detach_item(CHudItem* item);
     void detach_all_items()
     {
-        m_attached_items[0] = NULL;
-        m_attached_items[1] = NULL;
+        // Through detach_item_idx so on_b_hud_detach still runs: clearing the slots behind the
+        // items' backs left them believing they were still attached, and the pooled hud models
+        // kept whatever state the last owner had put them in.
+        // Left hand first: detach_item_idx only restores the right hand's animation
+        // partition while slot 0 is still occupied.
+        detach_item_idx(1);
+        detach_item_idx(0);
     };
 
     void calc_transform(u16 attach_slot_idx, const Fmatrix& offset, Fmatrix& result) const;

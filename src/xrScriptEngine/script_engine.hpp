@@ -210,6 +210,9 @@ public:
     CScriptEngine(bool is_editor = false, bool is_with_profiler = false);
     virtual ~CScriptEngine();
     void init(export_func exporterFunc, bool loadGlobalNamespace);
+    // XMS: fires at the end of init(), when the base Lua libraries and the
+    // global namespace are ready. Set by xrGame during export registration.
+    static void (*g_xms_on_init)(lua_State* L);
     virtual void unload();
     static int lua_panic(lua_State* L);
     static void lua_error(lua_State* L);

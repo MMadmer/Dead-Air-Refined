@@ -54,9 +54,10 @@ rewritten, comments and diagnostics replaced; nothing was merged wholesale):
 - invalid physics pose containment in bone callbacks — from `b0b6119b`
   (`src/xrPhysics/PHElement.*`), diagnostics reworked to per-element state;
 - local shadow-light budget with actor-torch privilege and admission
-  hysteresis — from reference HEAD `r2_R_render.cpp`/`Torch.cpp`, extended
-  with per-parent OMNIPART group admission and an unshadowed-export demotion
-  layout; parity default (`r__light_shadow_budget 0`);
+  hysteresis — from reference HEAD `r2_R_render.cpp`/`Torch.cpp`, with an
+  unshadowed-export demotion layout; admission is per shadow-map face, so a
+  shadowed point light spends six slots; parity default
+  (`r__light_shadow_budget 0`);
 - middle/far sun cascade cache — from `06654c8a`
   (`render_phase_sun.cpp`), parity default (`r__sun_cache_ms 0`);
 - loose per-particle overrides through the VFS — from `48f732bb`

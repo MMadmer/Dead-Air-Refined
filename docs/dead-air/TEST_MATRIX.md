@@ -12,6 +12,9 @@
 | Original 0.98b pair without `.scov` | `legacy098.scop/.scoc`, exact x86-reference bytes | Pass, 27,634 objects loaded; new Refined save committed and loaded in a separate process; original hashes unchanged and no sidecar added |
 | Refined save in original 0.98b | Isolated original x86 runtime and Refined-generated `serializer_ab_01` | Pass for load, 22,958 spawn points / 27,625 objects; the original renderer stalled after load before it could perform the requested resave |
 | Lua save API compatibility | Ten legacy `before_save` mutations plus synchronous `capture_encode == false` | Pass, exact `.scoc` results, failed capture preserved the previous trio, zero transaction residue |
+| XMS zero-module identity | XMS enabled, `mods/` with no valid manifest, new game | Pass, 22,958 spawn points (baseline) and not a single XMS log line — composition is a true no-op |
+| XMS module composition | `xms.sample` enabled, new game | Pass, 22,959 spawn points (+1 from `demo.xspawn`), game graph 5,768 vertices (5,528 base), module level `xms_proba` joined as id 128 |
+| XMS visual overlays | `overlay_visuals.ltx` with a static, a hierarchy, a mode-gated and a missing entry on `fake_start` | Pass, 2 attached, mode-gated entry skipped, missing file warned; graceful shutdown detached them without an assert |
 | Malformed extension quickload | Valid active `l01_escape` world plus structurally invalid target `.scov` | Pass, load rejected before broadcast; level and actor ID remained unchanged |
 | Save transaction fault models | 33 deterministic I/O/fallback cases and 10 durable crash checkpoints | Pass, production ordering verifier matched the implementation |
 | Packed addon | DA Inventory Sort XDB | Pass |

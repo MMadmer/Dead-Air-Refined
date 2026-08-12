@@ -1,5 +1,7 @@
 #include "pch_script.h"
 #include "xrEngine/XR_IOConsole.h"
+#include "xrCore/XMS/xms_core.h"
+#include "xrMaterialSystem/GameMtlLib.h"
 #include "xrEngine/xr_ioc_cmd.h"
 #include "xrEngine/CustomHUD.h"
 #include "xrEngine/FDemoRecord.h"
@@ -947,6 +949,119 @@ public:
         LogFile.clear();
         FlushLog();
         Msg("* Log file has been cleaned successfully!");
+    }
+};
+
+class CCC_XmsList : public IConsole_Command
+{
+public:
+    CCC_XmsList(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR)
+    {
+        const auto& modules = XMS::Modules();
+        if (modules.empty())
+        {
+            Msg("* XMS: no modules installed");
+            return;
+        }
+        for (const XMS::Module& m : modules)
+        {
+            if (m.disabled)
+                Msg("* [--] %s %s - DISABLED: %s", m.id.c_str(), m.version.c_str(), m.disable_reason.c_str());
+            else
+                Msg("* [%02u] %s %s (ns=%u)", u32(m.layer), m.id.c_str(), m.version.c_str(), u32(m.ns));
+        }
+    }
+};
+
+class CCC_XmsModes : public IConsole_Command
+{
+public:
+    CCC_XmsModes(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR args)
+    {
+        // no args = show; "none" clears; otherwise a comma list activates
+        if (!args || !args[0])
+        {
+            Msg("* XMS: active modes: [%s]", XMS::ActiveModesCsv()[0] ? XMS::ActiveModesCsv() : "none");
+            for (const XMS::Module& m : XMS::Modules())
+                for (const XMS::ProvidedMode& mode : m.provides_modes)
+                    if (!m.disabled)
+                        Msg("*   known mode: %s (module %s)", mode.id.c_str(), m.id.c_str());
+            return;
+        }
+        XMS::SetActiveModes(0 == xr_strcmp(args, "none") ? "" : args);
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "show or set active XMS game modes (comma list, 'none' to clear)"); }
+};
+
+class CCC_XmsConflicts : public IConsole_Command
+{
+public:
+    CCC_XmsConflicts(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR)
+    {
+        const auto& conflicts = XMS::Conflicts();
+        Msg("* XMS: %zu conflict(s); full list in xms_report.json", conflicts.size());
+        // console spam guard - the report file carries the rest
+        const size_t shown = std::min<size_t>(conflicts.size(), 40);
+        for (size_t i = 0; i < shown; ++i)
+        {
+            const XMS::ConflictRow& row = conflicts[i];
+            Msg("*   %s: [%s] %s -> %s", row.subject.c_str(), row.loser.c_str(), "overridden by", row.winner.c_str());
+        }
+        XMS::WriteReport();
+    }
+};
+
+// "who gave me this?" - the same question for a file path, a config section, a
+// key or an xml node, answered from the overlay map plus the conflict ledger.
+class CCC_XmsWhy : public IConsole_Command
+{
+public:
+    CCC_XmsWhy(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        if (!args || !args[0])
+        {
+            Msg("! usage: xms_why <path or section or key fragment>");
+            return;
+        }
+
+        xr_vector<XMS::OwnedFile> files;
+        XMS::FindOwnedFiles(args, files, 20);
+        for (const XMS::OwnedFile& f : files)
+            Msg("*   file [%s] <- module %s (%s)", f.vpath.c_str(), f.module_id.c_str(), f.physical.c_str());
+
+        // ledger rows carry everything that was overridden, merged or patched
+        size_t rows = 0;
+        for (const XMS::ConflictRow& row : XMS::Conflicts())
+        {
+            if (!strstr(row.subject.c_str(), args))
+                continue;
+            if (++rows > 20)
+                break;
+            Msg("*   %s [%s]: %s beats %s", kind_name_for_console(row.kind), row.subject.c_str(),
+                row.winner.c_str(), row.loser.c_str());
+        }
+
+        if (files.empty() && !rows)
+            Msg("* XMS: nothing matched [%s] - no module touches it, the base game owns it", args);
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "explain which XMS module provides or overrides a path/section/key"); }
+
+private:
+    static pcstr kind_name_for_console(XMS::ConflictKind kind)
+    {
+        switch (kind)
+        {
+        case XMS::ConflictKind::File: return "file";
+        case XMS::ConflictKind::LtxSection: return "ltx section";
+        case XMS::ConflictKind::LtxKey: return "ltx key";
+        case XMS::ConflictKind::XmlPatch: return "xml patch";
+        case XMS::ConflictKind::Script: return "script";
+        default: return "other";
+        }
     }
 };
 
@@ -2294,6 +2409,19 @@ void CCC_RegisterCommands()
 
     CMD1(CCC_FlushLog, "flush"); // flush log
     CMD1(CCC_ClearLog, "clear_log");
+
+    // XMS module system
+    CMD1(CCC_XmsList, "xms_list");
+    CMD1(CCC_XmsConflicts, "xms_conflicts");
+    CMD1(CCC_XmsModes, "xms_modes");
+    CMD1(CCC_XmsWhy, "xms_why");
+
+    // collision overlays resolve game materials by name through this
+    XMS::SetMaterialResolver([](pcstr name) -> u16
+    {
+        SGameMtl* material = GMLib.GetMaterial(name);
+        return material ? u16(material->GetID()) : u16(-1);
+    });
 
 #ifndef MASTER_GOLD
     CMD1(CCC_ALifeTimeFactor, "al_time_factor"); // set time factor

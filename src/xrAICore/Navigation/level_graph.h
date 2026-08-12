@@ -50,7 +50,9 @@ public:
 private:
     IReader* m_reader; // level graph virtual storage
     CHeader* m_header; // level graph header
+    CHeader m_xms_header_copy{}; // owned header when ai-map overlays bump the count
     CLevelGraphManager* m_nodes; // contains nodes array
+    void xms_collect_aimap_overlays(pcstr level_ai_path, xr_vector<u8>& out);
     xr_vector<bool> m_access_mask;
     GameGraph::_LEVEL_ID m_level_id; // unique level identifier
     u32 m_row_length;

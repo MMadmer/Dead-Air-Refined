@@ -6,9 +6,12 @@
 #include "Common/LevelStructure.hpp"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCore/stream_reader.h"
+#include "xrCore/XMS/xms_core.h"
+
+#include "Layers/xrRender/FHierrarhyVisual.h"
+#include "Layers/xrRender/r__sector.h"
 
 #if defined(USE_DX11)
-#include "Layers/xrRender/FHierrarhyVisual.h"
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidVolume.h"
 #endif
 
@@ -98,6 +101,9 @@ void CRender::level_Load(IReader* fs)
     Load3DFluid();
 #endif
 
+    // XMS: module-added geometry goes in right after the sectors exist
+    LoadOverlayVisuals();
+
     // HOM
     HOM.Load();
 
@@ -126,6 +132,9 @@ void CRender::level_Unload()
     // graph is still intact.
     Unload3DFluid();
 #endif
+
+    // Same deal for the module overlays
+    UnloadOverlayVisuals();
 
     // HOM
     HOM.Unload();
@@ -492,6 +501,304 @@ void CRender::LoadSWIs(CStreamReader* base_fs)
         }
         fs->close();
     }
+}
+
+// ---- XMS visual overlays ----------------------------------------------------
+// Modules ship world-space .ogf files listed in
+// <module>/levels/<level>/overlay_visuals.ltx (written by the editor's OGF
+// export). The registry lives outside gamedata on purpose: VFS mounting is
+// last-writer-wins, so a shared virtual path would let one module silence every
+// other one. Reading each module's file physically keeps the contributions
+// additive, which is the whole point of the overlay layer.
+//
+// Section layout, one entry per visual:
+//   [v_0]
+//   file   = visuals/my_shed.ogf   ; relative to levels/<level>/
+//   mode   = hardcore              ; optional extra game-mode gate
+//   sector = 12                    ; optional, skips sector auto-detection
+namespace
+{
+bool xms_read_physical(pcstr path, xr_vector<u8>& out)
+{
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return false;
+    fseek(f, 0, SEEK_END);
+    const long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    out.resize(size_t(std::max(0l, len)));
+    const size_t got = len > 0 ? fread(out.data(), 1, out.size(), f) : 0;
+    fclose(f);
+    return got == out.size() && !out.empty();
+}
+} // namespace
+
+bool CRender::AttachOverlayVisual(const XMS::Module& module, pcstr level_name, pcstr rel_file, int forced_sector)
+{
+    string_path path;
+    xr_sprintf(path, "%slevels" DELIMITER "%s" DELIMITER "%s", module.root.c_str(), level_name, rel_file);
+    for (char* p = path; *p; ++p)
+        if (*p == '/')
+            *p = _DELIMITER;
+
+    xr_vector<u8> raw;
+    if (!xms_read_physical(path, raw))
+    {
+        Msg("! XMS: overlay visual not readable [%s]", path);
+        return false;
+    }
+
+    IReader reader(raw.data(), raw.size());
+    ogf_header H;
+    if (reader.find_chunk(OGF_HEADER) != sizeof(H))
+    {
+        Msg("! XMS: not an ogf [%s]", path);
+        return false;
+    }
+    reader.r(&H, sizeof(H));
+
+    // Skeletons need a bone tick and an owning object; the editor refuses to bake
+    // them, so anything animated here means a hand-edited registry.
+    switch (H.type)
+    {
+    case MT_NORMAL:
+    case MT_PROGRESSIVE:
+    case MT_HIERRARHY:
+    case MT_TREE_ST:
+    case MT_TREE_PM: break;
+    default:
+        Msg("! XMS: overlay visual type %d is not static [%s]", H.type, path);
+        return false;
+    }
+
+    reader.seek(0);
+    dxRender_Visual* visual = Models->Instance_Create(H.type);
+    if (!visual)
+        return false;
+    visual->Load(path, &reader, 0);
+
+    const auto release = [&]()
+    {
+        visual->Release();
+        xr_delete(visual);
+    };
+
+    auto& dsgraph = get_imm_context();
+    auto sector_id = IRender_Sector::INVALID_SECTOR_ID;
+    if (forced_sector >= 0)
+    {
+        if (size_t(forced_sector) >= dsgraph.Sectors.size())
+        {
+            Msg("! XMS: sector %d is out of range (level has %zu) [%s]", forced_sector, dsgraph.Sectors.size(), path);
+            release();
+            return false;
+        }
+        sector_id = IRender_Sector::sector_id_t(forced_sector);
+    }
+    else
+    {
+        sector_id = dsgraph.detect_sector(visual->vis.sphere.P);
+        if (sector_id == IRender_Sector::INVALID_SECTOR_ID || size_t(sector_id) >= dsgraph.Sectors.size())
+        {
+            Msg("! XMS: no render sector at [%3.1f,%3.1f,%3.1f] - is the ogf baked in world space? [%s]",
+                VPUSH(visual->vis.sphere.P), path);
+            release();
+            return false;
+        }
+    }
+
+    dxRender_Visual* root = static_cast<CSector*>(dsgraph.get_sector(sector_id))->root();
+    if (!root || root->getType() != MT_HIERRARHY)
+    {
+        Msg("! XMS: sector %d has no hierarchy root [%s]", int(sector_id), path);
+        release();
+        return false;
+    }
+
+    static_cast<FHierrarhyVisual*>(root)->children.push_back(visual);
+
+    // The root's own bounds gate the entire sector subtree in add_static, so an
+    // overlay outside them would simply never draw. Widen only when it actually
+    // sticks out: a bigger root box costs every base visual in this sector its
+    // fcvInside fast path.
+    if (!root->vis.box.contains(visual->vis.box))
+    {
+        root->vis.box.merge(visual->vis.box);
+        root->vis.box.getsphere(root->vis.sphere.P, root->vis.sphere.R);
+    }
+
+    m_overlay_visuals.push_back({root, visual});
+    return true;
+}
+
+void CRender::LoadOverlayVisuals()
+{
+    ZoneScoped;
+
+    // No visual graph on a dedicated server - LoadVisuals is skipped there too
+    if (!XMS::Active() || GEnv.isDedicatedServer)
+        return;
+
+    // "$level$" is the level folder - its last component is the level name the
+    // editor stamps into the module layout.
+    string_path level_root;
+    FS.update_path(level_root, "$level$", "");
+    if (const size_t len = xr_strlen(level_root); len && (level_root[len - 1] == _DELIMITER || level_root[len - 1] == '/'))
+        level_root[len - 1] = 0;
+    pcstr level_name = level_root;
+    for (pcstr p = level_root; *p; ++p)
+        if (*p == _DELIMITER || *p == '/')
+            level_name = p + 1;
+    if (!level_name[0])
+        return;
+
+    // Two passes on purpose: every hide runs before any attach, so a module can
+    // never delete geometry another module just added - hides only ever target
+    // the base level.
+    struct AddEntry
+    {
+        const XMS::Module* module;
+        xr_string file;
+        int sector;
+    };
+    struct HideEntry
+    {
+        Fbox region;
+        int sector;
+        bool overlap;
+    };
+    xr_vector<AddEntry> adds;
+    xr_vector<HideEntry> hides;
+
+    for (const XMS::Module& m : XMS::Modules())
+    {
+        if (m.disabled || !XMS::ModuleApplies(m))
+            continue;
+
+        string_path ltx_path;
+        xr_sprintf(ltx_path, "%slevels" DELIMITER "%s" DELIMITER "overlay_visuals.ltx", m.root.c_str(), level_name);
+        xr_vector<XMS::IniRecord> records;
+        if (!XMS::ReadIniRecords(ltx_path, records))
+            continue;
+
+        // Records arrive in file order, so a section change closes the entry before it.
+        xr_string section, file, mode, hide;
+        int forced_sector = -1;
+        bool overlap = false;
+        const auto flush = [&]()
+        {
+            if (mode.empty() || XMS::ModeActive(mode.c_str()))
+            {
+                if (!file.empty())
+                    adds.push_back({&m, file, forced_sector});
+                Fvector centre, extent;
+                if (!hide.empty() &&
+                    6 == sscanf(hide.c_str(), "%f,%f,%f,%f,%f,%f", &centre.x, &centre.y, &centre.z,
+                                &extent.x, &extent.y, &extent.z))
+                {
+                    HideEntry entry;
+                    entry.region.setb(centre, extent); // setb takes half-extents
+                    entry.sector = forced_sector;
+                    entry.overlap = overlap;
+                    hides.push_back(entry);
+                }
+            }
+            file.clear();
+            mode.clear();
+            hide.clear();
+            forced_sector = -1;
+            overlap = false;
+        };
+
+        for (const XMS::IniRecord& r : records)
+        {
+            if (r.section != section)
+            {
+                flush();
+                section = r.section;
+            }
+            if (r.key == "file")
+                file = r.value;
+            else if (r.key == "mode")
+                mode = r.value;
+            else if (r.key == "sector")
+                forced_sector = atoi(r.value.c_str());
+            else if (r.key == "hide")
+                hide = r.value;
+            else if (r.key == "overlap")
+                overlap = 0 == xr_strcmp(r.value.c_str(), "true");
+        }
+        flush();
+    }
+
+    u32 hidden = 0;
+    for (const HideEntry& entry : hides)
+        hidden += HideOverlayGeometry(entry.region, entry.overlap, entry.sector);
+
+    u32 attached = 0;
+    for (const AddEntry& entry : adds)
+        attached += AttachOverlayVisual(*entry.module, level_name, entry.file.c_str(), entry.sector) ? 1 : 0;
+
+    if (attached || hidden)
+        Msg("* [XMS] visual overlays on [%s]: %d attached, %d base visual(s) hidden", level_name, attached, hidden);
+}
+
+// Detaches base visuals from their sector so a module can replace a chunk of the
+// level instead of just adding to it. Strict containment by default: an
+// intersection test would take out the whole terrain visual for a small box.
+// `overlap = true` is the opt-in for exactly that case - hide the big piece and
+// ship your own baked replacement next to it.
+u32 CRender::HideOverlayGeometry(const Fbox& region, bool overlap, int forced_sector)
+{
+    auto& dsgraph = get_imm_context();
+    if (dsgraph.Sectors.empty())
+        return 0;
+    if (forced_sector >= 0 && size_t(forced_sector) >= dsgraph.Sectors.size())
+    {
+        Msg("! XMS: hide sector %d is out of range (level has %zu)", forced_sector, dsgraph.Sectors.size());
+        return 0;
+    }
+
+    const size_t first = forced_sector >= 0 ? size_t(forced_sector) : 0;
+    const size_t last = forced_sector >= 0 ? first + 1 : dsgraph.Sectors.size();
+
+    u32 hidden = 0;
+    for (size_t s = first; s < last; ++s)
+    {
+        dxRender_Visual* root = static_cast<CSector*>(dsgraph.get_sector(s))->root();
+        if (!root || root->getType() != MT_HIERRARHY)
+            continue;
+        auto& children = static_cast<FHierrarhyVisual*>(root)->children;
+        for (size_t i = children.size(); i-- > 0;)
+        {
+            const Fbox& box = children[i]->vis.box;
+            if (!(overlap ? region.intersect(box) : region.contains(box)))
+                continue;
+            // The visual itself stays in Visuals and dies with the level; only the
+            // parent link goes, so there is nothing to restore on unload.
+            children.erase(children.begin() + i);
+            ++hidden;
+        }
+    }
+    return hidden;
+}
+
+void CRender::UnloadOverlayVisuals()
+{
+    for (auto& entry : m_overlay_visuals)
+    {
+        // Detach first: the sector root does not own its children, and the visual
+        // graph may already be half torn down by the time this runs.
+        if (entry.parent && entry.parent->getType() == MT_HIERRARHY)
+            std::erase(static_cast<FHierrarhyVisual*>(entry.parent)->children, entry.visual);
+
+        if (entry.visual)
+        {
+            entry.visual->Release();
+            xr_delete(entry.visual);
+        }
+    }
+    m_overlay_visuals.clear();
 }
 
 #if defined(USE_DX11)

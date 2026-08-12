@@ -199,6 +199,18 @@ target_sources_grouped(
 
 target_sources_grouped(
     TARGET xrCore
+    NAME "XMS"
+    FILES
+    XMS/xms_core.cpp
+    XMS/xms_core.h
+    XMS/xms_ltx.cpp
+    XMS/xms_ltx.h
+    XMS/xms_xml.cpp
+    XMS/xms_xml.h
+)
+
+target_sources_grouped(
+    TARGET xrCore
     NAME "FS\\file_stream_reader"
     FILES
     file_stream_reader.cpp

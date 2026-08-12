@@ -168,9 +168,11 @@ Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
 // How many shadow-map faces may render per frame; excess faces keep lighting unshadowed.
-// Per face, exactly as the reference build ships it (its default is 1 as well): one scene
-// pass for the winning face, everything else goes the cheap path. The actor's torch is
-// admitted above the budget. 0 = unlimited (one scene pass per source, stock behavior).
+// The unit is a face, not a lamp: light::Export explodes a shadowed point light into six
+// OMNIPART faces, so a scene-wide value below 6 cannot shadow even one world lamp completely.
+// 0 restores the CoC/1.0/x86 behaviour of shadowing every light, and costs about half the
+// frame rate on a lamp-lit level - measured on a player build, not acceptable as a default.
+// Runtime cvar: raise it or set 0 to trade frame rate for lamp shadows.
 int ps_r__light_shadow_budget = 1;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,

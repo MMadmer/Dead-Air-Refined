@@ -93,6 +93,91 @@ TiXmlNode* TiXmlNode::LinkEndChild(TiXmlNode* node)
     return node;
 }
 
+// ---- XMS mutation API ------------------------------------------------------
+
+bool TiXmlNode::XmsRemoveChild(TiXmlNode* child)
+{
+    if (!child || child->parent != this)
+        return false;
+
+    if (child->next)
+        child->next->prev = child->prev;
+    else
+        lastChild = child->prev;
+    if (child->prev)
+        child->prev->next = child->next;
+    else
+        firstChild = child->next;
+
+    xr_delete(child);
+    return true;
+}
+
+// deep copy without the upstream Clone/CopyTo machinery; elements, text and
+// comments are what game XML actually consists of
+static TiXmlNode* xms_clone_node(const TiXmlNode& source)
+{
+    switch (source.Type())
+    {
+    case TiXmlNode::ELEMENT:
+    {
+        const TiXmlElement* src = source.ToElement();
+        TiXmlElement* copy = xr_new<TiXmlElement>(src->Value());
+        for (const TiXmlAttribute* attr = src->FirstAttribute(); attr; attr = attr->Next())
+            copy->XmsSetAttribute(attr->Name(), attr->Value());
+        for (const TiXmlNode* child = src->FirstChild(); child; child = child->NextSibling())
+            if (TiXmlNode* child_copy = xms_clone_node(*child))
+                copy->LinkEndChild(child_copy);
+        return copy;
+    }
+    case TiXmlNode::TEXT:
+    {
+        TiXmlText* copy = xr_new<TiXmlText>(source.Value());
+        copy->SetCDATA(source.ToText()->CDATA());
+        return copy;
+    }
+    case TiXmlNode::COMMENT: return xr_new<TiXmlComment>(source.Value());
+    default: return 0; // declarations/unknowns are not patch material
+    }
+}
+
+TiXmlNode* TiXmlNode::XmsInsertEndChildClone(const TiXmlNode& source)
+{
+    TiXmlNode* copy = xms_clone_node(source);
+    return copy ? LinkEndChild(copy) : 0;
+}
+
+TiXmlNode* TiXmlNode::XmsInsertBeforeChildClone(TiXmlNode* before, const TiXmlNode& source)
+{
+    if (!before || before->parent != this)
+        return XmsInsertEndChildClone(source);
+    TiXmlNode* copy = xms_clone_node(source);
+    if (!copy)
+        return 0;
+
+    copy->parent = this;
+    copy->prev = before->prev;
+    copy->next = before;
+    if (before->prev)
+        before->prev->next = copy;
+    else
+        firstChild = copy;
+    before->prev = copy;
+    return copy;
+}
+
+void TiXmlElement::XmsSetAttribute(const char* _name, const char* _value)
+{
+    if (TiXmlAttribute* existing = attributeSet.Find(_name))
+    {
+        existing->SetValue(_value);
+        return;
+    }
+    attributeSet.Add(xr_new<TiXmlAttribute>(_name, _value));
+}
+
+// ----------------------------------------------------------------------------
+
 const TiXmlNode* TiXmlNode::FirstChild(const char* _value) const
 {
     const TiXmlNode* node;

@@ -515,6 +515,110 @@
             <options_item entry="r4_enable_tessellation" group="mm_opt_video_adv" depend="vid"/>
         </check_r4_tessellation>
 
+        <cap_detail_height x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_detail_height</text>
+        </cap_detail_height>
+        <cap_r__actor_body x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r__actor_body</text>
+        </cap_r__actor_body>
+        <cap_shadow_map x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_smap_size</text>
+        </cap_shadow_map>
+        <cap_reflections x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_reflections</text>
+        </cap_reflections>
+        <cap_r2_gloss_factor x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r2_gloss_factor</text>
+        </cap_r2_gloss_factor>
+        <cap_r2_ss_shafts x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r2_ss_shafts</text>
+        </cap_r2_ss_shafts>
+        <cap_r2_sun_shafts_value x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r2_shafts_value</text>
+        </cap_r2_sun_shafts_value>
+        <cap_bloom x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_bloom</text>
+        </cap_bloom>
+        <cap_lensdirt x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_lensdirt</text>
+        </cap_lensdirt>
+        <cap_lenswater x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_lenswater</text>
+        </cap_lenswater>
+        <cap_aberration x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_abberation</text>
+        </cap_aberration>
+        <cap_sharp x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_sharp</text>
+        </cap_sharp>
+        <cap_technicolor x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_technicolor</text>
+        </cap_technicolor>
+        <cap_vignette x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_vignette</text>
+        </cap_vignette>
+        <cap_fxaa x="15" y="3" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_fxaa</text>
+        </cap_fxaa>
+        <track_detail_height x="147" y="6" width="188" height="16" step="0.1">
+            <options_item entry="r__detail_height" group="mm_opt_video_adv"/>
+        </track_detail_height>
+        <track_r2_gloss_factor x="147" y="6" width="188" height="16" step="1">
+            <options_item entry="r2_gloss_factor" group="mm_opt_video_adv"/>
+        </track_r2_gloss_factor>
+        <track_r2_sun_shafts_value x="147" y="6" width="188" height="16" step="0.1">
+            <options_item entry="r2_sss_intensity" group="mm_opt_video_adv"/>
+        </track_r2_sun_shafts_value>
+        <track_bloom x="147" y="6" width="188" height="16" step="0.1">
+            <options_item entry="r2_ls_bloom_kernel_scale" group="mm_opt_video_adv"/>
+        </track_bloom>
+        <track_aberration x="147" y="6" width="188" height="16" step="0.1">
+            <options_item entry="r2_aberration_val" group="mm_opt_video_adv"/>
+        </track_aberration>
+        <track_sharp x="147" y="6" width="188" height="16" step="0.1">
+            <options_item entry="r2_lumasharpen" group="mm_opt_video_adv"/>
+        </track_sharp>
+        <check_r__actor_body x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r__actor_body" group="mm_opt_video"/>
+        </check_r__actor_body>
+        <check_reflections x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_reflections" group="mm_opt_video_adv" depend="restart"/>
+        </check_reflections>
+        <check_r2_ss_shafts x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_sss_enable" group="mm_opt_video_adv" depend="vid"/>
+        </check_r2_ss_shafts>
+        <check_lensdirt x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_lensdirt" group="mm_opt_video_adv" depend="vid"/>
+        </check_lensdirt>
+        <check_lenswater x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_lenswater" group="mm_opt_video_adv" depend="vid"/>
+        </check_lenswater>
+        <check_technicolor x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_technicolor" group="mm_opt_video_adv" depend="vid"/>
+        </check_technicolor>
+        <check_vignette x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_vignette" group="mm_opt_video_adv" depend="vid"/>
+        </check_vignette>
+        <check_fxaa x="136" y="0" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="r2_fxaa" group="mm_opt_video_adv"/>
+        </check_fxaa>
+        <combo_shadow_map x="147" y="0" width="188" height="20" list_length="5" always_show_scroll="0">
+            <options_item entry="r2_shadow_map_size" group="mm_opt_video" depend="restart"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+                <e r="170" g="170" b="170"/>
+                <d r="70" g="70" b="70"/>
+            </text_color>
+        </combo_shadow_map>
+
         <btn_to_simply x="338" y="299" width="86" height="24" stretch="1">
             <text align="c" font="letterica16">ui_mm_simply</text>
             <texture>ui_inGame2_button</texture>
@@ -624,6 +728,11 @@
         <cap_check_crosshair x="45" y="3" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_show_crosshair</text>
         </cap_check_crosshair>
+        <check_map_draw x="162" y="3" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="hud_draw_map" group="mm_opt_gameplay"/>
+        </check_map_draw>
+
         <check_crosshair x="162" y="5" width="35" stretch="1" height="29">
 	        <texture>ui_inGame2_checkbox</texture>
             <options_item entry="hud_crosshair" group="mm_opt_gameplay"/>
@@ -743,6 +852,14 @@
 	        <texture>ui_inGame2_checkbox</texture>
             <options_item entry="mouse_invert" group="mm_opt_controls"/>
         </check_mouseinvert>
+
+        <cap_aim_toggle x="176" y="33" width="108" height="24">
+            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_aim_toggle</text>
+        </cap_aim_toggle>
+        <check_aim_toggle x="293" y="30" width="35" stretch="1" height="29">
+            <texture>ui_inGame2_checkbox</texture>
+            <options_item entry="wpn_aim_toggle" group="mm_opt_controls"/>
+        </check_aim_toggle>
 
         <cap_keyboardsetup x="0" y="65" width="424" height="15">
             <texture a="150">ui_inGame2_servers_list_button</texture>

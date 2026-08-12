@@ -49,8 +49,8 @@ public:
     float attenuation2; // Quadratic attenuation
 
     light* omnipart[6];
-    // Set on exported OMNIPART faces: shadow-budget admission is decided per parent so a
-    // point light never renders with a partial cube map.
+    // Set on exported OMNIPART faces. Shadow-budget admission is per face, not per parent;
+    // this back-pointer is what the volume-only-face test in r2_R_lights reads.
     light* omnipart_owner;
     xr_vector<light_indirect> indirect;
     u32 indirect_photons;

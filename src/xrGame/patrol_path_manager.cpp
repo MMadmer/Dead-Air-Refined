@@ -98,6 +98,10 @@ struct CAccessabilityEvaluator
 void CPatrolPathManager::select_point(const Fvector& position, u32& dest_vertex_id)
 {
     VERIFY(m_path && !m_path->vertices().empty());
+
+    // Cleared on every selection so a path that becomes reachable again resumes by itself.
+    m_failed = false;
+
     const CPatrolPath::CVertex* vertex = 0;
     if (!actual() || !m_path->vertex(m_curr_point_index))
     {
@@ -154,13 +158,24 @@ void CPatrolPathManager::select_point(const Fvector& position, u32& dest_vertex_
         }
         default: NODEFAULT;
         }
-        if (!(vertex || show_restrictions(m_object)))
+        if (!vertex)
         {
             // ugly HACK, just because Plecha asked...
-            VERIFY2(vertex || show_restrictions(m_object),
-                make_string("any vertex in patrol path [%s] is inaccessible for object [%s]", m_path_name.c_str(),
-                    m_game_object->cName().c_str()));
+            // Upstream never raised m_failed here, so the movement manager walked on to
+            // CDetailPathManager::set_dest_position with a destination this manager had not
+            // assigned - flt_max straight after reinit - and the assertion killed the session.
+            // The dump runs once: the branch repeats every frame while the path stays closed.
+            static std::atomic<bool> reported{};
+            if (!reported.exchange(true))
+            {
+                show_restrictions(m_object);
+                Msg("! any vertex in patrol path [%s] is inaccessible for object [%s]", m_path_name.c_str(),
+                    m_game_object->cName().c_str());
+            }
+
             dest_vertex_id = m_game_object->ai_location().level_vertex_id();
+            m_dest_position = m_game_object->Position();
+            m_failed = true;
             return;
         }
 

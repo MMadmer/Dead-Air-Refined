@@ -8,6 +8,7 @@
 
 #include "StdAfx.h"
 #include "alife_spawn_registry.h"
+#include "xms_game.h"
 #include "Common/object_broker.h"
 #include "game_base.h"
 #include "ai_space.h"
@@ -156,12 +157,19 @@ void CALifeSpawnRegistry::load(IReader& file_stream, xrGUID* save_guid)
     }
     R_ASSERT2(m_chunk, "Spawn version mismatch - REBUILD SPAWN!");
 
+    // XMS P5: module levels join the graph here; base ids and guid unchanged
+    m_chunk = XmsGame::ComposeGameGraph(m_chunk);
+
     VERIFY(!m_game_graph);
     m_game_graph = xr_new<CGameGraph>(*m_chunk);
     ai().SetGameGraph(m_game_graph);
 
     R_ASSERT2((header().graph_guid() == ai().game_graph().header().guid()) || ignore_save_incompatibility(),
         "Spawn doesn't correspond to the graph : REBUILD SPAWN!");
+
+    // module spawn layers go on top of the untouched base file; the derived
+    // indices below pick the added vertices up automatically
+    xms_compose();
 
     build_story_spawns();
 

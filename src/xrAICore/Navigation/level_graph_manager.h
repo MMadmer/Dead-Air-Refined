@@ -47,6 +47,12 @@ private:
     }
 
 public:
+    // XMS: adopt an already-built heap array (base nodes + overlay appended)
+    CLevelGraphManager(CLevelVertex* owned_nodes, size_t vertex_count)
+        : m_nodes(owned_nodes), m_vertex_count(vertex_count), m_compatibility_mode(true)
+    {
+    }
+
     CLevelGraphManager(IReader* stream, size_t vertex_count, u32 version) : m_vertex_count(vertex_count)
     {
         switch ((xrAI_Versions)version)

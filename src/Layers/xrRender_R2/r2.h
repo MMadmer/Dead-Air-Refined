@@ -23,6 +23,13 @@
 #include "xrCore/Threading/TaskManager.hpp"
 #include "xrCore/FMesh.hpp"
 
+// XMS module descriptor: only referenced by the overlay loader, no need to drag
+// the whole module system header into everything that includes the renderer.
+namespace XMS
+{
+struct Module;
+}
+
 namespace xray::render::RENDER_NAMESPACE
 {
 class CRenderTarget;
@@ -367,6 +374,22 @@ private:
 #if RENDER != R_R2
     void Load3DFluid();
 #endif
+
+    void LoadOverlayVisuals();
+    void UnloadOverlayVisuals();
+    bool AttachOverlayVisual(const XMS::Module& module, pcstr level_name, pcstr rel_file, int forced_sector);
+    u32 HideOverlayGeometry(const Fbox& region, bool overlap, int forced_sector);
+
+    // XMS visual overlays: module-supplied world-space .ogf parented to a sector root.
+    // Same ownership contract as the fluid volumes below - they never enter Visuals,
+    // so unload has to detach and free them explicitly.
+    struct overlay_visual
+    {
+        dxRender_Visual* parent;
+        dxRender_Visual* visual;
+    };
+    xr_vector<overlay_visual> m_overlay_visuals;
+
 #if defined(USE_DX11)
     void Unload3DFluid();
 

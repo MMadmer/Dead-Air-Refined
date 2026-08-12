@@ -23,6 +23,8 @@
 #include <mutex>
 
 constexpr size_t VFS_STANDARD_FILE = std::numeric_limits<size_t>::max();
+
+#include "xrCore/XMS/xms_core.h"
 constexpr u32 VFS_INDEX_CACHE_MAGIC = 0x31494656;
 constexpr u32 VFS_INDEX_CACHE_VERSION = 5;
 constexpr u32 MAX_VFS_INDEX_ENTRIES = 2'000'000;
@@ -1223,6 +1225,10 @@ void CLocatorAPI::_initialize(u32 flags, pcstr target_folder, pcstr fs_name)
 
     CreateLog(nullptr != strstr(Core.Params, "-nolog"));
     xrDebug::OnFilesystemInitialized();
+
+    // XMS modules mount on top of everything fsgame.ltx brought in
+    if (!m_Flags.is(flTargetFolderOnly) && !strstr(Core.Params, "-no_xms"))
+        XMS::InitializeAndMount();
 }
 
 void CLocatorAPI::_destroy()
@@ -1259,6 +1265,11 @@ const CLocatorAPI::file* CLocatorAPI::GetFileDesc(pcstr path)
 {
     auto it = file_find_it(path);
     return it != m_files.end() ? &*it : nullptr;
+}
+
+const CLocatorAPI::file* CLocatorAPI::xms_register(pcstr vpath, u32 size, u32 modif)
+{
+    return Register(vpath, VFS_STANDARD_FILE, 0, 0, size, size, modif);
 }
 
 FileStatus CLocatorAPI::exist(pcstr fn, FSType fsType /*= FSType::Virtual*/)
@@ -1788,7 +1799,12 @@ T* CLocatorAPI::r_open_impl(pcstr path, pcstr _fname)
 
     // OK, analyse
     if (VFS_STANDARD_FILE == desc->vfs)
+    {
+        // XMS overlay entries live under a module folder, not at the registered path
+        if (pcstr xms_phys = XMS::ResolvePhysical(desc->name))
+            xr_strcpy(fname, xms_phys);
         file_from_cache(R, fname, sizeof fname, *desc, source_name);
+    }
     else
         file_from_archive(R, fname, *desc);
 
@@ -2173,6 +2189,8 @@ void CLocatorAPI::rescan_path(pcstr full_path, bool bRecurse)
     }
     bNoRecurse = !bRecurse;
     Recurse(full_path);
+    // re-assert module overlays that the erase pass above dropped
+    XMS::OnRescanPath(full_path);
 }
 
 void CLocatorAPI::rescan_pathes()

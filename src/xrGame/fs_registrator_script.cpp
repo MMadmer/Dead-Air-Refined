@@ -1,5 +1,7 @@
 #include "pch_script.h"
 
+#include <luabind/copy_policy.hpp>
+
 #include "xrCore/LocatorAPI.h"
 
 #include "base_client_classes_wrappers.h"
@@ -105,8 +107,10 @@ public:
     };
     FS_file_list_ex(LPCSTR path, u32 flags, LPCSTR mask);
 
-    u32 Size() { return m_file_items.size(); }
-    FS_item GetAt(u32 idx) { return m_file_items[idx]; }
+    u32 Size() { return u32(m_file_items.size()); }
+    // Answers nil out of range instead of copying an FS_item from past the end of the vector.
+    // Dead Air's own main menu reads GetAt(0) before testing it, which faulted with no saves.
+    FS_item* GetAt(u32 idx) { return idx < m_file_items.size() ? &m_file_items[idx] : nullptr; }
     void Sort(u32 flags);
 };
 
@@ -190,6 +194,7 @@ LPCSTR get_file_age_str(CLocatorAPI* fs, LPCSTR nm)
 void fs_registrator::script_register(lua_State* luaState)
 {
     using namespace luabind;
+    using namespace luabind::policy;
 
     module(luaState)
     [
@@ -202,7 +207,9 @@ void fs_registrator::script_register(lua_State* luaState)
 
         class_<FS_file_list_ex>("FS_file_list_ex")
             .def("Size", &FS_file_list_ex::Size)
-            .def("GetAt", &FS_file_list_ex::GetAt)
+            // copy<0> keeps the old by-value contract: scripts still get their own FS_item,
+            // not a pointer into a list that may outlive them.
+            .def("GetAt", &FS_file_list_ex::GetAt, copy<0>())
             .def("Sort", &FS_file_list_ex::Sort),
 
         class_<FS_file_list>("FS_file_list")

@@ -9,6 +9,10 @@
 #pragma once
 
 #include "script_engine.hpp"
+#include "xrCommon/xr_vector.h"
+#include "xrCore/xrstring.h"
+
+#include <algorithm>
 
 IC bool compare_safe(const luabind::object& o1, const luabind::object& o2)
 {
@@ -40,8 +44,50 @@ protected:
     functor_type m_functor;
     object_type m_object;
 
+    // XMS multicast subscribers. Empty for the overwhelming majority of
+    // slots, so the legacy 0/1-handler fast path stays byte-identical.
+    struct Subscriber
+    {
+        shared_str id;
+        s32 priority{0};
+        functor_type functor;
+        object_type object;
+    };
+    xr_vector<Subscriber> m_subscribers;
+
 private:
     bool empty() const { return !!m_functor.interpreter(); }
+
+    template <typename... Args>
+    void call_subscribers(Args&&... args) const
+    {
+        // index-based: a subscriber may add/remove callbacks while running
+        for (size_t i = 0; i < m_subscribers.size(); ++i)
+        {
+            const Subscriber& sub = m_subscribers[i];
+            if (!sub.functor.is_valid() || !sub.functor.interpreter())
+                continue;
+            try
+            {
+                try
+                {
+                    if (sub.object.is_valid() && sub.object.interpreter())
+                        luabind::call_function<void>(sub.functor, sub.object, args...);
+                    else
+                        luabind::call_function<void>(sub.functor, args...);
+                }
+                process_error catch (std::exception&)
+                {
+                    GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), "", 1);
+                }
+            }
+            catch (...)
+            {
+                // one broken subscriber must not kill the others
+            }
+        }
+    }
+
 public:
     CScriptCallbackEx() {}
     virtual ~CScriptCallbackEx() {}
@@ -58,8 +104,40 @@ public:
             m_functor = callback.m_functor;
         if (callback.m_object.is_valid() && callback.m_object.interpreter())
             m_object = callback.m_object;
+        m_subscribers = callback.m_subscribers;
         return *this;
     }
+
+    // ---- XMS multicast API -------------------------------------------------
+    // The legacy set()/clear() slot keeps its exact semantics; subscribers are
+    // an independent, id-keyed list called after it in priority order.
+
+    void add_subscriber(pcstr id, s32 priority, const functor_type& functor,
+        const object_type& object = object_type())
+    {
+        remove_subscriber(id);
+        Subscriber sub;
+        sub.id = id;
+        sub.priority = priority;
+        sub.functor = functor;
+        sub.object = object;
+        const auto position = std::find_if(m_subscribers.begin(), m_subscribers.end(),
+            [priority](const Subscriber& existing) { return existing.priority > priority; });
+        m_subscribers.insert(position, std::move(sub));
+    }
+
+    bool remove_subscriber(pcstr id)
+    {
+        const auto position = std::find_if(m_subscribers.begin(), m_subscribers.end(),
+            [id](const Subscriber& existing) { return 0 == xr_strcmp(existing.id.c_str(), id); });
+        if (position == m_subscribers.end())
+            return false;
+        m_subscribers.erase(position);
+        return true;
+    }
+
+    void clear_subscribers() { m_subscribers.clear(); }
+    u32 subscriber_count() const { return u32(m_subscribers.size()); }
 
     bool operator==(const CScriptCallbackEx& callback) const
     {
@@ -88,10 +166,15 @@ public:
         new (&m_object) object_type();
     }
 
-    operator unspecified_bool_type() const { return !m_functor.is_valid() ? 0 : &CScriptCallbackEx::empty; }
+    operator unspecified_bool_type() const
+    {
+        return !m_functor.is_valid() && m_subscribers.empty() ? 0 : &CScriptCallbackEx::empty;
+    }
+
     template <typename... Args>
     TResult operator()(Args&&... args) const
     {
+        TResult result = TResult(0);
         try
         {
             try
@@ -102,10 +185,10 @@ public:
                     if (m_object)
                     {
                         VERIFY(m_object.is_valid());
-                        return TResult(
-                            luabind::call_function<TResult>(m_functor, m_object, std::forward<Args>(args)...));
+                        result = TResult(luabind::call_function<TResult>(m_functor, m_object, args...));
                     }
-                    return TResult(luabind::call_function<TResult>(m_functor, std::forward<Args>(args)...));
+                    else
+                        result = TResult(luabind::call_function<TResult>(m_functor, args...));
                 }
             }
             process_error catch (std::exception&)
@@ -117,38 +200,15 @@ public:
         {
             const_cast<CScriptCallbackEx<TResult>*>(this)->clear();
         }
-        return TResult(0);
+        if (!m_subscribers.empty())
+            call_subscribers(args...);
+        return result;
     }
 
     template <typename... Args>
     TResult operator()(Args&&... args)
     {
-        try
-        {
-            try
-            {
-                if (m_functor)
-                {
-                    VERIFY(m_functor.is_valid());
-                    if (m_object)
-                    {
-                        VERIFY(m_object.is_valid());
-                        return TResult(
-                            luabind::call_function<TResult>(m_functor, m_object, std::forward<Args>(args)...));
-                    }
-                    return TResult(luabind::call_function<TResult>(m_functor, std::forward<Args>(args)...));
-                }
-            }
-            process_error catch (std::exception&)
-            {
-                GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), "", 1);
-            }
-        }
-        catch (...)
-        {
-            const_cast<CScriptCallbackEx<TResult>*>(this)->clear();
-        }
-        return TResult(0);
+        return const_cast<const CScriptCallbackEx*>(this)->operator()(args...);
     }
 };
 
@@ -166,10 +226,10 @@ void CScriptCallbackEx<void>::operator()(Args&&... args) const
                 if (m_object)
                 {
                     VERIFY(m_object.is_valid());
-                    luabind::call_function<void>(m_functor, m_object, std::forward<Args>(args)...);
+                    luabind::call_function<void>(m_functor, m_object, args...);
                 }
                 else
-                    luabind::call_function<void>(m_functor, std::forward<Args>(args)...);
+                    luabind::call_function<void>(m_functor, args...);
             }
         }
         process_error catch (std::exception&) { GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), "", 1); }
@@ -178,32 +238,13 @@ void CScriptCallbackEx<void>::operator()(Args&&... args) const
     {
         const_cast<CScriptCallbackEx<void>*>(this)->clear();
     }
+    if (!m_subscribers.empty())
+        call_subscribers(args...);
 }
 
 template <>
 template <typename... Args>
 void CScriptCallbackEx<void>::operator()(Args&&... args)
 {
-    try
-    {
-        try
-        {
-            if (m_functor)
-            {
-                VERIFY(m_functor.is_valid());
-                if (m_object)
-                {
-                    VERIFY(m_object.is_valid());
-                    luabind::call_function<void>(m_functor, m_object, std::forward<Args>(args)...);
-                }
-                else
-                    luabind::call_function<void>(m_functor, std::forward<Args>(args)...);
-            }
-        }
-        process_error catch (std::exception&) { GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), "", 1); }
-    }
-    catch (...)
-    {
-        const_cast<CScriptCallbackEx<void>*>(this)->clear();
-    }
+    const_cast<const CScriptCallbackEx<void>*>(this)->operator()(args...);
 }

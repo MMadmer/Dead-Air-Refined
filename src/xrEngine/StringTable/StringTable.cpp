@@ -5,6 +5,7 @@
 
 #include "xrCore/XML/XMLDocument.hpp"
 #include "xrCore/Threading/ParallelForEach.hpp"
+#include "xrCore/XMS/xms_core.h"
 
 constexpr pcstr OPENXRAY_XML = "openxray.xml";
 
@@ -107,7 +108,9 @@ void CStringTable::Init()
     xr_sprintf(cacheName, "string-table-%s.cache", pData->m_sLanguage.c_str());
     string_path cachePath;
     FS.update_path(cachePath, "$app_data_root$", cacheName);
-    const u32 signature = CalculateCacheSignature(fset, pData->m_sLanguage.c_str());
+    // module set participates in the cache identity: same files, different
+    // module order = different merged table
+    const u32 signature = CalculateCacheSignature(fset, pData->m_sLanguage.c_str()) ^ XMS::CompositionHash();
 
     if (!LoadCache(cachePath, signature, pData->m_StringTable))
     {
@@ -119,6 +122,27 @@ void CStringTable::Init()
             _splitpath(file.name.c_str(), nullptr, nullptr, name, extension);
             xr_strcat(name, extension);
             files.push_back({ name, {} });
+        }
+
+        // fold order: base layer first, then modules by load order; overrides
+        // land by layer priority instead of bare filename alphabetics
+        if (XMS::Active())
+        {
+            // pData is a class static - no capture needed
+            const auto layer_of = [](const LocalizationFile& f) -> u16
+            {
+                string_path full;
+                xr_sprintf(full, "text" DELIMITER "%s" DELIMITER "%s", pData->m_sLanguage.c_str(), f.name.c_str());
+                string_path resolved;
+                FS.update_path(resolved, "$game_config$", full);
+                xr_strlwr(resolved);
+                if (const auto* desc = FS.GetFileDesc(resolved))
+                    if (pcstr phys = XMS::ResolvePhysical(desc->name))
+                        return XMS::LayerOfPath(phys);
+                return 0;
+            };
+            std::stable_sort(files.begin(), files.end(),
+                [&layer_of](const LocalizationFile& a, const LocalizationFile& b) { return layer_of(a) < layer_of(b); });
         }
 
         xr_parallel_for_each(files, [this](LocalizationFile& file)

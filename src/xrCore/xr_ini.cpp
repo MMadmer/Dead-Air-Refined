@@ -2,6 +2,7 @@
 
 #include "FileSystem.h"
 #include "xrCore/xr_token.h"
+#include "xrCore/XMS/xms_core.h"
 
 XRCORE_API CInifile const* pSettings = nullptr;
 XRCORE_API CInifile const* pSettingsAuth = nullptr;
@@ -366,7 +367,9 @@ CInifile::CInifile(pcstr fileName, bool readOnly, bool loadAtStart, bool saveAtE
             const xr_string path = EFS_Utils::ExtractFilePath(m_file_name);
             if (sect_count)
                 DATA.reserve(sect_count);
+            XMS::PushLtxFile(fileName);
             Load(R, path.c_str(), allow_include_func);
+            XMS::PopLtxFile();
             FS.r_close(R);
         }
     }
@@ -397,13 +400,62 @@ static void insert_item(CInifile::Sect* tgt, const CInifile::Item& I)
         if (existing != tgt->LineIndex.end())
         {
             tgt->Data[existing->second].second = I.second;
+            if (!tgt->XmsItemLayers.empty())
+                tgt->XmsItemLayers[existing->second] = tgt->xms_layer;
             return;
         }
     }
 
     tgt->Data.push_back(I);
+    // keep the per-item layer mirror in sync once a merge materialized it
+    if (!tgt->XmsItemLayers.empty())
+        tgt->XmsItemLayers.push_back(tgt->xms_layer);
     if (I.first)
         tgt->LineIndex.emplace(tgt->Data.back().first.c_str(), static_cast<u32>(tgt->Data.size() - 1));
+}
+
+// Cross-layer section merge: additive keys append, colliding keys resolve by
+// layer priority, every resolution lands in the XMS ledger. Consumes src.
+static void xms_merge_section(CInifile::Sect* dst, CInifile::Sect* src)
+{
+    const u16 src_layer = src->xms_layer;
+    if (dst->XmsItemLayers.empty())
+        dst->XmsItemLayers.assign(dst->Data.size(), dst->xms_layer);
+
+    string512 subject, loser, winner;
+    for (const CInifile::Item& item : src->Data)
+    {
+        if (!item.first)
+            continue;
+        const auto found = dst->LineIndex.find(item.first.c_str());
+        if (found == dst->LineIndex.end())
+        {
+            dst->Data.push_back(item);
+            dst->XmsItemLayers.push_back(src_layer);
+            dst->LineIndex.emplace(dst->Data.back().first.c_str(), static_cast<u32>(dst->Data.size() - 1));
+            continue;
+        }
+        const u32 index = found->second;
+        const u16 old_layer = dst->XmsItemLayers[index];
+        xr_sprintf(subject, "%s.%s", dst->Name.c_str(), item.first.c_str());
+        if (src_layer >= old_layer)
+        {
+            xr_sprintf(loser, "layer %u = %s", u32(old_layer),
+                dst->Data[index].second.c_str() ? dst->Data[index].second.c_str() : "");
+            xr_sprintf(winner, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
+            dst->Data[index].second = item.second;
+            dst->XmsItemLayers[index] = src_layer;
+        }
+        else
+        {
+            xr_sprintf(loser, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
+            xr_sprintf(winner, "layer %u = %s", u32(old_layer),
+                dst->Data[index].second.c_str() ? dst->Data[index].second.c_str() : "");
+        }
+        XMS::AddConflict(XMS::ConflictKind::LtxKey, subject, loser, winner);
+    }
+    dst->xms_layer = std::max(dst->xms_layer, src_layer);
+    xr_delete(src);
 }
 
 void CInifile::insert_section(Sect* section)
@@ -417,9 +469,20 @@ void CInifile::insert_section(Sect* section)
         return xr_strcmp(left.first.c_str(), right.first.c_str()) < 0;
     });
     section->rebuild_index();
+    section->xms_layer = XMS::CurrentLtxLayer();
 
-    if (m_sectionIndex.find(section->Name.c_str()) != m_sectionIndex.end())
-        xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", section->Name.c_str());
+    if (Sect* existing = find_section(section->Name.c_str()))
+    {
+        // same layer = a genuine data bug, keep the historic hard stop;
+        // different layers = the XMS cross-mod merge path
+        if (!XMS::LtxMergeEnabled() || existing->xms_layer == section->xms_layer)
+            xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", section->Name.c_str());
+        else
+        {
+            xms_merge_section(existing, section);
+            return;
+        }
+    }
 
     const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
     DATA.insert(position, section);
@@ -517,7 +580,9 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
                         }
 #endif
                         R_ASSERT3(I, "Can't find include file:", name);
+                        XMS::PushLtxFile(_fn);
                         Load(I, inc_path, allow_include_func);
+                        XMS::PopLtxFile();
                         FS.r_close(I);
                     }
                 };
@@ -1036,10 +1101,133 @@ void CInifile::w_string(pcstr S, pcstr L, pcstr V, pcstr comment)
     else
     {
         const auto position = std::lower_bound(data.Data.begin(), data.Data.end(), I.first.c_str(), item_pred);
+        // keep the XMS layer mirror aligned with the shifted indices
+        if (!data.XmsItemLayers.empty())
+            data.XmsItemLayers.insert(data.XmsItemLayers.begin() + (position - data.Data.begin()), data.xms_layer);
         data.Data.insert(position, I);
         data.rebuild_index();
     }
 }
+
+// ---- XMS patch/overlay API -------------------------------------------------
+
+bool CInifile::xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value)
+{
+    Sect* section = find_section(S);
+    if (!section)
+    {
+        section = xr_new<Sect>();
+        section->Name = S;
+        section->xms_layer = XMS::CurrentLtxLayer();
+        const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
+        DATA.insert(position, section);
+        m_sectionIndex.emplace(section->Name.c_str(), section);
+    }
+    const auto existing = section->LineIndex.find(L);
+    if (existing != section->LineIndex.end())
+    {
+        if (old_value)
+            *old_value = section->Data[existing->second].second;
+        section->Data[existing->second].second = V && V[0] ? V : nullptr;
+        if (!section->XmsItemLayers.empty())
+            section->XmsItemLayers[existing->second] = XMS::CurrentLtxLayer();
+        return true;
+    }
+    Item item;
+    item.first = L;
+    item.second = V && V[0] ? V : nullptr;
+    section->Data.push_back(item);
+    if (!section->XmsItemLayers.empty())
+        section->XmsItemLayers.push_back(XMS::CurrentLtxLayer());
+    section->LineIndex.emplace(section->Data.back().first.c_str(), static_cast<u32>(section->Data.size() - 1));
+    return false;
+}
+
+bool CInifile::xms_remove_line(pcstr S, pcstr L)
+{
+    Sect* section = find_section(S);
+    if (!section)
+        return false;
+    const auto existing = section->LineIndex.find(L);
+    if (existing == section->LineIndex.end())
+        return false;
+    const u32 index = existing->second;
+    section->Data.erase(section->Data.begin() + index);
+    if (!section->XmsItemLayers.empty())
+        section->XmsItemLayers.erase(section->XmsItemLayers.begin() + index);
+    section->rebuild_index();
+    return true;
+}
+
+bool CInifile::xms_remove_section(pcstr S)
+{
+    Sect* section = find_section(S);
+    if (!section)
+        return false;
+    m_sectionIndex.erase(section->Name.c_str());
+    const auto it = std::find(DATA.begin(), DATA.end(), section);
+    if (it != DATA.end())
+        DATA.erase(it);
+    xr_delete(section);
+    return true;
+}
+
+bool CInifile::xms_create_section(pcstr S, pcstr parents_csv)
+{
+    if (section_exist(S))
+        return true;
+    Sect* section = xr_new<Sect>();
+    section->Name = S;
+    section->xms_layer = XMS::CurrentLtxLayer();
+    if (parents_csv && parents_csv[0])
+    {
+        const u32 count = _GetItemCount(parents_csv);
+        for (u32 k = 0; k < count; ++k)
+        {
+            string512 parent;
+            _GetItem(parents_csv, k, parent);
+            if (!section_exist(parent))
+            {
+                Msg("! XMS: [%s] cannot inherit missing section [%s]", S, parent);
+                xr_delete(section);
+                return false;
+            }
+            for (const Item& item : r_section(parent).Data)
+                insert_item(section, item);
+        }
+    }
+    const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
+    DATA.insert(position, section);
+    m_sectionIndex.emplace(section->Name.c_str(), section);
+    return true;
+}
+
+void CInifile::xms_load_overlay(pcstr physical_path)
+{
+    FILE* f = fopen(physical_path, "rb");
+    if (!f)
+        return;
+    fseek(f, 0, SEEK_END);
+    const long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (len <= 0)
+    {
+        fclose(f);
+        return;
+    }
+    char* buffer = xr_alloc<char>(size_t(len) + 1);
+    const size_t got = fread(buffer, 1, size_t(len), f);
+    fclose(f);
+    buffer[got] = 0;
+
+    const xr_string dir = EFS_Utils::ExtractFilePath(physical_path);
+    IReader reader(buffer, got);
+    XMS::PushLtxFile(physical_path);
+    Load(&reader, dir.c_str(), nullptr);
+    XMS::PopLtxFile();
+    xr_free(buffer);
+}
+
 void CInifile::w_u8(pcstr S, pcstr L, u8 V, pcstr comment)
 {
     string128 temp;

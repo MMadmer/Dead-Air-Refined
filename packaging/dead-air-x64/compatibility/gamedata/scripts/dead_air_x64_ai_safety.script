@@ -17,11 +17,16 @@ local function send_to_nearest_accessible_vertex(npc, vertex_id, caller)
 		return original_send_to_nearest_accessible_vertex(npc, vertex_id, caller)
 	end
 
-	local nearest_position = vector()
-	local nearest_vertex_id = npc:accessible_nearest(npc:position(), nearest_position)
-	if nearest_vertex_id and level.valid_vertex_id(nearest_vertex_id) then
-		npc:set_dest_level_vertex_id(nearest_vertex_id)
-		return nearest_vertex_id
+	-- accessible_nearest refuses an already accessible position and logs an engine error,
+	-- so ask for it only when the npc really stands outside its restrictions
+	local position = npc:position()
+	if not npc:accessible(position) then
+		local nearest_position = vector()
+		local nearest_vertex_id = npc:accessible_nearest(position, nearest_position)
+		if nearest_vertex_id and level.valid_vertex_id(nearest_vertex_id) then
+			npc:set_dest_level_vertex_id(nearest_vertex_id)
+			return nearest_vertex_id
+		end
 	end
 
 	local current_vertex_id = npc:level_vertex_id()

@@ -1144,6 +1144,10 @@ target_sources(xrGame PRIVATE
     server_entity_wrapper.cpp
     server_entity_wrapper.h
     server_entity_wrapper_inline.h
+    xms_game.cpp
+    xms_game.h
+    xms_graph_composer.cpp
+    xms_spawn_composer.cpp
     setup_manager.h
     setup_manager_inline.h
     ShootingObject.cpp

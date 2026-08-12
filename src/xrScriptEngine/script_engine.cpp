@@ -903,9 +903,14 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
         process_file_if_exists(GlobalNamespace, false);
         m_reload_modules = save;
     }
+    // XMS bootstrap needs the base libraries opened above; export_all is too early
+    if (g_xms_on_init)
+        g_xms_on_init(lua());
     m_stack_level = lua_gettop(lua());
     setvbuf(stderr, g_ca_stdout, _IOFBF, sizeof(g_ca_stdout));
 }
+
+void (*CScriptEngine::g_xms_on_init)(lua_State*) = nullptr;
 
 void CScriptEngine::remove_script_process(const ScriptProcessor& process_id)
 {

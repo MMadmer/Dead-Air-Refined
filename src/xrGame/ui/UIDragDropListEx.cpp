@@ -678,12 +678,12 @@ bool CUICellContainer::AddSimilar(CUICellItem* itm)
     if (iitem && !iitem->CanStack())
         return false;
 
+    // Not gated on g_inv_highlight_equipped: grouping an equipped item with a bag copy lets
+    // PopChild swap their m_pData, which trades the two items' identities.
     if (iitem && iitem->m_pInventory)
     {
-        if (g_inv_highlight_equipped)
-            if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
-                return false;
-
+        if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
+            return false;
     }
     //-Alundaio
 
@@ -713,10 +713,8 @@ CUICellItem* CUICellContainer::FindSimilar(CUICellItem* itm)
 
         if (iitem && iitem->m_pInventory)
         {
-            if (g_inv_highlight_equipped)
-                if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
-                    continue;
-
+            if (iitem->m_pInventory->ItemFromSlot(iitem->BaseSlot()) == iitem)
+                continue;
         }
         //-Alundaio
 

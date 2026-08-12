@@ -21,6 +21,7 @@
 #include "saved_game_wrapper.h"
 #include "save_extension_container.h"
 #include "save_extension_gameplay.h"
+#include "xms_game.h"
 #include "save_transaction_marker.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCore/Threading/ThreadUtil.h"
@@ -2148,6 +2149,32 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
     graph().on_load();
     objects().load(source);
 
+    // XMS: when the loader skipped objects of removed modules, their children
+    // reference missing parent ids - drop those subtrees before registration
+    if (XmsGame::SkippedObjectCount())
+    {
+        auto& object_map = objects().objects();
+        u32 pruned = 0;
+        for (bool removed_any = true; removed_any;)
+        {
+            removed_any = false;
+            for (auto it = object_map.begin(); it != object_map.end(); ++it)
+            {
+                CSE_ALifeDynamicObject* object = it->second;
+                if (object->ID_Parent == 0xffff || object_map.find(object->ID_Parent) != object_map.end())
+                    continue;
+                CSE_Abstract* abstract = object;
+                F_entity_Destroy(abstract);
+                object_map.erase(it);
+                removed_any = true;
+                ++pruned;
+                break; // iterator invalidated
+            }
+        }
+        if (pruned)
+            Msg("! XMS: pruned %u child object(s) of skipped parents", pruned);
+    }
+
     VERIFY(can_register_objects());
     can_register_objects(false);
 
@@ -2382,6 +2409,8 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     reload(m_section);
 
     SaveExtensionGameplay::stage_chunks(loadedExtensionChunks);
+    // XMS: module manifest diff + per-module blob snapshot
+    XmsGame::OnSnapshotLoaded(loadedExtensionChunks);
     SaveExtensionContainer::set_loaded_chunks(std::move(loadedExtensionChunks));
 
     const u64 effectiveSaveId = metadata.protectedFormat ||

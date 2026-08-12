@@ -8,6 +8,7 @@
 
 #include "StdAfx.h"
 #include "alife_object_registry.h"
+#include "xms_game.h"
 #include "ai_debug.h"
 #include "xrServerEntities/xrMessages.h"
 #include "xrServer_Objects_ALife_Items.h"
@@ -369,9 +370,20 @@ CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream, N
         Msg("Loading object %s [%d]b", s_name, packet.B.count);
     }
 #endif
-    // create entity
-    CSE_Abstract* tpSE_Abstract = F_entity_Create(s_name);
-    R_ASSERT2(tpSE_Abstract, "Can't create entity.");
+    // XMS: an object whose section vanished (its module was removed) is
+    // skipped instead of killing the load; the u16 length prefixes keep the
+    // stream framing intact
+    const bool known_section = pSettings->section_exist(s_name) && pSettings->line_exist(s_name, "class");
+    CSE_Abstract* tpSE_Abstract = known_section ? F_entity_Create(s_name, true) : nullptr;
+    if (!tpSE_Abstract)
+    {
+        XmsGame::NoteSkippedObject(s_name);
+        const u32 update_size = file_stream.r_u16();
+        CHECK_OR_EXIT(update_size < NET_PacketSizeLimit,
+            make_string("Invalid update packet size: %u", update_size));
+        file_stream.advance(update_size);
+        return nullptr;
+    }
     CSE_ALifeDynamicObject* tpALifeDynamicObject = smart_cast<CSE_ALifeDynamicObject*>(tpSE_Abstract);
     R_ASSERT2(tpALifeDynamicObject, "Non-ALife object in the saved game!");
     tpALifeDynamicObject->Spawn_Read(packet);
@@ -402,11 +414,15 @@ void CALifeObjectRegistry::load(IReader& file_stream)
     u32 count = file_stream.r_u32();
     // Reuse one packet to avoid clearing 16 KiB for every loaded object.
     NET_Packet loadPacket;
+    XmsGame::ResetSkippedObjects();
     for (u32 index = 0; index < count; ++index)
     {
         CSE_ALifeDynamicObject* object = get_object(file_stream, loadPacket);
-        add(object);
+        if (object)
+            add(object);
     }
 
-    Msg("* %d objects are successfully loaded", count);
+    if (const u32 skipped = XmsGame::SkippedObjectCount())
+        Msg("! XMS: %u of %u saved object(s) skipped (their modules are not installed)", skipped, count);
+    Msg("* %d objects are successfully loaded", count - XmsGame::SkippedObjectCount());
 }

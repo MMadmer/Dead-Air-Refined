@@ -46,7 +46,10 @@ IC CGameLevelCrossTable::~CGameLevelCrossTable()
 
 IC const CGameLevelCrossTable::CCell& CGameLevelCrossTable::vertex(u32 level_vertex_id) const
 {
-    VERIFY(level_vertex_id < header().level_vertex_count());
+    // XMS ai-map overlays append nodes past the compiled table; clamping to
+    // cell 0 beats reading out of bounds (also guards corrupt data)
+    if (level_vertex_id >= header().level_vertex_count())
+        return (m_tpaCrossTable[0]);
     return (m_tpaCrossTable[level_vertex_id]);
 }
 

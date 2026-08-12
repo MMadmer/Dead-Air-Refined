@@ -229,6 +229,8 @@ public:
     //инициализация свойств присоединенных аддонов
     virtual void InitAddons();
 
+    void on_b_hud_detach() override;
+
     //для отоброажения иконок апгрейдов в интерфейсе
     int GetScopeX() { return pSettings->r_s32(m_scopes[m_cur_scope], "scope_x"); }
     int GetScopeY() { return pSettings->r_s32(m_scopes[m_cur_scope], "scope_y"); }
@@ -526,6 +528,29 @@ public:
     using SCOPES_VECTOR = xr_vector<shared_str>;
     SCOPES_VECTOR m_scopes;
     u8 m_cur_scope;
+
+    // HUD bones driven by the scope keys, resolved from the ltx once: UpdateHUDAddonsVisibility
+    // runs every frame, and set_bone_visible takes a shared_str, so parsing there would intern a
+    // string per bone per frame. Parallel to m_scopes, rebuilt when an upgrade grows that list.
+    struct SScopeBones
+    {
+        xr_vector<shared_str> hide;
+        xr_vector<shared_str> show;
+    };
+
+    shared_str m_scopes_hide_bone;
+    xr_vector<SScopeBones> m_scope_bones;
+    bool m_scope_bones_used{};
+    // Last applied state, so the per-frame path costs three comparisons.
+    const void* m_scope_bones_target{};
+    u8 m_scope_bones_scope{ u8(-1) };
+    bool m_scope_bones_attached{};
+
+    void CacheScopeBones();
+    void UpdateScopeBonesVisibility();
+    void ResetScopeBonesVisibility();
+    void ShowScopeBones();
+    void SetScopeBoneVisible(const shared_str& bone_name, BOOL visible);
 
     CWeaponAmmo* m_pCurrentAmmo;
     u8 m_ammoType;

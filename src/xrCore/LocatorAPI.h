@@ -237,6 +237,10 @@ public:
     // For registered files only
     const file* GetFileDesc(pcstr path);
 
+    // XMS overlay: registers a virtual path whose bytes live elsewhere on disk
+    // (XMS::ResolvePhysical supplies the real location on open).
+    const file* xms_register(pcstr vpath, u32 size, u32 modif);
+
     FileStatus exist(pcstr N, FSType fsType = FSType::Virtual);
     FileStatus exist(pcstr path, pcstr name, FSType fsType = FSType::Virtual);
     FileStatus exist(string_path& fn, pcstr path, pcstr name, FSType fsType = FSType::Virtual);

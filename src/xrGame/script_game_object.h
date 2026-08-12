@@ -437,6 +437,14 @@ public:
     void SetCallback(GameObject::ECallbackType type);
     void ClearCallbacks();
 
+    // XMS multicast callbacks: id-keyed subscribers, independent of the
+    // legacy single set_callback slot
+    void AddCallback(GameObject::ECallbackType type, pcstr id, const luabind::functor<void>& functor);
+    void AddCallback(GameObject::ECallbackType type, pcstr id, const luabind::functor<void>& functor, s32 priority);
+    void AddCallback(GameObject::ECallbackType type, pcstr id, const luabind::functor<void>& functor, s32 priority,
+        const luabind::adl::object& object);
+    void RemoveCallback(GameObject::ECallbackType type, pcstr id);
+
     void set_patrol_extrapolate_callback(const luabind::functor<bool>& functor);
     void set_patrol_extrapolate_callback(const luabind::functor<bool>& functor, const luabind::adl::object& object);
     void set_patrol_extrapolate_callback();

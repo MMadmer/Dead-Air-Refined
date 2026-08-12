@@ -357,13 +357,16 @@ void CWeaponKnife::switch2_Attacking(u32 state)
     if (IsPending())
         return;
 
+    // No mix-in: the reference starts the swing at frame 0. Blending it in from idle both
+    // truncates the visible part of the strike and stacks blends on the item model, whose
+    // root bone is overwritten while attached to the hands.
     if (state == eFire)
-        PlayHUDMotion("anm_attack", "anim_shoot1_start", TRUE, this, state);
+        PlayHUDMotion("anm_attack", "anim_shoot1_start", FALSE, this, state);
     else // eFire2
-        PlayHUDMotion("anm_attack2", "anim_shoot2_start", TRUE, this, state);
+        PlayHUDMotion("anm_attack2", "anim_shoot2_start", FALSE, this, state);
 
     // XXX: could check it once at initialization stage (could use something like CHudItem::isHUDAnimationExist())
-    attackMotionMarksAvailable = !m_current_motion_def->marks.empty();
+    attackMotionMarksAvailable = m_current_motion_def && !m_current_motion_def->marks.empty();
     attackStarted = true;
     SetPending(TRUE);
 }

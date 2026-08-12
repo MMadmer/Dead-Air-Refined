@@ -62,15 +62,17 @@ void CHUDManager::Render_First(u32 context_id)
 {
     ZoneScoped;
 
-    if (!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2 | HUD_DRAW_RT2))
-        return;
+    // Gates match Render_Actor_Body in the reference: this entry point no longer draws the
+    // weapon HUD, so the psHUD_Flags mask it used to share does not apply. HUD_WEAPON is not
+    // in the engine default mask and HUD_WEAPON_RT clears while leaning, which switched the
+    // body off on a stock profile; HUDview() adds focus and holder checks for the same reason.
     if (0 == pUIGame)
         return;
     IGameObject* O = g_pGameLevel->CurrentViewEntity();
     if (0 == O)
         return;
     CActor* A = smart_cast<CActor*>(O);
-    if (!A || !A->HUDview() || (A->MovingState() & mcClimb))
+    if (!A || !A->g_Alive() || A->active_cam() != eacFirstEye || (A->MovingState() & mcClimb))
         return;
 
     // R1 keeps the actor hidden and renders only its shadow; newer renderers draw the first-person body.

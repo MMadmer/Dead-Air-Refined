@@ -374,6 +374,11 @@ void light::Export(light_Package& package)
                 L->omnipart_owner = this;
                 L->set_type(IRender_Light::OMNIPART);
                 L->set_shadow(shadowEnabled);
+                // The shadow budget reads this off the exported face, not the owner, so a
+                // privileged source has to hand it down or its privilege does nothing. Note
+                // that a privileged point light then holds six slots, none of them counted
+                // against a positive budget.
+                L->flags.bNeverDemote = flags.bNeverDemote;
                 L->set_position(position);
                 L->set_rotation(cmDir[f], R);
                 L->set_cone(PI_DIV_2);

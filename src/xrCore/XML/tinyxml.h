@@ -575,6 +575,13 @@ public:
 
     TiXmlNode* LinkEndChild(TiXmlNode* addThis);
 
+    // XMS: minimal mutation API for module XML patches (the vendored fork
+    // dropped the upstream copy-insert/remove family)
+    bool XmsRemoveChild(TiXmlNode* child); // unlink + delete; false when not a child
+    TiXmlNode* XmsInsertEndChildClone(const TiXmlNode& source); // deep copy as last child
+    // deep copy of 'source' inserted right before 'before' (must be a child)
+    TiXmlNode* XmsInsertBeforeChildClone(TiXmlNode* before, const TiXmlNode& source);
+
     /// Navigate to a sibling node.
     const TiXmlNode* PreviousSibling() const { return prev; }
     TiXmlNode* PreviousSibling() { return prev; }
@@ -990,6 +997,9 @@ public:
         return attributeSet.First();
     } ///< Access the first attribute in this element.
     TiXmlAttribute* FirstAttribute() { return attributeSet.First(); }
+
+    // XMS: set or replace an attribute value
+    void XmsSetAttribute(const char* _name, const char* _value);
     /** Convenience function for easy access to the text inside an element. Although easy
         and concise, GetText() is limited compared to getting the TiXmlText child
         and accessing it directly.

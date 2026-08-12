@@ -88,8 +88,7 @@ bool CUIInventoryCellItem::EqualTo(CUICellItem* itm)
     {
         return false;
     }
-    if (object()->IsUsingCondition() &&
-        !fsimilar(object()->GetCondition(), ci->object()->GetCondition(), 0.01f))
+    if (!fsimilar(object()->GetCondition(), ci->object()->GetCondition(), 0.01f))
     {
         return false;
     }

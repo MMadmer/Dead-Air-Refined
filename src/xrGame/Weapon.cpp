@@ -1727,11 +1727,159 @@ bool CWeapon::GrenadeLauncherAttachable() { return get_GrenadeLauncherStatus() =
 bool CWeapon::ScopeAttachable() { return get_ScopeStatus() == ALife::eAddonAttachable; }
 bool CWeapon::SilencerAttachable() { return get_SilencerStatus() == ALife::eAddonAttachable; }
 
+// Bone names reach LL_BoneID by interned pointer, and the OGF loader lowercases every name it
+// registers, so a value spelled with capitals would silently never match. Spaces are folded into
+// the comma separator _GetItem defaults to, which is also the form the module system composes.
+static void read_scope_bone_list(const shared_str& section, pcstr key, xr_vector<shared_str>& dest)
+{
+    dest.clear();
+    if (!section.size() || !pSettings->line_exist(section.c_str(), key))
+        return;
+
+    string4096 list;
+    xr_strcpy(list, pSettings->r_string(section.c_str(), key));
+    for (char* c = list; *c; ++c)
+        if (*c == ' ' || *c == '\t')
+            *c = ',';
+
+    const int count = _GetItemCount(list);
+    dest.reserve(size_t(count));
+    for (int i = 0; i < count; ++i)
+    {
+        string128 bone;
+        _GetItem(list, i, bone);
+        if (xr_strlen(bone))
+            dest.emplace_back(xr_strlwr(bone));
+    }
+}
+
+void CWeapon::CacheScopeBones()
+{
+    m_scopes_hide_bone = nullptr;
+    m_scope_bones.clear();
+    m_scope_bones_used = false;
+
+    if (pSettings->line_exist(cNameSect(), "scopes_hide_bone"))
+    {
+        string128 bone;
+        xr_strcpy(bone, pSettings->r_string(cNameSect(), "scopes_hide_bone"));
+        m_scopes_hide_bone = xr_strlwr(bone);
+        m_scope_bones_used = m_scopes_hide_bone.size() != 0;
+    }
+
+    m_scope_bones.resize(m_scopes.size());
+    for (size_t i = 0; i < m_scopes.size(); ++i)
+    {
+        read_scope_bone_list(m_scopes[i], "scope_hide_bones", m_scope_bones[i].hide);
+        read_scope_bone_list(m_scopes[i], "scope_show_bones", m_scope_bones[i].show);
+        m_scope_bones_used = m_scope_bones_used || !m_scope_bones[i].hide.empty() || !m_scope_bones[i].show.empty();
+    }
+}
+
+void CWeapon::UpdateScopeBonesVisibility()
+{
+    // An upgrade can append to m_scopes after Load, so the cache follows its size.
+    if (m_scope_bones.size() != m_scopes.size())
+        CacheScopeBones();
+
+    if (!m_scope_bones_used)
+        return;
+
+    attachable_hud_item* const hud_item = HudItemData();
+    if (!hud_item)
+        return;
+
+    // The raw status, not ScopeAttachable(): get_ScopeStatus() reports a broken scope mount as
+    // disabled, which would freeze the bones in whatever state the last scope left them.
+    if (m_eScopeStatus != ALife::eAddonAttachable)
+        return;
+
+    const bool attached = !!IsScopeAttached();
+    if (m_scope_bones_target == hud_item && m_scope_bones_scope == m_cur_scope &&
+        m_scope_bones_attached == attached)
+        return;
+
+    m_scope_bones_target = hud_item;
+    m_scope_bones_scope = m_cur_scope;
+    m_scope_bones_attached = attached;
+
+    // Hiding is sticky - an invisible bone keeps a zeroed transform and is never recomputed - and
+    // DetachScope resets m_cur_scope, so start from the model default every time instead of
+    // trying to undo the previous scope's rules.
+    ShowScopeBones();
+
+    if (attached)
+    {
+        SetScopeBoneVisible(m_scopes_hide_bone, FALSE);
+        if (m_cur_scope < m_scope_bones.size())
+            for (const shared_str& bone : m_scope_bones[m_cur_scope].hide)
+                SetScopeBoneVisible(bone, FALSE);
+    }
+    else if (m_cur_scope < m_scope_bones.size())
+    {
+        for (const shared_str& bone : m_scope_bones[m_cur_scope].show)
+            SetScopeBoneVisible(bone, FALSE);
+    }
+}
+
+void CWeapon::ResetScopeBonesVisibility()
+{
+    if (m_scope_bones_used && HudItemData())
+        ShowScopeBones();
+
+    m_scope_bones_target = nullptr;
+    m_scope_bones_scope = u8(-1);
+    m_scope_bones_attached = false;
+}
+
+void CWeapon::ShowScopeBones()
+{
+    SetScopeBoneVisible(m_scopes_hide_bone, TRUE);
+    for (const SScopeBones& scope : m_scope_bones)
+    {
+        for (const shared_str& bone : scope.hide)
+            SetScopeBoneVisible(bone, TRUE);
+        for (const shared_str& bone : scope.show)
+            SetScopeBoneVisible(bone, TRUE);
+    }
+}
+
+void CWeapon::SetScopeBoneVisible(const shared_str& bone_name, BOOL visible)
+{
+    if (!bone_name.size())
+        return;
+
+    attachable_hud_item* const hud_item = HudItemData();
+    if (!hud_item)
+        return;
+
+    // visimask is a single 64-bit field and LL_SetBoneVisible shifts by the bone id without an
+    // upper bound, so a name resolving past bit 63 would flip an unrelated bone.
+    const u16 bone_id = hud_item->m_model->LL_BoneID(bone_name);
+    if (bone_id == BI_NONE || bone_id >= 64)
+        return;
+
+    hud_item->set_bone_visible(bone_name, visible, TRUE);
+}
+
+void CWeapon::on_b_hud_detach()
+{
+    // The hud model is pooled per hud section: leaving a bone hidden would carry it over to the
+    // next weapon that shares the section, including one that sets none of these keys.
+    ResetScopeBonesVisibility();
+    inherited::on_b_hud_detach();
+}
+
 
 void CWeapon::UpdateHUDAddonsVisibility()
 {
     if (GamePersistent().GetHudTuner().is_active())
+    {
+        // The tuner rewrites every bone each frame, so forget the applied state and re-drive the
+        // scope bones once it lets go.
+        m_scope_bones_target = nullptr;
         return;
+    }
     static shared_str wpn_scope = WPN_SCOPE;
     static shared_str wpn_silencer = WPN_SILENCER;
     static shared_str wpn_grenade_launcher = WPN_GRENADE_LAUNCHER;
@@ -1757,6 +1905,8 @@ void CWeapon::UpdateHUDAddonsVisibility()
     }
     else if (scope_status == ALife::eAddonPermanent)
         HudItemData()->set_bone_visible(wpn_scope, TRUE, TRUE);
+
+    UpdateScopeBonesVisibility();
 
     if (silencer_status == ALife::eAddonAttachable)
     {

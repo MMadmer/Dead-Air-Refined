@@ -9,6 +9,7 @@
 #include "pch.hpp"
 #include "level_graph.h"
 #include "xrEngine/profiler.h"
+#include "xrCore/XMS/xms_core.h"
 
 CLevelGraph::CLevelGraph(const char* fileName)
     : m_level_id(GameGraph::_LEVEL_ID(-1))
@@ -33,13 +34,82 @@ void CLevelGraph::Initialize(const char* filePath)
     m_header = (CHeader*)m_reader->pointer();
     ASSERT_XRAI_VERSION_MATCH(header().version(), "Level graph");
     m_reader->advance(sizeof(CHeader));
+
+    // XMS: module ai-map overlays append nodes after the base array. The
+    // header and node array move to an owned heap copy with a bumped count.
+    xr_vector<u8> overlay_nodes;
+    if (header().version() == XRAI_CURRENT_VERSION)
+        xms_collect_aimap_overlays(filePath, overlay_nodes);
+    if (!overlay_nodes.empty())
+    {
+        const u32 base_count = header().vertex_count();
+        const u32 extra_count = u32(overlay_nodes.size() / sizeof(CLevelVertex));
+        const size_t total = size_t(base_count) + extra_count;
+        // one block: header copy + nodes (+1 sentinel like the converters)
+        m_xms_header_copy = *m_header;
+        m_xms_header_copy.xms_set_vertex_count(u32(total));
+        m_header = &m_xms_header_copy;
+        auto* nodes = xr_alloc<CLevelVertex>(total + 1);
+        memcpy(nodes, m_reader->pointer(), size_t(base_count) * sizeof(CLevelVertex));
+        memcpy(nodes + base_count, overlay_nodes.data(), overlay_nodes.size());
+        memset(nodes + total, 0, sizeof(CLevelVertex));
+        m_nodes = xr_new<CLevelGraphManager>(nodes, total);
+        Msg("* XMS: ai-map overlay: +%u node(s) on top of %u", extra_count, base_count);
+    }
+    else
+        m_nodes = xr_new<CLevelGraphManager>(m_reader, header().vertex_count(), header().version());
+
     const auto& box = header().box();
-    m_nodes = xr_new<CLevelGraphManager>(m_reader, header().vertex_count(), header().version());
     m_row_length = iFloor((box.vMax.z - box.vMin.z) / header().cell_size() + EPS_L + 1.5f);
     m_column_length = iFloor((box.vMax.x - box.vMin.x) / header().cell_size() + EPS_L + 1.5f);
     m_access_mask.assign(header().vertex_count(), true);
     unpack_xz(vertex_position(box.vMax), m_max_x, m_max_z);
     build_vertex_column_index();
+    if (!overlay_nodes.empty() && m_vertex_column_offsets.empty())
+        Msg("! XMS: ai-map overlay broke the sort invariant, nearest-vertex search falls back to full scan");
+}
+
+// gathers XAM1 overlay files of every applicable module for this level
+void CLevelGraph::xms_collect_aimap_overlays(pcstr level_ai_path, xr_vector<u8>& out)
+{
+    if (!XMS::Active())
+        return;
+    // ".../levels/<name>/level.ai" -> level folder name
+    string_path buffer;
+    xr_strcpy(buffer, level_ai_path);
+    pstr file_part = strrchr(buffer, _DELIMITER);
+    if (!file_part)
+        return;
+    *file_part = 0;
+    pstr level_name = strrchr(buffer, _DELIMITER);
+    level_name = level_name ? level_name + 1 : buffer;
+
+    for (const auto& m : XMS::Modules())
+    {
+        if (!XMS::ModuleApplies(m))
+            continue;
+        string_path path;
+        xr_sprintf(path, "%slevels" DELIMITER "%s" DELIMITER "overlay.aimap", m.root.c_str(), level_name);
+        FILE* f = fopen(path, "rb");
+        if (!f)
+            continue;
+        u32 magic = 0, version = 0, count = 0;
+        const bool header_ok = 1 == fread(&magic, 4, 1, f) && 1 == fread(&version, 4, 1, f) &&
+            1 == fread(&count, 4, 1, f) && magic == 0x314D4158 /*XAM1*/ && version == 1;
+        if (!header_ok || !count)
+        {
+            fclose(f);
+            Msg("! XMS: bad aimap overlay [%s]", path);
+            continue;
+        }
+        const size_t bytes = size_t(count) * sizeof(CLevelVertex);
+        const size_t offset = out.size();
+        out.resize(offset + bytes);
+        const size_t got = fread(out.data() + offset, 1, bytes, f);
+        fclose(f);
+        out.resize(offset + got - got % sizeof(CLevelVertex));
+        Msg("* XMS: aimap overlay [%s]: %u node(s) (module %s)", level_name, count, m.id.c_str());
+    }
 }
 
 // Vertices are stored sorted by packed xz = x * row_length + z, so every x column is one contiguous

@@ -71,6 +71,9 @@ protected:
 public:
     CALifeSpawnRegistry(LPCSTR section);
     virtual ~CALifeSpawnRegistry();
+    // XMS: applies module spawn layers (.xspawn) on top of the freshly loaded
+    // base graph; runs before the derived indices are rebuilt
+    void xms_compose();
     virtual void load(IReader& file_stream, xrGUID* save_guid = 0);
     virtual void save(IWriter& memory_stream);
     void begin_save(IWriter& memory_stream, SaveState& state);

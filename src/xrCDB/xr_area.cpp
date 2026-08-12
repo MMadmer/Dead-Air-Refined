@@ -4,6 +4,7 @@
 #include "xrEngine/xr_object.h"
 #include "Common/LevelStructure.hpp"
 #include "xrEngine/xr_collide_form.h"
+#include "xrCore/XMS/xms_core.h"
 
 #include <filesystem>
 
@@ -180,6 +181,160 @@ void CObjectSpace::Load(LPCSTR path, LPCSTR fname,
     Load(F, build_callback, serialize_callback, deserialize_callback, remapping_materials_callback, sourceCrc);
 }
 
+// ---- XMS collision overlays (.xcform) ---------------------------------------
+// Module-supplied world-space triangle soups merged into the static model
+// BEFORE the tree is built: base triangles keep their indices, overlay
+// triangles append at the end, so rq_result.element semantics never change.
+namespace
+{
+#pragma pack(push, 1)
+struct XcformTri
+{
+    u32 v0, v1, v2;
+    u16 material_index;
+    u16 pad;
+};
+#pragma pack(pop)
+
+struct XcformMerge
+{
+    xr_vector<Fvector> verts;
+    xr_vector<CDB::TRI> tris;
+    // Cut regions drop BASE triangles that fall entirely inside them, which is
+    // what makes a hole possible at all - appending alone can only add matter.
+    // Vertices are never removed: overlay triangles index the base vertex array
+    // by offset, and compacting it would mean remapping every consumer of
+    // CDB::TRI::verts.
+    xr_vector<Fbox> cuts;
+    u32 hash{0};
+};
+
+bool xms_load_xcform_overlays(pcstr level_folder, u32 base_verts, XcformMerge& out)
+{
+    if (!XMS::Active())
+        return false;
+    // "$level$" m_Add carries a trailing delimiter - strip it for the key
+    string_path level_name;
+    xr_strcpy(level_name, level_folder ? level_folder : "");
+    if (const size_t len = xr_strlen(level_name); len && level_name[len - 1] == _DELIMITER)
+        level_name[len - 1] = 0;
+
+    u32 vertex_cursor = base_verts;
+    for (const XMS::Module& m : XMS::Modules())
+    {
+        if (!XMS::ModuleApplies(m))
+            continue;
+        string_path path;
+        xr_sprintf(path, "%slevels" DELIMITER "%s" DELIMITER "overlay.xcform", m.root.c_str(), level_name);
+        FILE* f = fopen(path, "rb");
+        if (!f)
+            continue;
+        fseek(f, 0, SEEK_END);
+        const long len = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        xr_vector<u8> raw(size_t(std::max(0l, len)));
+        const size_t got = len > 0 ? fread(raw.data(), 1, size_t(len), f) : 0;
+        fclose(f);
+        raw.resize(got);
+        if (raw.size() < 16)
+            continue;
+
+        const u8* cursor = raw.data();
+        const u8* end = raw.data() + raw.size();
+        const auto read_u32 = [&]() { u32 v; memcpy(&v, cursor, 4); cursor += 4; return v; };
+        const auto read_u16 = [&]() { u16 v; memcpy(&v, cursor, 2); cursor += 2; return v; };
+        if (read_u32() != 0x31464358 /*XCF1*/)
+        {
+            Msg("! XMS: bad xcform header [%s]", path);
+            continue;
+        }
+        const u32 xcform_version = read_u32();
+        if (xcform_version != 1 && xcform_version != 2)
+        {
+            Msg("! XMS: unsupported xcform version %u [%s]", xcform_version, path);
+            continue;
+        }
+        const u16 sector = read_u16();
+        read_u16(); // reserved
+        const u32 material_count = read_u32();
+        const u16 default_material = XMS::ResolveMaterial("default");
+        if (default_material == u16(-1))
+        {
+            // no resolver registered - ids would blow up the remap pass
+            Msg("! XMS: material resolver missing, xcform overlay skipped [%s]", path);
+            continue;
+        }
+        xr_vector<u16> materials;
+        materials.reserve(material_count);
+        for (u32 i = 0; i < material_count && cursor < end; ++i)
+        {
+            pcstr name = (pcstr)cursor;
+            cursor += xr_strlen(name) + 1;
+            const u16 game_id = XMS::ResolveMaterial(name);
+            if (game_id == u16(-1))
+                Msg("! XMS: unknown game material [%s] in %s, using default", name, path);
+            materials.push_back(game_id == u16(-1) ? default_material : game_id);
+        }
+        if (cursor + 4 > end)
+            continue;
+        const u32 vertex_count = read_u32();
+        if (cursor + size_t(vertex_count) * sizeof(Fvector) + 4 > end)
+        {
+            Msg("! XMS: truncated xcform [%s]", path);
+            continue;
+        }
+        const Fvector* file_verts = (const Fvector*)cursor;
+        cursor += size_t(vertex_count) * sizeof(Fvector);
+        const u32 tri_count = read_u32();
+        if (cursor + size_t(tri_count) * sizeof(XcformTri) > end)
+        {
+            Msg("! XMS: truncated xcform tris [%s]", path);
+            continue;
+        }
+        const XcformTri* file_tris = (const XcformTri*)cursor;
+
+        out.verts.insert(out.verts.end(), file_verts, file_verts + vertex_count);
+        for (u32 i = 0; i < tri_count; ++i)
+        {
+            const XcformTri& src = file_tris[i];
+            if (src.v0 >= vertex_count || src.v1 >= vertex_count || src.v2 >= vertex_count)
+                continue;
+            CDB::TRI tri{};
+            tri.verts[0] = vertex_cursor + src.v0;
+            tri.verts[1] = vertex_cursor + src.v1;
+            tri.verts[2] = vertex_cursor + src.v2;
+            // material here is the persistent game-mtl ID; the game's
+            // build_callback remaps it to a runtime index like base tris
+            tri.material =
+                (src.material_index < materials.size() ? materials[src.material_index] : default_material) & 0x3FFF;
+            tri.sector = sector;
+            out.tris.emplace_back(tri);
+        }
+        cursor += size_t(tri_count) * sizeof(XcformTri);
+
+        u32 cut_count = 0;
+        if (xcform_version >= 2 && cursor + 4 <= end)
+        {
+            cut_count = read_u32();
+            const auto read_float = [&]() { float v; memcpy(&v, cursor, 4); cursor += 4; return v; };
+            for (u32 i = 0; i < cut_count && cursor + 24 <= end; ++i)
+            {
+                Fvector centre, extent;
+                centre.x = read_float(); centre.y = read_float(); centre.z = read_float();
+                extent.x = read_float(); extent.y = read_float(); extent.z = read_float();
+                out.cuts.emplace_back().setb(centre, extent); // setb takes half-extents
+            }
+        }
+
+        vertex_cursor = base_verts + u32(out.verts.size());
+        out.hash = crc32(raw.data(), u32(raw.size()), out.hash);
+        Msg("* XMS: collision overlay [%s]: %u verts, %u tris, %u cut(s) (module %s)", level_name, vertex_count,
+            tri_count, cut_count, m.id.c_str());
+    }
+    return !out.tris.empty() || !out.cuts.empty();
+}
+} // namespace
+
 void CObjectSpace::Load(IReader* F,
     CDB::build_callback build_callback,
     CDB::serialize_callback serialize_callback,
@@ -190,8 +345,8 @@ void CObjectSpace::Load(IReader* F,
     ZoneScoped;
 
     static const bool use_cache = !strstr(Core.Params, "-no_cdb_cache");
-    if (use_cache)
-        Static.set_model_crc32(knownSourceCrc ? knownSourceCrc : crc32(F->pointer(), F->length()));
+    // crc over the WHOLE file, captured before the cursor moves
+    const u32 base_crc = use_cache ? (knownSourceCrc ? knownSourceCrc : crc32(F->pointer(), F->length())) : 0;
 
     hdrCFORM H;
     F->r(&H, sizeof(hdrCFORM));
@@ -209,6 +364,62 @@ void CObjectSpace::Load(IReader* F,
         if (version == CFORM_CACHE_CURRENT_VERSION)
             cacheStream = F;
     }
+
+    // XMS: merge module collision overlays; the embedded tree only matches the
+    // base geometry, so it is skipped when overlays are present
+    XcformMerge merge;
+    xr_vector<Fvector> merged_verts;
+    xr_vector<CDB::TRI> merged_tris;
+    if (FS.path_exist("$level$") && xms_load_xcform_overlays(FS.get_path("$level$")->m_Add, H.vertcount, merge))
+    {
+        merged_verts.reserve(size_t(H.vertcount) + merge.verts.size());
+        merged_verts.assign(verts, verts + H.vertcount);
+        merged_verts.insert(merged_verts.end(), merge.verts.begin(), merge.verts.end());
+
+        merged_tris.reserve(size_t(H.facecount) + merge.tris.size());
+        if (merge.cuts.empty())
+            merged_tris.assign(tris, tris + H.facecount);
+        else
+        {
+            // A base triangle goes only when it lies wholly inside a cut - a
+            // partial test would eat the whole terrain sheet for a small box.
+            // Base indices below the first survivor stay put; the ones after it
+            // shift, which is safe because no triangle index outlives a level
+            // load (the only place one is persisted is the OPCODE tree, and both
+            // caches are invalidated right below).
+            u32 dropped = 0;
+            for (u32 i = 0; i < H.facecount; ++i)
+            {
+                const CDB::TRI& tri = tris[i];
+                bool cut = false;
+                for (const Fbox& region : merge.cuts)
+                {
+                    if (!region.contains(verts[tri.verts[0]]) || !region.contains(verts[tri.verts[1]]) ||
+                        !region.contains(verts[tri.verts[2]]))
+                        continue;
+                    cut = true;
+                    break;
+                }
+                if (cut)
+                    ++dropped;
+                else
+                    merged_tris.push_back(tri);
+            }
+            Msg("* XMS: collision cuts removed %u base triangle(s) of %u", dropped, H.facecount);
+        }
+        merged_tris.insert(merged_tris.end(), merge.tris.begin(), merge.tris.end());
+        for (const Fvector& v : merge.verts)
+            H.aabb.modify(v);
+        H.vertcount = u32(merged_verts.size());
+        H.facecount = u32(merged_tris.size());
+        verts = merged_verts.data();
+        tris = merged_tris.data();
+        cacheStream = nullptr;
+        if (use_cache)
+            Static.set_model_crc32(base_crc ^ merge.hash);
+    }
+    else if (use_cache)
+        Static.set_model_crc32(base_crc);
 
     Create(verts, tris, H, build_callback, serialize_callback, deserialize_callback, remapping_materials_callback, cacheStream);
     FS.r_close(F);

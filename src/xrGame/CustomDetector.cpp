@@ -104,17 +104,10 @@ void CCustomDetector::HideDetector(bool bFastMode)
     if (GetState() != eIdle)
         return;
 
-    if (!bFastMode)
-    {
-        ToggleDetector(false);
-        return;
-    }
-
-    SwitchState(eHidden);
-    if (m_light)
-        m_light->set_active(false);
-    TurnDetectorInternal(false);
-    g_player_hud->detach_item(this);
+    // Both modes go through eHiding: fast mode only selects anm_hide_fast, it does not skip
+    // the motion. Dropping straight to eHidden and detaching in the same frame made the item
+    // vanish from the hand the instant a two-handed weapon was drawn.
+    ToggleDetector(bFastMode);
 }
 
 void CCustomDetector::ShowDetector(bool bFastMode)
@@ -187,7 +180,7 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
         if (oldState != eHiding)
         {
             m_sounds.PlaySound("sndHide", Fvector().set(0, 0, 0), this, true, false);
-            PlayHUDMotion(m_bFastAnimMode ? "anm_hide_fast" : "anm_hide", "anim_show", FALSE/*TRUE*/, this, GetState());
+            PlayHUDMotion(m_bFastAnimMode ? "anm_hide_fast" : "anm_hide", "anim_hide", FALSE/*TRUE*/, this, GetState());
             SetPending(TRUE);
         }
     }
@@ -458,6 +451,13 @@ void CCustomDetector::UpdateCL()
 {
     inherited::UpdateCL();
     UpdateDeviceEffects();
+
+    // Same rule as the torch: a light the actor holds bypasses the local shadow budget.
+    // Otherwise the single budgeted slot goes to whatever world lamp scores nearer and the
+    // glowstick in hand stops casting shadows entirely. Refreshed every frame because
+    // ownership changes on pickup and drop.
+    if (m_light)
+        m_light->set_never_demote(!!smart_cast<CActor*>(H_Parent()));
 
     if (H_Parent() != Level().CurrentEntity())
         return;
