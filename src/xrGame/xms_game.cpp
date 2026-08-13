@@ -196,6 +196,57 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     }
 }
 
+void SyncModesFromNewGameOptions()
+{
+    // Always publish a set, even an empty one: XMS::SetActiveModes writes
+    // process-global state that survives "quit to menu, start another game",
+    // so skipping the call would carry the previous session's modes over.
+    string_path options;
+    FS.update_path(options, "$game_config$", "axr_options.ltx");
+    if (!FS.exist(options))
+    {
+        XMS::SetActiveModes("");
+        return;
+    }
+
+    CInifile ini(options, TRUE /*read only*/);
+    constexpr pcstr section = "character_creation";
+    if (!ini.section_exist(section))
+    {
+        XMS::SetActiveModes("");
+        return;
+    }
+
+    // The screen writes one key per checkbox and leaves the unticked ones
+    // empty. new_game_metro_mode -> "metro", matching the ids the editor
+    // offers and a module's [module] mode.
+    xr_string csv;
+    for (const auto& item : ini.r_section(section).Data)
+    {
+        pcstr key = item.first.c_str();
+        if (0 != strncmp(key, "new_game_", 9))
+            continue;
+        pcstr value = item.second.c_str();
+        if (!value || !value[0])
+            continue;
+        if (0 != xr_strcmp(value, "true") && 0 != xr_strcmp(value, "on") && 0 != xr_strcmp(value, "1"))
+            continue;
+
+        xr_string id = key + 9;
+        if (id.size() > 5 && 0 == xr_strcmp(id.c_str() + id.size() - 5, "_mode"))
+            id.erase(id.size() - 5);
+        if (id.empty())
+            continue;
+        if (!csv.empty())
+            csv += ",";
+        csv += id;
+    }
+
+    XMS::SetActiveModes(csv.c_str());
+    if (!csv.empty())
+        Msg("* XMS: new game modes: %s", csv.c_str());
+}
+
 u32 SkippedObjectCount() { return bs().skipped_objects; }
 void ResetSkippedObjects() { bs().skipped_objects = 0; }
 

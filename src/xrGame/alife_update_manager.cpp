@@ -21,6 +21,7 @@
 #include "restriction_space.h"
 #include "xrEngine/profiler.h"
 #include "mt_config.h"
+#include "xms_game.h"
 #include "xrNetServer/NET_Messages.h"
 #include "alife_storage_manager.h"
 #include "saved_game_wrapper.h"
@@ -266,6 +267,11 @@ void CALifeUpdateManager::new_game(LPCSTR save_name)
 
     unload();
     reload(m_section);
+    // The player's mode choice reaches XMS here, before the spawn composer and
+    // the graph composer gate anything on it. Only this path: a loaded save
+    // restores its own set from the .scov manifest, and a level change always
+    // arrives as a load.
+    XmsGame::SyncModesFromNewGameOptions();
     spawns().load(save_name);
     graph().on_load();
     server().PerformIDgen(0x0000);

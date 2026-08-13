@@ -34,6 +34,16 @@ void CollectSaveMutations(xr_vector<SaveExtensionGameplay::ChunkMutation>& mutat
 // clears state when the snapshot is empty. Reports module set differences.
 void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks);
 
+// Publishes the game modes the player ticked on the new-game screen as the
+// active XMS mode set, so a module built for one of them applies exactly
+// there. Dead Air keeps that choice in [character_creation] of
+// axr_options.ltx (new_game_<x>_mode = true) and nothing translated it, which
+// left every mode-gated module inert. New games only: a loaded save restores
+// its own set from the .scov manifest. Must run before the spawn composer,
+// and unconditionally - the active set is process-global and would otherwise
+// be inherited from the previous session.
+void SyncModesFromNewGameOptions();
+
 // Objects skipped by the save loader because their module/section is gone.
 u32 SkippedObjectCount();
 void ResetSkippedObjects();
