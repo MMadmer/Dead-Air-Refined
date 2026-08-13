@@ -5,6 +5,7 @@
 
 #include <io.h>
 #include <sys/stat.h>
+#include <direct.h>
 
 #include "xrCommon/xr_unordered_map.h"
 #include "xrCommon/xr_string.h"
@@ -338,7 +339,36 @@ bool normalize_rel_path(xr_string& p)
     return true;
 }
 
-void discover(pcstr mods_root)
+// One id per line, same shape as order.ltx. Used for the ids the player has
+// switched off and for nothing else.
+void read_id_list(pcstr path, xr_vector<xr_string>& out)
+{
+    RawFile raw;
+    if (!read_raw(path, raw))
+        return;
+    for (char* line = raw.data; line && *line;)
+    {
+        char* next = strchr(line, '\n');
+        if (next)
+            *next++ = 0;
+        if (char* cr = strchr(line, '\r'))
+            *cr = 0;
+        while (*line == ' ' || *line == '\t')
+            ++line;
+        if (char* comment = strchr(line, ';'))
+            *comment = 0;
+        for (char* end = line + xr_strlen(line); end > line && (end[-1] == ' ' || end[-1] == '\t');)
+            *--end = 0;
+        if (*line)
+            out.emplace_back(lower_copy(line));
+        line = next;
+    }
+}
+
+// legacy=true marks the folder XMS shares with JSGME: a module found there is
+// visible to it, and letting JSGME "activate" a module copies it into the game
+// tree - the one thing a module must never do.
+void discover(pcstr mods_root, bool legacy)
 {
     State& s = st();
     string_path mask;
@@ -367,6 +397,25 @@ void discover(pcstr mods_root)
         }
         if (m.name.empty())
             m.name = m.id;
+
+        // the same id in both roots: the module's own folder wins, the copy in
+        // the shared one is ignored rather than silently loaded twice
+        bool duplicate = false;
+        for (const Module& seen : s.modules)
+            if (seen.id == m.id)
+            {
+                duplicate = true;
+                Msg("! XMS: module [%s] found in both roots, using %s", m.id.c_str(), seen.root.c_str());
+                break;
+            }
+        if (duplicate)
+            continue;
+
+        if (legacy)
+            Msg("~ XMS: module [%s] sits in the folder JSGME manages. It works, but JSGME lists it as "
+                "one of its own - activating it there copies it into the game tree. Move it to modules%s",
+                m.id.c_str(), DELIMITER);
+
         s.modules.emplace_back(std::move(m));
     } while (_findnext(handle, &entry) == 0);
     _findclose(handle);
@@ -374,7 +423,7 @@ void discover(pcstr mods_root)
 
 // ---- ordering --------------------------------------------------------------
 
-void order_modules(pcstr mods_root)
+void order_modules(pcstr mods_root, pcstr legacy_root)
 {
     State& s = st();
     auto& mods = s.modules;
@@ -382,31 +431,20 @@ void order_modules(pcstr mods_root)
     if (!count)
         return;
 
-    // user override order: mods/order.ltx, one id per line, top loads first
+    // user override order: <root>/order.ltx, one id per line, top loads first.
+    // Both roots are read - an install that still keeps its modules in the
+    // JSGME folder keeps the order file it already has.
     xr_unordered_map<xr_string, u32> user_rank;
     {
+        xr_vector<xr_string> ranked;
         string_path order_path;
         strconcat(order_path, mods_root, "order.ltx");
-        RawFile raw;
-        if (read_raw(order_path, raw))
-        {
-            u32 rank = 0;
-            for (char* line = raw.data; line && *line;)
-            {
-                char* next = strchr(line, '\n');
-                if (next)
-                    *next++ = 0;
-                if (char* cr = strchr(line, '\r'))
-                    *cr = 0;
-                while (*line == ' ' || *line == '\t')
-                    ++line;
-                if (char* comment = strchr(line, ';'))
-                    *comment = 0;
-                if (*line)
-                    user_rank.emplace(lower_copy(line), rank++);
-                line = next;
-            }
-        }
+        read_id_list(order_path, ranked);
+        strconcat(order_path, legacy_root, "order.ltx");
+        read_id_list(order_path, ranked);
+        u32 rank = 0;
+        for (const xr_string& id : ranked)
+            user_rank.emplace(id, rank++);
     }
 
     xr_unordered_map<xr_string, size_t> index;
@@ -719,18 +757,57 @@ void InitializeAndMount()
         !FS.path_exist("$app_data_root$"))
         return;
 
-    string_path mods_root;
-    strconcat(mods_root, fs_root->m_Path, "mods" DELIMITER);
+    // Modules live in their OWN root. mods\ is the folder JSGME manages (it is
+    // the same directory as MODS\ - Windows does not care about the case), and
+    // a module there is a module JSGME offers to copy into the game tree, which
+    // is exactly the merge a module exists to avoid. Still read, because
+    // modules already installed there have to keep working.
+    string_path mods_root, legacy_root;
+    strconcat(mods_root, fs_root->m_Path, "modules" DELIMITER);
+    strconcat(legacy_root, fs_root->m_Path, "mods" DELIMITER);
 
     FS.update_path(s.registry_path, "$app_data_root$", "xms_registry.ltx");
     FS.update_path(s.report_path, "$app_data_root$", "xms_report.json");
 
-    discover(mods_root);
+    // A module JSGME has already copied over the game leaves its manifest in
+    // the root. Nothing here can undo that - say so, loudly. The check is
+    // physical on purpose: FS.exist asks the virtual namespace, which does not
+    // know about the game root while it is still coming up.
+    {
+        string_path stray;
+        strconcat(stray, fs_root->m_Path, "mod.ltx");
+        RawFile raw;
+        if (read_raw(stray, raw))
+            Msg("! XMS: mod.ltx in the game root - a module was installed with JSGME. Deactivate it there: "
+                "its files are now merged into the game and are being applied twice");
+    }
+
+    discover(mods_root, false);
+    discover(legacy_root, true);
     if (s.modules.empty())
         return;
 
+    // The player's own on/off list, one id per line. Kept next to the modules
+    // rather than in appdata so it travels with the install, exactly like
+    // order.ltx does - and in ONE place, whichever root a module happens to sit
+    // in, so moving a module never leaves a stale switch behind.
+    {
+        xr_vector<xr_string> off;
+        string_path off_path;
+        strconcat(off_path, mods_root, "disabled.ltx");
+        read_id_list(off_path, off);
+        for (Module& m : s.modules)
+            for (const xr_string& id : off)
+                if (m.id == id)
+                {
+                    m.disabled = true;
+                    m.disable_reason = "switched off in disabled.ltx";
+                    break;
+                }
+    }
+
     load_registry();
-    order_modules(mods_root);
+    order_modules(mods_root, legacy_root);
     mount_all();
     save_registry();
 
@@ -812,6 +889,83 @@ u16 LayerOfPath(pcstr physical_path)
             return m.layer;
     }
     return 0;
+}
+
+bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err)
+{
+    err.clear();
+    if (!id || !id[0])
+    {
+        err = "no module id";
+        return false;
+    }
+    const xr_string wanted = lower_copy(id);
+
+    bool known = false;
+    for (const Module& m : st().modules)
+        known |= (m.id == wanted);
+    if (!known)
+    {
+        err = "no such module (see xms_list)";
+        return false;
+    }
+
+    // One list for every module, in the modules root - a module that later
+    // moves between roots must not leave a switch behind in the old one.
+    FS_Path* fs_root = nullptr;
+    if (!FS.get_path("$fs_root$", &fs_root))
+    {
+        err = "no game root";
+        return false;
+    }
+    string_path list_path;
+    strconcat(list_path, fs_root->m_Path, "modules" DELIMITER);
+    _mkdir(list_path);
+    xr_strcat(list_path, sizeof(list_path), "disabled.ltx");
+
+    xr_vector<xr_string> off;
+    read_id_list(list_path, off);
+    bool changed = false;
+    if (enabled)
+    {
+        for (size_t i = 0; i < off.size();)
+        {
+            if (off[i] == wanted)
+            {
+                off.erase(off.begin() + i);
+                changed = true;
+            }
+            else
+                ++i;
+        }
+    }
+    else
+    {
+        bool present = false;
+        for (const xr_string& s : off)
+            present |= (s == wanted);
+        if (!present)
+        {
+            off.push_back(wanted);
+            changed = true;
+        }
+    }
+    if (!changed)
+        return true;
+
+    IWriter* w = FS.w_open(list_path);
+    if (!w)
+    {
+        err = xr_string("cannot write ") + list_path;
+        return false;
+    }
+    w->w_string("; XMS: modules switched off by the player, one id per line.");
+    w->w_string("; Written by xms_disable / xms_enable. Nothing is copied anywhere -");
+    w->w_string("; a module stays where it is and is simply not mounted next start.");
+    for (const xr_string& s : off)
+        w->w_string(s.c_str());
+    FS.w_close(w);
+    return true;
 }
 
 void AddConflict(ConflictKind kind, pcstr subject, pcstr loser, pcstr winner)

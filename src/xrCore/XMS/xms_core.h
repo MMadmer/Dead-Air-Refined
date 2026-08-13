@@ -105,6 +105,14 @@ XRCORE_API void OnRescanPath(pcstr full_path);
 // root, 0 otherwise.
 XRCORE_API u16 LayerOfPath(pcstr physical_path);
 
+// Switch a module off (or back on) for the next start. This is XMS's own
+// answer to "activate / deactivate a mod": it writes the id to disabled.ltx
+// next to the modules and nothing else - no file is copied anywhere, which is
+// exactly what a mod manager doing the same job would get wrong. Modules mount
+// while the file system comes up, so the change lands on the next launch.
+// false + reason when there is no such module or the list cannot be written.
+XRCORE_API bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err);
+
 // ---- ledger / report -------------------------------------------------------
 
 XRCORE_API void AddConflict(ConflictKind kind, pcstr subject, pcstr loser, pcstr winner);

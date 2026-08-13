@@ -12,7 +12,7 @@ writes because of modules is its own bookkeeping under `_appdata_`
 (`xms_registry.ltx`, `xms_report.json`, caches).
 
 ```
-<game root>/mods/<mod.id>/
+<game root>/modules/<mod.id>/
   mod.ltx            ; manifest: [module] id/name/version, [requires], [order]
                      ; after/before, [conflicts], [budget] spawns=N,
                      ; [vfs], [redirects] (see below)
@@ -92,8 +92,24 @@ so overlays add up instead of overwriting each other.
 
 Runtime facts:
 
+- Where modules live, and why not next to the JSGME ones. A module is read
+  from `<game>/modules/<id>/`. `<game>/mods/` is the folder JSGME manages (same
+  directory as `MODS/` — Windows ignores the case), and JSGME lists every
+  subfolder there as one of its own: "activating" a module in it copies the
+  module over the game, which is the exact merge a module exists to avoid, and
+  the content then applies twice — once as an overlay, once as loose gamedata.
+  `mods/` is still read so nothing installed before this stops working; every
+  module found there gets a log line saying so, and a `mod.ltx` in the game
+  root (the fingerprint of a module JSGME has already installed) is reported
+  loudly at startup.
+- Switching a module off is XMS's own job, not a mod manager's:
+  `xms_disable <id>` / `xms_enable <id>` write the id to
+  `modules/disabled.ltx` (one per line, editable by hand) and copy nothing
+  anywhere. Modules mount while the file system comes up, so it takes effect
+  on the next start. JSGME keeps working normally for JSGME mods, including a
+  module exported as a flat `gamedata_<id>` overlay — that IS a JSGME mod.
 - Load order is deterministic: `[requires]`/`[order]` topology, then
-  `mods/order.ltx` (one id per line), then id. `xms_list` shows it.
+  `modules/order.ltx` (one id per line), then id. `xms_list` shows it.
 - Conflicts never block loading: the later layer wins and the resolution is
   recorded — `xms_conflicts` in console, full ledger in
   `appdata/xms_report.json`.
@@ -112,7 +128,8 @@ Runtime facts:
 - Spawn ids for module objects come from persistent per-module ranges
   (`appdata/xms_registry.ltx`); base `all.spawn` ids never change.
 - Kill switch: `-no_xms` command line. JSGME layers and `xtra_*.xdb0` keep
-  working unchanged; folders under `MODS/` without `mod.ltx` are ignored.
+  working unchanged; a folder without `mod.ltx` is not a module and is ignored
+  in either root.
 - What `mode=` gates, exactly. Everything that edits a LEVEL is gated - the
   spawn composer, `overlay.xcform` (including its cut boxes), `overlay.aimap`,
   `overlay_visuals.ltx` (both the added `.ogf` and the `hide` boxes) and the

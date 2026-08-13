@@ -995,6 +995,34 @@ public:
     virtual void Info(TInfo& I) { xr_strcpy(I, "show or set active XMS game modes (comma list, 'none' to clear)"); }
 };
 
+// XMS's own "activate / deactivate a mod". A mod manager does that job by
+// copying files over the game; this only writes an id to disabled.ltx, so the
+// module stays where it is and the game tree is never touched.
+class CCC_XmsEnable : public IConsole_Command
+{
+    bool m_enable;
+
+public:
+    CCC_XmsEnable(LPCSTR N, bool enable) : IConsole_Command(N), m_enable(enable) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        if (!args || !args[0])
+        {
+            Msg("! usage: %s <module id>   (see xms_list)", cName);
+            return;
+        }
+        xr_string err;
+        if (!XMS::SetModuleEnabled(args, m_enable, err))
+            Msg("! XMS: %s", err.c_str());
+        else
+            Msg("* XMS: module [%s] %s - takes effect on the next start", args, m_enable ? "enabled" : "disabled");
+    }
+    virtual void Info(TInfo& I)
+    {
+        xr_strcpy(I, m_enable ? "switch an XMS module back on (next start)" : "switch an XMS module off (next start)");
+    }
+};
+
 class CCC_XmsConflicts : public IConsole_Command
 {
 public:
@@ -2412,6 +2440,8 @@ void CCC_RegisterCommands()
 
     // XMS module system
     CMD1(CCC_XmsList, "xms_list");
+    CMD2(CCC_XmsEnable, "xms_enable", true);
+    CMD2(CCC_XmsEnable, "xms_disable", false);
     CMD1(CCC_XmsConflicts, "xms_conflicts");
     CMD1(CCC_XmsModes, "xms_modes");
     CMD1(CCC_XmsWhy, "xms_why");
