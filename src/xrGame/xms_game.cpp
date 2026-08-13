@@ -575,6 +575,32 @@ function xms.registry.get(name)
     return reg
 end
 
+-- ---- module registrars ------------------------------------------------------
+-- A module ships a startup script to run something before anything else asks
+-- for it - adding its game mode to the new-game screen, registering a scheme,
+-- whatever. Loaded here, in load order, once the whole api above exists:
+-- without this a module's scripts sit on disk with nobody to require them.
+-- Two reserved names, so a tool and a human never overwrite each other:
+--   mode_register  generated (XFined Editor rewrites it on every export)
+--   register       the author's own, never touched by anything
+-- Generated first, so the author's script can override what it set up.
+local REGISTRARS = { "mode_register", "register" }
+function xms.load_registrars()
+    for _, m in ipairs(xms.modules() or {}) do
+        if m.enabled then
+            for i = 1, #REGISTRARS do
+                local name = REGISTRARS[i]
+                local source = xms_native_read_script(m.id, name)
+                if source and source ~= "" then
+                    xms.log("registrar: " .. m.id .. "/" .. name)
+                    xms.require(m.id, name)
+                end
+            end
+        end
+    end
+end
+xms.load_registrars()
+
 xms.log("bootstrap ready, api " .. tostring(xms.api))
 )xms";
 
