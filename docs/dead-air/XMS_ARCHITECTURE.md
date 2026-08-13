@@ -146,34 +146,46 @@
 
 ## 3. Пакет модуля
 
+Фактический layout и справочник автора — `MODDING.md`; здесь — принцип. Модуль
+— самодостаточная папка, читаемая игрой НА МЕСТЕ (движок отказывает записи в
+неё по коду):
+
 ```
 mods/<mod_id>/
   mod.ltx                     ; манифест
-  configs/                    ; обычные конфиги (opaque-слой, с провенансом)
-  configs/patch/*.ltxp        ; директивные патчи конфигов        <- основной путь
-  ui/patch/*.xmlp             ; патчи XML
-  text/<lang>/*.xml           ; строки (уже аддитивно движком)
-  scripts/*.script            ; неймспейс модуля
-  scripts/register/*.script   ; автосканируемые регистраторы (схемы, эффекты, диалоги, таски)
+  gamedata/                   ; классический зеркальный оверлей (соглашение,
+                              ;   не требование - см. [vfs] ниже)
+  gamedata/configs/xms/*.ltx  ; новые LTX-секции (мерж в system.ltx)
+  patch/*.ltxp                ; директивные патчи конфигов        <- основной путь
+  patch/**/*.xmlp             ; патчи XML
   spawn/*.xspawn              ; аддитивные операции над спавном
-  levels/<level>/patch/       ; оверлей существующего уровня
-  levels/<new_level>/         ; новый уровень + graph_fragment
-  meshes/ textures/ sounds/   ; opaque-ассеты (last-wins + отчёт)
+  scripts/*.script            ; неймспейс модуля (xms.require)
+  levels/<level>/             ; оверлеи уровня (xcform/aimap/visuals + реестр)
+  graph_links.ltx             ; связи композитного game.graph
 ```
 
+Произвольная структура: секция `[vfs]` манифеста публикует любой файл или
+папку модуля по любому виртуальному пути игры (поверх собственного зеркала
+`gamedata/`), а `[redirects]` держит старые виртуальные имена живыми после
+переименований внутри модуля — аналог редиректоров UE. Синтаксис и правила
+разрешения — в `MODDING.md`.
+
 ### Манифест `mod.ltx`
+
+Признаются секции: `[module]` (`id` `[a-z0-9_.-]`, `name`, `version`, `mode`),
+`[provides_mode]` (`id`/`title`), `[requires]`, `[conflicts]`,
+`[order]` (`after`/`before`), `[budget]` (`spawns`, дефолт 256), `[vfs]`,
+`[redirects]`. Неизвестные ключи игнорируются движком, но переживают
+round-trip редактора — расширения формата добавляются только новыми ключами.
 
 ```ini
 [module]
 id            = madmer.better_cordon     ; [a-z0-9_.-], reverse-dns
 name          = Better Cordon
 version       = 1.2.0
-api           = 1                        ; версия XMS API
-engine_min    = 1.0.0
 
 [requires]
 xfined.core   = >=1.0
-other.mod     = >=2.1 <3.0
 
 [order]
 after         = someones.overhaul
@@ -182,18 +194,15 @@ before        = cosmetic.pack
 [conflicts]
 old.cordon_rework = *
 
-[budget]                                 ; заявка на потолки (см. §9)
+[budget]
 spawns        = 500
-game_vertices = 0
-objects       = 500
 
-[declares]                               ; необязательно, только для качества отчёта
-ltx_section   = wpn_ak74, wpn_ak74_up
-script        = xr_logic
+[vfs]
+textures\wpn  = art\weapon_textures      ; произвольная структура модуля
+
+[redirects]
+meshes\dynamics\old.ogf = meshes\dynamics\props\new.ogf
 ```
-
-`[declares]` ничего не блокирует и ни на что не влияет в рантайме — он лишь позволяет отчёту
-сказать «мод А и мод Б оба трогают `wpn_ak74`» до того, как игрок это заметит в игре.
 
 ### Порядок загрузки
 
@@ -203,9 +212,11 @@ script        = xr_logic
 
 ### Неймспейс и стабильный `ns`
 
-Каждый модуль получает `ns : u16` из персистентного реестра `mods/ns_registry.ltx`
-(назначается один раз, никогда не переиспользуется в рамках профиля). `ns` попадает в сейв — поэтому
-он обязан быть стабильным, а не хэшом имени, который может конфликтовать.
+Каждый модуль получает `ns : u16` из персистентного реестра
+`_appdata_/xms_registry.ltx` (назначается один раз, никогда не переиспользуется
+в рамках профиля; реестр лежит в `_appdata_`, а не в `mods/`, потому что папки
+модов для игры read-only). `ns` попадает в сейв — поэтому он обязан быть
+стабильным, а не хэшом имени, который может конфликтовать.
 
 От `ns` детерминированно производятся:
 * диапазоны `_SPAWN_ID` и `_OBJECT_ID` (см. §9);

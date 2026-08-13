@@ -1852,6 +1852,24 @@ void CLocatorAPI::r_close(CStreamReader*& fs)
     fs->close();
 }
 
+// Module folders are read-only BY CODE, not by convention: a write aimed
+// inside a mounted module root is refused outright. A write to a gamedata
+// path that an XMS overlay currently shadows is legal (it lands in gamedata
+// as always) but reads would keep coming from the module - say so in the log
+// instead of leaving a silent divergence.
+static bool xms_deny_write(pcstr fname)
+{
+    if (XMS::LayerOfPath(fname))
+    {
+        Msg("! XMS: refused write into module folder: %s", fname);
+        return true;
+    }
+    if (const CLocatorAPI::file* desc = FS.GetFileDesc(fname))
+        if (XMS::ResolvePhysical(desc->name))
+            Msg("~ XMS: writing to '%s' which an XMS overlay shadows - reads will still see the module", fname);
+    return false;
+}
+
 IWriter* CLocatorAPI::w_open(pcstr path, pcstr _fname)
 {
     string_path fname;
@@ -1860,6 +1878,8 @@ IWriter* CLocatorAPI::w_open(pcstr path, pcstr _fname)
 
     if (path && path[0])
         update_path(fname, path, fname);
+    if (xms_deny_write(fname))
+        return nullptr;
     CFileWriter* W = xr_new<CFileWriter>(fname, false);
 #ifdef _EDITOR
     if (!W->valid())
@@ -1876,6 +1896,8 @@ IWriter* CLocatorAPI::w_open_ex(pcstr path, pcstr _fname)
 
     if (path && path[0])
         update_path(fname, path, fname);
+    if (xms_deny_write(fname))
+        return nullptr;
     CFileWriter* W = xr_new<CFileWriter>(fname, true);
 #ifdef _EDITOR
     if (!W->valid())

@@ -310,7 +310,32 @@ void parse_manifest(Module& m, char* text)
             if (0 == xr_strcmp(key, "spawns"))
                 m.budget_spawns = u32(atoi(value));
         }
+        else if (0 == xr_strcmp(section, "vfs"))
+            m.vfs_maps.push_back({lower_copy(key), value});
+        else if (0 == xr_strcmp(section, "redirects"))
+            m.redirect_maps.push_back({lower_copy(key), lower_copy(value)});
     });
+}
+
+// Manifest paths arrive in whatever style the author typed. Virtual sides are
+// lowercased by the callers above (the VFS is case-folded); here both sides
+// get one separator style and are refused any attempt to climb out of their
+// root - a manifest must not be able to name a file outside the module or
+// outside gamedata.
+bool normalize_rel_path(xr_string& p)
+{
+    xr_string out;
+    out.reserve(p.size());
+    for (char c : p)
+        out += (c == '/') ? '\\' : c;
+    while (!out.empty() && out.front() == '\\')
+        out.erase(out.begin());
+    while (!out.empty() && (out.back() == '\\' || out.back() == ' '))
+        out.pop_back();
+    if (out.empty() || out.find("..") != xr_string::npos)
+        return false;
+    p = std::move(out);
+    return true;
 }
 
 void discover(pcstr mods_root)
@@ -509,9 +534,39 @@ void order_modules(pcstr mods_root)
 
 // ---- mounting --------------------------------------------------------------
 
-void mount_tree(const Module& m, pcstr phys_dir, pcstr virt_dir)
+void mount_entry(const Module& m, pcstr phys, pcstr virt, u32 size, u32 modif)
 {
     State& s = st();
+    Overlay overlay;
+    overlay.vpath = lower_copy(virt);
+    overlay.phys = phys;
+    overlay.size = size;
+    overlay.modif = modif;
+    overlay.layer = m.layer;
+
+    // ledger: someone already owns this virtual path
+    if (const CLocatorAPI::file* prev = FS.GetFileDesc(overlay.vpath.c_str()))
+    {
+        if (prev->size_real || prev->vfs != kStandardVfs) // skip folder placeholders
+        {
+            pcstr prev_phys = ResolvePhysical(prev->name);
+            xr_string loser = prev_phys ? prev_phys : prev->name;
+            if (!prev_phys && prev->vfs != kStandardVfs)
+                loser = xr_string("archive entry: ") + prev->name;
+            AddConflict(ConflictKind::File, overlay.vpath.c_str(), loser.c_str(), overlay.phys.c_str());
+        }
+    }
+
+    const CLocatorAPI::file* registered =
+        FS.xms_register(overlay.vpath.c_str(), overlay.size, overlay.modif);
+    if (!registered)
+        return;
+    s.overlays.emplace_back(std::move(overlay));
+    s.redirect[registered->name] = s.overlays.size() - 1;
+}
+
+void mount_tree(const Module& m, pcstr phys_dir, pcstr virt_dir)
+{
     string_path mask;
     strconcat(mask, phys_dir, "*");
     _finddata_t entry;
@@ -532,34 +587,96 @@ void mount_tree(const Module& m, pcstr phys_dir, pcstr virt_dir)
             mount_tree(m, phys, virt);
             continue;
         }
-        Overlay overlay;
-        overlay.vpath = lower_copy(virt);
-        overlay.phys = phys;
-        overlay.size = u32(entry.size);
-        overlay.modif = u32(entry.time_write);
-        overlay.layer = m.layer;
-
-        // ledger: someone already owns this virtual path
-        if (const CLocatorAPI::file* prev = FS.GetFileDesc(overlay.vpath.c_str()))
-        {
-            if (prev->size_real || prev->vfs != kStandardVfs) // skip folder placeholders
-            {
-                pcstr prev_phys = ResolvePhysical(prev->name);
-                xr_string loser = prev_phys ? prev_phys : prev->name;
-                if (!prev_phys && prev->vfs != kStandardVfs)
-                    loser = xr_string("archive entry: ") + prev->name;
-                AddConflict(ConflictKind::File, overlay.vpath.c_str(), loser.c_str(), overlay.phys.c_str());
-            }
-        }
-
-        const CLocatorAPI::file* registered =
-            FS.xms_register(overlay.vpath.c_str(), overlay.size, overlay.modif);
-        if (!registered)
-            continue;
-        s.overlays.emplace_back(std::move(overlay));
-        s.redirect[registered->name] = s.overlays.size() - 1;
+        mount_entry(m, phys, virt, u32(entry.size), u32(entry.time_write));
     } while (_findnext(handle, &entry) == 0);
     _findclose(handle);
+}
+
+// [vfs]: a module is free to keep any folder layout it likes and publish it
+// at virtual paths through its manifest. Mounted AFTER the module's gamedata/
+// mirror, so an explicit mapping wins over the module's own mirror; between
+// modules the usual load order applies.
+void mount_vfs_maps(const Module& m, pcstr gamedata_root)
+{
+    for (const PathMap& map : m.vfs_maps)
+    {
+        xr_string virt_rel = map.from;
+        xr_string phys_rel = map.to;
+        if (!normalize_rel_path(virt_rel) || !normalize_rel_path(phys_rel))
+        {
+            Msg("! XMS: [%s] bad [vfs] entry '%s = %s', skipped", m.id.c_str(), map.from.c_str(), map.to.c_str());
+            continue;
+        }
+
+        string_path phys, virt;
+        strconcat(phys, m.root.c_str(), phys_rel.c_str());
+        strconcat(virt, gamedata_root, virt_rel.c_str());
+
+        // a folder mapping mounts the tree under the virtual prefix, a file
+        // mapping mounts that one file; the probe doubles as the existence check
+        _finddata_t entry;
+        const intptr_t handle = _findfirst(phys, &entry);
+        if (handle == -1)
+        {
+            Msg("! XMS: [%s] [vfs] source '%s' does not exist, skipped", m.id.c_str(), phys_rel.c_str());
+            continue;
+        }
+        const bool folder = 0 != (entry.attrib & _A_SUBDIR);
+        const u32 size = u32(entry.size);
+        const u32 modif = u32(entry.time_write);
+        _findclose(handle);
+
+        if (folder)
+        {
+            xr_strcat(phys, DELIMITER);
+            xr_strcat(virt, DELIMITER);
+            mount_tree(m, phys, virt);
+        }
+        else
+            mount_entry(m, phys, virt, size, modif);
+    }
+}
+
+// [redirects]: the retired name becomes one more overlay over the SAME
+// physical file its current name resolves to. Works for renames inside the
+// module and for pointing an old path at another module's (or loose base)
+// file; archive-backed targets cannot be redirected to - a standard VFS entry
+// cannot read out of an archive.
+void mount_redirects(const Module& m, pcstr gamedata_root)
+{
+    for (const PathMap& map : m.redirect_maps)
+    {
+        xr_string old_rel = map.from;
+        xr_string new_rel = map.to;
+        if (!normalize_rel_path(old_rel) || !normalize_rel_path(new_rel))
+        {
+            Msg("! XMS: [%s] bad [redirects] entry '%s = %s', skipped", m.id.c_str(), map.from.c_str(),
+                map.to.c_str());
+            continue;
+        }
+
+        string_path old_virt, new_virt;
+        strconcat(old_virt, gamedata_root, old_rel.c_str());
+        strconcat(new_virt, gamedata_root, new_rel.c_str());
+
+        const CLocatorAPI::file* target = FS.GetFileDesc(lower_copy(new_virt).c_str());
+        if (!target)
+        {
+            Msg("! XMS: [%s] redirect target '%s' not found, '%s' skipped", m.id.c_str(), new_rel.c_str(),
+                old_rel.c_str());
+            continue;
+        }
+        pcstr phys = ResolvePhysical(target->name);
+        if (!phys && target->vfs == kStandardVfs)
+            phys = target->name; // loose base file: its registered name IS the physical path
+        if (!phys)
+        {
+            Msg("! XMS: [%s] redirect target '%s' lives in an archive, '%s' skipped", m.id.c_str(),
+                new_rel.c_str(), old_rel.c_str());
+            continue;
+        }
+        mount_entry(m, phys, old_virt, target->size_real, target->modif);
+    }
 }
 
 void mount_all()
@@ -575,6 +692,15 @@ void mount_all()
         string_path overlay_root;
         strconcat(overlay_root, m.root.c_str(), "gamedata" DELIMITER);
         mount_tree(m, overlay_root, gamedata->m_Path);
+        mount_vfs_maps(m, gamedata->m_Path);
+    }
+    // a second pass, so a redirect may point at content of ANY module
+    // regardless of load order, not only at earlier layers
+    for (const Module& m : s.modules)
+    {
+        if (m.disabled)
+            continue;
+        mount_redirects(m, gamedata->m_Path);
     }
 }
 } // namespace

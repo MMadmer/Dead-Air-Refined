@@ -5,10 +5,17 @@
 Additive mod packages that compose instead of overwriting each other. Full
 design: `XMS_ARCHITECTURE.md`. Quick authoring reference:
 
+A module is a self-contained folder the game reads IN PLACE: nothing is ever
+copied, unpacked or merged into `gamedata` or any other game folder, and the
+engine refuses writes into module folders by code. The only thing the game
+writes because of modules is its own bookkeeping under `_appdata_`
+(`xms_registry.ltx`, `xms_report.json`, caches).
+
 ```
 <game root>/mods/<mod.id>/
   mod.ltx            ; manifest: [module] id/name/version, [requires], [order]
-                     ; after/before, [conflicts], [budget] spawns=N
+                     ; after/before, [conflicts], [budget] spawns=N,
+                     ; [vfs], [redirects] (see below)
   gamedata/          ; classic overlay, mirrors game layout 1:1 (assets,
                      ; full-file overrides); later modules win per file
   gamedata/configs/xms/*.ltx   ; NEW config sections, merged into system.ltx
@@ -26,6 +33,29 @@ design: `XMS_ARCHITECTURE.md`. Quick authoring reference:
     visuals/*.ogf    ;   world-space geometry
     overlay_visuals.ltx ; registry for the .ogf above
 ```
+
+The `gamedata/` mirror is a CONVENTION, not a requirement. A module may keep
+any folder layout it likes and publish it through its manifest:
+
+```ini
+[vfs]
+; <virtual game path> = <path inside the module>  (file or folder)
+configs\xms\balance.ltx = tuning\balance.ltx     ; single file
+textures\wpn            = art\weapon_textures    ; whole folder, recursive
+
+[redirects]
+; <retired virtual path> = <current virtual path> - the UE redirector idea:
+; renaming an asset inside the module never breaks references from saves,
+; other modules or base configs that still use the old name
+meshes\dynamics\old_crate.ogf = meshes\dynamics\props\crate_a.ogf
+```
+
+`[vfs]` entries mount after the module's own `gamedata/` mirror (an explicit
+mapping wins over the mirror); between modules the usual load order applies.
+`[redirects]` are resolved after EVERY module has mounted, so a redirect may
+point at any module's content or at a loose base file; archive-backed targets
+cannot be redirected to. Both sections refuse `..` and report bad or missing
+entries in the log instead of silently dropping them.
 
 Visual overlay registry — one section per entry, section name is free-form. A
 section either **adds** a visual (`file`) or **hides** base ones (`hide`):
@@ -83,6 +113,11 @@ Runtime facts:
   (`appdata/xms_registry.ltx`); base `all.spawn` ids never change.
 - Kill switch: `-no_xms` command line. JSGME layers and `xtra_*.xdb0` keep
   working unchanged; folders under `MODS/` without `mod.ltx` are ignored.
+- Known limit of the `mode=` gate: spawn ops, level overlays and visuals are
+  gated per game mode, but the VFS mount, config stage and XML patches run at
+  engine start - before any mode is chosen - so files and configs of a
+  mode-gated module apply regardless of mode. Keep mode-specific CONTENT in
+  spawn/levels/scripts, not in plain file overrides.
 
 ## Loose particle overrides
 

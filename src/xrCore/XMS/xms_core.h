@@ -17,6 +17,16 @@ struct ProvidedMode
     xr_string title; // string-table id for the new-game checkbox
 };
 
+// One [vfs] / [redirects] manifest line. For [vfs] `from` is the VIRTUAL
+// game path and `to` is the path inside the module (file or folder) that
+// backs it. For [redirects] both sides are virtual: `from` is the retired
+// name, `to` is where its content lives now.
+struct PathMap
+{
+    xr_string from;
+    xr_string to;
+};
+
 struct Module
 {
     xr_string id;      // [a-z0-9_.-]+, unique
@@ -29,6 +39,13 @@ struct Module
     xr_vector<xr_string> after_ids;
     xr_vector<xr_string> before_ids;
     xr_vector<xr_string> conflict_ids;
+    // [vfs]: free-form module layout - mounts a file or folder of the module
+    // at an arbitrary virtual game path, on top of the gamedata/ mirror
+    xr_vector<PathMap> vfs_maps;
+    // [redirects]: retired virtual names resolving to the current ones, so a
+    // rename inside the module never breaks outside references (saves, other
+    // modules, base configs) - the UE redirector idea in manifest form
+    xr_vector<PathMap> redirect_maps;
     u32 budget_spawns{256};
     u16 ns{0};        // stable namespace id from the persistent registry
     u16 layer{0};     // 1-based position in the final load order (0 = base game)
