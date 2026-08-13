@@ -184,6 +184,14 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     state.pending.clear();
     state.loaded.clear();
     state.skipped_objects = 0;
+
+    // The mode set is process-global and outlives "quit to menu, load another
+    // save", so it is cleared HERE rather than only overwritten by a manifest
+    // that may not be there: a save written before this module existed, one
+    // whose .scov went stale, or one made with -no_xms carries no manifest at
+    // all, and inheriting the previous session's modes would let mode-gated
+    // content into a save that never asked for it.
+    XMS::SetActiveModes("");
     if (!XMS::Active() && chunks.empty())
         return;
 
@@ -198,6 +206,16 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
 
 void SyncModesFromNewGameOptions()
 {
+    // A fresh game inherits nothing from the session before it: the mode set,
+    // and the per-module blobs a loaded save left behind, are both process
+    // global.
+    BlobState& state = bs();
+    state.pending.clear();
+    state.loaded.clear();
+    state.skipped_objects = 0;
+    if (!XMS::Active())
+        return;
+
     // Always publish a set, even an empty one: XMS::SetActiveModes writes
     // process-global state that survives "quit to menu, start another game",
     // so skipping the call would carry the previous session's modes over.
@@ -220,23 +238,32 @@ void SyncModesFromNewGameOptions()
     // The screen writes one key per checkbox and leaves the unticked ones
     // empty. new_game_metro_mode -> "metro", matching the ids the editor
     // offers and a module's [module] mode.
+    //
+    // Both halves of the name are required. That section holds plenty of other
+    // new_game_* keys the same screen writes as booleans - good_wpn, good_loot,
+    // unlocked_guide, loadout_code - and none of them is a mode. The value has
+    // to read exactly "true" for the same reason: that is what the game's own
+    // is_*_mode() helpers compare against, and a mode active in C++ but not in
+    // Lua is worse than one that is off in both.
+    constexpr pcstr suffix = "_mode";
+    const size_t suffix_len = xr_strlen(suffix);
     xr_string csv;
     for (const auto& item : ini.r_section(section).Data)
     {
         pcstr key = item.first.c_str();
-        if (0 != strncmp(key, "new_game_", 9))
+        if (0 != _strnicmp(key, "new_game_", 9))
             continue;
         pcstr value = item.second.c_str();
-        if (!value || !value[0])
-            continue;
-        if (0 != xr_strcmp(value, "true") && 0 != xr_strcmp(value, "on") && 0 != xr_strcmp(value, "1"))
+        if (!value || 0 != _stricmp(value, "true"))
             continue;
 
         xr_string id = key + 9;
-        if (id.size() > 5 && 0 == xr_strcmp(id.c_str() + id.size() - 5, "_mode"))
-            id.erase(id.size() - 5);
+        if (id.size() <= suffix_len || 0 != _stricmp(id.c_str() + id.size() - suffix_len, suffix))
+            continue;
+        id.erase(id.size() - suffix_len);
         if (id.empty())
             continue;
+        xr_strlwr(&id[0]);
         if (!csv.empty())
             csv += ",";
         csv += id;
@@ -584,6 +611,12 @@ end
 --   mode_register  generated (XFined Editor rewrites it on every export)
 --   register       the author's own, never touched by anything
 -- Generated first, so the author's script can override what it set up.
+--
+-- A registrar runs once per SCRIPT ENGINE, not once per process: the engine
+-- rebuilds the Lua state for a new game, a save load and every level change,
+-- and each of those states needs its own wrappers. Registrars must therefore
+-- be idempotent and must not read the active mode set - on the load path the
+-- state is rebuilt before the save's modes are restored.
 local REGISTRARS = { "mode_register", "register" }
 function xms.load_registrars()
     for _, m in ipairs(xms.modules() or {}) do
@@ -599,7 +632,9 @@ function xms.load_registrars()
         end
     end
 end
-xms.load_registrars()
+-- guarded: one module's broken registrar must not take the bootstrap with it
+local ok_reg, reg_err = pcall(xms.load_registrars)
+if not ok_reg then xms.log("! xms.load_registrars: " .. tostring(reg_err)) end
 
 xms.log("bootstrap ready, api " .. tostring(xms.api))
 )xms";
@@ -609,11 +644,22 @@ void run_bootstrap(lua_State* L)
     if (!XMS::Active())
         return;
 
-    // loose override for iteration: gamedata\scripts\xms.script wins
+    // Loose override for iteration: gamedata\scripts\xms.script wins - but only
+    // a REAL loose file does. Module gamedata is mounted into the same virtual
+    // namespace, so without this check one module shipping that path would
+    // replace the whole xms api, and every other module's registrar with it.
     if (FS.exist("$game_scripts$", "xms.script"))
     {
-        GEnv.ScriptEngine->process_file_if_exists("xms", false);
-        return;
+        string_path loose;
+        FS.update_path(loose, "$game_scripts$", "xms.script");
+        const CLocatorAPI::file* desc = FS.GetFileDesc(loose);
+        const bool from_module = desc && XMS::ResolvePhysical(desc->name);
+        if (!from_module)
+        {
+            GEnv.ScriptEngine->process_file_if_exists("xms", false);
+            return;
+        }
+        Msg("! XMS: a module ships scripts\\xms.script - ignored, the bootstrap is not overridable by modules");
     }
 
     if (0 != luaL_loadbuffer(L, kXmsBootstrap, xr_strlen(kXmsBootstrap), "@xms_bootstrap"))
