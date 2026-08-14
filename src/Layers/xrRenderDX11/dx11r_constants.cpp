@@ -306,6 +306,13 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
             pTable = pReflection->GetConstantBufferByIndex(iBuf);
             if (pTable)
             {
+                // Structured/byte-address buffers surface here as RESOURCE_BIND_INFO entries
+                // whose members are the element struct - nothing bindable through the constant
+                // table, and the member walk below would fatal on the struct type.
+                D3D_SHADER_BUFFER_DESC BufferDesc;
+                if (SUCCEEDED(pTable->GetDesc(&BufferDesc)) && BufferDesc.Type != D3D_CT_CBUFFER &&
+                    BufferDesc.Type != D3D_CT_TBUFFER)
+                    continue;
                 //  Encode buffer index into destination
                 u32 updatedDest = destination;
                 updatedDest |= iBuf << dest_to_shift_value(destination); /*((destination&RC_dest_pixel)
