@@ -40,7 +40,9 @@ local function write_keys(screen)
 	if not (cfg) then return end
 	for i = 1, #MODES do
 		local m = MODES[i]
-		local picked = (screen.dax64_mode_combo and screen.dax64_mode_combo:GetSelectedIDX() == i) and true or nil
+		-- GetCurrentIdx is the LUA name; GetSelectedIDX is the C++ one and does
+		-- not exist here - calling it only threw inside the pcall above
+		local picked = (screen.dax64_mode_combo and screen.dax64_mode_combo:GetCurrentIdx() == i) and true or nil
 		cfg:w_value("character_creation", "new_game_" .. m.id .. "_mode", picked)
 	end
 end
@@ -102,8 +104,13 @@ local function build_bar(screen)
 	screen.dax64_mode_combo = combo
 
 	screen:AddCallback("dax64_mode_combo", ui_events.LIST_ITEM_SELECT, function()
-		if (combo:GetSelectedIDX() > 0) then
-			clear_campaign_checkboxes(screen)
+		local ok, err = pcall(function()
+			if (combo:GetCurrentIdx() > 0) then
+				clear_campaign_checkboxes(screen)
+			end
+		end)
+		if not (ok) then
+			printf("! dead_air_x64: mode dropdown select failed: %s", tostring(err))
 		end
 	end, screen)
 
@@ -127,7 +134,12 @@ local function install()
 	if (type(cls.OnStartGame) == "function") then
 		local base = cls.OnStartGame
 		cls.OnStartGame = function(self, ...)
-			pcall(write_keys, self)
+			-- guarded so a failure here cannot block starting a game, but LOUD:
+			-- a silent pcall is what hid GetSelectedIDX not existing in Lua
+			local ok, err = pcall(write_keys, self)
+			if not (ok) then
+				printf("! dead_air_x64: module mode not stored: %s", tostring(err))
+			end
 			return base(self, ...)
 		end
 	end
