@@ -86,7 +86,12 @@ void CSE_ALifeDynamicObject::add_offline(
 
 bool CSE_ALifeDynamicObject::synchronize_location()
 {
+    // m_tNodeID can belong to another level here: CSE_ALifeOnlineOfflineGroup::switch_offline
+    // synchronizes members during cross-level script teleports, and the current level graph is
+    // not theirs. The reference build read garbage and survived on x86; on x64 the wild vertex
+    // pointer is an access violation, so skip the sync exactly like the invalid-position case.
     if (!ai().level_graph().valid_vertex_position(o_Position) ||
+        !ai().level_graph().valid_vertex_id(m_tNodeID) ||
         ai().level_graph().inside(ai().level_graph().vertex(m_tNodeID), o_Position))
         return (true);
 

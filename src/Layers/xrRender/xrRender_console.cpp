@@ -170,10 +170,11 @@ int ps_r__LightSleepFrames = 10;
 // How many shadow-map faces may render per frame; excess faces keep lighting unshadowed.
 // The unit is a face, not a lamp: light::Export explodes a shadowed point light into six
 // OMNIPART faces, so a scene-wide value below 6 cannot shadow even one world lamp completely.
-// 0 restores the CoC/1.0/x86 behaviour of shadowing every light, and costs about half the
-// frame rate on a lamp-lit level - measured on a player build, not acceptable as a default.
-// Runtime cvar: raise it or set 0 to trade frame rate for lamp shadows.
-int ps_r__light_shadow_budget = 1;
+// 0 = shadow every light, exact CoC/1.0/x86 parity, and the default: shipping 1 in 1.3.2
+// dropped every lamp shadow but the nearest face (bar arena went shadowless past a few
+// meters) and let NPC headlamps shine through their own wearer's skull. The budget stays as
+// an opt-in runtime cvar for weak machines that prefer frame rate over lamp shadows.
+int ps_r__light_shadow_budget = 0;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of

@@ -42,6 +42,12 @@ end
 -- exist yet, so any logic whose condlist uses one of them killed the session on entering the
 -- level. Answering "not met" is the honest result - the object really is absent - and the
 -- condlist is re-evaluated on every update, so the section resolves normally once it appears.
+--
+-- Guard ONLY while db.actor is absent: that is exactly the crashing window, and it is the
+-- only case where a condlist hands nil down as the first argument. Several stock callers
+-- (xr_statistic faction checks, task_status_functor, dialogs) legitimately pass nil first
+-- and only read p; suppressing those mid-game broke kill reputation, task statuses and
+-- quest dialogs in 1.3.2.
 local conditions_guarded = false
 
 local function guard_object_conditions()
@@ -53,7 +59,7 @@ local function guard_object_conditions()
 	for name, original in pairs(xr_conditions) do
 		if type(original) == "function" then
 			xr_conditions[name] = function(object, npc, p, ...)
-				if object == nil then
+				if object == nil and db.actor == nil then
 					return false
 				end
 				return original(object, npc, p, ...)
