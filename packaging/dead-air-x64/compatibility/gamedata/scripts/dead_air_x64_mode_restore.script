@@ -1,0 +1,66 @@
+-- Legacy-save mode repair.
+--
+-- Saves written before the engine recorded the active mode set carry no
+-- manifest, so a load starts with an empty set - and every mode-gated module
+-- composes nothing, which reads as "my mod only works on a new game".
+-- The modes themselves never left the save: the base game keeps its own
+-- record in alife_storage_manager's state (enable_<x>_mode = true). Once the
+-- world is up that state is readable, so this derives the set from it,
+-- publishes it, and asks the engine to re-compose: the composer skips
+-- vertices that already exist, the late pass instantiates what is missing
+-- exactly once, and the NEXT save writes a proper manifest - the save has
+-- healed itself and this file never fires for it again.
+--
+-- The derivation is generic - any true `enable_<x>_mode` key becomes mode
+-- <x> - so it knows no mode by name and works for whatever campaign set the
+-- installed game ships.
+
+local function derive_modes()
+	local out = {}
+	pcall(function()
+		local st = alife_storage_manager and alife_storage_manager.get_state()
+		if (type(st) ~= "table") then return end
+		for k, v in pairs(st) do
+			if (v == true and type(k) == "string") then
+				local id = string.match(k, "^enable_(.+)_mode$")
+				if (id) then out[#out + 1] = id end
+			end
+		end
+		table.sort(out)
+	end)
+	return out
+end
+
+local fired = false
+local function try_restore()
+	if (fired) then return end
+	fired = true
+
+	local ok, err = pcall(function()
+		if not (xms and xms.active_modes and xms.set_modes) then return end
+		local active = xms.active_modes()
+		if (active and active ~= "") then return end	-- the manifest did its job
+		local modes = derive_modes()
+		if (#modes == 0) then return end				-- genuinely modeless game
+
+		local csv = table.concat(modes, ",")
+		xms.set_modes(csv)
+		local created = xms_native_recompose_spawns()
+		printf("* dead_air_x64: legacy save healed - modes [%s] restored from game state, late spawn +%s",
+			csv, tostring(created))
+	end)
+	if not (ok) then
+		printf("! dead_air_x64: legacy mode restore failed: %s", tostring(err))
+	end
+end
+
+-- First actor update: the alife world and the base game's state both exist,
+-- and it fires on every load path (new game included, where active_modes is
+-- already published and this returns immediately). Registered through the
+-- base game's own callback system - axr_main calls every script's
+-- on_game_start, and RegisterScriptCallback exists by then. Hooking the
+-- actor binder directly is a trap: bind_stalker_ext re-wires update, and a
+-- wrapper installed before that is silently dead.
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", try_restore)
+end

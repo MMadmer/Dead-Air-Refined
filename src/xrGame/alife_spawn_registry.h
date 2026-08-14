@@ -74,6 +74,16 @@ public:
     // XMS: applies module spawn layers (.xspawn) on top of the freshly loaded
     // base graph; runs before the derived indices are rebuilt
     void xms_compose();
+    // XMS: re-runs the composer AFTER load - for saves whose mode set only
+    // became known once the Lua world was up (legacy saves carry no manifest).
+    // The composer skips vertices that already exist, and both derived
+    // indices rebuild from scratch, so this is safe to call repeatedly.
+    void xms_recompose()
+    {
+        xms_compose();
+        build_story_spawns();
+        build_root_spawns();
+    }
     virtual void load(IReader& file_stream, xrGUID* save_guid = 0);
     virtual void save(IWriter& memory_stream);
     void begin_save(IWriter& memory_stream, SaveState& state);

@@ -70,4 +70,10 @@ IReader* ComposeGameGraph(IReader* base_chunk);
 // game everything is freshly spawned, so it only seeds the ledger.
 // Returns how many objects were created.
 u32 LateSpawnCompose(class CALifeSimulatorBase& sim);
+
+// Re-runs the spawn composer and then the late pass. For the Lua-side mode
+// restore on LEGACY saves: the manifestless save's modes become known only
+// once the game world is up, which is long after spawns().load composed with
+// an empty set. Exposed to Lua as xms_native_recompose_spawns().
+u32 RecomposeAndLateSpawn(class CALifeSimulatorBase& sim);
 }

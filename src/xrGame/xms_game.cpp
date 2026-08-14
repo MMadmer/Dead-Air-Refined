@@ -7,6 +7,7 @@
 #include "ai_space.h"
 #include "xrAICore/Navigation/game_graph.h"
 #include "alife_simulator_base.h"
+#include "alife_simulator.h"
 #include "alife_spawn_registry.h"
 #include "alife_object_registry.h"
 #include "xrServerEntities/xrServer_Objects_ALife.h"
@@ -387,6 +388,14 @@ u32 LateSpawnCompose(CALifeSimulatorBase& sim)
     }
     return created_total;
 }
+
+u32 RecomposeAndLateSpawn(CALifeSimulatorBase& sim)
+{
+    if (!XMS::Active())
+        return 0;
+    sim.spawns().xms_recompose();
+    return LateSpawnCompose(sim);
+}
 } // namespace XmsGame
 
 // ---- Lua natives -----------------------------------------------------------
@@ -536,6 +545,17 @@ luabind::object xms_native_known_modes(lua_State* L)
         }
     }
     return result;
+}
+
+// legacy-save repair: after Lua derives the playthrough's modes from the base
+// game's own state and publishes them (xms.set_modes), this re-runs the spawn
+// composer with the now-correct gate and instantiates what is missing
+u32 xms_native_recompose_spawns()
+{
+    const CALifeSimulator* sim = ai().get_alife();
+    if (!sim)
+        return 0;
+    return XmsGame::RecomposeAndLateSpawn(const_cast<CALifeSimulator&>(*sim));
 }
 
 // nearest composed game vertex on a level - lets mode/level scripts wire
@@ -799,7 +819,8 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_active_modes", &xms_native_active_modes),
         def("xms_native_mode_active", &xms_native_mode_active),
         def("xms_native_known_modes", &xms_native_known_modes),
-        def("xms_native_graph_vertex", &xms_native_graph_vertex)
+        def("xms_native_graph_vertex", &xms_native_graph_vertex),
+        def("xms_native_recompose_spawns", &xms_native_recompose_spawns)
     ];
 
     // defer the bootstrap to the end of CScriptEngine::init - the base Lua

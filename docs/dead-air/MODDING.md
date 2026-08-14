@@ -153,6 +153,15 @@ Runtime facts:
   the player has chosen anything, so they apply in every game. Keep
   mode-specific CONTENT in spawn/levels, and gate mode-specific BEHAVIOUR in
   Lua with `xms.mode_active(id)` rather than in plain file overrides.
+- LEGACY saves heal themselves. A save written before the engine recorded the
+  mode set carries no manifest, so it loads with an empty set and every
+  mode-gated module composes nothing. The modes never left the save, though:
+  the base game keeps `enable_<x>_mode = true` in alife_storage_manager's
+  state, and `dead_air_x64_mode_restore.script` derives the set from it on the
+  first actor update (generically - any true `enable_<x>_mode` key), publishes
+  it and re-composes (`xms_native_recompose_spawns`: the composer skips
+  existing vertices, the late pass instantiates the missing objects once).
+  The next save writes a proper manifest and the script never fires again.
 - The active mode set comes from the new-game screen: `[character_creation]`
   keys named exactly `new_game_<x>_mode` and set to `true` are published as XMS
   modes when a new game starts (`new_game_metro_mode` -> `metro`), and a loaded
