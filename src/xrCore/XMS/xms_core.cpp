@@ -1214,7 +1214,27 @@ bool ModeActive(pcstr mode_id)
 
 bool ModuleApplies(const Module& m)
 {
-    return !m.disabled && (m.mode.empty() || ModeActive(m.mode.c_str()));
+    if (m.disabled)
+        return false;
+    // "*" opts out of gating: the module's level work lands in every game
+    if (m.mode == "*")
+        return true;
+    if (m.mode.empty())
+    {
+        // a module that BRINGS a mode is implicitly for that mode
+        if (!m.provides_modes.empty())
+        {
+            for (const ProvidedMode& p : m.provides_modes)
+                if (ModeActive(p.id.c_str()))
+                    return true;
+            return false;
+        }
+        // no mode at all = built for the ORDINARY game; a stock new game has
+        // no active modes, and a campaign like Revolution II must not inherit
+        // props that were never made for it
+        return st().active_modes.empty();
+    }
+    return ModeActive(m.mode.c_str());
 }
 
 void SetMaterialResolver(MaterialResolver resolver) { st().material_resolver = resolver; }

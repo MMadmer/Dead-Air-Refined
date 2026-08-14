@@ -33,7 +33,7 @@ struct Module
     xr_string name;    // human readable
     xr_string version; // free-form, informational
     xr_string root;    // absolute physical path, trailing delimiter
-    xr_string mode;    // gate: content applies only when this mode is active ("" = always)
+    xr_string mode;    // gate: "" = ordinary game only (unless provides_modes), "*" = everywhere, else that mode
     xr_vector<ProvidedMode> provides_modes;
     xr_vector<xr_string> requires_ids;
     xr_vector<xr_string> after_ids;
@@ -160,7 +160,11 @@ XRCORE_API void AdoptLevelId(pcstr level_name, u8 id);
 XRCORE_API void SetActiveModes(pcstr csv);
 XRCORE_API pcstr ActiveModesCsv();
 XRCORE_API bool ModeActive(pcstr mode_id);
-// True when the module's content applies now (no mode gate, or gate active).
+// True when the module's level work applies to the CURRENT game:
+//   mode = <id>  -> that mode is active
+//   mode = *     -> always
+//   no mode      -> the module provides a mode? that mode is active
+//                   : the ordinary game (no active modes at all)
 XRCORE_API bool ModuleApplies(const Module& m);
 
 // ---- material resolution (set by the game once GMLib is alive) --------------
