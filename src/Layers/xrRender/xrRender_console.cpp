@@ -294,7 +294,11 @@ int ps_r2_dhemi_count = 5; // 5
 int ps_r2_wait_sleep = 0;
 int ps_r2_wait_timeout = 500;
 
-float ps_r2_lt_smooth = 1.f; // 1.f
+// Dynamic-object hemi adaptation rate (time-based lerp factor). The reference ships 1.0,
+// which settles in about three seconds and reads as an NPC slowly "charring" after stepping
+// into shade - reported by players as a defect. 4.0 settles in under a second and stays
+// smooth; r2_dhemi_smooth remains tunable, 1.0 restores the reference pace.
+float ps_r2_lt_smooth = 4.f; // reference: 1.f
 float ps_r2_slight_fade = 0.5f; // 1.f
 
 //  x - min (0), y - focus (1.4), z - max (100)
