@@ -1,0 +1,70 @@
+-- One campaign at a time on the new-game screen.
+--
+-- The РЕЖИМЫ column ships as bare checkboxes: ui_mm_faction_select never
+-- registers CHECK_BUTTON_SET for any of them (InitCallBacks only wires the
+-- buttons and lists), so every campaign could be ticked at once, every key
+-- was written to axr_options, and on_game_load applied all of them - its
+-- mode blocks are independent ifs, not elseifs. The three empty stubs the
+-- original author left behind - OnCheckSetStory / OnCheckSetAzazel /
+-- OnCheckSetSurvival - are where this was meant to live.
+--
+-- Only the campaigns are made exclusive. The ОПЦИИ column (easy, hardcore,
+-- rerum, good weapons, good loot) stays multi-select: those are modifiers.
+
+-- faction_ui field -> the XML control name AddCallback needs.
+-- This table IS the definition of "campaign" - edit it to regroup.
+local EXCLUSIVE = {
+	ck_survival		= "check_survival",
+	ck_laststand	= "check_laststand_mode",
+	ck_das			= "check_das_mode",
+	ck_warmon		= "check_warmon_mode",
+	ck_metro		= "check_metro_mode",
+	ck_rev2			= "check_rev2_mode",
+	ck_rev			= "check_rev_mode",
+}
+
+-- SetCheck only moves the button state; it does not send CHECK_BUTTON_SET,
+-- so clearing the others here cannot re-enter this handler.
+local function keep_only(screen, chosen)
+	for field in pairs(EXCLUSIVE) do
+		if (field ~= chosen) then
+			local box = screen[field]
+			if (box and box:GetCheck()) then
+				box:SetCheck(false)
+			end
+		end
+	end
+end
+
+local function install()
+	-- _G auto-loads a namespace on first reference; the screen is a plain
+	-- class-definition file, so pulling it in at startup has no side effects
+	local screen = ui_mm_faction_select
+	if not (screen and screen.faction_ui and screen.faction_ui.InitCallBacks) then
+		return false
+	end
+
+	local base = screen.faction_ui.InitCallBacks
+	screen.faction_ui.InitCallBacks = function(self, f)
+		base(self, f)
+		-- Appended after the base pass. Dispatch takes the FIRST callback
+		-- matching (control, event), so should the stock screen ever wire
+		-- these checkboxes itself, its handler wins and this one goes quiet
+		-- instead of fighting it.
+		for field, control in pairs(EXCLUSIVE) do
+			if (self[field]) then
+				self:AddCallback(control, ui_events.CHECK_BUTTON_SET, function()
+					keep_only(self, field)
+				end, self)
+			end
+		end
+	end
+	return true
+end
+
+-- A build without the DAR2 screen must not take the script engine down at
+-- startup: the menu working matters more than this refinement.
+local ok, installed = pcall(install)
+if not (ok and installed) then
+	printf("! dead_air_x64: new-game campaign exclusivity not installed")
+end
