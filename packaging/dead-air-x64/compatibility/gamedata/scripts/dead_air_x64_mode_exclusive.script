@@ -8,30 +8,81 @@
 -- original author left behind - OnCheckSetStory / OnCheckSetAzazel /
 -- OnCheckSetSurvival - are where this was meant to live.
 --
--- Only the campaigns are made exclusive. The ОПЦИИ column (easy, hardcore,
--- rerum, good weapons, good loot) stays multi-select: those are modifiers.
+-- The group is assembled per screen, from three sources:
+--   1. the stock campaigns below,
+--   2. every mode an XMS module put on the screen (found, not declared),
+--   3. anything a mod added through register() at any point before the
+--      screen opens.
+-- Membership is therefore open: a new campaign joins the rule by existing,
+-- not by this file learning about it.
 
--- faction_ui field -> the XML control name AddCallback needs.
--- This table IS the definition of "campaign" - edit it to regroup.
-local EXCLUSIVE = {
-	ck_survival		= "check_survival",
-	ck_laststand	= "check_laststand_mode",
-	ck_das			= "check_das_mode",
-	ck_warmon		= "check_warmon_mode",
-	ck_metro		= "check_metro_mode",
-	ck_rev2			= "check_rev2_mode",
-	ck_rev			= "check_rev_mode",
+-- ---------------------------------------------------------------------------
+-- 1. Stock campaigns. The base game ships no metadata saying which checkbox
+-- is a campaign and which is a modifier - the "РЕЖИМЫ / ОПЦИИ" split is two
+-- static captions and two x-coordinates - so this list is the one thing that
+-- has to be stated outright. It mirrors the modes column as the author laid
+-- it out. The options column (easy, hardcore, rerum, good weapons, good loot)
+-- stays multi-select on purpose: those are modifiers.
+--   registered control name -> how to reach the control on the screen
+-- ---------------------------------------------------------------------------
+local STOCK = {
+	["check_survival"]			= function(s) return s.ck_survival end,
+	["check_laststand_mode"]	= function(s) return s.ck_laststand end,
+	["check_das_mode"]			= function(s) return s.ck_das end,
+	["check_warmon_mode"]		= function(s) return s.ck_warmon end,
+	["check_metro_mode"]		= function(s) return s.ck_metro end,
+	["check_rev2_mode"]			= function(s) return s.ck_rev2 end,
+	["check_rev_mode"]			= function(s) return s.ck_rev end,
 }
+
+-- ---------------------------------------------------------------------------
+-- 3. Public registry, for a mod that adds a campaign by hand.
+--   register("check_my_mode", function(s) return s.ck_my end)
+-- unregister() takes one back out - use it when a mode is a modifier that
+-- should stack with a campaign rather than replace it.
+-- ---------------------------------------------------------------------------
+local EXTRA = {}
+
+function register(control_name, accessor)
+	if (type(control_name) == "string" and type(accessor) == "function") then
+		EXTRA[control_name] = accessor
+	end
+end
+
+function unregister(control_name)
+	EXTRA[control_name] = nil
+	STOCK[control_name] = nil
+end
+
+-- 2. XMS module modes. The generated registrar keeps its checkboxes in
+-- self.xms_checks[<mode id>] and registers each under "main_dialog:check_<id>
+-- _mode" - so they can be picked up here without the module declaring
+-- anything, and a module built before this rule existed still obeys it.
+-- public so it can be inspected/tested without opening the screen
+function build_group(screen)
+	local group = {}
+	for name, get in pairs(STOCK) do
+		local box = get(screen)
+		if (box) then group[name] = box end
+	end
+	for name, get in pairs(EXTRA) do
+		local ok, box = pcall(get, screen)
+		if (ok and box) then group[name] = box end
+	end
+	if (type(screen.xms_checks) == "table") then
+		for id, box in pairs(screen.xms_checks) do
+			if (box) then group["main_dialog:check_" .. id .. "_mode"] = box end
+		end
+	end
+	return group
+end
 
 -- SetCheck only moves the button state; it does not send CHECK_BUTTON_SET,
 -- so clearing the others here cannot re-enter this handler.
-local function keep_only(screen, chosen)
-	for field in pairs(EXCLUSIVE) do
-		if (field ~= chosen) then
-			local box = screen[field]
-			if (box and box:GetCheck()) then
-				box:SetCheck(false)
-			end
+local function keep_only(group, chosen)
+	for name, box in pairs(group) do
+		if (name ~= chosen and box:GetCheck()) then
+			box:SetCheck(false)
 		end
 	end
 end
@@ -47,17 +98,22 @@ local function install()
 	local base = screen.faction_ui.InitCallBacks
 	screen.faction_ui.InitCallBacks = function(self, f)
 		base(self, f)
+		-- Built here, not at load: InitControls has already run, so module
+		-- checkboxes exist, and a late register() has still been seen.
+		local group = build_group(self)
 		-- Appended after the base pass. Dispatch takes the FIRST callback
 		-- matching (control, event), so should the stock screen ever wire
 		-- these checkboxes itself, its handler wins and this one goes quiet
 		-- instead of fighting it.
-		for field, control in pairs(EXCLUSIVE) do
-			if (self[field]) then
-				self:AddCallback(control, ui_events.CHECK_BUTTON_SET, function()
-					keep_only(self, field)
-				end, self)
-			end
+		local n = 0
+		for name in pairs(group) do
+			n = n + 1
+			self:AddCallback(name, ui_events.CHECK_BUTTON_SET, function()
+				keep_only(group, name)
+			end, self)
 		end
+		-- the count is the answer to "why is my mode still not exclusive"
+		printf("* dead_air_x64: %s campaign checkbox(es) made exclusive", n)
 	end
 	return true
 end

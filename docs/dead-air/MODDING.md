@@ -214,6 +214,28 @@ an install that has it. Old saves and stock campaigns keep working because
 nothing base is overwritten - the checkbox is appended, and every map edit it
 carries is gated behind its own mode.
 
+**A module's campaign is exclusive with the others for free.** The stock screen
+enforces nothing - it registers no handler for any mode checkbox, so all of
+them could be ticked at once - and Refined's
+`gamedata/scripts/dead_air_x64_mode_exclusive.script` adds the rule. It finds a
+module's modes rather than being told about them: the generated registrar keeps
+its controls in `self.xms_checks[<mode id>]` and registers each under
+`main_dialog:check_<id>_mode`, and those two names are the whole contract. Keep
+them and a hand-written registrar joins the group as well; the log line
+`* dead_air_x64: N campaign checkbox(es) made exclusive` on opening the screen
+is how you check it did.
+
+The stock seven (survival, laststand, das, warmon, metro, rev2, rev) are listed
+in that script because the base game ships no metadata saying which checkbox is
+a campaign and which is a modifier - the "РЕЖИМЫ / ОПЦИИ" split is two captions
+and two x-coordinates. The options column stays multi-select. Two public calls
+adjust the group without editing the list:
+
+```lua
+dead_air_x64_mode_exclusive.register("check_my_mode", function(s) return s.ck_my end)
+dead_air_x64_mode_exclusive.unregister("check_rerum_mode")   -- let it stack instead
+```
+
 ## Loose particle overrides
 
 Individual particle effects and groups can be replaced or added through loose
