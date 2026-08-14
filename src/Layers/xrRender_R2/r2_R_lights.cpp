@@ -133,9 +133,12 @@ void CRender::render_lights(light_Package& LP)
             const bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             const bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
                 !dsgraph.mapSorted.empty();
-            const bool renderDetails = ps_r_sun_details >= detail_shadow_high && Details &&
-                Details->HasRenderableDetails();
-            if (bNormal || bSpecial || renderDetails)
+            // Detail objects never render into local light shadow maps in the reference:
+            // CoC (R2/R3/R4) and Dead Air 1.0 reserve them for the sun cascades. The pass
+            // arrived with the modern upstream base, and on grassy levels it cost more than
+            // the rest of the face put together (about a quarter of the whole frame with
+            // r__light_shadow_budget 0 at the Jupiter station).
+            if (bNormal || bSpecial)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
@@ -146,8 +149,6 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
                 dsgraph.cmd_list.set_xform_project(L->X.S.project);
                 dsgraph.render_graph(0);
-                if (renderDetails)
-                    Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
                 L->X.S.transluent = FALSE;
                 if (bSpecial)
                 {
