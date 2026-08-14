@@ -182,6 +182,19 @@ id    = my_campaign
 title = Моя кампания      ; what the player reads, not a string id
 ```
 
+shows up on that screen through Refined's **module-mode dropdown**: one shared
+combo in the band between the loadout section and the modes/options block
+(`dead_air_x64_mode_select.script`; geometry in
+`dead_air_x64_mode_exclusive.ltx` `[module_mode_bar]`; drawn only when at
+least one module registered, so a module-less screen stays stock). The
+registrar the editor generates joins it with
+`dead_air_x64_mode_select.add_mode(<id>, "st_cap_check_<id>_mode")`, and that
+script also writes `new_game_<id>_mode` on start; picking a module campaign
+clears the checkbox campaigns and ticking a checkbox campaign resets the
+dropdown, through the exclusivity script's `on_campaign_picked` hook. On a
+plain DA install without the Refined layer the registrar falls back to the
+module's own checkbox - which is why the export still
+
 ships three generated files - XFined Editor writes them on export, and they are
 the whole contract if you write them by hand:
 

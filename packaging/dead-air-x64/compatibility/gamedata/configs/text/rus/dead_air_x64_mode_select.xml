@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- the module-mode dropdown band (dead_air_x64_mode_select.script) -->
+	<string id="st_dax64_module_mode">
+		<text>Режим мода:</text>
+	</string>
+	<string id="st_dax64_module_mode_none">
+		<text>нет</text>
+	</string>
+</string_table>

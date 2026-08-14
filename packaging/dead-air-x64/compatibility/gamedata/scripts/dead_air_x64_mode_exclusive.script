@@ -27,6 +27,11 @@ local SECTION = "exclusive_campaigns"
 -- ---------------------------------------------------------------------------
 local EXTRA, REMOVED = {}, {}
 
+-- fired after a campaign checkbox click settles, with the screen; the module
+-- mode dropdown resets itself through this instead of stealing the click -
+-- the dispatcher runs only the FIRST callback per (control, event)
+on_campaign_picked = nil
+
 function register(control_name)
 	if (type(control_name) == "string" and control_name ~= "") then
 		EXTRA[control_name] = true
@@ -113,6 +118,7 @@ local function install()
 			n = n + 1
 			self:AddCallback(name, ui_events.CHECK_BUTTON_SET, function()
 				keep_only(group, name)
+				if (on_campaign_picked) then pcall(on_campaign_picked, self) end
 			end, self)
 		end
 		-- the count is the answer to "why is my mode still not exclusive"

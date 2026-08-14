@@ -1,0 +1,153 @@
+-- The module-mode dropdown on the new-game screen.
+--
+-- Campaigns installed as XMS modules do not add checkboxes to the РЕЖИМЫ
+-- column; they register here and show up in ONE dropdown, drawn in the band
+-- between the loadout section and the modes/options block. No modules - no
+-- dropdown, the screen stays exactly stock.
+--
+-- This file never runs unless something references it: module registrars
+-- call add_mode() and the _G auto-loader pulls it in. It is mechanism only -
+-- what it draws comes from add_mode(), where it draws comes from
+-- dead_air_x64_mode_exclusive.ltx, and it touches no stock control by name.
+--
+-- Compatibility contract, both directions:
+--   * a module built for plain DA (no Refined layer) falls back to its own
+--     checkbox - the registrar script the editor generates tries add_mode()
+--     first and only then takes the checkbox path;
+--   * a legacy module that still creates a checkbox keeps working: its box
+--     lands in self.xms_checks, which the exclusivity group already covers;
+--   * a mod that replaces the screen entirely just loses the dropdown -
+--     every touch below is guarded, and nothing else depends on it.
+
+local MODES = {}		-- insertion-ordered: { id = ..., caption = <string id> }
+
+function add_mode(id, caption_string_id)
+	if (type(id) ~= "string" or id == "") then return end
+	for i = 1, #MODES do
+		if (MODES[i].id == id) then return end	-- one entry per mode
+	end
+	MODES[#MODES + 1] = { id = id, caption = caption_string_id or id }
+end
+
+function modes_count()
+	return #MODES
+end
+
+-- what OnStartGame writes: the selected module mode's key gets true, every
+-- other registered one is cleared - exactly the shape the engine reads back
+local function write_keys(screen)
+	local cfg = axr_main and axr_main.config
+	if not (cfg) then return end
+	for i = 1, #MODES do
+		local m = MODES[i]
+		local picked = (screen.dax64_mode_combo and screen.dax64_mode_combo:GetSelectedIDX() == i) and true or nil
+		cfg:w_value("character_creation", "new_game_" .. m.id .. "_mode", picked)
+	end
+end
+
+local function layout()
+	-- one band: caption left, combo right; every number is data
+	local out = { cap_x = 300, cap_y = 354, cap_w = 145, cap_h = 18,
+				  combo_x = 450, combo_y = 352, combo_w = 250, rows = 6 }
+	pcall(function()
+		local ini = ini_file("dead_air_x64_mode_exclusive.ltx")
+		if not (ini and ini:section_exist("module_mode_bar")) then return end
+		for k in pairs(out) do
+			if (ini:line_exist("module_mode_bar", k)) then
+				out[k] = ini:r_float("module_mode_bar", k)
+			end
+		end
+	end)
+	return out
+end
+
+local function clear_campaign_checkboxes(screen)
+	-- picking a module campaign unpicks every checkbox campaign; the group
+	-- lives in the exclusivity script and may be absent - then nothing to do
+	pcall(function()
+		local excl = dead_air_x64_mode_exclusive
+		if (excl and excl.build_group) then
+			for _, box in pairs(excl.build_group(screen)) do
+				if (box:GetCheck()) then box:SetCheck(false) end
+			end
+		end
+	end)
+end
+
+local function build_bar(screen)
+	if (#MODES == 0) then return end
+	if not (screen.dialog) then return end	-- a replaced screen without it: skip
+
+	local L = layout()
+
+	local cap = CUITextWnd()
+	cap:SetWndRect(Frect():set(L.cap_x, L.cap_y, L.cap_w, L.cap_h))
+	cap:SetFont(GetFontLetterica16Russian())
+	cap:SetTextColor(GetARGB(255, 170, 170, 170))
+	cap:SetText(game.translate_string("st_dax64_module_mode"))
+	cap:SetAutoDelete(true)
+	screen.dialog:AttachChild(cap)
+
+	local combo = CUIComboBox()
+	combo:Init(L.combo_x, L.combo_y, L.combo_w)
+	combo:SetListLength(math.min(#MODES + 1, L.rows))
+	combo:AddItem(game.translate_string("st_dax64_module_mode_none"), 0)
+	for i = 1, #MODES do
+		combo:AddItem(game.translate_string(MODES[i].caption), i)
+	end
+	combo:SetCurrentIdx(0)
+	combo:SetAutoDelete(true)
+	screen.dialog:AttachChild(combo)
+	screen:Register(combo, "dax64_mode_combo")
+	screen.dax64_mode_combo = combo
+
+	screen:AddCallback("dax64_mode_combo", ui_events.LIST_ITEM_SELECT, function()
+		if (combo:GetSelectedIDX() > 0) then
+			clear_campaign_checkboxes(screen)
+		end
+	end, screen)
+
+	printf("* dead_air_x64: module mode dropdown with %s campaign(s)", #MODES)
+end
+
+local function install()
+	local screen = ui_mm_faction_select
+	if not (screen and screen.faction_ui) then return false end
+	local cls = screen.faction_ui
+
+	if (type(cls.InitCallBacks) == "function") then
+		local base = cls.InitCallBacks
+		cls.InitCallBacks = function(self, f)
+			base(self, f)
+			local ok, err = pcall(build_bar, self)
+			if not (ok) then printf("! dead_air_x64: mode dropdown failed: %s", tostring(err)) end
+		end
+	end
+
+	if (type(cls.OnStartGame) == "function") then
+		local base = cls.OnStartGame
+		cls.OnStartGame = function(self, ...)
+			pcall(write_keys, self)
+			return base(self, ...)
+		end
+	end
+
+	-- a campaign checkbox being ticked resets the dropdown - the exclusivity
+	-- script owns those clicks and offers a hook for exactly this
+	pcall(function()
+		local excl = dead_air_x64_mode_exclusive
+		if (excl) then
+			excl.on_campaign_picked = function(screen)
+				if (screen.dax64_mode_combo) then
+					screen.dax64_mode_combo:SetCurrentIdx(0)
+				end
+			end
+		end
+	end)
+	return true
+end
+
+local ok, installed = pcall(install)
+if not (ok and installed) then
+	printf("! dead_air_x64: module mode dropdown not installed")
+end
