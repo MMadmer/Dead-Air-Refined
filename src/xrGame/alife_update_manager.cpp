@@ -280,6 +280,11 @@ void CALifeUpdateManager::new_game(LPCSTR save_name)
 
     can_register_objects(false);
     spawn_new_objects();
+    // XMS: seed the applied-spawn ledgers. Everything is freshly spawned, so
+    // this creates nothing - it records every module spawn id as applied, and
+    // the ledger is what keeps a prop the player later destroys from
+    // respawning when a save is loaded (the load path composes late).
+    XmsGame::LateSpawnCompose(*this);
     can_register_objects(true);
 
     CALifeObjectRegistry::OBJECT_REGISTRY::iterator I = objects().objects().begin();

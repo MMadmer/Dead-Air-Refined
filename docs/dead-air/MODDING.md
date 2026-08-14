@@ -26,6 +26,13 @@ writes because of modules is its own bookkeeping under `_appdata_`
   spawn/*.xspawn     ; additive spawn ops:
                      ;   [obj:my_guard]  op=add section=... level=... position=x,y,z
                      ;   [obj:base:<level>/<name>]  op=modify|remove ...
+                     ; add-ops reach EXISTING playthroughs too: a loaded save
+                     ; composes the registry the same way, and objects this
+                     ; playthrough never saw are instantiated once, recorded
+                     ; in a per-module ledger inside the .scov - a prop the
+                     ; player destroyed stays destroyed. modify/remove of
+                     ; base objects act on NEW games only: a save already
+                     ; carries its own copy of every existing object.
   scripts/*.script   ; namespaced, loaded via xms.require("mod.id","file")
   levels/<level>/    ; level overlays, exported by XFined Editor:
     overlay.xcform   ;   collision triangles appended to the static CDB
@@ -195,25 +202,25 @@ dropdown, through the exclusivity script's `on_campaign_picked` hook. On a
 plain DA install without the Refined layer the registrar falls back to the
 module's own checkbox - which is why the export still
 
-ships three generated files - XFined Editor writes them on export, and they are
+ships generated files - XFined Editor writes them on export, and they are
 the whole contract if you write them by hand:
 
 | file | what it does |
 | --- | --- |
-| `patch/xms_modes.xmlp` | appends `check_<id>_mode` + `cap_check_<id>_mode` to `main_dialog`, grows the frame around the mode column and pushes whatever sat below it down |
+| `scripts/mode_register.script` | registers the mode(s) with the dropdown (`dead_air_x64_mode_select.add_mode`); on an install without that layer, falls back to creating the module's own checkbox and writing `[character_creation] new_game_<id>_mode` on start |
 | `gamedata/configs/text/rus/<module id>_modes.xml` | defines `st_cap_check_<id>_mode`, cp1251 like every other string table |
-| `scripts/mode_register.script` | wraps `faction_ui:InitControls` to create the controls and `faction_ui:OnStartGame` to write `[character_creation] new_game_<id>_mode` |
+| `gamedata/configs/ui/<module id>_modes.xml` (+`_16`) | the FALLBACK checkbox layout - the module's own file, measured against the screen the linked game ships; the screen's xml itself is never patched, so nothing fights over its frame |
 
-The two file names that stay inside the module are fixed, so renaming a mode
-rewrites them instead of leaving a stale checkbox behind. The string table is
-the one that lands in the shared game namespace, so it carries the module id -
-two modules must not collide on it.
+The registrar's file name is fixed, so renaming a mode rewrites it instead of
+leaving a stale checkbox behind. The string table and the layout land in the
+game's shared namespace, so they carry the module id - two modules must not
+collide on them.
 
-Two things bite anyone writing that script by hand. `faction_ui` is a luabind
+Two things bite anyone writing the fallback by hand. `faction_ui` is a luabind
 class, so its methods are replaced by plain assignment (`cls.InitControls = ...`)
 - `xms.hook` resolves through `_G` and cannot reach them. And the screen keeps
-its `CScriptXmlInit` local, so the wrapper parses the layout again itself
-(`xml:ParseFile("ui_mm_faction_select.xml")`, the engine picks the aspect
+its `CScriptXmlInit` local, so the wrapper parses the module's own layout
+itself (`xml:ParseFile("<id>_modes.xml")`, the engine picks the aspect
 variant); there is no `self.xml` to reuse.
 
 The naming is not decoration: the engine turns `new_game_<id>_mode` back into

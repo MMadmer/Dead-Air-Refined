@@ -48,9 +48,11 @@ local function write_keys(screen)
 end
 
 local function layout()
-	-- one band: caption left, combo right; every number is data
-	local out = { cap_x = 300, cap_y = 354, cap_w = 145, cap_h = 18,
-				  combo_x = 450, combo_y = 352, combo_w = 250, rows = 6 }
+	-- one band: caption left, combo right; every number is data. Defaults sit
+	-- in the strip the base xmlp patch opens at y=375..395 - BETWEEN the
+	-- loadout frame and the (slid-down) modes/options frame.
+	local out = { cap_x = 300, cap_y = 377, cap_w = 145, cap_h = 18,
+				  combo_x = 450, combo_y = 375, combo_w = 250, rows = 6 }
 	pcall(function()
 		local ini = ini_file("dead_air_x64_mode_exclusive.ltx")
 		if not (ini and ini:section_exist("module_mode_bar")) then return end
@@ -99,7 +101,10 @@ local function build_bar(screen)
 	for i = 1, #MODES do
 		combo:AddItem(game.translate_string(MODES[i].caption), i)
 	end
-	combo:SetCurrentIdx(0)
+	-- SetCurrentID = C++ SetItemIDX: the one that also writes the closed
+	-- combo's text; SetCurrentIdx only marks the list row and leaves the
+	-- visible box empty
+	combo:SetCurrentID(0)
 	combo:SetAutoDelete(true)
 	screen.dialog:AttachChild(combo)
 	screen:Register(combo, "dax64_mode_combo")
@@ -153,7 +158,7 @@ local function install()
 		if (excl) then
 			excl.on_campaign_picked = function(screen)
 				if (screen.dax64_mode_combo) then
-					screen.dax64_mode_combo:SetCurrentIdx(0)
+					screen.dax64_mode_combo:SetCurrentID(0)
 				end
 			end
 		end

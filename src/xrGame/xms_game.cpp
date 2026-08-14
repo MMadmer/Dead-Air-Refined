@@ -6,6 +6,10 @@
 #include "xrScriptEngine/script_engine.hpp"
 #include "ai_space.h"
 #include "xrAICore/Navigation/game_graph.h"
+#include "alife_simulator_base.h"
+#include "alife_spawn_registry.h"
+#include "alife_object_registry.h"
+#include "xrServerEntities/xrServer_Objects_ALife.h"
 
 #include "xrCommon/xr_unordered_map.h"
 
@@ -19,6 +23,12 @@ struct BlobState
 {
     xr_unordered_map<u16, xr_vector<u8>> pending; // set by Lua this session
     xr_unordered_map<u16, xr_vector<u8>> loaded;  // last loaded .scov snapshot
+    // applied-spawn ledgers, per module ns: sorted spawn ids this playthrough
+    // has instantiated. pending_ledgers is what the next save writes; the
+    // loaded set only feeds it (a loaded-only chunk would be dropped from the
+    // next save, because the capture walks pending state exclusively).
+    xr_unordered_map<u16, xr_vector<u16>> pending_ledgers;
+    xr_unordered_map<u16, xr_vector<u16>> loaded_ledgers;
     u32 skipped_objects{0};
 };
 
@@ -176,6 +186,22 @@ void CollectSaveMutations(xr_vector<SaveExtensionGameplay::ChunkMutation>& mutat
         mutation.erase = blob.empty();
         mutations.emplace_back(std::move(mutation));
     }
+
+    // ledger v1 payload: u32 count, count * u16 spawn id (sorted)
+    for (auto& [ns, ids] : bs().pending_ledgers)
+    {
+        SaveExtensionGameplay::ChunkMutation mutation;
+        mutation.chunk.type = kLedgerChunkBase | ns;
+        mutation.chunk.version = 1;
+        mutation.newestSupportedVersion = 1;
+        CMemoryWriter writer;
+        writer.w_u32(u32(ids.size()));
+        for (const u16 id : ids)
+            writer.w_u16(id);
+        mutation.chunk.payload.assign(writer.pointer(), writer.pointer() + writer.size());
+        mutation.erase = ids.empty();
+        mutations.emplace_back(std::move(mutation));
+    }
 }
 
 void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
@@ -183,6 +209,8 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     BlobState& state = bs();
     state.pending.clear();
     state.loaded.clear();
+    state.pending_ledgers.clear();
+    state.loaded_ledgers.clear();
     state.skipped_objects = 0;
 
     // The mode set is process-global and outlives "quit to menu, load another
@@ -201,6 +229,20 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
             parse_manifest(chunk.payload);
         else if ((chunk.type & 0xFFFF0000) == kModuleChunkBase && chunk.version == 1)
             state.loaded[u16(chunk.type & 0xFFFF)] = chunk.payload;
+        else if ((chunk.type & 0xFFFF0000) == kLedgerChunkBase && chunk.version == 1)
+        {
+            if (chunk.payload.size() < sizeof(u32))
+                continue;
+            IReader reader(const_cast<u8*>(chunk.payload.data()), int(chunk.payload.size()));
+            const u32 count = reader.r_u32();
+            if (chunk.payload.size() < sizeof(u32) + size_t(count) * sizeof(u16))
+                continue;
+            xr_vector<u16>& ids = state.loaded_ledgers[u16(chunk.type & 0xFFFF)];
+            ids.resize(count);
+            for (u32 i = 0; i < count; ++i)
+                ids[i] = reader.r_u16();
+            std::sort(ids.begin(), ids.end());
+        }
     }
 }
 
@@ -212,6 +254,8 @@ void SyncModesFromNewGameOptions()
     BlobState& state = bs();
     state.pending.clear();
     state.loaded.clear();
+    state.pending_ledgers.clear();
+    state.loaded_ledgers.clear();
     state.skipped_objects = 0;
     if (!XMS::Active())
         return;
@@ -281,6 +325,67 @@ void NoteSkippedObject(pcstr section)
 {
     ++bs().skipped_objects;
     Msg("! XMS: skipped saved object with unknown section [%s]", section ? section : "?");
+}
+
+u32 LateSpawnCompose(CALifeSimulatorBase& sim)
+{
+    if (!XMS::Active())
+        return 0;
+    BlobState& state = bs();
+
+    // every loaded ledger is re-emitted even when its module is now absent or
+    // gated off: the capture walks pending state only, so a loaded-only chunk
+    // would silently fall out of the next save
+    for (const auto& [ns, ids] : state.loaded_ledgers)
+        if (state.pending_ledgers.find(ns) == state.pending_ledgers.end())
+            state.pending_ledgers[ns] = ids;
+
+    // spawn ids already embodied by loaded (or freshly spawned) objects - the
+    // secondary guard, and the whole seed on the new-game path
+    xr_vector<bool> occupied(65536, false);
+    for (const auto& [id, object] : sim.objects().objects())
+        if (object->m_tSpawnID != ALife::_SPAWN_ID(-1))
+            occupied[object->m_tSpawnID] = true;
+
+    u32 created_total = 0;
+    for (const XMS::Module& m : XMS::Modules())
+    {
+        if (m.disabled || !XMS::ModuleApplies(m))
+            continue;
+        u32 base = 0;
+        if (!XMS::SpawnRange(m.id.c_str(), m.budget_spawns, base))
+            continue;
+
+        xr_vector<u16>& ledger = state.pending_ledgers[m.ns];
+        u32 created = 0;
+        const u32 top = std::min(base + m.budget_spawns, 65535u);
+        for (u32 id = base; id < top; ++id)
+        {
+            const ALife::_SPAWN_ID spawn_id = ALife::_SPAWN_ID(id);
+            if (!sim.spawns().spawns().vertex(spawn_id))
+                continue;
+            const bool in_ledger = std::binary_search(ledger.begin(), ledger.end(), u16(id));
+            if (!in_ledger && !occupied[id])
+            {
+                // same recipe as CALifeSurgeManager::spawn_new_spawns, one
+                // vertex at a time: clone the composed prototype, take a
+                // fresh object id, register offline
+                CSE_ALifeDynamicObject* prototype =
+                    smart_cast<CSE_ALifeDynamicObject*>(&sim.spawns().spawns().vertex(spawn_id)->data()->object());
+                if (!prototype)
+                    continue;
+                CSE_ALifeDynamicObject* object = nullptr;
+                sim.create(object, prototype, spawn_id);
+                ++created;
+            }
+            if (!in_ledger)
+                ledger.insert(std::upper_bound(ledger.begin(), ledger.end(), u16(id)), u16(id));
+        }
+        if (created)
+            Msg("* XMS: [%s] late spawn: +%u object(s) composed into this playthrough", m.id.c_str(), created);
+        created_total += created;
+    }
+    return created_total;
 }
 } // namespace XmsGame
 

@@ -22,6 +22,10 @@ namespace XmsGame
 inline constexpr u32 kManifestChunkId = 0x31534D58;
 // per-module data chunks: "XM" prefix + module ns in the low word
 inline constexpr u32 kModuleChunkBase = 0x584D0000;
+// per-module applied-spawn ledgers: "XL" prefix + module ns in the low word.
+// Separate from the data chunk so a mod's own xms.save_data never collides
+// with the engine's bookkeeping.
+inline constexpr u32 kLedgerChunkBase = 0x584C0000;
 
 // ---- per-module persistent blobs (Lua xms.save_data / xms.load_data) -------
 void SetPendingBlob(u16 ns, const void* data, size_t size);
@@ -53,4 +57,17 @@ void NoteSkippedObject(pcstr section);
 // original reader when nothing to add, else a fresh reader over the composed
 // blob (the original is closed). Called on the all.spawn chunk 4.
 IReader* ComposeGameGraph(IReader* base_chunk);
+
+// ---- late spawn composition -------------------------------------------------
+// The composer already registers module spawn vertices on BOTH paths (a save
+// load re-reads all.spawn through the same loader), so a module updated since
+// the save was written has its new vertices in the registry - what a load
+// does not do is create the objects. This walks every applying module's spawn
+// id range, instantiates the vertices this playthrough never applied, and
+// records them in a per-module ledger chunk in the .scov - so a prop the
+// player destroyed stays destroyed instead of respawning on every load.
+// Runs inside the can_register_objects(false) window of BOTH paths: on a new
+// game everything is freshly spawned, so it only seeds the ledger.
+// Returns how many objects were created.
+u32 LateSpawnCompose(class CALifeSimulatorBase& sim);
 }

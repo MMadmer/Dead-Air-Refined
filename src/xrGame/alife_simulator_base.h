@@ -39,8 +39,18 @@ class Manager;
 }
 } // namespace upgrade, inventory
 
+class CALifeSimulatorBase;
+namespace XmsGame
+{
+u32 LateSpawnCompose(CALifeSimulatorBase& sim);
+}
+
 class CALifeSimulatorBase : public IPureDestroyableObject
 {
+    // late spawn composition instantiates module vertices exactly the way
+    // spawn_new_spawns does; it needs the protected registries for that
+    friend u32 XmsGame::LateSpawnCompose(CALifeSimulatorBase&);
+
 protected:
     IPureServer* m_server;
     CALifeSimulatorHeader* m_header;

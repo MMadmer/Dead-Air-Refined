@@ -2188,6 +2188,13 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
 
     registry().load(source);
 
+    // XMS: a module updated since this save was written has its new spawn
+    // vertices composed (spawns().load above runs the composer on this path
+    // too) but no objects. Instantiate what this playthrough never applied -
+    // still inside the deferred-on_register window, so the new objects join
+    // the uniform on_register pass below exactly like on a new game.
+    XmsGame::LateSpawnCompose(*this);
+
     can_register_objects(true);
 
     for (auto& object : objects().objects())

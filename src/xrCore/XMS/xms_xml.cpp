@@ -76,10 +76,66 @@ void collect_xmlp(pcstr dir, xr_vector<xr_string>& out)
     std::sort(out.begin(), out.end());
 }
 
+void index_patch_file(XmlState& s, pcstr file, pcstr owner_id, u16 layer)
+{
+    FILE* f = fopen(file, "rb");
+    if (!f)
+        return;
+    fseek(f, 0, SEEK_END);
+    const long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    xr_string text;
+    text.resize(size_t(std::max(0l, len)));
+    const size_t got = len > 0 ? fread(text.data(), 1, size_t(len), f) : 0;
+    fclose(f);
+    text.resize(got);
+    if (text.empty())
+        return;
+
+    auto doc = std::make_shared<TiXmlDocument>();
+    doc->Parse(doc.get(), text.c_str());
+    if (doc->Error())
+    {
+        Msg("! XMS: bad xmlp [%s]: %s", file, doc->ErrorDesc());
+        return;
+    }
+    for (TiXmlElement* patch = doc->FirstChildElement("xms-patch"); patch;
+         patch = patch->NextSiblingElement("xms-patch"))
+    {
+        pcstr target = patch->Attribute("target");
+        if (!target || !target[0])
+        {
+            Msg("! XMS: xmlp without target attribute [%s]", file);
+            continue;
+        }
+        PatchRef ref;
+        ref.module_id = owner_id;
+        ref.layer = layer;
+        ref.patch_root = patch;
+        ref.doc = doc;
+        s.by_target[normalize_target(target)].emplace_back(std::move(ref));
+    }
+}
+
 void build_index()
 {
     XmlState& s = xs();
     s.built = true;
+
+    // The BASE layer: the game's own compatibility patches under
+    // gamedata\patch\. Same format, applied before any module - this is how
+    // the shipped game adjusts a screen it does not own (the UI xml belongs
+    // to a third-party mod) without forking the whole file, and modules still
+    // patch on top of the result.
+    {
+        string_path base_dir;
+        FS.update_path(base_dir, "$game_data$", "patch" DELIMITER);
+        xr_vector<xr_string> files;
+        collect_xmlp(base_dir, files);
+        for (const xr_string& file : files)
+            index_patch_file(s, file.c_str(), "base", 0);
+    }
+
     for (const Module& m : Modules())
     {
         if (m.disabled)
@@ -89,45 +145,7 @@ void build_index()
         strconcat(dir, m.root.c_str(), "patch" DELIMITER);
         collect_xmlp(dir, files);
         for (const xr_string& file : files)
-        {
-            FILE* f = fopen(file.c_str(), "rb");
-            if (!f)
-                continue;
-            fseek(f, 0, SEEK_END);
-            const long len = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            xr_string text;
-            text.resize(size_t(std::max(0l, len)));
-            const size_t got = len > 0 ? fread(text.data(), 1, size_t(len), f) : 0;
-            fclose(f);
-            text.resize(got);
-            if (text.empty())
-                continue;
-
-            auto doc = std::make_shared<TiXmlDocument>();
-            doc->Parse(doc.get(), text.c_str());
-            if (doc->Error())
-            {
-                Msg("! XMS: bad xmlp [%s]: %s", file.c_str(), doc->ErrorDesc());
-                continue;
-            }
-            for (TiXmlElement* patch = doc->FirstChildElement("xms-patch"); patch;
-                 patch = patch->NextSiblingElement("xms-patch"))
-            {
-                pcstr target = patch->Attribute("target");
-                if (!target || !target[0])
-                {
-                    Msg("! XMS: xmlp without target attribute [%s]", file.c_str());
-                    continue;
-                }
-                PatchRef ref;
-                ref.module_id = m.id;
-                ref.layer = m.layer;
-                ref.patch_root = patch;
-                ref.doc = doc;
-                s.by_target[normalize_target(target)].emplace_back(std::move(ref));
-            }
-        }
+            index_patch_file(s, file.c_str(), m.id.c_str(), m.layer);
     }
     if (!s.by_target.empty())
         Msg("* XMS: xml patch index: %zu target file(s)", s.by_target.size());

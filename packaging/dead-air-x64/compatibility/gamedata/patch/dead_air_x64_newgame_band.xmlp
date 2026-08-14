@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!--
+	Opens a real band between the loadout section and the modes/options block
+	of the new-game screen: the whole lower block slides down 25 units, and
+	the module-mode dropdown (dead_air_x64_mode_select.script) draws in the
+	freed strip at y=375..395 - BETWEEN the frames, not over them.
+
+	This is the BASE patch layer (gamedata\patch\, applied before any module
+	patch). The screen xml ships in a third-party mod, so it is adjusted by
+	a data patch on its node names - never forked, never edited in code.
+	A replaced screen without these nodes just logs misses and stays intact.
+-->
+<xms-patch target="ui\ui_mm_faction_select_16.xml">
+	<!-- the lower frame and its two column headers -->
+	<set-attr node="main_dialog:frame_buttons" name="y" value="400"/>
+	<set-attr node="main_dialog:dar2_mode"     name="y" value="405"/>
+	<set-attr node="main_dialog:dar2_option"   name="y" value="405"/>
+
+	<!-- campaigns column -->
+	<set-attr node="main_dialog:cap_check_survival"       name="y" value="430"/>
+	<set-attr node="main_dialog:check_survival"           name="y" value="430"/>
+	<set-attr node="main_dialog:cap_check_laststand_mode" name="y" value="455"/>
+	<set-attr node="main_dialog:check_laststand_mode"     name="y" value="455"/>
+	<set-attr node="main_dialog:cap_check_das_mode"       name="y" value="480"/>
+	<set-attr node="main_dialog:check_das_mode"           name="y" value="480"/>
+	<set-attr node="main_dialog:cap_check_warmon_mode"    name="y" value="505"/>
+	<set-attr node="main_dialog:check_warmon_mode"        name="y" value="505"/>
+	<set-attr node="main_dialog:cap_check_metro_mode"     name="y" value="530"/>
+	<set-attr node="main_dialog:check_metro_mode"         name="y" value="530"/>
+	<set-attr node="main_dialog:cap_check_rev2_mode"      name="y" value="555"/>
+	<set-attr node="main_dialog:check_rev2_mode"          name="y" value="555"/>
+	<set-attr node="main_dialog:cap_check_rev_mode"       name="y" value="580"/>
+	<set-attr node="main_dialog:check_rev_mode"           name="y" value="580"/>
+	<set-attr node="main_dialog:cap_check_km_mode"        name="y" value="605"/>
+	<set-attr node="main_dialog:check_km_mode"            name="y" value="605"/>
+
+	<!-- options column -->
+	<set-attr node="main_dialog:cap_check_easy_mode"  name="y" value="430"/>
+	<set-attr node="main_dialog:check_easy_mode"      name="y" value="430"/>
+	<set-attr node="main_dialog:cap_check_good_wpn"   name="y" value="455"/>
+	<set-attr node="main_dialog:check_good_wpn"       name="y" value="455"/>
+	<set-attr node="main_dialog:cap_check_good_loot"  name="y" value="480"/>
+	<set-attr node="main_dialog:check_good_loot"      name="y" value="480"/>
+	<set-attr node="main_dialog:cap_check_hardcore"   name="y" value="505"/>
+	<set-attr node="main_dialog:check_hardcore"       name="y" value="505"/>
+	<set-attr node="main_dialog:input_lives_amount"   name="y" value="501"/>
+	<set-attr node="main_dialog:cap_lives_amount"     name="y" value="505"/>
+	<set-attr node="main_dialog:cap_check_rerum_mode" name="y" value="530"/>
+	<set-attr node="main_dialog:check_rerum_mode"     name="y" value="530"/>
+
+	<!-- the mod title and author under the block follow it down -->
+	<set-attr node="main_dialog:dar2"        name="y" value="633"/>
+	<set-attr node="main_dialog:dar2_author" name="y" value="663"/>
+</xms-patch>
