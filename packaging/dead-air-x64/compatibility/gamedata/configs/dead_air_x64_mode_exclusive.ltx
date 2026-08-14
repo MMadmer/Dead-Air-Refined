@@ -1,0 +1,25 @@
+; Which new-game checkboxes are CAMPAIGNS (mutually exclusive).
+;
+; This is data about the INSTALLED GAME's screen, not engine knowledge: the
+; base screen ships no metadata separating a campaign from a modifier - its
+; "РЕЖИМЫ / ОПЦИИ" split is two captions and two x-coordinates - so the
+; grouping has to be stated somewhere, and a config is where a statement
+; about somebody else's mod belongs. Replace the screen, replace this file.
+;
+; One REGISTERED CONTROL NAME per line (the name passed to Register() in
+; ui_mm_faction_select). A missing control is skipped silently, so this list
+; may cover more screens than the one installed. XMS modules are NOT listed
+; here - their modes are discovered on the screen automatically.
+;
+; The current set mirrors the DAR2 РЕЖИМЫ column. The ОПЦИИ column (easy,
+; hardcore, rerum, good weapons, good loot) is deliberately absent: those are
+; modifiers and stay multi-select. Note the _mode suffix proves nothing -
+; hardcore/rerum/easy carry it and are options.
+[exclusive_campaigns]
+check_survival
+check_laststand_mode
+check_das_mode
+check_warmon_mode
+check_metro_mode
+check_rev2_mode
+check_rev_mode

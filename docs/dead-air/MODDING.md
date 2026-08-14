@@ -217,24 +217,31 @@ carries is gated behind its own mode.
 **A module's campaign is exclusive with the others for free.** The stock screen
 enforces nothing - it registers no handler for any mode checkbox, so all of
 them could be ticked at once - and Refined's
-`gamedata/scripts/dead_air_x64_mode_exclusive.script` adds the rule. It finds a
-module's modes rather than being told about them: the generated registrar keeps
-its controls in `self.xms_checks[<mode id>]` and registers each under
-`main_dialog:check_<id>_mode`, and those two names are the whole contract. Keep
-them and a hand-written registrar joins the group as well; the log line
-`* dead_air_x64: N campaign checkbox(es) made exclusive` on opening the screen
-is how you check it did.
+`gamedata/scripts/dead_air_x64_mode_exclusive.script` adds the rule. The script
+is mechanism only and knows no checkbox by name; the group is assembled when
+the screen opens, from three sources:
 
-The stock seven (survival, laststand, das, warmon, metro, rev2, rev) are listed
-in that script because the base game ships no metadata saying which checkbox is
-a campaign and which is a modifier - the "РЕЖИМЫ / ОПЦИИ" split is two captions
-and two x-coordinates. The options column stays multi-select. Two public calls
-adjust the group without editing the list:
+- `gamedata/configs/dead_air_x64_mode_exclusive.ltx`, section
+  `[exclusive_campaigns]` - one registered control name per line. This is DATA
+  about the installed screen (the screen itself ships in a third-party mod, so
+  knowledge about it lives in a config other mods can patch, never in code).
+  Controls the installed screen does not have are skipped silently.
+- XMS module modes, DISCOVERED rather than declared: the generated registrar
+  keeps its controls in `self.xms_checks[<mode id>]` and registers each under
+  `main_dialog:check_<id>_mode` - those two names are the whole contract, keep
+  them and a hand-written registrar joins the group as well.
+- the public calls, for anything else:
 
 ```lua
-dead_air_x64_mode_exclusive.register("check_my_mode", function(s) return s.ck_my end)
-dead_air_x64_mode_exclusive.unregister("check_rerum_mode")   -- let it stack instead
+dead_air_x64_mode_exclusive.register("check_my_mode")
+dead_air_x64_mode_exclusive.unregister("check_rev_mode")   -- let it stack instead
 ```
+
+The log line `* dead_air_x64: N campaign checkbox(es) made exclusive` on
+opening the screen is how you check what joined. The options column (easy,
+hardcore, rerum, good weapons, good loot) is deliberately not listed - those
+are modifiers and stay multi-select; note their keys carry `_mode` too, the
+suffix proves nothing.
 
 ## Loose particle overrides
 

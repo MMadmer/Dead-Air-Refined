@@ -1,77 +1,81 @@
 -- One campaign at a time on the new-game screen.
 --
--- The РЕЖИМЫ column ships as bare checkboxes: ui_mm_faction_select never
--- registers CHECK_BUTTON_SET for any of them (InitCallBacks only wires the
+-- The screen ships its mode checkboxes bare: ui_mm_faction_select registers
+-- no CHECK_BUTTON_SET handler for any of them (InitCallBacks wires only the
 -- buttons and lists), so every campaign could be ticked at once, every key
 -- was written to axr_options, and on_game_load applied all of them - its
--- mode blocks are independent ifs, not elseifs. The three empty stubs the
--- original author left behind - OnCheckSetStory / OnCheckSetAzazel /
--- OnCheckSetSurvival - are where this was meant to live.
+-- mode blocks are independent ifs, not elseifs.
 --
--- The group is assembled per screen, from three sources:
---   1. the stock campaigns below,
---   2. every mode an XMS module put on the screen (found, not declared),
---   3. anything a mod added through register() at any point before the
---      screen opens.
--- Membership is therefore open: a new campaign joins the rule by existing,
--- not by this file learning about it.
+-- This file is MECHANISM ONLY and knows no checkbox by name. The group is
+-- assembled per screen, when it opens, from three sources:
+--   1. dead_air_x64_mode_exclusive.ltx - DATA about the installed screen's
+--      campaigns (the stock screen is itself a third-party mod; knowledge
+--      about somebody else's mod lives in a config, which other mods can
+--      patch, never in code);
+--   2. every mode an XMS module put on the screen - discovered, not declared:
+--      the generated registrar keeps its controls in self.xms_checks[<id>];
+--   3. anything registered through the public register() below.
+-- Membership is open: a new campaign joins by existing.
+
+local SECTION = "exclusive_campaigns"
 
 -- ---------------------------------------------------------------------------
--- 1. Stock campaigns. The base game ships no metadata saying which checkbox
--- is a campaign and which is a modifier - the "РЕЖИМЫ / ОПЦИИ" split is two
--- static captions and two x-coordinates - so this list is the one thing that
--- has to be stated outright. It mirrors the modes column as the author laid
--- it out. The options column (easy, hardcore, rerum, good weapons, good loot)
--- stays multi-select on purpose: those are modifiers.
---   registered control name -> how to reach the control on the screen
+-- public registry, for a mod that adds a campaign checkbox by hand:
+--   dead_air_x64_mode_exclusive.register("check_my_mode")
+-- unregister() also vetoes a config entry - use it when something listed
+-- should stack (be a modifier) in your setup.
 -- ---------------------------------------------------------------------------
-local STOCK = {
-	["check_survival"]			= function(s) return s.ck_survival end,
-	["check_laststand_mode"]	= function(s) return s.ck_laststand end,
-	["check_das_mode"]			= function(s) return s.ck_das end,
-	["check_warmon_mode"]		= function(s) return s.ck_warmon end,
-	["check_metro_mode"]		= function(s) return s.ck_metro end,
-	["check_rev2_mode"]			= function(s) return s.ck_rev2 end,
-	["check_rev_mode"]			= function(s) return s.ck_rev end,
-}
+local EXTRA, REMOVED = {}, {}
 
--- ---------------------------------------------------------------------------
--- 3. Public registry, for a mod that adds a campaign by hand.
---   register("check_my_mode", function(s) return s.ck_my end)
--- unregister() takes one back out - use it when a mode is a modifier that
--- should stack with a campaign rather than replace it.
--- ---------------------------------------------------------------------------
-local EXTRA = {}
-
-function register(control_name, accessor)
-	if (type(control_name) == "string" and type(accessor) == "function") then
-		EXTRA[control_name] = accessor
+function register(control_name)
+	if (type(control_name) == "string" and control_name ~= "") then
+		EXTRA[control_name] = true
+		REMOVED[control_name] = nil
 	end
 end
 
 function unregister(control_name)
 	EXTRA[control_name] = nil
-	STOCK[control_name] = nil
+	REMOVED[control_name] = true
 end
 
--- 2. XMS module modes. The generated registrar keeps its checkboxes in
--- self.xms_checks[<mode id>] and registers each under "main_dialog:check_<id>
--- _mode" - so they can be picked up here without the module declaring
--- anything, and a module built before this rule existed still obeys it.
+local function config_names()
+	local names = {}
+	local ok, err = pcall(function()
+		local ini = ini_file("dead_air_x64_mode_exclusive.ltx")
+		if not (ini and ini:section_exist(SECTION)) then return end
+		for i = 0, ini:line_count(SECTION) - 1 do
+			local res, key = ini:r_line(SECTION, i, "", "")
+			if (res and key ~= "") then names[key] = true end
+		end
+	end)
+	if not (ok) then
+		printf("! dead_air_x64: campaign config unreadable: %s", tostring(err))
+	end
+	return names
+end
+
 -- public so it can be inspected/tested without opening the screen
 function build_group(screen)
+	local wanted = config_names()
+	for name in pairs(EXTRA) do wanted[name] = true end
+	for name in pairs(REMOVED) do wanted[name] = nil end
+
 	local group = {}
-	for name, get in pairs(STOCK) do
-		local box = get(screen)
-		if (box) then group[name] = box end
-	end
-	for name, get in pairs(EXTRA) do
-		local ok, box = pcall(get, screen)
+	-- Register() writes the window name FindChild searches on, so every name
+	-- resolves through the screen itself - no field names, no layout guesses.
+	-- A control the installed screen does not have simply is not in the group.
+	for name in pairs(wanted) do
+		local ok, box = pcall(screen.GetCheckButton, screen, name)
 		if (ok and box) then group[name] = box end
 	end
+	-- XMS module modes: the generated registrar keeps its checkboxes right on
+	-- the screen instance, so a module joins without declaring anything - and
+	-- a module built before this rule existed still obeys it.
 	if (type(screen.xms_checks) == "table") then
 		for id, box in pairs(screen.xms_checks) do
-			if (box) then group["main_dialog:check_" .. id .. "_mode"] = box end
+			local name = "main_dialog:check_" .. tostring(id) .. "_mode"
+			if (box and not REMOVED[name]) then group[name] = box end
 		end
 	end
 	return group
@@ -102,9 +106,8 @@ local function install()
 		-- checkboxes exist, and a late register() has still been seen.
 		local group = build_group(self)
 		-- Appended after the base pass. Dispatch takes the FIRST callback
-		-- matching (control, event), so should the stock screen ever wire
-		-- these checkboxes itself, its handler wins and this one goes quiet
-		-- instead of fighting it.
+		-- matching (control, event), so should the screen ever wire these
+		-- checkboxes itself, its handler wins and this one goes quiet.
 		local n = 0
 		for name in pairs(group) do
 			n = n + 1
@@ -118,8 +121,8 @@ local function install()
 	return true
 end
 
--- A build without the DAR2 screen must not take the script engine down at
--- startup: the menu working matters more than this refinement.
+-- A build with a replaced or missing screen must not take the script engine
+-- down at startup: the menu working matters more than this refinement.
 local ok, installed = pcall(install)
 if not (ok and installed) then
 	printf("! dead_air_x64: new-game campaign exclusivity not installed")
