@@ -985,11 +985,13 @@ void CPHElement::BonesCallBack(CBoneInstance* B)
         {
             m_invalid_pose_report_step = now;
             IPhysicsShellHolder* owner = PhysicsRefObject();
-            IKinematics* kinematics = m_shell->PKinematics();
+            IKinematics* kinematics = m_shell ? m_shell->PKinematics() : nullptr;
+            // LL_BoneName_dbg returns null on a miss - it cannot feed %s directly
+            LPCSTR bone = kinematics ? kinematics->LL_BoneName_dbg(m_SelfID) : nullptr;
             Msg("! Physics solver produced an invalid bone transform, previous pose kept: object "
                 "'%s', visual '%s', bone '%s', contained %u",
                 owner ? owner->ObjectName() : "unknown", owner ? owner->ObjectNameVisual() : "unknown",
-                kinematics ? kinematics->LL_BoneName_dbg(m_SelfID) : "unknown", m_invalid_pose_contained);
+                bone ? bone : "unknown", m_invalid_pose_contained);
         }
         return;
     }

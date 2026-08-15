@@ -400,7 +400,7 @@ float CActorCondition::GetInjuriousMaterialDamage()
     if (mat_injurios != GAMEMTL_NONE_IDX)
     {
         const SGameMtl* mtl = GMLib.GetMaterialByIdx(mat_injurios);
-        return mtl->fInjuriousSpeed;
+        return mtl ? mtl->fInjuriousSpeed : 0.0f;
     }
     else
         return 0.0f;

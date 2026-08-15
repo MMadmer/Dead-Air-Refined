@@ -832,31 +832,54 @@ bool CActor::net_Relevant() // relevant for export to server
     };
 };
 
+// The bone name is fixed but the MODEL comes from mod data; a miss returns BI_NONE
+// (0xFFFF), and LL_GetBoneInstance(0xFFFF) WRITES the callback pointer far past the
+// bone array - heap corruption with a delayed crash elsewhere.
+static CBoneInstance* actor_bone(IKinematics* V, pcstr bone_name)
+{
+    const u16 bone_id = V->LL_BoneID(bone_name);
+    if (bone_id == BI_NONE || bone_id >= V->LL_BoneCount())
+    {
+        static u32 hits = 0;
+        ++hits;
+        if (hits <= 10 || (hits % 500) == 0)
+            Msg("! Actor model: no bone '%s', callback not assigned (case %u)", bone_name, hits);
+        return nullptr;
+    }
+    return &V->LL_GetBoneInstance(bone_id);
+}
+
 void CActor::SetCallbacks()
 {
     IKinematics* V = smart_cast<IKinematics*>(Visual());
     VERIFY(V);
-    u16 spine0_bone = V->LL_BoneID("bip01_spine");
-    u16 spine1_bone = V->LL_BoneID("bip01_spine1");
-    u16 shoulder_bone = V->LL_BoneID("bip01_spine2");
-    u16 head_bone = V->LL_BoneID("bip01_head");
-    V->LL_GetBoneInstance(u16(spine0_bone)).set_callback(bctCustom, Spin0Callback, this);
-    V->LL_GetBoneInstance(u16(spine1_bone)).set_callback(bctCustom, Spin1Callback, this);
-    V->LL_GetBoneInstance(u16(shoulder_bone)).set_callback(bctCustom, ShoulderCallback, this);
-    V->LL_GetBoneInstance(u16(head_bone)).set_callback(bctCustom, HeadCallback, this);
+    if (!V)
+        return;
+
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine"))
+        bone->set_callback(bctCustom, Spin0Callback, this);
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine1"))
+        bone->set_callback(bctCustom, Spin1Callback, this);
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine2"))
+        bone->set_callback(bctCustom, ShoulderCallback, this);
+    if (CBoneInstance* bone = actor_bone(V, "bip01_head"))
+        bone->set_callback(bctCustom, HeadCallback, this);
 }
 void CActor::ResetCallbacks()
 {
     IKinematics* V = smart_cast<IKinematics*>(Visual());
     VERIFY(V);
-    u16 spine0_bone = V->LL_BoneID("bip01_spine");
-    u16 spine1_bone = V->LL_BoneID("bip01_spine1");
-    u16 shoulder_bone = V->LL_BoneID("bip01_spine2");
-    u16 head_bone = V->LL_BoneID("bip01_head");
-    V->LL_GetBoneInstance(u16(spine0_bone)).reset_callback();
-    V->LL_GetBoneInstance(u16(spine1_bone)).reset_callback();
-    V->LL_GetBoneInstance(u16(shoulder_bone)).reset_callback();
-    V->LL_GetBoneInstance(u16(head_bone)).reset_callback();
+    if (!V)
+        return;
+
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine"))
+        bone->reset_callback();
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine1"))
+        bone->reset_callback();
+    if (CBoneInstance* bone = actor_bone(V, "bip01_spine2"))
+        bone->reset_callback();
+    if (CBoneInstance* bone = actor_bone(V, "bip01_head"))
+        bone->reset_callback();
 }
 
 void CActor::OnChangeVisual()

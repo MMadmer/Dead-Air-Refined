@@ -412,6 +412,7 @@ void CAI_Stalker::OnItemTake(CInventoryItem* inventory_item)
 {
     CObjectHandler::OnItemTake(inventory_item);
     m_item_actuality = false;
+    m_best_item_frame = u32(-1);
     m_sell_info_actuality = false;
 }
 
@@ -420,6 +421,7 @@ void CAI_Stalker::OnItemDrop(CInventoryItem* inventory_item, bool just_before_de
     CObjectHandler::OnItemDrop(inventory_item, just_before_destroy);
 
     m_item_actuality = false;
+    m_best_item_frame = u32(-1);
     m_sell_info_actuality = false;
 
     if (!g_Alive())
@@ -440,6 +442,10 @@ void CAI_Stalker::update_best_item_info()
 {
     if (m_bTrading || !m_can_select_weapon)
         return;
+
+    if (m_best_item_frame == Device.dwFrame)
+        return;
+    m_best_item_frame = Device.dwFrame;
 
     update_best_item_info_impl();
 }

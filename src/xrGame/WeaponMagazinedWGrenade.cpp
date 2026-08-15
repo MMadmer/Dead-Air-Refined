@@ -72,7 +72,23 @@ bool CWeaponMagazinedWGrenade::net_Spawn(CSE_Abstract* DC)
     iAmmoElapsed2 = weapon->a_elapsed_grenades.grenades_count;
     m_ammoType2 = weapon->a_elapsed_grenades.grenades_type;
 
-    m_DefaultCartridge2.Load(m_ammoTypes2[m_ammoType2].c_str(), m_ammoType2);
+    // the saved grenade type indexes m_ammoTypes2 unbounded - a config change between
+    // saves walked past the vector
+    if (m_ammoTypes2.empty())
+    {
+        Msg("! [%s] has no underbarrel ammo types - cartridge load skipped", cNameSect().c_str());
+    }
+    else
+    {
+        if (m_ammoType2 >= m_ammoTypes2.size())
+        {
+            Msg("! [%s] save carries grenade type %u of %u available - first one taken",
+                cNameSect().c_str(), (u32)m_ammoType2, (u32)m_ammoTypes2.size());
+            m_ammoType2 = 0;
+        }
+
+        m_DefaultCartridge2.Load(m_ammoTypes2[m_ammoType2].c_str(), m_ammoType2);
+    }
 
     if (!IsGameTypeSingle())
     {
@@ -825,6 +841,20 @@ void CWeaponMagazinedWGrenade::load(IReader& input_packet)
 
     u32 sz = 0;
     load_data(sz, input_packet);
+
+    // an unbounded count from the packet ran the loop below to OOM
+    const u32 limit = iMagazineSize2 > 0 ? u32(iMagazineSize2) : 0u;
+    if (sz > limit)
+    {
+        Msg("! [%s] save carries %u underbarrel rounds with capacity %u - excess dropped",
+            cNameSect().c_str(), sz, limit);
+        sz = limit;
+    }
+
+    if (m_ammoTypes2.empty())
+        return;
+    if (m_ammoType2 >= m_ammoTypes2.size())
+        m_ammoType2 = 0;
 
     CCartridge l_cartridge;
     l_cartridge.Load(m_ammoTypes2[m_ammoType2].c_str(), m_ammoType2);

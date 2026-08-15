@@ -116,10 +116,24 @@ void CRender::level_Load(IReader* fs)
 
     // signal loaded
     b_loaded = TRUE;
+
+    // Headlamp projector warmup - see m_torch_spot_warm in r2.h. The texture name is the
+    // TorchType 2 branch of xr_actor.script, i.e. exactly what the beam really uses.
+    // If the texture is absent, create() just yields a stub - no warmup, no harm either.
+    if (Target)
+    {
+        static constexpr pcstr torch_spot_texture = "internal" DELIMITER "torch1";
+        string256 warm_name;
+        strconcat(sizeof(warm_name), warm_name, "r2" DELIMITER "accum_spot_", torch_spot_texture);
+        m_torch_spot_warm.create(Target->b_accum_spot, warm_name, torch_spot_texture);
+    }
 }
 
 void CRender::level_Unload()
 {
+    // the warmup held the projector shader and its texture - released with the level
+    m_torch_spot_warm.destroy();
+
     ZoneScoped;
 
     if (!g_pGameLevel)
@@ -140,7 +154,8 @@ void CRender::level_Unload()
     HOM.Unload();
 
     //*** Details
-    Details->Unload();
+    if (Details) // a double unload is reachable through the deferred-quit race
+        Details->Unload();
 
     //*** Sectors
     // 1.

@@ -16,6 +16,13 @@ namespace xray::render::RENDER_NAMESPACE
 {
 using namespace R_dsgraph;
 
+// Batching does not just draw differently - it SORTS the draw list and REMOVES whatever
+// it drew in batches. Any change that alters the draw list composition must carry a kill
+// switch: without one, "an object vanished at a certain angle" has to be debugged by
+// reasoning instead of by flipping a single value. Outside the anonymous namespace: the
+// console handle links against it.
+int ps_r__tree_batch = 1;
+
 extern float r_ssaHZBvsTEX;
 extern float r_ssaGLOD_start, r_ssaGLOD_end;
 
@@ -131,6 +138,9 @@ bool get_tree_instance_constants(CBackend& cmd_list, R_constant*& instance_data,
 
 bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
 {
+    if (!ps_r__tree_batch)
+        return false;
+
     R_constant* instance_data{};
     R_constant* instance_control{};
     if (!get_tree_instance_constants(cmd_list, instance_data, instance_control))

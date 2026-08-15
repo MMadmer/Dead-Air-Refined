@@ -151,6 +151,10 @@ void CPHMovementControl::in_shedule_Update(u32 DT)
 void CPHMovementControl::Calculate(
     Fvector& vAccel, const Fvector& camDir, float /**ang_speed**/, float jump, float /**dt**/, bool /**bLight**/)
 {
+    // null is a legal state (offline / death / level-change gap); the neighbors check
+    if (!m_character)
+        return;
+
     Fvector previous_position;
     previous_position.set(vPosition);
     m_character->IPosition(vPosition);

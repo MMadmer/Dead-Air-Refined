@@ -66,7 +66,9 @@ void CSE_ALifeOnlineOfflineGroup::on_location_change() const { brain().on_locati
 void CSE_ALifeOnlineOfflineGroup::register_member(ALife::_OBJECT_ID member_id)
 {
     VERIFY(m_members.find(member_id) == m_members.end());
-    CSE_ALifeDynamicObject* object = ai().alife().objects().object(member_id);
+    // no_assert: a roster id missing from the registry hit THROW2 inside object()
+    // before the guard below could run
+    CSE_ALifeDynamicObject* object = ai().alife().objects().object(member_id, true);
     CSE_ALifeMonsterAbstract* monster = smart_cast<CSE_ALifeMonsterAbstract*>(object);
     VERIFY(monster);
     // A corrupt or modded save can list a non-monster ID in the roster; the VERIFY above

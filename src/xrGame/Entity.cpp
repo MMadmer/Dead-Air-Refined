@@ -162,14 +162,18 @@ bool CEntity::net_Spawn(CSE_Abstract* DC)
     {
         SetfHealth(E->get_health());
 
-        R_ASSERT2(!((E->get_killer_id() != ALife::_OBJECT_ID(-1)) && g_Alive()),
-            make_string(
-                "server entity [%s][%d] has an killer [%d] and not dead", E->name_replace(), E->ID, E->get_killer_id())
-                .c_str());
-
         m_killer_id = E->get_killer_id();
         if (m_killer_id == ID())
             m_killer_id = ALife::_OBJECT_ID(-1);
+
+        // mod scripts legally revive wounded NPCs while the killer stays recorded; the
+        // old R_ASSERT here crashed SAVE LOADING on such data - reset the record instead
+        if ((m_killer_id != ALife::_OBJECT_ID(-1)) && g_Alive())
+        {
+            Msg("! [Entity] living [%s][%d] carries killer [%d], record reset", E->name_replace(), E->ID,
+                m_killer_id);
+            m_killer_id = ALife::_OBJECT_ID(-1);
+        }
     }
     else
         SetfHealth(1.0f);

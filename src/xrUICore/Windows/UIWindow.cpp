@@ -23,6 +23,26 @@ CUIWindow::~CUIWindow()
     bool ad = IsAutoDelete();
     if (parent && !ad)
         parent->CUIWindow::DetachChild(this);
+    else if (parent)
+    {
+        // an auto-delete window destroyed past DetachChild left a dangling pointer in
+        // the parent's child list, virtual-called on the next Draw. Cannot call
+        // DetachChild from here - it would xr_delete(this) re-entrantly.
+        auto& siblings = parent->m_ChildWndList;
+        const auto it = std::find(siblings.begin(), siblings.end(), this);
+        if (it != siblings.end())
+        {
+            if (parent->m_pMouseCapturer == this)
+                parent->SetCapture(this, false);
+
+            siblings.erase(it);
+
+            const shared_str self_name = WindowName();
+            Msg("~ UI: auto-delete window [%s] destroyed past DetachChild - unlinked from the parent",
+                self_name.c_str() ? self_name.c_str() : "unnamed");
+        }
+        SetParent(NULL);
+    }
 
     DetachAll();
 }
@@ -120,7 +140,16 @@ void CUIWindow::DetachChild(CUIWindow* pChild)
 
     //.	SafeRemoveChild			(pChild);
     auto it = std::find(m_ChildWndList.begin(), m_ChildWndList.end(), pChild);
-    R_ASSERT(it != m_ChildWndList.end());
+    if (it == m_ChildWndList.end())
+    {
+        // live R_ASSERT was a guaranteed player-facing fatal on a mismatched detach
+        const shared_str child_name = pChild->WindowName();
+        const shared_str self_name = WindowName();
+        Msg("! UI: window [%s] detached from [%s], but the child list does not have it - skipped",
+            child_name.c_str() ? child_name.c_str() : "unnamed",
+            self_name.c_str() ? self_name.c_str() : "unnamed");
+        return;
+    }
     m_ChildWndList.erase(it);
 
     pChild->SetParent(NULL);

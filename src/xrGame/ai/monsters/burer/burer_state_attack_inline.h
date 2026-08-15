@@ -94,13 +94,19 @@ void CStateBurerAttack<Object>::execute()
         }
     }
 
+    // a state missing from the map now comes back null - "not ready" is the honest answer
+    const auto state_ready = [this](u32 state_id) -> bool {
+        auto* const st = this->get_state(state_id);
+        return st ? st->check_start_conditions() : false;
+    };
+
     m_allow_anti_aim = true;
-    bool const anti_aim_ready = this->get_state(eStateBurerAttack_AntiAim)->check_start_conditions();
+    bool const anti_aim_ready = state_ready(eStateBurerAttack_AntiAim);
     m_allow_anti_aim = false;
 
-    bool const gravi_ready = this->get_state(eStateBurerAttack_Gravi)->check_start_conditions();
-    bool const shield_ready = this->get_state(eStateBurerAttack_Shield)->check_start_conditions();
-    bool const tele_ready = this->get_state(eStateBurerAttack_Tele)->check_start_conditions();
+    bool const gravi_ready = state_ready(eStateBurerAttack_Gravi);
+    bool const shield_ready = state_ready(eStateBurerAttack_Shield);
+    bool const tele_ready = state_ready(eStateBurerAttack_Tele);
 
     bool selected_state = true;
 

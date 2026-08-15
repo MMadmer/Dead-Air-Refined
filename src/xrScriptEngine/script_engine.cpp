@@ -160,6 +160,15 @@ void CScriptEngine::print_stack(lua_State* L)
     if (L == nullptr)
         L = lua();
 
+    // this runs from the FAILURE handler; if the VM is gone (torn down, the fault came
+    // before creation or from a foreign thread), lua_isstring(nullptr) crashed a second
+    // time INSIDE the report of the first fault. Diagnostics must stay silent, not kill.
+    if (!L)
+    {
+        Log("~ Script stack unavailable: the Lua VM is not created or already destroyed");
+        return;
+    }
+
     if (lua_isstring(L, -1))
     {
         pcstr err = lua_tostring(L, -1);
@@ -723,7 +732,23 @@ void CScriptEngine::setup_callbacks()
         luabind::set_error_callback(CScriptEngine::lua_error);
 #endif
 
-        luabind::set_pcall_callback([](lua_State* L) { lua_pushcfunction(L, CScriptEngine::lua_pcall_failed); });
+        // pushing a fresh C closure per protected call was 52% of all Lua garbage
+        // (720 GCfuncC per frame measured); cache the handler in the registry keyed by a
+        // static address - same function on the stack, contract unchanged, invisible to
+        // scripts, and a reinit() gets a fresh registry automatically
+        luabind::set_pcall_callback([](lua_State* L)
+        {
+            static const char pcall_key = 0; // the ADDRESS is the key, the value is not used
+            lua_pushlightuserdata(L, (void*)&pcall_key);
+            lua_rawget(L, LUA_REGISTRYINDEX);
+            if (lua_isfunction(L, -1))
+                return; // hot path
+            lua_pop(L, 1);
+            lua_pushcfunction(L, CScriptEngine::lua_pcall_failed);
+            lua_pushlightuserdata(L, (void*)&pcall_key);
+            lua_pushvalue(L, -2);
+            lua_rawset(L, LUA_REGISTRYINDEX); // pops key+copy, the handler stays on the stack
+        });
     }
 #if !XRAY_EXCEPTIONS
     luabind::set_cast_failed_callback(CScriptEngine::lua_cast_failed);

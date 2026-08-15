@@ -74,10 +74,29 @@ void CALifeSmartTerrainTask::setup_patrol_point(const shared_str& patrol_path_na
     VERIFY(!m_patrol_point);
 
     const CPatrolPath* patrol_path = GetPatrolPath(patrol_path_name);
-    VERIFY(patrol_path);
+    // a missing route led to an uncaught THROW3 inside path() and a null vertex deref -
+    // the commit-class "mod data has the right to differ"
+    if (!patrol_path)
+    {
+        Msg("! Smart terrain task: patrol path '%s' not found, point not assigned", patrol_path_name.c_str());
+        return;
+    }
 
-    m_patrol_point = &patrol_path->vertex(patrol_point_index)->data();
-    VERIFY(m_patrol_point);
+    const CPatrolPath::CVertex* vertex = patrol_path->vertex(patrol_point_index);
+    if (!vertex)
+    {
+        if (patrol_path->vertices().empty())
+        {
+            Msg("! Smart terrain task: patrol path '%s' is empty, point not assigned", patrol_path_name.c_str());
+            return;
+        }
+
+        vertex = (*patrol_path->vertices().begin()).second;
+        Msg("! Smart terrain task: patrol path '%s' has no point %u, first one taken", patrol_path_name.c_str(),
+            patrol_point_index);
+    }
+
+    m_patrol_point = &vertex->data();
 }
 
 GameGraph::_GRAPH_ID CALifeSmartTerrainTask::game_vertex_id() const

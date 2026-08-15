@@ -64,6 +64,10 @@ void TTestDepthCallback(bool& do_colide, bool bo1, dContact& c, SGameMtl* materi
     if (saved_callback)
         saved_callback(do_colide, bo1, c, material_1, material_2);
 
+    // the neighbors (InitContact) already check for a missing material - this one did not
+    if (!material_1 || !material_2)
+        return;
+
     if (do_colide && !material_1->Flags.test(SGameMtl::flPassable) && !material_2->Flags.test(SGameMtl::flPassable))
     {
         float& depth = c.geom.depth;

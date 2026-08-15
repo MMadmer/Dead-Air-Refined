@@ -263,6 +263,19 @@ void ISpatial_DB::_insert(ISpatial_NODE* N, Fvector& n_C, float n_R)
 void ISpatial_DB::insert(ISpatial* S)
 {
     ScopeLock scope(&cs);
+
+    {
+        const auto& sd = S->GetSpatialData();
+        if (!_valid(sd.sphere.P) || !_valid(sd.sphere.R))
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 500) == 0)
+                Msg("! Spatial DB: non-finite position (%f,%f,%f) or radius %f - not registered (case %u)",
+                    VPUSH(sd.sphere.P), sd.sphere.R, hits);
+            return;
+        }
+    }
 #ifdef DEBUG
     Stats.Insert.Begin();
 

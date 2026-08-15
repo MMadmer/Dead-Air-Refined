@@ -333,6 +333,13 @@ public:
     Task* ProcessHOMTask;
     R_occlusion HWOCC;
 
+    // Headlamp projector warmup. After a clean start the FIRST torch press lit nothing:
+    // light::set_texture creates the projector shader for the texture name (light.cpp:86)
+    // together with loading the texture itself, and the first press paid for exactly
+    // that. The reference is held for the whole level so the refcount cannot drop and
+    // undo the warmup. No light parameters are touched - only the resource exists.
+    ref_shader m_torch_spot_warm;
+
     // Global vertex-buffer container
     xr_vector<FSlideWindowItem> SWIs;
     xr_vector<ref_shader> Shaders;
@@ -343,9 +350,11 @@ public:
     xr_vector<dxRender_Visual*> Visuals;
     CPSLibrary PSLibrary;
 
-    CDetailManager* Details;
-    CModelPool* Models;
-    CWallmarksEngine* Wallmarks;
+    // null is a legal "no level" state - created in level_Load, deleted in level_Unload,
+    // and a deferred quit event races net_Stop into these
+    CDetailManager* Details{};
+    CModelPool* Models{};
+    CWallmarksEngine* Wallmarks{};
 
     CRenderTarget* Target; // Render-target
 

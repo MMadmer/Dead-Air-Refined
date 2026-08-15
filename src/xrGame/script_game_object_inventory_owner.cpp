@@ -488,6 +488,12 @@ void CScriptGameObject::TransferMoney(u32 money, CScriptGameObject* pForWho)
     VERIFY(pOurOwner);
     CInventoryOwner* pOtherOwner = smart_cast<CInventoryOwner*>(&pForWho->object());
     VERIFY(pOtherOwner);
+    if (!pOurOwner || !pOtherOwner)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "transfer money: one of the objects is not an inventory owner");
+        return;
+    }
 
     if (pOurOwner->get_money() < money)
     {

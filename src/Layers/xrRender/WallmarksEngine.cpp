@@ -318,6 +318,39 @@ void CWallmarksEngine::AddSkeletonWallmark(
     lock.Leave();
 }
 
+void CWallmarksEngine::RemoveSkeletonWallmarks(const CKinematics* parent)
+{
+    if (!parent)
+        return;
+
+    lock.Enter(); // skeleton_items is guarded by the same lock as AddSkeletonWallmark
+    u32 removed = 0;
+    for (auto& slot : marks)
+    {
+        if (!slot)
+            continue;
+
+        auto& items = slot->skeleton_items;
+        const auto tail = std::remove_if(items.begin(), items.end(),
+            [parent](const intrusive_ptr<CSkeletonWallmark>& w) { return w && w->Parent() == parent; });
+
+        if (tail != items.end())
+        {
+            removed += u32(std::distance(tail, items.end()));
+            items.erase(tail, items.end());
+        }
+    }
+    lock.Leave();
+
+    if (removed)
+    {
+        static u32 total = 0;
+        total += removed;
+        if (total <= 5 || (total % 500) == 0)
+            Msg("~ Skeleton wallmarks removed with their visual: %u (total %u)", removed, total);
+    }
+}
+
 void CWallmarksEngine::AddSkeletonWallmark(intrusive_ptr<CSkeletonWallmark> wm)
 {
     lock.Enter();

@@ -69,6 +69,9 @@ public:
     void AddStaticWallmark(
         CDB::TRI* pTri, const Fvector* pVerts, const Fvector& contact_point, const ref_shader& hTexture, float sz);
     void AddSkeletonWallmark(intrusive_ptr<CSkeletonWallmark> wm);
+    // the engine keeps raw Parent() pointers into skeleton visuals; a visual destroyed
+    // without this cleanup gets virtual-called on the next render (UAF)
+    void RemoveSkeletonWallmarks(const CKinematics* parent);
     void AddSkeletonWallmark(
         const Fmatrix* xf, CKinematics* obj, ref_shader& sh, const Fvector& start, const Fvector& dir, float size);
 

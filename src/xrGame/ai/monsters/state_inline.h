@@ -127,6 +127,16 @@ CStateAbstract* CStateAbstract::get_state(u32 state_id)
 {
     auto it = substates.find(state_id);
     VERIFY(it != substates.end());
+    // an unknown state id used to deref end(): a garbage pointer and a virtual call in
+    // someone else's stack; the root of the burer crash and generic to all monster FSMs
+    if (it == substates.end())
+    {
+        static u32 hits = 0;
+        ++hits;
+        if (hits <= 5 || (hits % 200) == 0)
+            Msg("! Monster FSM: state [%u] is not registered - refused (case %u)", state_id, hits);
+        return nullptr;
+    }
 
     return it->second;
 }

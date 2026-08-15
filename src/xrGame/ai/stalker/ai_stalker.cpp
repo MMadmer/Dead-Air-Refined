@@ -104,6 +104,7 @@ void CAI_Stalker::debug_planner(const script_planner* planner) { m_debug_planner
 
 void CAI_Stalker::reinit()
 {
+    m_best_item_frame = u32(-1);
     CObjectHandler::reinit(this);
     sight().reinit();
     CCustomMonster::reinit();
@@ -564,7 +565,8 @@ bool CAI_Stalker::net_Spawn(CSE_Abstract* DC)
     CInifile* ini = pKinematics->LL_UserData();
     if (ini)
     {
-        if (ini->section_exist("immunities"))
+        // an empty [immunities] in a mod model was a live Fatal inside r_string
+        if (ini->line_exist("immunities", "immunities_sect"))
         {
             LPCSTR imm_sect = ini->r_string("immunities", "immunities_sect");
             conditions().LoadImmunities(imm_sect, pSettings);
@@ -1141,6 +1143,21 @@ void CAI_Stalker::net_Relcase(IGameObject* O)
     if (!g_Alive())
         return;
 
+    // the best-item pointers are raw; a destroyed item left them dangling, and the
+    // script-hook branch dereferences them before the actuality check
+    {
+        const auto matches = [O](const CInventoryItem* item) { return item && (&item->object() == O); };
+
+        if (matches(m_best_item_to_kill))
+            m_best_item_to_kill = nullptr;
+        if (matches(m_best_ammo))
+            m_best_ammo = nullptr;
+        if (matches(m_best_found_item_to_kill))
+            m_best_found_item_to_kill = nullptr;
+        if (matches(m_best_found_ammo))
+            m_best_found_ammo = nullptr;
+    }
+
     m_pPhysics_support->in_NetRelcase(O);
 }
 
@@ -1329,7 +1346,7 @@ void CAI_Stalker::ResetBoneProtections(pcstr imm_sect, pcstr bone_sect)
 
     CInifile* ini = pKinematics->LL_UserData();
 
-    if (imm_sect || (ini && ini->section_exist("immunities")))
+    if (imm_sect || (ini && ini->line_exist("immunities", "immunities_sect")))
     {
         const pcstr section = imm_sect ? imm_sect : ini->r_string("immunities", "immunities_sect");
         conditions().LoadImmunities(section, pSettings);

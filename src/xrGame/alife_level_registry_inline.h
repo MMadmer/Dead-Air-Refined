@@ -14,8 +14,27 @@ IC CALifeLevelRegistry::CALifeLevelRegistry(const GameGraph::_LEVEL_ID& level_id
 IC GameGraph::_LEVEL_ID CALifeLevelRegistry::level_id() const { return (m_level_id); }
 IC void CALifeLevelRegistry::add(CSE_ALifeDynamicObject* object)
 {
+    // an invalid graph vertex from a save meant an OOB read right below; the object just
+    // stays off this level's registry
+    if (!ai().game_graph().valid_vertex_id(object->m_tGraphID))
+    {
+        Msg("! Level registry: object [%s] section[%s] id[%d] carries graph vertex %u of %u total - not registered",
+            object->name_replace(), object->s_name.c_str(), object->ID, u32(object->m_tGraphID),
+            u32(ai().game_graph().header().vertex_count()));
+        return;
+    }
+
     if (ai().game_graph().vertex(object->m_tGraphID)->level_id() != level_id())
         return;
+
+    // a duplicate id would THROW2 -> std::terminate inside inherited::add; tolerate the
+    // re-add at the single entry point instead
+    if (objects().find(object->ID) != objects().end())
+    {
+        Msg("! Level registry: object [%s] section[%s] id[%d] already registered - repeat skipped",
+            object->name_replace(), object->s_name.c_str(), object->ID);
+        return;
+    }
 
 #ifdef DEBUG
     if (psAI_Flags.test(aiALife))

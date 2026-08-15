@@ -404,7 +404,7 @@ void CRender::Render()
                 continue;
             try
             {
-                for (int id = 0; id < 3; ++id)
+                for (int id = 0; id < R__NUM_PARALLEL_CONTEXTS; ++id)
                     Lights_LastFrame[it]->svis[id].flushoccq();
             }
             catch (...)

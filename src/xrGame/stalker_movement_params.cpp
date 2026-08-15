@@ -134,6 +134,12 @@ void stalker_movement_params::cover_loophole_id(shared_str const& loophole_id)
     }
 
     VERIFY(m_cover);
+    // cover and loophole ids come from mod configs
+    if (!m_cover || !m_cover->get_description())
+    {
+        m_cover_loophole = nullptr;
+        return;
+    }
 
     const auto predicate = [loophole_id](const smart_cover::loophole* loophole)
     {
@@ -145,6 +151,13 @@ void stalker_movement_params::cover_loophole_id(shared_str const& loophole_id)
 
     VERIFY2(i != loopholes.end(),
         make_string("loophole [%s] not present in smart_cover [%s]", loophole_id.c_str(), m_cover_id.c_str()));
+    if (i == loopholes.end())
+    {
+        Msg("! Smart cover '%s' has no loophole '%s', selection cancelled", m_cover_id.c_str(),
+            loophole_id.c_str());
+        m_cover_loophole = nullptr;
+        return;
+    }
 
     m_cover_loophole = *i;
 }

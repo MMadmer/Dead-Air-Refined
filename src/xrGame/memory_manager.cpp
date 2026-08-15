@@ -345,6 +345,8 @@ void CMemoryManager::make_object_visible_somewhen(const CEntityAlive* enemy)
     visual().add_visible_object(enemy, .001f, true);
     MemorySpace::CVisibleObject* obj1 = object().memory().visual().visible_object(enemy);
     VERIFY(obj1);
+    if (!obj1) // the first lookup two lines up is ternary-guarded; this one was not
+        return;
     //	if (obj1)
     //		Msg						("[%6d] make_object_visible_somewhen [%s] =
     //%x",Device.dwTimeGlobal,*enemy->cName(),obj1->m_squad_mask.get());

@@ -45,8 +45,7 @@ void CMaterialManager::Load(LPCSTR section)
         {
             VERIFY(GAMEMTL_NONE_IDX != m_my_material_idx);
             SGameMtl* m = GMLib.GetMaterialByIdx(m_my_material_idx);
-
-            VERIFY(m);
+            if (m)
             Msg("(CMaterialManager::Load(LPCSTR section)) material: %s loaded for %s, from section: %s ",
                 m->m_Name.c_str(), entity_alive->cName().c_str(), section);
         }
@@ -71,7 +70,7 @@ void CMaterialManager::reinit()
         {
             VERIFY(GAMEMTL_NONE_IDX != m_my_material_idx);
             SGameMtl* m = GMLib.GetMaterialByIdx(m_my_material_idx);
-            VERIFY(m);
+            if (m)
             Msg("(CMaterialManager::reinit) material: %s loaded for %s ", m->m_Name.c_str(),
                 entity_alive->cName().c_str());
         }
@@ -85,7 +84,9 @@ void CMaterialManager::update(float time_delta, float volume, float step_time, b
     VERIFY(GAMEMTL_NONE_IDX != m_my_material_idx);
     VERIFY(GAMEMTL_NONE_IDX != m_last_material_idx);
     SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(m_my_material_idx, m_last_material_idx);
-    VERIFY3(mtl_pair, "Undefined material pair: ", GMLib.GetMaterialByIdx(m_last_material_idx)->m_Name.c_str());
+    VERIFY(mtl_pair);
+    if (!mtl_pair)
+        return;
     Fvector position = m_object->Position();
     if (m_movement_control->CharacterExist())
     {

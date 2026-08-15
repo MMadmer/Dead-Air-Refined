@@ -189,7 +189,7 @@ ICF static bool grenade_hit_callback(collide::rq_result& result, LPVOID params)
         mtl_idx = T->material;
     }
     SGameMtl* mtl = GMLib.GetMaterialByIdx(mtl_idx);
-    float shoot_factor = 1.f - mtl->fShootFactor;
+    float shoot_factor = mtl ? 1.f - mtl->fShootFactor : 0.f;
     ep.shoot_factor *= shoot_factor;
 #ifdef DEBUG
     if (ph_dbg_draw_mask.test(phDbgDrawExplosions))

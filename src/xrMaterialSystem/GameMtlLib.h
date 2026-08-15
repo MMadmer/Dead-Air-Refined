@@ -300,23 +300,69 @@ public:
         return it != materials.end() ? *it : nullptr;
     }
 
+    // Misses repeat for the same name (a bone material is looked up per bone per model),
+    // so the log is throttled.
+    void report_missing_material(pcstr name, int id) const
+    {
+        static u32 hits = 0;
+        ++hits;
+        if (hits <= 10 || (hits % 500) == 0)
+        {
+            if (name)
+                Msg("! Material '%s' is not in the library (case %u)", name, hits);
+            else
+                Msg("! Material id %d is not in the library (case %u)", id, hits);
+        }
+    }
+
+    // The source of bad material indices. On a miss `it == materials.end()` and
+    // `u16(it - materials.begin())` yields EXACTLY size() - the first out-of-bounds
+    // index. VERIFY is empty in release, so the miss passed silently and poisoned the
+    // index forever: a bone stores it in bd.game_mtl_idx at model load and it surfaces
+    // anywhere later (lens flares, bone material picks). The name comes from model data
+    // and game_materials.xr - mod DATA, not code. The by-ID/by-name siblings
+    // (GetMaterialID, GetMaterial, GetMaterialByID) already handle a miss honestly;
+    // only these two did not.
     [[nodiscard]] u16 GetMaterialIdx(int ID)
     {
         const auto it = GetMaterialItByID(ID);
-        VERIFY(materials.end() != it);
+        if (materials.end() == it)
+        {
+            report_missing_material(nullptr, ID);
+            return u16(GAMEMTL_NONE_IDX);
+        }
         return u16(it - materials.begin());
     }
 
     [[nodiscard]] u16 GetMaterialIdx(pcstr name)
     {
         const auto it = GetMaterialIt(name);
-        VERIFY(materials.end() != it);
+        if (materials.end() == it)
+        {
+            report_missing_material(name, -1);
+            return u16(GAMEMTL_NONE_IDX);
+        }
         return u16(it - materials.begin());
     }
 
+    // Out-of-bounds read instead of a refusal: VERIFY is empty in release and
+    // materials[idx] on a bad index reads past the vector - a GARBAGE pointer whose
+    // fields get used immediately. The index comes from data and physics (a corpse can
+    // легально carry one out of range). Null instead of garbage makes the failure
+    // deterministic, and the message names the index. Callers that skip the check are
+    // few and each carries its own guard now.
     [[nodiscard]] SGameMtl* GetMaterialByIdx(u16 idx) const
     {
         VERIFY(idx < materials.size());
+        if (idx >= materials.size())
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 200) == 0)
+                Msg("! Material index %u with %u materials total - refused (case %u)", (u32)idx,
+                    (u32)materials.size(), hits);
+            return nullptr;
+        }
         return materials[idx];
     }
 
@@ -356,7 +402,16 @@ public:
     SGameMtlPair* GetMaterialPairByIndices(u16 i0, u16 i1) const
     {
         const auto mtlCount = materials.size();
-        R_ASSERT(i0 < mtlCount && i1 < mtlCount);
+        VERIFY(i0 < mtlCount && i1 < mtlCount);
+        if (i0 >= mtlCount || i1 >= mtlCount)
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 200) == 0)
+                Msg("! Material pair (%u, %u) with %u materials total - refused (case %u)", (u32)i0,
+                    (u32)i1, (u32)mtlCount, hits);
+            return nullptr;
+        }
         return material_pairs_rt[i1 * mtlCount + i0];
     }
 

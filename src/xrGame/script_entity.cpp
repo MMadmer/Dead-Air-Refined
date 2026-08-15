@@ -180,10 +180,15 @@ CScriptEntityAction* CScriptEntity::GetCurrentAction()
 
 void ActionCallback(IKinematics* tpKinematics)
 {
+    if (!tpKinematics)
+        return;
+
     // sounds
     CScriptEntity* l_tpScriptMonster =
         smart_cast<CScriptEntity*>((CGameObject*)(tpKinematics->GetUpdateCallbackParam()));
     VERIFY(l_tpScriptMonster);
+    if (!l_tpScriptMonster)
+        return;
     if (!l_tpScriptMonster->GetCurrentAction())
         return;
     l_tpScriptMonster->vfUpdateSounds();

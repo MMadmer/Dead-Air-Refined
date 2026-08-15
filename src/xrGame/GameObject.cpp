@@ -487,7 +487,29 @@ bool CGameObject::net_Spawn(CSE_Abstract* DC)
     //	if (GameID() != eGameIDSingle)
     //		Msg ("CGameObject::net_Spawn -- object %s[%x] setID [%d]", *(E->s_name), this, E->ID);
 
-    // XForm
+    // XForm. NaN coordinates or rotation from a save used to flow straight into
+    // physics, bones and the spatial DB and crash somewhere else; the graph vertex point
+    // is the nearest meaningful place. Fixed IN the server entity too, so the next save
+    // stores the repaired values. No `return false`: nine subclasses discard the base
+    // result, a refusal here would not stop the spawn anyway.
+    if (!_valid(E->o_Position) || !_valid(E->o_Angle))
+    {
+        Fvector safe_position = {0.f, 0.f, 0.f};
+        if (const CSE_ALifeDynamicObject* dynamic = smart_cast<const CSE_ALifeDynamicObject*>(E))
+            if (ai().game_graph().valid_vertex_id(dynamic->m_tGraphID))
+                safe_position = ai().game_graph().vertex(dynamic->m_tGraphID)->level_point();
+
+        Msg("! Object [%s] section[%s] id[%u] carries invalid position (%f,%f,%f) or angle "
+            "(%f,%f,%f) - replaced with graph point (%f,%f,%f), rotation zeroed",
+            E->name_replace(), E->s_name.c_str(), E->ID, VPUSH(E->o_Position), VPUSH(E->o_Angle),
+            VPUSH(safe_position));
+
+        if (!_valid(E->o_Position))
+            E->o_Position = safe_position;
+        if (!_valid(E->o_Angle))
+            E->o_Angle.set(0.f, 0.f, 0.f);
+    }
+
     XFORM().setXYZ(E->o_Angle);
     Position().set(E->o_Position);
 #ifdef DEBUG
@@ -1066,6 +1088,10 @@ Fvector CGameObject::get_last_local_point_on_mesh(Fvector const& local_point, u1
 {
     VERIFY(bone_id == u16(-1));
     Fvector result;
+    // an object without a collision form (pure visual mod data) crashed here; the local
+    // point itself is the honest fallback
+    if (!CForm)
+        return local_point;
     // Fetch data
     Fmatrix mE;
     const Fmatrix& M = XFORM();
@@ -1164,9 +1190,14 @@ void CGameObject::SetKinematicsCallback(bool set)
 
 void VisualCallback(IKinematics* tpKinematics)
 {
+    if (!tpKinematics)
+        return;
+
     CGameObject* game_object =
         smart_cast<CGameObject*>(static_cast<IGameObject*>(tpKinematics->GetUpdateCallbackParam()));
     VERIFY(game_object);
+    if (!game_object)
+        return;
     for (const auto& cb : game_object->visual_callbacks())
         cb(tpKinematics);
 }

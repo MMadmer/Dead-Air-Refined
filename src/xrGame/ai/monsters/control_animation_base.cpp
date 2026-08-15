@@ -44,7 +44,8 @@ bool monster_melee_trace_callback(collide::rq_result& result, void* data)
     }
 
     const CDB::TRI* triangle = Level().ObjectSpace.GetStaticTris() + result.element;
-    return GMLib.GetMaterialByIdx(triangle->material)->Flags.is(SGameMtl::flPassable);
+    const SGameMtl* mtl = GMLib.GetMaterialByIdx(triangle->material);
+    return mtl && mtl->Flags.is(SGameMtl::flPassable);
 }
 }
 

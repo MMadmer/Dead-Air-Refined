@@ -73,7 +73,7 @@ ICF static bool pick_trace_callback(collide::rq_result& result, LPVOID params)
         CDB::TRI* T = Level().ObjectSpace.GetStaticTris() + result.element;
 
         SGameMtl* mtl = GMLib.GetMaterialByIdx(T->material);
-        pp->power *= mtl->fVisTransparencyFactor;
+        pp->power *= mtl ? mtl->fVisTransparencyFactor : 0.f;
         if (pp->power > 0.34f)
         {
             return TRUE;

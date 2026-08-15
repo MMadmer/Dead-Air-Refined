@@ -157,6 +157,12 @@ void CUIArtefactDetectorAdv::SetBoneCallbacks()
     attachable_hud_item* itm = m_parent->HudItemData();
     R_ASSERT(itm);
     m_bid = itm->m_model->LL_BoneID("screen_bone");
+    // a mod model without the bone: BI_NONE would index far past the bone array (a write)
+    if (m_bid == BI_NONE || m_bid >= itm->m_model->LL_BoneCount())
+    {
+        Msg("! Detector: no 'screen_bone' in the model, the needle will not work");
+        return;
+    }
 
     CBoneInstance& bi = itm->m_model->LL_GetBoneInstance(m_bid);
     bi.set_callback(bctCustom, BoneCallback, this);
@@ -170,6 +176,8 @@ void CUIArtefactDetectorAdv::ResetBoneCallbacks()
     attachable_hud_item* itm = m_parent->HudItemData();
     R_ASSERT(itm);
     u16 bid = itm->m_model->LL_BoneID("screen_bone");
+    if (bid == BI_NONE || bid >= itm->m_model->LL_BoneCount()) // see SetBoneCallbacks
+        return;
 
     CBoneInstance& bi = itm->m_model->LL_GetBoneInstance(bid);
     bi.reset_callback();

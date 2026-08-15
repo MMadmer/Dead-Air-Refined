@@ -66,7 +66,8 @@ void CPHSimpleCharacter::UpdateDynamicDamage(dContact* c, u16 obj_material_idx, 
     if (accepted_energy > 0.f)
     {
         SGameMtl* obj_material = GMLib.GetMaterialByIdx(obj_material_idx);
-        c_vel = dSqrt(accepted_energy / m_mass * 2.f) * obj_material->fBounceDamageFactor;
+        // a corpse can carry an out-of-range material index - no material, no damage
+        c_vel = obj_material ? dSqrt(accepted_energy / m_mass * 2.f) * obj_material->fBounceDamageFactor : 0.f;
     }
     else
         c_vel = 0.f;
@@ -143,12 +144,16 @@ IC void CPHSimpleCharacter::foot_material_update(u16 contact_material_idx, u16 f
 {
     if (m_elevator_state.UpdateMaterial(*p_lastMaterialIDX))
         return;
-    if (*p_lastMaterialIDX != u16(-1) &&
-        GMLib.GetMaterialByIdx(*p_lastMaterialIDX)->Flags.test(SGameMtl::flPassable) && !b_foot_mtl_check)
+    // the u16(-1) test catches only one bad value of many - the library check covers all
+    const SGameMtl* const last_material =
+        (*p_lastMaterialIDX != u16(-1)) ? GMLib.GetMaterialByIdx(*p_lastMaterialIDX) : nullptr;
+    if (last_material && last_material->Flags.test(SGameMtl::flPassable) && !b_foot_mtl_check)
         return;
     b_foot_mtl_check = false;
 
     const SGameMtl* contact_material = GMLib.GetMaterialByIdx(contact_material_idx);
+    if (!contact_material)
+        return;
 
     if (contact_material->Flags.test(SGameMtl::flPassable))
     {

@@ -78,7 +78,18 @@ CSE_ALifeSmartZone& CALifeMonsterBrain::smart_terrain()
 void CALifeMonsterBrain::process_task()
 {
     CALifeSmartTerrainTask* task = smart_terrain().task(&object());
-    THROW3(task, "smart terrain returned nil task, while npc is registered in it", smart_terrain().name_replace());
+    // a nil task with a registered npc is reachable from mod data (missing patrol or
+    // smart config); THROW3 had no handler on this path - keep the previous movement
+    // target and retry next update instead
+    if (!task)
+    {
+        static u32 hits = 0;
+        ++hits;
+        if (hits <= 5 || (hits % 200) == 0)
+            Msg("! Smart terrain [%s] returned no task for registered npc [%s] - movement target kept (case %u)",
+                smart_terrain().name_replace(), object().name_replace(), hits);
+        return;
+    }
     movement().path_type(MovementManager::ePathTypeGamePath);
     movement().detail().target(*task);
 }

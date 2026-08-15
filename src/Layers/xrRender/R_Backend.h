@@ -138,9 +138,13 @@ private:
 #   error No graphics API selected or enabled!
 #endif
 
+    // The vertex shader name is needed in RELEASE too: a failed input-layout creation
+    // makes an object invisible silently, and without the culprit's name the failure has
+    // to be hunted by elimination. Costs one pointer assignment per shader change.
+    LPCSTR vs_name{ nullptr };
+
 #ifdef DEBUG
     LPCSTR ps_name;
-    LPCSTR vs_name;
     LPCSTR gs_name;
 #   if defined(USE_DX11)
     LPCSTR hs_name;

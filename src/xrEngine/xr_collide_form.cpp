@@ -84,15 +84,43 @@ IC bool RAYvsCYLINDER(const Fcylinder& c_cylinder, const Fvector& S, const Fvect
     return ((rp_res == Fcylinder::rpOriginOutside) || (!bCull && (rp_res == Fcylinder::rpOriginInside)));
 }
 
+namespace
+{
+u32 g_cform_reported_frame = 0;
+u32 g_cform_hits = 0;
+
+void cform_report(const char* where, IGameObject* owner)
+{
+    ++g_cform_hits;
+    if (Device.dwFrame - g_cform_reported_frame < 600 && g_cform_hits > 1)
+        return;
+
+    g_cform_reported_frame = Device.dwFrame;
+    Msg("! Skeleton cform (%s): object [%s] visual [%s] yields no kinematics - request refused (total %u)",
+        where, owner ? owner->cName().c_str() : "no object",
+        owner ? owner->cNameVisual().c_str() : "no visual", g_cform_hits);
+}
+} // namespace
+
 CCF_Skeleton::CCF_Skeleton(IGameObject* O) : ICollisionForm(O, cftObject)
 {
     // getVisData
     IRenderVisual* pVisual = O->Visual();
     VERIFY3(PKinematics(pVisual), "Can't create skeleton without Kinematics.", O->cNameVisual().c_str());
+    vis_mask = 0;
+
+    if (!pVisual)
+    {
+        cform_report("create", O);
+        bv_box.invalidate();
+        bv_sphere.P.set(0.f, 0.f, 0.f);
+        bv_sphere.R = 0.f;
+        return;
+    }
+
     // bv_box.set (K->vis.box);
     bv_box.set(pVisual->getVisData().box);
     bv_box.getsphere(bv_sphere.P, bv_sphere.R);
-    vis_mask = 0;
 }
 
 void CCF_Skeleton::BuildState()
@@ -100,6 +128,11 @@ void CCF_Skeleton::BuildState()
     dwFrame = Device.dwFrame;
     IRenderVisual* pVisual = owner->Visual();
     IKinematics* K = PKinematics(pVisual);
+    if (!K)
+    {
+        cform_report("rebuild", owner);
+        return;
+    }
     K->CalculateBones();
     const Fmatrix& L2W = owner->XFORM();
 
@@ -190,6 +223,11 @@ void CCF_Skeleton::BuildTopLevel()
 {
     dwFrameTL = Device.dwFrame;
     IRenderVisual* K = owner->Visual();
+    if (!K)
+    {
+        cform_report("bounds", owner);
+        return;
+    }
     vis_data& vis = K->getVisData();
     Fbox& B = vis.box;
     bv_box.vMin.average(B.vMin);
@@ -204,6 +242,12 @@ void CCF_Skeleton::BuildTopLevel()
 bool CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
 {
     ZoneScoped;
+
+    if (!PKinematics(owner->Visual()))
+    {
+        cform_report("ray query", owner);
+        return false;
+    }
 
     if (dwFrameTL != Device.dwFrame)
         BuildTopLevel();

@@ -82,7 +82,9 @@ CScriptGameObject* CScriptGameObject::best_weapon()
     else
     {
         //Alundaio: extra security
-        CGameObject* game_object = object_handler->best_weapon() ? &object_handler->best_weapon()->object() : nullptr;
+        // best_weapon() re-enters Lua with a full inventory walk - call it once
+        CInventoryItem* const best_item = object_handler->best_weapon();
+        CGameObject* game_object = best_item ? &best_item->object() : nullptr;
         if (!game_object)
             return nullptr;
 

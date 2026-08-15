@@ -17,7 +17,7 @@ void CWalmarkManager::AddWallmark(const Fvector& dir, const Fvector& start_pos, 
     CDB::TRI* pTri = Level().ObjectSpace.GetStaticTris() + t; // result.element;
     SGameMtl* pMaterial = GMLib.GetMaterialByIdx(pTri->material);
 
-    if (pMaterial->Flags.is(SGameMtl::flBloodmark))
+    if (pMaterial && pMaterial->Flags.is(SGameMtl::flBloodmark))
     {
         //вычислить нормаль к пораженной поверхности
         Fvector* pVerts = Level().ObjectSpace.GetStaticVerts();

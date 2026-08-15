@@ -564,7 +564,7 @@ void CRender::reset_begin()
                 continue;
             try
             {
-                for (int id = 0; id < 3; ++id)
+                for (int id = 0; id < R__NUM_PARALLEL_CONTEXTS; ++id)
                     Lights_LastFrame[it]->svis[id].resetoccq();
             }
             catch (...)
@@ -580,7 +580,8 @@ void CRender::reset_begin()
         !fsimilar(ps_r__Detail_density, ps_current_detail_density) ||
         !fsimilar(ps_r__Detail_height, ps_current_detail_height)))
     {
-        Details->Unload();
+        if (Details)
+            Details->Unload();
         xr_delete(Details);
     }
     //-AVO
@@ -782,6 +783,8 @@ void CRender::add_StaticWallmark(ref_shader& S, const Fvector& P, float s, CDB::
     if (T->suppress_wm)
         return;
     VERIFY2(_valid(P) && _valid(s) && verts && (s > EPS_L), "Invalid static wallmark params");
+    if (!Wallmarks)
+        return;
     Wallmarks->AddStaticWallmark(T, verts, P, &*S, s);
 }
 
@@ -799,11 +802,21 @@ void CRender::add_StaticWallmark(const wm_shader& S, const Fvector& P, float s, 
     add_StaticWallmark(pShader->hShader, P, s, T, V);
 }
 
-void CRender::clear_static_wallmarks() { Wallmarks->clear(); }
-void CRender::add_SkeletonWallmark(intrusive_ptr<CSkeletonWallmark> wm) { Wallmarks->AddSkeletonWallmark(wm); }
+void CRender::clear_static_wallmarks()
+{
+    if (Wallmarks)
+        Wallmarks->clear();
+}
+void CRender::add_SkeletonWallmark(intrusive_ptr<CSkeletonWallmark> wm)
+{
+    if (Wallmarks)
+        Wallmarks->AddSkeletonWallmark(wm);
+}
 void CRender::add_SkeletonWallmark(
     const Fmatrix* xf, CKinematics* obj, ref_shader& sh, const Fvector& start, const Fvector& dir, float size)
 {
+    if (!Wallmarks)
+        return;
     Wallmarks->AddSkeletonWallmark(xf, obj, sh, start, dir, size);
 }
 void CRender::add_SkeletonWallmark(

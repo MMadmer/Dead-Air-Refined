@@ -25,10 +25,14 @@ CPS_Instance::~CPS_Instance()
     VERIFY(!g_bRendering);
     auto it = g_pGamePersistent->ps_active.find(this);
     VERIFY(it != g_pGamePersistent->ps_active.end());
-    g_pGamePersistent->ps_active.erase(it);
+    if (it != g_pGamePersistent->ps_active.end())
+        g_pGamePersistent->ps_active.erase(it);
 
-    [[maybe_unused]] auto it2 = std::find(g_pGamePersistent->ps_destroy.begin(), g_pGamePersistent->ps_destroy.end(), this);
-    VERIFY(it2 == g_pGamePersistent->ps_destroy.end());
+    // deleted past the destroy queue - unlink the record, no dangling pointer remains
+    auto& queue = g_pGamePersistent->ps_destroy;
+    const auto stale = std::remove(queue.begin(), queue.end(), this);
+    if (stale != queue.end())
+        queue.erase(stale, queue.end());
 
     spatial_unregister();
     shedule_unregister();
@@ -53,6 +57,9 @@ void CPS_Instance::shedule_Update(u32 dt)
 //----------------------------------------------------
 void CPS_Instance::PSI_destroy()
 {
+    if (m_bDead) // three independent callers; a second call double-queued the delete
+        return;
+
     m_bDead = true;
     m_iLifeTime = 0;
     g_pGamePersistent->ps_destroy.push_back(this);

@@ -861,6 +861,12 @@ void CKinematics::RenderWallmark(intrusive_ptr<CSkeletonWallmark> wm, FVF::LIT*&
 
 void CKinematics::ClearWallmarks()
 {
+    // the engine side holds raw Parent() pointers to this visual; without the removal
+    // the next frame virtual-calls freed memory. Called from both ends of the visual's
+    // life (Spawn and Depart) - no better spot exists.
+    if (RImplementation.Wallmarks)
+        RImplementation.Wallmarks->RemoveSkeletonWallmarks(this);
+
     //  for (auto it=wallmarks.begin(); it!=wallmarks.end(); it++)
     //      xr_delete   (*it);
     wallmarks.clear();

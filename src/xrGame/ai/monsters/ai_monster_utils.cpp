@@ -28,8 +28,21 @@ bool object_position_valid(const CEntity* entity)
 
 Fvector get_bone_position(IGameObject* object, LPCSTR bone_name)
 {
-    u16 bone_id = smart_cast<IKinematics*>(object->Visual())->LL_BoneID(bone_name);
-    CBoneInstance& bone = smart_cast<IKinematics*>(object->Visual())->LL_GetBoneInstance(bone_id);
+    IKinematics* kinematics = smart_cast<IKinematics*>(object->Visual());
+    const u16 bone_id = kinematics->LL_BoneID(bone_name);
+
+    // the bone name comes from monster descriptions; a miss yields BI_NONE and a matrix
+    // read far past the bone array - the object position is the nearest honest answer
+    if (bone_id == BI_NONE || bone_id >= kinematics->LL_BoneCount())
+    {
+        static u32 hits = 0;
+        ++hits;
+        if (hits <= 10 || (hits % 500) == 0)
+            Msg("! Bone '%s' is not in the model, using object position (case %u)", bone_name, hits);
+        return object->Position();
+    }
+
+    CBoneInstance& bone = kinematics->LL_GetBoneInstance(bone_id);
 
     Fmatrix global_transform;
     global_transform.mul(object->XFORM(), bone.mTransform);

@@ -92,6 +92,8 @@ shared_str CSpaceRestrictionManager::base_in_restrictions(ALife::_OBJECT_ID id)
 
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
+    if (m_clients->end() == I) // reads through end() once VERIFY compiles out
+        return shared_str();
     return ((*I).second.m_base_in_restrictions);
 }
 
@@ -101,6 +103,8 @@ shared_str CSpaceRestrictionManager::base_out_restrictions(ALife::_OBJECT_ID id)
 
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
+    if (m_clients->end() == I)
+        return shared_str();
     return ((*I).second.m_base_out_restrictions);
 }
 
@@ -110,6 +114,8 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 
     CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
     VERIFY(m_clients->end() != I);
+    if (m_clients->end() == I)
+        return nullptr;
 
     // An unregistered client used to read straight through the end() iterator once VERIFY
     // compiled out. Every caller here already treats a null restriction as "unrestricted",

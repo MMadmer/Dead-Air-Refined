@@ -38,8 +38,11 @@ struct remove_non_savable_predicate
     {
         CSE_Abstract* object = m_server->GetGameState()->get_entity_from_eid(id);
         VERIFY(object);
-        CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(object);
+        CSE_ALifeObject* alife_object = object ? smart_cast<CSE_ALifeObject*>(object) : nullptr;
         VERIFY(alife_object);
+        // a missing or non-ALife entry equals what can_save() == false would do: remove
+        if (!alife_object)
+            return true;
         return (!alife_object->can_save());
     }
 };

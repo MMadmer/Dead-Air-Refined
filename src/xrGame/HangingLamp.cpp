@@ -45,6 +45,8 @@ void CHangingLamp::RespawnInit()
     if (Visual())
     {
         IKinematics* K = smart_cast<IKinematics*>(Visual());
+        if (!K) // a non-skeletal visual from mod data
+            return;
         K->LL_SetBonesVisible(u64(-1));
         K->CalculateBones_Invalidate();
         K->CalculateBones(TRUE);
@@ -376,6 +378,8 @@ void CHangingLamp::TurnOff()
     if (Visual())
     {
         IKinematics* K = smart_cast<IKinematics*>(Visual());
+        if (!K)
+            return;
         VERIFY(K);
         K->LL_SetBoneVisible(light_bone, FALSE, TRUE);
         VERIFY2(K->LL_GetBonesVisible() != 0,

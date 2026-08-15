@@ -403,7 +403,7 @@ void CEntityAlive::PlaceBloodWallmark(const Fvector& dir, const Fvector& start_p
         CDB::TRI* pTri = Level().ObjectSpace.GetStaticTris() + result.element;
         SGameMtl* pMaterial = GMLib.GetMaterialByIdx(pTri->material);
 
-        if (pMaterial->Flags.is(SGameMtl::flBloodmark))
+        if (pMaterial && pMaterial->Flags.is(SGameMtl::flBloodmark))
         {
             //вычислить нормаль к пораженной поверхности
             Fvector* pVerts = Level().ObjectSpace.GetStaticVerts();
@@ -932,6 +932,9 @@ Fvector CEntityAlive::get_last_local_point_on_mesh(Fvector const& last_point, u1
 
     IKinematics* const kinematics = smart_cast<IKinematics*>(Visual());
     VERIFY(kinematics);
+    // exactly what the guarded sibling get_new_local_point_on_mesh falls back to
+    if (!kinematics)
+        return inherited::get_last_local_point_on_mesh(last_point, u16(-1));
 
     Fmatrix transform;
     kinematics->Bone_GetAnimPos(transform, bone_id, u8(-1), false);

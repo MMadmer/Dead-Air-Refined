@@ -44,7 +44,8 @@ public:
         while (!state.compare_exchange_weak(current, next, std::memory_order_relaxed));
         return static_cast<s32>((static_cast<u32>(next) >> 16u) & 0x7fffu);
     }
-    s32 randI(s32 max) { VERIFY(max); return randI() % max; };
+    // % 0 is a hardware crash in release, and empty ranges come from mod data
+    s32 randI(s32 max) { VERIFY(max); return max > 0 ? randI() % max : 0; };
     s32 randI(s32 min, s32 max) { return min + randI(max - min); }
     s32 randIs(s32 range) { return randI(-range, range); }
     s32 randIs(s32 range, s32 offs) { return offs + randIs(range); }

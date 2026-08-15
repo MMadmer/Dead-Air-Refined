@@ -966,8 +966,8 @@ void R_dsgraph_structure::build_subspace_dynamic()
                 spatial->spatial_updatesector(sector_id);
             }
             const auto& [type, sphere, sector_id] = std::tuple(data.type, data.sphere, data.sector_id);
-            if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
-                continue; // disassociated from S/P structure
+            if (sector_id == IRender_Sector::INVALID_SECTOR_ID || sector_id >= Sectors.size())
+                continue; // disassociated from S/P structure, or a stale id past the sector list
             auto* sector = Sectors[sector_id];
 
             if (collect_lights && (type & STYPE_LIGHTSOURCE))

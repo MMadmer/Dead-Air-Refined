@@ -122,7 +122,7 @@ void CRender::Calculate()
             spatial->spatial_updatesector(dsgraph_main.detect_sector(entityPosition));
         }
         const auto sector_id = spatialData.sector_id;
-        if (sector_id == IRender_Sector::INVALID_SECTOR_ID)
+        if (sector_id == IRender_Sector::INVALID_SECTOR_ID || sector_id >= dsgraph_main.Sectors.size())
             return; // disassociated from S/P structure
 
         VERIFY(spatialData.type & STYPE_LIGHTSOURCE);

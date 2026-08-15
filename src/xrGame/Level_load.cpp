@@ -243,8 +243,8 @@ void CLevel::Load_GameSpecific_CFORM(CDB::TRI* tris, u32 count)
             {
                 (*I).material = (*i).m_index;
                 const SGameMtl* mtl = GMLib.GetMaterialByIdx((*i).m_index);
-                (*I).suppress_shadows = mtl->Flags.is(SGameMtl::flSuppressShadows);
-                (*I).suppress_wm = mtl->Flags.is(SGameMtl::flSuppressWallmarks);
+                (*I).suppress_shadows = mtl && mtl->Flags.is(SGameMtl::flSuppressShadows);
+                (*I).suppress_wm = mtl && mtl->Flags.is(SGameMtl::flSuppressWallmarks);
                 continue;
             }
 

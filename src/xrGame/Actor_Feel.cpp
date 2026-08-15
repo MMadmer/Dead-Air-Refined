@@ -87,7 +87,8 @@ ICF static bool info_trace_callback(collide::rq_result& result, LPVOID params)
     {
         //получить треугольник и узнать его материал
         CDB::TRI* T = Level().ObjectSpace.GetStaticTris() + result.element;
-        if (GMLib.GetMaterialByIdx(T->material)->Flags.is(SGameMtl::flPassable))
+        const SGameMtl* mtl = GMLib.GetMaterialByIdx(T->material);
+        if (mtl && mtl->Flags.is(SGameMtl::flPassable))
             return TRUE;
     }
     bOverlaped = TRUE;

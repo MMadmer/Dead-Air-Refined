@@ -292,8 +292,10 @@ struct SCollisionHitCallback : public ICollisionHitCallback
         if (cs > min_cs * 0.5f)
             hl = m_pmt_object_collision_damage;
         VERIFY(m_object);
-        di->SetInitiated();
-        m_object->set_collision_hit_callback(0); // delete this!!
+        if (di)
+            di->SetInitiated();
+        if (m_object)
+            m_object->set_collision_hit_callback(0); // delete this!!
     }
 };
 
@@ -305,12 +307,17 @@ void CPolterTele::tele_fire_objects()
         // if (tele_object.get_state() != TS_Fire) {
         if ((tele_object.get_state() == TS_Raise) || (tele_object.get_state() == TS_Keep))
         {
+            if (!Actor())
+                return;
+
             Fvector enemy_pos;
             // XXX: Allow headshooting not only for actor, but another enemies
             enemy_pos = get_head_position(Actor());
             CPhysicsShellHolder* hobj = tele_object.get_object();
 
             VERIFY(hobj);
+            if (!hobj)
+                continue;
             hobj->set_collision_hit_callback(xr_new<SCollisionHitCallback>(hobj, m_pmt_object_collision_damage));
             m_object->CTelekinesis::fire_t(tele_object.get_object(), enemy_pos,
                 tele_object.get_object()->Position().distance_to(enemy_pos) / m_pmt_fly_velocity);

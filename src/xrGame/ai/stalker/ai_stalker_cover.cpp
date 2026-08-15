@@ -277,6 +277,7 @@ void CAI_Stalker::on_enemy_change(const CEntityAlive* enemy)
 {
     inherited::on_enemy_change(enemy);
     m_item_actuality = false;
+    m_best_item_frame = u32(-1);
     m_best_cover_actual = false;
 #ifdef _DEBUG
 //	Msg									("* [%6d][%s] on_enemy_change",Device.dwTimeGlobal,*cName());

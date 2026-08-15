@@ -234,9 +234,7 @@ ICF void CBackend::set_VS(ID3DVertexShader* _vs, LPCSTR _n)
         HW.pContext->VSSetShader(vs);
 #endif
 
-#ifdef DEBUG
-        vs_name = _n;
-#endif
+        vs_name = _n; // release too - the input-layout failure report needs the culprit
     }
 }
 
@@ -614,10 +612,92 @@ IC void CBackend::ApplyVertexLayout()
 
     if (it == layouts.end())
     {
-        ID3DInputLayout* pLayout;
+        // A failed layout creation used to be INVISIBLE: CHK_DX expands to a bare call in
+        // release, the pointer stayed uninitialized and was cached UNCONDITIONALLY - so a
+        // null settled in forever for this declaration+signature pair, and every following
+        // frame bound an empty layout and drew nothing. DX9 read missing shader inputs as
+        // zeros; DX11 demands an exact match and refuses, which is why the same level data
+        // rendered fine on the original 32-bit engine (the Cordon mast case).
+        ID3DInputLayout* pLayout = nullptr;
 
-        CHK_DX(HW.pDevice->CreateInputLayout(&decl->dx11_dcl_code[0], decl->dx11_dcl_code.size() - 1,
-            m_pInputSignature->GetBufferPointer(), m_pInputSignature->GetBufferSize(), &pLayout));
+        const HRESULT hr = HW.pDevice->CreateInputLayout(&decl->dx11_dcl_code[0],
+            decl->dx11_dcl_code.size() - 1, m_pInputSignature->GetBufferPointer(),
+            m_pInputSignature->GetBufferSize(), &pLayout);
+
+        // Repairing the missing uv set - ONLY for the _lmh family: the material declares a
+        // lightmap so the blender picks the _lmh variant, but the geometry arrives in the
+        // vertex-lit format (COLOR0 + a single uv set), and the -hq close-range variant
+        // reads TEXCOORD1 which that format does not have. The shader choice matches the
+        // original sources verbatim - the LEVEL DATA is inconsistent, so the binding is
+        // repaired, not the choice. These calls drew nothing at all, so it cannot get
+        // worse; the lightmap ends up sampled by the base uv, meaningless for vertex-lit
+        // geometry, but the shape and placement come back.
+        if ((FAILED(hr) || !pLayout) && vs_name && strstr(vs_name, "_lmh"))
+        {
+            xr_vector<D3D_INPUT_ELEMENT_DESC> patched;
+            patched.reserve(decl->dx11_dcl_code.size() + 1);
+
+            bool has_tc1 = false;
+            const D3D_INPUT_ELEMENT_DESC* tc0 = nullptr;
+            for (size_t i = 0; i + 1 < decl->dx11_dcl_code.size(); ++i)
+            {
+                const auto& e = decl->dx11_dcl_code[i];
+                patched.push_back(e);
+                if (!e.SemanticName || xr_strcmp(e.SemanticName, "TEXCOORD") != 0)
+                    continue;
+                if (e.SemanticIndex == 0)
+                    tc0 = &decl->dx11_dcl_code[i];
+                else if (e.SemanticIndex == 1)
+                    has_tc1 = true;
+            }
+
+            if (!has_tc1 && tc0)
+            {
+                D3D_INPUT_ELEMENT_DESC extra = *tc0;
+                extra.SemanticIndex = 1;
+                patched.push_back(extra);
+
+                ID3DInputLayout* patched_layout = nullptr;
+                if (SUCCEEDED(HW.pDevice->CreateInputLayout(&patched[0], (UINT)patched.size(),
+                        m_pInputSignature->GetBufferPointer(), m_pInputSignature->GetBufferSize(),
+                        &patched_layout)) &&
+                    patched_layout)
+                {
+                    static u32 fixed_count = 0;
+                    if (++fixed_count <= 3)
+                        Msg("* [layout] shader '%s': TEXCOORD1 backfilled from the base uv, "
+                            "vertex-lit geometry draws again (case %u)",
+                            vs_name, fixed_count);
+                    pLayout = patched_layout;
+                }
+            }
+        }
+
+        if (FAILED(hr) && !pLayout)
+        {
+            // The refusal is cached too - retrying a hopeless call every frame costs more
+            // than remembering it. But now it is NAMED, with the semantics the declaration
+            // provides: the list shows what is MISSING, the shader name shows WHO demands it.
+            static u32 fail_count = 0;
+            ++fail_count;
+            if (fail_count <= 10)
+            {
+                string512 semantics{};
+                for (size_t i = 0; i + 1 < decl->dx11_dcl_code.size(); ++i)
+                {
+                    const auto& e = decl->dx11_dcl_code[i];
+                    if (!e.SemanticName)
+                        continue;
+                    string64 one;
+                    xr_sprintf(one, "%s%u ", e.SemanticName, e.SemanticIndex);
+                    xr_strcat(semantics, one);
+                }
+                Msg("! [layout] input layout NOT created (0x%08x): draws of shader '%s' "
+                    "produce nothing. Declaration provides: %s(case %u)",
+                    (u32)hr, vs_name ? vs_name : "(unnamed)", semantics, fail_count);
+            }
+            pLayout = nullptr;
+        }
 
         it = layouts.insert(std::pair<ID3DBlob*, ID3DInputLayout*>(m_pInputSignature, pLayout)).first;
     }

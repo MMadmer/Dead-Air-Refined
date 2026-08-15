@@ -130,16 +130,46 @@ void CMovementManager::process_game_path()
     }
     case ePathStateBuildLevelPath:
     {
+        // all three lookups below sat behind dead VERIFYs while the ids come from mod
+        // routes; break = retry next update with the state machine intact
+        if (!ai().game_graph().valid_vertex_id(game_path().intermediate_vertex_id()))
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 200) == 0)
+                Msg("! Game path: intermediate graph vertex %u is invalid - retry next update (case %u)",
+                    game_path().intermediate_vertex_id(), hits);
+            break;
+        }
+
         VERIFY(ai().game_graph().vertex(object().ai_location().game_vertex_id())->level_id() ==
             ai().game_graph().vertex(game_path().intermediate_vertex_id())->level_id());
 
         u32 dest_level_vertex_id = ai().game_graph().vertex(game_path().intermediate_vertex_id())->level_vertex_id();
+        if (!ai().level_graph().valid_vertex_id(dest_level_vertex_id))
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 200) == 0)
+                Msg("! Game path: level vertex %u of the intermediate point is invalid (case %u)",
+                    dest_level_vertex_id, hits);
+            break;
+        }
 
         if (!accessible(dest_level_vertex_id))
         {
             Fvector dest_pos;
             dest_level_vertex_id =
                 restrictions().accessible_nearest(ai().level_graph().vertex_position(dest_level_vertex_id), dest_pos);
+            if (!ai().level_graph().valid_vertex_id(dest_level_vertex_id))
+            {
+                static u32 hits = 0;
+                ++hits;
+                if (hits <= 5 || (hits % 200) == 0)
+                    Msg("! Game path: accessible_nearest yielded invalid vertex %u (case %u)",
+                        dest_level_vertex_id, hits);
+                break;
+            }
         }
 
         Fvector temp =

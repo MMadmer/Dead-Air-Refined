@@ -230,11 +230,23 @@ void CSE_ALifeInventoryBox::add_offline(
     {
         CSE_ALifeDynamicObject* child =
             smart_cast<CSE_ALifeDynamicObject*>(ai().alife().objects().object(saved_children[i], true));
-        R_ASSERT(child);
+        // a stale id in the saved list was a live R_ASSERT fatal; skipping the entry is
+        // exactly what the release path below does for non-savable items
+        if (!child)
+        {
+            Msg("! [ALife] box [%d] contents: item [%d] is no longer in the registry, skipped", ID,
+                saved_children[i]);
+            continue;
+        }
         child->m_bOnline = false;
 
         CSE_ALifeInventoryItem* inventory_item = smart_cast<CSE_ALifeInventoryItem*>(child);
-        VERIFY2(inventory_item, "Non inventory item object has parent?!");
+        if (!inventory_item)
+        {
+            Msg("! [ALife] box [%d] contents: [%s] is not an inventory item, skipped", ID,
+                child->name_replace());
+            continue;
+        }
 #ifdef DEBUG
         //		if (psAI_Flags.test(aiALife))
         //			Msg					("[LSS] Destroying item
@@ -248,9 +260,9 @@ void CSE_ALifeInventoryBox::add_offline(
 
         if (!child->can_save())
         {
+            // the old `--i; --n;` re-visited the released id: `saved_children` is a
+            // const ref, nothing is erased from it - one non-savable item killed the game
             object->alife().release(child);
-            --i;
-            --n;
             continue;
         }
         child->clear_client_data();

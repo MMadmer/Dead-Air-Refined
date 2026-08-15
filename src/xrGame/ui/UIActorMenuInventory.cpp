@@ -720,8 +720,10 @@ bool CUIActorMenu::ToBag(CUICellItem* itm, bool b_use_cursor_pos)
     CUIDragDropListEx* new_owner = NULL;
     if (b_use_cursor_pos)
     {
-        new_owner = CUIDragDropListEx::m_drag_item->BackList();
-        VERIFY(GetListType(new_owner) == iActorBag);
+        new_owner = CUIDragDropListEx::m_drag_item ? CUIDragDropListEx::m_drag_item->BackList() : nullptr;
+        VERIFY(!new_owner || GetListType(new_owner) == iActorBag);
+        if (!new_owner) // Lua calls with cursor mode outside a drag
+            new_owner = GetListByType(iActorBag);
     }
     else
         new_owner = GetListByType(iActorBag);
@@ -786,8 +788,10 @@ bool CUIActorMenu::ToBelt(CUICellItem* itm, bool b_use_cursor_pos)
         CUIDragDropListEx* new_owner = NULL;
         if (b_use_cursor_pos)
         {
-            new_owner = CUIDragDropListEx::m_drag_item->BackList();
-            VERIFY(new_owner == m_pLists[eInventoryBeltList]);
+            new_owner = CUIDragDropListEx::m_drag_item ? CUIDragDropListEx::m_drag_item->BackList() : nullptr;
+            VERIFY(!new_owner || new_owner == m_pLists[eInventoryBeltList]);
+            if (!new_owner)
+                new_owner = m_pLists[eInventoryBeltList];
         }
         else
             new_owner = m_pLists[eInventoryBeltList];

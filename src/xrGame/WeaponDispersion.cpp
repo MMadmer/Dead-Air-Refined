@@ -54,9 +54,10 @@ float CWeapon::GetFireDispersion(float cartridge_k, bool for_crosshair)
     //вычислить дисперсию, вносимую самим стрелком
     if (H_Parent())
     {
+        // a weapon can be held by a box or an anomaly - not an inventory owner
         const CInventoryOwner* pOwner = smart_cast<const CInventoryOwner*>(H_Parent());
-        float parent_disp = pOwner->GetWeaponAccuracy();
-        fire_disp += parent_disp;
+        if (pOwner)
+            fire_disp += pOwner->GetWeaponAccuracy();
     }
 
     return fire_disp;

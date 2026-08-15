@@ -611,6 +611,18 @@ public:
         FS.update_path(_cfg, "$game_config$", _cfg);
         strconcat(sizeof(cmd), cmd, "cfg_load", " ", _cfg);
         Console->Execute(cmd);
+
+        // The shadow-map budget follows the preset: it caps how many local light faces
+        // keep their shadows in one frame, the rest light unshadowed. Maximum keeps the
+        // reference unlimited behavior. Applied after the preset file so it stays in
+        // charge regardless of what the file carries.
+        static constexpr int budget_by_preset[] = {1, 16, 32, 48, 0};
+        if (*value < std::size(budget_by_preset))
+        {
+            string64 budget_cmd;
+            xr_sprintf(budget_cmd, "r__light_shadow_budget %d", budget_by_preset[*value]);
+            Console->Execute(budget_cmd);
+        }
     }
 };
 
@@ -896,6 +908,13 @@ void xrRender_initconsole()
     CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
+#if defined(USE_DX11)
+    {
+        // kill switch for batched tree rendering - it reorders and consumes the draw list
+        extern int ps_r__tree_batch;
+        CMD4(CCC_RuntimeInteger, "r__tree_batch", &ps_r__tree_batch, 0, 1);
+    }
+#endif
     CMD4(CCC_RuntimeInteger, "r__sun_cache_ms", &ps_r__sun_cache_ms, 0, 1000);
 
     // R1

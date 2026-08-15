@@ -220,11 +220,23 @@ void add_offline_impl(
     {
         CSE_ALifeDynamicObject* child =
             smart_cast<CSE_ALifeDynamicObject*>(ai().alife().objects().object(saved_children[i], true));
-        R_ASSERT(child);
+        // same trio as the inventory box: stale id was a live fatal, and the skip is what
+        // the non-savable branch below already does
+        if (!child)
+        {
+            Msg("! [ALife] inventory [%d]: item [%d] is no longer in the registry, skipped", object->ID,
+                saved_children[i]);
+            continue;
+        }
         child->m_bOnline = false;
 
         CSE_ALifeInventoryItem* inventory_item = smart_cast<CSE_ALifeInventoryItem*>(child);
-        VERIFY2(inventory_item, "Non inventory item object has parent?!");
+        if (!inventory_item)
+        {
+            Msg("! [ALife] inventory [%d]: [%s] is not an inventory item, skipped", object->ID,
+                child->name_replace());
+            continue;
+        }
 #ifdef DEBUG
         //		if (psAI_Flags.test(aiALife))
         //			Msg					("[LSS] Destroying item
@@ -239,9 +251,9 @@ void add_offline_impl(
 
         if (!child->can_save())
         {
+            // `--i; --n;` re-visited the released id - saved_children is const, nothing
+            // is ever erased from it
             object->alife().release(child);
-            --i;
-            --n;
             continue;
         }
 

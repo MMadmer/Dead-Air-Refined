@@ -114,6 +114,10 @@ private:
     // best item/ammo selection members
 public:
     bool m_item_actuality;
+    // once-per-frame gate for update_best_item_info: 4 GOAP evaluators plus the script
+    // hook each ran a full inventory walk per update; invalidated on take/drop/enemy
+    // change/reinit, so the within-frame answer is genuinely identical
+    u32 m_best_item_frame{ u32(-1) };
     CInventoryItem* m_best_item_to_kill;
     float m_best_item_value;
     CInventoryItem* m_best_ammo;

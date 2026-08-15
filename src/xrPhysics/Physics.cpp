@@ -137,6 +137,18 @@ IC static int CollideIntoGroup(
             material_idx_2 = (u16)surface.mode;
         SGameMtl* material_1 = GMLib.GetMaterialByIdx(material_idx_1);
         SGameMtl* material_2 = GMLib.GetMaterialByIdx(material_idx_2);
+
+        // the triangle material index comes from level data; previously a bad one fed
+        // OOB garbage into spring/friction - the contact is skipped and named instead
+        if (!material_1 || !material_2)
+        {
+            static u32 hits = 0;
+            ++hits;
+            if (hits <= 5 || (hits % 500) == 0)
+                Msg("! Collision: material not found (%u / %u) - contact skipped (case %u)",
+                    (u32)material_idx_1, (u32)material_idx_2, hits);
+            continue;
+        }
         ////////////////params can be changed in
         /// callbacks//////////////////////////////////////////////////////////////////////////
         surface.mode = dContactApprox1 | dContactSoftERP | dContactSoftCFM;

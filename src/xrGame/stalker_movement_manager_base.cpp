@@ -263,17 +263,28 @@ void stalker_movement_manager_base::setup_movement_params(stalker_movement_param
             (movement_params.m_path_type != MovementManager::ePathTypeGamePath) &&
             (movement_params.m_path_type != MovementManager::ePathTypeNoPath))
         {
-            if (!restrictions().accessible(level_path().dest_vertex_id()))
+            // vertex_position() is begin() + id behind a dead VERIFY: an invalid dest
+            // vertex read garbage that poisoned restrictors and the detail path
+            const u32 dest_vertex = level_path().dest_vertex_id();
+            if (!ai().level_graph().valid_vertex_id(dest_vertex))
+            {
+                static u32 hits = 0;
+                ++hits;
+                if (hits <= 5 || (hits % 200) == 0)
+                    Msg("! Movement [%s]: dest vertex %u is invalid - target kept (case %u)",
+                        object().cName().c_str(), dest_vertex, hits);
+            }
+            else if (!restrictions().accessible(dest_vertex))
             {
                 Fvector temp;
-                level_path().set_dest_vertex(restrictions().accessible_nearest(
-                    ai().level_graph().vertex_position(level_path().dest_vertex_id()), temp));
+                level_path().set_dest_vertex(
+                    restrictions().accessible_nearest(ai().level_graph().vertex_position(dest_vertex), temp));
                 detail().set_dest_position(temp);
             }
             else
             {
-                [[maybe_unused]] u32 vertex_id = level_path().dest_vertex_id();
-                Fvector vertex_position = ai().level_graph().vertex_position(level_path().dest_vertex_id());
+                [[maybe_unused]] u32 vertex_id = dest_vertex;
+                Fvector vertex_position = ai().level_graph().vertex_position(dest_vertex);
                 VERIFY2(restrictions().accessible(vertex_position) || show_restrictions(&restrictions()),
                     make_string("vertex_id[%d],position[%f][%f][%f],object[%s]", vertex_id, VPUSH(vertex_position),
                         object().cName().c_str()));

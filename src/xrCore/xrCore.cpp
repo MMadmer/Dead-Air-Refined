@@ -125,7 +125,10 @@ void xrCore::CalculateBuildId()
 
 void xrCore::PrintBuildInfo()
 {
-    Msg("%s %s build %d, %s (%s)", ApplicationName, XRAY_BUILD_CONFIGURATION, buildId, buildDate, XRAY_BUILD_CONFIGURATION2);
+    // the commit hash on the FIRST log line: crash reports start from here, and a log
+    // without a revision cannot be matched to a build
+    Msg("%s %s build %d [%s], %s (%s)", ApplicationName, XRAY_BUILD_CONFIGURATION, buildId,
+        GetBuildCommit(), buildDate, XRAY_BUILD_CONFIGURATION2);
 
     pcstr name      = "Custom";
     pcstr buildUniqueId = nullptr;

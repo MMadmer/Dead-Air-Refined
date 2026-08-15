@@ -225,7 +225,7 @@ void CBulletManager::FireShotmark(SBullet* bullet, const Fvector& vDir, const Fv
         mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();
 
     SGameMtl* tgt_mtl = GMLib.GetMaterialByIdx(target_material);
-    BOOL bStatic = !tgt_mtl->Flags.test(SGameMtl::flDynamic);
+    BOOL bStatic = tgt_mtl && !tgt_mtl->Flags.test(SGameMtl::flDynamic);
 
     if ((ps_name && ShowMark) || (bullet->flags.explosive && bStatic))
     {
@@ -408,7 +408,7 @@ bool CBulletManager::ObjectHit(SBullet_Hit* hit_res, SBullet* bullet, const Fvec
             }
             bullet->density_mode = true;
             SGameMtl* mtl = GMLib.GetMaterialByIdx(target_material);
-            bullet->density = mtl->fDensityFactor;
+            bullet->density = mtl ? mtl->fDensityFactor : 1.f;
             bullet->begin_density.mad(bullet->bullet_pos, bullet->dir, R.range);
         }
         else
@@ -430,7 +430,7 @@ bool CBulletManager::ObjectHit(SBullet_Hit* hit_res, SBullet* bullet, const Fvec
     //объекте, если больше 0, то пуля прошивает объект)
 
     SGameMtl* mtl = GMLib.GetMaterialByIdx(target_material);
-    float mtl_ap = mtl->fShootFactor;
+    float mtl_ap = mtl ? mtl->fShootFactor : 1.f; // unknown material stops the bullet
     float shoot_factor = 0.0f; // default >> пуля НЕ пробила материал!
     float ap = bullet->armor_piercing;
 

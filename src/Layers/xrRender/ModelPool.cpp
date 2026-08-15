@@ -132,7 +132,8 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register)
     case MT_SKELETON_RIGID:
     {
         const u16 def_idx = GMLib.GetMaterialIdx("default_object");
-        R_ASSERT2(GMLib.GetMaterialByIdx(def_idx)->Flags.is(SGameMtl::flDynamic), "'default_object' - must be dynamic");
+        const SGameMtl* def_mtl = GMLib.GetMaterialByIdx(def_idx);
+        R_ASSERT2(def_mtl && def_mtl->Flags.is(SGameMtl::flDynamic), "'default_object' - must be dynamic");
         auto* K = static_cast<CKinematics*>(V);
         VERIFY(K);
         const u16 cnt = K->LL_BoneCount();
@@ -142,8 +143,17 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register)
             if (bd.game_mtl_name.c_str())
             {
                 bd.game_mtl_idx = GMLib.GetMaterialIdx(bd.game_mtl_name.c_str());
-                R_ASSERT2(GMLib.GetMaterialByIdx(bd.game_mtl_idx)->Flags.is(SGameMtl::flDynamic),
-                    "Required dynamic game material");
+                const SGameMtl* bone_mtl = GMLib.GetMaterialByIdx(bd.game_mtl_idx);
+                if (!bone_mtl)
+                {
+                    // unknown bone material name in a mod model - fall back to default
+                    Msg("! Model '%s': bone material is unknown, default_object taken", N);
+                    bd.game_mtl_idx = def_idx;
+                }
+                else
+                {
+                    R_ASSERT2(bone_mtl->Flags.is(SGameMtl::flDynamic), "Required dynamic game material");
+                }
             }
             else
             {
@@ -364,7 +374,13 @@ void CModelPool::Delete(dxRender_Visual*& V, BOOL bDiscard)
 void CModelPool::DeleteQueue()
 {
     for (u32 it = 0; it < ModelsToDelete.size(); it++)
-        DeleteInternal(ModelsToDelete[it]);
+    {
+        // DeleteInternal takes a dxRender_Visual*& and can push_back into this very
+        // vector; a reallocation left the reference dangling and the final null-write
+        // corrupted the heap - hand it a copy
+        dxRender_Visual* victim = ModelsToDelete[it];
+        DeleteInternal(victim);
+    }
     ModelsToDelete.clear();
 }
 

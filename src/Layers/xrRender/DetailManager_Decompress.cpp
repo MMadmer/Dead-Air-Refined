@@ -197,7 +197,7 @@ void CDetailManager::cache_Decompress(Slot* S)
             {
                 CDB::TRI& T = tris[xrc.r_begin()[tid].id];
                 SGameMtl* mtl = GMLib.GetMaterialByIdx(T.material);
-                if (mtl->Flags.test(SGameMtl::flPassable))
+                if (mtl && mtl->Flags.test(SGameMtl::flPassable))
                     continue;
 
                 Fvector Tv[3] = {verts[T.verts[0]], verts[T.verts[1]], verts[T.verts[2]]};

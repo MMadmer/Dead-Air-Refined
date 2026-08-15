@@ -106,6 +106,13 @@ void CDialogHolder::StopMenu(CUIDialogWnd* pDialog)
 
 void CDialogHolder::AddDialogToRender(CUIWindow* pDialog)
 {
+    // Lua can pass nil; the crash arrived later at pDialog->Show(true)
+    if (!pDialog)
+    {
+        Msg("! [UI] a null window was passed to the render list");
+        return;
+    }
+
     dlgItem itm(pDialog);
     itm.enabled = true;
 

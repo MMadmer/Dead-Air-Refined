@@ -48,9 +48,9 @@ CObjectList::CObjectList()
 
 CObjectList::~CObjectList()
 {
-    R_ASSERT(objects_active.empty());
-    R_ASSERT(objects_sleeping.empty());
-    R_ASSERT(destroy_queue.empty());
+    if (!objects_active.empty() || !objects_sleeping.empty() || !destroy_queue.empty())
+        Msg("! CObjectList destroyed non-empty: active %u, sleeping %u, queued %u",
+            (u32)objects_active.size(), (u32)objects_sleeping.size(), (u32)destroy_queue.size());
     //. R_ASSERT ( map_NETID.empty() );
 }
 
@@ -462,7 +462,13 @@ return (it==map_NETID.end())?0:it->second;
 */
 void CObjectList::Load()
 {
-    R_ASSERT(/*map_NETID.empty() &&*/ objects_active.empty() && destroy_queue.empty() && objects_sleeping.empty());
+    if (!objects_active.empty() || !objects_sleeping.empty() || !destroy_queue.empty())
+    {
+        Msg("! Level load with non-empty lists: active %u, sleeping %u, queued %u - leftovers of the "
+            "previous level, queue cleared",
+            (u32)objects_active.size(), (u32)objects_sleeping.size(), (u32)destroy_queue.size());
+        destroy_queue.clear();
+    }
 }
 
 void CObjectList::Unload()
@@ -498,6 +504,15 @@ void CObjectList::Unload()
 #endif
         O->net_Destroy();
         Destroy(O);
+    }
+
+    // both loops above setDestroy(true) - which queues the object - then destroy it;
+    // the queue was left holding dangling entries to the just-destroyed objects
+    if (!destroy_queue.empty())
+    {
+        Msg("~ Destroy queue at unload: %u records to already-destroyed objects, cleared",
+            (u32)destroy_queue.size());
+        destroy_queue.clear();
     }
 }
 
