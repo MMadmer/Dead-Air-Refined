@@ -389,6 +389,7 @@ Do not install both. Existing saves are preserved.
 - `docs/dead-air/DEPENDENCIES.md` — pinned dependencies и build policy.
 - `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema и privacy contract.
 - `docs/dead-air/MODDING.md` — контракт совместимости для аддонов.
+- `docs/dead-air/NQ_RUNTIME.md` — формат `.nqasset` и контракт NQ-рантайма.
 - `docs/dead-air/SAVE_COMPATIBILITY.md` — бинарный контракт save-группы.
 - `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — открытое предложение, не реализовано.
 - `docs/dead-air/TEST_MATRIX.md` — обязательные release gates.

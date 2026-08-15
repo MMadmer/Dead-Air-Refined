@@ -8,6 +8,28 @@
 #include "script_game_object.h"
 #include "Actor.h"
 
+#include "xrCommon/xr_hash_map.h"
+
+namespace
+{
+// dialog id -> Lua init function name
+using VirtualDialogs = xr_flat_hash_map<shared_str, shared_str>;
+VirtualDialogs& virtual_dialogs()
+{
+    static VirtualDialogs registry;
+    return registry;
+}
+
+const shared_str* find_virtual(const shared_str& dialog_id)
+{
+    const VirtualDialogs& registry = virtual_dialogs();
+    if (registry.empty())
+        return nullptr;
+    const auto it = registry.find(dialog_id);
+    return it != registry.end() ? &it->second : nullptr;
+}
+} // namespace
+
 SPhraseDialogData::SPhraseDialogData()
 {
     m_PhraseGraph.clear();
@@ -197,6 +219,12 @@ void CPhraseDialog::Load(shared_str dialog_id)
 
 void CPhraseDialog::load_shared(LPCSTR)
 {
+    if (const shared_str* init_func = find_virtual(m_DialogId))
+    {
+        load_virtual(*init_func);
+        return;
+    }
+
     const ITEM_DATA& item_data = *id_to_index::GetById(m_DialogId);
 
     CUIXml* pXML = item_data._xml;
@@ -245,6 +273,84 @@ void CPhraseDialog::load_shared(LPCSTR)
     XML_NODE phrase_node = pXML->NavigateToNodeWithAttribute("phrase", "id", "0");
     THROW(phrase_node);
     AddPhrase(pXML, phrase_node, "0", "");
+}
+
+void CPhraseDialog::load_virtual(const shared_str& init_func)
+{
+    // the defaults an XML dialog without those attributes gets
+    SetPriority(0);
+    SetCaption(nullptr);
+    data()->m_PhraseGraph.clear();
+
+    luabind::functor<void> lua_function;
+    if (!GEnv.ScriptEngine->functor(init_func.c_str(), lua_function))
+        Msg("! XMS: nq dialog [%s]: init function [%s] not found", m_DialogId.c_str(), init_func.c_str());
+    else
+    {
+        // a broken quest graph must not take the talk window with it (the Lua
+        // error itself is printed by the script engine's pcall handler)
+        try
+        {
+            lua_function(this);
+        }
+#ifndef LUABIND_NO_EXCEPTIONS
+        catch (luabind::error&)
+        {
+            Msg("! XMS: nq dialog [%s]: init function [%s] failed", m_DialogId.c_str(), init_func.c_str());
+        }
+#endif
+        catch (std::exception& e)
+        {
+            Msg("! XMS: nq dialog [%s]: init function [%s] failed: %s", m_DialogId.c_str(), init_func.c_str(),
+                e.what());
+        }
+    }
+
+    // Init() THROWs on a missing root phrase; a mute stub keeps the talk alive
+    if (!data()->m_PhraseGraph.vertex("0"))
+        AddPhrase("...", "0", "", -10000);
+}
+
+bool CPhraseDialog::IsKnownDialogId(pcstr dialog_id)
+{
+    if (!dialog_id || !dialog_id[0])
+        return false;
+    const shared_str id(dialog_id);
+    if (virtual_dialogs().find(id) != virtual_dialogs().end())
+        return true;
+    // no_assert: an unknown id must come back as a null, not as a fatal
+    return nullptr != GetById(id, true);
+}
+
+bool CPhraseDialog::RegisterVirtual(pcstr dialog_id, pcstr init_func)
+{
+    if (!dialog_id || !dialog_id[0] || !init_func || !init_func[0])
+        return false;
+    virtual_dialogs()[shared_str(dialog_id)] = shared_str(init_func);
+    return true;
+}
+
+void CPhraseDialog::UnregisterVirtual(pcstr dialog_id)
+{
+    if (dialog_id && dialog_id[0])
+        virtual_dialogs().erase(shared_str(dialog_id));
+}
+
+bool CPhraseDialog::InvalidateVirtual(pcstr dialog_id)
+{
+    if (!dialog_id || !dialog_id[0])
+        return false;
+    // an open talk holds CPhrase pointers from these graphs
+    if (g_actor && g_actor->IsTalking())
+        return false;
+    if (SPhraseDialogData* data = inherited_shared::find_shared_data(shared_str(dialog_id)))
+    {
+        data->m_PhraseGraph.clear();
+        data->m_sCaption = nullptr;
+        data->m_iPriority = 0;
+        data->SetLoad(false);
+    }
+    return true;
 }
 
 void CPhraseDialog::SetCaption(LPCSTR str) { data()->m_sCaption = str; }

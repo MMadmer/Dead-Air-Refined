@@ -1,0 +1,8 @@
+-- E003 fixture: code outside strings (a global call) fails in the empty environment.
+return {
+  nq = 1,
+  id = "code_outside",
+  nodes = {
+    { id = "start", kind = "trigger.start", params = { x = math.floor(1) } },
+  },
+}

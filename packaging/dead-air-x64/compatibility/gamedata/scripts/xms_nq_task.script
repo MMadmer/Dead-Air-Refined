@@ -1,0 +1,292 @@
+-- NQ runtime: PDA tasks (NQ_ARCHITECTURE §9). Quests declare tasks in `tasks = { <id> = {...} }`;
+-- the runtime drives CGameTask directly (task_manager reads its ltx once and has no registration
+-- API). Engine task id: nq.<module>.<quest>.<task>. The runtime keeps qs.tasks[<task>] =
+-- "active"|"completed"|"failed" in its own blob (the core's `task_status` cond reads it) and
+-- reconciles it with the actor's task registry on every init.
+--
+-- Extra kinds: task.give / task.complete / task.fail / task.remove / task.set_target / task.set_text.
+
+local util = xms_nq_util
+local core = xms_nq
+
+local ICON_DEFAULT = "ui_pda2_mtask_overlay"
+
+local K = {}
+
+-- ---------------------------------------------------------------------------- helpers
+local function actor()
+	return db and db.actor
+end
+
+function task_id(uid, name)
+	return "nq." .. tostring(uid) .. "." .. tostring(name)
+end
+
+-- Declaration of a task of the quest; a missing one is an error (E030 catches it at load).
+local function decl(ctx, name)
+	local d = ctx.def and ctx.def.tasks and ctx.def.tasks[name]
+	if not (d) then error("task '" .. tostring(name) .. "' is not declared") end
+	return d
+end
+
+local function spot_of(d)
+	if (d.type == "storyline") then return "storyline_task_location", "ui_storyline_task_blink" end
+	return "secondary_task_location", "ui_secondary_task_blink"
+end
+
+local function set_status(ctx, name, status)
+	if not (ctx.qs) then return end
+	ctx.qs.tasks[name] = status
+	core.mark_dirty()
+end
+
+local function send_news(kind, t)
+	local a = actor()
+	if not (a and t and news_manager and news_manager.send_task) then return end
+	local ok, e = pcall(news_manager.send_task, a, kind, t)
+	if not (ok) then util.warn("task news: %s", tostring(e)) end
+end
+
+local function get_task(a, tid, only_inprocess)
+	local ok, t = pcall(a.get_task, a, tid, only_inprocess)
+	if (ok) then return t end
+	return nil
+end
+
+local function anchor_name(name)
+	return "task_" .. tostring(name) .. "_anchor"
+end
+
+-- Releases the space_restrictor a {pos} target created. Without this a reset (which drops qs.refs,
+-- the only handle on the object) leaks one ALife object per cycle into `.scop` forever.
+local function release_anchor(qs, name)
+	if not (qs) then return end
+	local rname = anchor_name(name)
+	local rec = core.ref_get(qs, rname)
+	if not (rec) then return end
+	if (rec.kind == "anchor" and rec.id) then
+		local se = util.se_by_id(rec.id)
+		if (se) then pcall(function() alife():release(se, true) end) end
+	end
+	core.ref_clear(qs, rname)
+end
+
+-- Object id a task target points at: {smart}/{ref}/{story}/npc_ref through the util resolver,
+-- {restrictor} = the zone, {pos} = an anchor restrictor created once and kept as a ref.
+local function target_object_id(ctx, name, target)
+	if (type(target) ~= "table") then return nil end
+	if (target.pos) then
+		local rname = anchor_name(name)
+		local rec = core.ref_get(ctx.qs, rname)
+		if (rec and rec.id and util.se_by_id(rec.id)) then return rec.id end
+		local lvl, pos, lvid, gvid = util.place_position(target)
+		if not (pos and lvid and gvid) then return nil end
+		local se
+		pcall(function() se = alife():create("space_restrictor", pos, lvid, gvid) end)
+		if not (se) then return nil end
+		core.ref_set(ctx.qs, rname, { id = se.id, kind = "anchor", section = "space_restrictor" })
+		return se.id
+	end
+	if (target.restrictor) then
+		local zone = db and db.zone_by_name and db.zone_by_name[target.restrictor]
+		if (zone) then return zone:id() end
+		return util.id_by_story(target.restrictor)
+	end
+	return util.resolve_target_id(ctx, target)
+end
+
+-- ---------------------------------------------------------------------------- operations
+-- Creates (or refreshes) the PDA task from the declaration. `quiet` skips the news (reconcile).
+function give(ctx, name, quiet)
+	local d = decl(ctx, name)
+	local a = actor()
+	if not (a) then error("task.give: no actor") end
+	local tid = task_id(ctx.uid, name)
+	local existing = get_task(a, tid, true)
+	local t = existing or CGameTask()
+	t:set_id(tid)
+	t:set_type((d.type == "storyline") and task.storyline or task.additional)
+	t:set_title(util.format_text(ctx, d.title or name))
+	t:set_description(util.format_text(ctx, d.descr or ""))
+	t:set_priority(0)
+	t:set_icon_name(d.icon or ICON_DEFAULT)
+	local spot, blink = spot_of(d)
+	local target = d.target and target_object_id(ctx, name, d.target) or nil
+	if (existing) then
+		-- a live task only gets its fields refreshed (the engine refuses a second give)
+		if (target) then
+			pcall(function()
+				if (t:get_map_object_id() ~= target) then
+					t:remove_map_locations(false)
+					t:change_map_location(spot, target)
+				end
+			end)
+		end
+	else
+		if (target) then
+			t:set_map_location(spot)
+			t:set_map_object_id(target)
+		end
+		a:give_task(t, 0, true, 0)
+	end
+	if (target) then pcall(level.map_add_object_spot, target, blink, "") end
+	set_status(ctx, name, "active")
+	if (not existing and not quiet) then send_news("new", t) end
+	return t
+end
+
+local function finish(ctx, name, status)
+	decl(ctx, name)
+	local a = actor()
+	if not (a) then error("task." .. status .. ": no actor") end
+	local tid = task_id(ctx.uid, name)
+	local t = get_task(a, tid, true)
+	if (t) then
+		a:set_task_state((status == "completed") and task.completed or task.fail, tid)
+	else
+		util.warn("%s: task %s is not in the PDA, state '%s' recorded only", ctx.uid, name, status)
+	end
+	set_status(ctx, name, status)
+	if (t) then send_news((status == "completed") and "complete" or "fail", t) end
+end
+
+function complete(ctx, name) finish(ctx, name, "completed") end
+function fail(ctx, name) finish(ctx, name, "failed") end
+
+-- The engine cannot delete a task: the map spot goes, the task is closed silently (no news) and
+-- the runtime forgets it (task_status = none).
+function remove(ctx, name)
+	decl(ctx, name)
+	local a = actor()
+	if not (a) then error("task.remove: no actor") end
+	local tid = task_id(ctx.uid, name)
+	local t = get_task(a, tid, true)
+	if (t) then
+		pcall(t.remove_map_locations, t, false)
+		pcall(a.set_task_state, a, task.fail, tid)
+	end
+	release_anchor(ctx.qs, name)
+	if (ctx.qs) then
+		ctx.qs.tasks[name] = nil
+		core.mark_dirty()
+	end
+end
+
+function set_target(ctx, name, target)
+	local d = decl(ctx, name)
+	local a = actor()
+	if not (a) then error("task.set_target: no actor") end
+	local tid = task_id(ctx.uid, name)
+	local t = get_task(a, tid, true)
+	if not (t) then error("task.set_target: task '" .. tostring(name) .. "' is not active in the PDA") end
+	local id = target_object_id(ctx, name, target)
+	if not (id) then error("task.set_target: target not found") end
+	local spot, blink = spot_of(d)
+	t:remove_map_locations(false)
+	t:change_map_location(spot, id)
+	pcall(level.map_add_object_spot, id, blink, "")
+	send_news("updated", t)
+end
+
+function set_text(ctx, name, title, descr)
+	decl(ctx, name)
+	local a = actor()
+	if not (a) then error("task.set_text: no actor") end
+	local tid = task_id(ctx.uid, name)
+	local t = get_task(a, tid, true)
+	if not (t) then error("task.set_text: task '" .. tostring(name) .. "' is not active in the PDA") end
+	if (title ~= nil) then t:set_title(util.format_text(ctx, title)) end
+	if (descr ~= nil) then t:set_description(util.format_text(ctx, descr)) end
+	send_news("updated", t)
+end
+
+-- ---------------------------------------------------------------------------- kinds
+K["task.give"] = { run = function(ctx, p) give(ctx, p.task) end }
+K["task.complete"] = { run = function(ctx, p) complete(ctx, p.task) end }
+K["task.fail"] = { run = function(ctx, p) fail(ctx, p.task) end }
+K["task.remove"] = { run = function(ctx, p) remove(ctx, p.task) end }
+K["task.set_target"] = { run = function(ctx, p) set_target(ctx, p.task, p.target) end }
+K["task.set_text"] = { run = function(ctx, p) set_text(ctx, p.task, p.new_title or p.title, p.new_descr or p.descr) end }
+
+-- ---------------------------------------------------------------------------- core hooks
+function register()
+	for name, impl in pairs(K) do core.register_kind(name, impl) end
+end
+
+-- Reconcile the runtime's view with the actor's task registry: a task the runtime holds active
+-- but the PDA lost (older save, engine registry reset) is recreated from the declaration.
+-- A PDA task outlives its quest: it lives in the actor's task registry (`.scop`), which the engine
+-- offers no way to delete from. When the quest is gone (module uninstalled, mode no longer
+-- matching) nothing would ever close it, so the record is failed once. The runtime's own state is
+-- left alone: if the module comes back, the reconcile loop below re-creates the task from it.
+local function close_orphan_tasks()
+	local a = actor()
+	local st = core.get_state()
+	if not (a and st and type(st.quests) == "table") then return end
+	local Q = core.quests()
+	for uid, qs in pairs(st.quests) do
+		if not (Q[uid]) then
+			for name, status in pairs(qs.tasks or {}) do
+				if (status == "active") then
+					local tid = task_id(uid, name)
+					local t = get_task(a, tid, true)
+					if (t) then
+						pcall(t.remove_map_locations, t, false)
+						pcall(a.set_task_state, a, task.fail, tid)
+						util.warn("%s: quest is no longer installed, its PDA task %s was closed", uid, name)
+					end
+				end
+			end
+		end
+	end
+end
+
+function on_init()
+	close_orphan_tasks()
+	local a = actor()
+	if not (a) then return end
+	local Q, order = core.quests()
+	for _, uid in ipairs(order) do
+		local q, qs = Q[uid], core.quest_state(uid)
+		if (q and qs and qs.status == "active") then
+			for name, status in pairs(qs.tasks) do
+				if (status == "active") then
+					local tid = task_id(uid, name)
+					if not (get_task(a, tid, true)) then
+						if (q.tasks[name]) then
+							local ok, e = pcall(give, core.make_ctx(uid, nil), name, true)
+							if (ok) then
+								util.warn("%s: task %s was missing from the PDA, recreated", uid, name)
+							else
+								util.err("%s: task %s could not be recreated: %s", uid, name, tostring(e))
+							end
+						else
+							util.warn("%s: task %s is active in the state but no longer declared", uid, name)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- The record is dropped: close its PDA tasks silently so the PDA keeps no orphans.
+function on_quest_reset(uid)
+	local a = actor()
+	local q = core.quest_def(uid)
+	local qs = core.quest_state(uid)
+	if not (q) then return end
+	for name in pairs(q.tasks) do
+		if (a) then
+			local tid = task_id(uid, name)
+			local t = get_task(a, tid, true)
+			if (t) then
+				pcall(t.remove_map_locations, t, false)
+				pcall(a.set_task_state, a, task.fail, tid)
+			end
+		end
+		release_anchor(qs, name)
+	end
+end
+
+function kinds() return K end

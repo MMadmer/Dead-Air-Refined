@@ -1,0 +1,11 @@
+-- Intentionally broken asset #2 (scenario a): a pin that the kind does not have and a target
+-- node that does not exist. The loader must reject it and keep the other quests running.
+return {
+  nq = 1,
+  id = "broken_pin",
+  title = "Broken: bad pin",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { nope = "s" } },
+    { id = "s", kind = "flow.step", out = { next = "does_not_exist" } },
+  },
+}

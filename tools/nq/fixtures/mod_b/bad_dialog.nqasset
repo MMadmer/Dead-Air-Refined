@@ -1,0 +1,14 @@
+-- E010/E011 fixture: an actor phrase where the NPC should answer (broken alternation) and a phrase
+-- entered from a non-dialog node (world edge into a phrase; it is also unreachable from any topic).
+return {
+  nq = 1,
+  id = "bad_dialog",
+  title = "Bad dialog",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = { "t", "w" } } },
+    { id = "t", kind = "dialog.topic", params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "hi" }, out = { next = "p1" } },
+    { id = "p1", kind = "dialog.actor_phrase", params = { text = "wrong side" } },
+    { id = "w", kind = "flow.step", out = { next = "p2" } },
+    { id = "p2", kind = "dialog.npc_phrase", params = { text = "from the world" } },
+  },
+}

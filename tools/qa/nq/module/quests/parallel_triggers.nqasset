@@ -1,0 +1,79 @@
+-- nq: parallel_triggers "Три дороги"
+-- Несколько корней и параллельных веток. Эталон для тест-плана (§16 игра п.3):
+--   * trigger.start   -> вилка на wait.timer и objective.reach -> flow.join -> шаг с новостью;
+--   * trigger.when{event.item_taken medkit} (однократно) -> новость;
+--   * trigger.when{has_item bread >= 3} -> objective.kill{spawn кабанов} -> награда (+ signal.send) -> wait.any -> flow.end;
+--   * trigger.when{event.signal} ловит сигнал из соседней ветки;
+--   * wait.any: использованная аптечка ИЛИ таймаут 5 с -> ветвление по var (пин else пишется как ["else"]).
+return {
+  nq = 1,
+  id = "parallel_triggers",
+  title = "Три дороги",
+  activation = "auto",
+  vars = { medkit_seen = false, hunted = false },
+  tasks = {
+    hunt = { title = "Охота у деревни", descr = "Перебей кабанов у деревни новичков.", type = "additional",
+             target = { ref = "boars" } },
+  },
+  nodes = {
+    -- ветка A: старт -> таймер и дойти -> дождаться обоих
+    { id = "start", kind = "trigger.start", out = { next = { "timer", "reach" } } },
+    { id = "timer", kind = "wait.timer", params = { duration = { game_minutes = 30 } }, out = { done = "join" } },
+    { id = "reach", kind = "objective.reach",
+      params = { place = { smart = "esc_smart_terrain_2_12" }, map_spot = true, spot_text = "Деревня новичков" },
+      out = { done = "join" } },
+    { id = "join", kind = "flow.join", out = { next = "arrived" } },
+    { id = "arrived", kind = "flow.step",
+      on_enter = { { kind = "news.tip", params = { text = "Ты в деревне новичков, и прошло полчаса. Обе дороги сошлись." } } } },
+
+    -- ветка B: подобрал аптечку (однократно)
+    { id = "on_medkit", kind = "trigger.when",
+      cond = { { kind = "event.item_taken", params = { section = "medkit" } } },
+      out = { next = "medkit_note" } },
+    { id = "medkit_note", kind = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "medkit_seen", value = true } },
+        { kind = "news.tip", params = { text = "Аптечка пригодится. Кабаны кусаются." } },
+      } },
+
+    -- ветка C: набрал хлеба -> охота
+    { id = "on_bread", kind = "trigger.when",
+      cond = { { kind = "has_item", params = { section = "bread", count = 3 } } },
+      out = { next = "hunt" } },
+    { id = "hunt", kind = "objective.kill",
+      params = { target = { spawn = { section = "simulation_boar", smart = "esc_smart_terrain_3_16", ref = "boars", hold = true } } },
+      on_enter = { { kind = "task.give", params = { task = "hunt" } } },
+      out = { done = "hunted" } },
+    { id = "hunted", kind = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "hunted", value = true } },
+        { kind = "task.complete", params = { task = "hunt" } },
+        { kind = "money.give", params = { amount = 700 } },
+        { kind = "signal.send", params = { name = "boars_done" } },
+      },
+      out = { next = "race" } },
+
+    -- ветка D: сигнал из ветки C ловится триггером (подписан с активации квеста)
+    { id = "on_signal", kind = "trigger.when",
+      cond = { { kind = "event.signal", params = { name = "boars_done" } } },
+      out = { next = "signal_note" } },
+    { id = "signal_note", kind = "flow.step",
+      on_enter = { { kind = "news.tip", params = { text = "Сигнал получен: охота окончена." } } } },
+
+    -- wait.any + ветвление: использовать аптечку или подождать 5 секунд
+    { id = "race", kind = "wait.any",
+      params = { cases = {
+        { name = "medkit",  cond = { { kind = "event.item_used", params = { section = "medkit" } } } },
+        { name = "timeout", cond = { { kind = "elapsed", params = { from = "node", duration = { seconds = 5 } } } } },
+      } },
+      out = { medkit = "which", timeout = "which" } },
+    { id = "which", kind = "flow.branch",
+      params = { cases = {
+        { name = "with_medkit", cond = { { kind = "var", params = { name = "medkit_seen", op = "eq", value = true } } } },
+      } },
+      out = { with_medkit = "end_good", ["else"] = "end_plain" } },
+    { id = "end_good", kind = "flow.end", params = { status = "completed" },
+      on_enter = { { kind = "news.tip", params = { text = "Охота окончена, аптечка не понадобилась." } } } },
+    { id = "end_plain", kind = "flow.end", params = { status = "completed" } },
+  },
+}

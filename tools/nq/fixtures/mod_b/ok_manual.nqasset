@@ -1,0 +1,16 @@
+-- Valid manual quest living next to broken files: must load and stay inactive until activated.
+return {
+  nq = 1,
+  id = "ok_manual",
+  title = "Manual one",
+  activation = "manual",
+  vars = { n = 0 },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "step" } },
+    { id = "step", kind = "flow.step",
+      on_enter = { { kind = "var.add", params = { name = "n", delta = 5 } },
+                   { kind = "lua", params = { code = [[ nq.vars.n = nq.vars.n * 2; nq.log("lua ran, n=%s", tostring(nq.vars.n)) ]] } } },
+      out = { next = "finish" } },
+    { id = "finish", kind = "flow.end", params = { status = "failed" } },
+  },
+}

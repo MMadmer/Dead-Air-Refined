@@ -1,0 +1,1107 @@
+-- NQ runtime headless tests (test tooling, not shipped). Run:
+--   python tools\nq\run_lua.py tools\nq\test_examples.lua [-v]
+-- Drives the three reference quests of the editor repo (docs\nq\examples) plus the broken
+-- fixtures through the mock engine and asserts the state machine, persistence and validation.
+
+local HERE = string.match(arg[0], "^(.*)[\\/][^\\/]+$") or "."
+local REPO = HERE .. "\\..\\.."
+local SCRIPTS = REPO .. "\\packaging\\dead-air-x64\\compatibility\\gamedata\\scripts"
+local CONFIG = REPO .. "\\packaging\\dead-air-x64\\compatibility\\gamedata\\configs"
+local EXAMPLES = os.getenv("NQ_EXAMPLES") or "D:\\Games\\XFined-Editor\\docs\\nq\\examples"
+local FIXTURES = HERE .. "\\fixtures"
+local verbose = arg[1] == "-v"
+
+local mock = dofile(HERE .. "\\mock_engine.lua")
+
+local passed, failed = 0, 0
+local function check(cond, msg)
+	if (cond) then
+		passed = passed + 1
+		if (verbose) then io.write("  ok   ", msg, "\n") end
+	else
+		failed = failed + 1
+		io.write("  FAIL ", msg, "\n")
+	end
+	return cond
+end
+
+local function section(name)
+	io.write("== ", name, "\n")
+end
+
+local function fail_dump()
+	io.write("---- last log lines:\n")
+	local from = math.max(1, #mock.log - 40)
+	for i = from, #mock.log do io.write(mock.log[i], "\n") end
+end
+
+local MODS = {
+	{ id = "mod_a", root = EXAMPLES },
+	{ id = "mod_b", root = FIXTURES .. "\\mod_b" },
+}
+
+local wolf					-- Wolf's game object (story id esc_2_12_stalker_wolf), created by setup()
+
+local function setup(opts)
+	opts = opts or {}
+	mock.setup({
+		scripts_dir = SCRIPTS, config_dir = CONFIG, appdata_dir = HERE,
+		modules = opts.modules or MODS, verbose = verbose,
+	})
+	mock.fresh()
+	mock.add_smart("esc_smart_terrain_2_12", 100, 0, 100, 1, 20)
+	mock.add_smart("esc_smart_terrain_3_16", -200, 0, 50, 1, 20)
+	wolf = mock.add_npc("esc_2_12_stalker_wolf", "esc_2_12_stalker_wolf", { community = "stalker", name = "Wolf", profile = "esc_wolf" })
+end
+
+local UID_A, UID_B, UID_C = "mod_a.linear_fetch", "mod_a.parallel_triggers", "mod_a.dialog_branching"
+local D_MEET, D_REPORT = "nq." .. UID_C .. ".meet", "nq." .. UID_C .. ".report"
+local T_BREAD = "nq." .. UID_A .. ".bring_bread"
+
+local function has(list, v)
+	for _, x in ipairs(list or {}) do if (x == v) then return true end end
+	return false
+end
+
+local function task_news(kind, id)
+	for _, n in ipairs(mock.news) do
+		if (n.task == kind and n.id == id) then return n end
+	end
+	return nil
+end
+
+-- ============================================================================ (a) linear_fetch
+section("(a) linear_fetch: start -> fetch -> reward -> end")
+setup()
+mock.first_update()
+local core = xms_nq
+check(core.is_ready(), "runtime initialised")
+local Q, order, invalid = core.quests()
+check(Q[UID_A] and Q[UID_B] and Q[UID_C], "three example quests loaded")
+check(#invalid == 5, "five invalid fixtures (" .. #invalid .. ")")
+check(Q["mod_b.ok_manual"] ~= nil, "valid quest next to broken ones still loads")
+check(mock.has_callback("actor_on_update"), "callbacks registered when quests exist")
+local qs = core.quest_state(UID_A)
+check(qs and qs.status == "active", "linear_fetch active")
+check(qs.tokens.fetch ~= nil and qs.tokens.fetch.b == true, "token waits on fetch")
+check(qs.done.start == "trigger.start" and qs.done.intro == nil, "trigger.start done marked with its kind, flow.step passed")
+check(mock.news_has(mock.cp("Новичкам на Кордоне нужен хлеб")), "intro news.tip sent (cp1251)")
+-- task.give: CGameTask in the actor registry, runtime status, PDA news
+local tb = mock.task_by_id(T_BREAD)
+check(tb ~= nil and tb:get_state() == task.in_progress, "task.give created the PDA task (in progress)")
+check(tb and tb:get_title() == mock.cp("Хлеб для новичков") and tb:get_type() == task.additional, "task title (cp1251) and type")
+check(tb and tb:get_icon_name() == "ui_pda2_mtask_overlay", "default task icon")
+check(qs.tasks.bring_bread == "active", "qs.tasks = active")
+check(task_news("new", T_BREAD) ~= nil, "news_manager.send_task new")
+check(mock.count_items("bread") == 0, "no bread yet")
+mock.add_item("bread", true)
+mock.ticks(2)
+qs = core.quest_state(UID_A)
+check(qs.tokens.fetch ~= nil, "one bread is not enough")
+mock.add_item("bread", true)
+mock.ticks(2)
+qs = core.quest_state(UID_A)
+check(qs.tokens.fetch == nil, "fetch completed after 2 bread")
+check(qs.status == "completed", "quest completed by flow.end (" .. tostring(qs.status) .. ")")
+check(mock.count_items("bread") == 0, "reward took the bread (item.take)")
+check(mock.count_items("medkit") == 1, "reward gave a medkit (item.give)")
+check(db.actor:money() == 1500, "money.give +500 (" .. db.actor:money() .. ")")
+check(mock.news_has(mock.cp("Держи аптечку")), "reward news.tip sent")
+check(mock.relocated("in", "medkit") == 1, "relocate news for medkit")
+check(qs.tasks.bring_bread == "completed", "task.complete -> qs.tasks completed")
+check(mock.task_by_id(T_BREAD):get_state() == task.completed, "PDA task state completed")
+check(task_news("complete", T_BREAD) ~= nil, "news_manager.send_task complete")
+check(mock.save_calls > 0 and mock.blobs["xms.nq"] ~= nil, "state blob staged under xms.nq")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (b1) parallel_triggers
+section("(b1) parallel_triggers: timer/reach/join, medkit trigger, bread -> kill -> signal, wait.any timeout")
+setup()
+mock.deleted["mod_a/linear_fetch.nqasset"] = true	-- keep linear_fetch from eating the bread
+mock.first_update()
+core = xms_nq
+qs = core.quest_state(UID_B)
+check(qs and qs.status == "active", "parallel_triggers active")
+check(qs.tokens.timer and qs.tokens.reach and not qs.tokens.join, "timer and reach wait, join not yet")
+local smart = mock.smarts["esc_smart_terrain_2_12"]
+check(mock.spots[smart.id .. "|secondary_task_location"] ~= nil, "objective.reach put a map spot on the smart")
+-- timer: 30 game minutes
+mock.advance_game(20 * 60)
+mock.ticks(1)
+check(core.quest_state(UID_B).tokens.timer ~= nil, "timer still waiting at 20 min")
+mock.advance_game(11 * 60)
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.timer == nil, "timer done after 31 game minutes")
+check(qs.joins.join and next(qs.joins.join) ~= nil, "join counted the first arrival")
+check(qs.tokens.arrived == nil and not mock.news_has(mock.cp("Обе дороги сошлись")), "join still waiting for reach")
+-- reach: walk into the smart radius
+mock.move_actor(105, 0, 100)
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.reach == nil, "reach done inside the smart radius")
+check(mock.news_has(mock.cp("Обе дороги сошлись")), "join fired -> arrived news")
+check(mock.spots[smart.id .. "|secondary_task_location"] == nil, "reach removed its map spot")
+check(qs.joins.join == nil, "join counter reset")
+-- medkit trigger (event.item_taken, once)
+mock.add_item("medkit", true)
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.vars.medkit_seen == true, "medkit trigger set var")
+check(mock.news_count(mock.cp("Кабаны кусаются")) == 1, "medkit note once")
+check(qs.fired.on_medkit == 1, "fired counter = 1")
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(mock.news_count(mock.cp("Кабаны кусаются")) == 1, "non-repeat trigger does not fire twice")
+-- bread trigger (has_item >= 3, polled) -> objective.kill{spawn}
+mock.add_item("bread") mock.add_item("bread")
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.hunt == nil, "2 bread: on_bread not fired")
+mock.add_item("bread")
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.hunt ~= nil and qs.tokens.hunt.b == true, "3 bread: hunt (objective.kill) waiting")
+check(qs.status == "active", "quest still active")
+local boars = qs.refs.boars and mock.se[qs.refs.boars.id]
+check(boars ~= nil and boars._section == "simulation_boar" and boars.scripted_target == "esc_smart_terrain_3_16", "objective.kill spawned the squad on the smart with hold")
+check(qs.tokens.hunt.w.id == qs.refs.boars.id and qs.tokens.hunt.w.kind == "squad", "kill token remembers its squad")
+check(mock.task_by_id("nq." .. UID_B .. ".hunt") ~= nil, "task.give in on_enter created the PDA task")
+-- squad dies offline (no callbacks): the poll fallback finishes the objective
+mock.squad_die_offline(boars)
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.hunt == nil and qs.vars.hunted == true, "offline squad death -> hunt done -> hunted")
+check(qs.tasks.hunt == "completed", "task.complete after the hunt")
+check(db.actor:money() == 1700, "money.give +700")
+check(mock.news_has(mock.cp("Сигнал получен")), "signal.send -> event.signal trigger -> note")
+check(qs.tokens.race ~= nil, "wait.any waiting")
+-- wait.any: 5 real seconds timeout -> flow.branch -> end_good (medkit_seen = true)
+mock.ticks(10, 260)
+qs = core.quest_state(UID_B)
+check(qs.tokens.race ~= nil, "race still waiting at 2.6 s")
+mock.ticks(12, 260)
+qs = core.quest_state(UID_B)
+check(qs.tokens.race == nil, "race timed out")
+check(mock.news_has(mock.cp("аптечка не понадобилась")), "branch with_medkit -> end_good")
+check(qs.status == "completed", "parallel_triggers completed")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (b2) parallel_triggers: item_used path -> else
+section("(b2) parallel_triggers: wait.any by event.item_used, flow.branch else")
+setup()
+mock.deleted["mod_a/linear_fetch.nqasset"] = true
+mock.first_update()
+core = xms_nq
+for _ = 1, 3 do mock.add_item("bread") end
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.hunt ~= nil, "hunt waiting")
+core.complete_external(UID_B, "hunt")	-- default pin
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.race ~= nil, "race waiting after default-pin completion")
+mock.add_item("medkit")	-- no item_take notification: medkit_seen stays false
+mock.use_item("medkit")
+mock.ticks(2)
+qs = core.quest_state(UID_B)
+check(qs.tokens.race == nil, "event.item_used resolved wait.any")
+check(qs.vars.medkit_seen == false, "medkit_seen false")
+check(qs.status == "completed" and not mock.news_has(mock.cp("аптечка не понадобилась")), "branch else -> end_plain")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (c) dialog_branching validation
+section("(c) dialog_branching loads with 0 errors")
+setup()
+mock.first_update()
+core = xms_nq
+local qc = core.quest_def(UID_C)
+check(qc ~= nil and qc.errors == 0, "dialog_branching valid (" .. tostring(qc and qc.errors) .. " errors)")
+if (qc) then
+	for _, p in ipairs(qc.problems) do io.write("  problem: ", xms_nq_load.problem_line(p), "\n") end
+end
+qs = core.quest_state(UID_C)
+check(qs and qs.tokens.meet ~= nil, "token on the first dialog.topic")
+local ol = xms_nq_load.outline(qc)
+check(string.find(ol, "meet %(dialog.topic; npc=story:esc_2_12_stalker_wolf%)", 1) ~= nil, "outline shows the topic")
+check(string.find(ol, "%[T%] start %(trigger.start%)", 1) ~= nil, "outline marks the trigger")
+if (verbose) then io.write(ol, "\n") end
+check(mock.dialogs_registered[D_MEET] ~= nil and mock.dialogs_registered[D_REPORT] ~= nil, "extension on_init registered both topic dialogs")
+check(string.find(mock.dialogs_registered[D_MEET], "^xms_nq_dialog%.init_%x+$") ~= nil, "init function name is content-addressed (" .. tostring(mock.dialogs_registered[D_MEET]) .. ")")
+check(type(mock.functor(mock.dialogs_registered[D_MEET])) == "function", "init function resolvable like the engine does")
+
+-- ============================================================================ (d) save -> load round trip
+section("(d) save/load round trip keeps tokens, vars, refs and restages the blob")
+setup()
+mock.first_update()
+core = xms_nq
+mock.add_item("bread", true)		-- linear_fetch: 1 of 2
+mock.add_item("medkit", true)		-- parallel: medkit trigger fired -> var
+mock.advance_game(10 * 60)
+mock.ticks(3)
+qs = core.quest_state(UID_B)
+core.ref_set(qs, "probe", { id = 4242, kind = "object", section = "probe" })
+mock.ticks(1)
+local before = xms_nq_util.decode(mock.blobs["xms.nq"])
+check(before.quests[UID_A].tokens.fetch ~= nil, "blob has the fetch token")
+check(before.quests[UID_B].vars.medkit_seen == true, "blob has medkit_seen")
+check(before.quests[UID_B].refs.probe.id == 4242, "blob has the ref")
+check(before.quests[UID_B].tokens.timer.w.until_g ~= nil, "wait.timer deadline persisted")
+local saves_before = mock.save_calls
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+check(core.is_ready(), "re-initialised from the blob")
+qs = core.quest_state(UID_A)
+check(qs and qs.tokens.fetch ~= nil and qs.tokens.fetch.b == true, "fetch token restored")
+qs = core.quest_state(UID_B)
+check(qs.vars.medkit_seen == true and qs.fired.on_medkit == 1, "vars and fired restored")
+check(qs.refs.probe and qs.refs.probe.id == 4242, "refs restored")
+check(mock.sor:get("nq." .. UID_B .. ".probe") == 4242, "ref story id re-registered")
+check(mock.save_calls > saves_before, "blob restaged after load")
+check(mock.spots[smart.id .. "|secondary_task_location"] ~= nil, "reach map spot re-added on load")
+-- and the game goes on: second bread completes the fetch
+mock.add_item("bread", true)
+mock.ticks(2)
+check(core.quest_state(UID_A).status == "completed", "linear_fetch completes after load")
+-- timer continues from the persisted deadline
+mock.advance_game(21 * 60)
+mock.ticks(2)
+check(core.quest_state(UID_B).tokens.timer == nil, "timer expired after load using the saved deadline")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (e) broken assets
+section("(e) broken assets: E003 / E007 without touching the others")
+setup()
+mock.first_update()
+core = xms_nq
+Q, order, invalid = core.quests()
+local codes = {}
+for _, q in ipairs(invalid) do
+	for _, p in ipairs(q.problems) do codes[q.file .. ":" .. p.code] = true end
+end
+check(codes["broken_syntax.nqasset:E003"], "syntax error -> E003")
+check(codes["code_outside.nqasset:E003"], "code outside strings -> E003")
+check(codes["code_local.nqasset:E003"], "a local declaration that the empty environment cannot catch -> E003")
+check(codes["bad_pin.nqasset:E007"], "undeclared pin / missing target / edge into trigger -> E007")
+check(codes["bad_dialog.nqasset:E010"] and codes["bad_dialog.nqasset:E011"], "broken alternation -> E010, world edge into a phrase -> E011")
+check(mock.dialogs_registered["nq.mod_b.bad_dialog.t"] == nil, "invalid quest registers no dialogs")
+check(Q["mod_b.ok_manual"] ~= nil and core.quest_status("mod_b.ok_manual") == "inactive", "manual quest loaded and inactive")
+check(mock.log_has("mod_b/broken_syntax.nqasset: E003"), "E003 logged with the file name")
+-- console: activate the manual quest, custom lua runs
+xms_nq_console.exec("activate mod_b.ok_manual")
+mock.ticks(2)
+qs = core.quest_state("mod_b.ok_manual")
+check(qs and qs.status == "failed", "manual quest ran to flow.end{failed} (" .. tostring(qs and qs.status) .. ")")
+check(qs and qs.vars.n == 10, "var.add then custom lua doubled n (" .. tostring(qs and qs.vars.n) .. ")")
+check(mock.log_has("lua ran, n=10"), "nq.log from custom lua")
+xms_nq_console.exec("list")
+check(mock.log_has("mod_b/broken_syntax.nqasset INVALID"), "nq list shows INVALID")
+xms_nq_console.exec("state mod_a.parallel_triggers")
+check(mock.log_has("%[nq%] tokens: "), "nq state prints tokens")
+xms_nq_console.exec("validate")
+check(mock.log_has("validate: %d+ file%(s%)"), "nq validate summary")
+xms_nq_console.exec("dump")
+local f = io.open(HERE .. "\\nq_report.json", "rb")
+check(f ~= nil, "nq dump wrote nq_report.json")
+if (f) then local s = f:read("*a") f:close() check(string.find(s, '"uid": "mod_a.linear_fetch"', 1, true) ~= nil, "report lists quests") os.remove(HERE .. "\\nq_report.json") end
+xms_nq_console.exec("debug 1")
+mock.ticks(1)
+xms_nq_console.exec("jump mod_a.linear_fetch reward")
+mock.ticks(2)
+check(core.quest_state(UID_A).status == "completed", "nq jump to reward -> flow.end")
+check(mock.news_has("[nq] " .. UID_A .. ": enter reward"), "debug mode mirrors transitions to PDA news")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (f) hash mismatch reconciliation
+section("(f) graph changed between sessions: token on a removed node is dropped")
+setup()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state(UID_A)
+check(qs.tokens.fetch ~= nil, "fetch token before the change")
+local original = xms.read_file("mod_a", "linear_fetch.nqasset")
+local changed = string.gsub(original, '"fetch"', '"fetch2"')	-- node id and the edge into it
+check(changed ~= original, "fixture patched")
+mock.overrides["mod_a/linear_fetch.nqasset"] = changed
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state(UID_A)
+check(qs ~= nil and qs.tokens.fetch == nil, "stale token dropped")
+check(mock.log_has("token on fetch dropped"), "drop logged")
+check(qs.hash == core.quest_def(UID_A).hash, "hash updated")
+check(qs.status == "completed", "no tokens and no armed triggers -> implicit completion")
+mock.overrides = {}
+-- nq reload with an unchanged asset keeps everything
+setup()
+mock.first_update()
+core = xms_nq
+mock.add_item("bread", true)
+mock.ticks(2)
+xms_nq_console.exec("reload")
+qs = core.quest_state(UID_A)
+check(qs.tokens.fetch ~= nil and qs.tokens.fetch.b == true, "reload keeps the waiting token")
+mock.add_item("bread", true)
+mock.ticks(2)
+check(core.quest_state(UID_A).status == "completed", "quest continues after reload")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (g) zero cost / disabled engine
+section("(g) no quests -> no callbacks; missing xms.list_files -> disabled with one line")
+setup({ modules = {} })
+mock.first_update()
+core = xms_nq
+check(core.is_ready(), "ready with zero quests")
+check(not mock.has_callback("actor_on_update"), "actor_on_update not registered without quests")
+mock.list_files_missing = true
+setup()
+mock.first_update()
+check(not xms_nq.is_ready(), "runtime disabled without xms.list_files")
+check(mock.log_count("quest runtime disabled") == 1, "exactly one disabled line")
+mock.list_files_missing = false
+
+-- ============================================================================ (h) unit checks
+section("(h) unit: cp1251, fnv1a, serializer, format_text")
+setup()
+local util = xms_nq_util
+local s, lost = util.to_cp1251("Привет — «мир» Ё ё № … €")
+check(#s == 24 and lost == 0, "cyrillic and typography map to cp1251 (" .. #s .. " bytes, " .. lost .. " lost)")
+check(string.byte(s, 1) == 0xCF and string.byte(s, 8) == 0x97 and string.byte(s, 16) == 0xA8 and string.byte(s, 18) == 0xB8 and string.byte(s, 20) == 0xB9 and string.byte(s, 22) == 0x85 and string.byte(s, 24) == 0x88, "cp1251 byte values")
+local s2, lost2 = util.to_cp1251("ok ☃")
+check(s2 == "ok ?" and lost2 == 1, "unknown char -> ? and counted")
+check(util.fnv1a("") == 2166136261, "fnv1a empty")
+check(util.fnv1a("a") == 0xE40C292C, "fnv1a 'a'")
+check(util.fnv1a("foobar") == 0xBF9CF968, "fnv1a 'foobar'")
+local t = { a = 1, b = "x\ny", c = { true, false, 2.5 }, ["k k"] = { z = "q" } }
+local rt = util.deserialize(util.serialize(t))
+check(rt.a == 1 and rt.b == "x\ny" and rt.c[3] == 2.5 and rt["k k"].z == "q", "serialize/deserialize round trip")
+check(util.decode(util.encode(t)).c[1] == true, "encode/decode (marshal path)")
+local ctx = { qs = { vars = { name = "Wolf", n = 3 } } }
+check(util.format_text(ctx, "hi {var:name} x{var:n} {actor}") == "hi Wolf x3 Strelok", "placeholders substituted")
+local g0 = util.game_secs()
+check(g0 == 1325376000, "game secs are absolute civil seconds (2012-01-01 = " .. g0 .. ")")
+mock.advance_game(90061)
+check(util.game_secs() - g0 == 90061, "game secs advance with CTime fields (" .. (util.game_secs() - g0) .. ")")
+
+-- ============================================================================ (i) validation codes
+section("(i) validation codes on inline assets")
+setup()
+mock.first_update()
+local loader = xms_nq_load
+local function codes_of(src)
+	local q = loader.load_asset("mod_x", "inline.nqasset", src)
+	local set = {}
+	for _, p in ipairs(q.problems) do set[p.code] = (set[p.code] or 0) + 1 end
+	return set, q
+end
+local c
+c = codes_of([[return { id = "x", nodes = { { id = "s", kind = "trigger.start" } } }]])
+check(c.E001 == 1, "E001 nq missing")
+c = codes_of([[return { nq = 1, id = "Bad-Id", nodes = { { id = "s", kind = "trigger.start" } } }]])
+check(c.E002 == 1, "E002 quest id pattern")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start" }, { id = "s", kind = "flow.step" }, { id = "Bad", kind = "flow.step" } } }]])
+check(c.E004 == 2, "E004 duplicate / bad node id (" .. tostring(c.E004) .. ")")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, { id = "a", kind = "no.such", }, { id = "b", kind = "item.give" }, { id = "c", kind = "flow.step", on_enter = { { kind = "var" } }, cond = { { kind = "item.give" } } } } }]])
+check(c.E005 == 4, "E005 unknown kind / wrong position x4 (" .. tostring(c.E005) .. ")")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, { id = "a", kind = "objective.fetch", params = { count = 0 } }, { id = "b", kind = "flow.step", on_enter = { { kind = "item.give", params = { section = 5 } }, { kind = "news.tip", params = { text = "ok", duration = "x" } } } } } }]])
+check(c.E006 == 4, "E006 required/type/min x4 (" .. tostring(c.E006) .. ")")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "a", kind = "flow.step" } } }]])
+check(c.E008 == 1 and c.W020 == 1, "E008 no trigger, W020 unreachable")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "j" } }, { id = "j", kind = "flow.join" }, { id = "z", kind = "flow.join" } } }]])
+check(c.E009 == 1 and c.W021 == 2 and c.W020 == 1, "E009 join without inputs, W021 waiting nodes without outputs")
+c = codes_of([[return { nq = 1, id = "x", nodes = {
+	{ id = "s", kind = "trigger.start", out = { next = "t" } },
+	{ id = "t", kind = "dialog.topic", params = { npc = { story = "n" }, text = "hi" }, out = { next = "p1" } },
+	{ id = "p1", kind = "dialog.actor_phrase", params = { text = "wrong side" }, out = { next = "p2" } },
+	{ id = "p2", kind = "dialog.npc_phrase", params = { text = "x" }, cond = { { kind = "event.signal", params = { name = "s" } } } },
+	{ id = "p3", kind = "dialog.npc_phrase", params = { text = "orphan" } },
+	{ id = "w", kind = "flow.step", out = { next = "p3" } },
+	{ id = "e", kind = "flow.end" },
+} }]])
+check(c.E010 == 3, "E010 alternation x2 + unreachable phrase (" .. tostring(c.E010) .. ")")
+check(c.E011 == 1, "E011 phrase entered from the world")
+check(c.E020 == 1, "E020 event cond in a phrase")
+check(c.W011 == 1, "W011 non-leaf phrase without unconditional continuation")
+c = codes_of([[return { nq = 1, id = "x", nodes = {
+	{ id = "s", kind = "trigger.start", out = { next = "b" } },
+	{ id = "b", kind = "flow.branch", params = { cases = { { name = "a", cond = { { kind = "event.item_taken" } } }, { name = "a", cond = {} } } }, out = { a = "r" } },
+	{ id = "r", kind = "flow.random", params = { cases = { { name = "q", weight = 0 } } } },
+	{ id = "w", kind = "wait.any", params = { cases = {} } },
+	{ id = "e", kind = "flow.end" },
+} }]])
+check(c.E020 == 1, "E020 event in flow.branch cases")
+check(c.E021 == 3, "E021 duplicate case, weight <= 0, empty cases (" .. tostring(c.E021) .. ")")
+c = codes_of([[return { nq = 1, id = "x", vars = { a = 1 }, tasks = { t = { title = "t" } }, nodes = {
+	{ id = "s", kind = "trigger.start", out = { next = "b" } },
+	{ id = "b", kind = "flow.step", on_enter = {
+		{ kind = "var.set", params = { name = "zz", value = 1 } },
+		{ kind = "task.give", params = { task = "nope" } },
+		{ kind = "map.spot", params = { target = { ref = "ghost" } } },
+		{ kind = "lua", params = { code = "this is not lua" } },
+	}, cond = { { kind = "node_done", params = { node = "missing" } } }, out = { next = "e" } },
+	{ id = "e", kind = "flow.end" },
+} }]])
+check(c.E030 == 4, "E030 var/task/node/ref references (" .. tostring(c.E030) .. ")")
+check(c.W030 == nil, "W030 is not the game's code for an uncreated ref any more")
+check(c.E050 == 1, "E050 lua syntax error")
+c = codes_of([[return { nq = 1, id = "x", nodes = {
+	{ id = "s", kind = "trigger.start", out = { next = "b" } },
+	{ id = "b", kind = "flow.step", on_enter = { { kind = "spawn.squad", params = { section = "sq", smart = "sm", hold = false } }, { kind = "news.tip", params = { text = "☃ snow" } } } },
+} }]])
+check(c.W031 == 1 and c.W040 == 1 and c.W070 == 1, "W031 hold=false, W040 char outside cp1251, W070 no flow.end")
+local _, qq = codes_of([[return { nq = 1, id = "x", title = { eng = "Eng", rus = "Рус" }, nodes = { { id = "s", kind = "trigger.start", out = { next = "e" } }, { id = "e", kind = "flow.end", once = "yes" } } }]])
+check(qq.title == mock.cp("Рус") and qq.errors == 1, "language pick rus + E006 once type")
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "t" } }, { id = "t", kind = "dialog.topic", params = { npc = { story = "n" }, text = "hi" }, once = false } } }]])
+check(c.W012 == 1 and c.W013 == 1, "W012 topic without phrases, W013 topic once=false without conds")
+
+-- ============================================================================ (j) restart, repeat+cooldown, level_entered, quest.activate, random, real timer
+section("(j) flow.end restart, trigger.when repeat/cooldown, level_entered, quest.activate, flow.random, wait.timer real")
+setup()
+mock.overrides["mod_a/loop.nqasset"] = [[return { nq = 1, id = "loop", vars = { n = 0 }, nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "tick" } },
+	{ id = "tick", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "n", delta = 1 } } }, out = { next = "w" } },
+	{ id = "w", kind = "wait.when", params = { timeout = { seconds = 1 } }, cond = { { kind = "has_info", params = { info = "never" } } }, out = { done = "fin", timeout = "br" } },
+	{ id = "br", kind = "flow.branch", params = { cases = { { name = "again", cond = { { kind = "has_info", params = { info = "stop" }, ["not"] = true } } } } }, out = { again = "fin_restart", ["else"] = "fin" } },
+	{ id = "fin_restart", kind = "flow.end", params = { status = "completed", restart = true } },
+	{ id = "fin", kind = "flow.end", params = { status = "failed" } },
+} }]]
+mock.overrides["mod_a/rep.nqasset"] = [[return { nq = 1, id = "rep", vars = { hits = 0 }, nodes = {
+	{ id = "t", kind = "trigger.when", params = { ["repeat"] = true, cooldown = { seconds = 1 } }, cond = { { kind = "has_item", params = { section = "bread" } } }, out = { next = "hit" } },
+	{ id = "hit", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "hits", delta = 1 } } } },
+} }]]
+mock.overrides["mod_a/misc.nqasset"] = [[return { nq = 1, id = "misc", vars = { entered = false, pick = "" }, nodes = {
+	{ id = "lvl", kind = "trigger.when", cond = { { kind = "event.level_entered", params = { level = "l01_escape" } } }, out = { next = "mark" } },
+	{ id = "mark", kind = "flow.step", on_enter = { { kind = "var.set", params = { name = "entered", value = true } }, { kind = "quest.activate", params = { quest = "manual2" } } }, out = { next = "rnd" } },
+	{ id = "rnd", kind = "flow.random", params = { cases = { { name = "a", weight = 1 }, { name = "b", weight = 1 } } }, out = { a = "pa", b = "pb" } },
+	{ id = "pa", kind = "flow.step", on_enter = { { kind = "var.set", params = { name = "pick", value = "a" } } }, out = { next = "tm" } },
+	{ id = "pb", kind = "flow.step", on_enter = { { kind = "var.set", params = { name = "pick", value = "b" } } }, out = { next = "tm" } },
+	{ id = "tm", kind = "wait.timer", params = { duration = { seconds = 2 } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/manual2.nqasset"] = [[return { nq = 1, id = "manual2", activation = "manual", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "s" } },
+	{ id = "s", kind = "flow.step", on_enter = { { kind = "info.give", params = { info = "m2_done" } }, { kind = "sound.play", params = { theme = "pda_tips" } } }, out = { next = "e" } },
+	{ id = "e", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local UL, UR, UM, UM2 = "mod_a.loop", "mod_a.rep", "mod_a.misc", "mod_a.manual2"
+-- misc (checked first: its real timer is short)
+qs = core.quest_state(UM)
+check(qs.vars.entered == true, "level_entered fired on first run")
+check(qs.vars.pick == "a" or qs.vars.pick == "b", "flow.random picked a case (" .. tostring(qs.vars.pick) .. ")")
+check(core.quest_status(UM2) == "completed" and has_alife_info("m2_done"), "quest.activate ran the manual quest to completion")
+check(mock.sounds[1] == "pda_tips", "sound.play reached xr_sound")
+check(qs.tokens.tm ~= nil, "wait.timer real waiting")
+qs = core.quest_state(UL)
+check(qs and qs.vars.n == 1 and qs.tokens.w ~= nil, "loop: first pass waits with n=1")
+mock.ticks(6)	-- 1.56 s real
+qs = core.quest_state(UL)
+check(qs.status == "active" and qs.vars.n == 1 and qs.tokens.w ~= nil, "loop: restart reset vars and re-armed trigger.start (n=" .. tostring(qs.vars.n) .. ")")
+check(mock.log_has("mod_a.loop: completed %(restart%)"), "restart logged")
+db.actor:give_info_portion("stop")
+mock.ticks(6)
+qs = core.quest_state(UL)
+check(qs.status == "failed", "loop: else branch -> flow.end failed (" .. tostring(qs.status) .. ")")
+-- repeat + cooldown
+qs = core.quest_state(UR)
+check(qs.status == "active" and qs.vars.hits == 0, "rep: armed, no bread")
+local bread = mock.add_item("bread")
+mock.ticks(1)
+qs = core.quest_state(UR)
+check(qs.vars.hits == 1, "rep: rising edge fired once")
+mock.ticks(1)
+check(core.quest_state(UR).vars.hits == 1, "rep: level stays true -> no refire")
+mock.remove_item(bread)
+mock.ticks(1)
+bread = mock.add_item("bread")
+mock.ticks(1)	-- 0.78 s after the fire: still inside the 1 s cooldown
+check(core.quest_state(UR).vars.hits == 1, "rep: second edge inside cooldown waits")
+mock.ticks(3)
+check(core.quest_state(UR).vars.hits == 2, "rep: fires after the cooldown (hits=" .. core.quest_state(UR).vars.hits .. ")")
+check(core.quest_state(UR).status == "active", "rep: repeat trigger keeps the quest active")
+check(core.quest_status(UM) == "completed", "wait.timer real seconds elapsed -> misc completed")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (k) error policy
+section("(k) error policy: action errors skip, cond errors read false, begin errors retry after 5 s, cancel on flow.end")
+setup()
+mock.overrides["mod_a/errs.nqasset"] = [[return { nq = 1, id = "errs", vars = { after = false, branch = "" }, nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "s" } },
+	{ id = "s", kind = "flow.step", on_enter = {
+		{ kind = "lua", params = { code = "error('action boom')" } },
+		{ kind = "var.set", params = { name = "after", value = true } },
+	}, out = { next = "b" } },
+	{ id = "b", kind = "flow.branch", params = { cases = { { name = "bad", cond = { { kind = "lua", params = { code = "return nil + 1" } } } } } },
+	  out = { bad = "pbad", ["else"] = "pelse" } },
+	-- pbad is the branch NOT taken: it declares the ref (so the graph validates) and never runs,
+	-- which is exactly the "used before its creator on this path" case the retry exists for
+	{ id = "pbad", kind = "flow.step", on_enter = {
+		{ kind = "var.set", params = { name = "branch", value = "bad" } },
+		{ kind = "spawn.object", params = { section = "ghost_npc", place = { level = "l01_escape", pos = { 0, 0, 0 } }, ref = "ghost" } },
+	} },
+	{ id = "pelse", kind = "flow.step", on_enter = { { kind = "var.set", params = { name = "branch", value = "else" } } }, out = { next = "kill" } },
+	{ id = "kill", kind = "objective.kill", params = { target = { ref = "ghost" } }, out = { done = "e" } },
+	{ id = "e", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local UE = "mod_a.errs"
+qs = core.quest_state(UE)
+check(qs.vars.after == true, "action error skipped, following action ran")
+check(mock.log_has("errs/s: enter#0 lua: .*action boom"), "action error logged with slot and kind")
+check(qs.vars.branch == "else", "cond error reads as false -> else branch")
+check(qs.tokens.kill ~= nil and qs.tokens.kill.b == nil, "begin error (ref not created yet) keeps the token, not begun")
+check(qs.errors.kill ~= nil and string.find(qs.errors.kill, "ref 'ghost' is not created yet", 1, true) ~= nil, "errors[node] recorded")
+mock.ticks(4)	-- ~1 s: no retry yet
+qs = core.quest_state(UE)
+check(qs.tokens.kill.b == nil, "no retry inside 5 s")
+local ghost = mock.add_npc("ghost_npc", nil, { name = "Ghost" })
+core.ref_set(qs, "ghost", { id = ghost:id(), kind = "npc", section = "ghost_npc" })
+mock.ticks(20)	-- > 5 s
+qs = core.quest_state(UE)
+check(qs.tokens.kill.b == true and qs.errors.kill == nil, "begin retried after 5 s and succeeded once the ref exists")
+core.finish_quest(UE, "failed", false)
+check(next(core.quest_state(UE).tokens) == nil and core.quest_status(UE) == "failed", "flow.end path cancels waiting tokens")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (l) dialog_branching
+section("(l) dialog_branching: dialogs_for, phrase graph, talk -> accept -> kill -> report -> reward -> end")
+setup()
+mock.first_update()
+core = xms_nq
+local dlg = xms_nq_dialog
+qs = core.quest_state(UID_C)
+check(qs and qs.tokens.meet ~= nil and qs.tokens.meet.b == true, "meet topic waits")
+-- topic list for Wolf and for a stranger
+local other_npc = mock.add_npc("stranger", "esc_stranger", { community = "bandit", name = "Stranger" })
+local ids = xms.dialogs_for(wolf, db.actor)
+check(#ids == 1 and ids[1] == D_MEET, "dialogs_for(wolf) lists the meet topic only (" .. table.concat(ids, ",") .. ")")
+check(#xms.dialogs_for(other_npc, db.actor) == 0, "dialogs_for(stranger) is empty")
+check(mock.log_has("dialogs: 2 topic%(s%) registered"), "both topic dialogs registered")
+-- the recorded graph
+local g = mock.dialog_load(D_MEET)
+check(g.phrases["0"] and g.phrases["0"].text == mock.cp("Слышал, у тебя проблемы с кабанами.") and g.phrases["0"].gw == -10000, "root '0' = topic text (cp1251)")
+check(g.phrases["0"].script.text == nil and #g.phrases["0"].script.pre == 0 and has(g.phrases["0"].script.act, "xms_nq_dialog.act"), "root: static text, no precondition, action attached")
+check(g.edges["0"] and #g.edges["0"] == 1 and g.edges["0"][1] == "wolf_1", "root -> wolf_1")
+check(g.phrases.wolf_1.gw == -10000 and g.phrases.wolf_1.text == mock.cp("Лезут из леса каждую ночь. Перебьёшь их — не обижу."), "wolf_1 goodwill -10000, cp1251 text")
+check(#g.phrases.wolf_1.script.pre == 0, "unconditional phrase: no precondition attached (structure = availability)")
+local kids = g.edges.wolf_1 or {}
+check(#kids == 3 and kids[1] == "accept" and kids[2] == "ask_more" and kids[3] == "decline", "wolf_1 -> accept, ask_more, decline in declared order")
+check(g.phrases.accept.gw == -10000 and g.phrases.ask_more.gw == -10001 and g.phrases.decline.gw == -10002, "children goodwill -10000 - index")
+check(#g.phrases.wolf_rich.script.pre == 1 and g.phrases.wolf_rich.script.pre[1] == "xms_nq_dialog.pre", "conditional phrase has the precondition")
+check(#g.phrases.wolf_poor.script.pre == 0, "wolf_poor unconditional")
+check(g.edges.ask_more and g.edges.ask_more[1] == "wolf_rich" and g.edges.ask_more[2] == "wolf_poor"
+	and g.edges.ask_more[3] == "nq_auto_ask_more" and g.phrases["nq_auto_ask_more"] ~= nil,
+	"wolf_rich (cond) + wolf_poor (uncond): the group still gets the hidden fallback leaf")
+check(#g.phrases["nq_auto_ask_more"].script.pre == 0 and g.phrases["nq_auto_ask_more"].gw < g.phrases.wolf_poor.gw,
+	"the fallback leaf is unconditional and ranks last")
+check(g.edges.back and g.edges.back[1] == "wolf_1" and g.phrases.wolf_1.ord < g.phrases.back.ord, "back -> wolf_1 (edge to an existing phrase, nil return handled)")
+local nauto = 0
+for id in pairs(g.phrases) do if (string.find(id, "^nq_auto_")) then nauto = nauto + 1 end end
+check(nauto == 1, "one automatic reply in the reference quest (the ask_more group has a conditional child)")
+check(mock.dialog_loads == 1, "graph built once")
+-- talk 1: ask twice (rich, then poor after spending), loop back, accept
+mock.talk_open(wolf)
+local topics = mock.talk_topics()
+check(#topics == 1 and topics[1] == D_MEET, "topic mode lists meet")
+mock.talk_start(D_MEET)
+check(mock.talk.log[1].who == "actor" and mock.talk.log[1].id == "0", "actor says the topic")
+check(mock.talk.log[2].who == "npc" and mock.talk.log[2].id == "wolf_1", "NPC answers wolf_1")
+local opts = mock.talk_options()
+check(#opts == 3 and opts[1] == "accept" and opts[2] == "ask_more" and opts[3] == "decline", "actor options in declared order (" .. table.concat(opts, ",") .. ")")
+mock.talk_say("ask_more")
+check(mock.talk.log[#mock.talk.log].id == "wolf_rich", "has_money 1000 -> wolf_rich picked first")
+check(core.quest_state(UID_C).vars.asked == 1, "ask_more on_exit: asked = 1")
+opts = mock.talk_options()
+check(#opts == 1 and opts[1] == "back", "only 'back' after wolf_rich")
+mock.talk_say("back")
+check(mock.talk.log[#mock.talk.log].id == "wolf_1", "back -> wolf_1 again (cycle)")
+db.actor._money = 500
+mock.talk_say("ask_more")
+check(mock.talk.log[#mock.talk.log].id == "wolf_poor", "500 RU -> wolf_rich filtered, wolf_poor said")
+check(core.quest_state(UID_C).vars.asked == 2, "asked = 2")
+mock.talk_say("back")
+mock.talk_say("accept")
+qs = core.quest_state(UID_C)
+check(qs.vars.agreed == true, "accept on_exit: agreed = true")
+check(qs.tasks.kill_boars == "active" and mock.task_by_id("nq." .. UID_C .. ".kill_boars") ~= nil, "accept on_exit: task kill_boars given")
+check(mock.talk.current == nil, "accept is a leaf: dialog finished")
+check(qs.tokens.meet ~= nil and qs.tokens.kill == nil, "nothing moved yet: transitions wait for the queue")
+check(#mock.talk_topics() == 0, "topic pending completion is already hidden from the list")
+mock.tick(50)
+qs = core.quest_state(UID_C)
+check(qs.tokens.meet == nil and qs.done.meet == "dialog.topic", "next frame: meet completed (once -> done)")
+check(qs.tokens.kill ~= nil and qs.tokens.kill.b == true, "kill entered from the world exit of accept")
+local sq = qs.refs.boars and mock.se[qs.refs.boars.id]
+check(sq ~= nil and sq._section == "simulation_boar" and sq.smart_id == mock.smarts["esc_smart_terrain_3_16"].id, "squad spawned at esc_smart_terrain_3_16, ref boars")
+check(sq.scripted_target == "esc_smart_terrain_3_16" and qs.refs.boars.hold == true, "hold: scripted_target = smart")
+check(mock.sor:get("nq." .. UID_C .. ".boars") == sq.id, "ref story id registered")
+check(#mock.talk_topics() == 0, "meet gone from dialogs_for (once)")
+mock.talk_close()
+-- (n) save -> new Lua state -> load in the middle: dialogs re-registered, hold re-applied, task kept
+section("(n) save/rebuild/load mid quest: dialogs re-registered, hold re-applied, tasks kept")
+mock.tick(50)
+sq.scripted_target = nil
+mock.dialogs_registered = {}		-- pretend the process forgot (it does not, but re-registration must be idempotent)
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state(UID_C)
+check(qs and qs.tokens.kill ~= nil and qs.tokens.kill.b == true and qs.tokens.kill.w.id == sq.id, "kill token restored with its squad id")
+check(mock.dialogs_registered[D_MEET] ~= nil and mock.dialogs_registered[D_REPORT] ~= nil, "topic dialogs registered again")
+check((mock.dialog_invalidated[D_MEET] or 0) >= 1 and mock.dialog_shared[D_MEET] == nil, "cached graph invalidated on init")
+check(sq.scripted_target == "esc_smart_terrain_3_16", "hold re-applied on init")
+sq.scripted_target = nil
+SendScriptCallback("squad_on_register", sq)
+check(sq.scripted_target == "esc_smart_terrain_3_16", "hold re-applied on squad_on_register")
+check(mock.task_by_id("nq." .. UID_C .. ".kill_boars") ~= nil and qs.tasks.kill_boars == "active", "task survives the load")
+check(#xms.dialogs_for(wolf, db.actor) == 0, "no topic offered while the hunt runs")
+-- kill the boars online: squad_npc_death events, last member -> squad_dead
+local members = {}
+for k in sq:squad_members() do members[#members + 1] = k.id end
+check(#members == 2, "two boars")
+mock.kill_member(sq, members[1], db.actor)
+mock.ticks(1)
+qs = core.quest_state(UID_C)
+check(qs.tokens.kill ~= nil and qs.tokens.kill.w.hit == true, "one boar down: still waiting, actor kill noted")
+mock.kill_member(sq, members[2], db.actor)
+mock.ticks(2)
+qs = core.quest_state(UID_C)
+check(qs.tokens.kill == nil and qs.tokens.report ~= nil, "squad dead -> kill done -> report topic waits")
+check(mock.se[sq.id] == nil, "squad object gone")
+-- talk 2: report -> reward -> end
+mock.talk_open(wolf)
+topics = mock.talk_topics()
+check(#topics == 1 and topics[1] == D_REPORT, "report topic offered")
+local money0 = db.actor:money()
+mock.talk_start(D_REPORT)
+check(mock.talk.log[#mock.talk.log].id == "wolf_thanks" and mock.talk.current == nil, "NPC says wolf_thanks (leaf), dialog finished")
+check(mock.count_items("wpn_pm") == 1 and mock.relocated("in", "wpn_pm") == 1, "item.give through the dialog transfer")
+check(db.actor:money() == money0 + 1500, "money.give +1500 in dialog")
+check(core.quest_state(UID_C).tasks.kill_boars == "completed" and task_news("complete", "nq." .. UID_C .. ".kill_boars") ~= nil, "task.complete + news")
+mock.talk_close()
+mock.ticks(2)
+qs = core.quest_state(UID_C)
+check(qs.status == "completed" and next(qs.tokens) == nil, "report done -> finish -> quest completed")
+check(#xms.dialogs_for(wolf, db.actor) == 0, "no topics left")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (l2) automatic reply + placeholders
+section("(l2) automatic reply where every child is conditional; placeholders: static root, dynamic phrases")
+setup()
+mock.overrides["mod_a/auto.nqasset"] = [[return { nq = 1, id = "auto", vars = { x = 0 }, nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "t" } },
+	{ id = "t", kind = "dialog.topic", params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Тема {var:x}." }, out = { next = "n1" } },
+	{ id = "n1", kind = "dialog.npc_phrase", params = { text = "Реплика {var:x}" }, out = { next = { "a_rich", "a_x" } } },
+	{ id = "a_rich", kind = "dialog.actor_phrase", params = { text = "rich" }, cond = { { kind = "has_money", params = { amount = 5000 } } }, out = { next = "n_end" } },
+	{ id = "a_x", kind = "dialog.actor_phrase", params = { text = "x" }, cond = { { kind = "var", params = { name = "x", op = "eq", value = 1 } } }, out = { next = "n_end" } },
+	{ id = "n_end", kind = "dialog.npc_phrase", params = { text = "конец" }, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local UAUTO, D_T = "mod_a.auto", "nq.mod_a.auto.t"
+check(core.quest_def(UAUTO) ~= nil and core.quest_def(UAUTO).warnings >= 1, "W011 reported at load")
+mock.talk_open(wolf)
+check(has(mock.talk_topics(), D_T), "topic offered")
+g = mock.dialog_load(D_T)
+check(g.phrases["0"].text == mock.cp("Тема 0.") and g.phrases["0"].script.text == nil, "root text formatted statically at build (x=0)")
+check(g.phrases.n1.script.text == "xms_nq_dialog.text", "phrase with a placeholder uses SetScriptText")
+check(g.phrases["nq_auto_n1"] ~= nil and g.phrases["nq_auto_n1"].text == mock.cp("Пока.") and g.phrases["nq_auto_n1"].gw == -10002, "automatic actor reply added last")
+check(#g.phrases["nq_auto_n1"].script.pre == 0 and #g.phrases["nq_auto_n1"].script.act == 0, "automatic reply: no scripts")
+check(g.edges["nq_auto_n1"] == nil, "automatic reply is a leaf")
+mock.talk_start(D_T)
+check(mock.talk.log[2].id == "n1" and mock.talk.log[2].text == mock.cp("Реплика 0"), "dynamic phrase text formatted on show")
+opts = mock.talk_options()
+check(#opts == 1 and opts[1] == "nq_auto_n1", "no money, x=0: only the automatic reply survives (assert guard)")
+mock.talk_say("nq_auto_n1")
+check(mock.talk.current == nil, "automatic reply closes the dialog")
+mock.tick(50)
+check(core.quest_state(UAUTO).tokens.t ~= nil and has(mock.talk_topics(), D_T), "automatic reply does not pass the topic: still offered")
+core.set_var(UAUTO, "x", 1)
+mock.talk_start(D_T)
+check(mock.talk.log[#mock.talk.log].text == mock.cp("Реплика 1"), "phrase text follows the var")
+opts = mock.talk_options()
+check(#opts == 2 and opts[1] == "a_x" and opts[2] == "nq_auto_n1", "a_x now available, automatic reply still last")
+mock.talk_say("a_x")
+check(mock.talk.log[#mock.talk.log].id == "n_end" and mock.talk.current == nil, "n_end leaf said")
+mock.talk_close()
+mock.ticks(2)
+check(core.quest_status(UAUTO) == "completed", "leaf -> topic done -> fin")
+-- root text is frozen until the graph is rebuilt: nq reload invalidates
+check(mock.dialog_load(D_T).phrases["0"].text == mock.cp("Тема 0."), "root caption still the build-time text")
+xms_nq_console.exec("reload")
+check(mock.dialog_shared[D_T] == nil, "nq reload dropped the cached graph")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (m) initiator = npc
+section("(m) initiator=npc: start dialog set while the topic waits, re-applied, restored at the end")
+setup()
+mock.overrides["mod_a/npc_init.nqasset"] = [[return { nq = 1, id = "npc_init", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "greet" } },
+	{ id = "greet", kind = "dialog.topic", params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Эй, сталкер, подойди.", initiator = "npc" }, out = { next = "a1" } },
+	{ id = "a1", kind = "dialog.actor_phrase", params = { text = "Чего тебе?" }, out = { next = "w1" } },
+	{ id = "w1", kind = "dialog.npc_phrase", params = { text = "Ничего. Иди." }, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local UN, D_GREET = "mod_a.npc_init", "nq.mod_a.npc_init.greet"
+check(core.quest_state(UN).tokens.greet ~= nil, "greet waits")
+check(wolf:get_start_dialog() == nil, "start dialog not touched before the first poll")
+mock.ticks(1)
+check(wolf:get_start_dialog() == D_GREET, "poll set the start dialog on Wolf")
+check(not has(xms.dialogs_for(wolf, db.actor), D_GREET), "npc-initiated topic is not in the actor's list")
+wolf:set_start_dialog("hello_dialog")	-- xr_meet interferes
+mock.ticks(1)
+check(wolf:get_start_dialog() == D_GREET, "start dialog re-applied over xr_meet")
+mock.talk_open(wolf)
+check(mock.talk.opened[1] == D_GREET and mock.talk.log[1].who == "npc" and mock.talk.log[1].id == "0", "NPC opens with the topic text")
+opts = mock.talk_options()
+check(#opts == 1 and opts[1] == "a1", "actor answers a1")
+mock.talk_say("a1")
+check(mock.talk.log[#mock.talk.log].id == "w1" and mock.talk.current == nil, "NPC w1 (leaf) ends the dialog")
+mock.talk_close()
+mock.ticks(2)
+check(core.quest_status(UN) == "completed", "quest completed")
+check(wolf:get_start_dialog() == nil, "start dialog restored when the topic finished")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (o) nq reload
+section("(o) nq reload invalidates and re-registers dialogs; refused mid-talk, retried on close")
+setup()
+mock.first_update()
+core = xms_nq
+mock.dialog_load(D_MEET)
+check(mock.dialog_shared[D_MEET] ~= nil, "graph cached")
+xms_nq_console.exec("reload")
+check(mock.dialog_shared[D_MEET] == nil and (mock.dialog_invalidated[D_MEET] or 0) >= 2, "reload invalidated the cached graph")
+check(mock.dialogs_registered[D_MEET] ~= nil and mock.dialogs_registered[D_REPORT] ~= nil, "dialogs still registered after reload")
+mock.talk_open(wolf)
+mock.talk_topics()
+check(mock.dialog_shared[D_MEET] ~= nil, "graph rebuilt on the next talk")
+xms_nq_console.exec("reload")
+check(mock.dialog_shared[D_MEET] ~= nil and mock.log_has("could not be invalidated now"), "invalidate refused while talking, warning logged")
+mock.talk_close()
+check(mock.dialog_shared[D_MEET] == nil, "retried when the talk closed")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (p) tasks lost by the engine
+section("(p) task recreated when the actor registry lost it")
+setup()
+mock.first_update()
+core = xms_nq
+check(mock.task_by_id(T_BREAD) ~= nil, "task given")
+mock.tasks_lost()
+check(mock.task_by_id(T_BREAD) == nil, "registry emptied")
+mock.news = {}
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+tb = mock.task_by_id(T_BREAD)
+check(tb ~= nil and tb:get_state() == task.in_progress and tb:get_title() == mock.cp("Хлеб для новичков"), "task recreated from the declaration on init")
+check(mock.log_has("task bring_bread was missing from the PDA, recreated"), "recreation logged")
+check(task_news("new", T_BREAD) == nil, "no news for the recreation")
+check(core.quest_state(UID_A).tasks.bring_bread == "active", "status active")
+-- task.give on an already active task only refreshes it, no second registry entry
+local before_n = #db.actor._tasks
+core.run_actions(core.make_ctx(UID_A, "intro"), { { kind = "task.give", params = { task = "bring_bread" } } }, "enter")
+check(#db.actor._tasks == before_n, "second task.give does not duplicate the task")
+-- task.remove: silent, status none
+core.run_actions(core.make_ctx(UID_A, "intro"), { { kind = "task.remove", params = { task = "bring_bread" } } }, "enter")
+check(core.quest_state(UID_A).tasks.bring_bread == nil and mock.task_by_id(T_BREAD):get_state() == task.fail and task_news("fail", T_BREAD) == nil, "task.remove closes silently, task_status none")
+-- task.set_target / set_text on an active task
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "hunt" } } }, "enter")
+local th = mock.task_by_id("nq." .. UID_B .. ".hunt")
+check(th ~= nil and th:get_map_object_id() == 65535, "hunt task without a target (ref boars not created yet)")
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt", target = { smart = "esc_smart_terrain_2_12" } } } }, "enter")
+check(th:get_map_object_id() == mock.smarts["esc_smart_terrain_2_12"].id and th:get_map_location() == "secondary_task_location", "task.set_target -> map location on the smart")
+check(mock.spots[mock.smarts["esc_smart_terrain_2_12"].id .. "|ui_secondary_task_blink"] ~= nil, "blink spot added")
+-- hand-built action lists skip the loader, so the text is passed already converted (cp1251)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_text", params = { task = "hunt", title = mock.cp("Новый заголовок") } } }, "enter")
+check(th:get_title() == mock.cp("Новый заголовок") and task_news("updated", "nq." .. UID_B .. ".hunt") ~= nil, "task.set_text + updated news")
+-- undeclared task -> error logged, nothing else breaks
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "nope" } } }, "enter")
+check(mock.log_has("task 'nope' is not declared"), "undeclared task errors at runtime")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (q) errors never propagate
+section("(q) precondition/action errors are contained; the assert guard holds even when the quest ends mid-talk")
+setup()
+mock.overrides["mod_a/errd.nqasset"] = [[return { nq = 1, id = "errd", vars = { x = 0 }, nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "t" } },
+	{ id = "t", kind = "dialog.topic", params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Проверка." }, out = { next = "n1" } },
+	{ id = "n1", kind = "dialog.npc_phrase", params = { text = "n1" }, on_exit = { { kind = "lua", params = { code = "error('act boom')" } } }, out = { next = { "a_bad", "a_ok" } } },
+	{ id = "a_bad", kind = "dialog.actor_phrase", params = { text = "bad" }, cond = { { kind = "lua", params = { code = "error('pre boom')" } } }, out = { next = "n2" } },
+	{ id = "a_ok", kind = "dialog.actor_phrase", params = { text = "ok" }, out = { next = "n2" } },
+	{ id = "n2", kind = "dialog.npc_phrase", params = { text = "n2" }, out = { next = "a_end" } },
+	{ id = "a_end", kind = "dialog.actor_phrase", params = { text = "end" } },
+} }]]
+mock.first_update()
+core = xms_nq
+local UERR, D_ERR = "mod_a.errd", "nq.mod_a.errd.t"
+mock.talk_open(wolf)
+mock.talk_start(D_ERR)
+check(mock.log_has("errd/n1: exit#0 lua: .*act boom"), "phrase on_exit error logged, talk goes on")
+check(mock.log_has("errd/a_bad: cond lua: .*pre boom"), "precondition error logged")
+opts = mock.talk_options()
+check(#opts >= 1 and opts[1] == "a_ok", "erroring precondition reads false, unconditional phrase stays")
+check(#opts == 2 and string.find(opts[2], "^nq_auto_"), "the group with a filtered phrase keeps its fallback leaf")
+-- the quest ends while the window is open: unconditional phrases still pass, actions are ignored
+core.finish_quest(UERR, "failed", false)
+mock.talk_say("a_ok")
+check(mock.talk.log[#mock.talk.log].id == "n2", "n2 (unconditional) offered and said although the quest is failed")
+opts = mock.talk_options()
+check(#opts == 1 and opts[1] == "a_end", "a_end still available")
+mock.talk_say("a_end")
+check(mock.talk.current == nil and core.quest_status(UERR) == "failed", "leaf said, quest untouched")
+mock.talk_close()
+-- entry points tolerate garbage
+check(xms_nq_dialog.pre(nil, nil, "no.such.dialog", "0", "x") == true, "pre for an unknown dialog does not filter")
+check(xms_nq_dialog.pre(nil, nil, D_ERR, "n1", "nq_auto_n1") == true, "pre for an automatic reply is true")
+check(xms_nq_dialog.pre(nil, nil, D_ERR, "n1", "a_bad") == false, "pre for a conditional phrase of a finished quest is false")
+xms_nq_dialog.act(nil, nil, "no.such.dialog", "0")
+xms_nq_dialog.act(nil, nil, D_ERR, "a_ok")
+check(xms_nq_dialog.text(nil, nil, "no.such.dialog", "p") == "p" and xms_nq_dialog.text(nil, nil, D_ERR, "n1") == "n1", "text falls back to the phrase id / static text without speakers")
+check(type(xms.dialogs_for(nil, nil)) == "table", "dialogs_for(nil) returns a table")
+-- world kinds through run_actions
+section("(q2) world extras: spawn.squad/squad.move/squad.remove, spawn.object, npc.kill/remove, relations")
+local ctxw = core.make_ctx(UID_B, "hunt")
+qs = core.quest_state(UID_B)
+core.run_actions(ctxw, { { kind = "spawn.squad", params = { section = "simulation_boar", smart = "esc_smart_terrain_2_12", ref = "guards", hold = true } } }, "enter")
+local guards = qs.refs.guards and mock.se[qs.refs.guards.id]
+check(guards ~= nil and guards.scripted_target == "esc_smart_terrain_2_12", "spawn.squad with hold")
+core.run_actions(ctxw, { { kind = "squad.move", params = { target = { ref = "guards" }, smart = "esc_smart_terrain_3_16" } } }, "enter")
+check(guards.scripted_target == "esc_smart_terrain_3_16" and qs.refs.guards.scripted == "esc_smart_terrain_3_16", "squad.move -> scripted_target and ref record")
+core.run_actions(ctxw, { { kind = "squad.move", params = { target = { ref = "guards" }, follow_actor = true } } }, "enter")
+check(guards.scripted_target == "actor", "squad.move follow_actor")
+core.run_actions(ctxw, { { kind = "relation.set", params = { who = { ref = "guards" }, value = "enemy" } } }, "enter")
+check(mock.squad_relations[guards.id] == "enemy", "relation.set on a squad ref")
+core.run_actions(ctxw, { { kind = "squad.remove", params = { target = { ref = "guards" } } } }, "enter")
+check(mock.se[guards.id] == nil, "squad.remove released the squad")
+core.run_actions(ctxw, { { kind = "spawn.object", params = { section = "medkit", place = { level = "l01_escape", pos = { 1, 2, 3 } }, ref = "box" } } }, "enter")
+check(qs.refs.box and mock.se[qs.refs.box.id] and mock.se[qs.refs.box.id]._section == "medkit", "spawn.object created + ref")
+local victim = mock.add_npc("victim_npc", "victim_sid", { community = "bandit" })
+core.run_actions(ctxw, { { kind = "relation.set", params = { who = { story = "victim_sid" }, value = "friend" } } }, "enter")
+check(victim._goodwill == 1000, "relation.set friend -> force_set_goodwill 1000")
+core.run_actions(ctxw, { { kind = "relation.goodwill", params = { who = { story = "victim_sid" }, delta = -300 } } }, "enter")
+check(victim._goodwill == 700, "relation.goodwill delta on the NPC")
+core.run_actions(ctxw, { { kind = "relation.set", params = { who = { community = "bandit" }, value = "enemy" } } }, "enter")
+check(mock.faction_relations["bandit>stalker"] == -5000, "relation.set community -> set_factions_community")
+core.run_actions(ctxw, { { kind = "relation.goodwill", params = { who = { community = "bandit" }, delta = 50 } } }, "enter")
+check(mock.faction_goodwill.bandit == 50, "relation.goodwill community -> change_factions_community_num")
+core.run_actions(ctxw, { { kind = "npc.kill", params = { npc = { story = "victim_sid" } } } }, "enter")
+check(victim:alive() == false, "npc.kill online")
+core.run_actions(ctxw, { { kind = "npc.remove", params = { npc = { story = "victim_sid" } } } }, "enter")
+check(mock.se[victim:id()] == nil, "npc.remove released the server object")
+-- objective.kill on a story NPC killed by the actor, by_actor honoured
+mock.overrides["mod_a/kills.nqasset"] = [[return { nq = 1, id = "kills", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "k" } },
+	{ id = "k", kind = "objective.kill", params = { target = { story = "boss_sid" }, by_actor = true }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+local boss = mock.add_npc("boss_npc", "boss_sid", { community = "bandit" })
+xms_nq_console.exec("reload")
+core = xms_nq
+local UK = "mod_a.kills"
+qs = core.quest_state(UK)
+check(qs and qs.tokens.k ~= nil and qs.tokens.k.w.id == boss:id() and qs.tokens.k.w.kind == "npc", "kill waits on the story NPC")
+boss:kill(other_npc or wolf)
+mock.ticks(2)
+qs = core.quest_state(UK)
+check(qs.tokens.k ~= nil, "killed by somebody else: by_actor keeps waiting")
+local boss2 = mock.add_npc("boss_npc", "boss2_sid", { community = "bandit" })
+qs.tokens.k.w.id = boss2:id()	-- retarget the token for the second half of the check
+boss2:kill(db.actor)
+mock.ticks(2)
+check(core.quest_status(UK) == "completed", "killed by the actor -> done -> completed")
+-- dialog.force / dialog.break
+core.run_actions(ctxw, { { kind = "dialog.force", params = { npc = { story = "esc_2_12_stalker_wolf" }, allow_break = false } } }, "enter")
+check(#mock.forced_talks == 1 and mock.forced_talks[1].id == wolf:id() and mock.forced_talks[1].disable_break == true and mock.talking, "dialog.force -> run_talk_dialog(npc, disable_break)")
+core.run_actions(core.make_ctx(UID_B, "hunt", wolf), { { kind = "dialog.break", params = {} } }, "enter")
+check(not mock.talking, "dialog.break closed the talk")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (r) topic ordering, repeatable topics, talk events
+section("(r) topics of several quests in uid order, once=false topic with cond, root-only topic, talk_started/talk_ended")
+setup()
+mock.overrides["mod_a/zz_second.nqasset"] = [[return { nq = 1, id = "zz_second", vars = { talks = 0, ends = 0, passes = 0, ready = false }, nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = { "rep", "solo" } } },
+	{ id = "rep", kind = "dialog.topic", once = false, params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Повторяемая тема." },
+	  cond = { { kind = "var", params = { name = "ready", op = "eq", value = true } } },
+	  on_exit = { { kind = "var.add", params = { name = "passes", delta = 1 } } },
+	  out = { next = "r1", done = "after" } },
+	{ id = "r1", kind = "dialog.npc_phrase", params = { text = "Снова ты." } },
+	{ id = "after", kind = "flow.step", once = false, on_enter = { { kind = "news.tip", params = { text = "после темы" } } } },
+	{ id = "solo", kind = "dialog.topic", params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Просто фраза без ответа." }, out = { done = "solo_done" } },
+	{ id = "solo_done", kind = "flow.step", on_enter = { { kind = "news.tip", params = { text = "solo done" } } } },
+	{ id = "on_talk", kind = "trigger.when", params = { ["repeat"] = true }, cond = { { kind = "event.talk_started", params = { npc = { story = "esc_2_12_stalker_wolf" } } } }, out = { next = "cnt" } },
+	{ id = "cnt", kind = "flow.step", once = false, on_enter = { { kind = "var.add", params = { name = "talks", delta = 1 } } } },
+	{ id = "on_end", kind = "trigger.when", params = { ["repeat"] = true }, cond = { { kind = "event.talk_ended", params = { npc = { story = "esc_2_12_stalker_wolf" } } } }, out = { next = "cnt2" } },
+	{ id = "cnt2", kind = "flow.step", once = false, on_enter = { { kind = "var.add", params = { name = "ends", delta = 1 } } } },
+} }]]
+mock.first_update()
+core = xms_nq
+local UZ = "mod_a.zz_second"
+local D_REP, D_SOLO = "nq." .. UZ .. ".rep", "nq." .. UZ .. ".solo"
+qs = core.quest_state(UZ)
+check(qs and qs.tokens.rep ~= nil and qs.tokens.solo ~= nil, "both topics wait")
+mock.talk_open(wolf)
+ids = mock.talk_topics()
+check(#ids == 2 and ids[1] == D_MEET and ids[2] == D_SOLO, "uid order: dialog_branching.meet before zz_second.solo; rep hidden by its cond (" .. table.concat(ids, ",") .. ")")
+mock.talk_topics()
+mock.ticks(1)
+check(core.quest_state(UZ).vars.talks == 1, "talk_started once per talk window even though the list was asked twice")
+core.set_var(UZ, "ready", true)
+ids = mock.talk_topics()
+check(#ids == 3 and ids[2] == D_REP and ids[3] == D_SOLO, "cond true: rep appears in node order (" .. table.concat(ids, ",") .. ")")
+-- repeatable topic: leaf said -> on_exit + done pin, token stays, topic offered again
+mock.talk_start(D_REP)
+check(mock.talk.log[#mock.talk.log].id == "r1" and mock.talk.current == nil, "r1 leaf said")
+qs = core.quest_state(UZ)
+check(qs.vars.passes == 1, "topic on_exit ran (synchronously, repeatable path)")
+mock.tick(50)
+qs = core.quest_state(UZ)
+check(qs.tokens.rep ~= nil and qs.done.rep == nil, "token stays on the repeatable topic")
+check(mock.news_has(mock.cp("после темы")), "done pin target entered")
+check(has(mock.talk_topics(), D_REP), "repeatable topic offered again")
+mock.talk_start(D_REP)
+mock.tick(50)
+check(core.quest_state(UZ).vars.passes == 2 and mock.news_count(mock.cp("после темы")) == 2, "second pass")
+-- topic without phrases (W012): the root is the leaf
+mock.talk_start(D_SOLO)
+check(mock.talk.current == nil, "root said, dialog finished at once")
+mock.tick(50)
+qs = core.quest_state(UZ)
+check(qs.tokens.solo == nil and qs.done.solo == "dialog.topic" and mock.news_has("solo done"), "root-only topic passed -> done pin")
+mock.talk_close()
+mock.ticks(1)
+check(core.quest_state(UZ).vars.ends == 1, "talk_ended once")
+mock.talk_open(wolf)
+mock.talk_topics()
+mock.talk_close()
+mock.ticks(1)
+qs = core.quest_state(UZ)
+check(qs.vars.talks == 2 and qs.vars.ends == 2, "second talk counted")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (s) trigger.when "repeat"
+-- The parameter is a Lua keyword, so it only reads back as params["repeat"]; the edge state
+-- (trig.last) must latch for a one-shot trigger and re-arm for a repeating one, on both the
+-- polled path and the event path.
+section("(s) trigger.when repeat: rising edge, latch when repeat=false, re-arm when true")
+setup()
+local function trig_quest(id, params, cond)
+	return "return { nq = 1, id = \"" .. id .. "\", vars = { n = 0 }, nodes = {\n" ..
+		"{ id = \"t\", kind = \"trigger.when\", params = " .. params .. ", cond = " .. cond .. ", out = { next = \"s\" } },\n" ..
+		"{ id = \"s\", kind = \"flow.step\", on_enter = { { kind = \"var.add\", params = { name = \"n\", delta = 1 } } } },\n} }"
+end
+local C_ITEM = [[{ { kind = "has_item", params = { section = "bread" } } }]]
+local C_SIG = [[{ { kind = "event.signal", params = { name = "go" } } }]]
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/lvl_once.nqasset"] = trig_quest("lvl_once", "{}", C_ITEM)
+mock.overrides["mod_a/lvl_rep.nqasset"] = trig_quest("lvl_rep", [[{ ["repeat"] = true }]], C_ITEM)
+mock.overrides["mod_a/ev_once.nqasset"] = trig_quest("ev_once", "{}", C_SIG)
+mock.overrides["mod_a/ev_rep.nqasset"] = trig_quest("ev_rep", [[{ ["repeat"] = true }]], C_SIG)
+mock.overrides["mod_a/ev_cd.nqasset"] = trig_quest("ev_cd", [[{ ["repeat"] = true, cooldown = { seconds = 1 } }]], C_SIG)
+mock.first_update()
+core = xms_nq
+local function hits(id) local q = core.quest_state("mod_a." .. id) return q and q.vars.n end
+local function edge(id) local q = core.quest_state("mod_a." .. id) return q and q.trig.t and q.trig.t.last end
+local function signal()
+	core.emit({ name = "signal", signal = "go", module = "mod_a" })
+	mock.ticks(2)
+end
+
+check(core.quest_def("mod_a.lvl_rep").node_by_id.t.params["repeat"] == true, "repeat survives the loader as params['repeat']")
+check(core.quest_def("mod_a.lvl_once").node_by_id.t.params["repeat"] == false, "repeat defaults to false from the catalog")
+check(hits("lvl_once") == 0 and edge("lvl_once") == false, "armed: edge starts false, nothing fired")
+
+-- polled path: rising edge
+local loaf = mock.add_item("bread")
+mock.ticks(2)
+check(hits("lvl_once") == 1 and hits("lvl_rep") == 1, "polled: both fire on the rising edge")
+check(edge("lvl_once") == true and edge("lvl_rep") == true, "polled: edge latched after firing")
+mock.ticks(3)
+check(hits("lvl_rep") == 1, "polled: level stays true -> no refire")
+-- falling edge: only the repeating trigger re-arms
+mock.remove_item(loaf)
+mock.ticks(2)
+check(edge("lvl_rep") == false, "polled: repeat trigger re-armed on the falling edge")
+check(edge("lvl_once") == true, "polled: one-shot trigger stays latched on the falling edge")
+mock.add_item("bread")
+mock.ticks(2)
+check(hits("lvl_rep") == 2, "polled: repeat trigger fires on the second rising edge")
+check(hits("lvl_once") == 1, "polled: one-shot trigger does not fire twice")
+
+-- event path: an event cond is true only for its instant, so a repeat trigger re-arms at once
+signal()
+check(hits("ev_once") == 1 and hits("ev_rep") == 1 and hits("ev_cd") == 1, "event: all three fire on the first signal")
+check(edge("ev_once") == true, "event: one-shot trigger latched")
+check(edge("ev_rep") == false, "event: repeat trigger re-armed for the next event")
+signal()
+check(hits("ev_once") == 1, "event: one-shot trigger does not fire on the second signal")
+check(hits("ev_rep") == 2, "event: repeat trigger fires on the second signal")
+check(hits("ev_cd") == 1, "event: second signal inside the cooldown is swallowed")
+mock.ticks(10)
+signal()
+check(hits("ev_cd") == 2, "event: fires again once the cooldown expired")
+check(core.quest_status("mod_a.ev_once") == "completed", "one-shot trigger quest completes when nothing is armed")
+check(core.quest_status("mod_a.ev_rep") == "active", "repeat trigger keeps its quest active")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (t) cp1251 conversion
+-- The engine's script loader does not turn a decimal escape into a byte: "\208" arrives in the Lua
+-- state as the three characters 2, 0, 8. Anything in the runtime that has to talk about raw bytes
+-- must therefore build them with string.char, which is what this section pins down. Every value
+-- below is assembled that way on purpose - written as escapes the test would pass in the harness
+-- (LuaJIT loads files directly here) and still ship a runtime that never converts anything.
+section("(t) UTF-8 -> cp1251 conversion works on byte values built at run time")
+
+local function B(...)
+	local t = { ... }
+	for i = 1, #t do t[i] = string.char(t[i]) end
+	return table.concat(t)
+end
+
+-- setup() rebuilds the script namespaces, so the reference quests are reloaded first and every
+-- name below comes from the fresh state.
+setup()
+mock.first_update()
+local u = xms_nq_util
+local conv, lost = u.to_cp1251(B(208, 161, 208, 187, 209, 139, 209, 136, 208, 176, 208, 187))	-- "Слышал"
+check(conv == B(209, 235, 251, 248, 224, 235) and lost == 0, "cyrillic converts to cp1251")
+conv, lost = u.to_cp1251(B(208, 129, 209, 145))													-- "Ёё"
+check(conv == B(168, 184) and lost == 0, "Ё/ё take their cp1251 slots")
+conv, lost = u.to_cp1251(B(226, 128, 148, 226, 132, 150, 226, 128, 166))						-- "—№…"
+check(conv == B(151, 185, 133) and lost == 0, "punctuation outside the cyrillic block converts")
+conv, lost = u.to_cp1251("plain ascii")
+check(conv == "plain ascii" and lost == 0, "ascii passes through untouched")
+conv, lost = u.to_cp1251(B(240, 159, 146, 128))													-- an emoji
+check(conv == "?" and lost == 1, "a character with no cp1251 equivalent becomes '?' and is counted")
+
+-- The whole load path: a reference quest's title and a topic text must reach the runtime as cp1251,
+-- with no UTF-8 lead byte left anywhere. Earlier sections replaced mod_a with inline assets, so the
+-- reference quests are reloaded from docs\nq\examples first.
+setup()
+mock.first_update()
+local qd = xms_nq.quest_def("mod_a.dialog_branching")
+local topic = qd and qd.node_by_id and qd.node_by_id.meet
+local lead = "[" .. B(208, 209) .. "][" .. string.char(128) .. "-" .. string.char(191) .. "]"
+check(qd ~= nil and string.sub(qd.title, 1, 4) == B(196, 238, 235, 227), "quest title loaded as cp1251")
+check(qd ~= nil and not string.find(qd.title, lead), "quest title carries no UTF-8 lead pair")
+check(topic ~= nil and not string.find(topic.params.text, lead), "topic text carries no UTF-8 lead pair")
+check(topic ~= nil and string.sub(topic.params.text, 1, 6) == B(209, 235, 251, 248, 224, 235),
+	"topic text is the cp1251 form of the asset's UTF-8")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ summary
+io.write(string.format("\n%d passed, %d failed\n", passed, failed))
+if (failed > 0) then
+	fail_dump()
+	error("tests failed", 0)
+end

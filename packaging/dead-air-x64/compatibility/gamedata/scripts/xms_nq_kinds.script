@@ -1,0 +1,742 @@
+-- NQ runtime: core kind implementations (triggers, main flow/wait/objective kinds, extra actions,
+-- conditions, event conditions). Registered into xms.registry "nq.kinds" by register().
+--
+-- Kind contract (see NQ_ARCHITECTURE §6.1):
+--   main:    begin(ctx) -> {pin=} | {finish={status,restart}} | "wait";  poll(ctx) -> pin|nil;
+--            on_event(ctx, evt) -> pin|nil;  finish(ctx, pin, external) (any completion, before
+--            on_exit);  cancel(ctx) (token removed without completing);  save(ctx) -> w;
+--            load(ctx, w);  events = {"name", ...};  subscribe(ctx) -> {"name", ...};
+--            wants_poll(ctx) -> bool
+--   trigger: arm(ctx, existed) -> pin|nil (fire at once), poll/on_event as above
+--   extra:   run(ctx, params)
+--   cond:    test(ctx, params[, evt]) -> bool   (event kinds get the matching evt)
+-- Kinds keep only plain data in ctx.w (persisted with the token) and ctx.trig (triggers).
+
+local util = xms_nq_util
+local core = xms_nq
+
+local K = {}
+
+-- ============================================================================ shared helpers
+local function actor()
+	return db and db.actor
+end
+
+-- In a dialog the transfer goes through the NPC (UI feedback in the talk window).
+local function in_dialog(ctx)
+	local a = actor()
+	if not (a and ctx and ctx.npc) then return false end
+	local ok, talking = pcall(a.is_talking, a)
+	return ok and talking and true or false
+end
+
+function give_item(ctx, section, count)
+	count = tonumber(count) or 1
+	if (in_dialog(ctx) and dialogs and dialogs.relocate_item_section_to_actor) then
+		dialogs.relocate_item_section_to_actor(ctx.npc, actor(), section, count)
+		return count
+	end
+	local made = util.give_items(section, count)
+	if (made > 0 and news_manager and news_manager.relocate_item) then
+		pcall(news_manager.relocate_item, actor(), "in", section, made)
+	end
+	return made
+end
+
+function take_item(ctx, section, count)
+	if (count == nil) then count = 1 end
+	if (in_dialog(ctx) and dialogs and dialogs.relocate_item_section_from_actor) then
+		local have = util.count_items(section)
+		if (count ~= "all" and have < count) then count = have end
+		if (count == "all" or count > 0) then
+			dialogs.relocate_item_section_from_actor(ctx.npc, actor(), section, count)
+		end
+		return count == "all" and have or count
+	end
+	local removed = util.remove_items(section, count)
+	if (removed > 0 and news_manager and news_manager.relocate_item) then
+		pcall(news_manager.relocate_item, actor(), "out", section, removed)
+	end
+	return removed
+end
+
+-- PDA tip; text is cp1251 already. sender: npc_ref | game object | icon key string.
+function news(ctx, text, sender, duration, icon)
+	local a = actor()
+	if not (a and news_manager and news_manager.send_tip) then return false end
+	local who = nil
+	if (type(sender) == "table") then
+		who = util.resolve_npc_go(ctx, sender)
+	elseif (type(sender) == "userdata") then
+		who = sender
+	elseif (type(sender) == "string") then
+		who = sender
+	end
+	if (who == nil and type(icon) == "string" and icon ~= "") then who = icon end
+	local ms = math.floor((tonumber(duration) or 5) * 1000)
+	local ok, e = pcall(news_manager.send_tip, a, util.format_text(ctx, text), nil, who, ms)
+	if not (ok) then util.err("news.tip: %s", tostring(e)) end
+	return ok
+end
+
+local function money_relocate(kind, amount)
+	if (news_manager and news_manager.relocate_money) then
+		pcall(news_manager.relocate_money, actor(), kind, amount)
+	end
+end
+
+local function elapsed_since(ctx, since, node_id, duration)
+	local secs, is_game = util.duration_secs(duration)
+	if not (secs) then return false end
+	local qs = ctx.qs
+	if not (qs) then return false end
+	if (since == "node") then
+		-- A named node without a live token reads false: substituting the current node's token
+		-- (what `node_id and qs.tokens[node_id] or ctx.tok` used to do) answers a question nobody asked.
+		local tok
+		if (node_id) then tok = qs.tokens[node_id] else tok = ctx.tok end
+		if not (tok) then return false end
+		if (is_game) then return (ctx.now.g - (tok.t0 or ctx.now.g)) >= secs end
+		return (tok.r or 0) >= secs
+	end
+	if (is_game) then return (ctx.now.g - (qs.t0 or ctx.now.g)) >= secs end
+	return (qs.r or 0) >= secs
+end
+
+-- Deadline bookkeeping shared by wait.timer / wait.when timeout: game time in ctx.w, real time
+-- as remaining seconds in qs.timers[node] (decremented by ctx.dt while polled).
+local function deadline_start(ctx, duration)
+	local secs, is_game = util.duration_secs(duration)
+	if not (secs) then return false end
+	if (is_game) then
+		ctx.w.until_g = ctx.now.g + secs
+	else
+		ctx.qs.timers[ctx.node_id] = { real_left = secs }
+	end
+	return secs <= 0
+end
+
+local function deadline_hit(ctx)
+	if (ctx.w.until_g) then return ctx.now.g >= ctx.w.until_g end
+	local t = ctx.qs.timers[ctx.node_id]
+	if not (t) then return false end
+	t.real_left = (t.real_left or 0) - (ctx.dt or 0)
+	if (t.real_left <= 0) then return true end
+	return false
+end
+
+local function first_true_case(ctx, cases, evt, events_only)
+	for _, cs in ipairs(cases or {}) do
+		local skip = false
+		if (events_only == true and not cs.has_event) then skip = true end
+		if (events_only == false and cs.all_events) then skip = true end
+		if not (skip) then
+			if (core.eval_conds(ctx, cs.cond, evt)) then return cs.name end
+		end
+	end
+	return nil
+end
+
+-- ============================================================================ triggers
+K["trigger.start"] = {
+	arm = function(ctx, existed) return "next" end,
+}
+
+local function when_cooldown_ok(ctx)
+	local trig = ctx.trig
+	if not (trig) then return true end
+	if (trig.cd_g and ctx.now.g < trig.cd_g) then return false end
+	if (trig.cd_r and (ctx.qs.r or 0) < trig.cd_r) then return false end
+	return true
+end
+
+local function when_set_cooldown(ctx)
+	local trig = ctx.trig
+	if not (trig) then return end
+	local secs, is_game = util.duration_secs(ctx.params.cooldown)
+	trig.cd_g, trig.cd_r = nil, nil
+	if (secs and secs > 0) then
+		if (is_game) then trig.cd_g = ctx.now.g + secs else trig.cd_r = (ctx.qs.r or 0) + secs end
+	end
+end
+
+-- "repeat" is a Lua keyword, so the asset writes it as ["repeat"] and it can only be read
+-- by index. Without it the trigger would re-arm on every falling edge (the core's own
+-- trigger_armed() gate happens to stop that today; the kind must not depend on it).
+local function when_repeats(ctx)
+	return ctx.params ~= nil and ctx.params["repeat"] == true
+end
+
+K["trigger.when"] = {
+	arm = function(ctx, existed)
+		-- arming counts as "false": a true condition fires on the first poll (existing state kept)
+		if (ctx.trig and not existed) then ctx.trig.last = false end
+		return nil
+	end,
+	-- Only a cond list made entirely of event kinds can skip the poll: anything else (a state cond,
+	-- or an `any` mixing the two) may become true with no event to wake it up.
+	wants_poll = function(ctx) return not ctx.node.all_events end,
+	poll = function(ctx)
+		local trig = ctx.trig
+		local v = core.eval_conds(ctx, ctx.node.cond, nil)
+		if not (v) then
+			-- falling edge: re-arm only for repeat triggers, otherwise stay latched forever
+			if (trig and trig.last and when_repeats(ctx)) then trig.last = false core.mark_dirty() end
+			return nil
+		end
+		if (trig and trig.last) then return nil end
+		if not (when_cooldown_ok(ctx)) then return nil end
+		if (trig) then trig.last = true end
+		when_set_cooldown(ctx)
+		core.mark_dirty()
+		return "next"
+	end,
+	on_event = function(ctx, evt)
+		local trig = ctx.trig
+		if (trig and trig.last) then return nil end	-- latched: fired once and does not repeat
+		if not (core.eval_conds(ctx, ctx.node.cond, evt)) then return nil end
+		if not (when_cooldown_ok(ctx)) then return nil end
+		-- an event cond is true only for this instant, so the composite falls back to false
+		-- right away: repeat triggers re-arm here, one-shot ones latch.
+		if (trig) then trig.last = not when_repeats(ctx) end
+		when_set_cooldown(ctx)
+		core.mark_dirty()
+		return "next"
+	end,
+}
+
+-- ============================================================================ main: wait
+K["wait.timer"] = {
+	begin = function(ctx)
+		if (deadline_start(ctx, ctx.params.duration)) then return { pin = "done" } end
+		return "wait"
+	end,
+	poll = function(ctx)
+		if (deadline_hit(ctx)) then return "done" end
+		return nil
+	end,
+}
+
+K["wait.when"] = {
+	begin = function(ctx)
+		if (core.eval_conds(ctx, ctx.node.cond, nil)) then return { pin = "done" } end
+		if (ctx.params.timeout ~= nil) then
+			if (deadline_start(ctx, ctx.params.timeout)) then return { pin = "timeout" } end
+		end
+		return "wait"
+	end,
+	wants_poll = function(ctx) return (not ctx.node.all_events) or ctx.params.timeout ~= nil end,
+	poll = function(ctx)
+		if (not ctx.node.all_events and core.eval_conds(ctx, ctx.node.cond, nil)) then return "done" end
+		if (ctx.params.timeout ~= nil and deadline_hit(ctx)) then return "timeout" end
+		return nil
+	end,
+	on_event = function(ctx, evt)
+		if (core.eval_conds(ctx, ctx.node.cond, evt)) then return "done" end
+		return nil
+	end,
+}
+
+K["wait.any"] = {
+	begin = function(ctx)
+		local pin = first_true_case(ctx, ctx.params.cases, nil, false)
+		if (pin) then return { pin = pin } end
+		return "wait"
+	end,
+	wants_poll = function(ctx)
+		for _, cs in ipairs(ctx.params.cases or {}) do
+			if not (cs.has_event) then return true end
+		end
+		return false
+	end,
+	poll = function(ctx) return first_true_case(ctx, ctx.params.cases, nil, false) end,
+	on_event = function(ctx, evt) return first_true_case(ctx, ctx.params.cases, evt, true) end,
+}
+
+-- ============================================================================ main: flow
+K["flow.branch"] = {
+	begin = function(ctx)
+		local pin = first_true_case(ctx, ctx.params.cases, nil, nil)
+		return { pin = pin or "else" }
+	end,
+}
+
+K["flow.random"] = {
+	begin = function(ctx)
+		local cases = ctx.params.cases or {}
+		local total = 0
+		for _, cs in ipairs(cases) do total = total + (tonumber(cs.weight) or 1) end
+		if (total <= 0 or #cases == 0) then return { pin = nil } end
+		local roll = math.random() * total
+		local acc = 0
+		for _, cs in ipairs(cases) do
+			acc = acc + (tonumber(cs.weight) or 1)
+			if (roll < acc) then return { pin = cs.name } end
+		end
+		return { pin = cases[#cases].name }
+	end,
+}
+
+-- The core gates a join by counting arrivals; when it lets the token in, the join is complete.
+K["flow.join"] = {
+	begin = function(ctx) return { pin = "next" } end,
+}
+
+K["flow.step"] = {
+	begin = function(ctx) return { pin = "next" } end,
+}
+
+K["flow.end"] = {
+	begin = function(ctx)
+		return { finish = { status = ctx.params.status or "completed", restart = ctx.params.restart == true } }
+	end,
+}
+
+-- ============================================================================ main: objectives
+K["objective.fetch"] = {
+	events = { "item_taken" },
+	begin = function(ctx)
+		if (util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return { pin = "done" } end
+		return "wait"
+	end,
+	poll = function(ctx)
+		if (util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return "done" end
+		return nil
+	end,
+	on_event = function(ctx, evt)
+		if (evt.section == ctx.params.section and util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return "done" end
+		return nil
+	end,
+}
+
+local function reach_anchor_name(ctx) return ctx.node_id .. "_anchor" end
+
+-- Object id used for the map spot: an anchor restrictor for positions, the smart / zone otherwise.
+local function reach_spot_target(ctx)
+	local place = ctx.params.place
+	if (place.smart) then
+		local smart = util.smart_by_name(place.smart)
+		return smart and smart.id or nil
+	end
+	if (place.restrictor) then
+		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
+		if (zone) then return zone:id() end
+		return util.id_by_story(place.restrictor)
+	end
+	local rec = core.ref_get(ctx.qs, reach_anchor_name(ctx))
+	if (rec) then return rec.id end
+	local lvl, pos, lvid, gvid = util.place_position(place)
+	if not (pos and lvid and gvid) then return nil end
+	local se
+	local ok, e = pcall(function() se = alife():create("space_restrictor", pos, lvid, gvid) end)
+	if not (ok or se) then
+		util.warn("%s/%s: cannot create anchor restrictor: %s", ctx.uid, ctx.node_id, tostring(e))
+		return nil
+	end
+	if not (se) then return nil end
+	core.ref_set(ctx.qs, reach_anchor_name(ctx), { id = se.id, kind = "anchor", section = "space_restrictor" })
+	return se.id
+end
+
+-- ctx.w.spot_id is set only when THIS node put the spot there. Spots are keyed by (object id,
+-- spot type) and `secondary_task_location` is shared with PDA tasks, so removing one we did not
+-- add would take a live task's marker off the map.
+local function reach_spot_add(ctx)
+	if (ctx.params.map_spot == false) then return end
+	local id = reach_spot_target(ctx)
+	if not (id) then return end
+	local spot = "secondary_task_location"
+	local hint = ctx.params.spot_text and util.format_text(ctx, ctx.params.spot_text) or ""
+	local owned = false
+	pcall(function()
+		if (level.map_has_object_spot(id, spot) == 0) then
+			level.map_add_object_spot(id, spot, hint)
+			owned = true
+		end
+	end)
+	if (owned) then ctx.w.spot_id = id end
+end
+
+local function reach_cleanup(ctx)
+	local id = ctx.w.spot_id
+	if (id) then
+		pcall(function() level.map_remove_object_spot(id, "secondary_task_location") end)
+		ctx.w.spot_id = nil
+	end
+	local rec = core.ref_get(ctx.qs, reach_anchor_name(ctx))
+	if (rec) then
+		local se = util.se_by_id(rec.id)
+		if (se) then pcall(function() alife():release(se, true) end) end
+		core.ref_clear(ctx.qs, reach_anchor_name(ctx))
+	end
+end
+
+K["objective.reach"] = {
+	begin = function(ctx)
+		if (util.place_contains_actor(ctx.params.place)) then return { pin = "done" } end
+		reach_spot_add(ctx)
+		return "wait"
+	end,
+	poll = function(ctx)
+		if (util.place_contains_actor(ctx.params.place)) then return "done" end
+		return nil
+	end,
+	load = function(ctx, w)
+		-- map spots are not serialized: put it back after a load / level change
+		ctx.w.spot_id = nil
+		reach_spot_add(ctx)
+	end,
+	finish = function(ctx, pin, external) reach_cleanup(ctx) end,
+	cancel = function(ctx) reach_cleanup(ctx) end,
+}
+
+-- ============================================================================ extra: items, money
+K["item.give"] = {
+	run = function(ctx, p) give_item(ctx, p.section, p.count or 1) end,
+}
+
+K["item.take"] = {
+	run = function(ctx, p) take_item(ctx, p.section, p.count == nil and 1 or p.count) end,
+}
+
+K["item.spawn"] = {
+	run = function(ctx, p)
+		local se
+		if (p.into ~= nil) then
+			local parent = util.resolve_target_id(ctx, p.into)
+			if not (parent) then error("item.spawn: 'into' target not found") end
+			local pse = util.se_by_id(parent)
+			if not (pse) then error("item.spawn: 'into' target has no server object") end
+			se = alife():create(p.section, pse.position, pse.m_level_vertex_id, pse.m_game_vertex_id, parent)
+		else
+			if not (p.place) then error("item.spawn: place or into is required") end
+			local lvl, pos, lvid, gvid = util.place_position(p.place)
+			if not (pos and lvid and gvid) then error("item.spawn: cannot resolve place") end
+			se = alife():create(p.section, pos, lvid, gvid)
+		end
+		if (se and p.ref) then core.ref_set(ctx.qs, p.ref, { id = se.id, kind = "object", section = p.section }) end
+	end,
+}
+
+K["money.give"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then return end
+		if (in_dialog(ctx) and dialogs and dialogs.relocate_money_to_actor) then
+			dialogs.relocate_money_to_actor(ctx.npc, a, p.amount)
+			return
+		end
+		a:give_money(p.amount)
+		money_relocate("in", p.amount)
+	end,
+}
+
+K["money.take"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then return end
+		if (in_dialog(ctx) and dialogs and dialogs.relocate_money_from_actor) then
+			dialogs.relocate_money_from_actor(ctx.npc, a, p.amount)
+			return
+		end
+		a:give_money(-p.amount)
+		money_relocate("out", p.amount)
+	end,
+}
+
+-- ============================================================================ extra: info, vars, signals, quests
+K["info.give"] = {
+	run = function(ctx, p) local a = actor() if (a) then a:give_info_portion(p.info) end end,
+}
+
+K["info.disable"] = {
+	run = function(ctx, p) local a = actor() if (a) then a:disable_info_portion(p.info) end end,
+}
+
+K["var.set"] = {
+	run = function(ctx, p) core.set_var(ctx.uid, p.name, p.value) end,
+}
+
+K["var.add"] = {
+	run = function(ctx, p)
+		local cur = tonumber(core.get_var(ctx.uid, p.name)) or 0
+		core.set_var(ctx.uid, p.name, cur + (tonumber(p.delta) or 0))
+	end,
+}
+
+K["signal.send"] = {
+	run = function(ctx, p)
+		core.emit({ name = "signal", signal = p.name, module = ctx.def and ctx.def.module, quest = ctx.uid })
+	end,
+}
+
+-- "<module>.<quest>" or "<quest>" (own module).
+function resolve_quest_uid(ctx, id)
+	if (type(id) ~= "string") then return nil end
+	if (string.find(id, ".", 1, true)) then return id end
+	return (ctx.def and ctx.def.module or "?") .. "." .. id
+end
+
+K["quest.activate"] = {
+	run = function(ctx, p)
+		local uid = resolve_quest_uid(ctx, p.quest)
+		if not (core.quest_def(uid)) then error("quest.activate: unknown quest " .. tostring(uid)) end
+		core.activate(uid)
+	end,
+}
+
+-- ============================================================================ extra: ui, actor, sound
+K["news.tip"] = {
+	run = function(ctx, p) news(ctx, p.text, p.sender, p.duration, p.icon) end,
+}
+
+K["map.spot"] = {
+	run = function(ctx, p)
+		local id = util.resolve_target_id(ctx, p.target)
+		if not (id) then error("map.spot: target not found") end
+		local spot = p.spot or "secondary_task_location"
+		local hint = p.text and util.format_text(ctx, p.text) or ""
+		if (level.map_has_object_spot(id, spot) == 0) then level.map_add_object_spot(id, spot, hint) end
+	end,
+}
+
+K["map.unspot"] = {
+	run = function(ctx, p)
+		local id = util.resolve_target_id(ctx, p.target)
+		if not (id) then return end
+		level.map_remove_object_spot(id, p.spot or "secondary_task_location")
+	end,
+}
+
+K["actor.teleport"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then return end
+		local lvl = util.place_level(p.place)
+		local cur = util.current_level()
+		if (lvl and cur and lvl ~= cur) then error("E031: actor.teleport target is on level " .. tostring(lvl) .. ", actor is on " .. tostring(cur)) end
+		local _, pos = util.place_position(p.place)
+		if not (pos) then error("actor.teleport: cannot resolve place") end
+		a:set_actor_position(pos)
+	end,
+}
+
+K["sound.play"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then return end
+		xr_sound.set_sound_play(a:id(), p.theme)
+	end,
+}
+
+-- Custom Lua is executed by the core (compiled once at load); the entries exist so the kind is
+-- known to be implemented.
+K["lua"] = {
+	run = function(ctx, p) error("lua actions are executed by the core") end,
+	test = function(ctx, p) error("lua conditions are executed by the core") end,
+}
+
+-- ============================================================================ conds: state
+K["has_info"] = {
+	test = function(ctx, p) return has_alife_info(p.info) and true or false end,
+}
+
+K["has_item"] = {
+	test = function(ctx, p) return util.count_items(p.section) >= (p.count or 1) end,
+}
+
+K["has_money"] = {
+	test = function(ctx, p) local a = actor() return a ~= nil and a:money() >= p.amount end,
+}
+
+local function compare(op, a, b)
+	if (op == "eq") then return a == b end
+	if (op == "ne") then return a ~= b end
+	local na, nb = tonumber(a), tonumber(b)
+	if (na == nil or nb == nil) then return false end
+	if (op == "lt") then return na < nb end
+	if (op == "le") then return na <= nb end
+	if (op == "gt") then return na > nb end
+	if (op == "ge") then return na >= nb end
+	return false
+end
+
+K["var"] = {
+	test = function(ctx, p) return compare(p.op or "eq", core.get_var(ctx.uid, p.name), p.value) end,
+}
+
+K["node_done"] = {
+	test = function(ctx, p) return core.node_done(ctx.uid, p.node) end,
+}
+
+K["quest_status"] = {
+	test = function(ctx, p) return core.quest_status(resolve_quest_uid(ctx, p.quest)) == p.is end,
+}
+
+K["task_status"] = {
+	test = function(ctx, p)
+		local st = ctx.qs and ctx.qs.tasks and ctx.qs.tasks[p.task] or "none"
+		return st == p.is
+	end,
+}
+
+-- ============================================================================ conds: world
+K["actor_on_level"] = {
+	test = function(ctx, p) return util.current_level() == p.level end,
+}
+
+K["actor_in_place"] = {
+	test = function(ctx, p) return util.place_contains_actor(p.place) end,
+}
+
+K["npc_alive"] = {
+	test = function(ctx, p)
+		local se = util.resolve_npc_se(ctx, p.npc)
+		return se ~= nil and util.se_alive(se)
+	end,
+}
+
+K["npc_dead"] = {
+	test = function(ctx, p)
+		local se = util.resolve_npc_se(ctx, p.npc)
+		return not (se ~= nil and util.se_alive(se))
+	end,
+}
+
+K["squad_alive"] = {
+	test = function(ctx, p)
+		local id = util.resolve_target_id(ctx, p.target)
+		return id ~= nil and util.se_by_id(id) ~= nil
+	end,
+}
+
+K["actor_community"] = {
+	test = function(ctx, p)
+		local a = actor()
+		return a ~= nil and util.go_community(a) == p.community
+	end,
+}
+
+local RELATION_BY_GO = { [0] = "friend", [1] = "neutral", [2] = "enemy" }
+
+local function relation_of(ctx, who)
+	local a = actor()
+	if not (a) then return nil end
+	local go = util.resolve_npc_go(ctx, who)
+	if (go and go.relation) then
+		local ok, r = pcall(go.relation, go, a)
+		if (ok) then return RELATION_BY_GO[r] end
+	end
+	local comm = who.community
+	if not (comm) then
+		local se = util.resolve_npc_se(ctx, who)
+		comm = se and util.se_community(se) or nil
+	end
+	if (comm and relation_registry and relation_registry.community_relation) then
+		local ok, g = pcall(relation_registry.community_relation, comm, util.go_community(a))
+		if (ok and g) then
+			local friends = (game_relations and game_relations.FRIENDS) or 1000
+			local enemies = (game_relations and game_relations.ENEMIES) or -1000
+			if (g >= friends) then return "friend" end
+			if (g <= enemies) then return "enemy" end
+			return "neutral"
+		end
+	end
+	return nil
+end
+
+K["relation"] = {
+	test = function(ctx, p) return relation_of(ctx, p.who) == p.is end,
+}
+
+K["time_of_day"] = {
+	test = function(ctx, p)
+		local h = level.get_time_hours()
+		if (p.from <= p.to) then return h >= p.from and h <= p.to end
+		return h >= p.from or h <= p.to
+	end,
+}
+
+K["elapsed"] = {
+	test = function(ctx, p) return elapsed_since(ctx, p["from"] or p.since or "quest", p.node, p.duration) end,
+}
+
+K["chance"] = {
+	test = function(ctx, p) return math.random(100) <= (p.percent or 0) end,
+}
+
+K["any"] = {
+	test = function(ctx, p, evt)
+		for _, c in ipairs(p.of or {}) do
+			if (core.eval_cond(ctx, c, evt)) then return true end
+		end
+		return false
+	end,
+}
+
+-- ============================================================================ conds: events
+-- The core calls these only when evt.name matches the kind; tests match the params.
+local function item_event(ctx, p, evt)
+	return p.section == nil or p.section == evt.section
+end
+
+K["event.item_taken"] = { test = item_event }
+K["event.item_dropped"] = { test = item_event }
+K["event.item_used"] = { test = item_event }
+
+K["event.npc_killed"] = {
+	test = function(ctx, p, evt)
+		if (p.by_actor and not evt.by_actor) then return false end
+		if (p.who == nil) then return true end
+		return util.npc_matches(ctx, p.who, { id = evt.id, story = evt.story, profile = evt.profile, community = evt.community })
+	end,
+}
+
+K["event.squad_dead"] = {
+	test = function(ctx, p, evt)
+		local t = p.target
+		if (type(t) ~= "table") then return false end
+		if (t.ref) then
+			local rec = core.ref_get(ctx.qs, t.ref)
+			return rec ~= nil and rec.id == evt.squad_id
+		end
+		if (t.story) then return evt.story == t.story end
+		return false
+	end,
+}
+
+K["event.info_given"] = {
+	test = function(ctx, p, evt) return evt.info == p.info end,
+}
+
+K["event.level_entered"] = {
+	test = function(ctx, p, evt) return evt.level == p.level end,
+}
+
+local function talk_event(ctx, p, evt)
+	if (p.npc == nil) then return true end
+	return util.npc_matches(ctx, p.npc, evt.rec or evt.npc)
+end
+
+K["event.talk_started"] = { test = talk_event }
+K["event.talk_ended"] = { test = talk_event }
+K["event.trade_done"] = { test = talk_event }
+
+K["event.signal"] = {
+	test = function(ctx, p, evt)
+		if (evt.signal == p.name) then return true end
+		if (evt.module and (evt.module .. "." .. tostring(evt.signal)) == p.name) then return true end
+		return false
+	end,
+}
+
+-- ============================================================================ registration
+function kinds() return K end
+
+function register()
+	local n = 0
+	for name, impl in pairs(K) do
+		if (core.register_kind(name, impl)) then n = n + 1 end
+	end
+	return n
+end

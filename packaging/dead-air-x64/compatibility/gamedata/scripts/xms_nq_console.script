@@ -1,0 +1,219 @@
+-- NQ runtime: console command `nq <args>` (the engine calls xms_nq_console.exec("<args>")).
+--
+--   nq list                    quests: uid, status, errors; invalid assets
+--   nq state <uid>             tokens, vars, refs, tasks, errors, outline
+--   nq activate <uid>          activate (manual quests; also a reset record)
+--   nq reset <uid>             drop the record (auto quests restart at once)
+--   nq jump <uid> <node>       cancel every token, put one on <node>
+--   nq fire <uid> <node> [pin] complete a waiting node (default: first pin)
+--   nq reload                  re-read assets, keep state (reconcile like a graph change)
+--   nq debug 0|1               mirror transitions to PDA news
+--   nq validate                re-validate every asset and print problems
+--   nq dump                    write $app_data_root$\nq_report.json
+--   nq help
+
+local util = xms_nq_util
+local core = xms_nq
+local loader = xms_nq_load
+
+local function say(fmt, ...)
+	printf("[nq] " .. util.sfmt(fmt, ...))
+end
+
+local function need_ready()
+	if (core.is_ready()) then return true end
+	say("runtime is not initialised (no actor yet, or xms.list_files is missing)")
+	return false
+end
+
+local function find_uid(arg)
+	if not (arg) then return nil end
+	local Q = core.quests()
+	if (Q[arg]) then return arg end
+	-- allow "<quest>" without module when unique
+	local found
+	for uid in pairs(Q) do
+		if (string.match(uid, "%.([^.]+)$") == arg) then
+			if (found) then return nil, "ambiguous quest id, use <module>.<quest>" end
+			found = uid
+		end
+	end
+	return found
+end
+
+local function cmd_list()
+	local Q, order, invalid = core.quests()
+	if (#order == 0 and #invalid == 0) then say("no quests loaded") end
+	for _, uid in ipairs(order) do
+		local q, qs = Q[uid], core.quest_state(uid)
+		local status = qs and qs.status or "inactive"
+		local ntok = qs and util.count_keys(qs.tokens) or 0
+		local nerr = qs and util.count_keys(qs.errors) or 0
+		local extra = ""
+		if (q.warnings and q.warnings > 0) then extra = extra .. string.format(" %dW", q.warnings) end
+		if (nerr > 0) then extra = extra .. string.format(" %d runtime error(s)", nerr) end
+		say("%s [%s] \"%s\" tokens=%d%s", uid, status, tostring(q.title), ntok, extra)
+	end
+	for _, q in ipairs(invalid) do
+		say("%s/%s INVALID (%d error(s))", tostring(q.module), tostring(q.file), q.errors or 0)
+	end
+	-- unknown records (module removed)
+	local st = core.get_state()
+	if (st) then
+		for uid, qs in pairs(st.quests) do
+			if not (Q[uid]) then say("%s [%s] (asset not loaded, record kept)", uid, tostring(qs.status)) end
+		end
+	end
+end
+
+local function cmd_state(arg)
+	local uid, why = find_uid(arg)
+	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
+	local q, qs = core.quest_def(uid), core.quest_state(uid)
+	say("%s [%s] hash=%08x file=%s", uid, qs and qs.status or "inactive", q.hash or 0, tostring(q.file))
+	if (qs) then
+		local toks = {}
+		for _, node in ipairs(q.nodes) do
+			local tok = qs.tokens[node.id]
+			if (tok) then
+				local s = node.id .. (tok.b and "" or "(begin pending)")
+				if (tok.w and next(tok.w)) then s = s .. " w=" .. util.brief(tok.w) end
+				toks[#toks + 1] = s
+			end
+		end
+		say("tokens: %s", #toks > 0 and table.concat(toks, ", ") or "-")
+		say("vars: %s", util.brief(qs.vars))
+		say("refs: %s", util.brief(qs.refs))
+		say("done: %s", util.brief(qs.done))
+		say("fired: %s", util.brief(qs.fired))
+		if (next(qs.joins)) then say("joins: %s", util.brief(qs.joins)) end
+		if (next(qs.timers)) then say("timers: %s", util.brief(qs.timers)) end
+		say("tasks: %s", util.brief(qs.tasks))
+		if (next(qs.errors)) then say("errors: %s", util.brief(qs.errors)) end
+	end
+	for line in string.gmatch(loader.outline(q), "[^\n]+") do say("  %s", line) end
+end
+
+local function cmd_activate(arg)
+	local uid, why = find_uid(arg)
+	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
+	local qs = core.quest_state(uid)
+	if (qs and qs.status ~= "active") then
+		-- a finished record blocks activation: drop it first
+		core.get_state().quests[uid] = nil
+	end
+	if (core.activate(uid)) then say("%s activated", uid) else say("%s not activated (see log)", uid) end
+end
+
+local function cmd_reset(arg)
+	local uid, why = find_uid(arg)
+	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
+	core.reset(uid)
+	say("%s reset", uid)
+end
+
+local function cmd_jump(arg, node)
+	local uid, why = find_uid(arg)
+	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
+	local ok, e = core.jump(uid, node)
+	if (ok) then say("%s: jumped to %s", uid, tostring(node)) else say("%s: %s", uid, tostring(e)) end
+end
+
+local function cmd_fire(arg, node, pin)
+	local uid, why = find_uid(arg)
+	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
+	local ok, e = core.fire(uid, node, pin)
+	if (ok) then say("%s: %s fired (%s)", uid, tostring(node), tostring(pin or "default pin")) else say("%s: %s", uid, tostring(e)) end
+end
+
+local function cmd_validate()
+	local all = loader.scan()
+	local n = 0
+	for _, uid in ipairs(all.order) do
+		local q = all.quests[uid]
+		say("%s: %d error(s), %d warning(s)", uid, q.errors or 0, q.warnings or 0)
+		for _, p in ipairs(q.problems) do say("  %s", loader.problem_line(p)) n = n + 1 end
+	end
+	for _, q in ipairs(all.invalid) do
+		say("%s/%s: INVALID, %d error(s), %d warning(s)", tostring(q.module), tostring(q.file), q.errors or 0, q.warnings or 0)
+		for _, p in ipairs(q.problems) do say("  %s", loader.problem_line(p)) n = n + 1 end
+	end
+	say("validate: %d file(s), %d problem(s)", all.files or 0, n)
+end
+
+local function report_table()
+	local Q, order, invalid = core.quests()
+	local st = core.get_state()
+	local rep = { runtime = { ready = core.is_ready(), debug = core.debug_enabled(), catalog = loader.catalog().version }, quests = {}, invalid = {}, records = {} }
+	for _, uid in ipairs(order) do
+		local q = Q[uid]
+		local qs = core.quest_state(uid)
+		local nodes = {}
+		for _, node in ipairs(q.nodes) do
+			nodes[#nodes + 1] = { id = node.id, kind = node.kind, once = node.once, trigger = node.is_trigger or false, out = node.out, token = qs and qs.tokens[node.id] or nil, error = qs and qs.errors[node.id] or nil }
+		end
+		local probs = {}
+		for _, p in ipairs(q.problems) do probs[#probs + 1] = { code = p.code, node = p.node, slot = p.slot, message = p.message } end
+		rep.quests[#rep.quests + 1] = {
+			uid = uid, module = q.module, file = q.file, title = q.title, activation = q.activation, hash = q.hash,
+			status = qs and qs.status or "inactive", vars = qs and qs.vars or q.vars, refs = qs and qs.refs or nil,
+			done = qs and qs.done or nil, fired = qs and qs.fired or nil, tasks = qs and qs.tasks or nil,
+			nodes = nodes, problems = probs, missing_impl = q.missing_impl,
+		}
+	end
+	for _, q in ipairs(invalid) do
+		local probs = {}
+		for _, p in ipairs(q.problems) do probs[#probs + 1] = { code = p.code, node = p.node, slot = p.slot, message = p.message } end
+		rep.invalid[#rep.invalid + 1] = { module = q.module, file = q.file, problems = probs }
+	end
+	if (st) then
+		for uid, qs in pairs(st.quests) do
+			if not (Q[uid]) then rep.records[#rep.records + 1] = { uid = uid, status = qs.status } end
+		end
+	end
+	return rep
+end
+
+local function cmd_dump()
+	local rep = report_table()
+	local text = util.to_json(rep)
+	local path = "nq_report.json"
+	pcall(function() path = getFS():update_path("$app_data_root$", "nq_report.json") end)
+	local f = io.open(path, "wb")
+	if not (f) then say("cannot write %s", tostring(path)) return end
+	f:write(text)
+	f:close()
+	say("report written to %s (%d bytes)", tostring(path), #text)
+end
+
+local function cmd_help()
+	say("nq list | state <uid> | activate <uid> | reset <uid> | jump <uid> <node> | fire <uid> <node> [pin]")
+	say("nq reload | debug 0|1 | validate | dump | help")
+end
+
+function exec(args)
+	local words = util.split_words(args)
+	local cmd = words[1] and string.lower(words[1]) or "help"
+	local ok, e = pcall(function()
+		if (cmd == "help" or cmd == "?") then cmd_help()
+		elseif (cmd == "list") then if (need_ready()) then cmd_list() end
+		elseif (cmd == "state") then if (need_ready()) then cmd_state(words[2]) end
+		elseif (cmd == "activate") then if (need_ready()) then cmd_activate(words[2]) end
+		elseif (cmd == "reset") then if (need_ready()) then cmd_reset(words[2]) end
+		elseif (cmd == "jump") then if (need_ready()) then cmd_jump(words[2], words[3]) end
+		elseif (cmd == "fire") then if (need_ready()) then cmd_fire(words[2], words[3], words[4]) end
+		elseif (cmd == "reload") then
+			if (core.reload()) then say("reloaded") else say("reload failed (runtime disabled?)") end
+		elseif (cmd == "debug") then
+			if (need_ready()) then
+				local on = words[2] == "1" or words[2] == "on" or words[2] == "true"
+				core.set_debug(on)
+				say("debug %s", on and "on" or "off")
+			end
+		elseif (cmd == "validate") then cmd_validate()
+		elseif (cmd == "dump") then if (need_ready()) then cmd_dump() end
+		else say("unknown command '%s'", tostring(cmd)) cmd_help()
+		end
+	end)
+	if not (ok) then say("error: %s", tostring(e)) end
+end

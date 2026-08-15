@@ -1,0 +1,583 @@
+-- NQ runtime: dialogs (NQ_ARCHITECTURE §7). A `dialog.topic` node is one engine dialog with id
+-- `nq.<module>.<quest>.<node>`; the phrase nodes reachable from it are its phrases. The engine
+-- builds the phrase graph once per dialog id per process through the virtual-dialog init function
+-- (registered with xms.dialog_register), asks `xms.dialogs_for(partner, actor)` for the topics of
+-- the NPC the actor talks to, and calls pre/act/text per phrase.
+--
+-- Engine facts this file relies on (Phase 1, PhraseDialog.cpp / PhraseScript.cpp):
+--   * root phrase id is "0"; AddPhrase(text, id, prev, goodwill) with a repeated id only adds an
+--     edge and returns nil, so preconditions/actions are attached the first time only;
+--   * the speaker flips on every edge: even depth from the root = dialog initiator, odd = partner;
+--   * the NPC picks its reply among the available successors by highest goodwill first
+--     (random within equal goodwill): goodwill = -10000 - index keeps "first declared wins";
+--   * a non-leaf phrase whose successors are ALL filtered out asserts (R_ASSERT2 "No available
+--     phrase to say"): every non-leaf phrase keeps at least one unconditional successor here -
+--     a hidden leaf ("Пока." / "...") is added where the declared ones are all conditional;
+--   * pre(fs, ss, dialog_id, phrase_id, next_id) is NOT wrapped by the engine: it never throws;
+--     act(fs, ss, dialog_id, phrase_id) and text(fs, ss, dialog_id, phrase_id) -> string are;
+--   * the topic list reads the root caption with NULL speakers (CUITalkWnd::UpdateQuestions ->
+--     DialogCaption -> GetPhraseText("0")), so the root text is always static: placeholders in
+--     a topic text are substituted when the graph is built (invalidate = rebuild), phrase texts
+--     with placeholders go through SetScriptText and are formatted on every show.
+--
+-- Everything the engine calls (pre/act/text/query/init_*) is pcall-protected inside.
+
+local util = xms_nq_util
+local core = xms_nq
+
+local M = getfenv(1)			-- this script's namespace: per-dialog init closures live here
+
+local PHRASE = { ["dialog.npc_phrase"] = "npc", ["dialog.actor_phrase"] = "actor" }
+local AUTO_PREFIX = "nq_auto_"
+local AUTO_TEXT = { actor = (util.to_cp1251("Пока.")), npc = "..." }
+local FN_PRE, FN_ACT, FN_TEXT = "xms_nq_dialog.pre", "xms_nq_dialog.act", "xms_nq_dialog.text"
+
+local K = {}
+local DIALOGS = {}				-- dialog id -> { uid, topic }
+local INIT_KEYS = {}			-- init function key -> dialog id (collision guard)
+local PENDING = {}				-- "uid|topic" -> true while a topic completion sits in the queue
+local talk_partner = nil		-- id of the partner the current talk window is open with
+local leave_cb_on = false
+local pending_invalidate = false
+local prev_dialogs_for = nil	-- somebody else's xms.dialogs_for, chained by query()
+
+-- ---------------------------------------------------------------------------- helpers
+local function dialog_id_of(uid, node_id) return "nq." .. tostring(uid) .. "." .. tostring(node_id) end
+local function key_of(uid, node_id) return tostring(uid) .. "|" .. tostring(node_id) end
+local function is_auto(phrase_id) return type(phrase_id) == "string" and string.sub(phrase_id, 1, #AUTO_PREFIX) == AUTO_PREFIX end
+local function other_side(side) return (side == "actor") and "npc" or "actor" end
+local function is_phrase(node) return node ~= nil and node.spec ~= nil and PHRASE[node.kind] ~= nil end
+
+-- A phrase the engine may always show: no cond and not once. Everything else is filtered by pre().
+local function is_uncond(node) return #node.cond == 0 and not node.once end
+
+local function obj_id(o)
+	if not (o) then return nil end
+	local ok, id = pcall(function() return o.id and o:id() end)
+	if (ok) then return id end
+	return nil
+end
+
+-- The NPC among the two speakers (dialogs.who_is_npc when the game has it: id 0 is the actor).
+local function who_is_npc(a, b)
+	if not (a and b) then return a or b end
+	if (dialogs and dialogs.who_is_npc) then
+		local ok, npc = pcall(dialogs.who_is_npc, a, b)
+		if (ok and npc) then return npc end
+	end
+	if (obj_id(a) == 0) then return b end
+	return a
+end
+
+local function log_debug(fmt, ...)
+	if (core.debug_enabled()) then util.info("dialog: " .. util.sfmt(fmt, ...)) end
+end
+
+local function topic_of(dialog_id)
+	local ent = DIALOGS[dialog_id]
+	if not (ent) then return nil end
+	local q = core.quest_def(ent.uid)
+	local topic = q and q.node_by_id[ent.topic]
+	if not (topic and topic.spec and topic.kind == "dialog.topic") then return nil end
+	return ent, q, topic
+end
+
+-- Phrase targets of `next` in declared order (a target listed twice counts once: the phrase graph
+-- has no duplicate-edge check).
+local function phrase_children(q, node)
+	local out, seen = {}, {}
+	for _, tid in ipairs(node.out.next or {}) do
+		local t = q.node_by_id[tid]
+		if (is_phrase(t) and not seen[tid]) then
+			seen[tid] = true
+			out[#out + 1] = t
+		end
+	end
+	return out
+end
+
+-- ---------------------------------------------------------------------------- start dialog (initiator=npc)
+local function wstate(ctx)
+	if not (ctx.w) then
+		ctx.w = {}
+		if (ctx.tok) then ctx.tok.w = ctx.w end
+	end
+	return ctx.w
+end
+
+local function restore_start_dialog(npc_id, dialog_id)
+	local go = util.go_by_id(npc_id)
+	if not (go) then return end
+	pcall(function()
+		if (go:get_start_dialog() == dialog_id) then go:restore_default_start_dialog() end
+	end)
+end
+
+local function clear_start_dialog(ctx)
+	local w = wstate(ctx)
+	if (w.sd) then
+		restore_start_dialog(w.sd, dialog_id_of(ctx.uid, ctx.node_id))
+		w.sd = nil
+		core.mark_dirty()
+	end
+end
+
+-- Re-applied every poll: xr_meet may overwrite the start dialog with its own condlist.
+local function apply_start_dialog(ctx)
+	local w = wstate(ctx)
+	local id = dialog_id_of(ctx.uid, ctx.node_id)
+	local go = util.resolve_npc_go(ctx, ctx.params.npc)
+	local want = false
+	if (go) then
+		local ok, alive = pcall(go.alive, go)
+		want = ok and alive and core.eval_conds(ctx, ctx.node.cond, nil) or false
+	end
+	if not (want) then
+		clear_start_dialog(ctx)
+		return
+	end
+	local gid = obj_id(go)
+	if (w.sd and w.sd ~= gid) then restore_start_dialog(w.sd, id) end
+	pcall(function()
+		if (go:get_start_dialog() ~= id) then go:set_start_dialog(id) end
+	end)
+	if (w.sd ~= gid) then
+		w.sd = gid
+		core.mark_dirty()
+	end
+end
+
+-- ---------------------------------------------------------------------------- kinds
+K["dialog.topic"] = {
+	begin = function(ctx) return "wait" end,
+	wants_poll = function(ctx) return (ctx.params.initiator or "actor") == "npc" end,
+	poll = function(ctx)
+		if ((ctx.params.initiator or "actor") == "npc") then apply_start_dialog(ctx) end
+		return nil
+	end,
+	finish = function(ctx, pin, external)
+		clear_start_dialog(ctx)
+		PENDING[key_of(ctx.uid, ctx.node_id)] = nil
+	end,
+	cancel = function(ctx)
+		clear_start_dialog(ctx)
+		PENDING[key_of(ctx.uid, ctx.node_id)] = nil
+	end,
+}
+
+-- Phrases never own a token: they run inside act(). A token can only land here through `nq jump`
+-- (E011 rejects world edges into phrases at load), so behave as "the phrase was said": on_enter
+-- ran already, on_exit runs on completion, only the world exits are activated (no pin: the core
+-- would otherwise enter the phrase children too).
+local function phrase_begin(ctx)
+	util.warn("%s/%s: phrase entered from the world (E011), treating it as said", ctx.uid, ctx.node_id)
+	local q = ctx.def
+	for _, tid in ipairs(ctx.node.out.next or {}) do
+		local t = q and q.node_by_id[tid]
+		if not (is_phrase(t)) then core.enqueue_enter(ctx.uid, tid, ctx.node_id .. "/next") end
+	end
+	return { pin = nil }
+end
+
+K["dialog.npc_phrase"] = { begin = phrase_begin }
+K["dialog.actor_phrase"] = { begin = phrase_begin }
+
+K["dialog.force"] = {
+	run = function(ctx, p)
+		local a = db and db.actor
+		if not (a) then error("dialog.force: no actor") end
+		local go = util.resolve_npc_go(ctx, p.npc)
+		if not (go) then error("dialog.force: npc is not online") end
+		-- second argument is disable_break (xr_meet: run_talk_dialog(npc, not allow_break))
+		a:run_talk_dialog(go, p.allow_break == false)
+	end,
+}
+
+K["dialog.break"] = {
+	run = function(ctx, p)
+		local a = db and db.actor
+		if not (a) then return end
+		local npc = ctx.npc
+		if not (npc) then
+			local vid = inventory_upgrades and inventory_upgrades.victim_id or nil
+			npc = vid and util.go_by_id(vid) or nil
+		end
+		pcall(a.stop_talk, a)
+		if (npc) then pcall(npc.stop_talk, npc) end
+	end,
+}
+
+-- ---------------------------------------------------------------------------- graph build (init)
+-- Adds one phrase; returns the CPhrase on first creation (nil on a revisit = edge only).
+local function add_phrase(dialog, text, id, prev, goodwill)
+	local ok, ph = pcall(dialog.AddPhrase, dialog, text, id, prev, goodwill)
+	if not (ok) then
+		util.err("dialog: AddPhrase(%s <- %s) failed: %s", tostring(id), tostring(prev), tostring(ph))
+		return nil
+	end
+	return ph
+end
+
+local function build_dialog(dialog_id, dialog)
+	local ent, q, topic = topic_of(dialog_id)
+	if not (ent) then
+		-- stale registration (quest gone): a mute stub keeps the talk window alive
+		util.warn("dialog %s: no such topic any more, mute stub built", tostring(dialog_id))
+		add_phrase(dialog, "...", "0", "", -10000)
+		return
+	end
+	local uid = ent.uid
+	local initiator = topic.params.initiator or "actor"
+	local ctx = core.make_ctx(uid, topic.id)
+	-- root: static text (see the header), formatted with the current vars
+	local root_text = util.format_text(ctx, topic.params.text or "")
+	if (type(root_text) ~= "string" or root_text == "") then root_text = topic.id end
+	local root = add_phrase(dialog, root_text, "0", "", -10000)
+	if (root) then
+		local sc = root:GetPhraseScript()
+		sc:AddAction(FN_ACT)
+	end
+	-- BFS over phrase nodes; a phrase reached again only gets one more edge
+	local depth = { ["0"] = 0 }
+	local queue = { { id = "0", node = topic } }
+	local qi = 1
+	local phrases, autos = 0, 0
+	while (qi <= #queue) do
+		local item = queue[qi]
+		qi = qi + 1
+		local d = depth[item.id]
+		local kids = phrase_children(q, item.node)
+		local uncond, idx = 0, 0
+		for _, t in ipairs(kids) do
+			if (t.id == "0") then
+				util.warn("%s/%s: phrase id '0' is reserved for the topic root, phrase skipped", uid, t.id)
+			else
+				if (is_uncond(t)) then uncond = uncond + 1 end
+				local first = (depth[t.id] == nil)
+				if (first) then depth[t.id] = d + 1 end
+				local text = t.params.text or ""
+				if (type(text) ~= "string") then text = tostring(text) end
+				local ph = add_phrase(dialog, text, t.id, item.id, -10000 - idx)
+				if (ph) then
+					phrases = phrases + 1
+					local sc = ph:GetPhraseScript()
+					if not (is_uncond(t)) then sc:AddPrecondition(FN_PRE) end
+					sc:AddAction(FN_ACT)
+					if (string.find(text, "{", 1, true)) then sc:SetScriptText(FN_TEXT) end
+					queue[#queue + 1] = { id = t.id, node = t }
+				elseif (first) then
+					-- the id was taken by something else (an automatic reply id?): the branch is cut here
+					util.warn("%s/%s: phrase could not be added (id already used), its continuations are dropped", uid, t.id)
+				end
+				idx = idx + 1
+			end
+		end
+		-- Assert guard. The actor side asserts ("No available phrase to say") and the NPC side used
+		-- to read an empty candidate list (CAI_PhraseDialogManager::AnswerPhrase), so a group that
+		-- CAN end up fully filtered needs a hidden unconditional leaf. One unconditional sibling is
+		-- not enough proof: it may be a revisit that the engine refused to re-add, so add the leaf
+		-- whenever any child is conditional. Its goodwill is the lowest of the group, and the engine
+		-- takes the first candidate whose goodwill fits, so it is only ever reached as a last resort.
+		if (#kids > 0 and (uncond == 0 or uncond < #kids)) then
+			local side = ((d + 1) % 2 == 0) and initiator or other_side(initiator)
+			local aid = AUTO_PREFIX .. item.id
+			if (q.node_by_id[aid]) then util.warn("%s: node id %s collides with the automatic reply id", uid, aid) end
+			add_phrase(dialog, AUTO_TEXT[side], aid, item.id, -10000 - idx)
+			autos = autos + 1
+		end
+	end
+	log_debug("%s built: %d phrase(s), %d automatic reply(ies)", dialog_id, phrases, autos)
+end
+
+-- One init function per dialog id: CPhraseDialog exposes no GetDialogID to Lua, so the id is
+-- bound by the function name (content-addressed, stable across Lua states).
+local function init_key(dialog_id)
+	local base = "init_" .. string.format("%08x", util.fnv1a(dialog_id))
+	local key, n = base, 1
+	while (INIT_KEYS[key] ~= nil and INIT_KEYS[key] ~= dialog_id) do
+		n = n + 1
+		key = base .. "_" .. tostring(n)
+	end
+	INIT_KEYS[key] = dialog_id
+	if not (M[key]) then
+		M[key] = function(dialog)
+			local ok, e = pcall(build_dialog, dialog_id, dialog)
+			if not (ok) then util.err("dialog %s: init failed: %s", dialog_id, tostring(e)) end
+		end
+	end
+	return key
+end
+
+-- ---------------------------------------------------------------------------- registration
+local function register_dialog(dialog_id)
+	if not (xms and xms.dialog_register) then return false end
+	local fname = "xms_nq_dialog." .. init_key(dialog_id)
+	local ok, r = pcall(xms.dialog_register, dialog_id, fname)
+	if not (ok) then
+		util.err("dialog_register(%s): %s", dialog_id, tostring(r))
+		return false
+	end
+	if (r == false) then util.warn("dialog_register(%s) refused by the engine", dialog_id) end
+	return r ~= false
+end
+
+local function invalidate_dialog(dialog_id)
+	if not (xms and xms.dialog_invalidate) then return true end
+	local ok, r = pcall(xms.dialog_invalidate, dialog_id)
+	if (ok and r ~= false) then return true end
+	if not (ok) then util.err("dialog_invalidate(%s): %s", dialog_id, tostring(r)) end
+	return false
+end
+
+local function invalidate_all()
+	local refused = 0
+	for id in pairs(DIALOGS) do
+		if not (invalidate_dialog(id)) then refused = refused + 1 end
+	end
+	if (refused > 0) then
+		pending_invalidate = true
+		util.warn("%d dialog(s) could not be invalidated now (talk in progress); retried when it closes", refused)
+	else
+		pending_invalidate = false
+	end
+end
+
+local function unregister_dialog(dialog_id)
+	if (xms and xms.dialog_unregister) then pcall(xms.dialog_unregister, dialog_id) end
+end
+
+-- ---------------------------------------------------------------------------- engine entry points
+-- Topics of `partner` for the talk window (xms.dialogs_for): topic tokens whose quest is active,
+-- initiator=actor, npc matches this partner and cond holds. Also the talk_started source.
+local function query_impl(partner, actor)
+	local out = {}
+	if not (partner and core.is_ready()) then return out end
+	local pid = obj_id(partner)
+	if (pid ~= nil and talk_partner ~= pid) then
+		talk_partner = pid
+		core.talk_started(partner)
+	end
+	core.each_token(function(uid, node_id, tok, q, qs)
+		if (tok.b) then
+			local node = q.node_by_id[node_id]
+			if (node and node.spec and node.kind == "dialog.topic" and (node.params.initiator or "actor") ~= "npc") then
+				local key = key_of(uid, node_id)
+				if (PENDING[key]) then
+					if not (qs.tokens[node_id]) then PENDING[key] = nil end
+				else
+					local ctx = core.make_ctx(uid, node_id, partner)
+					if (util.npc_matches(ctx, node.params.npc, partner) and core.eval_conds(ctx, node.cond, nil)) then
+						out[#out + 1] = dialog_id_of(uid, node_id)
+					end
+				end
+			end
+		end
+		return false
+	end)
+	return out
+end
+
+-- xms.dialogs_for is a single engine-visible slot. NQ takes it, but appends whatever was there
+-- before instead of silently deleting another module's topics (deduplicated: the engine would
+-- otherwise ask the dialog manager for the same id twice).
+function query(partner, actor)
+	local out = {}
+	local ok, list = pcall(query_impl, partner, actor)
+	if (ok and type(list) == "table") then out = list
+	elseif not (ok) then util.err("dialogs_for: %s", tostring(list)) end
+	if (prev_dialogs_for) then
+		local ok2, more = pcall(prev_dialogs_for, partner, actor)
+		if (ok2 and type(more) == "table") then
+			local seen = {}
+			for _, id in ipairs(out) do seen[id] = true end
+			for _, id in ipairs(more) do
+				if (type(id) == "string" and not seen[id]) then
+					seen[id] = true
+					out[#out + 1] = id
+				end
+			end
+		elseif not (ok2) then
+			util.err("dialogs_for (chained): %s", tostring(more))
+		end
+	end
+	return out
+end
+
+-- Installs (or releases) the engine hook. With no topics of our own the slot goes back to whoever
+-- held it: an installed-but-quest-less runtime must not sit in the talk path at all.
+local function install_hook(want)
+	if not (xms) then return end
+	if (want) then
+		if (xms.dialogs_for ~= query) then prev_dialogs_for = (type(xms.dialogs_for) == "function") and xms.dialogs_for or nil end
+		xms.dialogs_for = query
+	elseif (xms.dialogs_for == query) then
+		xms.dialogs_for = prev_dialogs_for
+	end
+end
+
+-- The topic is passed when a leaf phrase is said (§7.1): once -> the core completes the token
+-- (deferred: finish, on_exit, done pin); repeatable -> on_exit and the done pin, token stays.
+local function finish_topic(uid, topic, npc)
+	local q, qs = core.quest_def(uid), core.quest_state(uid)
+	local node = q and q.node_by_id[topic]
+	if not (node and qs and qs.status == "active") then return end
+	local key = key_of(uid, topic)
+	if (node.once) then
+		if (qs.tokens[topic] and not PENDING[key]) then
+			PENDING[key] = true
+			core.complete_external(uid, topic, "done")
+			log_debug("%s: topic %s passed", uid, topic)
+		end
+		return
+	end
+	local ctx = core.make_ctx(uid, topic, npc)
+	core.run_actions(ctx, node.on_exit, "exit")
+	for _, tid in ipairs(node.out.done or {}) do core.enqueue_enter(uid, tid, topic .. "/done") end
+	log_debug("%s: topic %s passed (repeatable)", uid, topic)
+end
+
+-- Precondition of the candidate `next_id` after `phrase_id` was said. Unconditional phrases (and
+-- the automatic replies) are decided before anything that could fail: that is the assert guard.
+local function pre_impl(fs, ss, dialog_id, phrase_id, next_id)
+	if (is_auto(next_id)) then return true end
+	local ent, q, topic = topic_of(dialog_id)
+	if not (ent) then return true end
+	local node = q.node_by_id[next_id]
+	if not (is_phrase(node)) then return true end
+	if (is_uncond(node)) then return true end
+	local qs = core.quest_state(ent.uid)
+	if not (qs and qs.status == "active") then return false end
+	if (node.once and qs.done[next_id]) then return false end
+	local ctx = core.make_ctx(ent.uid, next_id, who_is_npc(fs, ss))
+	return core.eval_conds(ctx, node.cond, nil)
+end
+
+function pre(fs, ss, dialog_id, phrase_id, next_id)
+	local ok, r = pcall(pre_impl, fs, ss, dialog_id, phrase_id, next_id)
+	if (ok) then return r == true end
+	util.err("dialog %s: precondition %s->%s: %s", tostring(dialog_id), tostring(phrase_id), tostring(next_id), tostring(r))
+	return false
+end
+
+-- Phrase said: on_enter, mark (once), on_exit, world exits through the queue; a leaf passes the topic.
+local function act_impl(fs, ss, dialog_id, phrase_id)
+	if (is_auto(phrase_id)) then return end
+	local ent, q, topic = topic_of(dialog_id)
+	if not (ent) then return end
+	local uid = ent.uid
+	local qs = core.quest_state(uid)
+	if not (qs and qs.status == "active") then
+		log_debug("%s: phrase %s said while the quest is %s, ignored", uid, phrase_id, tostring(qs and qs.status))
+		return
+	end
+	local npc = who_is_npc(fs, ss)
+	if (phrase_id == "0") then
+		log_debug("%s: topic %s opened", uid, topic.id)
+		-- a topic without phrases (W012): its root is the leaf
+		if (#phrase_children(q, topic) == 0) then finish_topic(uid, topic.id, npc) end
+		return
+	end
+	local node = q.node_by_id[phrase_id]
+	if not (is_phrase(node)) then return end
+	log_debug("%s: phrase %s said", uid, phrase_id)
+	local ctx = core.make_ctx(uid, phrase_id, npc)
+	core.run_actions(ctx, node.on_enter, "enter")
+	if (node.once and not qs.done[phrase_id]) then
+		qs.done[phrase_id] = node.kind
+		core.mark_dirty()
+	end
+	core.run_actions(ctx, node.on_exit, "exit")
+	local leaf = true
+	for _, tid in ipairs(node.out.next or {}) do
+		local t = q.node_by_id[tid]
+		if (is_phrase(t)) then
+			leaf = false
+		else
+			core.enqueue_enter(uid, tid, phrase_id .. "/next")
+		end
+	end
+	if (leaf) then finish_topic(uid, topic.id, npc) end
+end
+
+function act(fs, ss, dialog_id, phrase_id)
+	local ok, e = pcall(act_impl, fs, ss, dialog_id, phrase_id)
+	if not (ok) then util.err("dialog %s: action %s: %s", tostring(dialog_id), tostring(phrase_id), tostring(e)) end
+end
+
+-- Dynamic text of a phrase with placeholders (fs/ss = first/second speaker of the dialog).
+local function text_impl(fs, ss, dialog_id, phrase_id)
+	local ent, q, topic = topic_of(dialog_id)
+	if not (ent) then return tostring(phrase_id) end
+	local node = (phrase_id == "0") and topic or q.node_by_id[phrase_id]
+	if not (node) then return tostring(phrase_id) end
+	local ctx = core.make_ctx(ent.uid, node.id, who_is_npc(fs, ss))
+	local s = util.format_text(ctx, node.params.text or "")
+	if (type(s) ~= "string") then s = tostring(s) end
+	return s
+end
+
+function text(fs, ss, dialog_id, phrase_id)
+	local ok, s = pcall(text_impl, fs, ss, dialog_id, phrase_id)
+	if (ok and type(s) == "string") then return s end
+	if not (ok) then util.err("dialog %s: text %s: %s", tostring(dialog_id), tostring(phrase_id), tostring(s)) end
+	return tostring(phrase_id or "")
+end
+
+-- pda.script: actor_on_leave_dialog(victim_id) - the talk window closed.
+function on_leave_dialog(victim_id)
+	talk_partner = nil
+	if (pending_invalidate) then invalidate_all() end
+end
+
+-- ---------------------------------------------------------------------------- core hooks
+function register()
+	for name, impl in pairs(K) do core.register_kind(name, impl) end
+end
+
+-- Every Lua state (new game / load / level change) and after `nq reload`: rebuild the index,
+-- (re)register every topic dialog and drop cached graphs so the next talk rebuilds them from
+-- the current assets (the shared data outlives the Lua state).
+function on_init()
+	local Q, order = core.quests()
+	local index, ids = {}, {}
+	for _, uid in ipairs(order) do
+		local q = Q[uid]
+		for _, node in ipairs(q.nodes) do
+			if (node.spec and node.kind == "dialog.topic") then
+				local id = dialog_id_of(uid, node.id)
+				index[id] = { uid = uid, topic = node.id }
+				ids[#ids + 1] = id
+			end
+		end
+	end
+	for id in pairs(DIALOGS) do
+		if not (index[id]) then unregister_dialog(id) end
+	end
+	DIALOGS = index
+	local n = 0
+	for _, id in ipairs(ids) do
+		if (register_dialog(id)) then n = n + 1 end
+	end
+	install_hook(#ids > 0)
+	invalidate_all()
+	if (#order > 0 and not leave_cb_on and RegisterScriptCallback) then
+		RegisterScriptCallback("actor_on_leave_dialog", on_leave_dialog)
+		leave_cb_on = true
+	end
+	if (n > 0) then util.info("dialogs: %d topic(s) registered", n) end
+end
+
+function on_reload_begin()
+	invalidate_all()
+end
+
+function on_quest_reset(uid)
+	for key in pairs(PENDING) do
+		if (string.sub(key, 1, #uid + 1) == uid .. "|") then PENDING[key] = nil end
+	end
+end
+
+-- Debug helpers (console / tests).
+function dialog_index() return DIALOGS end
+function dialog_id(uid, node_id) return dialog_id_of(uid, node_id) end
+function kinds() return K end

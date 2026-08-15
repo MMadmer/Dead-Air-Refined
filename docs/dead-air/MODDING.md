@@ -128,7 +128,11 @@ Runtime facts:
   (pre/post/around), `game_object:add_callback(type, id, fn[, priority])` /
   `remove_callback(type, id)`, `xms.registry.get(name)`,
   `xms.save_data(id, str)` / `xms.load_data(id)` (persisted in `.scov`),
-  `xms.story_id(id, n)` for collision-free story ids.
+  `xms.story_id(id, n)` for collision-free story ids,
+  `xms.list_files(id, subdir, mask, recursive)` / `xms.read_file(id, relpath)`
+  to read a module's own data files, `xms.module_applies(id)` for the engine's
+  `mode=` gate, and `xms.dialog_register/unregister/invalidate(id, …)` for
+  dialogs built by script instead of XML (`xms.nq_api` feature-tests the group).
 - Saves: the module set is recorded in the save's `.scov` sidecar; removing a
   module does not brick the save — its objects are skipped on load and
   reported. `.scop` stays byte-compatible with original Dead Air 0.98b.
@@ -185,6 +189,30 @@ Runtime facts:
   active mode set: on the load path the state is rebuilt before the save's
   modes are restored. Ask `xms.mode_active(id)` when the thing actually
   happens, not while registering it.
+
+### NQ quest graphs
+
+A module can ship whole quests without a line of Lua. One quest is one
+`*.nqasset` file — declarative Lua (`return { … }`, loaded in an empty
+environment) describing nodes, dialog phrases, objectives, conditions and PDA
+tasks. The game interprets it; nothing is compiled, generated or merged into
+`gamedata`, so a runtime fix in a game update fixes every module's quests at
+once.
+
+- Put the files **anywhere inside the module** — the runtime scans the module
+  root recursively for `*.nqasset`. Quests are gated by `mode=` like the rest of
+  a module's content, and a quest reaches an EXISTING save as soon as the module
+  is installed.
+- New node kinds come from `gamedata/configs/nq/kinds/<mod>.ltx` plus
+  implementations registered in `scripts/register.script` through
+  `xms.registry.get("nq.kinds")`.
+- Quest state is one blob in the save's `.scov` sidecar
+  (`xms.save_data("xms.nq", …)`, chunk `0x584DFF01`); `.scop`/`.scoc` are not
+  touched and removing the module does not brick the save.
+- Console: `nq list`, `nq state <uid>`, `nq jump`/`nq fire`, `nq reload`,
+  `nq validate`, `nq dump`, `nq debug 1`. Log lines are prefixed `[nq]`.
+- Full contract — format, catalog, execution model, dialogs, persistence,
+  validation codes: `NQ_RUNTIME.md`.
 
 ### Adding a new game mode
 

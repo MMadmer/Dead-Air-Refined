@@ -74,3 +74,6 @@ doc/doxygen/html/*
 
 # Local full-text search index over the docs, regenerated on demand.
 /docs/index.bleve/
+
+# QA run artefacts: logs, engine dumps and captured frames of a local NQ run
+/tools/qa/nq/results/

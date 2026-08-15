@@ -109,6 +109,12 @@ ID can be reused; ordinary online/offline transitions keep the record alive.
 | `AFO1` | 1 | Artefact overrides: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u32 changedMask`, then 16 `f32` values. |
 | `WEX1` | 1 | Weapon extensions: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u32 extendedConditionMask`. |
 | `SEA1` | 1 | One finite `f32` environment season value; no record count. |
+| `0x584DFF01` | 1 | NQ quest-graph runtime state: opaque marshal blob owned by `xms_nq` (`xms.save_data("xms.nq", ...)`); no record count. Core pseudo-namespace `0xFF01` on the XMS per-module data channel `0x584D0000\|ns`; the range `0xFF00`–`0xFFFF` is reserved for engine-owned blobs and is never allocated to a module. |
+
+The XMS module set manifest (`XMS1`) and the per-module data (`0x584D0000|ns`)
+and spawn-ledger (`0x584C0000|ns`) chunk families are described in
+`XMS_ARCHITECTURE.md`; a core blob such as `0x584DFF01` follows the module blob
+rules (opaque payload, version 1, erased when the owner stores an empty blob).
 
 The AFO1 values are weight, health, radiation, satiety, power, bleeding,
 additional carry weight, and the nine original hit-immunity classes. WEX1

@@ -89,6 +89,13 @@ public:
 
         return _data;
     }
+
+    // Existing entry for `id`, null when there is none (never creates one).
+    SHARED_TYPE* find_shared(KEY_TYPE id)
+    {
+        SHARED_DATA_MAP_IT shared_it = _shared_tab.find(id);
+        return _shared_tab.end() == shared_it ? nullptr : shared_it->second;
+    }
 };
 
 class CSharedResource
@@ -129,6 +136,18 @@ public:
     virtual void load_shared(LPCSTR section) {}
     SHARED_TYPE* get_sd() { return _sd; }
     const SHARED_TYPE* get_sd() const { return _sd; }
+    // Cached entry for `key` when one was created by an earlier load, null
+    // otherwise. Lets a class reset an entry so the next load_shared(key)
+    // rebuilds it. The Instance/FreeInst pair keeps the singleton's refcount
+    // balanced; an auto-deleting store that did not exist is torn down again
+    // and can only have yielded null.
+    static SHARED_TYPE* find_shared_data(KEY_TYPE key)
+    {
+        CSharedObj<SHARED_TYPE, KEY_TYPE>* store = CSharedObj<SHARED_TYPE, KEY_TYPE>::Instance();
+        SHARED_TYPE* data = store->find_shared(key);
+        store->FreeInst();
+        return data;
+    }
     // управление загрузкой данных при компонентном подходе (загрузка данных вручную)
     bool start_load_shared(KEY_TYPE key)
     {

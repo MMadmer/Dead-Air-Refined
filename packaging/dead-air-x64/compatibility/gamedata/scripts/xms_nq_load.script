@@ -1,0 +1,1307 @@
+-- NQ runtime: asset discovery, sandboxed parse, validation (E/W codes shared with the editor),
+-- canonicalization, migrations, content hash and the text outline used by `nq state`.
+--
+-- A quest file is a declarative Lua table (`return { ... }`), loaded with an empty environment so
+-- anything that is code fails at load and rejects only that file. Every quest is processed
+-- independently: one broken asset never affects its neighbours.
+
+local util = xms_nq_util
+
+local NQ_VERSION = 1
+local ID_PATTERN = "^[a-z0-9_]+$"
+
+-- ============================================================================ catalog
+local catalog_cache
+
+local function trim(s)
+	return (string.gsub(tostring(s or ""), "^%s*(.-)%s*$", "%1"))
+end
+
+local function split_csv(s)
+	local out = {}
+	for item in string.gmatch(tostring(s or ""), "[^,]+") do
+		item = trim(item)
+		if (item ~= "") then out[#out + 1] = item end
+	end
+	return out
+end
+
+local function to_bool(v)
+	v = trim(v)
+	return v == "true" or v == "1" or v == "on" or v == "yes"
+end
+
+local function default_of_type(ptype, raw)
+	if (raw == nil) then return nil end
+	if (ptype == "bool") then return to_bool(raw) end
+	if (ptype == "int" or ptype == "float") then return tonumber(raw) end
+	return raw
+end
+
+-- "<type>[, required][, default=<v>][, min=<v>][, max=<v>][, enum=a|b|c]"
+local function parse_param_spec(name, spec)
+	local parts = split_csv(spec)
+	local p = { name = name, type = parts[1] or "string" }
+	for i = 2, #parts do
+		local tok = parts[i]
+		local k, v = string.match(tok, "^([%w_]+)%s*=%s*(.*)$")
+		if (tok == "required") then
+			p.required = true
+		elseif (k == "default") then
+			p.default_raw = v
+		elseif (k == "min") then
+			p.min = tonumber(v)
+		elseif (k == "max") then
+			p.max = tonumber(v)
+		elseif (k == "enum") then
+			p.enum = {}
+			p.enum_set = {}
+			for e in string.gmatch(v, "[^|]+") do
+				e = trim(e)
+				p.enum[#p.enum + 1] = e
+				p.enum_set[e] = true
+			end
+		end
+	end
+	p.default = default_of_type(p.type, p.default_raw)
+	return p
+end
+
+local function read_kind_section(ini, sec, cat, source)
+	local kind = string.sub(sec, 4)
+	local raw = {}
+	local n = ini:line_count(sec)
+	for i = 0, n - 1 do
+		local ok, _, key, value = pcall(ini.r_line, ini, sec, i, "", "")
+		if (ok and key and key ~= "") then raw[key] = value or "" end
+	end
+	local k = {
+		name = kind, group = raw.group or "", title = raw.title or kind, desc = raw.desc or "",
+		use = {}, params = {}, param_by_name = {}, pins = {}, pins_cases = false,
+		wait = to_bool(raw.wait), once = to_bool(raw.once), event = to_bool(raw.event),
+		impl = raw.impl or "core", since = tonumber(raw.since) or 1, source = source,
+	}
+	for _, u in ipairs(split_csv(raw.use)) do k.use[u] = true end
+	for _, pname in ipairs(split_csv(raw.params)) do
+		local p = parse_param_spec(pname, raw[pname] or "string")
+		k.params[#k.params + 1] = p
+		k.param_by_name[pname] = p
+	end
+	for _, pin in ipairs(split_csv(raw.pins)) do
+		if (pin == "cases") then k.pins_cases = true else k.pins[#k.pins + 1] = pin end
+	end
+	if (cat.kinds[kind]) then
+		util.warn("catalog: kind '%s' redefined by %s (was %s)", kind, tostring(source), tostring(cat.kinds[kind].source))
+	else
+		cat.order[#cat.order + 1] = kind
+	end
+	cat.kinds[kind] = k
+	-- alias = old.kind: assets may still say the old name, the runtime resolves it (§6.6)
+	for _, alias in ipairs(split_csv(raw.alias)) do cat.aliases[alias] = kind end
+end
+
+-- Canonical kind name for a name found in an asset (alias resolution).
+local function resolve_kind(cat, name)
+	if (type(name) ~= "string") then return name end
+	return cat.aliases[name] or name
+end
+
+local function read_catalog_ini(ini, cat, source)
+	if not (ini) then return end
+	if (ini:section_exist("nq.catalog")) then
+		if (ini:line_exist("nq.catalog", "version")) then cat.version = tonumber(ini:r_string("nq.catalog", "version")) or cat.version end
+		if (ini:line_exist("nq.catalog", "api")) then cat.api = tonumber(ini:r_string("nq.catalog", "api")) or cat.api end
+	end
+	-- Section enumeration: the engine binds ini_file:section_for_each(functor) (Alundaio's
+	-- extension); without it the caller falls back to scanning the raw text for headers.
+	local names = {}
+	if (ini.section_for_each) then
+		pcall(function()
+			ini:section_for_each(function(name) names[#names + 1] = name end)
+		end)
+	end
+	for _, sec in ipairs(names) do
+		if (string.sub(sec, 1, 3) == "nq." and sec ~= "nq.catalog") then
+			read_kind_section(ini, sec, cat, source)
+		end
+	end
+	return #names
+end
+
+-- Fallback when the ini binding cannot enumerate sections: read the raw file text and pick
+-- section headers with a pattern. Works for loose files and for the harness.
+local function catalog_section_names_from_text(text)
+	local names = {}
+	for sec in string.gmatch(text, "%f[^\n%z]%s*%[([^%]\n]+)%]") do
+		names[#names + 1] = trim(sec)
+	end
+	return names
+end
+
+local function read_catalog_file(relpath, cat, source)
+	local ok, ini = pcall(ini_file, relpath)
+	if not (ok and ini) then
+		util.warn("catalog: cannot open %s", tostring(relpath))
+		return false
+	end
+	local n = read_catalog_ini(ini, cat, source)
+	if (n and n > 0) then return true end
+	-- Enumerate sections from text (getFS path); every header found is then read via ini_file.
+	local text
+	pcall(function()
+		local fs = getFS()
+		local path = fs:update_path("$game_config$", relpath)
+		local f = io.open(path, "rb")
+		if (f) then text = f:read("*a") f:close() end
+	end)
+	if not (text) then
+		util.warn("catalog: cannot enumerate sections of %s", tostring(relpath))
+		return false
+	end
+	for _, sec in ipairs(catalog_section_names_from_text(text)) do
+		if (string.sub(sec, 1, 3) == "nq." and sec ~= "nq.catalog" and ini:section_exist(sec)) then
+			read_kind_section(ini, sec, cat, source)
+		end
+	end
+	return true
+end
+
+-- Loads configs\nq\catalog.ltx plus every configs\nq\kinds\*.ltx (module extensions).
+function catalog(force)
+	if (catalog_cache and not force) then return catalog_cache end
+	local cat = { version = 0, api = 0, kinds = {}, order = {}, aliases = {} }
+	read_catalog_file("nq\\catalog.ltx", cat, "core")
+	pcall(function()
+		local fs = getFS()
+		local flist = fs:file_list_open("$game_config$", "nq\\kinds\\", FS.FS_ListFiles)
+		if not (flist) then return end
+		local names = {}
+		for i = 0, flist:Size() - 1 do
+			local name = flist:GetAt(i)
+			if (type(name) ~= "string" and name.NameFull) then name = name:NameFull() end
+			if (type(name) == "string" and string.find(string.lower(name), "%.ltx$")) then names[#names + 1] = name end
+		end
+		if (flist.Free) then flist:Free() end
+		table.sort(names)
+		for _, name in ipairs(names) do
+			read_catalog_file("nq\\kinds\\" .. name, cat, name)
+		end
+	end)
+	catalog_cache = cat
+	util.info("catalog v%s api %s: %d kinds", tostring(cat.version), tostring(cat.api), #cat.order)
+	return cat
+end
+
+function kind_spec(name)
+	local cat = catalog()
+	return cat.kinds[name]
+end
+
+-- Registered Lua implementation of a kind (nil when the catalog knows it but nobody registered).
+function kind_impl(name)
+	if not (xms and xms.registry and xms.registry.get) then return nil end
+	local ok, reg = pcall(xms.registry.get, "nq.kinds")
+	if not (ok and reg) then return nil end
+	local ok2, impl = pcall(reg.get, reg, name)
+	if (ok2) then return impl end
+	return nil
+end
+
+-- ============================================================================ parse
+-- The empty environment only stops code that touches a global: `local x = 1`, arithmetic and
+-- control flow would run silently and the file would pass as data. So the source is scanned
+-- first and everything that is not a literal table is rejected (E003).
+local DECL_PUNCT = { ["{"] = true, ["}"] = true, ["["] = true, ["]"] = true, ["="] = true, [","] = true, [";"] = true, ["-"] = true }
+local DECL_LITERAL = { ["true"] = true, ["false"] = true, ["nil"] = true }
+
+-- src[i] == "[": returns the level of a long bracket and the position after it, or nil.
+local function long_bracket(src, i)
+	local j, level = i + 1, 0
+	while (string.sub(src, j, j) == "=") do level = level + 1 j = j + 1 end
+	if (string.sub(src, j, j) ~= "[") then return nil end
+	return level, j + 1
+end
+
+local function skip_long(src, i, level, what)
+	local close = string.find(src, "]" .. string.rep("=", level) .. "]", i, true)
+	if not (close) then return nil, "unterminated " .. what end
+	return close + level + 2
+end
+
+-- Returns nil when the source is a single literal table, or a message describing the first
+-- construct that is code. Tokens are collected with strings and comments already removed.
+local function declarative_problem(src)
+	local n, i = #src, 1
+	local toks = {}
+	while (i <= n) do
+		local c = string.sub(src, i, i)
+		if (string.find(c, "%s")) then
+			i = i + 1
+		elseif (string.sub(src, i, i + 1) == "--") then
+			local level, after
+			if (string.sub(src, i + 2, i + 2) == "[") then level, after = long_bracket(src, i + 2) end
+			if (level) then
+				local nxt, err = skip_long(src, after, level, "long comment")
+				if not (nxt) then return err end
+				i = nxt
+			else
+				local nl = string.find(src, "\n", i, true)
+				i = nl and (nl + 1) or (n + 1)
+			end
+		elseif (c == "\"" or c == "'") then
+			local j = i + 1
+			while (j <= n) do
+				local d = string.sub(src, j, j)
+				if (d == "\\") then j = j + 2
+				elseif (d == c or d == "\n") then break
+				else j = j + 1 end
+			end
+			if (j > n or string.sub(src, j, j) ~= c) then return "unterminated string" end
+			toks[#toks + 1] = "\1str"
+			i = j + 1
+		elseif (c == "[") then
+			local level, after = long_bracket(src, i)
+			if (level) then
+				local nxt, err = skip_long(src, after, level, "long string")
+				if not (nxt) then return err end
+				toks[#toks + 1] = "\1str"
+				i = nxt
+			else
+				toks[#toks + 1] = "["
+				i = i + 1
+			end
+		elseif (string.find(c, "%d") or (c == "." and string.find(string.sub(src, i + 1, i + 1), "%d"))) then
+			local j = i
+			while (j <= n) do
+				local d = string.sub(src, j, j)
+				if (string.find(d, "[%dA-Fa-fXx.]")) then j = j + 1
+				elseif ((d == "+" or d == "-") and string.find(string.sub(src, j - 1, j - 1), "[EePp]")) then j = j + 1
+				else break end
+			end
+			if (string.find(string.sub(src, i, j - 1), "..", 1, true)) then return "concatenation is code, not data" end
+			toks[#toks + 1] = "\1num"
+			i = j
+		elseif (string.find(c, "[A-Za-z_]")) then
+			local s, e = string.find(src, "^[A-Za-z_][A-Za-z0-9_]*", i)
+			toks[#toks + 1] = string.sub(src, s, e)
+			i = e + 1
+		elseif (DECL_PUNCT[c]) then
+			toks[#toks + 1] = c
+			i = i + 1
+		else
+			return string.format("'%s' outside a string is code, not data", c)
+		end
+	end
+	if (#toks == 0) then return "no 'return' statement" end
+	if (toks[1] ~= "return") then return string.format("'%s' before the table is code, not data", toks[1]) end
+	for k = 2, #toks do
+		local t = toks[k]
+		if (string.find(t, "^[A-Za-z_]") and not DECL_LITERAL[t] and toks[k + 1] ~= "=") then
+			return string.format("'%s' is code, not data (only literals and 'key =' names are allowed)", t)
+		end
+	end
+	return nil
+end
+
+-- Returns table or nil, message.
+function parse(src, chunkname)
+	if (type(src) ~= "string") then return nil, "empty file" end
+	local chunk, cerr = loadstring(src, "=" .. tostring(chunkname))
+	if not (chunk) then return nil, tostring(cerr) end
+	local decl = declarative_problem(src)
+	if (decl) then return nil, decl end
+	setfenv(chunk, {})
+	local ok, res, extra = pcall(chunk)
+	if not (ok) then return nil, "runtime error while evaluating (code outside strings?): " .. tostring(res) end
+	if (type(res) ~= "table") then return nil, "file must return a single table" end
+	if (extra ~= nil) then return nil, "file must return a single table" end
+	return res
+end
+
+-- ============================================================================ problems
+local function problem(list, code, node, slot, fmt, ...)
+	local sev = string.sub(code, 1, 1)
+	list[#list + 1] = { code = code, severity = sev, node = node, slot = slot, message = util.sfmt(fmt, ...) }
+end
+
+local function count_problems(list)
+	local e, w = 0, 0
+	for _, p in ipairs(list) do
+		if (p.severity == "E") then e = e + 1 else w = w + 1 end
+	end
+	return e, w
+end
+
+-- ============================================================================ canonicalization
+local REF_HOLDER_TYPES = { npc_ref = true, target_ref = true, place = true, kill_target = true, squad_ref = true }
+
+local function is_ident(s)
+	return type(s) == "string" and string.find(s, ID_PATTERN) ~= nil
+end
+
+local function is_int(v)
+	return type(v) == "number" and math.floor(v) == v
+end
+
+-- Converts a text param to cp1251, counting lost characters (W040).
+local function canon_text(v, st, node, slot)
+	local s = util.pick_text(v)
+	if (s == nil) then return nil end
+	local out, lost = util.to_cp1251(s)
+	if (lost > 0) then
+		problem(st.problems, "W040", node, slot, "%d character(s) outside cp1251 replaced by '?'", lost)
+	end
+	return out
+end
+
+local function valid_duration(v)
+	if (type(v) == "number") then return v >= 0 end
+	if (type(v) ~= "table") then return false end
+	local secs = util.duration_secs(v)
+	return secs ~= nil and secs >= 0
+end
+
+local function valid_npc_ref(v)
+	if (type(v) ~= "table") then return false end
+	if (type(v.story) == "string") then return true end
+	if (type(v.ref) == "string") then return true end
+	if (type(v.profile) == "string") then return true end
+	if (type(v.community) == "string") then return true end
+	return false
+end
+
+local function valid_target_ref(v)
+	if (type(v) ~= "table") then return false end
+	if (valid_npc_ref(v)) then return true end
+	if (type(v.smart) == "string") then return true end
+	return false
+end
+
+-- A squad/NPC the runtime can pin down to one stable object id. Deliberately narrower than
+-- target_ref: {profile=}/{community=}/{smart=} name a group, not the object the kind tracks.
+local function valid_squad_ref(v)
+	if (type(v) ~= "table") then return false end
+	return type(v.story) == "string" or type(v.ref) == "string"
+end
+
+local function valid_place(v)
+	if (type(v) ~= "table") then return false end
+	if (type(v.restrictor) == "string") then return true end
+	if (type(v.smart) == "string") then return true end
+	if (type(v.pos) == "table") then
+		local p = v.pos
+		local x, y, z = p[1] or p.x, p[2] or p.y, p[3] or p.z
+		return type(x) == "number" and type(y) == "number" and type(z) == "number"
+	end
+	return false
+end
+
+local function valid_spawn_spec(v)
+	return type(v) == "table" and type(v.section) == "string" and type(v.smart) == "string"
+end
+
+local canon_cond_list -- forward
+
+-- Canonical value for one param; returns value, ok(bool), why(string).
+local function canon_param(st, node, slot, p, v)
+	local t = p.type
+	if (v == nil) then
+		if (p.default ~= nil) then return util.copy(p.default), true end
+		if (p.required) then return nil, false, "is required" end
+		return nil, true
+	end
+	if (t == "text") then
+		local s = canon_text(v, st, node, slot)
+		if (s == nil) then return nil, false, "must be a text (string or {rus=,eng=})" end
+		return s, true
+	elseif (t == "int") then
+		if not (is_int(v)) then return nil, false, "must be an integer" end
+		if (p.min and v < p.min) then return nil, false, "must be >= " .. tostring(p.min) end
+		if (p.max and v > p.max) then return nil, false, "must be <= " .. tostring(p.max) end
+		return v, true
+	elseif (t == "float") then
+		if (type(v) ~= "number") then return nil, false, "must be a number" end
+		if (p.min and v < p.min) then return nil, false, "must be >= " .. tostring(p.min) end
+		if (p.max and v > p.max) then return nil, false, "must be <= " .. tostring(p.max) end
+		return v, true
+	elseif (t == "bool") then
+		if (type(v) ~= "boolean") then return nil, false, "must be true or false" end
+		return v, true
+	elseif (t == "enum") then
+		if (type(v) ~= "string" or (p.enum_set and not p.enum_set[v])) then
+			return nil, false, "must be one of " .. table.concat(p.enum or {}, "|")
+		end
+		return v, true
+	elseif (t == "relation") then
+		if (v ~= "enemy" and v ~= "neutral" and v ~= "friend") then return nil, false, "must be enemy|neutral|friend" end
+		return v, true
+	elseif (t == "duration") then
+		if not (valid_duration(v)) then return nil, false, "must be {seconds=N} | {game_minutes=N} | {game_hours=N}" end
+		return util.copy(v), true
+	elseif (t == "npc_ref") then
+		if not (valid_npc_ref(v)) then return nil, false, "must be {story=} | {ref=} | {profile=} | {community=[, level=]}" end
+		return util.copy(v), true
+	elseif (t == "target_ref") then
+		if not (valid_target_ref(v)) then return nil, false, "must be an npc_ref, {ref=} or {smart=}" end
+		return util.copy(v), true
+	elseif (t == "place") then
+		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=}" end
+		return util.copy(v), true
+	elseif (t == "spawn_spec") then
+		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=}" end
+		return util.copy(v), true
+	elseif (t == "squad_ref") then
+		if not (valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
+		return util.copy(v), true
+	elseif (t == "kill_target") then
+		if (type(v) ~= "table") then return nil, false, "must be {story=} | {ref=} | {spawn={section=, smart=, ref=}}" end
+		if (v.spawn ~= nil and not valid_spawn_spec(v.spawn)) then return nil, false, "spawn must be {section=, smart=, ref=, hold=}" end
+		if (v.spawn == nil and not valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=} | {spawn=...}" end
+		return util.copy(v), true
+	elseif (t == "value") then
+		local tv = type(v)
+		if (tv ~= "boolean" and tv ~= "number" and tv ~= "string") then return nil, false, "must be bool, number or string" end
+		return v, true
+	elseif (t == "count_or_all") then
+		if (v == "all") then return v, true end
+		if not (is_int(v) and v >= 1) then return nil, false, "must be an integer >= 1 or \"all\"" end
+		return v, true
+	elseif (t == "cases_cond") then
+		if (type(v) ~= "table") then return nil, false, "must be a list of {name=, cond={...}}" end
+		local out, seen = {}, {}
+		if (#v == 0) then problem(st.problems, "E021", node, slot, "cases are empty") end
+		for i, c in ipairs(v) do
+			local cslot = slot .. "/case:" .. tostring(i - 1)
+			if (type(c) ~= "table" or type(c.name) ~= "string" or not is_ident(c.name)) then
+				problem(st.problems, "E021", node, cslot, "case must have a name [a-z0-9_]")
+			else
+				if (seen[c.name]) then problem(st.problems, "E021", node, cslot, "duplicate case name '%s'", c.name) end
+				seen[c.name] = true
+				local conds = canon_cond_list(st, node, cslot, c.cond or {}, "/cond:")
+				out[#out + 1] = { name = c.name, cond = conds }
+			end
+		end
+		return out, true
+	elseif (t == "cases_weight") then
+		if (type(v) ~= "table") then return nil, false, "must be a list of {name=, weight=}" end
+		local out, seen = {}, {}
+		if (#v == 0) then problem(st.problems, "E021", node, slot, "cases are empty") end
+		for i, c in ipairs(v) do
+			local cslot = slot .. "/case:" .. tostring(i - 1)
+			if (type(c) ~= "table" or type(c.name) ~= "string" or not is_ident(c.name)) then
+				problem(st.problems, "E021", node, cslot, "case must have a name [a-z0-9_]")
+			else
+				if (seen[c.name]) then problem(st.problems, "E021", node, cslot, "duplicate case name '%s'", c.name) end
+				seen[c.name] = true
+				local w = c.weight
+				if (w == nil) then w = 1 end
+				if (type(w) ~= "number" or w <= 0) then problem(st.problems, "E021", node, cslot, "weight must be > 0") w = 1 end
+				out[#out + 1] = { name = c.name, weight = w }
+			end
+		end
+		return out, true
+	elseif (t == "cond_list") then
+		if (type(v) ~= "table") then return nil, false, "must be a list of conditions" end
+		return canon_cond_list(st, node, slot, v), true
+	elseif (t == "lua") then
+		if (type(v) ~= "string") then return nil, false, "must be a string of Lua code" end
+		return v, true
+	else
+		-- string, item_section, squad_section, level, smart, story_id, profile, community, info,
+		-- var_name, task_id, quest_id, ref_name, signal_name, spot_type, node_id
+		if (type(v) ~= "string") then return nil, false, "must be a string" end
+		return v, true
+	end
+end
+
+-- Compiles custom Lua once; the env is filled with the `nq` api right before every call.
+local function compile_lua(st, node, slot, code)
+	local name = tostring(st.uid) .. "/" .. tostring(node) .. "/" .. tostring(slot)
+	local fn, cerr = loadstring(code, "=" .. name)
+	if not (fn) then
+		problem(st.problems, "E050", node, slot, "Lua syntax error: %s", tostring(cerr))
+		return nil
+	end
+	local env = setmetatable({}, { __index = _G })
+	setfenv(fn, env)
+	return { fn = fn, env = env, name = name }
+end
+
+-- Shared for actions and conds: checks the kind for its position, canonicalizes params.
+local function canon_params(st, node, slot, spec, raw_params)
+	local params = {}
+	if (raw_params ~= nil and type(raw_params) ~= "table") then
+		problem(st.problems, "E006", node, slot, "params must be a table")
+		raw_params = {}
+	end
+	raw_params = raw_params or {}
+	for _, p in ipairs(spec.params) do
+		-- node params report as "param:<name>"; action/cond params keep the slot of their owner
+		local pslot = (slot == "param") and ("param:" .. p.name) or slot
+		local v, ok, why = canon_param(st, node, pslot, p, raw_params[p.name])
+		if not (ok) then
+			problem(st.problems, "E006", node, pslot, "param '%s' %s", p.name, tostring(why))
+		else
+			params[p.name] = v
+		end
+	end
+	if (spec.name == "lua" and type(params.code) == "string") then
+		params.compiled = compile_lua(st, node, slot, params.code)
+	end
+	return params
+end
+
+local function canon_action(st, node, slot, raw)
+	if (type(raw) ~= "table" or type(raw.kind) ~= "string") then
+		problem(st.problems, "E005", node, slot, "action must be { kind=, params= }")
+		return nil
+	end
+	local kname = resolve_kind(st.cat, raw.kind)
+	local spec = st.cat.kinds[kname]
+	if not (spec) then
+		problem(st.problems, "E005", node, slot, "unknown extra action kind '%s'", raw.kind)
+		return nil
+	end
+	if not (spec.use.extra) then
+		problem(st.problems, "E005", node, slot, "kind '%s' cannot be used as an extra action", raw.kind)
+		return nil
+	end
+	local a = { kind = kname, spec = spec, slot = slot }
+	a.params = canon_params(st, node, slot, spec, raw.params)
+	st.used_kinds[kname] = true
+	return a
+end
+
+local function canon_cond(st, node, slot, raw)
+	if (type(raw) ~= "table" or type(raw.kind) ~= "string") then
+		problem(st.problems, "E005", node, slot, "condition must be { kind=, params= }")
+		return nil
+	end
+	local kname = resolve_kind(st.cat, raw.kind)
+	local spec = st.cat.kinds[kname]
+	if not (spec) then
+		problem(st.problems, "E005", node, slot, "unknown condition kind '%s'", raw.kind)
+		return nil
+	end
+	if not (spec.use.cond) then
+		problem(st.problems, "E005", node, slot, "kind '%s' cannot be used as a condition", raw.kind)
+		return nil
+	end
+	local c = { kind = kname, spec = spec, slot = slot, ["not"] = raw["not"] == true }
+	c.params = canon_params(st, node, slot, spec, raw.params)
+	if (spec.event) then
+		c.is_event = true
+		c.event_name = string.sub(kname, 7) -- "event.item_taken" -> "item_taken"
+	end
+	st.used_kinds[kname] = true
+	return c
+end
+
+-- `sep` separates the child index from the owner slot: ":" for a node's own cond list
+-- ("cond:0"), "/cond:" inside a case ("param:cases/case:0/cond:0" - the form the editor prints).
+canon_cond_list = function(st, node, slot, raw, sep)
+	local out = {}
+	if (type(raw) ~= "table") then
+		problem(st.problems, "E006", node, slot, "cond must be a list of conditions")
+		return out
+	end
+	for i, rc in ipairs(raw) do
+		local c = canon_cond(st, node, slot .. (sep or ":") .. tostring(i - 1), rc)
+		if (c) then out[#out + 1] = c end
+	end
+	return out
+end
+
+-- Collects event names of a cond list (recursing into `any`).
+local function collect_events(list, into)
+	for _, c in ipairs(list or {}) do
+		if (c.is_event) then into[c.event_name] = true end
+		if (c.kind == "any" and c.params and c.params.of) then collect_events(c.params.of, into) end
+	end
+	return into
+end
+
+local function has_event_cond(list)
+	for _, c in ipairs(list or {}) do
+		if (c.is_event) then return true end
+		if (c.kind == "any" and c.params and c.params.of and has_event_cond(c.params.of)) then return true end
+	end
+	return false
+end
+
+-- "Nothing here can become true between two events." Only then may a node stop polling: an `any`
+-- mixing an event with a state cond still has to be re-evaluated on the poll (has_event_cond says
+-- true for it, which is what E020 placement wants, but not what the poll decision wants).
+local function all_event_conds(list)
+	if (list == nil or #list == 0) then return false end
+	for _, c in ipairs(list) do
+		if not (c.is_event) then return false end
+	end
+	return true
+end
+
+-- ---------------------------------------------------------------------------- refs bookkeeping
+-- Walks canonical params to record ref creators (ref_name/spawn ref) and ref users ({ref=}).
+local function scan_refs(st, node, spec, params, tasks_hint)
+	for _, p in ipairs(spec.params) do
+		local v = params[p.name]
+		if (v ~= nil) then
+			if (p.type == "ref_name" and type(v) == "string") then
+				st.ref_creators[v] = true
+			elseif (p.type == "spawn_spec" and type(v) == "table" and type(v.ref) == "string") then
+				st.ref_creators[v.ref] = true
+			elseif (p.type == "kill_target" and type(v) == "table") then
+				if (v.spawn and type(v.spawn.ref) == "string") then st.ref_creators[v.spawn.ref] = true end
+				if (type(v.ref) == "string") then st.ref_users[#st.ref_users + 1] = { name = v.ref, node = node, slot = "param:" .. p.name } end
+			elseif (REF_HOLDER_TYPES[p.type] and type(v) == "table" and type(v.ref) == "string") then
+				st.ref_users[#st.ref_users + 1] = { name = v.ref, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "var_name" and type(v) == "string") then
+				st.var_users[#st.var_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "task_id" and type(v) == "string") then
+				st.task_users[#st.task_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "node_id" and type(v) == "string") then
+				st.node_users[#st.node_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "quest_id" and type(v) == "string") then
+				st.quest_users[#st.quest_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "cond_list" or p.type == "cases_cond") then
+				local lists = (p.type == "cond_list") and { { cond = v } } or v
+				for _, cs in ipairs(lists) do
+					for _, c in ipairs(cs.cond or {}) do
+						if (c.spec) then scan_refs(st, node, c.spec, c.params) end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- ============================================================================ build a quest
+-- raw -> canonical quest definition with a problem list. `st` is the per-file scratch state.
+local function build_nodes(st, raw_nodes, q)
+	local cat = st.cat
+	local trigger_kinds = 0
+	for i, rn in ipairs(raw_nodes) do
+		local nid = type(rn) == "table" and rn.id or nil
+		local label = is_ident(nid) and nid or ("#" .. tostring(i))
+		if (type(rn) ~= "table") then
+			problem(st.problems, "E004", label, nil, "node must be a table")
+		elseif not (is_ident(nid)) then
+			problem(st.problems, "E004", label, nil, "node id must match [a-z0-9_]")
+		elseif (q.node_by_id[nid]) then
+			problem(st.problems, "E004", label, nil, "duplicate node id '%s'", nid)
+		else
+			local kname = resolve_kind(cat, rn.kind)
+			local node = { id = nid, idx = i, kind = kname, params = {}, cond = {}, on_enter = {}, on_exit = {}, out = {}, out_pins = {}, in_edges = 0, in_from = {}, comment = rn.comment }
+			q.node_by_id[nid] = node
+			q.nodes[#q.nodes + 1] = node
+			local spec = type(kname) == "string" and cat.kinds[kname] or nil
+			if not (spec) then
+				problem(st.problems, "E005", nid, nil, "unknown node kind '%s'", tostring(rn.kind))
+			elseif not (spec.use.main or spec.use.trigger) then
+				problem(st.problems, "E005", nid, nil, "kind '%s' cannot be a node (extra/cond only)", rn.kind)
+			else
+				node.spec = spec
+				node.is_trigger = spec.use.trigger and not spec.use.main
+				if (node.is_trigger) then trigger_kinds = trigger_kinds + 1 end
+				st.used_kinds[kname] = true
+				if (rn.once ~= nil) then
+					if (type(rn.once) ~= "boolean") then problem(st.problems, "E006", nid, "once", "once must be true or false") end
+					node.once = rn.once == true
+				else
+					node.once = spec.once
+				end
+				node.params = canon_params(st, nid, "param", spec, rn.params)
+				scan_refs(st, nid, spec, node.params)
+				-- cond / on_enter / on_exit
+				if (rn.cond ~= nil) then node.cond = canon_cond_list(st, nid, "cond", rn.cond) end
+				for _, c in ipairs(node.cond) do if (c.spec) then scan_refs(st, nid, c.spec, c.params) end end
+				for _, pair in ipairs({ { "enter", "on_enter" }, { "exit", "on_exit" } }) do
+					local slotname, key = pair[1], pair[2]
+					local list = rn[key]
+					if (list ~= nil) then
+						if (type(list) ~= "table") then
+							problem(st.problems, "E006", nid, slotname, "%s must be a list of actions", key)
+						else
+							for ai, ra in ipairs(list) do
+								local a = canon_action(st, nid, slotname .. ":" .. tostring(ai - 1), ra)
+								if (a) then
+									node[key][#node[key] + 1] = a
+									scan_refs(st, nid, a.spec, a.params)
+									if (a.kind == "spawn.squad" and a.params.hold == false) then
+										problem(st.problems, "W031", nid, a.slot, "spawn.squad without hold: the squad may leave for the simulation")
+									end
+								end
+							end
+						end
+					end
+				end
+				-- events referenced by the node's own conds and by cases
+				node.events = collect_events(node.cond, {})
+				node.has_event = has_event_cond(node.cond)
+				node.all_events = all_event_conds(node.cond)
+				if (node.params.cases and spec.param_by_name.cases and spec.param_by_name.cases.type == "cases_cond") then
+					for _, cs in ipairs(node.params.cases) do
+						cs.events = collect_events(cs.cond, {})
+						cs.has_event = has_event_cond(cs.cond)
+						cs.all_events = all_event_conds(cs.cond)
+						collect_events(cs.cond, node.events)
+						if (cs.has_event) then node.has_event = true end
+					end
+				end
+				-- E020: events only in trigger.when / wait.when / wait.any
+				local allows_events = (kname == "trigger.when" or kname == "wait.when" or kname == "wait.any")
+				if (node.has_event and not allows_events) then
+					problem(st.problems, "E020", nid, "cond", "event conditions are allowed only in trigger.when / wait.when / wait.any")
+				end
+				-- out pins
+				if (rn.out ~= nil) then
+					if (type(rn.out) ~= "table") then
+						problem(st.problems, "E007", nid, "out", "out must be a table of pin = target(s)")
+					else
+						local pins = {}
+						for pin in pairs(rn.out) do pins[#pins + 1] = pin end
+						table.sort(pins, function(a, b) return tostring(a) < tostring(b) end)
+						-- keep the catalog order for declared pins, then the rest alphabetically
+						local ordered, seen = {}, {}
+						for _, pin in ipairs(spec.pins) do if (rn.out[pin] ~= nil) then ordered[#ordered + 1] = pin seen[pin] = true end end
+						if (spec.pins_cases and node.params.cases) then
+							for _, cs in ipairs(node.params.cases) do
+								if (rn.out[cs.name] ~= nil and not seen[cs.name]) then ordered[#ordered + 1] = cs.name seen[cs.name] = true end
+							end
+						end
+						for _, pin in ipairs(pins) do if not (seen[pin]) then ordered[#ordered + 1] = pin end end
+						for _, pin in ipairs(ordered) do
+							local tv = rn.out[pin]
+							local targets = {}
+							if (type(tv) == "string") then targets[1] = tv
+							elseif (type(tv) == "table") then
+								-- One pin fires one edge per target: a target listed twice would count
+								-- twice in in_edges while enter() keys the join by the source pin, so
+								-- the join could never complete (and a plain node would run twice).
+								local seen = {}
+								for _, t in ipairs(tv) do
+									if (seen[t]) then
+										problem(st.problems, "W022", nid, "out:" .. tostring(pin), "target '%s' is listed twice, the duplicate edge is ignored", tostring(t))
+									else
+										seen[t] = true
+										targets[#targets + 1] = t
+									end
+								end
+							else problem(st.problems, "E007", nid, "out:" .. tostring(pin), "pin target must be a node id or a list of ids") end
+							node.out[pin] = targets
+							node.out_pins[#node.out_pins + 1] = pin
+						end
+					end
+				end
+			end
+		end
+	end
+	return trigger_kinds
+end
+
+local function pin_declared(node, pin)
+	local spec = node.spec
+	for _, p in ipairs(spec.pins) do if (p == pin) then return true end end
+	if (spec.pins_cases and node.params.cases) then
+		for _, cs in ipairs(node.params.cases) do if (cs.name == pin) then return true end end
+	end
+	return false
+end
+
+local DIALOG_PHRASE = { ["dialog.npc_phrase"] = "npc", ["dialog.actor_phrase"] = "actor" }
+
+local function check_graph(st, q)
+	-- E007 edges, incoming counters
+	for _, node in ipairs(q.nodes) do
+		if (node.spec) then
+			for _, pin in ipairs(node.out_pins) do
+				if not (pin_declared(node, pin)) then
+					problem(st.problems, "E007", node.id, "out:" .. pin, "pin '%s' is not declared for kind '%s'", pin, node.kind)
+				end
+				for _, tid in ipairs(node.out[pin]) do
+					local target = q.node_by_id[tid]
+					if not (target) then
+						problem(st.problems, "E007", node.id, "out:" .. pin, "target '%s' does not exist", tostring(tid))
+					elseif (target.is_trigger) then
+						problem(st.problems, "E007", node.id, "out:" .. pin, "edge leads into trigger '%s'", tid)
+					else
+						target.in_edges = target.in_edges + 1
+						target.in_from[#target.in_from + 1] = node.id .. "/" .. pin
+					end
+				end
+			end
+		end
+	end
+	-- E008 no trigger
+	local triggers = 0
+	for _, node in ipairs(q.nodes) do if (node.is_trigger) then triggers = triggers + 1 end end
+	if (triggers == 0) then problem(st.problems, "E008", nil, nil, "quest has no trigger node") end
+	-- E009 join without inputs, W021 waiting node without outputs, W070 no flow.end
+	local has_end = false
+	for _, node in ipairs(q.nodes) do
+		if (node.spec) then
+			if (node.kind == "flow.join" and node.in_edges == 0) then
+				problem(st.problems, "E009", node.id, nil, "flow.join has no incoming edges")
+			end
+			if (node.kind == "flow.end") then has_end = true end
+			if (node.spec.wait and not node.is_trigger and #node.out_pins == 0) then
+				problem(st.problems, "W021", node.id, nil, "waiting node has no outgoing edges: the quest will stay here")
+			end
+		end
+	end
+	q.has_end = has_end
+	if not (has_end) then problem(st.problems, "W070", nil, nil, "quest has no flow.end (it completes implicitly)") end
+	-- W020 reachability from triggers
+	local reach, stack = {}, {}
+	for _, node in ipairs(q.nodes) do if (node.is_trigger) then reach[node.id] = true stack[#stack + 1] = node end end
+	while (#stack > 0) do
+		local n = table.remove(stack)
+		for _, pin in ipairs(n.out_pins) do
+			for _, tid in ipairs(n.out[pin]) do
+				local t = q.node_by_id[tid]
+				if (t and not reach[tid]) then reach[tid] = true stack[#stack + 1] = t end
+			end
+		end
+	end
+	for _, node in ipairs(q.nodes) do
+		if (node.spec and not reach[node.id]) then problem(st.problems, "W020", node.id, nil, "node is unreachable from any trigger") end
+	end
+	-- dialogs: E010 (alternation), E011 (world edge into a phrase), W011/W012/W013
+	for _, node in ipairs(q.nodes) do
+		if (node.spec and DIALOG_PHRASE[node.kind]) then
+			for _, from in ipairs(node.in_from) do
+				local fid = string.match(from, "^(.-)/")
+				local fnode = q.node_by_id[fid]
+				if (fnode and not (fnode.kind == "dialog.topic" or DIALOG_PHRASE[fnode.kind])) then
+					problem(st.problems, "E011", node.id, nil, "phrase entered from non-dialog node '%s'", fid)
+				end
+			end
+		end
+	end
+	local phrase_seen = {}
+	for _, topic in ipairs(q.nodes) do
+		if (topic.spec and topic.kind == "dialog.topic") then
+			local initiator = topic.params.initiator or "actor"
+			local other = (initiator == "actor") and "npc" or "actor"
+			local first_phrases = 0
+			-- BFS over (node, depth parity)
+			local visited = {}
+			local queue = {}
+			for _, tid in ipairs(topic.out.next or {}) do
+				local t = q.node_by_id[tid]
+				if (t and DIALOG_PHRASE[t.kind]) then
+					first_phrases = first_phrases + 1
+					queue[#queue + 1] = { node = t, depth = 1 }
+				end
+			end
+			if (first_phrases == 0) then problem(st.problems, "W012", topic.id, nil, "dialog.topic has no phrase continuation") end
+			if (topic.once == false and #topic.cond == 0) then
+				problem(st.problems, "W013", topic.id, nil, "topic with once=false and no conditions is offered forever")
+			end
+			local qi = 1
+			while (qi <= #queue) do
+				local item = queue[qi]
+				qi = qi + 1
+				local n, depth = item.node, item.depth
+				local key = n.id .. ":" .. tostring(depth % 2)
+				if not (visited[key]) then
+					visited[key] = true
+					phrase_seen[n.id] = true
+					local expect = (depth % 2 == 1) and other or initiator
+					if (DIALOG_PHRASE[n.kind] ~= expect) then
+						problem(st.problems, "E010", n.id, nil, "speaker alternation broken: expected dialog.%s_phrase at depth %d from topic '%s'", expect, depth, topic.id)
+					end
+					local children, uncond = 0, 0
+					for _, tid in ipairs(n.out.next or {}) do
+						local t = q.node_by_id[tid]
+						if (t and DIALOG_PHRASE[t.kind]) then
+							children = children + 1
+							if (#t.cond == 0) then uncond = uncond + 1 end
+							queue[#queue + 1] = { node = t, depth = depth + 1 }
+						end
+					end
+					if (children > 0 and uncond == 0 and not n.w011) then
+						n.w011 = true
+						problem(st.problems, "W011", n.id, nil, "non-leaf phrase has no unconditional continuation (an automatic reply will be added)")
+					end
+				end
+			end
+		end
+	end
+	for _, node in ipairs(q.nodes) do
+		if (node.spec and DIALOG_PHRASE[node.kind] and not phrase_seen[node.id]) then
+			problem(st.problems, "E010", node.id, nil, "phrase is not reachable from any dialog.topic")
+		end
+	end
+	-- E030 references to declarations
+	for _, u in ipairs(st.var_users) do
+		if (q.vars[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "var '%s' is not declared", u.name) end
+	end
+	for _, u in ipairs(st.task_users) do
+		if (q.tasks[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "task '%s' is not declared", u.name) end
+	end
+	for _, u in ipairs(st.node_users) do
+		if (q.node_by_id[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "node '%s' does not exist", u.name) end
+	end
+	-- E030 refs used but never created by any node. An error, not a warning: nothing can ever
+	-- resolve such a ref, so the node holding it fails forever. The editor refuses the build for
+	-- the same reason, and W030 stays what the editor uses it for (created, but maybe too late).
+	for _, u in ipairs(st.ref_users) do
+		if not (st.ref_creators[u.name]) then
+			problem(st.problems, "E030", u.node, u.slot, "ref '%s' is never created by this quest", u.name)
+		end
+	end
+end
+
+-- Builds the canonical quest from a parsed table. Returns q (with q.valid / q.problems).
+function build(raw, module, relpath, src)
+	local st = {
+		cat = catalog(), problems = {}, used_kinds = {}, ref_creators = {}, ref_users = {},
+		var_users = {}, task_users = {}, node_users = {}, quest_users = {},
+	}
+	local q = { module = module, file = relpath, nodes = {}, node_by_id = {}, vars = {}, var_names = {}, tasks = {}, task_names = {}, problems = st.problems, quest_users = st.quest_users, used_kinds = st.used_kinds }
+	q.hash = util.fnv1a(src or "")
+	-- E001 / E002 header. Only the future is refused: every released version stays loadable, and
+	-- whatever is not readable as-is has been lifted to NQ_VERSION by migrate() before we get here.
+	if (raw.nq == nil) then
+		problem(st.problems, "E001", nil, "nq", "nq version is missing")
+	elseif (type(raw.nq) ~= "number" or math.floor(raw.nq) ~= raw.nq or raw.nq < 1) then
+		problem(st.problems, "E001", nil, "nq", "nq version %s is not a version number", tostring(raw.nq))
+	elseif (raw.nq > NQ_VERSION) then
+		problem(st.problems, "E001", nil, "nq", "nq version %s was written by a newer editor (this runtime supports up to %d)", tostring(raw.nq), NQ_VERSION)
+	end
+	q.nq = raw.nq
+	if not (is_ident(raw.id)) then
+		problem(st.problems, "E002", nil, "id", "quest id must match [a-z0-9_]")
+		q.id = string.match(string.gsub(tostring(relpath), "^.*[\\/]", ""), "^(.-)%.nqasset$") or "invalid"
+	else
+		q.id = raw.id
+	end
+	q.uid = tostring(module) .. "." .. tostring(q.id)
+	st.uid = q.uid
+	q.title = canon_text(raw.title, st, nil, "title") or q.id
+	if (raw.activation == nil) then
+		q.activation = "auto"
+	elseif (raw.activation == "auto" or raw.activation == "manual") then
+		q.activation = raw.activation
+	else
+		problem(st.problems, "E006", nil, "activation", "activation must be auto|manual")
+		q.activation = "auto"
+	end
+	-- vars
+	if (raw.vars ~= nil) then
+		if (type(raw.vars) ~= "table") then
+			problem(st.problems, "E006", nil, "vars", "vars must be a table of name = default")
+		else
+			for name, v in pairs(raw.vars) do
+				local tv = type(v)
+				if not (is_ident(name)) then
+					problem(st.problems, "E006", nil, "vars", "var name '%s' must match [a-z0-9_]", tostring(name))
+				elseif (tv ~= "boolean" and tv ~= "number" and tv ~= "string") then
+					problem(st.problems, "E006", nil, "vars", "var '%s' default must be bool, number or string", tostring(name))
+				else
+					q.vars[name] = v
+					q.var_names[#q.var_names + 1] = name
+				end
+			end
+			table.sort(q.var_names)
+		end
+	end
+	-- tasks
+	if (raw.tasks ~= nil) then
+		if (type(raw.tasks) ~= "table") then
+			problem(st.problems, "E006", nil, "tasks", "tasks must be a table of id = { title=, descr=, type= }")
+		else
+			for tid, t in pairs(raw.tasks) do
+				if not (is_ident(tid)) then
+					problem(st.problems, "E006", nil, "tasks", "task id '%s' must match [a-z0-9_]", tostring(tid))
+				elseif (type(t) ~= "table") then
+					problem(st.problems, "E006", nil, "tasks", "task '%s' must be a table", tostring(tid))
+				else
+					local task = { id = tid }
+					task.title = canon_text(t.title, st, nil, "task:" .. tid) or tid
+					task.descr = canon_text(t.descr, st, nil, "task:" .. tid) or ""
+					if (t.type == nil or t.type == "additional" or t.type == "storyline") then
+						task.type = t.type or "additional"
+					else
+						problem(st.problems, "E006", nil, "task:" .. tid, "task type must be additional|storyline")
+						task.type = "additional"
+					end
+					if (t.target ~= nil) then
+						if (valid_target_ref(t.target) or valid_place(t.target)) then
+							task.target = util.copy(t.target)
+							if (type(t.target.ref) == "string") then st.ref_users[#st.ref_users + 1] = { name = t.target.ref, node = nil, slot = "task:" .. tid } end
+						else
+							problem(st.problems, "E006", nil, "task:" .. tid, "task target must be a target_ref or a place")
+						end
+					end
+					if (t.icon ~= nil) then task.icon = tostring(t.icon) end
+					q.tasks[tid] = task
+					q.task_names[#q.task_names + 1] = tid
+				end
+			end
+			table.sort(q.task_names)
+		end
+	end
+	-- nodes
+	if (type(raw.nodes) ~= "table") then
+		problem(st.problems, "E008", nil, "nodes", "nodes list is missing")
+	else
+		build_nodes(st, raw.nodes, q)
+		check_graph(st, q)
+	end
+	-- kinds without implementation: the quest still loads, those nodes error at runtime
+	q.missing_impl = {}
+	for kname in pairs(st.used_kinds) do
+		if not (kind_impl(kname)) then q.missing_impl[#q.missing_impl + 1] = kname end
+	end
+	table.sort(q.missing_impl)
+	q.errors, q.warnings = count_problems(st.problems)
+	q.valid = (q.errors == 0)
+	return q
+end
+
+-- Cross-quest checks once everything is loaded (quest_id references, E030 within own module).
+local function check_quest_refs(all)
+	for uid, q in pairs(all.quests) do
+		for _, u in ipairs(q.quest_users or {}) do
+			local target = u.name
+			if not (string.find(target, ".", 1, true)) then target = q.module .. "." .. target end
+			local tmod = string.match(target, "^(.-)%.[^.]+$")
+			if (tmod == q.module and not all.quests[target] and not all.invalid_by_uid[target]) then
+				problem(q.problems, "E030", u.node, u.slot, "quest '%s' is not declared in this module", u.name)
+			end
+		end
+		q.errors, q.warnings = count_problems(q.problems)
+		q.valid = (q.errors == 0)
+	end
+end
+
+-- ASSET_MIGRATE[v] lifts a raw asset from version v to v+1; a version whose shape the current
+-- reader still understands needs no entry. The game supports every released `nq` version, so this
+-- chain (not an equality test) is what makes an older module keep working after a game update.
+local ASSET_MIGRATE = {}
+
+function migrate(raw)
+	if (type(raw) ~= "table") then return raw end
+	local v = tonumber(raw.nq)
+	if not (v) then return raw end
+	while (v < NQ_VERSION) do
+		local step = ASSET_MIGRATE[v]
+		if not (step) then break end
+		raw = step(raw) or raw
+		v = v + 1
+		raw.nq = v
+	end
+	return raw
+end
+
+-- Formats one problem the way the log and the console print it.
+function problem_line(p)
+	local where = p.node and (tostring(p.node) .. (p.slot and ("[" .. p.slot .. "]") or "")) or (p.slot and ("[" .. p.slot .. "]") or "quest")
+	return string.format("%s %s: %s", p.code, where, p.message)
+end
+
+function log_problems(q_or_file, problems, only_errors)
+	for _, p in ipairs(problems or {}) do
+		if (p.severity == "E") then
+			util.err("%s: %s", tostring(q_or_file), problem_line(p))
+		elseif not (only_errors) then
+			util.warn("%s: %s", tostring(q_or_file), problem_line(p))
+		end
+	end
+end
+
+-- Loads one asset text. Returns q (valid or not); q.uid may fall back to the file name.
+function load_asset(module, relpath, src)
+	local raw, perr = parse(src, module .. "/" .. relpath)
+	if not (raw) then
+		local id = string.match(string.gsub(tostring(relpath), "^.*[\\/]", ""), "^(.-)%.nqasset$") or "invalid"
+		local q = { module = module, file = relpath, id = id, uid = module .. "." .. id, nodes = {}, node_by_id = {}, vars = {}, tasks = {}, problems = {}, valid = false, hash = util.fnv1a(src or ""), parse_failed = true }
+		problem(q.problems, "E003", nil, nil, "not a single declarative table: %s", tostring(perr))
+		q.errors, q.warnings = count_problems(q.problems)
+		return q
+	end
+	raw = migrate(raw)
+	return build(raw, module, relpath, src)
+end
+
+-- Discovers every *.nqasset of every enabled, applicable module. Returns
+-- { quests = {uid = q}, order = {uid...}, invalid = {q...}, invalid_by_uid = {uid = q}, files = n }.
+function scan()
+	local all = { quests = {}, order = {}, invalid = {}, invalid_by_uid = {}, files = 0, modules = 0 }
+	if not (xms and xms.list_files and xms.read_file) then return all end
+	local ok, mods = pcall(xms.modules)
+	if not (ok and type(mods) == "table") then return all end
+	table.sort(mods, function(a, b) return tostring(a.id) < tostring(b.id) end)
+	for _, m in ipairs(mods) do
+		local applies = m.enabled ~= false
+		if (applies and xms.module_applies) then
+			local ok2, r = pcall(xms.module_applies, m.id)
+			if (ok2 and r == false) then applies = false end
+		end
+		if (applies) then
+			local ok3, files = pcall(xms.list_files, m.id, "", "*.nqasset", true)
+			if (ok3 and type(files) == "table" and #files > 0) then
+				all.modules = all.modules + 1
+				table.sort(files)
+				local seen_ids = {}
+				for _, rel in ipairs(files) do
+					local ok4, src = pcall(xms.read_file, m.id, rel)
+					if (ok4 and type(src) == "string") then
+						all.files = all.files + 1
+						local q = load_asset(m.id, rel, src)
+						local pq = seen_ids[q.id]
+						if (pq and q.valid) then
+							problem(q.problems, "E002", nil, "id", "quest id '%s' is already used by %s", q.id, tostring(pq.file))
+							q.errors, q.warnings = count_problems(q.problems)
+							q.valid = false
+						end
+						if (q.valid) then
+							seen_ids[q.id] = q
+							all.quests[q.uid] = q
+							all.order[#all.order + 1] = q.uid
+						else
+							all.invalid[#all.invalid + 1] = q
+							if not (all.invalid_by_uid[q.uid]) then all.invalid_by_uid[q.uid] = q end
+						end
+					else
+						util.err("%s/%s: cannot read file", tostring(m.id), tostring(rel))
+					end
+				end
+			end
+		end
+	end
+	check_quest_refs(all)
+	-- a quest that failed the cross check moves to the invalid list
+	local order = {}
+	for _, uid in ipairs(all.order) do
+		local q = all.quests[uid]
+		if (q.valid) then
+			order[#order + 1] = uid
+		else
+			all.quests[uid] = nil
+			all.invalid[#all.invalid + 1] = q
+			all.invalid_by_uid[uid] = q
+		end
+	end
+	table.sort(order)
+	all.order = order
+	return all
+end
+
+-- ============================================================================ outline
+local function brief_param_value(v)
+	if (type(v) == "table") then
+		for _, key in ipairs({ "story", "ref", "profile", "community", "smart", "restrictor", "spawn" }) do
+			if (v[key] ~= nil) then
+				if (key == "spawn") then
+					local s = v.spawn
+					return "spawn " .. tostring(s.section) .. "@" .. tostring(s.smart) .. (s.ref and (" ref=" .. s.ref) or "")
+				end
+				return key .. ":" .. tostring(v[key])
+			end
+		end
+		if (v.pos) then
+			return string.format("%s@%s,%s,%s r%s", tostring(v.level or "?"), tostring(v.pos[1] or v.pos.x), tostring(v.pos[2] or v.pos.y), tostring(v.pos[3] or v.pos.z), tostring(v.radius or 5))
+		end
+		local secs, is_game = util.duration_secs(v)
+		if (secs) then return tostring(secs) .. (is_game and "s game" or "s") end
+		return util.brief(v)
+	end
+	return tostring(v)
+end
+
+local function brief_params(spec, params, skip_text)
+	local parts = {}
+	for _, p in ipairs(spec.params) do
+		local v = params[p.name]
+		if (v ~= nil and p.name ~= "compiled") then
+			if (p.type == "text") then
+				if not (skip_text) then parts[#parts + 1] = p.name .. "=\"" .. tostring(v) .. "\"" end
+			elseif (p.type == "lua") then
+				parts[#parts + 1] = "code"
+			elseif (p.type == "cases_cond" or p.type == "cases_weight" or p.type == "cond_list") then
+				local names = {}
+				for _, cs in ipairs(v) do names[#names + 1] = cs.name or "?" end
+				if (#names > 0) then parts[#parts + 1] = p.name .. "=" .. table.concat(names, "|") end
+			elseif (p.type == "bool") then
+				if (v == true and p.default ~= true) then parts[#parts + 1] = p.name end
+				if (v == false and p.default == true) then parts[#parts + 1] = p.name .. "=false" end
+			elseif (v ~= p.default) then
+				parts[#parts + 1] = p.name .. "=" .. brief_param_value(v)
+			end
+		end
+	end
+	return table.concat(parts, "; ")
+end
+
+local function brief_action(a)
+	local ps = a.spec and brief_params(a.spec, a.params, false) or ""
+	return a.kind .. "(" .. ps .. ")"
+end
+
+local function brief_cond(c)
+	local s = c.kind
+	if (c.spec) then
+		local ps = brief_params(c.spec, c.params, false)
+		if (ps ~= "") then s = s .. "(" .. ps .. ")" end
+	end
+	if (c["not"]) then s = "not " .. s end
+	return s
+end
+
+-- Text outline of a quest (§4.5); `problems` are appended when present.
+function outline(q)
+	local lines = {}
+	local head = string.format("quest %s \"%s\" (active: %s", tostring(q.uid), tostring(q.title), tostring(q.activation))
+	if (q.var_names and #q.var_names > 0) then head = head .. "; vars: " .. table.concat(q.var_names, ", ") end
+	if (q.task_names and #q.task_names > 0) then head = head .. "; tasks: " .. table.concat(q.task_names, ", ") end
+	lines[#lines + 1] = head .. ")"
+	for _, node in ipairs(q.nodes or {}) do
+		local spec = node.spec
+		local s = (node.is_trigger and "[T] " or "") .. node.id .. " (" .. tostring(node.kind)
+		if (spec) then
+			local ps = brief_params(spec, node.params, true)
+			if (ps ~= "") then s = s .. "; " .. ps end
+			if (node.once and not spec.once) then s = s .. "; once" end
+			if (not node.once and spec.once) then s = s .. "; once=false" end
+		end
+		s = s .. ")"
+		local text = spec and spec.param_by_name.text and node.params.text
+		if (text) then s = s .. " \"" .. tostring(text) .. "\"" end
+		if (#node.cond > 0) then
+			local cs = {}
+			for _, c in ipairs(node.cond) do cs[#cs + 1] = brief_cond(c) end
+			s = s .. "  if " .. table.concat(cs, " and ")
+		end
+		if (#node.on_enter > 0) then
+			local as = {}
+			for _, a in ipairs(node.on_enter) do as[#as + 1] = brief_action(a) end
+			s = s .. "  on_enter: " .. table.concat(as, ", ")
+		end
+		if (#node.on_exit > 0) then
+			local as = {}
+			for _, a in ipairs(node.on_exit) do as[#as + 1] = brief_action(a) end
+			s = s .. "  on_exit: " .. table.concat(as, ", ")
+		end
+		if (#node.out_pins == 0) then
+			if (spec and #spec.pins > 0 or (spec and spec.pins_cases)) then s = s .. "  (leaf)" end
+		else
+			local outs = {}
+			for _, pin in ipairs(node.out_pins) do
+				outs[#outs + 1] = pin .. " -> " .. table.concat(node.out[pin], ", ")
+			end
+			s = s .. "  " .. table.concat(outs, "  ")
+		end
+		lines[#lines + 1] = s
+	end
+	if (q.problems and #q.problems > 0) then
+		local ps = {}
+		for _, p in ipairs(q.problems) do ps[#ps + 1] = problem_line(p) end
+		lines[#lines + 1] = "problems: " .. table.concat(ps, "; ")
+	else
+		lines[#lines + 1] = "problems: none"
+	end
+	return table.concat(lines, "\n")
+end

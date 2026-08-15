@@ -1,0 +1,1296 @@
+-- NQ runtime core: node-quest graphs of XMS modules (`*.nqasset`) interpreted in game.
+--
+-- Public surface (used by xms_nq_kinds / xms_nq_dialog / xms_nq_task / xms_nq_console):
+--   lifecycle   init(), is_ready(), reload(), quests(), quest_def(uid), quest_state(uid),
+--               quest_status(uid), activate(uid), reset(uid), finish_quest(uid, status, restart),
+--               jump(uid, node), fire(uid, node, pin)
+--   tokens      enqueue_enter(uid, node, from), complete_external(uid, node, pin),
+--               cancel_token(uid, node), each_token(fn), tokens_of(uid), node_done(uid, node)
+--   events      emit(evt), subscribe(uid, node, name), unsubscribe(uid, node [, name])
+--   context     make_ctx(uid, node, npc), run_actions(ctx, list, slot), eval_cond(ctx, cond, evt),
+--               eval_conds(ctx, list, evt), nq_api(ctx)
+--   refs/vars   ref_set(qs, name, rec), ref_get(qs, name), ref_clear(qs, name),
+--               set_var(uid, name, value), get_var(uid, name)
+--   kinds       register_kind(name, impl), kind_impl(name)
+--   state       mark_dirty(), save_now(), get_state(), set_debug(on), debug_enabled()
+--   ordering    everything that moves a token goes through the deferred queue drained each frame;
+--               polls run every 250 ms; every kind/action/cond boundary is pcall-protected.
+--
+-- Extension modules are picked up by name when their script exists (EXTENSIONS, in order):
+--   xms_nq_kinds (core kinds), xms_nq_dialog (§7), xms_nq_task (§9), xms_nq_world (kill/spawn/
+--   squad/npc/relation kinds + held-squad restore). Hooks: register() (before the scan),
+--   on_init() (after state load/activation, every Lua state), on_reload_begin(),
+--   on_quest_activate(uid), on_quest_finish(uid, status), on_quest_reset(uid).
+
+local util = xms_nq_util
+local loader = xms_nq_load
+
+local BLOB_ID = "xms.nq"
+local STATE_VERSION = 1
+local POLL_MS = 250
+local ERROR_RETRY_MS = 5000
+local QUEUE_CAP = 20000
+-- The .scov container refuses a chunk above 16 MiB and that failure takes the WHOLE save group
+-- with it, so the runtime keeps its own margin and reports instead of letting the save die.
+local BLOB_LIMIT = 15 * 1024 * 1024
+local EXTENSIONS = { "xms_nq_kinds", "xms_nq_dialog", "xms_nq_task", "xms_nq_world" }
+
+-- Callback names are limited to the fixed axr_main intercept table.
+local CALLBACKS = {
+	{ "actor_on_update", "on_actor_update" },
+	{ "actor_on_item_take", "on_item_take" },
+	{ "actor_on_item_drop", "on_item_drop" },
+	{ "actor_on_item_use", "on_item_use" },
+	{ "actor_on_info_callback", "on_info" },
+	{ "npc_on_death_callback", "on_npc_death" },
+	{ "monster_on_death_callback", "on_monster_death" },
+	{ "squad_on_npc_death", "on_squad_npc_death" },
+	{ "squad_on_unregister", "on_squad_unregister" },
+	{ "squad_on_register", "on_squad_register" },
+	{ "actor_on_leave_dialog", "on_leave_dialog" },
+	{ "actor_on_trade", "on_trade" },
+	{ "on_level_changing", "on_level_changing" },
+}
+
+-- ---------------------------------------------------------------------------- module state
+local ready = false
+local disabled = false
+local disabled_logged = false
+local callbacks_on = false
+local Q = {}				-- uid -> canonical quest (valid only)
+local Q_ORDER = {}			-- sorted uids
+local INVALID = {}			-- list of invalid quest records
+local SCAN = nil			-- last scan result
+local state = nil			-- persisted table
+local rt = {}				-- uid -> runtime (vars proxy)
+local queue, qhead, qtail = {}, 1, 0
+local subs = {}				-- event name -> { key -> {uid, node} }
+local polled = {}			-- key -> {uid, node}
+local dirty = false
+local blob_keep = nil		-- raw bytes we loaded but must not overwrite (unreadable or newer state)
+local blob_too_big_logged = false
+local save_refused_logged = false
+local last_poll_r = 0
+local last_acc_dirty_r = 0
+local draining = false
+local touched = {}			-- uid -> true: check implicit completion after the drain
+local err_at = {}			-- key -> real ms of the last begin/poll error (retry throttle, not persisted)
+local now_g, now_r = 0, 0
+
+local function key_of(uid, node) return uid .. "|" .. node end
+
+-- ---------------------------------------------------------------------------- small helpers
+local function log_debug(fmt, ...)
+	if not (state and state.debug) then return end
+	local msg = util.sfmt(fmt, ...)
+	util.info("%s", msg)
+	pcall(function()
+		if (db and db.actor and news_manager and news_manager.send_tip) then
+			news_manager.send_tip(db.actor, "[nq] " .. msg, nil, nil, 4000)
+		end
+	end)
+end
+
+-- Calls an optional hook of every extension module that exists (autoload by name).
+local function ext_call(fname, ...)
+	for _, name in ipairs(EXTENSIONS) do
+		local m = _G[name]
+		if (type(m) == "table" and type(m[fname]) == "function") then
+			local ok, e = pcall(m[fname], ...)
+			if not (ok) then util.err("%s.%s: %s", name, fname, tostring(e)) end
+		end
+	end
+end
+
+function debug_enabled() return state and state.debug == true or false end
+function set_debug(on)
+	if not (state) then return end
+	state.debug = on and true or false
+	dirty = true
+end
+
+function mark_dirty() dirty = true end
+function is_ready() return ready end
+function get_state() return state end
+function quests() return Q, Q_ORDER, INVALID end
+function quest_def(uid) return Q[uid] end
+function quest_state(uid) return state and state.quests[uid] or nil end
+function tokens_of(uid) local qs = quest_state(uid) return qs and qs.tokens or nil end
+function node_done(uid, node) local qs = quest_state(uid) return (qs and qs.done[node] ~= nil) and true or false end
+
+function quest_status(uid)
+	local qs = quest_state(uid)
+	if not (qs) then return "inactive" end
+	return qs.status or "inactive"
+end
+
+-- Debug view of the wiring: { polled = {"uid|node", ...}, subs = { event = {"uid|node", ...} } }.
+function wiring()
+	local out = { polled = {}, subs = {} }
+	for key in pairs(polled) do out.polled[#out.polled + 1] = key end
+	table.sort(out.polled)
+	for name, map in pairs(subs) do
+		local list = {}
+		for key in pairs(map) do list[#list + 1] = key end
+		table.sort(list)
+		if (#list > 0) then out.subs[name] = list end
+	end
+	return out
+end
+
+function kind_impl(name) return loader.kind_impl(name) end
+
+-- Registers a kind implementation. An entry installed earlier by somebody else (a module's
+-- register.script runs at bootstrap, before init) is kept: extensions win over the core.
+function register_kind(name, impl)
+	if not (xms and xms.registry and xms.registry.get) then return false end
+	local ok, reg = pcall(xms.registry.get, "nq.kinds")
+	if not (ok and reg) then return false end
+	local ok1, cur = pcall(reg.get, reg, name)
+	if (ok1 and cur == impl) then return true end
+	if (ok1 and cur ~= nil) then
+		util.warn("kind '%s' is already provided by an extension; the other implementation is kept", tostring(name))
+		return false
+	end
+	local ok2, r = pcall(reg.add, reg, name, impl)
+	return ok2 and r or false
+end
+
+-- ---------------------------------------------------------------------------- persistence
+local function new_quest_state(q)
+	return {
+		status = "active", hash = q.hash, tokens = {}, vars = util.copy(q.vars), refs = {}, done = {},
+		fired = {}, joins = {}, tasks = {}, errors = {}, timers = {}, trig = {},
+		t0 = now_g, r = 0,
+	}
+end
+
+local function ensure_qs_shape(qs, q)
+	for _, k in ipairs({ "tokens", "vars", "refs", "done", "fired", "joins", "tasks", "errors", "timers", "trig" }) do
+		if (type(qs[k]) ~= "table") then qs[k] = {} end
+	end
+	if (type(qs.r) ~= "number") then qs.r = 0 end
+	if (type(qs.t0) ~= "number") then qs.t0 = now_g end
+	if (q) then
+		for name, def in pairs(q.vars) do
+			if (qs.vars[name] == nil) then qs.vars[name] = util.copy(def) end
+		end
+	end
+end
+
+local function make_runtime(uid)
+	local r = rt[uid]
+	if (r) then return r end
+	r = {}
+	r.vars = setmetatable({}, {
+		__index = function(_, k)
+			local qs = quest_state(uid)
+			return qs and qs.vars[k]
+		end,
+		__newindex = function(_, k, v) set_var(uid, k, v) end,
+	})
+	rt[uid] = r
+	return r
+end
+
+-- Read-only mode: the loaded blob could not be decoded (or was written by a newer runtime), so it
+-- is re-staged byte-for-byte instead of being replaced by what this session managed to make of it.
+function blob_is_readonly() return blob_keep ~= nil end
+
+function save_now()
+	if not (state) then return false end
+	if not (xms and xms.save_data) then return false end
+	if (blob_keep) then
+		local ok, r = pcall(xms.save_data, BLOB_ID, blob_keep)
+		dirty = false
+		if not (ok) then
+			util.err("save_data failed while re-staging the preserved blob: %s", tostring(r))
+			return false
+		end
+		return r and true or false
+	end
+	-- let waiting kinds serialize their sub-state
+	for uid, qs in pairs(state.quests) do
+		local q = Q[uid]
+		if (q and qs.status == "active") then
+			for node_id, tok in pairs(qs.tokens) do
+				local node = q.node_by_id[node_id]
+				local impl = node and kind_impl(node.kind)
+				if (impl and impl.save and tok.b) then
+					local ok, w = pcall(impl.save, make_ctx(uid, node_id))
+					if (ok and type(w) == "table") then tok.w = w end
+				end
+			end
+		end
+	end
+	state.v = STATE_VERSION
+	local blob = util.encode(state)
+	if (#blob > BLOB_LIMIT) then
+		-- staging it would make the container refuse the chunk and fail every save from now on
+		if not (blob_too_big_logged) then
+			blob_too_big_logged = true
+			util.err("state blob is %d bytes, over the %d byte limit: NOT staged (a quest is accumulating state; the save itself is unaffected)", #blob, BLOB_LIMIT)
+		end
+		dirty = false
+		return false
+	end
+	blob_too_big_logged = false
+	local ok, r = pcall(xms.save_data, BLOB_ID, blob)
+	dirty = false
+	if not (ok) then
+		util.err("save_data failed: %s", tostring(r))
+		return false
+	end
+	if (r == false and not save_refused_logged) then
+		save_refused_logged = true
+		util.err("save_data(%s) refused by the engine: quest state will not persist (nq_api %s)", BLOB_ID, tostring(xms.nq_api))
+	end
+	return r and true or false
+end
+
+-- STATE_MIGRATE[v] lifts a decoded state from version v to v+1.
+local STATE_MIGRATE = {}
+
+-- A blob this runtime cannot own is never replaced by one it can: it is kept in blob_keep and
+-- re-staged verbatim by save_now, and the session runs on an empty state (see apply_scan, which
+-- also refuses to auto-activate then). That is the same rule the .scov container applies to a
+-- chunk it does not understand, one level down inside the payload.
+local function load_state()
+	local blob
+	if (xms and xms.load_data) then
+		local ok, b = pcall(xms.load_data, BLOB_ID)
+		if (ok) then blob = b end
+	end
+	local st = blob and util.decode(blob) or nil
+	local fresh = false
+	blob_keep = nil
+	if (type(st) ~= "table" or type(st.quests) ~= "table") then
+		if (blob and blob ~= "") then
+			util.err("state blob is unreadable: it is kept byte-for-byte and this session starts empty")
+			blob_keep = blob
+		end
+		st = { v = STATE_VERSION, quests = {} }
+		fresh = true
+	elseif ((st.v or 0) > STATE_VERSION) then
+		util.err("state v%s was written by a newer runtime (v%d): it is kept byte-for-byte and this session starts empty", tostring(st.v), STATE_VERSION)
+		blob_keep = blob
+		st = { v = STATE_VERSION, quests = {} }
+		fresh = true
+	else
+		local v = tonumber(st.v) or 0
+		while (v < STATE_VERSION) do
+			local step = STATE_MIGRATE[v]
+			if not (step) then break end
+			st = step(st) or st
+			v = v + 1
+			st.v = v
+		end
+	end
+	st.v = STATE_VERSION
+	return st, fresh
+end
+
+-- ---------------------------------------------------------------------------- refs
+function ref_set(qs, name, rec)
+	if not (qs and name and type(rec) == "table") then return end
+	qs.refs[name] = rec
+	dirty = true
+	if (rec.id and qs.uid) then util.register_story_id(rec.id, util.ref_story_id(qs.uid, name)) end
+end
+
+function ref_get(qs, name)
+	return qs and qs.refs and qs.refs[name] or nil
+end
+
+function ref_clear(qs, name)
+	if not (qs and name) then return end
+	if (qs.uid) then util.unregister_story_id(util.ref_story_id(qs.uid, name)) end
+	qs.refs[name] = nil
+	dirty = true
+end
+
+local function restore_refs(uid, qs)
+	for name, rec in pairs(qs.refs) do
+		if (type(rec) == "table" and rec.id) then util.register_story_id(rec.id, util.ref_story_id(uid, name)) end
+	end
+end
+
+-- ---------------------------------------------------------------------------- vars
+function set_var(uid, name, value)
+	local qs = quest_state(uid)
+	if not (qs) then return false end
+	local tv = type(value)
+	if (tv ~= "boolean" and tv ~= "number" and tv ~= "string" and value ~= nil) then
+		util.err("%s: var '%s' rejects a %s value", uid, tostring(name), tv)
+		return false
+	end
+	if (qs.vars[name] ~= value) then
+		qs.vars[name] = value
+		dirty = true
+		log_debug("%s: %s = %s", uid, tostring(name), tostring(value))
+	end
+	return true
+end
+
+function get_var(uid, name)
+	local qs = quest_state(uid)
+	return qs and qs.vars[name]
+end
+
+-- ---------------------------------------------------------------------------- context
+function make_ctx(uid, node_id, npc)
+	local q, qs = Q[uid], quest_state(uid)
+	local node = q and node_id and q.node_by_id[node_id] or nil
+	local tok = node and qs and qs.tokens[node_id] or nil
+	local r = make_runtime(uid)
+	local ctx = {
+		quest = uid, uid = uid, def = q, quest_def = q, qs = qs, node = node, node_id = node_id,
+		params = node and node.params or nil, tok = tok, w = tok and tok.w or nil,
+		trig = (node and node.is_trigger and qs) and qs.trig[node_id] or nil,
+		vars = r.vars, refs = qs and qs.refs or nil, npc = npc, actor = db and db.actor or nil,
+		now = { g = now_g, r = now_r }, dt = 0,
+	}
+	ctx.log = function(fmt, ...)
+		util.info("%s/%s: %s", uid, tostring(node_id), util.sfmt(fmt, ...))
+	end
+	ctx.emit = emit
+	return ctx
+end
+
+-- `nq` object handed to custom Lua (§14).
+function nq_api(ctx)
+	local uid = ctx.uid
+	local kinds = xms_nq_kinds
+	local api = {
+		quest = uid, node = ctx.node_id, actor = db and db.actor or nil, npc = ctx.npc, vars = ctx.vars,
+		ref = function(name) local r = ref_get(ctx.qs, name) return r and util.se_by_id(r.id) or nil end,
+		ref_go = function(name) local r = ref_get(ctx.qs, name) return r and util.go_by_id(r.id) or nil end,
+		signal = function(name) emit({ name = "signal", signal = tostring(name), module = ctx.def and ctx.def.module, quest = uid }) end,
+		news = function(text, sender, duration)
+			if (kinds and kinds.news) then return kinds.news(ctx, (util.to_cp1251(tostring(text))), sender, duration) end
+		end,
+		tr = function(text) return (util.to_cp1251(tostring(text))) end,
+		log = function(fmt, ...) ctx.log(fmt, ...) end,
+		give_item = function(section, n) if (kinds and kinds.give_item) then return kinds.give_item(ctx, section, n or 1) end end,
+		take_item = function(section, n) if (kinds and kinds.take_item) then return kinds.take_item(ctx, section, n or 1) end end,
+		has_item = function(section, n) return util.count_items(section) >= (n or 1) end,
+		money = function(delta)
+			local a = db and db.actor
+			if not (a) then return end
+			if (delta and delta ~= 0) then a:give_money(delta) end
+			return a:money()
+		end,
+		time = function() return util.game_secs() end,
+		done = function(node) return (ctx.qs and ctx.qs.done[node] ~= nil) and true or false end,
+		var = function(name) return ctx.qs and ctx.qs.vars[name] end,
+		set_var = function(name, v) return set_var(uid, name, v) end,
+	}
+	return api
+end
+
+-- Runs compiled custom Lua (action or cond). Returns ok, result.
+local function run_lua(ctx, compiled, slot)
+	if not (compiled or type(compiled) == "table") then return false, "no compiled code" end
+	compiled.env.nq = nq_api(ctx)
+	return pcall(compiled.fn)
+end
+
+-- ---------------------------------------------------------------------------- actions & conds
+local function node_error(uid, node_id, msg)
+	local qs = quest_state(uid)
+	if (qs) then
+		qs.errors[node_id] = tostring(msg)
+		dirty = true
+	end
+	util.err("%s/%s: %s", uid, tostring(node_id), tostring(msg))
+end
+
+function run_actions(ctx, list, slot)
+	if not (list) then return end
+	for i, act in ipairs(list) do
+		local impl = kind_impl(act.kind)
+		local ok, e
+		if not (impl) then
+			ok, e = false, "no implementation for kind '" .. tostring(act.kind) .. "'"
+		elseif (act.kind == "lua") then
+			ok, e = run_lua(ctx, act.params.compiled, act.slot)
+		elseif (impl.run) then
+			ok, e = pcall(impl.run, ctx, act.params)
+		else
+			ok, e = false, "kind '" .. tostring(act.kind) .. "' has no run()"
+		end
+		if not (ok) then
+			util.err("%s/%s: %s#%d %s: %s", ctx.uid, tostring(ctx.node_id), tostring(slot), i - 1, tostring(act.kind), tostring(e))
+		end
+	end
+end
+
+-- One condition; event conds are true only for the matching event. Errors read as false.
+function eval_cond(ctx, cond, evt)
+	local v = false
+	if (cond.is_event) then
+		if (evt and evt.name == cond.event_name) then
+			local impl = kind_impl(cond.kind)
+			if (impl and impl.test) then
+				local ok, r = pcall(impl.test, ctx, cond.params, evt)
+				if (ok) then v = r and true or false
+				else util.err("%s/%s: cond %s: %s", ctx.uid, tostring(ctx.node_id), tostring(cond.kind), tostring(r)) end
+			end
+		end
+	elseif (cond.kind == "lua") then
+		local ok, r = run_lua(ctx, cond.params.compiled, cond.slot)
+		if (ok) then v = r and true or false
+		else util.err("%s/%s: cond lua: %s", ctx.uid, tostring(ctx.node_id), tostring(r)) end
+	else
+		local impl = kind_impl(cond.kind)
+		if (impl and impl.test) then
+			local ok, r = pcall(impl.test, ctx, cond.params, evt)
+			if (ok) then v = r and true or false
+			else util.err("%s/%s: cond %s: %s", ctx.uid, tostring(ctx.node_id), tostring(cond.kind), tostring(r)) end
+		else
+			util.err("%s/%s: cond %s has no implementation", ctx.uid, tostring(ctx.node_id), tostring(cond.kind))
+		end
+	end
+	if (cond["not"]) then v = not v end
+	return v
+end
+
+-- AND over a list (empty list = true).
+function eval_conds(ctx, list, evt)
+	if not (list) then return true end
+	for _, c in ipairs(list) do
+		if not (eval_cond(ctx, c, evt)) then return false end
+	end
+	return true
+end
+
+-- ---------------------------------------------------------------------------- queue
+local function enqueue(op)
+	if (qtail - qhead + 1 >= QUEUE_CAP) then
+		util.err("queue overflow, dropping %s", tostring(op.op))
+		return
+	end
+	qtail = qtail + 1
+	queue[qtail] = op
+end
+
+function enqueue_enter(uid, node, from)
+	enqueue({ op = "enter", uid = uid, node = node, from = from })
+end
+
+function complete_external(uid, node, pin)
+	enqueue({ op = "complete", uid = uid, node = node, pin = pin, external = true })
+end
+
+function emit(evt)
+	if (type(evt) ~= "table" or type(evt.name) ~= "string") then return end
+	if not (ready) then return end
+	-- with no quests the drain callback is not registered, so anything queued here would never
+	-- be consumed: a producer that still runs (the dialog hook) must cost nothing
+	if (#Q_ORDER == 0) then return end
+	enqueue({ op = "event", evt = evt })
+end
+
+-- ---------------------------------------------------------------------------- subscriptions
+local function sorted_entries(map)
+	local list = {}
+	for _, e in pairs(map) do list[#list + 1] = e end
+	table.sort(list, function(a, b)
+		if (a.uid ~= b.uid) then return a.uid < b.uid end
+		local qa = Q[a.uid]
+		local ia = qa and qa.node_by_id[a.node] and qa.node_by_id[a.node].idx or 0
+		local ib = qa and qa.node_by_id[b.node] and qa.node_by_id[b.node].idx or 0
+		if (ia ~= ib) then return ia < ib end
+		return a.node < b.node
+	end)
+	return list
+end
+
+function subscribe(uid, node, name)
+	if not (name) then return end
+	local map = subs[name]
+	if not (map) then map = {} subs[name] = map end
+	map[key_of(uid, node)] = { uid = uid, node = node }
+end
+
+function unsubscribe(uid, node, name)
+	local key = key_of(uid, node)
+	if (name) then
+		if (subs[name]) then subs[name][key] = nil end
+		return
+	end
+	for _, map in pairs(subs) do map[key] = nil end
+end
+
+local function wants_poll(ctx, node, impl)
+	if not (impl) then return true end	-- retry begin later
+	if (impl.wants_poll) then
+		local ok, r = pcall(impl.wants_poll, ctx)
+		if (ok) then return r and true or false end
+		return true
+	end
+	return impl.poll ~= nil
+end
+
+-- Wires a waiting token / armed trigger into the event index and the poll list.
+local function wire(uid, node_id)
+	local q = Q[uid]
+	local node = q and q.node_by_id[node_id]
+	if not (node) then return end
+	local impl = kind_impl(node.kind)
+	local ctx = make_ctx(uid, node_id)
+	for name in pairs(node.events or {}) do subscribe(uid, node_id, name) end
+	if (impl) then
+		for _, name in ipairs(impl.events or {}) do subscribe(uid, node_id, name) end
+		if (impl.subscribe) then
+			local ok, list = pcall(impl.subscribe, ctx)
+			if (ok and type(list) == "table") then
+				for _, name in ipairs(list) do subscribe(uid, node_id, name) end
+			end
+		end
+	end
+	local key = key_of(uid, node_id)
+	if (wants_poll(ctx, node, impl)) then polled[key] = { uid = uid, node = node_id } else polled[key] = nil end
+end
+
+local function unwire(uid, node_id)
+	unsubscribe(uid, node_id)
+	polled[key_of(uid, node_id)] = nil
+	err_at[key_of(uid, node_id)] = nil
+end
+
+-- ---------------------------------------------------------------------------- triggers
+local function trigger_armed(q, qs, node)
+	if (qs.status ~= "active") then return false end
+	if (node.once and qs.done[node.id]) then return false end
+	local rep = node.params and node.params["repeat"] == true
+	if (rep) then return true end
+	return (qs.fired[node.id] or 0) == 0
+end
+
+local function fire_trigger(uid, node, pin)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs and qs.status == "active") then return end
+	qs.fired[node.id] = (qs.fired[node.id] or 0) + 1
+	if (node.once) then qs.done[node.id] = node.kind end
+	dirty = true
+	touched[uid] = true
+	log_debug("%s: trigger %s -> %s", uid, node.id, tostring(pin))
+	local ctx = make_ctx(uid, node.id)
+	run_actions(ctx, node.on_enter, "enter")
+	run_actions(ctx, node.on_exit, "exit")
+	if not (trigger_armed(q, qs, node)) then unwire(uid, node.id) end
+	if (pin and node.out[pin]) then
+		for _, tid in ipairs(node.out[pin]) do enqueue_enter(uid, tid, node.id .. "/" .. pin) end
+	end
+end
+
+-- Arms every trigger of an active quest; trigger.start style kinds fire from arm().
+local function arm_triggers(uid)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs) then return end
+	for _, node in ipairs(q.nodes) do
+		if (node.is_trigger and node.spec) then
+			if (trigger_armed(q, qs, node)) then
+				local impl = kind_impl(node.kind)
+				if not (impl) then
+					node_error(uid, node.id, "no implementation for kind '" .. node.kind .. "'")
+				else
+					local existed = qs.trig[node.id] ~= nil
+					if not (existed) then qs.trig[node.id] = {} end
+					local ctx = make_ctx(uid, node.id)
+					local pin
+					if (impl.arm) then
+						local ok, r = pcall(impl.arm, ctx, existed)
+						if (ok) then pin = r else node_error(uid, node.id, r) end
+					end
+					if (pin) then
+						fire_trigger(uid, node, pin)
+					end
+					if (trigger_armed(q, qs, node)) then wire(uid, node.id) end
+				end
+			else
+				unwire(uid, node.id)
+			end
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------- tokens
+local function cancel_token_impl(uid, node_id, reason)
+	local q, qs = Q[uid], quest_state(uid)
+	local tok = qs and qs.tokens[node_id]
+	if not (tok) then return end
+	local node = q and q.node_by_id[node_id]
+	unwire(uid, node_id)
+	if (node) then
+		local impl = kind_impl(node.kind)
+		if (impl and impl.cancel and tok.b) then
+			local ok, e = pcall(impl.cancel, make_ctx(uid, node_id))
+			if not (ok) then util.err("%s/%s: cancel: %s", uid, node_id, tostring(e)) end
+		end
+	end
+	qs.tokens[node_id] = nil
+	qs.errors[node_id] = nil
+	qs.timers[node_id] = nil
+	dirty = true
+	touched[uid] = true
+	log_debug("%s: token %s cancelled (%s)", uid, node_id, tostring(reason))
+end
+
+function cancel_token(uid, node_id, reason)
+	cancel_token_impl(uid, node_id, reason or "external")
+end
+
+local complete_impl -- forward
+
+local function begin_token(uid, node_id)
+	local q, qs = Q[uid], quest_state(uid)
+	local node = q and q.node_by_id[node_id]
+	local tok = qs and qs.tokens[node_id]
+	if not (node and tok) then return end
+	local impl = kind_impl(node.kind)
+	if not (impl) then
+		node_error(uid, node_id, "no implementation for kind '" .. node.kind .. "'")
+		err_at[key_of(uid, node_id)] = now_r
+		polled[key_of(uid, node_id)] = { uid = uid, node = node_id }
+		return
+	end
+	if not (impl.begin) then
+		node_error(uid, node_id, "kind '" .. node.kind .. "' has no begin()")
+		err_at[key_of(uid, node_id)] = now_r
+		polled[key_of(uid, node_id)] = { uid = uid, node = node_id }
+		return
+	end
+	local ctx = make_ctx(uid, node_id)
+	local ok, res = pcall(impl.begin, ctx)
+	if not (ok) then
+		node_error(uid, node_id, res)
+		err_at[key_of(uid, node_id)] = now_r
+		polled[key_of(uid, node_id)] = { uid = uid, node = node_id }
+		return
+	end
+	qs.errors[node_id] = nil
+	err_at[key_of(uid, node_id)] = nil
+	if (res == "wait") then
+		tok.b = true
+		dirty = true
+		wire(uid, node_id)
+	elseif (type(res) == "table") then
+		if (res.finish) then
+			complete_impl(uid, node_id, nil, false)
+			finish_quest(uid, res.finish.status or "completed", res.finish.restart == true)
+		else
+			complete_impl(uid, node_id, res.pin, false)
+		end
+	else
+		complete_impl(uid, node_id, nil, false)
+	end
+end
+
+complete_impl = function(uid, node_id, pin, external)
+	local q, qs = Q[uid], quest_state(uid)
+	local tok = qs and qs.tokens[node_id]
+	if not (q and tok) then return end
+	local node = q.node_by_id[node_id]
+	if not (node) then qs.tokens[node_id] = nil return end
+	unwire(uid, node_id)
+	local impl = kind_impl(node.kind)
+	local ctx = make_ctx(uid, node_id)
+	if (impl and impl.finish and tok.b) then
+		local ok, e = pcall(impl.finish, ctx, pin, external)
+		if not (ok) then util.err("%s/%s: finish: %s", uid, node_id, tostring(e)) end
+	end
+	run_actions(ctx, node.on_exit, "exit")
+	qs.tokens[node_id] = nil
+	if (node.once) then qs.done[node_id] = node.kind end
+	qs.errors[node_id] = nil
+	qs.timers[node_id] = nil
+	dirty = true
+	touched[uid] = true
+	log_debug("%s: %s -> %s", uid, node_id, tostring(pin))
+	if (pin and node.out[pin]) then
+		for _, tid in ipairs(node.out[pin]) do enqueue_enter(uid, tid, node_id .. "/" .. pin) end
+	end
+end
+
+local function enter_impl(uid, node_id, from)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs and qs.status == "active") then return end
+	local node = q.node_by_id[node_id]
+	if not (node and node.spec) then return end
+	if (node.is_trigger) then return end
+	if (node.kind == "flow.join") then
+		local joins = qs.joins[node_id]
+		if not (joins) then joins = {} qs.joins[node_id] = joins end
+		joins[from or "?"] = true
+		dirty = true
+		if (util.count_keys(joins) < math.max(node.in_edges, 1)) then return end
+		qs.joins[node_id] = nil
+	end
+	if (qs.tokens[node_id]) then return end
+	if (node.once and qs.done[node_id]) then return end
+	local tok = { t0 = now_g, r = 0, w = {}, k = node.kind }
+	qs.tokens[node_id] = tok
+	dirty = true
+	touched[uid] = true
+	log_debug("%s: enter %s", uid, node_id)
+	local ctx = make_ctx(uid, node_id)
+	run_actions(ctx, node.on_enter, "enter")
+	if not (qs.tokens[node_id]) then return end	-- an action ended the quest
+	begin_token(uid, node_id)
+end
+
+-- ---------------------------------------------------------------------------- events & polls
+local function dispatch_event(evt)
+	local map = subs[evt.name]
+	if not (map) then return end
+	for _, e in ipairs(sorted_entries(map)) do
+		local q, qs = Q[e.uid], quest_state(e.uid)
+		local node = q and q.node_by_id[e.node]
+		if (node and qs and qs.status == "active") then
+			local impl = kind_impl(node.kind)
+			if (impl and impl.on_event) then
+				if (node.is_trigger) then
+					if (trigger_armed(q, qs, node)) then
+						local ctx = make_ctx(e.uid, e.node)
+						local ok, pin = pcall(impl.on_event, ctx, evt)
+						if not (ok) then node_error(e.uid, e.node, pin)
+						elseif (pin) then fire_trigger(e.uid, node, pin) end
+					end
+				else
+					local tok = qs.tokens[e.node]
+					if (tok and tok.b) then
+						local ctx = make_ctx(e.uid, e.node)
+						local ok, pin = pcall(impl.on_event, ctx, evt)
+						if not (ok) then node_error(e.uid, e.node, pin)
+						elseif (pin) then complete_impl(e.uid, e.node, pin, false) end
+					end
+				end
+			end
+		end
+	end
+end
+
+local function poll_entry(e, dt)
+	local q, qs = Q[e.uid], quest_state(e.uid)
+	local node = q and q.node_by_id[e.node]
+	if not (node and qs and qs.status == "active") then polled[key_of(e.uid, e.node)] = nil return end
+	local impl = kind_impl(node.kind)
+	if (node.is_trigger) then
+		if not (trigger_armed(q, qs, node)) then unwire(e.uid, e.node) return end
+		if not (impl and impl.poll) then return end
+		local ctx = make_ctx(e.uid, e.node)
+		ctx.dt = dt
+		local ok, pin = pcall(impl.poll, ctx)
+		if not (ok) then node_error(e.uid, e.node, pin)
+		elseif (pin) then fire_trigger(e.uid, node, pin) end
+		return
+	end
+	local tok = qs.tokens[e.node]
+	if not (tok) then polled[key_of(e.uid, e.node)] = nil return end
+	if not (tok.b) then
+		-- begin failed earlier (or the kind is missing): retry at most every 5 s
+		local at = err_at[key_of(e.uid, e.node)]
+		if (at and now_r - at < ERROR_RETRY_MS) then return end
+		begin_token(e.uid, e.node)
+		return
+	end
+	if not (impl and impl.poll) then return end
+	local ctx = make_ctx(e.uid, e.node)
+	ctx.dt = dt
+	local ok, pin = pcall(impl.poll, ctx)
+	if not (ok) then
+		local at = err_at[key_of(e.uid, e.node)]
+		if not (at and now_r - at < ERROR_RETRY_MS) then node_error(e.uid, e.node, pin) end
+		err_at[key_of(e.uid, e.node)] = now_r
+	elseif (pin) then
+		qs.errors[e.node] = nil
+		complete_impl(e.uid, e.node, pin, false)
+	end
+end
+
+local function poll_all()
+	local dt = 0
+	if (last_poll_r > 0) then dt = (now_r - last_poll_r) / 1000 end
+	if (dt < 0 or dt > 60) then dt = 0 end
+	last_poll_r = now_r
+	-- real-time accumulators of active quests and their tokens; they alone restage the blob
+	-- only every few seconds (a save in between is at most that far behind on real-time waits)
+	for uid, qs in pairs(state.quests) do
+		if (qs.status == "active" and Q[uid]) then
+			qs.r = (qs.r or 0) + dt
+			for _, tok in pairs(qs.tokens) do tok.r = (tok.r or 0) + dt end
+		end
+	end
+	if (dt > 0 and now_r - last_acc_dirty_r >= 5000) then
+		dirty = true
+		last_acc_dirty_r = now_r
+	end
+	for _, e in ipairs(sorted_entries(polled)) do
+		poll_entry(e, dt)
+	end
+end
+
+local function check_implicit_completion()
+	for uid in pairs(touched) do
+		touched[uid] = nil
+		local q, qs = Q[uid], quest_state(uid)
+		if (q and qs and qs.status == "active" and next(qs.tokens) == nil) then
+			local armed = false
+			for _, node in ipairs(q.nodes) do
+				if (node.is_trigger and trigger_armed(q, qs, node)) then armed = true break end
+			end
+			if not (armed) then
+				qs.status = "completed"
+				dirty = true
+				util.info("%s: completed (no tokens, no armed triggers)", uid)
+				ext_call("on_quest_finish", uid, "completed")
+			end
+		end
+	end
+end
+
+local function drain()
+	if (draining) then return end
+	draining = true
+	local n = 0
+	while (qhead <= qtail) do
+		local op = queue[qhead]
+		queue[qhead] = nil
+		qhead = qhead + 1
+		n = n + 1
+		local ok, e = pcall(function()
+			if (op.op == "enter") then
+				enter_impl(op.uid, op.node, op.from)
+			elseif (op.op == "complete") then
+				local qs = quest_state(op.uid)
+				local q = Q[op.uid]
+				local tok = qs and qs.tokens[op.node]
+				if (tok and q) then
+					local node = q.node_by_id[op.node]
+					local pin = op.pin
+					if (pin == nil and node and node.spec) then
+						pin = node.spec.pins[1]
+						if (pin == nil and node.spec.pins_cases and node.params.cases and node.params.cases[1]) then pin = node.params.cases[1].name end
+					end
+					complete_impl(op.uid, op.node, pin, op.external)
+				end
+			elseif (op.op == "event") then
+				dispatch_event(op.evt)
+			elseif (op.op == "activate") then
+				activate(op.uid)
+			elseif (op.op == "call") then
+				op.fn()
+			end
+		end)
+		if not (ok) then util.err("queue op %s failed: %s", tostring(op.op), tostring(e)) end
+		if (n > QUEUE_CAP) then
+			util.err("queue drain cap reached, resuming next frame")
+			break
+		end
+	end
+	if (qhead > qtail) then queue, qhead, qtail = {}, 1, 0 end
+	draining = false
+	check_implicit_completion()
+end
+
+-- ---------------------------------------------------------------------------- quest lifecycle
+function activate(uid)
+	local q = Q[uid]
+	if not (q) then
+		util.warn("activate: unknown quest %s", tostring(uid))
+		return false
+	end
+	local qs = quest_state(uid)
+	if (qs and qs.status and qs.status ~= "inactive") then
+		util.warn("activate: %s is already %s", uid, tostring(qs.status))
+		return false
+	end
+	local keep = qs
+	qs = new_quest_state(q)
+	if (keep) then
+		qs.refs = keep.refs or {}
+		qs.tasks = keep.tasks or {}
+	end
+	qs.uid = uid
+	state.quests[uid] = qs
+	dirty = true
+	touched[uid] = true
+	util.info("%s: activated", uid)
+	ext_call("on_quest_activate", uid)
+	arm_triggers(uid)
+	return true
+end
+
+-- Cancels every token and disarms triggers; the record stays with the given status.
+function finish_quest(uid, status, restart)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs) then return false end
+	for node_id in pairs(util.copy(qs.tokens)) do cancel_token_impl(uid, node_id, "finish") end
+	for _, node in ipairs(q.nodes) do if (node.is_trigger) then unwire(uid, node.id) end end
+	qs.status = status or "completed"
+	dirty = true
+	touched[uid] = nil
+	util.info("%s: %s%s", uid, tostring(qs.status), restart and " (restart)" or "")
+	ext_call("on_quest_finish", uid, qs.status)
+	if (restart) then
+		-- vars back to defaults; refs and tasks survive
+		qs.status = "inactive"
+		activate(uid)
+	end
+	return true
+end
+
+-- Drops the record (cancelling tokens); auto quests are activated again right away.
+function reset(uid)
+	local q, qs = Q[uid], quest_state(uid)
+	if (qs) then
+		for node_id in pairs(util.copy(qs.tokens)) do cancel_token_impl(uid, node_id, "reset") end
+		if (q) then for _, node in ipairs(q.nodes) do if (node.is_trigger) then unwire(uid, node.id) end end end
+		for name in pairs(util.copy(qs.refs or {})) do util.unregister_story_id(util.ref_story_id(uid, name)) end
+	end
+	-- before the record goes: qs.refs is the only handle on the objects the extensions created
+	ext_call("on_quest_reset", uid)
+	state.quests[uid] = nil
+	rt[uid] = nil
+	dirty = true
+	util.info("%s: reset", uid)
+	if (q and q.activation == "auto") then activate(uid) end
+	return true
+end
+
+-- Debug: cancel everything and put a token on `node`.
+function jump(uid, node_id)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q) then return false, "unknown quest" end
+	if not (q.node_by_id[node_id]) then return false, "unknown node" end
+	if not (qs and qs.status == "active") then
+		if (qs) then state.quests[uid] = nil end
+		activate(uid)
+		qs = quest_state(uid)
+		if not (qs) then return false, "cannot activate" end
+	end
+	for nid in pairs(util.copy(qs.tokens)) do cancel_token_impl(uid, nid, "jump") end
+	enqueue_enter(uid, node_id, "jump")
+	return true
+end
+
+function fire(uid, node_id, pin)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs) then return false, "quest is not active" end
+	if not (qs.tokens[node_id]) then return false, "no token on node" end
+	complete_external(uid, node_id, pin)
+	return true
+end
+
+-- Walks every token of every active quest: fn(uid, node_id, tok, q, qs); return true to stop.
+function each_token(fn)
+	for _, uid in ipairs(Q_ORDER) do
+		local q, qs = Q[uid], quest_state(uid)
+		if (q and qs and qs.status == "active") then
+			for _, node in ipairs(q.nodes) do
+				local tok = qs.tokens[node.id]
+				if (tok and fn(uid, node.id, tok, q, qs)) then return end
+			end
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------- reconcile
+local function reconcile(uid, q, qs)
+	ensure_qs_shape(qs, q)
+	qs.uid = uid
+	if (qs.hash == q.hash) then return end
+	util.warn("%s: graph changed since the last session, reconciling", uid)
+	for node_id, tok in pairs(util.copy(qs.tokens)) do
+		local node = q.node_by_id[node_id]
+		local stale = not (node and node.spec)
+		if not (stale) then stale = (tok.k ~= nil and tok.k ~= node.kind) or node.is_trigger == true end
+		if (stale) then
+			qs.tokens[node_id] = nil
+			qs.errors[node_id] = nil
+			qs.timers[node_id] = nil
+			util.warn("%s: token on %s dropped (node removed or changed)", uid, node_id)
+		end
+	end
+	for _, field in ipairs({ "joins", "timers", "errors", "trig", "fired" }) do
+		for node_id in pairs(util.copy(qs[field])) do
+			if not (q.node_by_id[node_id] and q.node_by_id[node_id].spec) then qs[field][node_id] = nil end
+		end
+	end
+	-- `done` survives a graph change on purpose, but only for the node that earned it: an id whose
+	-- kind changed is a different node, exactly like the token rule above. (A legacy mark is the
+	-- boolean `true` and carries no kind, so it is kept.)
+	for node_id, mark in pairs(util.copy(qs.done)) do
+		local node = q.node_by_id[node_id]
+		if not (node and node.spec) then
+			qs.done[node_id] = nil
+		elseif (type(mark) == "string" and mark ~= node.kind) then
+			qs.done[node_id] = nil
+			util.warn("%s: done mark on %s dropped (kind changed)", uid, node_id)
+		end
+	end
+	qs.hash = q.hash
+	dirty = true
+end
+
+-- ---------------------------------------------------------------------------- init
+local function register_callbacks()
+	if (callbacks_on) then return end
+	local this = xms_nq
+	for _, pair in ipairs(CALLBACKS) do
+		local fn = this[pair[2]]
+		if (fn) then RegisterScriptCallback(pair[1], fn) end
+	end
+	callbacks_on = true
+	util.info("callbacks registered")
+end
+
+local function unregister_callbacks()
+	if not (callbacks_on) then return end
+	local this = xms_nq
+	for _, pair in ipairs(CALLBACKS) do
+		local fn = this[pair[2]]
+		if (fn) then pcall(UnregisterScriptCallback, pair[1], fn) end
+	end
+	callbacks_on = false
+end
+
+local function restore_quests()
+	-- (re)wire tokens and triggers of active quests, register ref story ids
+	for _, uid in ipairs(Q_ORDER) do
+		local q, qs = Q[uid], quest_state(uid)
+		if (qs and qs.status == "active") then
+			make_runtime(uid)
+			restore_refs(uid, qs)
+			for _, node in ipairs(q.nodes) do
+				local tok = qs.tokens[node.id]
+				if (tok) then
+					if (tok.b) then
+						local impl = kind_impl(node.kind)
+						if (impl and impl.load) then
+							local ok, e = pcall(impl.load, make_ctx(uid, node.id), tok.w)
+							if not (ok) then util.err("%s/%s: load: %s", uid, node.id, tostring(e)) end
+						end
+						wire(uid, node.id)
+					else
+						polled[key_of(uid, node.id)] = { uid = uid, node = node.id }
+					end
+				end
+			end
+			arm_triggers(uid)
+			touched[uid] = true
+		end
+	end
+end
+
+local function apply_scan(all, first_time)
+	SCAN = all
+	Q, Q_ORDER, INVALID = all.quests, all.order, all.invalid
+	for _, uid in ipairs(Q_ORDER) do
+		local q = Q[uid]
+		if (#q.problems > 0) then loader.log_problems(q.module .. "/" .. q.file, q.problems, false) end
+		if (#q.missing_impl > 0) then
+			util.err("%s: no implementation registered for kind(s): %s", uid, table.concat(q.missing_impl, ", "))
+		end
+	end
+	for _, q in ipairs(INVALID) do
+		util.err("%s/%s: INVALID (%d error(s))", tostring(q.module), tostring(q.file), q.errors or 0)
+		loader.log_problems(q.module .. "/" .. q.file, q.problems, true)
+	end
+	-- state records
+	for _, uid in ipairs(Q_ORDER) do
+		local q = Q[uid]
+		local qs = state.quests[uid]
+		if (qs) then
+			reconcile(uid, q, qs)
+		elseif (q.activation == "auto") then
+			-- the state we could not read may well say this quest is done: replaying it from zero
+			-- would re-spawn its squads and re-offer its dialogs on top of the player's real progress
+			if (blob_keep) then
+				util.err("%s: not activated - the state blob could not be read and is being preserved", uid)
+			else
+				activate(uid)
+			end
+		end
+	end
+	restore_quests()
+end
+
+function init()
+	if (ready or disabled) then return end
+	if not (xms and xms.list_files and xms.read_file) then
+		disabled = true
+		-- No xms table at all means the game has no modules: that is vanilla, and vanilla must not
+		-- gain a single log line from NQ. Only an xms that exists without the natives is worth a
+		-- warning, because then the scripts and the engine disagree about the API.
+		if (xms and not disabled_logged) then
+			disabled_logged = true
+			util.warn("engine has no xms.list_files/read_file (nq_api %s): quest runtime disabled", tostring(xms.nq_api))
+		end
+		return
+	end
+	now_g, now_r = util.game_secs(), util.real_ms()
+	loader.catalog()
+	ext_call("register")
+	state = load_state()
+	local first_run = (next(state.quests) == nil and state.first_done == nil)
+	local all = loader.scan()
+	ready = true
+	apply_scan(all, true)
+	ext_call("on_init")
+	-- level_entered: after a level change (flag persisted by on_level_changing) or on the first run
+	local lvl = util.current_level()
+	if (state.pending_level ~= nil or first_run) then
+		if (lvl) then emit({ name = "level_entered", level = lvl, from = state.pending_level }) end
+		state.pending_level = nil
+		state.first_done = true
+		dirty = true
+	end
+	if (#Q_ORDER > 0) then
+		register_callbacks()
+	else
+		util.info("no quests in %d module(s); callbacks not registered", all.modules or 0)
+	end
+	util.info("init: %d quest(s), %d invalid, %d module(s) with assets", #Q_ORDER, #INVALID, all.modules or 0)
+	drain()
+	-- restage the blob so the next save carries it even if nothing changed
+	save_now()
+end
+
+-- Re-reads assets keeping the state (like a graph change between sessions).
+function reload()
+	if not (ready) then init() return ready end
+	for _, uid in ipairs(Q_ORDER) do
+		local q = Q[uid]
+		for _, node in ipairs(q.nodes) do unwire(uid, node.id) end
+	end
+	loader.catalog(true)
+	ext_call("register")
+	local all = loader.scan()
+	ext_call("on_reload_begin")
+	apply_scan(all, false)
+	ext_call("on_init")
+	if (#Q_ORDER > 0) then register_callbacks() end
+	drain()
+	save_now()
+	util.info("reload: %d quest(s), %d invalid", #Q_ORDER, #INVALID)
+	return true
+end
+
+-- ---------------------------------------------------------------------------- engine callbacks
+function on_actor_update(binder, delta)
+	if not (ready) then return end
+	now_r = util.real_ms()
+	local poll_due = (now_r - last_poll_r >= POLL_MS)
+	local pending = (qhead <= qtail) or next(touched) ~= nil or dirty
+	if not (poll_due or pending) then return end	-- the usual frame: nothing to do
+	now_g = util.game_secs()
+	if (poll_due) then
+		local ok, e = pcall(poll_all)
+		if not (ok) then util.err("poll: %s", tostring(e)) end
+	end
+	drain()
+	if (dirty) then save_now() end
+end
+
+local function item_evt(name, item, sec)
+	local ok, e = pcall(function()
+		return { name = name, section = sec or item:section(), id = item:id(), item = item }
+	end)
+	if (ok) then emit(e) end
+end
+
+function on_item_take(item) item_evt("item_taken", item) end
+function on_item_drop(item) item_evt("item_dropped", item) end
+function on_item_use(item, sec) item_evt("item_used", item, sec) end
+
+function on_info(obj, info_id)
+	emit({ name = "info_given", info = info_id })
+end
+
+local function death_evt(victim, who)
+	local ok, e = pcall(function()
+		local id = victim:id()
+		local killer_id = who and who.id and who:id() or nil
+		local actor_id = db and db.actor and db.actor:id() or nil
+		return {
+			name = "npc_killed", id = id, npc = victim, killer = who, killer_id = killer_id,
+			by_actor = (killer_id ~= nil and killer_id == actor_id), section = util.go_section(victim),
+			story = util.story_id_of(id), profile = util.go_profile(victim), community = util.go_community(victim),
+			is_monster = not (IsStalker and IsStalker(victim)),
+		}
+	end)
+	if (ok) then emit(e) end
+end
+
+function on_npc_death(victim, who) death_evt(victim, who) end
+function on_monster_death(victim, who) death_evt(victim, who) end
+
+function on_squad_npc_death(squad, npc, killer)
+	local ok, e = pcall(function()
+		return { name = "squad_npc_death", squad = squad, squad_id = squad and squad.id, npc_id = npc and npc.id, killer = killer }
+	end)
+	if (ok) then emit(e) end
+end
+
+function on_squad_unregister(squad)
+	local ok, e = pcall(function()
+		return { name = "squad_dead", squad = squad, squad_id = squad.id, section = squad:section_name(), story = util.story_id_of(squad.id) }
+	end)
+	if (ok) then emit(e) end
+end
+
+function on_squad_register(squad)
+	local ok, e = pcall(function()
+		return { name = "squad_registered", squad = squad, squad_id = squad.id, section = squad:section_name() }
+	end)
+	if (ok) then emit(e) end
+end
+
+local function npc_record(go, id)
+	local rec = { id = id }
+	if (go) then
+		rec.story = util.story_id_of(id)
+		rec.profile = util.go_profile(go)
+		rec.community = util.go_community(go)
+	end
+	return rec
+end
+
+function on_leave_dialog(victim_id)
+	local go = victim_id and util.go_by_id(victim_id) or nil
+	emit({ name = "talk_ended", id = victim_id, npc = go, rec = npc_record(go, victim_id) })
+end
+
+-- Called by the dialog side (Phase 2b) when the talk window opens: emits talk_started.
+function talk_started(npc)
+	if not (npc) then return end
+	local ok, id = pcall(npc.id, npc)
+	if not (ok) then return end
+	emit({ name = "talk_started", id = id, npc = npc, rec = npc_record(npc, id) })
+end
+
+function on_trade(item, sell_bye, money)
+	local partner_id = inventory_upgrades and inventory_upgrades.victim_id or nil
+	local go = partner_id and util.go_by_id(partner_id) or nil
+	emit({ name = "trade_done", id = partner_id, npc = go, rec = npc_record(go, partner_id), item = item, sell = sell_bye, money = money })
+end
+
+function on_level_changing()
+	if not (state) then return end
+	state.pending_level = util.current_level() or "?"
+	dirty = true
+	save_now()
+end
+
+-- ---------------------------------------------------------------------------- entry point
+-- Only the first-update hook is registered here: db.actor does not exist yet and the world is
+-- not restored. Everything else waits for init().
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", function()
+		local ok, e = pcall(init)
+		if not (ok) then util.err("init failed: %s", tostring(e)) end
+	end)
+end

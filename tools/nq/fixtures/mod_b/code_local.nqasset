@@ -1,0 +1,11 @@
+-- E003 fixture: code outside strings that an empty environment cannot catch on its own
+-- (a local declaration touches no global, so only the declarative scan rejects it).
+local secret = 42
+return {
+  nq = 1,
+  id = "code_local",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "s" } },
+    { id = "s", kind = "flow.end", params = { status = "completed" } },
+  },
+}

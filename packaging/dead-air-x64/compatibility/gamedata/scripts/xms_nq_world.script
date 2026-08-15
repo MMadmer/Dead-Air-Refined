@@ -1,0 +1,416 @@
+-- NQ runtime: world kinds - kill objectives, squads, NPCs, relations (NQ_ARCHITECTURE §6.3-6.4).
+--   main:  objective.kill
+--   extra: spawn.squad, spawn.object, squad.move, squad.remove, npc.remove, npc.kill,
+--          relation.set, relation.goodwill
+-- Also restores what the engine does not persist: `squad.scripted_target` of held squads is
+-- re-applied from the quest refs on every init and whenever such a squad registers again.
+
+local util = xms_nq_util
+local core = xms_nq
+
+local GOODWILL = { enemy = -1000, neutral = 0, friend = 1000 }
+
+local K = {}
+local squad_cb_on = false
+
+-- ---------------------------------------------------------------------------- helpers
+local function actor()
+	return db and db.actor
+end
+
+local function obj_id(o)
+	if not (o) then return nil end
+	local ok, id = pcall(function()
+		if (type(o.id) == "function") then return o:id() end
+		return o.id
+	end)
+	if (ok) then return id end
+	return nil
+end
+
+local function is_squad(se)
+	if not (se) then return false end
+	local ok, r = pcall(function() return se.squad_members ~= nil and se.commander_id ~= nil end)
+	return ok and r == true
+end
+
+local function group_of(se)
+	local ok, gid = pcall(function() return se.group_id end)
+	if (ok and gid and gid ~= 65535) then return gid end
+	return nil
+end
+
+-- Squad server object of a target: the squad itself or the squad of a member.
+local function squad_of(ctx, target)
+	local id = util.resolve_target_id(ctx, target)
+	if not (id) then return nil end
+	local se = util.se_by_id(id)
+	if not (se) then return nil end
+	if (is_squad(se)) then return se end
+	local gid = group_of(se)
+	local sq = gid and util.se_by_id(gid) or nil
+	if (is_squad(sq)) then return sq end
+	return nil
+end
+
+local function ref_by_id(qs, id)
+	if not (qs and qs.refs and id) then return nil end
+	for _, rec in pairs(qs.refs) do
+		if (type(rec) == "table" and rec.id == id) then return rec end
+	end
+	return nil
+end
+
+local function release_se(se)
+	if not (se) then return end
+	if (safe_release_manager and safe_release_manager.release) then
+		local ok = pcall(safe_release_manager.release, se)
+		if (ok) then return end
+	end
+	pcall(function() alife():release(se, true) end)
+end
+
+local function sim_board()
+	if (SIMBOARD) then return SIMBOARD end
+	if (sim_board and sim_board.get_sim_board) then
+		local ok, b = pcall(sim_board.get_sim_board)
+		if (ok) then return b end
+	end
+	return nil
+end
+
+-- Creates a squad on a smart (mirrors xr_effects.create_squad). Returns squad, hold.
+local function spawn_squad(ctx, spec)
+	local smart = util.smart_by_name(spec.smart)
+	if not (smart) then error("smart '" .. tostring(spec.smart) .. "' not found") end
+	local board = sim_board()
+	if not (board and board.create_squad) then error("SIMBOARD is not available") end
+	local ok, exists = pcall(function() return system_ini():section_exist(spec.section) end)
+	if (ok and exists == false) then error("squad section '" .. tostring(spec.section) .. "' does not exist") end
+	local squad = board:create_squad(smart, spec.section)
+	if not (squad) then error("cannot create squad " .. tostring(spec.section) .. " at " .. tostring(spec.smart)) end
+	pcall(function()
+		for k in squad:squad_members() do
+			local se = k.object or (k.id and util.se_by_id(k.id))
+			if (se and board.setup_squad_and_group) then board:setup_squad_and_group(se) end
+		end
+	end)
+	local hold = (spec.hold ~= false)
+	if (hold) then squad.scripted_target = spec.smart end
+	return squad, hold
+end
+
+-- Held squads stay where the quest put them (scripted_target is not persisted by the game).
+local function apply_hold(rec, se)
+	if (type(rec) ~= "table" or rec.kind ~= "squad") then return end
+	local target = rec.scripted or (rec.hold and rec.smart) or nil
+	if not (target) then return end
+	se = se or util.se_by_id(rec.id)
+	if (is_squad(se)) then se.scripted_target = target end
+end
+
+-- ---------------------------------------------------------------------------- objective.kill
+-- w = { id, kind = "npc"|"squad", ref, story, hit }; hit = a member/the target died by the actor.
+local function target_dead(w)
+	if not (w.id) then return true end
+	local se = util.se_by_id(w.id)
+	if not (se) then return true end
+	if (w.kind == "squad") then
+		local ok, n = pcall(function() return se:npc_count() end)
+		if (ok and type(n) == "number") then return n <= 0 end
+		return false
+	end
+	return not util.se_alive(se)
+end
+
+local function kill_resolve(ctx)
+	local w = ctx.w
+	if (w.id or w.unresolved) then return w end
+	local t = ctx.params.target
+	if (type(t) ~= "table") then error("target must be {story=} | {ref=} | {spawn=}") end
+	if (t.spawn) then
+		local spec = t.spawn
+		local rname = spec.ref or (ctx.node_id .. "_target")
+		local rec = core.ref_get(ctx.qs, rname)
+		if (rec and rec.id and not target_dead({ id = rec.id, kind = "squad" })) then
+			-- the squad of a previous pass is still alive: reuse it instead of spawning twice
+			w.id, w.kind, w.ref = rec.id, "squad", rname
+		else
+			local squad, hold = spawn_squad(ctx, spec)
+			core.ref_set(ctx.qs, rname, { id = squad.id, kind = "squad", section = spec.section, smart = spec.smart, hold = hold })
+			w.id, w.kind, w.ref = squad.id, "squad", rname
+			ctx.log("spawned %s at %s (squad %s)", tostring(spec.section), tostring(spec.smart), tostring(squad.id))
+		end
+	elseif (t.ref) then
+		local rec = core.ref_get(ctx.qs, t.ref)
+		if not (rec) then error("ref '" .. tostring(t.ref) .. "' is not created yet") end
+		w.id, w.ref = rec.id, t.ref
+		w.kind = (rec.kind == "squad") and "squad" or "npc"
+	elseif (t.story) then
+		w.story = t.story
+		local id = util.id_by_story(t.story)
+		if (id) then
+			w.id = id
+			w.kind = is_squad(util.se_by_id(id)) and "squad" or "npc"
+		else
+			-- no such object: dead and released, or a typo (the editor warns W060)
+			w.unresolved = true
+			w.kind = "npc"
+			util.warn("%s/%s: story object '%s' does not exist, counted as dead", ctx.uid, ctx.node_id, tostring(t.story))
+		end
+	else
+		error("target must be {story=} | {ref=} | {spawn=}")
+	end
+	core.mark_dirty()
+	return w
+end
+
+local function kill_done(ctx)
+	if (ctx.params.by_actor and not ctx.w.hit) then return false end
+	return target_dead(ctx.w)
+end
+
+local function killer_is_actor(killer)
+	local a = actor()
+	if not (a and killer) then return false end
+	return obj_id(killer) == obj_id(a)
+end
+
+K["objective.kill"] = {
+	events = { "npc_killed", "squad_npc_death", "squad_dead" },
+	begin = function(ctx)
+		kill_resolve(ctx)
+		if (kill_done(ctx)) then return { pin = "done" } end
+		return "wait"
+	end,
+	-- offline deaths leave no callback: keep looking at the server object
+	wants_poll = function(ctx) return true end,
+	poll = function(ctx)
+		if (kill_done(ctx)) then return "done" end
+		return nil
+	end,
+	on_event = function(ctx, evt)
+		local w = ctx.w
+		if not (w.id) then return nil end
+		if (evt.name == "npc_killed") then
+			if (w.kind ~= "npc" or evt.id ~= w.id) then return nil end
+			if (evt.by_actor) then w.hit = true core.mark_dirty() end
+		elseif (evt.name == "squad_npc_death") then
+			if (w.kind ~= "squad" or evt.squad_id ~= w.id) then return nil end
+			if (killer_is_actor(evt.killer)) then w.hit = true core.mark_dirty() end
+		elseif (evt.name == "squad_dead") then
+			if (w.kind ~= "squad" or evt.squad_id ~= w.id) then return nil end
+		else
+			return nil
+		end
+		if (kill_done(ctx)) then return "done" end
+		return nil
+	end,
+}
+
+-- ---------------------------------------------------------------------------- extra: spawn
+K["spawn.squad"] = {
+	run = function(ctx, p)
+		local squad, hold = spawn_squad(ctx, p)
+		if (p.ref) then
+			core.ref_set(ctx.qs, p.ref, { id = squad.id, kind = "squad", section = p.section, smart = p.smart, hold = hold })
+		end
+	end,
+}
+
+K["spawn.object"] = {
+	run = function(ctx, p)
+		local lvl, pos, lvid, gvid = util.place_position(p.place)
+		if not (pos and lvid and gvid) then error("spawn.object: cannot resolve place") end
+		local se = alife():create(p.section, pos, lvid, gvid)
+		if not (se) then error("spawn.object: alife():create returned nothing") end
+		if (p.ref) then core.ref_set(ctx.qs, p.ref, { id = se.id, kind = "object", section = p.section }) end
+	end,
+}
+
+-- ---------------------------------------------------------------------------- extra: squads
+K["squad.move"] = {
+	run = function(ctx, p)
+		local sq = squad_of(ctx, p.target)
+		if not (sq) then error("squad.move: target squad not found") end
+		local dest = (p.follow_actor == true) and "actor" or p.smart
+		if not (dest) then error("squad.move: smart or follow_actor is required") end
+		if (dest ~= "actor" and not util.smart_by_name(dest)) then error("squad.move: smart '" .. tostring(dest) .. "' not found") end
+		sq.scripted_target = dest
+		-- the destination survives a load through the ref record
+		local rec = ref_by_id(ctx.qs, sq.id)
+		if (rec) then
+			rec.scripted = dest
+			core.mark_dirty()
+		end
+	end,
+}
+
+K["squad.remove"] = {
+	run = function(ctx, p)
+		local sq = squad_of(ctx, p.target)
+		if not (sq) then
+			util.warn("%s/%s: squad.remove: target squad not found (already gone?)", ctx.uid, ctx.node_id)
+			return
+		end
+		local board = sim_board()
+		local ok = false
+		if (board and board.remove_squad) then ok = pcall(board.remove_squad, board, sq) end
+		if not (ok) then release_se(sq) end
+	end,
+}
+
+-- ---------------------------------------------------------------------------- extra: npc
+K["npc.remove"] = {
+	run = function(ctx, p)
+		local se = util.resolve_npc_se(ctx, p.npc)
+		if not (se) then
+			util.warn("%s/%s: npc.remove: npc not found", ctx.uid, ctx.node_id)
+			return
+		end
+		release_se(se)
+	end,
+}
+
+K["npc.kill"] = {
+	run = function(ctx, p)
+		local go = util.resolve_npc_go(ctx, p.npc)
+		if (go) then
+			local ok, alive = pcall(go.alive, go)
+			if (ok and alive) then
+				go:kill(go)
+				return
+			end
+		end
+		local se = util.resolve_npc_se(ctx, p.npc)
+		if not (se) then
+			util.warn("%s/%s: npc.kill: npc not found", ctx.uid, ctx.node_id)
+			return
+		end
+		if not (util.se_alive(se)) then return end
+		local ok = pcall(function() se:kill() end)
+		if not (ok) then release_se(se) end
+	end,
+}
+
+-- ---------------------------------------------------------------------------- extra: relations
+local function actor_community()
+	local ok, c = pcall(function() return alife():actor():community() end)
+	if (ok and type(c) == "string" and c ~= "") then return c end
+	return util.go_community(actor()) or "actor"
+end
+
+local function community_only(who)
+	return type(who) == "table" and who.community ~= nil and who.story == nil and who.ref == nil and who.profile == nil
+end
+
+K["relation.set"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then error("relation.set: no actor") end
+		local who, value = p.who, p.value
+		if (community_only(who)) then
+			if (game_relations and game_relations.set_factions_community) then
+				game_relations.set_factions_community(who.community, actor_community(), value)
+			else
+				local num = (value == "enemy") and -5000 or (value == "friend") and 5000 or 0
+				relation_registry.set_community_relation(who.community, actor_community(), num)
+			end
+			return
+		end
+		local id = util.ref_object_id(ctx, who)
+		local se = id and util.se_by_id(id) or nil
+		if (is_squad(se)) then
+			if (se.set_squad_relation) then se:set_squad_relation(value) end
+			return
+		end
+		local go = util.resolve_npc_go(ctx, who)
+		if (go) then
+			go:force_set_goodwill(GOODWILL[value] or 0, a)
+			return
+		end
+		se = se or util.resolve_npc_se(ctx, who)
+		if (se and se.force_set_goodwill) then
+			se:force_set_goodwill(GOODWILL[value] or 0, a:id())
+			return
+		end
+		error("relation.set: target not found")
+	end,
+}
+
+K["relation.goodwill"] = {
+	run = function(ctx, p)
+		local a = actor()
+		if not (a) then error("relation.goodwill: no actor") end
+		local who, delta = p.who, tonumber(p.delta) or 0
+		if (community_only(who)) then
+			if (game_relations and game_relations.change_factions_community_num) then
+				game_relations.change_factions_community_num(who.community, a:id(), delta)
+			else
+				relation_registry.change_community_goodwill(who.community, a:id(), delta)
+			end
+			return
+		end
+		local id = util.ref_object_id(ctx, who)
+		local se = id and util.se_by_id(id) or nil
+		if (is_squad(se)) then
+			local n = 0
+			for k in se:squad_members() do
+				local go = util.go_by_id(k.id)
+				if (go) then
+					go:change_goodwill(delta, a)
+					n = n + 1
+				end
+			end
+			if (n == 0) then util.warn("%s/%s: relation.goodwill: squad has no online members", ctx.uid, ctx.node_id) end
+			return
+		end
+		local go = util.resolve_npc_go(ctx, who)
+		if not (go) then error("relation.goodwill: npc is not online") end
+		go:change_goodwill(delta, a)
+	end,
+}
+
+-- ---------------------------------------------------------------------------- restore
+-- squad_on_register: a held squad came (back) into the world - put its target back.
+function on_squad_register(squad)
+	local id = obj_id(squad)
+	if not (id) then return end
+	local Q, order = core.quests()
+	for _, uid in ipairs(order) do
+		local qs = core.quest_state(uid)
+		if (qs and qs.status == "active") then
+			for _, rec in pairs(qs.refs) do
+				if (type(rec) == "table" and rec.id == id) then apply_hold(rec, squad) end
+			end
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------- core hooks
+function register()
+	for name, impl in pairs(K) do core.register_kind(name, impl) end
+end
+
+function on_init()
+	local Q, order = core.quests()
+	local n = 0
+	for _, uid in ipairs(order) do
+		local qs = core.quest_state(uid)
+		if (qs and qs.status == "active") then
+			for _, rec in pairs(qs.refs) do
+				if (type(rec) == "table" and rec.kind == "squad" and (rec.scripted or rec.hold)) then
+					apply_hold(rec)
+					n = n + 1
+				end
+			end
+		end
+	end
+	if (n > 0) then util.info("world: %d held squad(s) re-targeted", n) end
+	if (#order > 0 and not squad_cb_on and RegisterScriptCallback) then
+		RegisterScriptCallback("squad_on_register", on_squad_register)
+		squad_cb_on = true
+	end
+end
+
+function kinds() return K end

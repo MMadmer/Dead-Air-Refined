@@ -1,0 +1,35 @@
+-- Scenario (i): the same quest with the node that holds the live token (objective.fetch) deleted
+-- and the flow rewired around it. Loading a save whose token sits on `fetch` must drop that token
+-- with a log line and leave everything else working. Only the QA runner uses this copy.
+return {
+  nq = 1,
+  id = "linear_fetch",
+  title = "Хлеб для новичков",
+  activation = "auto",
+  vars = { bread_needed = 2 },
+  tasks = {
+    bring_bread = { title = "Хлеб для новичков",
+                    descr = "Раздобудь две буханки хлеба для лагеря новичков на Кордоне.",
+                    type = "additional" },
+  },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "intro" } },
+
+    { id = "intro", kind = "flow.step",
+      on_enter = {
+        { kind = "news.tip", params = { text = "Новичкам на Кордоне нужен хлеб. Две буханки хватит." } },
+        { kind = "task.give", params = { task = "bring_bread" } },
+      },
+      out = { next = "reward" } },
+
+    { id = "reward", kind = "flow.step",
+      on_enter = {
+        { kind = "item.give", params = { section = "medkit", count = 1 } },
+        { kind = "money.give", params = { amount = 500 } },
+        { kind = "task.complete", params = { task = "bring_bread" } },
+      },
+      out = { next = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}

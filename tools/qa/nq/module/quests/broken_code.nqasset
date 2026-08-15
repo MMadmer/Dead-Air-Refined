@@ -1,0 +1,12 @@
+-- Intentionally broken asset #1 (scenario a): code outside strings.
+-- The loader must reject it (E00x) and keep the other quests running.
+local secret = 42
+return {
+  nq = 1,
+  id = "broken_code",
+  title = "Broken: code outside strings",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "s" } },
+    { id = "s", kind = "flow.end", params = { status = "completed" } },
+  },
+}

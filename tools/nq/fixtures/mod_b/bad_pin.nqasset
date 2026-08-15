@@ -1,0 +1,10 @@
+-- E007 fixture: undeclared pin, missing target, edge into a trigger.
+return {
+  nq = 1,
+  id = "bad_pin",
+  title = "Bad pin",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "step", foo = "step" } },
+    { id = "step", kind = "flow.step", out = { next = { "missing", "start" } } },
+  },
+}

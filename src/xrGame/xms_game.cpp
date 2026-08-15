@@ -2,6 +2,8 @@
 
 #include "xms_game.h"
 #include "save_extension_gameplay.h"
+#include "save_extension_chunk_ids.h"
+#include "PhraseDialog.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "ai_space.h"
@@ -404,6 +406,9 @@ namespace
 {
 const XMS::Module* find_enabled(pcstr id)
 {
+    // every caller takes the id straight from Lua, where nil is a normal argument
+    if (!id || !id[0])
+        return nullptr;
     const XMS::Module* m = XMS::FindModule(id);
     return m && !m->disabled ? m : nullptr;
 }
@@ -484,14 +489,143 @@ luabind::object xms_native_read_script(lua_State* L, pcstr id, pcstr name)
     return result;
 }
 
-bool xms_native_save_data(lua_State* L, pcstr id, luabind::object data)
+// ---- module files (NQ assets and other data a runtime reads itself) --------
+
+// A path inside a module: relative, no '..' anywhere, no drive/UNC, no glob
+// or control characters. Both '/' and '\' separate.
+bool valid_rel_path(pcstr path)
+{
+    if (!path || !path[0] || path[0] == '/' || path[0] == '\\' || strstr(path, ".."))
+        return false;
+    for (pcstr c = path; *c; ++c)
+        if (u8(*c) < 0x20 || *c == ':' || *c == '<' || *c == '>' || *c == '"' || *c == '|' || *c == '?' || *c == '*')
+            return false;
+    return true;
+}
+
+// subdir "" = module root; a subdir that fails the guard yields nil, an
+// absent one just an empty list
+luabind::object xms_native_list_files(lua_State* L, pcstr id, pcstr subdir, pcstr mask, bool recursive)
+{
+    const XMS::Module* m = find_enabled(id);
+    if (!m || !mask || !mask[0])
+        return luabind::object();
+    xr_string dir = m->root;
+    xr_string prefix;
+    if (subdir && subdir[0])
+    {
+        if (!valid_rel_path(subdir))
+            return luabind::object();
+        prefix = subdir;
+        for (char& c : prefix)
+            if (c == '/')
+                c = _DELIMITER;
+        if (prefix.back() != _DELIMITER)
+            prefix += _DELIMITER;
+        dir += prefix;
+    }
+    xr_vector<xr_string> files;
+    XMS::ListFilesRelative(dir.c_str(), mask, recursive, files);
+
+    luabind::object result = luabind::newtable(L);
+    int index = 1;
+    for (const xr_string& file : files)
+        result[index++] = (prefix + file).c_str();
+    return result;
+}
+
+luabind::object xms_native_read_file(lua_State* L, pcstr id, pcstr relpath)
 {
     const XMS::Module* m = find_enabled(id);
     if (!m)
+    {
+        Msg("! XMS: read_file: no enabled module [%s]", id ? id : "");
+        return luabind::object();
+    }
+    if (!valid_rel_path(relpath))
+    {
+        Msg("! XMS: read_file [%s]: refused path [%s]", id, relpath ? relpath : "");
+        return luabind::object();
+    }
+    string_path path;
+    xr_sprintf(path, "%s%s", m->root.c_str(), relpath);
+    for (char* c = path; *c; ++c)
+        if (*c == '/')
+            *c = _DELIMITER;
+
+    FILE* f = fopen(path, "rb");
+    if (!f)
+    {
+        Msg("! XMS: read_file [%s]: cannot open [%s]", id, relpath);
+        return luabind::object();
+    }
+    fseek(f, 0, SEEK_END);
+    const long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    constexpr long kMaxFileSize = 8 * 1024 * 1024;
+    if (len < 0 || len > kMaxFileSize)
+    {
+        fclose(f);
+        Msg("! XMS: read_file [%s]: [%s] is %ld bytes, limit is %ld", id, relpath, len, kMaxFileSize);
+        return luabind::object();
+    }
+    xr_vector<char> buffer(static_cast<size_t>(len));
+    const size_t got = len > 0 ? fread(buffer.data(), 1, size_t(len), f) : 0;
+    fclose(f);
+
+    lua_pushlstring(L, buffer.data(), got);
+    luabind::object result(luabind::from_stack(L, -1));
+    lua_pop(L, 1);
+    return result;
+}
+
+bool xms_native_module_applies(pcstr id)
+{
+    const XMS::Module* m = id ? XMS::FindModule(id) : nullptr;
+    return m && XMS::ModuleApplies(*m);
+}
+
+// ---- persistent blobs ------------------------------------------------------
+
+// Engine-owned state rides the module blob channel under namespaces the
+// registry never allocates. The "xms." id prefix is reserved for these and
+// resolves before any module id.
+struct CoreBlob
+{
+    pcstr id;
+    u16 ns;
+};
+constexpr CoreBlob kCoreBlobs[] = {
+    {"xms.nq", 0xFF01}, // NQ quest-graph runtime state, chunk 0x584DFF01
+};
+static_assert(kCoreBlobs[0].ns >= XMS::kReservedNsBase);
+static_assert((XmsGame::kModuleChunkBase | kCoreBlobs[0].ns) == SaveExtensionChunkIds::XmsNqState);
+
+bool resolve_blob_ns(pcstr id, u16& ns)
+{
+    if (!id)
+        return false;
+    for (const CoreBlob& blob : kCoreBlobs)
+        if (0 == xr_strcmp(id, blob.id))
+        {
+            ns = blob.ns;
+            return true;
+        }
+    const XMS::Module* m = find_enabled(id);
+    if (!m)
+        return false;
+    ns = m->ns;
+    return true;
+}
+
+bool xms_native_save_data(lua_State* L, pcstr id, luabind::object data)
+{
+    u16 ns = 0;
+    if (!resolve_blob_ns(id, ns))
         return false;
     if (luabind::type(data) == LUA_TNIL)
     {
-        XmsGame::SetPendingBlob(m->ns, "", 0);
+        XmsGame::SetPendingBlob(ns, "", 0);
         return true;
     }
     if (luabind::type(data) != LUA_TSTRING)
@@ -499,17 +633,17 @@ bool xms_native_save_data(lua_State* L, pcstr id, luabind::object data)
     data.push(L);
     size_t size = 0;
     pcstr bytes = lua_tolstring(L, -1, &size);
-    XmsGame::SetPendingBlob(m->ns, bytes, size);
+    XmsGame::SetPendingBlob(ns, bytes, size);
     lua_pop(L, 1);
     return true;
 }
 
 luabind::object xms_native_load_data(lua_State* L, pcstr id)
 {
-    const XMS::Module* m = find_enabled(id);
-    if (!m)
+    u16 ns = 0;
+    if (!resolve_blob_ns(id, ns))
         return luabind::object();
-    const xr_vector<u8>* blob = XmsGame::GetLoadedBlob(m->ns);
+    const xr_vector<u8>* blob = XmsGame::GetLoadedBlob(ns);
     if (!blob || blob->empty())
         return luabind::object();
     lua_pushlstring(L, reinterpret_cast<pcstr>(blob->data()), blob->size());
@@ -517,6 +651,12 @@ luabind::object xms_native_load_data(lua_State* L, pcstr id)
     lua_pop(L, 1);
     return result;
 }
+
+// ---- virtual dialogs (NQ) --------------------------------------------------
+
+bool xms_native_dialog_register(pcstr id, pcstr init_func) { return CPhraseDialog::RegisterVirtual(id, init_func); }
+void xms_native_dialog_unregister(pcstr id) { CPhraseDialog::UnregisterVirtual(id); }
+bool xms_native_dialog_invalidate(pcstr id) { return CPhraseDialog::InvalidateVirtual(id); }
 
 void xms_native_log(pcstr text) { Msg("[xms] %s", text ? text : ""); }
 
@@ -604,6 +744,14 @@ xms.active_modes = xms_native_active_modes
 xms.mode_active = xms_native_mode_active
 xms.known_modes = xms_native_known_modes
 xms.graph_vertex = xms_native_graph_vertex
+-- NQ quest-graph support (feature-test with xms.nq_api)
+xms.nq_api = 1
+xms.list_files = xms_native_list_files
+xms.read_file = xms_native_read_file
+xms.module_applies = xms_native_module_applies
+xms.dialog_register = xms_native_dialog_register
+xms.dialog_unregister = xms_native_dialog_unregister
+xms.dialog_invalidate = xms_native_dialog_invalidate
 
 -- ---- module script namespaces ----------------------------------------------
 local script_cache = {}
@@ -820,7 +968,13 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_mode_active", &xms_native_mode_active),
         def("xms_native_known_modes", &xms_native_known_modes),
         def("xms_native_graph_vertex", &xms_native_graph_vertex),
-        def("xms_native_recompose_spawns", &xms_native_recompose_spawns)
+        def("xms_native_recompose_spawns", &xms_native_recompose_spawns),
+        def("xms_native_list_files", &xms_native_list_files),
+        def("xms_native_read_file", &xms_native_read_file),
+        def("xms_native_module_applies", &xms_native_module_applies),
+        def("xms_native_dialog_register", &xms_native_dialog_register),
+        def("xms_native_dialog_unregister", &xms_native_dialog_unregister),
+        def("xms_native_dialog_invalidate", &xms_native_dialog_invalidate)
     ];
 
     // defer the bootstrap to the end of CScriptEngine::init - the base Lua

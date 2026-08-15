@@ -1,0 +1,822 @@
+-- NQ runtime: shared helpers (text encoding, references, places, time, serialization, logging).
+-- Part of the node-quest runtime of Dead Air Refined (contract: XFined Editor
+-- docs/NQ_ARCHITECTURE.md). Pure helpers: no callbacks, no state of its own except caches.
+
+-- ============================================================================ logging
+-- Every runtime line starts with "* [nq]", "~ [nq]" or "! [nq]" so the log can be filtered.
+-- The game's printf substitutes only %s, so lines are pre-formatted with string.format.
+
+-- Safe string.format: a bad format never turns a log line into a crash.
+function sfmt(fmt, ...)
+	if (select("#", ...) == 0) then return tostring(fmt) end
+	local ok, s = pcall(string.format, tostring(fmt), ...)
+	if (ok) then return s end
+	return tostring(fmt)
+end
+
+function info(fmt, ...)
+	printf("%s", "* [nq] " .. sfmt(fmt, ...))
+end
+
+function warn(fmt, ...)
+	printf("%s", "~ [nq] " .. sfmt(fmt, ...))
+end
+
+function err(fmt, ...)
+	printf("%s", "! [nq] " .. sfmt(fmt, ...))
+end
+
+-- ============================================================================ UTF-8 -> cp1251
+-- Assets are UTF-8, the engine wants cp1251 (translate() returns unknown keys as is, so raw
+-- cp1251 text works everywhere). Anything outside the code page becomes "?".
+local CP_MAP = {
+	[0x0402] = 0x80, [0x0403] = 0x81, [0x201A] = 0x82, [0x0453] = 0x83, [0x201E] = 0x84,
+	[0x2026] = 0x85, [0x2020] = 0x86, [0x2021] = 0x87, [0x20AC] = 0x88, [0x2030] = 0x89,
+	[0x0409] = 0x8A, [0x2039] = 0x8B, [0x040A] = 0x8C, [0x040C] = 0x8D, [0x040B] = 0x8E,
+	[0x040F] = 0x8F, [0x0452] = 0x90, [0x2018] = 0x91, [0x2019] = 0x92, [0x201C] = 0x93,
+	[0x201D] = 0x94, [0x2022] = 0x95, [0x2013] = 0x96, [0x2014] = 0x97, [0x2122] = 0x99,
+	[0x0459] = 0x9A, [0x203A] = 0x9B, [0x045A] = 0x9C, [0x045C] = 0x9D, [0x045B] = 0x9E,
+	[0x045F] = 0x9F, [0x00A0] = 0xA0, [0x040E] = 0xA1, [0x045E] = 0xA2, [0x0408] = 0xA3,
+	[0x00A4] = 0xA4, [0x0490] = 0xA5, [0x00A6] = 0xA6, [0x00A7] = 0xA7, [0x0401] = 0xA8,
+	[0x00A9] = 0xA9, [0x0404] = 0xAA, [0x00AB] = 0xAB, [0x00AC] = 0xAC, [0x00AD] = 0xAD,
+	[0x00AE] = 0xAE, [0x0407] = 0xAF, [0x00B0] = 0xB0, [0x00B1] = 0xB1, [0x0406] = 0xB2,
+	[0x0456] = 0xB3, [0x0491] = 0xB4, [0x00B5] = 0xB5, [0x00B6] = 0xB6, [0x00B7] = 0xB7,
+	[0x0451] = 0xB8, [0x2116] = 0xB9, [0x0454] = 0xBA, [0x00BB] = 0xBB, [0x0458] = 0xBC,
+	[0x0405] = 0xBD, [0x0455] = 0xBE, [0x0457] = 0xBF,
+}
+-- Cyrillic block A..ya is contiguous in both encodings.
+for cp = 0x0410, 0x044F do CP_MAP[cp] = 0xC0 + (cp - 0x0410) end
+
+-- Decodes one UTF-8 sequence starting at byte i; returns code point and next index.
+-- Malformed input yields 0xFFFD and advances by one byte.
+local function utf8_decode(s, i)
+	local b = string.byte(s, i)
+	if (b < 0x80) then return b, i + 1 end
+	local n, cp
+	if (b >= 0xF0) then n, cp = 3, b - 0xF0
+	elseif (b >= 0xE0) then n, cp = 2, b - 0xE0
+	elseif (b >= 0xC0) then n, cp = 1, b - 0xC0
+	else return 0xFFFD, i + 1 end
+	for k = 1, n do
+		local c = string.byte(s, i + k)
+		if not (c and c >= 0x80 and c < 0xC0) then return 0xFFFD, i + 1 end
+		cp = cp * 64 + (c - 0x80)
+	end
+	return cp, i + n + 1
+end
+
+-- Non-ASCII byte class. Built with string.char instead of written as "[\128-\255]": the engine's
+-- script loader does not turn decimal escapes into bytes (verified in game - "\208" arrives as the
+-- three characters 2, 0, 8), so the literal form would compile to a class of digits and every
+-- Cyrillic text would slip through unconverted.
+local HIGH_BYTES = "[" .. string.char(128) .. "-" .. string.char(255) .. "]"
+
+-- Returns cp1251 string and the number of characters that had no cp1251 equivalent.
+function to_cp1251(s)
+	if (type(s) ~= "string") then return s, 0 end
+	if not (string.find(s, HIGH_BYTES)) then return s, 0 end
+	local out, n, lost, i, len = {}, 0, 0, 1, #s
+	while (i <= len) do
+		local cp, ni = utf8_decode(s, i)
+		i = ni
+		n = n + 1
+		if (cp < 0x80) then
+			out[n] = string.char(cp)
+		else
+			local b = CP_MAP[cp]
+			if (b) then
+				out[n] = string.char(b)
+			else
+				out[n] = "?"
+				lost = lost + 1
+			end
+		end
+	end
+	return table.concat(out), lost
+end
+
+-- Alias used by the docs (xms_nq_util.cp1251): returns only the converted string.
+function cp1251(s)
+	local r = to_cp1251(s)
+	return r
+end
+
+-- Language of the running game: localization.ltx [string_table] language, fallback "rus".
+local language_cache
+function language()
+	if (language_cache) then return language_cache end
+	local lang = "rus"
+	pcall(function()
+		local ini = ini_file("localization.ltx")
+		if (ini and ini:section_exist("string_table") and ini:line_exist("string_table", "language")) then
+			local v = ini:r_string("string_table", "language")
+			if (v and v ~= "") then lang = v end
+		end
+	end)
+	language_cache = lang
+	return lang
+end
+
+-- text param -> UTF-8 string for the active language ("rus" fallback, then any).
+function pick_text(v)
+	if (type(v) == "string") then return v end
+	if (type(v) ~= "table") then return nil end
+	local lang = language()
+	if (type(v[lang]) == "string") then return v[lang] end
+	if (type(v.rus) == "string") then return v.rus end
+	for _, s in pairs(v) do
+		if (type(s) == "string") then return s end
+	end
+	return nil
+end
+
+-- Substitutes {var:name} and {actor} at use time. Text is already cp1251, placeholders are ASCII.
+function format_text(ctx, text)
+	if (type(text) ~= "string") then return text end
+	if not (string.find(text, "{", 1, true)) then return text end
+	local s = string.gsub(text, "{var:([%w_]+)}", function(name)
+		local vars = ctx and (ctx.qs and ctx.qs.vars or ctx.vars)
+		local v = vars and vars[name]
+		if (v == nil) then return "" end
+		return tostring(v)
+	end)
+	s = string.gsub(s, "{actor}", function()
+		local a = db and db.actor
+		if (a) then
+			local ok, name = pcall(a.character_name, a)
+			if (ok and name) then return name end
+		end
+		return "actor"
+	end)
+	return s
+end
+
+-- ============================================================================ hashing
+-- FNV-1a 32-bit over the asset text; exact double arithmetic, no reliance on the bit lib.
+local bxor = bit and bit.bxor
+local function xor8(a, b)
+	if (bxor) then return bxor(a, b) end
+	local r, m = 0, 1
+	for _ = 1, 8 do
+		local x, y = a % 2, b % 2
+		if (x ~= y) then r = r + m end
+		a, b, m = (a - x) / 2, (b - y) / 2, m * 2
+	end
+	return r
+end
+
+function fnv1a(s)
+	local h = 2166136261
+	for i = 1, #s do
+		local lo = h % 256
+		h = h - lo + xor8(lo, string.byte(s, i))
+		-- h * 16777619 mod 2^32 == (h * 403 + (h mod 256) * 2^24) mod 2^32, all exact in doubles.
+		h = (h * 403 + (h % 256) * 16777216) % 4294967296
+	end
+	return h
+end
+
+-- ============================================================================ time
+-- Game time as a plain number of seconds (civil calendar from CTime fields): exact, epoch free,
+-- and comparable across sessions. Real time is time_global() milliseconds.
+local function days_from_civil(y, m, d)
+	if (m <= 2) then y = y - 1 end
+	local era = math.floor(y / 400)
+	local yoe = y - era * 400
+	local mp = (m + 9) % 12
+	local doy = math.floor((153 * mp + 2) / 5) + d - 1
+	local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+	return era * 146097 + doe - 719468
+end
+
+function ctime_to_secs(ct)
+	local Y, M, D, h, m, s, ms = ct:get(0, 0, 0, 0, 0, 0, 0)
+	return days_from_civil(Y, M, D) * 86400 + h * 3600 + m * 60 + s + (ms or 0) / 1000
+end
+
+function game_secs()
+	local ok, ct = pcall(game.get_game_time)
+	if (ok and ct) then
+		local ok2, v = pcall(ctime_to_secs, ct)
+		if (ok2) then return v end
+	end
+	return 0
+end
+
+function real_ms()
+	local ok, v = pcall(time_global)
+	if (ok and type(v) == "number") then return v end
+	return 0
+end
+
+-- duration param -> seconds, is_game_time. Accepts {seconds=} | {game_hours=} | {game_minutes=} |
+-- {game_seconds=} | plain number (real seconds).
+function duration_secs(d)
+	if (type(d) == "number") then return d, false end
+	if (type(d) ~= "table") then return nil end
+	if (d.seconds) then return tonumber(d.seconds), false end
+	if (d.game_hours) then return tonumber(d.game_hours) * 3600, true end
+	if (d.game_minutes) then return tonumber(d.game_minutes) * 60, true end
+	if (d.game_seconds) then return tonumber(d.game_seconds), true end
+	return nil
+end
+
+-- ============================================================================ objects
+function actor()
+	return db and db.actor
+end
+
+function se_by_id(id)
+	if not (id) then return nil end
+	local ok, sim = pcall(alife)
+	if not (ok and sim) then return nil end
+	local ok2, se = pcall(sim.object, sim, id)
+	if (ok2) then return se end
+	return nil
+end
+
+function go_by_id(id)
+	if not (id) then return nil end
+	if (db and db.storage and db.storage[id] and db.storage[id].object) then
+		return db.storage[id].object
+	end
+	if (level and level.object_by_id) then
+		local ok, go = pcall(level.object_by_id, id)
+		if (ok) then return go end
+	end
+	return nil
+end
+
+function story_id_of(obj_id)
+	if not (obj_id) then return nil end
+	if (get_object_story_id) then
+		local ok, sid = pcall(get_object_story_id, obj_id)
+		if (ok) then return sid end
+	end
+	return nil
+end
+
+function id_by_story(sid)
+	if not (sid) then return nil end
+	if (get_story_object_id) then
+		local ok, id = pcall(get_story_object_id, sid)
+		if (ok) then return id end
+	end
+	return nil
+end
+
+-- Story id under which quest refs are (re)registered: nq.<module>.<quest>.<ref>.
+function ref_story_id(uid, name)
+	return "nq." .. tostring(uid) .. "." .. tostring(name)
+end
+
+function register_story_id(obj_id, sid)
+	if not (obj_id and sid and story_objects and story_objects.get_story_objects_registry) then return false end
+	local ok = pcall(function()
+		local reg = story_objects.get_story_objects_registry()
+		-- Re-registration after load: drop a stale binding of the same name first.
+		if (reg.story_id and reg.story_id[sid] and reg.story_id[sid] ~= obj_id) then
+			reg:unregister_by_story_id(sid)
+		end
+		reg:register(obj_id, sid)
+	end)
+	return ok
+end
+
+function unregister_story_id(sid)
+	if not (sid and story_objects and story_objects.get_story_objects_registry) then return end
+	pcall(function() story_objects.get_story_objects_registry():unregister_by_story_id(sid) end)
+end
+
+-- Character data of a game object with every call guarded (monsters have no community/profile).
+local function go_field(go, method)
+	local f = go and go[method]
+	if not (f) then return nil end
+	local ok, v = pcall(f, go)
+	if (ok) then return v end
+	return nil
+end
+
+function go_community(go) return go_field(go, "character_community") end
+function go_profile(go) return go_field(go, "profile_name") end
+function go_section(go) return go_field(go, "section") end
+function go_name(go) return go_field(go, "character_name") or go_field(go, "name") end
+
+local function se_field(se, method)
+	local f = se and se[method]
+	if not (f) then return nil end
+	local ok, v = pcall(f, se)
+	if (ok) then return v end
+	return nil
+end
+
+function se_community(se) return se_field(se, "community") end
+function se_profile(se) return se_field(se, "profile_name") end
+function se_alive(se)
+	if not (se) then return false end
+	local f = se.alive
+	if not (f) then return true end
+	local ok, v = pcall(f, se)
+	if (ok) then return v and true or false end
+	return false
+end
+
+-- ============================================================================ npc refs (§8)
+-- npc_ref = {story=} | {ref=} | {profile=} | {community=, level=?}
+-- Resolution order: ref -> story -> first online NPC by profile/community.
+
+local function refs_of(ctx)
+	return ctx and ((ctx.qs and ctx.qs.refs) or ctx.refs) or nil
+end
+
+-- Object id of a ref/story reference; nil for profile/community (they have no single object).
+function ref_object_id(ctx, ref)
+	if (type(ref) ~= "table") then return nil end
+	if (ref.ref) then
+		local refs = refs_of(ctx)
+		local r = refs and refs[ref.ref]
+		return r and r.id or nil
+	end
+	if (ref.story) then return id_by_story(ref.story) end
+	if (ref.id) then return ref.id end
+	return nil
+end
+
+-- Iterates online stalkers via db.storage; returns first game object matching fn.
+local function first_online_npc(fn)
+	if not (db and db.storage) then return nil end
+	for id, st in pairs(db.storage) do
+		local go = st and st.object
+		if (go and go.alive and go:alive() and IsStalker and IsStalker(go)) then
+			if (fn(go)) then return go end
+		end
+	end
+	return nil
+end
+
+function resolve_npc_go(ctx, ref)
+	if (type(ref) ~= "table") then return nil end
+	local id = ref_object_id(ctx, ref)
+	if (id) then return go_by_id(id) end
+	if (ref.profile) then
+		return first_online_npc(function(go) return go_profile(go) == ref.profile end)
+	end
+	if (ref.community) then
+		local lvl = ref.level
+		if (lvl and level and level.name and level.name() ~= lvl) then return nil end
+		return first_online_npc(function(go) return go_community(go) == ref.community end)
+	end
+	return nil
+end
+
+function resolve_npc_se(ctx, ref)
+	if (type(ref) ~= "table") then return nil end
+	local id = ref_object_id(ctx, ref)
+	if (id) then return se_by_id(id) end
+	local go = resolve_npc_go(ctx, ref)
+	if (go) then return se_by_id(go:id()) end
+	return nil
+end
+
+-- "Does this game object match the ref?" - the dialog side asks it from the NPC.
+-- Accepts a captured event record ({id, story, profile, community}) instead of a game object too.
+function npc_matches(ctx, ref, go)
+	if (type(ref) ~= "table" or not go) then return false end
+	-- a captured record carries a plain id; a game object (userdata, or a table in the harness) has id()
+	local is_rec = (type(go) == "table" and type(go.id) ~= "function")
+	local id = is_rec and go.id or (go.id and go:id())
+	if (ref.ref) then
+		local refs = refs_of(ctx)
+		local r = refs and refs[ref.ref]
+		return (r and r.id ~= nil and r.id == id) and true or false
+	end
+	if (ref.story) then
+		local sid = is_rec and go.story or story_id_of(id)
+		if (sid == ref.story) then return true end
+		-- Fallback: the story registry may lag behind; compare ids.
+		return id_by_story(ref.story) == id
+	end
+	if (ref.profile) then
+		local p = is_rec and go.profile or go_profile(go)
+		return p == ref.profile
+	end
+	if (ref.community) then
+		local c = is_rec and go.community or go_community(go)
+		if (c ~= ref.community) then return false end
+		if (ref.level and level and level.name and level.name() ~= ref.level) then return false end
+		return true
+	end
+	if (ref.id) then return ref.id == id end
+	return false
+end
+
+-- target_ref -> object id (npc_ref forms, {ref} squad/object, {smart}).
+function resolve_target_id(ctx, ref)
+	if (type(ref) ~= "table") then return nil end
+	if (ref.smart) then
+		local smart = smart_by_name(ref.smart)
+		return smart and smart.id or nil
+	end
+	local id = ref_object_id(ctx, ref)
+	if (id) then return id end
+	local go = resolve_npc_go(ctx, ref)
+	return go and go:id() or nil
+end
+
+-- ============================================================================ places (§8)
+function smart_by_name(name)
+	if not (name) then return nil end
+	if (SIMBOARD and SIMBOARD.smarts_by_names) then
+		return SIMBOARD.smarts_by_names[name]
+	end
+	if (sim_board and sim_board.get_sim_board) then
+		local ok, board = pcall(sim_board.get_sim_board)
+		if (ok and board and board.smarts_by_names) then return board.smarts_by_names[name] end
+	end
+	return nil
+end
+
+function level_name_of_gvid(gvid)
+	if not (gvid) then return nil end
+	local ok, name = pcall(function()
+		return alife():level_name(game_graph():vertex(gvid):level_id())
+	end)
+	if (ok) then return name end
+	return nil
+end
+
+function current_level()
+	if (level and level.name) then
+		local ok, n = pcall(level.name)
+		if (ok) then return n end
+	end
+	return nil
+end
+
+-- Position of a place: returns level_name, position(vector), lvid, gvid or nil.
+-- {level,pos}: vertices from level.vertex_id on the current level, xms.graph_vertex elsewhere.
+-- {smart}: the smart's own position/vertices. {restrictor}: online zone position (same level only).
+function place_position(place)
+	if (type(place) ~= "table") then return nil end
+	if (place.smart) then
+		local smart = smart_by_name(place.smart)
+		if not (smart) then return nil end
+		local lvl = level_name_of_gvid(smart.m_game_vertex_id)
+		return lvl, smart.position, smart.m_level_vertex_id, smart.m_game_vertex_id
+	end
+	if (place.restrictor) then
+		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
+		if (zone) then
+			local pos = zone:position()
+			return current_level(), pos, zone:level_vertex_id(), zone:game_vertex_id()
+		end
+		local id = id_by_story(place.restrictor)
+		local se = id and se_by_id(id)
+		if (se) then
+			return level_name_of_gvid(se.m_game_vertex_id), se.position, se.m_level_vertex_id, se.m_game_vertex_id
+		end
+		return nil
+	end
+	if (place.pos) then
+		local p = place.pos
+		local x, y, z = tonumber(p[1] or p.x), tonumber(p[2] or p.y), tonumber(p[3] or p.z)
+		if not (x and y and z) then return nil end
+		local pos = vector():set(x, y, z)
+		local lvl = place.level or current_level()
+		local lvid, gvid
+		if (lvl == current_level()) then
+			local ok, v = pcall(level.vertex_id, pos)
+			-- luabind quirk: an invalid vertex comes back as 4294967296 (u32(-1) + 1).
+			if (ok and v and v < 4294967295) then lvid = v end
+			if (db and db.actor) then gvid = db.actor:game_vertex_id() end
+		end
+		if (xms and xms.graph_vertex) then
+			local ok, g = pcall(xms.graph_vertex, lvl, x, y, z)
+			if (ok and g and g ~= 4294967295 and g ~= 4294967296 and g >= 0) then
+				gvid = g
+				if not (lvid) then
+					local ok2, lv = pcall(function() return game_graph():vertex(g):level_vertex_id() end)
+					if (ok2) then lvid = lv end
+				end
+			end
+		end
+		return lvl, pos, lvid, gvid
+	end
+	return nil
+end
+
+-- Level the place lives on (nil when unknown without alife data).
+function place_level(place)
+	if (type(place) ~= "table") then return nil end
+	if (place.level) then return place.level end
+	if (place.smart) then
+		local smart = smart_by_name(place.smart)
+		return smart and level_name_of_gvid(smart.m_game_vertex_id) or nil
+	end
+	return nil
+end
+
+function place_radius(place)
+	local r = tonumber(place and place.radius)
+	if (r and r > 0) then return r end
+	return 5
+end
+
+-- Is the actor inside the place right now?
+function place_contains_actor(place)
+	local a = actor()
+	if not (a) then return false end
+	if (type(place) ~= "table") then return false end
+	if (place.restrictor) then
+		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
+		if not (zone) then return false end
+		local ok, inside = pcall(zone.inside, zone, a:position())
+		return ok and inside and true or false
+	end
+	if (place.smart) then
+		local smart = smart_by_name(place.smart)
+		if not (smart) then return false end
+		local lvl = level_name_of_gvid(smart.m_game_vertex_id)
+		if (lvl and lvl ~= current_level()) then return false end
+		local r = tonumber(place.radius) or (smart.arrive_dist and tonumber(smart.arrive_dist)) or 25
+		local ok, d = pcall(function() return smart.position:distance_to(a:position()) end)
+		return ok and d and d <= r or false
+	end
+	if (place.pos) then
+		if (place.level and place.level ~= current_level()) then return false end
+		local p = place.pos
+		local x, y, z = tonumber(p[1] or p.x), tonumber(p[2] or p.y), tonumber(p[3] or p.z)
+		if not (x and y and z) then return false end
+		local ap = a:position()
+		local dx, dy, dz = ap.x - x, ap.y - y, ap.z - z
+		local r = place_radius(place)
+		return (dx * dx + dy * dy + dz * dz) <= r * r
+	end
+	return false
+end
+
+-- ============================================================================ inventory
+function count_items(section)
+	local a = actor()
+	if not (a or section) then return 0 end
+	local n = 0
+	pcall(function()
+		a:iterate_inventory(function(_, item)
+			if (item and item:section() == section) then n = n + 1 end
+			return false
+		end, a)
+	end)
+	return n
+end
+
+-- Removes up to `count` items of section (count = nil/"all" -> everything). Returns removed count.
+function remove_items(section, count)
+	local a = actor()
+	if not (a) then return 0 end
+	local all = (count == nil or count == "all")
+	local want = all and math.huge or tonumber(count) or 0
+	local victims = {}
+	pcall(function()
+		a:iterate_inventory(function(_, item)
+			if (#victims < want and item and item:section() == section) then victims[#victims + 1] = item:id() end
+			return false
+		end, a)
+	end)
+	local removed = 0
+	for _, id in ipairs(victims) do
+		local se = se_by_id(id)
+		if (se) then
+			local ok = pcall(function() alife():release(se, true) end)
+			if (ok) then removed = removed + 1 end
+		end
+	end
+	return removed
+end
+
+function is_ammo_section(section)
+	local ok, r = pcall(function()
+		local ini = system_ini()
+		if not (ini:section_exist(section)) then return false end
+		return ini:line_exist(section, "box_size")
+	end)
+	return ok and r or false
+end
+
+-- Creates `count` items of section on the actor (ammo through create_ammo which knows box sizes).
+function give_items(section, count)
+	local a = actor()
+	if not (a) then return 0 end
+	count = tonumber(count) or 1
+	local pos, lvid, gvid, pid = a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id()
+	if (is_ammo_section(section) and create_ammo) then
+		local ok = pcall(create_ammo, section, pos, lvid, gvid, pid, count)
+		return ok and count or 0
+	end
+	local made = 0
+	for _ = 1, count do
+		local ok = pcall(function() alife():create(section, pos, lvid, gvid, pid) end)
+		if (ok) then made = made + 1 end
+	end
+	return made
+end
+
+-- ============================================================================ serialization
+-- Plain-data tables (bool/number/string keys and values, nested tables). Used as the fallback
+-- when marshal is missing and for the JSON report of `nq dump`.
+local function ser_key(k)
+	if (type(k) == "string" and string.find(k, "^[%a_][%w_]*$")) then return k end
+	if (type(k) == "string") then return "[" .. string.format("%q", k) .. "]" end
+	return "[" .. tostring(k) .. "]"
+end
+
+local function ser_value(v, out)
+	local t = type(v)
+	if (t == "string") then
+		out[#out + 1] = string.format("%q", v)
+	elseif (t == "number") then
+		out[#out + 1] = string.format("%.17g", v)
+	elseif (t == "boolean") then
+		out[#out + 1] = tostring(v)
+	elseif (t == "table") then
+		out[#out + 1] = "{"
+		local n = #v
+		for i = 1, n do
+			ser_value(v[i], out)
+			out[#out + 1] = ","
+		end
+		local keys = {}
+		for k in pairs(v) do
+			if not (type(k) == "number" and k >= 1 and k <= n and math.floor(k) == k) then keys[#keys + 1] = k end
+		end
+		table.sort(keys, function(a, b)
+			local ta, tb = type(a), type(b)
+			if (ta ~= tb) then return ta < tb end
+			return a < b
+		end)
+		for _, k in ipairs(keys) do
+			local vk = v[k]
+			local tk = type(vk)
+			if (tk == "string" or tk == "number" or tk == "boolean" or tk == "table") then
+				out[#out + 1] = ser_key(k) .. "="
+				ser_value(vk, out)
+				out[#out + 1] = ","
+			end
+		end
+		out[#out + 1] = "}"
+	else
+		out[#out + 1] = "nil"
+	end
+end
+
+function serialize(t)
+	local out = { "return " }
+	ser_value(t, out)
+	return table.concat(out)
+end
+
+function deserialize(s)
+	if (type(s) ~= "string" or s == "") then return nil end
+	local chunk = loadstring(s, "=nq_state")
+	if not (chunk) then return nil end
+	setfenv(chunk, {})
+	local ok, v = pcall(chunk)
+	if (ok and type(v) == "table") then return v end
+	return nil
+end
+
+-- Persistence codec: marshal when the engine has it, the Lua-source fallback otherwise.
+-- A "L" prefix marks the fallback format so a blob is decodable by either path.
+function encode(t)
+	if (marshal and marshal.encode) then
+		local ok, s = pcall(marshal.encode, t)
+		if (ok and type(s) == "string") then return "M" .. s end
+	end
+	return "L" .. serialize(t)
+end
+
+function decode(s)
+	if (type(s) ~= "string" or #s < 2) then return nil end
+	local tag, body = string.sub(s, 1, 1), string.sub(s, 2)
+	if (tag == "M") then
+		if not (marshal and marshal.decode) then return nil end
+		local ok, v = pcall(marshal.decode, body)
+		if (ok and type(v) == "table") then return v end
+		return nil
+	elseif (tag == "L") then
+		return deserialize(body)
+	end
+	-- Legacy blob without a tag: try marshal, then source.
+	if (marshal and marshal.decode) then
+		local ok, v = pcall(marshal.decode, s)
+		if (ok and type(v) == "table") then return v end
+	end
+	return deserialize(s)
+end
+
+-- Deep copy of plain data (defaults for vars etc.).
+function copy(v)
+	if (type(v) ~= "table") then return v end
+	local r = {}
+	for k, x in pairs(v) do r[k] = copy(x) end
+	return r
+end
+
+function count_keys(t)
+	local n = 0
+	if (type(t) == "table") then for _ in pairs(t) do n = n + 1 end end
+	return n
+end
+
+function sorted_keys(t)
+	local keys = {}
+	if (type(t) == "table") then
+		for k in pairs(t) do keys[#keys + 1] = k end
+		table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+	end
+	return keys
+end
+
+-- ============================================================================ JSON (report)
+local function json_str(s)
+	s = string.gsub(s, '[%c"\\]', function(c)
+		if (c == '"') then return '\\"' end
+		if (c == "\\") then return "\\\\" end
+		if (c == "\n") then return "\\n" end
+		if (c == "\r") then return "\\r" end
+		if (c == "\t") then return "\\t" end
+		return string.format("\\u%04x", string.byte(c))
+	end)
+	-- The log/report is cp1251 like the rest of the game files; keep bytes as they are.
+	return '"' .. s .. '"'
+end
+
+local function json_value(v, out, indent)
+	local t = type(v)
+	if (t == "string") then
+		out[#out + 1] = json_str(v)
+	elseif (t == "number") then
+		if (v ~= v or v == math.huge or v == -math.huge) then out[#out + 1] = "null"
+		elseif (math.floor(v) == v and math.abs(v) < 1e15) then out[#out + 1] = string.format("%d", v)
+		else out[#out + 1] = string.format("%.17g", v) end
+	elseif (t == "boolean") then
+		out[#out + 1] = tostring(v)
+	elseif (t == "table") then
+		local n = #v
+		local pad = string.rep("  ", indent + 1)
+		if (n > 0 or next(v) == nil) then
+			out[#out + 1] = "["
+			for i = 1, n do
+				if (i > 1) then out[#out + 1] = "," end
+				out[#out + 1] = "\n" .. pad
+				json_value(v[i], out, indent + 1)
+			end
+			if (n > 0) then out[#out + 1] = "\n" .. string.rep("  ", indent) end
+			out[#out + 1] = "]"
+		else
+			out[#out + 1] = "{"
+			local keys = sorted_keys(v)
+			for i, k in ipairs(keys) do
+				if (i > 1) then out[#out + 1] = "," end
+				out[#out + 1] = "\n" .. pad .. json_str(tostring(k)) .. ": "
+				json_value(v[k], out, indent + 1)
+			end
+			out[#out + 1] = "\n" .. string.rep("  ", indent) .. "}"
+		end
+	else
+		out[#out + 1] = "null"
+	end
+end
+
+function to_json(v)
+	local out = {}
+	json_value(v, out, 0)
+	return table.concat(out)
+end
+
+-- Splits "a b  c" into { "a", "b", "c" }.
+function split_words(s)
+	local words = {}
+	for w in string.gmatch(tostring(s or ""), "%S+") do words[#words + 1] = w end
+	return words
+end
+
+-- Human readable one-liner of a plain value (state dumps).
+function brief(v, depth)
+	depth = depth or 0
+	local t = type(v)
+	if (t == "table") then
+		if (depth > 2) then return "{...}" end
+		local parts = {}
+		local n = #v
+		for i = 1, n do parts[#parts + 1] = brief(v[i], depth + 1) end
+		for _, k in ipairs(sorted_keys(v)) do
+			if not (type(k) == "number" and k >= 1 and k <= n) then
+				parts[#parts + 1] = tostring(k) .. "=" .. brief(v[k], depth + 1)
+			end
+		end
+		return "{" .. table.concat(parts, ", ") .. "}"
+	elseif (t == "string") then
+		return v
+	end
+	return tostring(v)
+end

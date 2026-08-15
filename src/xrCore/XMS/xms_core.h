@@ -135,6 +135,11 @@ XRCORE_API void WriteReport();
 
 // ---- persistent registry ---------------------------------------------------
 
+// Namespaces from here up are never handed to a module: the engine keeps its
+// own .scov blobs there (see kCoreBlobs in xms_game.cpp) on the same
+// 0x584D0000|ns channel the modules use.
+inline constexpr u16 kReservedNsBase = 0xFF00;
+
 // Grow-only spawn-id range of a module ([base, base+size)). Allocated on
 // first request, persisted in $app_data_root$\xms_registry.ltx. Returns false
 // when the id space is exhausted.
@@ -189,6 +194,11 @@ XRCORE_API bool ReadIniRecords(pcstr physical_path, xr_vector<IniRecord>& out);
 
 // Non-recursive physical listing of dir+mask, name-sorted for determinism.
 XRCORE_API void ListFiles(pcstr dir, pcstr mask, xr_vector<xr_string>& out);
+
+// Files under `dir` (trailing delimiter) whose NAME matches `mask` ('*' and
+// '?', case-insensitive), optionally descending into subfolders. Results are
+// paths relative to `dir` with '\' separators, sorted for determinism.
+XRCORE_API void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vector<xr_string>& out);
 
 // ---- ltx parse context -----------------------------------------------------
 

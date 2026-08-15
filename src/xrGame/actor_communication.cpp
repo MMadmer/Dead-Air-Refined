@@ -29,6 +29,71 @@
 #include "CustomDetector.h"
 #include "ai/monsters/basemonster/base_monster.h"
 #include "ai/trader/ai_trader.h"
+#include "xrCore/XMS/xms_core.h"
+#include "xrScriptEngine/script_engine.hpp"
+
+namespace
+{
+// XMS/NQ: quest topics for this partner. Lua `xms.dialogs_for(partner, actor)`
+// returns an array of dialog ids; nothing here runs unless a module is mounted
+// AND the runtime defined the function (raw lookups - no autoload, no logs).
+void xms_dialogs_for(CGameObject* partner, CGameObject* actor, xr_vector<shared_str>& out)
+{
+    if (!XMS::Active() || !partner || !actor || !GEnv.ScriptEngine)
+        return;
+    lua_State* L = GEnv.ScriptEngine->lua();
+    lua_pushstring(L, "xms");
+    lua_rawget(L, LUA_GLOBALSINDEX);
+    if (!lua_istable(L, -1))
+    {
+        lua_pop(L, 1);
+        return;
+    }
+    lua_pushstring(L, "dialogs_for");
+    lua_rawget(L, -2);
+    if (!lua_isfunction(L, -1))
+    {
+        lua_pop(L, 2);
+        return;
+    }
+    luabind::functor<luabind::object> dialogs_for(luabind::object(luabind::from_stack(L, -1)));
+    lua_pop(L, 2);
+
+    // a broken runtime is reported once, not on every talk (the Lua error
+    // itself is printed by the script engine's pcall handler)
+    static bool reported = false;
+    const auto report_once = [](pcstr what)
+    {
+        if (reported)
+            return;
+        reported = true;
+        Msg("! XMS: xms.dialogs_for failed (%s); further failures are not logged", what);
+    };
+    try
+    {
+        const luabind::object ids = dialogs_for(partner->lua_game_object(), actor->lua_game_object());
+        if (luabind::type(ids) != LUA_TTABLE)
+            return;
+        for (int i = 1;; ++i)
+        {
+            const luabind::object id = ids[i];
+            if (luabind::type(id) != LUA_TSTRING)
+                break;
+            out.emplace_back(luabind::object_cast<pcstr>(id));
+        }
+    }
+#ifndef LUABIND_NO_EXCEPTIONS
+    catch (luabind::error&)
+    {
+        report_once("Lua error");
+    }
+#endif
+    catch (std::exception& e)
+    {
+        report_once(e.what());
+    }
+}
+} // namespace
 
 void CActor::AddEncyclopediaArticle(const CInfoPortion* info_portion) const
 {
@@ -216,6 +281,20 @@ void CActor::UpdateAvailableDialogs(CPhraseDialogManager* partner)
 
     for (u32 i = 0; i < pInvOwnerPartner->CharacterInfo().ActorDialogs().size(); i++)
         AddAvailableDialog(pInvOwnerPartner->CharacterInfo().ActorDialogs()[i], partner);
+
+    // XMS/NQ quest topics of this partner. The ids come from a script, so an id nobody
+    // registered would assert inside CPhraseDialog::load_shared - report it and skip instead.
+    xr_vector<shared_str> xms_ids;
+    xms_dialogs_for(smart_cast<CGameObject*>(partner), this, xms_ids);
+    for (const shared_str& id : xms_ids)
+    {
+        if (!CPhraseDialog::IsKnownDialogId(id.c_str()))
+        {
+            Msg("! xms.dialogs_for returned an unknown dialog id [%s], skipped", id.c_str());
+            continue;
+        }
+        AddAvailableDialog(id, partner);
+    }
 
     CPhraseDialogManager::UpdateAvailableDialogs(partner);
 }

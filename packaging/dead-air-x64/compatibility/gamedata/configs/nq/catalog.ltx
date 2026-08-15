@@ -1,0 +1,930 @@
+; NQ kind catalog v1 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
+; One section per kind: [nq.<kind>]. Keys:
+;   group   - group name in the editor dropdown
+;   title   - what the author sees (rus)
+;   desc    - one-line description (rus), also returned by MCP quest_catalog for AI
+;   use     - comma list of: trigger, main, extra, cond
+;   params  - ordered comma list of parameter names; each name has its own key:
+;   <name>  = <type>[, required][, default=<v>][, min=<v>][, max=<v>][, enum=a|b|c]
+;   pins    - main/trigger: comma list of output pins; "cases" = pins come from params.cases
+;   wait    - main: waiting kind (true) or instant (false)
+;   once    - main: default of node.once
+;   event   - cond: true for edge-triggered event conditions (event.*)
+;   impl    - core | <module id> (who registers the Lua implementation in xms.registry "nq.kinds")
+;   since   - catalog version the kind appeared in
+; Extensions: modules add gamedata\configs\nq\kinds\<mod>.ltx with more [nq.*] sections and
+; register implementations from scripts\register.script.
+
+[nq.catalog]
+version = 1
+api     = 1
+
+; ============================================================ triggers
+[nq.trigger.start]
+group  = triggers
+title  = Старт квеста
+desc   = Срабатывает один раз при активации квеста
+use    = trigger
+params =
+pins   = next
+wait   = false
+once   = true
+impl   = core
+since  = 1
+
+[nq.trigger.when]
+group  = triggers
+title  = Когда выполнены условия
+desc   = Срабатывает на восходящем фронте условий ноды (cond). repeat перевзводит после того как условия снова ложны, cooldown ограничивает частоту
+use    = trigger
+params   = repeat, cooldown
+repeat   = bool, default=false
+cooldown = duration
+pins   = next
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+; ============================================================ main: dialog
+[nq.dialog.topic]
+group  = dialog
+title  = Диалог: тема
+desc   = Тема разговора у NPC. Пока токен на ноде и cond истинны, тема есть в списке. next - фразы, done - когда сказана листовая фраза
+use    = main
+params    = npc, text, initiator
+npc       = npc_ref, required
+text      = text, required
+initiator = enum, default=actor, enum=actor|npc
+pins   = next, done
+wait   = true
+once   = true
+impl   = core
+since  = 1
+
+[nq.dialog.npc_phrase]
+group  = dialog
+title  = Диалог: реплика NPC
+desc   = Реплика собеседника. cond ноды - условие показа. Первая по порядку реплика с истинным условием произносится
+use    = main
+params = text
+text   = text, required
+pins   = next
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+[nq.dialog.actor_phrase]
+group  = dialog
+title  = Диалог: реплика игрока
+desc   = Вариант ответа игрока. cond ноды - условие показа
+use    = main
+params = text
+text   = text, required
+pins   = next
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+; ============================================================ main: objectives
+[nq.objective.kill]
+group  = objective
+title  = Убить цель
+desc   = Ждёт смерти цели: NPC по story id, ранее созданный ref, или отряд из spawn (создаётся при входе и запоминается под ref)
+use    = main
+params   = target, by_actor
+target   = kill_target, required
+by_actor = bool, default=false
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+[nq.objective.fetch]
+group  = objective
+title  = Добыть предмет
+desc   = Ждёт, пока в инвентаре игрока будет нужное количество предметов секции
+use    = main
+params  = section, count
+section = item_section, required
+count   = int, default=1, min=1
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+[nq.objective.reach]
+group  = objective
+title  = Дойти до места
+desc   = Ждёт, пока игрок окажется в месте (точка с радиусом, рестриктор или смарт). map_spot ставит метку на карте
+use    = main
+params    = place, map_spot, spot_text
+place     = place, required
+map_spot  = bool, default=true
+spot_text = text
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+; ============================================================ main: wait
+[nq.wait.timer]
+group  = wait
+title  = Подождать
+desc   = Ждёт заданное время: игровое (game_hours, game_minutes) или реальное (seconds)
+use    = main
+params   = duration
+duration = duration, required
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+[nq.wait.when]
+group  = wait
+title  = Ждать условия
+desc   = Ждёт, пока условия ноды (cond) станут истинны. timeout - необязательный предел ожидания
+use    = main
+params  = timeout
+timeout = duration
+pins   = done, timeout
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+[nq.wait.any]
+group  = wait
+title  = Ждать одно из
+desc   = Несколько именованных наборов условий, срабатывает первый истинный. Каждый кейс - свой выход
+use    = main
+params = cases
+cases  = cases_cond, required
+pins   = cases
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+; ============================================================ main: flow
+[nq.flow.branch]
+group  = flow
+title  = Ветвление
+desc   = Мгновенно выбирает первый кейс с истинными условиями, иначе else
+use    = main
+params = cases
+cases  = cases_cond, required
+pins   = cases, else
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+[nq.flow.random]
+group  = flow
+title  = Случайный выбор
+desc   = Мгновенно выбирает кейс случайно с учётом весов
+use    = main
+params = cases
+cases  = cases_weight, required
+pins   = cases
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+[nq.flow.join]
+group  = flow
+title  = Дождаться всех
+desc   = Пропускает дальше, когда пришли токены по всем входящим рёбрам
+use    = main
+params =
+pins   = next
+wait   = true
+once   = false
+impl   = core
+since  = 1
+
+[nq.flow.step]
+group  = flow
+title  = Шаг
+desc   = Пустое основное действие: только on_enter и on_exit
+use    = main
+params =
+pins   = next
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+[nq.flow.end]
+group  = flow
+title  = Конец квеста
+desc   = Завершает квест со статусом. restart сбрасывает состояние и активирует квест заново
+use    = main
+params  = status, restart
+status  = enum, default=completed, enum=completed|failed
+restart = bool, default=false
+pins   =
+wait   = false
+once   = false
+impl   = core
+since  = 1
+
+; ============================================================ extra: items and money
+[nq.item.give]
+group  = items
+title  = Выдать предмет
+desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением
+use    = extra
+params  = section, count
+section = item_section, required
+count   = int, default=1, min=1
+impl   = core
+since  = 1
+
+[nq.item.take]
+group  = items
+title  = Забрать предмет
+desc   = Забирает у игрока предметы секции. count = all забирает все
+use    = extra
+params  = section, count
+section = item_section, required
+count   = count_or_all, default=1
+impl   = core
+since  = 1
+
+[nq.item.spawn]
+group  = items
+title  = Создать предмет в мире
+desc   = Создаёт предмет в точке (place) или внутри объекта (into). ref запоминает объект
+use    = extra
+params  = section, place, into, ref
+section = item_section, required
+place   = place
+into    = target_ref
+ref     = ref_name
+impl   = core
+since  = 1
+
+[nq.money.give]
+group  = money
+title  = Выдать деньги
+desc   = Даёт игроку деньги
+use    = extra
+params = amount
+amount = int, required, min=1
+impl   = core
+since  = 1
+
+[nq.money.take]
+group  = money
+title  = Забрать деньги
+desc   = Забирает у игрока деньги
+use    = extra
+params = amount
+amount = int, required, min=1
+impl   = core
+since  = 1
+
+; ============================================================ extra: info, vars, signals, quests
+[nq.info.give]
+group  = info
+title  = Выдать инфопоршень
+desc   = Выдаёт игроку инфопоршень (для связи с ванильной логикой)
+use    = extra
+params = info
+info   = info, required
+impl   = core
+since  = 1
+
+[nq.info.disable]
+group  = info
+title  = Снять инфопоршень
+desc   = Снимает инфопоршень у игрока
+use    = extra
+params = info
+info   = info, required
+impl   = core
+since  = 1
+
+[nq.var.set]
+group  = vars
+title  = Задать переменную
+desc   = Присваивает переменной квеста значение
+use    = extra
+params = name, value
+name   = var_name, required
+value  = value, required
+impl   = core
+since  = 1
+
+[nq.var.add]
+group  = vars
+title  = Прибавить к переменной
+desc   = Прибавляет число к числовой переменной квеста
+use    = extra
+params = name, delta
+name   = var_name, required
+delta  = float, required
+impl   = core
+since  = 1
+
+[nq.signal.send]
+group  = vars
+title  = Послать сигнал
+desc   = Испускает сигнал для триггеров и ожиданий event.signal (в том числе других квестов)
+use    = extra
+params = name
+name   = signal_name, required
+impl   = core
+since  = 1
+
+[nq.quest.activate]
+group  = quest
+title  = Активировать квест
+desc   = Активирует другой квест с activation = manual
+use    = extra
+params = quest
+quest  = quest_id, required
+impl   = core
+since  = 1
+
+; ============================================================ extra: tasks
+[nq.task.give]
+group  = tasks
+title  = Выдать задание
+desc   = Создаёт задание PDA из объявления tasks квеста
+use    = extra
+params = task
+task   = task_id, required
+impl   = core
+since  = 1
+
+[nq.task.complete]
+group  = tasks
+title  = Завершить задание
+desc   = Отмечает задание PDA выполненным
+use    = extra
+params = task
+task   = task_id, required
+impl   = core
+since  = 1
+
+[nq.task.fail]
+group  = tasks
+title  = Провалить задание
+desc   = Отмечает задание PDA проваленным
+use    = extra
+params = task
+task   = task_id, required
+impl   = core
+since  = 1
+
+[nq.task.remove]
+group  = tasks
+title  = Убрать задание
+desc   = Убирает задание из PDA без статуса
+use    = extra
+params = task
+task   = task_id, required
+impl   = core
+since  = 1
+
+[nq.task.set_target]
+group  = tasks
+title  = Цель задания
+desc   = Переставляет метку задания на цель
+use    = extra
+params = task, target
+task   = task_id, required
+target = target_ref, required
+impl   = core
+since  = 1
+
+[nq.task.set_text]
+group  = tasks
+title  = Текст задания
+desc   = Меняет заголовок и/или описание задания
+use    = extra
+params    = task, new_title, new_descr
+task      = task_id, required
+new_title = text
+new_descr = text
+impl   = core
+since  = 1
+
+; ============================================================ extra: spawn and squads
+[nq.spawn.squad]
+group  = spawn
+title  = Создать отряд
+desc   = Создаёт отряд секции на смарт-террейне. hold удерживает отряд на смарте, ref запоминает отряд
+use    = extra
+params  = section, smart, ref, hold
+section = squad_section, required
+smart   = smart, required
+ref     = ref_name
+hold    = bool, default=true
+impl   = core
+since  = 1
+
+[nq.spawn.object]
+group  = spawn
+title  = Создать объект
+desc   = Создаёт объект произвольной секции в точке. ref запоминает объект
+use    = extra
+params  = section, place, ref
+section = string, required
+place   = place, required
+ref     = ref_name
+impl   = core
+since  = 1
+
+[nq.squad.move]
+group  = squad
+title  = Отправить отряд
+desc   = Посылает отряд на смарт или за игроком (follow_actor)
+use    = extra
+params       = target, smart, follow_actor
+target       = target_ref, required
+smart        = smart
+follow_actor = bool, default=false
+impl   = core
+since  = 1
+
+[nq.squad.remove]
+group  = squad
+title  = Убрать отряд
+desc   = Удаляет отряд из мира
+use    = extra
+params = target
+target = target_ref, required
+impl   = core
+since  = 1
+
+[nq.npc.remove]
+group  = npc
+title  = Убрать NPC
+desc   = Удаляет NPC из мира
+use    = extra
+params = npc
+npc    = npc_ref, required
+impl   = core
+since  = 1
+
+[nq.npc.kill]
+group  = npc
+title  = Убить NPC
+desc   = Убивает NPC
+use    = extra
+params = npc
+npc    = npc_ref, required
+impl   = core
+since  = 1
+
+; ============================================================ extra: relations, ui, misc
+[nq.relation.set]
+group  = relation
+title  = Отношение к игроку
+desc   = Делает NPC/отряд/группировку врагом, нейтралом или другом игрока
+use    = extra
+params = who, value
+who    = npc_ref, required
+value  = relation, required
+impl   = core
+since  = 1
+
+[nq.relation.goodwill]
+group  = relation
+title  = Изменить репутацию
+desc   = Прибавляет (или отнимает) goodwill NPC/группировки к игроку
+use    = extra
+params = who, delta
+who    = npc_ref, required
+delta  = int, required
+impl   = core
+since  = 1
+
+[nq.news.tip]
+group  = ui
+title  = Сообщение в PDA
+desc   = Показывает новость игроку. sender - от чьего имени
+use    = extra
+params   = text, sender, icon, duration
+text     = text, required
+sender   = npc_ref
+icon     = string
+duration = float, default=5
+impl   = core
+since  = 1
+
+[nq.map.spot]
+group  = ui
+title  = Метка на карте
+desc   = Ставит метку на карте на цель
+use    = extra
+params = target, text, spot
+target = target_ref, required
+text   = text
+spot   = spot_type, default=secondary_task_location
+impl   = core
+since  = 1
+
+[nq.map.unspot]
+group  = ui
+title  = Убрать метку с карты
+desc   = Снимает метку с цели
+use    = extra
+params = target, spot
+target = target_ref, required
+spot   = spot_type, default=secondary_task_location
+impl   = core
+since  = 1
+
+[nq.dialog.force]
+group  = dialog_ctl
+title  = Начать разговор
+desc   = Принудительно открывает разговор с NPC (NPC должен быть рядом и онлайн)
+use    = extra
+params      = npc, allow_break
+npc         = npc_ref, required
+allow_break = bool, default=true
+impl   = core
+since  = 1
+
+[nq.dialog.break]
+group  = dialog_ctl
+title  = Прервать разговор
+desc   = Закрывает текущий разговор
+use    = extra
+params =
+impl   = core
+since  = 1
+
+[nq.actor.teleport]
+group  = actor
+title  = Телепортировать игрока
+desc   = Переносит игрока в точку текущего уровня
+use    = extra
+params = place
+place  = place, required
+impl   = core
+since  = 1
+
+[nq.sound.play]
+group  = sound
+title  = Проиграть звук
+desc   = Проигрывает звуковую тему на игроке
+use    = extra
+params = theme
+theme  = string, required
+impl   = core
+since  = 1
+
+[nq.lua]
+group  = custom
+title  = Свой код (Lua)
+desc   = Кастомный Lua. Как действие - выполняется. Как условие - должен вернуть true/false. Доступен объект nq и весь API игры
+use    = extra, cond
+params = code
+code   = lua, required
+impl   = core
+since  = 1
+
+; ============================================================ cond: state
+[nq.has_info]
+group  = cond_state
+title  = Есть инфопоршень
+desc   = У игрока есть инфопоршень
+use    = cond
+params = info
+info   = info, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.has_item]
+group  = cond_state
+title  = Есть предмет
+desc   = У игрока не меньше count предметов секции
+use    = cond
+params  = section, count
+section = item_section, required
+count   = int, default=1, min=1
+event  = false
+impl   = core
+since  = 1
+
+[nq.has_money]
+group  = cond_state
+title  = Есть деньги
+desc   = У игрока не меньше amount денег
+use    = cond
+params = amount
+amount = int, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.var]
+group  = cond_state
+title  = Переменная
+desc   = Сравнивает переменную квеста со значением. op: eq, ne, lt, le, gt, ge
+use    = cond
+params = name, op, value
+name   = var_name, required
+op     = enum, default=eq, enum=eq|ne|lt|le|gt|ge
+value  = value, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.node_done]
+group  = cond_state
+title  = Нода уже пройдена
+desc   = Нода с once уже отработала
+use    = cond
+params = node
+node   = node_id, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.quest_status]
+group  = cond_state
+title  = Статус квеста
+desc   = Другой квест в заданном статусе
+use    = cond
+params = quest, is
+quest  = quest_id, required
+is     = enum, required, enum=inactive|active|completed|failed
+event  = false
+impl   = core
+since  = 1
+
+[nq.task_status]
+group  = cond_state
+title  = Статус задания
+desc   = Задание квеста в заданном статусе
+use    = cond
+params = task, is
+task   = task_id, required
+is     = enum, required, enum=none|active|completed|failed
+event  = false
+impl   = core
+since  = 1
+
+[nq.actor_on_level]
+group  = cond_world
+title  = Игрок на уровне
+desc   = Игрок находится на уровне
+use    = cond
+params = level
+level  = level, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.actor_in_place]
+group  = cond_world
+title  = Игрок в месте
+desc   = Игрок в точке с радиусом, в рестрикторе или на смарте
+use    = cond
+params = place
+place  = place, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.npc_alive]
+group  = cond_world
+title  = NPC жив
+desc   = NPC существует и жив
+use    = cond
+params = npc
+npc    = npc_ref, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.npc_dead]
+group  = cond_world
+title  = NPC мёртв
+desc   = NPC мёртв или не существует
+use    = cond
+params = npc
+npc    = npc_ref, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.squad_alive]
+group  = cond_world
+title  = Отряд жив
+desc   = Отряд (ref или story) существует
+use    = cond
+params = target
+target = target_ref, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.actor_community]
+group  = cond_world
+title  = Группировка игрока
+desc   = Игрок состоит в группировке
+use    = cond
+params    = community
+community = community, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.relation]
+group  = cond_world
+title  = Отношение к игроку
+desc   = NPC/группировка враг, нейтрал или друг игрока
+use    = cond
+params = who, is
+who    = npc_ref, required
+is     = relation, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.time_of_day]
+group  = cond_world
+title  = Время суток
+desc   = Игровой час в диапазоне from..to (через полночь тоже работает)
+use    = cond
+params = from, to
+from   = int, required, min=0, max=23
+to     = int, required, min=0, max=23
+event  = false
+impl   = core
+since  = 1
+
+[nq.elapsed]
+group  = cond_world
+title  = Прошло времени
+desc   = С момента активации квеста (from=quest) или входа в ноду (from=node) прошло не меньше duration; если у указанной node нет живого токена — условие ложно
+use    = cond
+params   = from, node, duration
+from     = enum, default=quest, enum=quest|node
+node     = node_id
+duration = duration, required
+event  = false
+impl   = core
+since  = 1
+
+[nq.chance]
+group  = cond_world
+title  = Шанс
+desc   = Случайно истинно с вероятностью percent
+use    = cond
+params  = percent
+percent = int, required, min=0, max=100
+event  = false
+impl   = core
+since  = 1
+
+[nq.any]
+group  = logic
+title  = Любое из
+desc   = Истинно, если истинно хотя бы одно вложенное условие
+use    = cond
+params = of
+of     = cond_list, required
+event  = false
+impl   = core
+since  = 1
+
+; ============================================================ cond: events
+[nq.event.item_taken]
+group  = cond_event
+title  = Событие: предмет подобран
+desc   = Игрок взял предмет (section пустой - любой)
+use    = cond
+params  = section
+section = item_section
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.item_dropped]
+group  = cond_event
+title  = Событие: предмет выброшен
+desc   = Игрок выбросил предмет
+use    = cond
+params  = section
+section = item_section
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.item_used]
+group  = cond_event
+title  = Событие: предмет использован
+desc   = Игрок использовал предмет
+use    = cond
+params  = section
+section = item_section
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.npc_killed]
+group  = cond_event
+title  = Событие: NPC убит
+desc   = Убит NPC (who пустой - любой). by_actor - только если убил игрок
+use    = cond
+params   = who, by_actor
+who      = npc_ref
+by_actor = bool, default=false
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.squad_dead]
+group  = cond_event
+title  = Событие: отряд уничтожен
+desc   = Отряд (ref или story) перестал существовать
+use    = cond
+params = target
+target = squad_ref, required
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.info_given]
+group  = cond_event
+title  = Событие: выдан инфопоршень
+desc   = Игрок получил инфопоршень
+use    = cond
+params = info
+info   = info, required
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.level_entered]
+group  = cond_event
+title  = Событие: вход на уровень
+desc   = Игрок пришёл на уровень
+use    = cond
+params = level
+level  = level, required
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.talk_started]
+group  = cond_event
+title  = Событие: начат разговор
+desc   = Игрок начал разговор с NPC (npc пустой - любой)
+use    = cond
+params = npc
+npc    = npc_ref
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.talk_ended]
+group  = cond_event
+title  = Событие: разговор окончен
+desc   = Игрок закрыл разговор с NPC
+use    = cond
+params = npc
+npc    = npc_ref
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.signal]
+group  = cond_event
+title  = Событие: сигнал
+desc   = Получен сигнал signal.send
+use    = cond
+params = name
+name   = signal_name, required
+event  = true
+impl   = core
+since  = 1
+
+[nq.event.trade_done]
+group  = cond_event
+title  = Событие: торговля
+desc   = Игрок совершил торговую операцию (npc пустой - с любым)
+use    = cond
+params = npc
+npc    = npc_ref
+event  = true
+impl   = core
+since  = 1

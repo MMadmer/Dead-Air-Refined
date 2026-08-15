@@ -9,7 +9,21 @@ param(
     [int]$X,
 
     [Parameter(Mandatory)]
-    [int]$Y
+    [int]$Y,
+
+    # Client-area coordinates of the same point. X/Y drive the physical cursor and are therefore
+    # screen coordinates; the posted messages need the point in the window's client space. They
+    # differ whenever the window has a border or a title bar, so a caller that knows the offset
+    # passes both. Omitted, the posted messages keep using X/Y as before.
+    [int]$ClientX = [int]::MinValue,
+
+    [int]$ClientY = [int]::MinValue,
+
+    # Move the pointer without pressing. The engine dispatches a button press straight away but
+    # applies the accumulated motion only at the end of the frame's input batch, so a move and a
+    # click delivered together are handled at the *previous* cursor position. Callers move first,
+    # let a few frames pass, and click after that.
+    [switch]$MoveOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,7 +83,7 @@ public static class HiddenDesktopMouse
     [DllImport("user32.dll")]
     private static extern void mouse_event(int flags, int dx, int dy, int data, IntPtr extraInfo);
 
-    public static void Click(string desktopName, int processId, int x, int y)
+    public static void Click(string desktopName, int processId, int x, int y, int clientX, int clientY, bool moveOnly)
     {
         const int desktopReadObjects = 0x0001;
         const int desktopWriteObjects = 0x0080;
@@ -115,13 +129,19 @@ public static class HiddenDesktopMouse
 
                     SetForegroundWindow(target);
                     SetFocus(target);
+                    IntPtr position = new IntPtr((clientY << 16) | (clientX & 0xFFFF));
+                    PostMessage(target, wmMouseMove, IntPtr.Zero, position);
+                    if (moveOnly)
+                        return;
+
+                    // Synthetic hardware input only reaches the window station's *input* desktop,
+                    // which a hidden desktop is not, so the posted messages are what actually
+                    // drives the target. The cursor call keeps the two in step when they do match.
                     SetCursorPos(x, y);
                     mouse_event(2, 0, 0, 0, IntPtr.Zero);
                     Thread.Sleep(30);
                     mouse_event(4, 0, 0, 0, IntPtr.Zero);
 
-                    IntPtr position = new IntPtr((y << 16) | (x & 0xFFFF));
-                    PostMessage(target, wmMouseMove, IntPtr.Zero, position);
                     PostMessage(target, wmLeftButtonDown, new IntPtr(mkLeftButton), position);
                     PostMessage(target, wmLeftButtonUp, IntPtr.Zero, position);
                 }
@@ -145,5 +165,11 @@ public static class HiddenDesktopMouse
 }
 '@
 
-Add-Type -TypeDefinition $nativeSource -Language CSharp
-[HiddenDesktopMouse]::Click($DesktopName, $ProcessId, $X, $Y)
+# Callers invoke this dot-sourced style many times per run, and Add-Type refuses to redefine a type
+# that is already in the session.
+if (-not ('HiddenDesktopMouse' -as [type])) {
+    Add-Type -TypeDefinition $nativeSource -Language CSharp
+}
+if ($ClientX -eq [int]::MinValue) { $ClientX = $X }
+if ($ClientY -eq [int]::MinValue) { $ClientY = $Y }
+[HiddenDesktopMouse]::Click($DesktopName, $ProcessId, $X, $Y, $ClientX, $ClientY, [bool]$MoveOnly)

@@ -1093,6 +1093,67 @@ private:
     }
 };
 
+// Runs a Lua chunk the way `run_string` does: through the level script
+// process when there is one, else directly on the engine state.
+static void run_lua_console_string(LPCSTR args)
+{
+    if (GEnv.ScriptEngine->script_process(ScriptProcessor::Level))
+    {
+        GEnv.ScriptEngine->script_process(ScriptProcessor::Level)->add_script(args, true, true);
+        return;
+    }
+
+    string4096 S;
+    shared_str m_script_name = "console command";
+    xr_sprintf(S, "%s\n", args);
+    int l_iErrorCode = luaL_loadbuffer(GEnv.ScriptEngine->lua(), S, xr_strlen(S), "@console_command");
+    if (!l_iErrorCode)
+    {
+        l_iErrorCode = lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
+        if (l_iErrorCode)
+        {
+            GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), m_script_name.c_str(), l_iErrorCode);
+            GEnv.ScriptEngine->on_error(GEnv.ScriptEngine->lua());
+            return;
+        }
+    }
+
+    GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), m_script_name.c_str(), l_iErrorCode);
+}
+
+// NQ quest-graph console: `nq <anything>` becomes xms_nq_console.exec("<anything>")
+class CCC_XmsNq : public IConsole_Command
+{
+public:
+    CCC_XmsNq(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; bLowerCaseArgs = false; }
+    virtual void Execute(LPCSTR args)
+    {
+        luabind::functor<void> exec;
+        if (!GEnv.ScriptEngine || !GEnv.ScriptEngine->functor("xms_nq_console.exec", exec))
+        {
+            Msg("! NQ runtime is not loaded");
+            return;
+        }
+
+        pcstr text = args && args[0] ? args : "help";
+        xr_string chunk = "xms_nq_console.exec(\"";
+        for (pcstr c = text; *c; ++c)
+        {
+            switch (*c)
+            {
+            case '\\': chunk += "\\\\"; break;
+            case '"': chunk += "\\\""; break;
+            case '\n': chunk += "\\n"; break;
+            case '\r': chunk += "\\r"; break;
+            default: chunk += *c; break;
+            }
+        }
+        chunk += "\")";
+        run_lua_console_string(chunk.c_str());
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "NQ quest-graph runtime console; `nq help` lists subcommands"); }
+};
+
 class CCC_FloatBlock : public CCC_Float
 {
 public:
@@ -1601,30 +1662,7 @@ public:
         if (!xr_strlen(args))
             Log("* Specify string to run!");
         else
-        {
-            if (GEnv.ScriptEngine->script_process(ScriptProcessor::Level))
-            {
-                GEnv.ScriptEngine->script_process(ScriptProcessor::Level)->add_script(args, true, true);
-                return;
-            }
-
-            string4096 S;
-            shared_str m_script_name = "console command";
-            xr_sprintf(S, "%s\n", args);
-            int l_iErrorCode = luaL_loadbuffer(GEnv.ScriptEngine->lua(), S, xr_strlen(S), "@console_command");
-            if (!l_iErrorCode)
-            {
-                l_iErrorCode = lua_pcall(GEnv.ScriptEngine->lua(), 0, 0, 0);
-                if (l_iErrorCode)
-                {
-                    GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), m_script_name.c_str(), l_iErrorCode);
-                    GEnv.ScriptEngine->on_error(GEnv.ScriptEngine->lua());
-                    return;
-                }
-            }
-
-            GEnv.ScriptEngine->print_output(GEnv.ScriptEngine->lua(), m_script_name.c_str(), l_iErrorCode);
-        }
+            run_lua_console_string(args);
     } // void	Execute
 
     void GetStatus(TStatus& S) override { xr_strcpy(S, "<script_name.function()> (Specify script and function name!)"); }
@@ -2445,6 +2483,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_XmsConflicts, "xms_conflicts");
     CMD1(CCC_XmsModes, "xms_modes");
     CMD1(CCC_XmsWhy, "xms_why");
+    CMD1(CCC_XmsNq, "nq");
 
     // collision overlays resolve game materials by name through this
     XMS::SetMaterialResolver([](pcstr name) -> u16

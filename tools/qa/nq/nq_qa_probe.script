@@ -1,0 +1,1243 @@
+-- NQ acceptance-test probe. QA ONLY: Run-NqQa.ps1 copies this into the mirrored gamedata of the
+-- QA root and appends `nq_qa_probe` to the first `script =` line of the mirrored configs\script.ltx.
+-- It never ships with the game.
+--
+-- The probe drives the NQ runtime through its public API (xms_nq.*, xms_nq_console.exec) and
+-- through ordinary game APIs. It never moves the actor and never automates input: the only
+-- UI-driven scenario (d) asks the orchestrator to click by printing an AWAIT line and then waits
+-- for the state the click is supposed to produce.
+--
+-- One launch = one phase, read from configs\nq_qa.ltx which the runner rewrites between launches:
+--     [qa]
+--     phase = p1
+--     save  = nq_qa_mid
+--     quit  = true
+--
+-- Output contract (the runner greps for these):
+--     NQQA: <step> PASS <detail>   NQQA: <step> FAIL <detail>   NQQA: <step> SKIP <why>
+--     NQQA-info: <text>            free-form diagnostics
+--     NQQA-AWAIT: <tag> <hint>     the runner must click; the probe blocks until the step settles
+--     NQQA: DONE <passed>/<total> (failed=<n> skipped=<n> phase=<p>)
+
+local PHASE_INI = "nq_qa.ltx"
+local MARKER = "nq_qa_marker.txt"		-- survives the Lua state across a level change (scenario g)
+
+local phase = "scout"
+local save_name = "nq_qa_mid"
+local quit_at_end = true
+
+local started, finished = false, false
+local idx, step_start = 1, 0
+local passed, failed, skipped = 0, 0, 0
+local S = {}
+local shared = {}
+
+-- ---------------------------------------------------------------------------- output
+local function say(fmt, ...)
+	local ok, s = pcall(string.format, fmt, ...)
+	printf("NQQA: %s", ok and s or tostring(fmt))
+end
+
+local function fmt1(fmt, ...)
+	if (select("#", ...) == 0) then return tostring(fmt or "") end
+	local ok, s = pcall(string.format, fmt, ...)
+	return ok and s or tostring(fmt)
+end
+
+local function pass(step, fmt, ...) passed = passed + 1 say("%s PASS %s", step, fmt1(fmt, ...)) return true end
+local function fail(step, fmt, ...) failed = failed + 1 say("%s FAIL %s", step, fmt1(fmt, ...)) return true end
+local function skip(step, fmt, ...) skipped = skipped + 1 say("%s SKIP %s", step, fmt1(fmt, ...)) return true end
+
+local function check(step, cond, fmt, ...)
+	if (cond) then return pass(step, fmt, ...) end
+	return fail(step, fmt, ...)
+end
+
+local function info(fmt, ...)
+	printf("NQQA-info: %s", fmt1(fmt, ...))
+end
+
+local function await(tag, hint)
+	printf("NQQA-AWAIT: %s %s", tostring(tag), tostring(hint or ""))
+end
+
+-- ---------------------------------------------------------------------------- small helpers
+local function core() return xms_nq end
+local function uid(q) return "nq_qa." .. q end
+local function qstate(q) return core().quest_state(uid(q)) end
+local function qstatus(q) return core().quest_status(uid(q)) end
+
+local function tok(q, node)
+	local qs = qstate(q)
+	return qs and qs.tokens[node] or nil
+end
+
+local function qvar(q, name)
+	local qs = qstate(q)
+	return qs and qs.vars[name]
+end
+
+local function console(cmd)
+	local ok, e = pcall(function() get_console():execute(cmd) end)
+	if not (ok) then info("console '%s' failed: %s", cmd, tostring(e)) end
+end
+
+local function nq(args)
+	local ok, e = pcall(xms_nq_console.exec, args)
+	if not (ok) then info("nq '%s' failed: %s", args, tostring(e)) end
+end
+
+local function actor() return db and db.actor end
+
+local function app_path(name)
+	local p = name
+	pcall(function() p = getFS():update_path("$app_data_root$", name) end)
+	return p
+end
+
+local function marker_read()
+	local f = io.open(app_path(MARKER), "rb")
+	if not (f) then return nil end
+	local s = f:read("*a")
+	f:close()
+	return (string.gsub(tostring(s or ""), "%s+$", ""))
+end
+
+local function marker_write(v)
+	local f = io.open(app_path(MARKER), "wb")
+	if not (f) then info("cannot write the marker file") return false end
+	f:write(tostring(v))
+	f:close()
+	return true
+end
+
+-- Spawns `n` items of `section` straight into the actor's inventory (no dialog, no actor movement).
+local function give(section, n)
+	local a = actor()
+	if not (a) then return 0 end
+	local made = 0
+	for _ = 1, (n or 1) do
+		local ok = pcall(function()
+			alife():create(section, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id())
+		end)
+		if (ok) then made = made + 1 end
+	end
+	return made
+end
+
+local function count_items(section)
+	local n = 0
+	pcall(function() n = xms_nq_util.count_items(section) end)
+	return n
+end
+
+-- Engine-side task state. CGameTask has no state getter and this game does not dispatch
+-- actor_on_task_callback to scripts, so the engine's own answer is the pair of get_task() calls:
+-- the second argument asks for active tasks only, therefore "present but no longer active" is
+-- exactly "the engine moved it out of the active set".
+-- Returns: active task or nil, the task in any state or nil, the runtime's own record.
+local function task_of(q, task)
+	local a = actor()
+	if not (a) then return nil, nil, nil end
+	local id = "nq." .. uid(q) .. "." .. task
+	local ok1, active = pcall(a.get_task, a, id, true)
+	local ok2, any = pcall(a.get_task, a, id, false)
+	local qs = qstate(q)
+	return (ok1 and active or nil), (ok2 and any or nil), (qs and qs.tasks and qs.tasks[task] or nil)
+end
+
+local function money()
+	local m
+	pcall(function() m = actor():money() end)
+	return m
+end
+
+-- ---------------------------------------------------------------------------- step machine
+-- fn(state) -> true when the step is settled (it prints its own PASS/FAIL), nil to be retried on
+-- the next frame. opts = { wait = ms before the first call, timeout = ms, on_timeout = fn }.
+local function step(name, fn, opts)
+	opts = opts or {}
+	S[#S + 1] = { name = name, fn = fn, wait = opts.wait or 0, timeout = opts.timeout or 8000, on_timeout = opts.on_timeout }
+end
+
+local function step_wait(name, ms)
+	step(name, function()
+		if (time_global() - step_start < ms) then return nil end
+		return true
+	end, { timeout = ms + 60000 })
+end
+
+-- Retries until `cond()` is true, then passes; fails on timeout with the detail `detail()` returns.
+local function step_until(name, ms, cond, detail)
+	step(name, function()
+		if not (cond()) then return nil end
+		return pass(name, detail())
+	end, { timeout = ms, on_timeout = function() fail(name, detail()) end })
+end
+
+-- ---------------------------------------------------------------------------- core hook
+-- The saved state only records nodes that carry `once`, so a plain flow.* node leaves no trace the
+-- probe could read back. Wrapping the runtime's own run_actions gives an exact "this node was
+-- entered / left" record without touching the shipped runtime. `nq debug 1` puts the same
+-- transitions into the log independently.
+local function hook_core()
+	if (shared.core_hooked) then return end
+	shared.core_hooked = true
+	shared.entered = {}
+	local orig = xms_nq.run_actions
+	xms_nq.run_actions = function(ctx, list, slot)
+		if (ctx and ctx.node_id) then shared.entered[tostring(ctx.node_id) .. ":" .. tostring(slot)] = true end
+		return orig(ctx, list, slot)
+	end
+end
+
+-- ---------------------------------------------------------------------------- phase config
+local function read_phase()
+	local ok = pcall(function()
+		local ini = ini_file(PHASE_INI)
+		if (ini and ini:section_exist("qa")) then
+			if (ini:line_exist("qa", "phase")) then phase = ini:r_string("qa", "phase") end
+			if (ini:line_exist("qa", "save")) then save_name = ini:r_string("qa", "save") end
+			if (ini:line_exist("qa", "quit")) then quit_at_end = ini:r_bool("qa", "quit") end
+		end
+	end)
+	if not (ok) then info("cannot read %s, defaulting to phase '%s'", PHASE_INI, phase) end
+end
+
+-- ============================================================================ shared steps
+local function hexof(s, n)
+	local t = {}
+	for i = 1, math.min(#tostring(s or ""), n or 16) do t[#t + 1] = string.format("%02X", string.byte(s, i)) end
+	return table.concat(t, " ")
+end
+
+-- cp1251 evidence. Every byte the probe needs is built with string.char: this engine's script
+-- loader drops the backslash of a decimal escape instead of producing the byte ("\208" arrives as
+-- the three characters 2, 0, 8), so a literal like "\208\161" would test nothing.
+local function bytes(...)
+	local t = { ... }
+	for i = 1, #t do t[i] = string.char(t[i]) end
+	return table.concat(t)
+end
+
+local function step_encoding(tag)
+	step(tag .. ".encoding", function()
+		-- What the engine does with source escapes, on the record.
+		info("escapes: dec=%d/%s nl=%d/%s tab=%d/%s bs=%d/%s (want 1/208 1/10 1/9 1/92)",
+			#"\208", tostring(string.byte("\208", 1)), #"\n", tostring(string.byte("\n", 1)),
+			#"\t", tostring(string.byte("\t", 1)), #"\\", tostring(string.byte("\\", 1)))
+		local u8 = bytes(208, 161, 208, 187, 209, 139, 209, 136, 208, 176, 208, 187)	-- UTF-8 "Слышал"
+		local want = bytes(209, 235, 251, 248, 224, 235)								-- cp1251 "Слышал"
+		local conv, lost = "", -1
+		pcall(function() conv, lost = xms_nq_util.to_cp1251(u8) end)
+		info("to_cp1251 in : %s", hexof(u8))
+		info("to_cp1251 out: %s (lost=%s, want %s)", hexof(conv), tostring(lost), hexof(want))
+		local q = core().quest_def(uid("dialog_branching"))
+		local title = q and q.title or ""
+		local node = q and q.node_by_id and q.node_by_id.meet
+		local text = node and node.params and node.params.text or ""
+		info("quest title  : %s", hexof(title))
+		info("topic text   : %s", hexof(text))
+		local ok_conv = (conv == want)
+		-- A UTF-8 Cyrillic lead byte (0xD0/0xD1 followed by a continuation byte) can never appear in
+		-- cp1251 Russian text, so its absence is the proof the asset text was converted.
+		local lead = "[" .. bytes(208, 209) .. "][" .. string.char(128) .. "-" .. string.char(191) .. "]"
+		local ok_asset = not (string.find(title, lead) or string.find(text, lead))
+		return check(tag .. ".encoding", ok_conv and ok_asset,
+			"to_cp1251 correct=%s, asset text is cp1251 (no UTF-8 lead pair)=%s", tostring(ok_conv), tostring(ok_asset))
+	end, { timeout = 15000 })
+end
+
+local function step_env(tag)
+	step(tag .. ".env", function()
+		local lvl = "?"
+		pcall(function() lvl = level.name() end)
+		shared.level = lvl
+		info("level = %s", lvl)
+		info("xms present = %s, nq_api = %s", tostring(xms ~= nil), tostring(xms and xms.nq_api))
+		local modes = "<none>"
+		pcall(function()
+			if (xms and xms.active_modes) then
+				local m = xms.active_modes()
+				if (type(m) == "table") then
+					local l = {}
+					for k, v in pairs(m) do l[#l + 1] = (type(v) == "string") and v or tostring(k) end
+					table.sort(l)
+					if (#l > 0) then modes = table.concat(l, ",") end
+				else
+					modes = tostring(m)
+				end
+			end
+		end)
+		info("active modes = %s", modes)
+		shared.modes = modes
+		local applies = "?"
+		pcall(function() applies = tostring(xms.module_applies("nq_qa")) end)
+		info("xms.module_applies('nq_qa') = %s", applies)
+		local ready = core() and core().is_ready()
+		return check(tag .. ".ready", ready ~= nil,
+			"is_ready=%s level=%s modes=%s module_applies=%s", tostring(ready), lvl, modes, applies)
+	end)
+end
+
+-- scenario a
+local function step_discovery(tag)
+	step(tag .. ".discovery", function()
+		local Q, order, invalid = core().quests()
+		local names = {}
+		for _, u in ipairs(order) do names[#names + 1] = u end
+		table.sort(names)
+		local want = { "nq_qa.dialog_branching", "nq_qa.linear_fetch", "nq_qa.parallel_triggers" }
+		local ok = true
+		for _, w in ipairs(want) do
+			if not (Q[w]) then ok = false end
+		end
+		check(tag .. ".valid", ok and #order == 3, "loaded: [%s] (want exactly the three reference quests)",
+			table.concat(names, ","))
+		local nerr = 0
+		for _, u in ipairs(order) do nerr = nerr + (Q[u].errors or 0) end
+		check(tag .. ".noerrors", nerr == 0, "errors across the valid quests = %d", nerr)
+		local inv, codes = {}, {}
+		for _, q in ipairs(invalid) do
+			inv[#inv + 1] = tostring(q.file)
+			for _, p in ipairs(q.problems or {}) do codes[#codes + 1] = tostring(q.id) .. ":" .. p.code end
+		end
+		table.sort(inv)
+		table.sort(codes)
+		check(tag .. ".invalid", #invalid == 2, "invalid assets = %d [%s] codes=[%s] (want broken_code + broken_pin)",
+			#invalid, table.concat(inv, ","), table.concat(codes, ","))
+		nq("list")
+		return true
+	end)
+end
+
+-- ============================================================================ phase p1
+-- a) discovery, b) task appears, f) timer/reach/join, mid-quest save, then b/e/f to the end.
+local function build_p1()
+	hook_core()
+	step("a.debug", function()
+		nq("debug 1")		-- mirrors every transition into the log as independent evidence
+		return true
+	end)
+	step_env("a")
+	step_encoding("a")
+	step_discovery("a")
+
+	-- b) the PDA task of linear_fetch
+	step_until("b.task_given", 20000,
+		function()
+			local active, _, nqst = task_of("linear_fetch", "bring_bread")
+			return active ~= nil and nqst == "active"
+		end,
+		function()
+			local active, any, nqst = task_of("linear_fetch", "bring_bread")
+			return fmt1("PDA task nq.nq_qa.linear_fetch.bring_bread active=%s present=%s nq_state=%s",
+				tostring(active ~= nil), tostring(any ~= nil), tostring(nqst))
+		end)
+
+	step_until("b.fetch_waiting", 10000,
+		function() local t = tok("linear_fetch", "fetch") return t ~= nil and t.b == true end,
+		function() local t = tok("linear_fetch", "fetch") return fmt1("token on objective.fetch=%s begun=%s", tostring(t ~= nil), tostring(t and t.b)) end)
+
+	-- f) the wait.timer deadline that has to survive the save
+	step("f.timer_running", function()
+		local t = tok("parallel_triggers", "timer")
+		shared.timer_until = t and t.w and t.w.until_g or nil
+		return check("f.timer_running", shared.timer_until ~= nil, "wait.timer deadline until_g=%s", tostring(shared.timer_until))
+	end, { timeout = 10000 })
+
+	-- objective.reach settles at once when the actor already stands in the place; both outcomes are
+	-- correct, so the check records which one this save produced.
+	-- objective.reach settles at once when the actor already stands in the place; both outcomes are
+	-- correct, so the check records which one this save produced. The arrival is visible as the
+	-- half-filled flow.join (the other half is the timer, which is still running).
+	step("f.reach", function()
+		local qs = qstate("parallel_triggers")
+		local waiting = tok("parallel_triggers", "reach") ~= nil
+		local arrived = qs ~= nil and qs.joins ~= nil and qs.joins.join ~= nil and next(qs.joins.join) ~= nil
+		shared.reach_done = arrived
+		return check("f.reach", waiting or arrived, "objective.reach waiting=%s already_arrived=%s joins=%s (the actor is never moved)",
+			tostring(waiting), tostring(arrived), tostring(xms_nq_util.brief(qs and qs.joins)))
+	end, { timeout = 10000 })
+
+	-- c) the mid-quest save: linear_fetch at 1 of 2 bread, both parallel branches still waiting
+	step("c.one_bread", function()
+		local n = give("bread", 1)
+		return check("c.one_bread", n == 1, "spawned %d bread; inventory=%d", n, count_items("bread"))
+	end)
+
+	step("c.still_waiting", function()
+		if (time_global() - step_start < 2000) then return nil end
+		return check("c.still_waiting", tok("linear_fetch", "fetch") ~= nil and qstatus("linear_fetch") == "active",
+			"1/2 bread: token still on fetch=%s status=%s", tostring(tok("linear_fetch", "fetch") ~= nil), tostring(qstatus("linear_fetch")))
+	end, { timeout = 10000 })
+
+	step("c.save", function()
+		core().save_now()
+		nq("state nq_qa.linear_fetch")
+		info("saving mid-quest as '%s'", save_name)
+		console("save " .. save_name)
+		return true
+	end)
+	step_wait("c.save_wait", 5000)
+
+	-- f) timer + reach -> join. The timer runs on game time; reach would need the actor to walk to
+	-- the smart, which QA is not allowed to do, so it is completed through the sanctioned
+	-- `nq fire` debug path (NQ_ARCHITECTURE 12.4).
+	step("f.time_forward", function()
+		local before = shared.timer_until
+		pcall(function() level.change_game_time(0, 31, 0) end)
+		info("game time pushed by 31 minutes (deadline was %s)", tostring(before))
+		return true
+	end)
+
+	step_until("f.timer_done", 15000,
+		function() return tok("parallel_triggers", "timer") == nil end,
+		function() return fmt1("wait.timer token cleared=%s", tostring(tok("parallel_triggers", "timer") == nil)) end)
+
+	step("f.reach_fire", function()
+		if (tok("parallel_triggers", "reach") ~= nil) then nq("fire nq_qa.parallel_triggers reach done") end
+		return true
+	end)
+
+	step_until("f.join", 15000,
+		function()
+			local qs = qstate("parallel_triggers")
+			return qs ~= nil and qs.done and qs.tokens.join == nil and qs.tokens.reach == nil
+		end,
+		function()
+			local qs = qstate("parallel_triggers")
+			return fmt1("flow.join consumed both branches: reach=%s timer=%s join=%s",
+				tostring(qs and qs.tokens.reach ~= nil), tostring(qs and qs.tokens.timer ~= nil), tostring(qs and qs.tokens.join ~= nil))
+		end)
+
+	-- f) event.item_taken trigger
+	step("f.medkit", function()
+		local n = give("medkit", 1)
+		return check("f.medkit", n == 1, "spawned %d medkit", n)
+	end)
+
+	step_until("f.item_trigger", 15000,
+		function() return qvar("parallel_triggers", "medkit_seen") == true end,
+		function() return fmt1("trigger.when{event.item_taken medkit}: medkit_seen=%s", tostring(qvar("parallel_triggers", "medkit_seen"))) end)
+
+	-- b) finish linear_fetch and, with the same bread, arm the has_item trigger of parallel_triggers
+	step("b.more_bread", function()
+		shared.money_before = money()
+		shared.medkit_before = count_items("medkit")
+		local n = give("bread", 5)
+		shared.bread_expected = count_items("bread") + n
+		return check("b.more_bread", n == 5, "spawned %d bread; inventory will be %d; money=%s",
+			n, shared.bread_expected, tostring(shared.money_before))
+	end)
+
+	step_until("b.fetch_done", 20000,
+		function() return tok("linear_fetch", "fetch") == nil end,
+		function() return fmt1("objective.fetch completed=%s", tostring(tok("linear_fetch", "fetch") == nil)) end)
+
+	step_until("b.completed", 20000,
+		function() return qstatus("linear_fetch") == "completed" end,
+		function() return fmt1("quest status=%s", tostring(qstatus("linear_fetch"))) end)
+
+	step("b.rewards", function()
+		local med = count_items("medkit")
+		local bread = count_items("bread")
+		local want_bread = (shared.bread_expected or 0) - 2
+		local active, any, nqst = task_of("linear_fetch", "bring_bread")
+		check("b.rewards", med == (shared.medkit_before or 0) + 1 and bread == want_bread and
+			money() == (shared.money_before or 0) + 500,
+			"item.give medkit %d->%d, item.take bread %d->%d (want %d), money.give %s->%s",
+			shared.medkit_before, med, shared.bread_expected, bread, want_bread,
+			tostring(shared.money_before), tostring(money()))
+		check("b.task_completed", nqst == "completed" and active == nil and any ~= nil,
+			"task.complete: nq record=%s, engine still lists it as active=%s, task still in the PDA=%s",
+			tostring(nqst), tostring(active ~= nil), tostring(any ~= nil))
+		return true
+	end, { timeout = 15000 })
+
+	-- e) objective.kill with spawn
+	step_until("e.hunt_entered", 20000,
+		function() return tok("parallel_triggers", "hunt") ~= nil end,
+		function() return fmt1("trigger.when{has_item bread>=3} -> objective.kill entered=%s", tostring(tok("parallel_triggers", "hunt") ~= nil)) end)
+
+	step("e.squad_created", function()
+		local qs = qstate("parallel_triggers")
+		local ref = qs and qs.refs and qs.refs.boars
+		if not (ref) then return check("e.squad_created", false, "refs.boars is missing") end
+		shared.squad_id = ref.id
+		local se
+		pcall(function() se = alife():object(ref.id) end)
+		local target, holds
+		pcall(function() target = se and se.scripted_target end)
+		holds = (target ~= nil and tostring(target) ~= "")
+		check("e.squad_created", se ~= nil, "refs.boars id=%s kind=%s section=%s smart=%s server object=%s",
+			tostring(ref.id), tostring(ref.kind), tostring(ref.section), tostring(ref.smart), tostring(se ~= nil))
+		check("e.squad_hold", holds, "hold=true -> scripted_target=%s", tostring(target))
+		local sid = "nq." .. uid("parallel_triggers") .. ".boars"
+		local by_story
+		pcall(function() by_story = xms_nq_util.id_by_story(sid) end)
+		check("e.squad_story_id", by_story == ref.id, "story id %s -> %s (ref id %s)", sid, tostring(by_story), tostring(ref.id))
+		return true
+	end, { timeout = 15000 })
+
+	step("e.task_given", function()
+		local active, any, nqst = task_of("parallel_triggers", "hunt")
+		return check("e.task_given", active ~= nil and nqst == "active",
+			"objective.kill on_enter task active=%s present=%s nq_state=%s", tostring(active ~= nil), tostring(any ~= nil), tostring(nqst))
+	end, { timeout = 10000 })
+
+	-- Kill the squad: online members are killed, otherwise the server objects are released, which
+	-- is the offline death path the runtime has to notice (squad_on_unregister).
+	step("e.kill", function()
+		local id = shared.squad_id
+		if not (id) then return check("e.kill", false, "no squad id") end
+		local killed, released = 0, 0
+		pcall(function()
+			local se = alife():object(id)
+			if not (se) then return end
+			local members = {}
+			for m in se:squad_members() do members[#members + 1] = m.id end
+			for _, mid in ipairs(members) do
+				local go = level.object_by_id(mid)
+				if (go and go:alive()) then
+					go:kill(go)
+					killed = killed + 1
+				else
+					local mse = alife():object(mid)
+					if (mse) then alife():release(mse, true) released = released + 1 end
+				end
+			end
+			local still = alife():object(id)
+			if (still) then alife():release(still, true) end
+		end)
+		shared.kill_path = (killed > 0) and "kill()" or "release()"
+		return check("e.kill", (killed + released) > 0, "squad %s: %d killed online, %d released offline", tostring(id), killed, released)
+	end, { timeout = 10000 })
+
+	step_until("e.kill_done", 25000,
+		function() return tok("parallel_triggers", "hunt") == nil and qvar("parallel_triggers", "hunted") == true end,
+		function() return fmt1("objective.kill done=%s hunted=%s (path=%s)", tostring(tok("parallel_triggers", "hunt") == nil),
+			tostring(qvar("parallel_triggers", "hunted")), tostring(shared.kill_path)) end)
+
+	step("e.reward", function()
+		local active, any, nqst = task_of("parallel_triggers", "hunt")
+		return check("e.reward", nqst == "completed" and active == nil and any ~= nil and
+			money() == (shared.money_before or 0) + 500 + 700,
+			"hunt task nq_state=%s active=%s present=%s, money.give 700 -> %s",
+			tostring(nqst), tostring(active ~= nil), tostring(any ~= nil), tostring(money()))
+	end, { timeout = 10000 })
+
+	-- f) signal between branches, wait.any timeout, flow.branch, flow.end
+	step_until("f.signal", 20000,
+		function()
+			local qs = qstate("parallel_triggers")
+			return qs ~= nil and (qs.fired and qs.fired.on_signal or 0) > 0
+		end,
+		function()
+			local qs = qstate("parallel_triggers")
+			return fmt1("event.signal trigger fired %s time(s)", tostring(qs and qs.fired and qs.fired.on_signal))
+		end)
+
+	step_until("f.race_timeout", 25000,
+		function() return qstatus("parallel_triggers") ~= "active" end,
+		function()
+			local qs = qstate("parallel_triggers")
+			return fmt1("wait.any timed out -> flow.branch -> flow.end: status=%s done.end_good=%s done.end_plain=%s",
+				tostring(qstatus("parallel_triggers")), tostring(qs and qs.done and qs.done.end_good),
+				tostring(qs and qs.done and qs.done.end_plain))
+		end)
+
+	step("f.branch", function()
+		local good = shared.entered and shared.entered["end_good:enter"]
+		local plain = shared.entered and shared.entered["end_plain:enter"]
+		return check("f.branch", good == true and plain ~= true and qstatus("parallel_triggers") == "completed",
+			"flow.branch took with_medkit (medkit_seen=%s): end_good entered=%s end_plain entered=%s status=%s",
+			tostring(qvar("parallel_triggers", "medkit_seen")), tostring(good), tostring(plain),
+			tostring(qstatus("parallel_triggers")))
+	end)
+
+	step("p1.final", function()
+		nq("state nq_qa.parallel_triggers")
+		nq("list")
+		return true
+	end)
+end
+
+-- ============================================================================ phase p2
+-- c) the mid-quest save came back; k) the blob is restaged into an immediate save; finish b.
+local function build_p2()
+	step("k.save_now", function()
+		info("saving '%s' immediately after the load (scenario k)", save_name)
+		console("save " .. save_name)
+		return true
+	end)
+	step_wait("k.save_wait", 5000)
+
+	step_env("c")
+
+	step("c.survived", function()
+		local qs = qstate("linear_fetch")
+		if not (qs) then return check("c.survived", false, "no quest record after the load") end
+		local t = tok("linear_fetch", "fetch")
+		return check("c.survived", qs.status == "active" and t ~= nil and qs.vars.bread_needed == 2,
+			"status=%s token(fetch)=%s vars.bread_needed=%s", tostring(qs.status), tostring(t ~= nil), tostring(qs.vars.bread_needed))
+	end, { timeout = 15000 })
+
+	step("c.survived_task", function()
+		local active, any, nqst = task_of("linear_fetch", "bring_bread")
+		return check("c.survived_task", active ~= nil and nqst == "active",
+			"PDA task after the load: active=%s present=%s nq_state=%s", tostring(active ~= nil), tostring(any ~= nil), tostring(nqst))
+	end, { timeout = 10000 })
+
+	step("c.survived_items", function()
+		return check("c.survived_items", count_items("bread") == 1, "bread in the inventory after the load = %d", count_items("bread"))
+	end)
+
+	step("c.survived_timer", function()
+		local t = tok("parallel_triggers", "timer")
+		local u = t and t.w and t.w.until_g or nil
+		return check("c.survived_timer", u ~= nil, "wait.timer deadline after the load = %s", tostring(u))
+	end)
+
+	-- Whichever half of the parallel branch was already settled before the save has to still be
+	-- settled: either the reach token is back, or the flow.join still holds its arrival.
+	step("c.survived_reach", function()
+		local qs = qstate("parallel_triggers")
+		local waiting = tok("parallel_triggers", "reach") ~= nil
+		local arrived = qs ~= nil and qs.joins ~= nil and qs.joins.join ~= nil and next(qs.joins.join) ~= nil
+		return check("c.survived_reach", waiting or arrived, "objective.reach after the load: waiting=%s join arrival kept=%s (%s)",
+			tostring(waiting), tostring(arrived), tostring(xms_nq_util.brief(qs and qs.joins)))
+	end)
+
+	step("c.dialogs", function()
+		local reg = {}
+		pcall(function()
+			for id in pairs(xms_nq_dialog.dialog_index() or {}) do reg[#reg + 1] = id end
+		end)
+		table.sort(reg)
+		return check("c.dialogs", #reg >= 2, "dialogs re-registered after the load: [%s]", table.concat(reg, ","))
+	end)
+
+	-- b) finish the quest after the reload
+	step("c.finish_bread", function()
+		shared.money_before = money()
+		local n = give("bread", 1)
+		return check("c.finish_bread", n == 1, "second bread spawned; inventory=%d", count_items("bread"))
+	end)
+
+	step_until("c.finish_done", 25000,
+		function() return qstatus("linear_fetch") == "completed" end,
+		function() return fmt1("quest finished after the reload: status=%s medkit=%d money=%s->%s",
+			tostring(qstatus("linear_fetch")), count_items("medkit"), tostring(shared.money_before), tostring(money())) end)
+
+	step("c.finish_task", function()
+		local active, any, nqst = task_of("linear_fetch", "bring_bread")
+		return check("c.finish_task", nqst == "completed" and active == nil and any ~= nil,
+			"task completed after the reload: nq_state=%s active=%s present=%s", tostring(nqst), tostring(active ~= nil), tostring(any ~= nil))
+	end, { timeout = 10000 })
+
+	step("p2.final", function() nq("list") return true end)
+end
+
+-- ============================================================================ phase p3
+-- k) the state came back from the save written right after a load; d) the real talk UI.
+local WOLF = "esc_2_12_stalker_wolf"
+
+-- Wraps the runtime's phrase callbacks so the probe can see the walk the ENGINE performed:
+-- xms_nq_dialog.act runs from CPhraseScript::Action for every phrase the engine actually says,
+-- and .pre from the precondition of every candidate it considers. The engine resolves both
+-- functors by name on each call, so replacing the globals is enough and nothing ships changed.
+local function hook_dialog()
+	if (shared.hooked) then return end
+	shared.hooked = true
+	shared.said, shared.count, shared.order, shared.pre_seen = {}, {}, {}, {}
+	local orig_act, orig_pre = xms_nq_dialog.act, xms_nq_dialog.pre
+	xms_nq_dialog.act = function(fs, ss, dialog_id, phrase_id)
+		local pid = tostring(phrase_id)
+		shared.said[pid] = true
+		shared.count[pid] = (shared.count[pid] or 0) + 1
+		shared.order[#shared.order + 1] = pid
+		shared.last_phrase = pid
+		info("SayPhrase -> %s (%s)", pid, tostring(dialog_id))
+		return orig_act(fs, ss, dialog_id, phrase_id)
+	end
+	xms_nq_dialog.pre = function(fs, ss, dialog_id, phrase_id, next_id)
+		local r = orig_pre(fs, ss, dialog_id, phrase_id, next_id)
+		shared.pre_seen[tostring(next_id)] = r
+		return r
+	end
+end
+
+local function build_p3()
+	step_env("k")
+
+	step("k.state_back", function()
+		local qs = qstate("linear_fetch")
+		if not (qs) then return check("k.state_back", false, "no NQ record in the reloaded save") end
+		return check("k.state_back", qs.status == "active" and qs.tokens.fetch ~= nil and qs.vars.bread_needed == 2,
+			"NQ blob survived load->save->load: status=%s token(fetch)=%s vars=%s tasks=%s",
+			tostring(qs.status), tostring(qs.tokens.fetch ~= nil), tostring(qs.vars.bread_needed), tostring(qs.tasks and qs.tasks.bring_bread))
+	end, { timeout = 15000 })
+
+	-- d) dialog_branching through the engine's own phrase graph
+	step("d.registered", function()
+		local want = "nq." .. uid("dialog_branching") .. ".meet"
+		local have = {}
+		pcall(function()
+			for id in pairs(xms_nq_dialog.dialog_index() or {}) do have[#have + 1] = id end
+		end)
+		table.sort(have)
+		local found = false
+		for _, id in ipairs(have) do
+			if (id == want) then found = true end
+		end
+		return check("d.registered", found, "topic dialog '%s' registered; index=[%s]", want, table.concat(have, ","))
+	end)
+
+	step_encoding("d")
+
+	step("d.npc", function()
+		local id
+		pcall(function() id = xms_nq_util.id_by_story(WOLF) end)
+		if not (id) then return check("d.npc", false, "story id %s does not resolve on this level", WOLF) end
+		shared.wolf_id = id
+		local go = level.object_by_id(id)
+		info("wolf id=%s online=%s", tostring(id), tostring(go ~= nil))
+		-- Bring the partner to the actor instead of walking the actor over: moving an NPC is an
+		-- ordinary game API (debug_cmd_list does the same) and the actor never moves.
+		local a = actor()
+		if not (go) then
+			pcall(function() TeleportObject(id, a:position(), a:level_vertex_id(), a:game_vertex_id()) end)
+			pcall(function() alife():set_switch_online(id, true) end)
+			info("wolf teleported to the actor and switched online")
+		else
+			pcall(function() go:set_npc_position(a:position()) end)
+			info("wolf moved next to the actor")
+		end
+		return true
+	end)
+
+	step_until("d.npc_online", 30000,
+		function() return shared.wolf_id ~= nil and level.object_by_id(shared.wolf_id) ~= nil end,
+		function()
+			local go = shared.wolf_id and level.object_by_id(shared.wolf_id)
+			local nm
+			pcall(function() nm = go and go:character_name() end)
+			return fmt1("partner online=%s name=%s", tostring(go ~= nil), tostring(nm))
+		end)
+
+	step("d.dialogs_for", function()
+		local go = shared.wolf_id and level.object_by_id(shared.wolf_id)
+		if not (go) then return check("d.dialogs_for", false, "no online partner") end
+		local list = {}
+		pcall(function() list = xms.dialogs_for(go, actor()) or {} end)
+		local want = "nq." .. uid("dialog_branching") .. ".meet"
+		local found = false
+		for _, id in ipairs(list) do
+			if (id == want) then found = true end
+		end
+		return check("d.dialogs_for", found, "xms.dialogs_for(wolf, actor) = [%s]", table.concat(list, ","))
+	end)
+
+	-- Opening the talk window is retried: the NPC may still be finishing an animation or its meet
+	-- manager may have talk disabled for a moment after it comes online.
+	step("d.open", function()
+		hook_dialog()
+		core().set_debug(true)
+		local go = level.object_by_id(shared.wolf_id)
+		if not (go) then return check("d.open", false, "the partner went offline again") end
+		local talking = false
+		pcall(function() talking = actor():is_talking() end)
+		if (talking) then
+			info("reply order under wolf_1: 1=accept 2=ask_more 3=decline")
+			await("topic", "click the quest topic in the talk window (the NPC answer follows)")
+			return pass("d.open", "talk window open (actor:is_talking() = true)")
+		end
+		if ((time_global() - step_start) % 3000 < 60) then
+			pcall(function() go:enable_talk() end)
+			pcall(function() actor():run_talk_dialog(go, false) end)
+		end
+		return nil
+	end, { timeout = 40000, on_timeout = function()
+		local alive, enemy = "?", "?"
+		pcall(function()
+			local go = level.object_by_id(shared.wolf_id)
+			alive = tostring(go and go:alive())
+			enemy = tostring(go and go:best_enemy() ~= nil)
+		end)
+		fail("d.open", "run_talk_dialog never opened the window (partner alive=%s, has enemy=%s)", alive, enemy)
+	end })
+
+	-- The topic was clicked once the engine has said the root phrase and the NPC answer; the reply
+	-- list of wolf_1 is then on screen. A click that lands on "goodbye" closes the window, so the
+	-- step reopens it and asks again instead of running out the clock.
+	step("d.topic_open", function()
+		if (shared.said and shared.said["wolf_1"]) then
+			return pass("d.topic_open", "engine walked its own phrase graph: said=[%s]",
+				table.concat(shared.order or {}, ">"))
+		end
+		local talking = false
+		pcall(function() talking = actor():is_talking() end)
+		if not (talking) and (time_global() - (shared.reopened_at or 0) > 20000) then
+			shared.reopened_at = time_global()
+			local go = level.object_by_id(shared.wolf_id)
+			if (go) then
+				pcall(function() go:enable_talk() end)
+				pcall(function() actor():run_talk_dialog(go, false) end)
+				info("talk window had closed; reopened and asking for the topic again")
+				await("topic", "click the quest topic again (the window was reopened)")
+			end
+		end
+		return nil
+	end, { timeout = 90000, on_timeout = function()
+		-- The hidden desktop is not the window station's input desktop, so synthetic mouse input
+		-- can be posted but not guaranteed to be consumed. When the click path does not take, the
+		-- phrase walk is driven through the callbacks the engine itself would call, and every
+		-- following check says so. This is the documented last resort, not the normal path.
+		shared.ui_failed = true
+		fail("d.topic_open", "engine never said wolf_1 from the clicked UI: said=[%s]; falling back to the "
+			.. "scripted phrase walk (xms_nq_dialog.act/pre)", table.concat(shared.order or {}, ">"))
+	end })
+
+	-- Says one phrase: through the talk window when the click path works, otherwise straight into
+	-- the runtime's phrase callback, which is what CPhraseScript::Action does for a real click.
+	local function drive(step_name, row_tag, hint, phrase_id)
+		step(step_name, function()
+			if not (shared.ui_failed) then
+				await(row_tag, hint)
+				return true
+			end
+			local npc = level.object_by_id(shared.wolf_id)
+			local d = "nq." .. uid("dialog_branching") .. ".meet"
+			pcall(function() xms_nq_dialog.act(npc, actor(), d, phrase_id) end)
+			info("fallback: said '%s' through xms_nq_dialog.act", phrase_id)
+			return true
+		end)
+	end
+
+	step("d.path", function()
+		if (shared.ui_failed) then
+			local npc = level.object_by_id(shared.wolf_id)
+			local d = "nq." .. uid("dialog_branching") .. ".meet"
+			pcall(function() xms_nq_dialog.act(npc, actor(), d, "0") end)
+			pcall(function() xms_nq_dialog.act(npc, actor(), d, "wolf_1") end)
+			return pass("d.path", "FALLBACK path: the talk window would not take the click, the phrase "
+				.. "walk is driven through xms_nq_dialog.act/pre")
+		end
+		return pass("d.path", "UI path: the engine walked its own phrase graph from real clicks")
+	end)
+
+	drive("d.ask_more", "reply2", "click the SECOND actor reply (ask_more)", "ask_more")
+
+	step_until("d.asked", 180000,
+		function() return (qvar("dialog_branching", "asked") or 0) >= 1 end,
+		function() return fmt1("ask_more said: vars.asked=%s (on_exit ran inside the phrase action); said=[%s]",
+			tostring(qvar("dialog_branching", "asked")), table.concat(shared.order or {}, ">")) end)
+
+	-- The conditional NPC answer: the engine picks it with the phrase precondition, so the fallback
+	-- asks the same precondition and says whichever branch it allows.
+	step("d.conditional", function()
+		local said = shared.said or {}
+		local m = money()
+		local expect_rich = (m ~= nil and m >= 1000)
+		if (shared.ui_failed and not (said.wolf_rich or said.wolf_poor)) then
+			local npc = level.object_by_id(shared.wolf_id)
+			local d = "nq." .. uid("dialog_branching") .. ".meet"
+			local rich_ok, poor_ok = false, false
+			pcall(function() rich_ok = xms_nq_dialog.pre(npc, actor(), d, "ask_more", "wolf_rich") end)
+			pcall(function() poor_ok = xms_nq_dialog.pre(npc, actor(), d, "ask_more", "wolf_poor") end)
+			info("fallback: preconditions ask_more->wolf_rich=%s ask_more->wolf_poor=%s",
+				tostring(rich_ok), tostring(poor_ok))
+			pcall(function() xms_nq_dialog.act(npc, actor(), d, rich_ok and "wolf_rich" or "wolf_poor") end)
+			said = shared.said or {}
+		end
+		local rich, poor = said.wolf_rich, said.wolf_poor
+		return check("d.conditional", (rich == true) == expect_rich and (rich or poor),
+			"conditional NPC phrase with money=%s: wolf_rich=%s wolf_poor=%s (cond has_money>=1000 expects rich=%s)",
+			tostring(m), tostring(rich == true), tostring(poor == true), tostring(expect_rich))
+	end, { timeout = 20000 })
+
+	drive("d.back", "reply1", "click the FIRST actor reply (back -> loops to wolf_1)", "back")
+
+	step("d.loop_wolf", function()
+		if not (shared.ui_failed) then return true end
+		local npc = level.object_by_id(shared.wolf_id)
+		local d = "nq." .. uid("dialog_branching") .. ".meet"
+		pcall(function() xms_nq_dialog.act(npc, actor(), d, "wolf_1") end)
+		return true
+	end)
+
+	step_until("d.looped", 180000,
+		function() return (shared.count and shared.count.wolf_1 or 0) >= 2 end,
+		function() return fmt1("phrase loop back to wolf_1: said %s time(s); walk=[%s]",
+			tostring(shared.count and shared.count.wolf_1), table.concat(shared.order or {}, ">")) end)
+
+	drive("d.accept", "reply1", "click the FIRST actor reply (accept) - it is a leaf, the window closes", "accept")
+
+	step_until("d.accepted", 180000,
+		function() return qvar("dialog_branching", "agreed") == true end,
+		function() return fmt1("accept said: vars.agreed=%s; walk=[%s]", tostring(qvar("dialog_branching", "agreed")),
+			table.concat(shared.order or {}, ">")) end)
+
+	step_until("d.on_exit", 30000,
+		function()
+			local active, _, nqst = task_of("dialog_branching", "kill_boars")
+			return active ~= nil and nqst == "active"
+		end,
+		function()
+			local active, _, nqst = task_of("dialog_branching", "kill_boars")
+			return fmt1("on_exit of the leaf ran: task active=%s nq_state=%s", tostring(active ~= nil), tostring(nqst))
+		end)
+
+	step_until("d.topic_done", 30000,
+		function()
+			local qs = qstate("dialog_branching")
+			return qs ~= nil and qs.done and qs.done.meet == true and qs.tokens.kill ~= nil
+		end,
+		function()
+			local qs = qstate("dialog_branching")
+			return fmt1("leaf finished the topic: done.meet=%s token(kill)=%s", tostring(qs and qs.done and qs.done.meet),
+				tostring(qs and qs.tokens and qs.tokens.kill ~= nil))
+		end)
+
+	step("d.topic_gone", function()
+		local go = level.object_by_id(shared.wolf_id)
+		local list = {}
+		pcall(function() list = xms.dialogs_for(go, actor()) or {} end)
+		local want = "nq." .. uid("dialog_branching") .. ".meet"
+		local still = false
+		for _, id in ipairs(list) do
+			if (id == want) then still = true end
+		end
+		return check("d.topic_gone", not still, "once topic removed from dialogs_for; now = [%s]", table.concat(list, ","))
+	end, { timeout = 15000 })
+
+	step("d.walk", function()
+		return check("d.walk", #(shared.order or {}) >= 6, "engine phrase walk (SayPhrase order) = [%s]",
+			table.concat(shared.order or {}, ">"))
+	end)
+
+	step("d.final", function()
+		nq("state nq_qa.dialog_branching")
+		core().save_now()
+		info("saving '%s' after the dialog", save_name)
+		console("save " .. save_name)
+		return true
+	end)
+	step_wait("d.save_wait", 5000)
+end
+
+-- ============================================================================ phase p4 (scenario g)
+-- Level change out and back. ChangeLevel destroys the Lua state, so the phase re-enters through
+-- actor_on_first_update and picks up where it left off from the marker file.
+local function build_p4()
+	local mark = marker_read()
+	local here = "?"
+	pcall(function() here = level.name() end)
+	info("scenario g: marker=%s level=%s", tostring(mark), here)
+
+	if (mark == nil or mark == "") then
+		step_env("g")
+		step("g.before", function()
+			local qs = qstate("dialog_branching")
+			shared.before_refs = qs and qs.refs and qs.refs.boars and qs.refs.boars.id or nil
+			check("g.before", qs ~= nil and qs.status == "active",
+				"before the change: status=%s token(kill)=%s refs.boars=%s task=%s level=%s",
+				tostring(qs and qs.status), tostring(qs and qs.tokens.kill ~= nil), tostring(shared.before_refs),
+				tostring(qs and qs.tasks and qs.tasks.kill_boars), here)
+			local n = 0
+			pcall(function()
+				for _ in pairs(xms_nq_dialog.dialog_index() or {}) do n = n + 1 end
+			end)
+			shared.before_dialogs = n
+			marker_write("out|" .. here .. "|" .. tostring(shared.before_refs or "") .. "|" .. tostring(n))
+			core().save_now()
+			return true
+		end)
+		step_wait("g.settle", 3000)
+		step("g.jump_out", function()
+			local target = (here == "l01_escape") and "l02_garbage" or "l01_escape"
+			info("jumping to %s", target)
+			local ok = false
+			pcall(function() ok = JumpToLevel(target) end)
+			if not (ok) then
+				marker_write("")
+				return fail("g.jump_out", "JumpToLevel('%s') returned false; no level change is possible from here", target)
+			end
+			return true
+		end, { timeout = 20000 })
+		quit_at_end = false		-- the level change replaces this Lua state
+		return
+	end
+
+	local what, from_level, before_ref, before_dialogs = string.match(mark, "^(%a+)|([^|]*)|([^|]*)|([^|]*)$")
+	if (what == "out") then
+		step_env("g2")
+		step("g.other_level", function()
+			local qs = qstate("dialog_branching")
+			check("g.other_level", qs ~= nil and qs.status == "active",
+				"on %s after the change: status=%s token(kill)=%s refs.boars=%s",
+				here, tostring(qs and qs.status), tostring(qs and qs.tokens.kill ~= nil),
+				tostring(qs and qs.refs and qs.refs.boars and qs.refs.boars.id))
+			marker_write("back|" .. tostring(from_level) .. "|" .. tostring(before_ref) .. "|" .. tostring(before_dialogs))
+			core().save_now()
+			return true
+		end, { timeout = 15000 })
+		step_wait("g.settle2", 3000)
+		step("g.jump_back", function()
+			info("jumping back to %s", from_level)
+			local ok = false
+			pcall(function() ok = JumpToLevel(from_level) end)
+			if not (ok) then return fail("g.jump_back", "JumpToLevel('%s') returned false", tostring(from_level)) end
+			return true
+		end, { timeout = 20000 })
+		quit_at_end = false
+		return
+	end
+
+	-- back on the original level
+	step_env("g3")
+	step("g.back", function()
+		local qs = qstate("dialog_branching")
+		check("g.back", qs ~= nil and qs.status == "active" and qs.tokens.kill ~= nil,
+			"back on %s: status=%s token(kill)=%s vars.agreed=%s task=%s",
+			here, tostring(qs and qs.status), tostring(qs and qs.tokens.kill ~= nil),
+			tostring(qs and qs.vars and qs.vars.agreed), tostring(qs and qs.tasks and qs.tasks.kill_boars))
+		local ref = qs and qs.refs and qs.refs.boars
+		check("g.refs", ref ~= nil and tostring(ref.id) == tostring(before_ref),
+			"refs survived the round trip: before=%s after=%s", tostring(before_ref), tostring(ref and ref.id))
+		local target
+		pcall(function()
+			local se = ref and alife():object(ref.id)
+			target = se and se.scripted_target
+		end)
+		check("g.hold", target ~= nil and tostring(target) ~= "", "held squad re-applied: scripted_target=%s", tostring(target))
+		local sid = "nq." .. uid("dialog_branching") .. ".boars"
+		local by_story
+		pcall(function() by_story = xms_nq_util.id_by_story(sid) end)
+		check("g.story_id", ref ~= nil and by_story == ref.id, "story id %s re-registered -> %s", sid, tostring(by_story))
+		local n = 0
+		pcall(function()
+			for _ in pairs(xms_nq_dialog.dialog_index() or {}) do n = n + 1 end
+		end)
+		check("g.dialogs", tostring(n) == tostring(before_dialogs), "start dialogs/topics re-registered: before=%s after=%d",
+			tostring(before_dialogs), n)
+		return true
+	end, { timeout = 20000 })
+	step("g.cleanup", function() marker_write("") nq("list") return true end)
+end
+
+-- ============================================================================ phase p5 (scenario h1)
+-- The module is gone: the save must load, NQ must stay quiet and the record must survive.
+local function build_p5()
+	step_env("h")
+	step("h.no_quests", function()
+		local Q, order, invalid = core().quests()
+		check("h.no_quests", #order == 0 and #invalid == 0, "quests loaded without the module = %d, invalid = %d", #order, #invalid)
+		-- With no module at all the engine builds no xms table, so the runtime never loads its blob
+		-- and has nothing to show here. That the record survived is proved by phase p6, which puts
+		-- the module back and continues the quest; the save written below is its input.
+		local st = core().get_state()
+		local kept = {}
+		for u in pairs(st and st.quests or {}) do kept[#kept + 1] = u end
+		table.sort(kept)
+		info("runtime view of the blob without the module: ready=%s records=[%s] (p6 proves the record survived)",
+			tostring(core().is_ready()), table.concat(kept, ","))
+		nq("list")
+		return true
+	end, { timeout = 15000 })
+	step("h.save", function()
+		info("saving '%s' with the module removed", save_name)
+		console("save " .. save_name)
+		return true
+	end)
+	step_wait("h.save_wait", 5000)
+end
+
+-- ============================================================================ phase p6 (scenario h2)
+-- The module is back: the record has to be picked up again and the quest has to continue.
+local function build_p6()
+	step_env("h2")
+	step("h2.back", function()
+		local qs = qstate("linear_fetch")
+		if not (qs) then return check("h2.back", false, "the record did not survive the module-less save") end
+		return check("h2.back", qs.status == "active" and qs.tokens.fetch ~= nil and qs.vars.bread_needed == 2,
+			"quest continues: status=%s token(fetch)=%s vars.bread_needed=%s", tostring(qs.status),
+			tostring(qs.tokens.fetch ~= nil), tostring(qs.vars.bread_needed))
+	end, { timeout = 20000 })
+	step("h2.continue", function()
+		give("bread", 1)
+		return true
+	end)
+	step_until("h2.completed", 25000,
+		function() return qstatus("linear_fetch") == "completed" end,
+		function() return fmt1("quest finished after the module came back: status=%s", tostring(qstatus("linear_fetch"))) end)
+end
+
+-- ============================================================================ phase p7 (scenario i)
+-- The graph changed between sessions: the node that held the token is gone.
+local function build_p7()
+	step_env("i")
+	step("i.dropped", function()
+		local qs = qstate("linear_fetch")
+		local q = core().quest_def(uid("linear_fetch"))
+		if not (qs) or not (q) then return check("i.dropped", false, "quest or record missing") end
+		check("i.node_gone", q.node_by_id["fetch"] == nil, "node 'fetch' is no longer in the asset = %s", tostring(q.node_by_id["fetch"] == nil))
+		check("i.dropped", qs.tokens.fetch == nil, "token on the removed node dropped = %s; tokens now = %s",
+			tostring(qs.tokens.fetch == nil), tostring(xms_nq_util.brief(qs.tokens)))
+		check("i.vars_kept", qs.vars.bread_needed == 2, "vars kept across the graph change = %s", tostring(qs.vars.bread_needed))
+		nq("state nq_qa.linear_fetch")
+		return true
+	end, { timeout = 20000 })
+	step("i.others_alive", function()
+		local Q = core().quests()
+		check("i.others_alive", Q[uid("parallel_triggers")] ~= nil and Q[uid("dialog_branching")] ~= nil,
+			"the other quests still load = %s", tostring(Q[uid("parallel_triggers")] ~= nil and Q[uid("dialog_branching")] ~= nil))
+		local qs = qstate("parallel_triggers")
+		check("i.others_state", qs ~= nil and qs.status == "active", "parallel_triggers still active = %s", tostring(qs and qs.status))
+		return true
+	end, { timeout = 15000 })
+end
+
+-- ============================================================================ phase p8 (scenario j) / p9 (scenario l)
+local function build_quiet(tag)
+	step_env(tag)
+	step(tag .. ".quiet", function()
+		local Q, order, invalid = core().quests()
+		check(tag .. ".no_quests", #order == 0 and #invalid == 0, "quests=%d invalid=%d", #order, #invalid)
+		-- The "no callbacks registered" half of the gate is checked by the runner in the log:
+		-- the runtime only prints "callbacks registered" when at least one quest is loaded.
+		info("runtime ready=%s (the runner greps the log for the callback registration)", tostring(core().is_ready()))
+		nq("list")
+		return true
+	end, { timeout = 15000 })
+	step_wait(tag .. ".soak", 8000)
+end
+
+-- ============================================================================ registry
+local BUILDERS = {
+	scout = function()
+		step_env("scout")
+		step_encoding("scout")
+		step_discovery("scout")
+		step("scout.world", function()
+			local a = actor()
+			local pos = "?"
+			pcall(function() local p = a:position() pos = string.format("%.1f,%.1f,%.1f", p.x, p.y, p.z) end)
+			info("actor position = %s, money = %s", pos, tostring(money()))
+			local wid
+			pcall(function() wid = xms_nq_util.id_by_story(WOLF) end)
+			local wgo = wid and level.object_by_id(wid)
+			local wse
+			pcall(function() wse = wid and alife():object(wid) end)
+			local dist = "?"
+			pcall(function()
+				if (wse and a) then dist = string.format("%.0f", a:position():distance_to(wse.position)) end
+			end)
+			info("%s: id=%s online=%s server=%s distance=%s", WOLF, tostring(wid), tostring(wgo ~= nil), tostring(wse ~= nil), dist)
+			for _, sm in ipairs({ "esc_smart_terrain_2_12", "esc_smart_terrain_3_16" }) do
+				local s
+				pcall(function() s = xms_nq_util.smart_by_name(sm) end)
+				info("smart %s = %s", sm, tostring(s and s.id))
+			end
+			local n = 0
+			pcall(function()
+				for id in pairs(db.OnlineStalkers or {}) do
+					local st = db.storage[id]
+					local go = st and st.object
+					if (go) then
+						n = n + 1
+						if (n <= 8) then
+							info("online stalker #%d: id=%s name=%s", n, tostring(id), tostring(go:character_name()))
+						end
+					end
+				end
+			end)
+			info("online stalkers = %d", n)
+			return pass("scout.world", "world probed")
+		end, { timeout = 20000 })
+	end,
+	p1 = build_p1,
+	p2 = build_p2,
+	p3 = build_p3,
+	p4 = build_p4,
+	p5 = build_p5,
+	p6 = build_p6,
+	p7 = build_p7,
+	p8 = function() build_quiet("j") end,
+	p9 = function() build_quiet("l") end,
+}
+
+-- ============================================================================ runner
+local function finish()
+	if (finished) then return end
+	finished = true
+	local total = passed + failed + skipped
+	say("DONE %d/%d (failed=%d skipped=%d phase=%s)", passed, total, failed, skipped, phase)
+	console("flush")
+	if (quit_at_end) then console("quit") end
+end
+
+local heartbeat = 0
+
+-- Driven from a level call, not from actor_on_update: when the level finishes loading with the
+-- window in the background the engine pauses, script callbacks stop and the run would hang. Level
+-- calls keep running, so this is also the only place where PROJECT_RULES 8.1.5's per-frame
+-- device():pause(false) can actually be issued.
+local function on_update()
+	if (finished or not started) then return true end
+	pcall(function() device():pause(false) end)
+	local s = S[idx]
+	if not (s) then finish() return true end
+	local now = time_global()
+	if (now - heartbeat >= 10000) then
+		heartbeat = now
+		info("heartbeat: step %d/%d '%s' for %d ms", idx, #S, tostring(s.name), (step_start > 0) and (now - step_start) or 0)
+	end
+	if (step_start == 0) then step_start = now end
+	if (now - step_start < s.wait) then return end
+	local ok, r = pcall(s.fn, s)
+	if not (ok) then
+		fail(s.name, "lua error: %s", tostring(r))
+		idx = idx + 1
+		step_start = 0
+		return
+	end
+	if (r == true) then
+		idx = idx + 1
+		step_start = 0
+		return
+	end
+	if (now - step_start > s.timeout) then
+		if (s.on_timeout) then pcall(s.on_timeout) else fail(s.name, "timeout after %d ms", s.timeout) end
+		idx = idx + 1
+		step_start = 0
+	end
+end
+
+local function on_first_update()
+	if (started) then return end
+	started = true
+	read_phase()
+	say("START phase=%s save=%s", phase, save_name)
+	console("g_pause_in_background 0")
+	console("main_menu off")
+	pcall(function() device():pause(false) end)
+	local b = BUILDERS[phase]
+	if not (b) then
+		fail("phase", "unknown phase '%s'", tostring(phase))
+		finish()
+		return
+	end
+	local ok, e = pcall(b)
+	if not (ok) then
+		fail("phase", "builder error: %s", tostring(e))
+		finish()
+		return
+	end
+	level.add_call(on_update, function() end)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+end

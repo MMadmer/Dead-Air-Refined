@@ -1,0 +1,6 @@
+-- E003 fixture: the file is not a complete table (syntax error).
+return {
+  nq = 1,
+  id = "broken_syntax",
+  nodes = {
+    { id = "start", kind = "trigger.start" },

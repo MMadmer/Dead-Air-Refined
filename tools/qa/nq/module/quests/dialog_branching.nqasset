@@ -1,0 +1,70 @@
+-- nq: dialog_branching "Долг вежливости"
+-- Волк (Кордон, деревня новичков) просит перебить кабанов. Эталон для тест-плана (§16 игра п.2):
+-- две темы у одного NPC, реплики игрока с развилкой, реплика NPC по условию (has_money),
+-- цикл фраз через реплику игрока, once у темы, выход из диалога в objective.kill{spawn} и
+-- награда в on_exit финальной реплики.
+return {
+  nq = 1,
+  id = "dialog_branching",
+  title = "Долг вежливости",
+  activation = "auto",
+  vars = { agreed = false, asked = 0 },
+  tasks = {
+    kill_boars = { title = "Отстрел кабанов",
+                   descr = "Волк просил перебить кабанов у деревни новичков.",
+                   type = "additional", target = { ref = "boars" } },
+  },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "meet" } },
+
+    -- тема 1: предложение
+    { id = "meet", kind = "dialog.topic",
+      params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Слышал, у тебя проблемы с кабанами." },
+      once = true,
+      out = { next = "wolf_1" } },
+    { id = "wolf_1", kind = "dialog.npc_phrase",
+      params = { text = "Лезут из леса каждую ночь. Перебьёшь их — не обижу." },
+      out = { next = { "accept", "ask_more", "decline" } } },
+
+    { id = "ask_more", kind = "dialog.actor_phrase", params = { text = "А что дашь?" },
+      on_exit = { { kind = "var.add", params = { name = "asked", delta = 1 } } },
+      out = { next = { "wolf_rich", "wolf_poor" } } },
+    { id = "wolf_rich", kind = "dialog.npc_phrase",
+      params = { text = "Да ты, я смотрю, и так не бедствуешь. Ствол дам, патроны — с меня." },
+      cond = { { kind = "has_money", params = { amount = 1000 } } },
+      out = { next = "back" } },
+    { id = "wolf_poor", kind = "dialog.npc_phrase",
+      params = { text = "Ствол дам и денег подкину. По карманам вижу — не помешает." },
+      out = { next = "back" } },
+    { id = "back", kind = "dialog.actor_phrase", params = { text = "Понял. Так что там с кабанами?" },
+      out = { next = "wolf_1" } },
+
+    { id = "accept", kind = "dialog.actor_phrase", params = { text = "Помогу." },
+      on_exit = {
+        { kind = "var.set", params = { name = "agreed", value = true } },
+        { kind = "task.give", params = { task = "kill_boars" } },
+      },
+      out = { next = "kill" } },
+    { id = "decline", kind = "dialog.actor_phrase", params = { text = "Не моё дело." } },
+
+    -- цель
+    { id = "kill", kind = "objective.kill",
+      params = { target = { spawn = { section = "simulation_boar", smart = "esc_smart_terrain_3_16", ref = "boars", hold = true } } },
+      out = { done = "report" } },
+
+    -- тема 2: отчёт
+    { id = "report", kind = "dialog.topic",
+      params = { npc = { story = "esc_2_12_stalker_wolf" }, text = "Кабаны мертвы." },
+      once = true,
+      out = { next = "wolf_thanks" } },
+    { id = "wolf_thanks", kind = "dialog.npc_phrase", params = { text = "Молодец. Держи, как обещал." },
+      on_exit = {
+        { kind = "item.give",  params = { section = "wpn_pm", count = 1 } },
+        { kind = "money.give", params = { amount = 1500 } },
+        { kind = "task.complete", params = { task = "kill_boars" } },
+      },
+      out = { next = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}

@@ -84,6 +84,7 @@ public:
     int Priority();
 
     bool IsFinished() const { return m_bFinished; }
+    void SetFinished() { m_bFinished = true; }
     IC CPhraseDialogManager* FirstSpeaker() const { return m_pSpeakerFirst; }
     IC CPhraseDialogManager* SecondSpeaker() const { return m_pSpeakerSecond; }
     //кто собирается говорить и кто слушать
@@ -130,6 +131,8 @@ protected:
 
     //загрузка диалога из XML файла
     virtual void load_shared(LPCSTR);
+    // XML-less path of load_shared: the Lua init function builds the graph
+    void load_virtual(const shared_str& init_func);
 
     //рекурсивное добавление фраз в граф
     void AddPhrase(CUIXml* pXml, XML_NODE phrase_node, const shared_str& phrase_id, const shared_str& prev_phrase_id);
@@ -139,6 +142,21 @@ public:
     void SetCaption(LPCSTR str);
     void SetPriority(int val);
     CPhrase* GetPhrase(const shared_str& phrase_id);
+
+    // ---- virtual dialogs (XMS/NQ) ------------------------------------------
+    // A dialog that has no XML: Load(id) calls the registered Lua function
+    // with the dialog (like an <init_func> dialog) and it builds the phrase
+    // graph through AddPhrase. The registry lives for the process; Lua
+    // re-registers on every script engine init. A registered id shadows an
+    // XML dialog of the same name.
+    // Loadable at all? A script-supplied id that is neither virtual nor declared in the
+    // [dialogs] xml would assert inside GetById, so callers taking ids from Lua ask first.
+    static bool IsKnownDialogId(pcstr dialog_id);
+    static bool RegisterVirtual(pcstr dialog_id, pcstr init_func);
+    static void UnregisterVirtual(pcstr dialog_id);
+    // Drops the cached phrase graph so the next Load(id) rebuilds it. Refused
+    // (false) while the actor is talking: an open dialog still points into it.
+    static bool InvalidateVirtual(pcstr dialog_id);
 
 protected:
     static void InitXmlIdToIndex();

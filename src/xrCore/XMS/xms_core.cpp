@@ -89,6 +89,10 @@ bool valid_id(pcstr id)
 {
     if (!id || !id[0])
         return false;
+    // "xms." is reserved for the engine's own persistent blobs (xms.save_data/load_data resolve it
+    // before any module), so a module taking such an id would alias a core save chunk
+    if (0 == strncmp(id, "xms.", 4))
+        return false;
     for (pcstr c = id; *c; ++c)
     {
         const bool ok = (*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '_' || *c == '.' || *c == '-';
@@ -208,7 +212,11 @@ void load_registry()
     {
         if (0 == xr_strcmp(section, "ns"))
         {
-            s.ns_by_id[key] = u16(atoi(value));
+            // a hand-edited value inside the reserved range is dropped and
+            // the module simply gets a fresh one
+            const u16 ns = u16(atoi(value));
+            if (ns < kReservedNsBase)
+                s.ns_by_id[key] = ns;
         }
         else if (0 == xr_strcmp(section, "spawn_range"))
         {
@@ -257,17 +265,20 @@ void save_registry()
     s.registry_dirty = false;
 }
 
+// 0 when the id space below kReservedNsBase is used up
 u16 acquire_ns(const xr_string& id)
 {
     State& s = st();
     if (const auto it = s.ns_by_id.find(id); it != s.ns_by_id.end())
         return it->second;
-    u16 candidate = 1;
+    u32 candidate = 1;
     for (const auto& [_, ns] : s.ns_by_id)
-        candidate = std::max<u16>(candidate, ns + 1);
-    s.ns_by_id[id] = candidate;
+        candidate = std::max<u32>(candidate, u32(ns) + 1);
+    if (candidate >= kReservedNsBase)
+        return 0;
+    s.ns_by_id[id] = u16(candidate);
     s.registry_dirty = true;
-    return candidate;
+    return u16(candidate);
 }
 
 // ---- discovery -------------------------------------------------------------
@@ -562,8 +573,15 @@ void order_modules(pcstr mods_root, pcstr legacy_root)
     {
         if (m.disabled)
             continue;
+        const u16 ns = acquire_ns(m.id);
+        if (!ns)
+        {
+            m.disabled = true;
+            m.disable_reason = "namespace registry exhausted";
+            continue;
+        }
         m.layer = ++layer;
-        m.ns = acquire_ns(m.id);
+        m.ns = ns;
         hash = fnv1a(m.id.c_str(), hash);
         hash = fnv1a(m.version.c_str(), hash);
     }
@@ -1275,6 +1293,68 @@ void ListFiles(pcstr dir, pcstr mask, xr_vector<xr_string>& out)
             out.emplace_back(xr_string(dir) + entry.name);
     } while (_findnext(handle, &entry) == 0);
     _findclose(handle);
+    std::sort(out.begin(), out.end());
+}
+
+namespace
+{
+// '*' / '?' glob on a file name, case-insensitive. Done here rather than by
+// _findfirst so a mask never matches through 8.3 short names.
+bool wildcard_match(pcstr mask, pcstr name)
+{
+    pcstr star_mask = nullptr;
+    pcstr star_name = nullptr;
+    while (*name)
+    {
+        if (*mask == '*')
+        {
+            star_mask = ++mask;
+            star_name = name;
+            continue;
+        }
+        if (*mask == '?' || tolower(u8(*mask)) == tolower(u8(*name)))
+        {
+            ++mask;
+            ++name;
+            continue;
+        }
+        if (!star_mask)
+            return false;
+        mask = star_mask;
+        name = ++star_name;
+    }
+    while (*mask == '*')
+        ++mask;
+    return !*mask;
+}
+
+void list_relative(const xr_string& root, const xr_string& rel, pcstr mask, bool recursive, xr_vector<xr_string>& out)
+{
+    string_path pattern;
+    strconcat(pattern, root.c_str(), rel.c_str(), "*");
+    _finddata_t entry;
+    const intptr_t handle = _findfirst(pattern, &entry);
+    if (handle == -1)
+        return;
+    do
+    {
+        if (entry.attrib & _A_SUBDIR)
+        {
+            if (recursive && 0 != xr_strcmp(entry.name, ".") && 0 != xr_strcmp(entry.name, ".."))
+                list_relative(root, rel + entry.name + DELIMITER, mask, recursive, out);
+        }
+        else if (wildcard_match(mask, entry.name))
+            out.emplace_back(rel + entry.name);
+    } while (_findnext(handle, &entry) == 0);
+    _findclose(handle);
+}
+} // namespace
+
+void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vector<xr_string>& out)
+{
+    if (!dir || !dir[0] || !mask || !mask[0])
+        return;
+    list_relative(dir, xr_string(), mask, recursive, out);
     std::sort(out.begin(), out.end());
 }
 

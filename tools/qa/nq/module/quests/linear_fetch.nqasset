@@ -1,0 +1,42 @@
+-- nq: linear_fetch "Хлеб для новичков"
+-- Линейный квест без диалогов: старт -> задание -> добыть хлеб -> награда -> конец.
+-- Эталон для тест-плана (§16 игра п.1): проверяет trigger.start, flow.step, objective.fetch,
+-- task.give/complete, item.give, money.give, news.tip, flow.end и сейв/лоад на середине.
+return {
+  nq = 1,
+  id = "linear_fetch",
+  title = "Хлеб для новичков",
+  activation = "auto",
+  vars = { bread_needed = 2 },
+  tasks = {
+    bring_bread = { title = "Хлеб для новичков",
+                    descr = "Раздобудь две буханки хлеба для лагеря новичков на Кордоне.",
+                    type = "additional" },
+  },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "intro" } },
+
+    { id = "intro", kind = "flow.step",
+      on_enter = {
+        { kind = "news.tip", params = { text = "Новичкам на Кордоне нужен хлеб. Две буханки хватит." } },
+        { kind = "task.give", params = { task = "bring_bread" } },
+      },
+      out = { next = "fetch" } },
+
+    { id = "fetch", kind = "objective.fetch",
+      params = { section = "bread", count = 2 },
+      out = { done = "reward" } },
+
+    { id = "reward", kind = "flow.step",
+      on_enter = {
+        { kind = "item.take", params = { section = "bread", count = 2 } },
+        { kind = "item.give", params = { section = "medkit", count = 1 } },
+        { kind = "money.give", params = { amount = 500 } },
+        { kind = "task.complete", params = { task = "bring_bread" } },
+        { kind = "news.tip", params = { text = "Спасибо, сталкер. Держи аптечку и немного денег." } },
+      },
+      out = { next = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}

@@ -17,6 +17,7 @@
 | XMS visual overlays | `overlay_visuals.ltx` with a static, a hierarchy, a mode-gated and a missing entry on `fake_start` | Pass, 2 attached, mode-gated entry skipped, missing file warned; graceful shutdown detached them without an assert |
 | Malformed extension quickload | Valid active `l01_escape` world plus structurally invalid target `.scov` | Pass, load rejected before broadcast; level and actor ID remained unchanged |
 | Save transaction fault models | 33 deterministic I/O/fallback cases and 10 durable crash checkpoints | Pass, production ordering verifier matched the implementation |
+| NQ quest runtime in game | `tools\qa\nq\Run-NqQa.ps1 -Scenario All`, three reference quests plus two broken assets as a module in an isolated QA root | Pass, 9/9 scenarios, 83 checks, zero failures; the player's `savedgames` manifest is unchanged. `Dialog` drives the real talk window on the hidden desktop through the reply accelerator keys, so the engine walks its own phrase graph (`0>wolf_1>ask_more>wolf_rich>back>wolf_1>accept`) |
 | Packed addon | DA Inventory Sort XDB | Pass |
 | Loose addon | DAR2 Oxygen HUD scripts/UI | Pass |
 | Lua binding parity | Original x86 exports vs x64 exports | Pass, zero missing |
