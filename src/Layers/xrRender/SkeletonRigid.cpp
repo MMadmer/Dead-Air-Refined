@@ -12,27 +12,68 @@ extern int psSkeletonUpdate;
 void check_kinematics(CKinematics* _k, LPCSTR s);
 #endif
 
+namespace
+{
+constexpr u64 CalculationTimeMask = u64(u32(-1));
+
+IC u64 PublishedState(const u32 epoch, const u32 time) { return (u64(epoch) << 32) | time; }
+IC u32 PublishedEpoch(const u64 state) { return u32(state >> 32); }
+IC u32 PublishedTime(const u64 state) { return u32(state & CalculationTimeMask); }
+
+IC bool IsPublished(const u64 state, const u32 epoch, const u32 time)
+{
+    return PublishedEpoch(state) == epoch && PublishedTime(state) == time;
+}
+
+class CalculationGuard final
+{
+    bool& m_in_progress;
+
+public:
+    explicit CalculationGuard(bool& in_progress) : m_in_progress(in_progress)
+    {
+        VERIFY(!m_in_progress);
+        m_in_progress = true;
+    }
+
+    ~CalculationGuard() { m_in_progress = false; }
+};
+}
+
 void CKinematics::CalculateBones(BOOL bForceExact)
 {
     ZoneScoped;
 
-    // early out.
-    // check if the info is still relevant
-    // skip all the computations - assume nothing changes in a small period of time :)
-    if (Device.dwTimeGlobal == UCalc_Time)
-        return; // early out for "fast" update
+    u32 calculation_time = Device.dwTimeGlobal;
+    u64 published_state = UCalc_PublishedState.load(std::memory_order_acquire);
+    u32 calculation_epoch = UCalc_Epoch.load(std::memory_order_acquire);
+    if (IsPublished(published_state, calculation_epoch, calculation_time))
+        return;
+
     UCalc_mtlock lock;
+    calculation_time = Device.dwTimeGlobal;
+    published_state = UCalc_PublishedState.load(std::memory_order_acquire);
+    calculation_epoch = UCalc_Epoch.load(std::memory_order_acquire);
+    if (IsPublished(published_state, calculation_epoch, calculation_time))
+        return;
+
+    // The global lock is recursive, so callbacks need an explicit same-object guard.
+    if (UCalc_InProgress)
+        return;
+    const CalculationGuard calculation_guard(UCalc_InProgress);
+
     OnCalculateBones();
-    if (!bForceExact && (Device.dwTimeGlobal < (UCalc_Time + UCalc_Interval)))
-        return; // early out for "slow" update
+    published_state = UCalc_PublishedState.load(std::memory_order_acquire);
+    calculation_epoch = UCalc_Epoch.load(std::memory_order_acquire);
+    if (!bForceExact && PublishedEpoch(published_state) == calculation_epoch &&
+        calculation_time < PublishedTime(published_state) + UCalc_Interval)
+        return;
+
     if (Update_Visibility)
         Visibility_Update();
 
     _DBG_SINGLE_USE_MARKER;
-    // here we have either:
-    //	1:	timeout elapsed
-    //	2:	exact computation required
-    UCalc_Time = Device.dwTimeGlobal;
+    calculation_epoch = UCalc_Epoch.load(std::memory_order_acquire);
 
 // exact computation
 // Calculate bones
@@ -47,13 +88,13 @@ void CKinematics::CalculateBones(BOOL bForceExact)
 #endif
     VERIFY(LL_GetBonesVisible() != 0);
     // Calculate BOXes/Spheres if needed
-    UCalc_Visibox++;
-    if (UCalc_Visibox >= psSkeletonUpdate)
+    const s32 visibox_update = UCalc_Visibox.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (visibox_update >= psSkeletonUpdate)
     {
         ZoneScopedN("Skeleton update");
 
         // mark
-        UCalc_Visibox = -(::Random.randI(psSkeletonUpdate - 1));
+        UCalc_Visibox.store(-(::Random.randI(psSkeletonUpdate - 1)), std::memory_order_relaxed);
 
         // the update itself
         Fbox Box;
@@ -103,6 +144,10 @@ void CKinematics::CalculateBones(BOOL bForceExact)
     //
     if (Update_Callback)
         Update_Callback(this);
+
+    // Publish only a complete pose that no callback invalidated while calculating.
+    if (UCalc_Epoch.load(std::memory_order_acquire) == calculation_epoch)
+        UCalc_PublishedState.store(PublishedState(calculation_epoch, calculation_time), std::memory_order_release);
 }
 
 #ifdef DEBUG

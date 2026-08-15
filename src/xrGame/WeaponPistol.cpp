@@ -24,7 +24,7 @@ void CWeaponPistol::PlayAnimShow()
     VERIFY(GetState() == eShowing);
 
     if (iAmmoElapsed == 0)
-        PlayHUDMotion("anm_show_empty", "anim_draw_empty", FALSE, this, GetState());
+        PlayHUDMotion("anm_show_empty", "anim_draw_empty", TRUE, this, GetState());
     else
         inherited::PlayAnimShow();
 }

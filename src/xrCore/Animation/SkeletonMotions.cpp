@@ -4,9 +4,76 @@
 
 #include "SkeletonMotions.hpp"
 
+#include "AnimationBlendSettings.hpp"
 #include "FMesh.hpp"
 #include "Motion.hpp"
 #include "Include/xrRender/Kinematics.h"
+
+#include <cerrno>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+
+namespace AnimationBlend
+{
+float g_min_time = 0.2f;
+u32 g_curve = Smooth;
+float g_fall_at_end_time = 0.5f;
+float g_default_motion_accrue_time = 0.5f;
+float g_default_motion_falloff_time = 0.5f;
+float g_movement_blend_fraction = 0.2f;
+
+namespace
+{
+constexpr pcstr Section = "animation_blend";
+
+float ReadFloat(
+    const CInifile* settings, pcstr key, const float fallback, const bool allow_zero, const float maximum = flt_max)
+{
+    pcstr raw = READ_IF_EXISTS(settings, r_string, Section, key, nullptr);
+    if (!raw)
+        return fallback;
+
+    errno = 0;
+    char* end{};
+    const float value = std::strtof(raw, &end);
+    while (end && std::isspace(static_cast<unsigned char>(*end)))
+        ++end;
+
+    const bool valid = end && end != raw && !*end && errno != ERANGE && std::isfinite(value) &&
+        (allow_zero ? value >= 0.f : value > 0.f) && value <= maximum;
+    if (valid)
+        return value;
+
+    Msg("! [%s] invalid %s = '%s'; using %.6g", Section, key, raw, fallback);
+    return fallback;
+}
+}
+
+void LoadSettings(const CInifile* settings)
+{
+    if (!settings)
+        return;
+
+    g_curve = Smooth;
+    g_min_time = ReadFloat(settings, "min_time", 0.2f, true);
+    g_fall_at_end_time = ReadFloat(settings, "fall_at_end_time", 0.5f, false);
+    g_default_motion_accrue_time = ReadFloat(settings, "default_motion_accrue_time", 0.5f, false);
+    g_default_motion_falloff_time = ReadFloat(settings, "default_motion_falloff_time", 0.5f, false);
+    g_movement_blend_fraction = ReadFloat(settings, "movement_blend_fraction", 0.2f, true, 1.f);
+
+    pcstr curve = READ_IF_EXISTS(settings, r_string, Section, "curve", "smooth");
+    if (xr_strcmpi(curve, "linear") == 0)
+        g_curve = Linear;
+    else if (xr_strcmpi(curve, "smooth") == 0)
+        g_curve = Smooth;
+    else
+    {
+        Msg("! [%s] invalid curve = '%s'; using smooth", Section, curve);
+        g_curve = Smooth;
+    }
+}
+}
 
 motions_container* g_pMotionsContainer = nullptr;
 
@@ -397,7 +464,8 @@ void CMotionDef::Load(IReader* MP, u32 fl, u16 version)
     accrue = Quantize(MP->r_float());
     falloff = Quantize(MP->r_float());
     flags = (u16)fl;
-    if (!(flags & esmFX) && (falloff >= accrue))
+    // Zero authored accrue previously wrapped falloff to the maximum quantized rate.
+    if (!(flags & esmFX) && accrue && (falloff >= accrue))
         falloff = u16(accrue - 1);
 
     if (version >= 4)

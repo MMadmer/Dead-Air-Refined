@@ -6,6 +6,7 @@
 // AlexMX - Alexander Maksimchuk
 //-----------------------------------------------------------------------------
 #include "stdafx.h"
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 
 #include "x_ray.h"
 
@@ -200,6 +201,7 @@ void InitSettings()
 
     // module config overlays + .ltxp directive patches on top of system.ltx
     XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
+    AnimationBlend::LoadSettings(pSettings);
 
     if (strstr(Core.Params, "-shoc") || strstr(Core.Params, "-soc"))
         set_shoc_mode();

@@ -9,6 +9,7 @@ class CPhysicsShellAnimator
     xr_vector<CPhysicsShellAnimatorBoneData> m_bones_data;
     CPhysicsShell* m_pPhysicsShell;
     Fmatrix m_StartXFORM;
+    bool m_callbacks_reset{};
 
     void CreateJoints(LPCSTR controled);
     void CreateJoint(CPHElement* e);

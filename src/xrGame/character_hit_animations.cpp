@@ -82,6 +82,7 @@ IC void play_cycle(IKinematicsAnimated* CA, const MotionID& m, u8 channel, CBlen
     CBlend* B = (CA->PlayCycle(m, mixin, 0, 0, channel));
     if (B)
     {
+        // Hit channels own their power and falloff independently from normal cycles.
         B->blendAmount = power;
         B->blendPower = power;
     }

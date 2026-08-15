@@ -3,6 +3,7 @@
 #pragma hdrstop
 
 #include "SkeletonCustom.h"
+#include "FSkinned.h"
 #include "SkeletonX.h"
 #include "xrCore/FMesh.hpp"
 #include "xrCDB/Intersect.hpp"
@@ -21,6 +22,16 @@ Lock UCalc_Mutex
     (MUTEX_PROFILE_ID(UCalc_Mutex))
 #endif // CONFIG_PROFILE_LOCKS
     ;
+
+IC CSkeletonX* SkeletonChild(dxRender_Visual* visual)
+{
+    // The skeleton loader admits only these two concrete child types.
+    VERIFY(visual->Type == MT_SKELETON_GEOMDEF_ST || visual->Type == MT_SKELETON_GEOMDEF_PM);
+    if (visual->Type == MT_SKELETON_GEOMDEF_PM)
+        return static_cast<CSkeletonX_PM*>(visual);
+
+    return static_cast<CSkeletonX_ST*>(visual);
+}
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -158,9 +169,7 @@ void CKinematics::IBoneInstances_Destroy()
 
 CSkeletonX* CKinematics::LL_GetChild(u32 idx)
 {
-    IRenderVisual* V = children[idx];
-    CSkeletonX* B = dynamic_cast<CSkeletonX*>(V);
-    return B;
+    return SkeletonChild(children[idx]);
 }
 
 void CKinematics::Load(const char* N, IReader* data, u32 dwFlags)
@@ -432,8 +441,8 @@ void CKinematics::Copy(dxRender_Visual* P)
 
 void CKinematics::CalculateBones_Invalidate()
 {
-    UCalc_Time = 0x0;
-    UCalc_Visibox = psSkeletonUpdate;
+    UCalc_Visibox.store(psSkeletonUpdate, std::memory_order_relaxed);
+    UCalc_Epoch.fetch_add(1, std::memory_order_release);
 }
 
 void CKinematics::Spawn()
@@ -546,8 +555,7 @@ void CKinematics::Visibility_Update()
     // check visible
     for (u32 c_it = 0; c_it < children.size(); c_it++)
     {
-        CSkeletonX* _c = dynamic_cast<CSkeletonX*>(children[c_it]);
-        VERIFY(_c);
+        CSkeletonX* _c = SkeletonChild(children[c_it]);
         if (!_c->has_visible_bones())
         {
             // move into invisible list
@@ -560,8 +568,7 @@ void CKinematics::Visibility_Update()
     // check invisible
     for (u32 _it = 0; _it < children_invisible.size(); _it++)
     {
-        CSkeletonX* _c = dynamic_cast<CSkeletonX*>(children_invisible[_it]);
-        VERIFY(_c);
+        CSkeletonX* _c = SkeletonChild(children_invisible[_it]);
         if (_c->has_visible_bones())
         {
             // move into visible list
@@ -609,8 +616,6 @@ void CKinematics::EnumBoneVertices(SEnumVerticesCallback& C, u16 bone_id)
         LL_GetChild(i)->EnumBoneVertices(C, bone_id);
 }
 
-using OBBVec = xr_vector<Fobb>;
-
 bool CKinematics::PickBone(const Fmatrix& parent_xform, IKinematics::pick_result& r, float dist, const Fvector& start,
     const Fvector& dir, u16 bone_id)
 {
@@ -647,13 +652,24 @@ void CKinematics::AddWallmark(
     float dist = flt_max;
     BOOL picked = FALSE;
 
-    using OBBVec = xr_vector<Fobb>;
-    OBBVec cache_obb;
-    cache_obb.resize(LL_BoneCount());
+    struct WallmarkScratch
+    {
+        xr_vector<Fobb> obbs;
+        xr_vector<u16> bones;
+    };
+
+    // Bullet workers keep allocation reuse private to their own threads.
+    static thread_local WallmarkScratch scratch;
+    const u16 bone_count = LL_BoneCount();
+    scratch.obbs.resize(bone_count);
+    scratch.bones.clear();
+    scratch.bones.reserve(bone_count);
+    auto& cache_obb = scratch.obbs;
+    auto& test_bones = scratch.bones;
     IKinematics::pick_result r;
     r.normal = normal;
     r.dist = dist;
-    for (u16 k = 0; k < LL_BoneCount(); k++)
+    for (u16 k = 0; k < bone_count; k++)
     {
         CBoneData& BD = LL_GetData(k);
         if (LL_GetBoneVisible(k) && !BD.shape.flags.is(SBoneShape::sfNoPickable))
@@ -683,9 +699,7 @@ void CKinematics::AddWallmark(
     // collect collide boxes
     Fsphere test_sphere;
     test_sphere.set(cp, size);
-    xr_vector<u16> test_bones;
-    test_bones.reserve(LL_BoneCount());
-    for (u16 k = 0; k < LL_BoneCount(); k++)
+    for (u16 k = 0; k < bone_count; k++)
     {
         CBoneData& BD = LL_GetData(k);
         if (LL_GetBoneVisible(k) && !BD.shape.flags.is(SBoneShape::sfNoPickable))

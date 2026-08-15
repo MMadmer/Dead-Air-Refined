@@ -1,5 +1,7 @@
 #pragma once
 
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
+
 //------------------------------------------------------------------------------
 // calculate
 //------------------------------------------------------------------------------
@@ -207,8 +209,8 @@ IC void MixInterlerp(CKey& Result, const CKey* R, const CBlend* const BA[MAX_BLE
         break;
     case 2:
     {
-        float w0 = BA[0]->blendAmount;
-        float w1 = BA[1]->blendAmount;
+        const float w0 = AnimationBlend::ApplyCurve(BA[0]->blendAmount, BA[0]->blendPower);
+        const float w1 = AnimationBlend::ApplyCurve(BA[1]->blendAmount, BA[1]->blendPower);
         float ws = w0 + w1;
         float w;
         if (fis_zero(ws))
@@ -243,7 +245,7 @@ IC void MixInterlerp(CKey& Result, const CKey* R, const CBlend* const BA[MAX_BLE
         float total = 0;
         ConsistantKey S[MAX_BLENDED];
         for (u32 i = 0; i < b_count; i++)
-            S[i].set(R + i, BA[i]->blendAmount);
+            S[i].set(R + i, AnimationBlend::ApplyCurve(BA[i]->blendAmount, BA[i]->blendPower));
 
         std::sort(S, S + b_count);
         CKey tmp;

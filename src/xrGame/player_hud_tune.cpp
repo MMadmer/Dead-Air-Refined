@@ -308,6 +308,7 @@ void CHudTuner::on_tool_frame()
                     ImGui::TableNextColumn();
                     if (ImGui::Button(anim_name.c_str()))
                     {
+                        // Tuner playback is an exact preview, not a gameplay transition.
                         current_hud_item->m_parent_hud_item->PlayHUDMotion_noCB(anim_name, false);
                     }
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))

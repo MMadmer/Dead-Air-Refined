@@ -191,12 +191,12 @@ void CWeaponAutomaticShotgun::switch2_EndReload()
 void CWeaponAutomaticShotgun::PlayAnimOpenWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_open", "anim_open", FALSE, this, GetState());
+    PlayHUDMotion("anm_open", "anim_open", TRUE, this, GetState());
 }
 void CWeaponAutomaticShotgun::PlayAnimAddOneCartridgeWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", FALSE, this, GetState());
+    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", TRUE, this, GetState());
 }
 void CWeaponAutomaticShotgun::PlayAnimCloseWeapon()
 {

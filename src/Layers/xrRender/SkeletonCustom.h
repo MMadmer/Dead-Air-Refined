@@ -4,6 +4,8 @@
 #include "xrCore/Animation/Bone.hpp"
 #include "Include/xrRender/Kinematics.h"
 
+#include <atomic>
+
 class CInifile;
 class CBoneData;
 struct SEnumVerticesCallback;
@@ -149,8 +151,10 @@ protected:
     accel* bone_map_P; // bones associations (shared) - sorted by name-pointer
 
     BOOL Update_Visibility;
-    u32 UCalc_Time;
-    s32 UCalc_Visibox;
+    std::atomic<u64> UCalc_PublishedState{};
+    std::atomic<u32> UCalc_Epoch{1};
+    bool UCalc_InProgress{};
+    std::atomic<s32> UCalc_Visibox{};
 
     Flags64 visimask;
 

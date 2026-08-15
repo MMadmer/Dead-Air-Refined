@@ -234,7 +234,7 @@ void CMissile::State(u32 state, u32 oldState)
     case eShowing:
     {
         SetPending(TRUE);
-        PlayHUDMotion("anm_show", "anim_show", FALSE, this, GetState());
+        PlayHUDMotion("anm_show", "anim_show", TRUE, this, GetState());
     }
     break;
     case eIdle:

@@ -34,7 +34,7 @@ void CWeaponRevolver::PlayAnimShow()
     VERIFY(GetState()==eShowing);
 
     if (iAmmoElapsed == 0)
-        PlayHUDMotion("anm_show_empty", false, this, GetState());
+        PlayHUDMotion("anm_show_empty", true, this, GetState());
     else
         inherited::PlayAnimShow();
 }

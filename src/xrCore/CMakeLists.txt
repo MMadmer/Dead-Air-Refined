@@ -16,6 +16,7 @@ target_sources_grouped(
     Animation/interp.cpp
     Animation/Motion.cpp
     Animation/Motion.hpp
+    Animation/AnimationBlendSettings.hpp
     Animation/SkeletonMotionDefs.hpp
     Animation/SkeletonMotions.cpp
     Animation/SkeletonMotions.hpp

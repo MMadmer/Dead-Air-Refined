@@ -415,6 +415,53 @@ overweight_speed_min     = 0.3
   to the engine default instead of breaking the game. The section is re-read whenever the
   outfit changes, so scripted section swaps pick the new tuning up.
 
+## Animation blend tuning
+
+Animation transition timing can be added to `system.ltx` by an XMS config layer. Every key
+is optional. Existing XMS layers and mod configs need no migration: an absent section or
+key uses the engine default shown below.
+
+```ini
+[animation_blend]
+min_time                    = 0.2
+curve                       = smooth
+fall_at_end_time            = 0.5
+default_motion_accrue_time  = 0.5
+default_motion_falloff_time = 0.5
+movement_blend_fraction     = 0.2
+```
+
+| Key | Default | Meaning | Zero |
+|---|---:|---|---|
+| `min_time` | `0.2` | Minimum wall-clock accrue and falloff duration for normal cycles. Slower authored rates stay slower. | Disables the floor and restores authored timing. |
+| `curve` | `smooth` | `linear` keeps the stored weight; `smooth` reads it through `3a^2 - 2a^3` before the existing normalization. | Not applicable. Use `linear` for legacy shape. |
+| `fall_at_end_time` | `0.5` | Automatic falloff duration for stop-at-end hit channels, kept separate from the normal-cycle floor. | Invalid because the engine stores its reciprocal. |
+| `default_motion_accrue_time` | `0.5` | Constructor accrue duration for a motion without an authored value. | Invalid because the engine stores its reciprocal. |
+| `default_motion_falloff_time` | `0.5` | Constructor falloff duration for a motion without an authored value. | Invalid because the engine stores its reciprocal. |
+| `movement_blend_fraction` | `0.2` | Fraction (`0..1`) of a root-motion clip used to interpolate its starting pose. | Disables that starting-pose interval. |
+
+The curve changes only the pose weight at read time. The stored linear amount remains the
+source for blend state, callbacks, eviction, and hit-channel logic.
+
+For a stop-at-end cycle shorter than `min_time`, the engine relaxes both the incoming and
+outgoing floor to the playable part of that clip (length minus its final sample), using the
+speed known when the cycle starts. Authored rates that are already slower are still kept.
+This prevents a missing/fast blend from outliving a short animation without changing a
+deliberately slow authored transition. Later dynamic speed changes do not retime a blend
+that is already running.
+
+`animation_blend_min_time` and `animation_blend_curve` are persistent console commands.
+The minimum applies when the next cycle starts or begins fading; the curve changes current
+pose reads immediately. Both are saved in `user.ltx`, so a saved user value overrides the
+XMS startup value. The remaining keys are startup config.
+
+For a timing-and-shape parity check, use `animation_blend_min_time 0` together with
+`animation_blend_curve linear`. The zero-rate underflow fix and deliberately corrected
+same-skeleton transitions remain active.
+
+Invalid, non-finite, negative, out-of-range, or zero reciprocal-time values fall back to
+the defaults above and produce one startup log line per invalid key.
+
 ## Opting the installation out of online services
 
 A mod that changes the build owns the installation: our automatic update would overwrite

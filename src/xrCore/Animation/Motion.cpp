@@ -2,6 +2,7 @@
 #pragma hdrstop
 
 #include "Motion.hpp"
+#include "AnimationBlendSettings.hpp"
 #include "xrCore/Animation/Envelope.hpp"
 
 #define EOBJ_OMOTION 0x1100
@@ -245,8 +246,8 @@ CSMotion::CSMotion() : CCustomMotion()
     mtype = mtSkeleton;
     m_BoneOrPart = BI_NONE;
     fSpeed = 1.0f;
-    fAccrue = 2.0f;
-    fFalloff = 2.0f;
+    fAccrue = AnimationBlend::RateFromTime(AnimationBlend::g_default_motion_accrue_time);
+    fFalloff = AnimationBlend::RateFromTime(AnimationBlend::g_default_motion_falloff_time);
     fPower = 1.f;
     m_Flags.zero();
 }

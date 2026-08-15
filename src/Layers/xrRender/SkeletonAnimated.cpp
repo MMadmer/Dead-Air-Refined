@@ -6,6 +6,7 @@
 
 #include "AnimationKeyCalculate.h"
 #include "SkeletonX.h"
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "xrCore/FMesh.hpp"
 #include "xrCore/xr_token.h"
 #ifdef DEBUG
@@ -327,13 +328,14 @@ void CKinematicsAnimated::IBlendSetup(CBlend& B, u16 part, u8 channel, MotionID 
         B.set_accrue_state();
         B.blendAmount = 1;
     }
-    B.blendAccrue = blendAccrue;
-    B.blendFalloff = 0; // blendFalloff used for previous cycles
     B.blendPower = 1;
     B.speed = Speed;
     B.motionID = motion_ID;
     B.timeCurrent = 0;
     B.timeTotal = m_Motions[B.motionID.slot].bone_motions[LL_GetBoneRoot()]->at(motion_ID.idx).GetLength();
+    B.blendAccrue = blendAccrue;
+    // Previous cycles consume falloff; the new cycle only accrues.
+    B.blendFalloff = 0;
     B.bone_or_part = part;
     B.stop_at_end = noloop;
     B.playing = true;
@@ -386,6 +388,20 @@ CBlend* CKinematicsAnimated::LL_PlayCycle(u16 part, MotionID motion_ID, BOOL bMi
         return nullptr;
     if (!m_Partition->part(part).Name)
         return nullptr;
+
+    float effective_minimum_time = AnimationBlend::g_min_time;
+    const float absolute_speed = _abs(Speed);
+    if (effective_minimum_time > 0.f && noloop && absolute_speed > EPS_S)
+    {
+        const float time_total =
+            m_Motions[motion_ID.slot].bone_motions[LL_GetBoneRoot()]->at(motion_ID.idx).GetLength();
+        const float playable_time = _max(time_total - (SAMPLE_SPF + EPS), 0.f) / absolute_speed;
+        if (playable_time > EPS_S)
+            effective_minimum_time = _min(effective_minimum_time, playable_time);
+    }
+
+    blendAccrue = AnimationBlend::ApplyMinimumTime(blendAccrue, effective_minimum_time);
+    blendFalloff = AnimationBlend::ApplyMinimumTime(blendFalloff, effective_minimum_time);
 
     //	shared_motions* s_mots	= &m_Motions[motion.slot];
     //	CMotionDef* m_def		= s_mots->motion_def(motion.idx);

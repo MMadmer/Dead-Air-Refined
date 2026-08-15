@@ -33,6 +33,7 @@ CBlend* anim_script_callback::play_cycle(IKinematicsAnimated* sa, const shared_s
     R_ASSERT(m.valid());
     CMotionDef* md = sa->LL_GetMotionDef(m);
     R_ASSERT(md);
+    // Physical-object startup playback replaces its cycle with Lua-visible cut semantics.
     if (md->StopAtEnd())
     {
         on_end = false;

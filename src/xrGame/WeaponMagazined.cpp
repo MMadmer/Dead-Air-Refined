@@ -1269,7 +1269,7 @@ void CWeaponMagazined::ResetSilencerKoeffs() { cur_silencer_koef.Reset(); }
 void CWeaponMagazined::PlayAnimShow()
 {
     VERIFY(GetState() == eShowing);
-    PlayHUDMotion("anm_show", "anim_draw", false, this, GetState());
+    PlayHUDMotion("anm_show", "anim_draw", true, this, GetState());
 }
 
 void CWeaponMagazined::PlayAnimHide()

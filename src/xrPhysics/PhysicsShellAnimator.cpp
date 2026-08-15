@@ -79,27 +79,45 @@ void CPhysicsShellAnimator::CreateJoint(CPHElement* e)
 void CPhysicsShellAnimator::OnFrame()
 {
     m_pPhysicsShell->Enable();
+    if (m_bones_data.empty())
+        return;
 
-    for (auto it : m_bones_data)
+    IKinematics* const kinematics = m_pPhysicsShell->PKinematics();
+
+    const auto apply_target = [this, kinematics](const CPhysicsShellAnimatorBoneData& data)
     {
         Fmatrix target_obj_posFmatrixS;
-        CBoneInstance& B = m_pPhysicsShell->PKinematics()->LL_GetBoneInstance(it.m_element->m_SelfID);
-// B.Callback_overwrite = FALSE;
-// B.Callback = 0;
-#pragma todo("reset callback?")
-        B.set_callback(B.callback_type(), nullptr, B.callback_param(), false);
-
-        m_pPhysicsShell->PKinematics()->CalculateBones_Invalidate();
-        m_pPhysicsShell->PKinematics()->CalculateBones(true);
-
+        const CBoneInstance& B = kinematics->LL_GetBoneInstance(data.m_element->m_SelfID);
         target_obj_posFmatrixS.mul_43(m_StartXFORM, B.mTransform);
         dQuaternion target_obj_quat_dQuaternionS;
         dMatrix3 ph_mat;
         PHDynamicData::FMXtoDMX(target_obj_posFmatrixS, ph_mat);
         dQfromR(target_obj_quat_dQuaternionS, ph_mat);
         Fvector mc;
-        it.m_element->CPHGeometryOwner::get_mc_vs_transform(mc, target_obj_posFmatrixS);
-        dJointSetFixedQuaternionPos(it.m_anim_fixed_dJointID, target_obj_quat_dQuaternionS, &mc.x);
+        data.m_element->CPHGeometryOwner::get_mc_vs_transform(mc, target_obj_posFmatrixS);
+        dJointSetFixedQuaternionPos(data.m_anim_fixed_dJointID, target_obj_quat_dQuaternionS, &mc.x);
+    };
+
+    // Preserve progressive callback removal on the first frame for unordered mod bone lists.
+    if (!m_callbacks_reset)
+    {
+        for (const auto& it : m_bones_data)
+        {
+            CBoneInstance& B = kinematics->LL_GetBoneInstance(it.m_element->m_SelfID);
+#pragma todo("reset callback?")
+            B.set_callback(B.callback_type(), nullptr, B.callback_param(), false);
+            kinematics->CalculateBones_Invalidate();
+            kinematics->CalculateBones(true);
+            apply_target(it);
+        }
+        m_callbacks_reset = true;
+        return;
     }
+
+    kinematics->CalculateBones_Invalidate();
+    kinematics->CalculateBones(true);
+
+    for (const auto& it : m_bones_data)
+        apply_target(it);
     //(*(m_pPhysicsShell->Elements().begin()))->PhysicsRefObject()->XFORM().set(m_pPhysicsShell->mXFORM);
 }

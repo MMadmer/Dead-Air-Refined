@@ -42,6 +42,7 @@
 #include "xrAICore/Navigation/ai_object_location_impl.h"
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
+#include "xrCore/Animation/Bone.hpp"
 #include "ai/monsters/anti_aim_ability.h"
 
 // Lain: added
@@ -1020,13 +1021,32 @@ void CBaseMonster::update_eyes_visibility()
 
     R_ASSERT(left_eye_bone_id != u16(-1) && right_eye_bone_id != u16(-1));
 
-    bool eyes_visible = !g_Alive() || get_screen_space_coverage_diagonal() > 0.05f;
+    const bool eyes_visible = !g_Alive() || get_screen_space_coverage_diagonal() > 0.05f;
+    const auto subtree_has_visibility = [skeleton, eyes_visible](auto&& self, const u16 bone_id) -> bool
+    {
+        if (!!skeleton->LL_GetBoneVisible(bone_id) != eyes_visible)
+            return false;
 
-    bool const was_visible = !!skeleton->LL_GetBoneVisible(left_eye_bone_id);
-    skeleton->LL_SetBoneVisible(left_eye_bone_id, eyes_visible, true);
-    skeleton->LL_SetBoneVisible(right_eye_bone_id, eyes_visible, true);
+        for (const CBoneData* child : skeleton->LL_GetData(bone_id).children)
+            if (!self(self, child->GetSelfID()))
+                return false;
 
-    if (!was_visible && eyes_visible)
+        return true;
+    };
+
+    bool visibility_changed = false;
+    if (!subtree_has_visibility(subtree_has_visibility, left_eye_bone_id))
+    {
+        skeleton->LL_SetBoneVisible(left_eye_bone_id, eyes_visible, true);
+        visibility_changed = true;
+    }
+    if (!subtree_has_visibility(subtree_has_visibility, right_eye_bone_id))
+    {
+        skeleton->LL_SetBoneVisible(right_eye_bone_id, eyes_visible, true);
+        visibility_changed = true;
+    }
+
+    if (visibility_changed && eyes_visible)
     {
         skeleton->CalculateBones_Invalidate();
         skeleton->CalculateBones();

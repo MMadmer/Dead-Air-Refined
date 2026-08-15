@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "xrCore/Debug/CrashReport.h"
 #include "IGame_Level.h"
 
@@ -20,6 +21,8 @@ extern xr_map<u32, xr_vector<xr_token>> vid_mode_token;
 
 const xr_token vid_bpp_token[] = {{"16", 16}, {"32", 32}, {0, 0}};
 const xr_token snd_precache_all_token[] = {{"off", 0}, {"on", 1}, {0, 0}};
+const xr_token animation_blend_curve_token[] = {
+    {"linear", AnimationBlend::Linear}, {"smooth", AnimationBlend::Smooth}, {nullptr, 0}};
 
 void IConsole_Command::InvalidSyntax()
 {
@@ -788,6 +791,8 @@ void CCC_Register()
     CMD1(CCC_Disconnect, "disconnect");
     CMD1(CCC_SaveCFG, "cfg_save");
     CMD1(CCC_LoadCFG, "cfg_load");
+    CMD4(CCC_Float, "animation_blend_min_time", &AnimationBlend::g_min_time, 0.f, 10.f);
+    CMD3(CCC_Token, "animation_blend_curve", &AnimationBlend::g_curve, animation_blend_curve_token);
 
 #ifdef DEBUG
     CMD3(CCC_Mask, "mt_particles", &psDeviceFlags, mtParticles);

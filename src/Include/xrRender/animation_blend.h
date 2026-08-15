@@ -1,5 +1,6 @@
 #pragma once
 
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "animation_motion.h"
 #include "xrCore/Animation/SkeletonMotions.hpp" // PlayCallback XXX: fwd. decl. it instead?
 
@@ -123,7 +124,7 @@ IC void CBlend::update_play(float dt, PlayCallback _Callback)
     if (fall_at_end)
     {
         blend = eFalloff;
-        blendFalloff = 2.f;
+        blendFalloff = AnimationBlend::RateFromTime(AnimationBlend::g_fall_at_end_time);
         // blendAccrue = timeCurrent;
     }
     return;

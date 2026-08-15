@@ -3,6 +3,7 @@
 
 #include "Include/xrRender/Kinematics.h"
 #include "game_object_space.h"
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "xrPhysics/matrix_utils.h"
 #ifdef DEBUG
 #include "PHDebug.h"
@@ -373,11 +374,10 @@ void animation_movement_controller::BlendDestroy(CBlend& blend)
 }
 
 void animation_movement_controller::stop() { stopped = true; }
-const float percent_blending = 0.2f;
 void animation_movement_controller::SetPosesBlending()
 {
     VERIFY(IsActive());
-    float blending_time = percent_blending * m_control_blend->timeTotal;
+    float blending_time = AnimationBlend::g_movement_blend_fraction * m_control_blend->timeTotal;
 
     float sv_time = m_control_blend->timeCurrent;
     m_control_blend->timeCurrent = blending_time;

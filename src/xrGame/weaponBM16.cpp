@@ -20,8 +20,8 @@ void CWeaponBM16::PlayAnimShoot()
 {
     switch (m_magazine.size())
     {
-    case 1: PlayHUDMotion("anm_shot_1", "anim_shoot_1", FALSE, this, GetState()); break;
-    case 2: PlayHUDMotion("anm_shot_2", "anim_shoot", FALSE, this, GetState()); break;
+    case 1: PlayHUDMotion("anm_shot_1", "anim_shoot_1", TRUE, this, GetState()); break;
+    case 2: PlayHUDMotion("anm_shot_2", "anim_shoot", TRUE, this, GetState()); break;
     }
 }
 

@@ -34,6 +34,15 @@ float CalcMotionSpeed(const shared_str& anim_name, const float anim_speed)
         return (anim_name == "anm_show" || anim_name == "anm_hide") ? 2.0f : 1.0f;
 }
 
+CBlend* PlayHudCycle(
+    IKinematicsAnimated& model, const u16 part, const MotionID motion, const BOOL mix_in, const float speed_scale)
+{
+    CMotionDef* const motion_def = model.LL_GetMotionDef(motion);
+    R_ASSERT(motion_def);
+    return model.LL_PlayCycle(part, motion, mix_in, motion_def->Accrue(), motion_def->Falloff(),
+        motion_def->Speed() * speed_scale, motion_def->StopAtEnd(), nullptr, nullptr);
+}
+
 const player_hud_motion* player_hud_motion_container::find_motion(const shared_str& name) const
 {
     const auto it = m_anims.find(name);
@@ -126,26 +135,23 @@ void attachable_hud_item::set_bone_visible(const shared_str& bone_name, BOOL bVi
 
 void attachable_hud_item::update(bool bForce)
 {
-    if (!bForce && m_upd_firedeps_frame == Device.dwFrame)
-        return;
-
-    const bool is_16x9 = UICore::is_widescreen();
-
-    if (m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now) != is_16x9)
+    if (bForce || m_upd_firedeps_frame != Device.dwFrame)
     {
-        reload_measures();
+        const bool is_16x9 = UICore::is_widescreen();
+
+        if (m_measures.m_prop_flags.test(hud_item_measures::e_16x9_mode_now) != is_16x9)
+            reload_measures();
+
+        if (GamePersistent().GetHudTuner().is_active())
+            m_measures.update(m_attach_offset);
+
+        m_parent->calc_transform(m_attach_place_idx, m_attach_offset, m_item_transform);
+        m_upd_firedeps_frame = Device.dwFrame;
     }
-
-    if (GamePersistent().GetHudTuner().is_active())
-        m_measures.update(m_attach_offset);
-
-    m_parent->calc_transform(m_attach_place_idx, m_attach_offset, m_item_transform);
-    m_upd_firedeps_frame = Device.dwFrame;
 
     if (IKinematicsAnimated* ka = m_model->dcast_PKinematicsAnimated())
     {
         ka->UpdateTracks();
-        ka->dcast_PKinematics()->CalculateBones_Invalidate();
         ka->dcast_PKinematics()->CalculateBones(TRUE);
     }
 }
@@ -467,9 +473,8 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
         const u16 pc = ka->partitions().count();
         for (u16 pid = 0; pid < pc; ++pid)
         {
-            CBlend* B = ka->PlayCycle(pid, M2, bMixIn);
+            CBlend* B = PlayHudCycle(*ka, pid, M2, bMixIn, speed);
             R_ASSERT(B);
-            B->speed *= speed;
         }
 
         m_model->CalculateBones_Invalidate();
@@ -721,9 +726,8 @@ u32 player_hud::anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotio
         {
             if (pid == 0 || pid == part_id || part_id == u16(-1))
             {
-                CBlend* B = m_model->PlayCycle(pid, M, bMixIn);
+                CBlend* B = PlayHudCycle(*m_model, pid, M, bMixIn, speed);
                 R_ASSERT(B);
-                B->speed *= speed;
             }
         }
         m_model->dcast_PKinematics()->CalculateBones_Invalidate();

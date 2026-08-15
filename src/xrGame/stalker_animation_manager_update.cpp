@@ -8,6 +8,7 @@
 
 #include "pch_script.h"
 #include "stalker_animation_manager.h"
+#include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "ai/stalker/ai_stalker.h"
 #include "game_object_space.h"
 #include "xrScriptEngine/script_callback_ex.h"
@@ -177,7 +178,8 @@ void CStalkerAnimationManager::play_legs()
 
     if (!first_time && !result && legs().blend())
     {
-        float amount = legs().blend()->blendAmount;
+        const CBlend& blend = *legs().blend();
+        const float amount = AnimationBlend::ApplyCurve(blend.blendAmount, blend.blendPower);
         m_previous_speed = (m_target_speed - m_previous_speed) * amount + m_previous_speed;
     }
 
@@ -185,7 +187,8 @@ void CStalkerAnimationManager::play_legs()
 
     if (result && legs().blend())
     {
-        float amount = legs().blend()->blendAmount;
+        const CBlend& blend = *legs().blend();
+        const float amount = AnimationBlend::ApplyCurve(blend.blendAmount, blend.blendPower);
         speed = (m_target_speed - m_previous_speed) * amount + m_previous_speed;
     }
 
