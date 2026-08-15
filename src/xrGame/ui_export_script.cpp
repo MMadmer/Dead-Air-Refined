@@ -1,6 +1,7 @@
 #include "pch_script.h"
 
 #include "MainMenu.h"
+#include "ui/ModOptOut.h"
 
 #include "login_manager.h"
 #include "account_manager.h"
@@ -148,7 +149,12 @@ void CMainMenu::script_register(lua_State* luaState)
 
     module(luaState, "main_menu")
     [
-        def("get_main_menu", &MainMenu)
+        def("get_main_menu", &MainMenu),
+        // A mod declares itself by name; the engine then skips the update check, drops
+        // the bug report entry and shows the names at the bottom of the menu. Available
+        // from menu scripts too, i.e. before a level exists.
+        def("disable_auto_update", +[](pcstr modName) { ModOptOut::DisableAutoUpdate(modName); }),
+        def("auto_update_disabled", +[]() { return ModOptOut::AutoUpdateDisabled(); })
     ];
 }
 

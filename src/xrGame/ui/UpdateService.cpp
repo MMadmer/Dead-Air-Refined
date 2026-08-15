@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "UpdateService.h"
+#include "ModOptOut.h"
 
 #include "xrCore/ProductVersion.h"
 #include "xrEngine/Engine.h"
@@ -1057,6 +1058,19 @@ bool write_restart_command(const std::filesystem::path& path)
 
 void UpdateService::StartCheck()
 {
+    // A mod that changed the installation owns it: an update would overwrite its files
+    // with our payload, so the check does not even start.
+    if (ModOptOut::AutoUpdateDisabled())
+    {
+        static bool reported = false;
+        if (!reported)
+        {
+            reported = true;
+            Msg("* Update check skipped: disabled by mods");
+        }
+        return;
+    }
+
     ServiceState& instance = service();
     if (instance.started.exchange(true, std::memory_order_acq_rel))
         return;

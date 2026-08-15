@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "UIMMShniaga.h"
+#include "ModOptOut.h"
 #include "xrUICore/Cursor/UICursor.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/ScrollView/UIScrollView.h"
@@ -183,7 +184,9 @@ void CUIMMShniaga::CreateList(xr_vector<CUIStatic*>& lst, CUIXml& xml_doc, LPCST
         lst.push_back(button);
     };
 
-    const bool mainPage = std::string_view(path).starts_with("menu_main");
+    // The report goes to this project's tracker; once a mod changed the build, reports
+    // from it describe someone else's game, so the entry disappears with the updates.
+    const bool mainPage = std::string_view(path).starts_with("menu_main") && !ModOptOut::AutoUpdateDisabled();
     bool bugButtonAdded = false;
     for (int i = 0; i < nodes_num; ++i)
     {

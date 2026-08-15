@@ -214,6 +214,7 @@ private:
     bool CheckCrashReportDialog();
     void CheckUpdateDialog();
     void DrawProductVersion();
+    void DrawModOptOutNotice();
     DECLARE_SCRIPT_REGISTER_FUNCTION(CDialogHolder, CUIDialogWnd, CUIWindow);
 };
 

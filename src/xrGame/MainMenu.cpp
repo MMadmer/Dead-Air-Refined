@@ -24,6 +24,7 @@
 #include "xrCore/os_clipboard.h"
 #include "xrCore/Debug/CrashReport.h"
 #include "xrCore/ProductVersion.h"
+#include "ui/ModOptOut.h"
 #include "xrGame/game_type.h"
 
 #include "DemoInfo.h"
@@ -82,6 +83,10 @@ static void SetWindowPPMode(CUIWindow* window, bool enabled)
 CMainMenu::CMainMenu()
 {
     ZoneScoped;
+
+    // Config-declared opt-outs are read before anything can query them: the update check
+    // starts on menu activation and the menu buttons are built on the first page load.
+    ModOptOut::LoadFromConfig();
 
     CUIWindow::SetPPModeHandler(&SetWindowPPMode);
 
@@ -793,6 +798,44 @@ void CMainMenu::DrawProductVersion()
     font->SetAligment(CGameFont::alRight);
     font->SetColor(color_rgba(135, 123, 116, 255));
     font->OutI(0.97f, 0.927f, "%s v%s", DeadAirRefined::ProductName, DeadAirRefined::Version);
+
+    DrawModOptOutNotice();
+}
+
+void CMainMenu::DrawModOptOutNotice()
+{
+    if (!ModOptOut::AutoUpdateDisabled())
+        return;
+
+    CGameFont* font = UI().Font().pFontGraffiti19Russian;
+    if (!font)
+        return;
+
+    // Built once: the list only changes when a mod declares itself, which happens before
+    // the menu is on screen.
+    static shared_str cached_names;
+    static size_t cached_count = 0;
+    const auto& mods = ModOptOut::DisablingMods();
+    if (cached_count != mods.size())
+    {
+        cached_count = mods.size();
+        string4096 names{};
+        for (size_t i = 0; i < mods.size(); ++i)
+        {
+            if (i)
+                xr_strcat(names, ", ");
+            xr_strcat(names, mods[i].c_str());
+        }
+        cached_names = names;
+    }
+
+    // Bottom centre, below the version line, in red - the player must see that this
+    // installation no longer updates itself and why.
+    font->SetAligment(CGameFont::alCenter);
+    font->SetColor(color_rgba(220, 60, 50, 255));
+    font->OutI(0.0f, 0.965f, "%s %s", CStringTable().translate("ui_mm_auto_update_disabled").c_str(),
+        cached_names.c_str());
+    font->SetAligment(CGameFont::alRight);
 }
 
 void CMainMenu::DestroyInternal(bool bForce)

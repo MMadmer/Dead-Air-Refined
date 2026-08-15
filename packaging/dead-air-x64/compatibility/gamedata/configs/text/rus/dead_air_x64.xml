@@ -39,6 +39,9 @@
     <string id="ui_mm_auto_continue_on_load_hint">
         <text>Автоматически продолжает игру после завершения загрузки, пропуская ожидание нажатия любой клавиши.</text>
     </string>
+    <string id="ui_mm_auto_update_disabled">
+        <text>Автообновление отключено модами:</text>
+    </string>
     <string id="ui_mm_bug_report">
         <text>Отправить bug report</text>
     </string>

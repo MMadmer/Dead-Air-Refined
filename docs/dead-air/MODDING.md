@@ -376,3 +376,88 @@ misfire_condition_ceiling = 0.95   ; this one is meant to be unreliable even in 
   behaviour agree.
 - The legacy `misfire_probability` formula keeps its own built-in 0.95 floor even when the
   ceiling is disabled.
+
+## Actor movement tuning
+
+The speed penalty a held weapon applies, and the overweight slowdown curve, used to be
+literals in the engine. Both are now optional keys of the actor section
+(`configs/creatures/actor.ltx`). Every key defaults to the value it replaced, so a config
+that does not mention them behaves exactly as before.
+
+```ini
+[actor]
+; sprint penalty, legacy branch: penalty = clamp(active item weight / divisor, 0, max)
+sprint_weight_divisor    = 10.0   ; smaller value = heavier penalty per kilogram
+sprint_weight_penalty_max = 0.5   ; the cap that makes everything above ~5 kg equal today
+; sprint penalty, gear branch (active when sprint_weapon_koef/sprint_outfit_koef are set)
+sprint_gear_penalty_max  = 1.5
+; floor both branches clamp the sprint factor to
+sprint_koef_min          = 0.3
+; overweight = clamp((TotalWeight - max_walk_weight) * max_walk_weight * rate, 0, max)
+overweight_slowdown_rate = 0.0015
+overweight_slowdown_max  = 1.0
+; walking, running and sprinting are all lerped towards this factor by the overweight value
+overweight_speed_min     = 0.3
+```
+
+- The legacy branch is what a stock Dead Air config uses: `sprint_koef` is a multiplier
+  over running speed, and the penalty comes from the weight of whatever is *in hands* -
+  including a knife or a detector, and including the ammo loaded in the magazine.
+  `sprint_weight_penalty_max` is why an RPD, a PKM and an SVD all slow the actor down by
+  the same amount today; raise the divisor or the cap to make heavy weapons separate.
+- The gear branch replaces that with an absolute sprint factor and only counts
+  `CWeaponMagazined` weight plus outfit weight. It turns on when both `sprint_weapon_koef`
+  and `sprint_outfit_koef` exist in the section (they must be defined together).
+- Overweight is a separate effect and applies to walking, running and sprinting, so a
+  heavy weapon slows the actor down twice: once through the inventory weight and once
+  through the sprint penalty.
+- Values are validated: a non-finite, negative, or (for the divisor) zero value falls back
+  to the engine default instead of breaking the game. The section is re-read whenever the
+  outfit changes, so scripted section swaps pick the new tuning up.
+
+## Opting the installation out of online services
+
+A mod that changes the build owns the installation: our automatic update would overwrite
+its files with the payload of a version it never targeted, and a bug report from it would
+describe someone else's game. A mod can therefore declare itself, by name, and the engine
+will:
+
+- never start the update check;
+- drop the `Отправить bug report` entry from the main menu;
+- print a red line at the bottom centre of the menu:
+  `Автообновление отключено модами: <names>`.
+
+The names come from the mods themselves and are shown in declaration order, deduplicated,
+so a player (and we, in a screenshot) can always tell who took over the installation.
+
+**From a config**, for a plain addon — `configs/dead_air_x64_mod_opt_out.ltx`:
+
+```ini
+[auto_update_opt_out]
+weapon_pack     = "Оружейный Пак 2.0"   ; quotes required when the name has spaces
+hardcore_tweaks = Хардкор-Твики
+```
+
+The key only keeps declarations apart; the value is the displayed name. A key with no
+value declares itself by key. The same `[auto_update_opt_out]` section is also read from
+`system.ltx`, which is what an XMS module should patch through `.ltxp` - that way two
+modules can each add their own line without fighting over one file.
+
+**From Lua**, available in the menu context as well:
+
+```lua
+main_menu.disable_auto_update("Оружейный Пак 2.0")
+if main_menu.auto_update_disabled() then
+    -- ...
+end
+```
+
+Notes:
+
+- Declarations are additive and deduplicated; declaring twice is a no-op.
+- An empty or whitespace-only name is refused and logged - the list must stay meaningful.
+- Config declarations are read before the menu appears, so the notice and the missing
+  button are correct from the first frame. A Lua declaration takes effect from the moment
+  it runs.
+- Nothing else changes: the crash report prompt, saves, and every other menu entry keep
+  working exactly as before.

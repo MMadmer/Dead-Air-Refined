@@ -54,6 +54,15 @@ crash report has been submitted successfully or explicitly declined.
 The version comparison uses the product version compiled into the engine. The
 updater does not modify or infer that version independently.
 
+## Mod opt-out
+
+Mods can take the installation out of the update flow entirely by declaring themselves in
+`[auto_update_opt_out]` (in `configs/dead_air_x64_mod_opt_out.ltx` or in `system.ltx` via an
+XMS `.ltxp` patch), or by calling `main_menu.disable_auto_update("<name>")` from Lua. The
+check then never starts, the bug report menu entry disappears, and the menu shows
+`Автообновление отключено модами:` followed by the declared names. See
+`docs/dead-air/MODDING.md` for the full contract.
+
 ## Update application
 
 The game copies the external updater into the version-specific cache and exits.

@@ -292,10 +292,11 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
             {
                 scale = m_fWalkAccel / scale;
 
+                const MovementTuning tuning = GetMovementTuning();
                 const float maxWalkWeight = MaxWalkWeight();
                 float overweight =
-                    (inventory().TotalWeight() - maxWalkWeight) * (maxWalkWeight * 0.0015f);
-                clamp(overweight, 0.0f, 1.0f);
+                    (inventory().TotalWeight() - maxWalkWeight) * (maxWalkWeight * tuning.overweight_rate);
+                clamp(overweight, 0.0f, tuning.overweight_cap);
 
                 float movementFactor = 1.0f;
                 if (mstate_real & mcSprint)
@@ -309,15 +310,15 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
 
                     const CCustomOutfit* outfit = GetOutfit();
                     const float outfitWeight = outfit ? outfit->Weight() : 0.f;
-                    const float runFactor = std::lerp(
-                        mstate_real & mcBack ? m_fRunBackFactor : m_fRunFactor, 0.3f, overweight);
+                    const float runFactor = std::lerp(mstate_real & mcBack ? m_fRunBackFactor : m_fRunFactor,
+                        tuning.overweight_speed_floor, overweight);
                     movementFactor =
                         SprintMovementFactor(activeItemWeight, weaponWeight, outfitWeight, runFactor);
                 }
                 else if (bAccelerated)
                 {
                     movementFactor = mstate_real & mcBack ? m_fRunBackFactor : m_fRunFactor;
-                    movementFactor = std::lerp(movementFactor, 0.3f, overweight);
+                    movementFactor = std::lerp(movementFactor, tuning.overweight_speed_floor, overweight);
                 }
                 else
                 {
@@ -325,7 +326,7 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
                         movementFactor = m_fWalkBackFactor;
                     else if (mstate_real & (mcLStrafe | mcRStrafe) && !(mstate_real & mcCrouch))
                         movementFactor = m_fWalk_StrafeFactor;
-                    movementFactor *= std::lerp(1.0f, 0.3f, overweight);
+                    movementFactor *= std::lerp(1.0f, tuning.overweight_speed_floor, overweight);
                 }
 
                 scale *= movementFactor;

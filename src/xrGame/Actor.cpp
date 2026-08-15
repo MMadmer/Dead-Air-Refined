@@ -109,6 +109,7 @@ struct SprintGearFactors
 
 // Runtime-only factors preserve the actor layout used by legacy saves and native addons.
 xr_flat_hash_map<const CActor*, SprintGearFactors> actorSprintGearFactors;
+xr_flat_hash_map<const CActor*, CActor::MovementTuning> actorMovementTuning;
 xr_flat_hash_map<const CActor*, bool> actorKickModes;
 }
 
@@ -254,6 +255,7 @@ CActor::~CActor()
 {
     actorAdrenalineTimes.erase(this);
     actorSprintGearFactors.erase(this);
+    actorMovementTuning.erase(this);
     actorKickModes.erase(this);
 
     xr_delete(m_location_manager);
@@ -405,6 +407,41 @@ void CActor::Load(LPCSTR section)
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
     m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
+
+    {
+        // Optional movement tuning; absent keys keep the historical hardcoded values.
+        CActor::MovementTuning tuning;
+        tuning.legacy_weight_divisor =
+            READ_IF_EXISTS(pSettings, r_float, section, "sprint_weight_divisor", tuning.legacy_weight_divisor);
+        tuning.legacy_penalty_cap =
+            READ_IF_EXISTS(pSettings, r_float, section, "sprint_weight_penalty_max", tuning.legacy_penalty_cap);
+        tuning.gear_penalty_cap =
+            READ_IF_EXISTS(pSettings, r_float, section, "sprint_gear_penalty_max", tuning.gear_penalty_cap);
+        tuning.sprint_floor = READ_IF_EXISTS(pSettings, r_float, section, "sprint_koef_min", tuning.sprint_floor);
+        tuning.overweight_rate =
+            READ_IF_EXISTS(pSettings, r_float, section, "overweight_slowdown_rate", tuning.overweight_rate);
+        tuning.overweight_cap =
+            READ_IF_EXISTS(pSettings, r_float, section, "overweight_slowdown_max", tuning.overweight_cap);
+        tuning.overweight_speed_floor =
+            READ_IF_EXISTS(pSettings, r_float, section, "overweight_speed_min", tuning.overweight_speed_floor);
+
+        // A zero divisor would divide by zero; the rest only have to stay finite and
+        // non-negative. Bad values fall back to the default instead of killing the game -
+        // this is mod data, and the section is re-read on every outfit change.
+        const auto sane = [](float value, float fallback, bool nonzero = false) {
+            if (!std::isfinite(value) || value < 0.f || (nonzero && fis_zero(value)))
+                return fallback;
+            return value;
+        };
+        tuning.legacy_weight_divisor = sane(tuning.legacy_weight_divisor, 10.f, true);
+        tuning.legacy_penalty_cap = sane(tuning.legacy_penalty_cap, 0.5f);
+        tuning.gear_penalty_cap = sane(tuning.gear_penalty_cap, 1.5f);
+        tuning.sprint_floor = sane(tuning.sprint_floor, 0.3f);
+        tuning.overweight_rate = sane(tuning.overweight_rate, 0.0015f);
+        tuning.overweight_cap = sane(tuning.overweight_cap, 1.0f);
+        tuning.overweight_speed_floor = sane(tuning.overweight_speed_floor, 0.3f);
+        actorMovementTuning.insert_or_assign(this, tuning);
+    }
 
     const bool hasSprintWeaponFactor = pSettings->line_exist(section, "sprint_weapon_koef");
     const bool hasSprintOutfitFactor = pSettings->line_exist(section, "sprint_outfit_koef");
@@ -1132,21 +1169,29 @@ float CActor::currentFOV()
     return rad2deg(2.f * atanf(tanf(deg2rad(baseFov) * 0.5f) / zoomFactor));
 }
 
+CActor::MovementTuning CActor::GetMovementTuning() const
+{
+    const auto it = actorMovementTuning.find(this);
+    return it != actorMovementTuning.end() ? it->second : MovementTuning{};
+}
+
 float CActor::SprintMovementFactor(const float activeItemWeight, const float weaponWeight,
     const float outfitWeight, const float runFactor) const
 {
+    const MovementTuning tuning = GetMovementTuning();
+
     const auto it = actorSprintGearFactors.find(this);
     if (it == actorSprintGearFactors.end())
     {
         // Legacy actor configs store sprint_koef as a multiplier over running speed.
-        float legacyPenalty = activeItemWeight / 10.f;
-        clamp(legacyPenalty, 0.f, 0.5f);
-        return runFactor * _max(m_fSprintFactor - legacyPenalty, 0.3f);
+        float legacyPenalty = activeItemWeight / tuning.legacy_weight_divisor;
+        clamp(legacyPenalty, 0.f, tuning.legacy_penalty_cap);
+        return runFactor * _max(m_fSprintFactor - legacyPenalty, tuning.sprint_floor);
     }
 
     float gearPenalty = weaponWeight * it->second.weapon + outfitWeight * it->second.outfit;
-    clamp(gearPenalty, 0.0f, 1.5f);
-    return _max(m_fSprintFactor - gearPenalty, 0.3f);
+    clamp(gearPenalty, 0.0f, tuning.gear_penalty_cap);
+    return _max(m_fSprintFactor - gearPenalty, tuning.sprint_floor);
 }
 
 void CActor::StartKick()

@@ -2489,6 +2489,8 @@ target_sources(xrGame PRIVATE
     ui/UIBugReportWnd.h
     ui/UIUpdateWnd.cpp
     ui/UIUpdateWnd.h
+    ui/ModOptOut.cpp
+    ui/ModOptOut.h
     ui/UpdateService.cpp
     ui/UpdateService.h
 )

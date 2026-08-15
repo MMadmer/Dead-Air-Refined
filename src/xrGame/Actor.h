@@ -472,6 +472,21 @@ public:
     float m_fSprintFactor;
     float SprintMovementFactor(
         float activeItemWeight, float weaponWeight, float outfitWeight, float runFactor) const;
+
+    // Movement math that used to be hardcoded; see actor.ltx keys sprint_weight_divisor,
+    // sprint_weight_penalty_max, sprint_gear_penalty_max, sprint_koef_min,
+    // overweight_slowdown_rate, overweight_slowdown_max, overweight_speed_min.
+    struct MovementTuning
+    {
+        float legacy_weight_divisor{ 10.f };
+        float legacy_penalty_cap{ 0.5f };
+        float gear_penalty_cap{ 1.5f };
+        float sprint_floor{ 0.3f };
+        float overweight_rate{ 0.0015f };
+        float overweight_cap{ 1.0f };
+        float overweight_speed_floor{ 0.3f };
+    };
+    MovementTuning GetMovementTuning() const;
     float m_fBreath{0.2f};
     float m_fRecoilCoeff{1.0f};
     float m_fZoomInertion{};
