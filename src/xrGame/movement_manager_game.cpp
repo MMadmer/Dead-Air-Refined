@@ -131,14 +131,17 @@ void CMovementManager::process_game_path()
     case ePathStateBuildLevelPath:
     {
         // all three lookups below sat behind dead VERIFYs while the ids come from mod
-        // routes; break = retry next update with the state machine intact
+        // routes. On a bad id go back to ePathStateContinueGamePath, which re-selects
+        // the intermediate vertex: plain `break` would keep the same bad id (nothing
+        // else re-selects it) and the NPC would retry forever without ever moving.
         if (!ai().game_graph().valid_vertex_id(game_path().intermediate_vertex_id()))
         {
             static u32 hits = 0;
             ++hits;
             if (hits <= 5 || (hits % 200) == 0)
-                Msg("! Game path: intermediate graph vertex %u is invalid - retry next update (case %u)",
+                Msg("! Game path: intermediate graph vertex %u is invalid - reselecting (case %u)",
                     game_path().intermediate_vertex_id(), hits);
+            m_path_state = ePathStateContinueGamePath;
             break;
         }
 
@@ -151,8 +154,9 @@ void CMovementManager::process_game_path()
             static u32 hits = 0;
             ++hits;
             if (hits <= 5 || (hits % 200) == 0)
-                Msg("! Game path: level vertex %u of the intermediate point is invalid (case %u)",
+                Msg("! Game path: level vertex %u of the intermediate point is invalid - reselecting (case %u)",
                     dest_level_vertex_id, hits);
+            m_path_state = ePathStateContinueGamePath;
             break;
         }
 
@@ -166,8 +170,9 @@ void CMovementManager::process_game_path()
                 static u32 hits = 0;
                 ++hits;
                 if (hits <= 5 || (hits % 200) == 0)
-                    Msg("! Game path: accessible_nearest yielded invalid vertex %u (case %u)",
+                    Msg("! Game path: accessible_nearest yielded invalid vertex %u - reselecting (case %u)",
                         dest_level_vertex_id, hits);
+                m_path_state = ePathStateContinueGamePath;
                 break;
             }
         }

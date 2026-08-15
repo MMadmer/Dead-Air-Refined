@@ -48,7 +48,8 @@ TEMPLATE_SPECIALIZATION
 void CMonsterStateManagerAbstract::execute_script_state()
 {
     // выполнить текущее состояние
-    this->get_state_current()->execute();
+    if (auto* current = this->get_state_current())
+        current->execute();
 }
 
 TEMPLATE_SPECIALIZATION
@@ -65,12 +66,14 @@ bool CMonsterStateManagerAbstract::check_state(u32 state_id)
 {
     if (this->prev_substate == state_id)
     {
-        if (!this->get_state_current()->check_completion())
+        auto* current = this->get_state_current();
+        if (current && !current->check_completion())
             return true;
     }
     else
     {
-        if (this->get_state(state_id)->check_start_conditions())
+        auto* candidate = this->get_state(state_id);
+        if (candidate && candidate->check_start_conditions())
             return true;
     }
 

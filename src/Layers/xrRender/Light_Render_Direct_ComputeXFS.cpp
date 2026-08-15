@@ -92,13 +92,16 @@ void CLight_Compute_XFORM_and_VIS::compute_xf_spot(light* L)
 
     // _min(L->cone + deg2rad(4.5f), PI*0.98f) - Here, it is needed to enlarge the shadow map frustum to include also
     // displaced pixels and the pixels neighbor to the examining one.
-    float tan_shift;
-    if (L->flags.type == IRender_Light::POINT)
-        tan_shift = deg2rad(11.5f);
-    else
-        tan_shift = deg2rad(3.5f);
-
-    L->X.S.project.build_projection(L->cone + tan_shift, 1.f, L->virtual_size, L->range + EPS_S);
+    // Near plane: the reference builds every local shadow projection from the fixed
+    // SMAP_near_plane. Feeding the per-lamp virtual_size here (the reference cannot -
+    // set_virtual_size is an empty stub there, so the spawn value never reaches the
+    // renderer) silently rescales the depth bias per lamp: ps_r2_ls_depth_bias is an
+    // offset in post-projective depth, so its worth in world units goes as 1/near. A lamp
+    // authored with virtual_size 0.5 ends up with ~5x less effective bias than the
+    // reference gives it - which is why shadow acne showed up on some walls and not
+    // others, from the same cvar that is itself at parity.
+    L->X.S.project.build_projection(
+        _min(L->cone + deg2rad(5.f), PI * 0.98f), 1.f, SMAP_near_plane, L->range + EPS_S);
     L->X.S.combine.mul(L->X.S.project, L->X.S.view);
 }
 } // namespace xray::render::RENDER_NAMESPACE

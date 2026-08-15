@@ -429,7 +429,13 @@ void CBaseMonster::Hit(SHit* pHDS)
         if (!critically_wounded())
             update_critical_wounded(pHDS->boneID, pHDS->power);
 
-    if (pHDS->hit_type == ALife::eHitTypeFireWound && has_protections_sect)
+    // No `has_protections_sect` gate: both reference trees run this branch unconditionally,
+    // so a monster without a protections section falls into the else below and takes
+    // hit_power *= m_fHitFracMonster (0.1 by default) with no wound. The gate arrived with
+    // the modern upstream base and made every such monster take TEN TIMES the firearm
+    // damage the original engine gives it - Dead Air's civilian zombies have no
+    // protections_sect at all, which is exactly the reported "die from one body hit".
+    if (pHDS->hit_type == ALife::eHitTypeFireWound)
     {
         float& hit_power = pHDS->power;
         float ap = pHDS->armor_piercing;

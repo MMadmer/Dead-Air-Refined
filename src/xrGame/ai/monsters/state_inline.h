@@ -20,8 +20,8 @@ CStateAbstract::~CState() { free_mem(); }
 TEMPLATE_SPECIALIZATION
 void CStateAbstract::reinit()
 {
-    if (current_substate != u32(-1))
-        get_state_current()->critical_finalize();
+    if (CSState* current = (current_substate != u32(-1)) ? get_state_current() : nullptr)
+        current->critical_finalize();
 
     for (auto it = substates.begin(); it != substates.end(); ++it)
         it->second->reinit();
@@ -68,6 +68,8 @@ void CStateAbstract::execute()
 
     // выполнить текущее состояние
     CSState* state = get_state(current_substate);
+    if (!state) // unregistered id: refuse the tick instead of calling through a null
+        return;
     state->execute();
 
     // сохранить текущее состояние
@@ -86,8 +88,8 @@ void CStateAbstract::finalize() { reset(); }
 TEMPLATE_SPECIALIZATION
 void CStateAbstract::critical_finalize()
 {
-    if (current_substate != u32(-1))
-        get_state_current()->critical_finalize();
+    if (CSState* current = (current_substate != u32(-1)) ? get_state_current() : nullptr)
+        current->critical_finalize();
     reset();
 }
 
@@ -110,11 +112,19 @@ void CStateAbstract::select_state(u32 new_state_id)
     if (current_substate != u32(-1))
     {
         state = get_state(current_substate);
-        state->critical_finalize();
+        if (state)
+            state->critical_finalize();
     }
 
     // установить новое состояние
     state = get_state(current_substate = new_state_id);
+    if (!state)
+    {
+        // Nothing to switch to: stay without a substate rather than calling through a
+        // null. The next select_state() picks again, so the monster is not stranded.
+        current_substate = u32(-1);
+        return;
+    }
 
     // инициализировать новое состояние
     setup_substates();
@@ -199,6 +209,8 @@ CStateAbstract* CStateAbstract::get_state_current()
 
     auto it = substates.find(current_substate);
     VERIFY(it != substates.end());
+    if (it == substates.end())
+        return nullptr; // stale id: the callers all treat null as "no state"
 
     return it->second;
 }

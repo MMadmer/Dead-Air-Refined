@@ -134,9 +134,14 @@ void stalker_movement_params::cover_loophole_id(shared_str const& loophole_id)
     }
 
     VERIFY(m_cover);
-    // cover and loophole ids come from mod configs
+    // cover and loophole ids come from mod configs. A failure has to leave the state
+    // CONSISTENT: an id without a loophole pointer makes every smart-cover evaluator
+    // answer "no action available" forever, which reads as an NPC standing in cover and
+    // doing nothing. Clear the id too - that is the legal "not in a loophole" state the
+    // empty-id branch above produces.
     if (!m_cover || !m_cover->get_description())
     {
+        m_cover_loophole_id = "";
         m_cover_loophole = nullptr;
         return;
     }
@@ -155,6 +160,7 @@ void stalker_movement_params::cover_loophole_id(shared_str const& loophole_id)
     {
         Msg("! Smart cover '%s' has no loophole '%s', selection cancelled", m_cover_id.c_str(),
             loophole_id.c_str());
+        m_cover_loophole_id = "";
         m_cover_loophole = nullptr;
         return;
     }
