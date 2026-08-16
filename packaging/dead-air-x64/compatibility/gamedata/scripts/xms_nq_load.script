@@ -173,6 +173,11 @@ function catalog(force)
 	read_catalog_file("nq\\catalog.ltx", cat, "core")
 	pcall(function()
 		local fs = getFS()
+		-- The folder is optional - most installs carry no catalog extensions - and
+		-- file_list_open answers an empty list for one that is not there. It used
+		-- to answer a wrapper around a null vector instead, which faulted on the
+		-- first Size() where no pcall could reach; see FS_file_list in
+		-- fs_registrator_script.cpp.
 		local flist = fs:file_list_open("$game_config$", "nq\\kinds\\", FS.FS_ListFiles)
 		if not (flist) then return end
 		local names = {}

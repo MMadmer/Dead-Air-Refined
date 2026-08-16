@@ -34,9 +34,22 @@ class FS_file_list
 
 public:
     FS_file_list(xr_vector<pstr>* p) : m_p(p) {}
-    u32 Size() { return m_p->size(); }
-    LPCSTR GetAt(u32 idx) { return m_p->at(idx); }
-    void Free() { FS.file_list_close(m_p); };
+    // file_list_open answers a null vector for a folder that does not exist, and
+    // this wrapper is returned by value - so Lua gets a live object holding that
+    // null and faults on the first call. A missing folder is an ordinary answer
+    // for a script scanning an optional directory, so it reads as empty. Out of
+    // range answers "" for the same reason: at() would throw across the Lua
+    // boundary, and neither fault is something a script can pcall its way out of.
+    u32 Size() { return m_p ? m_p->size() : 0; }
+    LPCSTR GetAt(u32 idx) { return (m_p && idx < m_p->size()) ? m_p->at(idx) : ""; }
+    void Free()
+    {
+        if (m_p)
+        {
+            FS.file_list_close(m_p);
+            m_p = nullptr;
+        }
+    };
 };
 
 struct FS_item
