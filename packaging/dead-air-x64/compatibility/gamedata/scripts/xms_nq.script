@@ -28,6 +28,10 @@ local loader = xms_nq_load
 local BLOB_ID = "xms.nq"
 local STATE_VERSION = 1
 local POLL_MS = 250
+-- The tick used to be a hidden constant. A trigger may ask to be checked more
+-- often (check_every, down to 0 = every frame), so the pass runs at the fastest
+-- rate anyone actually asked for and each entry still honours its own interval.
+local poll_ms = POLL_MS
 local ERROR_RETRY_MS = 5000
 local QUEUE_CAP = 20000
 -- The .scov container refuses a chunk above 16 MiB and that failure takes the WHOLE save group
@@ -532,6 +536,14 @@ local function wants_poll(ctx, node, impl)
 	return impl.poll ~= nil
 end
 
+local function recompute_poll_ms()
+	local m = POLL_MS
+	for _, e in pairs(polled) do
+		if (e.interval_ms and e.interval_ms < m) then m = e.interval_ms end
+	end
+	poll_ms = m
+end
+
 -- Wires a waiting token / armed trigger into the event index and the poll list.
 local function wire(uid, node_id)
 	local q = Q[uid]
@@ -550,13 +562,21 @@ local function wire(uid, node_id)
 		end
 	end
 	local key = key_of(uid, node_id)
-	if (wants_poll(ctx, node, impl)) then polled[key] = { uid = uid, node = node_id } else polled[key] = nil end
+	if (wants_poll(ctx, node, impl)) then
+		local every = node.params and tonumber(node.params.check_every)
+		local ms = every and math.max(0, every * 1000) or nil
+		polled[key] = { uid = uid, node = node_id, interval_ms = ms }
+	else
+		polled[key] = nil
+	end
+	recompute_poll_ms()
 end
 
 local function unwire(uid, node_id)
 	unsubscribe(uid, node_id)
 	polled[key_of(uid, node_id)] = nil
 	err_at[key_of(uid, node_id)] = nil
+	recompute_poll_ms()
 end
 
 -- ---------------------------------------------------------------------------- triggers
@@ -776,6 +796,11 @@ local function poll_entry(e, dt)
 	local q, qs = Q[e.uid], quest_state(e.uid)
 	local node = q and q.node_by_id[e.node]
 	if not (node and qs and qs.status == "active") then polled[key_of(e.uid, e.node)] = nil return end
+	-- an entry asking for a slower rate than the pass simply skips ticks
+	if (e.interval_ms and e.interval_ms > 0) then
+		if (e.next_r and now_r < e.next_r) then return end
+		e.next_r = now_r + e.interval_ms
+	end
 	local impl = kind_impl(node.kind)
 	if (node.is_trigger) then
 		if not (trigger_armed(q, qs, node)) then unwire(e.uid, e.node) return end
@@ -1183,7 +1208,7 @@ end
 function on_actor_update(binder, delta)
 	if not (ready) then return end
 	now_r = util.real_ms()
-	local poll_due = (now_r - last_poll_r >= POLL_MS)
+	local poll_due = (now_r - last_poll_r >= poll_ms)
 	local pending = (qhead <= qtail) or next(touched) ~= nil or dirty
 	if not (poll_due or pending) then return end	-- the usual frame: nothing to do
 	now_g = util.game_secs()

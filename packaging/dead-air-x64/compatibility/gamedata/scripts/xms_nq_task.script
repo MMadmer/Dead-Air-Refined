@@ -179,9 +179,24 @@ function set_target(ctx, name, target)
 	local tid = task_id(ctx.uid, name)
 	local t = get_task(a, tid, true)
 	if not (t) then error("task.set_target: task '" .. tostring(name) .. "' is not active in the PDA") end
+	local spot, blink = spot_of(d)
+	-- No target at all clears the marker: a stage that only says "go find one" has
+	-- nowhere to point, and vanilla tasks without a map spot are ordinary. An
+	-- unresolvable target is still an error - that is an authoring mistake, not a
+	-- request to hide the marker.
+	if (target == nil) then
+		local prev = nil
+		pcall(function() prev = t:get_map_object_id() end)
+		t:remove_map_locations(false)
+		if (prev) then
+			pcall(level.map_remove_object_spot, prev, blink)
+			pcall(level.map_remove_object_spot, prev, spot)
+		end
+		send_news("updated", t)
+		return
+	end
 	local id = target_object_id(ctx, name, target)
 	if not (id) then error("task.set_target: target not found") end
-	local spot, blink = spot_of(d)
 	t:remove_map_locations(false)
 	t:change_map_location(spot, id)
 	pcall(level.map_add_object_spot, id, blink, "")

@@ -36,11 +36,12 @@ since  = 1
 [nq.trigger.when]
 group  = triggers
 title  = Когда выполнены условия
-desc   = Срабатывает на восходящем фронте условий ноды (cond). repeat перевзводит после того как условия снова ложны, cooldown ограничивает частоту
+desc   = Срабатывает на восходящем фронте условий ноды (cond). repeat перевзводит после того как условия снова ложны, cooldown ограничивает частоту, check_every — как часто проверять условия (секунды. 0 — каждый кадр)
 use    = trigger
-params   = repeat, cooldown
+params   = repeat, cooldown, check_every
 repeat   = bool, default=false
 cooldown = duration
+check_every = float, default=0.25, min=0
 pins   = next
 wait   = false
 once   = false
@@ -107,7 +108,7 @@ since  = 1
 [nq.objective.fetch]
 group  = objective
 title  = Добыть предмет
-desc   = Ждёт, пока в инвентаре игрока будет нужное количество предметов секции; count — штуки предметов: для патронов это коробки, а не патроны
+desc   = Ждёт, пока в инвентаре игрока будет нужное количество предметов секции. count — штуки предметов: для патронов это коробки, а не патроны
 use    = main
 params  = section, count
 section = item_section, required
@@ -242,7 +243,7 @@ since  = 1
 [nq.item.give]
 group  = items
 title  = Выдать предмет
-desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением; count — штуки предметов: для патронов это коробки, а не патроны
+desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением. count — штуки предметов: для патронов это коробки, а не патроны
 use    = extra
 params  = section, count
 section = item_section, required
@@ -253,7 +254,7 @@ since  = 1
 [nq.item.take]
 group  = items
 title  = Забрать предмет
-desc   = Забирает у игрока предметы секции. count = all забирает все; count — штуки предметов: для патронов это коробки, а не патроны
+desc   = Забирает у игрока предметы секции. count = all забирает все. count — штуки предметов: для патронов это коробки, а не патроны
 use    = extra
 params  = section, count
 section = item_section, required
@@ -401,11 +402,11 @@ since  = 1
 [nq.task.set_target]
 group  = tasks
 title  = Цель задания
-desc   = Переставляет метку задания на цель
+desc   = Переставляет метку задания на цель. без target — снимает метку совсем
 use    = extra
 params = task, target
 task   = task_id, required
-target = target_ref, required
+target = target_ref
 impl   = core
 since  = 1
 
@@ -613,7 +614,7 @@ since  = 1
 [nq.has_item]
 group  = cond_state
 title  = Есть предмет
-desc   = У игрока не меньше count предметов секции; count — штуки предметов: для патронов это коробки, а не патроны
+desc   = У игрока не меньше count предметов секции. count — штуки предметов: для патронов это коробки, а не патроны
 use    = cond
 params  = section, count
 section = item_section, required
@@ -774,7 +775,7 @@ since  = 1
 [nq.elapsed]
 group  = cond_world
 title  = Прошло времени
-desc   = С момента активации квеста (from=quest) или входа в ноду (from=node) прошло не меньше duration; если у указанной node нет живого токена — условие ложно
+desc   = С момента активации квеста (from=quest) или входа в ноду (from=node) прошло не меньше duration. если у указанной node нет живого токена — условие ложно
 use    = cond
 params   = from, node, duration
 from     = enum, default=quest, enum=quest|node
