@@ -7,7 +7,9 @@
 --            on_exit);  cancel(ctx) (token removed without completing);  save(ctx) -> w;
 --            load(ctx, w);  events = {"name", ...};  subscribe(ctx) -> {"name", ...};
 --            wants_poll(ctx) -> bool
---   trigger: arm(ctx, existed) -> pin|nil (fire at once), poll/on_event as above
+--   trigger: arm(ctx, existed) -> pin|nil (fire at once), poll/on_event as above, plus a second
+--            return: `pin, true` routes the pin WITHOUT firing the trigger (no `fired`, no
+--            `once`). ctx.trig.owe = pin keeps the node polled while a soft pin is still owed.
 --   extra:   run(ctx, params)
 --   cond:    test(ctx, params[, evt]) -> bool   (event kinds get the matching evt)
 -- Kinds keep only plain data in ctx.w (persisted with the token) and ctx.trig (triggers).
@@ -170,26 +172,41 @@ local function when_repeats(ctx)
 	return ctx.params ~= nil and ctx.params["repeat"] == true
 end
 
+-- The falling edge is only owed when the author wired `off`: an unconnected pin must not keep the
+-- trigger polled (nor its quest alive) after it fired.
+local function when_off_pin(ctx)
+	local edges = ctx.node.out and ctx.node.out.off
+	if (edges and #edges > 0) then return "off" end
+	return nil
+end
+
 K["trigger.when"] = {
 	arm = function(ctx, existed)
-		-- arming counts as "false": a true condition fires on the first poll (existing state kept)
+		-- arming counts as "false": a true condition fires on the first poll (existing state kept).
+		-- Nothing is owed yet, so a condition that is never true produces no `off` either.
 		if (ctx.trig and not existed) then ctx.trig.last = false end
 		return nil
 	end,
 	-- Only a cond list made entirely of event kinds can skip the poll: anything else (a state cond,
-	-- or an `any` mixing the two) may become true with no event to wake it up.
-	wants_poll = function(ctx) return not ctx.node.all_events end,
+	-- or an `any` mixing the two) may become true with no event to wake it up. A wired `off` needs
+	-- the poll in any case - no event reports a condition that stopped holding.
+	wants_poll = function(ctx) return (not ctx.node.all_events) or when_off_pin(ctx) ~= nil end,
 	poll = function(ctx)
 		local trig = ctx.trig
 		local v = core.eval_conds(ctx, ctx.node.cond, nil)
 		if not (v) then
-			-- falling edge: re-arm only for repeat triggers, otherwise stay latched forever
-			if (trig and trig.last and when_repeats(ctx)) then trig.last = false core.mark_dirty() end
+			if not (trig) then return nil end
+			-- falling edge: the `off` owed by the last rising edge goes out exactly once, and
+			-- re-arming happens only for repeat triggers (a one-shot one stays latched forever)
+			local off = trig.owe
+			if (off) then trig.owe = nil core.mark_dirty() end
+			if (trig.last and when_repeats(ctx)) then trig.last = false core.mark_dirty() end
+			if (off) then return off, true end	-- soft: routes the pin, does not fire the trigger
 			return nil
 		end
 		if (trig and trig.last) then return nil end
 		if not (when_cooldown_ok(ctx)) then return nil end
-		if (trig) then trig.last = true end
+		if (trig) then trig.last = true trig.owe = when_off_pin(ctx) end
 		when_set_cooldown(ctx)
 		core.mark_dirty()
 		return "next"
@@ -200,8 +217,9 @@ K["trigger.when"] = {
 		if not (core.eval_conds(ctx, ctx.node.cond, evt)) then return nil end
 		if not (when_cooldown_ok(ctx)) then return nil end
 		-- an event cond is true only for this instant, so the composite falls back to false
-		-- right away: repeat triggers re-arm here, one-shot ones latch.
-		if (trig) then trig.last = not when_repeats(ctx) end
+		-- right away: repeat triggers re-arm here, one-shot ones latch, and a wired `off`
+		-- follows on the next poll for the very same reason.
+		if (trig) then trig.last = not when_repeats(ctx) trig.owe = when_off_pin(ctx) end
 		when_set_cooldown(ctx)
 		core.mark_dirty()
 		return "next"

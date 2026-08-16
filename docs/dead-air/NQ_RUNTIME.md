@@ -206,6 +206,10 @@ return {
   trigger is still armed — that case is recorded as `completed` with a log line.
   A quest whose `trigger.when` has `["repeat"] = true` therefore stays active
   forever until an explicit `flow.end`; that is how a background quest is built.
+  A trigger that still owes a falling edge (`trigger.when`'s `off`, §5.1) counts
+  as armed for this check: the quest has work left, and it ends on the check
+  right after that edge goes out. An explicit `flow.end` disarms everything as
+  usual — a pending `off` is dropped, not delivered.
 - `flow.end` with `restart = true` finishes the quest, then activates it again:
   tokens, `done`, `fired`, `joins`, `timers` and `trig` state are dropped and
   `vars` go back to their defaults, while `refs` and PDA task states survive.
@@ -394,7 +398,7 @@ trigger, `run` for extra, `test` for cond).
 | Field | Position | Signature and meaning |
 |---|---|---|
 | `begin(ctx)` | main | Entry point. Return `{ pin = "next" }` to complete at once, `"wait"` to keep the token, or `{ finish = { status = "completed"\|"failed", restart = <bool> } }` to end the quest. Anything else completes the node with no pin (the branch stops). |
-| `poll(ctx)` | main, trigger | Called at most every 250 ms while the token waits / the trigger is armed. Return a pin name to complete (or, for a trigger, to fire); `nil` to keep waiting. `ctx.dt` is the seconds since the previous poll. |
+| `poll(ctx)` | main, trigger | Called at most every 250 ms while the token waits / the trigger is armed. Return a pin name to complete (or, for a trigger, to fire); `nil` to keep waiting. `ctx.dt` is the seconds since the previous poll. A trigger may return a second value, `pin, true`: the pin is routed **without** firing the trigger (no `fired`, no `once`) — that is how `trigger.when` delivers `off`. |
 | `on_event(ctx, evt)` | main, trigger | Called for every event the node is subscribed to. Same return contract as `poll`. |
 | `finish(ctx, pin, external)` | main | Called on **every** completion, before `on_exit` runs. `external` is true when the completion was queued from outside the kind — a console `nq fire`, or a `once` `dialog.topic` passed by its leaf phrase. Only called if `begin` returned `"wait"`. |
 | `cancel(ctx)` | main | Called when the token is removed without completing (quest finished/reset, `nq jump`). Only called if `begin` returned `"wait"`. |
@@ -429,7 +433,10 @@ trigger, `run` for extra, `test` for cond).
 
 Anything a kind puts into `ctx.w` or `ctx.trig` must be plain data
 (booleans, numbers, strings, nested tables of those): it is serialized into the
-save blob.
+save blob. One key of `ctx.trig` belongs to the core: `ctx.trig.owe` holds the
+name of a pin the trigger still owes. While it is set, the trigger keeps being
+polled and counts as armed for implicit completion even though it has spent its
+firings; the kind clears it when it finally returns that pin as a soft one.
 
 ---
 
@@ -446,7 +453,31 @@ is active. An edge may never point at a trigger (`E007`).
 | Kind | Params | Pins | `once` default | What it does |
 |---|---|---|---|---|
 | `trigger.start` | — | `next` | `true` | Fires once, the moment the quest is activated. |
-| `trigger.when` | `repeat: bool = false`, `cooldown: duration` | `next` | `false` | Fires on the rising edge of the node's `cond` list. Arming counts as "false", so conditions that are already true fire it on the first poll. Without `repeat` it fires once per activation; with `repeat` it re-arms after the conditions go false again, no more often than `cooldown`. |
+| `trigger.when` | `repeat: bool = false`, `cooldown: duration` | `next`, `off` | `false` | `next` fires on the rising edge of the node's `cond` list. Arming counts as "false", so conditions that are already true fire it on the first poll. Without `repeat` it fires once per activation; with `repeat` it re-arms after the conditions go false again, no more often than `cooldown`. `off` fires on the **falling** edge — see below. |
+
+`off` is the edge the other way: the conditions were true, and they are not any
+more. It is the pin for undoing what `next` did (clearing a task target, taking
+a map spot back down), and it obeys four rules:
+
+- **At most one `off` per `next`.** An edge is owed only once the rising edge has
+  actually gone out, so a condition that was never true produces no `off` — not
+  at activation, not ever.
+- **It is not a second firing.** The pin routes its edge without counting in
+  `fired`, without marking a `once` node done and without running the trigger's
+  own `on_enter`/`on_exit` actions again, so a trigger without `repeat` still
+  delivers its `off` after its single firing. `cooldown` does not apply — put
+  what the falling edge should do on the node wired to the pin.
+- **A wired `off` keeps the trigger alive.** A spent one-shot trigger normally
+  stops being polled, and with nothing else left the quest completes implicitly
+  (§3.1). While an `off` is owed the trigger stays polled and the quest stays
+  active — it ends on the check right after the falling edge goes out. An `off`
+  pin with nothing wired to it costs nothing and changes nothing.
+- **With an event condition it lands on the next poll.** An `event.*` condition
+  is true only for the instant of its event, so the composite is false again
+  immediately. Wire `off` to state conditions.
+
+The owed edge is part of the trigger's persisted state: it survives a save, and
+a save written before this pin existed simply owes nothing.
 
 Conditions live in the node's `cond`, not in `params`. When the list contains an
 event condition (`event.*`) the trigger stops polling and is evaluated purely on

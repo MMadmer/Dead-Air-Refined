@@ -36,13 +36,13 @@ since  = 1
 [nq.trigger.when]
 group  = triggers
 title  =  огда выполнены услови€
-desc   = —рабатывает на восход€щем фронте условий ноды (cond). repeat перевзводит после того как услови€ снова ложны, cooldown ограничивает частоту, check_every Ч как часто провер€ть услови€ (секунды. 0 Ч каждый кадр)
+desc   = —рабатывает на восход€щем фронте условий ноды (cond). repeat перевзводит после того как услови€ снова ложны, cooldown ограничивает частоту, check_every Ч как часто провер€ть услови€ (секунды. 0 Ч каждый кадр). ѕин off даЄт нисход€щий фронт Ч по одному разу на каждое срабатывание next, когда услови€ перестали выполн€тьс€ (например чтобы сн€ть метку). ѕока off не выдан, квест не завершаетс€ сам. ЌеподключЄнный off ничего не мен€ет.
 use    = trigger
 params   = repeat, cooldown, check_every
 repeat   = bool, default=false
 cooldown = duration
 check_every = float, default=0.25, min=0
-pins   = next
+pins   = next, off
 wait   = false
 once   = false
 impl   = core

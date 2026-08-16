@@ -437,7 +437,18 @@ function Test-PhaseLog {
     foreach ($line in $failLines) { $problems.Add("check failed: $($line.Trim())") }
 
     $done = @($nqqa | Where-Object { $_ -match 'NQQA: DONE ' }) | Select-Object -Last 1
-    if (-not $done) { $problems.Add('the probe never reached its DONE line') }
+    if (-not $done) {
+        # The QA root deliberately carries only the QA module, so a save written in a
+        # session that had other modules installed references content this root does
+        # not have and the engine dies before the probe says anything. Name that
+        # instead of reporting a silent probe.
+        $missing = @($lines | Where-Object { $_ -match "Can't find model file|Can't find (texture|sound)" }) | Select-Object -Last 1
+        if ($missing) {
+            $problems.Add(("the save needs content the QA root does not carry ({0}) - it was written with another " +
+                "module installed. Pass -SaveName for a save made without third-party modules.") -f $missing.Trim())
+        }
+        else { $problems.Add('the probe never reached its DONE line') }
+    }
     elseif ($done -match 'failed=(\d+)') { if ([int]$Matches[1] -gt 0) { $problems.Add("probe reports $($Matches[1]) failed check(s)") } }
 
     $fatal = @($lines | Where-Object { $_ -match $fatalPattern })

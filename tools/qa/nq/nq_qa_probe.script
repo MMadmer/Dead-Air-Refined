@@ -1138,6 +1138,18 @@ local BUILDERS = {
 				if (wse and a) then dist = string.format("%.0f", a:position():distance_to(wse.position)) end
 			end)
 			info("%s: id=%s online=%s server=%s distance=%s", WOLF, tostring(wid), tostring(wgo ~= nil), tostring(wse ~= nil), dist)
+			-- Which spelling of a story id actually resolves: the picker offers what the
+			-- configs declare, the registry answers for what the spawn placed.
+			for _, sid in ipairs({ "esc_m_trader", "esc_2_12_stalker_trader", "esc_2_12_stalker_wolf" }) do
+				local rid
+				pcall(function() rid = xms_nq_util.id_by_story(sid) end)
+				local nm
+				pcall(function()
+					local se = rid and alife():object(rid)
+					nm = se and se:name()
+				end)
+				info("story '%s' -> id=%s name=%s", sid, tostring(rid), tostring(nm))
+			end
 			for _, sm in ipairs({ "esc_smart_terrain_2_12", "esc_smart_terrain_3_16" }) do
 				local s
 				pcall(function() s = xms_nq_util.smart_by_name(sm) end)

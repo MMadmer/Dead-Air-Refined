@@ -588,6 +588,20 @@ local function trigger_armed(q, qs, node)
 	return (qs.fired[node.id] or 0) == 0
 end
 
+-- A pin the trigger still owes (trigger.when's falling `off`): the kind parks the pin name in
+-- its own state and the node keeps being polled until it comes back, even though the trigger
+-- itself is spent. Kinds only owe a pin the author actually wired, so a trigger nobody watches
+-- is torn down exactly as before.
+local function trigger_owes(qs, node)
+	local t = qs.trig and qs.trig[node.id]
+	return t and t.owe or nil
+end
+
+local function trigger_live(q, qs, node)
+	if (trigger_armed(q, qs, node)) then return true end
+	return qs.status == "active" and trigger_owes(qs, node) ~= nil
+end
+
 local function fire_trigger(uid, node, pin)
 	local q, qs = Q[uid], quest_state(uid)
 	if not (q and qs and qs.status == "active") then return end
@@ -599,10 +613,29 @@ local function fire_trigger(uid, node, pin)
 	local ctx = make_ctx(uid, node.id)
 	run_actions(ctx, node.on_enter, "enter")
 	run_actions(ctx, node.on_exit, "exit")
-	if not (trigger_armed(q, qs, node)) then unwire(uid, node.id) end
+	if not (trigger_live(q, qs, node)) then unwire(uid, node.id) end
 	if (pin and node.out[pin]) then
 		for _, tid in ipairs(node.out[pin]) do enqueue_enter(uid, tid, node.id .. "/" .. pin) end
 	end
+end
+
+-- Routing for whatever poll/on_event returned. A soft pin (`pin, true`) only carries its edge:
+-- it is not a firing of the trigger, so it neither counts in `fired` nor marks a `once` node
+-- done - which is what a falling edge is, the trigger having fired already.
+local function trigger_pin(uid, node, pin, soft)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs and qs.status == "active") then return end
+	if not (soft) then
+		if (trigger_armed(q, qs, node)) then fire_trigger(uid, node, pin) end
+		return
+	end
+	dirty = true
+	touched[uid] = true
+	log_debug("%s: trigger %s ~> %s", uid, node.id, tostring(pin))
+	if (node.out[pin]) then
+		for _, tid in ipairs(node.out[pin]) do enqueue_enter(uid, tid, node.id .. "/" .. pin) end
+	end
+	if not (trigger_live(q, qs, node)) then unwire(uid, node.id) end
 end
 
 -- Arms every trigger of an active quest; trigger.start style kinds fire from arm().
@@ -627,8 +660,10 @@ local function arm_triggers(uid)
 					if (pin) then
 						fire_trigger(uid, node, pin)
 					end
-					if (trigger_armed(q, qs, node)) then wire(uid, node.id) end
+					if (trigger_live(q, qs, node)) then wire(uid, node.id) end
 				end
+			elseif (trigger_live(q, qs, node)) then
+				wire(uid, node.id)	-- spent, but a falling edge is still owed (survives a load)
 			else
 				unwire(uid, node.id)
 			end
@@ -774,9 +809,9 @@ local function dispatch_event(evt)
 				if (node.is_trigger) then
 					if (trigger_armed(q, qs, node)) then
 						local ctx = make_ctx(e.uid, e.node)
-						local ok, pin = pcall(impl.on_event, ctx, evt)
+						local ok, pin, soft = pcall(impl.on_event, ctx, evt)
 						if not (ok) then node_error(e.uid, e.node, pin)
-						elseif (pin) then fire_trigger(e.uid, node, pin) end
+						elseif (pin) then trigger_pin(e.uid, node, pin, soft) end
 					end
 				else
 					local tok = qs.tokens[e.node]
@@ -803,13 +838,13 @@ local function poll_entry(e, dt)
 	end
 	local impl = kind_impl(node.kind)
 	if (node.is_trigger) then
-		if not (trigger_armed(q, qs, node)) then unwire(e.uid, e.node) return end
+		if not (trigger_live(q, qs, node)) then unwire(e.uid, e.node) return end
 		if not (impl and impl.poll) then return end
 		local ctx = make_ctx(e.uid, e.node)
 		ctx.dt = dt
-		local ok, pin = pcall(impl.poll, ctx)
+		local ok, pin, soft = pcall(impl.poll, ctx)
 		if not (ok) then node_error(e.uid, e.node, pin)
-		elseif (pin) then fire_trigger(e.uid, node, pin) end
+		elseif (pin) then trigger_pin(e.uid, node, pin, soft) end
 		return
 	end
 	local tok = qs.tokens[e.node]
@@ -862,9 +897,11 @@ local function check_implicit_completion()
 		touched[uid] = nil
 		local q, qs = Q[uid], quest_state(uid)
 		if (q and qs and qs.status == "active" and next(qs.tokens) == nil) then
+			-- a trigger that only owes its falling edge counts too: the quest still has work
+			-- to do, and it ends on the check right after that edge goes out
 			local armed = false
 			for _, node in ipairs(q.nodes) do
-				if (node.is_trigger and trigger_armed(q, qs, node)) then armed = true break end
+				if (node.is_trigger and trigger_live(q, qs, node)) then armed = true break end
 			end
 			if not (armed) then
 				qs.status = "completed"

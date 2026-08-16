@@ -1132,6 +1132,112 @@ check(mock.count_items(BAD) == NBOX, "unreadable box_size falls back to count ob
 check(mock.relocated("in", BAD) ~= nil, "unreadable box_size still reported a transfer (give_items returned > 0)")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (v) trigger.when "off"
+-- The falling edge is a second pin, not a second firing: it routes without counting in `fired`,
+-- it is owed at most once per rising edge, and only a wired `off` keeps a spent trigger polled
+-- (and its quest active). The owed edge is plain state in qs.trig, so it rides through a save -
+-- and a save written before all this simply owes nothing.
+section("(v) trigger.when off: falling edge, once per rising edge, only when wired, saved")
+setup()
+local function off_quest(id, params, cond, out, with_gone)
+	local nodes = "{ id = \"t\", kind = \"trigger.when\", params = " .. params .. ", cond = " .. cond .. ", out = " .. out .. " },\n" ..
+		"{ id = \"on\", kind = \"flow.step\", on_enter = { { kind = \"var.add\", params = { name = \"n\", delta = 1 } } } },\n"
+	if (with_gone) then
+		nodes = nodes .. "{ id = \"gone\", kind = \"flow.step\", on_enter = { { kind = \"var.add\", params = { name = \"g\", delta = 1 } } } },\n"
+	end
+	return "return { nq = 1, id = \"" .. id .. "\", vars = { n = 0, g = 0 }, nodes = {\n" .. nodes .. "} }"
+end
+local C_BREAD = [[{ { kind = "has_item", params = { section = "bread" } } }]]
+local C_PM = [[{ { kind = "has_item", params = { section = "wpn_pm" } } }]]
+local C_BAND = [[{ { kind = "has_item", params = { section = "bandage" } } }]]
+local C_NEVER = [[{ { kind = "has_item", params = { section = "vodka" } } }]]
+local OUT_BOTH, OUT_NEXT = [[{ next = "on", off = "gone" }]], [[{ next = "on" }]]
+local REP = [[{ ["repeat"] = true }]]
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/off_once.nqasset"] = off_quest("off_once", "{}", C_BREAD, OUT_BOTH, true)
+mock.overrides["mod_a/off_rep.nqasset"] = off_quest("off_rep", REP, C_BREAD, OUT_BOTH, true)
+mock.overrides["mod_a/off_plain.nqasset"] = off_quest("off_plain", "{}", C_BREAD, OUT_NEXT, false)
+mock.overrides["mod_a/off_never.nqasset"] = off_quest("off_never", "{}", C_NEVER, OUT_BOTH, true)
+mock.overrides["mod_a/off_pre.nqasset"] = off_quest("off_pre", "{}", C_PM, OUT_BOTH, true)
+mock.overrides["mod_a/off_old.nqasset"] = off_quest("off_old", "{}", C_BAND, OUT_BOTH, true)
+local pm = mock.add_item("wpn_pm")		-- already true when the triggers are armed
+mock.first_update()
+core = xms_nq
+local function V(id, v) local q = core.quest_state("mod_a." .. id) return q and q.vars[v] end
+local function owe(id) local q = core.quest_state("mod_a." .. id) return q and q.trig.t and q.trig.t.owe end
+local function st(id) return core.quest_status("mod_a." .. id) end
+
+check(has(core.quest_def("mod_a.off_once").node_by_id.t.spec.pins, "off"), "the catalog declares the off pin")
+local off_errs = 0
+for _, p in ipairs(core.quest_def("mod_a.off_once").problems) do
+	if (p.severity == "E") then off_errs = off_errs + 1 end
+end
+check(off_errs == 0, "wiring off is not an error for the loader")
+mock.ticks(2)
+check(V("off_pre", "n") == 1 and V("off_pre", "g") == 0, "a condition already true at arm fires next and no spurious off")
+check(owe("off_pre") == "off", "the rising edge owes the falling one")
+check(V("off_never", "n") == 0 and V("off_never", "g") == 0 and owe("off_never") == nil, "a condition that was never true owes nothing")
+
+-- rising edge
+local loaf = mock.add_item("bread")
+mock.ticks(2)
+check(V("off_once", "n") == 1 and V("off_rep", "n") == 1 and V("off_plain", "n") == 1, "rising edge: next on all three")
+check(V("off_once", "g") == 0 and V("off_rep", "g") == 0, "no off while the condition holds")
+check(st("off_plain") == "completed", "an unwired off changes nothing: the spent one-shot quest completes as before")
+check(st("off_once") == "active" and owe("off_once") == "off", "a wired off keeps the spent trigger and its quest alive")
+mock.ticks(4)
+check(V("off_once", "g") == 0 and V("off_rep", "g") == 0, "still no off several polls later")
+
+-- falling edge
+mock.remove_item(loaf)
+mock.ticks(2)
+check(V("off_once", "g") == 1 and V("off_rep", "g") == 1, "falling edge: off fires, one-shot trigger included")
+check(V("off_once", "n") == 1 and V("off_rep", "n") == 1, "the falling edge is not a second firing")
+local qso = core.quest_state("mod_a.off_once")
+check(qso.fired.t == 1 and qso.done.t == nil, "off did not count in fired and did not mark the node done")
+check(owe("off_once") == nil, "nothing is owed once the off went out")
+mock.ticks(4)
+check(V("off_once", "g") == 1 and V("off_rep", "g") == 1, "off fires at most once per rising edge")
+check(st("off_once") == "completed", "the quest ends on the check right after its last edge")
+
+-- the repeat trigger goes round again, the finished one stays put
+local loaf2 = mock.add_item("bread")
+mock.ticks(2)
+check(V("off_rep", "n") == 2 and V("off_rep", "g") == 1, "repeat trigger: second rising edge")
+check(V("off_once", "n") == 1 and V("off_once", "g") == 1, "the finished quest does not move")
+mock.remove_item(loaf2)
+mock.ticks(2)
+check(V("off_rep", "g") == 2, "repeat trigger: second falling edge")
+
+-- save / load with the edge still owed (off_pre is holding its pistol)
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+mock.ticks(1)
+check(st("off_pre") == "active" and owe("off_pre") == "off", "the owed falling edge survives a load")
+mock.remove_item(pm)
+mock.ticks(2)
+check(V("off_pre", "g") == 1 and V("off_pre", "n") == 1, "the reloaded trigger is polled again and delivers its off")
+check(st("off_pre") == "completed", "and the quest ends there")
+
+-- a save written before the off pin: the trigger is spent and owes nothing
+local band = mock.add_item("bandage")
+mock.ticks(2)
+check(V("off_old", "n") == 1 and owe("off_old") == "off", "off_old fired and owes its edge")
+core.quest_state("mod_a.off_old").trig.t.owe = nil		-- the field an older save simply does not have
+core.save_now()
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+mock.ticks(1)
+check(st("off_old") == "completed", "an older save: the spent trigger is torn down exactly as it used to be")
+mock.remove_item(band)
+mock.ticks(2)
+check(V("off_old", "g") == 0, "and no off arrives out of nowhere")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then
