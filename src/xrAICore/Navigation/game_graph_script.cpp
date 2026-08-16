@@ -11,6 +11,7 @@
 #include "game_graph.h"
 #include "AISpaceBase.hpp"
 
+#include "xrScriptEngine/script_engine.hpp"
 #include "xrScriptEngine/script_space.hpp"
 
 const CGameGraph* get_game_graph() { return &GEnv.AISpace->game_graph(); }
@@ -64,11 +65,25 @@ void CGameGraph::script_register(lua_State* luaState)
 
         def("gg_vertex_level_id", +[](u32 vertex_id)
         {
-            return GEnv.AISpace->game_graph().vertex(vertex_id)->level_id();
+            const CGameGraph& game_graph = GEnv.AISpace->game_graph();
+            if (!game_graph.valid_vertex_id(vertex_id))
+            {
+                GEnv.ScriptEngine->script_log(
+                    LuaMessageType::Error, "gg_vertex_level_id: there is no game vertex %d", vertex_id);
+                return _LEVEL_ID(-1);
+            }
+            return game_graph.vertex(vertex_id)->level_id();
         }),
         def("gg_level_id", +[](_LEVEL_ID idx)
         {
             const GameGraph::LEVEL_MAP& levels = GEnv.AISpace->game_graph().header().levels();
+            if (size_t(idx) >= levels.size())
+            {
+                GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+                    "gg_level_id: index %d is out of range, the game graph has %d level(s)", idx,
+                    u32(levels.size()));
+                return _LEVEL_ID(-1);
+            }
             return (levels.begin() + idx)->second.id();
         }),
         def("gg_levels_count", +[]()
@@ -77,7 +92,15 @@ void CGameGraph::script_register(lua_State* luaState)
         }),
         def("gg_distance", +[](u32 vid1, u32 vid2)
         {
-            const auto game_graph = GEnv.AISpace->game_graph();
+            // Reference, not a copy: CGameGraph owns an IReader and the cross table, and its
+            // destructor would free both out from under the live graph
+            const CGameGraph& game_graph = GEnv.AISpace->game_graph();
+            if (!game_graph.valid_vertex_id(vid1) || !game_graph.valid_vertex_id(vid2))
+            {
+                GEnv.ScriptEngine->script_log(
+                    LuaMessageType::Error, "gg_distance: bad game vertex pair (%d, %d)", vid1, vid2);
+                return flt_max;
+            }
             const auto p1 = game_graph.vertex(vid1)->game_point();
             const auto p2 = game_graph.vertex(vid2)->game_point();
             return p1.distance_to(p2);

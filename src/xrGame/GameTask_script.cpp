@@ -1,5 +1,7 @@
 #include "pch_script.h"
 
+#include "xrScriptEngine/script_engine.hpp"
+
 #include "GameTask.h"
 
 void CGameTask::AddObjective_script(SGameTaskObjective* O)
@@ -10,6 +12,14 @@ void CGameTask::AddObjective_script(SGameTaskObjective* O)
 
 SGameTaskObjective* CGameTask::GetObjective_script(TASK_OBJECTIVE_ID objective_id)
 {
+    // Ids come from scripts: answer nil instead of handing out an objective past the end,
+    // which the script would then write through via the setters
+    if (objective_id >= GetObjectivesCount())
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "get_objective: wrong objective id [%d], task has [%d] objectives", objective_id, GetObjectivesCount());
+        return nullptr;
+    }
     return &Objective(objective_id);
 }
 

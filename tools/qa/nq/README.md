@@ -61,7 +61,16 @@ begin mid-quest.
 * `gamedata\` = a copy of the player's loose layer overlaid with
   `packaging\dead-air-x64\compatibility\gamedata` (which carries `xms_nq*.script` and
   `configs\nq\catalog.ltx`), plus `nq_qa_probe.script` registered by appending `, nq_qa_probe` to
-  the first `script =` line of the mirrored `configs\script.ltx`;
+  the first `script =` line of the mirrored `configs\script.ltx`. The player's layer is copied
+  whole, empty directories included — those are real. The compatibility layer is copied with
+  `robocopy /S`, which leaves its empty directories behind, and `Assert-QaGameDataShape` then fails
+  the run if the mirror holds an empty directory the player's `gamedata` does not. This is not
+  housekeeping: git cannot track an empty directory and the deploy carries files, so one that
+  exists only in a working tree reaches nobody's install — yet the engine answers a missing
+  directory and an empty one differently. An empty `configs\nq\kinds` left in the packaging tree
+  is what once let a crash that killed **every** new game pass this suite, because
+  `file_list_open` answers a null vector for a directory that is not there and the old
+  `FS_file_list::Size()` dereferenced it;
 * `appdata\` with a `user.ltx` derived from the player's (`g_pause_in_background 0`, windowed
   1024x768, sound off), the seeded shader/collision caches and a copy of one save group;
 * `fsgame.ltx` copied from the install root — it resolves everything relative to `$fs_root$`;

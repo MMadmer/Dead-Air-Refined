@@ -857,6 +857,17 @@ ETaskState CScriptGameObject::GetGameTaskState(LPCSTR task_id, TASK_OBJECTIVE_ID
 void CScriptGameObject::SetGameTaskState(ETaskState state, LPCSTR task_id, TASK_OBJECTIVE_ID objective_id)
 {
     shared_str shared_name = task_id;
+
+    // Repeat the manager's own lookup just to keep a bad objective id from reaching the
+    // objectives vector, where it would be an out of bounds write. Missing task is left to
+    // the manager, it reports that case itself.
+    CGameTask* t = Level().GameTaskManager().HasGameTask(shared_name, objective_id != ROOT_TASK_OBJECTIVE);
+    if (t && objective_id >= t->GetObjectivesCount())
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error, "set_task_state: wrong objective num for task [%s]", task_id);
+        return;
+    }
+
     Level().GameTaskManager().SetTaskState(shared_name, state, objective_id);
 }
 
@@ -2157,7 +2168,7 @@ CScriptGameObject* CScriptGameObject::ItemOnBelt(u32 item_id) const
     }
 
     TIItemContainer* belt = &inventory_owner->inventory().m_belt;
-    if (belt->size() < item_id)
+    if (item_id >= belt->size())
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error, "item_on_belt: item id outside belt!");
         return nullptr;

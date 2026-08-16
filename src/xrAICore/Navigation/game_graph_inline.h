@@ -77,12 +77,21 @@ IC float CGameGraph::distance(const _GRAPH_ID tGraphID0, const _GRAPH_ID tGraphI
 IC bool CGameGraph::accessible(u32 const vertex_id) const
 {
     VERIFY(valid_vertex_id(vertex_id));
+    if (!valid_vertex_id(vertex_id))
+        return (false);
     return (m_enabled[vertex_id]);
 }
 
 IC void CGameGraph::accessible(u32 const vertex_id, bool value) const
 {
     VERIFY(valid_vertex_id(vertex_id));
+    // Scripts drive this one, and an out of range id here is a write past the bitfield
+    if (!valid_vertex_id(vertex_id))
+    {
+        Msg("! game graph: can't set accessibility of vertex %u, valid range is [0..%u)", vertex_id,
+            u32(header().vertex_count()));
+        return;
+    }
     m_enabled[vertex_id] = value;
 }
 
@@ -99,7 +108,16 @@ IC const CGameGraph::_GRAPH_ID& CGameGraph::value(u32 const /*vertex_id*/, const
 }
 
 IC const float& CGameGraph::edge_weight(const_iterator i) const { return (i->distance()); }
-IC const CGameGraph::CGameVertex* CGameGraph::vertex(u32 const vertex_id) const { return (m_nodes + vertex_id); }
+// Stale ids and the 65535 "no game vertex" sentinel reach this from savegames and scripts alike.
+// Substitute vertex 0 so the read stays inside the graph: every caller here dereferences the result.
+// Silent on purpose - shipped scripts pass the sentinel as a matter of course while an object is
+// migrating, and this is called per object per frame, so a message here is a log flood, not a clue.
+IC const CGameGraph::CGameVertex* CGameGraph::vertex(u32 const vertex_id) const
+{
+    if (!valid_vertex_id(vertex_id))
+        return (m_nodes);
+    return (m_nodes + vertex_id);
+}
 IC const u8& CGameGraph::CHeader::version() const { return (m_version); }
 IC GameGraph::_LEVEL_ID GameGraph::CHeader::level_count() const
 {

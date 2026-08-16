@@ -18,9 +18,15 @@ ICF bool CLevelGraph::valid_vertex_id(u32 id) const
     return (b);
 }
 
+// A level vertex id saved on one level and replayed on another lands anywhere; every caller
+// dereferences what comes back, so substitute vertex 0 rather than hand out a wild pointer.
 ICF CLevelGraph::CLevelVertex* CLevelGraph::vertex(const u32 vertex_id) const
 {
+    // Silent for the same reason as CGameGraph::vertex: this runs per object per frame, so a
+    // message on a stale id would bury the log instead of pointing at anything.
     VERIFY(valid_vertex_id(vertex_id));
+    if (!valid_vertex_id(vertex_id))
+        return m_nodes->begin();
     return m_nodes->begin() + vertex_id;
 }
 

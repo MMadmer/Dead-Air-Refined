@@ -24,7 +24,15 @@ LPCSTR update_path_script(CLocatorAPI* fs, LPCSTR initial, LPCSTR src)
 //Alundaio: Set flag to rescan all files in path
 void rescan_path_script(CLocatorAPI* fs, pcstr initial)
 {
-    fs->get_path(initial)->m_Flags.set(FS_Path::flNeedRescan, true);
+    // The alias comes from a script, so it can simply be wrong. The single-argument
+    // get_path asserts and then returns *end() anyway - and this used to write
+    // through that dead iterator the moment the assert was ignored. The bool
+    // overload answers the same lookup without pretending it cannot fail.
+    FS_Path* path = nullptr;
+    if (fs->get_path(initial, &path) && path)
+        path->m_Flags.set(FS_Path::flNeedRescan, true);
+    else
+        Msg("! [fs] rescan_path: unknown path alias [%s]", initial ? initial : "");
 }
 //-Alundaio
 

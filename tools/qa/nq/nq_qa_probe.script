@@ -892,7 +892,10 @@ local function build_p3()
 	step_until("d.topic_done", 30000,
 		function()
 			local qs = qstate("dialog_branching")
-			return qs ~= nil and qs.done and qs.done.meet == true and qs.tokens.kill ~= nil
+			-- done[node] holds the node's kind, not a boolean: the runtime writes
+			-- `qs.done[id] = node.kind` (xms_nq.script:575/706) and reads it back as
+			-- `~= nil` (node_done, :119). Comparing against true never matched.
+			return qs ~= nil and qs.done and qs.done.meet ~= nil and qs.tokens.kill ~= nil
 		end,
 		function()
 			local qs = qstate("dialog_branching")

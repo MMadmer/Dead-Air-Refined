@@ -346,7 +346,7 @@ void ELightAnimLibrary::RenameObject(pcstr nm0, pcstr nm1, EItemType type)
 
 struct lanim_wrapper
 {
-    CLAItem* item;
+    CLAItem* item = nullptr;
 
 public:
     lanim_wrapper(pcstr name)
@@ -357,19 +357,20 @@ public:
     void load(pcstr name)
     {
         item = LALib.FindItem(name);
+        // Loud, but ignorable: the assert names the bad anim, the guards below keep us alive
         R_ASSERT3(item, "Can't find color anim:", name);
     }
 
     u32 length() const
     {
-        VERIFY(item);
+        R_ASSERT1_CURE(item, { return 0; });
         return item->Length_ms();
     }
 
     Fcolor calculate(float T) const
     {
+        R_ASSERT1_CURE(item, { return Fcolor(0.f, 0.f, 0.f, 0.f); });
         int frame;
-        VERIFY(item);
         return Fcolor(item->CalculateRGB(T, frame));
     }
 

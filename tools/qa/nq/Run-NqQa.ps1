@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Acceptance test of the NQ quest runtime inside the real game (PROJECT_RULES.md section 8).
 
@@ -122,9 +122,15 @@ function Assert-NoTargetEngine {
 function Copy-TreeContents {
     # Merge copy: the compatibility layer is overlaid on top of an existing gamedata mirror, which
     # Copy-Item -Recurse cannot do without nesting the source directory inside the destination.
-    param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Destination)
+    # SkipEmpty (/S instead of /E) leaves empty directories behind: git cannot track one and the
+    # deploy carries files, so a directory that is empty in a working tree reaches nobody's install.
+    # Mirroring it anyway is not cosmetic - the engine answers a missing directory and an empty one
+    # differently, which is how an empty configs\nq\kinds once hid a crash from this whole suite.
+    param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Destination,
+        [switch]$SkipEmpty)
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    $output = & robocopy $Source $Destination /E /NFL /NDL /NJH /NJS /NP /R:2 /W:1
+    $recurse = if ($SkipEmpty) { '/S' } else { '/E' }
+    $output = & robocopy $Source $Destination $recurse /NFL /NDL /NJH /NJS /NP /R:2 /W:1
     if ($LASTEXITCODE -ge 8) { throw "robocopy '$Source' -> '$Destination' failed ($LASTEXITCODE): $output" }
     $global:LASTEXITCODE = 0
 }
@@ -177,13 +183,36 @@ function Update-QaRuntime {
     Write-Host "== runtime: $fromBuild of $($manifest.Count) file(s) from $BuildRoot, the rest from the install root"
 }
 
+function Assert-QaGameDataShape {
+    # The mirror is only evidence if it has the shape a player gets. The player's own gamedata is
+    # copied verbatim, empty directories included - those are real. What must never appear is an
+    # empty directory the mirror invented, because nothing downstream of a commit can produce one.
+    # Fails the run instead of letting a silent difference decide the result: an empty
+    # configs\nq\kinds is exactly what once let a guaranteed crash pass this suite.
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Reference)
+
+    $emptyIn = {
+        param($base)
+        @(Get-ChildItem -LiteralPath $base -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+            Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue) } |
+            ForEach-Object { $_.FullName.Substring($base.Length).TrimStart('\') })
+    }
+    $expected = [Collections.Generic.HashSet[string]]::new(
+        [string[]](& $emptyIn $Reference), [StringComparer]::OrdinalIgnoreCase)
+    $invented = @((& $emptyIn $Root) | Where-Object { -not $expected.Contains($_) })
+    if ($invented.Count) {
+        throw ("The mirrored gamedata invented {0} empty director{1} the player's install does not have: {2}" -f
+            $invented.Count, $(if ($invented.Count -eq 1) { 'y' } else { 'ies' }), ($invented -join ', '))
+    }
+}
+
 function Update-QaGameData {
     # The loose layer has to be a real copy: archive entries are registered under <root>\gamedata\,
     # so redirecting $game_data$ elsewhere would hide system.ltx and everything else.
     if (Test-Path -LiteralPath $qaGameData) { Remove-Item -LiteralPath $qaGameData -Recurse -Force }
     Copy-TreeContents -Source (Join-Path $GameRoot 'gamedata') -Destination $qaGameData
     # Refined's own compatibility layer carries the xms_nq*.script runtime and configs\nq\catalog.ltx.
-    Copy-TreeContents -Source $compatGameData -Destination $qaGameData
+    Copy-TreeContents -Source $compatGameData -Destination $qaGameData -SkipEmpty
 
     New-Item -ItemType Directory -Path (Join-Path $qaGameData 'scripts') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'nq_qa_probe.script') `
@@ -203,6 +232,8 @@ function Update-QaGameData {
         })
     if (-not $patched) { throw "No 'script =' line was found in the mirrored script.ltx." }
     Set-Content -LiteralPath $scriptLtxPath -Value $scriptLtx -Encoding Default
+
+    Assert-QaGameDataShape -Root $qaGameData -Reference (Join-Path $GameRoot 'gamedata')
 }
 
 function Update-QaUserLtx {
@@ -273,7 +304,10 @@ function Invoke-NqPhase {
         [Parameter(Mandatory)][string]$LoadSave,
         [string]$WriteSave = '',
         [switch]$DriveTalkUi,
-        [switch]$AllowNoNqLines
+        [switch]$AllowNoNqLines,
+        # Diagnostics this phase is designed to provoke. Everything else still fails the run:
+        # a scenario that orphans a quest on purpose must not be read as "any warning is fine".
+        [string[]]$ExpectedNqLines = @()
     )
 
     Assert-NoTargetEngine
@@ -412,7 +446,11 @@ function Test-PhaseLog {
     $nqErrors = @($lines | Where-Object { $_ -match '! \[nq\]|~ \[nq\]' })
     foreach ($line in $nqErrors) { Write-Host "   [nq diagnostic] $($line.Trim())" }
     if ($AllowNoNqLines -and $nqErrors.Count) {
-        foreach ($line in $nqErrors) { $problems.Add("unexpected NQ diagnostic: $($line.Trim())") }
+        foreach ($line in $nqErrors) {
+            $expected = $false
+            foreach ($pattern in $ExpectedNqLines) { if ($line -match $pattern) { $expected = $true; break } }
+            if (-not $expected) { $problems.Add("unexpected NQ diagnostic: $($line.Trim())") }
+        }
     }
     if ($AllowNoNqLines -and ($LogText -match 'callbacks registered')) {
         $problems.Add('NQ registered its callbacks although no quest is loaded')
@@ -687,7 +725,11 @@ function Invoke-ChangedGraph {
 function Invoke-EmptyModule {
     Assert-SaveExists -Save $SAVE_MID -Producer 'Main'
     Set-QaModule -Variant Empty
-    Invoke-NqPhase -Name 'EmptyModule' -Phase 'p8' -LoadSave $SAVE_MID -AllowNoNqLines | Out-Null
+    # The save is mid-quest and the module loses its quests under it, so the runtime is supposed to
+    # fail the orphaned PDA task and say so (xms_nq_task.script:230-236). That one line is the
+    # scenario working, not a defect; any other NQ diagnostic still fails the phase.
+    Invoke-NqPhase -Name 'EmptyModule' -Phase 'p8' -LoadSave $SAVE_MID -AllowNoNqLines `
+        -ExpectedNqLines @('quest is no longer installed, its PDA task \S+ was closed') | Out-Null
     Set-QaModule -Variant Full
 }
 

@@ -61,14 +61,16 @@ void CScriptTokenList::clear()
 int CScriptTokenList::id(pcstr name)
 {
     iterator I = token(name);
-    VERIFY(I != m_token_list.end());
+    // A miss answers the {nullptr,-1} terminator the list always keeps, never *end()
+    R_ASSERT1_CURE(I != m_token_list.end(), { return -1; });
     return (*I).id;
 }
 
 pcstr CScriptTokenList::name(int id)
 {
     iterator I = token(id);
-    VERIFY(I != m_token_list.end());
+    // nullptr reaches Lua as nil; a real token can never be nameless (see the predicates)
+    R_ASSERT1_CURE(I != m_token_list.end(), { return nullptr; });
     return (*I).name;
 }
 

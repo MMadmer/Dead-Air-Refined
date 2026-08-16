@@ -51,14 +51,26 @@ const Fvector& CPatrolPathParams::point(u32 index) const
 
 u32 CPatrolPathParams::level_vertex_id(u32 index) const
 {
-    VERIFY(m_path->vertex(index));
-    return (m_path->vertex(index)->data().level_vertex_id());
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't get level vertex id for patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return (u32(-1));
+    }
+    return (vertex->data().level_vertex_id());
 }
 
 GameGraph::_GRAPH_ID CPatrolPathParams::game_vertex_id(u32 index) const
 {
-    VERIFY(m_path->vertex(index));
-    return (m_path->vertex(index)->data().game_vertex_id());
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't get game vertex id for patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return (GameGraph::_GRAPH_ID(-1));
+    }
+    return (vertex->data().game_vertex_id());
 }
 
 u32 CPatrolPathParams::point(LPCSTR name) const
@@ -68,11 +80,24 @@ u32 CPatrolPathParams::point(LPCSTR name) const
     return (u32(-1));
 }
 
-u32 CPatrolPathParams::point(const Fvector& point) const { return (m_path->point(point)->vertex_id()); }
+// No point matches the position on an empty path: answer like the name overload above does
+u32 CPatrolPathParams::point(const Fvector& point) const
+{
+    if (const CPatrolPath::CVertex* vertex = m_path ? m_path->point(point) : nullptr)
+        return (vertex->vertex_id());
+    return (u32(-1));
+}
+
 bool CPatrolPathParams::flag(u32 index, u8 flag_index) const
 {
-    VERIFY(m_path->vertex(index));
-    return (!!(m_path->vertex(index)->data().flags() & (u32(1) << flag_index)));
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't get flag of patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return (false);
+    }
+    return (!!(vertex->data().flags() & (u32(1) << flag_index)));
 }
 
 Flags32 CPatrolPathParams::flags(u32 index) const
@@ -89,13 +114,24 @@ Flags32 CPatrolPathParams::flags(u32 index) const
 
 LPCSTR CPatrolPathParams::name(u32 index) const
 {
-    VERIFY(m_path->vertex(index));
-    return m_path->vertex(index)->data().name().c_str();
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't get name of patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return ("");
+    }
+    return vertex->data().name().c_str();
 }
 
 bool CPatrolPathParams::terminal(u32 index) const
 {
-    VERIFY(m_path->vertex(index));
-
-    return (m_path->vertex(index)->edges().size() == 0);
+    const CPatrolPath::CVertex* vertex = m_path ? m_path->vertex(index) : nullptr;
+    if (!vertex)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "Can't check terminality of patrol point number %d in the patrol way %s", index, m_path_name.c_str());
+        return (false);
+    }
+    return (vertex->edges().size() == 0);
 }
