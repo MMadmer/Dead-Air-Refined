@@ -1234,7 +1234,7 @@ function reload()
 	ext_call("on_reload_begin")
 	apply_scan(all, false)
 	ext_call("on_init")
-	if (#Q_ORDER > 0) then register_callbacks() end
+	if (#Q_ORDER > 0) then register_callbacks() else unregister_callbacks() end
 	drain()
 	save_now()
 	util.info("reload: %d quest(s), %d invalid", #Q_ORDER, #INVALID)

@@ -284,6 +284,14 @@ function actor_mt:run_talk_dialog(npc, disable_break)
 	mock.talk_open(npc)
 end
 -- CGameTaskManager: HasGameTask(id, only_inprocess) / GiveGameTaskToActor / SetTaskState
+-- The native manager immediately forwards new/completed states to actor_on_task_callback.
+-- Dynamic NQ tasks are absent from task_manager, so failures are deliberately silent here.
+local function task_state_changed(t, state)
+	if (state ~= task.fail) then
+		news_manager.send_task(db.actor, state == task.completed and "complete" or "new", t)
+	end
+end
+
 function actor_mt:get_task(id, only_inprocess)
 	for _, t in ipairs(self._tasks) do
 		if (t._id == id and (not only_inprocess or t._state == 1)) then return t end
@@ -295,6 +303,7 @@ function actor_mt:give_task(t, dt, check_existing, ttl)
 	t._state = 1
 	self._tasks[#self._tasks + 1] = t
 	mock.task_events[#mock.task_events + 1] = { "given", t:get_id() }
+	task_state_changed(t, task.in_progress)
 end
 function actor_mt:set_task_state(state, id)
 	local t = self:get_task(id, false)
@@ -302,6 +311,7 @@ function actor_mt:set_task_state(state, id)
 	t._state = state
 	if (state == 0 or state == 2) then t:remove_map_locations(false) end
 	mock.task_events[#mock.task_events + 1] = { state == 2 and "completed" or state == 0 and "failed" or tostring(state), id }
+	task_state_changed(t, state)
 end
 function actor_mt:get_task_state(id)
 	local t = self:get_task(id, false)

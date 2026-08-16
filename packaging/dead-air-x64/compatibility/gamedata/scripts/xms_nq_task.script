@@ -96,8 +96,8 @@ local function target_object_id(ctx, name, target)
 end
 
 -- ---------------------------------------------------------------------------- operations
--- Creates (or refreshes) the PDA task from the declaration. `quiet` skips the news (reconcile).
-function give(ctx, name, quiet)
+-- Creates or refreshes the PDA task from the declaration.
+function give(ctx, name)
 	local d = decl(ctx, name)
 	local a = actor()
 	if not (a) then error("task.give: no actor") end
@@ -131,7 +131,6 @@ function give(ctx, name, quiet)
 	end
 	if (target) then pcall(level.map_add_object_spot, target, blink, "") end
 	set_status(ctx, name, "active")
-	if (not existing and not quiet) then send_news("new", t) end
 	return t
 end
 
@@ -147,7 +146,8 @@ local function finish(ctx, name, status)
 		util.warn("%s: task %s is not in the PDA, state '%s' recorded only", ctx.uid, name, status)
 	end
 	set_status(ctx, name, status)
-	if (t) then send_news((status == "completed") and "complete" or "fail", t) end
+	-- The actor callback announces completion. Dynamic tasks bypass task_manager, so NQ owns failure news.
+	if (t and status == "failed") then send_news("fail", t) end
 end
 
 function complete(ctx, name) finish(ctx, name, "completed") end
@@ -269,7 +269,7 @@ function on_init()
 					local tid = task_id(uid, name)
 					if not (get_task(a, tid, true)) then
 						if (q.tasks[name]) then
-							local ok, e = pcall(give, core.make_ctx(uid, nil), name, true)
+							local ok, e = pcall(give, core.make_ctx(uid, nil), name)
 							if (ok) then
 								util.warn("%s: task %s was missing from the PDA, recreated", uid, name)
 							else

@@ -309,6 +309,40 @@ local function declarative_problem(src)
 end
 
 -- Returns table or nil, message.
+local function pack_results(...)
+	return { n = select("#", ...), ... }
+end
+
+local function plain_value(value, depth, walk)
+	walk.steps = walk.steps + 1
+	if (walk.steps > 200000) then return nil, "table too large" end
+	local tv = type(value)
+	if (tv == "nil" or tv == "boolean" or tv == "number" or tv == "string") then return value end
+	if (tv ~= "table") then return nil, "value is not plain data (function/userdata)" end
+	if (depth > 48) then return nil, "table nesting too deep (self reference?)" end
+
+	-- Match the editor walker: numeric keys are a sorted list, so sparse literals keep every entry.
+	local numeric, strings = {}, {}
+	for key in pairs(value) do
+		if (type(key) == "number") then numeric[#numeric + 1] = key
+		elseif (type(key) == "string") then strings[#strings + 1] = key end
+	end
+	table.sort(numeric)
+	table.sort(strings)
+	local out = {}
+	for _, key in ipairs(numeric) do
+		local item, err = plain_value(value[key], depth + 1, walk)
+		if (err) then return nil, err end
+		out[#out + 1] = item
+	end
+	for _, key in ipairs(strings) do
+		local item, err = plain_value(value[key], depth + 1, walk)
+		if (err) then return nil, err end
+		out[key] = item
+	end
+	return out
+end
+
 function parse(src, chunkname)
 	if (type(src) ~= "string") then return nil, "empty file" end
 	local chunk, cerr = loadstring(src, "=" .. tostring(chunkname))
@@ -316,11 +350,11 @@ function parse(src, chunkname)
 	local decl = declarative_problem(src)
 	if (decl) then return nil, decl end
 	setfenv(chunk, {})
-	local ok, res, extra = pcall(chunk)
-	if not (ok) then return nil, "runtime error while evaluating (code outside strings?): " .. tostring(res) end
-	if (type(res) ~= "table") then return nil, "file must return a single table" end
-	if (extra ~= nil) then return nil, "file must return a single table" end
-	return res
+	-- Preserve nil holes so every extra return value is rejected, including `table, nil, value`.
+	local results = pack_results(pcall(chunk))
+	if not (results[1]) then return nil, "runtime error while evaluating (code outside strings?): " .. tostring(results[2]) end
+	if (results.n ~= 2 or type(results[2]) ~= "table") then return nil, "file must return a single table" end
+	return plain_value(results[2], 0, { steps = 0 })
 end
 
 -- ============================================================================ problems
@@ -610,7 +644,8 @@ canon_cond_list = function(st, node, slot, raw, sep)
 		problem(st.problems, "E006", node, slot, "cond must be a list of conditions")
 		return out
 	end
-	for i, rc in ipairs(raw) do
+	local list = (#raw == 0 and raw.kind ~= nil) and { raw } or raw
+	for i, rc in ipairs(list) do
 		local c = canon_cond(st, node, slot .. (sep or ":") .. tostring(i - 1), rc)
 		if (c) then out[#out + 1] = c end
 	end
@@ -727,7 +762,8 @@ local function build_nodes(st, raw_nodes, q)
 						if (type(list) ~= "table") then
 							problem(st.problems, "E006", nid, slotname, "%s must be a list of actions", key)
 						else
-							for ai, ra in ipairs(list) do
+							local actions = (#list == 0 and list.kind ~= nil) and { list } or list
+							for ai, ra in ipairs(actions) do
 								local a = canon_action(st, nid, slotname .. ":" .. tostring(ai - 1), ra)
 								if (a) then
 									node[key][#node[key] + 1] = a

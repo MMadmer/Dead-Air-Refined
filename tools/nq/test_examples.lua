@@ -70,6 +70,14 @@ local function task_news(kind, id)
 	return nil
 end
 
+local function task_news_count(kind, id)
+	local n = 0
+	for _, news in ipairs(mock.news) do
+		if (news.task == kind and news.id == id) then n = n + 1 end
+	end
+	return n
+end
+
 -- ============================================================================ (a) linear_fetch
 section("(a) linear_fetch: start -> fetch -> reward -> end")
 setup()
@@ -92,7 +100,7 @@ check(tb ~= nil and tb:get_state() == task.in_progress, "task.give created the P
 check(tb and tb:get_title() == mock.cp("Хлеб для новичков") and tb:get_type() == task.additional, "task title (cp1251) and type")
 check(tb and tb:get_icon_name() == "ui_pda2_mtask_overlay", "default task icon")
 check(qs.tasks.bring_bread == "active", "qs.tasks = active")
-check(task_news("new", T_BREAD) ~= nil, "news_manager.send_task new")
+check(task_news_count("new", T_BREAD) == 1, "task.give emits one new-task notification")
 check(mock.count_items("bread") == 0, "no bread yet")
 mock.add_item("bread", true)
 mock.ticks(2)
@@ -110,7 +118,7 @@ check(mock.news_has(mock.cp("Держи аптечку")), "reward news.tip sent
 check(mock.relocated("in", "medkit") == 1, "relocate news for medkit")
 check(qs.tasks.bring_bread == "completed", "task.complete -> qs.tasks completed")
 check(mock.task_by_id(T_BREAD):get_state() == task.completed, "PDA task state completed")
-check(task_news("complete", T_BREAD) ~= nil, "news_manager.send_task complete")
+check(task_news_count("complete", T_BREAD) == 1, "task.complete emits one completion notification")
 check(mock.save_calls > 0 and mock.blobs["xms.nq"] ~= nil, "state blob staged under xms.nq")
 if (failed > 0) then fail_dump() end
 
@@ -349,6 +357,12 @@ if (failed > 0) then fail_dump() end
 
 -- ============================================================================ (g) zero cost / disabled engine
 section("(g) no quests -> no callbacks; missing xms.list_files -> disabled with one line")
+setup()
+mock.first_update()
+check(mock.has_callback("actor_on_update"), "actor_on_update registered with quests")
+mock.opts.modules = {}
+xms_nq.reload()
+check(not mock.has_callback("actor_on_update"), "callbacks removed when reload leaves no quests")
 setup({ modules = {} })
 mock.first_update()
 core = xms_nq
@@ -396,6 +410,19 @@ local function codes_of(src)
 	return set, q
 end
 local c
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "e" } }, { id = "e", kind = "flow.end" } } }, nil, true]])
+check(c.E003 == 1, "E003 multiple return values after a nil")
+local _, shorthand = codes_of([[return { nq = 1, id = "x", vars = { x = 0 }, nodes = {
+	{ id = "s", kind = "trigger.start", cond = { kind = "var", params = { name = "x", value = 0 } }, on_enter = { kind = "var.set", params = { name = "x", value = 1 } }, out = { next = "e" } },
+	{ id = "e", kind = "flow.end" },
+} }]])
+local short_start = shorthand.node_by_id.s
+check(shorthand.valid and #short_start.cond == 1 and #short_start.on_enter == 1, "single condition/action shorthand is preserved")
+local _, sparse = codes_of([[return { nq = 1, id = "x", vars = { x = 0 }, nodes = {
+	[2] = { id = "s", kind = "trigger.start", on_enter = { [3] = { kind = "var.set", params = { name = "x", value = 1 } } }, out = { next = "e" } },
+	[7] = { id = "e", kind = "flow.end" },
+} }]])
+check(sparse.valid and sparse.node_by_id.s and #sparse.node_by_id.s.on_enter == 1, "sparse literal lists match editor canonicalization")
 c = codes_of([[return { id = "x", nodes = { { id = "s", kind = "trigger.start" } } }]])
 check(c.E001 == 1, "E001 nq missing")
 c = codes_of([[return { nq = 1, id = "Bad-Id", nodes = { { id = "s", kind = "trigger.start" } } }]])
@@ -680,7 +707,7 @@ mock.talk_start(D_REPORT)
 check(mock.talk.log[#mock.talk.log].id == "wolf_thanks" and mock.talk.current == nil, "NPC says wolf_thanks (leaf), dialog finished")
 check(mock.count_items("wpn_pm") == 1 and mock.relocated("in", "wpn_pm") == 1, "item.give through the dialog transfer")
 check(db.actor:money() == money0 + 1500, "money.give +1500 in dialog")
-check(core.quest_state(UID_C).tasks.kill_boars == "completed" and task_news("complete", "nq." .. UID_C .. ".kill_boars") ~= nil, "task.complete + news")
+check(core.quest_state(UID_C).tasks.kill_boars == "completed" and task_news_count("complete", "nq." .. UID_C .. ".kill_boars") == 1, "dialog task.complete emits one completion notification")
 mock.talk_close()
 mock.ticks(2)
 qs = core.quest_state(UID_C)
@@ -803,15 +830,16 @@ core = xms_nq
 tb = mock.task_by_id(T_BREAD)
 check(tb ~= nil and tb:get_state() == task.in_progress and tb:get_title() == mock.cp("Хлеб для новичков"), "task recreated from the declaration on init")
 check(mock.log_has("task bring_bread was missing from the PDA, recreated"), "recreation logged")
-check(task_news("new", T_BREAD) == nil, "no news for the recreation")
+check(task_news_count("new", T_BREAD) == 1, "recreated task emits one new-task notification")
 check(core.quest_state(UID_A).tasks.bring_bread == "active", "status active")
 -- task.give on an already active task only refreshes it, no second registry entry
 local before_n = #db.actor._tasks
+local before_new = task_news_count("new", T_BREAD)
 core.run_actions(core.make_ctx(UID_A, "intro"), { { kind = "task.give", params = { task = "bring_bread" } } }, "enter")
-check(#db.actor._tasks == before_n, "second task.give does not duplicate the task")
+check(#db.actor._tasks == before_n and task_news_count("new", T_BREAD) == before_new, "second task.give is idempotent")
 -- task.remove: silent, status none
 core.run_actions(core.make_ctx(UID_A, "intro"), { { kind = "task.remove", params = { task = "bring_bread" } } }, "enter")
-check(core.quest_state(UID_A).tasks.bring_bread == nil and mock.task_by_id(T_BREAD):get_state() == task.fail and task_news("fail", T_BREAD) == nil, "task.remove closes silently, task_status none")
+check(core.quest_state(UID_A).tasks.bring_bread == nil and mock.task_by_id(T_BREAD):get_state() == task.fail and task_news_count("fail", T_BREAD) == 0, "task.remove closes silently, task_status none")
 -- task.set_target / set_text on an active task
 core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "hunt" } } }, "enter")
 local th = mock.task_by_id("nq." .. UID_B .. ".hunt")
@@ -822,9 +850,33 @@ check(mock.spots[mock.smarts["esc_smart_terrain_2_12"].id .. "|ui_secondary_task
 -- hand-built action lists skip the loader, so the text is passed already converted (cp1251)
 core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_text", params = { task = "hunt", title = mock.cp("Новый заголовок") } } }, "enter")
 check(th:get_title() == mock.cp("Новый заголовок") and task_news("updated", "nq." .. UID_B .. ".hunt") ~= nil, "task.set_text + updated news")
+local hunt_id = "nq." .. UID_B .. ".hunt"
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.fail", params = { task = "hunt" } } }, "enter")
+check(th:get_state() == task.fail and core.quest_state(UID_B).tasks.hunt == "failed" and task_news_count("fail", hunt_id) == 1, "task.fail emits one failure notification")
 -- undeclared task -> error logged, nothing else breaks
 core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "nope" } } }, "enter")
 check(mock.log_has("task 'nope' is not declared"), "undeclared task errors at runtime")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (p2) reset/orphan task cleanup
+section("(p2) reset and orphan cleanup close tasks without failure notifications")
+setup()
+mock.first_update()
+core = xms_nq
+tb = mock.task_by_id(T_BREAD)
+core.reset(UID_A)
+check(tb:get_state() == task.fail and task_news_count("fail", T_BREAD) == 0, "quest reset closes its task silently")
+
+setup()
+mock.first_update()
+mock.ticks(1)
+mock.news = {}
+mock.deleted["mod_a/linear_fetch.nqasset"] = true
+mock.rebuild()
+mock.first_update()
+tb = mock.task_by_id(T_BREAD)
+check(tb:get_state() == task.fail and task_news_count("fail", T_BREAD) == 0, "orphan cleanup closes its task silently")
+check(mock.log_has("quest is no longer installed, its PDA task bring_bread was closed"), "orphan cleanup logged")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ (q) errors never propagate
