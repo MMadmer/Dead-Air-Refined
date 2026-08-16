@@ -12,7 +12,10 @@
 --     (random within equal goodwill): goodwill = -10000 - index keeps "first declared wins";
 --   * a non-leaf phrase whose successors are ALL filtered out asserts (R_ASSERT2 "No available
 --     phrase to say"): every non-leaf phrase keeps at least one unconditional successor here -
---     a hidden leaf ("Пока." / "...") is added where the declared ones are all conditional;
+--     a hidden leaf ("Пока." / "...") is added whenever the declared successors are not ALL
+--     unconditional (see build_dialog), and `once` counts as a precondition as well. Among NPC
+--     replies it is unreachable, being outranked by any unconditional sibling; in a player's
+--     option list it is a visible way out that skips the topic - no on_exit, no `done` pin;
 --   * pre(fs, ss, dialog_id, phrase_id, next_id) is NOT wrapped by the engine: it never throws;
 --     act(fs, ss, dialog_id, phrase_id) and text(fs, ss, dialog_id, phrase_id) -> string are;
 --   * the topic list reads the root caption with NULL speakers (CUITalkWnd::UpdateQuestions ->

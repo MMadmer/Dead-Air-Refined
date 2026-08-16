@@ -30,6 +30,8 @@ local function in_dialog(ctx)
 	return ok and talking and true or false
 end
 
+-- `count` and the return value are WHOLE items (ammo: boxes) on both paths. The PDA line is in
+-- rounds for ammo, because that is what vanilla dialogs.script prints and both paths must agree.
 function give_item(ctx, section, count)
 	count = tonumber(count) or 1
 	if (in_dialog(ctx) and dialogs and dialogs.relocate_item_section_to_actor) then
@@ -38,11 +40,12 @@ function give_item(ctx, section, count)
 	end
 	local made = util.give_items(section, count)
 	if (made > 0 and news_manager and news_manager.relocate_item) then
-		pcall(news_manager.relocate_item, actor(), "in", section, made)
+		pcall(news_manager.relocate_item, actor(), "in", section, util.news_amount(section, made))
 	end
 	return made
 end
 
+-- Same units as give_item: `count` is whole items ("all" = every one of them), the news is rounds.
 function take_item(ctx, section, count)
 	if (count == nil) then count = 1 end
 	if (in_dialog(ctx) and dialogs and dialogs.relocate_item_section_from_actor) then
@@ -55,7 +58,7 @@ function take_item(ctx, section, count)
 	end
 	local removed = util.remove_items(section, count)
 	if (removed > 0 and news_manager and news_manager.relocate_item) then
-		pcall(news_manager.relocate_item, actor(), "out", section, removed)
+		pcall(news_manager.relocate_item, actor(), "out", section, util.news_amount(section, removed))
 	end
 	return removed
 end
@@ -293,6 +296,7 @@ K["flow.end"] = {
 }
 
 -- ============================================================================ main: objectives
+-- params.count is whole items (ammo: boxes), the unit item.give / item.take hand out.
 K["objective.fetch"] = {
 	events = { "item_taken" },
 	begin = function(ctx)
@@ -542,6 +546,7 @@ K["has_info"] = {
 }
 
 K["has_item"] = {
+	-- p.count is whole items (ammo: boxes), same unit as item.give / objective.fetch.
 	test = function(ctx, p) return util.count_items(p.section) >= (p.count or 1) end,
 }
 

@@ -1099,6 +1099,39 @@ check(topic ~= nil and string.sub(topic.params.text, 1, 6) == B(209, 235, 251, 2
 	"topic text is the cp1251 form of the asset's UTF-8")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (u) item.give ammo
+-- `count` is whole items on both transfer paths, so for ammo it is whole boxes. Outside a dialog the
+-- give goes through util.give_items -> create_ammo, which counts ROUNDS; inside one through
+-- dialogs.relocate_item_section_to_actor, which creates whole objects. The totals must not disagree.
+section("(u) item.give: count is whole boxes for ammo, on the world path and in a dialog")
+setup()
+mock.first_update()
+core = xms_nq
+local AMMO, BOX, NBOX = "ammo_9x18_fmj", 30, 2
+local ctxg = core.make_ctx(UID_B, "hunt")				-- no npc and nobody talking -> world path
+core.run_actions(ctxg, { { kind = "item.give", params = { section = AMMO, count = NBOX } } }, "enter")
+local w_rounds, w_objs = mock.ammo_rounds(AMMO), mock.count_items(AMMO)
+check(w_rounds == NBOX * BOX, "world item.give: count=2 -> 2 boxes = 60 rounds (" .. w_rounds .. ")")
+check(w_objs == NBOX, "world item.give: 2 ammo objects (" .. w_objs .. ")")
+core.run_actions(ctxg, { { kind = "item.give", params = { section = "wpn_pm", count = 3 } } }, "enter")
+check(mock.count_items("wpn_pm") == 3, "world item.give: a non-ammo section gives count objects (" .. mock.count_items("wpn_pm") .. ")")
+-- the same section and the same count inside a dialog must land on the same totals
+mock.talk_open(wolf)
+local ctxt = core.make_ctx(UID_B, "hunt", wolf)
+core.run_actions(ctxt, { { kind = "item.give", params = { section = AMMO, count = NBOX } } }, "enter")
+local d_rounds, d_objs = mock.ammo_rounds(AMMO) - w_rounds, mock.count_items(AMMO) - w_objs
+check(d_rounds == NBOX * BOX, "dialog item.give: count=2 -> 2 boxes = 60 rounds (" .. d_rounds .. ")")
+check(d_rounds == w_rounds and d_objs == w_objs, "both paths agree on count=2 (world " .. w_rounds .. "r/" .. w_objs .. "o, dialog " .. d_rounds .. "r/" .. d_objs .. "o)")
+core.run_actions(ctxt, { { kind = "item.give", params = { section = "wpn_pm", count = 3 } } }, "enter")
+check(mock.count_items("wpn_pm") == 6, "dialog item.give: a non-ammo section gives count objects (" .. mock.count_items("wpn_pm") .. ")")
+mock.talk_close()
+-- a box_size that cannot be read must degrade to whole objects, never to nothing
+local BAD = "ammo_broken_box"
+core.run_actions(ctxg, { { kind = "item.give", params = { section = BAD, count = NBOX } } }, "enter")
+check(mock.count_items(BAD) == NBOX, "unreadable box_size falls back to count objects (" .. mock.count_items(BAD) .. ")")
+check(mock.relocated("in", BAD) ~= nil, "unreadable box_size still reported a transfer (give_items returned > 0)")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

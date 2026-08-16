@@ -556,6 +556,8 @@ function place_contains_actor(place)
 end
 
 -- ============================================================================ inventory
+-- Everything here counts WHOLE ITEMS: an ammo box is one inventory object, so `count` means boxes,
+-- never rounds. That is what the dialog transfers (dialogs.script) and what the player sees.
 function count_items(section)
 	local a = actor()
 	if not (a or section) then return 0 end
@@ -569,7 +571,8 @@ function count_items(section)
 	return n
 end
 
--- Removes up to `count` items of section (count = nil/"all" -> everything). Returns removed count.
+-- Removes up to `count` whole items of section (count = nil/"all" -> everything). Returns how many
+-- objects went away, i.e. boxes for ammo (a partly spent box still counts as one).
 function remove_items(section, count)
 	local a = actor()
 	if not (a) then return 0 end
@@ -602,14 +605,39 @@ function is_ammo_section(section)
 	return ok and r or false
 end
 
--- Creates `count` items of section on the actor (ammo through create_ammo which knows box sizes).
+-- Rounds in one box of ammo, or nil when that is not knowable: a non-ammo section, an unreadable
+-- value, or a non-positive one. nil means "do not know" and nothing else - a defaulted box size
+-- would be a lie to whoever multiplies by it, and create_ammo re-reads the ini anyway.
+function box_size(section)
+	local ok, n = pcall(function()
+		local ini = system_ini()
+		if not (ini:section_exist(section) and ini:line_exist(section, "box_size")) then return nil end
+		return ini:r_u32(section, "box_size")
+	end)
+	n = ok and tonumber(n) or nil
+	if not (n and n > 0) then return nil end
+	return n
+end
+
+-- What the PDA line shows for `items` whole items: rounds for ammo with a readable box, the items
+-- themselves otherwise. Vanilla dialogs.script prints rounds, so both transfer paths must.
+function news_amount(section, items)
+	return items * (box_size(section) or 1)
+end
+
+-- Creates `count` WHOLE items of section on the actor: for ammo that is `count` full boxes, same as
+-- the dialog path. create_ammo counts in rounds and cuts them into boxes itself, so scale by the
+-- box size - but only when it is really known: with a broken one create_ammo's own re-read makes it
+-- spin forever (`while num > 0`), so spawn plain objects instead, one ammo object being one box.
 function give_items(section, count)
 	local a = actor()
 	if not (a) then return 0 end
 	count = tonumber(count) or 1
+	if (count < 1) then return 0 end
 	local pos, lvid, gvid, pid = a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id()
-	if (is_ammo_section(section) and create_ammo) then
-		local ok = pcall(create_ammo, section, pos, lvid, gvid, pid, count)
+	local box = box_size(section)
+	if (box and create_ammo) then
+		local ok = pcall(create_ammo, section, pos, lvid, gvid, pid, count * box)
 		return ok and count or 0
 	end
 	local made = 0

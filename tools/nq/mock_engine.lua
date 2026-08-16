@@ -234,6 +234,8 @@ function se_mt:kill() self._alive = false local go = mock.go[self.id] if (go) th
 local function new_se(section, pos, lvid, gvid, parent, id)
 	local se = setmetatable({ id = id or mock.next_id, _section = section, position = pos or vector():set(0, 0, 0), m_level_vertex_id = lvid or 1, m_game_vertex_id = gvid or 1, parent_id = parent, online = true }, se_mt)
 	if not (id) then mock.next_id = mock.next_id + 1 end
+	-- a spawned ammo object is one full box; create_ammo overwrites it with its own round count
+	if (section and system_ini():line_exist(section, "box_size")) then se.ammo_left = system_ini():r_u32(section, "box_size") end
 	mock.se[se.id] = se
 	return se
 end
@@ -370,6 +372,16 @@ function mock.count_items(section)
 	return n
 end
 
+-- Rounds the actor carries in an ammo section (each object holds ammo_left of them).
+function mock.ammo_rounds(section)
+	local n = 0
+	for _, it in ipairs(db.actor._inv) do
+		local se = mock.se[it:id()]
+		if (se and se:section_name() == section) then n = n + (se.ammo_left or 0) end
+	end
+	return n
+end
+
 function mock.use_item(section)
 	local go = db.actor:object(section)
 	if not (go) then error("use_item: no " .. section) end
@@ -497,7 +509,10 @@ dialogs = {
 	who_is_npc = function(a, b) return a:id() == 0 and b or a end,
 	who_is_actor = function(a, b) return a:id() == 0 and a or b end,
 	relocate_item_section_to_actor = function(npc, actor, section, amount)
-		for _ = 1, amount do mock.add_item(section) end
+		-- dialogs.script: `amount` whole objects (an ammo object is a full box), news counts rounds
+		local a = db.actor
+		for _ = 1, amount do alife():create(section, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id()) end
+		if (utils.is_ammo(section)) then amount = amount * system_ini():r_s32(section, "box_size") end
 		mock.news[#mock.news + 1] = { relocate = "in", section = section, amount = amount, dialog = true }
 	end,
 	relocate_item_section_from_actor = function(npc, actor, section, amount)
@@ -542,6 +557,7 @@ safe_release_manager = {
 function alife_object(id) return mock.se[id] end
 
 utils = {
+	is_ammo = function(section) return system_ini():r_string_ex(section, "class") == "AMMO" end,
 	CTime_to_table = function(ct) local Y, M, D, h, m, s, ms = ct:get() return { Y = Y, M = M, D = D, h = h, m = m, s = s, ms = ms } end,
 	CTime_from_table = function(t) return ctime(0) end,
 }
@@ -719,7 +735,14 @@ inv_name = st_medkit
 inv_name = st_wpn_pm
 [ammo_9x18_fmj]
 inv_name = st_ammo
+class = AMMO
 box_size = 30
+; ammo whose box_size is present but unusable: create_ammo reads it too, so a giver that scales
+; rounds by a defaulted box size still ends up inside a broken loop
+[ammo_broken_box]
+inv_name = st_ammo
+class = AMMO
+box_size = unreadable
 [space_restrictor]
 class = SPC_RS_S
 [simulation_boar]

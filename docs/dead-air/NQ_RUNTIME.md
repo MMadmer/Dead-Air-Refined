@@ -463,7 +463,7 @@ and the rest of the list is checked right then.
 | `dialog.npc_phrase` | **`text: text`** | `next` | | `false` | A line the NPC says. The node's `cond` is its display condition; the first declared line whose condition holds is the one spoken. |
 | `dialog.actor_phrase` | **`text: text`** | `next` | | `false` | A reply the player can pick. The node's `cond` is its display condition. |
 | `objective.kill` | **`target: kill_target`**, `by_actor: bool = false` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. |
-| `objective.fetch` | **`section: item_section`**, `count: int = 1` | `done` | ✔ | `false` | Waits until the player's inventory holds `count` items of the section. |
+| `objective.fetch` | **`section: item_section`**, `count: int = 1` | `done` | ✔ | `false` | Waits until the player's inventory holds `count` items of the section. `count` is always whole items — for an ammo section that means whole boxes, not rounds. |
 | `objective.reach` | **`place: place`**, `map_spot: bool = true`, `spot_text: text` | `done` | ✔ | `false` | Waits until the player is inside the place. With `map_spot` a secondary map marker is put on it (on an anchor restrictor for a bare position) and removed when the node ends. |
 | `wait.timer` | **`duration: duration`** | `done` | ✔ | `false` | Waits for the given time — game time for `game_*`, real time for `seconds`. |
 | `wait.when` | `timeout: duration` | `done`, `timeout` | ✔ | `false` | Waits until the node's `cond` list becomes true; `timeout` gives up through the other pin. |
@@ -483,8 +483,8 @@ that does not wait.
 
 | Kind | Params | What it does |
 |---|---|---|
-| `item.give` | **`section: item_section`**, `count: int = 1` | Gives items to the player. Inside a dialog the transfer goes through the NPC so the talk window shows it. Ammo sections are created with the proper box size. |
-| `item.take` | **`section: item_section`**, `count: count_or_all = 1` | Takes items away; `"all"` takes every one. Inside a dialog it goes through the NPC. |
+| `item.give` | **`section: item_section`**, `count: int = 1` | Gives items to the player. Inside a dialog the transfer goes through the NPC so the talk window shows it. `count` is always whole items — for an ammo section that means whole boxes, not rounds; each box is created with the section's own box size. |
+| `item.take` | **`section: item_section`**, `count: count_or_all = 1` | Takes items away; `"all"` takes every one. Inside a dialog it goes through the NPC. `count` counts the same units as `item.give` — whole items, so boxes rather than rounds for an ammo section. |
 | `item.spawn` | **`section: item_section`**, `place: place`, `into: target_ref`, `ref: ref_name` | Creates an item at a place, or inside a container/NPC when `into` is given (`into` wins over `place`). `ref` remembers it. |
 | `money.give` | **`amount: int ≥ 1`** | Gives money (through the NPC inside a dialog). |
 | `money.take` | **`amount: int ≥ 1`** | Takes money. |
@@ -525,7 +525,7 @@ Usable anywhere a `cond` list is: node conditions, phrase display conditions,
 | Kind | Params | True when |
 |---|---|---|
 | `has_info` | **`info: info`** | the player holds the info portion (works offline) |
-| `has_item` | **`section: item_section`**, `count: int = 1` | the player carries at least `count` of them |
+| `has_item` | **`section: item_section`**, `count: int = 1` | the player carries at least `count` of them — whole items, so boxes rather than rounds for an ammo section |
 | `has_money` | **`amount: int`** | the player has at least that much money |
 | `var` | **`name: var_name`**, `op: enum(eq\|ne\|lt\|le\|gt\|ge) = eq`, **`value: value`** | the quest variable compares that way (ordering comparisons need numbers) |
 | `node_done` | **`node: node_id`** | that `once` node has already completed |
@@ -611,10 +611,17 @@ leaf — `Пока.` when it is the player's turn, `...` when it is the NPC's �
 lowest goodwill so it is picked last. It is added whenever **any** child carries a
 condition, not only when they all do: an unconditional sibling is not proof the
 group survives, because the engine refuses to re-add a phrase id it already knows
-and a revisited line can therefore be missing from the group. The editor warns
-about the risky shape with `W011`. A phrase counts as unconditional only when it
-has no `cond` **and** is not `once`; a `once` phrase carries a precondition so it
-disappears after it has been said.
+and a revisited line can therefore be missing from the group. A phrase counts as
+unconditional only when it has no `cond` **and** is not `once`; a `once` phrase
+carries a precondition so it disappears after it has been said. The leaf carries
+no quest logic, so reaching it closes the talk window without the topic counting
+as passed: no topic `on_exit`, no `done` pin, and the token stays on the topic.
+Among NPC replies that never happens — the lowest goodwill puts the leaf behind
+any unconditional sibling — but in the player's option list every survivor is
+shown, so the leaf is a real selectable line and whatever hangs off `done` is
+silently skipped. The editor's `W011` follows that split: for player options it
+fires on exactly the runtime condition (not all of them unconditional), for NPC
+replies only when none of them is.
 
 **Two engine fixes this feature required** (both in `AI_PhraseDialogManager::AnswerPhrase`,
 both crash fixes that leave stock dialogs behaving exactly as before):
@@ -997,7 +1004,7 @@ load). `E` blocks — the build refuses, and the game does not load the quest.
 | `E030` | a `var` / `task` / `node` / `quest` reference points at something that is not declared |
 | `E031` | `actor.teleport` to a place on another level *(editor only — in game this is a runtime error prefixed `E031:`)* |
 | `E050` | syntax error in custom Lua |
-| `W011` | a non-leaf phrase has no unconditional continuation — an automatic reply will be added |
+| `W011` | continuations of a non-leaf phrase: not all of the player's options are unconditional (a hidden way out past `done` will be added), or none of the NPC's replies is (an automatic reply will be added). Unconditional means no `cond` and no `once` |
 | `W012` | a `dialog.topic` with no phrase continuation |
 | `W013` | a topic with `once = false` and no conditions: it is offered forever |
 | `W020` | a node unreachable from any trigger |

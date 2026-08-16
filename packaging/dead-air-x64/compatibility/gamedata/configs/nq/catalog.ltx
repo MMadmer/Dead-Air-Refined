@@ -107,7 +107,7 @@ since  = 1
 [nq.objective.fetch]
 group  = objective
 title  = Добыть предмет
-desc   = Ждёт, пока в инвентаре игрока будет нужное количество предметов секции
+desc   = Ждёт, пока в инвентаре игрока будет нужное количество предметов секции; count — штуки предметов: для патронов это коробки, а не патроны
 use    = main
 params  = section, count
 section = item_section, required
@@ -242,7 +242,7 @@ since  = 1
 [nq.item.give]
 group  = items
 title  = Выдать предмет
-desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением
+desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением; count — штуки предметов: для патронов это коробки, а не патроны
 use    = extra
 params  = section, count
 section = item_section, required
@@ -253,7 +253,7 @@ since  = 1
 [nq.item.take]
 group  = items
 title  = Забрать предмет
-desc   = Забирает у игрока предметы секции. count = all забирает все
+desc   = Забирает у игрока предметы секции. count = all забирает все; count — штуки предметов: для патронов это коробки, а не патроны
 use    = extra
 params  = section, count
 section = item_section, required
@@ -613,7 +613,7 @@ since  = 1
 [nq.has_item]
 group  = cond_state
 title  = Есть предмет
-desc   = У игрока не меньше count предметов секции
+desc   = У игрока не меньше count предметов секции; count — штуки предметов: для патронов это коробки, а не патроны
 use    = cond
 params  = section, count
 section = item_section, required
