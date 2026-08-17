@@ -923,8 +923,9 @@ state = {
 }
 ```
 
-A state written by a newer runtime is logged and then read anyway with the
-current version stamped in — the schema only ever grows.
+A state written by a newer runtime is logged and preserved byte-for-byte. The
+NQ state remains read-only for that session: the runtime starts from empty
+state, does not auto-activate quests, and re-stages the original blob on save.
 
 ### 11.4 Reconciliation
 
@@ -1034,7 +1035,7 @@ load). `E` blocks — the build refuses, and the game does not load the quest.
 | `E011` | a phrase is entered from a non-dialog node |
 | `E020` | an event condition outside `trigger.when` / `wait.when` / `wait.any` |
 | `E021` | `cases` empty, a case name missing or not `[a-z0-9_]`, duplicate case names, `weight ≤ 0` |
-| `E030` | a `var` / `task` / `node` / `quest` reference points at something that is not declared |
+| `E030` | a `var` / `task` / `node` / `quest` reference points at something that is not declared, or a `ref` is never created by any node in the quest |
 | `E031` | `actor.teleport` to a place on another level *(editor only — in game this is a runtime error prefixed `E031:`)* |
 | `E050` | syntax error in custom Lua |
 | `W011` | continuations of a non-leaf phrase: not all of the player's options are unconditional (a hidden way out past `done` will be added), or none of the NPC's replies is (an automatic reply will be added). Unconditional means no `cond` and no `once` |
@@ -1043,7 +1044,7 @@ load). `E` blocks — the build refuses, and the game does not load the quest.
 | `W020` | a node unreachable from any trigger |
 | `W021` | a waiting node with no outgoing edges — the quest will stop there |
 | `W022` | the same target is listed twice on one pin; the duplicate edge is ignored |
-| `W030` | a `ref` is used but no node creates it |
+| `W030` | a `ref` has a creator but may be used before it is created on at least one path *(editor only)* |
 | `W031` | `spawn.squad` with `hold = false`: the squad may wander off into the simulation |
 | `W040` | a character with no cp1251 equivalent in a text (replaced by `?`) |
 | `W050` | custom Lua could not be syntax-checked *(editor only)* |
