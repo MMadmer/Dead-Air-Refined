@@ -74,7 +74,8 @@ u32 rtc9_csize(u32 in)
 
 u32 rtc9_compress(void* dst, u32 dst_len, const void* src, u32 src_len)
 {
-    u32 out_size = dst_len;
+    // lzo_uint is 64-bit on x64, so its output pointer must not alias a u32.
+    lzo_uint out_size = dst_len;
     [[maybe_unused]] int r;
 
     rtc9_initialize();
@@ -82,39 +83,42 @@ u32 rtc9_compress(void* dst, u32 dst_len, const void* src, u32 src_len)
     if (_LZO_Dictionary)
     {
         r = lzo1x_999_compress_dict((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst,
-                                    (lzo_uintp)&out_size, rtc9_wrkmem, _LZO_Dictionary, _LZO_DictionarySize);
+                                    &out_size, rtc9_wrkmem, _LZO_Dictionary, _LZO_DictionarySize);
     }
     else
     {
-        r = lzo1x_999_compress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst,
-                               (lzo_uintp)&out_size, rtc9_wrkmem);
+        r = lzo1x_999_compress(
+            (const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc9_wrkmem);
     }
 
-    VERIFY(r == LZO_E_OK);
+    R_ASSERT(r == LZO_E_OK);
+    R_ASSERT(out_size <= type_max<u32>);
 
-    return out_size;
+    return static_cast<u32>(out_size);
 }
 
 //------------------------------------------------------------------------------
 
 u32 rtc9_decompress(void* dst, u32 dst_len, const void* src, u32 src_len)
 {
-    u32 out_size = dst_len;
+    // lzo_uint is 64-bit on x64, so its output pointer must not alias a u32.
+    lzo_uint out_size = dst_len;
     [[maybe_unused]] int r;
 
     rtc9_initialize();
 
     if (_LZO_Dictionary)
     {
-        r = lzo1x_decompress_dict_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size,
-            nullptr, _LZO_Dictionary, _LZO_DictionarySize);
+        r = lzo1x_decompress_dict_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, nullptr,
+            _LZO_Dictionary, _LZO_DictionarySize);
     }
     else
     {
-        r = lzo1x_decompress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size, nullptr);
+        r = lzo1x_decompress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, nullptr);
     }
 
-    VERIFY(r == LZO_E_OK);
+    R_ASSERT(r == LZO_E_OK);
+    R_ASSERT(out_size <= type_max<u32>);
 
-    return out_size;
+    return static_cast<u32>(out_size);
 }

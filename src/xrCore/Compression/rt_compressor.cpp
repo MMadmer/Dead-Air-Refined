@@ -18,7 +18,8 @@ u32 rtc_csize(u32 in)
 size_t rtc_compress(void* dst, size_t dst_len, const void* src, size_t src_len)
 {
     lzo_uint out_size = dst_len;
-    [[maybe_unused]] int r = lzo1x_1_compress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size, rtc_wrkmem);
+    [[maybe_unused]] int r =
+        lzo1x_1_compress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc_wrkmem);
     VERIFY(r == LZO_E_OK);
     return out_size;
 }
@@ -26,6 +27,6 @@ size_t rtc_decompress(void* dst, size_t dst_len, const void* src, size_t src_len
 {
     lzo_uint out_size = dst_len;
     const int result =
-        xr_lzo::decompress_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, (lzo_uintp)&out_size, rtc_wrkmem);
+        xr_lzo::decompress_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc_wrkmem);
     return result == LZO_E_OK && out_size == dst_len ? out_size : 0;
 }
