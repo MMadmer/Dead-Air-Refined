@@ -772,7 +772,9 @@ in `tasks`, and the extra actions operate on them.
   (`secondary_task_location` / `ui_secondary_task_blink`, or the storyline pair).
   A task that is already live only gets its fields refreshed; the engine refuses
   a second `give_task`.
-- `task.complete` / `task.fail` set the engine task state and send the PDA news.
+- `task.complete` sets the engine task state; the native actor callback sends
+  the completion news. `task.fail` also sends failure news explicitly because
+  the binder intentionally has no failure notification for dynamic NQ tasks.
 - `task.remove` is best effort: the engine cannot delete a task, so the map
   locations are dropped, the task is closed silently and the runtime forgets it
   (`task_status` reads `none` again).
@@ -1040,6 +1042,7 @@ load). `E` blocks — the build refuses, and the game does not load the quest.
 | `W013` | a topic with `once = false` and no conditions: it is offered forever |
 | `W020` | a node unreachable from any trigger |
 | `W021` | a waiting node with no outgoing edges — the quest will stop there |
+| `W022` | the same target is listed twice on one pin; the duplicate edge is ignored |
 | `W030` | a `ref` is used but no node creates it |
 | `W031` | `spawn.squad` with `hold = false`: the squad may wander off into the simulation |
 | `W040` | a character with no cp1251 equivalent in a text (replaced by `?`) |

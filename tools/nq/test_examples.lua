@@ -437,6 +437,8 @@ c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "a", kind = "flow.ste
 check(c.E008 == 1 and c.W020 == 1, "E008 no trigger, W020 unreachable")
 c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "j" } }, { id = "j", kind = "flow.join" }, { id = "z", kind = "flow.join" } } }]])
 check(c.E009 == 1 and c.W021 == 2 and c.W020 == 1, "E009 join without inputs, W021 waiting nodes without outputs")
+local duplicate_codes, duplicate_edges = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = { "e", "e" } } }, { id = "e", kind = "flow.end" } } }]])
+check(duplicate_codes.W022 == 1 and #duplicate_edges.node_by_id.s.out.next == 1, "W022 duplicate edge is reported and ignored")
 c = codes_of([[return { nq = 1, id = "x", nodes = {
 	{ id = "s", kind = "trigger.start", out = { next = "t" } },
 	{ id = "t", kind = "dialog.topic", params = { npc = { story = "n" }, text = "hi" }, out = { next = "p1" } },
