@@ -39,6 +39,7 @@ Useful parameters:
 | `-Scenario` | `All` | `Scout`, `Main`, `Reload`, `Dialog`, `LevelChange`, `ModuleRemoved`, `ChangedGraph`, `EmptyModule`, `Control` |
 | `-TimeoutSeconds` | `900` | per launch |
 | `-RebuildRoot` | off | rebuild `_qa\nq` from scratch instead of refreshing it |
+| `-AnyMode` | off | write `mode = *` into the module manifest copied into the QA root, so a save made inside a campaign mode can drive the run. The tracked manifest is never touched |
 | `-KeepRoot` | off | cosmetic; the root is always kept for the next run |
 | `-CaptureEverySeconds` | `0` | periodic hidden-desktop screenshots for diagnostics |
 | `-ReplyX`, `-FirstReplyY`, `-ReplyRowHeight`, `-TopicRow` | `300`, `599`, `20`, `3` | talk-window reply geometry, in screenshot pixels at `-VidMode 1024x768` |
@@ -78,8 +79,12 @@ begin mid-quest.
   `$fs_root$`, so the module lives here and never in the installed game.
 
 The module manifest carries no `mode =` key, which means it applies only when no campaign mode is
-active. The chosen save has no active mode (the probe prints `active modes =` empty); a save with a
-campaign mode would need `mode = *` in `tools\qa\nq\module\mod.ltx`.
+active. A save made inside a campaign (Revolution II and the like) makes the module apply to
+nothing, every check that needs a quest fails at once, and each one blames something else - so the
+runner recognises that shape and names the real reason instead. Pass **`-AnyMode`** for such a
+save: it writes `mode = *` (the engine's own opt-out, `XMS::ModuleApplies`) into the manifest
+**copied into the QA root**, leaving `tools\qa\nq\module\mod.ltx` alone. It is off by default
+because the gating is worth testing and the default run is the one that tests it.
 
 Before and after every run the script hashes the player's `appdata\savedgames` and fails if the
 manifest changed. It also removes the `HIGHDPIAWARE` AppCompat value it adds for the copied

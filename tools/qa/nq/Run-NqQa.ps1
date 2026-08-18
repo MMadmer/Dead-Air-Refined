@@ -39,6 +39,13 @@ param(
 
     [int]$TimeoutSeconds = 900,
 
+    # The QA module carries no `mode =`, so it applies only when no campaign mode is active -
+    # which means the suite cannot run from a save made inside a campaign (Revolution II and the
+    # like). This writes `mode = *` into the module manifest COPIED into the QA root, never into
+    # the tracked one, so such a save can drive the run. Off by default: the gating is worth
+    # testing, and the default run is the one that tests it.
+    [switch]$AnyMode,
+
     [switch]$KeepRoot,
 
     # Rebuild the QA root from scratch even when it already exists.
@@ -288,6 +295,24 @@ function Set-QaModule {
             }
         }
     }
+    if ($AnyMode) { Set-QaModuleAnyMode }
+}
+
+function Set-QaModuleAnyMode {
+    # `mode = *` is the engine's own opt-out of mode gating (XMS::ModuleApplies), so this makes
+    # the module apply under a campaign save instead of silently loading nothing.
+    $manifest = Join-Path $qaModule 'mod.ltx'
+    if (-not (Test-Path -LiteralPath $manifest)) { return }
+    $lines = @(Get-Content -LiteralPath $manifest)
+    $lines = @($lines | Where-Object { $_ -notmatch '^\s*mode\s*=' })
+    $out = [Collections.Generic.List[string]]::new()
+    $placed = $false
+    foreach ($line in $lines) {
+        $out.Add($line)
+        if (-not $placed -and $line -match '^\s*\[module\]\s*$') { $out.Add('mode    = *'); $placed = $true }
+    }
+    if (-not $placed) { $out.Add('mode    = *') }
+    Set-Content -LiteralPath $manifest -Value $out -Encoding Default
 }
 
 # ---------------------------------------------------------------------------- one launch
@@ -435,6 +460,16 @@ function Test-PhaseLog {
     $problems = [Collections.Generic.List[string]]::new()
     $failLines = @($nqqa | Where-Object { $_ -match 'NQQA: \S+ FAIL ' })
     foreach ($line in $failLines) { $problems.Add("check failed: $($line.Trim())") }
+
+    # Every check that needs the module fails at once when the module does not apply, and
+    # each one blames something else. The probe prints the real reason once, so say it once:
+    # the save was made inside a campaign mode and the QA module is built for the plain game.
+    $ready = @($nqqa | Where-Object { $_ -match 'module_applies=false' }) | Select-Object -First 1
+    if ($ready -and $ready -match 'modes=(\S+)' -and -not $AnyMode) {
+        $problems.Add(("the save has the campaign mode '{0}' active, so the QA module (built for the plain " +
+            'game) applies to nothing and every check that needs a quest fails. Rerun with -AnyMode, or ' +
+            'pass -SaveName for a save started without a mode.') -f $Matches[1])
+    }
 
     $done = @($nqqa | Where-Object { $_ -match 'NQQA: DONE ' }) | Select-Object -Last 1
     if (-not $done) {
