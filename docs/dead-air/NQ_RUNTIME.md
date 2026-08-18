@@ -136,6 +136,7 @@ The catalog declares a type per parameter. These are the types the loader knows
 | `npc_ref` | `{ story = "esc_2_12_stalker_wolf" }` \| `{ ref = "guard" }` \| `{ profile = "…" }` \| `{ community = "stalker", level = "l01_escape" }` | §7 |
 | `target_ref` | any `npc_ref`, or `{ ref = "boars" }` (squad/object), or `{ smart = "…" }` | |
 | `kill_target` | `{ story = … }` \| `{ ref = … }` \| `{ spawn = <spawn_spec> }` | only `objective.kill` |
+| `object_ref` | `{ story = … }` \| `{ ref = … }` | one concrete object the runtime can pin down to a single id; `profile`/`community`/`smart` name a group and are not accepted |
 | `place` | `{ level = "l01_escape", pos = {x,y,z}, radius = 5 }` \| `{ restrictor = "zone_name" }` \| `{ smart = "…" }` | `radius` defaults to 5 |
 | `spawn_spec` | `{ section = "simulation_boar", smart = "…", ref = "boars", hold = true }` | `section` and `smart` are required |
 | `cases_cond` | `{ { name = "yes", cond = { … } }, … }` | case names become pins |
@@ -341,7 +342,7 @@ One kind is one section named `nq.<kind>`:
 
 ```ini
 [nq.catalog]                       ; only in the core catalog.ltx
-version = 1                        ; catalog version
+version = 2                        ; catalog version
 api     = 1                        ; version of the kind implementation contract
 
 [nq.item.give]                     ; section = "nq." .. kind
@@ -440,9 +441,9 @@ firings; the kind clears it when it finally returns that pin as a soft one.
 
 ---
 
-## 5. Catalog v1
+## 5. Catalog v2
 
-Generated from `configs\nq\catalog.ltx` (version 1, api 1). Parameter notation:
+Generated from `configs\nq\catalog.ltx` (version 2, api 1). Parameter notation:
 `name: type` — required parameters are in **bold**, defaults follow `=`.
 
 ### 5.1 Triggers (`use = trigger`)
@@ -494,7 +495,8 @@ and the rest of the list is checked right then.
 | `dialog.npc_phrase` | **`text: text`** | `next` | | `false` | A line the NPC says. The node's `cond` is its display condition; the first declared line whose condition holds is the one spoken. |
 | `dialog.actor_phrase` | **`text: text`** | `next` | | `false` | A reply the player can pick. The node's `cond` is its display condition. |
 | `objective.kill` | **`target: kill_target`**, `by_actor: bool = false` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. |
-| `objective.fetch` | **`section: item_section`**, `count: int = 1` | `done` | ✔ | `false` | Waits until the player's inventory holds `count` items of the section. `count` is always whole items — for an ammo section that means whole boxes, not rounds. |
+| `objective.kill_count` | `count: int = 1`, `by_actor: bool = true`, `community: community`, `squad: object_ref`, `section: string` | `done` | ✔ | `false` | Counts kills until there are `count` of them. Counting starts when the node is entered, and the counter lives in the token, so it survives a save. `by_actor` (on by default) only counts what the player killed. At most one filter is allowed (`E022`): `community` is the victim's faction, `squad` a squad the quest spawned (the deaths of its members), `section` the victim's spawn section. With no filter every NPC death counts. A death nobody witnessed is only noticed for the `squad` filter and only with `by_actor = false`. |
+| `objective.fetch` | `section: item_section`, `count: int = 1`, `item: object_ref`, `from: object_ref` | `done` | ✔ | `false` | Waits for items to reach the player. Two mutually exclusive forms, one of which is required (`E022`): **`section`** (with `count` and an optional `from`), or **`item`**. Plain `section` counts anything of that section anywhere in the inventory. With `from` only items that actually came **out of that container** count — a stash, an inventory box or an NPC's inventory; an identical item picked up elsewhere never moves the counter. `item` names one concrete object and completes once that object is on the player. `count` is always whole items — for an ammo section that means whole boxes, not rounds. |
 | `objective.reach` | **`place: place`**, `map_spot: bool = true`, `spot_text: text` | `done` | ✔ | `false` | Waits until the player is inside the place. With `map_spot` a secondary map marker is put on it (on an anchor restrictor for a bare position) and removed when the node ends. |
 | `wait.timer` | **`duration: duration`** | `done` | ✔ | `false` | Waits for the given time — game time for `game_*`, real time for `seconds`. |
 | `wait.when` | `timeout: duration` | `done`, `timeout` | ✔ | `false` | Waits until the node's `cond` list becomes true; `timeout` gives up through the other pin. |
@@ -509,6 +511,33 @@ Instant world operations — spawning, giving, rewarding — are deliberately **
 main actions. A node is a meaningful stage of the quest; the rest is the
 `on_enter`/`on_exit` wrapping around it. Use `flow.step` when you want a stage
 that does not wait.
+
+#### `objective.fetch` with `from`: what "out of that container" means
+
+The runtime does not trust the inventory count for this form, because an
+identical item can come from anywhere. Instead it watches object identities. On
+entry, and on every poll and pickup afterwards, it lists the container's
+contents through `alife():get_children(<container>)` — which answers for an
+offline container too, the normal state of a stash nobody is standing next to —
+and remembers the ids of the matching section. An item is credited only once it
+has been seen **inside** the container and is then found on the actor, which the
+item's own `parent_id` reports online and offline alike. Items that were already
+gone when the node started are not in that set and never count; neither are
+items looted from a different container, bought, or spawned by another quest.
+The credited count and the watch set live in the token (`w.n`, `w.seen`,
+`w.got`), so looting half a stash, saving and coming back keeps the progress.
+
+#### `objective.kill_count` and deaths nobody saw
+
+Kills arrive through `npc_on_death_callback` / `monster_on_death_callback` and
+`squad_on_npc_death`; a victim reported by both is counted once (`w.seen`).
+A death simulated offline fires no callback at all, and the only victims the
+node can name in advance are the members of a watched squad — so that is the
+one case it polls the server objects for, exactly like `objective.kill` does.
+That poll cannot say who landed the blow, so it only runs with
+`by_actor = false`; a kill the player made is by definition an online one and
+always brings its callback. With `community`, `section` or no filter there is no
+candidate list to poll, and an offline death goes unnoticed.
 
 ### 5.3 Extra actions (`use = extra`, all instant)
 
@@ -1035,6 +1064,7 @@ load). `E` blocks — the build refuses, and the game does not load the quest.
 | `E011` | a phrase is entered from a non-dialog node |
 | `E020` | an event condition outside `trigger.when` / `wait.when` / `wait.any` |
 | `E021` | `cases` empty, a case name missing or not `[a-z0-9_]`, duplicate case names, `weight ≤ 0` |
+| `E022` | parameters of a kind combined in a way the kind does not allow: `objective.fetch` with `item` next to `section`/`count`/`from`, or with neither `item` nor `section`; `objective.kill_count` with more than one filter |
 | `E030` | a `var` / `task` / `node` / `quest` reference points at something that is not declared, or a `ref` is never created by any node in the quest |
 | `E031` | `actor.teleport` to a place on another level *(editor only — in game this is a runtime error prefixed `E031:`)* |
 | `E050` | syntax error in custom Lua |

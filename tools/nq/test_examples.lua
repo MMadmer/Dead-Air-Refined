@@ -431,8 +431,9 @@ c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.
 check(c.E004 == 2, "E004 duplicate / bad node id (" .. tostring(c.E004) .. ")")
 c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, { id = "a", kind = "no.such", }, { id = "b", kind = "item.give" }, { id = "c", kind = "flow.step", on_enter = { { kind = "var" } }, cond = { { kind = "item.give" } } } } }]])
 check(c.E005 == 4, "E005 unknown kind / wrong position x4 (" .. tostring(c.E005) .. ")")
-c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, { id = "a", kind = "objective.fetch", params = { count = 0 } }, { id = "b", kind = "flow.step", on_enter = { { kind = "item.give", params = { section = 5 } }, { kind = "news.tip", params = { text = "ok", duration = "x" } } } } } }]])
+c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, { id = "a", kind = "objective.fetch", params = { count = 0 } }, { id = "b", kind = "flow.step", on_enter = { { kind = "item.give", params = { section = 5 } }, { kind = "news.tip", params = { text = "ok", duration = "x" } } } }, { id = "c", kind = "wait.timer" } } }]])
 check(c.E006 == 4, "E006 required/type/min x4 (" .. tostring(c.E006) .. ")")
+check(c.E022 == 1, "E022 objective.fetch with neither section nor item (" .. tostring(c.E022) .. ")")
 c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "a", kind = "flow.step" } } }]])
 check(c.E008 == 1 and c.W020 == 1, "E008 no trigger, W020 unreachable")
 c = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "j" } }, { id = "j", kind = "flow.join" }, { id = "z", kind = "flow.join" } } }]])
@@ -1320,6 +1321,237 @@ check(st("off_old") == "completed", "an older save: the spent trigger is torn do
 mock.remove_item(band)
 mock.ticks(2)
 check(V("off_old", "g") == 0, "and no off arrives out of nowhere")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (w) objective.fetch forms
+-- The plain section+count form is untouched (section (a) drives it end to end); these are the two
+-- forms that follow concrete objects: one named item, and "only what came out of THIS container".
+section("(w) objective.fetch: a named item, a named container, and an identical item from elsewhere")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/f_item.nqasset"] = [[return { nq = 1, id = "f_item", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = { { kind = "item.spawn", params = { section = "bread", place = { level = "l01_escape", pos = { 10, 0, 10 } }, ref = "prize" } } }, out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch", params = { item = { ref = "prize" } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/f_story.nqasset"] = [[return { nq = 1, id = "f_story", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch", params = { item = { story = "quest_doc" } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/f_from.nqasset"] = [[return { nq = 1, id = "f_from", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "loot" } },
+	{ id = "loot", kind = "objective.fetch", params = { section = "bread", count = 2, from = { story = "wolf_stash" } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/f_plain.nqasset"] = [[return { nq = 1, id = "f_plain", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch", params = { section = "medkit", count = 2 }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+local stash = mock.add_container("inventory_box", "wolf_stash")
+for _ = 1, 3 do mock.put_in_container(stash, "bread") end
+local decoy = mock.add_container("inventory_box", "decoy_stash")	-- the same bread, the wrong box
+mock.put_in_container(decoy, "bread")
+local doc = mock.new_se("wpn_pm", nil, 1, 1, nil)
+mock.sor:register(doc.id, "quest_doc")
+mock.first_update()
+core = xms_nq
+local UFI, UFS, UFF, UFP = "mod_a.f_item", "mod_a.f_story", "mod_a.f_from", "mod_a.f_plain"
+local keys = xms_nq_util.count_keys
+local function tok_of(uid, node) local q = core.quest_state(uid) return q and q.tokens[node] or nil end
+qs = core.quest_state(UFI)
+local prize_id = qs.refs.prize and qs.refs.prize.id
+check(qs.tokens.get ~= nil and prize_id ~= nil and mock.se[prize_id] ~= nil, "fetch by item waits on the object item.spawn created")
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.cid == stash.id, "fetch from container resolved the stash by story id")
+check(keys(tok_of(UFF, "loot").w.seen) == 3, "the three loaves inside the stash are watched (" .. keys(tok_of(UFF, "loot").w.seen) .. ")")
+-- the negative case: an identical item that never was in the stash and is not the named object
+mock.add_item("bread", true)
+mock.ticks(2)
+check(tok_of(UFI, "get") ~= nil, "another bread does not satisfy fetch by item")
+check(tok_of(UFF, "loot") ~= nil and (tok_of(UFF, "loot").w.n or 0) == 0, "and it does not count towards the container either")
+mock.pick_up(mock.se[prize_id], true)
+mock.ticks(2)
+check(core.quest_status(UFI) == "completed", "picking up that exact object completes fetch by item")
+check(tok_of(UFS, "get") ~= nil, "fetch by story item still waits")
+mock.pick_up(doc, true)
+mock.ticks(2)
+check(core.quest_status(UFS) == "completed", "the story object in the inventory completes it")
+-- looting the container itself
+mock.loot(stash, "bread", true)
+mock.ticks(2)
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "one loaf out of the stash counted (" .. tostring(tok_of(UFF, "loot").w.n) .. ")")
+check(keys(tok_of(UFF, "loot").w.seen) == 2, "two loaves left inside the stash")
+check(mock.count_items("bread") == 3, "the actor carries three loaves, only one of them from the stash")
+check(xms_nq_util.decode(mock.blobs["xms.nq"]).quests[UFF].tokens.loot.w.n == 1, "the container counter is in the staged blob")
+mock.loot(decoy, "bread", true)
+mock.ticks(2)
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "an identical loaf out of another container does not count")
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "the container counter survived save/load")
+mock.add_item("bread", true)
+mock.ticks(2)
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "a bread from elsewhere after the load still does not count")
+mock.loot(stash, "bread", true)
+mock.ticks(2)
+check(core.quest_status(UFF) == "completed", "the second loaf from the stash completes it")
+-- and the original form is exactly what it was
+check(tok_of(UFP, "get") ~= nil, "plain section+count fetch waiting")
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(tok_of(UFP, "get") ~= nil, "one medkit is not enough")
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(core.quest_status(UFP) == "completed", "plain section+count fetch behaves as before")
+-- E022: the forms are mutually exclusive and one of them is required
+local function fetch_codes(params)
+	local q = xms_nq_load.load_asset("mod_x", "inline.nqasset",
+		"return { nq = 1, id = \"x\", nodes = {\n" ..
+		"{ id = \"s\", kind = \"trigger.start\", out = { next = \"g\" } },\n" ..
+		"{ id = \"g\", kind = \"objective.fetch\", params = " .. params .. ", out = { done = \"e\" } },\n" ..
+		"{ id = \"e\", kind = \"flow.end\" },\n} }")
+	local set = {}
+	for _, p in ipairs(q.problems) do set[p.code] = (set[p.code] or 0) + 1 end
+	return set
+end
+check(fetch_codes([[{ section = "bread", count = 2 }]]).E022 == nil, "section+count is a valid form")
+check(fetch_codes([[{ section = "bread", from = { story = "box" } }]]).E022 == nil, "section+from is a valid form")
+check(fetch_codes([[{ item = { story = "doc" } }]]).E022 == nil, "item alone is a valid form")
+check(fetch_codes([[{ item = { story = "doc" }, section = "bread" }]]).E022 == 1, "item + section -> E022")
+check(fetch_codes([[{ item = { story = "doc" }, count = 2 }]]).E022 == 1, "item + count -> E022")
+check(fetch_codes([[{ item = { story = "doc" }, from = { story = "box" } }]]).E022 == 1, "item + from -> E022")
+check(fetch_codes([[{ from = { story = "box" } }]]).E022 == 1, "from without section -> E022")
+check(fetch_codes([[{ item = "doc" }]]).E006 == 1, "item must be {ref=} or {story=} -> E006")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (x) objective.kill_count
+section("(x) objective.kill_count: no filter, community, section, by_actor, counter across a save")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+local function kc_quest(id, params)
+	return "return { nq = 1, id = \"" .. id .. "\", nodes = {\n" ..
+		"{ id = \"start\", kind = \"trigger.start\", out = { next = \"k\" } },\n" ..
+		"{ id = \"k\", kind = \"objective.kill_count\", params = " .. params .. ", out = { done = \"fin\" } },\n" ..
+		"{ id = \"fin\", kind = \"flow.end\" },\n} }"
+end
+mock.overrides["mod_a/kc_any.nqasset"] = kc_quest("kc_any", "{ count = 2 }")
+mock.overrides["mod_a/kc_comm.nqasset"] = kc_quest("kc_comm", [[{ count = 2, community = "bandit" }]])
+mock.overrides["mod_a/kc_sect.nqasset"] = kc_quest("kc_sect", [[{ count = 1, section = "boss_npc" }]])
+mock.overrides["mod_a/kc_other.nqasset"] = kc_quest("kc_other", "{ count = 2, by_actor = false }")
+mock.first_update()
+core = xms_nq
+local function kc_n(id)
+	local t = tok_of("mod_a." .. id, "k")
+	return t and (t.w.n or 0) or nil
+end
+check(kc_n("kc_any") == 0 and kc_n("kc_comm") == 0, "counters start at zero")
+check(tok_of("mod_a.kc_any", "k").b == true, "kill_count waits")
+-- A bandit killed by the player counts everywhere it matches. No quest finishes in this tick and
+-- no timer moves, so the blob is restaged only because the counter marked the state dirty itself.
+local saves_before_kill = mock.save_calls
+local b1 = mock.add_npc("bandit_npc", nil, { community = "bandit" })
+b1:kill(db.actor)
+mock.ticks(2)
+check(kc_n("kc_any") == 1, "unfiltered: the player's kill counted (" .. tostring(kc_n("kc_any")) .. ")")
+check(kc_n("kc_comm") == 1, "community filter: a bandit counted")
+check(kc_n("kc_other") == 1, "by_actor = false counts the player's kill as well")
+check(mock.save_calls > saves_before_kill and xms_nq_util.decode(mock.blobs["xms.nq"]).quests["mod_a.kc_any"].tokens.k.w.n == 1,
+	"the counter marked the state dirty and went into the blob")
+-- a kill by somebody else
+local s1 = mock.add_npc("stalker_npc", nil, { community = "stalker" })
+s1:kill(wolf)
+mock.ticks(2)
+check(kc_n("kc_any") == 1, "by_actor is on by default: an NPC-on-NPC kill does not count")
+check(core.quest_status("mod_a.kc_other") == "completed", "by_actor = false counts a kill by an NPC and completes")
+local b2 = mock.add_npc("bandit_npc", nil, { community = "bandit" })
+b2:kill(wolf)
+mock.ticks(2)
+check(kc_n("kc_comm") == 1, "a matching community killed by an NPC does not count either")
+-- the counter is part of the token and rides the blob
+check(xms_nq_util.decode(mock.blobs["xms.nq"]).quests["mod_a.kc_any"].tokens.k.w.n == 1, "the kill counter is in the staged blob")
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+check(kc_n("kc_any") == 1 and kc_n("kc_comm") == 1, "counters survived save/load")
+local s2 = mock.add_npc("stalker_npc", nil, { community = "stalker" })
+s2:kill(db.actor)
+mock.ticks(2)
+check(core.quest_status("mod_a.kc_any") == "completed", "second kill after the load completes the unfiltered quest")
+check(kc_n("kc_comm") == 1, "the community filter ignored a stalker")
+local b3 = mock.add_npc("bandit_npc", nil, { community = "bandit" })
+b3:kill(db.actor)
+mock.ticks(2)
+check(core.quest_status("mod_a.kc_comm") == "completed", "second bandit completes the community quest")
+-- section filter
+local dog = mock.add_npc("dog_npc", nil, { community = "monster" })
+dog:kill(db.actor)
+mock.ticks(2)
+check(kc_n("kc_sect") == 0, "section filter ignores another section")
+local boss = mock.add_npc("boss_npc", nil, { community = "monolith" })
+boss:kill(db.actor)
+mock.ticks(2)
+check(core.quest_status("mod_a.kc_sect") == "completed", "section filter counted the matching NPC")
+-- E022: at most one filter
+local function kc_codes(params)
+	local q = xms_nq_load.load_asset("mod_x", "inline.nqasset", kc_quest("x", params))
+	local set = {}
+	for _, p in ipairs(q.problems) do set[p.code] = (set[p.code] or 0) + 1 end
+	return set
+end
+check(kc_codes("{ count = 3 }").E022 == nil, "no filter is fine")
+check(kc_codes([[{ community = "bandit" }]]).E022 == nil, "one filter is fine")
+check(kc_codes([[{ community = "bandit", section = "x" }]]).E022 == 1, "two filters -> E022")
+check(kc_codes([[{ community = "bandit", squad = { story = "sq" }, section = "x" }]]).E022 == 1, "three filters -> one E022")
+check(kc_codes("{ count = 0 }").E006 == 1, "count keeps its min=1 -> E006")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (x2) kill_count on a squad
+section("(x2) objective.kill_count on a quest squad, offline deaths, objective.kill unchanged")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/kc_squad.nqasset"] = [[return { nq = 1, id = "kc_squad", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = { { kind = "spawn.squad", params = { section = "simulation_boar", smart = "esc_smart_terrain_2_12", ref = "gang" } } }, out = { next = "k" } },
+	{ id = "k", kind = "objective.kill_count", params = { count = 2, by_actor = false, squad = { ref = "gang" } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/k_plain.nqasset"] = [[return { nq = 1, id = "k_plain", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "k" } },
+	{ id = "k", kind = "objective.kill", params = { target = { spawn = { section = "simulation_boar", smart = "esc_smart_terrain_3_16", ref = "herd" } } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.kc_squad")
+local gang = qs.refs.gang and mock.se[qs.refs.gang.id]
+check(gang ~= nil and #gang._members == 2, "the quest spawned the squad it watches")
+check(qs.tokens.k ~= nil and qs.tokens.k.w.sid == gang.id, "kill_count pinned that squad down")
+check(keys(qs.tokens.k.w.mem) == 2, "both members are on the watch list (" .. keys(qs.tokens.k.w.mem) .. ")")
+local outsider = mock.add_npc("stalker_npc", nil, { community = "stalker" })
+outsider:kill(db.actor)
+mock.ticks(2)
+check(tok_of("mod_a.kc_squad", "k").w.n == 0, "a death outside the squad is filtered out")
+mock.kill_member(gang, gang._members[1], wolf)
+mock.ticks(2)
+check(tok_of("mod_a.kc_squad", "k").w.n == 1, "an online squad death counts once, killer or no killer")
+mock.member_die_offline(gang, gang._members[1])
+mock.ticks(2)
+check(core.quest_status("mod_a.kc_squad") == "completed", "the offline death with no callback was found by the poll")
+-- objective.kill on a spawned squad is untouched by any of this
+local herd = core.quest_state("mod_a.k_plain").refs.herd
+check(herd ~= nil and tok_of("mod_a.k_plain", "k") ~= nil, "objective.kill spawned and waits on its own squad")
+mock.squad_die_offline(mock.se[herd.id])
+mock.ticks(2)
+check(core.quest_status("mod_a.k_plain") == "completed", "objective.kill still completes when its squad is gone")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary

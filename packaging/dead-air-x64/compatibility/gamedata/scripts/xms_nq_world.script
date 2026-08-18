@@ -208,6 +208,110 @@ K["objective.kill"] = {
 	end,
 }
 
+-- ---------------------------------------------------------------------------- objective.kill_count
+-- "kill N of them" where the victims are not known up front. w = { n, seen = {[victim id]=true},
+-- sid = watched squad id, mem = {[member id]=true} }. Counting starts at begin(): the node is only
+-- subscribed while its token waits, so nothing that died earlier can reach it. `seen` is what makes
+-- one death count once when both npc_killed and squad_npc_death report it.
+local function kc_squad_id(ctx)
+	local w = ctx.w
+	if (w.sid) then return w.sid end
+	local sq = squad_of(ctx, ctx.params.squad)
+	if not (sq) then return nil end
+	w.sid = sq.id
+	core.mark_dirty()
+	return w.sid
+end
+
+-- Keeps the roster of the watched squad up to date; members are the only victims this kind can
+-- poll for, so they are the only ones an offline death can still be noticed for.
+local function kc_watch_members(ctx)
+	local w = ctx.w
+	local sid = kc_squad_id(ctx)
+	if not (sid) then return end
+	local se = util.se_by_id(sid)
+	if not (is_squad(se)) then return end
+	pcall(function()
+		for k in se:squad_members() do
+			local id = k.id or (k.object and k.object.id)
+			if (id and not w.mem[id] and not w.seen[id]) then
+				w.mem[id] = true
+				core.mark_dirty()
+			end
+		end
+	end)
+end
+
+local function kc_count(ctx, id, by_actor)
+	local w = ctx.w
+	if not (id) then return false end
+	if (w.seen[id]) then return false end
+	if (ctx.params.by_actor and not by_actor) then return false end
+	w.seen[id] = true
+	w.mem[id] = nil
+	w.n = (w.n or 0) + 1
+	core.mark_dirty()
+	return true
+end
+
+-- At most one filter is allowed (E022), so the first one that is set decides.
+local function kc_matches(ctx, evt)
+	local p = ctx.params
+	if (p.community) then return evt.community == p.community end
+	if (p.section) then return evt.section == p.section end
+	if (p.squad) then
+		if not (ctx.w.sid) then return false end	-- the squad does not exist yet: nobody belongs to it
+		if (ctx.w.mem[evt.id]) then return true end
+		-- a member that joined between two rosters: ask the victim who its squad is
+		local se = evt.id and util.se_by_id(evt.id) or nil
+		return se ~= nil and group_of(se) == ctx.w.sid
+	end
+	return true
+end
+
+K["objective.kill_count"] = {
+	events = { "npc_killed", "squad_npc_death" },
+	begin = function(ctx)
+		local w = ctx.w
+		w.n = w.n or 0
+		w.seen = w.seen or {}
+		w.mem = w.mem or {}
+		core.mark_dirty()
+		if (ctx.params.squad) then kc_watch_members(ctx) end
+		if (w.n >= (ctx.params.count or 1)) then return { pin = "done" } end
+		return "wait"
+	end,
+	-- Only a watched squad has something to poll: for the other filters no list of candidates
+	-- exists, and a kill the player landed is an online one that always fires its callback.
+	wants_poll = function(ctx) return ctx.params.squad ~= nil and not ctx.params.by_actor end,
+	poll = function(ctx)
+		local w = ctx.w
+		if (ctx.params.squad and not ctx.params.by_actor) then
+			kc_watch_members(ctx)
+			for id in pairs(w.mem) do
+				local se = util.se_by_id(id)
+				if not (se and util.se_alive(se)) then kc_count(ctx, id, false) end
+			end
+		end
+		if ((w.n or 0) >= (ctx.params.count or 1)) then return "done" end
+		return nil
+	end,
+	on_event = function(ctx, evt)
+		local w = ctx.w
+		if (ctx.params.squad) then kc_watch_members(ctx) end
+		if (evt.name == "npc_killed") then
+			if (kc_matches(ctx, evt)) then kc_count(ctx, evt.id, evt.by_actor == true) end
+		elseif (evt.name == "squad_npc_death") then
+			-- the squad callback carries no section/community, so it only feeds the squad filter
+			if (ctx.params.squad and evt.squad_id == w.sid) then
+				kc_count(ctx, evt.npc_id, killer_is_actor(evt.killer))
+			end
+		end
+		if ((w.n or 0) >= (ctx.params.count or 1)) then return "done" end
+		return nil
+	end,
+}
+
 -- ---------------------------------------------------------------------------- extra: spawn
 K["spawn.squad"] = {
 	run = function(ctx, p)

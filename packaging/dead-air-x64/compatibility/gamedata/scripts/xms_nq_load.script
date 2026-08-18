@@ -372,7 +372,7 @@ local function count_problems(list)
 end
 
 -- ============================================================================ canonicalization
-local REF_HOLDER_TYPES = { npc_ref = true, target_ref = true, place = true, kill_target = true, squad_ref = true }
+local REF_HOLDER_TYPES = { npc_ref = true, target_ref = true, place = true, kill_target = true, squad_ref = true, object_ref = true }
 
 local function is_ident(s)
 	return type(s) == "string" and string.find(s, ID_PATTERN) ~= nil
@@ -421,6 +421,13 @@ end
 local function valid_squad_ref(v)
 	if (type(v) ~= "table") then return false end
 	return type(v.story) == "string" or type(v.ref) == "string"
+end
+
+-- One concrete world object (item, container, squad): the same two alternatives as squad_ref,
+-- kept as its own type because the editor pickers and the docs describe it as "this object",
+-- not "this squad".
+local function valid_object_ref(v)
+	return valid_squad_ref(v)
 end
 
 local function valid_place(v)
@@ -491,6 +498,9 @@ local function canon_param(st, node, slot, p, v)
 		return util.copy(v), true
 	elseif (t == "squad_ref") then
 		if not (valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
+		return util.copy(v), true
+	elseif (t == "object_ref") then
+		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
 		return util.copy(v), true
 	elseif (t == "kill_target") then
 		if (type(v) ~= "table") then return nil, false, "must be {story=} | {ref=} | {spawn={section=, smart=, ref=}}" end
@@ -715,6 +725,37 @@ local function scan_refs(st, node, spec, params, tasks_hint)
 	end
 end
 
+-- ---------------------------------------------------------------------------- param combinations
+-- E022: parameters a kind declares individually but cannot accept together (or at all). The
+-- catalog has no way to say "either this set or that one", so the few kinds with alternative
+-- forms are checked here. The raw params decide which form the author meant - a canonical
+-- value is indistinguishable from a catalog default.
+local KIND_FORM = {}
+
+KIND_FORM["objective.fetch"] = function(st, nid, raw, params)
+	if (raw.item ~= nil) then
+		local clash = {}
+		for _, name in ipairs({ "section", "count", "from" }) do
+			if (raw[name] ~= nil) then clash[#clash + 1] = name end
+		end
+		if (#clash > 0) then
+			problem(st.problems, "E022", nid, "param:item", "item is one concrete object and cannot be combined with %s", table.concat(clash, ", "))
+		end
+	elseif (params.section == nil) then
+		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs either section (with count and an optional from) or item")
+	end
+end
+
+KIND_FORM["objective.kill_count"] = function(st, nid, raw, params)
+	local used = {}
+	for _, name in ipairs({ "community", "squad", "section" }) do
+		if (params[name] ~= nil) then used[#used + 1] = name end
+	end
+	if (#used > 1) then
+		problem(st.problems, "E022", nid, "param:" .. used[1], "at most one filter is allowed, got %s", table.concat(used, ", "))
+	end
+end
+
 -- ============================================================================ build a quest
 -- raw -> canonical quest definition with a problem list. `st` is the per-file scratch state.
 local function build_nodes(st, raw_nodes, q)
@@ -751,6 +792,8 @@ local function build_nodes(st, raw_nodes, q)
 					node.once = spec.once
 				end
 				node.params = canon_params(st, nid, "param", spec, rn.params)
+				local form = KIND_FORM[kname]
+				if (form) then form(st, nid, type(rn.params) == "table" and rn.params or {}, node.params) end
 				scan_refs(st, nid, spec, node.params)
 				-- cond / on_enter / on_exit
 				if (rn.cond ~= nil) then node.cond = canon_cond_list(st, nid, "cond", rn.cond) end

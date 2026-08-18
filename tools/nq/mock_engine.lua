@@ -237,9 +237,34 @@ local function new_se(section, pos, lvid, gvid, parent, id)
 	-- a spawned ammo object is one full box; create_ammo overwrites it with its own round count
 	if (section and system_ini():line_exist(section, "box_size")) then se.ammo_left = system_ini():r_u32(section, "box_size") end
 	mock.se[se.id] = se
+	-- parent/children mirror the server side: an item names its owner, the owner lists its items
+	local owner = parent and mock.se[parent]
+	if (owner) then
+		owner._children = owner._children or {}
+		owner._children[#owner._children + 1] = se.id
+	end
 	return se
 end
 mock.new_se = new_se
+
+local function detach_from_parent(se)
+	local owner = se and se.parent_id and mock.se[se.parent_id]
+	if not (owner and owner._children) then return end
+	for i, id in ipairs(owner._children) do
+		if (id == se.id) then table.remove(owner._children, i) break end
+	end
+end
+
+-- Ownership transfer (looting a stash, handing an item over): exactly what the server does.
+function mock.reparent(se, parent)
+	detach_from_parent(se)
+	se.parent_id = parent
+	local owner = parent and mock.se[parent]
+	if (owner) then
+		owner._children = owner._children or {}
+		owner._children[#owner._children + 1] = se.id
+	end
+end
 
 -- An online stalker with a server object of the same id, in db.storage, optionally with a story id.
 function mock.add_npc(section, story_id, fields)
@@ -372,8 +397,54 @@ function mock.remove_item(go)
 	for i, it in ipairs(a._inv) do
 		if (it == go or it:id() == go:id()) then table.remove(a._inv, i) break end
 	end
+	detach_from_parent(mock.se[go:id()])
 	mock.se[go:id()] = nil
 	mock.go[go:id()] = nil
+end
+
+-- ---------------------------------------------------------------------------- containers
+-- A stash / inventory box: a server object that owns its contents through parent_id. `online`
+-- also gives it a client object, the way a box on the current level has one.
+function mock.add_container(section, story_id, online)
+	local se = new_se(section or "inventory_box", vector():set(0, 0, 0), 1, 1, nil)
+	se._children = {}
+	if (online) then
+		local go = new_go(section or "inventory_box")
+		mock.go[go._id] = nil
+		go._id = se.id
+		mock.go[se.id] = go
+		db.storage[se.id] = { object = go }
+	end
+	if (story_id) then mock.sor:register(se.id, story_id) end
+	return se
+end
+
+function mock.put_in_container(box, section)
+	return new_se(section, box.position, 1, 1, box.id)
+end
+
+-- Moves an existing world object into the actor's inventory the way the engine does: the server
+-- object changes owner, a client object joins the inventory list, actor_on_item_take fires.
+function mock.pick_up(se, notify)
+	mock.reparent(se, db.actor:id())
+	local go = mock.go[se.id]
+	if not (go) then
+		go = new_go(se:section_name())
+		mock.go[go._id] = nil
+		go._id = se.id
+		mock.go[se.id] = go
+	end
+	db.actor._inv[#db.actor._inv + 1] = go
+	if (notify ~= false) then SendScriptCallback("actor_on_item_take", go) end
+	return go
+end
+
+function mock.loot(box, section, notify)
+	for _, id in ipairs(box._children or {}) do
+		local se = mock.se[id]
+		if (se and se:section_name() == section) then return mock.pick_up(se, notify) end
+	end
+	error("loot: no " .. tostring(section) .. " in the container")
 end
 
 function mock.count_items(section)
@@ -427,8 +498,17 @@ function alife_obj:create_ammo(section, pos, lvid, gvid, parent, num)
 	se.ammo_left = num
 	return se
 end
+-- Alundaio's binding: return_stl_iterator over the server-side child ids of an object.
+function alife_obj:get_children(se)
+	local list, i = (se and se._children) or {}, 0
+	return function()
+		i = i + 1
+		return list[i]
+	end
+end
 function alife_obj:release(se, b)
 	if (se) then
+		detach_from_parent(se)
 		mock.se[se.id] = nil
 		if (mock.go[se.id] and db.actor) then mock.remove_item(mock.go[se.id]) end
 		mock.go[se.id] = nil
@@ -672,6 +752,14 @@ end
 function mock.kill_member(squad, member_id, killer)
 	local go = mock.go[member_id]
 	if (go) then go:kill(killer) else mock.squad_member_died(squad, member_id, killer) end
+end
+
+-- One member dies while nobody is around: no callback of any kind, the object is simply gone.
+function mock.member_die_offline(squad, member_id)
+	squad:_drop_member(member_id)
+	mock.se[member_id] = nil
+	mock.go[member_id] = nil
+	db.storage[member_id] = nil
 end
 
 -- Offline death: nobody is around, no callbacks at all - the objects simply vanish.

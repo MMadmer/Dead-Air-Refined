@@ -315,18 +315,121 @@ K["flow.end"] = {
 
 -- ============================================================================ main: objectives
 -- params.count is whole items (ammo: boxes), the unit item.give / item.take hand out.
+-- objective.fetch has three forms, kept apart at load time by E022:
+--   section (+count)          any items of the section anywhere in the inventory (the original)
+--   section (+count) + from   only items that came out of THAT container
+--   item                      one concrete object has to end up on the actor
+
+local function actor_id()
+	local a = actor()
+	if not (a) then return nil end
+	local ok, id = pcall(a.id, a)
+	if (ok) then return id end
+	return nil
+end
+
+-- An inventory item names its owner in the server object's parent_id, online and offline alike,
+-- so this answers for a stash the player looted on a level nobody is standing on.
+local function held_by_actor(id)
+	local aid = actor_id()
+	if not (id and aid) then return false end
+	local se = util.se_by_id(id)
+	if not (se) then return false end
+	return se.parent_id == aid
+end
+
+-- Ids of `section` items sitting inside the container right now, or nil when it cannot be read.
+-- get_children works for an offline container too - the usual state of a stash the player has not
+-- reached yet; the inventory iterators are the fallback for an engine without that binding.
+local function container_item_ids(cid, section)
+	local se = util.se_by_id(cid)
+	if not (se) then return nil end
+	local ids = {}
+	local ok = pcall(function()
+		for id in alife():get_children(se) do
+			local child = util.se_by_id(id)
+			if (child and child:section_name() == section) then ids[#ids + 1] = id end
+		end
+	end)
+	if (ok) then return ids end
+	local go = util.go_by_id(cid)
+	if not (go) then return nil end
+	local list, seen = {}, {}
+	local collect = function(_, item)
+		local iid = item and item:id()
+		if (iid and not seen[iid] and item:section() == section) then
+			seen[iid] = true
+			list[#list + 1] = iid
+		end
+		return false
+	end
+	for _, method in ipairs({ "iterate_inventory_box", "iterate_inventory" }) do
+		local f = go[method]
+		if (f) then pcall(f, go, collect, go) end
+	end
+	return list
+end
+
+-- `from`: an item is credited only after it has been seen INSIDE the container and then on the
+-- actor. w = { cid, seen = {[id]=true}, got = {[id]=true}, n }. An identical item picked up
+-- anywhere else was never in `seen`, so it cannot move the counter.
+local function fetch_from_count(ctx)
+	local w, p = ctx.w, ctx.params
+	w.n = w.n or 0
+	w.seen = w.seen or {}
+	w.got = w.got or {}
+	local aid = actor_id()
+	if not (aid) then return w.n end
+	if not (w.cid) then
+		local cid = util.resolve_target_id(ctx, p.from)
+		if not (cid) then return w.n end	-- the container does not exist yet: nothing to watch
+		w.cid = cid
+		core.mark_dirty()
+	end
+	for _, id in ipairs(container_item_ids(w.cid, p.section) or {}) do
+		if not (w.seen[id] or w.got[id]) then
+			w.seen[id] = true
+			core.mark_dirty()
+		end
+	end
+	for id in pairs(w.seen) do
+		local se = util.se_by_id(id)
+		if not (se) then
+			w.seen[id] = nil			-- destroyed out of sight: it can never be credited now
+			core.mark_dirty()
+		elseif (se.parent_id == aid) then
+			w.seen[id] = nil
+			w.got[id] = true
+			w.n = w.n + 1
+			core.mark_dirty()
+		end
+	end
+	return w.n
+end
+
+local function fetch_done(ctx)
+	local p = ctx.params
+	if (p.item) then return held_by_actor(util.resolve_target_id(ctx, p.item)) end
+	if (p.from) then return fetch_from_count(ctx) >= (p.count or 1) end
+	return util.count_items(p.section) >= (p.count or 1)
+end
+
 K["objective.fetch"] = {
 	events = { "item_taken" },
 	begin = function(ctx)
-		if (util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return { pin = "done" } end
+		if (fetch_done(ctx)) then return { pin = "done" } end
 		return "wait"
 	end,
 	poll = function(ctx)
-		if (util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return "done" end
+		if (fetch_done(ctx)) then return "done" end
 		return nil
 	end,
 	on_event = function(ctx, evt)
-		if (evt.section == ctx.params.section and util.count_items(ctx.params.section) >= (ctx.params.count or 1)) then return "done" end
+		-- the plain form only cares about its own section; the object-tracking forms have to look
+		-- at every pickup, because the event carries no clue about where the item came from
+		local p = ctx.params
+		if (p.item == nil and p.from == nil and evt.section ~= p.section) then return nil end
+		if (fetch_done(ctx)) then return "done" end
 		return nil
 	end,
 }

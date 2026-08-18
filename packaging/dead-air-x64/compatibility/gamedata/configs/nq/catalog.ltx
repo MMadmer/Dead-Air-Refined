@@ -1,4 +1,6 @@
-; NQ kind catalog v1 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; NQ kind catalog v2 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; A ';' starts a comment, so it must never appear inside a value - one in a desc
+; truncates it silently and the editor shows half the text. Use a dash instead.
 ; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
 ; One section per kind: [nq.<kind>]. Keys:
 ;   group   - group name in the editor dropdown
@@ -17,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 1
+version = 2
 api     = 1
 
 ; ============================================================ triggers
@@ -105,14 +107,33 @@ once   = false
 impl   = core
 since  = 1
 
+[nq.objective.kill_count]
+group  = objective
+title  = ”бить N целей
+desc   = —читает убийства, пока их не наберЄтс€ count. ќтсчЄт идЄт с входа в ноду, счЄтчик переживает сохранение. by_actor засчитывает только убитых игроком. ‘ильтр необ€зателен, но больше одного сразу нельз€: community группировка жертвы, squad отр€д (ref или story), section секци€ NPC. Ѕез фильтра считаетс€ люба€ смерть NPC
+use    = main
+params    = count, by_actor, community, squad, section
+count     = int, default=1, min=1
+by_actor  = bool, default=true
+community = community
+squad     = object_ref
+section   = string
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 2
+
 [nq.objective.fetch]
 group  = objective
 title  = ƒобыть предмет
-desc   = ∆дЄт, пока в инвентаре игрока будет нужное количество предметов секции. count Ч штуки предметов: дл€ патронов это коробки, а не патроны
+desc   = ∆дЄт, пока предметы окажутс€ у игрока. ќбычна€ форма Ч section (+count): любые предметы секции в инвентаре. from Ч только те, что вз€ты из этого контейнера (тайник, €щик, инвентарь NPC) Ч такой же предмет из другого места не засчитываетс€. item Ч один конкретный объект (ref или story id), его нельз€ сочетать с section, count и from. count Ч штуки предметов: дл€ патронов это коробки, а не патроны
 use    = main
-params  = section, count
-section = item_section, required
+params  = section, count, item, from
+section = item_section
 count   = int, default=1, min=1
+item    = object_ref
+from    = object_ref
 pins   = done
 wait   = true
 once   = false
