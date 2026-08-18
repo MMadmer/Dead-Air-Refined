@@ -844,15 +844,45 @@ core.run_actions(core.make_ctx(UID_A, "intro"), { { kind = "task.remove", params
 check(core.quest_state(UID_A).tasks.bring_bread == nil and mock.task_by_id(T_BREAD):get_state() == task.fail and task_news_count("fail", T_BREAD) == 0, "task.remove closes silently, task_status none")
 -- task.set_target / set_text on an active task
 core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "hunt" } } }, "enter")
-local th = mock.task_by_id("nq." .. UID_B .. ".hunt")
-check(th ~= nil and th:get_map_object_id() == 65535, "hunt task without a target (ref boars not created yet)")
-core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt", target = { smart = "esc_smart_terrain_2_12" } } } }, "enter")
-check(th:get_map_object_id() == mock.smarts["esc_smart_terrain_2_12"].id and th:get_map_location() == "secondary_task_location", "task.set_target -> map location on the smart")
-check(mock.spots[mock.smarts["esc_smart_terrain_2_12"].id .. "|ui_secondary_task_blink"] ~= nil, "blink spot added")
--- hand-built action lists skip the loader, so the text is passed already converted (cp1251)
-core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_text", params = { task = "hunt", title = mock.cp("Новый заголовок") } } }, "enter")
-check(th:get_title() == mock.cp("Новый заголовок") and task_news("updated", "nq." .. UID_B .. ".hunt") ~= nil, "task.set_text + updated news")
 local hunt_id = "nq." .. UID_B .. ".hunt"
+local th = mock.task_by_id(hunt_id)
+check(th ~= nil and th:get_map_object_id() == 65535, "hunt task without a target (ref boars not created yet)")
+local before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt", target = { smart = "esc_smart_terrain_2_12" } } } }, "enter")
+check(th:get_map_object_id() == mock.smarts["esc_smart_terrain_2_12"].id and th:get_map_location() == "secondary_task_location" and task_news_count("updated", hunt_id) == before_update + 1, "task.set_target -> map location and one updated news")
+check(mock.spots[mock.smarts["esc_smart_terrain_2_12"].id .. "|ui_secondary_task_blink"] ~= nil, "blink spot added")
+before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt", target = { smart = "esc_smart_terrain_2_12" } } } }, "enter")
+check(task_news_count("updated", hunt_id) == before_update, "task.set_target suppresses a semantic no-op update")
+-- hand-built action lists skip the loader, so the text is passed already converted (cp1251)
+before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_text", params = { task = "hunt", title = mock.cp("Новый заголовок"), descr = mock.cp("Новое описание") } } }, "enter")
+check(th:get_title() == mock.cp("Новый заголовок") and th:get_description() == mock.cp("Новое описание") and task_news_count("updated", hunt_id) == before_update + 1, "task.set_text changes fields and emits one updated news")
+before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_text", params = { task = "hunt", title = mock.cp("Новый заголовок"), descr = mock.cp("Новое описание") } } }, "enter")
+check(task_news_count("updated", hunt_id) == before_update, "task.set_text suppresses a semantic no-op update")
+local hunt_def = core.quest_def(UID_B).tasks.hunt
+local saved_target = hunt_def.target
+hunt_def.target = { smart = "esc_smart_terrain_2_12" }
+local smart_id = mock.smarts["esc_smart_terrain_2_12"].id
+level.map_remove_object_spot(smart_id, "ui_secondary_task_blink")
+local map_add = level.map_add_object_spot
+local blink_adds = 0
+level.map_add_object_spot = function(...)
+	blink_adds = blink_adds + 1
+	return map_add(...)
+end
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "hunt" } } }, "enter")
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.give", params = { task = "hunt" } } }, "enter")
+level.map_add_object_spot = map_add
+hunt_def.target = saved_target
+check(blink_adds == 1, "repeated task.give keeps one blink spot")
+before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt" } } }, "enter")
+check(th:get_map_object_id() == 65535 and task_news_count("updated", hunt_id) == before_update + 1, "task.set_target clear emits one updated news")
+before_update = task_news_count("updated", hunt_id)
+core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.set_target", params = { task = "hunt" } } }, "enter")
+check(th:get_map_object_id() == 65535 and task_news_count("updated", hunt_id) == before_update, "task.set_target suppresses a repeated clear update")
 core.run_actions(core.make_ctx(UID_B, "hunt"), { { kind = "task.fail", params = { task = "hunt" } } }, "enter")
 check(th:get_state() == task.fail and core.quest_state(UID_B).tasks.hunt == "failed" and task_news_count("fail", hunt_id) == 1, "task.fail emits one failure notification")
 -- undeclared task -> error logged, nothing else breaks

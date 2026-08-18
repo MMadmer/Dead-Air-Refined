@@ -10,6 +10,7 @@ local util = xms_nq_util
 local core = xms_nq
 
 local ICON_DEFAULT = "ui_pda2_mtask_overlay"
+local NO_OBJECT_ID = 0xffff
 
 local K = {}
 
@@ -51,6 +52,19 @@ local function get_task(a, tid, only_inprocess)
 	local ok, t = pcall(a.get_task, a, tid, only_inprocess)
 	if (ok) then return t end
 	return nil
+end
+
+local function get_task_target(t)
+	local id = NO_OBJECT_ID
+	pcall(function() id = t:get_map_object_id() end)
+	if (id ~= NO_OBJECT_ID) then return id end
+	return nil
+end
+
+local function ensure_blink(id, blink)
+	local present = 0
+	pcall(function() present = level.map_has_object_spot(id, blink) end)
+	if (present == 0) then pcall(level.map_add_object_spot, id, blink, "") end
 end
 
 local function anchor_name(name)
@@ -129,7 +143,7 @@ function give(ctx, name)
 		end
 		a:give_task(t, 0, true, 0)
 	end
-	if (target) then pcall(level.map_add_object_spot, target, blink, "") end
+	if (target) then ensure_blink(target, blink) end
 	set_status(ctx, name, "active")
 	return t
 end
@@ -185,21 +199,22 @@ function set_target(ctx, name, target)
 	-- unresolvable target is still an error - that is an authoring mistake, not a
 	-- request to hide the marker.
 	if (target == nil) then
-		local prev = nil
-		pcall(function() prev = t:get_map_object_id() end)
+		local prev = get_task_target(t)
+		if not (prev) then return end
 		t:remove_map_locations(false)
-		if (prev) then
-			pcall(level.map_remove_object_spot, prev, blink)
-			pcall(level.map_remove_object_spot, prev, spot)
-		end
+		pcall(level.map_remove_object_spot, prev, blink)
+		pcall(level.map_remove_object_spot, prev, spot)
 		send_news("updated", t)
 		return
 	end
 	local id = target_object_id(ctx, name, target)
 	if not (id) then error("task.set_target: target not found") end
+	local location = nil
+	pcall(function() location = t:get_map_location() end)
+	if (get_task_target(t) == id and location == spot) then return end
 	t:remove_map_locations(false)
 	t:change_map_location(spot, id)
-	pcall(level.map_add_object_spot, id, blink, "")
+	ensure_blink(id, blink)
 	send_news("updated", t)
 end
 
@@ -210,9 +225,26 @@ function set_text(ctx, name, title, descr)
 	local tid = task_id(ctx.uid, name)
 	local t = get_task(a, tid, true)
 	if not (t) then error("task.set_text: task '" .. tostring(name) .. "' is not active in the PDA") end
-	if (title ~= nil) then t:set_title(util.format_text(ctx, title)) end
-	if (descr ~= nil) then t:set_description(util.format_text(ctx, descr)) end
-	send_news("updated", t)
+	local changed = false
+	if (title ~= nil) then
+		local value = util.format_text(ctx, title)
+		local current = nil
+		pcall(function() current = t:get_title() end)
+		if (current ~= value) then
+			t:set_title(value)
+			changed = true
+		end
+	end
+	if (descr ~= nil) then
+		local value = util.format_text(ctx, descr)
+		local current = nil
+		pcall(function() current = t:get_description() end)
+		if (current ~= value) then
+			t:set_description(value)
+			changed = true
+		end
+	end
+	if (changed) then send_news("updated", t) end
 end
 
 -- ---------------------------------------------------------------------------- kinds
