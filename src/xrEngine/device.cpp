@@ -507,8 +507,9 @@ void CRenderDevice::ProcessEvent(const SDL_Event& event)
             {
                 UpdateWindowRects();
 
-                // Exclusive mode changes are already applied through Reset; ignore stale SDL window sizes.
-                if (psDeviceMode.WindowStyle == rsFullscreen)
+                // Fullscreen sizes are device-owned; SDL may report DPI-virtualized logical dimensions here.
+                if (psDeviceMode.WindowStyle == rsFullscreen ||
+                    psDeviceMode.WindowStyle == rsFullscreenBorderless)
                     break;
 
                 if (static_cast<int>(psDeviceMode.Width) == event.window.data1 &&

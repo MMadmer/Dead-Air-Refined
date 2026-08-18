@@ -17,6 +17,14 @@ target_sources(xr_3da PRIVATE
     stalker_soc.ico
 )
 
+if (MSVC)
+    set(xr_3da_manifest "${CMAKE_CURRENT_SOURCE_DIR}/as-invoker-manifest-part.xml")
+
+    # Merge the DPI settings into CMake's generated manifest so the executable keeps one RT_MANIFEST resource.
+    target_link_options(xr_3da PRIVATE "/MANIFESTINPUT:${xr_3da_manifest}")
+    set_property(TARGET xr_3da APPEND PROPERTY LINK_DEPENDS "${xr_3da_manifest}")
+endif()
+
 # The resource compiler gets no dependency scanning, so a version bump would relink the
 # executable while leaving the stale VERSIONINFO in place. Diagnostic reports key off it.
 set_property(
