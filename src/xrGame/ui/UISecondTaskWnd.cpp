@@ -29,7 +29,7 @@
 // geometry of one sub-objective row, in the same base units the task layout uses
 static constexpr float OBJECTIVE_ROW_H = 16.0f;
 static constexpr float OBJECTIVE_INDENT = 32.0f;
-static constexpr float OBJECTIVE_DOT_SIZE = 7.0f;
+static constexpr float OBJECTIVE_DOT_SIZE = 11.0f;
 static constexpr float OBJECTIVE_MARK_SIZE = 13.0f;
 
 UITaskListWnd::UITaskListWnd() : CUIWindow("UITaskListWnd") {}
@@ -271,7 +271,9 @@ void UITaskListWndItem::build_objectives(CUIXml& xml)
 
         row.dot = xr_new<CUIStatic>("objective_state");
         row.dot->SetAutoDelete(true);
-        row.dot->InitTexture("ui_minimap_point", false);
+        // the task's own icon at a smaller size: it is the one texture this layout is
+        // guaranteed to have, since the row above draws it
+        row.dot->InitTexture("ui_inGame2_PDA_icon_Secondary_mission", false);
         row.dot->SetStretchTexture(true);
         row.dot->SetWndSize(Fvector2().set(OBJECTIVE_DOT_SIZE, OBJECTIVE_DOT_SIZE));
         AttachChild(row.dot);
@@ -281,6 +283,8 @@ void UITaskListWndItem::build_objectives(CUIXml& xml)
         row.text->SetFont(UI().Font().pFontLetterica16Russian);
         // take whatever font the task's own line uses when the layout offers one
         CUIXmlInit::InitText(xml, "second_task_wnd:task_item:name:text", 0, row.text->TextItemControl());
+        // whatever the task's line does with alignment, a list of steps reads left to right
+        row.text->TextItemControl()->SetTextAlignment(CGameFont::alLeft);
         row.text->SetTextComplexMode(true);
         row.text->SetText("");
         AttachChild(row.text);
