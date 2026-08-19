@@ -615,7 +615,19 @@ mock.level_name = "l01_escape"
 
 level = {
 	name = function() return mock.level_name end,
-	vertex_id = function(pos) return 12345 end,
+	-- a navmesh that snaps to a one metre grid, so scatter tests can see real,
+	-- distinct, reproducible points instead of one magic number
+	vertex_id = function(pos)
+		mock.vertex_pos = mock.vertex_pos or {}
+		local x, z = math.floor(pos.x + 0.5), math.floor(pos.z + 0.5)
+		local id = (x + 4096) * 8192 + (z + 4096)
+		mock.vertex_pos[id] = vector():set(x, pos.y, z)
+		return id
+	end,
+	valid_vertex_id = function(id) return id ~= nil and id > 0 end,
+	vertex_position = function(id)
+		return (mock.vertex_pos and mock.vertex_pos[id]) or vector():set(0, 0, 0)
+	end,
 	object_by_id = function(id) return mock.go[id] end,
 	map_add_object_spot = function(id, spot, hint) mock.spots[id .. "|" .. spot] = hint or "" end,
 	map_add_object_spot_ser = function(id, spot, hint) mock.spots[id .. "|" .. spot] = hint or "" end,

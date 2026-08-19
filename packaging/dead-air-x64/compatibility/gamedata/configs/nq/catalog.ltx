@@ -494,13 +494,14 @@ since     = 4
 [nq.spawn.squad]
 group  = spawn
 title  = —оздать отр€д
-desc   = —оздаЄт отр€д секции на смарт-террейне. place Ч поставить их в выбранное место, а не на смарт. restrictor Ч зона, из которой они не выйдут (движковое in-ограничение: работают как обычно, но с карты не убегут). hold удерживает отр€д на смарте, ref запоминает отр€д
+desc   = —оздаЄт отр€д секции на смарт-террейне. place Ч поставить их в выбранное место, а не на смарт: если это рестриктор, бойцы раскидываютс€ по навмешу внутри него, каждый на своей точке. spread сжимает область спавна к центру (0.5 Ч половина, чтобы не липли к кра€м), сам рестриктор не мен€етс€. restrictor Ч зона, из которой они не выйдут (движковое in-ограничение: работают как обычно, но с карты не убегут). hold удерживает отр€д на смарте, ref запоминает отр€д
 use    = extra
-params  = section, smart, place, restrictor, ref, hold
+params  = section, smart, place, restrictor, spread, ref, hold
 section = squad_section, required
 smart   = smart, required
 place   = place
 restrictor = restrictor
+spread  = float, default=1, min=0.05, max=1
 ref     = ref_name
 hold    = bool, default=true
 impl   = core

@@ -80,23 +80,61 @@ local function sim_board()
 end
 
 -- Creates a squad on a smart (mirrors xr_effects.create_squad). Returns squad, hold.
+-- One spawn point inside a place, snapped to the navmesh.
+--
+-- The sampling disc is the place's radius; when the restrictor is online its own
+-- shape has the final say through inside(), so an over-generous radius still fills
+-- the real zone and never spills out of it. spread shrinks the disc toward the
+-- centre, which is how you keep a squad off the edges.
+local function point_in_place(ctx, place, spread)
+	local lvl, centre, lvid, gvid = util.place_position(place, ctx)
+	if not (centre) then return nil end
+	local zone = place.restrictor and util.restrictor_zone(ctx, place.restrictor) or nil
+	local r = util.place_radius(place) * (tonumber(spread) or 1)
+	if (r <= 0) then return centre, lvid, gvid end
+	for _ = 1, 16 do
+		-- sqrt keeps the draw uniform over the disc instead of bunched at the middle
+		local a = math.random() * 2 * math.pi
+		local d = math.sqrt(math.random()) * r
+		local p = vector():set(centre.x + math.cos(a) * d, centre.y, centre.z + math.sin(a) * d)
+		local vid = level.vertex_id(p)
+		if (vid and level.valid_vertex_id(vid)) then
+			local vp = level.vertex_position(vid)
+			local ok_inside = true
+			if (zone and zone.inside) then
+				local ok, inside = pcall(zone.inside, zone, vp)
+				ok_inside = ok and inside and true or false
+			end
+			if (ok_inside) then return vp, vid, gvid end
+		end
+	end
+	-- nothing walkable found: the centre is still better than leaving them on the smart
+	return centre, lvid, gvid
+end
+
 -- Moves a freshly created squad onto a place of the author's choosing. The squad is
 -- still created on a smart - that is what gives its members something to do - and then
 -- put where the quest wants them, which the simulation is happy with because the smart
 -- keeps owning them.
-local function place_squad(ctx, squad, place)
-	local lvl, pos, lvid, gvid = util.place_position(place, ctx)
-	if not (pos and lvid and gvid) then
+local function place_squad(ctx, squad, place, spread)
+	local lvl, centre, clvid, cgvid = util.place_position(place, ctx)
+	if not (centre and clvid and cgvid) then
 		util.warn("%s/%s: spawn: cannot resolve place, the squad stays on its smart", ctx.uid, ctx.node_id)
 		return
 	end
+	-- A named point is a point: everyone stands on it. A zone is an area, so the squad
+	-- fills it instead of stacking on its centre. Not keyed off spread - the catalog
+	-- gives that a default, so it is never absent and would scatter everything.
+	local scatter = (place.restrictor ~= nil)
 	pcall(function()
 		for k in squad:squad_members() do
 			local se = k.object or (k.id and util.se_by_id(k.id))
 			if (se) then
-				se.position = pos
-				se.m_tNodeID = lvid
-				se.m_tGraphID = gvid
+				local pos, lvid, gvid = centre, clvid, cgvid
+				if (scatter) then pos, lvid, gvid = point_in_place(ctx, place, spread) end
+				se.position = pos or centre
+				se.m_tNodeID = lvid or clvid
+				se.m_tGraphID = gvid or cgvid
 			end
 		end
 	end)
@@ -137,7 +175,7 @@ local function spawn_squad(ctx, spec)
 			if (se and board.setup_squad_and_group) then board:setup_squad_and_group(se) end
 		end
 	end)
-	if (spec.place) then place_squad(ctx, squad, spec.place) end
+	if (spec.place) then place_squad(ctx, squad, spec.place, spec.spread) end
 	if (spec.restrictor) then confine_squad(ctx, squad, spec.restrictor) end
 	local hold = (spec.hold ~= false)
 	if (hold) then squad.scripted_target = spec.smart end

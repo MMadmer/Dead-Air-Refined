@@ -450,6 +450,7 @@ local function valid_spawn_spec(v)
 	-- optional: where to put them, and a zone they may not leave
 	if (v.place ~= nil and not valid_place(v.place)) then return false end
 	if (v.restrictor ~= nil and type(v.restrictor) ~= "string") then return false end
+	if (v.spread ~= nil and (type(v.spread) ~= "number" or v.spread <= 0 or v.spread > 1)) then return false end
 	return true
 end
 
@@ -501,7 +502,7 @@ local function canon_param(st, node, slot, p, v)
 		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=} | {ref=}" end
 		return util.copy(v), true
 	elseif (t == "spawn_spec") then
-		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=, place=, restrictor=}" end
+		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=, place=, restrictor=, spread=0..1}" end
 		return util.copy(v), true
 	elseif (t == "squad_ref") then
 		if not (valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=}" end

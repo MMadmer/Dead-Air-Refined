@@ -1795,6 +1795,44 @@ for k in squad:squad_members() do
 end
 check(placed > 0, "its members stand on the place the quest picked, not on the smart")
 check(confined == placed, "and every one of them is confined to the restrictor")
+
+-- scattered inside a restrictor, each on its own navmesh point, and spread keeps
+-- them off the edges
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/ring.nqasset"] = [[return { nq = 1, id = "ring", nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "spawn.squad", params = {
+	      section = "simulation_boar", smart = "esc_smart_terrain_2_12",
+	      place = { restrictor = "esc_ring", radius = 20 },
+	      spread = 0.5, ref = "ring" } } },
+	  out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.add_restrictor("esc_ring", vector():set(100, 0, 100), false)
+mock.first_update()
+core = xms_nq
+local rs = core.quest_state("mod_a.ring").refs.ring
+local rsq = rs and mock.se[rs.id]
+local seen, far, n = {}, 0, 0
+if (rsq) then
+	for k in rsq:squad_members() do
+		local se = k.object or mock.se[k.id]
+		if (se) then
+			n = n + 1
+			seen[string.format("%d:%d", se.position.x, se.position.z)] = true
+			local dx, dz = se.position.x - 100, se.position.z - 100
+			if (math.sqrt(dx * dx + dz * dz) > 10.5) then far = far + 1 end
+		end
+	end
+end
+check(n > 0, "the scattered squad has members")
+check(far == 0, "spread 0.5 of radius 20 keeps every member within ten metres of the centre")
+local distinct = 0
+for _ in pairs(seen) do distinct = distinct + 1 end
+check(distinct > 0, "and each member got its own navmesh point")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary
