@@ -103,9 +103,10 @@ local function target_object_id(ctx, name, target)
 		return se.id
 	end
 	if (target.restrictor) then
-		local zone = db and db.zone_by_name and db.zone_by_name[target.restrictor]
+		local zone = util.restrictor_zone(ctx, target.restrictor)
 		if (zone) then return zone:id() end
-		return util.id_by_story(target.restrictor)
+		local se = util.restrictor_se(ctx, target.restrictor)
+		return se and se.id or nil
 	end
 	return util.resolve_target_id(ctx, target)
 end

@@ -1662,6 +1662,59 @@ local t2 = mock.task_by_id("nq." .. US .. ".gather")
 check(t2 ~= nil and t2:get_objectives_cnt() == 3, "and the PDA task still carries its three steps")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z2) restrictors by name
+-- The name the author picks is the name the scene shows. The game does not always have
+-- it under that name: a module's objects are composed in as "<module>.<op>", and
+-- db.zone_by_name only holds restrictors that are online at all.
+section("(z2) place{restrictor}: offline, and under the name the composer gave it")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/gate.nqasset"] = [[return { nq = 1, id = "gate",
+	tasks = { go = { title = "Дойти", target = { restrictor = "esc_test_point" } } },
+	nodes = {
+		{ id = "start", kind = "trigger.start", on_enter = { { kind = "task.give", params = { task = "go" } } }, out = { next = "r" } },
+		{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_test_point", radius = 6 }, map_spot = false }, out = { done = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+-- named the way xms_spawn_composer names a module's own object, and still offline
+local gate = mock.add_restrictor("mod_a.esc_test_point", vector():set(40, 0, 40), false)
+mock.first_update()
+core = xms_nq
+local UG = "mod_a.gate"
+local t = mock.task_by_id("nq." .. UG .. ".go")
+check(t ~= nil and t:get_map_object_id() == gate.id,
+	"the task marker found the restrictor offline, under its composed name")
+check(core.quest_state(UG).tokens.r ~= nil, "objective.reach is waiting")
+mock.move_actor(300, 0, 300)
+mock.ticks(2)
+check(core.quest_state(UG).tokens.r ~= nil, "standing far away does not satisfy it")
+mock.move_actor(42, 0, 41)
+mock.ticks(2)
+check(core.quest_status(UG) == "completed", "walking in completes it with no zone object at all")
+-- and an online zone still answers through its own shape
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/gate2.nqasset"] = [[return { nq = 1, id = "gate2", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "r" } },
+	{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_ring" }, map_spot = false }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.add_restrictor("esc_ring", vector():set(0, 0, 0), true, 4)
+mock.move_actor(50, 0, 50)		-- the actor starts at the origin, which is inside it
+mock.first_update()
+core = xms_nq
+mock.ticks(2)
+check(core.quest_state("mod_a.gate2").tokens.r ~= nil, "outside the online zone it keeps waiting")
+mock.move_actor(1, 0, 1)
+mock.ticks(2)
+check(core.quest_status("mod_a.gate2") == "completed", "inside its shape it completes")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

@@ -423,6 +423,75 @@ function resolve_target_id(ctx, ref)
 	return go and go:id() or nil
 end
 
+-- ---------------------------------------------------------------------------- restrictors
+-- Two things make a restrictor hard to find by the name the author picked.
+--
+-- db.zone_by_name only holds restrictors that are ONLINE: the binder registers one in
+-- net_spawn (bind_restrictor.script), so a zone the actor has not walked near yet is
+-- simply absent - and a map spot cannot wait for that.
+--
+-- And a module's own objects are namespaced when they are composed into the spawn:
+-- xms_spawn_composer names them "<module>.<op>". So the plain name matches only for
+-- objects the level shipped with, and never for one the mod placed itself.
+--
+-- alife():object(name) searches name_replace and answers offline, which covers both.
+-- It is a linear walk of the registry, so the answer is remembered per name.
+local restrictor_ids = {}
+local restrictor_level = nil
+
+local function module_of(ctx)
+	local uid = ctx and ctx.uid
+	if (type(uid) ~= "string") then return nil end
+	local dot = string.find(uid, ".", 1, true)
+	return dot and string.sub(uid, 1, dot - 1) or nil
+end
+
+local function restrictor_cache()
+	local lvl = current_level()
+	if (restrictor_level ~= lvl) then
+		restrictor_ids = {}
+		restrictor_level = lvl
+	end
+	return restrictor_ids
+end
+
+-- The server object, online or not.
+function restrictor_se(ctx, name)
+	if not (name) then return nil end
+	local cache = restrictor_cache()
+	local id = cache[name]
+	if (id) then
+		local se = se_by_id(id)
+		if (se) then return se end
+		cache[name] = nil
+	end
+	local sim = alife()
+	if not (sim) then return nil end
+	local se
+	pcall(function() se = sim:object(name) end)
+	if not (se) then
+		local mod = module_of(ctx)
+		if (mod) then pcall(function() se = sim:object(mod .. "." .. name) end) end
+	end
+	if not (se) then
+		local sid = id_by_story(name)
+		se = sid and se_by_id(sid) or nil
+	end
+	if (se) then cache[name] = se.id end
+	return se
+end
+
+-- The online object, when there is one: only it can answer :inside().
+function restrictor_zone(ctx, name)
+	if not (name) then return nil end
+	local by_name = db and db.zone_by_name
+	if not (by_name) then return nil end
+	local z = by_name[name]
+	if (z) then return z end
+	local mod = module_of(ctx)
+	return mod and by_name[mod .. "." .. name] or nil
+end
+
 -- ============================================================================ places (§8)
 function smart_by_name(name)
 	if not (name) then return nil end
@@ -473,13 +542,12 @@ function place_position(place, ctx)
 		return lvl, smart.position, smart.m_level_vertex_id, smart.m_game_vertex_id
 	end
 	if (place.restrictor) then
-		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
+		local zone = restrictor_zone(ctx, place.restrictor)
 		if (zone) then
 			local pos = zone:position()
 			return current_level(), pos, zone:level_vertex_id(), zone:game_vertex_id()
 		end
-		local id = id_by_story(place.restrictor)
-		local se = id and se_by_id(id)
+		local se = restrictor_se(ctx, place.restrictor)
 		if (se) then
 			return level_name_of_gvid(se.m_game_vertex_id), se.position, se.m_level_vertex_id, se.m_game_vertex_id
 		end
@@ -552,10 +620,17 @@ function place_contains_actor(place, ctx)
 		return ok and d and d <= place_radius(place) or false
 	end
 	if (place.restrictor) then
-		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
-		if not (zone) then return false end
-		local ok, inside = pcall(zone.inside, zone, a:position())
-		return ok and inside and true or false
+		local zone = restrictor_zone(ctx, place.restrictor)
+		if (zone) then
+			local ok, inside = pcall(zone.inside, zone, a:position())
+			return ok and inside and true or false
+		end
+		-- offline: no shape to ask, so the radius around where it stands has to do
+		local se = restrictor_se(ctx, place.restrictor)
+		if not (se) then return false end
+		if (level_name_of_gvid(se.m_game_vertex_id) ~= current_level()) then return false end
+		local ok, d = pcall(function() return se.position:distance_to(a:position()) end)
+		return ok and d and d <= place_radius(place) or false
 	end
 	if (place.smart) then
 		local smart = smart_by_name(place.smart)

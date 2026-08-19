@@ -364,6 +364,26 @@ local function make_actor()
 	return a
 end
 
+-- A named space_restrictor in the world; `online` also puts it in db.zone_by_name the
+-- way bind_restrictor does on net_spawn.
+function mock.add_restrictor(name, pos, online, radius)
+	local se = new_se("space_restrictor", pos or vector():set(0, 0, 0), 1, 1, nil)
+	se._name = name
+	if (online) then
+		local go = new_go("space_restrictor")
+		go._id = se.id
+		go._name = name
+		go._radius = radius or 5
+		go.inside = function(self, p)
+			return se.position:distance_to(p) <= (self._radius or 5)
+		end
+		mock.go[se.id] = go
+		db.zone_by_name = db.zone_by_name or {}
+		db.zone_by_name[name] = go
+	end
+	return se
+end
+
 -- Simulates an old save whose actor registry never saw the runtime's tasks.
 function mock.tasks_lost() db.actor._tasks = {} end
 function mock.task_by_id(id) return db.actor:get_task(id, false) end
@@ -527,7 +547,17 @@ end
 
 -- ---------------------------------------------------------------------------- alife / level / db
 local alife_obj = {}
-function alife_obj:object(id) return mock.se[id] end
+-- by id, or by name_replace like the engine's alife():object(pcstr) overload - which
+-- is how a restrictor is found while it is still offline
+function alife_obj:object(id)
+	if (type(id) == "string") then
+		for _, se in pairs(mock.se) do
+			if (se:name() == id) then return se end
+		end
+		return nil
+	end
+	return mock.se[id]
+end
 function alife_obj:create(section, pos, lvid, gvid, parent, reg)
 	local se = new_se(section, pos, lvid, gvid, parent)
 	if (parent == 0 and db.actor) then

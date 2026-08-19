@@ -444,9 +444,12 @@ local function reach_spot_target(ctx)
 		return smart and smart.id or nil
 	end
 	if (place.restrictor) then
-		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
+		-- the spot needs an id whether or not the zone is online, so the server
+		-- object answers when db.zone_by_name cannot
+		local zone = util.restrictor_zone(ctx, place.restrictor)
 		if (zone) then return zone:id() end
-		return util.id_by_story(place.restrictor)
+		local se = util.restrictor_se(ctx, place.restrictor)
+		return se and se.id or nil
 	end
 	local rec = core.ref_get(ctx.qs, reach_anchor_name(ctx))
 	if (rec) then return rec.id end
