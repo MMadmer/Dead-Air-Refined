@@ -1762,6 +1762,41 @@ core = xms_nq
 check(mock.log_has("set_target"), "pointing a finished task at a target is still reported")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z4) spawn where I say, stay where I say
+-- A squad is created on a smart because that is what gives it something to do, but the
+-- author wants it standing somewhere they chose and not wandering off the map.
+section("(z4) spawn.squad: place puts them there, restrictor keeps them there")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/ambush.nqasset"] = [[return { nq = 1, id = "ambush", nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "spawn.squad", params = {
+	      section = "simulation_boar", smart = "esc_smart_terrain_2_12",
+	      place = { level = "l01_escape", pos = { 70, 1, 70 } },
+	      restrictor = "esc_ring", ref = "ambush" } } },
+	  out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+local ring = mock.add_restrictor("esc_ring", vector():set(70, 0, 70), false)
+mock.first_update()
+core = xms_nq
+local sq = core.quest_state("mod_a.ambush").refs.ambush
+check(sq ~= nil, "the squad was created")
+local squad = mock.se[sq.id]
+local placed, confined = 0, 0
+for k in squad:squad_members() do
+	local se = k.object or mock.se[k.id]
+	if (se and se.position and se.position:distance_to(vector():set(70, 1, 70)) < 0.01) then placed = placed + 1 end
+	if (se and se._in_restr) then
+		for _, z in ipairs(se._in_restr) do if (z == ring.id) then confined = confined + 1 end end
+	end
+end
+check(placed > 0, "its members stand on the place the quest picked, not on the smart")
+check(confined == placed, "and every one of them is confined to the restrictor")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

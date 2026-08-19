@@ -80,6 +80,48 @@ local function sim_board()
 end
 
 -- Creates a squad on a smart (mirrors xr_effects.create_squad). Returns squad, hold.
+-- Moves a freshly created squad onto a place of the author's choosing. The squad is
+-- still created on a smart - that is what gives its members something to do - and then
+-- put where the quest wants them, which the simulation is happy with because the smart
+-- keeps owning them.
+local function place_squad(ctx, squad, place)
+	local lvl, pos, lvid, gvid = util.place_position(place, ctx)
+	if not (pos and lvid and gvid) then
+		util.warn("%s/%s: spawn: cannot resolve place, the squad stays on its smart", ctx.uid, ctx.node_id)
+		return
+	end
+	pcall(function()
+		for k in squad:squad_members() do
+			local se = k.object or (k.id and util.se_by_id(k.id))
+			if (se) then
+				se.position = pos
+				se.m_tNodeID = lvid
+				se.m_tGraphID = gvid
+			end
+		end
+	end)
+end
+
+-- Confines the squad to a restrictor: an "in" restriction is the engine's own way of
+-- saying an NPC may not leave a zone (alife_simulator_script add_in_restriction), so
+-- it keeps working and keeps its jobs, it just cannot wander off the map.
+local function confine_squad(ctx, squad, restrictor)
+	local zone = util.restrictor_se(ctx, restrictor)
+	if not (zone) then
+		util.warn("%s/%s: spawn: restrictor '%s' not found, the squad is not confined",
+			ctx.uid, ctx.node_id, tostring(restrictor))
+		return
+	end
+	local sim = alife()
+	if not (sim and sim.add_in_restriction) then return end
+	pcall(function()
+		for k in squad:squad_members() do
+			local se = k.object or (k.id and util.se_by_id(k.id))
+			if (se) then sim:add_in_restriction(se, zone.id) end
+		end
+	end)
+end
+
 local function spawn_squad(ctx, spec)
 	local smart = util.smart_by_name(spec.smart)
 	if not (smart) then error("smart '" .. tostring(spec.smart) .. "' not found") end
@@ -95,6 +137,8 @@ local function spawn_squad(ctx, spec)
 			if (se and board.setup_squad_and_group) then board:setup_squad_and_group(se) end
 		end
 	end)
+	if (spec.place) then place_squad(ctx, squad, spec.place) end
+	if (spec.restrictor) then confine_squad(ctx, squad, spec.restrictor) end
 	local hold = (spec.hold ~= false)
 	if (hold) then squad.scripted_target = spec.smart end
 	return squad, hold

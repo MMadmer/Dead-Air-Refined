@@ -1,4 +1,4 @@
-; NQ kind catalog v4 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; NQ kind catalog v5 - Dead Air Refined. Encoding: cp1251 (like every other game config).
 ; A ';' starts a comment, so it must never appear inside a value - one in a desc
 ; truncates it silently and the editor shows half the text. Use a dash instead.
 ; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 4
+version = 5
 api     = 1
 
 ; ============================================================ triggers
@@ -494,11 +494,13 @@ since     = 4
 [nq.spawn.squad]
 group  = spawn
 title  = —оздать отр€д
-desc   = —оздаЄт отр€д секции на смарт-террейне. hold удерживает отр€д на смарте, ref запоминает отр€д
+desc   = —оздаЄт отр€д секции на смарт-террейне. place Ч поставить их в выбранное место, а не на смарт. restrictor Ч зона, из которой они не выйдут (движковое in-ограничение: работают как обычно, но с карты не убегут). hold удерживает отр€д на смарте, ref запоминает отр€д
 use    = extra
-params  = section, smart, ref, hold
+params  = section, smart, place, restrictor, ref, hold
 section = squad_section, required
 smart   = smart, required
+place   = place
+restrictor = restrictor
 ref     = ref_name
 hold    = bool, default=true
 impl   = core

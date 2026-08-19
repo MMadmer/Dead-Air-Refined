@@ -594,6 +594,16 @@ function alife_obj:release(se, b)
 		mock.released[#mock.released + 1] = se.id
 	end
 end
+-- The engine's own way of confining an NPC to a zone (alife_simulator_script).
+function alife_obj:add_in_restriction(se, zone_id)
+	se._in_restr = se._in_restr or {}
+	se._in_restr[#se._in_restr + 1] = zone_id
+end
+function alife_obj:add_out_restriction(se, zone_id)
+	se._out_restr = se._out_restr or {}
+	se._out_restr[#se._out_restr + 1] = zone_id
+end
+
 function alife_obj:has_info(id, info) return db.actor and db.actor:has_info(info) or false end
 function alife_obj:level_name(id) return mock.level_names[id] or "l01_escape" end
 function alife_obj:actor() return mock.actor_se end
