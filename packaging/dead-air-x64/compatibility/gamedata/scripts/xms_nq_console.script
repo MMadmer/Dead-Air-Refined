@@ -89,6 +89,34 @@ local function cmd_state(arg)
 		if (next(qs.joins)) then say("joins: %s", util.brief(qs.joins)) end
 		if (next(qs.timers)) then say("timers: %s", util.brief(qs.timers)) end
 		say("tasks: %s", util.brief(qs.tasks))
+		-- what the runtime believes next to what the PDA actually holds: "completed here,
+		-- in progress there" is a whole class of bug that is invisible from either side alone
+		local a = db and db.actor
+		for name, status in pairs(qs.tasks or {}) do
+			local tid = "nq." .. uid .. "." .. name
+			local inproc, any
+			pcall(function() inproc = a and a:get_task(tid, true) end)
+			pcall(function() any = a and a:get_task(tid, false) end)
+			local pda = any and (inproc and "in progress" or "closed") or "absent"
+			local steps = ""
+			if (any) then
+				local n = 0
+				pcall(function() n = any:get_objectives_cnt(true) end)
+				for i = 1, (n or 0) do
+					local o
+					pcall(function() o = any:get_objective(i) end)
+					if (o) then
+						local st = "?"
+						pcall(function() st = tostring(o:get_state()) end)
+						local vis = true
+						pcall(function() vis = o:is_visible() end)
+						steps = steps .. string.format(" %d=%s%s", i, st, vis and "" or "(hidden)")
+					end
+				end
+			end
+			say("task %s: nq=%s pda=%s%s", name, tostring(status), pda,
+				(steps ~= "") and (" steps:" .. steps) or "")
+		end
 		if (next(qs.errors)) then say("errors: %s", util.brief(qs.errors)) end
 	end
 	for line in string.gmatch(loader.outline(q), "[^\n]+") do say("  %s", line) end

@@ -604,8 +604,12 @@ local function build_p1()
 		for _, r in ipairs(shared.task_news or {}) do
 			if (r.id == tid) then kinds[#kinds + 1] = r.kind end
 		end
-		return check("e.task_news", task_news_seen("complete", tid),
-			"news for the task with steps: [%s] (want 'complete' among them)", table.concat(kinds, ", "))
+		-- 'updated' is the step closing, 'complete' is the task closing. The engine tells
+		-- scripts about steps on a callback nothing listens to, so the runtime sends that one
+		-- itself - without it a step closing is silent and the player is told nothing.
+		return check("e.task_news", task_news_seen("complete", tid) and task_news_seen("updated", tid),
+			"news for the task with steps: [%s] (want 'updated' and 'complete' among them)",
+			table.concat(kinds, ", "))
 	end, { timeout = 10000 })
 
 	step("e.reward", function()
@@ -1230,6 +1234,17 @@ end
 
 -- ============================================================================ registry
 local BUILDERS = {
+	-- Look inside a save that is not ours: load a player's own game and print what the
+	-- runtime and the PDA each hold. `save` in the phase ini names the quest to dump.
+	dump = function()
+		step("dump.ready", function()
+			if not (core() and core().is_ready()) then return nil end
+			nq("list")
+			nq("state " .. tostring(save_name))
+			return pass("dump.ready", "dumped quest '%s'", tostring(save_name))
+		end, { timeout = 60000 })
+	end,
+
 	scout = function()
 		step_env("scout")
 		step_encoding("scout")

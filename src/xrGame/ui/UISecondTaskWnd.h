@@ -70,6 +70,7 @@ private: // m_
 
     float m_orig_h{};
     bool m_show_only_secondary_tasks{};
+    u32 m_actual_frame{};   // the task manager's, to notice tasks changing while this sits open
 }; // class UITaskListWnd
 
 // -------------------------------------------------------------------------------------------------

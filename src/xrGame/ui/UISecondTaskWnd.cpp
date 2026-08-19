@@ -149,7 +149,17 @@ void UITaskListWnd::OnFocusLost()
 void UITaskListWnd::Update()
 {
     inherited::Update();
-    //	UpdateCounter();
+
+    // The list was only ever built when it was shown - and closing the PDA does not hide it,
+    // it just stops drawing it. So a task finished while the player was out in the world stayed
+    // on this list, greyed out by its own state, until the list was closed and opened again.
+    // The manager stamps a frame whenever a task is given or changes state; that is the cue.
+    if (IsShown())
+    {
+        const u32 frame = Level().GameTaskManager().ActualFrame();
+        if (frame != m_actual_frame)
+            UpdateList();
+    }
 }
 
 void UITaskListWnd::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
@@ -167,6 +177,7 @@ void UITaskListWnd::OnBtnClose(CUIWindow* w, void* d)
 
 void UITaskListWnd::UpdateList()
 {
+    m_actual_frame = Level().GameTaskManager().ActualFrame();
     const int prev_scroll_pos = m_list->GetCurrentScrollPos();
 
     m_list->Clear();

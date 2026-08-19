@@ -348,6 +348,10 @@ local function finish_objective(ctx, name, oid, status)
 	local t = get_task(a, tid, true)
 	if (t) then
 		pcall(a.set_task_state, a, (status == "completed") and task.completed or task.fail, tid, o.index)
+		-- A step closing is a change to the task the player can see, and the engine tells the
+		-- game about steps on a callback of their own that nothing listens to. Without this the
+		-- PDA just quietly redraws and the player is told nothing at all.
+		send_news("updated", t)
 	else
 		util.warn("%s: task %s is not in the PDA, objective %s recorded as '%s' only", ctx.uid, name, oid, status)
 	end
@@ -393,16 +397,20 @@ function set_objective_visible(ctx, name, oid, visible)
 	local _, o = decl_objective(ctx, name, oid)
 	local a = actor()
 	if not (a) then error("task.set_objective_visible: no actor") end
-	local _, obj = engine_objective(a, task_id(ctx.uid, name), o.index)
+	local t, obj = engine_objective(a, task_id(ctx.uid, name), o.index)
 	if not (obj) then
 		-- the task is not in the PDA: remember it anyway, give() applies it when it returns
 		set_objective_visibility(ctx, name, oid, visible)
 		return
 	end
+	local was = true
+	pcall(function() was = obj:is_visible() end)
 	if not (apply_objective_visible(obj, visible)) then
 		error("this build of the game cannot hide a step of a task")
 	end
 	set_objective_visibility(ctx, name, oid, visible)
+	-- a step appearing is new work for the player: worth the same notice as one closing
+	if (visible and not was and t) then send_news("updated", t) end
 end
 
 -- read by the objective_status condition
