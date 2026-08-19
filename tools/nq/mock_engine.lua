@@ -1423,10 +1423,13 @@ function mock.rebuild()
 end
 
 -- Engine start: axr_main calls every script's on_game_start, then the first actor update.
+-- The runtime defers its init one update further (the mode heal rides first_update), so a
+-- plain update follows - test code keeps calling first_update() and is initialized after it.
 function mock.first_update()
 	local nq = xms_nq
 	if (nq and nq.on_game_start) then nq.on_game_start() end
 	SendScriptCallback("actor_on_first_update", { }, 0)
+	SendScriptCallback("actor_on_update", { }, 0)
 end
 
 function mock.tick(ms)

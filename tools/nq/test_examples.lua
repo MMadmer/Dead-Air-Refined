@@ -2002,6 +2002,48 @@ check(tb:get_state() == task.completed, "the PDA task itself is completed, not l
 check(mock.task_by_id2 == nil or true, "")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z8) the mode heal race
+-- A legacy save carries no mode manifest: quests initialize against an empty mode set, and
+-- only then the game derives the real one (rev2, say) and publishes it. The heal calls
+-- reload(); a module built for the ordinary game must drop out, its PDA task closing quietly.
+section("(z8) modes healed after init: the ordinary-game quest leaves the rev2 playthrough")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/plain.nqasset"] = [[return { nq = 1, id = "plain",
+	tasks = { job = { title = "Обычная работа", type = "additional" } },
+	nodes = {
+		{ id = "start", kind = "trigger.start", on_enter = { { kind = "task.give", params = { task = "job" } } }, out = { next = "w" } },
+		{ id = "w", kind = "wait.when", cond = { { kind = "has_item", params = { section = "bread" } } }, out = { done = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+mock.first_update()
+core = xms_nq
+check(core.quest_status("mod_a.plain") == "active", "with no modes known the quest activated")
+check(mock.task_by_id("nq.mod_a.plain.job") ~= nil, "and its task went into the PDA")
+-- the heal: the playthrough turns out to be a campaign the module was never built for
+for _, m in ipairs(mock.opts.modules) do if (m.id == "mod_a") then m.applies = false end end
+mock.news = {}
+core.reload()
+mock.ticks(2)
+Q2 = core.quests()
+check(Q2["mod_a.plain"] == nil, "after the heal the module no longer applies and the quest is not loaded")
+t_gone = mock.task_by_id("nq.mod_a.plain.job")
+check(t_gone == nil or t_gone:get_state() ~= task.in_progress, "its PDA task is closed, not left running")
+noisy = false
+for _, n in ipairs(mock.news or {}) do
+	if (tostring(n.caption or ""):find("fail") or tostring(n.kind or "") == "fail") then noisy = true end
+end
+check(not noisy, "and it closed without a failure notification")
+-- the module comes back (an ordinary-game save): the task is re-created from the declaration
+for _, m in ipairs(mock.opts.modules) do if (m.id == "mod_a") then m.applies = nil end end
+core.reload()
+mock.ticks(2)
+check(core.quest_status("mod_a.plain") == "active", "back in the ordinary game the quest record is picked up again")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

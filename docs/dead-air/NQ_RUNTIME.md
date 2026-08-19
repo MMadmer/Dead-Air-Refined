@@ -316,8 +316,16 @@ callback.
 
 ### 3.6 Zero cost without quests
 
-`on_game_start` registers exactly one callback: `actor_on_first_update`. If the
-scan finds no quest in any applicable module, none of the other callbacks are
+`on_game_start` registers exactly one callback: `actor_on_first_update` - and the
+actual init runs one actor update **after** it. The legacy-save mode heal
+(`dead_air_x64_mode_restore.script`) rides the same first-update callback in
+whatever order the scripts happened to register, and quests judge every module
+against the active mode set: initializing before the heal briefly handed an
+ordinary-game module's tasks to a Revolution II playthrough. One tick later the
+set is final on every load path; the heal also calls `xms_nq.reload()` after
+publishing the healed set, which covers the other order (not initialized yet =
+just initializes) and rescans if quests somehow got there first. If the scan
+finds no quest in any applicable module, none of the other callbacks are
 registered at all and the log says so. No quests means no polls, no event
 dispatch and no save blob.
 

@@ -1353,8 +1353,19 @@ end
 -- Only the first-update hook is registered here: db.actor does not exist yet and the world is
 -- not restored. Everything else waits for init().
 function on_game_start()
+	-- One update AFTER the first: the legacy-save mode heal (dead_air_x64_mode_restore)
+	-- rides actor_on_first_update too, in whatever order the scripts happened to register.
+	-- Quests judge every module against the active mode set, so they must go second - or a
+	-- mod built for the ordinary game briefly hands its tasks to a Revolution II playthrough
+	-- and takes them back a frame later. One tick after first_update the set is final on
+	-- every load path (the heal is a safety net for the other order: it calls reload()).
 	RegisterScriptCallback("actor_on_first_update", function()
-		local ok, e = pcall(init)
-		if not (ok) then util.err("init failed: %s", tostring(e)) end
+		local once
+		once = function()
+			pcall(UnregisterScriptCallback, "actor_on_update", once)
+			local ok, e = pcall(init)
+			if not (ok) then util.err("init failed: %s", tostring(e)) end
+		end
+		RegisterScriptCallback("actor_on_update", once)
 	end)
 end

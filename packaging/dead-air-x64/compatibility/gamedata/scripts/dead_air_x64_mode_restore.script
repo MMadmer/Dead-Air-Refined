@@ -48,6 +48,15 @@ local function try_restore()
 		local created = xms_native_recompose_spawns()
 		printf("* dead_air_x64: legacy save healed - modes [%s] restored from game state, late spawn +%s",
 			csv, tostring(created))
+		-- The quest runtime gates by module_applies at ITS init, and both inits ride the same
+		-- first-update callback in whatever order the scripts registered. When quests won that
+		-- race they judged every module against an empty mode set - so a mod built for the
+		-- ordinary game had its quest running inside Revolution II. Re-scan under the healed set;
+		-- reload() also covers the other order (not initialized yet) by just initializing.
+		if (xms_nq and xms_nq.reload) then
+			local ok2, e2 = pcall(xms_nq.reload)
+			if not (ok2) then printf("! dead_air_x64: nq rescan after the heal failed: %s", tostring(e2)) end
+		end
 	end)
 	if not (ok) then
 		printf("! dead_air_x64: legacy mode restore failed: %s", tostring(err))
