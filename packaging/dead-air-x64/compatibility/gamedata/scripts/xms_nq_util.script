@@ -456,8 +456,16 @@ end
 -- Position of a place: returns level_name, position(vector), lvid, gvid or nil.
 -- {level,pos}: vertices from level.vertex_id on the current level, xms.graph_vertex elsewhere.
 -- {smart}: the smart's own position/vertices. {restrictor}: online zone position (same level only).
-function place_position(place)
+function place_position(place, ctx)
 	if (type(place) ~= "table") then return nil end
+	-- an object this quest created: the only way to point at something that did not
+	-- exist when the graph was written (a restrictor spawned mid-quest, say)
+	if (place.ref) then
+		local id = ctx and ref_object_id(ctx, { ref = place.ref }) or nil
+		local se = id and se_by_id(id)
+		if not (se) then return nil end
+		return level_name_of_gvid(se.m_game_vertex_id), se.position, se.m_level_vertex_id, se.m_game_vertex_id
+	end
 	if (place.smart) then
 		local smart = smart_by_name(place.smart)
 		if not (smart) then return nil end
@@ -523,10 +531,26 @@ function place_radius(place)
 end
 
 -- Is the actor inside the place right now?
-function place_contains_actor(place)
+function place_contains_actor(place, ctx)
 	local a = actor()
 	if not (a) then return false end
 	if (type(place) ~= "table") then return false end
+	-- a quest-created object: its zone if it has one (a spawned space_restrictor is
+	-- registered like any other), otherwise a radius around where it stands
+	if (place.ref) then
+		local id = ctx and ref_object_id(ctx, { ref = place.ref }) or nil
+		if not (id) then return false end
+		local obj = level and level.object_by_id and level.object_by_id(id)
+		if (obj and obj.inside) then
+			local ok, inside = pcall(obj.inside, obj, a:position())
+			if (ok) then return inside and true or false end
+		end
+		local se = se_by_id(id)
+		if not (se) then return false end
+		if (level_name_of_gvid(se.m_game_vertex_id) ~= current_level()) then return false end
+		local ok, d = pcall(function() return se.position:distance_to(a:position()) end)
+		return ok and d and d <= place_radius(place) or false
+	end
 	if (place.restrictor) then
 		local zone = db and db.zone_by_name and db.zone_by_name[place.restrictor]
 		if not (zone) then return false end

@@ -450,7 +450,7 @@ local function reach_spot_target(ctx)
 	end
 	local rec = core.ref_get(ctx.qs, reach_anchor_name(ctx))
 	if (rec) then return rec.id end
-	local lvl, pos, lvid, gvid = util.place_position(place)
+	local lvl, pos, lvid, gvid = util.place_position(place, ctx)
 	if not (pos and lvid and gvid) then return nil end
 	local se
 	local ok, e = pcall(function() se = alife():create("space_restrictor", pos, lvid, gvid) end)
@@ -498,12 +498,12 @@ end
 
 K["objective.reach"] = {
 	begin = function(ctx)
-		if (util.place_contains_actor(ctx.params.place)) then return { pin = "done" } end
+		if (util.place_contains_actor(ctx.params.place, ctx)) then return { pin = "done" } end
 		reach_spot_add(ctx)
 		return "wait"
 	end,
 	poll = function(ctx)
-		if (util.place_contains_actor(ctx.params.place)) then return "done" end
+		if (util.place_contains_actor(ctx.params.place, ctx)) then return "done" end
 		return nil
 	end,
 	load = function(ctx, w)
@@ -535,7 +535,7 @@ K["item.spawn"] = {
 			se = alife():create(p.section, pse.position, pse.m_level_vertex_id, pse.m_game_vertex_id, parent)
 		else
 			if not (p.place) then error("item.spawn: place or into is required") end
-			local lvl, pos, lvid, gvid = util.place_position(p.place)
+			local lvl, pos, lvid, gvid = util.place_position(p.place, ctx)
 			if not (pos and lvid and gvid) then error("item.spawn: cannot resolve place") end
 			se = alife():create(p.section, pos, lvid, gvid)
 		end
@@ -640,7 +640,7 @@ K["actor.teleport"] = {
 		local lvl = util.place_level(p.place)
 		local cur = util.current_level()
 		if (lvl and cur and lvl ~= cur) then error("E031: actor.teleport target is on level " .. tostring(lvl) .. ", actor is on " .. tostring(cur)) end
-		local _, pos = util.place_position(p.place)
+		local _, pos = util.place_position(p.place, ctx)
 		if not (pos) then error("actor.teleport: cannot resolve place") end
 		a:set_actor_position(pos)
 	end,
@@ -712,7 +712,7 @@ K["actor_on_level"] = {
 }
 
 K["actor_in_place"] = {
-	test = function(ctx, p) return util.place_contains_actor(p.place) end,
+	test = function(ctx, p) return util.place_contains_actor(p.place, ctx) end,
 }
 
 K["npc_alive"] = {

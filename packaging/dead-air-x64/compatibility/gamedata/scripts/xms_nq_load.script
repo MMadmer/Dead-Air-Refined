@@ -432,6 +432,9 @@ end
 
 local function valid_place(v)
 	if (type(v) ~= "table") then return false end
+	-- an object this quest created: the only way to name a place that did not exist
+	-- when the graph was written
+	if (type(v.ref) == "string") then return true end
 	if (type(v.restrictor) == "string") then return true end
 	if (type(v.smart) == "string") then return true end
 	if (type(v.pos) == "table") then
@@ -491,7 +494,7 @@ local function canon_param(st, node, slot, p, v)
 		if not (valid_target_ref(v)) then return nil, false, "must be an npc_ref, {ref=} or {smart=}" end
 		return util.copy(v), true
 	elseif (t == "place") then
-		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=}" end
+		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=} | {ref=}" end
 		return util.copy(v), true
 	elseif (t == "spawn_spec") then
 		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=}" end

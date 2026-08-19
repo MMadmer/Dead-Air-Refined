@@ -1,4 +1,4 @@
-; NQ kind catalog v2 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; NQ kind catalog v3 - Dead Air Refined. Encoding: cp1251 (like every other game config).
 ; A ';' starts a comment, so it must never appear inside a value - one in a desc
 ; truncates it silently and the editor shows half the text. Use a dash instead.
 ; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 2
+version = 3
 api     = 1
 
 ; ============================================================ triggers
@@ -143,7 +143,7 @@ since  = 1
 [nq.objective.reach]
 group  = objective
 title  = Дойти до места
-desc   = Ждёт, пока игрок окажется в месте (точка с радиусом, рестриктор или смарт). map_spot ставит метку на карте
+desc   = Ждёт, пока игрок окажется в месте (точка с радиусом, рестриктор, смарт или ref объекта, созданного этим квестом). map_spot ставит метку на карте
 use    = main
 params    = place, map_spot, spot_text
 place     = place, required
@@ -491,6 +491,16 @@ target = target_ref, required
 impl   = core
 since  = 1
 
+[nq.object.remove]
+group  = spawn
+title  = Убрать объект
+desc   = Удаляет из мира объект, созданный этим квестом (spawn.object) или объект по story id. Ref после удаления очищается — иначе следующая нода резолвила бы мёртвый id
+use    = extra
+params = target
+target = object_ref, required
+impl   = core
+since  = 3
+
 [nq.npc.remove]
 group  = npc
 title  = Убрать NPC
@@ -717,7 +727,7 @@ since  = 1
 [nq.actor_in_place]
 group  = cond_world
 title  = Игрок в месте
-desc   = Игрок в точке с радиусом, в рестрикторе или на смарте
+desc   = Игрок в точке с радиусом, в рестрикторе, на смарте или в объекте, созданном этим квестом (ref)
 use    = cond
 params = place
 place  = place, required

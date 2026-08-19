@@ -93,7 +93,7 @@ local function target_object_id(ctx, name, target)
 		local rname = anchor_name(name)
 		local rec = core.ref_get(ctx.qs, rname)
 		if (rec and rec.id and util.se_by_id(rec.id)) then return rec.id end
-		local lvl, pos, lvid, gvid = util.place_position(target)
+		local lvl, pos, lvid, gvid = util.place_position(target, ctx)
 		if not (pos and lvid and gvid) then return nil end
 		local se
 		pcall(function() se = alife():create("space_restrictor", pos, lvid, gvid) end)

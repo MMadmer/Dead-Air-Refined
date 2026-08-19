@@ -324,7 +324,7 @@ K["spawn.squad"] = {
 
 K["spawn.object"] = {
 	run = function(ctx, p)
-		local lvl, pos, lvid, gvid = util.place_position(p.place)
+		local lvl, pos, lvid, gvid = util.place_position(p.place, ctx)
 		if not (pos and lvid and gvid) then error("spawn.object: cannot resolve place") end
 		local se = alife():create(p.section, pos, lvid, gvid)
 		if not (se) then error("spawn.object: alife():create returned nothing") end
@@ -361,6 +361,25 @@ K["squad.remove"] = {
 		local ok = false
 		if (board and board.remove_squad) then ok = pcall(board.remove_squad, board, sq) end
 		if not (ok) then release_se(sq) end
+	end,
+}
+
+-- Takes back an object this quest created. spawn.object could put a thing in the
+-- world and nothing could take it out again, so a stage that spawns a restrictor
+-- (or a stash, or a prop) had no way to clean up after itself and left it behind
+-- for the rest of the save.
+K["object.remove"] = {
+	run = function(ctx, p)
+		local id = util.ref_object_id(ctx, p.target)
+		local se = id and util.se_by_id(id)
+		if not (se) then
+			util.warn("%s/%s: object.remove: object not found (already gone?)", ctx.uid, ctx.node_id)
+		else
+			release_se(se)
+		end
+		-- the ref named a thing that no longer exists; leaving it would let a later
+		-- node resolve a dead id
+		if (p.target and p.target.ref) then core.ref_clear(ctx.qs, p.target.ref) end
 	end,
 }
 

@@ -1554,6 +1554,43 @@ mock.ticks(2)
 check(core.quest_status("mod_a.k_plain") == "completed", "objective.kill still completes when its squad is gone")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (y) place{ref} and object.remove
+-- A quest can now point a place at a thing it created itself, and take it back when
+-- the stage is over. Before this, spawn.object could put a restrictor in the world and
+-- nothing could aim at it or remove it again.
+section("(y) place{ref}: reach a quest-spawned restrictor, then object.remove takes it back")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/zone.nqasset"] = [[return { nq = 1, id = "zone", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step",
+	  on_enter = { { kind = "spawn.object", params = { section = "space_restrictor", place = { level = "l01_escape", pos = { 50, 0, 50 } }, ref = "gate" } } },
+	  out = { next = "reach" } },
+	{ id = "reach", kind = "objective.reach", params = { place = { ref = "gate", radius = 8 }, map_spot = false }, out = { done = "clean" } },
+	{ id = "clean", kind = "flow.step",
+	  on_enter = { { kind = "object.remove", params = { target = { ref = "gate" } } } },
+	  out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local UZ = "mod_a.zone"
+qs = core.quest_state(UZ)
+local gate = qs.refs.gate and qs.refs.gate.id
+check(gate ~= nil and mock.se[gate] ~= nil, "spawn.object created the restrictor and remembered it as a ref")
+check(qs.tokens.reach ~= nil, "objective.reach waits on a place that names that ref")
+mock.move_actor(300, 0, 300)
+mock.ticks(2)
+check(core.quest_state(UZ).tokens.reach ~= nil, "standing far away does not satisfy it")
+mock.move_actor(52, 0, 51)
+mock.ticks(2)
+check(core.quest_status(UZ) == "completed", "walking into the quest-made zone completes the objective")
+check(mock.se[gate] == nil, "object.remove took the restrictor back out of the world")
+check(core.quest_state(UZ).refs.gate == nil, "and cleared the ref, so nothing can resolve a dead id")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then
