@@ -505,6 +505,29 @@ function smart_by_name(name)
 	return nil
 end
 
+-- The smart nearest a position, for a spawn that names a place instead of a smart.
+-- A squad still needs one - it is what owns it and gives its members jobs - but making
+-- the author pick one out of four hundred unnamed ids just to spawn somewhere is not a
+-- choice, it is a chore.
+function nearest_smart(pos)
+	if not (pos) then return nil, nil end
+	local board = SIMBOARD
+	if not (board) and sim_board and sim_board.get_sim_board then
+		local ok, b = pcall(sim_board.get_sim_board)
+		if (ok) then board = b end
+	end
+	local by_name = board and board.smarts_by_names
+	if not (by_name) then return nil, nil end
+	local best, best_name, best_d
+	for name, smart in pairs(by_name) do
+		local ok, d = pcall(function() return smart.position:distance_to(pos) end)
+		if (ok and d and (not best_d or d < best_d)) then
+			best, best_name, best_d = smart, name, d
+		end
+	end
+	return best, best_name
+end
+
 function level_name_of_gvid(gvid)
 	if not (gvid) then return nil end
 	local ok, name = pcall(function()

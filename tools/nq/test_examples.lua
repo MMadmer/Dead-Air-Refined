@@ -1833,6 +1833,24 @@ check(far == 0, "spread 0.5 of radius 20 keeps every member within ten metres of
 local distinct = 0
 for _ in pairs(seen) do distinct = distinct + 1 end
 check(distinct > 0, "and each member got its own navmesh point")
+
+-- no smart named at all: the nearest one to the place stands in
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/nosmart.nqasset"] = [[return { nq = 1, id = "nosmart", nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "spawn.squad", params = {
+	      section = "simulation_boar",
+	      place = { level = "l01_escape", pos = { 5, 0, 5 } }, ref = "here" } } },
+	  out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+check(core.quest_state("mod_a.nosmart").refs.here ~= nil,
+	"a spawn with a place and no smart still created its squad")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary

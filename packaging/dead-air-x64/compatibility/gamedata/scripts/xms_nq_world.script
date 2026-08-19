@@ -161,14 +161,23 @@ local function confine_squad(ctx, squad, restrictor)
 end
 
 local function spawn_squad(ctx, spec)
-	local smart = util.smart_by_name(spec.smart)
-	if not (smart) then error("smart '" .. tostring(spec.smart) .. "' not found") end
+	local smart_name = spec.smart
+	local smart = smart_name and util.smart_by_name(smart_name) or nil
+	if not (smart) and spec.place then
+		-- no smart named: take the one nearest the place, so the author does not have
+		-- to pick from four hundred ids to spawn somewhere they already chose
+		local _, pos = util.place_position(spec.place, ctx)
+		smart, smart_name = util.nearest_smart(pos)
+	end
+	if not (smart) then
+		error("no smart terrain: name one, or give a place so the nearest can be used")
+	end
 	local board = sim_board()
 	if not (board and board.create_squad) then error("SIMBOARD is not available") end
 	local ok, exists = pcall(function() return system_ini():section_exist(spec.section) end)
 	if (ok and exists == false) then error("squad section '" .. tostring(spec.section) .. "' does not exist") end
 	local squad = board:create_squad(smart, spec.section)
-	if not (squad) then error("cannot create squad " .. tostring(spec.section) .. " at " .. tostring(spec.smart)) end
+	if not (squad) then error("cannot create squad " .. tostring(spec.section) .. " at " .. tostring(smart_name)) end
 	pcall(function()
 		for k in squad:squad_members() do
 			local se = k.object or (k.id and util.se_by_id(k.id))
@@ -178,7 +187,7 @@ local function spawn_squad(ctx, spec)
 	if (spec.place) then place_squad(ctx, squad, spec.place, spec.spread) end
 	if (spec.restrictor) then confine_squad(ctx, squad, spec.restrictor) end
 	local hold = (spec.hold ~= false)
-	if (hold) then squad.scripted_target = spec.smart end
+	if (hold) then squad.scripted_target = smart_name end
 	return squad, hold
 end
 
