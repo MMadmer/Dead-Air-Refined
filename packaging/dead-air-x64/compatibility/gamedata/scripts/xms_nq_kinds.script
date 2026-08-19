@@ -706,6 +706,16 @@ K["task_status"] = {
 	end,
 }
 
+-- One step of a task, so a graph can branch on "the bread is found but the medkit
+-- is not" without splitting the task into two quests.
+K["objective_status"] = {
+	test = function(ctx, p)
+		local per_task = ctx.qs and ctx.qs.objectives and ctx.qs.objectives[p.task]
+		local st = per_task and per_task[p.objective] or "none"
+		return st == p.is
+	end,
+}
+
 -- ============================================================================ conds: world
 K["actor_on_level"] = {
 	test = function(ctx, p) return util.current_level() == p.level end,

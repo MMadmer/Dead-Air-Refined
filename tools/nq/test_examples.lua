@@ -1591,6 +1591,77 @@ check(mock.se[gate] == nil, "object.remove took the restrictor back out of the w
 check(core.quest_state(UZ).refs.gate == nil, "and cleared the ref, so nothing can resolve a dead id")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z) task sub-objectives
+-- One PDA task with several steps, each with its own text and its own map spot. Before
+-- this, "collect X, collect Y, talk to Z" needed a whole quest per step.
+section("(z) task objectives: own spots, own states, the task outlives them, saved")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/steps.nqasset"] = [[return { nq = 1, id = "steps",
+	tasks = {
+		gather = {
+			title = "Собрать снаряжение", type = "storyline",
+			objectives = {
+				{ id = "bread",  title = "Найти хлеб",  target = { story = "wolf" } },
+				{ id = "medkit", title = "Найти аптечку" },
+				{ id = "talk",   title = "Доложить" },
+			},
+		},
+	},
+	nodes = {
+		{ id = "start", kind = "trigger.start", on_enter = { { kind = "task.give", params = { task = "gather" } } }, out = { next = "w" } },
+		{ id = "w", kind = "wait.when", cond = { { kind = "has_item", params = { section = "bread" } } }, out = { done = "one" } },
+		{ id = "one", kind = "flow.step",
+		  on_enter = { { kind = "task.objective_complete", params = { task = "gather", objective = "bread" } },
+		               { kind = "task.set_objective_target", params = { task = "gather", objective = "medkit", target = { story = "wolf" } } } },
+		  out = { next = "w2" } },
+		{ id = "w2", kind = "wait.when",
+		  cond = { { kind = "objective_status", params = { task = "gather", objective = "bread", is = "completed" } },
+		           { kind = "has_item", params = { section = "medkit" } } },
+		  out = { done = "two" } },
+		{ id = "two", kind = "flow.step",
+		  on_enter = { { kind = "task.objective_complete", params = { task = "gather", objective = "medkit" } },
+		               { kind = "task.set_objective_text", params = { task = "gather", objective = "talk", new_title = "Вернуться к Волку" } } },
+		  out = { next = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+local wolf_se = mock.new_se("stalker", nil, 1, 1, nil)
+mock.sor:register(wolf_se.id, "wolf")
+mock.first_update()
+core = xms_nq
+local US = "mod_a.steps"
+local t = mock.task_by_id("nq." .. US .. ".gather")
+check(t ~= nil and t:get_objectives_cnt() == 3, "the task went into the PDA carrying its three steps")
+check(t:get_objective(1) ~= nil and t:get_objective(1):get_title() == mock.cp("Найти хлеб"), "step one kept its own title")
+check(t:get_objective(1):get_map_object_id() == wolf_se.id, "and its own map spot, separate from the task's")
+check(t:get_objective(2):get_map_object_id() == 65535, "a step with no target has no spot")
+qs = core.quest_state(US)
+check(qs.objectives.gather.bread == "active" and qs.objectives.gather.talk == "active", "every step starts active")
+mock.add_item("bread", true)
+mock.ticks(2)
+check(qs.objectives.gather.bread == "completed", "the first step is completed on its own")
+check(t:get_objective(1):get_state() == task.completed, "and the engine objective says so")
+check(t:get_state() == task.in_progress, "while the task itself stays in progress")
+check(t:get_objective(2):get_map_object_id() == wolf_se.id, "set_objective_target moved the second step's spot")
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(qs.objectives.gather.medkit == "completed", "objective_status let the graph wait on step one before step two")
+check(t:get_objective(3):get_title() == mock.cp("Вернуться к Волку"), "set_objective_text rewrote the third step")
+check(qs.objectives.gather.talk == "active", "the untouched step is still active")
+-- the steps survive a save like every other piece of quest state
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state(US)
+check(qs.objectives and qs.objectives.gather and qs.objectives.gather.bread == "completed",
+	"step states came back after a save/load")
+local t2 = mock.task_by_id("nq." .. US .. ".gather")
+check(t2 ~= nil and t2:get_objectives_cnt() == 3, "and the PDA task still carries its three steps")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

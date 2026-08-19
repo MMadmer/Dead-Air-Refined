@@ -330,17 +330,33 @@ function actor_mt:give_task(t, dt, check_existing, ttl)
 	mock.task_events[#mock.task_events + 1] = { "given", t:get_id() }
 	task_state_changed(t, task.in_progress)
 end
-function actor_mt:set_task_state(state, id)
+function actor_mt:set_task_state(state, id, objective_id)
 	local t = self:get_task(id, false)
 	if not (t) then printf("! actor does not has task [%s]", id) return end
+	-- index 0 is the task itself; anything else is one of its steps and leaves the
+	-- task's own state alone, which is the whole point of sub-objectives
+	if (objective_id and objective_id ~= 0) then
+		local o = t._objectives and t._objectives[objective_id]
+		if not (o) then printf("! task [%s] has no objective [%s]", id, tostring(objective_id)) return end
+		o._state = state
+		if (state == 0 or state == 2) then o:remove_map_locations(false) end
+		mock.task_events[#mock.task_events + 1] =
+			{ state == 2 and "objective_completed" or state == 0 and "objective_failed" or tostring(state), id, objective_id }
+		return
+	end
 	t._state = state
 	if (state == 0 or state == 2) then t:remove_map_locations(false) end
 	mock.task_events[#mock.task_events + 1] = { state == 2 and "completed" or state == 0 and "failed" or tostring(state), id }
 	task_state_changed(t, state)
 end
-function actor_mt:get_task_state(id)
+function actor_mt:get_task_state(id, objective_id)
 	local t = self:get_task(id, false)
-	return t and t._state or 65535
+	if not (t) then return 65535 end
+	if (objective_id and objective_id ~= 0) then
+		local o = t._objectives and t._objectives[objective_id]
+		return o and o._state or 65535
+	end
+	return t._state
 end
 
 local function make_actor()
@@ -379,6 +395,38 @@ function gt_mt:remove_map_locations(notify) self._map_loc = nil self._map_obj = 
 function gt_mt:change_map_location(spot, id) self._map_loc = spot self._map_obj = id self._state = 1 end
 function gt_mt:add_complete_func(s) end
 function gt_mt:add_fail_func(s) end
+
+-- SGameTaskObjective: a step of a task, with its own text and its own map spot.
+local ob_mt = {}
+ob_mt.__index = ob_mt
+function SGameTaskObjective(task_obj, idx)
+	return setmetatable({ _task = task_obj, _idx = idx, _title = "", _descr = "", _state = 1 }, ob_mt)
+end
+function ob_mt:get_idx() return self._idx end
+function ob_mt:get_title() return self._title end
+function ob_mt:set_title(s) self._title = s end
+function ob_mt:get_description() return self._descr end
+function ob_mt:set_description(s) self._descr = s end
+function ob_mt:get_state() return self._state end
+function ob_mt:get_map_location() return self._map_loc end
+function ob_mt:set_map_location(s) self._map_loc = s end
+function ob_mt:get_map_object_id() return self._map_obj or 65535 end
+function ob_mt:set_map_object_id(id) self._map_obj = id end
+function ob_mt:set_map_hint(s) self._hint = s end
+function ob_mt:set_icon_name(s) self._icon = s end
+function ob_mt:remove_map_locations(notify) self._map_loc = nil self._map_obj = nil end
+function ob_mt:change_map_location(spot, id) self._map_loc = spot self._map_obj = id end
+
+function gt_mt:add_objective(o)
+	self._objectives = self._objectives or {}
+	self._objectives[o._idx] = o
+end
+function gt_mt:get_objective(idx) return self._objectives and self._objectives[idx] or nil end
+function gt_mt:get_objectives_cnt()
+	local n = 0
+	for _ in pairs(self._objectives or {}) do n = n + 1 end
+	return n
+end
 
 -- Adds an item to the actor inventory (server + client objects); fires actor_on_item_take when asked.
 function mock.add_item(section, notify)

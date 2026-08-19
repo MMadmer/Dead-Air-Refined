@@ -505,6 +505,9 @@ local function canon_param(st, node, slot, p, v)
 	elseif (t == "object_ref") then
 		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
 		return util.copy(v), true
+	elseif (t == "objective_id") then
+		if (type(v) ~= "string" or not is_ident(v)) then return nil, false, "must be an objective id of the task" end
+		return v, true
 	elseif (t == "kill_target") then
 		if (type(v) ~= "table") then return nil, false, "must be {story=} | {ref=} | {spawn={section=, smart=, ref=}}" end
 		if (v.spawn ~= nil and not valid_spawn_spec(v.spawn)) then return nil, false, "spawn must be {section=, smart=, ref=, hold=}" end
@@ -712,6 +715,11 @@ local function scan_refs(st, node, spec, params, tasks_hint)
 				st.var_users[#st.var_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "task_id" and type(v) == "string") then
 				st.task_users[#st.task_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "objective_id" and type(v) == "string") then
+				-- an objective id is only meaningful next to the task it belongs to,
+				-- which every kind that takes one passes in the same params table
+				st.objective_users[#st.objective_users + 1] =
+					{ task = params and params.task, name = v, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "node_id" and type(v) == "string") then
 				st.node_users[#st.node_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "quest_id" and type(v) == "string") then
@@ -1024,6 +1032,14 @@ local function check_graph(st, q)
 	for _, u in ipairs(st.var_users) do
 		if (q.vars[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "var '%s' is not declared", u.name) end
 	end
+	for _, u in ipairs(st.objective_users) do
+		local t = u.task and q.tasks[u.task]
+		if not (t) then
+			problem(st.problems, "E030", u.node, u.slot, "objective '%s' names no task", u.name)
+		elseif not (t.objectives and t.objectives[u.name]) then
+			problem(st.problems, "E030", u.node, u.slot, "task '%s' declares no objective '%s'", u.task, u.name)
+		end
+	end
 	for _, u in ipairs(st.task_users) do
 		if (q.tasks[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "task '%s' is not declared", u.name) end
 	end
@@ -1044,7 +1060,7 @@ end
 function build(raw, module, relpath, src)
 	local st = {
 		cat = catalog(), problems = {}, used_kinds = {}, ref_creators = {}, ref_users = {},
-		var_users = {}, task_users = {}, node_users = {}, quest_users = {},
+		var_users = {}, task_users = {}, objective_users = {}, node_users = {}, quest_users = {},
 	}
 	local q = { module = module, file = relpath, nodes = {}, node_by_id = {}, vars = {}, var_names = {}, tasks = {}, task_names = {}, problems = st.problems, quest_users = st.quest_users, used_kinds = st.used_kinds }
 	q.hash = util.fnv1a(src or "")
@@ -1123,6 +1139,42 @@ function build(raw, module, relpath, src)
 						end
 					end
 					if (t.icon ~= nil) then task.icon = tostring(t.icon) end
+					-- Sub-objectives. The engine has carried them all along (CGameTask
+					-- keeps a vector of SGameTaskObjective, each with its own title,
+					-- description and map spot); a task of several steps used to need a
+					-- whole quest per step because nothing here declared them.
+					task.objectives = {}
+					task.objective_names = {}
+					if (t.objectives ~= nil) then
+						if (type(t.objectives) ~= "table" or #t.objectives == 0) then
+							problem(st.problems, "E006", nil, "task:" .. tid, "objectives must be a non-empty array of { id=, title=, ... }")
+						else
+							for i, o in ipairs(t.objectives) do
+								local slot = "task:" .. tid .. "/objective:" .. tostring(i)
+								if (type(o) ~= "table") then
+									problem(st.problems, "E006", nil, slot, "objective must be a table")
+								elseif not (is_ident(o.id)) then
+									problem(st.problems, "E006", nil, slot, "objective id '%s' must match [a-z0-9_]", tostring(o.id))
+								elseif (task.objectives[o.id]) then
+									problem(st.problems, "E006", nil, slot, "duplicate objective id '%s'", tostring(o.id))
+								else
+									local obj = { id = o.id, index = #task.objective_names + 1 }
+									obj.title = canon_text(o.title, st, nil, slot) or o.id
+									obj.descr = canon_text(o.descr, st, nil, slot) or ""
+									if (o.target ~= nil) then
+										if (valid_target_ref(o.target) or valid_place(o.target)) then
+											obj.target = util.copy(o.target)
+											if (type(o.target.ref) == "string") then st.ref_users[#st.ref_users + 1] = { name = o.target.ref, node = nil, slot = slot } end
+										else
+											problem(st.problems, "E006", nil, slot, "objective target must be a target_ref or a place")
+										end
+									end
+									task.objectives[o.id] = obj
+									task.objective_names[#task.objective_names + 1] = o.id
+								end
+							end
+						end
+					end
 					q.tasks[tid] = task
 					q.task_names[#q.task_names + 1] = tid
 				end

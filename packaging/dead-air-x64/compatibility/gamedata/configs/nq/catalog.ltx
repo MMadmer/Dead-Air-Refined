@@ -1,4 +1,4 @@
-; NQ kind catalog v3 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; NQ kind catalog v4 - Dead Air Refined. Encoding: cp1251 (like every other game config).
 ; A ';' starts a comment, so it must never appear inside a value - one in a desc
 ; truncates it silently and the editor shows half the text. Use a dash instead.
 ; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 3
+version = 4
 api     = 1
 
 ; ============================================================ triggers
@@ -444,6 +444,53 @@ impl   = core
 since  = 1
 
 ; ============================================================ extra: spawn and squads
+[nq.task.objective_complete]
+group     = tasks
+title     = Выполнить подзадачу
+desc      = Отмечает выполненным один шаг задачи. Задача остаётся активной, пока её не завершить отдельно
+use       = extra
+params    = task, objective
+task      = task_id, required
+objective = objective_id, required
+impl      = core
+since     = 4
+
+[nq.task.objective_fail]
+group     = tasks
+title     = Провалить подзадачу
+desc      = Отмечает проваленным один шаг задачи
+use       = extra
+params    = task, objective
+task      = task_id, required
+objective = objective_id, required
+impl      = core
+since     = 4
+
+[nq.task.set_objective_target]
+group     = tasks
+title     = Цель подзадачи
+desc      = Переставляет метку одного шага задачи. Без target — снимает метку этого шага. У каждого шага метка своя
+use       = extra
+params    = task, objective, target
+task      = task_id, required
+objective = objective_id, required
+target    = target_ref
+impl      = core
+since     = 4
+
+[nq.task.set_objective_text]
+group     = tasks
+title     = Текст подзадачи
+desc      = Меняет заголовок и описание одного шага задачи
+use       = extra
+params    = task, objective, new_title, new_descr
+task      = task_id, required
+objective = objective_id, required
+new_title = text
+new_descr = text
+impl      = core
+since     = 4
+
 [nq.spawn.squad]
 group  = spawn
 title  = Создать отряд
@@ -712,6 +759,19 @@ is     = enum, required, enum=none|active|completed|failed
 event  = false
 impl   = core
 since  = 1
+
+[nq.objective_status]
+group     = cond_state
+title     = Статус подзадачи
+desc      = Шаг задачи в заданном статусе. Позволяет ветвиться на «хлеб найден, аптечка ещё нет», не разбивая задачу на два квеста
+use       = cond
+params    = task, objective, is
+task      = task_id, required
+objective = objective_id, required
+is        = enum, required, enum=none|active|completed|failed
+event     = false
+impl      = core
+since     = 4
 
 [nq.actor_on_level]
 group  = cond_world

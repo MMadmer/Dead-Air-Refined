@@ -41,6 +41,7 @@ local function set_status(ctx, name, status)
 	core.mark_dirty()
 end
 
+
 local function send_news(kind, t)
 	local a = actor()
 	if not (a and t and news_manager and news_manager.send_task) then return end
@@ -109,6 +110,51 @@ local function target_object_id(ctx, name, target)
 	return util.resolve_target_id(ctx, target)
 end
 
+-- ---------------------------------------------------------------------------- sub-objectives
+-- A PDA task can hold several steps, each with its own text and its own map spot
+-- (CGameTask keeps a vector of SGameTaskObjective). NQ declares them per task; the
+-- engine numbers them from 1, index 0 being the task itself.
+local function decl_objective(ctx, task_name, oid)
+	local d = decl(ctx, task_name)
+	local o = d.objectives and d.objectives[oid]
+	if not (o) then
+		error("task '" .. tostring(task_name) .. "' has no objective '" .. tostring(oid) .. "'")
+	end
+	return d, o
+end
+
+local function objective_status(ctx, task_name, oid)
+	local per_task = ctx.qs and ctx.qs.objectives and ctx.qs.objectives[task_name]
+	return per_task and per_task[oid] or nil
+end
+
+local function set_objective_status(ctx, task_name, oid, status)
+	if not (ctx.qs) then return end
+	ctx.qs.objectives[task_name] = ctx.qs.objectives[task_name] or {}
+	ctx.qs.objectives[task_name][oid] = status
+	core.mark_dirty()
+end
+
+-- The engine's objective object, or nil when the task is not in the PDA.
+local function engine_objective(a, tid, index)
+	local t = get_task(a, tid, true)
+	if not (t) then return nil, nil end
+	local o
+	pcall(function() o = t:get_objective(index) end)
+	return t, o
+end
+
+local function apply_objective_target(ctx, task_name, o, obj, spot, blink)
+	if not (obj) then return end
+	local id = o.target and target_object_id(ctx, task_name .. "/" .. o.id, o.target) or nil
+	if not (id) then return end
+	pcall(function()
+		obj:set_map_location(spot)
+		obj:set_map_object_id(id)
+	end)
+	ensure_blink(id, blink)
+end
+
 -- ---------------------------------------------------------------------------- operations
 -- Creates or refreshes the PDA task from the declaration.
 function give(ctx, name)
@@ -140,6 +186,17 @@ function give(ctx, name)
 		if (target) then
 			t:set_map_location(spot)
 			t:set_map_object_id(target)
+		end
+		-- the steps of the task, each with its own text and its own map spot;
+		-- built before the task is handed over, the engine numbers them from 1
+		for _, oid in ipairs(d.objective_names or {}) do
+			local o = d.objectives[oid]
+			local obj = SGameTaskObjective(t, o.index)
+			obj:set_title(util.format_text(ctx, o.title))
+			obj:set_description(util.format_text(ctx, o.descr or ""))
+			apply_objective_target(ctx, name, o, obj, spot, blink)
+			t:add_objective(obj)
+			set_objective_status(ctx, name, oid, "active")
 		end
 		a:give_task(t, 0, true, 0)
 	end
@@ -247,6 +304,62 @@ function set_text(ctx, name, title, descr)
 	if (changed) then send_news("updated", t) end
 end
 
+-- The step is marked in the PDA and remembered in our own state; a step of a task
+-- that is not in the PDA is recorded only, exactly like the task itself.
+local function finish_objective(ctx, name, oid, status)
+	local d, o = decl_objective(ctx, name, oid)
+	local a = actor()
+	if not (a) then error("task.objective_" .. status .. ": no actor") end
+	local tid = task_id(ctx.uid, name)
+	local t = get_task(a, tid, true)
+	if (t) then
+		pcall(a.set_task_state, a, (status == "completed") and task.completed or task.fail, tid, o.index)
+	else
+		util.warn("%s: task %s is not in the PDA, objective %s recorded as '%s' only", ctx.uid, name, oid, status)
+	end
+	set_objective_status(ctx, name, oid, status)
+end
+
+function objective_complete(ctx, name, oid) finish_objective(ctx, name, oid, "completed") end
+function objective_fail(ctx, name, oid) finish_objective(ctx, name, oid, "failed") end
+
+-- Same contract as the task's own target: no target clears the step's marker.
+function set_objective_target(ctx, name, oid, target)
+	local d, o = decl_objective(ctx, name, oid)
+	local a = actor()
+	if not (a) then error("task.set_objective_target: no actor") end
+	local _, obj = engine_objective(a, task_id(ctx.uid, name), o.index)
+	if not (obj) then error("task.set_objective_target: task '" .. tostring(name) .. "' is not active in the PDA") end
+	local spot, blink = spot_of(d)
+	if (target == nil) then
+		pcall(obj.remove_map_locations, obj, false)
+		return
+	end
+	local id = target_object_id(ctx, name .. "/" .. oid, target)
+	if not (id) then error("task.set_objective_target: target not found") end
+	pcall(function()
+		obj:remove_map_locations(false)
+		obj:change_map_location(spot, id)
+	end)
+	ensure_blink(id, blink)
+end
+
+function set_objective_text(ctx, name, oid, title, descr)
+	local _, o = decl_objective(ctx, name, oid)
+	local a = actor()
+	if not (a) then error("task.set_objective_text: no actor") end
+	local _, obj = engine_objective(a, task_id(ctx.uid, name), o.index)
+	if not (obj) then error("task.set_objective_text: task '" .. tostring(name) .. "' is not active in the PDA") end
+	if (title ~= nil) then pcall(obj.set_title, obj, util.format_text(ctx, title)) end
+	if (descr ~= nil) then pcall(obj.set_description, obj, util.format_text(ctx, descr)) end
+end
+
+-- read by the objective_status condition
+function objective_state(ctx, name, oid)
+	decl_objective(ctx, name, oid)
+	return objective_status(ctx, name, oid) or "none"
+end
+
 -- ---------------------------------------------------------------------------- kinds
 K["task.give"] = { run = function(ctx, p) give(ctx, p.task) end }
 K["task.complete"] = { run = function(ctx, p) complete(ctx, p.task) end }
@@ -254,6 +367,10 @@ K["task.fail"] = { run = function(ctx, p) fail(ctx, p.task) end }
 K["task.remove"] = { run = function(ctx, p) remove(ctx, p.task) end }
 K["task.set_target"] = { run = function(ctx, p) set_target(ctx, p.task, p.target) end }
 K["task.set_text"] = { run = function(ctx, p) set_text(ctx, p.task, p.new_title or p.title, p.new_descr or p.descr) end }
+K["task.objective_complete"] = { run = function(ctx, p) objective_complete(ctx, p.task, p.objective) end }
+K["task.objective_fail"] = { run = function(ctx, p) objective_fail(ctx, p.task, p.objective) end }
+K["task.set_objective_target"] = { run = function(ctx, p) set_objective_target(ctx, p.task, p.objective, p.target) end }
+K["task.set_objective_text"] = { run = function(ctx, p) set_objective_text(ctx, p.task, p.objective, p.new_title or p.title, p.new_descr or p.descr) end }
 
 -- ---------------------------------------------------------------------------- core hooks
 function register()

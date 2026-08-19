@@ -1124,3 +1124,19 @@ release on, the following are frozen and only ever extended additively:
 The game's own obligation is stronger and independent of all of this: a module
 built by any released version of the editor keeps working, and old-style modding
 keeps working forever.
+
+## Task objectives
+
+A PDA task can hold several steps. `CGameTask` keeps a vector of `SGameTaskObjective`;
+index 0 is the task itself and the steps are numbered from 1 in declaration order. Each
+step carries its own title, description and map spot, so one task can cover "collect X,
+collect Y, report" with a marker per step instead of needing a quest apiece.
+
+A quest declares them under its task: `objectives = { { id = ..., title = ..., target = ... }, ... }`.
+`task.objective_complete` / `task.objective_fail` mark one step through
+`actor:set_task_state(state, task_id, index)` and leave the task itself in progress -
+closing the task is still `task.complete`. `task.set_objective_target` moves one step's
+marker (no target clears just that one) and `task.set_objective_text` rewrites its text.
+Step states live in `qs.objectives[<task>][<objective>]`, survive a save, and are read by
+the `objective_status` condition, so a graph can branch on one step without splitting the
+task into separate quests.
