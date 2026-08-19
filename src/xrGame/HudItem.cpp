@@ -376,8 +376,7 @@ void CHudItem::on_a_hud_attach()
 {
     if (m_current_motion_def)
     {
-        // Attachment replay can target the persistent hands skeleton from the previous item.
-        PlayHUDMotion_noCB(m_current_motion, TRUE);
+        PlayHUDMotion_noCB(m_current_motion, FALSE);
 #ifdef DEBUG
 //		Msg("continue playing [%s][%d]",m_current_motion.c_str(), Device.dwFrame);
 #endif // #ifdef DEBUG

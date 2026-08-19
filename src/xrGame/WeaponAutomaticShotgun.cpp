@@ -27,14 +27,16 @@ bool CWeaponAutomaticShotgun::net_Spawn(CSE_Abstract* DC)
     if (server_weapon->m_AmmoIDs.empty())
         return result;
 
-    R_ASSERT3(server_weapon->m_AmmoIDs.size() == m_magazine.size(),
-        "Saved mixed automatic-shotgun magazine size does not match ammo count", cNameSect().c_str());
-
-    for (size_t i = 0; i < m_magazine.size(); ++i)
+    // The per-cartridge list and the elapsed count travel in different parts of the server
+    // state and can disagree after an offline ammo change or a mod-side edit; the reference
+    // (CoC net_Import, Dead Air 1.0 net_Spawn) applies what both sides agree on and keeps
+    // the default cartridge for the rest instead of refusing the spawn.
+    const size_t count = std::min(server_weapon->m_AmmoIDs.size(), m_magazine.size());
+    for (size_t i = 0; i < count; ++i)
     {
         const u8 ammo_type = server_weapon->m_AmmoIDs[i];
-        R_ASSERT3(
-            ammo_type < m_ammoTypes.size(), "Saved automatic-shotgun cartridge type is out of range", cNameSect().c_str());
+        if (ammo_type >= m_ammoTypes.size())
+            continue;
         m_magazine[i].Load(m_ammoTypes[ammo_type].c_str(), ammo_type);
     }
 
@@ -124,7 +126,10 @@ void CWeaponAutomaticShotgun::Reload()
 
 void CWeaponAutomaticShotgun::TriStateReload()
 {
-    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    // >= rather than ==: a magazine that already holds more than its size (a bad save or a
+    // mod-side edit) must still count as full, or the tri-state loop adds one shell per
+    // cycle for as long as the inventory lasts (141 rounds in a reported protecta).
+    if (m_magazine.size() >= (u32)iMagazineSize || !HaveCartridgeInInventory(1))
         return;
     CWeapon::Reload();
     m_sub_state = eSubstateReloadBegin;
@@ -141,7 +146,7 @@ void CWeaponAutomaticShotgun::OnStateSwitch(u32 S, u32 oldState)
 
     CWeapon::OnStateSwitch(S, oldState);
 
-    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    if (m_magazine.size() >= (u32)iMagazineSize || !HaveCartridgeInInventory(1))
     {
         switch2_EndReload();
         m_sub_state = eSubstateReloadEnd;
@@ -191,12 +196,12 @@ void CWeaponAutomaticShotgun::switch2_EndReload()
 void CWeaponAutomaticShotgun::PlayAnimOpenWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_open", "anim_open", TRUE, this, GetState());
+    PlayHUDMotion("anm_open", "anim_open", FALSE, this, GetState());
 }
 void CWeaponAutomaticShotgun::PlayAnimAddOneCartridgeWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", TRUE, this, GetState());
+    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", FALSE, this, GetState());
 }
 void CWeaponAutomaticShotgun::PlayAnimCloseWeapon()
 {

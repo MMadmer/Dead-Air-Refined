@@ -373,7 +373,8 @@ IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, 
     // INT BaseVertexLocation
     SRVSManager.Apply(context_id);
     ApplyRTandZB();
-    ApplyVertexLayout();
+    if (!ApplyVertexLayout())
+        return;
     StateManager.Apply();
     //  State manager may alter constants
     constants.flush();
@@ -407,7 +408,8 @@ IC void CBackend::RenderInstanced(
     ApplyPrimitieTopology(topology);
     SRVSManager.Apply(context_id);
     ApplyRTandZB();
-    ApplyVertexLayout();
+    if (!ApplyVertexLayout())
+        return;
     StateManager.Apply();
     constants.flush();
     HW.get_context(context_id)->DrawIndexedInstanced(
@@ -435,7 +437,8 @@ IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 startV, u32 PC)
     ApplyPrimitieTopology(Topology);
     SRVSManager.Apply(context_id);
     ApplyRTandZB();
-    ApplyVertexLayout();
+    if (!ApplyVertexLayout())
+        return;
     StateManager.Apply();
     //  State manager may alter constants
     constants.flush();
@@ -596,14 +599,14 @@ ICF void CBackend::SetAmbient(u32 /*factor*/) const
     // Not supported
 }
 
-IC void CBackend::ApplyVertexLayout()
+IC bool CBackend::ApplyVertexLayout()
 {
     VERIFY(vs);
     VERIFY(decl);
     VERIFY(m_pInputSignature);
 
     if (m_pInputLayout && m_pInputLayoutDecl == decl && m_pInputLayoutSignature == m_pInputSignature)
-        return;
+        return true;
 
     // This backend's own cache: inserting into a tree shared between contexts races the
     // other worker backends walking it (see vs_to_layout).
@@ -709,17 +712,22 @@ IC void CBackend::ApplyVertexLayout()
         m_pInputLayout = it->second;
         HW.get_context(context_id)->IASetInputLayout(m_pInputLayout);
     }
+    // A draw with no input layout while the vertex shader declares inputs is undefined for
+    // the driver, not merely empty - it has to be dropped here, once, by the one who knows.
+    return !!m_pInputLayout;
 }
 
 ICF void CBackend::set_VS(ref_vs& _vs)
 {
     m_pInputSignature = _vs->signature->signature;
+    m_bVSPositionOnly = _vs->signature->position_only;
     set_VS(_vs->sh, _vs->cName.c_str());
 }
 
 ICF void CBackend::set_VS(SVS* _vs)
 {
     m_pInputSignature = _vs->signature->signature;
+    m_bVSPositionOnly = _vs->signature->position_only;
     set_VS(_vs->sh, _vs->cName.c_str());
 }
 

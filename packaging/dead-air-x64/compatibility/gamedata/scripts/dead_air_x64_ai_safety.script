@@ -1,5 +1,6 @@
 local original_send_to_nearest_accessible_vertex = utils.send_to_nearest_accessible_vertex
 local original_load_var = utils.load_var
+local original_process_npc_usability
 
 local function load_var(obj, varname, defval)
 	if not db.actor then
@@ -68,8 +69,32 @@ local function guard_object_conditions()
 	end
 end
 
+-- xr_meet.process_npc_usability indexes db.storage[id].wounded as soon as IsWounded() says
+-- so, but IsWounded answers from the persistent "wounded_state" variable, while the storage
+-- entry only appears once the npc's logic is configured (xr_logic.configure_schemes). A
+-- stalker saved wounded whose smart terrain found no job for it on spawn is updated before
+-- that happens - smart_terrain.setup_gulag_and_logic_on_spawn returns without setting any
+-- logic up - and the stock code faults on the nil. Nothing can be evaluated for such an npc
+-- yet; the next update after the logic setup runs the stock code unchanged.
+local function process_npc_usability(npc)
+	local storage = db.storage[npc:id()]
+	if storage and storage.wounded == nil and IsWounded(npc) then
+		return
+	end
+	return original_process_npc_usability(npc)
+end
+
+local function guard_npc_usability()
+	if original_process_npc_usability or not (xr_meet and xr_meet.process_npc_usability) then
+		return
+	end
+	original_process_npc_usability = xr_meet.process_npc_usability
+	xr_meet.process_npc_usability = process_npc_usability
+end
+
 function on_game_start()
 	utils.load_var = load_var
 	utils.send_to_nearest_accessible_vertex = send_to_nearest_accessible_vertex
 	guard_object_conditions()
+	guard_npc_usability()
 end

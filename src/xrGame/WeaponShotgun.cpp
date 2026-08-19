@@ -27,13 +27,14 @@ bool CWeaponShotgun::net_Spawn(CSE_Abstract* DC)
     if (serverWeapon->m_AmmoIDs.empty())
         return result;
 
-    R_ASSERT3(serverWeapon->m_AmmoIDs.size() == m_magazine.size(),
-        "Saved mixed shotgun magazine size does not match ammo count", cNameSect().c_str());
-
-    for (size_t i = 0; i < m_magazine.size(); ++i)
+    // See CWeaponAutomaticShotgun::net_Spawn: the two saved sides can disagree, the reference
+    // applies the common part and never refuses the spawn.
+    const size_t count = std::min(serverWeapon->m_AmmoIDs.size(), m_magazine.size());
+    for (size_t i = 0; i < count; ++i)
     {
         const u8 ammoType = serverWeapon->m_AmmoIDs[i];
-        R_ASSERT3(ammoType < m_ammoTypes.size(), "Saved shotgun cartridge type is out of range", cNameSect().c_str());
+        if (ammoType >= m_ammoTypes.size())
+            continue;
         m_magazine[i].Load(m_ammoTypes[ammoType].c_str(), ammoType);
     }
 
@@ -129,7 +130,10 @@ void CWeaponShotgun::Reload()
 
 void CWeaponShotgun::TriStateReload()
 {
-    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    // >= rather than ==: a magazine that already holds more than its size (a bad save or a
+    // mod-side edit) must still count as full, or the tri-state loop adds one shell per
+    // cycle for as long as the inventory lasts (141 rounds in a reported protecta).
+    if (m_magazine.size() >= (u32)iMagazineSize || !HaveCartridgeInInventory(1))
         return;
     CWeapon::Reload();
     m_sub_state = eSubstateReloadBegin;
@@ -146,7 +150,7 @@ void CWeaponShotgun::OnStateSwitch(u32 S, u32 oldState)
 
     CWeapon::OnStateSwitch(S, oldState);
 
-    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    if (m_magazine.size() >= (u32)iMagazineSize || !HaveCartridgeInInventory(1))
     {
         switch2_EndReload();
         m_sub_state = eSubstateReloadEnd;
@@ -196,12 +200,12 @@ void CWeaponShotgun::switch2_EndReload()
 void CWeaponShotgun::PlayAnimOpenWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_open", "anim_open_weapon", TRUE, this, GetState());
+    PlayHUDMotion("anm_open", "anim_open_weapon", FALSE, this, GetState());
 }
 void CWeaponShotgun::PlayAnimAddOneCartridgeWeapon()
 {
     VERIFY(GetState() == eReload);
-    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", TRUE, this, GetState());
+    PlayHUDMotion("anm_add_cartridge", "anim_add_cartridge", FALSE, this, GetState());
 }
 void CWeaponShotgun::PlayAnimCloseWeapon()
 {

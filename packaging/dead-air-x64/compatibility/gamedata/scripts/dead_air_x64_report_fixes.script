@@ -5,7 +5,34 @@ local original_send_script_callback = SendScriptCallback
 local ui_patched = false
 local se_store_patched = false
 
-function SendScriptCallback(name, ...)
+-- Scripts written for engines with a larger monster roster ask the class table for names
+-- this engine never registered (clsid.karlik_s and the like). luabind raises
+-- "no static 'x' in class 'clsid'" for an unknown static, so the usual
+-- `elseif c == clsid.karlik_s then` chain kills the session the moment it reaches the
+-- missing name. Answer nil instead: every comparison with it is false and the chain moves
+-- on, exactly as it would on an engine where the class exists but the object is something
+-- else. Resolved names are cached in the proxy, so the hot path is a plain table read.
+-- Assigned through _G on purpose: this chunk runs inside its own namespace table, a bare
+-- global write would land there and leave the real table untouched.
+local native_clsid = clsid
+if type(native_clsid) == "userdata" then
+	local proxy = {}
+	setmetatable(proxy, {
+		__index = function(t, key)
+			local ok, value = pcall(function() return native_clsid[key] end)
+			if not ok or value == nil then
+				return nil
+			end
+			rawset(t, key, value)
+			return value
+		end,
+	})
+	_G.clsid = proxy
+end
+
+-- Same reason for the explicit _G: the wrapper has to replace the global the binders call,
+-- not a namespace-local copy nobody reaches.
+function _G.SendScriptCallback(name, ...)
 	if name == "physic_object_on_use_callback" then
 		local object, initiator = ...
 		if type(initiator) == "number" then

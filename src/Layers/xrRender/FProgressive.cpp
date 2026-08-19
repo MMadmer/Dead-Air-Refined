@@ -70,7 +70,8 @@ void FProgressive::Load(const char* N, IReader* data, u32 dwFlags)
 void FProgressive::Render(CBackend& cmd_list, float LOD, bool use_fast_geo)
 {
 #if RENDER != R_R1
-    if (m_fast && use_fast_geo)
+    // same rule as Fvisual::Render - the stripped format only feeds a position-only shader
+    if (m_fast && use_fast_geo && cmd_list.vs_position_only())
     {
         int lod_id = iFloor((1.f - clampr(LOD, 0.f, 1.f)) * float(xSWI->count - 1) + 0.5f);
         VERIFY(lod_id >= 0 && lod_id < int(xSWI->count));

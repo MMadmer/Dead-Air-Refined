@@ -8,6 +8,8 @@
 #include "DetailManager.h"
 #include "xrCDB/Intersect.hpp"
 
+#include <thread>
+
 #ifdef _EDITOR
 #include "ESceneClassList.h"
 #include "Scene.h"
@@ -523,12 +525,16 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
 
 void CDetailManager::WaitForCalc()
 {
-    if (!m_calc_task)
+    if (Task* task = m_calc_task.exchange(nullptr, std::memory_order_acq_rel))
+    {
+        TaskScheduler->Wait(*task);
+        m_calc_running.store(false, std::memory_order_release);
         return;
+    }
 
-    TaskScheduler->Wait(*m_calc_task);
-    m_calc_task = nullptr;
-    m_calc_running.store(false, std::memory_order_release);
+    // Somebody else owns the handle: the task clears the flag as its very last step.
+    while (m_calc_running.load(std::memory_order_acquire))
+        std::this_thread::yield();
 }
 
 void CDetailManager::DispatchMTCalc()
@@ -544,7 +550,7 @@ void CDetailManager::DispatchMTCalc()
     m_calc_scheduled_frame = Device.dwFrame;
     const Fvector eye = Device.vCameraPosition;
 
-    m_calc_task = &TaskScheduler->AddTask([this, eye]
+    m_calc_task.store(&TaskScheduler->AddTask([this, eye]
     {
         ZoneScoped;
 
@@ -559,6 +565,6 @@ void CDetailManager::DispatchMTCalc()
 
         UpdateVisibleM();
         m_calc_running.store(false, std::memory_order_release);
-    });
+    }), std::memory_order_release);
 }
 } // namespace xray::render::RENDER_NAMESPACE

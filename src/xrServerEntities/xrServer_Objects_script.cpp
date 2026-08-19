@@ -12,10 +12,43 @@
 #include "PHNetState.h"
 #include "xrServer_script_macroses.h"
 #include "script_ini_file.h"
+#include "xrScriptEngine/script_engine.hpp"
 
-pcstr get_section_name(const CSE_Abstract* abstract) { return (abstract->name()); }
-pcstr get_name(const CSE_Abstract* abstract) { return (abstract->name_replace()); }
-CScriptIniFile* get_spawn_ini(CSE_Abstract* abstract) { return ((CScriptIniFile*)&abstract->spawn_ini()); }
+namespace
+{
+// A script-held cse_abstract is a raw pointer that nothing invalidates on release, and these
+// accessors dispatch virtually through it - on a released object that is a jump through
+// freed memory (the reported heap-address crash inside a binder update). Refuse the call,
+// answer an empty value and name the script, so the reference that outlived its object can
+// be found instead of taking the whole game down.
+bool script_object_usable(const CSE_Abstract* abstract, pcstr method)
+{
+    if (CSE_Abstract::is_live_object(abstract))
+        return true;
+
+    static u32 reported = 0;
+    if (++reported <= 16)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error,
+            "cse_abstract:%s() called on a released server object - the script keeps a stale handle", method);
+        GEnv.ScriptEngine->print_stack();
+    }
+    return false;
+}
+} // namespace
+
+pcstr get_section_name(const CSE_Abstract* abstract)
+{
+    return script_object_usable(abstract, "section_name") ? abstract->name() : "";
+}
+pcstr get_name(const CSE_Abstract* abstract)
+{
+    return script_object_usable(abstract, "name") ? abstract->name_replace() : "";
+}
+CScriptIniFile* get_spawn_ini(CSE_Abstract* abstract)
+{
+    return script_object_usable(abstract, "spawn_ini") ? (CScriptIniFile*)&abstract->spawn_ini() : nullptr;
+}
 
 // Dead Air exposes these empty Lua type markers for compatibility checks.
 struct DeadAirClsidCompatibility {};

@@ -13,6 +13,7 @@
 #include "script_value_container_impl.h"
 #include "clsid_game.h"
 #include "xrCore/xr_token.h"
+#include <parallel_hashmap/phmap.h>
 
 #ifndef AI_COMPILER
 #include "object_factory.h"
@@ -52,8 +53,30 @@ void CPureServerObject::save(NET_Packet& tNetPacket) {}
 ////////////////////////////////////////////////////////////////////////////
 // CSE_Abstract
 ////////////////////////////////////////////////////////////////////////////
+namespace
+{
+// Every server entity alive right now. luabind hands scripts the bare pointer and nothing
+// invalidates it on release, so the Lua-facing accessors consult this set before they
+// dispatch virtually through the object (a released one would jump through whatever the
+// allocator left in the old vtable slot).
+Lock g_live_server_objects_lock;
+phmap::flat_hash_set<const CSE_Abstract*> g_live_server_objects;
+} // namespace
+
+bool CSE_Abstract::is_live_object(const CSE_Abstract* object)
+{
+    if (!object)
+        return false;
+    ScopeLock lock{ &g_live_server_objects_lock };
+    return g_live_server_objects.contains(object);
+}
+
 CSE_Abstract::CSE_Abstract(LPCSTR caSection)
 {
+    {
+        ScopeLock lock{ &g_live_server_objects_lock };
+        g_live_server_objects.insert(this);
+    }
     m_editor_flags.zero();
     RespawnTime = 0;
     net_Ready = FALSE;
@@ -133,6 +156,10 @@ CSE_Abstract::CSE_Abstract(LPCSTR caSection)
 
 CSE_Abstract::~CSE_Abstract()
 {
+    {
+        ScopeLock lock{ &g_live_server_objects_lock };
+        g_live_server_objects.erase(this);
+    }
     xr_free(s_name_replace);
     xr_delete(m_ini_file);
 }

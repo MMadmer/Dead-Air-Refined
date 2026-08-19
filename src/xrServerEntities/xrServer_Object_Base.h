@@ -136,6 +136,9 @@ public:
     //
     virtual void Spawn_Write(NET_Packet& tNetPacket, BOOL bLocal);
     virtual BOOL Spawn_Read(NET_Packet& tNetPacket);
+    // Whether the pointer names a server entity that still exists. Lua keeps raw pointers
+    // to server objects, and the script-facing accessors ask before dispatching through one.
+    static bool is_live_object(const CSE_Abstract* object);
     virtual LPCSTR name() const;
     virtual LPCSTR name_replace() const;
     virtual void set_name(LPCSTR s) { s_name = s; }

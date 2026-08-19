@@ -39,6 +39,11 @@ class ECORE_API CModelPool
 
     xr_vector<ModelDef> Models; // Reference / Base
     xr_vector<dxRender_Visual*> ModelsToDelete; //
+    // Deferred deletes arrive from the parallel graph-build tasks (a particle group
+    // retiring a finished child from any render context); the queue needs its own guard,
+    // and so does child effect creation from the same tasks.
+    Lock ModelsToDeleteLock;
+    Lock ParticleCreateLock;
     REGISTRY Registry; // Just pairing of pointer / Name
     POOL Pool; // Unused / Inactive
     BOOL bLogging;

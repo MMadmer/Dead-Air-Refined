@@ -297,6 +297,15 @@ void CParticlesObject::renderable_Render(u32 context_id, IRenderable* root)
     if (!psDeviceFlags.test(rsDrawParticles))
         return;
 
+    // The main pass, the rain pass, every sun cascade and every local light shadow map build
+    // their graphs in parallel tasks, and each of them lands here for the same object. The
+    // reference ran these passes one after another, so the first visit updated the effect and
+    // the rest only added it. Unserialised, two tasks update the same effect at once: a group
+    // OnFrame pushes and pops its child vectors while another task walks them in add_Visual,
+    // and the same stopped child gets handed to model_Delete twice - the reported crashes in
+    // CParticleManager::Update (garbage action list) and CModelPool::DeleteQueue (double free).
+    ScopeLock lock{ &render_lock };
+
     VERIFY(renderable.visual);
     const auto dt = Device.dwTimeGlobal - dwLastTime;
     if (dt)

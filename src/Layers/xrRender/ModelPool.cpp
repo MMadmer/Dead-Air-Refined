@@ -362,6 +362,7 @@ void CModelPool::Delete(dxRender_Visual*& V, BOOL bDiscard)
     if (g_bRendering)
     {
         VERIFY(!bDiscard);
+        ScopeLock lock{ &ModelsToDeleteLock };
         ModelsToDelete.push_back(V);
     }
     else
@@ -373,6 +374,8 @@ void CModelPool::Delete(dxRender_Visual*& V, BOOL bDiscard)
 
 void CModelPool::DeleteQueue()
 {
+    VERIFY(!g_bRendering);
+    ScopeLock lock{ &ModelsToDeleteLock };
     for (u32 it = 0; it < ModelsToDelete.size(); it++)
     {
         // DeleteInternal takes a dxRender_Visual*& and can push_back into this very
@@ -459,8 +462,13 @@ void CModelPool::ClearPool(BOOL b_complete)
     Pool.clear();
 }
 
+// A particle group spawns its child effects from OnFrame, which the parallel graph-build
+// tasks drive; two groups doing it at once would share the geometry registry and the
+// definition's cached shader reference count unguarded. Creation is rare (explosions),
+// deletion already runs on the main thread only.
 dxRender_Visual* CModelPool::CreatePE(PS::CPEDef* source)
 {
+    ScopeLock lock{ &ParticleCreateLock };
     PS::CParticleEffect* V = (PS::CParticleEffect*)Instance_Create(MT_PARTICLE_EFFECT);
     V->Compile(source);
     return V;
@@ -468,6 +476,7 @@ dxRender_Visual* CModelPool::CreatePE(PS::CPEDef* source)
 
 dxRender_Visual* CModelPool::CreatePG(PS::CPGDef* source)
 {
+    ScopeLock lock{ &ParticleCreateLock };
     PS::CParticleGroup* V = (PS::CParticleGroup*)Instance_Create(MT_PARTICLE_GROUP);
     V->Compile(source);
     return V;

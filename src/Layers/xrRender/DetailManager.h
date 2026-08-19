@@ -248,7 +248,10 @@ public:
     void Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum = nullptr);
 
     /// MT stuff
-    Task* m_calc_task{};
+    // The main pass and the parallel sun cascade passes all render details and all wait for
+    // the calc first; the handle is claimed atomically by one of them, the rest spin on the
+    // running flag (a shared plain pointer let two renderers race on the same task).
+    std::atomic<Task*> m_calc_task{};
     std::atomic_bool m_calc_running{};
     u32 m_calc_scheduled_frame{u32(-1)};
 

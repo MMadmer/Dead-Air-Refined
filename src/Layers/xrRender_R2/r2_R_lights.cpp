@@ -137,8 +137,11 @@ void CRender::render_lights(light_Package& LP)
             // CoC (R2/R3/R4) and Dead Air 1.0 reserve them for the sun cascades. The pass
             // arrived with the modern upstream base, and on grassy levels it cost more than
             // the rest of the face put together (about a quarter of the whole frame with
-            // r__light_shadow_budget 0 at the Jupiter station).
-            if (bNormal || bSpecial)
+            // r__light_shadow_budget 0 at the Jupiter station) - so it is a High/Maximum
+            // preset feature (r__light_details), gated by the grass shadow option itself.
+            const bool renderDetails = ps_r__light_details && ps_r_sun_details >= detail_shadow_high && Details &&
+                Details->HasRenderableDetails();
+            if (bNormal || bSpecial || renderDetails)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
@@ -149,6 +152,8 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
                 dsgraph.cmd_list.set_xform_project(L->X.S.project);
                 dsgraph.render_graph(0);
+                if (renderDetails)
+                    Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
                 L->X.S.transluent = FALSE;
                 if (bSpecial)
                 {

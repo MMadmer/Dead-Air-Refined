@@ -175,6 +175,11 @@ int ps_r__LightSleepFrames = 10;
 // meters) and let NPC headlamps shine through their own wearer's skull. The budget stays as
 // an opt-in runtime cvar for weak machines that prefer frame rate over lamp shadows.
 int ps_r__light_shadow_budget = 0;
+// Detail objects (grass) in local light shadow maps: an upstream extra the reference never
+// drew, and on grassy levels the single biggest per-face cost. It follows the quality preset
+// (High and Maximum turn it on, see CCC_Preset) and still needs the grass shadow option
+// (r2_sun_details high) like every other grass shadow. Opt-in at runtime for the rest.
+int ps_r__light_details = 0;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -623,6 +628,17 @@ public:
             xr_sprintf(budget_cmd, "r__light_shadow_budget %d", budget_by_preset[*value]);
             Console->Execute(budget_cmd);
         }
+
+        // Grass in local light shadow maps is a High/Maximum feature: it was the costliest
+        // part of a shadowed lamp on grassy levels, so the lower presets keep the reference
+        // behaviour (sun cascades only).
+        static constexpr int light_details_by_preset[] = {0, 0, 0, 1, 1};
+        if (*value < std::size(light_details_by_preset))
+        {
+            string64 details_cmd;
+            xr_sprintf(details_cmd, "r__light_details %d", light_details_by_preset[*value]);
+            Console->Execute(details_cmd);
+        }
     }
 };
 
@@ -908,6 +924,7 @@ void xrRender_initconsole()
     CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
+    CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list

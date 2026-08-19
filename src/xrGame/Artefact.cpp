@@ -836,7 +836,7 @@ void CArtefact::OnStateSwitch(u32 S, u32 oldState)
     inherited::OnStateSwitch(S, oldState);
     switch (S)
     {
-    case eShowing: { PlayHUDMotion("anm_show", "anim_show", TRUE, this, S);
+    case eShowing: { PlayHUDMotion("anm_show", "anim_show", FALSE, this, S);
     }
     break;
     case eHiding:

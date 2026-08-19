@@ -430,8 +430,12 @@ public:
 public:
 #if defined(USE_OGL)
     ICF bool is_TessEnabled() { return false; }
+    // Position-only vertex formats (the level's fast shadow geometry) feed the bound vertex
+    // shader only when it reads nothing else; GL keeps the reference behaviour.
+    ICF bool vs_position_only() const { return true; }
 #elif defined(USE_DX11)
     ICF bool is_TessEnabled();
+    ICF bool vs_position_only() const { return m_bVSPositionOnly; }
 #else
 #   error No graphics API selected or enabled!
 #endif
@@ -617,7 +621,9 @@ private:
     //	DirectX 11+ internal functionality
     // void CreateConstantBuffers();
     // void DestroyConstantBuffers();
-    void ApplyVertexLayout();
+    // false = no input layout could be created for the bound declaration and vertex shader;
+    // the caller must not issue the draw (a null layout is not a legal draw state)
+    bool ApplyVertexLayout();
     void ApplyRTandZB();
     void ApplyPrimitieTopology(D3D_PRIMITIVE_TOPOLOGY Topology);
     bool UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers],
@@ -625,6 +631,7 @@ private:
 
 private:
     ID3DBlob* m_pInputSignature{ nullptr };
+    bool m_bVSPositionOnly{ false };
     ID3DUserDefinedAnnotation* pAnnotation{ nullptr };
 
     bool m_bChangedRTorZB;

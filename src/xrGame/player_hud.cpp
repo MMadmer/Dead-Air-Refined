@@ -152,6 +152,9 @@ void attachable_hud_item::update(bool bForce)
     if (IKinematicsAnimated* ka = m_model->dcast_PKinematicsAnimated())
     {
         ka->UpdateTracks();
+        // Reference order: the tracks just advanced, a pose published earlier this frame is
+        // stale - without the invalidation the attached item lags the hands it hangs on.
+        ka->dcast_PKinematics()->CalculateBones_Invalidate();
         ka->dcast_PKinematics()->CalculateBones(TRUE);
     }
 }

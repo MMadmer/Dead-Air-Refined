@@ -19,6 +19,11 @@ namespace xray::render::RENDER_NAMESPACE
 struct ECORE_API SInputSignature : public xr_resource_flagged
 {
     ID3DBlob* signature;
+    // The vertex shader consumes POSITION (plus system values) and nothing else, so the
+    // level's position-only fast geometry can feed it. Anything that also reads texture
+    // coordinates (alpha-tested shadow casters) needs the full vertex format: the layout
+    // for the stripped one cannot even be created.
+    bool position_only{ false };
     SInputSignature(ID3DBlob* pBlob);
     ~SInputSignature();
 };

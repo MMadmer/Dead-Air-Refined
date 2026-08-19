@@ -331,9 +331,9 @@ void CWeaponKnife::OnAnimationEnd(u32 state)
             attackStarted = false;
 
             if (state == eFire)
-                time = PlayHUDMotion("anm_attack_end", "anim_shoot1_end", TRUE, this, state);
+                time = PlayHUDMotion("anm_attack_end", "anim_shoot1_end", FALSE, this, state);
             else // eFire2
-                time = PlayHUDMotion("anm_attack2_end", "anim_shoot2_end", TRUE, this, state);
+                time = PlayHUDMotion("anm_attack2_end", "anim_shoot2_end", FALSE, this, state);
 
             if (time != 0 && !attackMotionMarksAvailable)
                 OnKnifeStrike(state);
@@ -357,10 +357,13 @@ void CWeaponKnife::switch2_Attacking(u32 state)
     if (IsPending())
         return;
 
+    // No mix-in: the reference starts the swing at frame 0. Blending it in from idle both
+    // truncates the visible part of the strike and stacks blends on the item model, whose
+    // root bone is overwritten while attached to the hands.
     if (state == eFire)
-        PlayHUDMotion("anm_attack", "anim_shoot1_start", TRUE, this, state);
+        PlayHUDMotion("anm_attack", "anim_shoot1_start", FALSE, this, state);
     else // eFire2
-        PlayHUDMotion("anm_attack2", "anim_shoot2_start", TRUE, this, state);
+        PlayHUDMotion("anm_attack2", "anim_shoot2_start", FALSE, this, state);
 
     // XXX: could check it once at initialization stage (could use something like CHudItem::isHUDAnimationExist())
     attackMotionMarksAvailable = m_current_motion_def && !m_current_motion_def->marks.empty();
@@ -394,7 +397,7 @@ void CWeaponKnife::switch2_Showing()
 {
     VERIFY(GetState() == eShowing);
     PlaySound("sndShow", get_LastFP());
-    PlayHUDMotion("anm_show", "anim_draw", TRUE, this, GetState());
+    PlayHUDMotion("anm_show", "anim_draw", FALSE, this, GetState());
 }
 
 void CWeaponKnife::FireStart()

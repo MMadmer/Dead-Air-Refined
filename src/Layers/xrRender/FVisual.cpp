@@ -173,8 +173,11 @@ void Fvisual::Render(CBackend& cmd_list, float, bool use_fast_geo)
 #if RENDER == R_R1
     if (m_fast && ps_r1_force_geomx)
 #else
+    // The fast (position-only) geometry can stand in only for a vertex shader that reads
+    // nothing but the position: an alpha-tested shadow caster samples its texture in the
+    // shadow pass too, and the stripped format cannot even build an input layout for it.
     if (m_fast &&
-        (ps_r1_force_geomx || use_fast_geo && !cmd_list.is_TessEnabled()))
+        (ps_r1_force_geomx || use_fast_geo && !cmd_list.is_TessEnabled() && cmd_list.vs_position_only()))
 #endif
     {
         cmd_list.set_Geometry(m_fast->rm_geom);

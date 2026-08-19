@@ -74,6 +74,34 @@ static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t c
             svs_result->signature = RImplementation.Resources->_CreateInputSignature(pSignatureBlob);
 
             _RELEASE(pSignatureBlob);
+
+            // Classify the inputs once per signature: only POSITION and system values means
+            // the position-only fast geometry may stand in for the full vertex format.
+            if (svs_result->signature)
+            {
+                bool position_only = true;
+                ID3DShaderReflection* pReflection = nullptr;
+                if (SUCCEEDED(D3DReflect(buffer, buffer_size, IID_ID3DShaderReflection, (void**)&pReflection)) &&
+                    pReflection)
+                {
+                    D3D_SHADER_DESC shader_desc{};
+                    if (SUCCEEDED(pReflection->GetDesc(&shader_desc)))
+                    {
+                        for (UINT i = 0; i < shader_desc.InputParameters && position_only; ++i)
+                        {
+                            D3D11_SIGNATURE_PARAMETER_DESC param{};
+                            if (FAILED(pReflection->GetInputParameterDesc(i, &param)) || !param.SemanticName)
+                                continue;
+                            if (param.SystemValueType != D3D_NAME_UNDEFINED)
+                                continue;
+                            if (xr_stricmp(param.SemanticName, "POSITION") != 0)
+                                position_only = false;
+                        }
+                    }
+                    _RELEASE(pReflection);
+                }
+                svs_result->signature->position_only = position_only;
+            }
         }
     }
     else if (pTarget[0] == 'g')

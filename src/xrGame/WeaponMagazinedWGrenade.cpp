@@ -130,7 +130,7 @@ void CWeaponMagazinedWGrenade::switch2_Reload()
     {
         PlaySound("sndReloadG", get_LastFP2());
 
-        PlayHUDMotion("anm_reload_g", "anim_reload_g", TRUE, this, GetState());
+        PlayHUDMotion("anm_reload_g", "anim_reload_g", FALSE, this, GetState());
         SetPending(TRUE);
     }
     else
@@ -610,12 +610,12 @@ void CWeaponMagazinedWGrenade::PlayAnimShow()
     if (IsGrenadeLauncherAttached())
     {
         if (!m_bGrenadeMode)
-            PlayHUDMotion("anm_show_w_gl", "anim_draw_gl", TRUE, this, GetState());
+            PlayHUDMotion("anm_show_w_gl", "anim_draw_gl", FALSE, this, GetState());
         else
-            PlayHUDMotion("anm_show_g", "anim_draw_g", TRUE, this, GetState());
+            PlayHUDMotion("anm_show_g", "anim_draw_g", FALSE, this, GetState());
     }
     else
-        PlayHUDMotion("anm_show", "anim_draw", TRUE, this, GetState());
+        PlayHUDMotion("anm_show", "anim_draw", FALSE, this, GetState());
 }
 
 void CWeaponMagazinedWGrenade::PlayAnimHide()
