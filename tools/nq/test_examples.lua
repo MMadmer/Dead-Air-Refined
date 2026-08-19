@@ -1715,6 +1715,53 @@ mock.ticks(2)
 check(core.quest_status("mod_a.gate2") == "completed", "inside its shape it completes")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z3) clearing a marker that is gone
+-- A trigger's falling edge routinely lands after the task it watched was completed.
+-- Clearing a marker then is not a mistake - the marker went with the task.
+section("(z3) task.set_target with no target on a finished task is quiet")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/late.nqasset"] = [[return { nq = 1, id = "late",
+	tasks = { job = { title = "Работа" } },
+	nodes = {
+		{ id = "start", kind = "trigger.start",
+		  on_enter = { { kind = "task.give", params = { task = "job" } },
+		               { kind = "task.complete", params = { task = "job" } },
+		               { kind = "task.set_target", params = { task = "job" } } },
+		  out = { next = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+mock.first_update()
+core = xms_nq
+local UL = "mod_a.late"
+check(core.quest_status(UL) == "completed", "the quest ran through instead of erroring")
+check(not mock.log_has("set_target"), "and said nothing about the cleared marker")
+-- naming a target the task cannot have is still an authoring mistake
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/late2.nqasset"] = [[return { nq = 1, id = "late2",
+	tasks = { job = { title = "Работа" } },
+	nodes = {
+		{ id = "start", kind = "trigger.start",
+		  on_enter = { { kind = "task.give", params = { task = "job" } },
+		               { kind = "task.complete", params = { task = "job" } },
+		               { kind = "task.set_target", params = { task = "job", target = { story = "wolf" } } } },
+		  out = { next = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+mock.first_update()
+core = xms_nq
+-- the error record is cleared when the token leaves the node, so the log is what
+-- proves it was raised
+check(mock.log_has("set_target"), "pointing a finished task at a target is still reported")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then
