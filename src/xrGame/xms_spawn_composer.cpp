@@ -5,6 +5,7 @@
 // per-module persistent id ranges. See docs/dead-air/XMS_ARCHITECTURE.md p.7.
 
 #include "alife_spawn_registry.h"
+#include "xrServerEntities/xrServer_Objects.h"		// CSE_Shape: restrictors carry their geometry
 #include "xms_game.h"
 #include "xrCore/XMS/xms_core.h"
 
@@ -316,6 +317,46 @@ void CALifeSpawnRegistry::xms_compose()
             if (pcstr visual = op.value("visual"))
                 if (CSE_Visual* visual_object = smart_cast<CSE_Visual*>(abstract))
                     visual_object->set_visual(visual);
+
+            // A restrictor without its shape is a zone nothing can ever be inside: the
+            // marker points at it correctly and walking in does nothing, because the
+            // shape list the editor drew is not part of the section.
+            if (CSE_Shape* shape_object = smart_cast<CSE_Shape*>(abstract))
+            {
+                const int shape_count = op.value("shapes") ? atoi(op.value("shapes")) : 0;
+                xr_vector<CShapeData::shape_def> shapes;
+                for (int si = 0; si < shape_count; ++si)
+                {
+                    string64 key;
+                    xr_sprintf(key, "shape%d", si);
+                    pcstr text = op.value(key);
+                    if (!text)
+                        continue;
+                    CShapeData::shape_def def{};
+                    if (0 == strncmp(text, "sphere", 6))
+                    {
+                        def.type = CShapeData::cfSphere;
+                        if (4 != sscanf(text + 6, " , %f , %f , %f , %f", &def.data.sphere.P.x,
+                                &def.data.sphere.P.y, &def.data.sphere.P.z, &def.data.sphere.R))
+                            continue;
+                    }
+                    else if (0 == strncmp(text, "box", 3))
+                    {
+                        def.type = CShapeData::cfBox;
+                        Fmatrix& b = def.data.box;
+                        b.identity();
+                        if (12 != sscanf(text + 3, " , %f , %f , %f , %f , %f , %f , %f , %f , %f , %f , %f , %f",
+                                &b.i.x, &b.i.y, &b.i.z, &b.j.x, &b.j.y, &b.j.z,
+                                &b.k.x, &b.k.y, &b.k.z, &b.c.x, &b.c.y, &b.c.z))
+                            continue;
+                    }
+                    else
+                        continue;
+                    shapes.push_back(def);
+                }
+                if (!shapes.empty())
+                    shape_object->assign_shapes(&shapes[0], u32(shapes.size()));
+            }
             if (pcstr profile = op.value("character_profile"))
                 if (CSE_ALifeTraderAbstract* trader = smart_cast<CSE_ALifeTraderAbstract*>(abstract))
                     trader->set_character_profile(profile);
