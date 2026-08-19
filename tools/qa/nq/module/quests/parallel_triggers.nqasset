@@ -12,8 +12,13 @@ return {
   activation = "auto",
   vars = { medkit_seen = false, hunted = false },
   tasks = {
+    -- два шага, и закрываются они там же, где закрывается задача: в on_exit ноды охоты.
+    -- Последний шаг снимает задачу со слота активной - и именно тогда закрытие самой
+    -- задачи обязано сработать
     hunt = { title = "Охота у деревни", descr = "Перебей кабанов у деревни новичков.", type = "additional",
-             target = { ref = "boars" } },
+             target = { ref = "boars" },
+             objectives = { { id = "track", title = "Найти кабанов" },
+                            { id = "kill_them", title = "Перебить их" } } },
   },
   nodes = {
     -- ветка A: старт -> таймер и дойти -> дождаться обоих
@@ -42,12 +47,14 @@ return {
       out = { next = "hunt" } },
     { id = "hunt", kind = "objective.kill",
       params = { target = { spawn = { section = "simulation_boar", smart = "esc_smart_terrain_3_16", ref = "boars", hold = true } } },
-      on_enter = { { kind = "task.give", params = { task = "hunt" } } },
+      on_enter = { { kind = "task.give", params = { task = "hunt" } },
+                   { kind = "task.objective_complete", params = { task = "hunt", objective = "track" } } },
+      on_exit = { { kind = "task.objective_complete", params = { task = "hunt", objective = "kill_them" } },
+                  { kind = "task.complete", params = { task = "hunt" } } },
       out = { done = "hunted" } },
     { id = "hunted", kind = "flow.step",
       on_enter = {
         { kind = "var.set", params = { name = "hunted", value = true } },
-        { kind = "task.complete", params = { task = "hunt" } },
         { kind = "money.give", params = { amount = 700 } },
         { kind = "signal.send", params = { name = "boars_done" } },
       },

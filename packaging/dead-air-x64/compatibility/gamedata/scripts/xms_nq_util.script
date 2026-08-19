@@ -625,6 +625,14 @@ end
 function place_contains_actor(place, ctx)
 	local a = actor()
 	if not (a) then return false end
+	return place_contains_pos(place, ctx, a:position())
+end
+
+-- Same question for anyone: is this position inside the place? The actor's version is this one
+-- with the actor's position - a squad that has to stay inside a zone needs the same test.
+function place_contains_pos(place, ctx, p_pos)
+	if not (p_pos) then return false end
+	local a = { position = function() return p_pos end }
 	if (type(place) ~= "table") then return false end
 	-- a quest-created object: its zone if it has one (a spawned space_restrictor is
 	-- registered like any other), otherwise a radius around where it stands

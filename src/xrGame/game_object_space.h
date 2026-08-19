@@ -86,6 +86,12 @@ enum ECallbackType : u32
     eControllerHold,
     eControllerAttitudeChange,
 
+    // A step of a task changing state. Its own id, because the task callback's contract is
+    // (task, state) and every script written for it reads the second argument as the state -
+    // handing an objective over on that same id made a finished task announce itself as a new
+    // one. Appended with an explicit number so no existing id shifts.
+    eTaskObjectiveStateChange = 125,
+
     // X-Ray Extensions:
     eMouseWheel = 126,
     eMouseMove  = 127,

@@ -138,7 +138,7 @@ The catalog declares a type per parameter. These are the types the loader knows
 | `kill_target` | `{ story = … }` \| `{ ref = … }` \| `{ spawn = <spawn_spec> }` | only `objective.kill` |
 | `object_ref` | `{ story = … }` \| `{ ref = … }` | one concrete object the runtime can pin down to a single id; `profile`/`community`/`smart` name a group and are not accepted |
 | `place` | `{ level = "l01_escape", pos = {x,y,z}, radius = 5 }` \| `{ restrictor = "zone_name" }` \| `{ smart = "…" }` | `radius` defaults to 5 |
-| `spawn_spec` | `{ section = "simulation_boar", smart = "…", ref = "boars", hold = true }` | `section` and `smart` are required |
+| `spawn_spec` | `{ section = "simulation_boar", smart = "…", place = <place>, restrictor = "…", spread = 1, ref = "boars", hold = true }` | `section` is required, plus a `smart` **or** a `place`. An empty `smart` counts as unset. `place` puts them where the author chose (a restrictor scatters them over its navmesh, `spread` shrinks that area toward the centre), `restrictor` is the zone they may not leave |
 | `cases_cond` | `{ { name = "yes", cond = { … } }, … }` | case names become pins |
 | `cases_weight` | `{ { name = "a", weight = 3 }, … }` | weight defaults to 1, must be > 0 |
 | `cond_list` | `{ <cond>, … }` | the `of` parameter of `any` |
@@ -561,7 +561,7 @@ candidate list to poll, and an offline death goes unnoticed.
 | `task.set_target` | **`task: task_id`**, **`target: target_ref`** | Moves the task's map marker onto another object. |
 | `task.set_text` | **`task: task_id`**, `new_title: text`, `new_descr: text` | Rewrites the task's title and/or description. |
 | `task.set_objective_visible` | **`task: task_id`**, **`objective: objective_id`**, `visible: bool = true` | Shows or hides one step of a task in the PDA. A hidden step keeps running and can still be completed, it just takes no row. |
-| `spawn.squad` | **`section: squad_section`**, **`smart: smart`**, `ref: ref_name`, `hold: bool = true` | Creates a squad on a smart terrain. `hold` pins it there; `ref` remembers it. |
+| `spawn.squad` | **`section: squad_section`**, `smart: smart`, `place: place`, `restrictor: restrictor`, `spread: float = 1`, `ref: ref_name`, `hold: bool = true` | Creates a squad. A squad always belongs to a smart terrain - that is what gives it something to do - so with only a `place` the nearest smart to it is borrowed. `hold` means "stay where the quest put you": it ties the squad's `scripted_target` to the smart the AUTHOR named, and to nothing at all when they named a place instead, because a smart nobody chose is a leash pointing out of the very restrictor they were confined to. `restrictor` adds the zone to every member's in-restrictions. |
 | `spawn.object` | **`section: string`**, **`place: place`**, `ref: ref_name` | Creates an arbitrary object at a place. |
 | `squad.move` | **`target: target_ref`**, `smart: smart`, `follow_actor: bool = false` | Sends a squad to a smart terrain, or after the player. One of the two is required. |
 | `squad.remove` | **`target: target_ref`** | Removes a squad from the world. |
@@ -1153,6 +1153,15 @@ shows its description. Each step gets its own map spot when it names a target -
 completed and is still read by `objective_status`, it simply takes no row in the PDA and
 the rows below it move up. `task.set_objective_visible` flips it at run time. What the
 quest set by hand is remembered in `qs.ovis[<task>][<objective>]`.
+
+**A step is not the task, and the callbacks say so.** The actor's `task_state` callback
+carries `(task, state)`, and every script written for it - the game's own
+`bind_stalker_ext.actor_on_task_callback` included - reads the second argument as the
+state. Sending an objective on that same callback made a finished task announce itself as
+a *new* task and left the game's own task bookkeeping never told it closed. Steps now
+report on `callback.task_objective_state` (`eTaskObjectiveStateChange`, id 125) as
+`(task, objective, state)`; `callback.task_state` keeps its two-argument contract whether
+the task has steps or not.
 
 **Steps do not survive a save on their own.** `CGameTask::save` writes only the task, not
 its objectives vector, so a task restored from a save comes back with no steps at all

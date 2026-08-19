@@ -143,6 +143,26 @@ end
 -- Confines the squad to a restrictor: an "in" restriction is the engine's own way of
 -- saying an NPC may not leave a zone (alife_simulator_script add_in_restriction), so
 -- it keeps working and keeps its jobs, it just cannot wander off the map.
+-- Which squads this session already handed to the engine as restricted. The list lives on the
+-- server objects and is serialized, so applying it twice in one session only bloats it; a new
+-- session starts empty, which is exactly when the restrictions have to go on again.
+local confined_now = {}
+
+local function confine_members(se_squad, zone_id)
+	local sim = alife()
+	if not (sim and sim.add_in_restriction and zone_id) then return false end
+	local id = obj_id(se_squad)
+	if (id and confined_now[id] == zone_id) then return true end
+	local ok = pcall(function()
+		for k in se_squad:squad_members() do
+			local m = k.object or (k.id and util.se_by_id(k.id))
+			if (m) then sim:add_in_restriction(m, zone_id) end
+		end
+	end)
+	if (ok and id) then confined_now[id] = zone_id end
+	return ok
+end
+
 local function confine_squad(ctx, squad, restrictor)
 	local zone = util.restrictor_se(ctx, restrictor)
 	if not (zone) then
@@ -150,19 +170,13 @@ local function confine_squad(ctx, squad, restrictor)
 			ctx.uid, ctx.node_id, tostring(restrictor))
 		return
 	end
-	local sim = alife()
-	if not (sim and sim.add_in_restriction) then return end
-	pcall(function()
-		for k in squad:squad_members() do
-			local se = k.object or (k.id and util.se_by_id(k.id))
-			if (se) then sim:add_in_restriction(se, zone.id) end
-		end
-	end)
+	confine_members(squad, zone.id)
 end
 
 local function spawn_squad(ctx, spec)
 	-- an untouched picker writes an empty string, which is not a smart named
-	local smart_name = (spec.smart ~= nil and spec.smart ~= "") and spec.smart or nil
+	local author_smart = (spec.smart ~= nil and spec.smart ~= "") and spec.smart or nil
+	local smart_name = author_smart
 	local smart = smart_name and util.smart_by_name(smart_name) or nil
 	if not (smart) and spec.place then
 		-- no smart named: take the one nearest the place, so the author does not have
@@ -196,18 +210,35 @@ local function spawn_squad(ctx, spec)
 	end)
 	if (spec.place) then place_squad(ctx, squad, spec.place, spec.spread) end
 	if (spec.restrictor) then confine_squad(ctx, squad, spec.restrictor) end
+
+	-- Holding a squad means "stay where the quest put you". Leashing it to a smart the author
+	-- never named points it at a place OUTSIDE the very restrictor it was just confined to, and
+	-- the simulation duly walks them there - which is how a "confined" squad ends up far away.
+	-- So the leash is only tied when the author picked the smart, or when nothing else says
+	-- where they belong.
 	local hold = (spec.hold ~= false)
-	if (hold) then squad.scripted_target = smart_name end
-	return squad, hold
+	local placed = (spec.place ~= nil) or (spec.restrictor ~= nil)
+	local hold_target = nil
+	if (hold) then
+		if (author_smart) then hold_target = author_smart
+		elseif not (placed) then hold_target = smart_name end
+	end
+	if (hold_target) then squad.scripted_target = hold_target end
+	return squad, hold, hold_target
 end
 
--- Held squads stay where the quest put them (scripted_target is not persisted by the game).
-local function apply_hold(rec, se)
+-- Held squads stay where the quest put them (scripted_target is not persisted by the game),
+-- and a squad that may not leave a zone has to be told so again: in-restrictions live on the
+-- server objects, and members that came back from a save do not carry the quest's.
+local function apply_hold(rec, se, uid)
 	if (type(rec) ~= "table" or rec.kind ~= "squad") then return end
-	local target = rec.scripted or (rec.hold and rec.smart) or nil
-	if not (target) then return end
 	se = se or util.se_by_id(rec.id)
-	if (is_squad(se)) then se.scripted_target = target end
+	local target = rec.scripted or (rec.hold and rec.smart) or nil
+	if (target and target ~= "" and is_squad(se)) then se.scripted_target = target end
+	if (rec.confine and is_squad(se)) then
+		local zone = util.restrictor_se({ uid = uid }, rec.confine)
+		if (zone) then confine_members(se, zone.id) end
+	end
 end
 
 -- ---------------------------------------------------------------------------- objective.kill
@@ -233,14 +264,20 @@ local function kill_resolve(ctx)
 		local spec = t.spawn
 		local rname = spec.ref or (ctx.node_id .. "_target")
 		local rec = core.ref_get(ctx.qs, rname)
+		-- the zone they may not leave, whether they were spawned now or on an earlier pass
+		w.confine = spec.restrictor
 		if (rec and rec.id and not target_dead({ id = rec.id, kind = "squad" })) then
 			-- the squad of a previous pass is still alive: reuse it instead of spawning twice
 			w.id, w.kind, w.ref = rec.id, "squad", rname
 		else
-			local squad, hold = spawn_squad(ctx, spec)
-			core.ref_set(ctx.qs, rname, { id = squad.id, kind = "squad", section = spec.section, smart = spec.smart, hold = hold })
+			local squad, hold, hold_target = spawn_squad(ctx, spec)
+			-- smart is the leash to re-tie after a load, so it stores what was actually tied,
+			-- not the field the author left empty. confine is the zone they may not leave.
+			core.ref_set(ctx.qs, rname, { id = squad.id, kind = "squad", section = spec.section,
+										  smart = hold_target, hold = hold, confine = spec.restrictor })
 			w.id, w.kind, w.ref = squad.id, "squad", rname
-			ctx.log("spawned %s at %s (squad %s)", tostring(spec.section), tostring(spec.smart), tostring(squad.id))
+			ctx.log("spawned %s at %s (squad %s)", tostring(spec.section),
+				tostring(hold_target or spec.restrictor or "the place given"), tostring(squad.id))
 		end
 	elseif (t.ref) then
 		local rec = core.ref_get(ctx.qs, t.ref)
@@ -304,6 +341,38 @@ local function kill_spot_remove(ctx)
 	ctx.w.spot_id = nil
 end
 
+-- The engine's in-restriction binds an ONLINE npc's pathfinding. Offline there is no path and
+-- no restriction: the simulation walks the squad wherever its logic says, and the player comes
+-- back to an empty zone. While the objective watches them, a member that drifted out while
+-- nobody could see it is put back on a navmesh point inside. Online members are left alone -
+-- a body teleporting in front of the player would be worse than one standing too far out.
+local function keep_inside(ctx)
+	local w = ctx.w
+	if (w.kind ~= "squad" or not (w.id) or not (w.confine)) then return end
+	-- nodes poll four times a second; walking the squad that often buys nothing
+	w.kin = (w.kin or 0) + 1
+	if (w.kin % 16 ~= 0) then return end
+	local se = util.se_by_id(w.id)
+	if not (is_squad(se)) then return end
+	local place = { restrictor = w.confine }
+	pcall(function()
+		for k in se:squad_members() do
+			local m = k.object or (k.id and util.se_by_id(k.id))
+			local id = m and (k.id or m.id) or nil
+			if (m and id and not util.go_by_id(id)) then
+				if not (util.place_contains_pos(place, ctx, m.position)) then
+					local pos, lvid, gvid = point_in_place(ctx, place, 0.8)
+					if (pos and lvid and gvid) then
+						m.position = pos
+						m.m_tNodeID = lvid
+						m.m_tGraphID = gvid
+					end
+				end
+			end
+		end
+	end)
+end
+
 K["objective.kill"] = {
 	events = { "npc_killed", "squad_npc_death", "squad_dead" },
 	begin = function(ctx)
@@ -315,6 +384,11 @@ K["objective.kill"] = {
 	load = function(ctx, w)
 		-- map spots are not serialized: put it back after a load or a level change
 		ctx.w.spot_id = nil
+		-- a token from an older session never recorded the zone; take it from the node
+		local t = ctx.params and ctx.params.target
+		if (ctx.w.confine == nil and type(t) == "table" and type(t.spawn) == "table") then
+			ctx.w.confine = t.spawn.restrictor
+		end
 		kill_spot_add(ctx)
 	end,
 	finish = function(ctx, pin, external) kill_spot_remove(ctx) end,
@@ -323,6 +397,7 @@ K["objective.kill"] = {
 	wants_poll = function(ctx) return true end,
 	poll = function(ctx)
 		if (kill_done(ctx)) then return "done" end
+		keep_inside(ctx)
 		return nil
 	end,
 	on_event = function(ctx, evt)
@@ -451,9 +526,10 @@ K["objective.kill_count"] = {
 -- ---------------------------------------------------------------------------- extra: spawn
 K["spawn.squad"] = {
 	run = function(ctx, p)
-		local squad, hold = spawn_squad(ctx, p)
+		local squad, hold, hold_target = spawn_squad(ctx, p)
 		if (p.ref) then
-			core.ref_set(ctx.qs, p.ref, { id = squad.id, kind = "squad", section = p.section, smart = p.smart, hold = hold })
+			core.ref_set(ctx.qs, p.ref, { id = squad.id, kind = "squad", section = p.section,
+										  smart = hold_target, hold = hold, confine = p.restrictor })
 		end
 	end,
 }
@@ -640,7 +716,7 @@ function on_squad_register(squad)
 		local qs = core.quest_state(uid)
 		if (qs and qs.status == "active") then
 			for _, rec in pairs(qs.refs) do
-				if (type(rec) == "table" and rec.id == id) then apply_hold(rec, squad) end
+				if (type(rec) == "table" and rec.id == id) then apply_hold(rec, squad, uid) end
 			end
 		end
 	end
@@ -658,8 +734,8 @@ function on_init()
 		local qs = core.quest_state(uid)
 		if (qs and qs.status == "active") then
 			for _, rec in pairs(qs.refs) do
-				if (type(rec) == "table" and rec.kind == "squad" and (rec.scripted or rec.hold)) then
-					apply_hold(rec)
+				if (type(rec) == "table" and rec.kind == "squad" and (rec.scripted or rec.hold or rec.confine)) then
+					apply_hold(rec, nil, uid)
 					n = n + 1
 				end
 			end

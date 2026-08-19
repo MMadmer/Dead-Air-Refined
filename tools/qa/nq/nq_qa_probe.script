@@ -192,6 +192,31 @@ local function step_until(name, ms, cond, detail)
 	end, { timeout = ms, on_timeout = function() fail(name, detail()) end })
 end
 
+-- The game announces a finished task through news_manager.send_task, called from its own
+-- actor task callback. That call is the only player-visible proof the callback arrived intact:
+-- the handler reads the SECOND argument as the state, so anything the engine passes there that
+-- is not a state turns "task complete" into "new task" silently.
+local function hook_task_news()
+	if (shared.news_hooked) then return end
+	if not (news_manager and news_manager.send_task) then return end
+	shared.news_hooked = true
+	shared.task_news = {}
+	local orig = news_manager.send_task
+	news_manager.send_task = function(a, kind, t, ...)
+		local id
+		pcall(function() id = t and t:get_id() end)
+		shared.task_news[#shared.task_news + 1] = { kind = tostring(kind), id = tostring(id) }
+		return orig(a, kind, t, ...)
+	end
+end
+
+local function task_news_seen(kind, task_id)
+	for _, r in ipairs(shared.task_news or {}) do
+		if (r.kind == kind and r.id == task_id) then return true end
+	end
+	return false
+end
+
 -- ---------------------------------------------------------------------------- core hook
 -- The saved state only records nodes that carry `once`, so a plain flow.* node leaves no trace the
 -- probe could read back. Wrapping the runtime's own run_actions gives an exact "this node was
@@ -332,6 +357,7 @@ end
 -- a) discovery, b) task appears, f) timer/reach/join, mid-quest save, then b/e/f to the end.
 local function build_p1()
 	hook_core()
+	hook_task_news()
 	step("a.debug", function()
 		nq("debug 1")		-- mirrors every transition into the log as independent evidence
 		return true
@@ -555,6 +581,32 @@ local function build_p1()
 		function() return tok("parallel_triggers", "hunt") == nil and qvar("parallel_triggers", "hunted") == true end,
 		function() return fmt1("objective.kill done=%s hunted=%s (path=%s)", tostring(tok("parallel_triggers", "hunt") == nil),
 			tostring(qvar("parallel_triggers", "hunted")), tostring(shared.kill_path)) end)
+
+	-- the shape an author writes by hand: the last step and the task closed together, in the
+	-- on_exit of the node that finished. The step going out empties the active-task slot, so
+	-- this is where "the step closed but the task did not" would show up
+	step("e.objectives_closed", function()
+		local active, any = task_of("parallel_triggers", "hunt")
+		local t = active or any
+		local o1, o2
+		if (t) then pcall(function() o1 = t:get_objective(1) o2 = t:get_objective(2) end) end
+		return check("e.objectives_closed",
+			o1 ~= nil and o2 ~= nil and o1:get_state() == 2 and o2:get_state() == 2,
+			"steps after the hunt: first=%s second=%s (2 = completed)",
+			tostring(o1 and o1:get_state()), tostring(o2 and o2:get_state()))
+	end, { timeout = 10000 })
+
+	-- what the player is actually told. A task with steps used to reach the game's handler with
+	-- an objective where the state belongs, so it announced a finished task as a new one
+	step("e.task_news", function()
+		local tid = "nq." .. uid("parallel_triggers") .. ".hunt"
+		local kinds = {}
+		for _, r in ipairs(shared.task_news or {}) do
+			if (r.id == tid) then kinds[#kinds + 1] = r.kind end
+		end
+		return check("e.task_news", task_news_seen("complete", tid),
+			"news for the task with steps: [%s] (want 'complete' among them)", table.concat(kinds, ", "))
+	end, { timeout = 10000 })
 
 	step("e.reward", function()
 		local active, any, nqst = task_of("parallel_triggers", "hunt")

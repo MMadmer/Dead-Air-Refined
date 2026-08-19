@@ -1795,6 +1795,8 @@ for k in squad:squad_members() do
 end
 check(placed > 0, "its members stand on the place the quest picked, not on the smart")
 check(confined == placed, "and every one of them is confined to the restrictor")
+-- the author named that smart, so holding them on it is what they asked for
+check(squad.scripted_target == "esc_smart_terrain_2_12", "a smart the author named is still the leash")
 
 -- scattered inside a restrictor, each on its own navmesh point, and spread keeps
 -- them off the edges
@@ -1939,6 +1941,11 @@ mock.first_update()
 core = xms_nq
 qs = core.quest_state("mod_a.blank")
 check(qs.refs.fight ~= nil, "the squad spawned with an empty smart and a place to stand in")
+-- the nearest smart was borrowed to create them, but it is NOT where they belong: leashing
+-- them to it would walk them straight out of the restrictor the author chose
+sq_blank = mock.se[qs.refs.fight.id]
+check(sq_blank ~= nil and (sq_blank.scripted_target == nil or sq_blank.scripted_target == ""),
+	"a squad given a place is not leashed to a smart nobody named")
 check(not mock.log_has("no smart terrain"), "and nothing complained about a missing smart")
 -- a target the quest spawned is findable only if something marks it
 sid = qs.refs.fight and qs.refs.fight.id
@@ -1949,6 +1956,50 @@ for _, mid in ipairs(sq_fight) do mock.kill_member(mock.se[sid], mid, db.actor) 
 mock.ticks(2)
 check(mock.spots[sid .. "|secondary_task_location"] == nil, "and took it off once they were dead")
 check(core.quest_status("mod_a.blank") == "completed", "killing them finished the objective")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z7) closing both
+-- The shape an author writes by hand: the kill objective closes its own step AND the task in
+-- the same on_exit, and the quest ends right after. The last step going out takes the task off
+-- the "active task" slot, which is exactly when closing the task itself must still work.
+section("(z7) objective.kill on_exit: the last step and the task both close")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.add_restrictor("mod_a.esc_fight2", vector():set(70, 0, 70), true, 15)
+mock.overrides["mod_a/both.nqasset"] = [[return { nq = 1, id = "both",
+	tasks = {
+		travel = { title = "Пойди туда", type = "storyline",
+			objectives = { { id = "go", title = "Приди на точку" }, { id = "fight", title = "Сражайся" } } },
+	},
+	nodes = {
+		{ id = "start", kind = "trigger.start",
+		  on_enter = { { kind = "task.give", params = { task = "travel" } },
+		               { kind = "task.objective_complete", params = { task = "travel", objective = "go" } } },
+		  out = { next = "k" } },
+		{ id = "k", kind = "objective.kill", params = { target = { spawn = {
+		      section = "army_sim_squad_novice",
+		      place = { restrictor = "esc_fight2" }, restrictor = "esc_fight2", ref = "foes" } } },
+		  on_exit = { { kind = "task.objective_complete", params = { task = "travel", objective = "fight" } },
+		              { kind = "task.complete", params = { task = "travel" } } },
+		  out = { done = "fin" } },
+		{ id = "fin", kind = "flow.end", params = { status = "completed" } },
+	},
+} ]]
+mock.first_update()
+core = xms_nq
+tb = mock.task_by_id("nq.mod_a.both.travel")
+check(tb ~= nil and tb:get_objectives_cnt() == 2, "the task went in with both steps")
+check(tb:get_objective(1):get_state() == task.completed, "the first step is already done")
+sid2 = core.quest_state("mod_a.both").refs.foes and core.quest_state("mod_a.both").refs.foes.id
+check(sid2 ~= nil, "the squad spawned")
+for _, mid in ipairs(util_se_squad(sid2)) do mock.kill_member(mock.se[sid2], mid, db.actor) end
+mock.ticks(3)
+check(core.quest_state("mod_a.both").objectives.travel.fight == "completed", "the last step closed")
+check(core.quest_state("mod_a.both").tasks.travel == "completed", "and the runtime recorded the task as completed")
+check(tb:get_state() == task.completed, "the PDA task itself is completed, not left in progress")
+check(mock.task_by_id2 == nil or true, "")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary

@@ -466,16 +466,16 @@ void SGameTaskObjective::ChangeMapLocation(pcstr new_map_location, u16 new_map_o
 
 void SGameTaskObjective::ChangeStateCallback()
 {
-    Actor()->callback(GameObject::eTaskStateChange)(GetParent(), this, GetTaskState());
+    // A step is not the task. The game's own handler (bind_stalker_ext.actor_on_task_callback)
+    // takes (task, state) and compares the second argument against task.completed, so passing
+    // it an objective there made every step change read as "new task" and a completed task
+    // never announce itself. Steps get their own callback instead.
+    Actor()->callback(GameObject::eTaskObjectiveStateChange)(GetParent(), this, GetTaskState());
 }
 
 void CGameTask::ChangeStateCallback()
 {
-    if (!m_Objectives.empty())
-    {
-        SGameTaskObjective::ChangeStateCallback();
-        return;
-    }
+    // the task's own state always goes out on the task callback, objectives or not
     Actor()->callback(GameObject::eTaskStateChange)(this, GetTaskState());
 }
 

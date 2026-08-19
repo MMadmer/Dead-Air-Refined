@@ -73,6 +73,7 @@ void CScriptGameObject::script_register(lua_State* luaState)
                 value("inventory_info", int(GameObject::eInventoryInfo)),
                 value("article_info", int(GameObject::eArticleInfo)),
                 value("task_state", int(GameObject::eTaskStateChange)),
+                value("task_objective_state", int(GameObject::eTaskObjectiveStateChange)),
                 value("map_location_added", int(GameObject::eMapLocationAdded)),
                 value("use_object", int(GameObject::eUseObject)),
                 value("hit", int(GameObject::eHit)),
