@@ -164,13 +164,13 @@ end
 local function new_quest_state(q)
 	return {
 		status = "active", hash = q.hash, tokens = {}, vars = util.copy(q.vars), refs = {}, done = {},
-		fired = {}, joins = {}, tasks = {}, objectives = {}, errors = {}, timers = {}, trig = {},
+		fired = {}, joins = {}, tasks = {}, objectives = {}, ovis = {}, errors = {}, timers = {}, trig = {},
 		t0 = now_g, r = 0,
 	}
 end
 
 local function ensure_qs_shape(qs, q)
-	for _, k in ipairs({ "tokens", "vars", "refs", "done", "fired", "joins", "tasks", "objectives", "errors", "timers", "trig" }) do
+	for _, k in ipairs({ "tokens", "vars", "refs", "done", "fired", "joins", "tasks", "objectives", "ovis", "errors", "timers", "trig" }) do
 		if (type(qs[k]) ~= "table") then qs[k] = {} end
 	end
 	if (type(qs.r) ~= "number") then qs.r = 0 end
@@ -975,6 +975,7 @@ function activate(uid)
 		qs.refs = keep.refs or {}
 		qs.tasks = keep.tasks or {}
 		qs.objectives = keep.objectives or {}
+		qs.ovis = keep.ovis or {}
 	end
 	qs.uid = uid
 	state.quests[uid] = qs

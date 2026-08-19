@@ -129,6 +129,30 @@ local function objective_status(ctx, task_name, oid)
 	return per_task and per_task[oid] or nil
 end
 
+-- Visibility the quest set by hand. Absent means "as declared": the engine loses the
+-- objectives of a task on save/load, so what the player last saw has to be remembered here.
+local function objective_visible(ctx, task_name, oid, o)
+	local per_task = ctx.qs and ctx.qs.ovis and ctx.qs.ovis[task_name]
+	local v = per_task and per_task[oid]
+	if (v ~= nil) then return v and true or false end
+	return o.visible ~= false
+end
+
+local function set_objective_visibility(ctx, task_name, oid, visible)
+	if not (ctx.qs) then return end
+	ctx.qs.ovis = ctx.qs.ovis or {}
+	ctx.qs.ovis[task_name] = ctx.qs.ovis[task_name] or {}
+	ctx.qs.ovis[task_name][oid] = visible and true or false
+	core.mark_dirty()
+end
+
+-- The engine hides a step when asked; an older binary simply has no such setter.
+local function apply_objective_visible(obj, visible)
+	if not (obj) then return false end
+	local ok = pcall(function() obj:set_visible(visible and true or false) end)
+	return ok
+end
+
 local function set_objective_status(ctx, task_name, oid, status)
 	if not (ctx.qs) then return end
 	ctx.qs.objectives[task_name] = ctx.qs.objectives[task_name] or {}
@@ -195,6 +219,7 @@ function give(ctx, name)
 			local obj = SGameTaskObjective(t, o.index)
 			obj:set_title(util.format_text(ctx, o.title))
 			obj:set_description(util.format_text(ctx, o.descr or ""))
+			apply_objective_visible(obj, objective_visible(ctx, name, oid, o))
 			apply_objective_target(ctx, name, o, obj, spot, blink)
 			t:add_objective(obj)
 			set_objective_status(ctx, name, oid, "active")
@@ -363,6 +388,23 @@ function set_objective_text(ctx, name, oid, title, descr)
 	if (descr ~= nil) then pcall(obj.set_description, obj, util.format_text(ctx, descr)) end
 end
 
+-- A hidden step keeps running and can still be completed: it just takes no room in the PDA.
+function set_objective_visible(ctx, name, oid, visible)
+	local _, o = decl_objective(ctx, name, oid)
+	local a = actor()
+	if not (a) then error("task.set_objective_visible: no actor") end
+	local _, obj = engine_objective(a, task_id(ctx.uid, name), o.index)
+	if not (obj) then
+		-- the task is not in the PDA: remember it anyway, give() applies it when it returns
+		set_objective_visibility(ctx, name, oid, visible)
+		return
+	end
+	if not (apply_objective_visible(obj, visible)) then
+		error("this build of the game cannot hide a step of a task")
+	end
+	set_objective_visibility(ctx, name, oid, visible)
+end
+
 -- read by the objective_status condition
 function objective_state(ctx, name, oid)
 	decl_objective(ctx, name, oid)
@@ -380,10 +422,57 @@ K["task.objective_complete"] = { run = function(ctx, p) objective_complete(ctx, 
 K["task.objective_fail"] = { run = function(ctx, p) objective_fail(ctx, p.task, p.objective) end }
 K["task.set_objective_target"] = { run = function(ctx, p) set_objective_target(ctx, p.task, p.objective, p.target) end }
 K["task.set_objective_text"] = { run = function(ctx, p) set_objective_text(ctx, p.task, p.objective, p.new_title or p.title, p.new_descr or p.descr) end }
+K["task.set_objective_visible"] = { run = function(ctx, p) set_objective_visible(ctx, p.task, p.objective, p.visible ~= false) end }
 
 -- ---------------------------------------------------------------------------- core hooks
 function register()
 	for name, impl in pairs(K) do core.register_kind(name, impl) end
+end
+
+-- The engine writes a task into the save but not its steps: CGameTask serializes only itself,
+-- so a task that came back from a load has an empty objectives vector while the PDA still shows
+-- the task. Rebuild the steps from the declaration and put back what the runtime remembers:
+-- which ones are done, and which the quest had hidden.
+local function restore_objectives(ctx, name, t)
+	local d = decl(ctx, name)
+	local names = d.objective_names or {}
+	if (#names == 0) then return end
+	local cnt = 0
+	pcall(function() cnt = t:get_objectives_cnt(true) end)
+	if (cnt > 0) then return end
+
+	local a = actor()
+	if not (a) then return end
+	local spot, blink = spot_of(d)
+	for _, oid in ipairs(names) do
+		local o = d.objectives[oid]
+		local obj = SGameTaskObjective(t, o.index)
+		obj:set_title(util.format_text(ctx, o.title))
+		obj:set_description(util.format_text(ctx, o.descr or ""))
+		apply_objective_visible(obj, objective_visible(ctx, name, oid, o))
+		apply_objective_target(ctx, name, o, obj, spot, blink)
+		t:add_objective(obj)
+	end
+
+	-- the task arrived long before this load, so nothing creates the spots for us
+	local tid = task_id(ctx.uid, name)
+	local active = nil
+	for _, oid in ipairs(names) do
+		local o = d.objectives[oid]
+		local status = objective_status(ctx, name, oid)
+		if (status == "completed" or status == "failed") then
+			pcall(a.set_task_state, a, (status == "completed") and task.completed or task.fail, tid, o.index)
+		else
+			local e = t:get_objective(o.index)
+			if (e) then pcall(function() e:create_map_location(false) end) end
+			-- the first step still running is the one the PDA points at
+			if not (active) then
+				active = o.index
+				pcall(function() t:set_active_objective(o.index) end)
+			end
+		end
+	end
+	util.info("%s: task %s got its %d steps back after the load", ctx.uid, name, #names)
 end
 
 -- Reconcile the runtime's view with the actor's task registry: a task the runtime holds active
@@ -425,7 +514,8 @@ function on_init()
 			for name, status in pairs(qs.tasks) do
 				if (status == "active") then
 					local tid = task_id(uid, name)
-					if not (get_task(a, tid, true)) then
+					local t = get_task(a, tid, true)
+					if not (t) then
 						if (q.tasks[name]) then
 							local ok, e = pcall(give, core.make_ctx(uid, nil), name)
 							if (ok) then
@@ -435,6 +525,11 @@ function on_init()
 							end
 						else
 							util.warn("%s: task %s is active in the state but no longer declared", uid, name)
+						end
+					elseif (q.tasks[name]) then
+						local ok, e = pcall(restore_objectives, core.make_ctx(uid, nil), name, t)
+						if not (ok) then
+							util.err("%s: task %s could not get its steps back: %s", uid, name, tostring(e))
 						end
 					end
 				end

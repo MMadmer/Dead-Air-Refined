@@ -359,6 +359,9 @@ void CGameTask::OnArrived()
         objective.m_task_state = eTaskStateInProgress;
         if (objective.m_task_type == eTaskTypeDummy)
             objective.m_task_type = eTaskTypeStoryline;
+        // a step that names its own target gets its own spot, or the map would show
+        // where the task is and never where its current step is
+        objective.CreateMapLocation(false);
     }
 
     m_read = false;

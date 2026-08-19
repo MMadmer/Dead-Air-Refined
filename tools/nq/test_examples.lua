@@ -1853,6 +1853,104 @@ check(core.quest_state("mod_a.nosmart").refs.here ~= nil,
 	"a spawn with a place and no smart still created its squad")
 if (failed > 0) then fail_dump() end
 
+-- the member ids of a squad, taken before any of them dies
+function util_se_squad(id)
+	local out = {}
+	local se = mock.se[id]
+	if not (se) then return out end
+	for k in se:squad_members() do out[#out + 1] = k.id end
+	return out
+end
+
+-- ============================================================================ (z5) hidden steps
+-- A step can be declared hidden and shown later: it runs either way, it just takes no room
+-- in the PDA until the quest says so. And because the engine saves a task without its steps,
+-- a load has to put them back exactly as the player last saw them.
+section("(z5) objective visibility: declared hidden, shown by the quest, and restored after a load")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/hidden.nqasset"] = [[return { nq = 1, id = "hidden",
+	tasks = {
+		job = {
+			title = "Работа", type = "additional",
+			objectives = {
+				{ id = "open",   title = "Первый шаг" },
+				{ id = "secret", title = "Второй шаг", visible = false },
+			},
+		},
+	},
+	nodes = {
+		{ id = "start", kind = "trigger.start", on_enter = { { kind = "task.give", params = { task = "job" } } }, out = { next = "w" } },
+		{ id = "w", kind = "wait.when", cond = { { kind = "has_item", params = { section = "bread" } } }, out = { done = "show" } },
+		{ id = "show", kind = "flow.step",
+		  on_enter = { { kind = "task.objective_complete", params = { task = "job", objective = "open" } },
+		               { kind = "task.set_objective_visible", params = { task = "job", objective = "secret", visible = true } } },
+		  out = { next = "hold" } },
+		{ id = "hold", kind = "wait.when", cond = { { kind = "has_item", params = { section = "vodka" } } }, out = { done = "fin" } },
+		{ id = "fin", kind = "flow.end" },
+	},
+} ]]
+mock.first_update()
+core = xms_nq
+local UH = "mod_a.hidden"
+local th = mock.task_by_id("nq." .. UH .. ".job")
+check(th ~= nil and th:get_objectives_cnt() == 2, "both steps went into the task")
+check(th:get_objective(1):is_visible(), "the plain step is visible")
+check(not th:get_objective(2):is_visible(), "the one declared visible = false is hidden")
+mock.add_item("bread", true)
+mock.ticks(2)
+check(th:get_objective(2):is_visible(), "task.set_objective_visible showed it")
+qs = core.quest_state(UH)
+check(qs.ovis and qs.ovis.job and qs.ovis.job.secret == true, "and the runtime remembers what it did")
+
+-- the load: the engine hands the task back with no steps at all
+mock.rebuild()
+mock.drop_objectives("nq." .. UH .. ".job")
+mock.first_update()
+core = xms_nq
+local th2 = mock.task_by_id("nq." .. UH .. ".job")
+check(th2 ~= nil and th2:get_objectives_cnt() == 2, "the steps were rebuilt from the declaration")
+check(th2:get_objective(1):get_state() == task.completed, "the finished step came back finished")
+check(th2:get_objective(2):is_visible(), "and the one the quest revealed is still visible")
+check(th2:get_active_objective() == 2, "the PDA points at the first step still running")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z6) an empty smart is no smart
+-- The picker writes "" when nobody touched it. That is not a smart terrain named badly, it
+-- is no smart terrain at all, and the place has to carry the spawn on its own.
+section("(z6) spawn.squad: smart = \"\" is treated as unset, not as a smart called nothing")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.add_restrictor("mod_a.esc_fight", vector():set(60, 0, 60), true, 15)
+-- the shape the editor writes for "spawn soldiers to kill in this restrictor"
+mock.overrides["mod_a/blank.nqasset"] = [[return { nq = 1, id = "blank", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "k" } },
+	{ id = "k", kind = "objective.kill", params = { target = { spawn = {
+	      section = "army_sim_squad_novice", smart = "",
+	      place = { restrictor = "esc_fight" }, restrictor = "esc_fight", ref = "fight" } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.blank")
+check(qs.refs.fight ~= nil, "the squad spawned with an empty smart and a place to stand in")
+check(not mock.log_has("no smart terrain"), "and nothing complained about a missing smart")
+-- a target the quest spawned is findable only if something marks it
+sid = qs.refs.fight and qs.refs.fight.id
+check(sid ~= nil and mock.spots[sid .. "|secondary_task_location"] ~= nil,
+	"objective.kill put a marker on the squad it spawned")
+sq_fight = util_se_squad(sid)
+for _, mid in ipairs(sq_fight) do mock.kill_member(mock.se[sid], mid, db.actor) end
+mock.ticks(2)
+check(mock.spots[sid .. "|secondary_task_location"] == nil, "and took it off once they were dead")
+check(core.quest_status("mod_a.blank") == "completed", "killing them finished the objective")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

@@ -449,7 +449,8 @@ local function valid_spawn_spec(v)
 	if (type(v) ~= "table" or type(v.section) ~= "string") then return false end
 	-- a smart or a place: without either there is nothing to create the squad on
 	if (v.smart ~= nil and type(v.smart) ~= "string") then return false end
-	if (v.smart == nil and v.place == nil) then return false end
+	-- the editor writes "" for a picker nobody touched; that is not a smart
+	if ((v.smart == nil or v.smart == "") and v.place == nil) then return false end
 	-- optional: where to put them, and a zone they may not leave
 	if (v.place ~= nil and not valid_place(v.place)) then return false end
 	if (v.restrictor ~= nil and type(v.restrictor) ~= "string") then return false end
@@ -1175,6 +1176,15 @@ function build(raw, module, relpath, src)
 											if (type(o.target.ref) == "string") then st.ref_users[#st.ref_users + 1] = { name = o.target.ref, node = nil, slot = slot } end
 										else
 											problem(st.problems, "E006", nil, slot, "objective target must be a target_ref or a place")
+										end
+									end
+									-- hidden from the start: the step still runs, the PDA just
+									-- gives it no row until the quest shows it
+									if (o.visible ~= nil) then
+										if (type(o.visible) ~= "boolean") then
+											problem(st.problems, "E006", nil, slot, "objective visible must be true or false")
+										else
+											obj.visible = o.visible
 										end
 									end
 									task.objectives[o.id] = obj

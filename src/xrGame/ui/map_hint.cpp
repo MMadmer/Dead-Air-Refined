@@ -95,7 +95,7 @@ void CUIMapLocationHint::SetInfoMSpot(CMapSpot* spot)
         SetInfoStr(ml->GetHint());
 }
 
-void CUIMapLocationHint::SetInfoTask(CGameTask* task)
+void CUIMapLocationHint::SetInfoTask(SGameTaskObjective* task)
 {
     SetInfoMode(2);
     CUIStatic* S = m_info["t_icon"];

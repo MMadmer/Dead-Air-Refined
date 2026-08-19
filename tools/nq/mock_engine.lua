@@ -436,6 +436,10 @@ function ob_mt:set_map_hint(s) self._hint = s end
 function ob_mt:set_icon_name(s) self._icon = s end
 function ob_mt:remove_map_locations(notify) self._map_loc = nil self._map_obj = nil end
 function ob_mt:change_map_location(spot, id) self._map_loc = spot self._map_obj = id end
+-- a hidden step still runs, it just takes no room in the PDA
+function ob_mt:is_visible() return self._hidden ~= true end
+function ob_mt:set_visible(v) self._hidden = not v end
+function ob_mt:create_map_location(on_load) self._spot_made = true end
 
 function gt_mt:add_objective(o)
 	self._objectives = self._objectives or {}
@@ -446,6 +450,16 @@ function gt_mt:get_objectives_cnt()
 	local n = 0
 	for _ in pairs(self._objectives or {}) do n = n + 1 end
 	return n
+end
+function gt_mt:get_active_objective() return self._active or 0 end
+function gt_mt:set_active_objective(idx) self._active = idx end
+
+-- The engine writes a task into the save but not its steps, so a task that came back from a
+-- load has none. mock.drop_objectives is that load, for tests of the runtime's repair path.
+function mock.drop_objectives(task_id)
+	local t = mock.task_by_id(task_id)
+	if (t) then t._objectives = nil t._active = nil end
+	return t
 end
 
 -- Adds an item to the actor inventory (server + client objects); fires actor_on_item_take when asked.
@@ -945,6 +959,11 @@ box_size = unreadable
 class = SPC_RS_S
 [simulation_boar]
 class = ON_OFF_S
+; a real army squad, the kind an author picks for "spawn soldiers to kill"
+[army_sim_squad_novice]
+class = ON_OFF_S
+faction = army
+npc = sim_default_military_1, sim_default_military_2, sim_default_military_3
 ]]
 local system_ini_obj = setmetatable({ d = parse_ini(SYSTEM_INI) }, ini_mt)
 function system_ini() return system_ini_obj end

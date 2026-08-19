@@ -9,6 +9,7 @@ class CUIMapWnd;
 class CUIMapFilters;
 class CUIStatic;
 class CGameTask;
+class SGameTaskObjective;
 class CUIXml;
 class CUITaskItem;
 class CUI3tButton;
@@ -83,8 +84,9 @@ public:
     bool IsUsingCursorRightNow() const override;
 
 private:
-    void TaskSetTargetMap(CGameTask* task) const;
-    void TaskShowMapSpot(CGameTask* task, bool show) const;
+    // a step of a task centres and hides its own spot exactly like the task does
+    void TaskSetTargetMap(SGameTaskObjective* task) const;
+    void TaskShowMapSpot(SGameTaskObjective* task, bool show) const;
 
     void OnShowTaskListWnd(CUIWindow* w, void* d) const;
     void OnTask1DbClicked(CUIWindow*, void*);

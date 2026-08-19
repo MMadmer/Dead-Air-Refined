@@ -161,7 +161,8 @@ local function confine_squad(ctx, squad, restrictor)
 end
 
 local function spawn_squad(ctx, spec)
-	local smart_name = spec.smart
+	-- an untouched picker writes an empty string, which is not a smart named
+	local smart_name = (spec.smart ~= nil and spec.smart ~= "") and spec.smart or nil
 	local smart = smart_name and util.smart_by_name(smart_name) or nil
 	if not (smart) and spec.place then
 		-- no smart named: take the one nearest the place, so the author does not have
@@ -170,7 +171,16 @@ local function spawn_squad(ctx, spec)
 		smart, smart_name = util.nearest_smart(pos)
 	end
 	if not (smart) then
-		error("no smart terrain: name one, or give a place so the nearest can be used")
+		-- say which half failed: naming no smart and naming a place that resolves to
+		-- nothing are different mistakes with different fixes
+		if not (spec.place) then
+			error("no smart terrain and no place: name a smart, or a place to put them")
+		end
+		local _, pos = util.place_position(spec.place, ctx)
+		if not (pos) then
+			error("the place could not be resolved - is the restrictor in the mod and named as the picker shows it?")
+		end
+		error("no smart terrain near that place (the simulation has none on this level yet)")
 	end
 	local board = sim_board()
 	if not (board and board.create_squad) then error("SIMBOARD is not available") end
@@ -267,13 +277,48 @@ local function killer_is_actor(killer)
 	return obj_id(killer) == obj_id(a)
 end
 
+-- A target the quest spawned exists nowhere the player can look it up, so without a marker
+-- "kill them" means "wander the level". Same spot type the reach objective uses, and the same
+-- rule about ownership: only a spot this node put there is taken away again.
+local KILL_SPOT = "secondary_task_location"
+
+local function kill_spot_add(ctx)
+	if (ctx.params.map_spot == false) then return end
+	local w = ctx.w
+	if not (w.id) or w.unresolved then return end
+	local hint = ctx.params.spot_text and util.format_text(ctx, ctx.params.spot_text) or ""
+	local owned = false
+	pcall(function()
+		if (level.map_has_object_spot(w.id, KILL_SPOT) == 0) then
+			level.map_add_object_spot(w.id, KILL_SPOT, hint)
+			owned = true
+		end
+	end)
+	if (owned) then w.spot_id = w.id core.mark_dirty() end
+end
+
+local function kill_spot_remove(ctx)
+	local id = ctx.w.spot_id
+	if not (id) then return end
+	pcall(function() level.map_remove_object_spot(id, KILL_SPOT) end)
+	ctx.w.spot_id = nil
+end
+
 K["objective.kill"] = {
 	events = { "npc_killed", "squad_npc_death", "squad_dead" },
 	begin = function(ctx)
 		kill_resolve(ctx)
 		if (kill_done(ctx)) then return { pin = "done" } end
+		kill_spot_add(ctx)
 		return "wait"
 	end,
+	load = function(ctx, w)
+		-- map spots are not serialized: put it back after a load or a level change
+		ctx.w.spot_id = nil
+		kill_spot_add(ctx)
+	end,
+	finish = function(ctx, pin, external) kill_spot_remove(ctx) end,
+	cancel = function(ctx) kill_spot_remove(ctx) end,
 	-- offline deaths leave no callback: keep looking at the server object
 	wants_poll = function(ctx) return true end,
 	poll = function(ctx)

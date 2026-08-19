@@ -17,6 +17,7 @@ class CUIMapLocationHint;
 class CMapLocation;
 class CMapSpot;
 class CGameTask;
+class SGameTaskObjective;
 class CUIXml;
 class UIHint;
 class CUIPropertiesBox;
@@ -135,7 +136,7 @@ public:
 
     void ShowHintStr(CUIWindow* parent, LPCSTR text);
     void ShowHintSpot(CMapSpot* spot);
-    void ShowHintTask(CGameTask* task, CUIWindow* owner);
+    void ShowHintTask(SGameTaskObjective* task, CUIWindow* owner);
 
     void SpotSelected(CUIWindow* spot);
 

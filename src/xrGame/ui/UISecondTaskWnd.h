@@ -10,6 +10,7 @@
 
 #include "xrUICore/Windows/UIWindow.h"
 #include "xrUICore/Callbacks/UIWndCallback.h"
+#include "GameTaskDefs.h"
 
 #define PDA_TASK_XML "pda_tasks.xml"
 
@@ -21,6 +22,8 @@ class CUI3tButton;
 class CUICheckButton;
 class CUIFrameLineWnd;
 class CGameTask;
+class SGameTaskObjective;
+class CUIXml;
 class UIHint;
 
 class UITaskListWnd final : public CUIWindow, public CUIWndCallback
@@ -44,6 +47,9 @@ public:
     void ShowOnlySecondaryTasks(bool mode) { m_show_only_secondary_tasks = mode; }
 
     void UpdateList();
+
+    // an item whose height changed asks the list to place the items below it again
+    void RelayoutItems() const;
 
     pcstr GetDebugType() override { return "UITaskListWnd"; }
 
@@ -93,6 +99,11 @@ private:
     void update_view();
     void update_visible_map_spot();
 
+    // sub-objectives: the steps of the task, one row each under its own task
+    void build_objectives(CUIXml& xml);
+    float layout_objectives(float top);
+    SGameTaskObjective* objective_at(float x, float y) const;
+
 public:
     bool show_hint_can{};
     bool show_hint{};
@@ -103,6 +114,21 @@ private:
     CUICheckButton* m_bt_view{};
     CUIStatic* m_st_story{};
     CUI3tButton* m_bt_focus{};
+
+    // one row per step of the task; a hidden step keeps its row objects but is
+    // shown nowhere and adds no height, exactly like a collapsed widget
+    struct SObjectiveRow
+    {
+        TASK_OBJECTIVE_ID idx{};
+        CUIStatic* dot{};
+        CUIStatic* text{};
+        CUIStatic* marker{};
+    };
+    xr_vector<SObjectiveRow> m_objectives;
+    UITaskListWnd* m_parent{};
+    float m_min_h{};
+    TASK_OBJECTIVE_ID m_hot_row{};   // the step under the cursor, for its hint
+    u32 m_hot_since{};
 
     enum
     {

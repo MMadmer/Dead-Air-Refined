@@ -494,7 +494,7 @@ and the rest of the list is checked right then.
 | `dialog.topic` | **`npc: npc_ref`**, **`text: text`**, `initiator: enum(actor\|npc) = actor` | `next`, `done` | ✔ | `true` | A conversation topic on an NPC. While the token sits here and the node's `cond` holds, the topic is in the talk list. `next` leads to the phrases; `done` fires when a leaf phrase has been said. |
 | `dialog.npc_phrase` | **`text: text`** | `next` | | `false` | A line the NPC says. The node's `cond` is its display condition; the first declared line whose condition holds is the one spoken. |
 | `dialog.actor_phrase` | **`text: text`** | `next` | | `false` | A reply the player can pick. The node's `cond` is its display condition. |
-| `objective.kill` | **`target: kill_target`**, `by_actor: bool = false` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. |
+| `objective.kill` | **`target: kill_target`**, `by_actor: bool = false`, `map_spot: bool = true`, `spot_text: text` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. With `map_spot` a secondary map marker sits on the target while the node waits and is removed when it ends - for a squad the quest just spawned that is the only way the player can find it. |
 | `objective.kill_count` | `count: int = 1`, `by_actor: bool = true`, `community: community`, `squad: object_ref`, `section: string` | `done` | ✔ | `false` | Counts kills until there are `count` of them. Counting starts when the node is entered, and the counter lives in the token, so it survives a save. `by_actor` (on by default) only counts what the player killed. At most one filter is allowed (`E022`): `community` is the victim's faction, `squad` a squad the quest spawned (the deaths of its members), `section` the victim's spawn section. With no filter every NPC death counts. A death nobody witnessed is only noticed for the `squad` filter and only with `by_actor = false`. |
 | `objective.fetch` | `section: item_section`, `count: int = 1`, `item: object_ref`, `from: object_ref` | `done` | ✔ | `false` | Waits for items to reach the player. Two mutually exclusive forms, one of which is required (`E022`): **`section`** (with `count` and an optional `from`), or **`item`**. Plain `section` counts anything of that section anywhere in the inventory. With `from` only items that actually came **out of that container** count — a stash, an inventory box or an NPC's inventory; an identical item picked up elsewhere never moves the counter. `item` names one concrete object and completes once that object is on the player. `count` is always whole items — for an ammo section that means whole boxes, not rounds. |
 | `objective.reach` | **`place: place`**, `map_spot: bool = true`, `spot_text: text` | `done` | ✔ | `false` | Waits until the player is inside the place. With `map_spot` a secondary map marker is put on it (on an anchor restrictor for a bare position) and removed when the node ends. |
@@ -560,6 +560,7 @@ candidate list to poll, and an offline death goes unnoticed.
 | `task.remove` | **`task: task_id`** | Closes it quietly and forgets it (`task_status` goes back to `none`). |
 | `task.set_target` | **`task: task_id`**, **`target: target_ref`** | Moves the task's map marker onto another object. |
 | `task.set_text` | **`task: task_id`**, `new_title: text`, `new_descr: text` | Rewrites the task's title and/or description. |
+| `task.set_objective_visible` | **`task: task_id`**, **`objective: objective_id`**, `visible: bool = true` | Shows or hides one step of a task in the PDA. A hidden step keeps running and can still be completed, it just takes no row. |
 | `spawn.squad` | **`section: squad_section`**, **`smart: smart`**, `ref: ref_name`, `hold: bool = true` | Creates a squad on a smart terrain. `hold` pins it there; `ref` remembers it. |
 | `spawn.object` | **`section: string`**, **`place: place`**, `ref: ref_name` | Creates an arbitrary object at a place. |
 | `squad.move` | **`target: target_ref`**, `smart: smart`, `follow_actor: bool = false` | Sends a squad to a smart terrain, or after the player. One of the two is required. |
@@ -1132,7 +1133,7 @@ index 0 is the task itself and the steps are numbered from 1 in declaration orde
 step carries its own title, description and map spot, so one task can cover "collect X,
 collect Y, report" with a marker per step instead of needing a quest apiece.
 
-A quest declares them under its task: `objectives = { { id = ..., title = ..., target = ... }, ... }`.
+A quest declares them under its task: `objectives = { { id = ..., title = ..., target = ..., visible = ... }, ... }`.
 `task.objective_complete` / `task.objective_fail` mark one step through
 `actor:set_task_state(state, task_id, index)` and leave the task itself in progress -
 closing the task is still `task.complete`. `task.set_objective_target` moves one step's
@@ -1140,3 +1141,22 @@ marker (no target clears just that one) and `task.set_objective_text` rewrites i
 Step states live in `qs.objectives[<task>][<objective>]`, survive a save, and are read by
 the `objective_status` condition, so a graph can branch on one step without splitting the
 task into separate quests.
+
+The PDA draws the steps itself: the task list puts one row per step under the task that
+owns it (state dot, title, and the centre-on-map icon when that step has a spot of its
+own), clicking a row makes it the current step and points the map at it, and hovering it
+shows its description. Each step gets its own map spot when it names a target -
+`CGameTask::OnArrived` creates the objectives' locations along with the task's.
+
+**Hidden steps.** `visible = false` in the declaration hides a step
+(`SGameTaskObjective::m_hidden`, `set_visible` from script): it still runs, can still be
+completed and is still read by `objective_status`, it simply takes no row in the PDA and
+the rows below it move up. `task.set_objective_visible` flips it at run time. What the
+quest set by hand is remembered in `qs.ovis[<task>][<objective>]`.
+
+**Steps do not survive a save on their own.** `CGameTask::save` writes only the task, not
+its objectives vector, so a task restored from a save comes back with no steps at all
+(this is the original format and stays that way - see `SAVE_COMPATIBILITY.md`). The
+runtime rebuilds them from the declaration on init (`xms_nq_task.script`,
+`restore_objectives`), re-applies the remembered statuses and visibility, re-creates the
+spots of the steps still running, and points the task at the first of them.

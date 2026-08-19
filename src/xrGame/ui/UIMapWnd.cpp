@@ -777,7 +777,7 @@ void CUIMapWnd::ShowHintSpot(CMapSpot* spot)
     }
 }
 
-void CUIMapWnd::ShowHintTask(CGameTask* task, CUIWindow* owner)
+void CUIMapWnd::ShowHintTask(SGameTaskObjective* task, CUIWindow* owner)
 {
     if (task)
     {

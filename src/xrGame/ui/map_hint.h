@@ -5,6 +5,7 @@
 class CUIStatic;
 class CUIXml;
 class CGameTask;
+class SGameTaskObjective;
 class CMapSpot;
 
 class CUIMapLocationHint final : public CUIFrameWindow
@@ -23,7 +24,7 @@ public:
 
     void SetInfoStr(LPCSTR text);
     void SetInfoMSpot(CMapSpot* spot);
-    void SetInfoTask(CGameTask* task);
+    void SetInfoTask(SGameTaskObjective* task);
 
     void SetOwner(CUIWindow* w) { m_owner = w; }
     CUIWindow* GetOwner() const { return m_owner; }

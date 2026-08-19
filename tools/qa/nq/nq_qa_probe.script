@@ -146,6 +146,23 @@ local function task_of(q, task)
 	return (ok1 and active or nil), (ok2 and any or nil), (qs and qs.tasks and qs.tasks[task] or nil)
 end
 
+-- The steps of a PDA task, the way the UI reads them: index 0 is the task itself.
+local function objective_of(q, task, index)
+	local active = task_of(q, task)
+	if not (active) then return nil end
+	local o
+	pcall(function() o = active:get_objective(index) end)
+	return o, active
+end
+
+local function objectives_cnt(q, task)
+	local active = task_of(q, task)
+	if not (active) then return nil end
+	local n
+	pcall(function() n = active:get_objectives_cnt(true) end)
+	return n
+end
+
 local function money()
 	local m
 	pcall(function() m = actor():money() end)
@@ -334,6 +351,26 @@ local function build_p1()
 			return fmt1("PDA task nq.nq_qa.linear_fetch.bring_bread active=%s present=%s nq_state=%s",
 				tostring(active ~= nil), tostring(any ~= nil), tostring(nqst))
 		end)
+
+	-- the steps of that task: declared, one of them hidden, each with its own title
+	step_until("b.objectives", 10000,
+		function() return objectives_cnt("linear_fetch", "bring_bread") == 2 end,
+		function()
+			local o1 = objective_of("linear_fetch", "bring_bread", 1)
+			local o2 = objective_of("linear_fetch", "bring_bread", 2)
+			return fmt1("task steps=%s first=[%s] visible=%s second=[%s] visible=%s",
+				tostring(objectives_cnt("linear_fetch", "bring_bread")),
+				tostring(o1 and o1:get_title()), tostring(o1 and o1:is_visible()),
+				tostring(o2 and o2:get_title()), tostring(o2 and o2:is_visible()))
+		end)
+
+	step("b.objective_hidden", function()
+		local o1 = objective_of("linear_fetch", "bring_bread", 1)
+		local o2 = objective_of("linear_fetch", "bring_bread", 2)
+		return check("b.objective_hidden", o1 ~= nil and o2 ~= nil and o1:is_visible() and not o2:is_visible(),
+			"visible: step1=%s step2=%s (the second is declared visible = false)",
+			tostring(o1 and o1:is_visible()), tostring(o2 and o2:is_visible()))
+	end)
 
 	step_until("b.fetch_waiting", 10000,
 		function() local t = tok("linear_fetch", "fetch") return t ~= nil and t.b == true end,
@@ -589,6 +626,19 @@ local function build_p2()
 			"PDA task after the load: active=%s present=%s nq_state=%s", tostring(active ~= nil), tostring(any ~= nil), tostring(nqst))
 	end, { timeout = 10000 })
 
+	-- the engine saves a task without its steps: the runtime has to put them back, with the
+	-- statuses and the visibility the player last saw
+	step("c.survived_objectives", function()
+		local n = objectives_cnt("linear_fetch", "bring_bread")
+		local o1 = objective_of("linear_fetch", "bring_bread", 1)
+		local o2 = objective_of("linear_fetch", "bring_bread", 2)
+		return check("c.survived_objectives", n == 2 and o1 ~= nil and o2 ~= nil and
+			o1:is_visible() and not o2:is_visible(),
+			"task steps after the load = %s first=[%s] visible=%s second=[%s] visible=%s", tostring(n),
+			tostring(o1 and o1:get_title()), tostring(o1 and o1:is_visible()),
+			tostring(o2 and o2:get_title()), tostring(o2 and o2:is_visible()))
+	end, { timeout = 10000 })
+
 	step("c.survived_items", function()
 		return check("c.survived_items", count_items("bread") == 1, "bread in the inventory after the load = %d", count_items("bread"))
 	end)
@@ -634,6 +684,15 @@ local function build_p2()
 		local active, any, nqst = task_of("linear_fetch", "bring_bread")
 		return check("c.finish_task", nqst == "completed" and active == nil and any ~= nil,
 			"task completed after the reload: nq_state=%s active=%s present=%s", tostring(nqst), tostring(active ~= nil), tostring(any ~= nil))
+	end, { timeout = 10000 })
+
+	-- the reward revealed the step that was declared hidden
+	step("c.objective_shown", function()
+		local _, any = task_of("linear_fetch", "bring_bread")
+		local o2
+		if (any) then pcall(function() o2 = any:get_objective(2) end) end
+		return check("c.objective_shown", o2 ~= nil and o2:is_visible(),
+			"the step declared hidden is visible after set_objective_visible: %s", tostring(o2 and o2:is_visible()))
 	end, { timeout = 10000 })
 
 	step("p2.final", function() nq("list") return true end)

@@ -65,6 +65,9 @@ void CGameTask::script_register(lua_State* luaState)
 
             .def("get_state", &SGameTaskObjective::GetTaskState)
 
+            .def("is_visible", &SGameTaskObjective::IsVisible_script)
+            .def("set_visible", &SGameTaskObjective::SetVisible_script)
+
             .def("get_type", &SGameTaskObjective::GetType_script)
             .def("set_type", &SGameTaskObjective::SetType_script)
 
@@ -104,6 +107,9 @@ void CGameTask::script_register(lua_State* luaState)
 
             .def("add_objective", &CGameTask::AddObjective_script, adopt<2>())
             .def("get_objective", &CGameTask::GetObjective_script)
+
+            .def("get_active_objective", &CGameTask::ActiveObjectiveIdx)
+            .def("set_active_objective", &CGameTask::SetActiveObjective)
 
             .def("get_objectives_cnt", &CGameTask::GetObjectivesCount)
             .def("get_objectives_cnt", +[](const CGameTask* self)

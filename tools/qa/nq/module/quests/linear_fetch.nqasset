@@ -9,9 +9,16 @@ return {
   activation = "auto",
   vars = { bread_needed = 2 },
   tasks = {
+    -- два шага: один виден сразу, второй объявлен скрытым и показывается по ходу.
+    -- Движок носит шаги задачи в CGameTask, но НЕ сохраняет их - после загрузки рантайм
+    -- собирает их заново, что и проверяет сценарий Reload
     bring_bread = { title = "Хлеб для новичков",
                     descr = "Раздобудь две буханки хлеба для лагеря новичков на Кордоне.",
-                    type = "additional" },
+                    type = "additional",
+                    objectives = {
+                      { id = "find", title = "Найти две буханки" },
+                      { id = "deliver", title = "Отнести их новичкам", visible = false },
+                    } },
   },
   nodes = {
     { id = "start", kind = "trigger.start", out = { next = "intro" } },
@@ -29,6 +36,8 @@ return {
 
     { id = "reward", kind = "flow.step",
       on_enter = {
+        { kind = "task.objective_complete", params = { task = "bring_bread", objective = "find" } },
+        { kind = "task.set_objective_visible", params = { task = "bring_bread", objective = "deliver", visible = true } },
         { kind = "item.take", params = { section = "bread", count = 2 } },
         { kind = "item.give", params = { section = "medkit", count = 1 } },
         { kind = "money.give", params = { amount = 500 } },

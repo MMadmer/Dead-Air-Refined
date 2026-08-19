@@ -59,6 +59,11 @@ public:
     Frect m_icon_rect;
     shared_str m_icon_texture_name;
 
+    // PDA visibility. A hidden objective takes no row in the task list at all - it is
+    // still tracked and can still be completed, it is simply not shown. Only scripts set
+    // it; tasks declared in game_tasks.xml never hide a step.
+    bool m_hidden{};
+
     // map
     shared_str m_map_hint;
     shared_str m_map_location;
@@ -122,6 +127,9 @@ public:
     void SetType_script(int t)  { m_task_type = (ETaskType)t; }
 
     auto GetID() const { return m_idx; }
+
+    bool IsVisible_script() const { return !m_hidden; }
+    void SetVisible_script(bool visible) { m_hidden = !visible; }
 
     auto GetTitle_script() const { return m_Title.c_str(); }
     void SetTitle_script(pcstr title) { m_Title = title; }

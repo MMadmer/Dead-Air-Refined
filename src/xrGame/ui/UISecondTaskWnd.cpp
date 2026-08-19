@@ -26,7 +26,19 @@
 #include "GametaskManager.h"
 #include "Actor.h"
 
+// geometry of one sub-objective row, in the same base units the task layout uses
+static constexpr float OBJECTIVE_ROW_H = 16.0f;
+static constexpr float OBJECTIVE_INDENT = 32.0f;
+static constexpr float OBJECTIVE_DOT_SIZE = 7.0f;
+static constexpr float OBJECTIVE_MARK_SIZE = 13.0f;
+
 UITaskListWnd::UITaskListWnd() : CUIWindow("UITaskListWnd") {}
+
+void UITaskListWnd::RelayoutItems() const
+{
+    if (m_list)
+        m_list->ForceUpdate();
+}
 
 void UITaskListWnd::init_from_xml(CUIXml& xml, LPCSTR path)
 {
@@ -216,6 +228,7 @@ bool UITaskListWndItem::init_task(CGameTask* task, UITaskListWnd* parent)
         return false;
     }
     m_task = task;
+    m_parent = parent;
     SetMessageTarget(parent);
 
     CUIXml xml;
@@ -231,12 +244,145 @@ bool UITaskListWndItem::init_task(CGameTask* task, UITaskListWnd* parent)
     m_color_states[stt_activ] = CUIXmlInit::GetColor(xml, "second_task_wnd:task_item:activ", 0, u32(-1));
     m_color_states[stt_unread] = CUIXmlInit::GetColor(xml, "second_task_wnd:task_item:unread", 0, u32(-1));
     m_color_states[stt_read] = CUIXmlInit::GetColor(xml, "second_task_wnd:task_item:read", 0, u32(-1));
+
+    m_min_h = GetHeight();
+    build_objectives(xml);
     update_view();
 
     if (m_bt_view)
         UI().Focus().UnregisterFocusable(m_bt_view);
     UI().Focus().UnregisterFocusable(m_bt_focus);
     return true;
+}
+
+// A task can be a single line ("bring five pistols") or a list of steps, each with its own
+// text and its own map spot. The engine has carried the steps forever (CGameTask keeps a
+// vector of SGameTaskObjective); nothing drew them, so a multi-step task looked like a
+// one-line task with the steps invisible. One row per step, under the task that owns them.
+void UITaskListWndItem::build_objectives(CUIXml& xml)
+{
+    const TASK_OBJECTIVE_ID count = m_task->GetObjectivesCount(true);
+    m_objectives.reserve(count);
+
+    for (TASK_OBJECTIVE_ID i = 1; i <= count; ++i)
+    {
+        SObjectiveRow row;
+        row.idx = i;
+
+        row.dot = xr_new<CUIStatic>("objective_state");
+        row.dot->SetAutoDelete(true);
+        row.dot->InitTexture("ui_minimap_point", false);
+        row.dot->SetStretchTexture(true);
+        row.dot->SetWndSize(Fvector2().set(OBJECTIVE_DOT_SIZE, OBJECTIVE_DOT_SIZE));
+        AttachChild(row.dot);
+
+        row.text = xr_new<CUIStatic>("objective_text");
+        row.text->SetAutoDelete(true);
+        row.text->SetFont(UI().Font().pFontLetterica16Russian);
+        // take whatever font the task's own line uses when the layout offers one
+        CUIXmlInit::InitText(xml, "second_task_wnd:task_item:name:text", 0, row.text->TextItemControl());
+        row.text->SetTextComplexMode(true);
+        row.text->SetText("");
+        AttachChild(row.text);
+
+        row.marker = xr_new<CUIStatic>("objective_marker");
+        row.marker->SetAutoDelete(true);
+        row.marker->InitTexture("ui_inGame2_pda_center_on_mission_button_e", false);
+        row.marker->SetStretchTexture(true);
+        row.marker->SetWndSize(Fvector2().set(OBJECTIVE_MARK_SIZE, OBJECTIVE_MARK_SIZE));
+        AttachChild(row.marker);
+
+        m_objectives.emplace_back(row);
+    }
+}
+
+// Places the visible rows under the task's line and answers with the height they took.
+float UITaskListWndItem::layout_objectives(float top)
+{
+    if (m_objectives.empty())
+        return 0.0f;
+
+    const float width = GetWidth();
+    const float text_x = OBJECTIVE_INDENT + OBJECTIVE_DOT_SIZE + 6.0f;
+    const float mark_x = _max(text_x, width - OBJECTIVE_MARK_SIZE - 2.0f);
+    float y = top;
+
+    const TASK_OBJECTIVE_ID live = m_task->GetObjectivesCount(true);
+    for (SObjectiveRow& row : m_objectives)
+    {
+        // the rows were built from the task; never index past what it holds now
+        if (row.idx > live)
+        {
+            row.dot->Show(false);
+            row.text->Show(false);
+            row.marker->Show(false);
+            continue;
+        }
+        SGameTaskObjective& objective = m_task->Objective(row.idx);
+
+        // Collapsed, not just transparent: a hidden step is skipped before anything is
+        // placed, so the rows below it move up and the item ends shorter.
+        if (objective.m_hidden || !objective.m_Title.size())
+        {
+            row.dot->Show(false);
+            row.text->Show(false);
+            row.marker->Show(false);
+            continue;
+        }
+
+        row.text->SetWndPos(Fvector2().set(text_x, y));
+        row.text->SetWidth(mark_x - text_x - 4.0f);
+        row.text->SetTextST(objective.m_Title.c_str());
+        row.text->AdjustHeightToText();
+        const float row_h = _max(OBJECTIVE_ROW_H, row.text->GetHeight());
+
+        u32 color = m_color_states[stt_unread];
+        switch (objective.GetTaskState())
+        {
+        case eTaskStateCompleted: color = m_color_states[stt_read]; break;
+        case eTaskStateFail: color = color_rgba(150, 80, 80, 255); break;
+        default:
+            if (m_task->ActiveObjectiveIdx() == row.idx)
+                color = m_color_states[stt_activ];
+            break;
+        }
+        row.text->SetTextColor(color);
+
+        row.dot->Show(true);
+        row.dot->SetWndPos(Fvector2().set(OBJECTIVE_INDENT, y + (row_h - OBJECTIVE_DOT_SIZE) * 0.5f));
+        row.dot->SetTextureColor(color);
+
+        row.text->Show(true);
+
+        // the step marks a place on the map only when it names a target of its own
+        CMapLocation* ml = objective.LinkedMapLocation();
+        row.marker->Show(ml && ml->SpotEnabled());
+        row.marker->SetWndPos(Fvector2().set(mark_x, y + (row_h - OBJECTIVE_MARK_SIZE) * 0.5f));
+
+        y += row_h + 2.0f;
+    }
+
+    return y - top;
+}
+
+// The step under the cursor, or nothing when the cursor is not over a row.
+SGameTaskObjective* UITaskListWndItem::objective_at(float x, float y) const
+{
+    const TASK_OBJECTIVE_ID live = m_task->GetObjectivesCount(true);
+    for (const SObjectiveRow& row : m_objectives)
+    {
+        if (!row.text->IsShown() || row.idx > live)
+            continue;
+
+        Frect r;
+        row.text->GetAbsoluteRect(r);
+        // the whole row answers, not only the glyphs: the dot and the marker are part of it
+        r.x1 -= OBJECTIVE_INDENT;
+        r.x2 += OBJECTIVE_MARK_SIZE + 6.0f;
+        if (r.in(x, y))
+            return &m_task->Objective(row.idx);
+    }
+    return nullptr;
 }
 
 void UITaskListWndItem::hide_hint()
@@ -256,8 +402,28 @@ void UITaskListWndItem::Update()
         if (Device.dwTimeGlobal > (m_name->FocusReceiveTime() + 700 * Device.time_factor()))
         {
             show_hint = true;
-            GetMessageTarget()->SendMessage(this, PDA_TASK_SHOW_HINT, (void*)m_task);
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SHOW_HINT, (void*)static_cast<SGameTaskObjective*>(m_task));
             return;
+        }
+    }
+
+    // a step shows only its title in the list, so its description lives in the same hint the
+    // task uses - hovering the row is the only place it can be read at all
+    if (m_task && !m_objectives.empty())
+    {
+        const auto [cx, cy] = UI().GetUICursor().GetCursorPosition();
+        SGameTaskObjective* hot = CursorOverWindow() ? objective_at(cx, cy) : nullptr;
+        const TASK_OBJECTIVE_ID idx = hot ? hot->GetID() : ROOT_TASK_OBJECTIVE;
+        if (idx != m_hot_row)
+        {
+            m_hot_row = idx;
+            m_hot_since = Device.dwTimeGlobal;
+        }
+        else if (hot && hot->m_Description.size() &&
+                 Device.dwTimeGlobal > (m_hot_since + u32(700 * Device.time_factor())))
+        {
+            show_hint = true;
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SHOW_HINT, (void*)hot);
         }
     }
 }
@@ -292,9 +458,19 @@ void UITaskListWndItem::update_view()
 
     m_name->TextItemControl()->SetTextST(m_task->m_Title.c_str());
     m_name->AdjustHeightToText();
-    float h1 = m_name->GetWndPos().y + m_name->GetHeight() + 10.0f;
-    h1 = _max(h1, GetHeight());
-    SetHeight(h1);
+    const float name_bottom = m_name->GetWndPos().y + m_name->GetHeight();
+
+    const float rows_h = layout_objectives(name_bottom + 2.0f);
+    float h1 = name_bottom + (rows_h > 0.0f ? rows_h + 8.0f : 10.0f);
+    h1 = _max(h1, m_min_h);
+    if (!fsimilar(h1, GetHeight()))
+    {
+        // a step that finished, or one that was just hidden, changes how tall this item is;
+        // the list has to place the items below it again or they overlap
+        SetHeight(h1);
+        if (m_parent)
+            m_parent->RelayoutItems();
+    }
 
     const CGameTask* storyTask = Level().GameTaskManager().ActiveTask(eTaskTypeStoryline);
     const CGameTask* additionalTask = Level().GameTaskManager().ActiveTask(eTaskTypeAdditional);
@@ -319,19 +495,19 @@ void UITaskListWndItem::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
     {
         if (msg == BUTTON_DOWN)
         {
-            GetMessageTarget()->SendMessage(this, PDA_TASK_SET_TARGET_MAP, (void*)m_task);
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SET_TARGET_MAP, (void*)static_cast<SGameTaskObjective*>(m_task));
         }
     }
     if (pWnd == m_bt_view && m_bt_view)
     {
         if (m_bt_view->GetCheck() && msg == BUTTON_CLICKED)
         {
-            GetMessageTarget()->SendMessage(this, PDA_TASK_HIDE_MAP_SPOT, (void*)m_task);
+            GetMessageTarget()->SendMessage(this, PDA_TASK_HIDE_MAP_SPOT, (void*)static_cast<SGameTaskObjective*>(m_task));
             return;
         }
         if (!m_bt_view->GetCheck() && msg == BUTTON_CLICKED)
         {
-            GetMessageTarget()->SendMessage(this, PDA_TASK_SHOW_MAP_SPOT, (void*)m_task);
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SHOW_MAP_SPOT, (void*)static_cast<SGameTaskObjective*>(m_task));
             return;
         }
     }
@@ -346,7 +522,7 @@ void UITaskListWndItem::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
 
         if (msg == WINDOW_LBUTTON_DB_CLICK)
         {
-            GetMessageTarget()->SendMessage(this, PDA_TASK_SET_TARGET_MAP, (void*)m_task);
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SET_TARGET_MAP, (void*)static_cast<SGameTaskObjective*>(m_task));
         }
     }
 
@@ -370,6 +546,18 @@ bool UITaskListWndItem::OnMouseAction(float x, float y, EUIMessages mouse_action
         break;
     }
     } // switch
+
+    // a step answers for itself: clicking it makes it the current one and points the map
+    // at its own spot, so a task with several places is navigable step by step
+    if (mouse_action == WINDOW_LBUTTON_DOWN || mouse_action == WINDOW_LBUTTON_DB_CLICK)
+    {
+        if (SGameTaskObjective* objective = objective_at(x, y))
+        {
+            Level().GameTaskManager().SetActiveTask(m_task);
+            m_task->SetActiveObjective(objective->GetID());
+            GetMessageTarget()->SendMessage(this, PDA_TASK_SET_TARGET_MAP, (void*)objective);
+        }
+    }
 
     return true;
 }

@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 5
+version = 6
 api     = 1
 
 ; ============================================================ triggers
@@ -96,11 +96,13 @@ since  = 1
 [nq.objective.kill]
 group  = objective
 title  = ”бить цель
-desc   = ∆дЄт смерти цели: NPC по story id, ранее созданный ref, или отр€д из spawn (создаЄтс€ при входе и запоминаетс€ под ref)
+desc   = ∆дЄт смерти цели: NPC по story id, ранее созданный ref, или отр€д из spawn (создаЄтс€ при входе и запоминаетс€ под ref). map_spot держит метку на цели, пока еЄ не убили - дл€ отр€да из spawn это единственный способ показать игроку, куда идти
 use    = main
-params   = target, by_actor
-target   = kill_target, required
-by_actor = bool, default=false
+params    = target, by_actor, map_spot, spot_text
+target    = kill_target, required
+by_actor  = bool, default=false
+map_spot  = bool, default=true
+spot_text = text
 pins   = done
 wait   = true
 once   = false
@@ -490,6 +492,18 @@ new_title = text
 new_descr = text
 impl      = core
 since     = 4
+
+[nq.task.set_objective_visible]
+group     = tasks
+title     = ¬идимость подзадачи
+desc      = ѕоказать или скрыть шаг задачи в PDA. —крытый шаг работает как обычно и его можно завершить Ч он просто не занимает строку в списке задач
+use       = extra
+params    = task, objective, visible
+task      = task_id, required
+objective = objective_id, required
+visible   = bool
+impl      = core
+since     = 6
 
 [nq.spawn.squad]
 group  = spawn

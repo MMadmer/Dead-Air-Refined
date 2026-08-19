@@ -168,25 +168,25 @@ void CUITaskWnd::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
     }
     if (msg == PDA_TASK_SET_TARGET_MAP && pData)
     {
-        CGameTask* task = static_cast<CGameTask*>(pData);
+        auto* task = static_cast<SGameTaskObjective*>(pData);
         TaskSetTargetMap(task);
         return;
     }
     if (msg == PDA_TASK_SHOW_MAP_SPOT && pData && IsSecondaryTasksEnabled())
     {
-        CGameTask* task = static_cast<CGameTask*>(pData);
+        auto* task = static_cast<SGameTaskObjective*>(pData);
         TaskShowMapSpot(task, true);
         return;
     }
     if (msg == PDA_TASK_HIDE_MAP_SPOT && pData)
     {
-        CGameTask* task = static_cast<CGameTask*>(pData);
+        auto* task = static_cast<SGameTaskObjective*>(pData);
         TaskShowMapSpot(task, false);
         return;
     }
     if (msg == PDA_TASK_SHOW_HINT && pData)
     {
-        CGameTask* task = static_cast<CGameTask*>(pData);
+        auto* task = static_cast<SGameTaskObjective*>(pData);
         m_pMapWnd->ShowHintTask(task, pWnd);
         return;
     }
@@ -352,7 +352,7 @@ bool CUITaskWnd::IsUsingCursorRightNow() const
     return true;
 }
 
-void CUITaskWnd::TaskSetTargetMap(CGameTask* task) const
+void CUITaskWnd::TaskSetTargetMap(SGameTaskObjective* task) const
 {
     if (!task || !IsSecondaryTasksEnabled())
     {
@@ -368,7 +368,7 @@ void CUITaskWnd::TaskSetTargetMap(CGameTask* task) const
     }
 }
 
-void CUITaskWnd::TaskShowMapSpot(CGameTask* task, bool show) const
+void CUITaskWnd::TaskShowMapSpot(SGameTaskObjective* task, bool show) const
 {
     if (!task || !IsSecondaryTasksEnabled())
     {
