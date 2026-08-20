@@ -334,7 +334,7 @@ local function step_discovery(tag)
 		for _, w in ipairs(want) do
 			if not (Q[w]) then ok = false end
 		end
-		check(tag .. ".valid", ok and #order == 3, "loaded: [%s] (want exactly the three reference quests)",
+		check(tag .. ".valid", ok and #order == 4, "loaded: [%s] (want exactly the four reference quests)",
 			table.concat(names, ","))
 		local nerr = 0
 		for _, u in ipairs(order) do nerr = nerr + (Q[u].errors or 0) end
@@ -397,6 +397,43 @@ local function build_p1()
 			"visible: step1=%s step2=%s (the second is declared visible = false)",
 			tostring(o1 and o1:is_visible()), tostring(o2 and o2:is_visible()))
 	end)
+
+	-- the stash_fetch reference quest: fetch{spawn} made its box, filled it, marked it
+	step_until("b.stash_spawned", 15000,
+		function()
+			local qs = qstate("stash_fetch")
+			local rec = qs and qs.refs and qs.refs.qa_box
+			if not (rec) then return false end
+			local n = 0
+			pcall(function()
+				local se = alife():object(rec.id)
+				for _ in alife():get_children(se) do n = n + 1 end
+			end)
+			return n >= 2
+		end,
+		function()
+			local qs = qstate("stash_fetch")
+			local rec = qs and qs.refs and qs.refs.qa_box
+			local n, spot = -1, -1
+			if (rec) then
+				pcall(function()
+					local se = alife():object(rec.id)
+					n = 0
+					for _ in alife():get_children(se) do n = n + 1 end
+				end)
+				pcall(function() spot = level.map_has_object_spot(rec.id, "secondary_task_location") end)
+			end
+			return fmt1("fetch spawn: box=%s children=%d spot=%s", tostring(rec and rec.id), n, tostring(spot))
+		end)
+
+	step("b.stash_spot", function()
+		local qs = qstate("stash_fetch")
+		local rec = qs and qs.refs and qs.refs.qa_box
+		local spot = 0
+		pcall(function() spot = level.map_has_object_spot(rec.id, "secondary_task_location") end)
+		return check("b.stash_spot", rec ~= nil and spot > 0,
+			"the quest-made box carries the fetch marker (spot=%s)", tostring(spot))
+	end, { timeout = 10000 })
 
 	step_until("b.fetch_waiting", 10000,
 		function() local t = tok("linear_fetch", "fetch") return t ~= nil and t.b == true end,

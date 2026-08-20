@@ -370,68 +370,380 @@ local function container_item_ids(cid, section)
 	return list
 end
 
--- `from`: an item is credited only after it has been seen INSIDE the container and then on the
--- actor. w = { cid, seen = {[id]=true}, got = {[id]=true}, n }. An identical item picked up
--- anywhere else was never in `seen`, so it cannot move the counter.
-local function fetch_from_count(ctx)
+-- What to bring, as one list either way: `items` as declared, or the single
+-- section+count folded into a one-entry list.
+local function fetch_reqs(p)
+	if (p.items) then return p.items end
+	if (p.section) then return { { section = p.section, count = p.count or 1 } } end
+	return nil
+end
+
+local FETCH_SPOT = "secondary_task_location"
+
+local function dist_to_actor(se)
+	local a = actor()
+	if not (a and se and se.position) then return nil end
+	local ok, d = pcall(function() return se.position:distance_to(a:position()) end)
+	return ok and d or nil
+end
+
+-- Candidate hosts for a random pick, all on the actor's level: inventory boxes filtered by
+-- how full they are, or corpses. One registry walk per selection, never per frame.
+local function loot_candidates(kind, sel)
+	local here = util.current_level()
+	return util.alife_scan(function(se)
+		if (util.level_name_of_gvid(se.m_game_vertex_id) ~= here) then return false end
+		if (kind == "corpse") then return util.se_is_corpse(se) end
+		if not (util.se_is_invbox(se)) then return false end
+		local state = sel.state or "any"
+		if (state ~= "any") then
+			local n = util.container_count(se.id)
+			if (n == nil) then return false end
+			if (state == "empty" and n > 0) then return false end
+			if (state == "full" and n == 0) then return false end
+		end
+		return true
+	end)
+end
+
+-- The radius rules as the author states them: within/beyond bound the candidates (both at
+-- once make a ring). Nothing inside the bound falls back to the NEAREST match anywhere for
+-- `within`, and to the FARTHEST one for `beyond` - a stash quest must pick something.
+local function pick_host(kind, sel)
+	local cand = {}
+	for _, se in ipairs(loot_candidates(kind, sel)) do
+		local d = dist_to_actor(se)
+		if (d) then cand[#cand + 1] = { se = se, d = d } end
+	end
+	if (#cand == 0) then return nil end
+	local within, beyond = tonumber(sel.within), tonumber(sel.beyond)
+	local pool = {}
+	for _, c in ipairs(cand) do
+		if ((not within or c.d <= within) and (not beyond or c.d >= beyond)) then pool[#pool + 1] = c end
+	end
+	local mode = sel.pick or (kind == "corpse" and "nearest" or "random")
+	if (#pool == 0) then
+		pool = cand
+		if (within) then mode = "nearest" elseif (beyond) then mode = "farthest" end
+	end
+	if (mode == "random") then return pool[math.random(#pool)].se end
+	table.sort(pool, function(x, y) return x.d < y.d end)
+	return (mode == "farthest") and pool[#pool].se or pool[1].se
+end
+
+-- One host id (or a ground position) for one item instance. Errors here happen BEFORE
+-- anything is created, and begin retries them - a container another node makes later is
+-- simply not there yet, not a broken quest.
+local function fetch_host(ctx, sp, cache)
+	if (sp.place) then
+		if not (cache.ground) then
+			local _, pos, lvid, gvid = util.place_position(sp.place, ctx)
+			if not (pos and lvid and gvid) then error("fetch spawn: cannot resolve the place") end
+			cache.ground = { pos = pos, lvid = lvid, gvid = gvid }
+		end
+		return nil, cache.ground
+	end
+	if (sp.into) then
+		local id = util.resolve_target_id(ctx, sp.into)
+		if not (id) then error("fetch spawn: the 'into' target does not exist (yet)") end
+		return id
+	end
+	if (sp.npc) then
+		local id = util.ref_object_id(ctx, sp.npc)
+		if not (id) then
+			local go = util.resolve_npc_go(ctx, sp.npc)
+			id = go and go:id() or nil
+		end
+		if not (id) then error("fetch spawn: the npc was not found (profile/community need him online)") end
+		return id
+	end
+	if (sp.stash or sp.corpse) then
+		local kind = sp.stash and "stash" or "corpse"
+		local se = pick_host(kind, sp.stash or sp.corpse)
+		if not (se) then error("fetch spawn: nothing on this level matches the " .. kind .. " filters") end
+		return se.id
+	end
+	if (sp.new_corpse) then
+		if not (ctx.w.body) then
+			local _, pos, lvid, gvid = util.place_position(sp.new_corpse.place, ctx)
+			if not (pos and lvid and gvid) then error("fetch spawn: cannot resolve the corpse place") end
+			local se = alife():create(sp.new_corpse.section, pos, lvid, gvid)
+			if not (se) then error("fetch spawn: cannot create " .. tostring(sp.new_corpse.section)) end
+			ctx.w.body = se.id
+			-- it dies the moment it comes online (see poll); the items survive into the corpse
+			ctx.w.kos = ctx.w.kos or {}
+			ctx.w.kos[se.id] = true
+			core.mark_dirty()
+		end
+		return ctx.w.body
+	end
+	error("fetch spawn: empty spawn block")
+end
+
+-- Creates the loot. The plan (a host for every instance) is resolved in full before the
+-- first create, so a retried begin never leaves half the items behind.
+local function fetch_make_loot(ctx)
 	local w, p = ctx.w, ctx.params
-	w.n = w.n or 0
-	w.seen = w.seen or {}
-	w.got = w.got or {}
-	local aid = actor_id()
-	if not (aid) then return w.n end
-	if not (w.cid) then
-		local cid = util.resolve_target_id(ctx, p.from)
-		if not (cid) then return w.n end	-- the container does not exist yet: nothing to watch
-		w.cid = cid
+	local sp, reqs = p.spawn, fetch_reqs(p)
+	for _, r in ipairs(reqs) do
+		local ok, exists = pcall(function() return system_ini():section_exist(r.section) end)
+		if (ok and exists == false) then error("fetch spawn: item section '" .. tostring(r.section) .. "' does not exist") end
+	end
+	local scatter = sp.stash and sp.stash.scatter
+	local cache, plan = {}, {}
+	local fixed_host, fixed_ground
+	if not (scatter) then fixed_host, fixed_ground = fetch_host(ctx, sp, cache) end
+	for ri, r in ipairs(reqs) do
+		for _ = 1, (r.count or 1) do
+			local host, ground = fixed_host, fixed_ground
+			if (scatter) then host, ground = fetch_host(ctx, sp, cache) end
+			plan[#plan + 1] = { ri = ri, section = r.section, host = host, ground = ground }
+		end
+	end
+	w.ids, w.host_of, w.hosts, w.got = {}, {}, {}, w.got or {}
+	for _, e in ipairs(plan) do
+		local se
+		if (e.host) then
+			local hse = util.se_by_id(e.host)
+			if (hse) then se = alife():create(e.section, hse.position, hse.m_level_vertex_id, hse.m_game_vertex_id, e.host) end
+		else
+			se = alife():create(e.section, e.ground.pos, e.ground.lvid, e.ground.gvid)
+		end
+		if (se) then
+			w.ids[se.id] = e.ri
+			if (e.host) then
+				w.host_of[se.id] = e.host
+				w.hosts[e.host] = true
+			end
+		end
+	end
+	w.spawned = true
+	core.mark_dirty()
+	ctx.log("fetch: loot spawned (%d instance(s))", #plan)
+end
+
+-- A destroyed instance must not dead-end the quest: it is recreated in its host, or at the
+-- player's feet when the host itself is gone too.
+local function fetch_heal(ctx)
+	local w = ctx.w
+	local reqs = fetch_reqs(ctx.params)
+	local lost = {}
+	for id, ri in pairs(w.ids) do
+		if (not w.got[id]) and not util.se_by_id(id) then lost[#lost + 1] = { id = id, ri = ri } end
+	end
+	for _, e in ipairs(lost) do
+		w.ids[e.id] = nil
+		local section = reqs[e.ri] and reqs[e.ri].section
+		local host = w.host_of and w.host_of[e.id]
+		local hse = host and util.se_by_id(host)
+		local nse
+		if (section and hse) then
+			nse = alife():create(section, hse.position, hse.m_level_vertex_id, hse.m_game_vertex_id, host)
+		elseif (section) then
+			local a = actor()
+			if (a) then nse = alife():create(section, a:position(), a:level_vertex_id(), a:game_vertex_id()) end
+		end
+		if (nse) then
+			w.ids[nse.id] = e.ri
+			if (hse) then w.host_of[nse.id] = host end
+			util.warn("%s/%s: quest item %s was destroyed, a replacement was made", ctx.uid, ctx.node_id, tostring(section))
+		end
 		core.mark_dirty()
 	end
-	for _, id in ipairs(container_item_ids(w.cid, p.section) or {}) do
-		if not (w.seen[id] or w.got[id]) then
-			w.seen[id] = true
+end
+
+-- spawn form: exactly the created instances count; once held, an instance stays credited
+local function fetch_spawn_done(ctx)
+	local w = ctx.w
+	local aid = actor_id()
+	if (aid) then
+		for id in pairs(w.ids) do
+			if not (w.got[id]) then
+				local se = util.se_by_id(id)
+				if (se and se.parent_id == aid) then
+					w.got[id] = true
+					core.mark_dirty()
+				end
+			end
+		end
+	end
+	local need = {}
+	for ri, r in ipairs(fetch_reqs(ctx.params)) do need[ri] = r.count or 1 end
+	for id, ri in pairs(w.ids) do
+		if (w.got[id]) then need[ri] = need[ri] - 1 end
+	end
+	for _, n in ipairs(need) do
+		if (n > 0) then return false end
+	end
+	return true
+end
+
+-- `from`: an item is credited only after it has been seen INSIDE the container and then on
+-- the actor. w.fs[section] = { seen, got, n }. An identical item picked up anywhere else was
+-- never in `seen`, so it cannot move the counter.
+local function fetch_from_done(ctx)
+	local w, p = ctx.w, ctx.params
+	w.fs = w.fs or {}
+	local aid = actor_id()
+	if not (w.cid) then
+		local cid = util.resolve_target_id(ctx, p.from)
+		if (cid) then
+			w.cid = cid
 			core.mark_dirty()
 		end
 	end
-	for id in pairs(w.seen) do
-		local se = util.se_by_id(id)
-		if not (se) then
-			w.seen[id] = nil			-- destroyed out of sight: it can never be credited now
-			core.mark_dirty()
-		elseif (se.parent_id == aid) then
-			w.seen[id] = nil
-			w.got[id] = true
-			w.n = w.n + 1
-			core.mark_dirty()
+	local done = true
+	for _, r in ipairs(fetch_reqs(p)) do
+		local f = w.fs[r.section]
+		if not (f) then
+			f = { seen = {}, got = {}, n = 0 }
+			w.fs[r.section] = f
 		end
+		if (w.cid and aid) then
+			for _, id in ipairs(container_item_ids(w.cid, r.section) or {}) do
+				if not (f.seen[id] or f.got[id]) then
+					f.seen[id] = true
+					core.mark_dirty()
+				end
+			end
+			for id in pairs(f.seen) do
+				local se = util.se_by_id(id)
+				if not (se) then
+					f.seen[id] = nil			-- destroyed out of sight: it can never be credited now
+					core.mark_dirty()
+				elseif (se.parent_id == aid) then
+					f.seen[id] = nil
+					f.got[id] = true
+					f.n = f.n + 1
+					core.mark_dirty()
+				end
+			end
+		end
+		if (f.n < (r.count or 1)) then done = false end
 	end
-	return w.n
+	return done
 end
 
 local function fetch_done(ctx)
 	local p = ctx.params
 	if (p.item) then return held_by_actor(util.resolve_target_id(ctx, p.item)) end
-	if (p.from) then return fetch_from_count(ctx) >= (p.count or 1) end
-	return util.count_items(p.section) >= (p.count or 1)
+	if (p.spawn) then return ctx.w.spawned and fetch_spawn_done(ctx) or false end
+	if (p.from) then return fetch_from_done(ctx) end
+	for _, r in ipairs(fetch_reqs(p) or {}) do
+		if (util.count_items(r.section) < (r.count or 1)) then return false end
+	end
+	return true
+end
+
+-- Where the marker belongs: the hosts of spawned loot (or the loose items themselves),
+-- the watched container, or whatever carries the named item right now.
+local function fetch_spot_targets(ctx)
+	local w, p = ctx.w, ctx.params
+	local out = {}
+	if (p.spawn) then
+		if (w.hosts and next(w.hosts)) then
+			for id in pairs(w.hosts) do out[#out + 1] = id end
+		elseif (w.ids) then
+			for id in pairs(w.ids) do
+				if not (w.got[id]) then out[#out + 1] = id end
+			end
+		end
+	elseif (p.from) then
+		if (w.cid) then out[#out + 1] = w.cid end
+	elseif (p.item) then
+		local id = util.resolve_target_id(ctx, p.item)
+		if (id) then out[#out + 1] = util.top_owner(id) end
+	end
+	return out
+end
+
+local function fetch_spot_add(ctx)
+	if (ctx.params.map_spot == false) then return end
+	local w = ctx.w
+	w.spots = w.spots or {}
+	local hint = ctx.params.spot_text and util.format_text(ctx, ctx.params.spot_text) or ""
+	for _, id in ipairs(fetch_spot_targets(ctx)) do
+		if not (w.spots[id]) then
+			local owned = false
+			pcall(function()
+				if (level.map_has_object_spot(id, FETCH_SPOT) == 0) then
+					level.map_add_object_spot(id, FETCH_SPOT, hint)
+					owned = true
+				end
+			end)
+			if (owned) then
+				w.spots[id] = true
+				core.mark_dirty()
+			end
+		end
+	end
+	-- a picked-up loose item takes its own marker with it
+	for id in pairs(w.spots) do
+		if (w.got and w.got[id]) then
+			pcall(function() level.map_remove_object_spot(id, FETCH_SPOT) end)
+			w.spots[id] = nil
+			core.mark_dirty()
+		end
+	end
+end
+
+local function fetch_spot_remove(ctx)
+	for id in pairs(ctx.w.spots or {}) do
+		pcall(function() level.map_remove_object_spot(id, FETCH_SPOT) end)
+	end
+	ctx.w.spots = nil
+end
+
+-- new_corpse bodies are created alive (there is no dead-spawn) and are put down the moment
+-- they come online - at switch distance, far outside the player's sight
+local function fetch_kill_pending(ctx)
+	local w = ctx.w
+	if not (w.kos) then return end
+	for id in pairs(w.kos) do
+		local go = util.go_by_id(id)
+		if (go) then
+			if (go:alive()) then
+				pcall(go.kill, go, go)
+			else
+				w.kos[id] = nil
+				core.mark_dirty()
+			end
+		end
+	end
 end
 
 K["objective.fetch"] = {
 	events = { "item_taken" },
 	begin = function(ctx)
+		if (ctx.params.spawn and not ctx.w.spawned) then fetch_make_loot(ctx) end
 		if (fetch_done(ctx)) then return { pin = "done" } end
+		fetch_spot_add(ctx)
 		return "wait"
 	end,
+	-- the spawn form has work no event covers: healing, pending kills, late spots
+	wants_poll = function(ctx) return true end,
 	poll = function(ctx)
+		fetch_kill_pending(ctx)
+		if (ctx.params.spawn and ctx.w.spawned) then fetch_heal(ctx) end
 		if (fetch_done(ctx)) then return "done" end
+		fetch_spot_add(ctx)
 		return nil
 	end,
 	on_event = function(ctx, evt)
-		-- the plain form only cares about its own section; the object-tracking forms have to look
-		-- at every pickup, because the event carries no clue about where the item came from
+		-- the single-section form only cares about its own section; every other form has to
+		-- look at each pickup, because the event carries no clue where the item came from
 		local p = ctx.params
-		if (p.item == nil and p.from == nil and evt.section ~= p.section) then return nil end
+		if (p.item == nil and p.from == nil and p.spawn == nil and p.items == nil and evt.section ~= p.section) then return nil end
 		if (fetch_done(ctx)) then return "done" end
 		return nil
 	end,
+	load = function(ctx, w)
+		-- map spots are not serialized: put them back after a load or a level change
+		ctx.w.spots = nil
+		fetch_spot_add(ctx)
+	end,
+	finish = function(ctx, pin, external) fetch_spot_remove(ctx) end,
+	cancel = function(ctx) fetch_spot_remove(ctx) end,
 }
 
 local function reach_anchor_name(ctx) return ctx.node_id .. "_anchor" end

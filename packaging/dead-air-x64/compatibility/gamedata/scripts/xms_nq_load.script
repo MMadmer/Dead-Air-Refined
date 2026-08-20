@@ -458,6 +458,52 @@ local function valid_spawn_spec(v)
 	return true
 end
 
+-- items: a non-empty array of { section = "...", count = N } - several kinds at once
+local function valid_item_list(v)
+	if (type(v) ~= "table" or #v == 0) then return false end
+	local seen = {}
+	for _, e in ipairs(v) do
+		if (type(e) ~= "table" or type(e.section) ~= "string" or e.section == "") then return false end
+		if (e.count ~= nil and not (is_int(e.count) and e.count >= 1)) then return false end
+		if (seen[e.section]) then return false end	-- one line per section, or the counts are ambiguous
+		seen[e.section] = true
+	end
+	return true
+end
+
+-- loot_spawn: WHERE the node puts the loot it creates. Exactly one placement key.
+local PICK_SET = { random = true, nearest = true, farthest = true }
+local STATE_SET = { any = true, full = true, empty = true }
+local function valid_loot_spawn(v)
+	if (type(v) ~= "table") then return false end
+	local keys, n = { "place", "into", "stash", "npc", "corpse", "new_corpse" }, 0
+	for _, k in ipairs(keys) do if (v[k] ~= nil) then n = n + 1 end end
+	if (n ~= 1) then return false end
+	if (v.place ~= nil and not valid_place(v.place)) then return false end
+	if (v.into ~= nil and not valid_object_ref(v.into)) then return false end
+	if (v.npc ~= nil and not valid_npc_ref(v.npc)) then return false end
+	for _, k in ipairs({ "stash", "corpse" }) do
+		local sel = v[k]
+		if (sel ~= nil) then
+			if (type(sel) ~= "table") then return false end
+			if (sel.pick ~= nil and not PICK_SET[sel.pick]) then return false end
+			if (sel.within ~= nil and (type(sel.within) ~= "number" or sel.within <= 0)) then return false end
+			if (sel.beyond ~= nil and (type(sel.beyond) ~= "number" or sel.beyond <= 0)) then return false end
+		end
+	end
+	if (v.stash ~= nil) then
+		if (v.stash.state ~= nil and not STATE_SET[v.stash.state]) then return false end
+		if (v.stash.scatter ~= nil and type(v.stash.scatter) ~= "boolean") then return false end
+	end
+	if (v.corpse ~= nil and v.corpse.state ~= nil) then return false end
+	if (v.new_corpse ~= nil) then
+		local nc = v.new_corpse
+		if (type(nc) ~= "table" or type(nc.section) ~= "string" or nc.section == "") then return false end
+		if not (valid_place(nc.place)) then return false end
+	end
+	return true
+end
+
 local canon_cond_list -- forward
 
 -- Canonical value for one param; returns value, ok(bool), why(string).
@@ -513,6 +559,14 @@ local function canon_param(st, node, slot, p, v)
 		return util.copy(v), true
 	elseif (t == "object_ref") then
 		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
+		return util.copy(v), true
+	elseif (t == "item_list") then
+		if not (valid_item_list(v)) then return nil, false, "must be a list of { section = ..., count = N } with no repeated section" end
+		return util.copy(v), true
+	elseif (t == "loot_spawn") then
+		if not (valid_loot_spawn(v)) then
+			return nil, false, "must have exactly one of place | into | stash | npc | corpse | new_corpse (see the catalog)"
+		end
 		return util.copy(v), true
 	elseif (t == "objective_id") then
 		if (type(v) ~= "string" or not is_ident(v)) then return nil, false, "must be an objective id of the task" end
@@ -753,16 +807,27 @@ end
 local KIND_FORM = {}
 
 KIND_FORM["objective.fetch"] = function(st, nid, raw, params)
+	local forms = {}
+	for _, name in ipairs({ "section", "items", "item" }) do
+		if (raw[name] ~= nil) then forms[#forms + 1] = name end
+	end
+	if (#forms == 0) then
+		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs section, items or item - one of them")
+	elseif (#forms > 1) then
+		problem(st.problems, "E022", nid, "param:" .. forms[2], "%s and %s are different forms and cannot be combined", forms[1], forms[2])
+	end
 	if (raw.item ~= nil) then
-		local clash = {}
-		for _, name in ipairs({ "section", "count", "from" }) do
-			if (raw[name] ~= nil) then clash[#clash + 1] = name end
+		for _, name in ipairs({ "count", "from", "spawn" }) do
+			if (raw[name] ~= nil) then
+				problem(st.problems, "E022", nid, "param:item", "item is one concrete object and cannot be combined with %s", name)
+			end
 		end
-		if (#clash > 0) then
-			problem(st.problems, "E022", nid, "param:item", "item is one concrete object and cannot be combined with %s", table.concat(clash, ", "))
-		end
-	elseif (params.section == nil) then
-		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs either section (with count and an optional from) or item")
+	end
+	if (raw.count ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, "param:count", "count belongs to section - the items list carries its own counts")
+	end
+	if (raw.from ~= nil and raw.spawn ~= nil) then
+		problem(st.problems, "E022", nid, "param:from", "spawn already decides where the loot is - from would watch a second container")
 	end
 end
 

@@ -1367,12 +1367,12 @@ qs = core.quest_state(UFI)
 local prize_id = qs.refs.prize and qs.refs.prize.id
 check(qs.tokens.get ~= nil and prize_id ~= nil and mock.se[prize_id] ~= nil, "fetch by item waits on the object item.spawn created")
 check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.cid == stash.id, "fetch from container resolved the stash by story id")
-check(keys(tok_of(UFF, "loot").w.seen) == 3, "the three loaves inside the stash are watched (" .. keys(tok_of(UFF, "loot").w.seen) .. ")")
+check(keys(tok_of(UFF, "loot").w.fs.bread.seen) == 3, "the three loaves inside the stash are watched (" .. keys(tok_of(UFF, "loot").w.fs.bread.seen) .. ")")
 -- the negative case: an identical item that never was in the stash and is not the named object
 mock.add_item("bread", true)
 mock.ticks(2)
 check(tok_of(UFI, "get") ~= nil, "another bread does not satisfy fetch by item")
-check(tok_of(UFF, "loot") ~= nil and (tok_of(UFF, "loot").w.n or 0) == 0, "and it does not count towards the container either")
+check(tok_of(UFF, "loot") ~= nil and (tok_of(UFF, "loot").w.fs.bread.n or 0) == 0, "and it does not count towards the container either")
 mock.pick_up(mock.se[prize_id], true)
 mock.ticks(2)
 check(core.quest_status(UFI) == "completed", "picking up that exact object completes fetch by item")
@@ -1383,20 +1383,20 @@ check(core.quest_status(UFS) == "completed", "the story object in the inventory 
 -- looting the container itself
 mock.loot(stash, "bread", true)
 mock.ticks(2)
-check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "one loaf out of the stash counted (" .. tostring(tok_of(UFF, "loot").w.n) .. ")")
-check(keys(tok_of(UFF, "loot").w.seen) == 2, "two loaves left inside the stash")
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.fs.bread.n == 1, "one loaf out of the stash counted (" .. tostring(tok_of(UFF, "loot").w.fs.bread.n) .. ")")
+check(keys(tok_of(UFF, "loot").w.fs.bread.seen) == 2, "two loaves left inside the stash")
 check(mock.count_items("bread") == 3, "the actor carries three loaves, only one of them from the stash")
-check(xms_nq_util.decode(mock.blobs["xms.nq"]).quests[UFF].tokens.loot.w.n == 1, "the container counter is in the staged blob")
+check(xms_nq_util.decode(mock.blobs["xms.nq"]).quests[UFF].tokens.loot.w.fs.bread.n == 1, "the container counter is in the staged blob")
 mock.loot(decoy, "bread", true)
 mock.ticks(2)
-check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "an identical loaf out of another container does not count")
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.fs.bread.n == 1, "an identical loaf out of another container does not count")
 mock.rebuild()
 mock.first_update()
 core = xms_nq
-check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "the container counter survived save/load")
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.fs.bread.n == 1, "the container counter survived save/load")
 mock.add_item("bread", true)
 mock.ticks(2)
-check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.n == 1, "a bread from elsewhere after the load still does not count")
+check(tok_of(UFF, "loot") ~= nil and tok_of(UFF, "loot").w.fs.bread.n == 1, "a bread from elsewhere after the load still does not count")
 mock.loot(stash, "bread", true)
 mock.ticks(2)
 check(core.quest_status(UFF) == "completed", "the second loaf from the stash completes it")
@@ -2042,6 +2042,191 @@ for _, m in ipairs(mock.opts.modules) do if (m.id == "mod_a") then m.applies = n
 core.reload()
 mock.ticks(2)
 check(core.quest_status("mod_a.plain") == "active", "back in the ordinary game the quest record is picked up again")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z8) fetch: items list
+-- Several kinds at once: the node is done only when every line of the list is in the
+-- inventory at the same time.
+section("(z8) objective.fetch items: several sections, each with its own count")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/multi.nqasset"] = [[return { nq = 1, id = "multi", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { items = { { section = "bread", count = 2 }, { section = "medkit" } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+check(core.quest_state("mod_a.multi").tokens.get ~= nil, "the list form waits")
+mock.add_item("bread", true)
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(core.quest_state("mod_a.multi").tokens.get ~= nil, "one bread of two is not enough")
+mock.add_item("bread", true)
+mock.ticks(2)
+check(core.quest_status("mod_a.multi") == "completed", "both lines full = done")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z9) fetch: spawn into a box
+-- The node makes its own loot in a container and credits exactly those instances - the
+-- same section from the floor never counts, a destroyed instance is recreated.
+section("(z9) objective.fetch spawn{into}: only the created instances count")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/planted.nqasset"] = [[return { nq = 1, id = "planted", nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "spawn.object", params = { section = "inventory_box", place = { level = "l01_escape", pos = { 30, 0, 30 } }, ref = "qbox" } } },
+	  out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "bread", count = 2, spawn = { into = { ref = "qbox" } }, spot_text = "Тайник" },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+UQ9 = "mod_a.planted"
+qs = core.quest_state(UQ9)
+box9 = qs.refs.qbox and qs.refs.qbox.id
+check(box9 ~= nil, "the quest made its box")
+tok9 = qs.tokens.get
+check(tok9 ~= nil and tok9.w.spawned == true, "the node spawned its loot")
+n9 = 0
+for id, ri in pairs(tok9.w.ids) do
+	n9 = n9 + 1
+	check(mock.se[id] ~= nil and mock.se[id].parent_id == box9, "instance " .. tostring(id) .. " sits inside the box")
+end
+check(n9 == 2, "two instances were made")
+check(mock.spots[box9 .. "|secondary_task_location"] ~= nil, "the box carries the map spot")
+-- the decoy: same section, never part of the plan
+mock.add_item("bread", true)
+mock.add_item("bread", true)
+mock.ticks(2)
+check(core.quest_state(UQ9).tokens.get ~= nil, "two breads from elsewhere do not finish it")
+-- one instance is destroyed out of sight: a replacement appears in the same box
+lost9 = nil
+for id in pairs(tok9.w.ids) do lost9 = id break end
+mock.se[lost9] = nil
+mock.ticks(2)
+tok9 = core.quest_state(UQ9).tokens.get
+check(tok9.w.ids[lost9] == nil, "the destroyed instance left the plan")
+n9b, repl9 = 0, nil
+for id in pairs(tok9.w.ids) do
+	n9b = n9b + 1
+	if (mock.se[id] and mock.se[id].parent_id == box9) then repl9 = id end
+end
+check(n9b == 2 and repl9 ~= nil, "a replacement was made in the same box")
+-- the save carries the plan
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+tok9 = core.quest_state(UQ9).tokens.get
+check(tok9 ~= nil and tok9.w.spawned == true, "the plan survived the save")
+-- taking the actual instances finishes it
+for id in pairs(tok9.w.ids) do mock.pick_up(mock.se[id], true) end
+mock.ticks(2)
+check(core.quest_status(UQ9) == "completed", "taking the planted instances completes the node")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z10) fetch: stash selectors
+-- Random stash by filters: fullness, radius in/out, and the author's fallbacks - nothing
+-- inside the radius takes the nearest match anywhere, nothing outside takes the farthest.
+section("(z10) objective.fetch spawn{stash}: filters, radii and their fallbacks")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+-- actor stands at the origin; three boxes: 10m empty, 50m full, 300m full
+mock.move_actor(0, 0, 0)
+box_a = mock.add_container("inventory_box", nil, false, vector():set(10, 0, 0))
+box_b = mock.add_container("inventory_box", nil, false, vector():set(50, 0, 0))
+mock.put_in_container(box_b, "bread")
+box_c = mock.add_container("inventory_box", nil, false, vector():set(300, 0, 0))
+mock.put_in_container(box_c, "bread")
+mock.overrides["mod_a/st1.nqasset"] = [[return { nq = 1, id = "st1", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "medkit", spawn = { stash = { state = "full", within = 100 } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/st2.nqasset"] = [[return { nq = 1, id = "st2", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "medkit", spawn = { stash = { pick = "nearest", beyond = 200 } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/st3.nqasset"] = [[return { nq = 1, id = "st3", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "medkit", spawn = { stash = { state = "empty", within = 5 } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+function host_of10(uid)
+	local t = core.quest_state(uid).tokens.get
+	for id in pairs(t.w.ids) do return mock.se[id] and mock.se[id].parent_id end
+end
+check(host_of10("mod_a.st1") == box_b.id, "state=full within=100 lands in the 50m full box")
+check(host_of10("mod_a.st2") == box_c.id, "beyond=200 lands in the 300m box")
+check(host_of10("mod_a.st3") == box_a.id, "within=5 has nothing - the fallback takes the NEAREST empty box")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z11) fetch: corpses
+-- Items into an existing corpse by distance, and a freshly made body that is put down the
+-- moment it comes online, with the loot already inside.
+section("(z11) objective.fetch spawn{corpse / new_corpse}")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+corpse_far = mock.add_corpse(vector():set(200, 0, 0))
+corpse_near = mock.add_corpse(vector():set(20, 0, 0))
+mock.overrides["mod_a/body.nqasset"] = [[return { nq = 1, id = "body", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "bread", spawn = { corpse = { pick = "nearest" } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.overrides["mod_a/fresh.nqasset"] = [[return { nq = 1, id = "fresh", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "get" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { section = "medkit", spawn = { new_corpse = { section = "stalker", place = { level = "l01_escape", pos = { 40, 0, 40 } } } } },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+tok11 = core.quest_state("mod_a.body").tokens.get
+got_host = nil
+for id in pairs(tok11.w.ids) do got_host = mock.se[id] and mock.se[id].parent_id end
+check(got_host == corpse_near.id, "the nearest corpse got the loot")
+-- the fresh body: created alive, killed the moment a client object shows up
+tokf = core.quest_state("mod_a.fresh").tokens.get
+body_id = tokf.w.body
+check(body_id ~= nil and mock.se[body_id] ~= nil, "a body was created")
+check(mock.se[body_id]:alive() == true and tokf.w.kos[body_id] == true, "still alive offline, marked to be put down")
+inside = nil
+for id in pairs(tokf.w.ids) do inside = mock.se[id] and mock.se[id].parent_id end
+check(inside == body_id, "the loot is already inside it")
+-- it comes online: the mock grows a client object, the next poll kills it
+go_b = mock.new_go("stalker")
+mock.go[go_b._id] = nil
+go_b._id = body_id
+mock.go[body_id] = go_b
+mock.ticks(2)
+check(mock.se[body_id]:alive() == false, "put down once online")
+check(core.quest_state("mod_a.fresh").tokens.get.w.kos[body_id] == nil, "and no longer pending")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary

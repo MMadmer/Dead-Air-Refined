@@ -685,6 +685,62 @@ function place_contains_pos(place, ctx, p_pos)
 	return false
 end
 
+-- ---------------------------------------------------------------------------- alife registry
+-- One pass over the whole server registry - the same walk coc_treasure_manager does once per
+-- game load. Only runs when a quest actually asks for a random stash or corpse, never per frame.
+function alife_scan(fn)
+	local sim = alife()
+	if not (sim) then return {} end
+	local out = {}
+	for i = 1, 65534 do
+		local se = sim:object(i)
+		if (se and fn(se)) then out[#out + 1] = se end
+	end
+	return out
+end
+
+-- The object at the top of the parent chain: the box an item lies in, the NPC carrying the
+-- bag the item is packed into. For a map spot the owner is the thing that has a position.
+function top_owner(id)
+	local cur, guard = id, 0
+	while (guard < 8) do
+		local se = se_by_id(cur)
+		if not (se) then return cur end
+		local pid = se.parent_id
+		if (pid == nil or pid == 65535) then return cur end
+		cur = pid
+		guard = guard + 1
+	end
+	return cur
+end
+
+function se_is_invbox(se)
+	if not (se) then return false end
+	local ok, r = pcall(function() return IsInvbox and IsInvbox(nil, se:clsid()) end)
+	return ok and r == true
+end
+
+-- a corpse is a stalker whose server object is no longer alive
+function se_is_corpse(se)
+	if not (se) then return false end
+	local ok, r = pcall(function() return IsStalker and IsStalker(nil, se:clsid()) end)
+	if not (ok and r == true) then return false end
+	return not se_alive(se)
+end
+
+-- how many children a container holds, or nil when it cannot be read
+function container_count(id)
+	local se = se_by_id(id)
+	if not (se) then return nil end
+	local n
+	local ok = pcall(function()
+		n = 0
+		for _ in alife():get_children(se) do n = n + 1 end
+	end)
+	if (ok) then return n end
+	return nil
+end
+
 -- ============================================================================ inventory
 -- Everything here counts WHOLE ITEMS: an ammo box is one inventory object, so `count` means boxes,
 -- never rounds. That is what the dialog transfers (dialogs.script) and what the player sees.

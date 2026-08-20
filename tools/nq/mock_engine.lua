@@ -233,6 +233,9 @@ function se_mt:kill() self._alive = false local go = mock.go[self.id] if (go) th
 
 local function new_se(section, pos, lvid, gvid, parent, id)
 	local se = setmetatable({ id = id or mock.next_id, _section = section, position = pos or vector():set(0, 0, 0), m_level_vertex_id = lvid or 1, m_game_vertex_id = gvid or 1, parent_id = parent, online = true }, se_mt)
+	-- the class tag IsInvbox/IsStalker answer by, derived from the section like the factory does
+	if (section == "inventory_box" or section == "hidden_box" or section == "inv_backpack") then se._clsid = "invbox"
+	elseif (section == "stalker" or string.find(section or "", "sim_default_", 1, true)) then se._clsid = "stalker" end
 	if not (id) then mock.next_id = mock.next_id + 1 end
 	-- a spawned ammo object is one full box; create_ammo overwrites it with its own round count
 	if (section and system_ini():line_exist(section, "box_size")) then se.ammo_left = system_ini():r_u32(section, "box_size") end
@@ -462,6 +465,14 @@ function mock.drop_objectives(task_id)
 	return t
 end
 
+-- A corpse: a stalker server object that is no longer alive, at a position.
+function mock.add_corpse(pos)
+	local se = new_se("stalker", pos, 1, 1, nil)
+	se._children = {}
+	se._alive = false
+	return se
+end
+
 -- Adds an item to the actor inventory (server + client objects); fires actor_on_item_take when asked.
 function mock.add_item(section, notify)
 	local a = db.actor
@@ -487,8 +498,8 @@ end
 -- ---------------------------------------------------------------------------- containers
 -- A stash / inventory box: a server object that owns its contents through parent_id. `online`
 -- also gives it a client object, the way a box on the current level has one.
-function mock.add_container(section, story_id, online)
-	local se = new_se(section or "inventory_box", vector():set(0, 0, 0), 1, 1, nil)
+function mock.add_container(section, story_id, online, pos)
+	local se = new_se(section or "inventory_box", pos or vector():set(0, 0, 0), 1, 1, nil)
 	se._children = {}
 	if (online) then
 		local go = new_go(section or "inventory_box")
@@ -662,7 +673,14 @@ end
 
 db = { storage = {}, zone_by_name = {}, actor = nil }
 
-function IsStalker(go) return go and go._stalker == true end
+function IsStalker(go, cls)
+	if (cls ~= nil) then return cls == "stalker" end
+	return go and go._stalker == true
+end
+function IsInvbox(go, cls)
+	if (cls ~= nil) then return cls == "invbox" end
+	return go and go._clsid == "invbox"
+end
 function IsMonster(go) return go and go._monster == true end
 
 -- ---------------------------------------------------------------------------- story objects

@@ -1,0 +1,28 @@
+-- nq: stash_fetch "Заначка"
+-- Эталон формы spawn у objective.fetch: квест сам создаёт ящик, кладёт в него добычу
+-- и ждёт, пока игрок заберёт ИМЕННО эти экземпляры. Проверяется движковой QA (фаза p1):
+-- ящик существует, в нём два предмета, на нём метка.
+return {
+  nq = 1,
+  id = "stash_fetch",
+  title = "Заначка",
+  activation = "auto",
+  nodes = {
+    { id = "start", kind = "trigger.start",
+      on_enter = {
+        { kind = "spawn.object",
+          params = { section = "inventory_box", place = { level = "l01_escape", pos = { -215, -20, -140 } }, ref = "qa_box" } },
+      },
+      out = { next = "get" } },
+
+    { id = "get", kind = "objective.fetch",
+      params = {
+        items = { { section = "bread" }, { section = "medkit" } },
+        spawn = { into = { ref = "qa_box" } },
+        spot_text = "Заначка QA",
+      },
+      out = { done = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}
