@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 7
+version = 8
 api     = 1
 
 ; ============================================================ triggers
@@ -96,13 +96,13 @@ since  = 1
 [nq.objective.kill]
 group  = objective
 title  = ”бить цель
-desc   = ∆дЄт смерти цели: NPC по story id, ранее созданный ref, или отр€д из spawn (создаЄтс€ при входе и запоминаетс€ под ref). map_spot держит метку на цели, пока еЄ не убили - дл€ отр€да из spawn это единственный способ показать игроку, куда идти
+desc   = ∆дЄт смерти цели: NPC по story id, ранее созданный ref, или отр€д из spawn (создаЄтс€ при входе и запоминаетс€ под ref). spot_task ведЄт маркер задачи (с spot_objective Ч маркер еЄ подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. ѕусто Ч нода метку не трогает. ƒл€ отр€да из spawn это единственный способ показать игроку, куда идти
 use    = main
-params    = target, by_actor, map_spot, spot_text
+params    = target, by_actor, spot_task, spot_objective
 target    = kill_target, required
 by_actor  = bool, default=false
-map_spot  = bool, default=true
-spot_text = text
+spot_task      = task_id
+spot_objective = objective_id
 pins   = done
 wait   = true
 once   = false
@@ -129,16 +129,16 @@ since  = 2
 [nq.objective.fetch]
 group  = objective
 title  = ƒобыть предмет
-desc   = ∆дЄт, пока предметы окажутс€ у игрока. „то нести задаЄт —ѕ»—ќ  items: кажда€ строка Ч либо секци€ со своим количеством, либо один конкретный объект (ref или story id). ¬иды строк можно смешивать: Ђпринеси “” —јћ”ё флешку и три аптечкиї Ч одна нода. section+count Ч кратка€ запись списка из одной строки. from Ч засчитывать только вз€тое из Ё“ќ√ќ контейнера (дл€ строк-секций): такой же предмет из другого места не считаетс€. spawn Ч нода —јћј создаЄт предметы при входе (на земле, в конкретном €щике или у объекта, в случайном тайнике по фильтрам, у живого NPC, в существующем или в новом трупе) и засчитывает только эти экземпл€ры Ч уничтоженный пересоздаЄтс€, квест не встаЄт. map_spot держит метку на источнике, пока нода ждЄт. count Ч штуки предметов: дл€ патронов это коробки, а не патроны
+desc   = ∆дЄт, пока предметы окажутс€ у игрока. „то нести задаЄт —ѕ»—ќ  items: кажда€ строка Ч либо секци€ со своим количеством, либо один конкретный объект (ref или story id). ¬иды строк можно смешивать: Ђпринеси “” —јћ”ё флешку и три аптечкиї Ч одна нода. section+count Ч кратка€ запись списка из одной строки. from Ч засчитывать только вз€тое из Ё“ќ√ќ контейнера (дл€ строк-секций): такой же предмет из другого места не считаетс€. spawn Ч нода —јћј создаЄт предметы при входе (на земле, в конкретном €щике или у объекта, в случайном тайнике по фильтрам, у живого NPC, в существующем или в новом трупе) и засчитывает только эти экземпл€ры Ч уничтоженный пересоздаЄтс€, квест не встаЄт. spot_task ведЄт маркер задачи (с spot_objective Ч маркер еЄ подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. ѕусто Ч нода метку не трогает: из непринесЄнного метитс€ ближайша€ цель (тайник, носитель, предмет), собранное из учЄта выпадает. count Ч штуки предметов: дл€ патронов это коробки, а не патроны
 use    = main
-params    = section, count, items, from, spawn, map_spot, spot_text
+params    = section, count, items, from, spawn, spot_task, spot_objective
 section   = item_section
 count     = int, default=1, min=1
 items     = item_list
 from      = object_ref
 spawn     = loot_spawn
-map_spot  = bool, default=true
-spot_text = text
+spot_task      = task_id
+spot_objective = objective_id
 pins   = done
 wait   = true
 once   = false
@@ -148,12 +148,12 @@ since  = 1
 [nq.objective.reach]
 group  = objective
 title  = ƒойти до места
-desc   = ∆дЄт, пока игрок окажетс€ в месте (точка с радиусом, рестриктор, смарт или ref объекта, созданного этим квестом). map_spot ставит метку на карте
+desc   = ∆дЄт, пока игрок окажетс€ в месте (точка с радиусом, рестриктор, смарт или ref объекта, созданного этим квестом). spot_task ведЄт маркер задачи (с spot_objective Ч маркер еЄ подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. ѕусто Ч нода метку не трогает
 use    = main
-params    = place, map_spot, spot_text
+params    = place, spot_task, spot_objective
 place     = place, required
-map_spot  = bool, default=true
-spot_text = text
+spot_task      = task_id
+spot_objective = objective_id
 pins   = done
 wait   = true
 once   = false

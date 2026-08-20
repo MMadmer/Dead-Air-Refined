@@ -25,7 +25,7 @@ return {
     { id = "start", kind = "trigger.start", out = { next = { "timer", "reach" } } },
     { id = "timer", kind = "wait.timer", params = { duration = { game_minutes = 30 } }, out = { done = "join" } },
     { id = "reach", kind = "objective.reach",
-      params = { place = { smart = "esc_smart_terrain_2_12" }, map_spot = true, spot_text = "Деревня новичков" },
+      params = { place = { smart = "esc_smart_terrain_2_12" } },
       out = { done = "join" } },
     { id = "join", kind = "flow.join", out = { next = "arrived" } },
     { id = "arrived", kind = "flow.step",

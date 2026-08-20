@@ -64,6 +64,23 @@ end
 -- ---------------------------------------------------------------------------- small helpers
 local function core() return xms_nq end
 local function uid(q) return "nq_qa." .. q end
+-- Where the PDA marker of an NQ task points now: object id + spot type.
+local function task_marker_of(quest, task_name)
+	local a = db and db.actor
+	if not (a) then return nil, nil end
+	local uid = nil
+	for _, cand in ipairs({ "nq_qa." .. quest, quest }) do
+		if (xms_nq and xms_nq.quest_state and xms_nq.quest_state(cand)) then uid = cand break end
+	end
+	if not (uid) then return nil, nil end
+	local t = nil
+	pcall(function() t = a:get_task("nq." .. uid .. "." .. task_name, true) end)
+	if not (t) then return nil, nil end
+	local id, loc = nil, nil
+	pcall(function() id = t:get_map_object_id() loc = t:get_map_location() end)
+	return id, loc
+end
+
 local function qstate(q) return core().quest_state(uid(q)) end
 local function qstatus(q) return core().quest_status(uid(q)) end
 
@@ -421,18 +438,18 @@ local function build_p1()
 					n = 0
 					for _ in alife():get_children(se) do n = n + 1 end
 				end)
-				pcall(function() spot = level.map_has_object_spot(rec.id, "secondary_task_location") end)
+				pcall(function() spot = task_marker_of("stash_fetch", "loot") end)
 			end
-			return fmt1("fetch spawn: box=%s children=%d spot=%s", tostring(rec and rec.id), n, tostring(spot))
+			return fmt1("fetch spawn: box=%s children=%d marker=%s", tostring(rec and rec.id), n, tostring(spot))
 		end)
 
+	-- spot_task: the node re-points the task's own marker, no additive spot exists
 	step("b.stash_spot", function()
 		local qs = qstate("stash_fetch")
 		local rec = qs and qs.refs and qs.refs.qa_box
-		local spot = 0
-		pcall(function() spot = level.map_has_object_spot(rec.id, "secondary_task_location") end)
-		return check("b.stash_spot", rec ~= nil and spot > 0,
-			"the quest-made box carries the fetch marker (spot=%s)", tostring(spot))
+		local id, loc = task_marker_of("stash_fetch", "loot")
+		return check("b.stash_spot", rec ~= nil and id == rec.id and loc == "storyline_task_location",
+			"the task marker walked onto the quest-made box (id=%s loc=%s)", tostring(id), tostring(loc))
 	end, { timeout = 10000 })
 
 	step_until("b.fetch_waiting", 10000,

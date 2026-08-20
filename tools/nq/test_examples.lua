@@ -132,7 +132,7 @@ qs = core.quest_state(UID_B)
 check(qs and qs.status == "active", "parallel_triggers active")
 check(qs.tokens.timer and qs.tokens.reach and not qs.tokens.join, "timer and reach wait, join not yet")
 local smart = mock.smarts["esc_smart_terrain_2_12"]
-check(mock.spots[smart.id .. "|secondary_task_location"] ~= nil, "objective.reach put a map spot on the smart")
+check(mock.spots[smart.id .. "|secondary_task_location"] == nil, "no spot_task = the reach node leaves the map alone")
 -- timer: 30 game minutes
 mock.advance_game(20 * 60)
 mock.ticks(1)
@@ -267,7 +267,7 @@ check(qs.vars.medkit_seen == true and qs.fired.on_medkit == 1, "vars and fired r
 check(qs.refs.probe and qs.refs.probe.id == 4242, "refs restored")
 check(mock.sor:get("nq." .. UID_B .. ".probe") == 4242, "ref story id re-registered")
 check(mock.save_calls > saves_before, "blob restaged after load")
-check(mock.spots[smart.id .. "|secondary_task_location"] ~= nil, "reach map spot re-added on load")
+check(mock.spots[smart.id .. "|secondary_task_location"] == nil, "still no additive spot after a load")
 -- and the game goes on: second bread completes the fetch
 mock.add_item("bread", true)
 mock.ticks(2)
@@ -1577,7 +1577,7 @@ mock.overrides["mod_a/zone.nqasset"] = [[return { nq = 1, id = "zone", nodes = {
 	{ id = "make", kind = "flow.step",
 	  on_enter = { { kind = "spawn.object", params = { section = "space_restrictor", place = { level = "l01_escape", pos = { 50, 0, 50 } }, ref = "gate" } } },
 	  out = { next = "reach" } },
-	{ id = "reach", kind = "objective.reach", params = { place = { ref = "gate", radius = 8 }, map_spot = false }, out = { done = "clean" } },
+	{ id = "reach", kind = "objective.reach", params = { place = { ref = "gate", radius = 8 } }, out = { done = "clean" } },
 	{ id = "clean", kind = "flow.step",
 	  on_enter = { { kind = "object.remove", params = { target = { ref = "gate" } } } },
 	  out = { next = "fin" } },
@@ -1684,7 +1684,7 @@ mock.overrides["mod_a/gate.nqasset"] = [[return { nq = 1, id = "gate",
 	tasks = { go = { title = "Дойти", target = { restrictor = "esc_test_point" } } },
 	nodes = {
 		{ id = "start", kind = "trigger.start", on_enter = { { kind = "task.give", params = { task = "go" } } }, out = { next = "r" } },
-		{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_test_point", radius = 6 }, map_spot = false }, out = { done = "fin" } },
+		{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_test_point", radius = 6 } }, out = { done = "fin" } },
 		{ id = "fin", kind = "flow.end" },
 	},
 } ]]
@@ -1710,7 +1710,7 @@ for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) 
 end
 mock.overrides["mod_a/gate2.nqasset"] = [[return { nq = 1, id = "gate2", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "r" } },
-	{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_ring" }, map_spot = false }, out = { done = "fin" } },
+	{ id = "r", kind = "objective.reach", params = { place = { restrictor = "esc_ring" } }, out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
 mock.add_restrictor("esc_ring", vector():set(0, 0, 0), true, 4)
@@ -1938,11 +1938,17 @@ for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) 
 end
 mock.add_restrictor("mod_a.esc_fight", vector():set(60, 0, 60), true, 15)
 -- the shape the editor writes for "spawn soldiers to kill in this restrictor"
-mock.overrides["mod_a/blank.nqasset"] = [[return { nq = 1, id = "blank", nodes = {
-	{ id = "start", kind = "trigger.start", out = { next = "k" } },
+mock.overrides["mod_a/blank.nqasset"] = [[return { nq = 1, id = "blank",
+  tasks = { fight = { title = "Fight", type = "additional" } },
+  nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "task.give", params = { task = "fight" } } },
+	  out = { next = "k" } },
 	{ id = "k", kind = "objective.kill", params = { target = { spawn = {
 	      section = "army_sim_squad_novice", smart = "",
-	      place = { restrictor = "esc_fight" }, restrictor = "esc_fight", ref = "fight" } } },
+	      place = { restrictor = "esc_fight" }, restrictor = "esc_fight", ref = "fight" } },
+	      spot_task = "fight" },
+	  on_exit = { { kind = "task.complete", params = { task = "fight" } } },
 	  out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
@@ -1956,15 +1962,18 @@ sq_blank = mock.se[qs.refs.fight.id]
 check(sq_blank ~= nil and (sq_blank.scripted_target == nil or sq_blank.scripted_target == ""),
 	"a squad given a place is not leashed to a smart nobody named")
 check(not mock.log_has("no smart terrain"), "and nothing complained about a missing smart")
--- a target the quest spawned is findable only if something marks it
+-- a target the quest spawned is findable only through the task marker it re-points
 sid = qs.refs.fight and qs.refs.fight.id
-check(sid ~= nil and mock.spots[sid .. "|secondary_task_location"] ~= nil,
-	"objective.kill put a marker on the squad it spawned")
+t6 = mock.task_by_id("nq.mod_a.blank.fight")
+check(sid ~= nil and t6 ~= nil and t6:get_map_object_id() == sid,
+	"objective.kill walked the task marker onto the squad it spawned")
+check(t6:get_map_location() == "secondary_task_location", "an additional task keeps the secondary colour")
+check(mock.spots[sid .. "|secondary_task_location"] == nil, "and no separate additive spot exists")
 sq_fight = util_se_squad(sid)
 for _, mid in ipairs(sq_fight) do mock.kill_member(mock.se[sid], mid, db.actor) end
 mock.ticks(2)
-check(mock.spots[sid .. "|secondary_task_location"] == nil, "and took it off once they were dead")
 check(core.quest_status("mod_a.blank") == "completed", "killing them finished the objective")
+check(t6:get_map_location() == nil, "completing the task took the marker with it")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ (z7) closing both
@@ -2088,12 +2097,17 @@ setup()
 for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
 	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
 end
-mock.overrides["mod_a/planted.nqasset"] = [[return { nq = 1, id = "planted", nodes = {
+mock.overrides["mod_a/planted.nqasset"] = [[return { nq = 1, id = "planted",
+  tasks = { bring = { title = "Bring the bread", type = "storyline" } },
+  nodes = {
 	{ id = "start", kind = "trigger.start",
-	  on_enter = { { kind = "spawn.object", params = { section = "inventory_box", place = { level = "l01_escape", pos = { 30, 0, 30 } }, ref = "qbox" } } },
+	  on_enter = {
+		{ kind = "spawn.object", params = { section = "inventory_box", place = { level = "l01_escape", pos = { 30, 0, 30 } }, ref = "qbox" } },
+		{ kind = "task.give", params = { task = "bring" } },
+	  },
 	  out = { next = "get" } },
 	{ id = "get", kind = "objective.fetch",
-	  params = { section = "bread", count = 2, spawn = { into = { ref = "qbox" } }, spot_text = "Тайник" },
+	  params = { section = "bread", count = 2, spawn = { into = { ref = "qbox" } }, spot_task = "bring" },
 	  out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
@@ -2111,7 +2125,9 @@ for id, ri in pairs(tok9.w.ids) do
 	check(mock.se[id] ~= nil and mock.se[id].parent_id == box9, "instance " .. tostring(id) .. " sits inside the box")
 end
 check(n9 == 2, "two instances were made")
-check(mock.spots[box9 .. "|secondary_task_location"] ~= nil, "the box carries the map spot")
+t9 = mock.task_by_id("nq.mod_a.planted.bring")
+check(t9 ~= nil and t9:get_map_object_id() == box9, "the task marker walked onto the box")
+check(t9 ~= nil and t9:get_map_location() == "storyline_task_location", "and it kept the storyline colour")
 -- the decoy: same section, never part of the plan
 mock.add_item("bread", true)
 mock.add_item("bread", true)
@@ -2236,6 +2252,48 @@ mock.go[body_id] = go_b
 mock.ticks(2)
 check(mock.se[body_id]:alive() == false, "put down once online")
 check(core.quest_state("mod_a.fresh").tokens.get.w.kos[body_id] == nil, "and no longer pending")
+if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z12) spot_objective
+-- The node re-points one STEP's marker, the override survives a save (steps are rebuilt
+-- from the declaration on load), and a manual task.set_target takes the marker back.
+section("(z12) spot_task + spot_objective: step marker, save, manual retarget wins")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+z12_zone = mock.add_restrictor("mod_a.esc_goal", vector():set(50, 0, 50), true, 5)
+mock.overrides["mod_a/steps.nqasset"] = [[return { nq = 1, id = "steps",
+  tasks = { walk = { title = "Walk", type = "storyline", target = { story = "esc_2_12_stalker_wolf" },
+            objectives = { { id = "go", title = "Go there" }, { id = "back", title = "Come back" } } } },
+  nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "task.give", params = { task = "walk" } } },
+	  out = { next = "r" } },
+	{ id = "r", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_goal" }, spot_task = "walk", spot_objective = "go" },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+z12_qs = core.quest_state("mod_a.steps")
+check(z12_qs and z12_qs.status == "active", "steps quest active")
+z12_t = mock.task_by_id("nq.mod_a.steps.walk")
+z12_o = z12_t and z12_t:get_objective(1)
+check(z12_o ~= nil and z12_o:get_map_object_id() == z12_zone.id, "the STEP marker walked onto the zone")
+check(z12_o:get_map_location() == "storyline_task_location", "with the task colour")
+check(z12_t:get_map_object_id() == wolf:id(), "the task's own marker still points at Wolf")
+-- the save: steps are rebuilt from the declaration, the override must win over it
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+z12_t = mock.task_by_id("nq.mod_a.steps.walk")
+z12_o = z12_t and z12_t:get_objective(1)
+check(z12_o ~= nil and z12_o:get_map_object_id() == z12_zone.id, "the step override survived the load")
+-- the author retargets by hand: the manual action owns the task marker again
+xms_nq_task.set_target(core.make_ctx("mod_a.steps", nil), "walk", { story = "esc_2_12_stalker_wolf" })
+check(core.quest_state("mod_a.steps").retg["walk"] == nil, "manual set_target dropped the task-level override")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ summary

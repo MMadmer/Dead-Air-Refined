@@ -378,7 +378,6 @@ local function fetch_reqs(p)
 	return nil
 end
 
-local FETCH_SPOT = "secondary_task_location"
 
 local function dist_to_actor(se)
 	local a = actor()
@@ -669,45 +668,27 @@ local function fetch_spot_targets(ctx)
 	return out
 end
 
-local function fetch_spot_add(ctx)
-	if (ctx.params.map_spot == false) then return end
-	local w = ctx.w
-	w.spots = w.spots or {}
-	local hint = ctx.params.spot_text and util.format_text(ctx, ctx.params.spot_text) or ""
-	for _, id in ipairs(fetch_spot_targets(ctx)) do
-		if not (w.spots[id]) then
-			local owned = false
-			pcall(function()
-				if (level.map_has_object_spot(id, FETCH_SPOT) == 0) then
-					level.map_add_object_spot(id, FETCH_SPOT, hint)
-					owned = true
-				end
-			end)
-			if (owned) then
-				w.spots[id] = true
-				core.mark_dirty()
-			end
+-- One marker, the task's own: while the node runs, the bound task/step points at the
+-- nearest pending target (host, container, carrier or loose item). Collected targets
+-- drop out of fetch_spot_targets, so the marker walks the list by itself. Nothing is
+-- removed at the end: like a manual retarget, completing the task/step is what takes
+-- the marker off the map - and the author wires that on the same pin anyway.
+local function fetch_spot_sync(ctx)
+	local p = ctx.params
+	if not (p.spot_task) then return end
+	local ids = fetch_spot_targets(ctx)
+	local a, best, bd = actor(), nil, nil
+	local ap = a and a:position()
+	for _, id in ipairs(ids) do
+		local se = util.se_by_id(id)
+		if (se) then
+			local d2 = ap and ap:distance_to_sqr(se.position) or 0
+			if not (best) or (d2 < bd) then best, bd = id, d2 end
 		end
 	end
-	-- a picked-up loose item takes its own marker with it
-	for id in pairs(w.spots) do
-		if (w.got and w.got[id]) then
-			pcall(function() level.map_remove_object_spot(id, FETCH_SPOT) end)
-			w.spots[id] = nil
-			core.mark_dirty()
-		end
-	end
+	if (best) then xms_nq_task.retarget(ctx, p.spot_task, p.spot_objective, best) end
 end
 
-local function fetch_spot_remove(ctx)
-	for id in pairs(ctx.w.spots or {}) do
-		pcall(function() level.map_remove_object_spot(id, FETCH_SPOT) end)
-	end
-	ctx.w.spots = nil
-end
-
--- new_corpse bodies are created alive (there is no dead-spawn) and are put down the moment
--- they come online - at switch distance, far outside the player's sight
 local function fetch_kill_pending(ctx)
 	local w = ctx.w
 	if not (w.kos) then return end
@@ -729,7 +710,7 @@ K["objective.fetch"] = {
 	begin = function(ctx)
 		if (ctx.params.spawn and not ctx.w.spawned) then fetch_make_loot(ctx) end
 		if (fetch_done(ctx)) then return { pin = "done" } end
-		fetch_spot_add(ctx)
+		fetch_spot_sync(ctx)
 		return "wait"
 	end,
 	-- the spawn form has work no event covers: healing, pending kills, late spots
@@ -738,7 +719,7 @@ K["objective.fetch"] = {
 		fetch_kill_pending(ctx)
 		if (ctx.params.spawn and ctx.w.spawned) then fetch_heal(ctx) end
 		if (fetch_done(ctx)) then return "done" end
-		fetch_spot_add(ctx)
+		fetch_spot_sync(ctx)
 		return nil
 	end,
 	on_event = function(ctx, evt)
@@ -750,12 +731,9 @@ K["objective.fetch"] = {
 		return nil
 	end,
 	load = function(ctx, w)
-		-- map spots are not serialized: put them back after a load or a level change
-		ctx.w.spots = nil
-		fetch_spot_add(ctx)
+		-- engine saves keep task markers; re-offer for the task that arrived late
+		fetch_spot_sync(ctx)
 	end,
-	finish = function(ctx, pin, external) fetch_spot_remove(ctx) end,
-	cancel = function(ctx) fetch_spot_remove(ctx) end,
 }
 
 local function reach_anchor_name(ctx) return ctx.node_id .. "_anchor" end
@@ -790,32 +768,26 @@ local function reach_spot_target(ctx)
 	return se.id
 end
 
--- ctx.w.spot_id is set only when THIS node put the spot there. Spots are keyed by (object id,
--- spot type) and `secondary_task_location` is shared with PDA tasks, so removing one we did not
--- add would take a live task's marker off the map.
-local function reach_spot_add(ctx)
-	if (ctx.params.map_spot == false) then return end
+-- Same contract as fetch: spot_task points the bound task's/step's marker at the
+-- place (its restrictor, smart, or the anchor a {pos} place spawned).
+local function reach_spot_sync(ctx)
+	local p = ctx.params
+	if not (p.spot_task) then return end
 	local id = reach_spot_target(ctx)
-	if not (id) then return end
-	local spot = "secondary_task_location"
-	local hint = ctx.params.spot_text and util.format_text(ctx, ctx.params.spot_text) or ""
-	local owned = false
-	pcall(function()
-		if (level.map_has_object_spot(id, spot) == 0) then
-			level.map_add_object_spot(id, spot, hint)
-			owned = true
-		end
-	end)
-	if (owned) then ctx.w.spot_id = id end
+	if (id) then
+		if (xms_nq_task.retarget(ctx, p.spot_task, p.spot_objective, id)) then ctx.w.sp = id end
+	end
 end
 
 local function reach_cleanup(ctx)
-	local id = ctx.w.spot_id
-	if (id) then
-		pcall(function() level.map_remove_object_spot(id, "secondary_task_location") end)
-		ctx.w.spot_id = nil
-	end
 	local rec = core.ref_get(ctx.qs, reach_anchor_name(ctx))
+	-- the marker may point at the anchor this node is about to release: a marker on a
+	-- dead id is nonsense, so that one case is cleared. A marker on anything that
+	-- outlives the node stays, like after a manual retarget.
+	if (rec and ctx.params.spot_task and ctx.w.sp == rec.id) then
+		pcall(xms_nq_task.retarget_clear, ctx, ctx.params.spot_task, ctx.params.spot_objective)
+		ctx.w.sp = nil
+	end
 	if (rec) then
 		local se = util.se_by_id(rec.id)
 		if (se) then pcall(function() alife():release(se, true) end) end
@@ -826,17 +798,18 @@ end
 K["objective.reach"] = {
 	begin = function(ctx)
 		if (util.place_contains_actor(ctx.params.place, ctx)) then return { pin = "done" } end
-		reach_spot_add(ctx)
+		reach_spot_sync(ctx)
 		return "wait"
 	end,
 	poll = function(ctx)
 		if (util.place_contains_actor(ctx.params.place, ctx)) then return "done" end
+		-- the bound task may enter the PDA after this node started - keep offering
+		reach_spot_sync(ctx)
 		return nil
 	end,
 	load = function(ctx, w)
-		-- map spots are not serialized: put it back after a load / level change
-		ctx.w.spot_id = nil
-		reach_spot_add(ctx)
+		-- engine saves keep task markers; this only re-offers when nothing took yet
+		reach_spot_sync(ctx)
 	end,
 	finish = function(ctx, pin, external) reach_cleanup(ctx) end,
 	cancel = function(ctx) reach_cleanup(ctx) end,

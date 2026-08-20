@@ -160,6 +160,44 @@ local function set_objective_status(ctx, task_name, oid, status)
 	core.mark_dirty()
 end
 
+-- Node-driven marker overrides (qs.retg): a node with spot_task re-points the task's
+-- or one step's marker at the node's target. The engine save keeps task markers, but
+-- steps are rebuilt from the declaration on load and give() refreshes a live task from
+-- it too - both would quietly put the marker back where the author's static decl says.
+-- The override remembers who owns the marker now. A manual task.set_target wins: it
+-- clears the override, the author took control back.
+local function retg_key(name, oid) return oid and (name .. "/" .. oid) or name end
+
+local function retg_get(ctx, name, oid)
+	local m = ctx.qs and ctx.qs.retg
+	local id = m and m[retg_key(name, oid)]
+	if (id and not util.se_by_id(id)) then
+		m[retg_key(name, oid)] = nil		-- the object died out of sight; the decl takes over
+		core.mark_dirty()
+		return nil
+	end
+	return id
+end
+
+local function retg_set(ctx, name, oid, id)
+	if not (ctx.qs) then return end
+	ctx.qs.retg = ctx.qs.retg or {}
+	if (ctx.qs.retg[retg_key(name, oid)] ~= id) then
+		ctx.qs.retg[retg_key(name, oid)] = id
+		core.mark_dirty()
+	end
+end
+
+local function retg_drop_task(ctx, name)
+	local m = ctx.qs and ctx.qs.retg
+	if not (m) then return end
+	local prefix = name .. "/"
+	for key in pairs(m) do
+		if (key == name or string.sub(key, 1, #prefix) == prefix) then m[key] = nil end
+	end
+	core.mark_dirty()
+end
+
 -- The engine's objective object, or nil when the task is not in the PDA.
 local function engine_objective(a, tid, index)
 	local t = get_task(a, tid, true)
@@ -171,7 +209,8 @@ end
 
 local function apply_objective_target(ctx, task_name, o, obj, spot, blink)
 	if not (obj) then return end
-	local id = o.target and target_object_id(ctx, task_name .. "/" .. o.id, o.target) or nil
+	local id = retg_get(ctx, task_name, o.id)
+		or (o.target and target_object_id(ctx, task_name .. "/" .. o.id, o.target) or nil)
 	if not (id) then return end
 	pcall(function()
 		obj:set_map_location(spot)
@@ -199,7 +238,7 @@ function give(ctx, name)
 	local target = d.target and target_object_id(ctx, name, d.target) or nil
 	if (existing) then
 		-- a live task only gets its fields refreshed (the engine refuses a second give)
-		if (target) then
+		if (target and not retg_get(ctx, name, nil)) then
 			pcall(function()
 				if (t:get_map_object_id() ~= target) then
 					t:remove_map_locations(false)
@@ -242,6 +281,7 @@ local function finish(ctx, name, status)
 	else
 		util.warn("%s: task %s is not in the PDA, state '%s' recorded only", ctx.uid, name, status)
 	end
+	retg_drop_task(ctx, name)
 	set_status(ctx, name, status)
 	-- The actor callback announces completion. Dynamic tasks bypass task_manager, so NQ owns failure news.
 	if (t and status == "failed") then send_news("fail", t) end
@@ -263,6 +303,7 @@ function remove(ctx, name)
 		pcall(a.set_task_state, a, task.fail, tid)
 	end
 	release_anchor(ctx.qs, name)
+	retg_drop_task(ctx, name)
 	if (ctx.qs) then
 		ctx.qs.tasks[name] = nil
 		core.mark_dirty()
@@ -273,6 +314,7 @@ function set_target(ctx, name, target)
 	local d = decl(ctx, name)
 	local a = actor()
 	if not (a) then error("task.set_target: no actor") end
+	retg_set(ctx, name, nil, nil)
 	local tid = task_id(ctx.uid, name)
 	local t = get_task(a, tid, true)
 	if not (t) then
@@ -307,6 +349,68 @@ function set_target(ctx, name, target)
 	t:change_map_location(spot, id)
 	ensure_blink(id, blink)
 	send_news("updated", t)
+end
+
+-- The built-in retarget of spot_task nodes. Points the task's marker (oid = nil) or
+-- the marker of one step at `id`, with the task's own spot type - storyline stays
+-- storyline-coloured, secondary stays secondary. Returns false while the task is not
+-- in the PDA yet: nodes poll and try again, because task.give may come later.
+function retarget(ctx, name, oid, id)
+	local d = decl(ctx, name)
+	local a = actor()
+	if not (a and id) then return false end
+	local t = get_task(a, task_id(ctx.uid, name), true)
+	if not (t) then return false end
+	local spot, blink = spot_of(d)
+	if (oid) then
+		local o = d.objectives and d.objectives[oid]
+		if not (o) then error("spot_objective: task '" .. name .. "' has no step '" .. tostring(oid) .. "'") end
+		-- a finished step keeps its outcome; re-pointing it would flip it back to running
+		if (objective_status(ctx, name, oid) ~= "active") then return true end
+		local obj = t:get_objective(o.index)
+		if not (obj) then return false end
+		local cur, loc = nil, nil
+		pcall(function() cur = obj:get_map_object_id() loc = obj:get_map_location() end)
+		if (cur ~= id or loc ~= spot) then
+			pcall(function() obj:change_map_location(spot, id) end)
+		end
+	else
+		local loc = nil
+		pcall(function() loc = t:get_map_location() end)
+		if (get_task_target(t) ~= id or loc ~= spot) then
+			t:remove_map_locations(false)
+			t:change_map_location(spot, id)
+			send_news("updated", t)
+		end
+	end
+	ensure_blink(id, blink)
+	retg_set(ctx, name, oid, id)
+	return true
+end
+
+-- Undo of retarget for the one case the node must clean up after itself: its marker
+-- points at an object the node is about to release (the reach anchor). Anything else
+-- keeps the marker - like a manual retarget, the next action decides what happens.
+function retarget_clear(ctx, name, oid)
+	retg_set(ctx, name, oid, nil)
+	local a = actor()
+	if not (a) then return end
+	local t = get_task(a, task_id(ctx.uid, name), true)
+	if not (t) then return end
+	if (oid) then
+		local d = decl(ctx, name)
+		local o = d.objectives and d.objectives[oid]
+		local obj = o and t:get_objective(o.index)
+		if (obj) then pcall(function() obj:remove_map_locations(false) end) end
+	else
+		local d = decl(ctx, name)
+		local spot, blink = spot_of(d)
+		local prev = get_task_target(t)
+		if not (prev) then return end
+		t:remove_map_locations(false)
+		pcall(level.map_remove_object_spot, prev, blink)
+		pcall(level.map_remove_object_spot, prev, spot)
+	end
 end
 
 function set_text(ctx, name, title, descr)
