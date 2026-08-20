@@ -569,6 +569,13 @@ local function build_p1()
 		check("b.task_completed", nqst == "completed" and active == nil and any ~= nil,
 			"task.complete: nq record=%s, engine still lists it as active=%s, task still in the PDA=%s",
 			tostring(nqst), tostring(active ~= nil), tostring(any ~= nil))
+		-- nobody closed that step by hand: the fetch node is bound to it with
+		-- spot_task/spot_objective and spot_done closes it on the way out
+		local qs = qstate("linear_fetch")
+		local per = qs and qs.objectives and qs.objectives["bring_bread"]
+		check("b.step_auto_closed", per ~= nil and per["find"] == "completed",
+			"spot_done closed the bound step by itself: state=%s",
+			tostring(per and per["find"]))
 		return true
 	end, { timeout = 15000 })
 

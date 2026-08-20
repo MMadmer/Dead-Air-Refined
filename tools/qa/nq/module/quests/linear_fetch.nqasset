@@ -31,12 +31,12 @@ return {
       out = { next = "fetch" } },
 
     { id = "fetch", kind = "objective.fetch",
-      params = { section = "bread", count = 2 },
+      -- шаг привязан к ноде: его закрывает spot_done (включён по умолчанию), а не ручное task.objective_complete
+      params = { section = "bread", count = 2, spot_task = "bring_bread", spot_objective = "find" },
       out = { done = "reward" } },
 
     { id = "reward", kind = "flow.step",
       on_enter = {
-        { kind = "task.objective_complete", params = { task = "bring_bread", objective = "find" } },
         { kind = "task.set_objective_visible", params = { task = "bring_bread", objective = "deliver", visible = true } },
         { kind = "item.take", params = { section = "bread", count = 2 } },
         { kind = "item.give", params = { section = "medkit", count = 1 } },
