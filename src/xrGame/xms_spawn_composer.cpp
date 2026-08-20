@@ -377,6 +377,23 @@ void CALifeSpawnRegistry::xms_compose()
             if (pcstr story = op.value("story_id"))
                 alife_object->m_story_id = (u32(m.ns) << 16) | (u32(atoi(story)) & 0xFFFF);
 
+            // A physic entity with no visual crashes the client inside net_Spawn:
+            // Center() reads a null renderable. A broken module must cost an error
+            // line, not the new game.
+            if (smart_cast<CSE_ALifeObjectPhysic*>(abstract))
+            {
+                CSE_Visual* visual_check = smart_cast<CSE_Visual*>(abstract);
+                pcstr v = visual_check ? visual_check->get_visual() : nullptr;
+                if (!v || !*v)
+                {
+                    Msg("! XMS: [%s] add %s: section [%s] has no visual - skipped, it would crash at spawn",
+                        m.id.c_str(), op.name.c_str(), section);
+                    F_entity_Destroy(abstract);
+                    ++failed;
+                    continue;
+                }
+            }
+
             m_spawns.add_vertex(xr_new<CServerEntityWrapper>(abstract), ALife::_SPAWN_ID(spawn_id));
             ++added;
         }
