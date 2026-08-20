@@ -1,4 +1,4 @@
-#include "StdAfx.h"
+﻿#include "StdAfx.h"
 
 // XMS spawn composer: applies module .xspawn layers on top of the freshly
 // loaded base spawn graph. Base spawn ids never move; module vertices live in
@@ -6,6 +6,7 @@
 
 #include "alife_spawn_registry.h"
 #include "xrServerEntities/xrServer_Objects.h"		// CSE_Shape: restrictors carry their geometry
+#include "xrServerEntities/xrServer_Objects_ALife.h"	// CSE_ALifeObjectPhysic: fixed_bones
 #include "xms_game.h"
 #include "xrCore/XMS/xms_core.h"
 
@@ -360,6 +361,12 @@ void CALifeSpawnRegistry::xms_compose()
             if (pcstr profile = op.value("character_profile"))
                 if (CSE_ALifeTraderAbstract* trader = smart_cast<CSE_ALifeTraderAbstract*>(abstract))
                     trader->set_character_profile(profile);
+
+            // the editor's Model\Fixed bones chooser: without it a placed prop is a
+            // free physics body and slides off the spot the author nailed it to
+            if (pcstr fixed = op.value("fixed_bones"))
+                if (CSE_ALifeObjectPhysic* physic = smart_cast<CSE_ALifeObjectPhysic*>(abstract))
+                    physic->fixed_bones = fixed;
 
             if (pcstr custom = op.value("custom_data"))
             {
