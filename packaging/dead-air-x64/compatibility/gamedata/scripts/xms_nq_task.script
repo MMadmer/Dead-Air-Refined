@@ -465,6 +465,29 @@ end
 function objective_complete(ctx, name, oid) finish_objective(ctx, name, oid, "completed") end
 function objective_fail(ctx, name, oid) finish_objective(ctx, name, oid, "failed") end
 
+-- A node that borrowed a task's marker closes what it borrowed: once the thing the
+-- marker pointed at is done, the step has nothing left to say. Author turns it off with
+-- spot_done = false when several nodes feed one step and only the last one ends it.
+-- Runs before the node's own on_exit actions, so a hand-written task.complete there
+-- still lands - on an already closed task it would double the news, hence the guard.
+function spot_finish(ctx, pin, external)
+	local p = ctx.params
+	if (external or pin ~= "done") then return end
+	if not (p.spot_task) then return end
+	if (p.spot_done == false) then return end
+	local qs = ctx.qs
+	if (p.spot_objective) then
+		local per = qs and qs.objectives and qs.objectives[p.spot_task]
+		local st = per and per[p.spot_objective]
+		if (st == "completed" or st == "failed") then return end
+		objective_complete(ctx, p.spot_task, p.spot_objective)
+	else
+		local st = qs and qs.tasks and qs.tasks[p.spot_task]
+		if (st == "completed" or st == "failed") then return end
+		complete(ctx, p.spot_task)
+	end
+end
+
 -- Same contract as the task's own target: no target clears the step's marker.
 function set_objective_target(ctx, name, oid, target)
 	local d, o = decl_objective(ctx, name, oid)

@@ -734,6 +734,7 @@ K["objective.fetch"] = {
 		-- engine saves keep task markers; re-offer for the task that arrived late
 		fetch_spot_sync(ctx)
 	end,
+	finish = function(ctx, pin, external) xms_nq_task.spot_finish(ctx, pin, external) end,
 }
 
 local function reach_anchor_name(ctx) return ctx.node_id .. "_anchor" end
@@ -811,7 +812,10 @@ K["objective.reach"] = {
 		-- engine saves keep task markers; this only re-offers when nothing took yet
 		reach_spot_sync(ctx)
 	end,
-	finish = function(ctx, pin, external) reach_cleanup(ctx) end,
+	finish = function(ctx, pin, external)
+		reach_cleanup(ctx)
+		xms_nq_task.spot_finish(ctx, pin, external)
+	end,
 	cancel = function(ctx) reach_cleanup(ctx) end,
 }
 

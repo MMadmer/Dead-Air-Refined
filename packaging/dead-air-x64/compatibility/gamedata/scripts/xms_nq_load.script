@@ -826,6 +826,9 @@ local function check_spot_form(st, nid, raw)
 	if (raw.spot_objective ~= nil and raw.spot_task == nil) then
 		problem(st.problems, "E022", nid, "param:spot_objective", "spot_objective needs spot_task")
 	end
+	if (raw.spot_done ~= nil and raw.spot_task == nil) then
+		problem(st.problems, "E022", nid, "param:spot_done", "spot_done needs spot_task")
+	end
 end
 
 KIND_FORM["objective.fetch"] = function(st, nid, raw, params)

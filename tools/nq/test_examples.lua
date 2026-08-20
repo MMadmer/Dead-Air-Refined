@@ -2296,6 +2296,111 @@ xms_nq_task.set_target(core.make_ctx("mod_a.steps", nil), "walk", { story = "esc
 check(core.quest_state("mod_a.steps").retg["walk"] == nil, "manual set_target dropped the task-level override")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z13) spot_done
+-- A node that borrowed a task's marker closes what it borrowed. On by default, so the bound
+-- step ends when the thing its marker pointed at is done; spot_done = false hands the step
+-- to a later node instead. And a step somebody already closed is not closed twice - the
+-- second close would announce the same update to the player again.
+section("(z13) spot_done: the bound step closes itself, false leaves it open")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.add_restrictor("esc_done_a", vector():set(0, 0, 0), true, 4)
+mock.add_restrictor("esc_done_b", vector():set(80, 0, 80), true, 4)
+mock.overrides["mod_a/sdone.nqasset"] = [[return { nq = 1, id = "sdone",
+  tasks = { walk = { title = "Walk", type = "storyline",
+            objectives = { { id = "go", title = "Go there" }, { id = "back", title = "Come back" } } } },
+  nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "task.give", params = { task = "walk" } } },
+	  out = { next = "a" } },
+	{ id = "a", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_done_a" }, spot_task = "walk", spot_objective = "go" },
+	  out = { done = "b" } },
+	{ id = "b", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_done_b" }, spot_task = "walk", spot_objective = "back", spot_done = false },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.move_actor(50, 0, 50)
+mock.first_update()
+core = xms_nq
+mock.ticks(2)
+z13_qs = core.quest_state("mod_a.sdone")
+check(z13_qs ~= nil and z13_qs.status == "active", "sdone quest active")
+check(z13_qs.objectives.walk == nil or z13_qs.objectives.walk.go == nil or z13_qs.objectives.walk.go == "active",
+	"the bound step starts open")
+mock.move_actor(1, 0, 1)
+mock.ticks(2)
+z13_qs = core.quest_state("mod_a.sdone")
+check(z13_qs.objectives.walk and z13_qs.objectives.walk.go == "completed", "the bound step closed itself")
+check(z13_qs.tokens.b ~= nil, "the next node took over")
+check(z13_qs.tasks.walk == "active", "the task itself is untouched - only the step was bound")
+mock.move_actor(80, 0, 80)
+mock.ticks(2)
+z13_qs = core.quest_state("mod_a.sdone")
+check(core.quest_status("mod_a.sdone") == "completed", "the second node closed too")
+check(z13_qs.objectives.walk.back ~= "completed", "spot_done = false left its step for somebody else")
+if (failed > 0) then fail_dump() end
+
+-- The whole task, not a step: no spot_objective means the marker - and the closing - belong
+-- to the task itself. And the second node bound to a step that is already closed says nothing.
+section("(z13) spot_done: task-level close, and no second announcement for a closed step")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.add_restrictor("esc_done_c", vector():set(0, 0, 0), true, 4)
+mock.add_restrictor("esc_done_d", vector():set(80, 0, 80), true, 4)
+mock.overrides["mod_a/sdone2.nqasset"] = [[return { nq = 1, id = "sdone2",
+  tasks = { hunt = { title = "Hunt", type = "storyline",
+            objectives = { { id = "one", title = "One" } } },
+            plain = { title = "Plain", type = "storyline" } },
+  nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "task.give", params = { task = "hunt" } },
+	               { kind = "task.give", params = { task = "plain" } } },
+	  out = { next = "c" } },
+	{ id = "c", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_done_c" }, spot_task = "hunt", spot_objective = "one" },
+	  out = { done = "d" } },
+	{ id = "d", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_done_d" }, spot_task = "hunt", spot_objective = "one" },
+	  out = { done = "e" } },
+	{ id = "e", kind = "objective.reach",
+	  params = { place = { restrictor = "esc_done_c" }, spot_task = "plain" },
+	  out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.move_actor(50, 0, 50)
+mock.first_update()
+core = xms_nq
+-- count the closes themselves: news cannot be counted here, because moving a marker
+-- announces "task updated" too and the second node moves it on the way in
+z13_closes = 0
+z13_orig = xms_nq_task.objective_complete
+xms_nq_task.objective_complete = function(...)
+	z13_closes = z13_closes + 1
+	return z13_orig(...)
+end
+mock.ticks(2)
+mock.move_actor(1, 0, 1)
+mock.ticks(2)
+z13_qs = core.quest_state("mod_a.sdone2")
+check(z13_qs.objectives.hunt and z13_qs.objectives.hunt.one == "completed", "step closed by the first node")
+check(z13_closes == 1, "closed exactly once")
+mock.move_actor(80, 0, 80)
+mock.ticks(2)
+z13_qs = core.quest_state("mod_a.sdone2")
+check(z13_qs.tokens.d == nil, "the second node bound to the same step ran and closed")
+check(z13_closes == 1, "it did not close the step again - it was already closed")
+xms_nq_task.objective_complete = z13_orig
+mock.move_actor(1, 0, 1)
+mock.ticks(2)
+check(core.quest_state("mod_a.sdone2").tasks.plain == "completed", "spot_task with no step closes the whole task")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

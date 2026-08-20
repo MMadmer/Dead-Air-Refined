@@ -400,6 +400,7 @@ K["objective.kill"] = {
 		if (kill_done(ctx)) then return "done" end
 		return nil
 	end,
+	finish = function(ctx, pin, external) xms_nq_task.spot_finish(ctx, pin, external) end,
 }
 
 -- ---------------------------------------------------------------------------- objective.kill_count
