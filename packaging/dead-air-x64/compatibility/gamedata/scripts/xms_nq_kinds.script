@@ -486,6 +486,8 @@ local function fetch_make_loot(ctx)
 	local w, p = ctx.w, ctx.params
 	local sp, reqs = p.spawn, fetch_reqs(p)
 	for _, r in ipairs(reqs) do
+		-- the loader refuses this combination, but a hand-built state must not crash the node
+		if (r.item) then error("fetch spawn: a concrete-object row cannot be spawned") end
 		local ok, exists = pcall(function() return system_ini():section_exist(r.section) end)
 		if (ok and exists == false) then error("fetch spawn: item section '" .. tostring(r.section) .. "' does not exist") end
 	end
@@ -594,6 +596,10 @@ local function fetch_from_done(ctx)
 	end
 	local done = true
 	for _, r in ipairs(fetch_reqs(p)) do
+		-- a concrete-object row is already its own proof: it either sits on the actor or not
+		if (r.item) then
+			if not (held_by_actor(util.resolve_target_id(ctx, r.item))) then done = false end
+		else
 		local f = w.fs[r.section]
 		if not (f) then
 			f = { seen = {}, got = {}, n = 0 }
@@ -620,17 +626,19 @@ local function fetch_from_done(ctx)
 			end
 		end
 		if (f.n < (r.count or 1)) then done = false end
+		end
 	end
 	return done
 end
 
 local function fetch_done(ctx)
 	local p = ctx.params
-	if (p.item) then return held_by_actor(util.resolve_target_id(ctx, p.item)) end
 	if (p.spawn) then return ctx.w.spawned and fetch_spawn_done(ctx) or false end
 	if (p.from) then return fetch_from_done(ctx) end
 	for _, r in ipairs(fetch_reqs(p) or {}) do
-		if (util.count_items(r.section) < (r.count or 1)) then return false end
+		if (r.item) then
+			if not (held_by_actor(util.resolve_target_id(ctx, r.item))) then return false end
+		elseif (util.count_items(r.section) < (r.count or 1)) then return false end
 	end
 	return true
 end
@@ -648,11 +656,15 @@ local function fetch_spot_targets(ctx)
 				if not (w.got[id]) then out[#out + 1] = id end
 			end
 		end
-	elseif (p.from) then
-		if (w.cid) then out[#out + 1] = w.cid end
-	elseif (p.item) then
-		local id = util.resolve_target_id(ctx, p.item)
-		if (id) then out[#out + 1] = util.top_owner(id) end
+		return out
+	end
+	if (p.from and w.cid) then out[#out + 1] = w.cid end
+	-- a concrete-object row is findable: mark whatever carries it right now
+	for _, r in ipairs(fetch_reqs(p) or {}) do
+		if (r.item) then
+			local id = util.resolve_target_id(ctx, r.item)
+			if (id and not held_by_actor(id)) then out[#out + 1] = util.top_owner(id) end
+		end
 	end
 	return out
 end
@@ -733,7 +745,7 @@ K["objective.fetch"] = {
 		-- the single-section form only cares about its own section; every other form has to
 		-- look at each pickup, because the event carries no clue where the item came from
 		local p = ctx.params
-		if (p.item == nil and p.from == nil and p.spawn == nil and p.items == nil and evt.section ~= p.section) then return nil end
+		if (p.from == nil and p.spawn == nil and p.items == nil and evt.section ~= p.section) then return nil end
 		if (fetch_done(ctx)) then return "done" end
 		return nil
 	end,

@@ -1334,12 +1334,15 @@ end
 mock.overrides["mod_a/f_item.nqasset"] = [[return { nq = 1, id = "f_item", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "make" } },
 	{ id = "make", kind = "flow.step", on_enter = { { kind = "item.spawn", params = { section = "bread", place = { level = "l01_escape", pos = { 10, 0, 10 } }, ref = "prize" } } }, out = { next = "get" } },
-	{ id = "get", kind = "objective.fetch", params = { item = { ref = "prize" } }, out = { done = "fin" } },
+	{ id = "get", kind = "objective.fetch", params = { items = { { item = { ref = "prize" } } } }, out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
+-- a mixed list: THE document plus two medkits of any origin, one node
 mock.overrides["mod_a/f_story.nqasset"] = [[return { nq = 1, id = "f_story", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "get" } },
-	{ id = "get", kind = "objective.fetch", params = { item = { story = "quest_doc" } }, out = { done = "fin" } },
+	{ id = "get", kind = "objective.fetch",
+	  params = { items = { { item = { story = "quest_doc" } }, { section = "medkit", count = 2 } } },
+	  out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
 mock.overrides["mod_a/f_from.nqasset"] = [[return { nq = 1, id = "f_from", nodes = {
@@ -1349,7 +1352,7 @@ mock.overrides["mod_a/f_from.nqasset"] = [[return { nq = 1, id = "f_from", nodes
 } }]]
 mock.overrides["mod_a/f_plain.nqasset"] = [[return { nq = 1, id = "f_plain", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "get" } },
-	{ id = "get", kind = "objective.fetch", params = { section = "medkit", count = 2 }, out = { done = "fin" } },
+	{ id = "get", kind = "objective.fetch", params = { section = "vodka", count = 2 }, out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
 local stash = mock.add_container("inventory_box", "wolf_stash")
@@ -1376,10 +1379,14 @@ check(tok_of(UFF, "loot") ~= nil and (tok_of(UFF, "loot").w.fs.bread.n or 0) == 
 mock.pick_up(mock.se[prize_id], true)
 mock.ticks(2)
 check(core.quest_status(UFI) == "completed", "picking up that exact object completes fetch by item")
-check(tok_of(UFS, "get") ~= nil, "fetch by story item still waits")
+check(tok_of(UFS, "get") ~= nil, "the mixed list still waits")
 mock.pick_up(doc, true)
 mock.ticks(2)
-check(core.quest_status(UFS) == "completed", "the story object in the inventory completes it")
+check(tok_of(UFS, "get") ~= nil, "THE document alone is not enough - the medkit line is open")
+mock.add_item("medkit", true)
+mock.add_item("medkit", true)
+mock.ticks(2)
+check(core.quest_status(UFS) == "completed", "the concrete object plus two medkits of any origin complete the one node")
 -- looting the container itself
 mock.loot(stash, "bread", true)
 mock.ticks(2)
@@ -1402,10 +1409,10 @@ mock.ticks(2)
 check(core.quest_status(UFF) == "completed", "the second loaf from the stash completes it")
 -- and the original form is exactly what it was
 check(tok_of(UFP, "get") ~= nil, "plain section+count fetch waiting")
-mock.add_item("medkit", true)
+mock.add_item("vodka", true)
 mock.ticks(2)
-check(tok_of(UFP, "get") ~= nil, "one medkit is not enough")
-mock.add_item("medkit", true)
+check(tok_of(UFP, "get") ~= nil, "one bottle is not enough")
+mock.add_item("vodka", true)
 mock.ticks(2)
 check(core.quest_status(UFP) == "completed", "plain section+count fetch behaves as before")
 -- E022: the forms are mutually exclusive and one of them is required
@@ -1421,12 +1428,14 @@ local function fetch_codes(params)
 end
 check(fetch_codes([[{ section = "bread", count = 2 }]]).E022 == nil, "section+count is a valid form")
 check(fetch_codes([[{ section = "bread", from = { story = "box" } }]]).E022 == nil, "section+from is a valid form")
-check(fetch_codes([[{ item = { story = "doc" } }]]).E022 == nil, "item alone is a valid form")
-check(fetch_codes([[{ item = { story = "doc" }, section = "bread" }]]).E022 == 1, "item + section -> E022")
-check(fetch_codes([[{ item = { story = "doc" }, count = 2 }]]).E022 == 1, "item + count -> E022")
-check(fetch_codes([[{ item = { story = "doc" }, from = { story = "box" } }]]).E022 == 1, "item + from -> E022")
-check(fetch_codes([[{ from = { story = "box" } }]]).E022 == 1, "from without section -> E022")
-check(fetch_codes([[{ item = "doc" }]]).E006 == 1, "item must be {ref=} or {story=} -> E006")
+check(fetch_codes([[{ items = { { item = { story = "doc" } } } }]]).E022 == nil, "a concrete-object row alone is a valid form")
+check(fetch_codes([[{ items = { { item = { story = "doc" } }, { section = "medkit", count = 2 } } }]]).E022 == nil, "a mixed list is a valid form")
+check(fetch_codes([[{ item = { story = "doc" } }]]).E006 == 1, "the old top-level item is named as gone -> E006")
+check(fetch_codes([[{ section = "bread", items = { { section = "medkit" } } }]]).E022 == 1, "section next to items -> E022")
+check(fetch_codes([[{ items = { { section = "bread" } }, count = 2 }]]).E022 == 1, "count next to items -> E022")
+check(fetch_codes([[{ from = { story = "box" } }]]).E022 == 1, "from without a form -> E022")
+check(fetch_codes([[{ items = { { item = { story = "doc" } } }, spawn = { place = { level = "l01_escape", pos = { 0, 0, 0 } } } }]]).E022 == 1, "spawn over a concrete-object row -> E022")
+check(fetch_codes([[{ items = { { item = { story = "doc" }, section = "bread" } } }]]).E006 == 1, "a row with both kinds at once -> E006")
 if (failed > 0) then fail_dump() end
 
 -- ============================================================================ (x) objective.kill_count

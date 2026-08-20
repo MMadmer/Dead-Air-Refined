@@ -458,15 +458,24 @@ local function valid_spawn_spec(v)
 	return true
 end
 
--- items: a non-empty array of { section = "...", count = N } - several kinds at once
+-- items: a non-empty array of rows. A row is either { section = "...", count = N } (any items
+-- of the kind) or { item = { ref= | story= } } (one concrete object) - the two mix freely.
 local function valid_item_list(v)
 	if (type(v) ~= "table" or #v == 0) then return false end
 	local seen = {}
 	for _, e in ipairs(v) do
-		if (type(e) ~= "table" or type(e.section) ~= "string" or e.section == "") then return false end
-		if (e.count ~= nil and not (is_int(e.count) and e.count >= 1)) then return false end
-		if (seen[e.section]) then return false end	-- one line per section, or the counts are ambiguous
-		seen[e.section] = true
+		if (type(e) ~= "table") then return false end
+		local has_section = type(e.section) == "string" and e.section ~= ""
+		local has_item = e.item ~= nil
+		if (has_section == has_item) then return false end	-- exactly one per row
+		if (has_item) then
+			if not (valid_object_ref(e.item)) then return false end
+			if (e.count ~= nil) then return false end		-- a concrete object IS one
+		else
+			if (e.count ~= nil and not (is_int(e.count) and e.count >= 1)) then return false end
+			if (seen[e.section]) then return false end	-- one line per section, or the counts are ambiguous
+			seen[e.section] = true
+		end
 	end
 	return true
 end
@@ -807,27 +816,27 @@ end
 local KIND_FORM = {}
 
 KIND_FORM["objective.fetch"] = function(st, nid, raw, params)
-	local forms = {}
-	for _, name in ipairs({ "section", "items", "item" }) do
-		if (raw[name] ~= nil) then forms[#forms + 1] = name end
-	end
-	if (#forms == 0) then
-		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs section, items or item - one of them")
-	elseif (#forms > 1) then
-		problem(st.problems, "E022", nid, "param:" .. forms[2], "%s and %s are different forms and cannot be combined", forms[1], forms[2])
-	end
 	if (raw.item ~= nil) then
-		for _, name in ipairs({ "count", "from", "spawn" }) do
-			if (raw[name] ~= nil) then
-				problem(st.problems, "E022", nid, "param:item", "item is one concrete object and cannot be combined with %s", name)
-			end
-		end
+		problem(st.problems, "E006", nid, "param:item", "the separate 'item' parameter is gone - use an items row { item = { ref = ... } }")
+	end
+	if (raw.section == nil and raw.items == nil) then
+		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs section or items")
+	elseif (raw.section ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, "param:items", "section is the one-line spelling of items - use one of them")
 	end
 	if (raw.count ~= nil and raw.items ~= nil) then
 		problem(st.problems, "E022", nid, "param:count", "count belongs to section - the items list carries its own counts")
 	end
 	if (raw.from ~= nil and raw.spawn ~= nil) then
 		problem(st.problems, "E022", nid, "param:from", "spawn already decides where the loot is - from would watch a second container")
+	end
+	if (raw.spawn ~= nil and type(params.items) == "table") then
+		for _, e in ipairs(params.items) do
+			if (type(e) == "table" and e.item ~= nil) then
+				problem(st.problems, "E022", nid, "param:spawn", "spawn creates its own instances - a concrete-object row cannot be combined with it")
+				break
+			end
+		end
 	end
 end
 
