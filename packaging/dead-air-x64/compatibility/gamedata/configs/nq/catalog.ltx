@@ -25,8 +25,8 @@ api     = 1
 ; ============================================================ triggers
 [nq.trigger.start]
 group  = triggers
-title  = Старт квеста
-desc   = Срабатывает один раз при активации квеста
+title  = Quest start
+desc   = Fires once when the quest activates.
 use    = trigger
 params =
 pins   = next
@@ -37,8 +37,8 @@ since  = 1
 
 [nq.trigger.when]
 group  = triggers
-title  = Когда выполнены условия
-desc   = Срабатывает на восходящем фронте условий ноды (cond). repeat перевзводит после того как условия снова ложны, cooldown ограничивает частоту, check_every — как часто проверять условия (секунды. 0 — каждый кадр). Пин off даёт нисходящий фронт — по одному разу на каждое срабатывание next, когда условия перестали выполняться (например чтобы снять метку). Пока off не выдан, квест не завершается сам. Неподключённый off ничего не меняет.
+title  = When conditions hold
+desc   = Fires on the rising edge of the node conditions. repeat re-arms after they turn false, cooldown limits the rate, check_every sets the poll period. The off pin fires once per trigger when the conditions stop holding.
 use    = trigger
 params   = repeat, cooldown, check_every
 repeat   = bool, default=false
@@ -53,8 +53,8 @@ since  = 1
 ; ============================================================ main: dialog
 [nq.dialog.topic]
 group  = dialog
-title  = Диалог: тема
-desc   = Тема разговора у NPC. Пока токен на ноде и cond истинны, тема есть в списке. next - фразы, done - когда сказана листовая фраза
+title  = Dialog: topic
+desc   = Adds a talk topic to the NPC while the node token and conditions hold. next: phrases, done: a leaf phrase was said.
 use    = main
 params    = npc, text, initiator
 npc       = npc_ref, required
@@ -68,8 +68,8 @@ since  = 1
 
 [nq.dialog.npc_phrase]
 group  = dialog
-title  = Диалог: реплика NPC
-desc   = Реплика собеседника. cond ноды - условие показа. Первая по порядку реплика с истинным условием произносится
+title  = Dialog: NPC phrase
+desc   = NPC line. Node conditions gate visibility, the first matching phrase is spoken.
 use    = main
 params = text
 text   = text, required
@@ -81,8 +81,8 @@ since  = 1
 
 [nq.dialog.actor_phrase]
 group  = dialog
-title  = Диалог: реплика игрока
-desc   = Вариант ответа игрока. cond ноды - условие показа
+title  = Dialog: player phrase
+desc   = Player reply option. Node conditions gate visibility.
 use    = main
 params = text
 text   = text, required
@@ -95,8 +95,8 @@ since  = 1
 ; ============================================================ main: objectives
 [nq.objective.kill]
 group  = objective
-title  = Убить цель
-desc   = Ждёт смерти цели: NPC по story id, ранее созданный ref, или отряд из spawn (создаётся при входе и запоминается под ref). spot_task ведёт маркер задачи (с spot_objective — маркер её подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. Пусто — нода метку не трогает. Для отряда из spawn это единственный способ показать игроку, куда идти spot_done - завершать привязанную задачу или подзадачу самой, когда нода закрылась - по умолчанию да
+title  = Kill target
+desc   = Waits for the target to die: an NPC by story id, a saved ref, or a squad from spawn (created on entry, saved under ref). spot_task points the bound task marker (spot_objective: its objective) at the target. spot_done completes the bound task or objective when the node closes.
 use    = main
 params    = target, by_actor, spot_task, spot_objective, spot_done
 target    = kill_target, required
@@ -112,8 +112,8 @@ since  = 1
 
 [nq.objective.kill_count]
 group  = objective
-title  = Убить N целей
-desc   = Считает убийства, пока их не наберётся count. Отсчёт идёт с входа в ноду, счётчик переживает сохранение. by_actor засчитывает только убитых игроком. Фильтр необязателен, но больше одного сразу нельзя: community группировка жертвы, squad отряд (ref или story), section секция NPC. Без фильтра считается любая смерть NPC
+title  = Kill N targets
+desc   = Counts kills from node entry until count is reached, survives saves. by_actor counts only player kills. Optional single filter: community, squad, or section.
 use    = main
 params    = count, by_actor, community, squad, section
 count     = int, default=1, min=1
@@ -129,8 +129,8 @@ since  = 2
 
 [nq.objective.fetch]
 group  = objective
-title  = Добыть предмет
-desc   = Ждёт, пока предметы окажутся у игрока. Что нести задаёт СПИСОК items: каждая строка — либо секция со своим количеством, либо один конкретный объект (ref или story id). Виды строк можно смешивать: «принеси ТУ САМУЮ флешку и три аптечки» — одна нода. section+count — краткая запись списка из одной строки. from — засчитывать только взятое из ЭТОГО контейнера (для строк-секций): такой же предмет из другого места не считается. spawn — нода САМА создаёт предметы при входе (на земле, в конкретном ящике или у объекта, в случайном тайнике по фильтрам, у живого NPC, в существующем или в новом трупе) и засчитывает только эти экземпляры — уничтоженный пересоздаётся, квест не встаёт. spot_task ведёт маркер задачи (с spot_objective — маркер её подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. Пусто — нода метку не трогает: из непринесённого метится ближайшая цель (тайник, носитель, предмет), собранное из учёта выпадает. count — штуки предметов: для патронов это коробки, а не патроны spot_done - завершать привязанную задачу или подзадачу самой, когда нода закрылась - по умолчанию да
+title  = Fetch items
+desc   = Waits until the player holds the items. items rows: a section with a count, or one concrete object (ref or story id), mixed freely. section+count is the one-row shorthand. from credits only items taken from that container. spawn creates the loot on entry and credits only those instances. spot_task (spot_objective: its objective) points the bound marker at the nearest pending source. spot_done completes the bound task or objective on close. count is in items (ammo: boxes).
 use    = main
 params    = section, count, items, from, spawn, spot_task, spot_objective, spot_done
 section   = item_section
@@ -149,8 +149,8 @@ since  = 1
 
 [nq.objective.reach]
 group  = objective
-title  = Дойти до места
-desc   = Ждёт, пока игрок окажется в месте (точка с радиусом, рестриктор, смарт или ref объекта, созданного этим квестом). spot_task ведёт маркер задачи (с spot_objective — маркер её подзадачи) на цель ноды: цвет задачи, без отдельной белой метки. Пусто — нода метку не трогает spot_done - завершать привязанную задачу или подзадачу самой, когда нода закрылась - по умолчанию да
+title  = Reach location
+desc   = Waits until the player is inside the place: a point with radius, a restrictor, a smart, or a ref created by this quest. spot_task (spot_objective: its objective) points the bound marker. spot_done completes it on close.
 use    = main
 params    = place, spot_task, spot_objective, spot_done
 place     = place, required
@@ -166,8 +166,8 @@ since  = 1
 ; ============================================================ main: wait
 [nq.wait.timer]
 group  = wait
-title  = Подождать
-desc   = Ждёт заданное время: игровое (game_hours, game_minutes) или реальное (seconds)
+title  = Wait
+desc   = Waits for game time (game_hours, game_minutes) or real seconds.
 use    = main
 params   = duration
 duration = duration, required
@@ -179,8 +179,8 @@ since  = 1
 
 [nq.wait.when]
 group  = wait
-title  = Ждать условия
-desc   = Ждёт, пока условия ноды (cond) станут истинны. timeout - необязательный предел ожидания
+title  = Wait for conditions
+desc   = Waits until the node conditions hold. timeout is an optional limit.
 use    = main
 params  = timeout
 timeout = duration
@@ -192,8 +192,8 @@ since  = 1
 
 [nq.wait.any]
 group  = wait
-title  = Ждать одно из
-desc   = Несколько именованных наборов условий, срабатывает первый истинный. Каждый кейс - свой выход
+title  = Wait for any
+desc   = Several named condition sets, the first one to hold wins. Each case is an output pin.
 use    = main
 params = cases
 cases  = cases_cond, required
@@ -206,8 +206,8 @@ since  = 1
 ; ============================================================ main: flow
 [nq.flow.branch]
 group  = flow
-title  = Ветвление
-desc   = Мгновенно выбирает первый кейс с истинными условиями, иначе else
+title  = Branch
+desc   = Instantly takes the first case whose conditions hold, otherwise else.
 use    = main
 params = cases
 cases  = cases_cond, required
@@ -219,8 +219,8 @@ since  = 1
 
 [nq.flow.random]
 group  = flow
-title  = Случайный выбор
-desc   = Мгновенно выбирает кейс случайно с учётом весов
+title  = Random choice
+desc   = Instantly picks a case at random, honoring weights.
 use    = main
 params = cases
 cases  = cases_weight, required
@@ -232,8 +232,8 @@ since  = 1
 
 [nq.flow.join]
 group  = flow
-title  = Дождаться всех
-desc   = Пропускает дальше, когда пришли токены по всем входящим рёбрам
+title  = Join
+desc   = Passes through once tokens arrived over every incoming edge.
 use    = main
 params =
 pins   = next
@@ -244,8 +244,8 @@ since  = 1
 
 [nq.flow.step]
 group  = flow
-title  = Шаг
-desc   = Пустое основное действие: только on_enter и on_exit
+title  = Step
+desc   = Empty main action: on_enter and on_exit only.
 use    = main
 params =
 pins   = next
@@ -256,8 +256,8 @@ since  = 1
 
 [nq.flow.end]
 group  = flow
-title  = Конец квеста
-desc   = Завершает квест со статусом. restart сбрасывает состояние и активирует квест заново
+title  = Quest end
+desc   = Ends the quest with the given status. restart resets state and re-activates the quest.
 use    = main
 params  = status, restart
 status  = enum, default=completed, enum=completed|failed
@@ -271,8 +271,8 @@ since  = 1
 ; ============================================================ extra: items and money
 [nq.item.give]
 group  = items
-title  = Выдать предмет
-desc   = Даёт игроку предметы секции. В диалоге - через передачу от NPC с уведомлением. count — штуки предметов: для патронов это коробки, а не патроны
+title  = Give item
+desc   = Gives the player items of the section. In dialog: handed over by the NPC with a notification. count is in items (ammo: boxes).
 use    = extra
 params  = section, count
 section = item_section, required
@@ -282,8 +282,8 @@ since  = 1
 
 [nq.item.take]
 group  = items
-title  = Забрать предмет
-desc   = Забирает у игрока предметы секции. count = all забирает все. count — штуки предметов: для патронов это коробки, а не патроны
+title  = Take item
+desc   = Takes items of the section from the player. count = all takes everything. count is in items (ammo: boxes).
 use    = extra
 params  = section, count
 section = item_section, required
@@ -293,8 +293,8 @@ since  = 1
 
 [nq.item.spawn]
 group  = items
-title  = Создать предмет в мире
-desc   = Создаёт предмет в точке (place) или внутри объекта (into). ref запоминает объект
+title  = Spawn item
+desc   = Creates an item at a place or inside an object (into). ref saves the object.
 use    = extra
 params  = section, place, into, ref
 section = item_section, required
@@ -306,8 +306,8 @@ since  = 1
 
 [nq.money.give]
 group  = money
-title  = Выдать деньги
-desc   = Даёт игроку деньги
+title  = Give money
+desc   = Gives the player money.
 use    = extra
 params = amount
 amount = int, required, min=1
@@ -316,8 +316,8 @@ since  = 1
 
 [nq.money.take]
 group  = money
-title  = Забрать деньги
-desc   = Забирает у игрока деньги
+title  = Take money
+desc   = Takes money from the player.
 use    = extra
 params = amount
 amount = int, required, min=1
@@ -327,8 +327,8 @@ since  = 1
 ; ============================================================ extra: info, vars, signals, quests
 [nq.info.give]
 group  = info
-title  = Выдать инфопоршень
-desc   = Выдаёт игроку инфопоршень (для связи с ванильной логикой)
+title  = Give info portion
+desc   = Gives the player an info portion (bridge to vanilla logic).
 use    = extra
 params = info
 info   = info, required
@@ -337,8 +337,8 @@ since  = 1
 
 [nq.info.disable]
 group  = info
-title  = Снять инфопоршень
-desc   = Снимает инфопоршень у игрока
+title  = Remove info portion
+desc   = Removes an info portion from the player.
 use    = extra
 params = info
 info   = info, required
@@ -347,8 +347,8 @@ since  = 1
 
 [nq.var.set]
 group  = vars
-title  = Задать переменную
-desc   = Присваивает переменной квеста значение
+title  = Set variable
+desc   = Assigns a value to a quest variable.
 use    = extra
 params = name, value
 name   = var_name, required
@@ -358,8 +358,8 @@ since  = 1
 
 [nq.var.add]
 group  = vars
-title  = Прибавить к переменной
-desc   = Прибавляет число к числовой переменной квеста
+title  = Add to variable
+desc   = Adds a number to a numeric quest variable.
 use    = extra
 params = name, delta
 name   = var_name, required
@@ -369,8 +369,8 @@ since  = 1
 
 [nq.signal.send]
 group  = vars
-title  = Послать сигнал
-desc   = Испускает сигнал для триггеров и ожиданий event.signal (в том числе других квестов)
+title  = Send signal
+desc   = Emits a signal for event.signal triggers and waits, including other quests.
 use    = extra
 params = name
 name   = signal_name, required
@@ -379,8 +379,8 @@ since  = 1
 
 [nq.quest.activate]
 group  = quest
-title  = Активировать квест
-desc   = Активирует другой квест с activation = manual
+title  = Activate quest
+desc   = Activates another quest declared with activation = manual.
 use    = extra
 params = quest
 quest  = quest_id, required
@@ -390,8 +390,8 @@ since  = 1
 ; ============================================================ extra: tasks
 [nq.task.give]
 group  = tasks
-title  = Выдать задание
-desc   = Создаёт задание PDA из объявления tasks квеста
+title  = Give task
+desc   = Creates a PDA task from the quest tasks declaration.
 use    = extra
 params = task
 task   = task_id, required
@@ -400,8 +400,8 @@ since  = 1
 
 [nq.task.complete]
 group  = tasks
-title  = Завершить задание
-desc   = Отмечает задание PDA выполненным
+title  = Complete task
+desc   = Marks a PDA task completed.
 use    = extra
 params = task
 task   = task_id, required
@@ -410,8 +410,8 @@ since  = 1
 
 [nq.task.fail]
 group  = tasks
-title  = Провалить задание
-desc   = Отмечает задание PDA проваленным
+title  = Fail task
+desc   = Marks a PDA task failed.
 use    = extra
 params = task
 task   = task_id, required
@@ -420,8 +420,8 @@ since  = 1
 
 [nq.task.remove]
 group  = tasks
-title  = Убрать задание
-desc   = Убирает задание из PDA без статуса
+title  = Remove task
+desc   = Removes a task from the PDA without a status.
 use    = extra
 params = task
 task   = task_id, required
@@ -430,8 +430,8 @@ since  = 1
 
 [nq.task.set_target]
 group  = tasks
-title  = Цель задания
-desc   = Переставляет метку задания на цель. без target — снимает метку совсем
+title  = Task target
+desc   = Re-points the task marker at a target. No target clears the marker.
 use    = extra
 params = task, target
 task   = task_id, required
@@ -441,8 +441,8 @@ since  = 1
 
 [nq.task.set_text]
 group  = tasks
-title  = Текст задания
-desc   = Меняет заголовок и/или описание задания
+title  = Task text
+desc   = Changes the task title and/or description.
 use    = extra
 params    = task, new_title, new_descr
 task      = task_id, required
@@ -454,8 +454,8 @@ since  = 1
 ; ============================================================ extra: spawn and squads
 [nq.task.objective_complete]
 group     = tasks
-title     = Выполнить подзадачу
-desc      = Отмечает выполненным один шаг задачи. Задача остаётся активной, пока её не завершить отдельно
+title     = Complete objective
+desc      = Marks one task objective completed. With auto_complete on, the last one also closes the task.
 use       = extra
 params    = task, objective
 task      = task_id, required
@@ -465,8 +465,8 @@ since     = 4
 
 [nq.task.objective_fail]
 group     = tasks
-title     = Провалить подзадачу
-desc      = Отмечает проваленным один шаг задачи
+title     = Fail objective
+desc      = Marks one task objective failed.
 use       = extra
 params    = task, objective
 task      = task_id, required
@@ -476,8 +476,8 @@ since     = 4
 
 [nq.task.set_objective_target]
 group     = tasks
-title     = Цель подзадачи
-desc      = Переставляет метку одного шага задачи. Без target — снимает метку этого шага. У каждого шага метка своя
+title     = Objective target
+desc      = Re-points one objective marker. No target clears it. Each objective owns its marker.
 use       = extra
 params    = task, objective, target
 task      = task_id, required
@@ -488,8 +488,8 @@ since     = 4
 
 [nq.task.set_objective_text]
 group     = tasks
-title     = Текст подзадачи
-desc      = Меняет заголовок и описание одного шага задачи
+title     = Objective text
+desc      = Changes one objective title and description.
 use       = extra
 params    = task, objective, new_title, new_descr
 task      = task_id, required
@@ -501,8 +501,8 @@ since     = 4
 
 [nq.task.set_objective_visible]
 group     = tasks
-title     = Видимость подзадачи
-desc      = Показать или скрыть шаг задачи в PDA. Скрытый шаг работает как обычно и его можно завершить — он просто не занимает строку в списке задач
+title     = Objective visibility
+desc      = Shows or hides one objective in the PDA. A hidden objective still runs and can be completed.
 use       = extra
 params    = task, objective, visible
 task      = task_id, required
@@ -513,8 +513,8 @@ since     = 6
 
 [nq.spawn.squad]
 group  = spawn
-title  = Создать отряд
-desc   = Создаёт отряд секции. smart можно не указывать, если задан place — возьмётся ближайший к нему (отряду смарт нужен: он им владеет и даёт работу). place — поставить их в выбранное место, а не на смарт: если это рестриктор, бойцы раскидываются по навмешу внутри него, каждый на своей точке. spread сжимает область спавна к центру (0.5 — половина, чтобы не липли к краям), сам рестриктор не меняется. restrictor — зона, из которой они не выйдут (движковое in-ограничение: работают как обычно, но с карты не убегут). hold удерживает отряд на смарте, ref запоминает отряд
+title  = Spawn squad
+desc   = Creates a squad of the section. smart is optional when place is set (the nearest one is used). place puts them there, inside a restrictor each member gets its own navmesh point and spread pulls the area toward the center. restrictor pens them in, hold pins the squad to its smart, ref saves the squad.
 use    = extra
 params  = section, smart, place, restrictor, spread, ref, hold
 section = squad_section, required
@@ -529,8 +529,8 @@ since  = 1
 
 [nq.spawn.object]
 group  = spawn
-title  = Создать объект
-desc   = Создаёт объект любой спавн-секции в точке (ящик, рестриктор, физика). ref запоминает объект
+title  = Spawn object
+desc   = Creates an object of any spawn section at a point (box, restrictor, physics). ref saves the object.
 use    = extra
 params  = section, place, ref
 section = spawn_section, required
@@ -541,8 +541,8 @@ since  = 1
 
 [nq.squad.move]
 group  = squad
-title  = Отправить отряд
-desc   = Посылает отряд на смарт или за игроком (follow_actor)
+title  = Move squad
+desc   = Sends the squad to a smart or after the player (follow_actor).
 use    = extra
 params       = target, smart, follow_actor
 target       = target_ref, required
@@ -553,8 +553,8 @@ since  = 1
 
 [nq.squad.remove]
 group  = squad
-title  = Убрать отряд
-desc   = Удаляет отряд из мира
+title  = Remove squad
+desc   = Removes the squad from the world.
 use    = extra
 params = target
 target = target_ref, required
@@ -563,8 +563,8 @@ since  = 1
 
 [nq.object.remove]
 group  = spawn
-title  = Убрать объект
-desc   = Удаляет из мира объект, созданный этим квестом (spawn.object) или объект по story id. Ref после удаления очищается — иначе следующая нода резолвила бы мёртвый id
+title  = Remove object
+desc   = Removes an object created by this quest (spawn.object) or one by story id. The ref is cleared afterwards.
 use    = extra
 params = target
 target = object_ref, required
@@ -573,8 +573,8 @@ since  = 3
 
 [nq.npc.remove]
 group  = npc
-title  = Убрать NPC
-desc   = Удаляет NPC из мира
+title  = Remove NPC
+desc   = Removes the NPC from the world.
 use    = extra
 params = npc
 npc    = npc_ref, required
@@ -583,8 +583,8 @@ since  = 1
 
 [nq.npc.kill]
 group  = npc
-title  = Убить NPC
-desc   = Убивает NPC
+title  = Kill NPC
+desc   = Kills the NPC.
 use    = extra
 params = npc
 npc    = npc_ref, required
@@ -594,8 +594,8 @@ since  = 1
 ; ============================================================ extra: relations, ui, misc
 [nq.relation.set]
 group  = relation
-title  = Отношение к игроку
-desc   = Делает NPC/отряд/группировку врагом, нейтралом или другом игрока
+title  = Set relation
+desc   = Makes an NPC, squad, or community an enemy, neutral, or friend of the player.
 use    = extra
 params = who, value
 who    = npc_ref, required
@@ -605,8 +605,8 @@ since  = 1
 
 [nq.relation.goodwill]
 group  = relation
-title  = Изменить репутацию
-desc   = Прибавляет (или отнимает) goodwill NPC/группировки к игроку
+title  = Change goodwill
+desc   = Adds (or subtracts) NPC or community goodwill toward the player.
 use    = extra
 params = who, delta
 who    = npc_ref, required
@@ -616,8 +616,8 @@ since  = 1
 
 [nq.news.tip]
 group  = ui
-title  = Сообщение в PDA
-desc   = Показывает новость игроку. sender - от чьего имени
+title  = PDA message
+desc   = Shows a news tip to the player. sender sets the author.
 use    = extra
 params   = text, sender, icon, duration
 text     = text, required
@@ -629,8 +629,8 @@ since  = 1
 
 [nq.map.spot]
 group  = ui
-title  = Метка на карте
-desc   = Ставит метку на карте на цель
+title  = Map spot
+desc   = Puts a map spot on the target.
 use    = extra
 params = target, text, spot
 target = target_ref, required
@@ -641,8 +641,8 @@ since  = 1
 
 [nq.map.unspot]
 group  = ui
-title  = Убрать метку с карты
-desc   = Снимает метку с цели
+title  = Remove map spot
+desc   = Removes the map spot from the target.
 use    = extra
 params = target, spot
 target = target_ref, required
@@ -652,8 +652,8 @@ since  = 1
 
 [nq.dialog.force]
 group  = dialog_ctl
-title  = Начать разговор
-desc   = Принудительно открывает разговор с NPC (NPC должен быть рядом и онлайн)
+title  = Start dialog
+desc   = Force-opens a dialog with the NPC (must be nearby and online).
 use    = extra
 params      = npc, allow_break
 npc         = npc_ref, required
@@ -663,8 +663,8 @@ since  = 1
 
 [nq.dialog.break]
 group  = dialog_ctl
-title  = Прервать разговор
-desc   = Закрывает текущий разговор
+title  = Break dialog
+desc   = Closes the current dialog.
 use    = extra
 params =
 impl   = core
@@ -672,8 +672,8 @@ since  = 1
 
 [nq.actor.teleport]
 group  = actor
-title  = Телепортировать игрока
-desc   = Переносит игрока в точку текущего уровня
+title  = Teleport player
+desc   = Moves the player to a point on the current level.
 use    = extra
 params = place
 place  = place, required
@@ -682,8 +682,8 @@ since  = 1
 
 [nq.sound.play]
 group  = sound
-title  = Проиграть звук
-desc   = Проигрывает звуковую тему на игроке
+title  = Play sound
+desc   = Plays a sound theme on the player.
 use    = extra
 params = theme
 theme  = string, required
@@ -692,8 +692,8 @@ since  = 1
 
 [nq.lua]
 group  = custom
-title  = Свой код (Lua)
-desc   = Кастомный Lua. Как действие - выполняется. Как условие - должен вернуть true/false. Доступен объект nq и весь API игры
+title  = Custom Lua
+desc   = Custom Lua. As an action it runs, as a condition it must return true or false. The nq object and the full game API are available.
 use    = extra, cond
 params = code
 code   = lua, required
@@ -703,8 +703,8 @@ since  = 1
 ; ============================================================ cond: state
 [nq.has_info]
 group  = cond_state
-title  = Есть инфопоршень
-desc   = У игрока есть инфопоршень
+title  = Has info portion
+desc   = The player has the info portion.
 use    = cond
 params = info
 info   = info, required
@@ -714,8 +714,8 @@ since  = 1
 
 [nq.has_item]
 group  = cond_state
-title  = Есть предмет
-desc   = У игрока не меньше count предметов секции. count — штуки предметов: для патронов это коробки, а не патроны
+title  = Has item
+desc   = The player holds at least count items of the section. count is in items (ammo: boxes).
 use    = cond
 params  = section, count
 section = item_section, required
@@ -726,8 +726,8 @@ since  = 1
 
 [nq.has_money]
 group  = cond_state
-title  = Есть деньги
-desc   = У игрока не меньше amount денег
+title  = Has money
+desc   = The player has at least amount money.
 use    = cond
 params = amount
 amount = int, required
@@ -737,8 +737,8 @@ since  = 1
 
 [nq.var]
 group  = cond_state
-title  = Переменная
-desc   = Сравнивает переменную квеста со значением. op: eq, ne, lt, le, gt, ge
+title  = Variable
+desc   = Compares a quest variable with a value. op: eq, ne, lt, le, gt, ge.
 use    = cond
 params = name, op, value
 name   = var_name, required
@@ -750,8 +750,8 @@ since  = 1
 
 [nq.node_done]
 group  = cond_state
-title  = Нода уже пройдена
-desc   = Нода с once уже отработала
+title  = Node done
+desc   = A once node has already run.
 use    = cond
 params = node
 node   = node_id, required
@@ -761,8 +761,8 @@ since  = 1
 
 [nq.quest_status]
 group  = cond_state
-title  = Статус квеста
-desc   = Другой квест в заданном статусе
+title  = Quest status
+desc   = Another quest is in the given status.
 use    = cond
 params = quest, is
 quest  = quest_id, required
@@ -773,8 +773,8 @@ since  = 1
 
 [nq.task_status]
 group  = cond_state
-title  = Статус задания
-desc   = Задание квеста в заданном статусе
+title  = Task status
+desc   = A quest task is in the given status.
 use    = cond
 params = task, is
 task   = task_id, required
@@ -785,8 +785,8 @@ since  = 1
 
 [nq.objective_status]
 group     = cond_state
-title     = Статус подзадачи
-desc      = Шаг задачи в заданном статусе. Позволяет ветвиться на «хлеб найден, аптечка ещё нет», не разбивая задачу на два квеста
+title     = Objective status
+desc      = One task objective is in the given status, so the graph can branch on a single objective.
 use       = cond
 params    = task, objective, is
 task      = task_id, required
@@ -798,8 +798,8 @@ since     = 4
 
 [nq.actor_on_level]
 group  = cond_world
-title  = Игрок на уровне
-desc   = Игрок находится на уровне
+title  = Player on level
+desc   = The player is on the level.
 use    = cond
 params = level
 level  = level, required
@@ -809,8 +809,8 @@ since  = 1
 
 [nq.actor_in_place]
 group  = cond_world
-title  = Игрок в месте
-desc   = Игрок в точке с радиусом, в рестрикторе, на смарте или в объекте, созданном этим квестом (ref)
+title  = Player in place
+desc   = The player is inside a point with radius, a restrictor, a smart, or a quest-created ref.
 use    = cond
 params = place
 place  = place, required
@@ -820,8 +820,8 @@ since  = 1
 
 [nq.npc_alive]
 group  = cond_world
-title  = NPC жив
-desc   = NPC существует и жив
+title  = NPC alive
+desc   = The NPC exists and is alive.
 use    = cond
 params = npc
 npc    = npc_ref, required
@@ -831,8 +831,8 @@ since  = 1
 
 [nq.npc_dead]
 group  = cond_world
-title  = NPC мёртв
-desc   = NPC мёртв или не существует
+title  = NPC dead
+desc   = The NPC is dead or does not exist.
 use    = cond
 params = npc
 npc    = npc_ref, required
@@ -842,8 +842,8 @@ since  = 1
 
 [nq.squad_alive]
 group  = cond_world
-title  = Отряд жив
-desc   = Отряд (ref или story) существует
+title  = Squad alive
+desc   = The squad (ref or story) exists.
 use    = cond
 params = target
 target = target_ref, required
@@ -853,8 +853,8 @@ since  = 1
 
 [nq.actor_community]
 group  = cond_world
-title  = Группировка игрока
-desc   = Игрок состоит в группировке
+title  = Player community
+desc   = The player belongs to the community.
 use    = cond
 params    = community
 community = community, required
@@ -864,8 +864,8 @@ since  = 1
 
 [nq.relation]
 group  = cond_world
-title  = Отношение к игроку
-desc   = NPC/группировка враг, нейтрал или друг игрока
+title  = Relation
+desc   = The NPC or community is an enemy, neutral, or friend of the player.
 use    = cond
 params = who, is
 who    = npc_ref, required
@@ -876,8 +876,8 @@ since  = 1
 
 [nq.time_of_day]
 group  = cond_world
-title  = Время суток
-desc   = Игровой час в диапазоне from..to (через полночь тоже работает)
+title  = Time of day
+desc   = The in-game hour is within from..to (midnight wrap supported).
 use    = cond
 params = from, to
 from   = int, required, min=0, max=23
@@ -888,8 +888,8 @@ since  = 1
 
 [nq.elapsed]
 group  = cond_world
-title  = Прошло времени
-desc   = С момента активации квеста (from=quest) или входа в ноду (from=node) прошло не меньше duration. если у указанной node нет живого токена — условие ложно
+title  = Time elapsed
+desc   = At least duration passed since quest activation (from=quest) or node entry (from=node). False when the node has no live token.
 use    = cond
 params   = from, node, duration
 from     = enum, default=quest, enum=quest|node
@@ -901,8 +901,8 @@ since  = 1
 
 [nq.chance]
 group  = cond_world
-title  = Шанс
-desc   = Случайно истинно с вероятностью percent
+title  = Chance
+desc   = Randomly true with the given percent.
 use    = cond
 params  = percent
 percent = int, required, min=0, max=100
@@ -912,8 +912,8 @@ since  = 1
 
 [nq.any]
 group  = logic
-title  = Любое из
-desc   = Истинно, если истинно хотя бы одно вложенное условие
+title  = Any of
+desc   = True when at least one nested condition is true.
 use    = cond
 params = of
 of     = cond_list, required
@@ -924,8 +924,8 @@ since  = 1
 ; ============================================================ cond: events
 [nq.event.item_taken]
 group  = cond_event
-title  = Событие: предмет подобран
-desc   = Игрок взял предмет (section пустой - любой)
+title  = Event: item taken
+desc   = The player picked up an item (empty section: any).
 use    = cond
 params  = section
 section = item_section
@@ -935,8 +935,8 @@ since  = 1
 
 [nq.event.item_dropped]
 group  = cond_event
-title  = Событие: предмет выброшен
-desc   = Игрок выбросил предмет
+title  = Event: item dropped
+desc   = The player dropped an item.
 use    = cond
 params  = section
 section = item_section
@@ -946,8 +946,8 @@ since  = 1
 
 [nq.event.item_used]
 group  = cond_event
-title  = Событие: предмет использован
-desc   = Игрок использовал предмет
+title  = Event: item used
+desc   = The player used an item.
 use    = cond
 params  = section
 section = item_section
@@ -957,8 +957,8 @@ since  = 1
 
 [nq.event.npc_killed]
 group  = cond_event
-title  = Событие: NPC убит
-desc   = Убит NPC (who пустой - любой). by_actor - только если убил игрок
+title  = Event: NPC killed
+desc   = An NPC died (empty who: any). by_actor: only player kills.
 use    = cond
 params   = who, by_actor
 who      = npc_ref
@@ -969,8 +969,8 @@ since  = 1
 
 [nq.event.squad_dead]
 group  = cond_event
-title  = Событие: отряд уничтожен
-desc   = Отряд (ref или story) перестал существовать
+title  = Event: squad dead
+desc   = The squad (ref or story) ceased to exist.
 use    = cond
 params = target
 target = squad_ref, required
@@ -980,8 +980,8 @@ since  = 1
 
 [nq.event.info_given]
 group  = cond_event
-title  = Событие: выдан инфопоршень
-desc   = Игрок получил инфопоршень
+title  = Event: info given
+desc   = The player received an info portion.
 use    = cond
 params = info
 info   = info, required
@@ -991,8 +991,8 @@ since  = 1
 
 [nq.event.level_entered]
 group  = cond_event
-title  = Событие: вход на уровень
-desc   = Игрок пришёл на уровень
+title  = Event: level entered
+desc   = The player arrived on the level.
 use    = cond
 params = level
 level  = level, required
@@ -1002,8 +1002,8 @@ since  = 1
 
 [nq.event.talk_started]
 group  = cond_event
-title  = Событие: начат разговор
-desc   = Игрок начал разговор с NPC (npc пустой - любой)
+title  = Event: talk started
+desc   = The player started a dialog with the NPC (empty npc: any).
 use    = cond
 params = npc
 npc    = npc_ref
@@ -1013,8 +1013,8 @@ since  = 1
 
 [nq.event.talk_ended]
 group  = cond_event
-title  = Событие: разговор окончен
-desc   = Игрок закрыл разговор с NPC
+title  = Event: talk ended
+desc   = The player closed a dialog with the NPC.
 use    = cond
 params = npc
 npc    = npc_ref
@@ -1024,8 +1024,8 @@ since  = 1
 
 [nq.event.signal]
 group  = cond_event
-title  = Событие: сигнал
-desc   = Получен сигнал signal.send
+title  = Event: signal
+desc   = A signal.send signal was received.
 use    = cond
 params = name
 name   = signal_name, required
@@ -1035,8 +1035,8 @@ since  = 1
 
 [nq.event.trade_done]
 group  = cond_event
-title  = Событие: торговля
-desc   = Игрок совершил торговую операцию (npc пустой - с любым)
+title  = Event: trade
+desc   = The player completed a trade (empty npc: any).
 use    = cond
 params = npc
 npc    = npc_ref

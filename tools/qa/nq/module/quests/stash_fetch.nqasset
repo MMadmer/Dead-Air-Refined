@@ -1,7 +1,7 @@
 -- nq: stash_fetch "Заначка"
--- Эталон формы spawn у objective.fetch: квест сам создаёт ящик, кладёт в него добычу
--- и ждёт, пока игрок заберёт ИМЕННО эти экземпляры. Проверяется движковой QA (фаза p1):
--- ящик существует, в нём два предмета, маркер задачи переведён на ящик (spot_task).
+-- Reference for the spawn form of objective.fetch: the quest creates a box, fills it with
+-- loot and waits until the player takes THOSE instances. Verified by the engine QA (phase p1):
+-- the box exists, holds two items, the task marker points at it (spot_task).
 return {
   nq = 1,
   id = "stash_fetch",

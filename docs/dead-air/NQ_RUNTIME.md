@@ -357,8 +357,8 @@ api     = 1                        ; version of the kind implementation contract
 
 [nq.item.give]                     ; section = "nq." .. kind
 group   = items                    ; group in the editor dropdown
-title   = Выдать предмет           ; cp1251, what the author sees
-desc    = Даёт игроку предметы секции
+title   = Kill the boars           ; what the author sees
+desc    = What the main node does
 use     = extra                    ; comma list of: trigger, main, extra, cond
 params  = section, count           ; ordered parameter names
 section = item_section, required   ; <type>[, required][, default=v][, min=v][, max=v][, enum=a|b|c]

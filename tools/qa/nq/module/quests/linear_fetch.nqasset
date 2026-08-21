@@ -1,7 +1,7 @@
 -- nq: linear_fetch "Хлеб для новичков"
--- Линейный квест без диалогов: старт -> задание -> добыть хлеб -> награда -> конец.
--- Эталон для тест-плана (§16 игра п.1): проверяет trigger.start, flow.step, objective.fetch,
--- task.give/complete, item.give, money.give, news.tip, flow.end и сейв/лоад на середине.
+-- A linear quest with no dialogs: start -> task -> fetch bread -> reward -> end.
+-- Test-plan reference (sec. 16, game item 1): trigger.start, flow.step, objective.fetch,
+-- task.give/complete, item.give, money.give, news.tip, flow.end and a mid-quest save/load.
 return {
   nq = 1,
   id = "linear_fetch",
@@ -9,9 +9,9 @@ return {
   activation = "auto",
   vars = { bread_needed = 2 },
   tasks = {
-    -- два шага: один виден сразу, второй объявлен скрытым и показывается по ходу.
-    -- Движок носит шаги задачи в CGameTask, но НЕ сохраняет их - после загрузки рантайм
-    -- собирает их заново, что и проверяет сценарий Reload
+    -- two objectives: one visible at once, the other declared hidden and revealed later.
+    -- The engine carries task objectives in CGameTask but does NOT save them - after a load
+    -- the runtime rebuilds them, which is what the Reload scenario verifies
     bring_bread = { title = "Хлеб для новичков",
                     descr = "Раздобудь две буханки хлеба для лагеря новичков на Кордоне.",
                     type = "additional",
@@ -31,7 +31,7 @@ return {
       out = { next = "fetch" } },
 
     { id = "fetch", kind = "objective.fetch",
-      -- шаг привязан к ноде: его закрывает spot_done (включён по умолчанию), а не ручное task.objective_complete
+      -- the objective is bound to the node: spot_done (default on) closes it, not a manual task.objective_complete
       params = { section = "bread", count = 2, spot_task = "bring_bread", spot_objective = "find" },
       out = { done = "reward" } },
 
@@ -41,7 +41,7 @@ return {
         { kind = "item.take", params = { section = "bread", count = 2 } },
         { kind = "item.give", params = { section = "medkit", count = 1 } },
         { kind = "money.give", params = { amount = 500 } },
-        -- второй шаг закрывается здесь, а саму задачу завершает auto_complete
+        -- the second objective closes here; the task itself is closed by auto_complete
         { kind = "task.objective_complete", params = { task = "bring_bread", objective = "deliver" } },
         { kind = "news.tip", params = { text = "Спасибо, сталкер. Держи аптечку и немного денег." } },
       },
