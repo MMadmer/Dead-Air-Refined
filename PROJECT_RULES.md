@@ -1,340 +1,348 @@
-# Правила работы с Dead Air: Refined
+# Dead Air: Refined — working rules
 
-Этот файл — единственный источник рабочих правил проекта. Технические
-спецификации в `docs/dead-air` дополняют его, но не должны дублировать или
-переопределять описанный здесь процесс.
+This file is the single source of the project's working rules. The technical
+specifications in `docs/dead-air` extend it but must not duplicate or override
+the process described here.
 
-## 1. Область проекта
+## 1. Project scope
 
-- Целевая игра: Dead Air 0.98b и Dead Air Revolution II.
-- Целевая платформа: Windows x64.
-- Источники правды для поведения — оригинальная x86-версия Dead Air и
-  осмысленные изменения незавершённого переноса Dead Air 1.0 относительно
-  исходной базы CoC. При спорном поведении сначала исследуется оригинальный
-  x86-бинарник, конфигурация, скрипт или шейдер, затем семантический diff между
-  соответствующими исходниками CoC и Dead Air 1.0, и только потом меняется
-  x64-реализация. Если подтверждённое решение Dead Air 1.0 конфликтует с
-  оригиналом, приоритет имеет поведение 1.0. Исходники Dead Air 1.0 целиком
-  эталоном не считаются: код, унаследованный без изменений от CoC, не является
-  самостоятельным решением Dead Air и не должен переноситься в проект только
-  из-за наличия в 1.0.
-- Проект сохраняет формат сохранений, Lua API, ABI публичных модулей,
-  сериализацию, порядок загрузки XDB и loose `gamedata`, JSGME и обычные
-  контентные аддоны.
-- Проект также сохраняет контракт модульной системы XMS — форматы и поведение,
-  на которые опираются моды, созданные в XFined Editor (`D:\Games\XFined-Editor`):
-  манифест модуля, порядок монтирования и разрешения конфликтов, `.ltxp`,
-  `.xmlp`, приоритеты string table, `.xspawn`, `.xcform`, aimap-append,
-  overlay_visuals, композитный `game.graph`, реестр режимов игры и chunks в
-  `.scov`. Игра и редактор развиваются независимо: обновление Dead Air Refined
-  не имеет права сломать мод, собранный любой более ранней версией редактора.
-- Нативные x86-плагины не объявляются совместимыми с x64 без отдельного порта.
+- Target game: Dead Air 0.98b and Dead Air Revolution II.
+- Target platform: Windows x64.
+- The sources of truth for behavior are the original x86 build of Dead Air and
+  the meaningful changes of the unfinished Dead Air 1.0 port relative to its
+  CoC base. On disputed behavior, investigate the original x86 binary,
+  configuration, script, or shader first, then the semantic diff between the
+  corresponding CoC and Dead Air 1.0 sources, and only then change the x64
+  implementation. When a confirmed Dead Air 1.0 decision conflicts with the
+  original, 1.0 behavior wins. The Dead Air 1.0 sources are not a reference as
+  a whole: code inherited unchanged from CoC is not a Dead Air decision of its
+  own and must not be ported into the project merely because 1.0 contains it.
+- The project preserves the savegame format, the Lua API, the ABI of public
+  modules, serialization, the XDB and loose `gamedata` load order, JSGME, and
+  ordinary content addons.
+- The project also preserves the XMS module system contract — the formats and
+  behavior that mods built in XFined Editor (`D:\Games\XFined-Editor`) rely
+  on: the module manifest, mount order and conflict resolution, `.ltxp`,
+  `.xmlp`, string table priorities, `.xspawn`, `.xcform`, aimap append,
+  overlay_visuals, the composite `game.graph`, the game mode registry, and the
+  `.scov` chunks. The game and the editor evolve independently: a Dead Air
+  Refined update has no right to break a mod built by any earlier editor
+  version.
+- Native x86 plugins are not declared x64-compatible without a dedicated port.
 
-## 2. Начало работы
+## 2. Starting work
 
-1. Прочитать этот файл, актуальные технические спецификации и релевантную
-   историю предыдущих задач проекта.
-2. Проверить `git status`, текущую ветку, последний успешный коммит, собранные и
-   установленные версии. Чужие или несвязанные изменения не трогать.
-3. Проверить доступные MCP и skills. Для нативного поведения и сигнатур сначала
-   использовать IDA/декомпиляцию, для runtime-фактов — логи и безопасную живую
-   диагностику.
-4. Зафиксировать границы пачки и критерии успеха до изменения кода.
-5. Если для системного профилирования или другой штатной операции нужен UAC,
-   запросить его у пользователя. Не подменять требуемый тест заведомо менее
-   точным только ради обхода UAC.
+1. Read this file, the current technical specifications, and the relevant
+   history of previous project tasks.
+2. Check `git status`, the current branch, the last successful commit, and the
+   built and deployed versions. Do not touch unrelated or foreign changes.
+3. Check the available MCP servers and skills. For native behavior and
+   signatures use IDA/decompilation first; for runtime facts use logs and safe
+   live diagnostics.
+4. Fix the batch boundaries and success criteria before changing code.
+5. If system profiling or another standard operation requires UAC, request it
+   from the user. Do not substitute the required test with a knowingly less
+   accurate one just to avoid UAC.
 
-## 3. Изменения и совместимость
+## 3. Changes and compatibility
 
-- Перед любой правкой сначала сравнить затронутый код и поведение с оригинальной
-  x86-версией по доступному первичному источнику: бинарнику, конфигурации,
-  скрипту или шейдеру, а также проверить семантический diff соответствующих
-  исходников CoC и Dead Air 1.0. Для багов обе проверки обязательны до выбора
-  причины и способа исправления; неизменённый CoC-код в исходниках 1.0 не
-  считать подтверждением желаемого поведения Dead Air.
-- Эталоны неприкасаемы: оригинальный x86-бинарник (включая его IDA-базу),
-  исходники Dead Air 1.0 и распаковки в `_analysis` — строго только чтение.
-  В них ничего не редактировать, не дописывать и не пересохранять.
-- Dead Air 1.0 не доделана: сборки движка или паков из её исходников не
-  производить. 1.0 служит только справочным эталоном поведения; собираемый
-  код живёт исключительно в DeadAir-x64.
-- Если x64-реализация расходится с оригиналом и Dead Air 1.0 не содержит
-  собственного осмысленного решения, восстановить паритет с оригиналом. Если
-  подтверждённое изменение Dead Air 1.0 конфликтует с оригиналом, считать
-  эталоном поведение 1.0. Собственное решение допускается только когда задача
-  явно требует изменить это поведение либо когда доказано, что дефект
-  присутствует в выбранном эталоне.
-- Исправлять причину, а не маскировать симптом или отключать проверку.
-- Не менять игровую механику, частоту симуляции, качество изображения, дальность,
-  LOD, culling result или состав мира, если это не запрошено явно.
-- Не редактировать и не перепаковывать пользовательские `database`, `gamedata`,
-  `appdata`, `MODS`, JSGME state и сохранения.
-- Архитектура совместимости с модами двусторонняя, и обе стороны обязательны:
-  старые моды (XDB, loose `gamedata`, JSGME, контентные аддоны) и новые
-  XMS-моды из XFined Editor. Любая правка, затрагивающая точки контракта XMS
-  (реестр и монтирование модулей, merge-порядок LTX/XML/string table, дельты
-  уровней `.xspawn`/`.xcform`/aimap/overlay_visuals/`game.graph`, chunks
-  `.scov`, реестр режимов), выполняется только обратно-совместимо: новые
-  возможности добавляются новыми версиями chunk/поля с тихим fallback, уже
-  выпущенное поведение не меняется и не удаляется. Мод, собранный более ранней
-  версией редактора, обязан работать после любой обновы игры — это условие
-  независимого развития двух проектов, и оно не обсуждается в рамках
-  оптимизаций или рефакторингов.
-- Сохранения запрещено перезаписывать, удалять или включать в управляемый
-  installer/update payload. Любая миграция формата требует отдельного явного
-  решения и обратимого плана.
-- Weapons Evolution и другие сторонние моды используются только как материал
-  для анализа совместимости. Мод-специфичные обходы и изменения основной игры
-  запрещены без отдельного прямого разрешения.
-- Ошибки на общей границе Lua callback/API исправлять централизованно в
-  существующем compatibility-слое. Не добавлять полные override-файлы скриптов
-  конкретного мода, если контракт или аргументы можно нормализовать для всех
-  потребителей общей точки расширения.
-- Новый compatibility-скрипт создавать только для отдельной ответственности,
-  которую нельзя разумно встроить в уже существующий общий compatibility-скрипт.
-- Публичные Lua-имена, callbacks, action IDs, serialized enum values, размеры и
-  порядок полей сетевых и save-структур сохраняются.
-- Не исполнять Lua конкурентно. Не допускать конкурентную запись в один игровой
-  объект или общее scratch-состояние без явной модели владения и barrier.
-- Не удерживать ресурсы выгруженной локации ради ускорения.
-- Слабое железо и старые ОС остаются играбельными, но не служат потолком для
-  остальных. Возможность современной платформы (флаг API, расширение драйвера,
-  режим вывода, набор инструкций) подключается по факту её наличия в рантайме, а
-  при отсутствии — тихий откат на прежний путь без потери функциональности и без
-  предупреждений игроку. Ветка отката остаётся рабочей и проверяемой, а не
-  формальной: если она не может дать результат, это описывается в отчёте, а не
-  прячется. Запрещено и требовать новое железо там, где старое справлялось, и
-  занижать поведение нового железа ради единообразия со старым.
-- Разные рендеры (`R1`/`R2`/`R2.5`/`R3`/`R4`) и режимы вывода поддерживаются
-  одновременно: правка в одном backend не должна ломать сборку или поведение
-  остальных, а общий код остаётся общим.
+- Before any edit, first compare the affected code and behavior with the
+  original x86 version through an available primary source — binary,
+  configuration, script, or shader — and check the semantic diff of the
+  corresponding CoC and Dead Air 1.0 sources. For bugs both checks are
+  mandatory before choosing the cause and the fix; unchanged CoC code inside
+  the 1.0 sources does not confirm the desired Dead Air behavior.
+- The references are untouchable: the original x86 binary (including its IDA
+  database), the Dead Air 1.0 sources, and the unpacked trees in `_analysis`
+  are strictly read-only. Do not edit, append to, or re-save anything there.
+- Dead Air 1.0 is unfinished: do not build the engine or packs from its
+  sources. 1.0 serves only as a behavioral reference; buildable code lives
+  exclusively in DeadAir-x64.
+- If the x64 implementation diverges from the original and Dead Air 1.0 has no
+  meaningful decision of its own, restore parity with the original. If a
+  confirmed Dead Air 1.0 change conflicts with the original, treat 1.0
+  behavior as the reference. An original solution is allowed only when the
+  task explicitly requires changing that behavior, or when the defect is
+  proven to exist in the chosen reference.
+- Fix the cause, do not mask the symptom or disable the check.
+- Do not change game mechanics, simulation frequency, image quality, draw
+  distance, LOD, culling results, or world composition unless explicitly
+  requested.
+- Do not edit or repack the user's `database`, `gamedata`, `appdata`, `MODS`,
+  JSGME state, or savegames.
+- Mod compatibility is two-sided and both sides are mandatory: old mods (XDB,
+  loose `gamedata`, JSGME, content addons) and new XMS mods from XFined
+  Editor. Any change touching XMS contract points (module registry and
+  mounting, LTX/XML/string table merge order, level deltas
+  `.xspawn`/`.xcform`/aimap/overlay_visuals/`game.graph`, `.scov` chunks, the
+  mode registry) is made backward-compatibly only: new capabilities are added
+  as new chunk/field versions with a silent fallback, and behavior already
+  shipped is neither changed nor removed. A mod built by an earlier editor
+  version must keep working after any game update — this is the condition of
+  the two projects' independent evolution and is not negotiable within
+  optimizations or refactorings.
+- Savegames must not be overwritten, deleted, or included in a managed
+  installer/update payload. Any format migration requires a separate explicit
+  decision and a reversible plan.
+- Weapons Evolution and other third-party mods are used only as compatibility
+  analysis material. Mod-specific workarounds and base game changes are
+  forbidden without separate direct permission.
+- Errors on the shared Lua callback/API boundary are fixed centrally in the
+  existing compatibility layer. Do not add full override files of a specific
+  mod's scripts when the contract or the arguments can be normalized for all
+  consumers of the shared extension point.
+- Create a new compatibility script only for a distinct responsibility that
+  cannot reasonably live in an already existing shared compatibility script.
+- Public Lua names, callbacks, action IDs, serialized enum values, and the
+  sizes and field order of network and save structures are preserved.
+- Do not execute Lua concurrently. Do not allow concurrent writes into one
+  game object or shared scratch state without an explicit ownership model and
+  barrier.
+- Do not hold resources of an unloaded location for the sake of speed.
+- Weak hardware and old OSes stay playable but do not cap everyone else. A
+  modern platform capability (an API flag, a driver extension, an output mode,
+  an instruction set) is enabled when detected at runtime; in its absence the
+  code silently falls back to the previous path with no functionality loss and
+  no warnings to the player. The fallback branch stays working and verifiable,
+  not nominal: if it cannot produce the result, the report says so instead of
+  hiding it. It is equally forbidden to require new hardware where old
+  hardware coped, and to degrade new hardware to match the old.
+- The renderers (`R1`/`R2`/`R2.5`/`R3`/`R4`) and output modes are supported
+  simultaneously: a change in one backend must not break the build or the
+  behavior of the others, and shared code stays shared.
 
-## 4. Асинхронные сохранения
+## 4. Asynchronous saves
 
-- Текущий общий main-thread budget подготовки сохранения — `3 ms` на кадр.
-- Клиентская часть обрабатывается порциями не более `16` объектов за шаг.
-- Захват ALife-состояния продолжается следующими кадрами в оставшемся бюджете;
-  сжатие и атомарная фиксация выполняются фоновым writer-потоком.
-- Предыдущая пара save-файлов должна сохраняться при любой ошибке новой
-  транзакции. Для Refined это означает полный согласованный save-group:
-  оригинальные `.scop`/`.scoc` и единый добавочный `.scov`.
-- Форматы `.scop` и `.scoc` не расширять. Все новые persistent-механики хранить
-  только отдельными versioned chunks в одном `.scov`; новые файлы по механикам
-  запрещены. Неизвестные, flagged и более новые chunks сохранять byte-for-byte.
-- Формат контейнера `.scov` v3 заморожен. Будущие версии добавляют новый chunk
-  ID или повышают версию конкретного chunk, но не меняют header/directory и не
-  понижают уже записанную версию.
-- Save-group фиксируется атомарно: companions первыми, `.scop` последним.
-  Crash recovery разрешён только по валидному durable transaction marker;
-  orphan `.bak` без marker не восстанавливать автоматически.
-- Эти лимиты и порядок нельзя менять как микрооптимизацию. Изменение допускается
-  только после отдельного профиля, проверки фризов, save/load, перехода между
-  локациями и аварийного завершения записи.
+- The current shared main-thread budget for save preparation is `3 ms` per
+  frame.
+- The client part is processed in portions of at most `16` objects per step.
+- ALife state capture continues on subsequent frames within the remaining
+  budget; compression and atomic commit run on a background writer thread.
+- The previous save file pair must survive any failure of a new transaction.
+  For Refined this means the full consistent save group: the original
+  `.scop`/`.scoc` and the single additional `.scov`.
+- Do not extend the `.scop` and `.scoc` formats. Store all new persistent
+  mechanics only as separate versioned chunks in the single `.scov`; new
+  per-mechanic files are forbidden. Preserve unknown, flagged, and newer
+  chunks byte-for-byte.
+- The `.scov` v3 container format is frozen. Future versions add a new chunk
+  ID or raise a specific chunk's version, but do not change the
+  header/directory and do not downgrade an already written version.
+- The save group commits atomically: companions first, `.scop` last. Crash
+  recovery is allowed only from a valid durable transaction marker; orphan
+  `.bak` files without a marker are not restored automatically.
+- These limits and this order must not be changed as a micro-optimization. A
+  change is allowed only after a dedicated profile and checks of freezes,
+  save/load, level transitions, and aborted writes.
 
-Полный бинарный контракт и правила эволюции описаны в
+The full binary contract and evolution rules are described in
 `docs/dead-air/SAVE_COMPATIBILITY.md`.
 
-## 5. Код
+## 5. Code
 
-- Использовать C++20 и возможности языка, если они не ухудшают логику,
-  совместимость или производительность.
-- Для новых ассоциативных lookup-контейнеров по умолчанию использовать
-  проектные Swiss-table типы `xr_flat_hash_map` или `xr_node_hash_map`, если это
-  безопасно. Сохранять `xr_map`, когда требуется сортированный порядок,
-  стабильность адресов или итераторов, совместимый публичный тип, сериализация
-  в порядке ключей либо иное поведение `std::map`.
-- Следовать локальному стилю файла; базовый формат — 4 пробела, UTF-8, финальная
-  пустая строка и до 120 символов в строке.
-- Обычные указатели проверять неявным булевым преобразованием: `if (pointer)` и
-  `if (!pointer)`, без сравнений с `nullptr`.
-- Комментарии добавлять только там, где без них неясна причина решения,
-  lifetime, синхронизация или compatibility constraint. Комментарии должны
-  быть краткими и только на английском языке.
-- Не добавлять диагностический код, telemetry или временные console commands в
-  финальную пачку.
-- Release-сборка должна проходить с действующей политикой warnings-as-errors.
+- Use C++20 and language features when they do not hurt logic, compatibility,
+  or performance.
+- For new associative lookup containers default to the project Swiss-table
+  types `xr_flat_hash_map` or `xr_node_hash_map` when safe. Keep `xr_map` when
+  sorted order, address or iterator stability, a compatible public type,
+  key-ordered serialization, or other `std::map` behavior is required.
+- Follow the local style of the file; the base format is 4 spaces, UTF-8, a
+  final empty line, and up to 120 characters per line.
+- Check plain pointers with the implicit boolean conversion: `if (pointer)`
+  and `if (!pointer)`, no comparisons with `nullptr`.
+- Add comments only where the reason for a decision, a lifetime, a
+  synchronization, or a compatibility constraint is unclear without them.
+  Comments must be short and in English only.
+- Do not add diagnostic code, telemetry, or temporary console commands to the
+  final batch.
+- The Release build must pass with the active warnings-as-errors policy.
 
-## 6. Оптимизация
+## 6. Optimization
 
-1. Сначала получить профиль на реальном `xrEngine.exe` и назвать конкретный
-   горячий путь, функцию, шейдер, объект или ожидание.
-2. Приоритизировать постоянные потери FPS, фризы и широкие пользовательские
-   сценарии, а не микрооптимизации.
-3. Сохранить текущий успешный исходный код, build и deployed state до
-   эксперимента.
-4. Выполнить целую согласованную пачку. Полное игровое и A/B-тестирование
-   проводится после завершения итерации, а не после каждого мелкого изменения.
-5. Сравнивать baseline/candidate в одинаковых условиях. Разницу менее 1%
-   считать шумом, если нет другого статистического обоснования.
-6. Для общего performance-QA использовать ровно три локации в godmode: лёгкую,
-   среднюю и тяжёлую по последнему измеренному рейтингу. В отчёте указывать
-   выбранные локации, save, renderer, разрешение, погоду, прогрев и длительность.
-7. Для освещения отдельно проверять помещение и улицу, источники в руках и в
-   мире, наклоны камеры, выход источника за viewport и движение теней.
-8. Проверять average, p50/p95/p99/max frame time, CPU/GPU bottleneck, private
-   memory, handles, threads и рост ресурсов при переходах между локациями.
-9. Не оставлять правку при видимой регрессии, утечке, нестабильном результате
-   или отсутствии воспроизводимого выигрыша. Неудачный эксперимент полностью
-   удалить до следующей попытки.
+1. First obtain a profile on the real `xrEngine.exe` and name the specific hot
+   path, function, shader, object, or wait.
+2. Prioritize constant FPS losses, freezes, and broad user scenarios over
+   micro-optimizations.
+3. Preserve the current successful source, build, and deployed state before
+   the experiment.
+4. Execute a whole coherent batch. Full in-game and A/B testing happens after
+   the iteration is complete, not after every small change.
+5. Compare baseline/candidate under identical conditions. Treat a difference
+   below 1% as noise unless another statistical justification exists.
+6. For general performance QA use exactly three locations in godmode: light,
+   medium, and heavy by the last measured rating. Report the chosen locations,
+   save, renderer, resolution, weather, warm-up, and duration.
+7. For lighting, verify indoors and outdoors separately, sources held and in
+   the world, camera tilts, a source leaving the viewport, and shadow motion.
+8. Check average, p50/p95/p99/max frame time, CPU/GPU bottleneck, private
+   memory, handles, threads, and resource growth across level transitions.
+9. Do not keep a change with a visible regression, a leak, an unstable result,
+   or no reproducible win. Remove a failed experiment completely before the
+   next attempt.
 
-## 7. Сборка и развёртывание
+## 7. Build and deployment
 
-- Единственный поддерживаемый pipeline: CMake presets и Ninja Multi-Config.
-  Legacy Visual Studio projects, XMake и параллельные альтернативные pipeline
-  не поддерживаются.
-- Каноническая чистая сборка:
+- The only supported pipeline: CMake presets and Ninja Multi-Config. Legacy
+  Visual Studio projects, XMake, and parallel alternative pipelines are not
+  supported.
+- The canonical clean build:
 
   ```powershell
   tools\build\build_x64.ps1 -Configuration Release -Clean
   ```
 
-- Для небольших локальных правок исходного кода по умолчанию использовать
-  incremental-сборку. Чистая сборка обязательна после изменения CMake, toolchain, зависимостей, generated-файлов
-  или при подозрении на устаревшие артефакты.
-- После чистой или рабочей incremental-сборки выполнить повторную
-  incremental-сборку и убедиться, что работы или ошибок не осталось.
-- Развёртывать полный список из
-  `packaging/dead-air-x64/installer/runtime-files.txt`, а не отдельную DLL, если
-  пачка затрагивает общую версию или зависимости.
-- Перед развёртыванием убедиться, что игра закрыта. После него сравнить SHA-256
-  каждого файла из актуального runtime-манифеста с `bin/x64/Release`.
-- Основная игровая установка должна получать только подтверждённый кандидат.
-  Тестовые корни и временные файлы размещать отдельно и удалять после проверки.
+- For small local source edits default to the incremental build. A clean build
+  is mandatory after changing CMake, the toolchain, dependencies, generated
+  files, or on suspicion of stale artifacts.
+- After a clean or a successful incremental build, run another incremental
+  build and confirm no work or errors remain.
+- Deploy the full list from
+  `packaging/dead-air-x64/installer/runtime-files.txt`, not a single DLL, when
+  the batch touches the shared version or dependencies.
+- Before deployment make sure the game is closed. Afterwards compare the
+  SHA-256 of every file from the current runtime manifest with
+  `bin/x64/Release`.
+- The main game installation receives only a confirmed candidate. Place test
+  roots and temporary files separately and remove them after verification.
 
-## 7.1. Обработка баг-репортов игроков
+## 7.1. Player bug report handling
 
-- Репортам на слово не верить: описание игрока — это симптом и гипотеза, а не
-  диагноз. Ожидаемое поведение сверяется с оригинальной x86-версией и Dead Air
-  1.0 по правилам раздела 3 до выбора причины и способа исправления; поведение,
-  совпадающее с эталоном, багом не считается и закрывается объяснением, а не
-  правкой.
-- Разбор начинается с приложенной диагностики (`session.log`, `session.dmp`,
-  `user.ltx`, save-группа), а не с текста описания. Версия из репорта сверяется
-  с историей фиксов: проблема, уже исправленная в более новой версии,
-  закрывается как устаревшая с указанием коммита, без повторной правки.
-- Несколько репортов с одной сигнатурой — один дефект: чинится корень один раз,
-  все дубликаты закрываются на него. Один репорт с несколькими проблемами
-  разбирается на отдельные дефекты.
-- Краши мод-скриптов чинятся по правилам раздела 3: контракт движка или общий
-  compatibility-слой, а не override под конкретный мод.
-- Итог разбора каждого репорта фиксируется: подтверждён и исправлен (коммит),
-  уже исправлен (версия/коммит), не воспроизводится, соответствует эталону,
-  либо отклонён с причиной. Репорт не считается обработанным без одного из
-  этих вердиктов.
+- Do not take reports at face value: the player's description is a symptom and
+  a hypothesis, not a diagnosis. Expected behavior is checked against the
+  original x86 version and Dead Air 1.0 by the rules of section 3 before
+  choosing the cause and the fix; behavior matching the reference is not a bug
+  and is closed with an explanation, not a change.
+- Triage starts from the attached diagnostics (`session.log`, `session.dmp`,
+  `user.ltx`, the save group), not from the description text. The reported
+  version is checked against the fix history: an issue already fixed in a
+  newer version is closed as outdated with the commit reference, without a
+  repeated fix.
+- Several reports with one signature are one defect: the root is fixed once
+  and all duplicates are closed onto it. One report with several problems is
+  split into separate defects.
+- Mod script crashes are fixed by the rules of section 3: the engine contract
+  or the shared compatibility layer, not an override for a specific mod.
+- The outcome of every report is recorded: confirmed and fixed (commit),
+  already fixed (version/commit), not reproducible, matches the reference, or
+  rejected with a reason. A report is not handled without one of these
+  verdicts.
 
-## 8. Runtime-QA
+## 8. Runtime QA
 
-- Проверять `xrEngine.exe` из настроенного корня основной игры, а не отдельный
-  harness или случайную копию бинарника.
-- Не перехватывать управление компьютером, не двигать персонажа и не
-  автоматизировать ввод. Разрешены скрытый запуск, чтение логов и остановка
-  только запущенного нами процесса.
-- Runtime-тест считается успешным только после достижения требуемого игрового
-  состояния. Startup-smoke нельзя выдавать за загрузку уровня.
-- Обязательные проверки по риску: существующий save, новая игра, save/load,
-  переход локации, UI/PDA/инвентарь, relevant addon и активный soak.
-- Проверять лог на fatal, assertion, access violation, reader overflow, Lua/UI
-  lifecycle errors и новые повторяющиеся предупреждения.
-- После каждого теста проверить завершение игры, launcher, updater, debugger,
-  profiler, compiler, linker, CMake и Ninja. Timeout оболочки не
-  означает, что дочерние процессы завершились.
+- Test the `xrEngine.exe` from the configured main game root, not a separate
+  harness or a random binary copy.
+- Do not take over the computer, move the character, or automate input.
+  Allowed: hidden launch, log reading, and stopping only the process we
+  started.
+- A runtime test counts as successful only after the required game state is
+  reached. A startup smoke must not be passed off as a level load.
+- Mandatory checks by risk: an existing save, a new game, save/load, a level
+  transition, UI/PDA/inventory, the relevant addon, and an active soak.
+- Check the log for fatals, assertions, access violations, reader overflows,
+  Lua/UI lifecycle errors, and new recurring warnings.
+- After every test verify that the game, launcher, updater, debugger,
+  profiler, compiler, linker, CMake, and Ninja have exited. A shell timeout
+  does not mean the child processes have finished.
 
-### 8.1. Рендерные тесты
+### 8.1. Render tests
 
-1. Рендерный тест выполнять на основном Windows Desktop, а не на скрытом или
-   виртуальном рабочем столе. Foreground- и background-прогоны валидны, но в
-   одном A/B состояние видимости, фокуса и свёрнутости окна должно полностью
-   совпадать и фиксироваться вместе с результатом; foreground сравнивать только
-   с foreground, background — только с background. `-always_active` не делает
-   смешанное сравнение корректным. Ввод, курсор и управление персонажем не
-   автоматизировать; поворот камеры выполнять только штатным runtime-кодом.
-2. Создать отдельные `fsltx`, `appdata` и Lua QA-скрипт. Копировать в тестовый
-   `savedgames` всю исходную save-группу без изменения файлов; в `-start`
-   передавать имя save, а не путь к `.ltx` и не имя с расширением save-файла.
-3. Запускать движок по схеме
+1. Run render tests on the main Windows Desktop, not a hidden or virtual one.
+   Foreground and background runs are both valid, but within one A/B the
+   window visibility, focus, and minimized state must match exactly and be
+   recorded with the result; compare foreground only with foreground and
+   background only with background. `-always_active` does not make a mixed
+   comparison valid. Do not automate input, the cursor, or character control;
+   rotate the camera only through standard runtime code.
+2. Create a separate `fsltx`, `appdata`, and Lua QA script. Copy the whole
+   source save group into the test `savedgames` without modifying the files;
+   pass the save name to `-start`, not a `.ltx` path and not a name with a
+   save-file extension.
+3. Launch the engine as
    `xrEngine.exe -fsltx <qa.ltx> -always_active -silent_error_mode
    -force_flushlog -r4 -start server(<save>/single/alife/load)`.
-4. QA-скрипт подключать через `[common]` в `script.ltx`. В `on_game_start`
-   зарегистрировать `actor_on_first_update`, а измерение начинать только после
-   первого обновления актёра и фактической загрузки уровня.
-5. Сразу после `actor_on_first_update` выполнить `g_pause_in_background 0`,
-   `main_menu off` и `device():pause(false)`. Затем вызывать
-   `device():pause(false)` каждый кадр до конца теста. На уже загруженном уровне
-   не должно быть красной надписи «ПАУЗА»; экран загрузки этой проверкой не
-   считается.
-6. Сохранить исходный pitch и начальный горизонтальный угол камеры. Вращать
-   только yaw с заданной положительной или отрицательной скоростью; не
-   направлять актёра в пол и не менять его позицию. Для постоянного вращения
-   длительность `-1`, иначе остановить вращение по заданному времени.
-7. Перед замером выставить fullscreen и `vid_mode 2560x1440`, затем проверить
-   физические DWM bounds окна: начало `0,0`, размер ровно `2560x1440`. Одного
-   `user.ltx` недостаточно: DPI virtualization при масштабе Windows 150% может
-   превратить режим в логические `1707x960`.
-8. Если тестовый `xrEngine.exe` находится не по основному пути, до запуска
-   временно скопировать для него AppCompat DPI-layer основного exe
-   (`HIGHDPIAWARE`). После QA удалить только созданную тестом registry-запись.
-   Замер до подтверждения физических DWM bounds считать невалидным.
-9. После короткой стабилизации загруженной сцены снимать примерно 15 секунд
-   рендера; это ориентир с разумным разбросом, а не жёсткий таймер до
-   миллисекунды. Писать не чаще одного раза в секунду elapsed time, yaw и FPS;
-   системный profiler ограничивать тем же измерительным окном.
-10. По завершении выполнить `quit`, дождаться выхода и проверить отсутствие
-    `xrEngine`, launcher, debugger, `wpr`, `xperf`, `wpaexporter`, compiler,
-    linker, CMake и Ninja. Отдельно завершить созданные тестом экземпляры
-    `pwsh`/`powershell`, включая запущенные через UAC, не затрагивая постоянные
-    процессы Codex и пользователя. Если штатный выход не состоялся, завершить
-    только PID этого теста. Удалить временные QA-файлы и жирные Windows dumps.
+4. Attach the QA script through `[common]` in `script.ltx`. In
+   `on_game_start` register `actor_on_first_update` and start measuring only
+   after the first actor update and the actual level load.
+5. Right after `actor_on_first_update` execute `g_pause_in_background 0`,
+   `main_menu off`, and `device():pause(false)`. Then call
+   `device():pause(false)` every frame until the test ends. On a loaded level
+   there must be no red pause caption; the loading screen does not count for
+   this check.
+6. Preserve the original pitch and the initial horizontal camera angle. Rotate
+   yaw only, at the given positive or negative speed; do not point the actor
+   at the floor and do not change its position. For continuous rotation use
+   duration `-1`, otherwise stop the rotation at the given time.
+7. Before measuring, set fullscreen and `vid_mode 2560x1440`, then verify the
+   physical DWM bounds of the window: origin `0,0`, size exactly `2560x1440`.
+   `user.ltx` alone is not enough: DPI virtualization at Windows 150% scale
+   can turn the mode into logical `1707x960`.
+8. If the test `xrEngine.exe` is not at the main path, temporarily copy the
+   AppCompat DPI layer of the main exe (`HIGHDPIAWARE`) for it before launch.
+   After QA remove only the registry entry the test created. A measurement
+   taken before the physical DWM bounds are confirmed is invalid.
+9. After a short stabilization of the loaded scene, capture about 15 seconds
+   of rendering; this is a guideline with reasonable variance, not a hard
+   millisecond timer. Log elapsed time, yaw, and FPS at most once per second;
+   limit the system profiler to the same measurement window.
+10. On completion execute `quit`, wait for exit, and verify the absence of
+    `xrEngine`, the launcher, debugger, `wpr`, `xperf`, `wpaexporter`,
+    compiler, linker, CMake, and Ninja. Separately terminate the
+    `pwsh`/`powershell` instances the test created, including those launched
+    through UAC, without touching the persistent Codex and user processes. If
+    the normal exit did not happen, kill only this test's PID. Remove the
+    temporary QA files and fat Windows dumps.
 
-## 9. Коммиты
+## 9. Commits
 
-- Коммит создаётся после крупной успешной и проверенной пачки.
-- Не коммитить неудачные эксперименты, временную telemetry, профилировщики,
-  логи, сборки и откатываемые попытки.
-- Перед коммитом: удалить мусор, выполнить `git diff --check`, просмотреть весь
-  diff и убедиться, что рабочее дерево содержит только текущую пачку.
-- Сообщение коммита должно кратко описывать результат, а не перечислять файлы.
-- Если попытка отменена, вернуть ветку к последнему успешному состоянию без
-  сохранения фиктивных промежуточных коммитов.
+- A commit is created after a large successful and verified batch.
+- Do not commit failed experiments, temporary telemetry, profilers, logs,
+  builds, or attempts being rolled back.
+- Before committing: remove garbage, run `git diff --check`, review the whole
+  diff, and make sure the working tree contains only the current batch.
+- The commit message must briefly describe the result, not list files.
+- If an attempt is abandoned, return the branch to the last successful state
+  without keeping fictitious intermediate commits.
 
-## 10. Релиз и обновления
+## 10. Release and updates
 
-- Версия следует SemVer и одновременно обновляется в product version,
-  packaging scripts, Inno Setup, compatibility metadata и пользовательской
-  документации.
-- Релиз содержит два альтернативных способа установки:
-  `Dead-Air-Refined-VERSION-Setup.exe` и
-  `Dead-Air-Refined-VERSION-Update.zip`. Пользователю нужен один из них:
-  Setup — рекомендуемый вариант, ZIP — ручная установка или payload встроенного
+- The version follows SemVer and is updated simultaneously in the product
+  version, packaging scripts, Inno Setup, compatibility metadata, and user
+  documentation.
+- A release contains two alternative installation options:
+  `Dead-Air-Refined-VERSION-Setup.exe` and
+  `Dead-Air-Refined-VERSION-Update.zip`. The user needs one of them: Setup is
+  the recommended option, the ZIP is a manual installation or the payload of
+  the built-in updater.
+- The Update ZIP must contain an empty `appdata/savedgames`, and the manifest
+  must not contain a single save file. The installer and uninstaller do not
+  delete existing saves.
+- Package building is a local operation. Push, tag, GitHub Release, and asset
+  upload happen only after the user's direct permission.
+- Address all GitHub commands explicitly to the `MMadmer/Dead-Air-Refined`
+  repository; do not rely on auto-detection while an `upstream` exists.
+- Before publishing verify a clean HEAD, the binary version, the package
+  contents, hashes, install/update, and save-file preservation.
+- After publishing verify the tag target, the release status, the names and
+  SHA-256 of both assets, and the public `releases/latest` used by the
   updater.
-- Update ZIP обязан содержать пустой `appdata/savedgames`, но manifest не
-  должен содержать ни одного save-файла. Installer и uninstaller не удаляют
-  существующие сохранения.
-- Сборка пакетов — локальная операция. Push, tag, GitHub Release и загрузка
-  assets выполняются только после прямого разрешения пользователя.
-- Все GitHub-команды явно адресовать репозиторию
-  `MMadmer/Dead-Air-Refined`; не полагаться на auto-detection при наличии
-  `upstream`.
-- Перед публикацией проверить чистый HEAD, версию бинарника, package contents,
-  hashes, установку/обновление и сохранность save-файлов.
-- После публикации проверить tag target, release status, имена и SHA-256 обоих
-  assets, а также публичный `releases/latest`, используемый updater.
 
-### 10.1. Обязательный текст GitHub Release
+### 10.1. Mandatory GitHub Release text
 
-- Текст релиза писать коротко и только по подтверждённым
-  изменениям текущей версии. Не включать внутренние номера задач, хэши,
-  неподтверждённые обещания или длинный changelog.
-- Использовать одинаковую структуру для каждого релиза: сначала изменения,
-  затем короткая инструкция установки.
-- В разделе `Changes` перечислять только пользовательский результат: исправления,
-  улучшения и совместимость. Если отдельной категории нет, её не добавлять.
-- В разделе `Installation` явно указать, что Setup и Update ZIP — альтернативы,
-  нужен только один вариант; ZIP разрешён для ручной установки. Отдельно
-  предупредить, что существующие сохранения не должны затираться.
-- Перед публикацией провести чистую сборку, если она еще не была выполнена, сверить номер версии, имена обоих assets и текст с фактически
-  собранными пакетами.
+- Keep the release text short and only about the confirmed changes of the
+  current version. Do not include internal task numbers, hashes, unconfirmed
+  promises, or a long changelog.
+- Use the same structure for every release: changes first, then a short
+  installation instruction.
+- In `Changes` list only the user-visible outcome: fixes, improvements, and
+  compatibility. If a category is empty, do not add it.
+- In `Installation` state explicitly that Setup and Update ZIP are
+  alternatives and only one is needed; the ZIP is allowed for manual
+  installation. Warn separately that existing saves must not be clobbered.
+- Before publishing run a clean build if one has not been done yet, and verify
+  the version number, both asset names, and the text against the actually
+  built packages.
 
-Шаблон тела релиза:
+Release body template:
 
 ```markdown
 ## EN
@@ -370,28 +378,28 @@ Do not install both. Existing saves are preserved.
 Не устанавливайте оба варианта. Существующие сохранения будут сохранены.
 ```
 
-## 11. Документация
+## 11. Documentation
 
-- README и packaging README содержат только актуальную пользовательскую
-  информацию. Нельзя запрещать ручную установку Update ZIP.
-- `docs/dead-air` хранит только действующие технические спецификации, текущие
-  открытые проблемы и release validation matrix.
-- Завершённые планы, временные итерационные отчёты, локальные абсолютные пути,
-  старые binary hashes и уже закрытые списки задач не остаются рабочей
-  документацией. Нужный общий вывод переносится сюда или в актуальную
-  спецификацию, после чего временный документ удаляется.
-- При изменении контракта обновить соответствующую спецификацию и ссылки в
-  README в той же пачке.
+- The README and packaging README contain only current user information.
+  Forbidding manual Update ZIP installation is not allowed.
+- `docs/dead-air` holds only active technical specifications, currently open
+  problems, and the release validation matrix.
+- Finished plans, temporary iteration reports, local absolute paths, old
+  binary hashes, and already closed task lists do not remain working
+  documentation. The needed shared conclusion is moved here or into the
+  current specification, after which the temporary document is deleted.
+- When a contract changes, update the corresponding specification and the
+  README references in the same batch.
 
-## 12. Действующие технические спецификации
+## 12. Active technical specifications
 
 - `docs/dead-air/AUTO_UPDATE.md` — release/update protocol.
-- `docs/dead-air/DEPENDENCIES.md` — pinned dependencies и build policy.
-- `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema и privacy contract.
-- `docs/dead-air/MODDING.md` — контракт совместимости для аддонов.
-- `docs/dead-air/NQ_RUNTIME.md` — формат `.nqasset` и контракт NQ-рантайма.
-- `docs/dead-air/SAVE_COMPATIBILITY.md` — бинарный контракт save-группы.
-- `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — открытое предложение, не реализовано.
-- `docs/dead-air/TEST_MATRIX.md` — обязательные release gates.
-- `docs/dead-air/UPSTREAM.md` — provenance и attribution.
-- `docs/dead-air/x64-parity-open-issues.md` — только реально открытые проблемы.
+- `docs/dead-air/DEPENDENCIES.md` — pinned dependencies and build policy.
+- `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema and privacy contract.
+- `docs/dead-air/MODDING.md` — compatibility contract for addons.
+- `docs/dead-air/NQ_RUNTIME.md` — the `.nqasset` format and NQ runtime contract.
+- `docs/dead-air/SAVE_COMPATIBILITY.md` — the binary save-group contract.
+- `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — an open proposal, not implemented.
+- `docs/dead-air/TEST_MATRIX.md` — mandatory release gates.
+- `docs/dead-air/UPSTREAM.md` — provenance and attribution.
+- `docs/dead-air/x64-parity-open-issues.md` — genuinely open problems only.
