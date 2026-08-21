@@ -165,12 +165,58 @@ local function new_quest_state(q)
 	return {
 		status = "active", hash = q.hash, tokens = {}, vars = util.copy(q.vars), refs = {}, done = {},
 		fired = {}, joins = {}, tasks = {}, objectives = {}, ovis = {}, retg = {}, errors = {}, timers = {},
-		trig = {}, t0 = now_g, r = 0,
+		trig = {}, jobs = {}, t0 = now_g, r = 0,
 	}
 end
 
+-- ---------------------------------------------------------------------------- online jobs
+-- Some of what a quest sets on an object only exists on the client side: a weapon's loaded
+-- magazine, a consumable's remaining uses, a death. Objects are created offline, so the job
+-- waits in the quest state - it survives a save - and the poll applies it the moment a client
+-- object shows up. jobs[id] = { kill = true, ammo = n, uses = n }
+function online_job(qs, id, job)
+	if not (qs and id and type(job) == "table") then return end
+	qs.jobs = qs.jobs or {}
+	local cur = qs.jobs[id] or {}
+	for k, v in pairs(job) do cur[k] = v end
+	qs.jobs[id] = cur
+	dirty = true
+end
+
+local function run_online_jobs()
+	for uid, qs in pairs(state.quests) do
+		if (qs.jobs and next(qs.jobs)) then
+			for id, job in pairs(qs.jobs) do
+				local se = util.se_by_id(id)
+				if not (se) then
+					qs.jobs[id] = nil	-- the object is gone, so is the work
+					dirty = true
+				else
+					local go = util.go_by_id(id)
+					if (go) then
+						if (job.ammo and go.set_ammo_elapsed) then pcall(go.set_ammo_elapsed, go, job.ammo) end
+						if (job.uses and go.set_remaining_uses) then pcall(go.set_remaining_uses, go, job.uses) end
+						local done = true
+						if (job.kill) then
+							local ok, alive = pcall(go.alive, go)
+							if (ok and alive) then
+								pcall(go.kill, go, go)
+								done = false		-- checked again next poll: the death lands on the server a frame later
+							end
+						end
+						if (done) then
+							qs.jobs[id] = nil
+							dirty = true
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
 local function ensure_qs_shape(qs, q)
-	for _, k in ipairs({ "tokens", "vars", "refs", "done", "fired", "joins", "tasks", "objectives", "ovis", "retg", "errors", "timers", "trig" }) do
+	for _, k in ipairs({ "tokens", "vars", "refs", "done", "fired", "joins", "tasks", "objectives", "ovis", "retg", "errors", "timers", "trig", "jobs" }) do
 		if (type(qs[k]) ~= "table") then qs[k] = {} end
 	end
 	if (type(qs.r) ~= "number") then qs.r = 0 end
@@ -900,6 +946,7 @@ local function poll_all()
 	for _, e in ipairs(sorted_entries(polled)) do
 		poll_entry(e, dt)
 	end
+	run_online_jobs()
 end
 
 local function check_implicit_completion()

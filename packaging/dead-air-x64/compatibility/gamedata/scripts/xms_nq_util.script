@@ -556,6 +556,32 @@ end
 -- {smart}: the smart's own position/vertices. {restrictor}: online zone position (same level only).
 function place_position(place, ctx)
 	if (type(place) ~= "table") then return nil end
+	-- relative to the player: `distance` metres ahead of the actor, snapped to the
+	-- navmesh. The classic "drop it in front of me" / "ambush behind the corner" spawn,
+	-- which no fixed coordinate can express
+	if (place.actor) then
+		local a = actor()
+		if not (a) then return nil end
+		local pos = vector():set(a:position())
+		local d = tonumber(place.distance) or 0
+		if (d > 0) then
+			local ok, dir = pcall(a.direction, a)
+			if (ok and dir) then
+				local len = math.sqrt(dir.x * dir.x + dir.z * dir.z)
+				if (len > 0.001) then pos = vector():set(pos.x + dir.x / len * d, pos.y, pos.z + dir.z / len * d) end
+			end
+		end
+		local lvid, gvid = a:level_vertex_id(), a:game_vertex_id()
+		if (d > 0) then
+			local ok, v = pcall(level.vertex_id, pos)
+			if (ok and v and v < 4294967295 and level.valid_vertex_id(v)) then
+				lvid = v
+				local ok2, vp = pcall(level.vertex_position, v)
+				if (ok2 and vp) then pos = vp end
+			end
+		end
+		return current_level(), pos, lvid, gvid
+	end
 	-- an object this quest created: the only way to point at something that did not
 	-- exist when the graph was written (a restrictor spawned mid-quest, say)
 	if (place.ref) then
@@ -613,6 +639,7 @@ end
 -- Level the place lives on (nil when unknown without alife data).
 function place_level(place)
 	if (type(place) ~= "table") then return nil end
+	if (place.actor) then return current_level() end
 	if (place.level) then return place.level end
 	if (place.smart) then
 		local smart = smart_by_name(place.smart)
@@ -640,6 +667,13 @@ function place_contains_pos(place, ctx, p_pos)
 	if not (p_pos) then return false end
 	local a = { position = function() return p_pos end }
 	if (type(place) ~= "table") then return false end
+	-- a point relative to the player: a radius around wherever it resolves to right now
+	if (place.actor) then
+		local _, pos = place_position(place, ctx)
+		if not (pos) then return false end
+		local ok, d = pcall(function() return pos:distance_to(p_pos) end)
+		return ok and d and d <= place_radius(place) or false
+	end
 	-- a quest-created object: its zone if it has one (a spawned space_restrictor is
 	-- registered like any other), otherwise a radius around where it stands
 	if (place.ref) then

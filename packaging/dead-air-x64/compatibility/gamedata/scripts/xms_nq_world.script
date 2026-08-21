@@ -524,6 +524,15 @@ K["spawn.object"] = {
 		if not (pos and lvid and gvid) then error("spawn.object: cannot resolve place") end
 		local se = alife():create(p.section, pos, lvid, gvid)
 		if not (se) then error("spawn.object: alife():create returned nothing") end
+		-- the server angle is what the client object is built from: a prop placed by a
+		-- quest faces where the author said, not the default north
+		local yaw = tonumber(p.yaw)
+		if (yaw and yaw ~= 0) then
+			pcall(function() se.angle = vector():set(0, math.rad(yaw), 0) end)
+		end
+		-- a creature section put down the moment it comes online: a corpse where the
+		-- story needs one, without a fight (the same mechanism fetch uses for new_corpse)
+		if (p.dead == true) then core.online_job(ctx.qs, se.id, { kill = true }) end
 		if (p.ref) then core.ref_set(ctx.qs, p.ref, { id = se.id, kind = "object", section = p.section }) end
 	end,
 }

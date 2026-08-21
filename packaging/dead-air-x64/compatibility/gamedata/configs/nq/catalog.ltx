@@ -19,7 +19,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 9
+version = 10
 api     = 1
 
 ; ============================================================ triggers
@@ -293,13 +293,18 @@ since  = 1
 
 [nq.item.spawn]
 group  = items
-title  = Spawn item
-desc   = Creates an item at a place or inside an object (into). ref saves the object.
+title  = Spawn items
+desc   = Creates items: a section with a count, or an items list. where says where they land - place, into (a container or NPC by story id or ref), stash, npc, corpse or new_corpse, the forms fetch uses. condition, ammo (rounds loaded, or in the box of an ammo section), uses and upgrades set the state of every item. ref saves the object and needs a single item.
 use    = extra
-params  = section, place, into, ref
-section = item_section, required
-place   = place
-into    = target_ref
+params  = section, count, items, where, condition, ammo, uses, upgrades, ref
+section = item_section
+count   = int, default=1, min=1
+items   = item_list
+where   = loot_spawn, required
+condition = float, min=0, max=1
+ammo    = int, min=0
+uses    = int, min=1
+upgrades = string
 ref     = ref_name
 impl   = core
 since  = 1
@@ -530,11 +535,13 @@ since  = 1
 [nq.spawn.object]
 group  = spawn
 title  = Spawn object
-desc   = Creates an object of any spawn section at a point (box, restrictor, physics). ref saves the object.
+desc   = Creates an object of any spawn section at a place (box, restrictor, physics, a creature). yaw turns it, in degrees. dead puts a creature down the moment it comes online - a corpse where the story needs one. ref saves the object.
 use    = extra
-params  = section, place, ref
+params  = section, place, yaw, dead, ref
 section = spawn_section, required
 place   = place, required
+yaw     = float, default=0, min=-360, max=360
+dead    = bool, default=false
 ref     = ref_name
 impl   = core
 since  = 1

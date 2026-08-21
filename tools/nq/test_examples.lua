@@ -1340,7 +1340,7 @@ for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) 
 end
 mock.overrides["mod_a/f_item.nqasset"] = [[return { nq = 1, id = "f_item", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "make" } },
-	{ id = "make", kind = "flow.step", on_enter = { { kind = "item.spawn", params = { section = "bread", place = { level = "l01_escape", pos = { 10, 0, 10 } }, ref = "prize" } } }, out = { next = "get" } },
+	{ id = "make", kind = "flow.step", on_enter = { { kind = "item.spawn", params = { section = "bread", where = { place = { level = "l01_escape", pos = { 10, 0, 10 } } }, ref = "prize" } } }, out = { next = "get" } },
 	{ id = "get", kind = "objective.fetch", params = { items = { { item = { ref = "prize" } } } }, out = { done = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
@@ -2491,6 +2491,133 @@ core = xms_nq
 check(core.quest_state("mod_a.ac").tasks.walk == "completed", "the task is still completed after the load")
 check(#mock.news == z14_news, "the load announced nothing")
 if (failed > 0) then fail_dump() end
+
+-- ============================================================================ (z15) spawn v10
+-- item.spawn lands items through the same destination forms as fetch, sets their state
+-- server-side where the engine allows (condition, upgrades, the rounds of an ammo box) and
+-- leaves the rest (a loaded magazine, remaining uses, a death) as jobs the poll applies the
+-- moment a client object shows up. spawn.object turns a prop and can lay a creature down.
+-- Its own function: the main chunk sits at Lua's 200-local ceiling, so even a loop
+-- variable up here would not compile. Everything below is local to z15_run.
+do
+local function z15_run()
+section("(z15) item.spawn: where forms, count, state props, ref, online jobs")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+z15_box = mock.add_container("inventory_box", "z15_box")
+mock.overrides["mod_a/sp.nqasset"] = [[return { nq = 1, id = "sp", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { section = "medkit", count = 2, where = { into = { story = "z15_box" } }, condition = 0.5 } },
+		{ kind = "item.spawn", params = { section = "wpn_pm", where = { place = { actor = true, distance = 2 } }, ammo = 3, upgrades = "up_a, up_b", ref = "gun" } },
+		{ kind = "item.spawn", params = { section = "ammo_9x18_fmj", where = { into = { story = "z15_box" } }, ammo = 7 } },
+		{ kind = "item.spawn", params = { items = { { section = "bread", count = 3 } }, where = { place = { level = "l01_escape", pos = { 30, 0, 30 }, radius = 4 } }, uses = 2 } },
+		{ kind = "spawn.object", params = { section = "inventory_box", place = { level = "l01_escape", pos = { 50, 0, 50 } }, yaw = 90, ref = "crate" } },
+		{ kind = "spawn.object", params = { section = "stalker", place = { level = "l01_escape", pos = { 60, 0, 60 } }, dead = true, ref = "body" } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.sp")
+check(qs ~= nil and qs.status == "completed", "the quest ran to its end (no action raised)")
+-- into a container, two of them, with the condition set before they ever go online
+z15_meds = {}
+for _, cid in ipairs(z15_box._children or {}) do
+	local se = mock.se[cid]
+	if (se and se._section == "medkit") then z15_meds[#z15_meds + 1] = se end
+end
+check(#z15_meds == 2, "count=2 made two medkits inside the container (" .. #z15_meds .. ")")
+check(#z15_meds == 2 and z15_meds[1].condition == 0.5 and z15_meds[2].condition == 0.5, "condition is set server-side on every instance")
+-- in front of the player: the actor faces +z in the mock, so 2 m ahead is (0,0,2)
+z15_gun = qs.refs.gun and mock.se[qs.refs.gun.id]
+check(z15_gun ~= nil and z15_gun._section == "wpn_pm", "ref names the single item")
+check(z15_gun ~= nil and math.abs(z15_gun.position.z - 2) < 0.6 and math.abs(z15_gun.position.x) < 0.6, "place{actor, distance=2} lands ahead of the player (" .. (z15_gun and (z15_gun.position.x .. "," .. z15_gun.position.z) or "?") .. ")")
+check(z15_gun ~= nil and z15_gun:has_upgrade("up_a") and z15_gun:has_upgrade("up_b"), "upgrades are added server-side, comma list")
+check(z15_gun ~= nil and qs.jobs[z15_gun.id] ~= nil and qs.jobs[z15_gun.id].ammo == 3, "a weapon's magazine is a job that waits for the client object")
+-- an ammo section: the box itself carries the rounds, no job needed
+z15_ammo = nil
+for _, cid in ipairs(z15_box._children or {}) do
+	local se = mock.se[cid]
+	if (se and se._section == "ammo_9x18_fmj") then z15_ammo = se end
+end
+check(z15_ammo ~= nil and z15_ammo.ammo_left == 7, "an ammo section is made with exactly that many rounds in the box")
+check(z15_ammo ~= nil and qs.jobs[z15_ammo.id] == nil, "and no job is left behind for it")
+-- three loaves over a 4 m circle: scattered on the navmesh, each with a uses job
+z15_bread = {}
+for id, se in pairs(mock.se) do
+	if (se._section == "bread" and se.parent_id == nil) then z15_bread[#z15_bread + 1] = se end
+end
+check(#z15_bread == 3, "an items row with count 3 made three loaves (" .. #z15_bread .. ")")
+z15_inside = true
+for _, se in ipairs(z15_bread) do
+	local dx, dz = se.position.x - 30, se.position.z - 30
+	if (math.sqrt(dx * dx + dz * dz) > 4.8) then z15_inside = false end
+	if not (qs.jobs[se.id] and qs.jobs[se.id].uses == 2) then z15_inside = false end
+end
+check(z15_inside, "every loaf is inside the radius and carries its uses job")
+-- spawn.object: yaw turns the server angle, dead is a kill job
+z15_crate = qs.refs.crate and mock.se[qs.refs.crate.id]
+check(z15_crate ~= nil and z15_crate.angle ~= nil and math.abs(z15_crate.angle.y - math.rad(90)) < 0.001, "spawn.object yaw=90 turned the crate")
+z15_body = qs.refs.body and mock.se[qs.refs.body.id]
+check(z15_body ~= nil and z15_body:alive() == true and qs.jobs[z15_body.id] and qs.jobs[z15_body.id].kill == true, "spawn.object dead: alive offline, marked to be put down")
+if (failed > 0) then fail_dump() end
+
+-- the jobs land when the objects come online, then leave the state
+section("(z15) online jobs apply once and survive a save")
+mock.ticks(1)		-- state reaches the blob
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.sp")
+check(qs.jobs[z15_gun.id] ~= nil and qs.jobs[z15_body.id] ~= nil, "pending jobs survived the save")
+z15_go_gun = mock.new_go("wpn_pm")
+mock.go[z15_go_gun._id] = nil
+z15_go_gun._id = z15_gun.id
+mock.go[z15_gun.id] = z15_go_gun
+z15_go_body = mock.new_go("stalker")
+mock.go[z15_go_body._id] = nil
+z15_go_body._id = z15_body.id
+mock.go[z15_body.id] = z15_go_body
+mock.ticks(2)
+check(z15_go_gun:get_ammo_in_magazine() == 3, "the magazine was loaded once the weapon went online")
+check(qs.jobs[z15_gun.id] == nil, "the ammo job is gone after applying")
+check(mock.se[z15_body.id]:alive() == false, "the body was put down once online")
+check(qs.jobs[z15_body.id] == nil, "the kill job is gone once the death landed")
+check(qs.jobs[z15_bread[1].id] ~= nil, "a job whose object is still offline keeps waiting")
+-- the object vanishes while offline: the job goes with it
+alife():release(mock.se[z15_bread[1].id])
+mock.ticks(1)
+check(qs.jobs[z15_bread[1].id] == nil, "a job for a released object is dropped")
+if (failed > 0) then fail_dump() end
+
+-- the two refusals the runtime still has to make on its own
+section("(z15) item.spawn: missing where / a ref over several items")
+mock.clear_log()
+z15_ctx = core.make_ctx("mod_a.sp", "make")
+core.run_actions(z15_ctx, { { kind = "item.spawn", params = { section = "bread" } } }, "enter")
+check(mock.log_has("'where' is required"), "no where: the action raises and says so")
+core.run_actions(z15_ctx, { { kind = "item.spawn", params = { section = "bread", count = 2, where = { into = { story = "z15_box" } }, ref = "loaf" } } }, "enter")
+check(qs.refs.loaf ~= nil and mock.log_has("names the first of 2"), "ref over two items: the first is named and the log says so")
+-- the loader: a place relative to the actor is validated like the other forms
+z15_q = xms_nq_load.load_asset("mod_x", "inline.nqasset",
+	"return { nq = 1, id = \"x\", nodes = {\n" ..
+	"{ id = \"s\", kind = \"trigger.start\", out = { next = \"e\" } },\n" ..
+	"{ id = \"e\", kind = \"flow.end\", on_enter = {\n" ..
+	"  { kind = \"item.spawn\", params = { section = \"bread\", where = { place = { actor = true, distance = 3 } } } },\n" ..
+	"  { kind = \"item.spawn\", params = { section = \"bread\", where = { place = { actor = \"yes\" } } } },\n" ..
+	"  { kind = \"item.spawn\", params = { section = \"bread\" } },\n" ..
+	"} },\n} }")
+z15_codes = {}
+for _, p in ipairs(z15_q.problems) do z15_codes[p.code] = (z15_codes[p.code] or 0) + 1 end
+check(z15_codes.E006 == 2, "actor must be true, and where is required: two E006 (" .. tostring(z15_codes.E006) .. ")")
+if (failed > 0) then fail_dump() end
+end
+z15_run()
+end
 
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))

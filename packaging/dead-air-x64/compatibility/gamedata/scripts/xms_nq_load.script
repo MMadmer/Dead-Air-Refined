@@ -432,6 +432,12 @@ end
 
 local function valid_place(v)
 	if (type(v) ~= "table") then return false end
+	-- relative to the player: { actor = true, distance = metres ahead }
+	if (v.actor ~= nil) then
+		if (v.actor ~= true) then return false end
+		if (v.distance ~= nil and (type(v.distance) ~= "number" or v.distance < 0)) then return false end
+		return true
+	end
 	-- an object this quest created: the only way to name a place that did not exist
 	-- when the graph was written
 	if (type(v.ref) == "string") then return true end

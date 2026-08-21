@@ -137,9 +137,9 @@ The catalog declares a type per parameter. These are the types the loader knows
 | `target_ref` | any `npc_ref`, or `{ ref = "boars" }` (squad/object), or `{ smart = "…" }` | |
 | `kill_target` | `{ story = … }` \| `{ ref = … }` \| `{ spawn = <spawn_spec> }` | only `objective.kill` |
 | `object_ref` | `{ story = … }` \| `{ ref = … }` | one concrete object the runtime can pin down to a single id; `profile`/`community`/`smart` name a group and are not accepted |
-| `place` | `{ level = "l01_escape", pos = {x,y,z}, radius = 5 }` \| `{ restrictor = "zone_name" }` \| `{ smart = "…" }` | `radius` defaults to 5 |
+| `place` | `{ level = "l01_escape", pos = {x,y,z}, radius = 5 }` \| `{ restrictor = "zone_name" }` \| `{ smart = "…" }` \| `{ ref = "anchor" }` \| `{ actor = true, distance = 2 }` | `radius` defaults to 5; `ref` is where an object this quest created stands; `actor` is that many metres in front of the player, resolved when the action runs and snapped to the navmesh — a spawn point, not a destination |
 | `item_list` | `{ { section = "bread", count = 2 }, { item = { ref = "prize" } }, … }` | rows of two kinds: any items of a section (with a count), or one concrete object; a section may appear once |
-| `loot_spawn` | exactly one of: `{ place = <place> }` · `{ into = <object_ref> }` · `{ stash = { pick = random\|nearest\|farthest, state = any\|full\|empty, within = R, beyond = R, scatter = bool } }` · `{ npc = <npc_ref> }` · `{ corpse = { pick, within, beyond } }` · `{ new_corpse = { section, place } }` | where `objective.fetch` puts the loot it creates. `within`/`beyond` bound the random pick by distance from the actor (both at once make a ring); nothing inside the bound falls back to the **nearest** match anywhere for `within` and to the **farthest** for `beyond`. `state`: `full` = has something inside, `empty` = holds nothing. `scatter` gives every instance its own random stash. `new_corpse` spawns the body alive and puts it down the moment it comes online, far outside the player's sight, with the loot already inside. |
+| `loot_spawn` | exactly one of: `{ place = <place> }` · `{ into = <object_ref> }` · `{ stash = { pick = random\|nearest\|farthest, state = any\|full\|empty, within = R, beyond = R, scatter = bool } }` · `{ npc = <npc_ref> }` · `{ corpse = { pick, within, beyond } }` · `{ new_corpse = { section, place } }` | where `objective.fetch` (its `spawn`) and `item.spawn` (its `where`) put the loot they create. `within`/`beyond` bound the random pick by distance from the actor (both at once make a ring); nothing inside the bound falls back to the **nearest** match anywhere for `within` and to the **farthest** for `beyond`. `state`: `full` = has something inside, `empty` = holds nothing. `scatter` gives every instance its own random stash. `new_corpse` spawns the body alive and puts it down the moment it comes online, far outside the player's sight, with the loot already inside. |
 | `spawn_spec` | `{ section = "simulation_boar", smart = "…", place = <place>, restrictor = "…", spread = 1, ref = "boars", hold = true }` | `section` is required, plus a `smart` **or** a `place`. An empty `smart` counts as unset. `place` puts them where the author chose (a restrictor scatters them over its navmesh, `spread` shrinks that area toward the centre), `restrictor` is the zone they may not leave |
 | `cases_cond` | `{ { name = "yes", cond = { … } }, … }` | case names become pins |
 | `cases_weight` | `{ { name = "a", weight = 3 }, … }` | weight defaults to 1, must be > 0 |
@@ -555,7 +555,7 @@ candidate list to poll, and an offline death goes unnoticed.
 |---|---|---|
 | `item.give` | **`section: item_section`**, `count: int = 1` | Gives items to the player. Inside a dialog the transfer goes through the NPC so the talk window shows it. `count` is always whole items — for an ammo section that means whole boxes, not rounds; each box is created with the section's own box size. |
 | `item.take` | **`section: item_section`**, `count: count_or_all = 1` | Takes items away; `"all"` takes every one. Inside a dialog it goes through the NPC. `count` counts the same units as `item.give` — whole items, so boxes rather than rounds for an ammo section. |
-| `item.spawn` | **`section: item_section`**, `place: place`, `into: target_ref`, `ref: ref_name` | Creates an item at a place, or inside a container/NPC when `into` is given (`into` wins over `place`). `ref` remembers it. |
+| `item.spawn` | `section: item_section`, `count: int = 1`, `items: item_list`, **`where: loot_spawn`**, `condition: float 0..1`, `ammo: int`, `uses: int`, `upgrades: string`, `ref: ref_name` | Creates items. What: `section`+`count`, or an `items` list of section rows (a concrete-object row cannot be spawned). Where: one `loot_spawn` form — `place` (the ground; several instances spread over the place's radius), `into` (a container or NPC by story id/ref), `stash`, `npc`, `corpse`, `new_corpse` — exactly the forms `objective.fetch` resolves. State of every instance: `condition` is written on the server entity before the item ever goes online, so it holds in a stash nobody opens; `upgrades` (comma list of upgrade sections) likewise through `add_upgrade`; `ammo` is the box content of an ammo section (`create_ammo`, clamped to `box_size`) or the loaded magazine of a weapon; `uses` the remaining uses of a consumable. A magazine and uses only exist on the client object, so they wait as **online jobs** (`qs.jobs`, §5) and land the moment the object shows up. `ref` names the object and needs a single item — on several a hand-written asset gets the first and a warning. |
 | `money.give` | **`amount: int ≥ 1`** | Gives money (through the NPC inside a dialog). |
 | `money.take` | **`amount: int ≥ 1`** | Takes money. |
 | `info.give` | **`info: info`** | Gives an info portion — the interop channel with vanilla logic. An unknown id does not assert. |
@@ -572,7 +572,7 @@ candidate list to poll, and an offline death goes unnoticed.
 | `task.set_text` | **`task: task_id`**, `new_title: text`, `new_descr: text` | Rewrites the task's title and/or description. |
 | `task.set_objective_visible` | **`task: task_id`**, **`objective: objective_id`**, `visible: bool = true` | Shows or hides one step of a task in the PDA. A hidden step keeps running and can still be completed, it just takes no row. |
 | `spawn.squad` | **`section: squad_section`**, `smart: smart`, `place: place`, `restrictor: restrictor`, `spread: float = 1`, `ref: ref_name`, `hold: bool = true` | Creates a squad. A squad always belongs to a smart terrain - that is what gives it something to do - so with only a `place` the nearest smart to it is borrowed. `hold` means "stay where the quest put you": it ties the squad's `scripted_target` to the smart the AUTHOR named, and to nothing at all when they named a place instead, because a smart nobody chose is a leash pointing out of the very restrictor they were confined to. `restrictor` adds the zone to every member's in-restrictions. |
-| `spawn.object` | **`section: string`**, **`place: place`**, `ref: ref_name` | Creates an arbitrary object at a place. |
+| `spawn.object` | **`section: spawn_section`**, **`place: place`**, `yaw: float = 0`, `dead: bool = false`, `ref: ref_name` | Creates an arbitrary object at a place. `yaw` (degrees) is written into the server entity's angle, so a prop faces where the author said. `dead` is for a creature section: it is created alive and put down by an online job the moment a client object shows up — a corpse where the story needs one, the same mechanism as fetch's `new_corpse`. |
 | `squad.move` | **`target: target_ref`**, `smart: smart`, `follow_actor: bool = false` | Sends a squad to a smart terrain, or after the player. One of the two is required. |
 | `squad.remove` | **`target: target_ref`** | Removes a squad from the world. |
 | `npc.remove` | **`npc: npc_ref`** | Removes an NPC from the world. |
@@ -793,6 +793,8 @@ A `place` is one of:
 | `{ level, pos = {x,y,z}, radius }` | a sphere; `radius` defaults to 5; on another level it never contains the actor |
 | `{ restrictor = "zone_name" }` | the restrictor zone's own shape |
 | `{ smart = "…" }` | the smart terrain's position with `radius` (or its arrive distance, or 25) |
+| `{ ref = "anchor" }` | where an object this quest created stands (its zone when it has one, a `radius` around it otherwise) |
+| `{ actor = true, distance = 2 }` | that many metres in front of the player, resolved when the action runs and snapped to the navmesh; `0` = at their feet. A spawn point, not a destination: reach, `actor_in_place` and teleport refuse it |
 
 Positions are turned into vertices with `level.vertex_id` on the current level
 and `xms.graph_vertex(level, x, y, z)` for anywhere else.
@@ -958,6 +960,7 @@ state = {
       tasks  = { kill_boars = "active" },
       errors = { kill = "…" },
       timers = { wait_1 = { real_left = 12.5 } },
+      jobs   = { [5124] = { ammo = 30 } },  -- online jobs: applied by the poll once the client object exists (kill / ammo / uses)
     },
   },
 }

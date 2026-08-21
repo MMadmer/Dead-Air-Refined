@@ -195,6 +195,11 @@ function go_mt:force_set_goodwill(gw, who) self._goodwill = gw end
 function go_mt:change_goodwill(delta, who) self._goodwill = (self._goodwill or 0) + delta end
 function go_mt:set_relation(rel, who) self._relation = rel end
 function go_mt:general_goodwill(who) return self._goodwill or 0 end
+function go_mt:direction() return self._dir or vector():set(0, 0, 1) end
+function go_mt:set_ammo_elapsed(n) self._ammo_elapsed = n end
+function go_mt:get_ammo_in_magazine() return self._ammo_elapsed or 0 end
+function go_mt:set_remaining_uses(n) self._uses = n end
+function go_mt:get_remaining_uses() return self._uses or 1 end
 function go_mt:get_start_dialog() return self._start_dialog end
 function go_mt:set_start_dialog(id) self._start_dialog = id end
 function go_mt:restore_default_start_dialog() self._start_dialog = nil end
@@ -230,6 +235,9 @@ function se_mt:profile_name() return self._profile end
 function se_mt:clsid() return self._clsid or 0 end
 function se_mt:force_set_goodwill(gw, who_id) self._goodwill = gw end
 function se_mt:kill() self._alive = false local go = mock.go[self.id] if (go) then go._alive = false end end
+-- CSE_ALifeInventoryItem: upgrades are added server-side, condition is a plain field
+function se_mt:add_upgrade(name) self._upgrades = self._upgrades or {} self._upgrades[#self._upgrades + 1] = name end
+function se_mt:has_upgrade(name) for _, u in ipairs(self._upgrades or {}) do if (u == name) then return true end end return false end
 
 local function new_se(section, pos, lvid, gvid, parent, id)
 	local se = setmetatable({ id = id or mock.next_id, _section = section, position = pos or vector():set(0, 0, 0), m_level_vertex_id = lvid or 1, m_game_vertex_id = gvid or 1, parent_id = parent, online = true }, se_mt)
@@ -597,6 +605,8 @@ function alife_obj:create(section, pos, lvid, gvid, parent, reg)
 	return se
 end
 function alife_obj:create_ammo(section, pos, lvid, gvid, parent, num)
+	-- the engine has no parentless overload: 65535 is "no parent"
+	if (parent == 65535) then parent = nil end
 	local se = self:create(section, pos, lvid, gvid, parent)
 	se.ammo_left = num
 	return se

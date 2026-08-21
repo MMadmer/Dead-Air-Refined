@@ -463,20 +463,111 @@ local function fetch_host(ctx, sp, cache)
 		return se.id
 	end
 	if (sp.new_corpse) then
-		if not (ctx.w.body) then
+		-- one body per plan: the cache remembers it, the owner (a fetch token or a
+		-- quest-level job list) is told through on_body so it can put it down later
+		if not (cache.body) then
 			local _, pos, lvid, gvid = util.place_position(sp.new_corpse.place, ctx)
 			if not (pos and lvid and gvid) then error("fetch spawn: cannot resolve the corpse place") end
 			local se = alife():create(sp.new_corpse.section, pos, lvid, gvid)
 			if not (se) then error("fetch spawn: cannot create " .. tostring(sp.new_corpse.section)) end
-			ctx.w.body = se.id
-			-- it dies the moment it comes online (see poll); the items survive into the corpse
-			ctx.w.kos = ctx.w.kos or {}
-			ctx.w.kos[se.id] = true
-			core.mark_dirty()
+			cache.body = se.id
+			if (cache.on_body) then cache.on_body(se.id) end
 		end
-		return ctx.w.body
+		return cache.body
 	end
 	error("fetch spawn: empty spawn block")
+end
+
+-- Spreads one ground point over the place's radius: N items dropped on one spot pile up
+-- into a single unreadable heap, N navmesh points inside the circle read as loot.
+local function scatter_ground(ground, radius)
+	if not (ground and radius and radius > 0) then return ground end
+	local ang, d = math.random() * 2 * math.pi, math.sqrt(math.random()) * radius
+	local pos = vector():set(ground.pos.x + math.cos(ang) * d, ground.pos.y, ground.pos.z + math.sin(ang) * d)
+	local ok, lvid = pcall(level.vertex_id, pos)
+	if (ok and lvid and lvid < 4294967295 and level.valid_vertex_id(lvid)) then
+		local ok2, vp = pcall(level.vertex_position, lvid)
+		return { pos = (ok2 and vp) or pos, lvid = lvid, gvid = ground.gvid }
+	end
+	return ground
+end
+
+local function is_ammo_section(section)
+	local ok, r = pcall(function() return system_ini():line_exist(section, "box_size") end)
+	return ok and r == true
+end
+
+-- Creates items of `rows` (section + count each) at a loot_spawn destination and returns
+-- their ids. Shared by item.spawn and anything else that creates loot on demand; fetch keeps
+-- its own plan because it also has to remember hosts and heal losses.
+--   props.condition - CSE_ALifeInventoryItem.condition, set server-side before the item ever
+--                     goes online, so it holds in a stash nobody opens for an hour
+--   props.ammo      - rounds: the box content of an ammo section (create_ammo), or the loaded
+--                     magazine of a weapon - the latter only exists online, so it is a job
+--   props.uses      - remaining uses of a consumable (max_uses in its section), online only
+--   props.upgrades  - comma list of upgrade sections, added server-side (add_upgrade)
+function spawn_items(ctx, where, rows, props)
+	props = props or {}
+	if (type(where) ~= "table") then error("spawn: 'where' is required") end
+	for _, r in ipairs(rows) do
+		if (r.item) then error("spawn: a concrete-object row cannot be spawned") end
+		local ok, exists = pcall(function() return system_ini():section_exist(r.section) end)
+		if (ok and exists == false) then error("spawn: item section '" .. tostring(r.section) .. "' does not exist") end
+	end
+	local qs = ctx.qs
+	local cache = { on_body = function(id) core.online_job(qs, id, { kill = true }) end }
+	local scatter = where.stash and where.stash.scatter
+	local plan, total = {}, 0
+	for _, r in ipairs(rows) do total = total + (r.count or 1) end
+	local fixed_host, fixed_ground
+	if not (scatter) then fixed_host, fixed_ground = fetch_host(ctx, where, cache) end
+	local radius = (where.place and total > 1) and util.place_radius(where.place) or 0
+	for _, r in ipairs(rows) do
+		for _ = 1, (r.count or 1) do
+			local host, ground = fixed_host, fixed_ground
+			if (scatter) then host, ground = fetch_host(ctx, where, cache) end
+			if (ground and radius > 0) then ground = scatter_ground(ground, radius) end
+			plan[#plan + 1] = { section = r.section, host = host, ground = ground }
+		end
+	end
+	local upgrades = {}
+	if (type(props.upgrades) == "string") then
+		for up in string.gmatch(props.upgrades, "[^,%s]+") do upgrades[#upgrades + 1] = up end
+	end
+	local ids = {}
+	for _, e in ipairs(plan) do
+		local se
+		local hse = e.host and util.se_by_id(e.host)
+		if (e.host and not hse) then error("spawn: the host object vanished before the items were made") end
+		local pos, lvid, gvid = (hse and hse.position) or e.ground.pos, (hse and hse.m_level_vertex_id) or e.ground.lvid, (hse and hse.m_game_vertex_id) or e.ground.gvid
+		local rounds = tonumber(props.ammo)
+		if (rounds and is_ammo_section(e.section)) then
+			-- the box is made with exactly that many rounds; 65535 is "no parent" to the engine
+			local box = system_ini():r_u32(e.section, "box_size")
+			if (rounds > box) then rounds = box end
+			if (rounds < 1) then rounds = 1 end
+			se = alife():create_ammo(e.section, pos, lvid, gvid, e.host or 65535, rounds)
+		elseif (e.host) then
+			se = alife():create(e.section, pos, lvid, gvid, e.host)
+		else
+			se = alife():create(e.section, pos, lvid, gvid)
+		end
+		if (se) then
+			ids[#ids + 1] = se.id
+			if (props.condition ~= nil) then
+				pcall(function() se.condition = props.condition end)
+			end
+			for _, up in ipairs(upgrades) do
+				local ok = pcall(function() se:add_upgrade(up) end)
+				if not (ok) then util.warn("%s/%s: spawn: upgrade '%s' could not be added to %s", ctx.uid, ctx.node_id, up, e.section) end
+			end
+			local job = {}
+			if (rounds and not is_ammo_section(e.section)) then job.ammo = rounds end
+			if (tonumber(props.uses)) then job.uses = tonumber(props.uses) end
+			if (next(job)) then core.online_job(qs, se.id, job) end
+		end
+	end
+	return ids
 end
 
 -- Creates the loot. The plan (a host for every instance) is resolved in full before the
@@ -491,7 +582,15 @@ local function fetch_make_loot(ctx)
 		if (ok and exists == false) then error("fetch spawn: item section '" .. tostring(r.section) .. "' does not exist") end
 	end
 	local scatter = sp.stash and sp.stash.scatter
-	local cache, plan = {}, {}
+	-- the body of a new_corpse lives in the token: it dies the moment it comes online
+	-- (see poll) and the items survive into the corpse
+	local cache = { body = w.body, on_body = function(id)
+		w.body = id
+		w.kos = w.kos or {}
+		w.kos[id] = true
+		core.mark_dirty()
+	end }
+	local plan = {}
 	local fixed_host, fixed_ground
 	if not (scatter) then fixed_host, fixed_ground = fetch_host(ctx, sp, cache) end
 	for ri, r in ipairs(reqs) do
@@ -828,22 +927,24 @@ K["item.take"] = {
 	run = function(ctx, p) take_item(ctx, p.section, p.count == nil and 1 or p.count) end,
 }
 
+-- item.spawn: the destination is a loot_spawn (the forms fetch uses), the rows are the
+-- section+count shorthand or an items list. The state props apply to every instance.
 K["item.spawn"] = {
 	run = function(ctx, p)
-		local se
-		if (p.into ~= nil) then
-			local parent = util.resolve_target_id(ctx, p.into)
-			if not (parent) then error("item.spawn: 'into' target not found") end
-			local pse = util.se_by_id(parent)
-			if not (pse) then error("item.spawn: 'into' target has no server object") end
-			se = alife():create(p.section, pse.position, pse.m_level_vertex_id, pse.m_game_vertex_id, parent)
-		else
-			if not (p.place) then error("item.spawn: place or into is required") end
-			local lvl, pos, lvid, gvid = util.place_position(p.place, ctx)
-			if not (pos and lvid and gvid) then error("item.spawn: cannot resolve place") end
-			se = alife():create(p.section, pos, lvid, gvid)
+		if not (p.where) then error("item.spawn: 'where' is required") end
+		local rows = fetch_reqs(p)
+		if not (rows) then error("item.spawn: section or items is required") end
+		local ids = spawn_items(ctx, p.where, rows, {
+			condition = p.condition, ammo = p.ammo, uses = p.uses, upgrades = p.upgrades })
+		if (p.ref and ids[1]) then
+			-- a ref names ONE object; the editor refuses a ref on several, a hand-written
+			-- asset gets the first and a warning
+			if (#ids > 1) then
+				util.warn("%s/%s: item.spawn: ref '%s' names the first of %d items", ctx.uid, ctx.node_id, p.ref, #ids)
+			end
+			local section = rows[1] and rows[1].section
+			core.ref_set(ctx.qs, p.ref, { id = ids[1], kind = "item", section = section })
 		end
-		if (se and p.ref) then core.ref_set(ctx.qs, p.ref, { id = se.id, kind = "object", section = p.section }) end
 	end,
 }
 
