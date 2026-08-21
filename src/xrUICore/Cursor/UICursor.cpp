@@ -101,7 +101,12 @@ void CUICursor::UpdateCursorPosition(Fvector2 pos)
     vPrevPos = vPos;
     if (pInput->IsExclusiveMode() || !m_bound_to_system_cursor)
     {
-        constexpr float sens = 1.0f;
+        // correction maps a mouse count onto the UI canvas through the window it was
+        // measured in, so the sum below is exactly one desktop pixel per count whatever the
+        // resolution, window mode or canvas size - the cursor matches the system pointer by
+        // construction rather than by a tuned number. All that was missing was a way to ask
+        // for anything else: the rate used to be a hard-coded 1.0 that no setting could reach.
+        const float sens = psUICursorSens;
         vPos.x += pos.x * sens * correction.x;
         vPos.y += pos.y * sens * correction.y;
     }

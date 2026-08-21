@@ -44,6 +44,11 @@ public:
 
 ENGINE_API extern float psMouseSens;
 ENGINE_API extern float psMouseSensScale;
+// Menu and inventory cursor speed. 1.0 is the desktop pointer's own speed, which is what
+// the cursor moves at and what this multiplies; it is deliberately independent of the aim
+// sensitivity above, because pointing at a button and turning the character are not the
+// same gesture and should not share a slider.
+ENGINE_API extern float psUICursorSens;
 ENGINE_API extern Flags32 psMouseInvert;
 
 ENGINE_API extern float psControllerStickSensX;

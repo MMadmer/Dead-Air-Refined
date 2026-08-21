@@ -37,6 +37,7 @@ public:
 } dummyController;
 
 ENGINE_API float psMouseSens = 1.f;
+ENGINE_API float psUICursorSens = 1.f;
 ENGINE_API float psMouseSensScale = 1.f;
 ENGINE_API Flags32 psMouseInvert = {};
 

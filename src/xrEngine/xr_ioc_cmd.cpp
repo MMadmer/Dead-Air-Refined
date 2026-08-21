@@ -900,6 +900,7 @@ void CCC_Register()
     CMD3(CCC_Mask, "mouse_invert", &psMouseInvert, 1);
     psMouseSens = 0.12f;
     CMD4(CCC_Float, "mouse_sens", &psMouseSens, 0.001f, 0.6f);
+    CMD4(CCC_Float, "ui_cursor_sens", &psUICursorSens, 0.1f, 10.f);
 
     // Gamepad
     CMD3(CCC_Mask, "gamepad_invert_x", &psControllerFlags, ControllerInvertX);

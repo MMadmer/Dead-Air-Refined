@@ -1,7 +1,25 @@
+-- Menu cursor speed as a multiplier of the desktop pointer, which is what the engine moves it
+-- at. Offered as steps rather than a slider because the options list only builds check boxes
+-- and combo boxes; the value itself lives in the ui_cursor_sens console variable, so there is
+-- one source of truth and it persists in user.ltx like every other sensitivity.
+local CURSOR_SENS_STEPS = { "0.50", "0.75", "1.00", "1.25", "1.50", "2.00" }
+
+local function nearest_cursor_step(value)
+	local best, best_diff = "1.00", nil
+	for _, step in ipairs(CURSOR_SENS_STEPS) do
+		local diff = math.abs(tonumber(step) - value)
+		if (not best_diff) or (diff < best_diff) then
+			best, best_diff = step, diff
+		end
+	end
+	return best
+end
+
 local function on_init(menu)
 	menu.gameplay_options["infinite_bolts"] = {typ="check"}
 	menu.gameplay_options["pause_in_background"] = {typ="check"}
 	menu.gameplay_options["crosshair_dot"] = {typ="check"}
+	menu.gameplay_options["cursor_sens"] = {typ="list", list=CURSOR_SENS_STEPS}
 end
 
 local function on_set_values(menu, opt_manager)
@@ -20,6 +38,11 @@ local function on_set_values(menu, opt_manager)
 	if (crosshair_dot and crosshair_dot.ctrl) then
 		crosshair_dot.ctrl:SetCheck(console:get_bool("hud_crosshair_dot"))
 	end
+
+	local cursor_sens = menu.gameplay_options["cursor_sens"]
+	if (cursor_sens and cursor_sens.ctrl) then
+		cursor_sens.ctrl:SetText(nearest_cursor_step(console:get_float("ui_cursor_sens")))
+	end
 end
 
 local function on_accept(menu, opt_manager, console)
@@ -36,6 +59,11 @@ local function on_accept(menu, opt_manager, console)
 	local crosshair_dot = menu.gameplay_options["crosshair_dot"]
 	if (crosshair_dot and crosshair_dot.ctrl) then
 		console:execute("hud_crosshair_dot " .. (crosshair_dot.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local cursor_sens = menu.gameplay_options["cursor_sens"]
+	if (cursor_sens and cursor_sens.ctrl) then
+		console:execute("ui_cursor_sens " .. cursor_sens.ctrl:GetText())
 	end
 end
 
