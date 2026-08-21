@@ -478,6 +478,16 @@ local function enqueue(op)
 	queue[qtail] = op
 end
 
+-- Run something AFTER the op being drained has fully unwound. The queue has
+-- always understood a "call" op; this is the producer for it.
+function enqueue_call(fn)
+	if (type(fn) == "function") then enqueue({ op = "call", fn = fn }) end
+end
+
+-- True while the queue is being drained: a caller that wants to run after the
+-- current op has to know whether there IS a drain to append to.
+function is_draining() return draining end
+
 function enqueue_enter(uid, node, from)
 	enqueue({ op = "enter", uid = uid, node = node, from = from })
 end

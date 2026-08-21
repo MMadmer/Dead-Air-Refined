@@ -1145,8 +1145,30 @@ collect Y, report" with a marker per step instead of needing a quest apiece.
 
 A quest declares them under its task: `objectives = { { id = ..., title = ..., target = ..., visible = ... }, ... }`.
 `task.objective_complete` / `task.objective_fail` mark one step through
-`actor:set_task_state(state, task_id, index)` and leave the task itself in progress -
-closing the task is still `task.complete`. `task.set_objective_target` moves one step's
+`actor:set_task_state(state, task_id, index)` and leave the task itself in progress.
+
+**`auto_complete` (task declaration, default on).** A task of steps is done when its
+steps are: the step that leaves every declared objective `completed` closes the task
+itself, so nothing hand-writes `task.complete` after the last one. Declare
+`auto_complete = false` on the task for one that ends on something its steps do not
+cover. Three things make it safe rather than surprising:
+
+- It is hooked on `task.objective_complete` and nowhere else. `restore_objectives`
+  re-applies stored step states after a load by calling `set_task_state` directly, so
+  a save can never re-close the task or announce it a second time.
+- The closing step sends no `updated` news of its own - the task's own **completed**
+  notification is already on the way, and two toasts with the same title back to back
+  read as a bug.
+- It runs AFTER the node that closed the step has unwound. `impl.finish` is called
+  before the node's `on_exit` (see `complete_impl`), so closing the task inline would
+  point every `task.*` action in that `on_exit` at a task that is already closed; the
+  rule is appended to the queue as a `call` op instead.
+
+A **failed** step never satisfies it: the task stays open and the author decides what a
+failure means. When every step is terminal and one of them failed, the runtime says so
+once in the log rather than leaving a task nothing will ever close. Completing an
+already completed task or step is a no-op, so a hand-written `task.complete` left in an
+older graph costs nothing. `task.set_objective_target` moves one step's
 marker (no target clears just that one) and `task.set_objective_text` rewrites its text.
 Step states live in `qs.objectives[<task>][<objective>]`, survive a save, and are read by
 the `objective_status` condition, so a graph can branch on one step without splitting the

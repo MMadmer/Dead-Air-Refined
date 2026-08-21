@@ -41,7 +41,8 @@ return {
         { kind = "item.take", params = { section = "bread", count = 2 } },
         { kind = "item.give", params = { section = "medkit", count = 1 } },
         { kind = "money.give", params = { amount = 500 } },
-        { kind = "task.complete", params = { task = "bring_bread" } },
+        -- второй шаг закрывается здесь, а саму задачу завершает auto_complete
+        { kind = "task.objective_complete", params = { task = "bring_bread", objective = "deliver" } },
         { kind = "news.tip", params = { text = "Спасибо, сталкер. Держи аптечку и немного денег." } },
       },
       out = { next = "finish" } },

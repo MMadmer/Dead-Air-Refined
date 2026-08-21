@@ -1247,6 +1247,16 @@ function build(raw, module, relpath, src)
 						end
 					end
 					if (t.icon ~= nil) then task.icon = tostring(t.icon) end
+					-- A task of steps is done when its steps are: the last one closing
+					-- completes the task itself, so nobody hand-writes task.complete after
+					-- it. Off for a task that ends on something its steps do not cover.
+					if (t.auto_complete ~= nil) then
+						if (type(t.auto_complete) ~= "boolean") then
+							problem(st.problems, "E006", nil, "task:" .. tid, "auto_complete must be true or false")
+						else
+							task.auto_complete = t.auto_complete
+						end
+					end
 					-- Sub-objectives. The engine has carried them all along (CGameTask
 					-- keeps a vector of SGameTaskObjective, each with its own title,
 					-- description and map spot); a task of several steps used to need a
@@ -1291,6 +1301,10 @@ function build(raw, module, relpath, src)
 								end
 							end
 						end
+					end
+					if (task.auto_complete == false and #task.objective_names == 0) then
+						problem(st.problems, "W032", nil, "task:" .. tid,
+							"auto_complete is only about steps - a task without objectives never auto-completes anyway")
 					end
 					q.tasks[tid] = task
 					q.task_names[#q.task_names + 1] = tid

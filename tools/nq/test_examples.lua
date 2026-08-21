@@ -2401,6 +2401,90 @@ mock.ticks(2)
 check(core.quest_state("mod_a.sdone2").tasks.plain == "completed", "spot_task with no step closes the whole task")
 if (failed > 0) then fail_dump() end
 
+-- ============================================================================ (z14) auto_complete
+-- A task of steps is done when its steps are. Default on, so the last step closing completes
+-- the task; auto_complete = false leaves it for the quest to close; a FAILED step never
+-- satisfies the rule, so the task stays open and the author decides what a failure means.
+section("(z14) auto_complete: the last step closes the task, false and a failure do not")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/ac.nqasset"] = [[return { nq = 1, id = "ac",
+  tasks = {
+	walk = { title = "Walk", type = "storyline",
+	         objectives = { { id = "one", title = "One" }, { id = "two", title = "Two" } } },
+	hand = { title = "Hand", type = "storyline", auto_complete = false,
+	         objectives = { { id = "only", title = "Only" } } },
+	luck = { title = "Luck", type = "storyline",
+	         objectives = { { id = "good", title = "Good" }, { id = "bad", title = "Bad" } } },
+	solo = { title = "Solo", type = "storyline",
+	         objectives = { { id = "only", title = "Only" } } },
+  },
+  nodes = {
+	{ id = "start", kind = "trigger.start",
+	  on_enter = { { kind = "task.give", params = { task = "walk" } },
+	               { kind = "task.give", params = { task = "hand" } },
+	               { kind = "task.give", params = { task = "luck" } },
+	               { kind = "task.give", params = { task = "solo" } } },
+	  out = { next = "hold" } },
+	{ id = "hold", kind = "wait.timer", params = { duration = { seconds = 9000 } } },
+  } }]]
+mock.first_update()
+core = xms_nq
+z14_ctx = core.make_ctx("mod_a.ac", nil)
+z14_qs = core.quest_state("mod_a.ac")
+check(z14_qs.tasks.walk == "active", "the multi-step task starts active")
+
+-- one of two: not yet
+xms_nq_task.objective_complete(z14_ctx, "walk", "one")
+check(core.quest_state("mod_a.ac").tasks.walk == "active", "one step of two leaves the task open")
+-- the last one closes it
+xms_nq_task.objective_complete(z14_ctx, "walk", "two")
+check(core.quest_state("mod_a.ac").tasks.walk == "completed", "the last step completed the task itself")
+
+-- auto_complete = false: the only step closes, the task does not
+xms_nq_task.objective_complete(z14_ctx, "hand", "only")
+z14_qs = core.quest_state("mod_a.ac")
+check(z14_qs.objectives.hand.only == "completed", "the step of the opted-out task closed")
+check(z14_qs.tasks.hand == "active", "auto_complete = false left the task for the quest")
+
+-- a failed step never satisfies "all completed"
+xms_nq_task.objective_fail(z14_ctx, "luck", "bad")
+xms_nq_task.objective_complete(z14_ctx, "luck", "good")
+check(core.quest_state("mod_a.ac").tasks.luck == "active", "a failed step keeps the task open")
+if (failed > 0) then fail_dump() end
+
+-- Two toasts with the same title back to back read as a bug: the step that ends the task
+-- keeps quiet, because the task's own "completed" notification is already on the way.
+section("(z14) auto_complete: the closing step does not announce itself on top of the task")
+z14_news = #mock.news
+xms_nq_task.objective_complete(z14_ctx, "solo", "only")
+check(core.quest_state("mod_a.ac").tasks.solo == "completed", "the single step closed the task")
+check(#mock.news == z14_news + 1, "exactly one notification - the task's own, not the step's on top of it")
+if (failed > 0) then fail_dump() end
+
+-- A hand-written task.complete after the rule already closed the task must be a no-op,
+-- not a warning about a PDA that lost nothing.
+section("(z14) auto_complete: closing an already closed task is quiet")
+z14_news = #mock.news
+xms_nq_task.complete(z14_ctx, "walk")
+check(core.quest_state("mod_a.ac").tasks.walk == "completed", "still completed")
+check(#mock.news == z14_news, "the repeat close announced nothing")
+if (failed > 0) then fail_dump() end
+
+-- The load path writes the engine state directly (restore_objectives) instead of going
+-- through objective_complete, so a save must not re-complete or re-announce anything.
+section("(z14) auto_complete: a load does not re-announce the completed task")
+mock.ticks(1)		-- the state reaches the blob on a tick, and only then can a load restore it
+z14_news = #mock.news
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+check(core.quest_state("mod_a.ac").tasks.walk == "completed", "the task is still completed after the load")
+check(#mock.news == z14_news, "the load announced nothing")
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

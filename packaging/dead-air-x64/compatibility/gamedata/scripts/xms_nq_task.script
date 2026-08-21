@@ -272,6 +272,8 @@ end
 
 local function finish(ctx, name, status)
 	decl(ctx, name)
+	-- already in that state: saying it twice would warn about a PDA that lost nothing
+	if ((ctx.qs and ctx.qs.tasks and ctx.qs.tasks[name]) == status) then return end
 	local a = actor()
 	if not (a) then error("task." .. status .. ": no actor") end
 	local tid = task_id(ctx.uid, name)
@@ -442,24 +444,89 @@ function set_text(ctx, name, title, descr)
 	if (changed) then send_news("updated", t) end
 end
 
+-- Every declared step completed means the task is: the last one closing completes it.
+-- Author turns it off with auto_complete = false on the task declaration.
+--
+-- Deliberately hooked on finish_objective and nowhere else. restore_objectives
+-- re-applies stored step states after a load by calling set_task_state directly,
+-- so it never comes through here - a save cannot re-complete the task or announce
+-- it to the player a second time. A failed step simply never satisfies the rule:
+-- the task stays open and the author decides what a failure means.
+local function auto_complete_ready(ctx, name)
+	local ok, d = pcall(decl, ctx, name)
+	if not (ok) or d.auto_complete == false then return false end
+	local names = d.objective_names or {}
+	if (#names == 0) then return false end
+	-- only a task that is still running: completed/failed/removed stay as they are
+	if ((ctx.qs and ctx.qs.tasks and ctx.qs.tasks[name]) ~= "active") then return false end
+	for _, oid in ipairs(names) do
+		if (objective_status(ctx, name, oid) ~= "completed") then return false end
+	end
+	return true
+end
+
+-- Every step terminal but not all completed: the rule can never fire again and the
+-- player is left with a task nothing will close. Say so once, where the author looks.
+local function warn_stuck(ctx, name)
+	local ok, d = pcall(decl, ctx, name)
+	if not (ok) or d.auto_complete == false then return end
+	local names = d.objective_names or {}
+	if (#names == 0) then return end
+	if ((ctx.qs and ctx.qs.tasks and ctx.qs.tasks[name]) ~= "active") then return end
+	local any_failed = false
+	for _, oid in ipairs(names) do
+		local s = objective_status(ctx, name, oid)
+		if (s ~= "completed" and s ~= "failed") then return end
+		if (s == "failed") then any_failed = true end
+	end
+	if (any_failed) then
+		util.warn("%s: task %s has no step left to run and one of them failed - "
+			.. "auto_complete will not close it, wire task.fail or task.complete yourself",
+			ctx.uid, name)
+	end
+end
+
+local function auto_complete_task(ctx, name)
+	if (auto_complete_ready(ctx, name)) then complete(ctx, name) end
+end
+
 -- The step is marked in the PDA and remembered in our own state; a step of a task
 -- that is not in the PDA is recorded only, exactly like the task itself.
 local function finish_objective(ctx, name, oid, status)
 	local d, o = decl_objective(ctx, name, oid)
+	-- already in that state: repeating it would tell the player the same thing again
+	if (objective_status(ctx, name, oid) == status) then return end
 	local a = actor()
 	if not (a) then error("task.objective_" .. status .. ": no actor") end
 	local tid = task_id(ctx.uid, name)
 	local t = get_task(a, tid, true)
+	-- recorded first: whether this step closes the whole task is read off the state,
+	-- and the answer decides what the player is told below
+	set_objective_status(ctx, name, oid, status)
+	local closing = (status == "completed") and auto_complete_ready(ctx, name)
 	if (t) then
 		pcall(a.set_task_state, a, (status == "completed") and task.completed or task.fail, tid, o.index)
 		-- A step closing is a change to the task the player can see, and the engine tells the
 		-- game about steps on a callback of their own that nothing listens to. Without this the
-		-- PDA just quietly redraws and the player is told nothing at all.
-		send_news("updated", t)
+		-- PDA just quietly redraws and the player is told nothing at all. The exception is the
+		-- step that ends the task: its own "completed" toast is already on the way, and two
+		-- notifications with the same title back to back read as a bug.
+		if not (closing) then send_news("updated", t) end
 	else
 		util.warn("%s: task %s is not in the PDA, objective %s recorded as '%s' only", ctx.uid, name, oid, status)
 	end
-	set_objective_status(ctx, name, oid, status)
+	if (closing) then
+		-- AFTER the node unwinds: this runs inside impl.finish, which the queue calls
+		-- before the node's own on_exit actions - closing the task here would make every
+		-- task.* action in that on_exit fire at a task that is already closed.
+		if (core.is_draining and core.is_draining() and core.enqueue_call) then
+			core.enqueue_call(function() auto_complete_task(ctx, name) end)
+		else
+			auto_complete_task(ctx, name)
+		end
+	elseif (status == "failed") then
+		warn_stuck(ctx, name)
+	end
 end
 
 function objective_complete(ctx, name, oid) finish_objective(ctx, name, oid, "completed") end

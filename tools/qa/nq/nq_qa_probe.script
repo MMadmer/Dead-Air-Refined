@@ -573,6 +573,11 @@ local function build_p1()
 		-- spot_task/spot_objective and spot_done closes it on the way out
 		local qs = qstate("linear_fetch")
 		local per = qs and qs.objectives and qs.objectives["bring_bread"]
+		-- nobody calls task.complete for this task any more: both steps close and
+		-- auto_complete closes the task itself
+		check("b.task_auto_completed", per ~= nil and per["deliver"] == "completed" and nqst == "completed",
+			"auto_complete closed the task once both steps were done: deliver=%s task=%s",
+			tostring(per and per["deliver"]), tostring(nqst))
 		check("b.step_auto_closed", per ~= nil and per["find"] == "completed",
 			"spot_done closed the bound step by itself: state=%s",
 			tostring(per and per["find"]))
