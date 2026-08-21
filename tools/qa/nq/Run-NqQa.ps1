@@ -439,7 +439,10 @@ function Invoke-NqPhase {
     }
     $logDestination = Join-Path $phaseResult 'engine.log'
     Copy-Item -LiteralPath $log.FullName -Destination $logDestination -Force
-    $logText = Get-Content -LiteralPath $logDestination -Raw
+    # the engine writes its log in cp1251; without the code page PowerShell reads
+    # it as UTF-8 and every Russian line arrives as replacement characters, which
+    # a failure report then quotes back at you as garbage
+    $logText = Get-Content -LiteralPath $logDestination -Raw -Encoding 1251
 
     return Test-PhaseLog -Name $Name -LogText $logText -LogPath $logDestination -ExitCode $exitCode -AllowNoNqLines:$AllowNoNqLines
 }

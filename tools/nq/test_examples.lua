@@ -393,6 +393,13 @@ check(rt.a == 1 and rt.b == "x\ny" and rt.c[3] == 2.5 and rt["k k"].z == "q", "s
 check(util.decode(util.encode(t)).c[1] == true, "encode/decode (marshal path)")
 local ctx = { qs = { vars = { name = "Wolf", n = 3 } } }
 check(util.format_text(ctx, "hi {var:name} x{var:n} {actor}") == "hi Wolf x3 Strelok", "placeholders substituted")
+-- A variable keeps the asset's raw UTF-8 so that nq.var comparisons stay byte-equal,
+-- but the text it is spliced into is already cp1251 - splicing without converting
+-- put UTF-8 in the middle of a cp1251 string and the PDA showed question marks.
+ctx.qs.vars.who = "Волк"
+check(util.format_text(ctx, "{var:who}") == util.to_cp1251("Волк"), "a non-ASCII variable is converted on splice")
+check(util.format_text(ctx, "x{var:n}") == "x3", "a number variable is untouched")
+check(util.format_text(ctx, "{var:missing}") == "", "an unknown variable is still empty")
 local g0 = util.game_secs()
 check(g0 == 1325376000, "game secs are absolute civil seconds (2012-01-01 = " .. g0 .. ")")
 mock.advance_game(90061)

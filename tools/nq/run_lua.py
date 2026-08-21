@@ -58,7 +58,15 @@ def lua_error(dll, L):
     n = ctypes.c_size_t(0)
     s = dll.lua_tolstring(L, -1, ctypes.byref(n))
     dll.lua_settop(L, -2)
-    return s.decode("cp1251", "replace") if s else "<no message>"
+    if not s:
+        return "<no message>"
+    # the message carries whatever the failing chunk held: test sources are UTF-8,
+    # while a string that already went through to_cp1251 is not - try the source
+    # encoding first so a UTF-8 message is not mangled into replacement characters
+    try:
+        return s.decode("utf-8")
+    except UnicodeDecodeError:
+        return s.decode("cp1251", "replace")
 
 
 def push_args(dll, L, script, args):

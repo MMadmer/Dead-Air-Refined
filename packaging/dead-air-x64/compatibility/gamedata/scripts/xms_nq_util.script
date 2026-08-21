@@ -130,7 +130,12 @@ function pick_text(v)
 	return nil
 end
 
--- Substitutes {var:name} and {actor} at use time. Text is already cp1251, placeholders are ASCII.
+-- Substitutes {var:name} and {actor} at use time. The text itself is already
+-- cp1251 (canon_text converted it at load), but a variable is NOT: its value
+-- comes out of the asset as raw UTF-8 and is kept that way so that comparisons
+-- in nq.var stay byte-equal on both sides. So the value - and only the value -
+-- is converted here, right where it enters cp1251 text. {actor} needs nothing:
+-- character_name comes from the engine already encoded.
 function format_text(ctx, text)
 	if (type(text) ~= "string") then return text end
 	if not (string.find(text, "{", 1, true)) then return text end
@@ -138,6 +143,7 @@ function format_text(ctx, text)
 		local vars = ctx and (ctx.qs and ctx.qs.vars or ctx.vars)
 		local v = vars and vars[name]
 		if (v == nil) then return "" end
+		if (type(v) == "string") then return (to_cp1251(v)) end
 		return tostring(v)
 	end)
 	s = string.gsub(s, "{actor}", function()
