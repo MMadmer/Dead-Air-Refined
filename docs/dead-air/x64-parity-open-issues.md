@@ -54,6 +54,19 @@ validation rules are defined in [`PROJECT_RULES.md`](../../PROJECT_RULES.md).
   pipeline the x86 reference used, and `-dxdebug` drains the D3D11 validator into
   the log, naming any invalid bind or draw that precedes the removal.
 
+  A timing signature has since emerged and narrows the search considerably. Every
+  removal of this kind sits in the first minute of the session: 48.7 s on the AMD
+  RX 6600, 55.9 s and 44.3 s on an NVIDIA RTX 3070 Laptop, all three on Escape and
+  all three at a healthy frame rate right up to the fatal (60 to 112 fps). Startup
+  and load account for roughly ten of those seconds, so the removal lands about 35
+  to 47 seconds into actual play. The 1.3.3 report, by contrast, died at 1351 s -
+  it belongs to the closed NULL-input-layout defect, and the gap between the two
+  clusters is itself evidence that these are two different faults. Two GPU vendors
+  in one cluster rules out a vendor bug, and a fixed wall-clock window rules out
+  anything driven by frame count. What runs in that window and not later is the
+  question worth answering next: ALife bringing its first objects online, the
+  resources they create, and the first weather step all fall inside it.
+
 ## Deferred diagnostics candidate
 
 - Early vectored capture of silent fatal failures (heap corruption, stack
