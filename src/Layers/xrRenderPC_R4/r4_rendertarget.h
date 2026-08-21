@@ -81,6 +81,7 @@ public:
     ref_rt rt_smap_depth; // 24(32) bit,	depth
     ref_rt rt_smap_rain;
     ref_rt rt_smap_depth_minmax; //	is used for min/max sm
+    ref_rt rt_smap_hud; // first-person hands and item, for self-shadowing only
 
     //	Igor: for async screenshots
     ID3DTexture2D* t_ss_async; // 32bit		(r,g,b,a) is situated in the system memory
@@ -114,6 +115,14 @@ private:
 
     //	generate min/max
     ref_shader s_create_minmax_sm;
+
+    //	first-person self-shadow
+    ref_shader s_hud_shadow;
+    // HUD eye space -> self-shadow texel space, rebuilt every frame the pass runs.
+    Fmatrix m_hud_shadow_xform{ Fidentity };
+    // Reconstruction parameters of the narrow HUD projection, in the layout the deferred
+    // position decompression uses: (HorzTan, VertTan, 2*HorzTan/width, 2*VertTan/height).
+    Fvector4 m_hud_pos_decompress{};
 
     //	DX11 Rain
     ref_shader s_rain;
@@ -279,6 +288,17 @@ public:
 
     //	Generates min/max sm
     void create_minmax_SM(CBackend& cmd_list);
+
+    //	First-person self-shadow: the caster map, and its application to the HUD pixels
+    void phase_smap_hud(CBackend& cmd_list);
+    void phase_hud_shadow(CBackend& cmd_list);
+    bool hud_shadow_available() const { return !!s_hud_shadow && !!rt_smap_hud; }
+    u32 hud_smap_size() const { return rt_smap_hud ? rt_smap_hud->dwWidth : 0; }
+    void set_hud_shadow_params(const Fmatrix& xform, const Fvector4& decompress)
+    {
+        m_hud_shadow_xform = xform;
+        m_hud_pos_decompress = decompress;
+    }
 
     void phase_rain(CBackend& cmd_list);
     void draw_rain(CBackend& cmd_list, light& RainSetup);

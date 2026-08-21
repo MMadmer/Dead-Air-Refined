@@ -17,10 +17,13 @@
 #include "Layers/xrRender/blenders/dx11MinMaxSMBlender.h"
 #if defined(USE_DX11)
 #    include "Layers/xrRender/blenders/dx11HDAOCSBlender.h"
+#    include "Layers/xrRender/blenders/blender_hud_shadow.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
+IReader* open_shader(pcstr shader);
+
 void CRenderTarget::u_stencil_optimize(CBackend& cmd_list, eStencilOptimizeMode eSOM)
 {
     PIX_EVENT(stencil_optimize);
@@ -383,6 +386,35 @@ CRenderTarget::CRenderTarget()
             CBlender_createminmax b_create_minmax;
             s_create_minmax_sm.create(&b_create_minmax, "null");
         }
+
+#if defined(USE_DX11)
+        // First-person self-shadow. The map is its own, tight one instead of a slot in the sun
+        // cascades on purpose: the world already casts the actor's body and the item's world
+        // model, so a HUD caster in a world cascade would drop a second pair of arms onto the
+        // ground. Its own map shadows the HUD pixels and nothing else. Created regardless of
+        // the preset - one small depth surface - so r__hud_shadow takes effect without a
+        // renderer restart, exactly like the other preset-driven render switches.
+        {
+            // The pass ships its own shader. An installation that updated the binaries but
+            // not the content archive has no such file, and compiling a missing shader is
+            // fatal - so the feature simply does not come up there, the same way the HDAO
+            // compute path checks for its own sources.
+            IReader* hud_shadow_ps = open_shader("hud_shadow.ps");
+            const bool hud_shadow_shader_exists = !!hud_shadow_ps;
+            FS.r_close(hud_shadow_ps);
+
+            if (hud_shadow_shader_exists)
+            {
+                constexpr u32 hud_smapsize = 1024;
+                rt_smap_hud.create(r2_RT_smap_hud, hud_smapsize, hud_smapsize, depth_format);
+                if (rt_smap_hud)
+                {
+                    CBlender_hud_shadow b_hud_shadow;
+                    s_hud_shadow.create(&b_hud_shadow, "null");
+                }
+            }
+        }
+#endif
 
         // Accum mask
         {

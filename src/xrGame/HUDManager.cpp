@@ -129,6 +129,33 @@ void CHUDManager::Render_Last(u32 context_id)
 }
 
 #include "player_hud.h"
+
+void CHUDManager::Render_Shadow(u32 context_id)
+{
+    ZoneScoped;
+
+    if (!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2 | HUD_DRAW_RT2))
+        return;
+    if (0 == pUIGame)
+        return;
+    if (!need_render_hud())
+        return;
+    if (!g_player_hud)
+        return;
+
+    IGameObject* O = g_pGameLevel->CurrentViewEntity();
+    if (0 == O)
+        return;
+
+    // renderable_HUD deliberately stays false here: the caster has to enter the shadow graph
+    // as ordinary dynamic geometry, because mapHUD is drawn by the main pass only and anything
+    // parked there would never reach a shadow map. The same lock as the other two entry points
+    // keeps the HUD state consistent while the main pass builds its own graph in parallel.
+    const auto root = O->H_Root();
+    ScopeLock lock{ &render_lock };
+    g_player_hud->render_shadow(context_id, root);
+}
+
 bool CHUDManager::RenderActiveItemUIQuery()
 {
     if (!psHUD_Flags.is(HUD_DRAW_RT2))

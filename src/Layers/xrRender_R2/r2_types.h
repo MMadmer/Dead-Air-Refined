@@ -53,6 +53,12 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_RT_smap_depth    "$user$smap_depth"  // --- directional
 #define     r2_RT_smap_rain     "$user$smap_rain"
 #define     r2_RT_smap_depth_minmax "$user$smap_depth_minmax"
+#define     r2_RT_smap_hud      "$user$smap_hud"    // --- first-person self-shadow
+
+// Depth slice rmNear() squeezes the first-person HUD into, so it can never intersect the
+// world. It doubles as the marker of a HUD pixel: nothing else in the frame reaches it,
+// because at a 0.05 m near plane this depth is a distance of about 5 cm from the eye.
+static constexpr float r2_hud_depth_limit = 0.02f;
 
 #define     r2_async_ss         "$user$async_ss"
 

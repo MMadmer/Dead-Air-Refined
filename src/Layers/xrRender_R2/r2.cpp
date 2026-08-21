@@ -387,7 +387,12 @@ void CRender::create()
     o.ssao_half_data = ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_HALF_DATA) && o.ssao_opt_data && (ps_r_ssao != 0);
 #if defined(USE_DX11)
     o.ssao_hdao = ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_HDAO) && (ps_r_ssao != 0);
-    o.ssao_ultra = HW.ComputeShadersSupported && ssao_hdao_cs_shaders_exist();
+    // The ultra path dispatches a compute shader that writes rt_ssao_temp through a UAV, and the
+    // UAV bind flag is only granted at feature level 11.0 (dx11SH_RT). A 10.x device still reports
+    // ComputeShadersSupported for CS 4.x, so without this guard phase_hdao would bind a null UAV
+    // and dispatch against it - undefined for the driver, and the device is lost mid-frame.
+    o.ssao_ultra = HW.FeatureLevel >= D3D_FEATURE_LEVEL_11_0 && HW.ComputeShadersSupported &&
+        ssao_hdao_cs_shaders_exist();
     o.ssao_hbao = !o.ssao_hdao && ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_HBAO) && (ps_r_ssao != 0);
 #elif defined(USE_OGL)
     // TODO: OGL: temporary disabled HBAO/HDAO, need to fix it
@@ -830,7 +835,8 @@ void CRender::add_SkeletonWallmark(
 
 void CRender::rmNear(CBackend& cmd_list)
 {
-    const D3D_VIEWPORT viewport = { 0, 0, Target->get_width(cmd_list), Target->get_height(cmd_list), 0.f, 0.02f };
+    const D3D_VIEWPORT viewport = {
+        0, 0, Target->get_width(cmd_list), Target->get_height(cmd_list), 0.f, r2_hud_depth_limit };
     cmd_list.SetViewport(viewport);
 }
 

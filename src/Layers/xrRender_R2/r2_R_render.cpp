@@ -432,6 +432,12 @@ void CRender::Render()
             r_sun.sync();
         else
             r_sun_old.sync();
+#if defined(USE_DX11)
+        // Between the cascades and the ambient blend the accumulator holds the sun term and
+        // nothing else, which is the only point where the first-person self-shadow can be
+        // applied to sunlight alone.
+        render_hud_shadow();
+#endif
         Target->accum_direct_blend(dsgraph.cmd_list);
     }
 

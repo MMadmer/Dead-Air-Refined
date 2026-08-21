@@ -33,6 +33,9 @@ class ENGINE_API XR_NOVTABLE CCustomHUD
 public:
     virtual void Render_First(u32 context_id) = 0;
     virtual void Render_Last(u32 context_id) = 0;
+    // The first-person hands and item as shadow casters. Separate from Render_Last because a
+    // caster must not be marked as HUD geometry: mapHUD belongs to the main pass alone.
+    virtual void Render_Shadow(u32 context_id) = 0;
 
     virtual void OnFrame() = 0;
     virtual void Load() = 0;

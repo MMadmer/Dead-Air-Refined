@@ -634,6 +634,33 @@ void player_hud::render_hud(u32 context_id, IRenderable* root)
         item1->render(context_id, root);
 }
 
+void player_hud::render_shadow(u32 context_id, IRenderable* root)
+{
+    attachable_hud_item* item0 = m_attached_items[0];
+    attachable_hud_item* item1 = m_attached_items[1];
+
+    if (!item0 && !item1)
+        return;
+
+    const bool b_r0 = item0 && item0->need_renderable();
+    const bool b_r1 = item1 && item1->need_renderable();
+
+    if (!b_r0 && !b_r1)
+        return;
+
+    // Visuals only, with the same transforms the main pass uses. attachable_hud_item::render
+    // is deliberately not reused: it also runs render_hud_mode(), which registers the item's
+    // light, and that must happen once per frame, not once per pass.
+    if (m_model)
+        GEnv.Render->add_Visual(context_id, root, m_model->dcast_RenderVisual(), m_transform);
+
+    if (item0 && item0->m_model)
+        GEnv.Render->add_Visual(context_id, root, item0->m_model->dcast_RenderVisual(), item0->m_item_transform);
+
+    if (item1 && item1->m_model)
+        GEnv.Render->add_Visual(context_id, root, item1->m_model->dcast_RenderVisual(), item1->m_item_transform);
+}
+
 #include "xrCore/Animation/Motion.hpp"
 
 u32 player_hud::motion_length(const shared_str& anim_name, const shared_str& hud_name, const CMotionDef*& md)

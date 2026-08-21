@@ -1,0 +1,50 @@
+// Dead Air: Refined - first-person self-shadow.
+//
+// Runs once per frame between the sun cascades and the ambient blend, over the pixels the
+// HUD wrote. The accumulator carries the sun term alone at that moment, so the result is
+// modulated in (ZERO / SRCCOLOR) and darkens sunlight only.
+//
+// Deliberately standalone: including common.h would drag in the deferred sampler set, whose
+// position target changes type under MSAA. Everything this pass needs is declared here.
+
+Texture2D               s_position;     // deferred position, .z is eye-space depth
+Texture2D               s_smap_hud;     // first-person caster depth
+SamplerComparisonState  smp_smap;
+
+uniform float4x4        m_hud_shadow;       // eye space -> self-shadow texel space
+uniform float4          hud_pos_decompress; // HorzTan, VertTan, 2*HorzTan/w, 2*VertTan/h
+uniform float4          hud_smap_size;      // size, 1/size, 0, 0
+
+float4 main(float2 tc0 : TEXCOORD0, float4 col : COLOR, float4 pos2d : SV_POSITION) : SV_Target
+{
+    // Eye-space depth is written verbatim by the model shaders in both g-buffer layouts, so
+    // it is the one channel that can be trusted here. The lateral part has to be rebuilt with
+    // the HUD field of view: the deferred decompression carries the main camera FOV and would
+    // place a first-person pixel about twice as far off-axis as it really is.
+    float  Pz = s_position.Load(int3(pos2d.xy, 0)).z;
+    float3 Pe = float3(Pz * (pos2d.xy * hud_pos_decompress.zw - hud_pos_decompress.xy), Pz);
+
+    float4 PS = mul(m_hud_shadow, float4(Pe, 1.0f));
+    if (PS.w <= 0.0f)
+        return 1.0f;
+
+    float3 tc = PS.xyz / PS.w;
+
+    // Outside the caster box there is nothing to be shadowed by: stay lit rather than clamp
+    // to the border texel, which would smear the map's edge across the whole weapon.
+    if (any(saturate(tc.xy) != tc.xy) || tc.z <= 0.0f || tc.z >= 1.0f)
+        return 1.0f;
+
+    // 2x2 rotated grid. The map covers three metres across 1024 texels, so a single tap is
+    // already close to pixel-exact; four keep the contact edges from aliasing as the hands
+    // move, and a wider kernel would only wash the contact out.
+    float s = 0.0f;
+    [unroll] for (int i = 0; i < 4; ++i)
+    {
+        float2 o = float2((i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f) * hud_smap_size.y;
+        s += s_smap_hud.SampleCmpLevelZero(smp_smap, tc.xy + o, tc.z).x;
+    }
+    s *= 0.25f;
+
+    return float4(s, s, s, s);
+}

@@ -180,6 +180,11 @@ int ps_r__light_shadow_budget = 0;
 // (High and Maximum turn it on, see CCC_Preset) and still needs the grass shadow option
 // (r2_sun_details high) like every other grass shadow. Opt-in at runtime for the rest.
 int ps_r__light_details = 0;
+// Self-shadowing of the first-person hands and item: their own geometry shades them instead
+// of the whole model taking one flat sun value. It uses a small dedicated map rather than a
+// world cascade, so the weapon never drops a second shadow on the ground next to the one the
+// actor's body and the item's world model already cast. Maximum preset only (see CCC_Preset).
+int ps_r__hud_shadow = 0;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -639,6 +644,17 @@ public:
             xr_sprintf(details_cmd, "r__light_details %d", light_details_by_preset[*value]);
             Console->Execute(details_cmd);
         }
+
+        // Weapon self-shadowing is a Maximum-only feature: every frame the sun is up it draws
+        // the first-person hands and item once more into their own depth map, which the lower
+        // presets should not pay for.
+        static constexpr int hud_shadow_by_preset[] = {0, 0, 0, 0, 1};
+        if (*value < std::size(hud_shadow_by_preset))
+        {
+            string64 hud_shadow_cmd;
+            xr_sprintf(hud_shadow_cmd, "r__hud_shadow %d", hud_shadow_by_preset[*value]);
+            Console->Execute(hud_shadow_cmd);
+        }
     }
 };
 
@@ -925,6 +941,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list

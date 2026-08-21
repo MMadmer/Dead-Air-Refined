@@ -26,6 +26,34 @@ validation rules are defined in [`PROJECT_RULES.md`](../../PROJECT_RULES.md).
   and the deterministic size-sort tie-break. QA sweep: 100.6 avg vs 101-103
   baseline. Re-parallelize only with a design that keeps one build phase.
 
+- Device removal (`DXGI_ERROR_DRIVER_INTERNAL_ERROR`, 0x887A0020) reported once
+  against 1.3.4 itself, on an AMD RX 6600 in `renderer_r3` (feature level 10.1),
+  seconds after a quicksave finished loading on Escape, with a completely clean
+  log. The same signature on 1.3.3 is a different, closed defect: those sessions
+  carry `input layout NOT created ... shadow_direct_base_aref` and were fixed in
+  `3c128db98`. The 1.3.4 case has no such marker and does not reproduce offline
+  on the reporter's own save across repeated loads on NVIDIA hardware, in both
+  `renderer_r4` and `renderer_r3`. Two independent audits of the parallel render
+  path found no provable cause and ruled out, with evidence: the reset and
+  first-frame path (a level load never calls `Device.Reset`, so nothing dangles),
+  the deferred command-list lifecycle (record and `FinishCommandList` are joined
+  by the task graph before `flush()` submits), context allocation (all
+  `alloc_context` calls happen on the main thread in `Calculate` before any phase
+  runs), the occlusion-query set (`light::~light` nulls itself out of
+  `Lights_LastFrame`, which `reset_begin` clears), `CKinematics::CalculateBones`
+  (recursive lock plus atomic epoch), the multithreaded texture upload (device
+  calls only, immutable creation), the detail and constant-buffer paths (both
+  per-context), and the completeness of the 1.3.4 particle-race fix. One real
+  feature-level defect was found on the way and is fixed: HDAO "ultra" enabled
+  its compute path from `ComputeShadersSupported` alone, which a 10.x device
+  reports true for CS 4.x, while the UAV bind flag needs feature level 11.0 - the
+  dispatch ran against a null UAV. That is a guaranteed device removal for a DX10
+  user who selects HDAO Ultra, but the reporter's configuration selects HBAO, so
+  it does not explain this report. Narrowing needs data from the affected
+  machine: `r2_mt_render 0` plus `r2_mt_calculate 0` forces the sequential
+  pipeline the x86 reference used, and `-dxdebug` drains the D3D11 validator into
+  the log, naming any invalid bind or draw that precedes the removal.
+
 ## Deferred diagnostics candidate
 
 - Early vectored capture of silent fatal failures (heap corruption, stack

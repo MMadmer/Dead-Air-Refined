@@ -417,6 +417,9 @@ public:
     void render_forward();
     void render_indirect(light* L) const;
     void render_lights(light_Package& LP);
+    // First-person self-shadow: builds the HUD caster map and modulates the sun term on the
+    // HUD pixels. A no-op unless the Maximum preset turned r__hud_shadow on.
+    void render_hud_shadow();
 
     render_main r_main;
 #if RENDER != R_R2
