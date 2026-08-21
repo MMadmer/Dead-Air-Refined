@@ -72,6 +72,8 @@ extern ECORE_API int ps_r__LightSleepFrames;
 extern ECORE_API int ps_r__light_shadow_budget;
 extern ECORE_API int ps_r__light_details;
 extern ECORE_API int ps_r__hud_shadow;
+extern ECORE_API float ps_r__hud_shadow_normal_offset;
+extern ECORE_API float ps_r__hud_shadow_slope_bias;
 extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;

@@ -185,6 +185,16 @@ int ps_r__light_details = 0;
 // world cascade, so the weapon never drops a second shadow on the ground next to the one the
 // actor's body and the item's world model already cast. Maximum preset only (see CCC_Preset).
 int ps_r__hud_shadow = 0;
+// How far the self-shadow lifts a sample off its own surface, in metres, and how much depth
+// slope one shadow texel may carry. Both exist for the same reason the sun has its own depth
+// bias pair: the deferred position a first-person pixel reconstructs from is not exactly on
+// the surface - the model shaders displace it along the normal by the parallax virtual height,
+// up to 5 cm and varying per texel - and a surface lit edge-on changes depth across a texel by
+// far more than any fixed epsilon. Together they are what keeps direct sunlight from drawing
+// stripes along the shadow map's texel grid on hands and blades. Raise them if a machine still
+// shows banding, lower them for tighter contact shadows.
+float ps_r__hud_shadow_normal_offset = 0.01f;
+float ps_r__hud_shadow_slope_bias = 0.003f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -942,6 +952,8 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
+    CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);
+    CMD4(CCC_Float, "r__hud_shadow_slope_bias", &ps_r__hud_shadow_slope_bias, 0.f, 0.05f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list

@@ -19,6 +19,7 @@ void CBlender_hud_shadow::Compile(CBlender_Compile& C)
         C.PassSET_ZB(TRUE, FALSE);
 
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_smap_hud", r2_RT_smap_hud);
 
         C.r_dx11Sampler("smp_nofilter");

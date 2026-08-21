@@ -7,22 +7,50 @@
 // Deliberately standalone: including common.h would drag in the deferred sampler set, whose
 // position target changes type under MSAA. Everything this pass needs is declared here.
 
-Texture2D               s_position;     // deferred position, .z is eye-space depth
+Texture2D               s_position;     // deferred position: .z is eye-space depth
+Texture2D               s_normal;       // only bound apart when the g-buffer is not packed
 Texture2D               s_smap_hud;     // first-person caster depth
 SamplerComparisonState  smp_smap;
 
 uniform float4x4        m_hud_shadow;       // eye space -> self-shadow texel space
 uniform float4          hud_pos_decompress; // HorzTan, VertTan, 2*HorzTan/w, 2*VertTan/h
-uniform float4          hud_smap_size;      // size, 1/size, 0, 0
+uniform float4          hud_smap_size;      // size, 1/size, normal offset (m), slope allowance
+
+// Mirrors gbuf_pack_normal in the deferred pack: z verbatim, x folded into the sign of y.
+// Inlined rather than included for the reason in the header comment above.
+float3 hud_unpack_normal(float2 n)
+{
+    float3 res;
+    res.z = n.x;
+    res.x = (2.0f * abs(n.y)) - 1.0f;
+    res.y = (n.y < 0.0f ? -1.0f : 1.0f) * sqrt(abs(1.0f - res.x * res.x - res.z * res.z));
+    return res;
+}
 
 float4 main(float2 tc0 : TEXCOORD0, float4 col : COLOR, float4 pos2d : SV_POSITION) : SV_Target
 {
+    float4 P = s_position.Load(int3(pos2d.xy, 0));
+
     // Eye-space depth is written verbatim by the model shaders in both g-buffer layouts, so
     // it is the one channel that can be trusted here. The lateral part has to be rebuilt with
     // the HUD field of view: the deferred decompression carries the main camera FOV and would
     // place a first-person pixel about twice as far off-axis as it really is.
-    float  Pz = s_position.Load(int3(pos2d.xy, 0)).z;
+    float  Pz = P.z;
     float3 Pe = float3(Pz * (pos2d.xy * hud_pos_decompress.zw - hud_pos_decompress.xy), Pz);
+
+#ifdef GBUFFER_OPTIMIZATION
+    float3 N = hud_unpack_normal(P.xy);
+#else
+    float3 N = s_normal.Load(int3(pos2d.xy, 0)).xyz;
+#endif
+
+    // Lift the sample off its own surface before testing. Two reasons: the stored position is
+    // already displaced along the normal by the parallax virtual height (up to 5 cm, and it
+    // varies per texel), and a receiver sitting exactly on the caster it came from is what
+    // produces acne in the first place. The shift is along the normal, so it costs depth only
+    // where the surface faces the light - which is exactly where the tolerance is needed, and
+    // leaves grazing contact shadows tight.
+    Pe += N * hud_smap_size.z;
 
     float4 PS = mul(m_hud_shadow, float4(Pe, 1.0f));
     if (PS.w <= 0.0f)
@@ -35,14 +63,41 @@ float4 main(float2 tc0 : TEXCOORD0, float4 col : COLOR, float4 pos2d : SV_POSITI
     if (any(saturate(tc.xy) != tc.xy) || tc.z <= 0.0f || tc.z >= 1.0f)
         return 1.0f;
 
+    // Receiver-plane depth bias. A constant bias cannot cover a surface seen edge-on by the
+    // sun: across one texel its depth changes far more than any fixed epsilon, which is the
+    // banding that shows up on hands and blades in direct light. Solving the plane through
+    // the screen-space derivatives gives the exact depth slope per texel, so each tap is
+    // compared against the depth its own texel should hold.
+    float3 dtdx = ddx(tc);
+    float3 dtdy = ddy(tc);
+    float  det = dtdx.x * dtdy.y - dtdx.y * dtdy.x;
+
+    float texel = hud_smap_size.y;
+    float2 slope = float2(0.0f, 0.0f);
+    if (abs(det) > 1e-9f)
+    {
+        slope.x = ( dtdy.y * dtdx.z - dtdx.y * dtdy.z) / det;
+        slope.y = (-dtdy.x * dtdx.z + dtdx.x * dtdy.z) / det;
+        slope *= texel; // depth change over one texel
+    }
+
+    // A silhouette pixel derives its plane from a neighbour on another surface, so the slope
+    // has to stay bounded or a single edge pixel would punch a hole through the shadow.
+    slope = clamp(slope, -hud_smap_size.w, hud_smap_size.w);
+
     // 2x2 rotated grid. The map covers three metres across 1024 texels, so a single tap is
     // already close to pixel-exact; four keep the contact edges from aliasing as the hands
     // move, and a wider kernel would only wash the contact out.
     float s = 0.0f;
     [unroll] for (int i = 0; i < 4; ++i)
     {
-        float2 o = float2((i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f) * hud_smap_size.y;
-        s += s_smap_hud.SampleCmpLevelZero(smp_smap, tc.xy + o, tc.z).x;
+        float2 o = float2((i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f);
+        // dot() moves the comparison onto the depth the tap's own texel should hold; the
+        // allowance is then SUBTRACTED, because tolerance means letting a sample count as lit,
+        // and adding to the receiver's depth would have manufactured shadow instead of curing
+        // it - which is exactly what the striping was.
+        float  z = tc.z + dot(slope, o) - max(abs(slope.x), abs(slope.y));
+        s += s_smap_hud.SampleCmpLevelZero(smp_smap, tc.xy + o * texel, z).x;
     }
     s *= 0.25f;
 

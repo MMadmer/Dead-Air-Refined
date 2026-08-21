@@ -171,7 +171,8 @@ void CRenderTarget::phase_hud_shadow(CBackend& cmd_list)
     cmd_list.set_c("m_hud_shadow", m_hud_shadow_xform);
     cmd_list.set_c("hud_pos_decompress",
         m_hud_pos_decompress.x, m_hud_pos_decompress.y, m_hud_pos_decompress.z, m_hud_pos_decompress.w);
-    cmd_list.set_c("hud_smap_size", smap_size, 1.f / smap_size, 0.f, 0.f);
+    cmd_list.set_c("hud_smap_size", smap_size, 1.f / smap_size,
+        ps_r__hud_shadow_normal_offset, ps_r__hud_shadow_slope_bias);
 
     cmd_list.set_Stencil(FALSE);
     cmd_list.set_CullMode(CULL_NONE);
