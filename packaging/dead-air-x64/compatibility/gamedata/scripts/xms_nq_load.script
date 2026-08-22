@@ -466,21 +466,45 @@ end
 
 -- items: a non-empty array of rows. A row is either { section = "...", count = N } (any items
 -- of the kind) or { item = { ref= | story= } } (one concrete object) - the two mix freely.
-local function valid_item_list(v)
+-- The state a spawn row may carry. A row of objective.fetch describes what the player must
+-- BRING, so it takes none of it - the type is shared, the permission is not.
+local ROW_STATE = { condition = true, ammo = true, ammo_kind = true, uses = true,
+					upgrades = true, ref = true }
+local ROW_KEYS  = { section = true, count = true, item = true }
+for k in pairs(ROW_STATE) do ROW_KEYS[k] = true end
+
+local function valid_item_list(v, state_ok)
 	if (type(v) ~= "table" or #v == 0) then return false end
 	local seen = {}
 	for _, e in ipairs(v) do
 		if (type(e) ~= "table") then return false end
+		-- a key nobody reads is the exact bug this feature exists to kill: a typo would
+		-- silently do nothing and the author would blame the game
+		for k in pairs(e) do
+			if not (ROW_KEYS[k]) then return false end
+			if (ROW_STATE[k] and not state_ok) then return false end
+		end
 		local has_section = type(e.section) == "string" and e.section ~= ""
 		local has_item = e.item ~= nil
 		if (has_section == has_item) then return false end	-- exactly one per row
 		if (has_item) then
 			if not (valid_object_ref(e.item)) then return false end
 			if (e.count ~= nil) then return false end		-- a concrete object IS one
+			for k in pairs(ROW_STATE) do if (e[k] ~= nil) then return false end end
 		else
 			if (e.count ~= nil and not (is_int(e.count) and e.count >= 1)) then return false end
 			if (seen[e.section]) then return false end	-- one line per section, or the counts are ambiguous
 			seen[e.section] = true
+			if (e.condition ~= nil and (type(e.condition) ~= "number" or e.condition < 0 or e.condition > 1)) then return false end
+			if (e.ammo ~= nil and not (is_int(e.ammo) and e.ammo >= 0)) then return false end
+			if (e.uses ~= nil and not (is_int(e.uses) and e.uses >= 0)) then return false end
+			if (e.ammo_kind ~= nil and (type(e.ammo_kind) ~= "string" or e.ammo_kind == "")) then return false end
+			if (e.upgrades ~= nil and type(e.upgrades) ~= "string") then return false end
+			if (e.ref ~= nil) then
+				if (type(e.ref) ~= "string" or e.ref == "") then return false end
+				-- a ref names ONE object
+				if ((e.count or 1) > 1) then return false end
+			end
 		end
 	end
 	return true
@@ -522,7 +546,9 @@ end
 local canon_cond_list -- forward
 
 -- Canonical value for one param; returns value, ok(bool), why(string).
-local function canon_param(st, node, slot, p, v)
+-- `kind` is the name of the kind the parameter belongs to: item_list rows carry state for
+-- the kind that CREATES items and none for the one that asks the player to bring them
+local function canon_param(st, node, slot, p, v, kind)
 	local t = p.type
 	if (v == nil) then
 		if (p.default ~= nil) then return util.copy(p.default), true end
@@ -576,7 +602,13 @@ local function canon_param(st, node, slot, p, v)
 		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
 		return util.copy(v), true
 	elseif (t == "item_list") then
-		if not (valid_item_list(v)) then return nil, false, "must be a list of { section = ..., count = N } with no repeated section" end
+		local state_ok = (kind == "item.spawn")
+		if not (valid_item_list(v, state_ok)) then
+			if (state_ok) then
+				return nil, false, "must be a list of { section = ..., count = N } with no repeated section; a row may also carry condition, ammo, ammo_kind, uses, upgrades and a ref (ref needs count 1)"
+			end
+			return nil, false, "must be a list of { section = ..., count = N } with no repeated section"
+		end
 		return util.copy(v), true
 	elseif (t == "loot_spawn") then
 		if not (valid_loot_spawn(v)) then
@@ -671,7 +703,7 @@ local function canon_params(st, node, slot, spec, raw_params)
 	for _, p in ipairs(spec.params) do
 		-- node params report as "param:<name>"; action/cond params keep the slot of their owner
 		local pslot = (slot == "param") and ("param:" .. p.name) or slot
-		local v, ok, why = canon_param(st, node, pslot, p, raw_params[p.name])
+		local v, ok, why = canon_param(st, node, pslot, p, raw_params[p.name], spec.name)
 		if not (ok) then
 			problem(st.problems, "E006", node, pslot, "param '%s' %s", p.name, tostring(why))
 		else

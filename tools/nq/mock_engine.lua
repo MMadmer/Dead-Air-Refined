@@ -235,9 +235,24 @@ function se_mt:profile_name() return self._profile end
 function se_mt:clsid() return self._clsid or 0 end
 function se_mt:force_set_goodwill(gw, who_id) self._goodwill = gw end
 function se_mt:kill() self._alive = false local go = mock.go[self.id] if (go) then go._alive = false end end
--- CSE_ALifeInventoryItem: upgrades are added server-side, condition is a plain field
-function se_mt:add_upgrade(name) self._upgrades = self._upgrades or {} self._upgrades[#self._upgrades + 1] = name end
+-- CSE_ALifeInventoryItem: upgrades are added server-side, condition is a plain field.
+-- A duplicate is a FATAL in the engine (xrServer_Objects_ALife_Items.cpp), which no pcall
+-- can swallow - so it is a hard error here too, and a regression in the dedupe fails loudly
+-- instead of being caught and logged.
+function se_mt:add_upgrade(name)
+	self._upgrades = self._upgrades or {}
+	if (self:has_upgrade(name)) then mock.fatal = "duplicate upgrade " .. tostring(name) error(mock.fatal, 0) end
+	self._upgrades[#self._upgrades + 1] = name
+end
 function se_mt:has_upgrade(name) for _, u in ipairs(self._upgrades or {}) do if (u == name) then return true end end return false end
+-- CSE_ALifeItemWeapon: the magazine is a server field, read by the client at net_Spawn
+function se_mt:get_ammo_magsize()
+	local n = system_ini():line_exist(self._section, "ammo_mag_size")
+		and tonumber(system_ini():r_string(self._section, "ammo_mag_size")) or 0
+	return n or 0
+end
+function se_mt:set_ammo_elapsed(n) self.a_elapsed = n end
+function se_mt:get_ammo_elapsed() return self.a_elapsed or 0 end
 
 local function new_se(section, pos, lvid, gvid, parent, id)
 	local se = setmetatable({ id = id or mock.next_id, _section = section, position = pos or vector():set(0, 0, 0), m_level_vertex_id = lvid or 1, m_game_vertex_id = gvid or 1, parent_id = parent, online = true }, se_mt)
@@ -509,6 +524,9 @@ end
 function mock.add_container(section, story_id, online, pos)
 	local se = new_se(section or "inventory_box", pos or vector():set(0, 0, 0), 1, 1, nil)
 	se._children = {}
+	-- a container is online exactly when it has a client object, which is what decides
+	-- whether alife():create spawns the item's twin on the spot
+	se.online = online == true
 	if (online) then
 		local go = new_go(section or "inventory_box")
 		mock.go[go._id] = nil
@@ -591,6 +609,18 @@ function alife_obj:object(id)
 	end
 	return mock.se[id]
 end
+-- What the client twin was built from. The engine spawns it SYNCHRONOUSLY when the parent is
+-- already online, so anything written to the server entity afterwards never reaches the item
+-- in the player's hands. The snapshot is taken at that same moment, and a test comparing it
+-- against the final entity is what proves the state was applied before registration.
+local function client_snapshot(se)
+	local up = {}
+	for _, u in ipairs(se._upgrades or {}) do up[#up + 1] = u end
+	mock.client_snapshot = mock.client_snapshot or {}
+	mock.client_snapshot[se.id] = { condition = se.condition, a_elapsed = se.a_elapsed,
+									ammo_type = se.ammo_type, upgrades = up }
+end
+
 function alife_obj:create(section, pos, lvid, gvid, parent, reg)
 	local se = new_se(section, pos, lvid, gvid, parent)
 	if (parent == 0 and db.actor) then
@@ -602,7 +632,34 @@ function alife_obj:create(section, pos, lvid, gvid, parent, reg)
 	end
 	mock.created = mock.created or {}
 	mock.created[#mock.created + 1] = { section = section, parent = parent, id = se.id }
+	local host = parent and mock.se[parent]
+	local host_online = host and host.online == true
+	if (host_online and reg == false) then
+		-- spawn_item3: with an online parent the entity comes back UNREGISTERED, so the
+		-- caller can fill it in before the client ever sees it
+		mock.se[se.id] = nil
+		se._unregistered = true
+	elseif (host_online) then
+		client_snapshot(se)
+	end
 	return se
+end
+
+-- reprocess_spawn: destroys the entity it was given and hands back a NEW one. The client
+-- twin is built here, from whatever the caller wrote in between.
+function alife_obj:register(se)
+	if not (se) then return nil end
+	local fresh = new_se(se._section, se.position, se.m_level_vertex_id, se.m_game_vertex_id, se.parent_id)
+	fresh.condition = se.condition
+	fresh.a_elapsed = se.a_elapsed
+	fresh.ammo_type = se.ammo_type
+	fresh.ammo_left = se.ammo_left
+	fresh._upgrades = se._upgrades
+	mock.se[se.id] = nil
+	mock.registered = mock.registered or {}
+	mock.registered[#mock.registered + 1] = { was = se.id, id = fresh.id, section = se._section }
+	client_snapshot(fresh)
+	return fresh
 end
 function alife_obj:create_ammo(section, pos, lvid, gvid, parent, num)
 	-- the engine has no parentless overload: 65535 is "no parent"
@@ -969,14 +1026,67 @@ end
 local SYSTEM_INI = [[
 [bread]
 inv_name = st_bread
+; a consumable with several doses: max_uses is what makes "remaining uses" mean
+; anything (eatable_item.cpp:39 defaults it to 1 when the key is absent)
 [medkit]
 inv_name = st_medkit
+max_uses = 3
+[epinephrine]
+inv_name = st_epinephrine
+max_uses = 1
+; a genuinely multi-dose consumable: the shipped game has none, a module can bring one
+[drug_multi]
+inv_name = st_drug_multi
+class = II_FOOD
+max_uses = 3
+; carries box_size but is NOT ammo - create_ammo would THROW on it, so the class is the test
+[kerosene_5]
+inv_name = st_kerosene
+class = S_EXPLO
+box_size = 1
+; passes ammo_mag_size but is not a magazined weapon
+[wpn_knife]
+inv_name = st_wpn_knife
+class = WP_KNIFE
+ammo_mag_size = 1
+ammo_class = ammo_knife
 [wpn_pm]
 inv_name = st_wpn_pm
+class = WP_PM
+ammo_mag_size = 8
+ammo_class = ammo_9x18_fmj, ammo_9x18_pmm
+; a rifle carrying everything a spawn can set: a magazine, addon slots, upgrades
+[wpn_ak74]
+inv_name = st_wpn_ak74
+class = WP_AK74
+ammo_mag_size = 30
+ammo_class = ammo_5.45x39_fmj, ammo_5.45x39_ap
+scope_status = 2
+silencer_status = 1
+grenade_launcher_status = 1
+upgrades = up_gr_firstab_ak74, up_gr_seconab_ak74
+; the upgrade tree: `upgrades` names GROUPS, a group's `elements` are the ids add_upgrade
+; takes, and an element's `effects` names further groups - so the legal set is a walk
+[up_gr_firstab_ak74]
+elements = up_firsta_ak74
+[up_firsta_ak74]
+effects = up_gr_firstcd_ak74
+[up_gr_firstcd_ak74]
+elements = up_firstc_ak74
+[up_gr_seconab_ak74]
+elements = up_seconc_ak74
 [ammo_9x18_fmj]
 inv_name = st_ammo
 class = AMMO
 box_size = 30
+[ammo_5.45x39_fmj]
+inv_name = st_ammo
+class = AMMO
+box_size = 30
+[ammo_5.45x39_ap]
+inv_name = st_ammo
+class = AMMO
+box_size = 60
 ; ammo whose box_size is present but unusable: create_ammo reads it too, so a giver that scales
 ; rounds by a defaulted box size still ends up inside a broken loop
 [ammo_broken_box]
@@ -1408,6 +1518,9 @@ function mock.fresh()
 	mock.go = {}
 	mock.created = {}
 	mock.released = {}
+	mock.registered = {}
+	mock.client_snapshot = {}
+	mock.fatal = nil
 	mock.overrides = {}
 	mock.deleted = {}
 	mock.real_ms = 1000

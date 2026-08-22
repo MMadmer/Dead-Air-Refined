@@ -2492,128 +2492,279 @@ check(core.quest_state("mod_a.ac").tasks.walk == "completed", "the task is still
 check(#mock.news == z14_news, "the load announced nothing")
 if (failed > 0) then fail_dump() end
 
--- ============================================================================ (z15) spawn v10
--- item.spawn lands items through the same destination forms as fetch, sets their state
--- server-side where the engine allows (condition, upgrades, the rounds of an ammo box) and
--- leaves the rest (a loaded magazine, remaining uses, a death) as jobs the poll applies the
--- moment a client object shows up. spawn.object turns a prop and can lay a creature down.
+-- ============================================================================ (z15) spawn v11
+-- Every row of an item.spawn carries its own state: two rifles and a medkit in one list do
+-- not share a condition. What the server entity can hold is written before it is registered
+-- (condition, magazine, cartridge, upgrades); the one field with no server side - a
+-- consumable's remaining doses - stays an online job.
 -- Its own function: the main chunk sits at Lua's 200-local ceiling, so even a loop
 -- variable up here would not compile. Everything below is local to z15_run.
 do
 local function z15_run()
-section("(z15) item.spawn: where forms, count, state props, ref, online jobs")
+section("(z15) item.spawn: per-row state on the server entity")
 setup()
 for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
 	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
 end
 mock.move_actor(0, 0, 0)
-z15_box = mock.add_container("inventory_box", "z15_box")
+local box = mock.add_container("inventory_box", "z15_box", false)
 mock.overrides["mod_a/sp.nqasset"] = [[return { nq = 1, id = "sp", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "make" } },
 	{ id = "make", kind = "flow.step", on_enter = {
-		{ kind = "item.spawn", params = { section = "medkit", count = 2, where = { into = { story = "z15_box" } }, condition = 0.5 } },
-		{ kind = "item.spawn", params = { section = "wpn_pm", where = { place = { actor = true, distance = 2 } }, ammo = 3, upgrades = "up_a, up_b", ref = "gun" } },
-		{ kind = "item.spawn", params = { section = "ammo_9x18_fmj", where = { into = { story = "z15_box" } }, ammo = 7 } },
-		{ kind = "item.spawn", params = { items = { { section = "bread", count = 3 } }, where = { place = { level = "l01_escape", pos = { 30, 0, 30 }, radius = 4 } }, uses = 2 } },
-		{ kind = "spawn.object", params = { section = "inventory_box", place = { level = "l01_escape", pos = { 50, 0, 50 } }, yaw = 90, ref = "crate" } },
-		{ kind = "spawn.object", params = { section = "stalker", place = { level = "l01_escape", pos = { 60, 0, 60 } }, dead = true, ref = "body" } },
+		{ kind = "item.spawn", params = { where = { into = { story = "z15_box" } }, items = {
+			{ section = "wpn_ak74", condition = 0.72, ammo = 30, ammo_kind = "ammo_5.45x39_ap",
+			  upgrades = "up_firsta_ak74, up_seconc_ak74", ref = "prize_rifle" },
+			{ section = "medkit", count = 2, uses = 0 },
+			{ section = "ammo_5.45x39_ap", count = 3, ammo = 45 },
+		} } },
 	}, out = { next = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
 mock.first_update()
 core = xms_nq
-qs = core.quest_state("mod_a.sp")
-check(qs ~= nil and qs.status == "completed", "the quest ran to its end (no action raised)")
--- into a container, two of them, with the condition set before they ever go online
-z15_meds = {}
-for _, cid in ipairs(z15_box._children or {}) do
-	local se = mock.se[cid]
-	if (se and se._section == "medkit") then z15_meds[#z15_meds + 1] = se end
+local qs = core.quest_state("mod_a.sp")
+check(qs ~= nil and qs.status == "completed", "the quest ran to its end")
+local function kids_of(se, sect)
+	local out = {}
+	for _, cid in ipairs(se._children or {}) do
+		local k = mock.se[cid]
+		if (k and k._section == sect) then out[#out + 1] = k end
+	end
+	return out
 end
-check(#z15_meds == 2, "count=2 made two medkits inside the container (" .. #z15_meds .. ")")
-check(#z15_meds == 2 and z15_meds[1].condition == 0.5 and z15_meds[2].condition == 0.5, "condition is set server-side on every instance")
--- in front of the player: the actor faces +z in the mock, so 2 m ahead is (0,0,2)
-z15_gun = qs.refs.gun and mock.se[qs.refs.gun.id]
-check(z15_gun ~= nil and z15_gun._section == "wpn_pm", "ref names the single item")
-check(z15_gun ~= nil and math.abs(z15_gun.position.z - 2) < 0.6 and math.abs(z15_gun.position.x) < 0.6, "place{actor, distance=2} lands ahead of the player (" .. (z15_gun and (z15_gun.position.x .. "," .. z15_gun.position.z) or "?") .. ")")
-check(z15_gun ~= nil and z15_gun:has_upgrade("up_a") and z15_gun:has_upgrade("up_b"), "upgrades are added server-side, comma list")
-check(z15_gun ~= nil and qs.jobs[z15_gun.id] ~= nil and qs.jobs[z15_gun.id].ammo == 3, "a weapon's magazine is a job that waits for the client object")
--- an ammo section: the box itself carries the rounds, no job needed
-z15_ammo = nil
-for _, cid in ipairs(z15_box._children or {}) do
-	local se = mock.se[cid]
-	if (se and se._section == "ammo_9x18_fmj") then z15_ammo = se end
+local rifles, meds, ammo = kids_of(box, "wpn_ak74"), kids_of(box, "medkit"), kids_of(box, "ammo_5.45x39_ap")
+check(#rifles == 1 and #meds == 2 and #ammo == 3, "one rifle, two medkits, three ammo boxes (" .. #rifles .. "/" .. #meds .. "/" .. #ammo .. ")")
+local rifle = rifles[1]
+check(rifle ~= nil and rifle.condition == 0.72, "the rifle carries its own condition")
+check(meds[1] ~= nil and meds[1].condition == nil and meds[2].condition == nil, "the medkits did NOT inherit the rifle's condition")
+check(rifle ~= nil and rifle.a_elapsed == 30, "the magazine is on the server entity, not deferred")
+check(rifle ~= nil and rifle.ammo_type == 1, "ammo_kind resolved to its index in ammo_class (" .. tostring(rifle and rifle.ammo_type) .. ")")
+check(rifle ~= nil and rifle:has_upgrade("up_firsta_ak74") and rifle:has_upgrade("up_seconc_ak74"), "both upgrades installed")
+check(qs.jobs[rifle.id] == nil, "no online job is left for the rifle")
+local uses_jobs = 0
+for _, m in ipairs(meds) do
+	if (qs.jobs[m.id] and qs.jobs[m.id].uses == 0) then uses_jobs = uses_jobs + 1 end
 end
-check(z15_ammo ~= nil and z15_ammo.ammo_left == 7, "an ammo section is made with exactly that many rounds in the box")
-check(z15_ammo ~= nil and qs.jobs[z15_ammo.id] == nil, "and no job is left behind for it")
--- three loaves over a 4 m circle: scattered on the navmesh, each with a uses job
-z15_bread = {}
-for id, se in pairs(mock.se) do
-	if (se._section == "bread" and se.parent_id == nil) then z15_bread[#z15_bread + 1] = se end
-end
-check(#z15_bread == 3, "an items row with count 3 made three loaves (" .. #z15_bread .. ")")
-z15_inside = true
-for _, se in ipairs(z15_bread) do
-	local dx, dz = se.position.x - 30, se.position.z - 30
-	if (math.sqrt(dx * dx + dz * dz) > 4.8) then z15_inside = false end
-	if not (qs.jobs[se.id] and qs.jobs[se.id].uses == 2) then z15_inside = false end
-end
-check(z15_inside, "every loaf is inside the radius and carries its uses job")
--- spawn.object: yaw turns the server angle, dead is a kill job
-z15_crate = qs.refs.crate and mock.se[qs.refs.crate.id]
-check(z15_crate ~= nil and z15_crate.angle ~= nil and math.abs(z15_crate.angle.y - math.rad(90)) < 0.001, "spawn.object yaw=90 turned the crate")
-z15_body = qs.refs.body and mock.se[qs.refs.body.id]
-check(z15_body ~= nil and z15_body:alive() == true and qs.jobs[z15_body.id] and qs.jobs[z15_body.id].kill == true, "spawn.object dead: alive offline, marked to be put down")
+check(uses_jobs == 2, "each medkit of a count=2 row got its own uses job (" .. uses_jobs .. ")")
+local boxes_ok = true
+for _, a in ipairs(ammo) do if (a.ammo_left ~= 45) then boxes_ok = false end end
+check(boxes_ok, "every ammo box holds the rounds the row asked for")
+check(qs.refs.prize_rifle ~= nil and qs.refs.prize_rifle.id == rifle.id, "the ref names its OWN row's object")
+check(qs.refs.prize_rifle ~= nil and qs.refs.prize_rifle.section == "wpn_ak74", "and carries that row's section")
 if (failed > 0) then fail_dump() end
 
--- the jobs land when the objects come online, then leave the state
-section("(z15) online jobs apply once and survive a save")
-mock.ticks(1)		-- state reaches the blob
+-- the online-parent path: the client twin is built the moment the entity is registered, so
+-- everything the row asked for has to be on it BEFORE that
+section("(z15) an online host gets the state, not an empty twin")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+local live = mock.add_container("inventory_box", "z15_live", true)
+mock.overrides["mod_a/on.nqasset"] = [[return { nq = 1, id = "on", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { where = { into = { story = "z15_live" } },
+		  items = { { section = "wpn_ak74", condition = 0.5, ammo = 10,
+					  upgrades = "up_firsta_ak74", ref = "live_gun" } } } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.on")
+local gun_id = qs.refs.live_gun and qs.refs.live_gun.id
+check(gun_id ~= nil and mock.se[gun_id] ~= nil, "the item exists under the live container")
+check(#(mock.registered or {}) == 1, "it was registered exactly once (" .. #(mock.registered or {}) .. ")")
+local snap = mock.client_snapshot and mock.client_snapshot[gun_id]
+check(snap ~= nil, "a client twin was built for it")
+check(snap ~= nil and snap.condition == 0.5, "the twin was built WITH the condition")
+check(snap ~= nil and snap.a_elapsed == 10, "and with the loaded magazine")
+check(snap ~= nil and snap.upgrades[1] == "up_firsta_ak74", "and with the upgrade")
+check(mock.se[gun_id].parent_id == live.id, "and it really sits in the container")
+if (failed > 0) then fail_dump() end
+
+-- an offline host must not go near register(): that would destroy and respawn a live object
+section("(z15) an offline host registers nothing twice")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.add_container("inventory_box", "z15_dark", false)
+mock.overrides["mod_a/off.nqasset"] = [[return { nq = 1, id = "off", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { where = { into = { story = "z15_dark" } },
+		  items = { { section = "wpn_ak74", condition = 0.3, ref = "dark_gun" } } } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.off")
+check(#(mock.registered or {}) == 0, "no registration happened for an offline host")
+local dark = qs.refs.dark_gun and mock.se[qs.refs.dark_gun.id]
+check(dark ~= nil and dark.condition == 0.3, "the state is on the entity all the same")
+if (failed > 0) then fail_dump() end
+
+-- the gates: a field that means nothing for a section is skipped and said out loud
+section("(z15) state that does not fit its section is skipped, loudly")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.overrides["mod_a/gate.nqasset"] = [[return { nq = 1, id = "gate", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { where = { place = { actor = true } }, items = {
+			{ section = "medkit", ammo = 30 },
+			{ section = "kerosene_5", ammo = 5 },
+			{ section = "wpn_ak74", uses = 2 },
+			{ section = "wpn_pm", ammo_kind = "ammo_5.45x39_ap" },
+			{ section = "bread", upgrades = "up_firsta_ak74" },
+		} } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.clear_log()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.gate")
+check(mock.log_has("'medkit' takes no magazine"), "ammo on a medkit is refused and named")
+check(mock.log_has("'wpn_ak74' has no doses"), "uses on a rifle is refused and named")
+check(mock.log_has("ammo_kind 'ammo_5.45x39_ap' is not in the ammo_class of wpn_pm"), "a foreign cartridge is named")
+check(mock.log_has("does not belong to bread"), "a foreign upgrade is refused and named")
+-- box_size alone would have sent this through create_ammo, which THROWs on a non-ammo class
+check(mock.log_has("'kerosene_5' takes no magazine"), "a fuel carrying box_size is not treated as ammo")
+local jobs = 0
+for _ in pairs(qs.jobs or {}) do jobs = jobs + 1 end
+check(jobs == 0, "nothing that was refused left a job behind (" .. jobs .. ")")
+if (failed > 0) then fail_dump() end
+
+-- a duplicate upgrade is a FATAL in the engine, which no pcall can catch: it must never
+-- reach add_upgrade at all
+section("(z15) a duplicate upgrade never reaches the engine")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.overrides["mod_a/dup.nqasset"] = [[return { nq = 1, id = "dup", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { where = { place = { actor = true } },
+		  items = { { section = "wpn_ak74", upgrades = "up_firsta_ak74, up_firsta_ak74, up_firstc_ak74", ref = "dup_gun" } } } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.fatal = nil
+mock.clear_log()
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.dup")
+check(mock.fatal == nil, "no duplicate ever reached add_upgrade")
+check(mock.log_has("is listed twice"), "the duplicate was named")
+local dgun = qs.refs.dup_gun and mock.se[qs.refs.dup_gun.id]
+check(dgun ~= nil and #(dgun._upgrades or {}) == 2, "the two distinct upgrades installed (" .. tostring(dgun and #(dgun._upgrades or {})) .. ")")
+check(dgun ~= nil and dgun:has_upgrade("up_firstc_ak74"), "including one reached through an element's effects")
+if (failed > 0) then fail_dump() end
+
+-- ceilings and the one-line spelling
+section("(z15) ceilings, the one-line spelling and its own state")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.overrides["mod_a/cap.nqasset"] = [[return { nq = 1, id = "cap", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { section = "wpn_ak74", where = { place = { actor = true } },
+		  condition = 0.9, ammo = 999, ref = "one_liner" } },
+		{ kind = "item.spawn", params = { section = "ammo_9x18_fmj", count = 2,
+		  where = { place = { actor = true } }, ammo = 999 } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.cap")
+local one = qs.refs.one_liner and mock.se[qs.refs.one_liner.id]
+check(one ~= nil and one.condition == 0.9, "the one-line spelling carries its own state")
+check(one ~= nil and one.a_elapsed == 30, "ammo over the magazine is clamped to it (" .. tostring(one and one.a_elapsed) .. ")")
+local nboxes, box_ok = 0, true
+for _, se in pairs(mock.se) do
+	if (se._section == "ammo_9x18_fmj") then
+		nboxes = nboxes + 1
+		if (se.ammo_left ~= 30) then box_ok = false end
+	end
+end
+check(nboxes == 2 and box_ok, "both boxes clamped to box_size (" .. nboxes .. ")")
+if (failed > 0) then fail_dump() end
+
+-- the doses job still works end to end, and survives a save
+section("(z15) the uses job applies once the object is online, across a save")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.overrides["mod_a/dose.nqasset"] = [[return { nq = 1, id = "dose", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { section = "drug_multi", where = { place = { actor = true } },
+		  uses = 1, ref = "dose" } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+qs = core.quest_state("mod_a.dose")
+local dose_id = qs.refs.dose and qs.refs.dose.id
+check(dose_id ~= nil and qs.jobs[dose_id] ~= nil and qs.jobs[dose_id].uses == 1, "a multi-dose consumable left a uses job")
+mock.ticks(1)
 mock.rebuild()
 mock.first_update()
 core = xms_nq
-qs = core.quest_state("mod_a.sp")
-check(qs.jobs[z15_gun.id] ~= nil and qs.jobs[z15_body.id] ~= nil, "pending jobs survived the save")
-z15_go_gun = mock.new_go("wpn_pm")
-mock.go[z15_go_gun._id] = nil
-z15_go_gun._id = z15_gun.id
-mock.go[z15_gun.id] = z15_go_gun
-z15_go_body = mock.new_go("stalker")
-mock.go[z15_go_body._id] = nil
-z15_go_body._id = z15_body.id
-mock.go[z15_body.id] = z15_go_body
+qs = core.quest_state("mod_a.dose")
+check(qs.jobs[dose_id] ~= nil, "the job survived the save")
+local dgo = mock.new_go("drug_multi")
+mock.go[dgo._id] = nil
+dgo._id = dose_id
+mock.go[dose_id] = dgo
 mock.ticks(2)
-check(z15_go_gun:get_ammo_in_magazine() == 3, "the magazine was loaded once the weapon went online")
-check(qs.jobs[z15_gun.id] == nil, "the ammo job is gone after applying")
-check(mock.se[z15_body.id]:alive() == false, "the body was put down once online")
-check(qs.jobs[z15_body.id] == nil, "the kill job is gone once the death landed")
-check(qs.jobs[z15_bread[1].id] ~= nil, "a job whose object is still offline keeps waiting")
--- the object vanishes while offline: the job goes with it
-alife():release(mock.se[z15_bread[1].id])
-mock.ticks(1)
-check(qs.jobs[z15_bread[1].id] == nil, "a job for a released object is dropped")
+check(dgo:get_remaining_uses() == 1, "the doses were set once it came online")
+check(qs.jobs[dose_id] == nil, "and the job is gone")
 if (failed > 0) then fail_dump() end
 
--- the two refusals the runtime still has to make on its own
-section("(z15) item.spawn: missing where / a ref over several items")
-mock.clear_log()
-z15_ctx = core.make_ctx("mod_a.sp", "make")
-core.run_actions(z15_ctx, { { kind = "item.spawn", params = { section = "bread" } } }, "enter")
-check(mock.log_has("'where' is required"), "no where: the action raises and says so")
-core.run_actions(z15_ctx, { { kind = "item.spawn", params = { section = "bread", count = 2, where = { into = { story = "z15_box" } }, ref = "loaf" } } }, "enter")
-check(qs.refs.loaf ~= nil and mock.log_has("names the first of 2"), "ref over two items: the first is named and the log says so")
--- the loader: a place relative to the actor is validated like the other forms
-z15_q = xms_nq_load.load_asset("mod_x", "inline.nqasset",
+-- the loader is the last line: a typo in a row key must not silently do nothing
+section("(z15) the loader refuses a bad row")
+local function sp_codes(params)
+	local q = xms_nq_load.load_asset("mod_x", "inline.nqasset",
+		"return { nq = 1, id = \"x\", nodes = {\n" ..
+		"{ id = \"s\", kind = \"trigger.start\", out = { next = \"e\" } },\n" ..
+		"{ id = \"e\", kind = \"flow.end\", on_enter = { { kind = \"item.spawn\", params = " .. params .. " } } },\n} }")
+	local set = {}
+	for _, p in ipairs(q.problems) do set[p.code] = (set[p.code] or 0) + 1 end
+	return set
+end
+local W = [[where = { place = { actor = true } }]]
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", conditon = 0.5 } } }").E006 == 1, "a misspelt row key is refused")
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", count = 2, ref = \"x\" } } }").E006 == 1, "a ref on a count=2 row is refused")
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", condition = 2 } } }").E006 == 1, "a condition over 1 is refused")
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", uses = -1 } } }").E006 == 1, "a negative uses is refused")
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", condition = 0.5 } } }").E006 == nil, "a good row loads")
+check(sp_codes("{ " .. W .. ", section = \"bread\", condition = 0.5 }").E006 == nil, "the one-line spelling with state loads")
+-- objective.fetch shares the type and takes NO state: its rows say what to bring
+local fq = xms_nq_load.load_asset("mod_x", "inline.nqasset",
 	"return { nq = 1, id = \"x\", nodes = {\n" ..
-	"{ id = \"s\", kind = \"trigger.start\", out = { next = \"e\" } },\n" ..
-	"{ id = \"e\", kind = \"flow.end\", on_enter = {\n" ..
-	"  { kind = \"item.spawn\", params = { section = \"bread\", where = { place = { actor = true, distance = 3 } } } },\n" ..
-	"  { kind = \"item.spawn\", params = { section = \"bread\", where = { place = { actor = \"yes\" } } } },\n" ..
-	"  { kind = \"item.spawn\", params = { section = \"bread\" } },\n" ..
-	"} },\n} }")
-z15_codes = {}
-for _, p in ipairs(z15_q.problems) do z15_codes[p.code] = (z15_codes[p.code] or 0) + 1 end
-check(z15_codes.E006 == 2, "actor must be true, and where is required: two E006 (" .. tostring(z15_codes.E006) .. ")")
+	"{ id = \"s\", kind = \"trigger.start\", out = { next = \"g\" } },\n" ..
+	"{ id = \"g\", kind = \"objective.fetch\", params = { items = { { section = \"bread\", condition = 0.5 } } }, out = { done = \"e\" } },\n" ..
+	"{ id = \"e\", kind = \"flow.end\" },\n} }")
+local fset = {}
+for _, p in ipairs(fq.problems) do fset[p.code] = (fset[p.code] or 0) + 1 end
+check(fset.E006 == 1, "state on a fetch row is refused - those rows are what the player brings")
 if (failed > 0) then fail_dump() end
 end
 z15_run()

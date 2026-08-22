@@ -170,10 +170,12 @@ local function new_quest_state(q)
 end
 
 -- ---------------------------------------------------------------------------- online jobs
--- Some of what a quest sets on an object only exists on the client side: a weapon's loaded
--- magazine, a consumable's remaining uses, a death. Objects are created offline, so the job
--- waits in the quest state - it survives a save - and the poll applies it the moment a client
--- object shows up. jobs[id] = { kill = true, ammo = n, uses = n }
+-- Some of what a quest sets on an object has no server side at all: a consumable's remaining
+-- doses live in the client packet, and a death needs something to kill. Objects are created
+-- offline, so the job waits in the quest state - it survives a save - and the poll applies it
+-- the moment a client object shows up. jobs[id] = { kill = true, uses = n }
+-- A weapon's magazine is NOT here: it is a plain field of the server entity, read by the
+-- client at net_Spawn, so deferring it left the rifle empty until someone walked up to it.
 function online_job(qs, id, job)
 	if not (qs and id and type(job) == "table") then return end
 	qs.jobs = qs.jobs or {}
@@ -194,7 +196,6 @@ local function run_online_jobs()
 				else
 					local go = util.go_by_id(id)
 					if (go) then
-						if (job.ammo and go.set_ammo_elapsed) then pcall(go.set_ammo_elapsed, go, job.ammo) end
 						if (job.uses and go.set_remaining_uses) then pcall(go.set_remaining_uses, go, job.uses) end
 						local done = true
 						if (job.kill) then

@@ -15,11 +15,13 @@
 ;   event   - cond: true for edge-triggered event conditions (event.*)
 ;   impl    - core | <module id> (who registers the Lua implementation in xms.registry "nq.kinds")
 ;   since   - catalog version the kind appeared in
+;   rows    - ordered comma list of keys ONE ROW of a list parameter carries; each
+;             name has its own key spelled row.<name> with the same grammar as a param
 ; Extensions: modules add gamedata\configs\nq\kinds\<mod>.ltx with more [nq.*] sections and
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 10
+version = 11
 api     = 1
 
 ; ============================================================ triggers
@@ -294,18 +296,28 @@ since  = 1
 [nq.item.spawn]
 group  = items
 title  = Spawn items
-desc   = Creates items where you say - the same destination forms as fetch. condition, ammo, uses and upgrades set their state. ref names a single item.
+desc   = Creates items where you say - the same destination forms as fetch. Every row carries its own state.
 use    = extra
-params  = section, count, items, where, condition, ammo, uses, upgrades, ref
+params  = section, count, items, where, condition, ammo, ammo_kind, uses, upgrades, ref
 section = item_section
 count   = int, default=1, min=1
 items   = item_list
 where   = loot_spawn, required
 condition = float, min=0, max=1
 ammo    = int, min=0
-uses    = int, min=1
+ammo_kind = item_section
+uses    = int, min=0
 upgrades = string
 ref     = ref_name
+rows    = section, count, condition, ammo, ammo_kind, uses, upgrades, ref
+row.section   = item_section, required
+row.count     = int, default=1, min=1
+row.condition = float, min=0, max=1
+row.ammo      = int, min=0
+row.ammo_kind = item_section
+row.uses      = int, min=0
+row.upgrades  = string
+row.ref       = ref_name
 impl   = core
 since  = 1
 

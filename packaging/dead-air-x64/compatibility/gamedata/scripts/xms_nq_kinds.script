@@ -492,22 +492,146 @@ local function scatter_ground(ground, radius)
 	return ground
 end
 
-local function is_ammo_section(section)
-	local ok, r = pcall(function() return system_ini():line_exist(section, "box_size") end)
-	return ok and r == true
+-- ---------------------------------------------------------------------------- item state
+local function ini_str(section, key)
+	local ok, v = pcall(function()
+		local ini = system_ini()
+		if not (ini:line_exist(section, key)) then return nil end
+		return ini:r_string(section, key)
+	end)
+	-- a bare `upgrades =` is a live idiom for cancelling an inherited root, and the ini
+	-- stores it as nothing at all - an empty value is "absent", not "present but blank"
+	if (ok and type(v) == "string" and v ~= "") then return v end
+	return nil
 end
 
--- Creates items of `rows` (section + count each) at a loot_spawn destination and returns
--- their ids. Shared by item.spawn and anything else that creates loot on demand; fetch keeps
--- its own plan because it also has to remember hosts and heal losses.
---   props.condition - CSE_ALifeInventoryItem.condition, set server-side before the item ever
---                     goes online, so it holds in a stash nobody opens for an hour
---   props.ammo      - rounds: the box content of an ammo section (create_ammo), or the loaded
---                     magazine of a weapon - the latter only exists online, so it is a job
---   props.uses      - remaining uses of a consumable (max_uses in its section), online only
---   props.upgrades  - comma list of upgrade sections, added server-side (add_upgrade)
-function spawn_items(ctx, where, rows, props)
-	props = props or {}
+local function ini_num(section, key)
+	local v = ini_str(section, key)
+	return v and tonumber(v) or nil
+end
+
+local function csv_list(s)
+	local out = {}
+	if (type(s) ~= "string") then return out end
+	for it in string.gmatch(s, "[^,%s]+") do out[#out + 1] = it end
+	return out
+end
+
+-- The classes the ammo factory actually accepts. box_size alone is NOT the test: the
+-- cooking fuels carry it with class = S_EXPLO, and create_ammo smart_casts and THROWs on
+-- anything that is not an ammo entity - that is the whole game down, not a caught error.
+local AMMO_CLS = { AMMO = true, AMMO_S = true, S_VOG25 = true, S_OG7B = true, S_M209 = true }
+
+local function is_ammo_section(section)
+	local cls = ini_str(section, "class")
+	return cls ~= nil and AMMO_CLS[cls] == true
+end
+
+-- ammo_type is an index into the weapon's OWN ammo_class list, not a section id.
+local function ammo_index(section, kind)
+	for i, a in ipairs(csv_list(ini_str(section, "ammo_class"))) do
+		if (a == kind) then return i - 1 end
+	end
+	return nil
+end
+
+-- What add_upgrade will accept for a section. `upgrades` names GROUPS, a group's `elements`
+-- are the ids that install, and an element's `effects` names further groups - so the legal
+-- set is a walk. It has to be checked here because add_upgrade validates nothing (an unknown
+-- id crashes later, on the client) and FATALs on a duplicate, which no pcall can catch.
+local function upgrade_set(section)
+	local out, seen, queue = {}, {}, {}
+	for _, g in ipairs(csv_list(ini_str(section, "upgrades"))) do queue[#queue + 1] = g end
+	local rooted = #queue > 0
+	local guard = 0
+	while (#queue > 0 and guard < 512) do
+		guard = guard + 1
+		local g = table.remove(queue)
+		if not (seen[g]) then
+			seen[g] = true
+			for _, el in ipairs(csv_list(ini_str(g, "elements"))) do
+				out[el] = true
+				for _, nx in ipairs(csv_list(ini_str(el, "effects"))) do
+					if not (seen[nx]) then queue[#queue + 1] = nx end
+				end
+			end
+		end
+	end
+	return out, rooted
+end
+
+-- Everything the item's state can carry, written on the SERVER entity before it is
+-- registered, so the client twin is built from it. Returns the one piece with no server
+-- side - a consumable's remaining doses live in the client packet (CEatableItem) - as a
+-- job for the caller to defer.
+local function apply_item_state(ctx, se, row, section, ammo_is_box)
+	local job = nil
+	if (row.condition ~= nil) then
+		-- the engine writes condition through a u8 quantiser that only VERIFYs the range,
+		-- and VERIFY is a no-op in release: out of range wraps instead of failing
+		local c = tonumber(row.condition) or 1
+		if (c < 0) then c = 0 elseif (c > 1) then c = 1 end
+		pcall(function() se.condition = c end)
+	end
+	local rounds = tonumber(row.ammo)
+	if (rounds and not ammo_is_box) then
+		local mag = 0
+		pcall(function() mag = se:get_ammo_magsize() or 0 end)
+		if (mag > 0) then
+			if (rounds > mag) then rounds = mag end
+			if (rounds < 0) then rounds = 0 end
+			pcall(function() se:set_ammo_elapsed(rounds) end)
+		else
+			util.warn("%s/%s: item.spawn: '%s' takes no magazine - ammo ignored", ctx.uid, ctx.node_id, tostring(section))
+		end
+	end
+	if (row.ammo_kind ~= nil) then
+		local idx = ammo_index(section, row.ammo_kind)
+		if (idx) then
+			pcall(function() se.ammo_type = idx end)
+		else
+			util.warn("%s/%s: item.spawn: ammo_kind '%s' is not in the ammo_class of %s - using the first",
+				ctx.uid, ctx.node_id, tostring(row.ammo_kind), tostring(section))
+		end
+	end
+	if (row.upgrades ~= nil) then
+		-- an id the section cannot install is not "probably fine": add_upgrade validates
+		-- nothing and the crash lands later, on the client, in release
+		local legal = upgrade_set(section)
+		local done = {}
+		for _, up in ipairs(csv_list(row.upgrades)) do
+			if (done[up]) then
+				util.warn("%s/%s: item.spawn: upgrade '%s' is listed twice on %s - dropped",
+					ctx.uid, ctx.node_id, up, tostring(section))
+			elseif (not legal[up]) then
+				util.warn("%s/%s: item.spawn: upgrade '%s' does not belong to %s - skipped",
+					ctx.uid, ctx.node_id, up, tostring(section))
+			else
+				done[up] = true
+				local ok = pcall(function() se:add_upgrade(up) end)
+				if not (ok) then
+					util.warn("%s/%s: item.spawn: upgrade '%s' could not be added to %s",
+						ctx.uid, ctx.node_id, up, tostring(section))
+				end
+			end
+		end
+	end
+	local uses = tonumber(row.uses)
+	if (uses) then
+		if (ini_num(section, "max_uses")) then
+			job = { uses = uses }
+		else
+			util.warn("%s/%s: item.spawn: '%s' has no doses - uses ignored", ctx.uid, ctx.node_id, tostring(section))
+		end
+	end
+	return job
+end
+
+-- Creates the items of `rows` at a loot_spawn destination. A row is a section, a count and
+-- its OWN state - two rifles and a medkit in one list do not share a condition. Returns the
+-- flat id list and, alongside it, the ids each row produced (a ref names one row's object).
+-- fetch keeps its own plan: it also has to remember hosts and heal losses.
+function spawn_items(ctx, where, rows)
 	if (type(where) ~= "table") then error("spawn: 'where' is required") end
 	for _, r in ipairs(rows) do
 		if (r.item) then error("spawn: a concrete-object row cannot be spawned") end
@@ -522,52 +646,60 @@ function spawn_items(ctx, where, rows, props)
 	local fixed_host, fixed_ground
 	if not (scatter) then fixed_host, fixed_ground = fetch_host(ctx, where, cache) end
 	local radius = (where.place and total > 1) and util.place_radius(where.place) or 0
-	for _, r in ipairs(rows) do
+	for ri, r in ipairs(rows) do
 		for _ = 1, (r.count or 1) do
 			local host, ground = fixed_host, fixed_ground
 			if (scatter) then host, ground = fetch_host(ctx, where, cache) end
 			if (ground and radius > 0) then ground = scatter_ground(ground, radius) end
-			plan[#plan + 1] = { section = r.section, host = host, ground = ground }
+			plan[#plan + 1] = { ri = ri, row = r, section = r.section, host = host, ground = ground }
 		end
 	end
-	local upgrades = {}
-	if (type(props.upgrades) == "string") then
-		for up in string.gmatch(props.upgrades, "[^,%s]+") do upgrades[#upgrades + 1] = up end
-	end
-	local ids = {}
+	local ids, by_row = {}, {}
 	for _, e in ipairs(plan) do
-		local se
 		local hse = e.host and util.se_by_id(e.host)
 		if (e.host and not hse) then error("spawn: the host object vanished before the items were made") end
-		local pos, lvid, gvid = (hse and hse.position) or e.ground.pos, (hse and hse.m_level_vertex_id) or e.ground.lvid, (hse and hse.m_game_vertex_id) or e.ground.gvid
-		local rounds = tonumber(props.ammo)
-		if (rounds and is_ammo_section(e.section)) then
-			-- the box is made with exactly that many rounds; 65535 is "no parent" to the engine
-			local box = system_ini():r_u32(e.section, "box_size")
-			if (rounds > box) then rounds = box end
-			if (rounds < 1) then rounds = 1 end
-			se = alife():create_ammo(e.section, pos, lvid, gvid, e.host or 65535, rounds)
-		elseif (e.host) then
-			se = alife():create(e.section, pos, lvid, gvid, e.host)
+		local pos = (hse and hse.position) or e.ground.pos
+		local lvid = (hse and hse.m_level_vertex_id) or e.ground.lvid
+		local gvid = (hse and hse.m_game_vertex_id) or e.ground.gvid
+		local row, se, job = e.row, nil, nil
+		local host_online = false
+		if (hse) then
+			local ok, o = pcall(function() return hse.online end)
+			host_online = ok and o == true
+		end
+		if (is_ammo_section(e.section)) then
+			-- a box is made with its rounds already in it; create_ammo writes them before
+			-- the spawn packet, so it is right even for an online host. 65535 = no parent
+			local box = ini_num(e.section, "box_size") or 1
+			local n = tonumber(row.ammo) or box
+			if (n > box) then n = box end
+			if (n < 1) then n = 1 end
+			se = alife():create_ammo(e.section, pos, lvid, gvid, e.host or 65535, n)
+			if (se) then job = apply_item_state(ctx, se, row, e.section, true) end
+		elseif (e.host and host_online) then
+			-- An ONLINE parent makes alife():create build and send the client twin on the
+			-- spot, so anything written afterwards reaches the server entity only and the
+			-- item in the player's hands has none of it. Build it unregistered, fill it in,
+			-- then register - which hands back a NEW entity and destroys this one.
+			se = alife():create(e.section, pos, lvid, gvid, e.host, false)
+			if (se) then
+				job = apply_item_state(ctx, se, row, e.section, false)
+				se = alife():register(se)
+			end
 		else
-			se = alife():create(e.section, pos, lvid, gvid)
+			se = e.host and alife():create(e.section, pos, lvid, gvid, e.host)
+					   or alife():create(e.section, pos, lvid, gvid)
+			if (se) then job = apply_item_state(ctx, se, row, e.section, false) end
 		end
 		if (se) then
-			ids[#ids + 1] = se.id
-			if (props.condition ~= nil) then
-				pcall(function() se.condition = props.condition end)
-			end
-			for _, up in ipairs(upgrades) do
-				local ok = pcall(function() se:add_upgrade(up) end)
-				if not (ok) then util.warn("%s/%s: spawn: upgrade '%s' could not be added to %s", ctx.uid, ctx.node_id, up, e.section) end
-			end
-			local job = {}
-			if (rounds and not is_ammo_section(e.section)) then job.ammo = rounds end
-			if (tonumber(props.uses)) then job.uses = tonumber(props.uses) end
-			if (next(job)) then core.online_job(qs, se.id, job) end
+			local id = se.id
+			ids[#ids + 1] = id
+			by_row[e.ri] = by_row[e.ri] or {}
+			table.insert(by_row[e.ri], id)
+			if (job) then core.online_job(qs, id, job) end
 		end
 	end
-	return ids
+	return ids, by_row
 end
 
 -- Creates the loot. The plan (a host for every instance) is resolved in full before the
@@ -927,23 +1059,38 @@ K["item.take"] = {
 	run = function(ctx, p) take_item(ctx, p.section, p.count == nil and 1 or p.count) end,
 }
 
--- item.spawn: the destination is a loot_spawn (the forms fetch uses), the rows are the
--- section+count shorthand or an items list. The state props apply to every instance.
+-- The rows of an item.spawn. The one-line spelling IS one row, so the state written next to
+-- `section` belongs to it - which is why the state keys are legal there and nowhere else
+-- beside an `items` list.
+local function spawn_rows(p)
+	if (p.items) then return p.items end
+	if (p.section) then
+		return { { section = p.section, count = p.count or 1, condition = p.condition,
+				   ammo = p.ammo, ammo_kind = p.ammo_kind, uses = p.uses,
+				   upgrades = p.upgrades, ref = p.ref } }
+	end
+	return nil
+end
+
+-- item.spawn: the destination is a loot_spawn (the forms fetch uses), and every row carries
+-- its own state and its own ref.
 K["item.spawn"] = {
 	run = function(ctx, p)
 		if not (p.where) then error("item.spawn: 'where' is required") end
-		local rows = fetch_reqs(p)
+		local rows = spawn_rows(p)
 		if not (rows) then error("item.spawn: section or items is required") end
-		local ids = spawn_items(ctx, p.where, rows, {
-			condition = p.condition, ammo = p.ammo, uses = p.uses, upgrades = p.upgrades })
-		if (p.ref and ids[1]) then
-			-- a ref names ONE object; the editor refuses a ref on several, a hand-written
-			-- asset gets the first and a warning
-			if (#ids > 1) then
-				util.warn("%s/%s: item.spawn: ref '%s' names the first of %d items", ctx.uid, ctx.node_id, p.ref, #ids)
+		local _, by_row = spawn_items(ctx, p.where, rows)
+		for ri, r in ipairs(rows) do
+			local made = r.ref and by_row[ri] or nil
+			if (made and made[1]) then
+				-- a ref names ONE object; the editor refuses a ref on a row that makes
+				-- several, a hand-written asset gets the first and a warning
+				if (#made > 1) then
+					util.warn("%s/%s: item.spawn: ref '%s' names the first of %d items",
+						ctx.uid, ctx.node_id, r.ref, #made)
+				end
+				core.ref_set(ctx.qs, r.ref, { id = made[1], kind = "item", section = r.section })
 			end
-			local section = rows[1] and rows[1].section
-			core.ref_set(ctx.qs, p.ref, { id = ids[1], kind = "item", section = section })
 		end
 	end,
 }
