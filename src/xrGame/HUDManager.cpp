@@ -156,6 +156,38 @@ void CHUDManager::Render_Shadow(u32 context_id)
     g_player_hud->render_shadow(context_id, root);
 }
 
+// The actor is dropped from the spatial database while it is in first person, so its world
+// shadow has to be driven by hand: the caster is prepared here once per frame, and every
+// shadow-map pass asks for it separately.
+void CHUDManager::Update_Actor_Shadow(bool enabled)
+{
+    ZoneScoped;
+
+    if (!g_pGameLevel)
+        return;
+
+    CActor* A = smart_cast<CActor*>(g_pGameLevel->CurrentViewEntity());
+    if (!A)
+        return;
+
+    ScopeLock lock{ &render_lock };
+    A->update_shadow_caster(enabled);
+}
+
+void CHUDManager::Render_Actor_Shadow(u32 context_id, const Fvector& source)
+{
+    ZoneScoped;
+
+    if (!g_pGameLevel)
+        return;
+
+    CActor* A = smart_cast<CActor*>(g_pGameLevel->CurrentViewEntity());
+    if (!A)
+        return;
+
+    A->render_shadow_caster(context_id, A->H_Root(), source);
+}
+
 bool CHUDManager::RenderActiveItemUIQuery()
 {
     if (!psHUD_Flags.is(HUD_DRAW_RT2))

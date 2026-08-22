@@ -23,6 +23,8 @@ public:
     virtual void Render_First(u32 context_id);
     virtual void Render_Last(u32 context_id);
     virtual void Render_Shadow(u32 context_id);
+    virtual void Update_Actor_Shadow(bool enabled);
+    virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source);
     virtual void OnFrame();
 
     virtual void RenderUI();

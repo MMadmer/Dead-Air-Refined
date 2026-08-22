@@ -392,6 +392,13 @@
         <check_r__actor_body x="115" y="0" width="30" height="21">
             <options_item entry="r__actor_body" group="mm_opt_video"/>
         </check_r__actor_body>
+
+	    <cap_r__actor_shadow x="25" y="2" width="90" height="21" complex_mode="1" >
+            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_r__actor_shadow</text>
+        </cap_r__actor_shadow>
+        <check_r__actor_shadow x="115" y="0" width="30" height="21">
+            <options_item entry="r__actor_shadow" group="mm_opt_video"/>
+        </check_r__actor_shadow>
         
         <cap_r2_sun_details x="25" y="2" width="90" height="21" complex_mode="1" >
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_r2_sun_details</text>

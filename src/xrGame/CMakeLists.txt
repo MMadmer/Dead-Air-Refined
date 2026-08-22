@@ -47,6 +47,7 @@ target_sources(xrGame PRIVATE
     ActorFollowers.cpp
     ActorFollowers.h
     Actor.h
+    actor_shadow.cpp
     ActorHelmet.cpp
     ActorHelmet.h
     ActorBackpack.cpp

@@ -37,6 +37,11 @@ public:
     // caster must not be marked as HUD geometry: mapHUD belongs to the main pass alone.
     virtual void Render_Shadow(u32 context_id) = 0;
 
+    // The first-person actor's world shadow. Prepared once per frame on the main thread, then
+    // handed to every shadow map by hand - the hidden actor is not in the spatial database.
+    virtual void Update_Actor_Shadow(bool enabled) = 0;
+    virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source) = 0;
+
     virtual void OnFrame() = 0;
     virtual void Load() = 0;
     virtual void OnDisconnected() = 0;

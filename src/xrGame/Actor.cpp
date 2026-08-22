@@ -253,6 +253,8 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 CActor::~CActor()
 {
+    drop_shadow_caster();
+
     actorAdrenalineTimes.erase(this);
     actorSprintGearFactors.erase(this);
     actorMovementTuning.erase(this);

@@ -124,6 +124,17 @@ public:
     void renderable_RenderBody(u32 context_id, IRenderable* root);
     void renderable_Render(u32 context_id, IRenderable* root) override;
     virtual bool renderable_ShadowGenerate();
+
+    // First-person world shadow. The visible model is a legs-only mesh, so the caster is a
+    // separate full-body copy driven by the very same skeleton.
+    struct shadow_bone
+    {
+        IKinematics* source;
+        u16 source_id;
+    };
+    void update_shadow_caster(bool enabled);
+    void render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source);
+    void drop_shadow_caster();
     void feel_sound_new(IGameObject* who, int type, const CSound_UserDataPtr& user_data,
         const Fvector& position, float power) override;
     virtual Feel::Sound* dcast_FeelSound() { return this; }
@@ -709,6 +720,22 @@ protected:
     CStatGraph* pStatGraph;
 
     shared_str m_DefaultVisualOutfit;
+
+    // First-person shadow caster: the model itself, its per-bone link into the actor's skeleton
+    // and the world items that ride along with it. All of it exists only while the setting is on.
+    struct shadow_item
+    {
+        IRenderVisual* visual;
+        Fmatrix xform;
+    };
+    IRenderVisual* m_shadow_caster{};
+    shared_str m_shadow_caster_name;
+    xr_vector<shadow_bone> m_shadow_bones;
+    xr_vector<shadow_item> m_shadow_items;
+
+    shared_str shadow_caster_visual() const;
+    void bind_shadow_caster(IKinematics* body);
+    void collect_shadow_items();
 
     LPCSTR invincibility_fire_shield_3rd;
     LPCSTR invincibility_fire_shield_1st;

@@ -740,6 +740,8 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
 
 void CActor::net_Destroy()
 {
+    drop_shadow_caster();
+
     inherited::net_Destroy();
 
     if (m_holder_id != ALife::_OBJECT_ID(-1))
@@ -884,6 +886,9 @@ void CActor::ResetCallbacks()
 
 void CActor::OnChangeVisual()
 {
+    // The caster mirrors this skeleton bone by bone, so a new model invalidates every link.
+    drop_shadow_caster();
+
     {
         CPhysicsShell* tmp_shell = PPhysicsShell();
         PPhysicsShell() = NULL;
