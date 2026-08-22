@@ -153,7 +153,7 @@ void CRender::Calculate()
     // The first-person shadow caster is prepared before any graph is built: creating its model
     // and refreshing the actor's pose must stay on the main thread, outside the parallel passes.
     if (g_pGameLevel && g_pGameLevel->pHUD)
-        g_pGameLevel->pHUD->Update_Actor_Shadow(ps_r__common_flags.test(RFLAG_ACTOR_SHADOW));
+        g_pGameLevel->pHUD->Update_Actor_Shadow(ps_r__actor_shadow != 0);
 
     r_main.init();
     if (o.oldshadowcascades)

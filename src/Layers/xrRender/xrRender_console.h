@@ -72,6 +72,7 @@ extern ECORE_API int ps_r__LightSleepFrames;
 extern ECORE_API int ps_r__light_shadow_budget;
 extern ECORE_API int ps_r__light_details;
 extern ECORE_API int ps_r__hud_shadow;
+extern ECORE_API int ps_r__actor_shadow;
 extern ECORE_API float ps_r__hud_shadow_normal_offset;
 extern ECORE_API float ps_r__hud_shadow_slope_bias;
 extern ECORE_API int ps_r__sun_cache_ms;
@@ -99,14 +100,6 @@ extern ECORE_API float ps_r__tf_Mipbias;
 
 extern ECORE_API int ps_r__clear_models_on_unload;
 extern ECORE_API int ps_r__unload_level_textures;
-
-enum
-{
-    RFLAG_ACTOR_SHADOW = 1 << 0,
-    RFLAG_ACTOR_BODY = 1 << 1,
-};
-
-extern ECORE_API Flags32 ps_r__common_flags;
 
 // R1
 extern ECORE_API float ps_r1_ssaLOD_A;

@@ -182,8 +182,10 @@ void CRender::Render()
         Target->phase_scene_prepare();
     }
 
-    // Insert the first-person body only after scene building and the optional depth prepass have finished.
-    if (g_pGameLevel->pHUD && ps_r__common_flags.test(RFLAG_ACTOR_BODY))
+    // Insert the first-person body only after scene building and the optional depth prepass have
+    // finished. It is not optional: the player always has legs, and Render_First gates itself on
+    // the camera mode anyway.
+    if (g_pGameLevel->pHUD)
     {
         dsgraph.o.phase = PHASE_NORMAL;
         dsgraph.r_pmask(true, true, true);

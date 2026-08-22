@@ -313,14 +313,6 @@
             <options_item entry="r2_sun_details" group="mm_opt_video"/>
         </check_r2_sun_details>
 
-		<cap_r__actor_shadow x="15" y="3" width="108" height="24">
-            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r__actor_shadow</text>
-        </cap_r__actor_shadow>
-        <check_r__actor_shadow x="136" y="0" width="35" stretch="1" height="29">
-	        <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="r__actor_shadow" group="mm_opt_video"/>
-        </check_r__actor_shadow>
-		
         <cap_r1_detail_textures x="15" y="3" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r1_detail_textures</text>
         </cap_r1_detail_textures>
@@ -518,9 +510,6 @@
         <cap_detail_height x="15" y="3" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_detail_height</text>
         </cap_detail_height>
-        <cap_r__actor_body x="15" y="3" width="108" height="24">
-            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_r__actor_body</text>
-        </cap_r__actor_body>
         <cap_shadow_map x="15" y="3" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_smap_size</text>
         </cap_shadow_map>
@@ -578,10 +567,6 @@
         <track_sharp x="147" y="6" width="188" height="16" step="0.1">
             <options_item entry="r2_lumasharpen" group="mm_opt_video_adv"/>
         </track_sharp>
-        <check_r__actor_body x="136" y="0" width="35" stretch="1" height="29">
-            <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="r__actor_body" group="mm_opt_video"/>
-        </check_r__actor_body>
         <check_reflections x="136" y="0" width="35" stretch="1" height="29">
             <texture>ui_inGame2_checkbox</texture>
             <options_item entry="r2_reflections" group="mm_opt_video_adv" depend="restart"/>

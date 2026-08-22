@@ -128,9 +128,9 @@ void CActor::update_shadow_caster(bool enabled)
         return;
     }
 
-    // In first person nothing else asks for the actor's pose - the body model only reaches a
-    // graph while r__actor_body is on - yet the caster, the weapon transform and the attachment
-    // callbacks all read it. So it is refreshed here: once per frame, on the main thread.
+    // The caster, the weapon transform and the attachment callbacks all read the actor's pose,
+    // and the main pass builds its graph in parallel with the shadow maps. So it is refreshed
+    // here instead: once per frame, on the main thread, before any graph is built.
     body->CalculateBones(TRUE);
 
     const shared_str name = shadow_caster_visual();

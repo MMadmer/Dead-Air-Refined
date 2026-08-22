@@ -136,7 +136,4 @@
     <string id="ui_mm_cursor_sens_hint">
         <text>Скорость курсора в меню и инвентаре. 1.00 — как у системного курсора.</text>
     </string>
-    <string id="ui_mm_r__actor_shadow">
-        <text>Тень игрока</text>
-    </string>
 </string_table>

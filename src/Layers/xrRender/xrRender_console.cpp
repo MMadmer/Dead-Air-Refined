@@ -163,7 +163,6 @@ const xr_token q_optimize_static_token[] =
 extern int psSkeletonUpdate;
 extern float r__dtex_range;
 
-Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
 
 //int ps_r__Supersample = 1;
 int ps_r__LightSleepFrames = 10;
@@ -185,6 +184,7 @@ int ps_r__light_details = 0;
 // world cascade, so the weapon never drops a second shadow on the ground next to the one the
 // actor's body and the item's world model already cast. Maximum preset only (see CCC_Preset).
 int ps_r__hud_shadow = 0;
+int ps_r__actor_shadow = 0;
 // How far the self-shadow lifts a sample off its own surface, in metres, and how much depth
 // slope one shadow texel may carry. Both exist for the same reason the sun has its own depth
 // bias pair: the deferred position a first-person pixel reconstructs from is not exactly on
@@ -665,6 +665,16 @@ public:
             xr_sprintf(hud_shadow_cmd, "r__hud_shadow %d", hud_shadow_by_preset[*value]);
             Console->Execute(hud_shadow_cmd);
         }
+
+        // The player's own world shadow starts at Medium: it is one more full-body caster in
+        // every shadow map, which the two lowest presets should not pay for.
+        static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
+        if (*value < std::size(actor_shadow_by_preset))
+        {
+            string64 actor_shadow_cmd;
+            xr_sprintf(actor_shadow_cmd, "r__actor_shadow %d", actor_shadow_by_preset[*value]);
+            Console->Execute(actor_shadow_cmd);
+        }
     }
 };
 
@@ -940,8 +950,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__detail_l_aniso", &ps_r__Detail_l_aniso, .1f, .5f);
 #endif // DEBUG
 
-    CMD3(CCC_Mask, "r__actor_shadow", &ps_r__common_flags, RFLAG_ACTOR_SHADOW);
-    CMD3(CCC_Mask, "r__actor_body", &ps_r__common_flags, RFLAG_ACTOR_BODY);
 
     CMD2(CCC_tf_Aniso, "r__tf_aniso", &ps_r__tf_Anisotropic); // {1..16}
     CMD2(CCC_tf_MipBias, "r1_tf_mipbias", &ps_r__tf_Mipbias); // {-3 +3}
@@ -952,6 +960,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__actor_shadow", &ps_r__actor_shadow, 0, 1);
     CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);
     CMD4(CCC_Float, "r__hud_shadow_slope_bias", &ps_r__hud_shadow_slope_bias, 0.f, 0.05f);
 #if defined(USE_DX11)

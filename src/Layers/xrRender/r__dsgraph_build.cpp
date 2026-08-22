@@ -1056,8 +1056,8 @@ void R_dsgraph_structure::build_subspace()
     // In first person the actor is dropped from the spatial database, so the query above can
     // never find it and its shadow has to be inserted into each shadow map by hand. The main
     // pass keeps its own z-prefill on PHASE_SMAP, hence the is_main_pass guard.
-    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__common_flags.test(RFLAG_ACTOR_SHADOW) &&
-        g_pGameLevel && g_pGameLevel->pHUD)
+    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__actor_shadow && g_pGameLevel &&
+        g_pGameLevel->pHUD)
         g_pGameLevel->pHUD->Render_Actor_Shadow(context_id, o.view_pos);
 }
 } // namespace xray::render::RENDER_NAMESPACE
