@@ -468,7 +468,7 @@ end
 -- of the kind) or { item = { ref= | story= } } (one concrete object) - the two mix freely.
 -- The state a spawn row may carry. A row of objective.fetch describes what the player must
 -- BRING, so it takes none of it - the type is shared, the permission is not.
-local ROW_STATE = { condition = true, ammo = true, ammo_kind = true, uses = true,
+local ROW_STATE = { condition = true, ammo = true, ammo_kind = true,
 					upgrades = true, ref = true }
 local ROW_KEYS  = { section = true, count = true, item = true }
 for k in pairs(ROW_STATE) do ROW_KEYS[k] = true end
@@ -497,7 +497,6 @@ local function valid_item_list(v, state_ok)
 			seen[e.section] = true
 			if (e.condition ~= nil and (type(e.condition) ~= "number" or e.condition < 0 or e.condition > 1)) then return false end
 			if (e.ammo ~= nil and not (is_int(e.ammo) and e.ammo >= 0)) then return false end
-			if (e.uses ~= nil and not (is_int(e.uses) and e.uses >= 0)) then return false end
 			if (e.ammo_kind ~= nil and (type(e.ammo_kind) ~= "string" or e.ammo_kind == "")) then return false end
 			if (e.upgrades ~= nil and type(e.upgrades) ~= "string") then return false end
 			if (e.ref ~= nil) then
@@ -605,7 +604,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		local state_ok = (kind == "item.spawn")
 		if not (valid_item_list(v, state_ok)) then
 			if (state_ok) then
-				return nil, false, "must be a list of { section = ..., count = N } with no repeated section; a row may also carry condition, ammo, ammo_kind, uses, upgrades and a ref (ref needs count 1)"
+				return nil, false, "must be a list of { section = ..., count = N } with no repeated section; a row may also carry condition, ammo, ammo_kind, upgrades and a ref (ref needs count 1)"
 			end
 			return nil, false, "must be a list of { section = ..., count = N } with no repeated section"
 		end

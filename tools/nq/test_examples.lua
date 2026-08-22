@@ -2514,7 +2514,7 @@ mock.overrides["mod_a/sp.nqasset"] = [[return { nq = 1, id = "sp", nodes = {
 		{ kind = "item.spawn", params = { where = { into = { story = "z15_box" } }, items = {
 			{ section = "wpn_ak74", condition = 0.72, ammo = 30, ammo_kind = "ammo_5.45x39_ap",
 			  upgrades = "up_firsta_ak74, up_seconc_ak74", ref = "prize_rifle" },
-			{ section = "medkit", count = 2, uses = 0 },
+			{ section = "medkit", count = 2, condition = 0.4 },
 			{ section = "ammo_5.45x39_ap", count = 3, ammo = 45 },
 		} } },
 	}, out = { next = "fin" } },
@@ -2536,16 +2536,12 @@ local rifles, meds, ammo = kids_of(box, "wpn_ak74"), kids_of(box, "medkit"), kid
 check(#rifles == 1 and #meds == 2 and #ammo == 3, "one rifle, two medkits, three ammo boxes (" .. #rifles .. "/" .. #meds .. "/" .. #ammo .. ")")
 local rifle = rifles[1]
 check(rifle ~= nil and rifle.condition == 0.72, "the rifle carries its own condition")
-check(meds[1] ~= nil and meds[1].condition == nil and meds[2].condition == nil, "the medkits did NOT inherit the rifle's condition")
+check(meds[1] ~= nil and meds[1].condition == 0.4 and rifle.condition == 0.72, "the medkits did NOT inherit the rifle's condition")
 check(rifle ~= nil and rifle.a_elapsed == 30, "the magazine is on the server entity, not deferred")
 check(rifle ~= nil and rifle.ammo_type == 1, "ammo_kind resolved to its index in ammo_class (" .. tostring(rifle and rifle.ammo_type) .. ")")
 check(rifle ~= nil and rifle:has_upgrade("up_firsta_ak74") and rifle:has_upgrade("up_seconc_ak74"), "both upgrades installed")
 check(qs.jobs[rifle.id] == nil, "no online job is left for the rifle")
-local uses_jobs = 0
-for _, m in ipairs(meds) do
-	if (qs.jobs[m.id] and qs.jobs[m.id].uses == 0) then uses_jobs = uses_jobs + 1 end
-end
-check(uses_jobs == 2, "each medkit of a count=2 row got its own uses job (" .. uses_jobs .. ")")
+check(meds[1] ~= nil and meds[1].condition == 0.4 and meds[2].condition == 0.4, "both medkits of a count=2 row carry that row's condition")
 local boxes_ok = true
 for _, a in ipairs(ammo) do if (a.ammo_left ~= 45) then boxes_ok = false end end
 check(boxes_ok, "every ammo box holds the rounds the row asked for")
@@ -2620,7 +2616,6 @@ mock.overrides["mod_a/gate.nqasset"] = [[return { nq = 1, id = "gate", nodes = {
 		{ kind = "item.spawn", params = { where = { place = { actor = true } }, items = {
 			{ section = "medkit", ammo = 30 },
 			{ section = "kerosene_5", ammo = 5 },
-			{ section = "wpn_ak74", uses = 2 },
 			{ section = "wpn_pm", ammo_kind = "ammo_5.45x39_ap" },
 			{ section = "bread", upgrades = "up_firsta_ak74" },
 		} } },
@@ -2632,7 +2627,6 @@ mock.first_update()
 core = xms_nq
 qs = core.quest_state("mod_a.gate")
 check(mock.log_has("'medkit' takes no magazine"), "ammo on a medkit is refused and named")
-check(mock.log_has("'wpn_ak74' has no doses"), "uses on a rifle is refused and named")
 check(mock.log_has("ammo_kind 'ammo_5.45x39_ap' is not in the ammo_class of wpn_pm"), "a foreign cartridge is named")
 check(mock.log_has("does not belong to bread"), "a foreign upgrade is refused and named")
 -- box_size alone would have sent this through create_ammo, which THROWs on a non-ammo class
@@ -2703,39 +2697,29 @@ end
 check(nboxes == 2 and box_ok, "both boxes clamped to box_size (" .. nboxes .. ")")
 if (failed > 0) then fail_dump() end
 
--- the doses job still works end to end, and survives a save
-section("(z15) the uses job applies once the object is online, across a save")
+-- an unset magazine means a FULL one: a quest reward is not a broken gift
+section("(z15) an unset magazine is a full magazine")
 setup()
 for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
 	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
 end
 mock.move_actor(0, 0, 0)
-mock.overrides["mod_a/dose.nqasset"] = [[return { nq = 1, id = "dose", nodes = {
+mock.overrides["mod_a/full.nqasset"] = [[return { nq = 1, id = "full", nodes = {
 	{ id = "start", kind = "trigger.start", out = { next = "make" } },
 	{ id = "make", kind = "flow.step", on_enter = {
-		{ kind = "item.spawn", params = { section = "drug_multi", where = { place = { actor = true } },
-		  uses = 1, ref = "dose" } },
+		{ kind = "item.spawn", params = { section = "wpn_ak74", where = { place = { actor = true } }, ref = "full_gun" } },
+		{ kind = "item.spawn", params = { section = "wpn_pm", where = { place = { actor = true } }, ammo = 0, ref = "empty_gun" } },
 	}, out = { next = "fin" } },
 	{ id = "fin", kind = "flow.end" },
 } }]]
 mock.first_update()
 core = xms_nq
-qs = core.quest_state("mod_a.dose")
-local dose_id = qs.refs.dose and qs.refs.dose.id
-check(dose_id ~= nil and qs.jobs[dose_id] ~= nil and qs.jobs[dose_id].uses == 1, "a multi-dose consumable left a uses job")
-mock.ticks(1)
-mock.rebuild()
-mock.first_update()
-core = xms_nq
-qs = core.quest_state("mod_a.dose")
-check(qs.jobs[dose_id] ~= nil, "the job survived the save")
-local dgo = mock.new_go("drug_multi")
-mock.go[dgo._id] = nil
-dgo._id = dose_id
-mock.go[dose_id] = dgo
-mock.ticks(2)
-check(dgo:get_remaining_uses() == 1, "the doses were set once it came online")
-check(qs.jobs[dose_id] == nil, "and the job is gone")
+qs = core.quest_state("mod_a.full")
+local full_gun = qs.refs.full_gun and mock.se[qs.refs.full_gun.id]
+local empty_gun = qs.refs.empty_gun and mock.se[qs.refs.empty_gun.id]
+check(full_gun ~= nil and full_gun.a_elapsed == 30, "saying nothing loads the whole magazine (" .. tostring(full_gun and full_gun.a_elapsed) .. ")")
+check(empty_gun ~= nil and empty_gun.a_elapsed == 0, "asking for 0 really does spawn it empty")
+check(full_gun ~= nil and full_gun.condition == 1, "an unwritten condition arrives as the catalog default, a whole item")
 if (failed > 0) then fail_dump() end
 
 -- the loader is the last line: a typo in a row key must not silently do nothing
@@ -2753,7 +2737,7 @@ local W = [[where = { place = { actor = true } }]]
 check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", conditon = 0.5 } } }").E006 == 1, "a misspelt row key is refused")
 check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", count = 2, ref = \"x\" } } }").E006 == 1, "a ref on a count=2 row is refused")
 check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", condition = 2 } } }").E006 == 1, "a condition over 1 is refused")
-check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", uses = -1 } } }").E006 == 1, "a negative uses is refused")
+check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", uses = 1 } } }").E006 == 1, "the retired uses key is refused as unknown")
 check(sp_codes("{ " .. W .. ", items = { { section = \"bread\", condition = 0.5 } } }").E006 == nil, "a good row loads")
 check(sp_codes("{ " .. W .. ", section = \"bread\", condition = 0.5 }").E006 == nil, "the one-line spelling with state loads")
 -- objective.fetch shares the type and takes NO state: its rows say what to bring

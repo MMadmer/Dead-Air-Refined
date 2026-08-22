@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 11
+version = 12
 api     = 1
 
 ; ============================================================ triggers
@@ -296,26 +296,24 @@ since  = 1
 [nq.item.spawn]
 group  = items
 title  = Spawn items
-desc   = Creates items where you say - the same destination forms as fetch. Every row carries its own state.
+desc   = Creates items where you say - the same destination forms as fetch. Every row carries its own state, full by default.
 use    = extra
-params  = section, count, items, where, condition, ammo, ammo_kind, uses, upgrades, ref
+params  = section, count, items, where, condition, ammo, ammo_kind, upgrades, ref
 section = item_section
 count   = int, default=1, min=1
 items   = item_list
 where   = loot_spawn, required
-condition = float, min=0, max=1
+condition = float, default=1, min=0, max=1
 ammo    = int, min=0
 ammo_kind = item_section
-uses    = int, min=0
 upgrades = string
 ref     = ref_name
-rows    = section, count, condition, ammo, ammo_kind, uses, upgrades, ref
+rows    = section, count, condition, ammo, ammo_kind, upgrades, ref
 row.section   = item_section, required
 row.count     = int, default=1, min=1
-row.condition = float, min=0, max=1
+row.condition = float, default=1, min=0, max=1
 row.ammo      = int, min=0
 row.ammo_kind = item_section
-row.uses      = int, min=0
 row.upgrades  = string
 row.ref       = ref_name
 impl   = core

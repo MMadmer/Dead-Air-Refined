@@ -561,11 +561,10 @@ local function upgrade_set(section)
 end
 
 -- Everything the item's state can carry, written on the SERVER entity before it is
--- registered, so the client twin is built from it. Returns the one piece with no server
--- side - a consumable's remaining doses live in the client packet (CEatableItem) - as a
--- job for the caller to defer.
+-- registered, so the client twin is built from it. An unset field means FULL: a quest that
+-- hands out a rifle means a working rifle, and the engine's own default for a fresh item is
+-- a condition of 1 - only the magazine starts empty, so that is the one this fills.
 local function apply_item_state(ctx, se, row, section, ammo_is_box)
-	local job = nil
 	if (row.condition ~= nil) then
 		-- the engine writes condition through a u8 quantiser that only VERIFYs the range,
 		-- and VERIFY is a no-op in release: out of range wraps instead of failing
@@ -573,15 +572,18 @@ local function apply_item_state(ctx, se, row, section, ammo_is_box)
 		if (c < 0) then c = 0 elseif (c > 1) then c = 1 end
 		pcall(function() se.condition = c end)
 	end
-	local rounds = tonumber(row.ammo)
-	if (rounds and not ammo_is_box) then
+	if not (ammo_is_box) then
 		local mag = 0
 		pcall(function() mag = se:get_ammo_magsize() or 0 end)
+		local rounds = tonumber(row.ammo)
 		if (mag > 0) then
+			-- said nothing = a full magazine. The server entity starts at zero rounds,
+			-- which for a quest reward reads as a broken gift
+			if not (rounds) then rounds = mag end
 			if (rounds > mag) then rounds = mag end
 			if (rounds < 0) then rounds = 0 end
 			pcall(function() se:set_ammo_elapsed(rounds) end)
-		else
+		elseif (rounds) then
 			util.warn("%s/%s: item.spawn: '%s' takes no magazine - ammo ignored", ctx.uid, ctx.node_id, tostring(section))
 		end
 	end
@@ -616,15 +618,6 @@ local function apply_item_state(ctx, se, row, section, ammo_is_box)
 			end
 		end
 	end
-	local uses = tonumber(row.uses)
-	if (uses) then
-		if (ini_num(section, "max_uses")) then
-			job = { uses = uses }
-		else
-			util.warn("%s/%s: item.spawn: '%s' has no doses - uses ignored", ctx.uid, ctx.node_id, tostring(section))
-		end
-	end
-	return job
 end
 
 -- Creates the items of `rows` at a loot_spawn destination. A row is a section, a count and
@@ -661,7 +654,7 @@ function spawn_items(ctx, where, rows)
 		local pos = (hse and hse.position) or e.ground.pos
 		local lvid = (hse and hse.m_level_vertex_id) or e.ground.lvid
 		local gvid = (hse and hse.m_game_vertex_id) or e.ground.gvid
-		local row, se, job = e.row, nil, nil
+		local row, se = e.row, nil
 		local host_online = false
 		if (hse) then
 			local ok, o = pcall(function() return hse.online end)
@@ -675,7 +668,7 @@ function spawn_items(ctx, where, rows)
 			if (n > box) then n = box end
 			if (n < 1) then n = 1 end
 			se = alife():create_ammo(e.section, pos, lvid, gvid, e.host or 65535, n)
-			if (se) then job = apply_item_state(ctx, se, row, e.section, true) end
+			if (se) then apply_item_state(ctx, se, row, e.section, true) end
 		elseif (e.host and host_online) then
 			-- An ONLINE parent makes alife():create build and send the client twin on the
 			-- spot, so anything written afterwards reaches the server entity only and the
@@ -683,20 +676,19 @@ function spawn_items(ctx, where, rows)
 			-- then register - which hands back a NEW entity and destroys this one.
 			se = alife():create(e.section, pos, lvid, gvid, e.host, false)
 			if (se) then
-				job = apply_item_state(ctx, se, row, e.section, false)
+				apply_item_state(ctx, se, row, e.section, false)
 				se = alife():register(se)
 			end
 		else
 			se = e.host and alife():create(e.section, pos, lvid, gvid, e.host)
 					   or alife():create(e.section, pos, lvid, gvid)
-			if (se) then job = apply_item_state(ctx, se, row, e.section, false) end
+			if (se) then apply_item_state(ctx, se, row, e.section, false) end
 		end
 		if (se) then
 			local id = se.id
 			ids[#ids + 1] = id
 			by_row[e.ri] = by_row[e.ri] or {}
 			table.insert(by_row[e.ri], id)
-			if (job) then core.online_job(qs, id, job) end
 		end
 	end
 	return ids, by_row
@@ -1066,7 +1058,7 @@ local function spawn_rows(p)
 	if (p.items) then return p.items end
 	if (p.section) then
 		return { { section = p.section, count = p.count or 1, condition = p.condition,
-				   ammo = p.ammo, ammo_kind = p.ammo_kind, uses = p.uses,
+				   ammo = p.ammo, ammo_kind = p.ammo_kind,
 				   upgrades = p.upgrades, ref = p.ref } }
 	end
 	return nil
