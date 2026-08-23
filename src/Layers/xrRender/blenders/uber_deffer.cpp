@@ -41,8 +41,11 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     if (C.bDetail_Bump)
     {
         LPCSTR detail_bump_texture = RImplementation.Resources->m_textures_description.GetBumpName(dt).c_str();
-        // Detect and use detail bump
-        if (detail_bump_texture)
+        // Detect and use detail bump. c_str() of an empty shared_str is "", never null, so the
+        // pointer test used to pass an empty name through, and the length VERIFYs below are gone in
+        // release - leaving a texture literally named "#" and the wrong shader variant. Without a
+        // bump name the material renders with details and no bump, which is what it has.
+        if (detail_bump_texture && xr_strlen(detail_bump_texture) > 2)
         {
             bHasDetailBump = true;
             xr_strcpy(texDetailBump, sizeof(texDetailBump), detail_bump_texture);

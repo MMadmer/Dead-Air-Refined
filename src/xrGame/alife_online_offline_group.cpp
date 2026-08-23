@@ -127,7 +127,20 @@ void CSE_ALifeOnlineOfflineGroup::unregister_member(ALife::_OBJECT_ID member_id)
     //	CALifeLevelRegistry			&level = graph.level();
 
     MEMBERS::iterator I = m_members.find(member_id);
-    VERIFY(I != m_members.end());
+    if (I == m_members.end())
+        return;
+
+    // The member may already be gone from the server - the pointer then names freed memory, and
+    // updating the graph through it is the reported crash. Strike it from the roster and leave it.
+    if (!CSE_Abstract::is_live_object((*I).second))
+    {
+        Msg("~ Squad [%d]: member [%d] is already released, struck from the roster", ID, member_id);
+        m_members.erase(I);
+        if (m_members.empty())
+            m_flags.set(flUsedAI_Locations, FALSE);
+        return;
+    }
+
     VERIFY((*I).second->m_group_id == ID);
     (*I).second->m_group_id = 0xffff;
 
@@ -139,6 +152,14 @@ void CSE_ALifeOnlineOfflineGroup::unregister_member(ALife::_OBJECT_ID member_id)
     {
         m_flags.set(flUsedAI_Locations, FALSE);
     }
+}
+
+CSE_ALifeOnlineOfflineGroup::MEMBER* CSE_ALifeOnlineOfflineGroup::live_member() const
+{
+    for (const auto& it : m_members)
+        if (it.second && CSE_Abstract::is_live_object(it.second))
+            return it.second;
+    return nullptr;
 }
 
 CSE_ALifeOnlineOfflineGroup::MEMBER* CSE_ALifeOnlineOfflineGroup::member(ALife::_OBJECT_ID member_id, bool no_assert)
@@ -158,11 +179,15 @@ bool CSE_ALifeOnlineOfflineGroup::synchronize_location()
 {
     if (m_bOnline)
     {
-        MEMBER* member = (*m_members.begin()).second;
-        o_Position = member->o_Position;
-        m_tNodeID = member->m_tNodeID;
-        m_tGraphID = member->m_tGraphID;
-        m_fDistance = member->m_fDistance;
+        // The first live member; the roster can hold a pointer to a released object.
+        MEMBER* member = live_member();
+        if (member)
+        {
+            o_Position = member->o_Position;
+            m_tNodeID = member->m_tNodeID;
+            m_tGraphID = member->m_tGraphID;
+            m_fDistance = member->m_fDistance;
+        }
     }
 
     return (true);
@@ -267,10 +292,8 @@ void CSE_ALifeOnlineOfflineGroup::switch_offline()
     R_ASSERT(m_bOnline);
     m_bOnline = false;
 
-    if (!m_members.empty())
+    if (MEMBER* member = live_member())
     {
-        MEMBER* member = (*m_members.begin()).second;
-
         member->synchronize_location();
 
         o_Position = member->o_Position;

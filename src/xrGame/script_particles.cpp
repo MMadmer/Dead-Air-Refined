@@ -113,13 +113,15 @@ CScriptParticles::~CScriptParticles()
 
 void CScriptParticles::Play()
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     m_particles->Play(false);
 }
 
 void CScriptParticles::PlayAtPos(const Fvector& position)
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     //m_particles->play_at_pos(position);
     m_transform.translate_over(position);
     m_particles->UpdateParent(m_transform, zero_vel);
@@ -129,19 +131,22 @@ void CScriptParticles::PlayAtPos(const Fvector& position)
 
 void CScriptParticles::Stop()
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     m_particles->Stop(FALSE);
 }
 
 void CScriptParticles::StopDeferred()
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     m_particles->Stop(TRUE);
 }
 
 void CScriptParticles::MoveTo(const Fvector& pos, const Fvector& vel)
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     //Fmatrix XF;
     //XF.translate(pos);
     m_transform.translate_over(pos);
@@ -152,6 +157,8 @@ void CScriptParticles::MoveTo(const Fvector& pos, const Fvector& vel)
 
 void CScriptParticles::SetDirection(const Fvector& dir)
 {
+    if (!m_particles)
+        return;
     Fmatrix matrix;
     matrix.identity();
     matrix.k.set(dir);
@@ -163,6 +170,8 @@ void CScriptParticles::SetDirection(const Fvector& dir)
 
 void CScriptParticles::SetOrientation(float yaw, float pitch, float roll)
 {
+    if (!m_particles)
+        return;
     Fmatrix matrix;
     matrix.setHPB(yaw, pitch, roll); // ?????????? matrix.c
     matrix.translate_over(m_transform.c);
@@ -172,21 +181,38 @@ void CScriptParticles::SetOrientation(float yaw, float pitch, float roll)
 
 bool CScriptParticles::IsPlaying() const
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return false;
     return m_particles->IsPlaying();
 }
 
 bool CScriptParticles::IsLooped() const
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return false;
     return m_particles->IsLooped();
 }
 
 void CScriptParticles::LoadPath(LPCSTR caPathName)
 {
-    VERIFY(m_particles);
+    if (!m_particles)
+        return;
     m_particles->LoadPath(caPathName);
 }
-void CScriptParticles::StartPath(bool looped) { m_particles->StartPath(looped); }
-void CScriptParticles::StopPath() { m_particles->StopPath(); }
-void CScriptParticles::PausePath(bool val) { m_particles->PausePath(val); }
+// The engine frees a finished non-looped effect and nulls m_particles; a script that still holds
+// the wrapper may call any of these afterwards, and that is routine mod usage, not a fault.
+void CScriptParticles::StartPath(bool looped)
+{
+    if (m_particles)
+        m_particles->StartPath(looped);
+}
+void CScriptParticles::StopPath()
+{
+    if (m_particles)
+        m_particles->StopPath();
+}
+void CScriptParticles::PausePath(bool val)
+{
+    if (m_particles)
+        m_particles->PausePath(val);
+}

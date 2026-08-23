@@ -364,6 +364,10 @@ bool CChangeLevelWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
     {
         if (IsBinded(kQUIT, dik))
             OnCancel();
+        // The same window is shown for a forbidden transition with other text and no Yes button,
+        // hence the gate.
+        else if (m_b_allow_change_level && (dik == SDL_SCANCODE_SPACE || dik == SDL_SCANCODE_RETURN || dik == SDL_SCANCODE_KP_ENTER))
+            OnOk();
         return true;
     }
     return inherited::OnKeyboardAction(dik, keyboard_action);

@@ -37,6 +37,11 @@ void AddOne(pcstr split)
     OutputDebugString(split);
     OutputDebugString("\n");
 
+    // The console and the crash report read the tail of this buffer, not the whole session; left
+    // unbounded it grew by megabytes an hour. Trim from the head, both readers count from size().
+    constexpr size_t log_lines_kept = 40000;
+    if (LogFile.size() >= log_lines_kept)
+        LogFile.erase(LogFile.begin(), LogFile.begin() + (LogFile.size() - log_lines_kept + 1));
     LogFile.push_back(split);
 
     // exec CallBack

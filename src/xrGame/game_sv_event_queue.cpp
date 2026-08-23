@@ -125,9 +125,13 @@ void GameEventQueue::Release()
     pcs->Enter();
     R_ASSERT(!ready.empty());
     //---------------------------------------------
+    // The "nothing created for a minute" pruning never fires in live play, so the pool ratcheted to
+    // its all-time peak at a NET_Packet (16 KB) per cell - tens of megabytes held for the session
+    // after one mass spawn. A hard cap keeps a generous reserve and frees the rest.
+    constexpr u32 pool_reserve = 256;
     u32 tmp_time = CPU::GetTicks() - 60000;
     u32 size = unused.size();
-    if ((LastTimeCreate < tmp_time) && (size > 32))
+    if (size >= pool_reserve || ((LastTimeCreate < tmp_time) && (size > 32)))
     {
         xr_delete(ready.front());
 #ifdef _DEBUG

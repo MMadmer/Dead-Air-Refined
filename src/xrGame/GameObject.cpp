@@ -861,18 +861,57 @@ u32 CGameObject::new_level_vertex_id() const
 
 void CGameObject::update_ai_locations(bool decrement_reference)
 {
+    // CLevelGraph::vertex() answers u32(-1) on an ordinary search miss, and every check on this
+    // path used to be a VERIFY - gone in release, with the id then multiplied by six and read as a
+    // cross-table cell. Usually that lands in mapped memory and quietly returns a foreign graph
+    // vertex; under a guarded heap it is a plain access violation.
     u32 l_dwNewLevelVertexID = new_level_vertex_id();
-    VERIFY(ai().level_graph().valid_vertex_id(l_dwNewLevelVertexID));
+    if (!ai().level_graph().valid_vertex_id(l_dwNewLevelVertexID))
+    {
+        static u32 reported = 0;
+        if (reported < 8)
+        {
+            ++reported;
+            Msg("! No level vertex for [%s], placement skipped (id %u)", cName().c_str(), l_dwNewLevelVertexID);
+        }
+        return;
+    }
     if (decrement_reference && (ai_location().level_vertex_id() == l_dwNewLevelVertexID))
         return;
 
     ai_location().level_vertex(l_dwNewLevelVertexID);
 
-    if (!ai().get_game_graph() && ai().get_cross_table())
+    // The condition was inverted (!graph && table): without a graph AND without a table, or with
+    // a graph but no table, it fell through into cross_table(). Either one missing means stop.
+    if (!ai().get_game_graph() || !ai().get_cross_table())
         return;
 
-    ai_location().game_vertex(ai().cross_table().vertex(ai_location().level_vertex_id()).game_vertex_id());
-    VERIFY(ai().game_graph().valid_vertex_id(ai_location().game_vertex_id()));
+    // The cross table has its own bound, and it need not agree with the level graph - they are
+    // different files, and a mismatch between them is exactly what produces these misses.
+    const u32 level_vertex_id = ai_location().level_vertex_id();
+    if (level_vertex_id >= ai().cross_table().header().level_vertex_count())
+    {
+        static u32 reported = 0;
+        if (reported < 8)
+        {
+            ++reported;
+            Msg("! Level vertex %u is outside the cross table (%u entries) for [%s], graph binding skipped",
+                level_vertex_id, ai().cross_table().header().level_vertex_count(), cName().c_str());
+        }
+        return;
+    }
+
+    const GameGraph::_GRAPH_ID game_vertex_id = ai().cross_table().vertex(level_vertex_id).game_vertex_id();
+    if (!ai().game_graph().valid_vertex_id(game_vertex_id))
+    {
+        static u32 reported = 0;
+        if (reported < 8)
+        {
+            ++reported;
+            Msg("! Cross table yields an invalid game vertex %u for [%s]", u32(game_vertex_id), cName().c_str());
+        }
+    }
+    ai_location().game_vertex(game_vertex_id);
 }
 
 void CGameObject::validate_ai_locations(bool decrement_reference)

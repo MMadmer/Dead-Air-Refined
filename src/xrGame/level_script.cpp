@@ -928,9 +928,11 @@ void CLevel::script_register(lua_State* luaState)
 
         def("vertex_id", +[](Fvector position) -> u64
         {
-            // Original luabind converts 4294967295 (which is u32(-1)) to 4294967296
+            // Original luabind converts 4294967295 (which is u32(-1)) to 4294967296. The sum has
+            // to be taken in 64 bits: in u32 it wraps to 0, and "no vertex" reaches Lua as vertex 0
+            // - a real node in a corner of the map that every script-side guard lets through.
             const u32 id = ai().level_graph().vertex_id(position);
-            return id == u32(-1) ? id + 1 : id; // reproduce original behaviour
+            return id == u32(-1) ? u64(id) + 1 : u64(id); // reproduce original behaviour
         }),
         def("game_id", &GameID),
         def("ray_pick", &ray_pick)

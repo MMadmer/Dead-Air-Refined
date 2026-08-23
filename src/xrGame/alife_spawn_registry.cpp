@@ -95,7 +95,7 @@ void CALifeSpawnRegistry::load(IReader& file_stream, LPCSTR game_name)
 
     xrGUID guid;
     chunk = chunk0->open_chunk(0);
-    VERIFY(chunk);
+    R_ASSERT2(chunk, "Corrupted save: SPAWN_CHUNK_DATA carries no chunk 0 with the spawn name");
     chunk->r_stringZ(m_spawn_name);
     chunk->r(&guid, sizeof(guid));
     chunk->close();
@@ -190,9 +190,27 @@ void CALifeSpawnRegistry::load_updates(IReader& stream)
     for (IReader* chunk = stream.open_chunk_iterator(vertex_id); chunk;
          chunk = stream.open_chunk_iterator(vertex_id, chunk))
     {
-        VERIFY(u32(ALife::_SPAWN_ID(-1)) > vertex_id);
+        // The vertex id comes from the save file. A save made on one spawn and loaded on another
+        // - mod updated, spawn rebuilt, objects added or removed - points at nothing, and both
+        // checks here used to vanish in release with a null dereference right after. An update for
+        // a vertex that does not exist has nowhere to go; the rest of the save loads unharmed.
+        if (u32(ALife::_SPAWN_ID(-1)) <= vertex_id)
+        {
+            Msg("! Spawn update: vertex id %u is out of range, skipped", vertex_id);
+            continue;
+        }
         const SPAWN_GRAPH::CVertex* vertex = m_spawns.vertex(ALife::_SPAWN_ID(vertex_id));
-        VERIFY(vertex);
+        if (!vertex)
+        {
+            static u32 reported = 0;
+            if (reported < 8)
+            {
+                ++reported;
+                Msg("! Spawn update: vertex %u is not in the spawn, skipped (the save was made on another spawn)",
+                    vertex_id);
+            }
+            continue;
+        }
         vertex->data()->load_update(*chunk);
     }
 }

@@ -422,10 +422,25 @@ void SGameTaskObjective::CreateMapLocation(bool on_load)
     else
     {
         m_linked_map_location = Level().MapManager().AddMapLocation(m_map_location, m_map_object_id);
-        m_linked_map_location->m_owner_task_id = m_parent->m_ID;
+        if (m_linked_map_location && m_parent)
+            m_linked_map_location->m_owner_task_id = m_parent->m_ID;
     }
 
-    VERIFY(m_linked_map_location);
+    // On load the spot is looked up among the existing ones, not created, and a miss is an
+    // ordinary outcome: the save simply has no marker for this objective. Drawing one here would
+    // rewrite the saved game on the fly, so the objective goes without it.
+    if (!m_linked_map_location)
+    {
+        static u32 reported = 0;
+        if (reported < 8)
+        {
+            ++reported;
+            Msg("! Map location [%s] for object [%u] not found%s, the objective stays unmarked",
+                m_map_location.c_str() ? m_map_location.c_str() : "", u32(m_map_object_id),
+                on_load ? " on load" : "");
+        }
+        return;
+    }
 
     if (!on_load)
     {

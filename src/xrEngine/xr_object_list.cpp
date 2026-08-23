@@ -323,11 +323,18 @@ void CObjectList::ProcessDestroyQueue()
     for (auto destroyed = destroy_queue.rbegin(); destroyed != destroy_queue.rend(); ++destroyed)
         g_pGameLevel->Sound->object_relcase(*destroyed);
 
-    for (auto callback = m_relcase_callbacks.begin(); callback != m_relcase_callbacks.end(); ++callback)
+    // A callback may unregister itself (~pure_relcase) or register a new one while this walks, and
+    // unregister is swap-with-back: an iterator walks past the new end and the element swapped in
+    // is skipped. So the walk is by index on a copied entry, and only advances when the slot still
+    // holds the entry it just called.
+    for (size_t index = 0; index < m_relcase_callbacks.size();)
     {
-        VERIFY(*callback->m_ID == callback - m_relcase_callbacks.begin());
+        const SRelcasePair entry = m_relcase_callbacks[index];
         for (IGameObject* destroyed : destroy_queue)
-            callback->m_Callback(destroyed);
+            entry.m_Callback(destroyed);
+
+        if (index < m_relcase_callbacks.size() && m_relcase_callbacks[index].m_ID == entry.m_ID)
+            ++index;
     }
 
     for (IGameObject* destroyed : destroy_queue)
@@ -579,7 +586,14 @@ void CObjectList::relcase_register(RELCASE_CALLBACK cb, int* ID)
 
 void CObjectList::relcase_unregister(int* ID)
 {
-    VERIFY(m_relcase_callbacks[*ID].m_ID == ID);
+    // A stale or repeated unregister used to write past the vector; VERIFY is gone in release.
+    if (!ID || *ID < 0 || size_t(*ID) >= m_relcase_callbacks.size() || m_relcase_callbacks[*ID].m_ID != ID)
+    {
+        static u32 reported = 0;
+        if (++reported <= 5)
+            Msg("! relcase_unregister skipped: index %d with %u entries", ID ? *ID : -1, u32(m_relcase_callbacks.size()));
+        return;
+    }
     m_relcase_callbacks[*ID] = m_relcase_callbacks.back();
     *m_relcase_callbacks.back().m_ID = *ID;
     m_relcase_callbacks.pop_back();

@@ -770,6 +770,8 @@ public:
     ALife::_OBJECT_ID commander_id();
     MEMBERS const& squad_members() const;
     u32 npc_count() const;
+    // The first member whose server object still exists, or nullptr.
+    MEMBER* live_member() const;
     void clear_location_types();
     void add_location_type(LPCSTR mask);
     void force_change_position(Fvector position);

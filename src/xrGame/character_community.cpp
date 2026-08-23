@@ -34,10 +34,14 @@ void CHARACTER_COMMUNITY::InitIdToIndex()
 }
 
 CHARACTER_GOODWILL CHARACTER_COMMUNITY::relation(CHARACTER_COMMUNITY_INDEX to) { return relation(m_current_index, to); }
+// IdToIndex answers NO_COMMUNITY_INDEX for a faction name the table does not know, and these are
+// reachable from Lua with any string - the checks have to hold in release, or the table is read and
+// written at index -1.
 CHARACTER_GOODWILL CHARACTER_COMMUNITY::relation(CHARACTER_COMMUNITY_INDEX from, CHARACTER_COMMUNITY_INDEX to)
 {
-    VERIFY(from >= 0 && from < (int)m_relation_table.table().size());
-    VERIFY(to >= 0 && to < (int)m_relation_table.table().size());
+    const int table_size = (int)m_relation_table.table().size();
+    if (from < 0 || from >= table_size || to < 0 || to >= table_size)
+        return CHARACTER_GOODWILL(0);
 
     return m_relation_table.table()[from][to];
 }
@@ -45,8 +49,9 @@ CHARACTER_GOODWILL CHARACTER_COMMUNITY::relation(CHARACTER_COMMUNITY_INDEX from,
 void CHARACTER_COMMUNITY::set_relation(
     CHARACTER_COMMUNITY_INDEX from, CHARACTER_COMMUNITY_INDEX to, CHARACTER_GOODWILL goodwill)
 {
-    VERIFY(from >= 0 && from < (int)m_relation_table.table().size());
-    VERIFY(to >= 0 && to < (int)m_relation_table.table().size());
+    const int table_size = (int)m_relation_table.table().size();
+    if (from < 0 || from >= table_size || to < 0 || to >= table_size)
+        return;
     VERIFY(goodwill != NO_GOODWILL);
 
     m_relation_table.table()[from][to] = goodwill;
@@ -54,7 +59,8 @@ void CHARACTER_COMMUNITY::set_relation(
 
 float CHARACTER_COMMUNITY::sympathy(CHARACTER_COMMUNITY_INDEX comm)
 {
-    VERIFY(comm >= 0 && comm < (int)m_sympathy_table.table().size());
+    if (comm < 0 || comm >= (int)m_sympathy_table.table().size())
+        return 0.f;
     return m_sympathy_table.table()[comm][0];
 }
 

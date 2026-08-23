@@ -23,6 +23,10 @@ float const doors::g_door_open_time = 1.4f;
 actor::actor(CAI_Stalker const& object) : m_object(object) {}
 actor::~actor()
 {
+    // Set before the doors hear about it: they unregister us, but the script use callback must
+    // not fire for a stalker that is being destroyed - see door::change_state.
+    m_destroying = true;
+
     revert_states(m_open_doors, door_state_closed);
     revert_states(m_closed_doors, door_state_open);
 }

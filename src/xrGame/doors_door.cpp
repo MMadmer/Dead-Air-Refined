@@ -169,6 +169,13 @@ void door::change_state(actor* initiator)
     if (!user)
         return;
 
+    // A stalker being destroyed reverts its doors from its destructor, and this used to hand Lua
+    // the game object of that half-destroyed stalker (read at -1 inside the callback). The door
+    // still changes state - it closes because its holder ceased to exist, not because anyone used
+    // it - so only the script notification is skipped.
+    if (user->destroying())
+        return;
+
     m_object.callback(GameObject::eUseObject)(
         m_object.lua_game_object(), static_cast<CScriptGameObject*>(user->lua_game_object()));
 #ifdef DEBUG

@@ -130,10 +130,13 @@ void INetQueue::Release()
 //#endif
     VERIFY(!ready.empty());
     //---------------------------------------------
+    // Same ratchet as GameEventQueue: the minute-of-quiet pruning never triggers in play, and the
+    // pool keeps its peak at 16 KB a cell. Cap the reserve.
+    constexpr u32 pool_reserve = 256;
     u32 tmp_time = CPU::GetTicks() - 60000;
     u32 size = unused.size();
     ready.front()->B.count = 0;
-    if ((LastTimeCreate < tmp_time) && (size > 32))
+    if (size >= pool_reserve || ((LastTimeCreate < tmp_time) && (size > 32)))
     {
         xr_delete(ready.front());
     }

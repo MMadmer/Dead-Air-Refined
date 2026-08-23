@@ -473,14 +473,12 @@ void CUIDragDropListEx::Update()
     }
     if (m_condition_indicator)
     {
-        float condition = 0.0f;
-        if (ItemsCount())
-        {
-            const PIItem itm = static_cast<PIItem>(GetItemIdx(0)->m_pData);
-            if (itm)
-                condition = iCeil(itm->GetCondition() * 15.0f) / 15.0f;
-        }
-        m_condition_indicator->SetProgressPos(condition);
+        // An empty slot used to set progress 0 and leave the bar drawn, which reads as a
+        // condition of zero. Drive visibility instead.
+        const PIItem itm = ItemsCount() ? static_cast<PIItem>(GetItemIdx(0)->m_pData) : nullptr;
+        m_condition_indicator->Show(!!itm);
+        if (itm)
+            m_condition_indicator->SetProgressPos(iCeil(itm->GetCondition() * 15.0f) / 15.0f);
     }
 }
 
@@ -1005,8 +1003,15 @@ Ivector2 CUICellContainer::PickCell(const Fvector2& abs_pos)
     GetAbsolutePos(ap);
     ap.sub(abs_pos);
     ap.mul(-1);
-    res.x = iFloor(ap.x / (m_cellSize.x + m_cellSpacing.x * (m_cellsCapacity.x - 1) / m_cellsCapacity.x));
-    res.y = iFloor(ap.y / (m_cellSize.y + m_cellSpacing.y * (m_cellsCapacity.y - 1) / m_cellsCapacity.y));
+    // The capacity comes from config and a container slot can carry 0 - then the spacing term is
+    // an integer division by zero while an item is dragged over it. Spacing only means anything
+    // between two cells, so with fewer than two the step is the bare cell size.
+    const int spacing_x = m_cellsCapacity.x > 1 ? m_cellSpacing.x * (m_cellsCapacity.x - 1) / m_cellsCapacity.x : 0;
+    const int spacing_y = m_cellsCapacity.y > 1 ? m_cellSpacing.y * (m_cellsCapacity.y - 1) / m_cellsCapacity.y : 0;
+    const int step_x = m_cellSize.x + spacing_x;
+    const int step_y = m_cellSize.y + spacing_y;
+    res.x = step_x ? iFloor(ap.x / step_x) : -1;
+    res.y = step_y ? iFloor(ap.y / step_y) : -1;
     if (!ValidCell(res))
         res.set(-1, -1);
     return res;

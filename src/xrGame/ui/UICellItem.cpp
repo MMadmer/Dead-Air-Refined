@@ -255,6 +255,12 @@ void CUICellItem::UpdateConditionProgressBar()
 
             float cond = itm->GetCondition();
 
+            // Cell widgets are pooled: the eatable branch below switches the gradient and the
+            // background off and nothing switched them back, so one food item stripped the
+            // gradient from every condition bar drawn after it. Reset to the defaults per item.
+            m_pConditionState->UseGradient(true);
+            m_pConditionState->ShowBackground(true);
+
             CEatableItem* eitm = smart_cast<CEatableItem*>(itm);
             if (eitm)
             {

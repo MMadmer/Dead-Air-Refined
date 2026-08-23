@@ -199,7 +199,9 @@ void CBloodsuckerAlien::activate()
     if (m_active)
         return;
 
-    VERIFY(Actor());
+    // The actor can be gone while a bloodsucker is still being updated (death, level change).
+    if (!Actor())
+        return;
     m_object->CControlledActor::install(Actor());
     m_object->CControlledActor::dont_need_turn();
 
@@ -238,19 +240,25 @@ void CBloodsuckerAlien::deactivate()
 
     m_object->CControlledActor::release();
 
-    Actor()->SetWeaponHideState(INV_STATE_BLOCK_ALL, false);
+    // deactivate() also runs from the bloodsucker's own destruction, and the actor may already be
+    // gone by then; the bookkeeping below still has to complete.
+    if (Actor())
+        Actor()->SetWeaponHideState(INV_STATE_BLOCK_ALL, false);
     if (m_crosshair_show)
         psHUD_Flags.set(HUD_CROSSHAIR_RT, TRUE);
 
 #pragma warning(push)
 #pragma warning(disable : 4826) // XXX: Do something with that cheap ID generation, remove warning
     // Stop camera effector
-    Actor()->Cameras().RemoveCamEffector(EFFECTOR_ID_GEN(ECamEffectorType));
+    if (Actor())
+        Actor()->Cameras().RemoveCamEffector(EFFECTOR_ID_GEN(ECamEffectorType));
     m_effector = 0;
 
     // Stop postprocess effector
-    Actor()->Cameras().RemovePPEffector(EFFECTOR_ID_GEN(EEffectorPPType));
-    m_effector_pp->Destroy();
+    if (Actor())
+        Actor()->Cameras().RemovePPEffector(EFFECTOR_ID_GEN(EEffectorPPType));
+    if (m_effector_pp)
+        m_effector_pp->Destroy();
     m_effector_pp = 0;
 #pragma warning(pop)
 

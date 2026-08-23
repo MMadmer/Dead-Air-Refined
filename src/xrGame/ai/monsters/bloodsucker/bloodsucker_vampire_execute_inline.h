@@ -33,13 +33,16 @@ void CStateBloodsuckerVampireExecuteAbstract::initialize()
     this->object->m_sufficient_hits_before_vampire_random = -1 + (rand() % 3);
 
     HUD().SetRenderable(false);
-    NET_Packet P;
-    Actor()->u_EventGen(P, GEG_PLAYER_WEAPON_HIDE_STATE, Actor()->ID());
-    P.w_u16(INV_STATE_BLOCK_ALL);
-    P.w_u8(u8(true));
-    Actor()->u_EventSend(P);
+    if (Actor())
+    {
+        NET_Packet P;
+        Actor()->u_EventGen(P, GEG_PLAYER_WEAPON_HIDE_STATE, Actor()->ID());
+        P.w_u16(INV_STATE_BLOCK_ALL);
+        P.w_u8(u8(true));
+        Actor()->u_EventSend(P);
 
-    Actor()->set_inventory_disabled(true);
+        Actor()->set_inventory_disabled(true);
+    }
 
     m_effector_activated = false;
 }
@@ -108,6 +111,10 @@ TEMPLATE_SPECIALIZATION
 void CStateBloodsuckerVampireExecuteAbstract::show_hud()
 {
     HUD().SetRenderable(true);
+    // Reached from net_Destroy -> critical_finalize, where the actor may already be gone; the
+    // state cleanup still has to run.
+    if (!Actor())
+        return;
     NET_Packet P;
 
     Actor()->u_EventGen(P, GEG_PLAYER_WEAPON_HIDE_STATE, Actor()->ID());
@@ -119,7 +126,8 @@ void CStateBloodsuckerVampireExecuteAbstract::show_hud()
 TEMPLATE_SPECIALIZATION
 void CStateBloodsuckerVampireExecuteAbstract::cleanup()
 {
-    Actor()->set_inventory_disabled(false);
+    if (Actor())
+        Actor()->set_inventory_disabled(false);
 
     if (this->object->com_man().ta_is_active())
         this->object->com_man().ta_deactivate();

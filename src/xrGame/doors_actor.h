@@ -48,6 +48,14 @@ private:
     doors_type m_detected_doors;
 #endif // #ifdef DEBUG
     CAI_Stalker const& m_object;
+
+public:
+    // Raised first thing in the destructor. A door looks at it before raising the use callback:
+    // the stalker's game object is already half torn down and must not reach Lua.
+    bool destroying() const { return m_destroying; }
+
+private:
+    bool m_destroying{ false };
 }; // class actor
 
 } // namespace doors
