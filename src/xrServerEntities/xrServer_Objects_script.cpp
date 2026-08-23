@@ -14,13 +14,11 @@
 #include "script_ini_file.h"
 #include "xrScriptEngine/script_engine.hpp"
 
-namespace
-{
-// A script-held cse_abstract is a raw pointer that nothing invalidates on release, and these
-// accessors dispatch virtually through it - on a released object that is a jump through
-// freed memory (the reported heap-address crash inside a binder update). Refuse the call,
-// answer an empty value and name the script, so the reference that outlived its object can
-// be found instead of taking the whole game down.
+// A script-held cse_abstract is a raw pointer that nothing invalidates on release, and the
+// accessors read or dispatch straight through it - on a released object that walks memory the
+// allocator has already handed to somebody else. Refuse the call, answer an empty value and name
+// the script, so the reference that outlived its object can be found instead of taking the whole
+// game down.
 bool script_object_usable(const CSE_Abstract* abstract, pcstr method)
 {
     if (CSE_Abstract::is_live_object(abstract))
@@ -35,7 +33,6 @@ bool script_object_usable(const CSE_Abstract* abstract, pcstr method)
     }
     return false;
 }
-} // namespace
 
 pcstr get_section_name(const CSE_Abstract* abstract)
 {

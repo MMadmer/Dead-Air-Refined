@@ -23,6 +23,7 @@
 | Lua binding parity | Original x86 exports vs x64 exports | Pass, zero missing |
 | First-person self-shadow | Maximum preset, `renderer_r4` and `renderer_r3`, an outdoor save with an item in hand | Pass, `$user$smap_hud` created and `hud_shadow.ps` compiled on both renderers; the shadow term follows the model (lit top of the head, shadowed underside), the darkening lands only on HUD pixels and the background is untouched; `_preset Extreme` reports `r__hud_shadow 1` and `_preset High` reports `0` |
 | Player world shadow | `r__actor_shadow` on, first person, a save with an item in hand, sun or a lamp overhead | Pass only when the caster is the full third-person model - head, arms and the held item all present in the silhouette - the shadow follows the player's stance with no detached item hanging in the air, the caster is gone from memory while the option is off, and the player's own torch is not shadowed by the body carrying it |
+| Stale server-object handle | A save with squads, release one from a script and keep the handle | Pass only when every guarded accessor answers a neutral value - npc_count 0, commander_id 65535, squad_members empty, mutators ignored - logs the refusal with the script stack, and the session keeps running |
 | Screen-space sun shafts | R4 renderer | Pass, all shader stages compiled |
 | FXAA | R4 renderer | Pass, both shader stages compiled |
 | Visor drops and reflections | R4 renderer, `r2_lenswater` and `r2_lensdirt` enabled | Pass only when `combine_2_naa` compiles without fallback shaders and the world remains visible |

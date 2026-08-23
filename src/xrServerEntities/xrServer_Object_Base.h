@@ -53,6 +53,11 @@ private:
     DECLARE_SCRIPT_REGISTER_FUNCTION();
 };
 
+// A script-held server object is a raw pointer that nothing invalidates on release. Ask before
+// dispatching through one: the answer is false for a pointer whose object is gone, and the refusal
+// is logged once with the script stack so the reference that outlived its object can be found.
+bool script_object_usable(const CSE_Abstract* object, pcstr method);
+
 class CSE_Abstract : public IServerEntity, public CPureServerObject, public CScriptValueContainer
 {
     using inherited1 = IServerEntity;
