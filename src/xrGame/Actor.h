@@ -333,6 +333,10 @@ public:
     MotionID m_current_legs;
     MotionID m_current_torso;
     MotionID m_current_head;
+    // Where the walk cycle stood the last time the actor was really moving, so a momentary stop
+    // does not restart the legs from the middle of a stride.
+    float m_legs_cycle_phase;
+    u32 m_legs_cycle_phase_time;
 
     // callback на анимации модели актера
     void SetCallbacks();

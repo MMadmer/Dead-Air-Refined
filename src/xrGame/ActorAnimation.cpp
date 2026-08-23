@@ -616,6 +616,19 @@ void CActor::g_SetAnimation(u32 mstate_rl)
         m_current_head = M_head;
     }
 
+    // Remember where the walk cycle stands while the actor really moves. A change of direction
+    // takes the actual velocity through zero, and g_cl_CheckControls drops mcAnyMove for the frame
+    // or two it stays under 0.2 m/s, so without this the legs come back on the stock "just started
+    // moving" path and restart from the middle of a stride - which reads as the legs teleporting
+    // into the new animation.
+    if ((mstate_real & mcAnyMove) && (mstate_old & mcAnyMove) && m_current_legs_blend && m_current_legs.valid() &&
+        m_current_legs_blend->motionID == m_current_legs && !fis_zero(m_current_legs_blend->timeTotal))
+    {
+        m_legs_cycle_phase =
+            fmod(m_current_legs_blend->timeCurrent, m_current_legs_blend->timeTotal) / m_current_legs_blend->timeTotal;
+        m_legs_cycle_phase_time = Device.dwTimeGlobal;
+    }
+
     if (m_current_legs != M_legs)
     {
         float pos = 0.f;
@@ -631,7 +644,13 @@ void CActor::g_SetAnimation(u32 mstate_rl)
 
         if ((!(mstate_old & mcAnyMove)) && (mstate_real & mcAnyMove))
         {
-            pos = 0.5f; // 0.5f*Random.randI(2);
+            // Half a cycle is the stock guess for a standing start. A stride that was interrupted
+            // moments ago is not a standing start, so it picks up where it left off instead.
+            static float resync_time =
+                READ_IF_EXISTS(pSettings, r_float, "actor_animation", "legs_cycle_resync_time", 0.25f);
+            const u32 gap = Device.dwTimeGlobal - m_legs_cycle_phase_time;
+            const bool stride_still_warm = m_legs_cycle_phase_time && gap <= u32(resync_time * 1000.f);
+            pos = stride_still_warm ? m_legs_cycle_phase : 0.5f; // 0.5f*Random.randI(2);
         }
         if (m_current_legs_blend)
             m_current_legs_blend->timeCurrent = m_current_legs_blend->timeTotal * pos;

@@ -181,6 +181,8 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
     r_model_yaw = 0;
     r_model_yaw_delta = 0;
     r_model_yaw_dest = 0;
+    m_legs_cycle_phase = 0.f;
+    m_legs_cycle_phase_time = 0;
 
     b_DropActivated = 0;
     f_DropPower = 0.f;
