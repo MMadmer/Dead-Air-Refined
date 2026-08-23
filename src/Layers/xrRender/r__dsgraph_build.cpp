@@ -124,8 +124,15 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     if (!o.pmask[sh->flags.iPriority / 2])
         return;
 
-    // HUD rendering
-    if (root && root->renderable_HUD())
+    // HUD rendering.
+    // The decision is taken by phase, not by the flag alone: mapHUD and mapHUDSorted are drained
+    // by render_hud, which only the main pass calls, so anything a shadow context parks there is
+    // dropped without a trace and wiped by the next reset. renderable_HUD is a single plain bool
+    // on the object that the main pass raises for the length of its HUD draw, while the cascade
+    // and rain culling tasks run alongside it - a shadow task reading it mid-window would lose
+    // the first-person shadow caster for that frame. The main pass keeps its own z-prefill on
+    // PHASE_SMAP, so it is excluded by is_main_pass rather than by phase.
+    if (root && root->renderable_HUD() && !(o.phase == CRender::PHASE_SMAP && !o.is_main_pass))
     {
         if (sh->flags.bStrictB2F)
         {
