@@ -204,8 +204,13 @@ SGeometry* CResourceManager::CreateGeom(const VertexElement* decl, VertexBufferH
 SGeometry* CResourceManager::CreateGeom(u32 FVF, VertexBufferHandle vb, IndexBufferHandle ib)
 {
     thread_local xr_vector<VertexElement> decl;
-    [[maybe_unused]] const bool result = ::FVF::CreateDeclFromFVF(FVF, decl);
-    VERIFY(result);
+    // On failure the thread_local still holds the previous call's layout, and that is what used
+    // to be cached under this FVF - a foreign vertex format, with no log line. Name it instead.
+    if (!::FVF::CreateDeclFromFVF(FVF, decl))
+    {
+        Msg("! CreateGeom: no vertex declaration for FVF 0x%08X", FVF);
+        return nullptr;
+    }
     SGeometry* g = CreateGeom(decl.data(), vb, ib);
     return g;
 }

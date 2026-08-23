@@ -17,8 +17,11 @@ void DamageReceiverCollisionCallback(bool& do_colide, bool bo1, dContact& c, SGa
 
     SGameMtl* material_self = bo1 ? material_1 : material_2;
     SGameMtl* material_damager = bo1 ? material_2 : material_1;
-    VERIFY(ud_self);
+    if (!ud_self)
+        return;
     IPhysicsShellHolder* o_self = ud_self->ph_ref_object;
+    if (!o_self)
+        return;
     IPhysicsShellHolder* o_damager = NULL;
     if (ud_damager)
         o_damager = ud_damager->ph_ref_object;
@@ -26,7 +29,8 @@ void DamageReceiverCollisionCallback(bool& do_colide, bool bo1, dContact& c, SGa
 
     // CPHCollisionDamageReceiver	*dr	= static_cast<CPhysicsShellHolder*>( o_self )->PHCollisionDamageReceiver();
     ICollisionDamageReceiver* dr = (o_self)->ObjectPhCollisionDamageReceiver();
-    VERIFY2(dr, "wrong callback");
+    if (!dr)
+        return;
 
     float damager_material_factor = material_damager->fBounceDamageFactor;
 

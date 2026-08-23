@@ -929,7 +929,8 @@ bool CPHSimpleCharacter::ValidateWalkOnMesh()
     for (auto &Res : *XRC.r_get())
     {
         SGameMtl* m = GMLib.GetMaterialByIdx(Res.material);
-        if (m->Flags.test(SGameMtl::flPassable))
+        // A null material is a bad index; treat the triangle as passable rather than read it.
+        if (!m || m->Flags.test(SGameMtl::flPassable))
             continue;
         // CDB::TRI* T = T_array + Res->id;
         Point vertices[3] = {
@@ -960,7 +961,8 @@ bool CPHSimpleCharacter::ValidateWalkOnMesh()
     {
         // CDB::TRI* T = T_array + Res->id;
         SGameMtl* m = GMLib.GetMaterialByIdx(Res.material);
-        if (m->Flags.test(SGameMtl::flPassable))
+        // A null material is a bad index; treat the triangle as passable rather than read it.
+        if (!m || m->Flags.test(SGameMtl::flPassable))
             continue;
         Point vertices[3] = {
             Point((dReal*)&Res.verts[0]), Point((dReal*)&Res.verts[1]), Point((dReal*)&Res.verts[2])};
@@ -1009,7 +1011,8 @@ bool CPHSimpleCharacter::StepAssistHeadroomClear()
     for (auto& Res : *XRC.r_get())
     {
         SGameMtl* m = GMLib.GetMaterialByIdx(Res.material);
-        if (m->Flags.test(SGameMtl::flPassable))
+        // A null material is a bad index; treat the triangle as passable rather than read it.
+        if (!m || m->Flags.test(SGameMtl::flPassable))
             continue;
         Point vertices[3] = {
             Point((dReal*)&Res.verts[0]), Point((dReal*)&Res.verts[1]), Point((dReal*)&Res.verts[2])};
@@ -1576,6 +1579,11 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
         is_contact = true;
     }
     u16 foot_material_idx = ((dxGeomUserData*)dGeomGetData(m_wheel))->tri_material;
+    if (!tri_material)
+    {
+        do_collide = false;
+        return;
+    }
     if (tri_material->Flags.test(SGameMtl::flPassable) && !do_collide)
     {
         UpdateStaticDamage(c, tri_material, bo1);
@@ -2108,9 +2116,12 @@ void CPHSimpleCharacter::Collide()
     OnStartCollidePhase();
 
     inherited::Collide();
-    if (injuriousMaterialIDX == GAMEMTL_NONE_IDX && (*p_lastMaterialIDX) != GAMEMTL_NONE_IDX &&
-        GMLib.GetMaterialByIdx(*p_lastMaterialIDX)->Flags.test(SGameMtl::flInjurious))
-        injuriousMaterialIDX = *p_lastMaterialIDX;
+    if (injuriousMaterialIDX == GAMEMTL_NONE_IDX && (*p_lastMaterialIDX) != GAMEMTL_NONE_IDX)
+    {
+        SGameMtl* last = GMLib.GetMaterialByIdx(*p_lastMaterialIDX);
+        if (last && last->Flags.test(SGameMtl::flInjurious))
+            injuriousMaterialIDX = *p_lastMaterialIDX;
+    }
 }
 void CPHSimpleCharacter::OnStartCollidePhase() { injuriousMaterialIDX = GAMEMTL_NONE_IDX; }
 void CPHSimpleCharacter::NetRelcase(IPhysicsShellHolder* O)

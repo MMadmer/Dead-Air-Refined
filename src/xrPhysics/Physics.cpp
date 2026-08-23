@@ -92,9 +92,8 @@ IC static int CollideIntoGroup(
     // get the contacts up to a maximum of N contacts
     int n;
 
-    VERIFY(o1);
-    VERIFY(o2);
-    VERIFY(&contacts[0].geom);
+    if (!o1 || !o2)
+        return 0;
     n = dCollide(o1, o2, N, &contacts[0].geom, sizeof(dContact));
 
     if (n > N - 1)
@@ -108,6 +107,11 @@ IC static int CollideIntoGroup(
         dSurfaceParameters& surface = c.surface;
         dGeomID g1 = cgeom.g1;
         dGeomID g2 = cgeom.g2;
+        // dCollide names the geoms itself, and for a composite body those are nested ones that can
+        // be gone by the time the contact is processed (a grenade destroyed mid-step). A contact
+        // without both geoms has nothing to resolve.
+        if (!g1 || !g2)
+            continue;
         bool pushing_neg = false;
         bool do_collide = true;
         dxGeomUserData* usr_data_1 = NULL;

@@ -427,8 +427,9 @@ void CPHJoint::SetAxisDir(const float x, const float y, const float z, const int
 {
     int ax = axis_num;
     LimitAxisNum(ax);
-    // if(-1==ax) return;
-    VERIFY(-1 != ax);
+    // A ball joint has no limit axis (-1); every sibling setter already returns here.
+    if (-1 == ax)
+        return;
     axes[ax].vs = vs_global;
     axes[ax].direction.set(x, y, z);
 

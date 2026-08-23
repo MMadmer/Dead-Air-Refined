@@ -85,14 +85,16 @@ IC void dx11ConstantBuffer::seta(R_constant* C, R_constant_load& L, u32 e, const
     {
     case RC_2x4:
         base = (u32)L.index + 2 * lineSize * e;
-        VERIFY((base + 2 * lineSize) <= m_uiBufferSize);
+        if ((base + 2 * lineSize) > m_uiBufferSize)
+            return;
         data[0].set(A._11, A._21, A._31, A._41);
         data[1].set(A._12, A._22, A._32, A._42);
         rows = 2;
         break;
     case RC_3x4:
         base = (u32)L.index + 3 * lineSize * e;
-        VERIFY((base + 3 * lineSize) <= m_uiBufferSize);
+        if ((base + 3 * lineSize) > m_uiBufferSize)
+            return;
         data[0].set(A._11, A._21, A._31, A._41);
         data[1].set(A._12, A._22, A._32, A._42);
         data[2].set(A._13, A._23, A._33, A._43);
@@ -100,7 +102,8 @@ IC void dx11ConstantBuffer::seta(R_constant* C, R_constant_load& L, u32 e, const
         break;
     case RC_4x4:
         base = (u32)L.index + 4 * lineSize * e;
-        VERIFY((base + 4 * lineSize) <= m_uiBufferSize);
+        if ((base + 4 * lineSize) > m_uiBufferSize)
+            return;
         data[0].set(A._11, A._21, A._31, A._41);
         data[1].set(A._12, A._22, A._32, A._42);
         data[2].set(A._13, A._23, A._33, A._43);
@@ -123,8 +126,11 @@ IC void dx11ConstantBuffer::seta(R_constant* C, R_constant_load& L, u32 e, const
     VERIFY(RC_1x4 == L.cls || RC_1x3 == L.cls || RC_1x2 == L.cls);
 
     static const u16 lineSize = 4 * sizeof(float);
+    // e is a runtime array index (bone palette, light arrays); the bound has to hold in release,
+    // because the offset is truncated to u16 on the way into the buffer.
     u32 base = (u32)L.index + lineSize * e;
-    VERIFY((base + lineSize) <= m_uiBufferSize);
+    if ((base + lineSize) > m_uiBufferSize)
+        return;
     Update(static_cast<u16>(base), &A, sizeof(A));
 }
 

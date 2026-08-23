@@ -442,7 +442,17 @@ ShaderElement* CBlender_Compile::_lua_Compile(LPCSTR namesp, LPCSTR name)
     using namespace luabind;
 
     ShaderElement E;
+    // SH is a member that names the element under construction. Compiles nest (adopt_compiler
+    // re-enters from the script), so the previous one is saved and restored on every exit -
+    // otherwise SH is left pointing into a frame that has already returned.
+    ShaderElement* const previous = SH;
     SH = &E;
+    struct restore_element
+    {
+        ShaderElement*& slot;
+        ShaderElement* value;
+        ~restore_element() { slot = value; }
+    } restore{ SH, previous };
     RS.Invalidate();
 
     // Compile

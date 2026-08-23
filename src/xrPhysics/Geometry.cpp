@@ -231,15 +231,16 @@ void CODEGeom::set_material(u16 ul_material)
 {
     if (!m_geom_transform)
         return;
+    // The user data is gone on a geom that is being destroyed.
     if (geom())
     {
-        VERIFY(dGeomGetUserData(geom()));
-        dGeomGetUserData(geom())->material = ul_material;
+        if (dxGeomUserData* data = dGeomGetUserData(geom()))
+            data->material = ul_material;
     }
     else
     {
-        VERIFY(dGeomGetUserData(m_geom_transform));
-        dGeomGetUserData(m_geom_transform)->material = ul_material;
+        if (dxGeomUserData* data = dGeomGetUserData(m_geom_transform))
+            data->material = ul_material;
     }
 }
 
