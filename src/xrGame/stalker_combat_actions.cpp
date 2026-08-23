@@ -1295,8 +1295,10 @@ void CStalkerCombatActionThrowGrenade::initialize()
 
     object().movement().set_mental_state(eMentalStateDanger);
 
+    // The grenade slot can empty between planning and initialize.
     const CInventoryItem* grenade = object().inventory().ItemFromSlot(GRENADE_SLOT);
-    VERIFY(grenade);
+    if (!grenade)
+        return;
     m_grenade_id = grenade->object().ID();
 
     object().movement().set_movement_type(eMovementTypeStand);

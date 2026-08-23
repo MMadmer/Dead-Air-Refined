@@ -375,10 +375,18 @@ void IReader::r(void* p, size_t cnt)
 {
     if (Pos > Size || cnt > Size - Pos)
     {
+        // Named and traced, and then NOT read past the end: the available bytes are copied, the
+        // rest of the destination is zeroed, and the reader parks at the end.
         Msg("! IReader overflow: position=%zu, requested=%zu, size=%zu", Pos, cnt, Size);
         xrDebug::LogStackTrace("IReader overflow");
+        const size_t available = Pos <= Size ? Size - Pos : 0;
+        if (available)
+            CopyMemory(p, pointer(), available);
+        if (cnt > available)
+            ZeroMemory(static_cast<u8*>(p) + available, cnt - available);
+        Pos = Size;
+        return;
     }
-    VERIFY(Pos <= Size && cnt <= Size - Pos);
     CopyMemory(p, pointer(), cnt);
     advance(cnt);
 #ifdef DEBUG

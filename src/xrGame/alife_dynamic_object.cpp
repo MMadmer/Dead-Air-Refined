@@ -96,10 +96,15 @@ bool CSE_ALifeDynamicObject::synchronize_location()
         return (true);
 
     u32 const new_vertex_id = ai().level_graph().vertex(m_tNodeID, o_Position);
+    // vertex() answers u32(-1) on a miss; that must not index the graph or the cross table.
+    if (!ai().level_graph().valid_vertex_id(new_vertex_id))
+        return (true);
     if (!m_bOnline && !ai().level_graph().inside(new_vertex_id, o_Position))
         return (true);
 
     m_tNodeID = new_vertex_id;
+    if (!ai().get_cross_table() || m_tNodeID >= ai().cross_table().header().level_vertex_count())
+        return (true);
     GameGraph::_GRAPH_ID tGraphID = ai().cross_table().vertex(m_tNodeID).game_vertex_id();
     if (tGraphID != m_tGraphID)
     {

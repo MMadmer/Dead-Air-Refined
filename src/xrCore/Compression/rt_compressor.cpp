@@ -18,9 +18,15 @@ u32 rtc_csize(u32 in)
 size_t rtc_compress(void* dst, size_t dst_len, const void* src, size_t src_len)
 {
     lzo_uint out_size = dst_len;
-    [[maybe_unused]] int r =
-        lzo1x_1_compress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc_wrkmem);
-    VERIFY(r == LZO_E_OK);
+    const int r = lzo1x_1_compress((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc_wrkmem);
+    // On failure LZO leaves out_size partially written and the caller would trust that length -
+    // corrupt bytes flowing into a save or a packet without a word. Decompression already answers
+    // 0 on failure; compression is a genuine fault and says so.
+    if (r != LZO_E_OK)
+    {
+        string32 code;
+        R_ASSERT3(false, "LZO compression failed, code", xr_itoa(r, code, 10));
+    }
     return out_size;
 }
 size_t rtc_decompress(void* dst, size_t dst_len, const void* src, size_t src_len)

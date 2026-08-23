@@ -235,3 +235,16 @@ CCoverManager::Cover* CCoverManager::smart_cover(shared_str const& cover_id) con
 
     return (*found);
 }
+
+// smart_cover() dereferences end() on a miss once the VERIFY is gone, so callers that get the id
+// from outside (Lua) ask this first.
+bool CCoverManager::has_smart_cover(shared_str const& cover_id) const
+{
+    if (!m_smart_covers_actual)
+        actualize_smart_covers();
+
+    SmartCovers::iterator found =
+        std::lower_bound(m_smart_covers.begin(), m_smart_covers.end(), cover_id, id_predicate_less());
+
+    return found != m_smart_covers.end() && (*found)->id()._get() == cover_id._get();
+}

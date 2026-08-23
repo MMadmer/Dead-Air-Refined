@@ -213,8 +213,9 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
     string_path originalSaveName;
     xr_strcpy(originalSaveName, m_save_name);
     LPCSTR temp0 = strchr(m_server_command_line->c_str(), '/');
-    VERIFY(temp0);
-    const xr_string serverOptions = temp0;
+    // Without the '/' there are no server options to carry over; an xr_string built from null is
+    // a crash, not a transition.
+    const xr_string serverOptions = temp0 ? temp0 : "";
     const auto saveTransition = [&](pcstr saveName)
     {
         string256 commandLine;

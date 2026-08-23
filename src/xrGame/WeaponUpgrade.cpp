@@ -207,9 +207,10 @@ bool CWeapon::install_upgrade_hit(LPCSTR section, bool test)
     //	LPCSTR weapon_section = cNameSect().c_str();
     float rpm = 60.0f / fOneShotTime; // pSettings->r_float( weapon_section, "rpm" ); // fOneShotTime * 60.0f;
     result2 = process_if_exists(section, "rpm", &CInifile::r_float, rpm, test);
-    if (result2 && !test)
+    if (result2 && !test && rpm <= 0.0f)
+        Msg("! Upgrade [%s]: rpm = %.1f, must be positive; shot time left unchanged", section, rpm);
+    else if (result2 && !test)
     {
-        VERIFY(rpm > 0.0f);
         const float newShotTime = 60.0f / rpm;
         const float newActorShotTime = GetActorShotTime() - fOneShotTime + newShotTime;
         fOneShotTime = newShotTime;

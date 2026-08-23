@@ -108,7 +108,8 @@ IC size_t IReaderBase<T>::find_chunk(u32 ID, bool* bCompressed)
 
     bool success = false;
 
-    if (m_last_pos != 0)
+    // m_last_pos is set on a strict "<", so a 1..7-byte tail passes it; the header read needs 8.
+    if (m_last_pos != 0 && m_last_pos + 2 * sizeof(u32) <= (size_t)impl().length())
     {
         impl().seek(m_last_pos);
         dwType = r_u32();

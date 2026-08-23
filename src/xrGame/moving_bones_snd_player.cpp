@@ -33,6 +33,10 @@ static const float play_threthhold = 0.2f;
 void moving_bones_snd_player::update(float time_delta, CGameObject& object)
 {
     VERIFY(sound._handle());
+    // The bone name is model user data; without the bone (or a velocity scale) there is nothing
+    // to play, and LL_GetTransform(BI_NONE) every frame is what this used to do instead.
+    if (BI_NONE == bone_id || fis_zero(base_velocity))
+        return;
 
     Fmatrix new_position;
     new_position.mul_43(object.XFORM(), bone_matrix());
@@ -127,7 +131,8 @@ void moving_bones_snd_player::load(IKinematics& K, CInifile& ini, LPCSTR section
     sound.create(ini.r_string(section, "sound"), st_Effect, sg_SourceType);
     VERIFY(sound._handle());
     bone_id = kinematics->LL_BoneID(ini.r_string(section, "bone"));
-    VERIFY(BI_NONE != bone_id);
+    if (BI_NONE == bone_id)
+        Msg("! Moving bone sound: bone [%s] not found in the skeleton, sound disabled", ini.r_string(section, "bone"));
     min_factor = ini.r_float(section, "min_factor");
     max_factor = ini.r_float(section, "max_factor");
     base_velocity = ini.r_float(section, "base_velocity");

@@ -70,7 +70,13 @@ void CSE_ALifeAnomalousZone::spawn_artefacts()
     }
 
     u32 n = _GetItemCount(artefacts);
-    VERIFY2(!(n % 2), "Invalid parameters count in line artefacts for anomalous zone");
+    // The line is "section, weight" pairs; an odd count would read past the last field.
+    if (n % 2)
+    {
+        Msg("! Anomalous zone [%s]: the artefacts line has %u fields, pairs expected; nothing spawned",
+            name_replace(), n);
+        return;
+    }
     n /= 2;
 
     typedef std::pair<shared_str, float> Weight;

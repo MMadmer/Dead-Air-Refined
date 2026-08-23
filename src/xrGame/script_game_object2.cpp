@@ -172,13 +172,12 @@ void CScriptGameObject::Hit(CScriptHit* tpLuaHit)
     HS.weaponID = 0; //	P.w_u16			(0);
     HS.dir = tLuaHit.m_tDirection; //	P.w_dir			(tLuaHit.m_tDirection);
     HS.power = tLuaHit.m_fPower; //	P.w_float		(tLuaHit.m_fPower);
-    IKinematics* V = smart_cast<IKinematics*>(
-        object().Visual()); //	IKinematics		*V = smart_cast<IKinematics*>(object().Visual());
-    VERIFY(V); //	VERIFY			(V);
-    if (xr_strlen(tLuaHit.m_caBoneName)) //	if (xr_strlen	(tLuaHit.m_caBoneName))
-        HS.boneID = (V->LL_BoneID(tLuaHit.m_caBoneName)); //		P.w_s16		(V->LL_BoneID(tLuaHit.m_caBoneName));
-    else //	else
-        HS.boneID = (s16(0)); //		P.w_s16		(s16(0));
+    // hit_object is callable on anything, including objects without a skeleton.
+    IKinematics* V = smart_cast<IKinematics*>(object().Visual());
+    if (V && xr_strlen(tLuaHit.m_caBoneName))
+        HS.boneID = (V->LL_BoneID(tLuaHit.m_caBoneName));
+    else
+        HS.boneID = (s16(0));
     HS.p_in_bone_space = Fvector().set(0, 0, 0); //	P.w_vec3		(Fvector().set(0,0,0));
     HS.impulse = tLuaHit.m_fImpulse; //	P.w_float		(tLuaHit.m_fImpulse);
     HS.hit_type = (ALife::EHitType)(tLuaHit.m_tHitType); //	P.w_u16			(u16(tLuaHit.m_tHitType));

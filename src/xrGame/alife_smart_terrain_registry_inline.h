@@ -12,6 +12,7 @@ IC const CALifeSmartTerrainRegistry::OBJECTS& CALifeSmartTerrainRegistry::object
 IC CSE_ALifeSmartZone* CALifeSmartTerrainRegistry::object(const ALife::_OBJECT_ID& id) const
 {
     OBJECTS::const_iterator I = objects().find(id);
-    VERIFY(I != objects().end());
+    if (I == objects().end())
+        return nullptr;
     return ((*I).second);
 }

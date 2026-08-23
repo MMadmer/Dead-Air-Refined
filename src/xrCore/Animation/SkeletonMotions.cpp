@@ -192,7 +192,8 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
 #else
                 VERIFY3(*b_it != BI_NONE, "Can't find bone:", buf);
 #endif
-                if (bRes)
+                // m_idx comes straight from the file; a corrupt OMF wrote past rm_bones in release.
+                if (bRes && m_idx < rm_bones.size())
                     rm_bones[m_idx] = u16(*b_it);
             }
             part_bone_cnt = u16(part_bone_cnt + (u16)PART.bones.size());

@@ -185,8 +185,8 @@ void CObjectActionReload::initialize()
     if (object().infinite_ammo())
     {
         CWeapon* weapon = smart_cast<CWeapon*>(&m_item->object());
-        VERIFY(weapon);
-        try_advance_ammo(*weapon);
+        if (weapon)
+            try_advance_ammo(*weapon);
     }
 
     object().inventory().Action(kWPN_RELOAD, CMD_START);
@@ -201,8 +201,7 @@ void CObjectActionReload::execute()
     VERIFY(object().inventory().ActiveItem()->object().ID() == m_item->object().ID());
 
     CWeapon* weapon = smart_cast<CWeapon*>(object().inventory().ActiveItem());
-    VERIFY(weapon);
-    if (weapon->IsPending())
+    if (!weapon || weapon->IsPending())
         return;
 
     if (weapon->GetAmmoElapsed())

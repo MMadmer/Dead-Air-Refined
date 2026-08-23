@@ -59,7 +59,9 @@ template <typename _item_type>
 void CObjectActionBase<_item_type>::stop_hiding_operation_if_any() const
 {
     CHudItem* const hud_item = smart_cast<CHudItem*>(object().inventory().ActiveItem());
-    VERIFY(hud_item);
+    // The active item may be gone or not a HUD item by the time this runs.
+    if (!hud_item)
+        return;
     if (!hud_item->IsHidden())
     {
         hud_item->StopCurrentAnimWithoutCallback();

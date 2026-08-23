@@ -13,6 +13,8 @@
 #include "stalker_movement_manager_smart_cover.h"
 #include "xrScriptEngine/script_callback_ex.h"
 #include "smart_cover.h"
+#include "ai_space.h"
+#include "cover_manager.h"
 
 bool CScriptGameObject::use_smart_covers_only() const
 {
@@ -203,6 +205,14 @@ void CScriptGameObject::set_dest_smart_cover(LPCSTR cover_id)
     {
         GEnv.ScriptEngine->script_log(
             LuaMessageType::Error, "CAI_Stalker : cannot access class member set_dest_smart_cover!");
+        return;
+    }
+
+    // An unknown cover id would be dereferenced off end() by the movement manager later.
+    if (cover_id && xr_strlen(cover_id) && !ai().cover_manager().has_smart_cover(cover_id))
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "set_dest_smart_cover: smart_cover [%s] does not exist, ignored", cover_id);
         return;
     }
 

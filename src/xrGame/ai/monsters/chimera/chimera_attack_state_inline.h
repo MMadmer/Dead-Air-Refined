@@ -254,8 +254,10 @@ bool ChimeraAttackState<Object>::select_target_for_jump(enum_action const action
     m_attack_jump = false;
 
     VERIFY(self2enemy_mag < m_min_run_distance);
-    VERIFY(get_attack_radius() >= 4);
-    float const attack_radius = 3 + float(rand() % (u32)(get_attack_radius() - 3));
+    // A radius of 3 or less made this rand() % 0 - a hardware fault, and the radius is config.
+    float const radius_span_f = get_attack_radius() - 3.f;
+    u32 const radius_span = radius_span_f >= 1.f ? u32(radius_span_f) : 1;
+    float const attack_radius = 3 + float(rand() % radius_span);
 
     Fvector const enemy_dir = normalize(enemy->Direction());
     Fvector const behind_point = enemy_pos - (enemy_dir * attack_radius);

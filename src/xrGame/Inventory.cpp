@@ -1519,9 +1519,11 @@ void CInventory::TryDeactivateActiveSlot()
     }
 }
 
+// The slot id comes from item config and indexes a fixed array; out of range is refused.
 void CInventory::BlockSlot(u16 slot_id)
 {
-    VERIFY2(slot_id <= LastSlot(), make_string("wrong slot number. Slot = %d, LastSlot() = %d", slot_id, LastSlot()).c_str());
+    if (slot_id >= m_blocked_slots.size())
+        return;
 
     ++m_blocked_slots[slot_id];
 
@@ -1530,15 +1532,16 @@ void CInventory::BlockSlot(u16 slot_id)
 
 void CInventory::UnblockSlot(u16 slot_id)
 {
-    VERIFY2(slot_id <= LastSlot(), make_string("wrong slot number. Slot = %d, LastSlot() = %d", slot_id, LastSlot()).c_str());
-    VERIFY2(m_blocked_slots[slot_id] > 0, make_string("blocked slot [%d] underflow").c_str());
+    if (slot_id >= m_blocked_slots.size() || m_blocked_slots[slot_id] == 0)
+        return;
 
     --m_blocked_slots[slot_id];
 }
 
 bool CInventory::IsSlotBlocked(u16 slot_id) const
 {
-    VERIFY2(slot_id <= LastSlot(), make_string("wrong slot number. Slot = %d, LastSlot() = %d", slot_id, LastSlot()).c_str());
+    if (slot_id >= m_blocked_slots.size())
+        return false;
     return m_blocked_slots[slot_id] > 0;
 }
 

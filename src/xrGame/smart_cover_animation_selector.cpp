@@ -152,6 +152,11 @@ MotionID animation_selector::select_animation(bool& animation_movement_controlle
 
     VERIFY(blend->motionID == result);
     CMotionDef* motion_def = m_skeleton_animated->LL_GetMotionDef(result);
+    if (!motion_def)
+    {
+        current_operator()->on_no_mark();
+        return (result);
+    }
 
     typedef xr_vector<motion_marks> Marks;
     Marks const& marks = motion_def->marks;
@@ -191,7 +196,8 @@ void animation_selector::modify_animation(CBlend* blend)
         return;
 
     CMotionDef* motion_def = m_skeleton_animated->LL_GetMotionDef(blend->motionID);
-    VERIFY(motion_def);
+    if (!motion_def)
+        return;
     blend->speed = motion_def->Speed() * g_smart_cover_animation_speed_factor;
 }
 

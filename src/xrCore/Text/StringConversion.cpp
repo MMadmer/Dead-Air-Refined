@@ -45,19 +45,18 @@ u16 mbhMulti2WideDumb(xr_wide_char* WideStr, xr_wide_char* WidePos, u16 WideStrS
 
         if (WideStr)
         {
-            VERIFY2((dpos < WideStrSize), make_string("S1: '%s',%hu<%hu", MultiStr, dpos, WideStrSize));
+            // The output is a fixed stack buffer; a long enough string overflowed it.
+            if (dpos >= WideStrSize)
+                break;
             WideStr[dpos] = wc;
         }
     }
 
-    if (WidePos)
+    if (WidePos && (!WideStr || dpos < WideStrSize))
         WidePos[dpos] = spos;
 
-    if (WideStr)
-    {
-        VERIFY2((dpos < WideStrSize), make_string("S2: '%s',%hu<%hu", MultiStr, dpos, WideStrSize));
+    if (WideStr && dpos + 1 < WideStrSize)
         WideStr[dpos + 1] = 0x0000;
-    }
 
     if (WideStr)
         WideStr[0] = dpos;
@@ -138,19 +137,18 @@ u16 mbhMulti2Wide(xr_wide_char* WideStr, xr_wide_char* WidePos, u16 WideStrSize,
 
         if (WideStr)
         {
-            VERIFY2((dpos < WideStrSize), make_string("S1: '%s',%hu<%hu", MultiStr, dpos, WideStrSize));
+            // The output is a fixed stack buffer; a long enough string overflowed it.
+            if (dpos >= WideStrSize)
+                break;
             WideStr[dpos] = wc;
         }
     }
 
-    if (WidePos)
+    if (WidePos && (!WideStr || dpos < WideStrSize))
         WidePos[dpos] = spos;
 
-    if (WideStr)
-    {
-        VERIFY2((dpos < WideStrSize), make_string("S2: '%s',%hu<%hu", MultiStr, dpos, WideStrSize));
+    if (WideStr && dpos + 1 < WideStrSize)
         WideStr[dpos + 1] = 0x0000;
-    }
 
     if (WideStr)
         WideStr[0] = dpos;

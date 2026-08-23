@@ -25,10 +25,19 @@ extern Flags32 psAI_Flags;
 void CSE_ALifeTraderAbstract::spawn_supplies()
 {
     CSE_ALifeDynamicObject* dynamic_object = smart_cast<CSE_ALifeDynamicObject*>(this);
-    VERIFY(dynamic_object);
+    if (!dynamic_object)
+        return;
     CSE_Abstract* abstract = dynamic_object->alife().spawn_item(
         "device_pda", base()->o_Position, dynamic_object->m_tNodeID, dynamic_object->m_tGraphID, base()->ID);
     CSE_ALifeItemPDA* pda = smart_cast<CSE_ALifeItemPDA*>(abstract);
+    // spawn_item answers null when device_pda is missing or of another class - a mod can do that
+    // to the section, and every trader would then crash on spawn.
+    if (!pda)
+    {
+        Msg("! Trader [%s]: could not spawn its PDA (section device_pda), supplies skipped",
+            base() ? base()->name_replace() : "");
+        return;
+    }
     pda->m_original_owner = base()->ID;
 
     character_profile();

@@ -319,10 +319,11 @@ float evalEnvelope(CEnvelope* env, float time)
         }
     }
     // get the endpoints of the interval being evaluated
+    // keys[k + 1] was read before the bound was checked; on an edge-time envelope k walks off the
+    // array. The bound is part of the loop condition now.
     int k = 0;
-    while (time > env->keys[k + 1]->time)
+    while ((k + 2) < sz && time > env->keys[k + 1]->time)
         k++;
-    VERIFY((k + 1) < sz);
 
     key1 = env->keys[k + 1];
     key0 = env->keys[k];

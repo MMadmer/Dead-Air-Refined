@@ -473,7 +473,8 @@ void CScriptGameObject::TransferItem(CScriptGameObject* pItem, CScriptGameObject
 u32 CScriptGameObject::Money()
 {
     CInventoryOwner* pOurOwner = smart_cast<CInventoryOwner*>(&object());
-    VERIFY(pOurOwner);
+    if (!pOurOwner)
+        return 0;
     return pOurOwner->get_money();
 }
 
@@ -508,7 +509,8 @@ void CScriptGameObject::TransferMoney(u32 money, CScriptGameObject* pForWho)
 void CScriptGameObject::GiveMoney(u32 money)
 {
     CInventoryOwner* pOurOwner = smart_cast<CInventoryOwner*>(&object());
-    VERIFY(pOurOwner);
+    if (!pOurOwner)
+        return;
 
     pOurOwner->set_money(pOurOwner->get_money() + money, true);
 }
@@ -911,7 +913,8 @@ void CScriptGameObject::SwitchToTalk() { R_ASSERT("switch_to_talk called ;)"); }
 void CScriptGameObject::AllowBreakTalkDialog(bool b)
 {
     CInventoryOwner* inv_owner = smart_cast<CInventoryOwner*>(&object());
-    VERIFY(inv_owner);
+    if (!inv_owner)
+        return;
     inv_owner->bDisableBreakDialog = !b;
 }
 

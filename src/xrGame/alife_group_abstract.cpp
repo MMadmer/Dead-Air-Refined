@@ -67,13 +67,24 @@ void CSE_ALifeGroupAbstract::switch_offline()
             tpGroup->m_fCurSpeed = tpGroup->m_fCurrentLevelGoingSpeed;
             tpGroup->o_Position = tpGroupMember->o_Position;
             u32 dwNodeID = tpGroup->m_tNodeID;
-            tpGroup->m_tGraphID = ai().cross_table().vertex(dwNodeID).game_vertex_id();
-            tpGroup->m_fDistanceToPoint = ai().cross_table().vertex(dwNodeID).distance();
-            tpGroup->m_tNextGraphID = tpGroup->m_tGraphID;
-            u16 wNeighbourCount = ai().game_graph().vertex(tpGroup->m_tGraphID)->edge_count();
-            CGameGraph::const_iterator i, e;
-            ai().game_graph().begin(tpGroup->m_tGraphID, i, e);
-            tpGroup->m_tPrevGraphID = (*(i + object->randI(0, wNeighbourCount))).vertex_id();
+            // The node id indexes the cross table, the result indexes the game graph, and an
+            // edgeless vertex would make randI(0, 0) and dereference begin() - each step checked.
+            if (ai().get_cross_table() && dwNodeID < ai().cross_table().header().level_vertex_count())
+            {
+                tpGroup->m_tGraphID = ai().cross_table().vertex(dwNodeID).game_vertex_id();
+                tpGroup->m_fDistanceToPoint = ai().cross_table().vertex(dwNodeID).distance();
+                tpGroup->m_tNextGraphID = tpGroup->m_tGraphID;
+                if (ai().game_graph().valid_vertex_id(tpGroup->m_tGraphID))
+                {
+                    u16 wNeighbourCount = ai().game_graph().vertex(tpGroup->m_tGraphID)->edge_count();
+                    if (wNeighbourCount)
+                    {
+                        CGameGraph::const_iterator i, e;
+                        ai().game_graph().begin(tpGroup->m_tGraphID, i, e);
+                        tpGroup->m_tPrevGraphID = (*(i + object->randI(0, wNeighbourCount))).vertex_id();
+                    }
+                }
+            }
         }
         object->alife().remove_online(tpGroupMember, false);
         ++I;

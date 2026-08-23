@@ -11,7 +11,14 @@ void CPPEffectorDistance::load(LPCSTR section)
     m_r_min_perc = pSettings->r_float(section, "radius_min");
     m_r_max_perc = pSettings->r_float(section, "radius_max");
 
-    VERIFY(m_r_min_perc <= m_r_max_perc);
+    // Equal radii put a zero in the update_factor denominator; the NaN then passes the clamp (every
+    // comparison with NaN is false) straight into set_factor, silently.
+    if (m_r_min_perc >= m_r_max_perc)
+    {
+        Msg("! Distance effector [%s]: radius_min %.3f is not below radius_max %.3f, pulled apart", section,
+            m_r_min_perc, m_r_max_perc);
+        m_r_min_perc = m_r_max_perc - EPS_L;
+    }
 }
 
 bool CPPEffectorDistance::check_completion() { return (m_dist > m_radius * m_r_max_perc); }

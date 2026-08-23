@@ -420,6 +420,9 @@ IReader* open_chunk(void* ptr, u32 ID, pcstr archiveName, size_t archiveSize, bo
 
         if ((dwType & ~CFS_CompressMark) == ID)
         {
+            // A corrupt chunk size would ask the allocator for gigabytes.
+            if (dwSize == 0 || dwSize > (1u << 30))
+                return nullptr;
             u8* src_data = xr_alloc<u8>(dwSize);
             res = ReadFile(ptr, src_data, dwSize, &read_byte, nullptr);
 
@@ -481,6 +484,9 @@ IReader* open_chunk(int fd, u32 ID, pcstr archiveName, size_t archiveSize, bool 
 
         if ((dwType & ~CFS_CompressMark) == ID)
         {
+            // A corrupt chunk size would ask the allocator for gigabytes.
+            if (dwSize == 0 || dwSize > (1u << 30))
+                return nullptr;
             u8* src_data = xr_alloc<u8>(dwSize);
             read_byte = _read(fd, src_data, dwSize);
 
@@ -2300,8 +2306,15 @@ CLocatorAPI::archive_file_header::archive_file_header(IReader& reader)
     size_compr = reader.r_u32();
     crc = reader.r_u32();
 
-    const size_t name_length = size - ELEMENTS_SIZE;
-    VERIFY(name_length < sizeof(name));
+    // size comes from the archive; below ELEMENTS_SIZE the subtraction underflows and the name
+    // read runs off the stack buffer. An entry like that is empty, not fatal.
+    const size_t name_length = size >= ELEMENTS_SIZE ? size - ELEMENTS_SIZE : sizeof(name);
+    if (size < ELEMENTS_SIZE || name_length >= sizeof(name))
+    {
+        name[0] = 0;
+        ptr = 0;
+        return;
+    }
 
     reader.r(&name, name_length);
     name[name_length] = 0;
