@@ -71,6 +71,7 @@ extern ECORE_API u32 ps_r_optimize_static;
 extern ECORE_API int ps_r__LightSleepFrames;
 extern ECORE_API int ps_r__light_shadow_budget;
 extern ECORE_API int ps_r__light_details;
+extern ECORE_API int ps_r__light_dyn_shared;
 extern ECORE_API int ps_r__hud_shadow;
 extern ECORE_API int ps_r__actor_shadow;
 extern ECORE_API float ps_r__hud_shadow_normal_offset;

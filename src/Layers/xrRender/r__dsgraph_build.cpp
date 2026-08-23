@@ -891,8 +891,29 @@ void R_dsgraph_structure::build_subspace_dynamic()
 
     if (collect_dynamic_any)
     {
-        // Traverse object database
-        g_pGamePersistent->SpatialSpace.q_frustum(lstRenderables, o.spatial_traverse_flags, o.spatial_types, o.view_frustum);
+        if (o.dynamic_source)
+        {
+            // The same two tests q_frustum applies inside the tree - type mask, then the bounding
+            // sphere against the frustum - so the result is exactly what the query would return.
+            lstRenderables.clear();
+            lstRenderables.reserve(o.dynamic_source->size());
+            const u32 frustum_mask = o.view_frustum.getMask();
+            for (ISpatial* spatial : *o.dynamic_source)
+            {
+                auto& data = spatial->GetSpatialData();
+                if (0 == (data.type & o.spatial_types))
+                    continue;
+                u32 test_mask = frustum_mask;
+                if (fcvNone == o.view_frustum.testSphere(data.sphere.P, data.sphere.R, test_mask))
+                    continue;
+                lstRenderables.push_back(spatial);
+            }
+        }
+        else
+        {
+            // Traverse object database
+            g_pGamePersistent->SpatialSpace.q_frustum(lstRenderables, o.spatial_traverse_flags, o.spatial_types, o.view_frustum);
+        }
 
         if (o.spatial_traverse_flags & ISpatial_DB::O_ORDERED) // this should be inside of query functions
         {

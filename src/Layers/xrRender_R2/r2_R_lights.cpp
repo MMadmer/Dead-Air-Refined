@@ -2,6 +2,18 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// One dynamic-object query for the whole light phase instead of one per shadowed light. Every
+// query takes the spatial database lock, and the caster builds of one frame are parallel tasks - so
+// with a dozen shadowed lights the phase spent its time queueing on that lock, not drawing (the
+// sibling port measured 1.25 ms of waiting against 0.07 ms of shadow maps, and 1.30 -> 0.39 ms for
+// the phase once the query was hoisted). A box covering the influence spheres of every shadowed
+// light is queried once, and each light then filters that list with its own frustum, applying the
+// same type-and-sphere test the tree would have. Any object inside a light's frustum is inside its
+// sphere, and the box covers the union of the spheres, so the list is a superset of every per-light
+// query and the caster set is unchanged. The bounds are taken from the spheres and not the frusta
+// on purpose: a tighter volume would drop casters at the edges of lights, quietly.
+static xr_vector<ISpatial*> s_light_dynamic_casters;
+
 void CRender::render_lights(light_Package& LP)
 {
     ZoneScoped;
@@ -23,6 +35,27 @@ void CRender::render_lights(light_Package& LP)
             *output++ = L;
         }
         source.erase(output, source.end());
+    }
+
+    s_light_dynamic_casters.clear();
+    if (ps_r__light_dyn_shared && !LP.v_shadowed.empty())
+    {
+        Fbox bounds;
+        bounds.invalidate();
+        for (light* L : LP.v_shadowed)
+        {
+            const auto& sphere = L->GetSpatialData().sphere;
+            const Fvector radius{ sphere.R, sphere.R, sphere.R };
+            Fvector corner;
+            bounds.modify(corner.sub(sphere.P, radius));
+            bounds.modify(corner.add(sphere.P, radius));
+        }
+        // get_CD yields half the extent and q_box builds its box as centre +- size (Fbox::setb), so
+        // the two halves agree. Get this wrong by two and the volume would be half of what is
+        // needed, with casters vanishing at the edges of lights.
+        Fvector center, half_size;
+        bounds.get_CD(center, half_size);
+        g_pGamePersistent->SpatialSpace.q_box(s_light_dynamic_casters, 0, STYPE_RENDERABLE, center, half_size);
     }
 
     // 2. refactor - infact we could go from the backside and sort in ascending order
@@ -228,8 +261,15 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.o.view_pos = L->position;
                 dsgraph.o.xform = L->X.S.combine;
                 dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+                // An empty shared list means the hoist is off or found nothing; the build then
+                // queries the tree as before. The context goes back to the pool, so the pointer is
+                // cleared right after.
+                dsgraph.o.dynamic_source =
+                    (ps_r__light_dyn_shared && !s_light_dynamic_casters.empty()) ? &s_light_dynamic_casters : nullptr;
 
                 dsgraph.build_subspace();
+
+                dsgraph.o.dynamic_source = nullptr;
             };
 
             if (o.mt_calculate)

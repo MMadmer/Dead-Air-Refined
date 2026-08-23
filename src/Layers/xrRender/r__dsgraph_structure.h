@@ -43,6 +43,11 @@ struct R_dsgraph_structure
         bool precise_portals{ false };
         bool is_main_pass{ false };
         bool mt_calculate{ false };
+        // A dynamic-object list collected ahead of time. When set, build_subspace_dynamic filters it
+        // with the view frustum instead of querying the spatial database - the database takes one
+        // lock for every query, and the shadow-map passes of one frame would otherwise queue up on
+        // it, one query per light.
+        const xr_vector<ISpatial*>* dynamic_source{ nullptr };
     } o;
 
     // Dynamic scene graph
@@ -160,6 +165,7 @@ struct R_dsgraph_structure
         o.spatial_traverse_flags = 0;
         o.portal_traverse_flags = 0;
         o.spatial_types = STYPE_RENDERABLE;
+        o.dynamic_source = nullptr;
 
         val_recorder = nullptr;
         val_feedback = nullptr;
