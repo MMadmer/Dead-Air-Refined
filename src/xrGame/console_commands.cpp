@@ -220,6 +220,10 @@ void log_stability_memory_stats(bool compact)
     Msg("* [x-ray]: private[%zu MiB], Lua[%zu MiB]", processHeap / 1048576, luaBytes / 1048576);
     Msg("* [x-ray]: shared string savings[%zu KiB/%zu], shared memory savings[%zu KiB]",
         ecoStringsBytes / 1024, ecoStringsCount, ecoSmem);
+    // Corruption canary for the "symbols instead of letters" class of report: if pooled text was
+    // stomped in place, this names the stomped entries right in the session log.
+    if (const size_t stomped = g_pStringContainer->verify_report())
+        Msg("! [x-ray]: shared string pool: %zu entries no longer match their own checksum", stomped);
     Msg("* [ALife]: objects[%zu], online[%zu], pending release[%u]", alifeObjects, onlineObjects, pendingRelease);
 #ifdef FS_DEBUG
     Msg("* [ x-ray  ]: file mapping: memory[%d K], count[%d]", g_file_mapped_memory / 1024, g_file_mapped_count);

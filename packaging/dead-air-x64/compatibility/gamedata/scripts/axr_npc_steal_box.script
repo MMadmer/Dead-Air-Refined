@@ -1,0 +1,383 @@
+--[[
+	scheme_type: generic
+	author: Lanforse
+--]]
+--------------------------------------
+actid = 188121
+evaid = 188121
+--------------------------------------
+
+local looting = {}
+
+local anm_low_list = {"pickup_crouch","search"}
+local anm_high_list = {"search"}
+
+
+local anim_low = {
+	["pickup_crouch"] = true,
+	["search"] = true,
+}
+
+local anim_high = {
+	["search"] = true,
+}
+
+-----------------------------------------------------------------------------------------
+--								MODIFIED FROM EVALUATOR NPC vs BOX
+-----------------------------------------------------------------------------------------
+
+class "evaluator_npc_steal_box" (property_evaluator)
+function evaluator_npc_steal_box:__init(npc,name,storage) super (nil, name)
+	self.st = storage
+end
+
+function evaluator_npc_steal_box:evaluate()
+	
+	local tg = time_global()
+	---[[
+	if (tg < xr_actor.first_update_time+10000) then
+		return false
+	end
+	--]]
+		
+	local npc = self.object
+	
+	if not npc then
+		return false
+	end
+		
+	if not (npc:alive()) then 
+		return false 
+	end
+	
+	if (npc:has_info("npcx_is_companion")) then
+		return false
+	end
+		
+	if (IsWounded(npc)) then 
+		return false 
+	end
+		
+	if (self.st.box_id) then 
+		return true
+	end
+	
+	if (self.st.box_vid) then
+		return true
+	end
+	
+	if (anim_low[state_mgr.get_state(npc)] or anim_high[state_mgr.get_state(npc)]) then
+		return false
+	end
+	
+	local caches = coc_treasure_manager.caches
+	
+	---[[
+	if not (string.find(npc:name(),"sim_default_")) then
+		return false
+	end
+	--]]
+	
+	self.st.__dtimer = not self.st.__dtimer and tg + 5000 or self.st.__dtimer
+	if (tg < self.st.__dtimer) then 
+		return false
+	end
+	self.st.__dtimer = nil
+	
+	for id,val in pairs (caches) do
+		
+		local obj = level.object_by_id(id)
+		local se_obj = obj and alife():object(obj:id())
+		
+		if (se_obj and looting[obj:id()] ~= true) then
+		
+			local name = obj:name()
+		
+			local npc_pos = npc:position()
+			local obj_pos = obj:position()
+			
+			local angle = se_obj.angle.y
+			
+			local pos_x=math.sin(angle)*1.3
+			local pos_z=-math.cos(angle)*1.3
+			
+			obj_pos.x = obj_pos.x + pos_x
+			obj_pos.z = obj_pos.z + pos_z
+			
+			local dist = npc_pos:distance_to_sqr(obj_pos)
+			local dist_to_actor = obj_pos:distance_to_sqr(db.actor:position())
+			
+			local vid = level.vertex_id(obj_pos)
+			
+			
+			local y_diff = obj_pos.y-npc_pos.y
+			
+			local y_check = false
+			if (y_diff < 1) and (y_diff > -1) then
+				y_check = true
+			end
+			
+			--printf("%s vid:%s [%s %s %s] dist:%s",obj:name(), vid, obj_pos.x, obj_pos.y, obj_pos.z, dist)
+			--printf("%s %s %s %s %s %s",(vid < 4294967295),(npc:accessible(vid)),(y_diff),(dist < 500),(dist_to_actor > 200),(not coc_treasure_manager.caches_exclude[name]))
+			
+			-- dist < 500 is the original range term (see the debug print above); it was lost in a
+			-- merge, and without it every sim stalker on the level marched to any stash anywhere.
+			if (vid < 4294967295) and (npc:accessible(vid)) and (y_check) and (dist < 500) and (dist_to_actor > 100) and not (coc_treasure_manager.caches_exclude[name]) then
+				--printf("%s %s %s %s %s %s",obj:name(), vid, obj_pos.x, obj_pos.y, obj_pos.z, dist)
+				--printf("%s %s %s %s",obj:name(), vid, dist, dist_to_actor)
+			
+				---[[
+				coc_treasure_manager.try_spawn_treasure(obj)
+				local found = false
+				local function inv_box_has_items(inv_box, item)
+					if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil) then
+						self.st.box_id = obj:id()
+						self.st.box_vid = vid
+						self.st.state = "patrol"
+						looting[self.st.box_id] = true
+						if (DEV_DEBUG_DEV) then
+							printf("-SEND %s to %s",npc:name(),obj:name())
+						end
+						found = true
+						return
+					end
+				end
+				obj:iterate_inventory_box(inv_box_has_items, obj)
+				
+				if (found) then
+					return
+				end
+			end
+		end
+	end
+		
+	return false
+end
+
+-----------------------------------------------------------------------------------------
+--								ACTION NPC steal BOX
+-----------------------------------------------------------------------------------------
+class "action_npc_steal_box" (action_base)
+function action_npc_steal_box:__init (npc,name,storage) super (nil,name)
+	self.st = storage
+end
+
+function action_npc_steal_box:initialize()
+	local npc = self.object
+	--printf("%s: init",npc:name())
+	npc:set_desired_position()
+	npc:set_desired_direction()
+	npc:set_path_type(game_object.level_path)
+	state_mgr.set_state(npc,self.st.state,nil,nil,nil,{fast_set = true})
+	self.st.vid = self.st.box_vid
+	action_base.initialize(self)
+end
+
+	
+function action_npc_steal_box:execute()
+
+	action_base.execute(self)
+	
+	local npc = self.object
+	--printf("%s: execute",npc:name())
+	local box = level.object_by_id(self.st.box_id)
+	local se_box = box and alife():object(box:id())
+	
+	local vid = self.st.box_vid
+	if not (npc and box and vid) then
+		if (DEV_DEBUG_DEV) then
+			printf("action_npc_steal_box:execute() break")
+		end
+		looting[self.st.box_id] = nil
+		self.st.__tmr = nil
+		self.st.box_id = nil
+		self.st.box_vid = nil
+		self.st.state = nil
+		return
+	end
+	
+	if (anim_low[state_mgr.get_state(npc)] or anim_high[state_mgr.get_state(npc)]) then
+		self.st.__tmr = self.st.__tmr or time_global()+8000	
+		if (time_global() > self.st.__tmr) then
+			looting[self.st.box_id] = nil
+			self.st.__tmr = nil
+			self.st.box_id = nil
+			self.st.box_vid = nil
+			self.st.state = nil
+			return
+		end
+	elseif (npc:level_vertex_id() == self.st.vid) then
+	
+		-- the nearest vertex can be far from a stash that has no ai-mesh under it (roof, rock);
+		-- looting through geometry is what players reported, so out of arm's reach = give up
+		if (box:position():distance_to_sqr(npc:position()) > 9) then
+			-- keep it marked, or the next stalker repeats the same futile march
+			looting[self.st.box_id] = true
+			self.st.__tmr = nil
+			self.st.box_id = nil
+			self.st.box_vid = nil
+			self.st.state = nil
+			return
+		end
+	
+		if (box:position().y - npc:position().y > 0.5) then
+			self.st.state = anm_high_list[math.random(#anm_high_list)]
+		else
+			self.st.state = anm_low_list[math.random(#anm_low_list)]
+		end
+	
+		npc:set_desired_position()
+		npc:set_desired_direction()
+		state_mgr.set_state(npc,self.st.state,nil,nil,{look_position = box:position()})
+		
+		coc_treasure_manager.caches[box:id()] = false
+		level.map_remove_object_spot(box:id(), "treasure")
+		
+		local function transfer(inv_box,item)
+			if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil) then
+			
+				if (dynamic_news_manager and axr_main.config:r_value("mm_options","enable_dynamic_news",1)) then 
+					if (IsArtefact(item)) then
+						dynamic_news_manager.get_dynamic_news():FoundArtefact(npc,item)
+					elseif (IsMedicine(item))then
+						dynamic_news_manager.get_dynamic_news():FoundMedicine(npc,item)
+					elseif (IsFood(item))then
+						dynamic_news_manager.get_dynamic_news():FoundFood(npc,item)
+					end
+				end
+			
+				if (item:section() == "mine_wire") then
+					
+					local blow_particle = particles_object("explosions\\explosion_04")
+					blow_particle:play_at_pos(box:position())
+					xr_sound.set_sound_play(box:id(),"stash_explosion")
+					
+					db.storage[npc:id()].tagged_by_actor = true
+					
+					local h = hit()
+					h.type = hit.explosion
+					h:bone("pelvis")
+					h.power = 4
+					h.impulse = 20
+					h.direction = vector():set(0,0,1)
+					h.draftsman = npc
+					npc:hit(h)
+					
+					local se_obj = alife_object(item:id())
+					if (se_obj) then 
+						alife():release(se_obj,true)
+					end
+				else
+					inv_box:transfer_item(item, npc)
+				end
+			end
+		end
+		box:iterate_inventory_box(transfer,box)
+			
+		if not self.sound then
+			xr_sound.set_sound_play(npc:id(),"corpse_loot_begin")
+			self.sound = true
+		end
+	else
+		local dist = npc:position():distance_to_sqr(box:position())
+	
+		if (npc:path_type() ~= game_object.level_path) then 
+			npc:set_path_type(game_object.level_path)
+		end
+		
+		if (dist < 200) then
+			self.st.state = "rush"
+		else
+			self.st.state = "patrol"
+		end
+		
+		--self.st.state = "sprint"
+		
+		state_mgr.set_state(npc,self.st.state)
+		local n_vid = utils.send_to_nearest_accessible_vertex(npc, self.st.vid,"steal_box")
+	end
+	
+end
+
+function action_npc_steal_box:finalize()
+	action_base.finalize(self)
+end
+
+---------------------------------------------------------
+---------------------- binder ---------------------------
+function setup_generic_scheme(npc,ini,scheme,section,stype,temp)
+	local st = xr_logic.assign_storage_and_bind(npc,ini,"npc_steal_box",section,temp)
+end
+
+function add_to_binder(npc,ini,scheme,section,storage,temp)
+	local manager = npc:motivation_action_manager()
+	
+	if (not npc:alive()) or (npc:character_community() == "zombied" or npc:section() == "actor_visual_stalker") then
+		manager:add_evaluator(evaid,property_evaluator_const(false))
+		--temp.needs_configured = false
+	else
+		manager:add_evaluator(evaid,evaluator_npc_steal_box(npc,"eva_npc_steal_box",storage))
+	end 
+	
+	temp.action = action_npc_steal_box(npc,"act_npc_steal_box",storage)
+	
+	temp.action:add_precondition(world_property(stalker_ids.property_alive,true))
+	temp.action:add_precondition(world_property(stalker_ids.property_danger, false))
+	temp.action:add_precondition(world_property(stalker_ids.property_anomaly,false))
+	temp.action:add_precondition(world_property(stalker_ids.property_enemy,false))
+	temp.action:add_precondition(world_property(evaid,true))
+	
+	temp.action:add_effect(world_property(evaid,false))
+	
+	manager:add_action(actid,temp.action)
+end
+
+function configure_actions(npc,ini,scheme,section,stype,temp)
+	--temp.action:add_precondition(world_property(xr_evaluators_id.state_mgr + 1,true))
+	temp.action:add_precondition(world_property(xr_evaluators_id.sidor_wounded_base,false))
+	temp.action:add_precondition(world_property(xr_evaluators_id.wounded_exist,false))
+
+	--[[
+	if (_G.schemes["rx_ff"]) then 
+		temp.action:add_precondition(world_property(rx_ff.evaid,false))
+	end
+	--]]
+	
+	if (_G.schemes["gl"]) then
+		temp.action:add_precondition(world_property(rx_gl.evid_gl_reload,false))
+	end
+	
+	--[[
+	if (_G.schemes["facer"]) then
+		temp.action:add_precondition(world_property(xrs_facer.evid_facer,false))
+		temp.action:add_precondition(world_property(xrs_facer.evid_steal_up_facer,false))
+	end
+	--]]
+
+	local manager = npc:motivation_action_manager()
+	local action	
+	local p = {
+				stalker_ids.action_combat_planner, 
+				--xr_actions_id.state_mgr + 1,
+				xr_actions_id.state_mgr + 2,
+				xr_actions_id.alife
+	}
+
+	for i=1,#p do
+		action = manager:action(p[i])
+		if (action) then
+			action:add_precondition(world_property(evaid,false))
+		end
+	end
+end
+	
+function disable_generic_scheme(npc,scheme,stype)
+	local st = db.storage[npc:id()][scheme]
+	if st then
+		st.enabled = false
+	end
+end
+
+function npc_add_precondition(action)
+	action:add_precondition(world_property(evaid,false))
+end

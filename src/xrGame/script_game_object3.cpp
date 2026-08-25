@@ -70,6 +70,22 @@ const CCoverPoint* CScriptGameObject::best_cover(const Fvector& position, const 
         GEnv.ScriptEngine->script_log(LuaMessageType::Error, "CGameObject : cannot access class member best_cover!");
         return (0);
     }
+    // The evaluators die in net_Destroy while a script planner may still hold the wrapper
+    // through a level change - the last scheduled think arrives after the object is gone.
+    if (!stalker->m_ce_best)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CGameObject : best_cover on a destroyed object [%s]!", object().cName().c_str());
+        return (0);
+    }
+    // The evaluators die in net_Destroy while a script planner may still hold the wrapper
+    // through a level change - the last scheduled think arrives after the object is gone.
+    if (!stalker->m_ce_best)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CGameObject : best_cover on a destroyed object [%s]!", object().cName().c_str());
+        return (0);
+    }
     stalker->m_ce_best->setup(enemy_position, min_enemy_distance, max_enemy_distance, 0.f);
     const CCoverPoint* point = ai().cover_manager().best_cover(position, radius, *stalker->m_ce_best);
     return (point);
@@ -81,6 +97,18 @@ const CCoverPoint* CScriptGameObject::safe_cover(const Fvector& position, float 
     if (!stalker)
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error, "CGameObject : cannot access class member best_cover!");
+        return (0);
+    }
+    if (!stalker->m_ce_safe)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CGameObject : safe_cover on a destroyed object [%s]!", object().cName().c_str());
+        return (0);
+    }
+    if (!stalker->m_ce_safe)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CGameObject : safe_cover on a destroyed object [%s]!", object().cName().c_str());
         return (0);
     }
     stalker->m_ce_safe->setup(min_distance);

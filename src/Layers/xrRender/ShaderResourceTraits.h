@@ -665,12 +665,20 @@ T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32
             string_path tmp;
             strconcat(tmp, "stub_default", ShaderTypeTraits<T>::GetShaderExt());
 
-            Msg("CreateShader: %s is missing. Replacing it with %s", cname, tmp);
+            Msg("CreateShader: %s is missing or failed to compile. Replacing it with %s", cname, tmp);
             strconcat(cname, RImplementation.getShaderPath(), tmp);
             FS.update_path(cname, "$game_shaders$", cname);
             file = FS.r_open(cname);
         }
-        R_ASSERT3(file, "Shader file doesnt exist", cname);
+        // A clean exit, not an assert: xrDebug::Fail can be ignored or silenced, and the code
+        // below would then read through the null. Reached only when the stub for this shader
+        // stage is missing as well.
+        if (!file)
+        {
+            Msg("! CreateShader: no source and no stub for [%s]", cname);
+            CHECK_OR_EXIT(false, "Shader is missing and could not be replaced with a stub.\n\n"
+                                 "Try to lower or reset the video settings.");
+        }
 
         // Duplicate and zero-terminate
         const auto size = file->length();

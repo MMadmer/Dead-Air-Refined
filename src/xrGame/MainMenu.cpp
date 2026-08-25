@@ -307,7 +307,16 @@ bool CMainMenu::ReloadUI()
     xr_delete(m_startDialog);
 
     m_startDialog = smart_cast<CUIDialogWnd*>(dlg);
-    VERIFY(m_startDialog);
+    // The MAIN_MNU class is backed by a script class, and this runs from the script-engine
+    // reset event too - mid-reset the factory can hand back an object that is not a dialog.
+    // A menu that failed to rebuild deactivates instead of writing through null.
+    if (!m_startDialog)
+    {
+        Msg("! CMainMenu::ReloadUI: MAIN_MNU did not produce a dialog, the menu stays down");
+        xr_delete(dlg);
+        m_Flags.set(flActive | flNeedChangeCapture, FALSE);
+        return false;
+    }
     m_startDialog->m_bWorkInPause = true;
     m_startDialog->ShowDialog(true);
     return true;

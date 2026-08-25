@@ -1364,7 +1364,7 @@ EXPORTS
     ?o_delete@Vision@Feel@@AEAAXPEAVIGameObject@@@Z @1362
     ?o_get_by_iterator@CObjectList@@QEAAPEAVIGameObject@@I@Z @1363
     ?o_new@Vision@Feel@@AEAAXPEAVIGameObject@@@Z @1364
-    ?o_remove@CObjectList@@QEAAXAEAV?$vector@PEAVIGameObject@@V?$xalloc@PEAVIGameObject@@@@@std@@PEAVIGameObject@@@Z @1365
+    ?o_remove@CObjectList@@QEAA_NAEAV?$vector@PEAVIGameObject@@V?$xalloc@PEAVIGameObject@@@@@std@@PEAVIGameObject@@@Z @1365
     ?o_sleep@CObjectList@@QEAAXPEAVIGameObject@@@Z @1366
     ?o_trace@Vision@Feel@@AEAAXAEAU?$_vector3@M@@MM@Z @1367
     ?on_device_create@CEnvDescriptor@@QEAAXXZ @1368

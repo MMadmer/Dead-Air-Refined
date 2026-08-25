@@ -85,16 +85,15 @@ IGameObject* CObjectList::FindObjectByCLS_ID(CLASS_ID cls)
     return NULL;
 }
 
-void CObjectList::o_remove(Objects& v, IGameObject* O)
+bool CObjectList::o_remove(Objects& v, IGameObject* O)
 {
-    //. if(O->ID()==1026)
-    //. {
-    //. Log("ahtung");
-    //. }
     Objects::iterator _i = std::find(v.begin(), v.end(), O);
-    VERIFY(_i != v.end());
+    // A miss used to erase(end()) - a memmove with a negative count straight through the heap.
+    // It happens when a script toggles processing on an object that is already unregistered.
+    if (_i == v.end())
+        return false;
     v.erase(_i);
-    //. Msg("---o_remove[%s][%d]", O->cName().c_str(), O->ID() );
+    return true;
 }
 
 void CObjectList::o_activate(IGameObject* O)
@@ -102,7 +101,19 @@ void CObjectList::o_activate(IGameObject* O)
     VERIFY(O && O->processing_enabled());
     {
         std::unique_lock lock(objectStateMutex);
-        o_remove(objects_sleeping, O);
+        // Not sleeping: either already active (a double toggle) or not registered at all (a
+        // script poking a torn-down object). Pushing it would double the updates or resurrect
+        // a dead pointer into the update loop, so the state is left as it is.
+        if (!o_remove(objects_sleeping, O))
+        {
+            static u32 reported = 0;
+            if (reported < 8)
+            {
+                ++reported;
+                Msg("! o_activate: [%s] is not in the sleeping list, state left unchanged", O->cName().c_str());
+            }
+            return;
+        }
         objects_active.push_back(O);
     }
     O->MakeMeCrow();
@@ -112,7 +123,16 @@ void CObjectList::o_sleep(IGameObject* O)
     VERIFY(O && !O->processing_enabled());
     {
         std::unique_lock lock(objectStateMutex);
-        o_remove(objects_active, O);
+        if (!o_remove(objects_active, O))
+        {
+            static u32 reported = 0;
+            if (reported < 8)
+            {
+                ++reported;
+                Msg("! o_sleep: [%s] is not in the active list, state left unchanged", O->cName().c_str());
+            }
+            return;
+        }
         objects_sleeping.push_back(O);
     }
     O->MakeMeCrow();

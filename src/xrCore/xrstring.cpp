@@ -108,6 +108,33 @@ struct str_container_impl
         Msg("strings verify completed");
     }
 
+    // Non-fatal integrity sweep for the periodic stats: counts docked nodes whose stored CRC or
+    // length no longer matches their bytes - i.e. somebody wrote into pooled string memory - and
+    // names the first few, so a corruption report carries the evidence instead of a description.
+    size_t verify_report() const
+    {
+        size_t corrupted = 0;
+        for (size_t i = 0; i < buffer_size; ++i)
+        {
+            const str_value* value = buffer[i];
+            while (value)
+            {
+                const bool crc_ok = crc32(value->value, value->dwLength) == value->dwCRC;
+                const bool len_ok = value->dwLength == xr_strlen(value->value);
+                if (!crc_ok || !len_ok)
+                {
+                    ++corrupted;
+                    if (corrupted <= 5)
+                        Msg("! shared string stomped: ref[%u] len[%u/%zu] crc[%s] : %.96s",
+                            value->dwReference.load(std::memory_order_relaxed), value->dwLength,
+                            xr_strlen(value->value), crc_ok ? "ok" : "BAD", value->value);
+                }
+                value = value->next;
+            }
+        }
+        return corrupted;
+    }
+
     void dump(FILE* f) const
     {
         for (size_t i = 0; i < buffer_size; ++i)
@@ -243,6 +270,14 @@ void str_container::verify() const
     impl->cs.Enter();
     impl->verify();
     impl->cs.Leave();
+}
+
+size_t str_container::verify_report() const
+{
+    impl->cs.Enter();
+    const size_t corrupted = impl->verify_report();
+    impl->cs.Leave();
+    return corrupted;
 }
 
 void str_container::dump() const

@@ -1066,38 +1066,26 @@ void CUIActorMenu::PropertiesBoxForWeapon(CUICellItem* cell_item, PIItem item, b
         return;
     }
 
-    if (pWeapon->GrenadeLauncherAttachable())
+    // CanDetach owns the full rule - the addon must be attached AND its mount unbroken. An
+    // entry the weapon would refuse must not be offered: the refused click used to fall into
+    // the free-spawning base Detach.
+    if (pWeapon->GrenadeLauncherAttachable() && pWeapon->IsGrenadeLauncherAttached() &&
+        pWeapon->CanDetach(pWeapon->GetGrenadeLauncherName().c_str()))
     {
-        if (pWeapon->IsGrenadeLauncherAttached())
-        {
-            m_UIPropertiesBox->AddItem("st_detach_gl", NULL, INVENTORY_DETACH_GRENADE_LAUNCHER_ADDON);
-            b_show = true;
-        }
-        else
-        {
-        }
+        m_UIPropertiesBox->AddItem("st_detach_gl", NULL, INVENTORY_DETACH_GRENADE_LAUNCHER_ADDON);
+        b_show = true;
     }
-    if (pWeapon->ScopeAttachable())
+    if (pWeapon->ScopeAttachable() && pWeapon->IsScopeAttached() &&
+        pWeapon->CanDetach(pWeapon->GetScopeName().c_str()))
     {
-        if (pWeapon->IsScopeAttached())
-        {
-            m_UIPropertiesBox->AddItem("st_detach_scope", NULL, INVENTORY_DETACH_SCOPE_ADDON);
-            b_show = true;
-        }
-        else
-        {
-        }
+        m_UIPropertiesBox->AddItem("st_detach_scope", NULL, INVENTORY_DETACH_SCOPE_ADDON);
+        b_show = true;
     }
-    if (pWeapon->SilencerAttachable())
+    if (pWeapon->SilencerAttachable() && pWeapon->IsSilencerAttached() &&
+        pWeapon->CanDetach(pWeapon->GetSilencerName().c_str()))
     {
-        if (pWeapon->IsSilencerAttached())
-        {
-            m_UIPropertiesBox->AddItem("st_detach_silencer", NULL, INVENTORY_DETACH_SILENCER_ADDON);
-            b_show = true;
-        }
-        else
-        {
-        }
+        m_UIPropertiesBox->AddItem("st_detach_silencer", NULL, INVENTORY_DETACH_SILENCER_ADDON);
+        b_show = true;
     }
     CWeaponMagazined* weaponMagazined = smart_cast<CWeaponMagazined*>(pWeapon);
     if (weaponMagazined && IsGameTypeSingle())

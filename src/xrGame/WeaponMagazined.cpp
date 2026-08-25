@@ -1156,8 +1156,23 @@ bool CWeaponMagazined::Detach(const char* item_section_name, bool b_spawn_item)
         return CInventoryItemObject::Detach(item_section_name, b_spawn_item);
     }
     else
+    {
+        // The base Detach spawns whatever section it is given and clears nothing. Reaching it
+        // with one of this weapon's own addon sections means the branch above refused - a
+        // broken mount, a wrong status - and letting it fall through minted free copies of the
+        // addon while the attached flag stayed set (the infinite-silencer report).
+        const bool names_our_addon = (m_sSilencerName == item_section_name) ||
+            (m_sGrenadeLauncherName == item_section_name) ||
+            std::any_of(m_scopes.begin(), m_scopes.end(), [&](const shared_str& scope_section)
+                { return 0 == xr_strcmp(pSettings->r_string(scope_section, "scope_name"), item_section_name); });
+        if (names_our_addon)
+        {
+            Msg("! [%s]: refused to detach [%s] - the addon branch did not accept it (broken mount?)",
+                cNameSect().c_str(), item_section_name);
+            return false;
+        }
         return inherited::Detach(item_section_name, b_spawn_item);
-    ;
+    }
 }
 /*
 void CWeaponMagazined::LoadAddons()

@@ -54,6 +54,9 @@ public:
     void dump() const;
     void dump(IWriter* W) const;
     void verify() const;
+    // Non-fatal integrity sweep: how many pooled strings no longer match their own CRC/length,
+    // with the first few logged. Used by the periodic memory stats as a corruption canary.
+    size_t verify_report() const;
 
     [[nodiscard]]
     std::pair<size_t, size_t> stat_economy() const;
