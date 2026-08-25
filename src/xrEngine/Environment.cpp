@@ -376,14 +376,26 @@ void CEnvironment::SetWeather(shared_str name, bool forced)
 
 bool CEnvironment::SetWeatherFX(shared_str name)
 {
+    // A refusal here used to be silent, and the callers ignore the result: a surge whose
+    // fx_blowout was refused runs to completion with a clear sky and 10x game time - the
+    // "racing moon, no blowout" reports. Name every refusal so the session log carries the cause.
     if (bWFX)
+    {
+        Msg("! SetWeatherFX [%s]: refused, effect [%s] is already playing", name.c_str() ? name.c_str() : "",
+            Current[0] ? Current[0]->m_identifier.c_str() : "");
         return false;
+    }
     if (name.size())
     {
         auto it = WeatherFXs.find(name);
         R_ASSERT3(it != WeatherFXs.end(), "Invalid weather effect name.", name.c_str());
-        R_ASSERT2(CurrentWeather && Current[0] && Current[1],
-            "Cannot start a weather effect before the base weather pair is selected");
+        // Reachable, not impossible: a save made mid-surge resumes its manager before the first
+        // weather pair is selected. Refuse instead of asserting; the caller already handles false.
+        if (!CurrentWeather || !Current[0] || !Current[1])
+        {
+            Msg("! SetWeatherFX [%s]: refused, the base weather pair is not selected yet", name.c_str());
+            return false;
+        }
 
         EnvVec* previous_weather = CurrentWeather;
         EnvVec* next_weather = &it->second;

@@ -68,7 +68,15 @@ void CRender::Calculate()
     ZoneScopedN("r2_calculate");
 
     // Transfer to global space to avoid deep pointer access
-    float fov_factor = _sqr(90.f / Device.fFOV);
+    //
+    // The fov term keeps pixel coverage constant: a wider view makes everything smaller on
+    // screen, so lods and discards move closer. The reference tuned its art and thresholds at
+    // fov 75 (its default; the slider stopped at 90), and above that point the same formula
+    // starts deleting bushes and props the player still plainly sees - the "objects vanish at
+    // a small distance" reports, all from fov 85-90 configs. The factor is therefore pinned at
+    // the reference tuning point: up to 75 both engines agree bit for bit, beyond it the
+    // thresholds stay at the reference experience instead of shrinking further.
+    float fov_factor = _sqr(90.f / _min(Device.fFOV, 75.f));
     g_fSCREEN = float(Target->get_width(RCache) * Target->get_height(RCache)) * fov_factor * (EPS_S + ps_r__LOD);
     r_ssaDISCARD = _sqr(ps_r__ssaDISCARD) / g_fSCREEN;
     r_ssaDONTSORT = _sqr(ps_r__ssaDONTSORT / 3) / g_fSCREEN;
