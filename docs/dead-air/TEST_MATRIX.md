@@ -3,7 +3,7 @@
 | Gate | Content/runtime | Result |
 | --- | --- | --- |
 | Clean x64 build | `Release`, clean intermediate tree | Pass, zero build errors |
-| PE architecture | 44 packaged EXE/DLL files: 41 runtime files and 3 update/maintenance programs | Pass, all AMD64 |
+| PE architecture | 43 packaged EXE/DLL files: 40 runtime files and 3 update/maintenance programs | Pass, all AMD64 |
 | XDB discovery | Existing `database/*.xdb*` | Pass |
 | Loose override discovery | Existing `gamedata` | Pass |
 | Clean Dead Air new game | Base archives, no DAR2 archives | Pass |
@@ -34,7 +34,7 @@
 | Level transition | Underground to Agroprom | Pass |
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |
 | Long-session soak | Fresh Agroprom save, packaged runtime | Pass, 15.29 minutes, responsive, 3.04 GiB private memory |
-| Dependency audit | 44-file release package | Pass, no missing local DLLs |
+| Dependency audit | 43-file release package | Pass, no missing local DLLs |
 | GUI upgrade installer | Final `Dead Air: Refined 1.1.1` package over the installed 1.1.0 root | Pass, all 46 managed payload hashes matched and 75 saves remained unchanged |
 | Main-menu AtmosFear apply | `af_options_dialog:OnBtnAccept()` with no active level | Pass, settings saved without calling the runtime weather manager; process remained responsive without Lua or access-violation errors |
 | Installed EXE uninstaller | Upgrade mode | Pass, 13 original runtime files restored across a 43-file scope with zero mismatches |

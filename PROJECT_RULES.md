@@ -323,8 +323,11 @@ The full binary contract and evolution rules are described in
 - Before publishing verify a clean HEAD, the binary version, the package
   contents, hashes, install/update, and save-file preservation.
 - After publishing verify the tag target, the release status, the names and
-  SHA-256 of both assets, and the public `releases/latest` used by the
-  updater.
+  SHA-256 of both assets, and the release list the updater actually reads:
+  `repos/MMadmer/Dead-Air-Refined/releases?per_page=30`. The client picks the
+  highest parseable version on that page, so the GitHub "Latest" badge is
+  cosmetic for updating; a tag it cannot parse, a draft or a pre-release is
+  invisible to every installed client.
 
 ### 10.1. Mandatory GitHub Release text
 
