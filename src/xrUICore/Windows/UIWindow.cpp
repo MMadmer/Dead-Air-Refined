@@ -17,6 +17,14 @@ CUIWindow::~CUIWindow()
 {
     ResetPPMode();
 
+    // Both directions of the message-target link die with this window: whoever
+    // targeted it must not keep the freed pointer (SetCurrentValues on an orphaned
+    // tab control virtual-called a destroyed dialog through exactly that).
+    SetMessageTarget(nullptr);
+    for (CUIWindow* dependent : m_targetedBy)
+        dependent->m_pMessageTarget = nullptr;
+    m_targetedBy.clear();
+
     VERIFY(!(GetParent() && IsAutoDelete()));
 
     CUIWindow* parent = GetParent();
@@ -501,6 +509,26 @@ void CUIWindow::ResetAll()
 }
 
 CUIWindow* CUIWindow::GetMessageTarget() { return m_pMessageTarget ? m_pMessageTarget : GetParent(); }
+
+void CUIWindow::SetMessageTarget(CUIWindow* pWindow)
+{
+    if (m_pMessageTarget == pWindow)
+        return;
+
+    if (m_pMessageTarget)
+    {
+        auto& dependents = m_pMessageTarget->m_targetedBy;
+        const auto it = std::find(dependents.begin(), dependents.end(), this);
+        if (it != dependents.end())
+            dependents.erase(it);
+    }
+
+    m_pMessageTarget = pWindow;
+
+    if (pWindow)
+        pWindow->m_targetedBy.push_back(this);
+}
+
 bool CUIWindow::IsChild(CUIWindow* pPossibleChild) const
 {
     WINDOW_LIST::const_iterator it = std::find(m_ChildWndList.begin(), m_ChildWndList.end(), pPossibleChild);

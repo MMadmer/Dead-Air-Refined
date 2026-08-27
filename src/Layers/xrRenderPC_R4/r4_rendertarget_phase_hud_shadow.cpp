@@ -12,9 +12,19 @@ void CRender::render_hud_shadow()
     if (!Target || !Target->hud_shadow_available())
         return;
     // The pass reads the deferred position as a plain 2D surface; under MSAA that target is
-    // multisampled, so the feature stays off there instead of guessing a sample.
+    // multisampled, so the feature stays off there instead of guessing a sample. Say so once:
+    // a player who enabled the Maximum preset with MSAA on reports "weapon shadows stopped
+    // working" otherwise, and the session log carries no clue.
     if (o.msaa)
+    {
+        static bool reported = false;
+        if (!reported)
+        {
+            Msg("! [hud_shadow] r__hud_shadow is on, but MSAA is active - the first-person self-shadow stays off until MSAA is disabled");
+            reported = true;
+        }
         return;
+    }
     if (!g_pGameLevel || !g_pGameLevel->pHUD)
         return;
     if (o.sunstatic || !ps_r2_ls_flags.test(R2FLAG_SUN))

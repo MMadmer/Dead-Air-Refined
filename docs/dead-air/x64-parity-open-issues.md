@@ -9,6 +9,21 @@ validation rules are defined in [`PROJECT_RULES.md`](../../PROJECT_RULES.md).
   effectively transparent, allowing labels below the list to overlap its
   option text.
 
+- Report 20260826T075952 ("тени, лоды снова"): sun shadows "turn to mush" and
+  drop out near the screen edges at particular view angles, and vegetation still
+  vanishes at distance, on `renderer_r4` at fov 90 with the Extreme preset and
+  `r3_msaa 2x`. The lod half was already audited line-by-line against the x86
+  reference in the 1.3.4 tail and the fov-75 pin verifiably ships in the R4
+  binary, so what remains is the shadow-edge half. It could not be reproduced on
+  the rig: the reporter's own save embeds a third-party addon model
+  (`drug_caf.ogf`) and does not load on a clean stand, and the outdoor stand
+  save never produced a hard-sun sky through the AtmosFear forcing window. The
+  MSAA edge-stencil path of the sun accumulation is the standing suspect since
+  every symptom is tied to the one config with MSAA on. Needs the reporter's
+  demo or a screenshot pair (msaa 2x vs off, same spot and angle) on 1.3.6,
+  where the new `! [hud_shadow] ... MSAA is active` line also confirms the MSAA
+  state in the session log.
+
 - Device removal (`DXGI_ERROR_DRIVER_INTERNAL_ERROR`, 0x887A0020) reported once
   against 1.3.4 itself, on an AMD RX 6600 in `renderer_r3` (feature level 10.1),
   seconds after a quicksave finished loading on Escape, with a completely clean

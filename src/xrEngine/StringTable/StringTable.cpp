@@ -4,7 +4,6 @@
 #include "xr_level_controller.h"
 
 #include "xrCore/XML/XMLDocument.hpp"
-#include "xrCore/Threading/ParallelForEach.hpp"
 #include "xrCore/XMS/xms_core.h"
 
 constexpr pcstr OPENXRAY_XML = "openxray.xml";
@@ -12,9 +11,13 @@ constexpr pcstr OPENXRAY_XML = "openxray.xml";
 namespace
 {
 constexpr u32 STRING_TABLE_CACHE_MAGIC = 0x31435453;
-constexpr u32 STRING_TABLE_CACHE_VERSION = 2;
+// Version 3: the header carries a content CRC and the table is rebuilt serially.
+// The bump itself matters - it drops every cache built by the racy parallel path,
+// which is how a one-time parse glitch became permanent mojibake for a player.
+constexpr u32 STRING_TABLE_CACHE_VERSION = 3;
 constexpr u32 MAX_CACHED_STRINGS = 1'000'000;
 constexpr size_t MAX_CACHED_STRING_LENGTH = 1024 * 1024;
+constexpr size_t STRING_TABLE_CACHE_HEADER_SIZE = sizeof(u32) * 5;
 
 struct LocalizationFile
 {
@@ -145,10 +148,11 @@ void CStringTable::Init()
                 [&layer_of](const LocalizationFile& a, const LocalizationFile& b) { return layer_of(a) < layer_of(b); });
         }
 
-        xr_parallel_for_each(files, [this](LocalizationFile& file)
-        {
+        // Serial on purpose: this path runs only on a cache miss, and whatever it
+        // produces is frozen into the cache for every later session. A parallel parse
+        // that goes wrong once turns into permanently garbled text on that machine.
+        for (LocalizationFile& file : files)
             Load(file.name.c_str(), file.strings);
-        });
 
         for (LocalizationFile& file : files)
         {
@@ -344,14 +348,20 @@ bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& s
         return false;
 
     STRING_TABLE_MAP cachedStrings;
-    bool valid = reader->elapsed() >= static_cast<intptr_t>(sizeof(u32) * 4);
+    bool valid = reader->elapsed() >= static_cast<intptr_t>(STRING_TABLE_CACHE_HEADER_SIZE);
     u32 count = 0;
+    u32 contentCrc = 0;
     if (valid)
     {
         valid = reader->r_u32() == STRING_TABLE_CACHE_MAGIC;
         valid = valid && reader->r_u32() == STRING_TABLE_CACHE_VERSION;
         valid = valid && reader->r_u32() == signature;
-        count = reader->r_u32();
+        contentCrc = reader->r_u32();
+        // The header signature only proves the source files did not change; the CRC
+        // covers the payload itself, so a torn or bit-rotted cache rebuilds instead
+        // of feeding stable garbage into every session from now on.
+        valid = valid && crc32(reader->pointer(), reader->elapsed()) == contentCrc;
+        count = valid ? reader->r_u32() : 0;
         valid = valid && count <= MAX_CACHED_STRINGS;
     }
 
@@ -370,24 +380,30 @@ bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& s
         return false;
 
     strings.swap(cachedStrings);
-#ifndef MASTER_GOLD
-    Msg("StringTable: loaded cache with %u strings", count);
-#endif
+    // Content CRC in the line on purpose: a "symbols instead of letters" report can be
+    // matched against a clean rebuild of the same content by this value alone.
+    Msg("StringTable: loaded cache with %u strings, content crc[%08X]", count, contentCrc);
     return true;
 }
 
 void CStringTable::SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings)
 {
+    CMemoryWriter payload;
+    payload.w_u32(static_cast<u32>(strings.size()));
+    for (const auto& [id, value] : strings)
+    {
+        payload.w_stringZ(id);
+        payload.w_stringZ(value);
+    }
+    const u32 contentCrc = crc32(payload.pointer(), payload.size());
+    Msg("StringTable: rebuilt %zu strings, content crc[%08X]", strings.size(), contentCrc);
+
     CMemoryWriter writer;
     writer.w_u32(STRING_TABLE_CACHE_MAGIC);
     writer.w_u32(STRING_TABLE_CACHE_VERSION);
     writer.w_u32(signature);
-    writer.w_u32(static_cast<u32>(strings.size()));
-    for (const auto& [id, value] : strings)
-    {
-        writer.w_stringZ(id);
-        writer.w_stringZ(value);
-    }
+    writer.w_u32(contentCrc);
+    writer.w(payload.pointer(), payload.size());
 
     xr_string temporaryPath = cachePath;
     temporaryPath += ".tmp";

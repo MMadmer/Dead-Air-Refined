@@ -8,6 +8,7 @@
 #endif
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <mutex>
 
 #define MODULE
 
@@ -655,8 +656,13 @@ bool Decode(int total_size) /* recover */
     return true;
 }
 
+// The codec state (fs, text_buf, freq/prnt/son trees) is file-scope globals; two threads
+// inside at once silently interleave the Huffman tree and both get plausible garbage out.
+static std::mutex g_lz_mutex;
+
 size_t _writeLZ(int hf, void* d, size_t size)
 {
+    std::lock_guard lock(g_lz_mutex);
     u8* start = (u8*)d;
     fs.Init_Input(start, start + size);
 
@@ -672,6 +678,7 @@ size_t _writeLZ(int hf, void* d, size_t size)
 
 void _compressLZ(u8** dest, size_t* dest_sz, void* src, size_t src_sz)
 {
+    std::lock_guard lock(g_lz_mutex);
     u8* start = (u8*)src;
     fs.Init_Input(start, start + src_sz);
     Encode();
@@ -681,6 +688,7 @@ void _compressLZ(u8** dest, size_t* dest_sz, void* src, size_t src_sz)
 
 bool _decompressLZ(u8** dest, size_t* dest_sz, void* src, size_t src_sz, size_t total_size /*= -1*/)
 {
+    std::lock_guard lock(g_lz_mutex);
     u8* start = (u8*)src;
     fs.Init_Input(start, start + src_sz);
 
@@ -694,6 +702,7 @@ bool _decompressLZ(u8** dest, size_t* dest_sz, void* src, size_t src_sz, size_t 
 
 size_t _readLZ(int hf, void*& d, size_t size)
 {
+    std::lock_guard lock(g_lz_mutex);
     // Read file in memory
     u8* data = (u8*)xr_malloc(size);
     _read(hf, data, size);

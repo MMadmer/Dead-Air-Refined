@@ -24,6 +24,7 @@
 #include "xrCore/os_clipboard.h"
 #include "xrCore/Debug/CrashReport.h"
 #include "xrCore/ProductVersion.h"
+#include "xrScriptEngine/script_engine.hpp"
 #include "ui/ModOptOut.h"
 #include "xrGame/game_type.h"
 
@@ -305,6 +306,18 @@ bool CMainMenu::ReloadUI()
         return false;
     }
     xr_delete(m_startDialog);
+
+    // The dead menu's script-built windows (the cached options dialog and its floating
+    // advanced-video rows) stay alive - and registered in CUIOptionsManager - until Lua
+    // collects them. Left to the lazy GC they are iterated by the fresh menu's
+    // SetCurrentValues/SaveValues as dangling ghosts: that was the options crash and the
+    // "settings revert on their own" class. Two passes: the second frees what the first
+    // pass's finalizers released.
+    if (GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
+    {
+        lua_gc(GEnv.ScriptEngine->lua(), LUA_GCCOLLECT, 0);
+        lua_gc(GEnv.ScriptEngine->lua(), LUA_GCCOLLECT, 0);
+    }
 
     m_startDialog = smart_cast<CUIDialogWnd*>(dlg);
     // The MAIN_MNU class is backed by a script class, and this runs from the script-engine
@@ -853,6 +866,14 @@ void CMainMenu::DestroyInternal(bool bForce)
     {
         m_startDialog->HideDialog();
         xr_delete(m_startDialog);
+
+        // Same sweep as ReloadUI: retire the menu's script-built windows from the
+        // options registry now instead of whenever the GC gets to them.
+        if (GEnv.ScriptEngine && GEnv.ScriptEngine->lua())
+        {
+            lua_gc(GEnv.ScriptEngine->lua(), LUA_GCCOLLECT, 0);
+            lua_gc(GEnv.ScriptEngine->lua(), LUA_GCCOLLECT, 0);
+        }
     }
 }
 

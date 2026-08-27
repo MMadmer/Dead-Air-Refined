@@ -223,7 +223,7 @@ public:
 
     //окошко, которому пересылаются сообщения,
     //если NULL, то шлем на GetParent()
-    void SetMessageTarget(CUIWindow* pWindow) { m_pMessageTarget = pWindow; }
+    void SetMessageTarget(CUIWindow* pWindow);
 
     [[nodiscard]]
     CUIWindow* GetMessageTarget();
@@ -398,6 +398,11 @@ protected:
 
     //кому шлем сообщения
     CUIWindow* m_pMessageTarget{};
+
+    // Windows currently pointing their m_pMessageTarget at this one. A detached
+    // options row can outlive the dialog it targets (auto_delete=false survives
+    // DetachAll), so the dying target has to null their pointers itself.
+    WINDOW_LIST m_targetedBy;
 
     // Последняя позиция мышки
     Fvector2 cursor_pos;

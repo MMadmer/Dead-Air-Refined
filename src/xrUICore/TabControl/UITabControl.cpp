@@ -26,6 +26,8 @@ void CUITabControl::SetCurrentOptValue()
 #ifndef MASTER_GOLD
         Msg("! tab named [%s] doesnt exist", v.c_str());
 #endif // #ifndef MASTER_GOLD
+        if (m_TabsArr.empty())
+            return;
         v = m_TabsArr[0]->m_btn_id;
     }
     SetActiveTab(v);
@@ -169,7 +171,10 @@ void CUITabControl::OnTabChange(const shared_str& sCur, const shared_str& sPrev)
     if (tb_cur)
         tb_cur->SendMessage(tb_cur, TAB_CHANGED, NULL);
 
-    GetMessageTarget()->SendMessage(this, TAB_CHANGED, NULL);
+    // Unlike every other options control, a tab reaches its message target from
+    // SetCurrentOptValue with no user input; an orphaned row has none to reach.
+    if (CUIWindow* target = GetMessageTarget())
+        target->SendMessage(this, TAB_CHANGED, NULL);
 }
 
 int CUITabControl::GetActiveIndex() const
