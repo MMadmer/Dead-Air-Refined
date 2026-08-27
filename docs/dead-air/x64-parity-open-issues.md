@@ -9,6 +9,23 @@ validation rules are defined in [`PROJECT_RULES.md`](../../PROJECT_RULES.md).
   effectively transparent, allowing labels below the list to overlap its
   option text.
 
+- Community report (mod thread, 27.08): "skyboxes look different with Refined,
+  cloud shadows are almost gone". Verified NOT a defect in the port: the cloud
+  shadow chain is intact end to end - `sunmask.dds` (legacy A8, full 0..255
+  range) ships in the game archives and loads as `A8_UNORM`, the compiled
+  `accum_sun_near` blob in the field shader cache samples `s_lmap` through
+  `smp_linear` (wrap), the `m_sunmask` ortho-projection is fed on both the old
+  and the cascade sun paths, and a static-camera A/B on the rig shows the
+  shadow patches drifting across the ground exactly as designed. What the
+  player actually sees is the mod's r3 (DX11) shader stack: the x64 port is
+  DX11-only, so every renderer mode compiles the mod's `shaders\r3` set (its
+  own `sky2.ps`, tonemap/combine with OGSE headers, sunshafts), while on x86
+  the default and common choice was the true DX9 `renderer_r2` with the mod's
+  separate r2 stack. Different stack - different sky look and different
+  contrast around the (subtle, weather-scaled) cloud shadows. Cosmetic parity
+  of the r3 stack with the r2 look would be a content tuning task, not an
+  engine one.
+
 - Report 20260826T075952 ("тени, лоды снова"): sun shadows "turn to mush" and
   drop out near the screen edges at particular view angles, and vegetation still
   vanishes at distance, on `renderer_r4` at fov 90 with the Extreme preset and

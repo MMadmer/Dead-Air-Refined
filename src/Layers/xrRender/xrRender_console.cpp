@@ -610,6 +610,38 @@ public:
 };
 
 //-----------------------------------------------------------------------
+// The four preset-derived switches. None of them serialize into user.ltx on purpose -
+// the preset is their single source of truth - so besides CCC_Preset they are re-applied
+// whenever the renderer comes up: any way a value gets lost or overwritten mid-session
+// (a script, a console line, a stale options control) heals on the next start instead
+// of surviving as "weapon shadows stopped working" with a Maximum preset on screen.
+void xrRender_sync_preset_derived()
+{
+    // The shadow-map budget follows the preset: it caps how many local light faces
+    // keep their shadows in one frame, the rest light unshadowed. Maximum keeps the
+    // reference unlimited behavior.
+    static constexpr int budget_by_preset[] = {1, 16, 32, 48, 0};
+    // Grass in local light shadow maps is a High/Maximum feature: it was the costliest
+    // part of a shadowed lamp on grassy levels, so the lower presets keep the reference
+    // behaviour (sun cascades only).
+    static constexpr int light_details_by_preset[] = {0, 0, 0, 1, 1};
+    // Weapon self-shadowing is a Maximum-only feature: every frame the sun is up it draws
+    // the first-person hands and item once more into their own depth map, which the lower
+    // presets should not pay for.
+    static constexpr int hud_shadow_by_preset[] = {0, 0, 0, 0, 1};
+    // The player's own world shadow starts at Medium: it is one more full-body caster in
+    // every shadow map, which the two lowest presets should not pay for.
+    static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
+
+    if (ps_Preset >= std::size(budget_by_preset))
+        return;
+
+    ps_r__light_shadow_budget = budget_by_preset[ps_Preset];
+    ps_r__light_details = light_details_by_preset[ps_Preset];
+    ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
+    ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
+}
+
 class CCC_Preset : public CCC_Token
 {
 public:
@@ -633,49 +665,9 @@ public:
         strconcat(sizeof(cmd), cmd, "cfg_load", " ", _cfg);
         Console->Execute(cmd);
 
-        // The shadow-map budget follows the preset: it caps how many local light faces
-        // keep their shadows in one frame, the rest light unshadowed. Maximum keeps the
-        // reference unlimited behavior. Applied after the preset file so it stays in
-        // charge regardless of what the file carries.
-        static constexpr int budget_by_preset[] = {1, 16, 32, 48, 0};
-        if (*value < std::size(budget_by_preset))
-        {
-            string64 budget_cmd;
-            xr_sprintf(budget_cmd, "r__light_shadow_budget %d", budget_by_preset[*value]);
-            Console->Execute(budget_cmd);
-        }
-
-        // Grass in local light shadow maps is a High/Maximum feature: it was the costliest
-        // part of a shadowed lamp on grassy levels, so the lower presets keep the reference
-        // behaviour (sun cascades only).
-        static constexpr int light_details_by_preset[] = {0, 0, 0, 1, 1};
-        if (*value < std::size(light_details_by_preset))
-        {
-            string64 details_cmd;
-            xr_sprintf(details_cmd, "r__light_details %d", light_details_by_preset[*value]);
-            Console->Execute(details_cmd);
-        }
-
-        // Weapon self-shadowing is a Maximum-only feature: every frame the sun is up it draws
-        // the first-person hands and item once more into their own depth map, which the lower
-        // presets should not pay for.
-        static constexpr int hud_shadow_by_preset[] = {0, 0, 0, 0, 1};
-        if (*value < std::size(hud_shadow_by_preset))
-        {
-            string64 hud_shadow_cmd;
-            xr_sprintf(hud_shadow_cmd, "r__hud_shadow %d", hud_shadow_by_preset[*value]);
-            Console->Execute(hud_shadow_cmd);
-        }
-
-        // The player's own world shadow starts at Medium: it is one more full-body caster in
-        // every shadow map, which the two lowest presets should not pay for.
-        static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
-        if (*value < std::size(actor_shadow_by_preset))
-        {
-            string64 actor_shadow_cmd;
-            xr_sprintf(actor_shadow_cmd, "r__actor_shadow %d", actor_shadow_by_preset[*value]);
-            Console->Execute(actor_shadow_cmd);
-        }
+        // Applied after the preset file so the derived switches stay in charge
+        // regardless of what the file carries.
+        xrRender_sync_preset_derived();
     }
 };
 
