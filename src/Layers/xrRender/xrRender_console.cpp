@@ -199,9 +199,10 @@ float ps_r__hud_shadow_slope_bias = 0.003f;
 // Screen-space contact shadows for the near sun pass (see da_sss.h in the shader overlay).
 // The sun map covers tens of metres at one resolution, so anything thinner than a texel -
 // a grass blade at its root - never reaches it and floats above the ground. A short ray
-// marched through the depth buffer toward the sun catches exactly that scale. Off by
-// default: parity with the reference look, opt-in via r__sss (ported from the sibling
-// engine, d13e266; length/thickness/steps are its in-game tuned values).
+// marched through the depth buffer toward the sun catches exactly that scale. The strength
+// follows the quality preset (see xrRender_sync_preset_derived: on from High); the console
+// command overrides it for the session only. Ported from the sibling engine, d13e266;
+// length/thickness/steps are its in-game tuned values.
 float ps_r__sss = 0.f;
 float ps_r__sss_len = 0.35f;
 float ps_r__sss_thick = 0.5f;
@@ -620,7 +621,7 @@ public:
 };
 
 //-----------------------------------------------------------------------
-// The four preset-derived switches. None of them serialize into user.ltx on purpose -
+// The preset-derived switches. None of them serialize into user.ltx on purpose -
 // the preset is their single source of truth - so besides CCC_Preset they are re-applied
 // whenever the renderer comes up: any way a value gets lost or overwritten mid-session
 // (a script, a console line, a stale options control) heals on the next start instead
@@ -642,6 +643,11 @@ void xrRender_sync_preset_derived()
     // The player's own world shadow starts at Medium: it is one more full-body caster in
     // every shadow map, which the two lowest presets should not pay for.
     static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
+    // Screen-space contact shadows join at High: an 8-step depth ray per lit pixel of the
+    // near sun pass. Slightly stronger on Maximum; below High the two lowest-cost presets
+    // keep the reference look. Not full strength on purpose - the technique's stepping
+    // noise shows at 1.0, and 0.6-0.7 reads as shadow, not as dirt.
+    static constexpr float sss_by_preset[] = {0.f, 0.f, 0.f, 0.6f, 0.7f};
 
     if (ps_Preset >= std::size(budget_by_preset))
         return;
@@ -650,6 +656,7 @@ void xrRender_sync_preset_derived()
     ps_r__light_details = light_details_by_preset[ps_Preset];
     ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
+    ps_r__sss = sss_by_preset[ps_Preset];
 }
 
 class CCC_Preset : public CCC_Token
