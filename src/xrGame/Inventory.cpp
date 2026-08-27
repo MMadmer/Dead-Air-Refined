@@ -401,6 +401,12 @@ bool CInventory::Slot(u16 slot_id, PIItem pIItem, bool bNotActivate, bool strict
 
     pIItem->object().processing_activate();
 
+    // Clear/Take/DropItem/Belt/Ruck all recalc, Slot did not - correct while a slotted item
+    // weighed the same as a rucked one, wrong since equippedWeightFactor made worn gear count
+    // for 30%. Without this, moving an item INTO a slot keeps the old, higher total until any
+    // unrelated inventory action recalculates it (ported from the sibling engine, 7a8af8d).
+    CalcTotalWeight();
+
     return true;
 }
 

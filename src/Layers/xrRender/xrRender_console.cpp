@@ -196,6 +196,16 @@ int ps_r__actor_shadow = 0;
 // shows banding, lower them for tighter contact shadows.
 float ps_r__hud_shadow_normal_offset = 0.01f;
 float ps_r__hud_shadow_slope_bias = 0.003f;
+// Screen-space contact shadows for the near sun pass (see da_sss.h in the shader overlay).
+// The sun map covers tens of metres at one resolution, so anything thinner than a texel -
+// a grass blade at its root - never reaches it and floats above the ground. A short ray
+// marched through the depth buffer toward the sun catches exactly that scale. Off by
+// default: parity with the reference look, opt-in via r__sss (ported from the sibling
+// engine, d13e266; length/thickness/steps are its in-game tuned values).
+float ps_r__sss = 0.f;
+float ps_r__sss_len = 0.35f;
+float ps_r__sss_thick = 0.5f;
+float ps_r__sss_steps = 8.f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -957,6 +967,10 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__actor_shadow", &ps_r__actor_shadow, 0, 1);
     CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);
     CMD4(CCC_Float, "r__hud_shadow_slope_bias", &ps_r__hud_shadow_slope_bias, 0.f, 0.05f);
+    CMD4(CCC_Float, "r__sss", &ps_r__sss, 0.f, 1.f);
+    CMD4(CCC_Float, "r__sss_len", &ps_r__sss_len, 0.05f, 2.f);
+    CMD4(CCC_Float, "r__sss_thick", &ps_r__sss_thick, 0.05f, 3.f);
+    CMD4(CCC_Float, "r__sss_steps", &ps_r__sss_steps, 2.f, 32.f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list

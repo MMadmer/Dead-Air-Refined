@@ -559,6 +559,11 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
         {
             string_path inc_name;
             R_ASSERT(path && path[0]);
+            // #include_optional: an include that is allowed to be absent. A base config can
+            // reference a separately-installed addon's file without making the game refuse to
+            // start once the addon is removed (ported from the sibling engine, 0788e01). The
+            // plain #include branch matches this too (substring), so tell them apart by name.
+            const bool optionalInclude = strstr(str, "#include_optional") != nullptr;
             if (_GetItem(str, 1, inc_name, '"'))
             {
                 string_path fn, inc_path, folder;
@@ -579,6 +584,11 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
                             I = FS.r_open(fn);
                         }
 #endif
+                        if (optionalInclude && !I)
+                        {
+                            Msg("~ optional include skipped: %s", name);
+                            return;
+                        }
                         R_ASSERT3(I, "Can't find include file:", name);
                         XMS::PushLtxFile(_fn);
                         Load(I, inc_path, allow_include_func);

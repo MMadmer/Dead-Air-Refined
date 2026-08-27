@@ -405,6 +405,15 @@ misfire_condition_ceiling = 0.95   ; this one is meant to be unreliable even in 
 - The legacy `misfire_probability` formula keeps its own built-in 0.95 floor even when the
   ceiling is disabled.
 
+## Screen-space contact shadows (r__sss)
+
+Off by default to keep the reference look. `r__sss 0..1` enables a short depth-buffer ray
+march toward the sun in the near sun pass, giving contact shadows to detail smaller than a
+sun-map texel (grass roots, small props). Tuning knobs: `r__sss_len` (ray length in metres,
+default 0.35), `r__sss_thick` (assumed occluder thickness, 0.5), `r__sss_steps` (8).
+Limitations inherent to the technique: only visible geometry casts, and the shadow fades at
+the screen edge. Ported from the sibling open-source engine.
+
 ## Actor movement tuning
 
 The speed penalty a held weapon applies, and the overweight slowdown curve, used to be

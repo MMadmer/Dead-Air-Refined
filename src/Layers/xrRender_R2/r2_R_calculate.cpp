@@ -22,7 +22,13 @@ extern int ps_r2_mt_render;
 //-----
 void render_main::init()
 {
-    o.mt_calc_enabled = RImplementation.o.mt_calculate && !RImplementation.o.oldshadowcascades && !ps_r2_ls_flags.test(R2FLAG_ZFILL);
+    // The main view culls on the main thread on purpose. The sibling engine measured the
+    // task-queue path: waiting on the queued visibility task cost 0.63 ms against 0.34 ms of
+    // actual culling work, while the waiting main thread stole 2-3 tasks between thousands of
+    // idle spins. Doing it inline removed the wait entirely (render 3.77 -> 3.64 ms there) and
+    // the sun cascades and rain still cull in parallel and overlap this work (ported from
+    // b8aaca7; the old-cascade path already implied this, so prod behaviour does not change).
+    o.mt_calc_enabled = false;
     o.mt_draw_enabled = false; // always on imm context
     o.active = true; // always active
 }

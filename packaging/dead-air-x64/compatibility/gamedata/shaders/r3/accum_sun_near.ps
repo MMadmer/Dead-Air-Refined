@@ -14,6 +14,7 @@
 #endif
 
 #include "shadow.h"
+#include "da_sss.h"	// screen-space contact shadows, r__sss (off by default)
 
 #ifdef USE_SUNFILTER
 #ifdef MSAA_OPTIMIZATION
@@ -77,6 +78,12 @@ float4 main ( v2p_volume I ) : SV_Target
 #endif
 	#endif
 
+	[branch] if (s <= 0.0f)
+		return 0.0f;
+
+	// Contact shadows only where the shadow map still leaves light: pixels the map already
+	// shadows took the early-out above, so the ray march is never paid for them.
+	s *= da_screen_space_shadow( _P.xyz, Ldynamic_dir.xyz, I.hpos.xy );
 	[branch] if (s <= 0.0f)
 		return 0.0f;
 

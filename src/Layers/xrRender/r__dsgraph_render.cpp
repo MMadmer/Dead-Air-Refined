@@ -292,6 +292,15 @@ bool cmp_ssa(const T &lhs, const T &rhs)
 template <typename T>
 bool cmp_pass(const T& left, const T& right)
 {
+    // Group passes by their constant table first. set_Constants has an early-out when the
+    // table did not change, but pure ssa order interleaves the (few) tables across the (many)
+    // passes and the early-out almost never fires; grouping removes most of those calls
+    // outright - the sibling engine measured render 3.79 -> 3.66 ms with an unchanged GPU
+    // time (ported from 4ed0004). Front-to-back ssa order is kept inside each group.
+    const void* leftTable = left->first ? left->first->constants._get() : nullptr;
+    const void* rightTable = right->first ? right->first->constants._get() : nullptr;
+    if (leftTable != rightTable)
+        return std::less<const void*>{}(leftTable, rightTable);
     if (left->second.ssa != right->second.ssa)
         return left->second.ssa > right->second.ssa;
     return left->first < right->first;

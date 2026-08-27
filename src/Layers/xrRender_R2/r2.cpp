@@ -127,6 +127,16 @@ static class cl_sun_shafts_intensity : public R_constant_setup
     }
 } binder_sun_shafts_intensity;
 
+// Screen-space contact shadows: x = strength (0 = off), y = ray length, z = thickness, w = steps.
+// Consumed by da_sss.h from the near sun pass.
+static class cl_da_sss : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__sss, ps_r__sss_len, ps_r__sss_thick, ps_r__sss_steps);
+    }
+} binder_da_sss;
+
 static class cl_alpha_ref : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -512,6 +522,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("parallax", &binder_parallax);
     Resources->RegisterConstantSetup("water_intensity", &binder_water_intensity);
     Resources->RegisterConstantSetup("sun_shafts_intensity", &binder_sun_shafts_intensity);
+    Resources->RegisterConstantSetup("da_sss", &binder_da_sss);
     Resources->RegisterConstantSetup("pos_decompression_params", &binder_pos_decompress_params);
     Resources->RegisterConstantSetup("pos_decompression_params2", &binder_pos_decompress_params2);
     Resources->RegisterConstantSetup("m_AlphaRef", &binder_alpha_ref);
