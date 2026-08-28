@@ -151,7 +151,9 @@ target_sources_grouped(
     NAME "Engine\\Game API\\Environment\\Effects"
     FILES
     Rain.cpp
+    WindVegSound.cpp
     Rain.h
+    WindVegSound.h
     thunderbolt.cpp
     thunderbolt.h
     xr_efflensflare.cpp

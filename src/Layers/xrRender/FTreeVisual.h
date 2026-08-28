@@ -41,6 +41,9 @@ protected:
     Fmatrix xform;
 
 public:
+    // The vegetation-audio layer harvests tree world positions once per level load.
+    const Fvector& root_position() const { return xform.c; }
+
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override; // LOD - Level Of Detail  [0.0f - min, 1.0f - max], Ignored
 #ifdef USE_DX11
     virtual bool GetInstancedDraw(float LOD, FTreeVisualInstancedDraw& draw);

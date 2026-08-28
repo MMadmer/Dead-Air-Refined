@@ -28,6 +28,7 @@ void release_resources(CEnvironment& environment);
 class ENGINE_API CEnvironment;
 class ENGINE_API CLensFlare;
 class ENGINE_API CEffect_Rain;
+class ENGINE_API CEffect_WindVeg;
 class ENGINE_API CEffect_Thunderbolt;
 
 class ENGINE_API CPerlinNoise1D;
@@ -308,6 +309,16 @@ public:
     // lockstep. Wrapped to the field's repeat length (2560 m) so precision never degrades.
     Fvector2 eff_wind_field_ofs{};
 
+    // CPU twin of da_wind_field_eval (amplitude half): the audio layer asks "how hard does the
+    // wind blow AT THAT TREE right now". Must stay formula-identical to da_wind_field.h.
+    float SampleWindField(float x, float z) const;
+
+    // Published by the renderer for the vegetation-audio layer: world positions of every tree
+    // visual on the level (filled after level load, cleared on unload), and a 0..1 "how much
+    // green is around the camera" from the detail manager's visible sets.
+    xr_vector<Fvector> wind_veg_trees;
+    float wind_veg_green{};
+
     void UpdateEffectiveWind();
 
     // wind blast params
@@ -337,6 +348,7 @@ public:
     EnvAmbVec Ambients;
 
     CEffect_Rain* eff_Rain{};
+    CEffect_WindVeg* eff_WindVeg{};
     CLensFlare* eff_LensFlare{};
     CEffect_Thunderbolt* eff_Thunderbolt{};
 

@@ -9,6 +9,7 @@
 #include "xr_efflensflare.h"
 #include "Rain.h"
 #include "thunderbolt.h"
+#include "WindVegSound.h"
 #include "xrHemisphere.h"
 #include "perlin.h"
 
@@ -622,6 +623,40 @@ float wind_vnoise(float x)
 }
 } // namespace
 
+// CPU twin of da_wind_field_eval (the amplitude half). MUST stay formula-identical to
+// packaging\...\shaders\r3\da_wind_field.h - the audio layer decides "does that tree rustle"
+// with this, and the tree it hears must be the tree it sees leaning.
+float CEnvironment::SampleWindField(float x, float z) const
+{
+    // shader: p = frac(fmod(i+4096,64) * {127.1,311.7}); p += dot(p, p+34.23); frac(p.x*p.y)
+    const auto lattice = [](float ix, float iz) {
+        float hx = fmodf(fmodf(ix + 4096.f, 64.f) * 127.1f, 1.f);
+        float hz = fmodf(fmodf(iz + 4096.f, 64.f) * 311.7f, 1.f);
+        const float d = hx * (hx + 34.23f) + hz * (hz + 34.23f);
+        hx += d;
+        hz += d;
+        const float r = hx * hz;
+        return r - floorf(r);
+    };
+    const auto vnoise = [&](float px, float pz) {
+        const float ix = floorf(px), iz = floorf(pz);
+        float fx = px - ix, fz = pz - iz;
+        fx = fx * fx * (3.f - 2.f * fx);
+        fz = fz * fz * (3.f - 2.f * fz);
+        const float a = lattice(ix, iz), b = lattice(ix + 1.f, iz);
+        const float c = lattice(ix, iz + 1.f), d = lattice(ix + 1.f, iz + 1.f);
+        return (a * (1.f - fx) + b * fx) * (1.f - fz) + (c * (1.f - fx) + d * fx) * fz;
+    };
+
+    const float qx = (x - eff_wind_field_ofs.x) * (1.f / 40.f);
+    const float qz = (z - eff_wind_field_ofs.y) * (1.f / 40.f);
+    const float n = vnoise(qx, qz) * 0.62f + vnoise(qx * 2.17f + 13.7f, qz * 2.17f + 13.7f) * 0.38f;
+    float g = clampr((n - 0.35f) / 0.5f, 0.f, 1.f);
+    g = g * g * (3.f - 2.f * g); // smoothstep
+    g *= g;
+    return 0.40f + 0.75f * g;
+}
+
 void CEnvironment::UpdateEffectiveWind()
 {
     const float t = Device.fTimeGlobal;
@@ -688,4 +723,6 @@ void CEnvironment::OnFrame()
     eff_LensFlare->OnFrame(CurrentEnv, fTimeFactor);
     eff_Thunderbolt->OnFrame(CurrentEnv);
     eff_Rain->OnFrame();
+    if (eff_WindVeg)
+        eff_WindVeg->OnFrame();
 }

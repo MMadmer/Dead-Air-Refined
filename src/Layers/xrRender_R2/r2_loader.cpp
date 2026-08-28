@@ -9,6 +9,9 @@
 #include "xrCore/XMS/xms_core.h"
 
 #include "Layers/xrRender/FHierrarhyVisual.h"
+#include "Layers/xrRender/FTreeVisual.h"
+#include "xrEngine/Environment.h"
+#include "xrEngine/WindVegSound.h"
 #include "Layers/xrRender/r__sector.h"
 
 #if defined(USE_DX11)
@@ -117,6 +120,23 @@ void CRender::level_Load(IReader* fs)
     // signal loaded
     b_loaded = TRUE;
 
+    // Publish tree world positions for the vegetation-audio layer (wind rustle picks the
+    // nearest crowns). Static tree instances are ordinary visuals with a baked xform; walking
+    // them once at load costs nothing and the engine side cannot see render types itself.
+    {
+        auto& tree_out = g_pGamePersistent->Environment().wind_veg_trees;
+        tree_out.clear();
+        for (dxRender_Visual* V : Visuals)
+        {
+            if (V && (V->Type == MT_TREE_ST || V->Type == MT_TREE_PM))
+            {
+                const FTreeVisual* T = static_cast<FTreeVisual*>(V);
+                tree_out.push_back(T->root_position());
+            }
+        }
+        Msg("* [wind-veg] %u tree positions published", u32(tree_out.size()));
+    }
+
     // Headlamp projector warmup - see m_torch_spot_warm in r2.h. The texture name is the
     // TorchType 2 branch of xr_actor.script, i.e. exactly what the beam really uses.
     // If the texture is absent, create() just yields a stub - no warmup, no harm either.
@@ -133,6 +153,15 @@ void CRender::level_Unload()
 {
     // the warmup held the projector shader and its texture - released with the level
     m_torch_spot_warm.destroy();
+
+    // the published tree list points into this level's visuals - gone with them
+    if (g_pGamePersistent)
+    {
+        g_pGamePersistent->Environment().wind_veg_trees.clear();
+        g_pGamePersistent->Environment().wind_veg_green = 0.f;
+        if (g_pGamePersistent->Environment().eff_WindVeg)
+            g_pGamePersistent->Environment().eff_WindVeg->OnLevelUnload();
+    }
 
     ZoneScoped;
 

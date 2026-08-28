@@ -532,6 +532,17 @@ void CDetailManager::UpdateRenderState()
 
     m_wind_dir1.set(_sin(dir1), 0.f, _cos(dir1), 0.f).normalize().mul(swing_current.amp1 * wind_norm);
     m_wind_dir2.set(_sin(dir2), 0.f, _cos(dir2), 0.f).normalize().mul(swing_current.amp2 * wind_norm);
+
+#ifndef _EDITOR
+    // Publish "how much green is around" for the vegetation-audio layer: the visible-instance
+    // sets are already maintained per frame, counting them is free. ~600 visible tufts reads
+    // as a full meadow.
+    u32 visible_count = 0;
+    for (const auto& list : m_visibles)
+        for (const auto& part : list)
+            visible_count += u32(part.size());
+    g_pGamePersistent->Environment().wind_veg_green = clampr(float(visible_count) / 600.f, 0.f, 1.f);
+#endif
 }
 
 void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)

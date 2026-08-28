@@ -4,6 +4,7 @@
 #include "Environment.h"
 #include "xr_efflensflare.h"
 #include "thunderbolt.h"
+#include "WindVegSound.h"
 #include "Rain.h"
 
 #include "IGame_Level.h"
@@ -1096,6 +1097,8 @@ void CEnvironment::load()
         eff_LensFlare = xr_new<CLensFlare>();
     if (!eff_Thunderbolt)
         eff_Thunderbolt = xr_new<CEffect_Thunderbolt>();
+    if (!eff_WindVeg)
+        eff_WindVeg = xr_new<CEffect_WindVeg>();
 
     load_weathers();
     load_weather_effects();
@@ -1128,6 +1131,7 @@ void CEnvironment::unload()
 
     // misc
     xr_delete(eff_Rain);
+    xr_delete(eff_WindVeg);
     xr_delete(eff_LensFlare);
     xr_delete(eff_Thunderbolt);
     CurrentWeather = nullptr;
