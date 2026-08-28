@@ -346,6 +346,19 @@ static class cl_da_aref : public R_constant_setup
     }
 } binder_da_aref;
 
+// Effective wind for the puddle ripple drift: xy = world-XZ direction scaled by the current
+// strength, z = gustiness. Straight from the wind service, so ripples drift exactly where the
+// grass bends and the rain slants.
+static class cl_da_puddle_wind : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        const float a = env.eff_wind_dir;
+        cmd_list.set_c(C, _sin(a) * env.eff_wind_norm, _cos(a) * env.eff_wind_norm, env.eff_wind_gust, 0.f);
+    }
+} binder_da_puddle_wind;
+
 static class cl_various_rain : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -492,6 +505,7 @@ void CBlender_Compile::SetMapping()
 #endif
     r_Constant("screen_res", &binder_screen_res);
     r_Constant("da_aref_u", &binder_da_aref);
+    r_Constant("da_puddle_wind", &binder_da_puddle_wind);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

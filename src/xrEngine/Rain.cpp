@@ -83,13 +83,13 @@ void CEffect_Rain::Born(Item& dest, float radius)
 
     Fvector axis;
     axis.set(0, -1, 0);
-    // Wind tilt from the live wind strength, clamped - the old fixed-gust formula could
-    // push the pitch past the cone and spray drops sideways in a storm.
-    float gust = g_pGamePersistent->Environment().wind_strength_factor / 10.f;
-    float k = g_pGamePersistent->Environment().CurrentEnv.wind_velocity * gust / drop_max_wind_vel;
+    // Slant follows the effective-wind service, so the rain leans exactly where the grass bends
+    // and the puddle ripples drift - and it breathes with the same lulls and gusts.
+    const auto& env = g_pGamePersistent->Environment();
+    float k = env.eff_wind_norm * (0.4f + 0.6f * env.eff_wind_gust);
     clamp(k, 0.f, 1.f);
     float pitch = drop_max_angle * k - PI_DIV_2;
-    axis.setHP(g_pGamePersistent->Environment().CurrentEnv.wind_direction, pitch);
+    axis.setHP(env.eff_wind_dir, pitch);
 
     Fvector& view = Device.vCameraPosition;
     float angle = ::Random.randF(0, PI_MUL_2);

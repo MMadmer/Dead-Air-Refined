@@ -605,6 +605,60 @@ void CEnvironment::lerp()
     m_pRender->lerp(CurrentEnv, &*Current[0]->m_pDescriptor, &*Current[1]->m_pDescriptor);
 }
 
+namespace
+{
+// C1-smooth 1D value noise for the wind service: random values on an integer lattice,
+// smoothstep-interpolated between them. Cheap, continuous, no library dependencies.
+float wind_vnoise(float x)
+{
+    const float i = floorf(x);
+    const float f = x - i;
+    const float s = f * f * (3.f - 2.f * f);
+    const auto h = [](float n) {
+        const float v = sinf(n * 127.1f) * 43758.5453f;
+        return v - floorf(v);
+    };
+    return h(i) * (1.f - s) + h(i + 1.f) * s;
+}
+} // namespace
+
+void CEnvironment::UpdateEffectiveWind()
+{
+    const float t = Device.fTimeGlobal;
+    const float base = clampr(CurrentEnv.wind_velocity / 20.f, 0.f, 1.f); // weather ceiling
+
+    // Three time scales, deliberately incommensurable so the pattern never visibly loops:
+    // a minute-scale trend (lulls and freshenings), tens-of-seconds waves, and a fast layer
+    // that only matters when it spikes - that spike IS a discrete gust. Calm weather raises
+    // the spike threshold (gusts become rare), storms lower it (gusts come often).
+    const float n_trend = wind_vnoise(t * (1.f / 170.f) + 3.7f);
+    const float n_wave = wind_vnoise(t * (1.f / 23.f) + 17.3f);
+    const float n_fast = wind_vnoise(t * (1.f / 5.5f) + 29.1f);
+    const float gust_thr = 0.55f + 0.25f * (1.f - base);
+    const float gust_ev = clampr((n_fast - gust_thr) / std::max(1.f - gust_thr, 0.05f), 0.f, 1.f);
+
+    // Variability inside the weather envelope: a calm day swings between near-nothing and its
+    // own light ceiling, a storm between fresh and violent. The 0.12 floor keeps air moving.
+    eff_wind_var = clampr(0.12f + n_trend * 0.50f + n_wave * 0.28f + gust_ev * 0.45f, 0.f, 1.f);
+    eff_wind_norm = base * eff_wind_var;
+
+    // Gustiness: the fast layers, with the legacy Perlin mixed in - blowout zones override
+    // wind_strength_factor directly, and that surge must keep reaching every consumer.
+    eff_wind_gust = clampr(0.5f * wind_strength_factor + n_wave * 0.25f + gust_ev * 0.75f, 0.f, 1.f);
+
+    float delta = Device.fTimeDelta;
+    if (delta < 0.f || delta > 1.f)
+        delta = 0.03f;
+    eff_wind_gust_smooth += (eff_wind_gust - eff_wind_gust_smooth) * (1.f - expf(-delta / 1.5f));
+
+    // Direction: the weather heading with a bounded wander - broad and lazy in light air
+    // (real light wind meanders), tight in strong wind (a storm holds its line).
+    const float wander_amp = deg2rad(35.f - 22.f * base);
+    const float wander = (wind_vnoise(t * (1.f / 45.f) + 41.7f) * 2.f - 1.f) * wander_amp +
+        (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(5.f);
+    eff_wind_dir = CurrentEnv.wind_direction + wander;
+}
+
 void CEnvironment::OnFrame()
 {
     ZoneScoped;
@@ -616,6 +670,8 @@ void CEnvironment::OnFrame()
 
     PerlinNoise1D->SetFrequency(wind_gust_factor * MAX_NOISE_FREQ);
     wind_strength_factor = clampr(PerlinNoise1D->GetContinious(Device.fTimeGlobal) + 0.5f, 0.f, 1.f);
+
+    UpdateEffectiveWind();
 
     eff_LensFlare->OnFrame(CurrentEnv, fTimeFactor);
     eff_Thunderbolt->OnFrame(CurrentEnv);

@@ -117,14 +117,17 @@ struct FTreeVisual_setup
     void calculate()
     {
         dwFrame = Device.dwFrame;
-        CEnvDescriptor& desc = g_pGamePersistent->Environment().CurrentEnv;
+        auto& env = g_pGamePersistent->Environment();
+        CEnvDescriptor& desc = env.CurrentEnv;
 
-        // Calc wind-vector3, scale
-        float tm_rot = PI_MUL_2 * Device.fTimeGlobal / desc.m_fTreeRotation;
-
-        wind.set(_sin(tm_rot), 0, _cos(tm_rot), 0);
+        // The wind heading used to spin full circle every m_fTreeRotation seconds - crowns leaned
+        // east, then north, then west on a windless noon. Now it comes from the effective-wind
+        // service (weather heading + bounded wander), and the authored per-weather amplitude
+        // breathes with the service's variability: lulls ease off, gusts lean the crowns harder.
+        const float dir = env.eff_wind_dir;
+        wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
-        wind.mul(desc.m_fTreeAmplitude); // dir1*amplitude
+        wind.mul(desc.m_fTreeAmplitude * (0.35f + 0.65f * env.eff_wind_var));
 
         scale = 1.f / float(FTreeVisual_quant);
 

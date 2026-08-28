@@ -500,9 +500,16 @@ void CDetailManager::UpdateRenderState()
     m_render_state_frame = Device.dwFrame;
 
 #ifndef _EDITOR
-    const float factor_raw = g_pGamePersistent->Environment().wind_strength_factor;
+    const auto& env = g_pGamePersistent->Environment();
+    const float gust_smooth = env.eff_wind_gust_smooth;
+    const float wind_dir = env.eff_wind_dir;
+    // Floor keeps a calm morning breathing; above it the effective-wind service supplies the
+    // real-life variability (minute trends, waves, discrete gusts) inside the weather envelope.
+    const float wind_norm = 0.20f + 0.80f * env.eff_wind_norm;
 #else
-    constexpr float factor_raw = 0.3f;
+    constexpr float gust_smooth = 0.3f;
+    constexpr float wind_dir = 0.f;
+    constexpr float wind_norm = 0.5f;
 #endif
 
     float delta = Device.fTimeGlobal - m_global_time_old;
@@ -510,27 +517,19 @@ void CDetailManager::UpdateRenderState()
         delta = 0.03f;
     m_global_time_old = Device.fTimeGlobal;
 
-    // Low-pass the gust factor (tau ~1.5 s) before it picks the swing preset.
-    m_wind_gust += (factor_raw - m_wind_gust) * (1.f - expf(-delta / 1.5f));
-    swing_current.lerp(swing_desc[0], swing_desc[1], m_wind_gust);
+    // The swing preset (calm vs storm set) follows the smoothed gustiness from the wind service.
+    swing_current.lerp(swing_desc[0], swing_desc[1], gust_smooth);
 
     m_time_rot_1 += PI_MUL_2 * delta / swing_current.rot1;
     m_time_rot_2 += PI_MUL_2 * delta / swing_current.rot2;
     m_time_pos += delta * swing_current.speed;
 
-    const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
+    // Direction comes from the service (weather heading + its own bounded wander); the two wave
+    // groups get a small fixed split so the field does not move as one sheet.
+    constexpr float group_split = deg2rad(4.f);
+    const float dir1 = wind_dir + group_split;
+    const float dir2 = wind_dir - group_split;
 
-    // Wind direction now follows the weather (rain and cloud shadows already do) with a bounded
-    // wander at the swing periods, instead of the old free 360-degree spin per rot period.
-    constexpr float wander = deg2rad(20.f);
-    const float dir1 = environment.wind_direction + wander * _sin(m_time_rot_1);
-    const float dir2 = environment.wind_direction + wander * _sin(m_time_rot_2);
-
-    // Authored amplitudes from [details] are live again (they were computed and discarded for a
-    // hardcoded wind_velocity line, so gusts changed the frequency without changing the sway).
-    // Weather wind speed scales them the way the rain does (20 m/s = full swing), with a floor so
-    // a calm morning still breathes.
-    const float wind_norm = 0.25f + 0.75f * clampr(environment.wind_velocity / 20.f, 0.f, 1.f);
     m_wind_dir1.set(_sin(dir1), 0.f, _cos(dir1), 0.f).normalize().mul(swing_current.amp1 * wind_norm);
     m_wind_dir2.set(_sin(dir2), 0.f, _cos(dir2), 0.f).normalize().mul(swing_current.amp2 * wind_norm);
 }

@@ -291,6 +291,19 @@ public:
     float wind_strength_factor{};
     float wind_gust_factor{};
 
+    // ---- Effective wind: the single source of truth for every wind consumer ----------------
+    // (grass, trees, rain slant, puddle drift). Weather configs provide the ENVELOPE
+    // (wind_velocity = the ceiling, wind_direction = the mean heading); this service adds the
+    // real-life variability inside one weather: minute-scale trends, tens-of-seconds waves and
+    // short discrete gusts, plus a bounded direction wander. Scalar math once per frame.
+    float eff_wind_dir{};        // radians; weather heading + bounded wander
+    float eff_wind_norm{};       // 0..1 current strength: weather envelope x variability
+    float eff_wind_var{};        // 0..1 the variability alone (envelope-free, for amplitude mods)
+    float eff_wind_gust{};       // 0..1 gustiness right now (blowout override flows through)
+    float eff_wind_gust_smooth{};// low-passed gust for slow mode lerps (grass swing set)
+
+    void UpdateEffectiveWind();
+
     // wind blast params
     float wind_blast_strength{};
     Fvector wind_blast_direction{};

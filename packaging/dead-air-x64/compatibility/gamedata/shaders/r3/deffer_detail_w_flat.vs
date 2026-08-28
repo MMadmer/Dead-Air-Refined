@@ -64,6 +64,13 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	float 	H 	= v.pos.y * length(float3(m0.y, m1.y, m2.y));
 	float 	frac 	= v.misc.z*consts.x;		// fractional
 	float 	inten 	= H * dp;
+	// Wind sheltering: the tuft's baked sky openness (c0.w, from the level lightmap) already
+	// encodes the room around it - bright near a doorway or a broken roof, dark in a corner.
+	// Scaling the sway by it gives draughts for free: grass by an opening stirs, grass deep
+	// inside stands still, and the gradient across a hangar follows the actual holes in it.
+	// A small floor keeps sheltered air from being perfectly dead.
+	float	shelter	= saturate((c0.w - 0.10f) * 1.8f);
+	inten	*= 0.05f + 0.95f * shelter;
 	float2 	result	= calc_xz_wave	(dir2D.xz*inten,frac);
 	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
 	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the
