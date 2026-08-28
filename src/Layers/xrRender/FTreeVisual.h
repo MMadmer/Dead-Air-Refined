@@ -45,7 +45,7 @@ public:
 #ifdef USE_DX11
     virtual bool GetInstancedDraw(float LOD, FTreeVisualInstancedDraw& draw);
     void FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& data) const;
-    static void SetupInstancedGlobals(CBackend& cmd_list);
+    static void SetupInstancedGlobals(CBackend& cmd_list, bool shadow_pass);
 #endif
     virtual void Load(LPCSTR N, IReader* data, u32 dwFlags);
     virtual void Copy(dxRender_Visual* pFrom);

@@ -4,6 +4,10 @@
 #include "IGame_Persistent.h"
 #include "Environment.h"
 
+// Rain knobs, see xr_ioc_cmd.cpp.
+extern ENGINE_API float ps_r__rain_splash;
+extern ENGINE_API float ps_r__rain_splash_time;
+
 #ifdef _EDITOR
 #include "ui_toolscustom.h"
 #else
@@ -17,17 +21,22 @@
 //static const int max_desired_items = 2500;
 //static const float source_radius = 12.5f;
 static const float source_offset = 40.f;
-static const float max_distance = source_offset * 2.25f;
+// Kept in step with dxRainRender: near-vertical fast drops need less headroom below.
+static const float max_distance = source_offset * 1.25f;
 //static const float sink_offset = -(max_distance - source_offset);
 //static const float drop_length = 5.f;
 //static const float drop_width = 0.30f;
-static const float drop_angle = 15.0f;
-static const float drop_max_angle = deg2rad(30.f);
-static const float drop_max_wind_vel = 40.0f;
-static const float drop_speed_min = 15.f;
-static const float drop_speed_max = 40.f;
+// Real rain falls near-vertically at 9 m/s terminal velocity and faster with gusts; the
+// 2007 constants (15-40 m/s at up to 30 degrees) drew slow slanted streaks.
+static const float drop_angle = 3.0f;
+static const float drop_max_angle = deg2rad(10.f);
+static const float drop_max_wind_vel = 20.0f;
+static const float drop_speed_min = 40.f;
+static const float drop_speed_max = 80.f;
 
-const int max_particles = 1000;
+// Splash pool. Was 1000 with every second hit refused; now every drop splashes and a dense
+// rain runs out of a thousand - new splashes were simply never born.
+const int max_particles = 4000;
 //const int particles_cache = 400;
 const float particles_time = .3f;
 
@@ -74,9 +83,11 @@ void CEffect_Rain::Born(Item& dest, float radius)
 
     Fvector axis;
     axis.set(0, -1, 0);
-    const float wind = g_pGamePersistent->Environment().CurrentEnv.wind_velocity * 2.f;
-    const float gust = 0.5f / 10.f;
-    float k = wind * gust / drop_max_wind_vel;
+    // Wind tilt from the live wind strength, clamped - the old fixed-gust formula could
+    // push the pitch past the cone and spray drops sideways in a storm.
+    float gust = g_pGamePersistent->Environment().wind_strength_factor / 10.f;
+    float k = g_pGamePersistent->Environment().CurrentEnv.wind_velocity * gust / drop_max_wind_vel;
+    clamp(k, 0.f, 1.f);
     float pitch = drop_max_angle * k - PI_DIV_2;
     axis.setHP(g_pGamePersistent->Environment().CurrentEnv.wind_direction, pitch);
 
@@ -86,9 +97,8 @@ void CEffect_Rain::Born(Item& dest, float radius)
     dist = _sqrt(dist) * radius;
     float x = dist * _cos(angle);
     float z = dist * _sin(angle);
-    const float pitch_offset = source_offset - wind / 34.285f;
     dest.D.random_dir(axis, deg2rad(drop_angle));
-    dest.P.set(x + view.x - dest.D.x * pitch_offset, pitch_offset + view.y, z + view.z - dest.D.z * pitch_offset);
+    dest.P.set(x + view.x - dest.D.x * source_offset, source_offset + view.y, z + view.z - dest.D.z * source_offset);
     // dest.P.set (x+view.x,height+view.y,z+view.z);
     dest.fSpeed = ::Random.randF(drop_speed_min, drop_speed_max);
 
@@ -211,7 +221,10 @@ void CEffect_Rain::Render()
 // startup _new_ particle system
 void CEffect_Rain::Hit(Fvector& pos)
 {
-    if (0 != ::Random.randI(2))
+    // Was a hard `if (0 != Random.randI(2)) return;` - half the drops landed without a
+    // trace, for no reason and with no way to change it. The share is a knob now, default
+    // every drop: splashes, not the drops themselves, are what shows rain hitting GROUND.
+    if (::Random.randF() > ps_r__rain_splash)
         return;
     Particle* P = p_allocate();
     if (0 == P)
@@ -219,7 +232,7 @@ void CEffect_Rain::Hit(Fvector& pos)
 
     const Fsphere& bv_sphere = m_pRender->GetDropBounds();
 
-    P->time = particles_time;
+    P->time = ps_r__rain_splash_time;
     P->mXForm.rotateY(::Random.randF(PI_MUL_2));
     P->mXForm.translate_over(pos);
     P->mXForm.transform_tiny(P->bounds.P, bv_sphere.P);

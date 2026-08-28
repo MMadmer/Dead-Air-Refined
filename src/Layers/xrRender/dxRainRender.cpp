@@ -1,6 +1,15 @@
 #include "stdafx.h"
 #include "dxRainRender.h"
 
+// Rain sizes and density as knobs instead of 2007 constants - see xr_ioc_cmd.cpp.
+// Declared before the namespace opens: inside it the extern would bind to render_r4::.
+extern ENGINE_API float ps_r__rain_len;
+extern ENGINE_API float ps_r__rain_width;
+extern ENGINE_API int ps_r__rain_drops;
+extern ENGINE_API float ps_r__rain_radius;
+extern ENGINE_API float ps_r__rain_bright;
+extern ENGINE_API float ps_r__rain_splash_bright;
+
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Rain.h"
 
@@ -10,7 +19,8 @@ namespace xray::render::RENDER_NAMESPACE
 static const int max_desired_items = 3500;
 static const float source_radius = 12.5f;
 static const float source_offset = 40.f;
-static const float max_distance = source_offset * 2.25f;
+// Drops fall near-vertically now, so the kill plane needs far less headroom below.
+static const float max_distance = source_offset * 1.25f;
 static const float sink_offset = -(max_distance - source_offset);
 static const float drop_length = 5.f;
 static const float drop_width = 0.30f;
@@ -21,7 +31,7 @@ static const float drop_speed_min = 40.f;
 static const float drop_speed_max = 80.f;
 
 const int max_particles = 1000;
-const int particles_cache = 400;
+const int particles_cache = 1500; // was 400 - splashes cut off in dense rain
 const float particles_time = .3f;
 
 dxRainRender::dxRainRender()
@@ -48,7 +58,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
     if (factor < EPS_L)
         return;
 
-    const u32 desired_items = iFloor(0.5f * (1.f + factor) * float(max_desired_items));
+    const u32 desired_items = iFloor(0.5f * (1.f + factor) * float(_max(ps_r__rain_drops, 1)));
 
     // born _new_ if needed
     if (owner.items.size() < desired_items)
@@ -57,19 +67,31 @@ void dxRainRender::Render(CEffect_Rain& owner)
         while (owner.items.size() < desired_items)
         {
             CEffect_Rain::Item one;
-            owner.Born(one, source_radius);
+            owner.Born(one, ps_r__rain_radius);
             owner.items.push_back(one);
         }
     }
 
     // visual
     const float factor_visual = factor;
-    const float visual_length = drop_length * factor_visual;
+    const float visual_length = ps_r__rain_len * factor_visual;
     const float visual_half_length = visual_length * .5f;
+    // Drop colour times r__rain_bright: the weather configs paint drops dark grey-brown,
+    // and a thin drop vanished against a storm sky. Real rain catches skylight and reads
+    // LIGHTER than the background.
     const Fvector3 f_rain_color = g_pGamePersistent->Environment().CurrentEnv.rain_color;
-    const u32 u_rain_color = color_rgba_f(f_rain_color.x, f_rain_color.y, f_rain_color.z, factor_visual);
+    const float rain_bright = ps_r__rain_bright;
+    const u32 u_rain_color = color_rgba_f(_min(1.f, f_rain_color.x * rain_bright),
+        _min(1.f, f_rain_color.y * rain_bright), _min(1.f, f_rain_color.z * rain_bright), factor_visual);
 
-    const float b_radius_wrap_sqr = _sqr((source_radius + .5f));
+    // Ground splashes get their OWN brightness: sharing the drop colour turned them into
+    // white grit on dark ground ("like hail"). A flying drop reads lighter than the
+    // background; a splash lying on wet ground does not - it is in shade and soaked.
+    const float splash_bright = ps_r__rain_splash_bright;
+    const u32 u_splash_color = color_rgba_f(_min(1.f, f_rain_color.x * splash_bright),
+        _min(1.f, f_rain_color.y * splash_bright), _min(1.f, f_rain_color.z * splash_bright), factor_visual);
+
+    const float b_radius_wrap_sqr = _sqr((ps_r__rain_radius + .5f));
 
     // build source plane
     Fplane src_plane;
@@ -88,7 +110,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
         if (one.dwTime_Hit < Device.dwTimeGlobal)
             owner.Hit(one.Phit);
         if (one.dwTime_Life < Device.dwTimeGlobal)
-            owner.Born(one, source_radius);
+            owner.Born(one, ps_r__rain_radius);
 
         one.P.mad(one.D, one.fSpeed * dt);
         Fvector wdir;
@@ -168,7 +190,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
         camDir.sub(sphere_center, vEye);
         camDir.normalize();
         lineTop.crossproduct(camDir, one.D);
-        float w = drop_width;
+        float w = ps_r__rain_width;
         u32 s = one.uv_set;
         P.mad(pos_trail, lineTop, -w);
         verts->set(P, u_rain_color, UV[s][0].x, UV[s][0].y);
@@ -242,7 +264,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
                 mXform.mul_43(P->mXForm, mScale);
 
                 // XForm verts
-                DM_Drop->transfer(mXform, v_ptr, u_rain_color, i_ptr, pcount * DM_Drop->number_vertices);
+                DM_Drop->transfer(mXform, v_ptr, u_splash_color, i_ptr, pcount * DM_Drop->number_vertices);
                 v_ptr += DM_Drop->number_vertices;
                 i_ptr += DM_Drop->number_indices;
                 pcount++;

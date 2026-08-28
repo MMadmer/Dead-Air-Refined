@@ -2871,6 +2871,11 @@ void CCC_RegisterCommands()
     g_uCommonFlags.set(flAiUseTorchDynamicLights, TRUE);
 
     CMD3(CCC_Mask, "ai_use_torch_dynamic_lights", &g_uCommonFlags, flAiUseTorchDynamicLights);
+    {
+        // NPC torch shadow (the crawling black wedge at night) - see Torch.cpp.
+        extern int ps_r__npc_torch_shadow;
+        CMD4(CCC_Integer, "r__npc_torch_shadow", &ps_r__npc_torch_shadow, 0, 1);
+    }
 
 #ifndef MASTER_GOLD
     CMD4(CCC_Vector3, "psp_cam_offset", &CCameraLook2::m_cam_offset, Fvector().set(-1000, -1000, -1000),

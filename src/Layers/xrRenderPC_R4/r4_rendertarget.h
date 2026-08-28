@@ -64,6 +64,7 @@ public:
     ref_rt rt_Generic_1; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
     //	Igor: for volumetric lights
     ref_rt rt_Generic_2; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
+    ref_rt rt_SSR; // scene grab taken right before the forward pass, sampled by the water SSLR
     ref_rt rt_SunShaftsMask;
     ref_rt rt_SunShaftsMaskSmoothed;
     ref_rt rt_SunShaftsPass0;
@@ -183,6 +184,7 @@ private:
     ref_shader s_combine_volumetric;
     ref_shader s_fxaa;
     ref_shader s_sunshafts;
+    ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
     ref_geom g_fxaa;
 
 public:
@@ -330,6 +332,7 @@ public:
     void phase_luminance();
     void phase_fxaa();
     void phase_sunshafts();
+    void phase_da_puddle_refl(); // world reflections in rain puddles
     void phase_combine();
     void phase_combine_volumetric();
     void phase_pp();

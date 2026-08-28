@@ -136,7 +136,7 @@ bool get_tree_instance_constants(CBackend& cmd_list, R_constant*& instance_data,
     return data_buffer != control_buffer && !instance_data->vs.index && !instance_control->vs.index;
 }
 
-bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
+bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items, const bool shadow_pass)
 {
     if (!ps_r__tree_batch)
         return false;
@@ -209,7 +209,7 @@ bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
 
     xr_vector<u8>& batched_items = scratch.batched_items;
     batched_items.assign(items.size(), false);
-    FTreeVisual::SetupInstancedGlobals(cmd_list);
+    FTreeVisual::SetupInstancedGlobals(cmd_list, shadow_pass);
 
     for (size_t page_begin = 0; page_begin < segments.size();)
     {
@@ -339,7 +339,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 if (items.size() > 1)
                     std::sort(items.begin(), items.end(), cmp_ssa<_NormalItem>);
 #ifdef USE_DX11
-                if (render_tree_batches(cmd_list, items) && items.empty())
+                if (render_tree_batches(cmd_list, items, o.phase == CRender::PHASE_SMAP) && items.empty())
                     continue;
 #endif
                 for (const auto& item : items)

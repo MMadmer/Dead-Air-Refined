@@ -222,6 +222,79 @@ void CTextureDescrMngr::LoadTHM(LPCSTR initial, bool listTHM)
     }
 }
 
+// Materials allowed to break texture repeats with the hex grid. A list is required: the
+// trick only works on TILED unwraps, and no data field marks those - enabling it globally
+// turned unique-unwrap props (the barrel) into mush. The list was classified automatically
+// straight from the images (seam break, transparency share, edge features, periodicity).
+// Format: one texture name per line, ";" starts a note; slashes normalised on load.
+void CTextureDescrMngr::LoadHexList()
+{
+    ZoneScoped;
+
+    string_path fname;
+    FS.update_path(fname, "$game_config$", "da_hex_tiling.ltx");
+    if (!FS.exist(fname))
+        return;
+
+    IReader* F = FS.r_open(fname);
+    if (!F)
+        return;
+
+    string_path line;
+    u32 count = 0;
+    while (!F->eof())
+    {
+        F->r_string(line, sizeof(line));
+
+        if (pstr sep = strchr(line, ';'))
+            *sep = 0;
+        if (pstr sep = strchr(line, '\t'))
+            *sep = 0;
+        pstr p = line;
+        while (*p == ' ')
+            ++p;
+        for (int i = (int)xr_strlen(p) - 1; i >= 0 && (p[i] == ' ' || p[i] == '\r'); --i)
+            p[i] = 0;
+        if (!p[0])
+            continue;
+
+        // Texture description keys use the platform separator, the classifier writes "/".
+        // Normalise, or the lookup finds nothing and the list is silently empty.
+        for (pstr c = p; *c; ++c)
+            if (*c == '/')
+                *c = '\\';
+        xr_strlwr(p);
+
+        m_hex_tiling[shared_str(p)] = 1;
+        ++count;
+    }
+    FS.r_close(F);
+
+#ifndef MASTER_GOLD
+    Msg("* hex tiling: %u materials allowed", count);
+#endif
+}
+
+BOOL CTextureDescrMngr::UseHexTiling(const shared_str& tex_name) const
+{
+    if (m_hex_tiling.empty())
+        return FALSE;
+
+    // Shaders without a detail path leave the base texture name unresolved (null) -
+    // strcpy_s from a null source trips the CRT invalid-parameter handler.
+    if (!tex_name.c_str())
+        return FALSE;
+
+    string_path key;
+    xr_strcpy(key, tex_name.c_str());
+    for (pstr c = key; *c; ++c)
+        if (*c == '/')
+            *c = '\\';
+    xr_strlwr(key);
+
+    return m_hex_tiling.find(shared_str(key)) != m_hex_tiling.end() ? TRUE : FALSE;
+}
+
 void CTextureDescrMngr::Load()
 {
     ZoneScoped;
@@ -238,6 +311,8 @@ void CTextureDescrMngr::Load()
     LoadTHM("$game_textures$", listTHM);
     LoadTHM("$level$", listTHM);
 
+    LoadHexList();
+
 #ifndef MASTER_GOLD
     Msg("%s, texture descriptions loaded for %d ms", __FUNCTION__, timer.GetElapsed_ms());
 #endif
@@ -251,6 +326,7 @@ void CTextureDescrMngr::UnLoad()
         xr_delete(it.second.m_spec);
     }
     m_texture_details.clear();
+    m_hex_tiling.clear(); // otherwise the list survives level unload and grows duplicates
 }
 
 CTextureDescrMngr::~CTextureDescrMngr()
@@ -283,7 +359,17 @@ BOOL CTextureDescrMngr::UseSteepParallax(const shared_str& tex_name) const
     {
         if (I->second.m_spec)
         {
-            return I->second.m_spec->m_use_steep_parallax;
+            if (I->second.m_spec->m_use_steep_parallax)
+                return TRUE;
+
+            // r__parallax_force: the sibling's census over 5985 .thm files found 112
+            // textures hand-marked for parallax against 2020 carrying a height map - the
+            // GSC editor flag simply never reached most of them. A non-empty bump name
+            // means a _bump/_bump# pair exists with height in the alpha of the second -
+            // the exact data UpdateTC reads, same signal, different author.
+            // Needs a level reload: shader names are built once at blender compile.
+            if (ps_r__parallax_force && I->second.m_spec->m_bump_name.size() > 2)
+                return TRUE;
         }
     }
     return FALSE;

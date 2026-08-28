@@ -12,18 +12,63 @@ float Contrast(float Input, float ContrastPower)
      return Output;
 }
 
+// Tonemap tinting arrives in da_tonemap_params (bound in r2.cpp). The SIGNATURE of tonemap()
+// must not change: archive shaders call it too, and a mismatch dies silently with a stub.
+// A zero constant (a shader where it is not bound) reproduces the old behaviour exactly: the
+// white point falls back to 1.7 and the luminance share stays zero.
+// y = white point, z = luminance-tonemap share, w = late-desaturation power.
+uniform float4 da_tonemap_params;
+
 void tonemap( out float4 low, out float4 high, float3 rgb, float scale)
 {
 	rgb		=	rgb*scale;
 
-	const float fWhiteIntensity = 1.7;
+	const float fWhiteIntensity = (da_tonemap_params.y > 0.01f) ? da_tonemap_params.y : 1.7;
 
 	const float fWhiteIntensitySQR = fWhiteIntensity*fWhiteIntensity;
 
 //	low		=	(rgb/(rgb + 1)).xyzz;
-	low		=	( (rgb*(1+rgb/fWhiteIntensitySQR)) / (rgb+1) ).xyzz;
+	float3 tm	=	(rgb*(1+rgb/fWhiteIntensitySQR)) / (rgb+1);
+
+	// Luminance-preserving tonemap (r__tonemap_hue). Zero keeps the per-channel path.
+	// The per-channel curve pulls channels toward each other, so everything bright bleaches -
+	// sunlit foliage goes white. Here the curve is computed ONCE on luminance and the channels
+	// are rescaled by the new-to-old luminance ratio, so proportions survive any brightness.
+	[branch] if ( da_tonemap_params.z > 0.001f )
+	{
+		const float3 LUM = float3(0.2126f, 0.7152f, 0.0722f);
+		const float  l   = dot(rgb, LUM);
+		const float  lt  = (l*(1+l/fWhiteIntensitySQR)) / (l+1);
+		float3 hue = rgb * (lt / max(l, 1e-4f));
+
+		// True overexposure still goes to white: without this the sun disc and speculars come
+		// out coloured and acid. The power (r__tonemap_desat) decides how late that starts.
+		hue = lerp(hue, lt.xxx, pow(saturate(lt), max(da_tonemap_params.w, 1.0f)));
+
+		tm = lerp(tm, hue, saturate(da_tonemap_params.z));
+	}
+
+	low		=	tm.xyzz;
 
 	high	=	rgb.xyzz/def_hdr;	// 8x dynamic range
+}
+
+// Foliage albedo knobs (bound in r2.cpp): .x gloss multiplier shifted by one (0 = constant
+// not bound, keep stock), .z vibrance, .w debleach strength. Used by deffer_base_aref_*.
+uniform float4 da_foliage;
+
+// Kills BRIGHT AND COLOURLESS: a bleached branch has high luminance at near-zero saturation,
+// green needles have saturation and stay untouched - unlike a flat darkening that would
+// press the whole tree down at once.
+float3 da_debleach( float3 c, float k )
+{
+	[branch] if ( k < 0.001f ) return c;
+	const float3 LUM = float3(0.2126f, 0.7152f, 0.0722f);
+	const float  mx  = max(c.r, max(c.g, c.b));
+	const float  mn  = min(c.r, min(c.g, c.b));
+	const float  sat = (mx > 1e-4f) ? ((mx - mn) / mx) : 0.0f;
+	const float  bl  = saturate(dot(c, LUM)) * (1.0f - saturate(sat));
+	return c * (1.0f - saturate(k) * bl);
 }
 
 float3 Vibrance( float3 i, half val )

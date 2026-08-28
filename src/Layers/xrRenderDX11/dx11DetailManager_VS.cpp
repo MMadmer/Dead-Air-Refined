@@ -34,6 +34,18 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);
 
+    // r__wind_shadow 0: grass stands still in the SHADOW passes while swaying on screen.
+    // A shadow map is a hard edge on a texel boundary; a blade moving by a fraction of a
+    // texel flips whole shaded pixels between lit and unlit every frame, which narrow
+    // specular lobes turn into colour noise on metal. Every frustum-culled detail pass
+    // today is a shadow pass (sun cascades, lamp smaps) - the main pass passes none.
+    const bool shadow_pass = frustum != nullptr;
+    Fvector4 wind_zero;
+    wind_zero.set(0.f, 0.f, 0.f, 0.f);
+    const bool freeze_wind = shadow_pass && ps_r__wind_shadow == 0;
+    const Fvector4& dir1 = freeze_wind ? wind_zero : m_wind_dir1;
+    const Fvector4& dir2 = freeze_wind ? wind_zero : m_wind_dir2;
+
     // Wave0
     float scale = 1.f / float(quant);
     Fvector4 wave;
@@ -48,7 +60,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir1); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	1, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir1, 1, 0, collectStats, frustum);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir1, 1, 0, collectStats, frustum);
 
     // Wave1
     // wave.set				(1.f/3.f,		1.f/7.f,	1.f/5.f,	Device.fTimeGlobal*swing_current.speed);
@@ -57,7 +69,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir2); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	2, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 2, 0, collectStats, frustum);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir2, 2, 0, collectStats, frustum);
 
     // Still
     consts.set(scale, scale, scale, 1.f);
@@ -78,6 +90,41 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     static shared_str strDir2D("dir2D");
     static shared_str strArray("array");
     static shared_str strXForm("xform");
+    static shared_str strSFade("grass_sfade");
+    static shared_str strSFadeEye("grass_sfade_eye");
+    static shared_str strGrassTint("grass_tint");
+
+    // Every frustum-culled detail pass today is a shadow pass (see hw_Render).
+    const bool shadow_pass = frustum != nullptr;
+
+    // Grass shadow fade band (start, end) in metres from the camera. STRICTLY zero in the
+    // normal pass: the shader reads zero as "nothing to fade" and behaves exactly as before.
+    // No pass define exists for this on purpose - one would double the grass shader cache.
+    Fvector4 sfade;
+    if (shadow_pass && ps_r__grass_shadow_fade > 0)
+    {
+        const float e = float(ps_r__grass_shadow_dist);
+        sfade.set(_max(e - float(ps_r__grass_shadow_fade), 0.f), e, 0.f, 0.f);
+    }
+    else
+        sfade.set(0.f, 0.f, 0.f, 0.f);
+
+    // The camera position is handed over SEPARATELY: in the shadow pass m_WV belongs to the
+    // SUN, so a view-space distance in the shader would measure the wrong thing. This is the
+    // same distance the CPU cull below uses, so the fade band lines up with the cut.
+    const Fvector& ep = Device.vCameraPosition;
+    Fvector4 eye;
+    eye.set(ep.x, ep.y, ep.z, 0.f);
+
+    // World-position brightness variation: strength, 1/patch size, base boost.
+    Fvector4 tint;
+    tint.set(ps_r__grass_tint, 1.f / _max(ps_r__grass_tint_scale, 0.1f), ps_r__grass_tint_base, 0.f);
+
+    // Grass beyond this radius skips the shadow maps entirely - stock fed ALL visible grass
+    // (hundreds of metres) into the 20 m near cascade and let the GPU discard it after
+    // vertex work. Compared per part against the slot bounds below.
+    const float grass_shadow_dist_sq =
+        float(ps_r__grass_shadow_dist) * float(ps_r__grass_shadow_dist);
 
     vis_list& list = m_visibles[var_id];
 
@@ -101,6 +148,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             cmd_list.set_c(strWave, wave);
             cmd_list.set_c(strDir2D, wind);
             cmd_list.set_c(strXForm, cmd_list.xforms.m_wvp);
+            cmd_list.set_c(strSFade, sfade);
+            cmd_list.set_c(strSFadeEye, eye);
+            cmd_list.set_c(strGrassTint, tint);
 
             // ref_constant constArray = RCache.get_c(strArray);
             // VERIFY(constArray);
@@ -123,28 +173,42 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 if (!IsPartVisible(part, frustum))
                     continue;
 
+                // Recomputed per frame on purpose: the slot-refresh distance in UpdateVisibleM
+                // is amortised over 15-30 frames and would make the shadow radius lag in steps.
+                if (shadow_pass && ep.distance_to_sqr(part.bounds->sphere.P) > grass_shadow_dist_sq)
+                    continue;
+
                 for (SlotItem* item : *part.items)
                 {
                     SlotItem& Instance = *item;
                     u32 base = dwBatch * 4;
 
-                    // Build matrix ( 3x4 matrix, last row - color )
-                    float scale = Instance.scale_calculated;
-                    Fmatrix& M = Instance.mRotY;
-                    c_storage[base + 0].set(M._11 * scale, M._21 * scale, M._31 * scale, M._41);
-                    c_storage[base + 1].set(M._12 * scale, M._22 * scale, M._32 * scale, M._42);
-                    c_storage[base + 2].set(M._13 * scale, M._23 * scale, M._33 * scale, M._43);
-                        // RCache.set_ca(&*constArray, base+0, M._11*scale,	M._21*scale,	M._31*scale,	M._41	);
-                        // RCache.set_ca(&*constArray, base+1, M._12*scale,	M._22*scale,	M._32*scale,	M._42	);
-                        // RCache.set_ca(&*constArray, base+2, M._13*scale,	M._23*scale,	M._33*scale,	M._43	);
+                    // The instance never moves: mRotY/c_hemi/c_sun are set once at slot
+                    // decompression, scale/height once per 15-30 frames per slot. Rebuilding
+                    // 12 multiplies per instance per frame for ~47k instances was pure waste.
+                    if (!Instance.cache_valid)
+                    {
+                        // Build matrix ( 3x4 matrix, last row - color ). Height is scaled
+                        // SEPARATELY: the local-height contribution is the second element of
+                        // each row, so scaling just those lays the blade flat without
+                        // touching its ground footprint (r__grass_fade_flat).
+                        const float scale = Instance.scale_calculated;
+                        const float hs = scale * Instance.height_calculated;
+                        Fmatrix& M = Instance.mRotY;
+                        Instance.cached_out[0].set(M._11 * scale, M._21 * hs, M._31 * scale, M._41);
+                        Instance.cached_out[1].set(M._12 * scale, M._22 * hs, M._32 * scale, M._42);
+                        Instance.cached_out[2].set(M._13 * scale, M._23 * hs, M._33 * scale, M._43);
 
-                    // Build color
-                    // R2 only needs hemisphere
-                    float h = Instance.c_hemi;
-                    float s = Instance.c_sun;
-                    c_storage[base + 3].set(s, s, s, h);
-                        // RCache.set_ca(&*constArray, base+3, s,				s,				s,				h
-                        // );
+                        // Build color (R2 only needs hemisphere)
+                        const float h = Instance.c_hemi;
+                        const float s = Instance.c_sun;
+                        Instance.cached_out[3].set(s, s, s, h);
+                        Instance.cache_valid = true;
+                    }
+                    c_storage[base + 0] = Instance.cached_out[0];
+                    c_storage[base + 1] = Instance.cached_out[1];
+                    c_storage[base + 2] = Instance.cached_out[2];
+                    c_storage[base + 3] = Instance.cached_out[3];
                     dwBatch++;
                     if (dwBatch == hw_BatchSize)
                     {

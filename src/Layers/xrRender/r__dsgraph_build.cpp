@@ -20,6 +20,9 @@ using namespace R_dsgraph;
 // Scene graph actual insertion and sorting ////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 float r_ssaDISCARD;
+// Vegetation billboards (FLOD) get their own, lower discard threshold: they fill the far
+// background and cost four vertices each, unlike everything else the shared threshold drags.
+float r_ssaVEG_DISCARD;
 float r_ssaDONTSORT;
 float r_ssaLOD_A, r_ssaLOD_B;
 float r_ssaGLOD_start, r_ssaGLOD_end;
@@ -474,7 +477,8 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual, bool lod_ma
         ssa *= pV->lod_factor;
         if (ssa < r_ssaLOD_A)
         {
-            if (ssa < r_ssaDISCARD)
+            // Own threshold, not the shared one - see r_ssaVEG_DISCARD.
+            if (ssa < r_ssaVEG_DISCARD)
                 return;
             mapLOD.insert_anyway(D, _LodItem({ ssa, pVisual }));
         }
@@ -722,7 +726,8 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
         ssa *= pV->lod_factor;
         if (ssa < r_ssaLOD_A)
         {
-            if (ssa < r_ssaDISCARD)
+            // Own threshold, not the shared one - see r_ssaVEG_DISCARD.
+            if (ssa < r_ssaVEG_DISCARD)
                 return;
             mapLOD.insert_anyway(D, _LodItem({ ssa, pVisual }));
         }

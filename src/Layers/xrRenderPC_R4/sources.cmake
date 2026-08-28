@@ -193,6 +193,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/r2_test_hw.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_accum_direct.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_combine.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_da_puddle_refl.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_hdao.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_hud_shadow.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_shaders.cpp"

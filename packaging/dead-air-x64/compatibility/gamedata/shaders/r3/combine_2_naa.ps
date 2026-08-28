@@ -8,6 +8,9 @@ uniform float4		screen_res;
 uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
 uniform float4 		e_weights;	// x=norm, y=depth, z=clr
 uniform float4 		e_kernel;	// x=norm, y=depth, z=clr
+// x = 1/gamma, y = brightness/2, z = contrast/2, w = 1 when the hardware ramp is dead
+// (windowed/borderless) and the sliders have to act here instead.
+uniform float4		da_gamma;
 #define MAXCOF		7.h
 #define EPSDEPTH	0.001h
 
@@ -163,6 +166,28 @@ c2_out main( v2p_aa_AA I )
 			final = visor_reflect(center, final, visorDepth);
 		}
 	#endif
+
+	// Gamma / brightness / contrast in the shader, same curve the engine builds for the
+	// hardware ramp (CGammaControl::GenLUT) - so the sliders match what they produced on the
+	// original DX9 build. Applied only when the ramp is not doing the job (da_gamma.w),
+	// i.e. windowed/borderless; at 1/1/1 it reduces exactly to the identity.
+	[branch] if ( da_gamma.w > 0.5h )
+	{
+		const float B = da_gamma.y;
+		const float C = da_gamma.z;
+		float3 v = pow(max(final.rgb, 0.0h), da_gamma.x);
+		final.rgb = (C + 0.5h) * v + (B - 0.5h) * 0.5h - C * 0.5h + 0.25h;
+	}
+
+	// Output dithering: +-1/2 LSB triangular noise breaks the 8-bit banding on smooth
+	// gradients (sunset sky) into invisible grain. Two independent hashes summed give the
+	// triangular distribution; screen-position-only, so static frames stay static.
+	{
+		float2 dseed = I.Tex0 * screen_res.xy;
+		float dn0 = frac(sin(dot(dseed, float2(12.9898h, 78.233h))) * 43758.5453h);
+		float dn1 = frac(sin(dot(dseed, float2(39.3468h, 11.135h))) * 24634.6345h);
+		final.rgb += (dn0 + dn1 - 1.0h) * (1.0h / 255.0h);
+	}
 
 	res.Color = final;
 

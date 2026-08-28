@@ -1,0 +1,69 @@
+#include "common.h"
+#include "shadow.h"
+// For sky_s0/sky_s1 and env_color: the shaft colour is taken from the sky at the horizon.
+#include "hmodel.h"
+#include "MrProperCommon.h" // [FX to mrmnwar] Cheking includes, please
+
+float4 blendSoftLight(float4 a, float4 b)
+{
+	float4 c = 2 * a * b + a * a * (1 - 2 * b);
+	float4 d = sqrt(a) * (2 * b - 1) + 2 * a * (1 - b);
+	
+	return ( b < 0.5 )? c : d;
+}
+
+float4	sun_shafts_intensity;
+
+// x = share of horizon-sky colour in the shaft tint (r__shafts_sky). Zero = stock.
+uniform float4 da_shafts;
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+float4		main		(	AntiAliasingStruct	INStruct	)		:		SV_Target
+{
+	
+#ifdef USE_SSHAFTS
+	
+	float4 outColor;
+	
+	float4 cScreen = sScene.Sample(smp_nofilter,INStruct.texCoord0.xy);
+	float4 cSunShafts = sSunShafts.Sample(smp_nofilter,INStruct.texCoord0.xy);
+
+	
+	float fShaftsMask=saturate(1.00001-cSunShafts.w)*SSParamsDISPLAY.y*2;
+
+	float	max_density = sun_shafts_intensity;
+	
+	//normalize suncolor
+	float4 sunColor = float4(1,1,1,1);
+	sunColor.xyz = normalize(Vibrance(L_hemi_color.rgb,2));
+
+	// Shaft colour from the sky at the horizon (r__shafts_sky). The stock tint is the
+	// normalized hemi colour, which mostly ignores the ACTUAL sky: at dawn the shafts stay
+	// bluish-white while the sky burns orange. The same cubemap pair the haze uses gives
+	// the true colour: the sky changes, the shafts follow. Direction is the sun's, pressed
+	// towards the horizon - shafts are lit by the sky AROUND the sun, not overhead.
+	[branch] if ( da_shafts.x > 0.001f )
+	{
+		float3 sd = normalize( float3( L_sun_dir_w.x, L_sun_dir_w.y * 0.15f, L_sun_dir_w.z ) );
+		float3 s0 = sky_s0.SampleLevel( smp_rtlinear, sd, 6.0f );
+		float3 s1 = sky_s1.SampleLevel( smp_rtlinear, sd, 6.0f );
+		float3 sky = env_color.xyz * lerp( s0, s1, env_color.w );
+
+		// Normalized like the stock colour: the tint carries the hue, strength stays with
+		// sun_shafts_intensity - so the knob cannot double as a brightness slider.
+		sky = normalize( max( sky, 0.001f ) );
+		sunColor.xyz = lerp( sunColor.xyz, sky, saturate( da_shafts.x ) );
+	}
+
+	outColor = cScreen+cSunShafts.xyzz*max_density.x*4*SSParamsDISPLAY.x*sunColor*(1-cScreen);
+		
+	outColor = blendSoftLight(outColor,sunColor*fShaftsMask*0.5+0.5);
+	
+	return outColor;
+	
+#else
+
+	return sScene.Sample(smp_nofilter,INStruct.texCoord0.xy);
+#endif //USE_SSHAFTS
+}

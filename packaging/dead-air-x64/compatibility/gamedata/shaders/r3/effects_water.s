@@ -1,0 +1,51 @@
+local tex_base                = "water\\water_water"
+local tex_nmap                = "water\\water_normal"
+local tex_dist                = "water\\water_dudv"
+local tex_env0                = "$user$sky0"         -- "sky\\sky_8_cube"
+local tex_env1                = "$user$sky1"         -- "sky\\sky_8_cube"
+
+--local tex_leaves              = "decal\\decal_listja"
+-- Real leaves instead of foam. The s_leaves slot is read by water.ps and lays debris OVER the
+-- procedural foam; the stock binding was water foam, i.e. the layer painted foam over foam and
+-- contributed nothing. Both leaf decals ship in the game archives - no new asset.
+local tex_leaves              = "decal\\decal_listja_vetki"
+
+function normal                (shader, t_base, t_second, t_detail)
+	shader	:begin		("water_soft","water_soft")
+    		:sorting	(2, false)
+			:blend		(true,blend.srcalpha,blend.invsrcalpha)
+			:zb			(true,false)
+			:distort	(true)
+			:fog		(true)
+
+	shader:dx10texture	("s_base",		tex_base)
+	shader:dx10texture	("s_nmap",		tex_nmap)
+	shader:dx10texture	("s_env0",		tex_env0)
+	shader:dx10texture	("s_env1",		tex_env1)
+	shader:dx10texture	("s_position",	"$user$position")
+
+	shader:dx10texture	("s_leaves",	tex_leaves)
+	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR (frame copy before water)
+
+	shader:dx10sampler	("smp_base")
+	shader:dx10sampler	("smp_nofilter")
+	shader:dx10sampler	("smp_rtlinear")
+end
+
+function l_special        (shader, t_base, t_second, t_detail)
+	shader	:begin                ("waterd_soft","waterd_soft")
+			:sorting        (2, true)
+			:blend                (true,blend.srcalpha,blend.invsrcalpha)
+			:zb                (true,false)
+			:fog                (false)
+			:distort        (true)
+
+	shader: dx10color_write_enable( true, true, true, false)
+
+	shader:dx10texture	("s_base",		tex_base)
+	shader:dx10texture	("s_distort",	tex_dist)
+	shader:dx10texture	("s_position",	"$user$position")
+
+	shader:dx10sampler	("smp_base")
+	shader:dx10sampler	("smp_nofilter")
+end

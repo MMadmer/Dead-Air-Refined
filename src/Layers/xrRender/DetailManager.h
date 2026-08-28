@@ -56,6 +56,10 @@ public:
     { // один кустик
         float scale;
         float scale_calculated;
+        // Separate HEIGHT multiplier (r__grass_fade_flat): spending the distance fade on
+        // height alone lays the tuft flat while its ground footprint keeps covering the
+        // soil, instead of shrinking below a pixel and baring the ground.
+        float height_calculated;
         Fmatrix mRotY;
         u32 vis_ID; // индекс в visibility списке он же тип [не качается, качается1, качается2]
         float c_hemi;
@@ -63,6 +67,12 @@ public:
 #if RENDER == R_R1
         Fvector c_rgb;
 #endif
+        // Ready-made constant-buffer rows for hw_Render_dump. mRotY/c_hemi/c_sun never change
+        // after slot decompression and scale_calculated changes once per 15-30 frames per slot
+        // (UpdateVisibleM amortisation), yet the dump used to redo 12 multiplies per instance
+        // per frame for ~47k instances. Invalidated where the inputs change, not where drawn.
+        Fvector4 cached_out[4];
+        bool cache_valid = false;
     };
 
     using SlotItemVec = xr_vector<SlotItem*>;

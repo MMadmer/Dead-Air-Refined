@@ -1,0 +1,165 @@
+// [DA_PORT] ---- Отражения в лужах -----------------------------------------------------------------
+//
+// Полноэкранный проход, идущий СРАЗУ ПОСЛЕ копии кадра для водяного SSR и ДО прямого прохода, в
+// котором рисуется вода. Копия (rt_SSR, здесь s_image) — это освещённый кадр без воды, то есть ровно
+// то, что лужа должна отражать.
+//
+// Почему отдельным проходом, а не в G-буфере вместе с самими лужами: отражение — это чтение уже
+// освещённой картинки, а G-буфер заполняется ДО освещения. Вода в игре отражает по той же причине из
+// прямого прохода (см. water.ps), но лужи — часть геометрии земли, отдельной поверхности у них нет.
+//
+// Маска считается ЗАНОВО, тем же кодом, что в G-буфере (da_puddles.h): мировая позиция
+// восстанавливается из глубины, шум и горизонтальность — как там. Хранить маску в G-буфере было бы
+// дешевле, но свободного канала в нём нет, а лишний канал стоит памяти на каждый кадр — здесь же
+// платим только арифметикой и только на пикселях земли.
+#include "common.h"
+#include "ogse_reflections.h"
+#include "da_puddles.h"
+
+// x — сила отражения (r__puddles_refl_power), y — включено ли (0/1), z — нижняя граница френеля
+// (r__puddles_facing), w — доля отражения НЕБА, когда луч-марш ничего не нашёл (r__puddles_sky).
+uniform float4 da_puddle_refl;
+
+// s_image (копия кадра) объявлен в ogse_reflections.h — там же, где им пользуется ray-march.
+// Ray-march по буферу глубины: шагаем вдоль отражённого луча в экранных координатах, пока не упрёмся
+// в геометрию. Возвращает цвет попадания и вес: 0 — не попали или попали у самого края экрана.
+
+// [DA_PORT] Запасное отражение: НЕБО.
+//
+// Луч-марш ищет геометрию в буфере глубины, а неба там нет — на небе он возвращал ноль, и вся
+// формула отражения обнулялась целиком. Заметно это именно при взгляде СВЕРХУ ВНИЗ: отражённый луч
+// уходит в небо, попадать ему не во что, и лужа под ногами пропадала. Ручка френеля при этом не
+// помогала — она умножалась на этот же ноль.
+//
+// Цвет берём из полусферической освещённости: это и есть свет неба, посчитанный движком. Точнее было
+// бы сэмплировать небосвод, но за это пришлось бы тащить его текстуру в проход.
+float4 da_puddle_sky()
+{
+	return float4(L_hemi_color.rgb, saturate(da_puddle_refl.w));
+}
+
+float4 da_puddle_march(float3 pos_w, float3 vreflect)
+{
+	const float3 v_pixel = mul((float3x4)m_V, float4(pos_w, 1.0f));
+	const float4 p_pixel = mul(m_VP, float4(pos_w, 1.0f));
+	float4 s_pixel = proj_to_screen(p_pixel);
+	s_pixel.xy /= s_pixel.w;
+
+	const float3 w_next = pos_w + normalize(vreflect);
+	const float3 v_next = mul((float3x4)m_V, float4(w_next, 1.0f));
+	const float4 p_next = mul(m_VP, float4(w_next, 1.0f));
+	float4 s_next = proj_to_screen(p_next);
+	s_next.xy /= s_next.w;
+
+	float3 from = float3(s_pixel.xy, v_pixel.z);
+	float3 to = float3(s_next.xy, v_next.z);
+
+	// Луч, летящий в камеру, отражать нечем.
+	if (dot(eye_direction, normalize(vreflect)) < -0.5f || from.z > REFL_RANGE)
+		return 0.0f;
+
+	const float3 main_vec = to - from;
+	const float3 step_vec = main_vec / (max(abs(main_vec.x), abs(main_vec.y)) * 256.0f);
+
+	float3 cur = from;
+	cur.xy += 0.5f * screen_res.zw;
+
+	// ⛔ Случайного сдвига старта луча здесь НЕТ, и это осознанно. Он добавлялся против полос, а полосы
+	// оказались вовсе не отсюда — это была рябь суммой синусов в da_puddles.h. Зато сам сдвиг дал по
+	// краю лужи тонкую светлую линию: у соседних пикселей луч стартует с разным смещением, и там, где
+	// маска только-только появляется, часть лучей попадает в цель, а часть нет. Полоса и есть граница
+	// между «попал» и «не попал».
+
+	[loop]	// без [loop] компилятор разворачивает цикл и падает сам — см. water.ps
+	for (int i = 0; i < SSR_MAX_IT; ++i)
+	{
+		cur.xyz += step_vec;
+
+		// Ушли за экран — отражать нечего. Раньше здесь оставался белый цвет.
+		if (cur.x < 0.0f || cur.x > 1.0f || cur.y < 0.0f || cur.y > 1.0f)
+			return da_puddle_sky();
+
+		float depth = get_depth_fast(cur.xy);
+		depth = lerp(depth, 0.0f, is_sky(depth));
+
+		if (depth <= cur.z && from.z <= depth)
+		{
+			// Гасим У КРАЁВ экрана, а не в середине: за краем данных нет, и отражение там обязано
+			// исчезать, иначе последняя выборка размазывается полосой.
+			const float2 d = abs(cur.xy - 0.5f) * 2.0f;
+			const float edge = saturate((1.0f - max(d.x, d.y)) * 5.0f);
+			return float4(s_image.SampleLevel(smp_rtlinear, cur.xy, 0).xyz, edge);
+		}
+	}
+	return da_puddle_sky();	// геометрию не нашли — значит там небо
+}
+
+struct vf
+{
+	float2 tc0   : TEXCOORD0;
+	float4 hpos  : SV_Position;
+};
+
+float4 main(vf I) : SV_Target
+{
+	// Позиция и полусфера из G-буфера.
+	gbuffer_data gbd = gbuffer_load_data(I.tc0, I.hpos.xy);
+	const float3 pos_v = gbd.P;
+
+	// Мировое положение: матрица вида ортонормирована, обратная ей — транспонированная.
+	const float3x3 V_rot = float3x3(m_V[0].xyz, m_V[1].xyz, m_V[2].xyz);
+	const float3 V_ofs = float3(m_V[0].w, m_V[1].w, m_V[2].w);
+	const float3 pos_w = mul(transpose(V_rot), pos_v - V_ofs);
+
+	// Та же маска, что считает G-буфер, тем же кодом.
+	da_puddle_result P = da_puddles(pos_v, gbd.hemi, float3(0.0f, 0.0f, 1.0f));
+
+	const float mask = P.mask * saturate(da_puddle_refl.y);
+	[branch] if (mask < 0.004f)
+		return float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+	const float3 eye_w = mul(transpose(V_rot), -V_ofs);
+	const float3 view_w = normalize(pos_w - eye_w);
+
+	// Нормаль воды: строго вверх плюс рябь. Она живёт ЗДЕСЬ, а не в G-буфере — потому и не создаёт
+	// каймы: наложение смешивается с кадром по альфе, а альфа границ не подчёркивает.
+	float3 water_n = float3(0.0f, 1.0f, 0.0f);
+	[branch] if (P.ripple_amp > 0.0001f)
+	{
+		const float2 q = pos_w.xz * 12.0f + float2(sin(timers.x * 0.7f), cos(timers.x * 0.53f)) * 2.0f;
+		const float h0 = da_vnoise(q);
+		const float hx = da_vnoise(q + float2(0.35f, 0.0f));
+		const float hy = da_vnoise(q + float2(0.0f, 0.35f));
+		water_n = normalize(float3((h0 - hx) * P.ripple_amp * 6.0f, 1.0f, (h0 - hy) * P.ripple_amp * 6.0f));
+	}
+
+	const float3 vreflect = reflect(view_w, water_n);
+
+	// Френель: к горизонту вода становится зеркалом. Показатель мягкий (2.5, не 4) и с заметной
+	// постоянной частью: честные 5% отражения в упор физически верны, но в кадре означают «отражения
+	// нет», а лужа без отражения — просто тёмное пятно.
+	//
+	// [DA_PORT] Постоянная часть теперь ручкой (r__puddles_facing), а не числом. Это ровно тот случай,
+	// когда физика и читаемость расходятся: смотришь на лужу сверху вниз — угол нормальный, отражения
+	// по формуле почти нет, и лужа под ногами исчезает. Пол кривой поднимает ТОЛЬКО этот случай;
+	// у горизонта отражение и так полное, там ручка ничего не меняет.
+	const float f0 = saturate(da_puddle_refl.z);
+	const float fres = saturate(f0 + (1.0f - f0) * pow(saturate(1.0f + dot(view_w, water_n)), 2.5f));
+
+	// Отражение мира.
+	const float4 refl = da_puddle_march(pos_w, vreflect);
+
+	// Солнечный блик считаем сами: раньше его рисовал движок по глянцу из G-буфера, а глянец мы
+	// оттуда убрали — он и был одним из источников каймы.
+	const float3 sun_dir = normalize(L_sun_dir_w.xyz);
+	const float3 half_v = normalize(-sun_dir - view_w);
+	const float glint = pow(saturate(dot(water_n, half_v)), 900.0f) * 3.0f;
+
+	// Цвет наложения — ТОЛЬКО отражение мира. Дно, потемнение и блик рисует G-буфер: туда лужи и
+	// вернулись, потому что плоская нормаль там даёт объём, которого наложение поверх кадра не даёт.
+	// Здесь остаётся то единственное, чего G-буфер не умеет: посмотреть, что отражается.
+	const float k = saturate(mask * fres * da_puddle_refl.x * refl.w * saturate(da_puddle_look.x));
+
+	// Премультиплицированный цвет: смешивание задано как (one, invsrcalpha).
+	return float4(refl.xyz * k, k);
+}

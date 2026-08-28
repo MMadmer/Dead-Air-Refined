@@ -1,0 +1,144 @@
+Texture2D 			s_distort;
+uniform float4		screen_res;
+
+#define MAXCOF		7.h
+#define EPSDEPTH	0.001h
+
+#include "common.h"
+#include "mblur.h"
+
+uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
+uniform float4 		e_weights;	// x=norm, y=depth, z=clr
+uniform float4 		e_kernel;	// x=norm, y=depth, z=clr
+// x = 1/gamma, y = brightness/2, z = contrast/2, w = 1 when the hardware ramp is dead.
+uniform float4		da_gamma;
+
+#define tmp0 tmp.x
+#define tmp1 tmp.y
+#define tmp2 tmp.z
+#define tmp3 tmp.w
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Pixel
+#ifdef GBUFFER_OPTIMIZATION
+float4 main ( v_aa_AA I, float4 pos2d : SV_POSITION ) : SV_Target
+#else
+float4 main ( v_aa_AA I ) : SV_Target
+#endif
+{
+#ifdef GBUFFER_OPTIMIZATION
+  gbuffer_data gbd0 = gbuffer_load_data(I.Tex0, pos2d);
+  gbuffer_data gbd1 = gbuffer_load_data_offset(I.Tex0,I.Tex1, pos2d);
+  gbuffer_data gbd2 = gbuffer_load_data_offset(I.Tex0,I.Tex2, pos2d);
+  gbuffer_data gbd3 = gbuffer_load_data_offset(I.Tex0,I.Tex3, pos2d);
+  gbuffer_data gbd4 = gbuffer_load_data_offset(I.Tex0,I.Tex4, pos2d);
+#else
+  gbuffer_data gbd0 = gbuffer_load_data(I.Tex0);
+  gbuffer_data gbd1 = gbuffer_load_data(I.Tex1);
+  gbuffer_data gbd2 = gbuffer_load_data(I.Tex2);
+  gbuffer_data gbd3 = gbuffer_load_data(I.Tex3);
+  gbuffer_data gbd4 = gbuffer_load_data(I.Tex4);
+#endif
+  
+  // Normal discontinuety filter
+  //float3 nc		=  tex2D	(s_normal,   	I.tc0);
+	float3 nc		=  gbd0.N;
+  float4 nd;
+//	nd.x 		=  dot 		(nc, (float3)tex2D(s_normal,I.tc1));
+//	nd.y 		=  dot 		(nc, (float3)tex2D(s_normal,I.tc2));
+//	nd.z 		=  dot 		(nc, (float3)tex2D(s_normal,I.tc3));
+//	nd.w 		=  dot 		(nc, (float3)tex2D(s_normal,I.tc4));
+	nd.x 		=  dot 		(nc, (float3)( gbd1 ).N);
+	nd.y 		=  dot 		(nc, (float3)( gbd2 ).N);
+	nd.z 		=  dot 		(nc, (float3)( gbd3 ).N);
+	nd.w 		=  dot 		(nc, (float3)( gbd4 ).N);
+	nd 		-= e_barrier.x	;
+	nd 		=  step		(0,nd);	// bw
+  float  ne 		=  saturate	(dot(nd,e_weights.x));
+
+  // Opposite coords
+  float4 tc5r 		=  I.Tex5.wzyx;
+  float4 tc6r 		=  I.Tex6.wzyx;
+  
+#ifdef GBUFFER_OPTIMIZATION
+  gbuffer_data gbd5 = gbuffer_load_data_offset(I.Tex0,I.Tex5, pos2d); 
+  gbuffer_data gbd6 = gbuffer_load_data_offset(I.Tex0,I.Tex6, pos2d); 
+  gbuffer_data gbd5r = gbuffer_load_data_offset(I.Tex0,tc5r, pos2d); 
+  gbuffer_data gbd6r = gbuffer_load_data_offset(I.Tex0,tc6r, pos2d); 
+#else
+  gbuffer_data gbd5 = gbuffer_load_data(I.Tex5); 
+  gbuffer_data gbd6 = gbuffer_load_data(I.Tex6); 
+  gbuffer_data gbd5r = gbuffer_load_data(tc5r); 
+  gbuffer_data gbd6r = gbuffer_load_data(tc6r); 
+#endif
+
+  // Depth filter : compute gradiental difference: (c-sample1)+(c-sample1_opposite)
+//  float4 dc		=  tex2D 	(s_position, I.tc0); 
+  float4 dc		=  float4( gbd0.P, gbd0.mtl ); 
+  float4 dd;
+//	dd.x 		=  (float)tex2D(s_position,I.tc1).z + (float)tex2D(s_position,I.tc2).z;
+//	dd.y 		=  (float)tex2D(s_position,I.tc3).z + (float)tex2D(s_position,I.tc4).z;
+//	dd.z 		=  (float)tex2D(s_position,I.tc5).z + (float)tex2D(s_position,tc5r).z;
+//	dd.w 		=  (float)tex2D(s_position,I.tc6).z + (float)tex2D(s_position,tc6r).z;
+	dd.x 		=  	(float)gbd1.P.z 
+				+	(float)gbd2.P.z;
+	dd.y 		=  	(float)gbd3.P.z 
+				+	(float)gbd4.P.z;
+	dd.z 		=  	(float)gbd5.P.z 
+				+	(float)gbd5r.P.z;
+	dd.w 		=  	(float)gbd6.P.z 
+				+	(float)gbd6r.P.z;
+	dd 		=  abs(2*dc.z-dd)-e_barrier.y;
+	dd 		=  step		(dd,0);		// bw
+  float  de 		=  saturate	(dot(dd,e_weights.y));
+
+  // weight
+  float 	w 		=  (1-de*ne)*e_kernel.x;	// 0 - no aa, 1=full aa
+
+#ifdef 	USE_DISTORT
+//	float4 	distort	= tex2D		(s_distort, I.tc0);
+	float4 	distort	= s_distort.Sample( smp_nofilter, I.Tex0);
+	float2	doffs	= (distort.xy-.5h)*def_distort;
+	float2	center	= I.Tex0 + doffs;
+#else
+	float2	center 	= I.Tex0;
+#endif
+
+  // Smoothed color
+  // (a-c)*w + c = a*w + c(1-w)
+
+	float2	offset 	=  center * (1-w);
+//  float4 	s0 	=  tex2D	(s_image, offset + I.tc1*w);
+//  float4 	s1 	=  tex2D	(s_image, offset + I.tc2*w);
+//  float4 	s2 	=  tex2D	(s_image, offset + I.tc3*w);
+//  float4 	s3 	=  tex2D	(s_image, offset + I.tc4*w);
+	float4	s0	=  s_image.Sample( smp_rtlinear, offset + I.Tex1*w);
+	float4	s1	=  s_image.Sample( smp_rtlinear, offset + I.Tex2*w);
+	float4	s2 	=  s_image.Sample( smp_rtlinear, offset + I.Tex3*w);
+	float4	s3 	=  s_image.Sample( smp_rtlinear, offset + I.Tex4*w);
+
+	float3 	final	=  mblur( center, dc, (s0+s1+s2+s3)/4.h );
+
+//	return combine_bloom(final,tex2D	(s_bloom, I.tc0));
+	float4	out_c	= combine_bloom( final, s_bloom.Sample( smp_rtlinear, I.Tex0));
+
+	// Gamma/brightness/contrast in the shader when the hardware ramp is dead (windowed) -
+	// same curve CGammaControl::GenLUT builds; identity at 1/1/1.
+	[branch] if ( da_gamma.w > 0.5h )
+	{
+		const float B = da_gamma.y;
+		const float C = da_gamma.z;
+		float3 v = pow(max(out_c.rgb, 0.0h), da_gamma.x);
+		out_c.rgb = (C + 0.5h) * v + (B - 0.5h) * 0.5h - C * 0.5h + 0.25h;
+	}
+
+	// Output dithering: +-1/2 LSB triangular noise kills gradient banding.
+	{
+		float2 dseed = I.Tex0 * screen_res.xy;
+		float dn0 = frac(sin(dot(dseed, float2(12.9898h, 78.233h))) * 43758.5453h);
+		float dn1 = frac(sin(dot(dseed, float2(39.3468h, 11.135h))) * 24634.6345h);
+		out_c.rgb += (dn0 + dn1 - 1.0h) * (1.0h / 255.0h);
+	}
+
+	return out_c;
+}

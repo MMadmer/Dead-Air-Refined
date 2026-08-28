@@ -293,7 +293,9 @@ void CDetailManager::UpdateVisibleM()
 
     float fade_limit = dm_fade;
     fade_limit = fade_limit * fade_limit;
-    float fade_start = 1.f;
+    // Fade onset as a share of the draw radius (r__grass_fade_start); 0 keeps the stock
+    // shrink-from-one-metre. The capped 0.95 keeps fade_range from collapsing to zero.
+    float fade_start = 1.f + (dm_fade - 1.f) * ps_r__grass_fade_start;
     fade_start = fade_start * fade_start;
     float fade_range = fade_limit - fade_start;
     float r_ssaCHEAP = 16 * r_ssaDISCARD;
@@ -385,7 +387,15 @@ void CDetailManager::UpdateVisibleM()
                         {
                             SlotItem& Item = *siIT;
                             const float fade = ps_detail_scale_on_fade ? 1.f : alpha_i;
-                            const float scale = Item.scale_calculated = Item.scale * fade;
+                            // r__grass_fade_flat splits the fade between uniform shrink and
+                            // height-only: uni is what the footprint loses, and the height
+                            // multiplier restores fade/uni so total vertical shrink stays fade.
+                            const float uni = 1.f - (1.f - fade) * (1.f - ps_r__grass_fade_flat);
+                            Item.height_calculated = (uni > 1e-4f) ? (fade / uni) : 1.f;
+                            const float scale = Item.scale_calculated = Item.scale * uni;
+                            // The only place the dump's constant rows change - drop the cache
+                            // here, not in the (much hotter) draw loop.
+                            Item.cache_valid = false;
                             const float ssa = scale * scale * Rq_drcp;
                             if (ssa < r_ssaDISCARD)
                             {
@@ -484,10 +494,10 @@ void CDetailManager::UpdateRenderState()
     const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
     m_wind_dir1.set(_sin(m_time_rot_1), 0.f, _cos(m_time_rot_1), 0.f)
         .normalize()
-        .mul(0.1f + environment.wind_velocity * 0.0016f);
+        .mul((0.1f + environment.wind_velocity * 0.0016f) * ps_r__wind_scale);
     m_wind_dir2.set(_sin(m_time_rot_2), 0.f, _cos(m_time_rot_2), 0.f)
         .normalize()
-        .mul(0.05f + environment.wind_velocity * 0.0008f);
+        .mul((0.05f + environment.wind_velocity * 0.0008f) * ps_r__wind_scale);
 }
 
 void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)

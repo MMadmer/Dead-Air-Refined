@@ -5,10 +5,8 @@
 #define SM_MINMAX
 #endif
 
-// The ultra path (SUN_QUALITY>2 -> shadow_extreme_quality) is retired on purpose: it walks
-// its own fixed Gather grid, bypassing shadow_hw - so the rotated/scaled PCF kernel and the
-// cascade kernel floor would silently not apply exactly on the top sun-quality setting.
-// Extreme now takes the same shadow_hw road as high, with the full kernel machinery.
+// The ultra path (SUN_QUALITY>2 -> shadow_extreme_quality) is retired on purpose - see
+// accum_sun_near.ps: it bypasses shadow_hw and with it the whole PCF kernel machinery.
 //#if SUN_QUALITY>2
 //#define ULTRA_SHADOWS_ON
 //#endif //	SUN_QUALITY>2
@@ -18,7 +16,10 @@
 #endif
 
 #include "shadow.h"
-#include "da_sss.h"	// screen-space contact shadows, r__sss (off by default)
+uniform float3	view_shadow_proj;	// kept for the constant table; superseded by the distance fade
+// x = unused (historical), y = full-light distance in metres from the camera (r__sun_shadow_fade).
+uniform float4	da_sun_far_fade;
+
 
 #ifdef USE_SUNFILTER
 #ifdef MSAA_OPTIMIZATION
@@ -82,12 +83,38 @@ float4 main ( v2p_volume I ) : SV_Target
 #endif
 	#endif
 
-	[branch] if (s <= 0.0f)
-		return 0.0f;
+	// Far shadow fade by DISTANCE from the camera (r__sun_shadow_fade), replacing the stock
+	// map-edge fade. The stock code faded against the shadow map border, but the far map is
+	// fitted to the camera pyramid and its edge MOVES with every turn of the view - the
+	// travelling "wedge" of shadow. Distance is rotation-invariant (the industry answer: UE
+	// Dynamic Shadow Distance, URP max-distance fade): shadow dissolves into light on the way
+	// out, before any pixel can reach the moving map edge. _P is view space, so length = camera
+	// distance; the fade starts well ahead (35%) for a soft ramp instead of a visible ring.
+	// Zero constant = not bound (old shadow path, archive DLL) - keep the stock edge fade.
+	[branch] if ( da_sun_far_fade.y > 1.0f )
+	{
+		float 	cam_dist = length( _P.xyz );
+		float 	d_end   = da_sun_far_fade.y;
+		float 	d_start = d_end * 0.35f;
+		float 	fade = saturate( (cam_dist - d_start) / max( d_end - d_start, 1e-3f ) );
+		s += (1.f - s) * fade;
+	}
+	else
+	{
+		// Far edge fading code
+		float2 	tc_f	= (PS.xy/PS.w)-float2(0.5f,0.5f);
+				// Fade only fron edges
+				tc_f 	*= step( -dot( tc_f, view_shadow_proj.xy ), 0 );
+				tc_f	= abs( tc_f );
+		float 	border 	= 0.4f;
+		float 	fac_x 	= 1.f-saturate( ( tc_f.x - border )/(0.5f-border));
+		float 	fac_y 	= 1.f-saturate( ( tc_f.y - border )/(0.5f-border));
 
-	// Contact shadows only where the shadow map still leaves light: pixels the map already
-	// shadows took the early-out above, so the ray march is never paid for them.
-	s *= da_screen_space_shadow( _P.xyz, Ldynamic_dir.xyz, I.hpos.xy );
+		s += ((1-s)*(1-fac_x*fac_y));
+	}
+	//\ Far edge fading code
+
+	// Fully shadowed and not faded back in - the light model below is never paid for.
 	[branch] if (s <= 0.0f)
 		return 0.0f;
 

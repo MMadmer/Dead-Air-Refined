@@ -36,6 +36,22 @@ static u16 facetable[16][3] =
 };
 } // namespace accum_direct
 
+// PCF kernel controls and the far-shadow distance fade, per sun cascade. The near cascade
+// keeps the stock kernel; the middle takes half the growth so the cascade seam does not
+// read as a step; the far one takes it in full - there a screen pixel covers dozens of
+// shadow texels and the 4-tap filter degenerates into a point probe. da_sun_far_fade is
+// read by accum_sun_far.ps only; for near/middle it silently goes nowhere.
+static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 sub_phase)
+{
+    const float k = float(ps_r__shadow_kernel_far);
+    const float da_kernel = (SE_SUN_NEAR == sub_phase)   ? 1.f
+                          : (SE_SUN_MIDDLE == sub_phase) ? (1.f + (k - 1.f) * 0.5f)
+                                                         : k;
+    cmd_list.set_c("da_shadow_kernel", da_kernel, k,
+        float(Device.dwFrame & 7) * 0.125f, float(ps_r__shadow_rotate));
+    cmd_list.set_c("da_sun_far_fade", 0.75f * ps_r__sun_shadow_fade, ps_r__sun_shadow_fade, 0.f, 0.f);
+}
+
 void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
 {
     // Choose normal code-path or filtered
@@ -257,6 +273,9 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
 
         // setup
         cmd_list.set_Element(s_accum_direct->E[uiElementIndex]);
+        // STRICTLY after set_Element: set_c writes into the CURRENT element's constant
+        // table; placed earlier it vanishes silently - no error, no log line.
+        da_set_sun_shadow_consts(cmd_list, sub_phase);
         cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
         cmd_list.set_c("Ldynamic_color", L_clr.x, L_clr.y, L_clr.z, L_spec);
         cmd_list.set_c("m_shadow", m_shadow);
@@ -620,9 +639,22 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
 
         // setup
         cmd_list.set_Element(s_accum_direct->E[uiElementIndex]);
+        // STRICTLY after set_Element - see da_set_sun_shadow_consts.
+        da_set_sun_shadow_consts(cmd_list, sub_phase);
         cmd_list.set_c("m_texgen", m_Texgen);
         cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
-        cmd_list.set_c("Ldynamic_color", L_clr.x, L_clr.y, L_clr.z, L_spec);
+        {
+            // Cascade diagnostic (r__dbg_sun_cascades): near=R, middle=G, far=B - the sun
+            // light of each cascade is tinted so a visible wedge lands on a colour border.
+            float tr = 1.f, tg = 1.f, tb = 1.f;
+            if (ps_r__dbg_sun_cascades)
+            {
+                tr = (SE_SUN_NEAR == sub_phase) ? 1.4f : 0.25f;
+                tg = (SE_SUN_MIDDLE == sub_phase) ? 1.4f : 0.25f;
+                tb = (SE_SUN_NEAR != sub_phase && SE_SUN_MIDDLE != sub_phase) ? 1.4f : 0.25f;
+            }
+            cmd_list.set_c("Ldynamic_color", L_clr.x * tr, L_clr.y * tg, L_clr.z * tb, L_spec);
+        }
         cmd_list.set_c("m_shadow", m_shadow);
         cmd_list.set_c("m_sunmask", m_clouds_shadow);
 

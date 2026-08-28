@@ -80,6 +80,20 @@ extern ECORE_API float ps_r__sss;
 extern ECORE_API float ps_r__sss_len;
 extern ECORE_API float ps_r__sss_thick;
 extern ECORE_API float ps_r__sss_steps;
+extern ECORE_API float ps_r__fog;
+extern ECORE_API float ps_r__fog_sky;
+extern ECORE_API float ps_r__fog_sky_mip;
+extern ECORE_API float ps_r__fog_sky_flat;
+extern ECORE_API float ps_r__fog_height;
+extern ECORE_API float ps_r__fog_height_falloff;
+extern ECORE_API float ps_r__fog_height_base;
+extern ECORE_API float ps_r__fog_dist;
+extern ECORE_API float ps_r__fog_follow_vis;
+extern ECORE_API float ps_r__fog_max;
+extern ECORE_API float ps_r__tonemap_hue;
+extern ECORE_API float ps_r__tonemap_desat;
+extern ECORE_API float ps_r__tonemap_white;
+extern ECORE_API float ps_r__ssao_power;
 extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;
@@ -98,6 +112,94 @@ extern ECORE_API float ps_r__GLOD_ssa_end;
 extern ECORE_API float ps_r__LOD;
 //.extern ECORE_API	float		ps_r__LOD_Power		;
 extern ECORE_API float ps_r__ssaDISCARD;
+// Separate discard threshold for vegetation billboards (FLOD); see xrRender_console.cpp.
+extern ECORE_API float ps_r__vegDISCARD;
+extern ECORE_API float ps_r__grass_fade_start;
+extern ECORE_API float ps_r__grass_fade_flat;
+extern ECORE_API int ps_r__grass_shadow_dist;
+extern ECORE_API int ps_r__grass_shadow_fade;
+extern ECORE_API float ps_r__grass_tint;
+extern ECORE_API float ps_r__grass_tint_scale;
+extern ECORE_API float ps_r__grass_tint_base;
+extern ECORE_API float ps_r__wind_scale;
+extern ECORE_API int ps_r__wind_shadow;
+extern ECORE_API float ps_r__lod_hemi;
+extern ECORE_API float ps_r__lod_sat;
+extern ECORE_API float ps_r__lod_bright;
+extern ECORE_API float ps_r__foliage_gloss;
+extern ECORE_API float ps_r__foliage_vibrance;
+extern ECORE_API float ps_r__foliage_debleach;
+extern ECORE_API int ps_r__puddles;
+extern ECORE_API float ps_r__puddles_buildup;
+extern ECORE_API float ps_r__puddles_dry;
+extern ECORE_API float ps_r__puddles_size;
+extern ECORE_API float ps_r__puddles_force;
+extern ECORE_API float ps_r__puddles_gloss;
+extern ECORE_API float ps_r__puddles_dark;
+extern ECORE_API float ps_r__puddles_damp;
+extern ECORE_API float ps_r__puddles_ripple;
+extern ECORE_API int ps_r__puddles_debug;
+extern ECORE_API int ps_r__puddles_dist;
+extern ECORE_API int ps_r__puddles_gbuf;
+extern ECORE_API float ps_r__puddles_edge;
+extern ECORE_API float ps_r__puddles_rim;
+extern ECORE_API float ps_r__puddles_rim_width;
+extern ECORE_API int ps_r__puddles_refl;
+extern ECORE_API float ps_r__puddles_refl_power;
+extern ECORE_API float ps_r__puddles_facing;
+extern ECORE_API float ps_r__puddles_sky;
+extern ECORE_API int ps_r__sun_shafts_mod;
+extern ECORE_API float ps_r__sun_shafts_boost;
+extern ECORE_API float ps_r__sun_shafts_min;
+extern ECORE_API float ps_r__sun_shafts_indoor;
+extern ECORE_API float ps_r__shafts_sky;
+
+// The final shaft strength, computed in ONE place on purpose: the render-target gate
+// decides whether the pass runs at all, and the binder ships the value to the shader -
+// computed twice differently, the pass dies on the weather zero while a downstream
+// multiplier saves nobody. The floor is a THRESHOLD (max), not a multiplier: DA weather
+// sets shafts to zero in most records, and multiplying zero gives zero.
+inline float da_sun_shafts_value(float env_value)
+{
+    if (!ps_r__sun_shafts_mod)
+        return 0.f;
+    const float scaled = env_value * ps_r__sun_shafts_boost;
+    return scaled > ps_r__sun_shafts_min ? scaled : ps_r__sun_shafts_min;
+}
+
+extern ECORE_API float ps_r__parallax_start;
+extern ECORE_API float ps_r__parallax_stop;
+extern ECORE_API float ps_r__parallax_depth;
+extern ECORE_API float ps_r__parallax_shadow;
+extern ECORE_API int ps_r__parallax_samples;
+extern ECORE_API int ps_r__parallax_samples_min;
+extern ECORE_API int ps_r__parallax_shadow_samples;
+extern ECORE_API int ps_r__parallax_force;
+extern ECORE_API int ps_r__parallax_debug;
+extern ECORE_API float ps_r__spec_aa;
+extern ECORE_API float ps_r__spec_aa_max;
+extern ECORE_API float ps_r__spec_aa_power;
+extern ECORE_API int ps_r__spec_aa_debug;
+extern ECORE_API int ps_r__hex_tiling;
+extern ECORE_API float ps_r__hex_scale;
+extern ECORE_API float ps_r__hex_rot;
+extern ECORE_API float ps_r__hex_contrast;
+extern ECORE_API int ps_r__shadow_kernel_far;
+extern ECORE_API int ps_r__shadow_rotate;
+extern ECORE_API float ps_r__sun_shadow_fade;
+extern ECORE_API int ps_r__dbg_sun_cascades;
+extern ECORE_API int ps_r__particle_dist;
+extern ECORE_API float ps_r__detail_mipbias;
+extern ECORE_API float ps_r__detail_nfade;
+extern ECORE_API float ps_r__macro_var;
+extern ECORE_API float ps_r__macro_var_scale;
+extern ECORE_API float ps_r__macro_var_start;
+extern ECORE_API float ps_r__macro_var_end;
+extern ECORE_API float ps_r__macro_tint;
+extern ECORE_API float ps_r__macro_relief;
+extern ECORE_API float ps_r__terrain_blend;
+extern ECORE_API float ps_r__mask_jitter;
+extern ECORE_API float ps_r__macro_detail;
 extern ECORE_API float ps_r__ssaDONTSORT;
 extern ECORE_API float ps_r__ssaHZBvsTEX;
 extern ECORE_API int ps_r__tf_Anisotropic;

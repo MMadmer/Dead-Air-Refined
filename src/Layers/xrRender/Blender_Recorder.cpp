@@ -54,6 +54,7 @@ void CBlender_Compile::_cpp_Compile(ShaderElement* _SH)
     // Analyze possibility to detail this shader
     detail_texture = nullptr;
     detail_scaler = nullptr;
+    bUseHexTiling = FALSE; // default until the base texture name is resolved
     LPCSTR base = nullptr;
     if (bDetail && BT->canBeDetailed())
     {
@@ -122,6 +123,11 @@ void CBlender_Compile::_cpp_Compile(ShaderElement* _SH)
 
     bUseSteepParallax =
         RImplementation.Resources->m_textures_description.UseSteepParallax(base) && BT->canUseSteepParallax();
+
+    // Hex repeat-breaking - decided by the BASE texture name, the same one parallax is
+    // decided by above: both flags describe one surface, taking them from different places
+    // would drift apart one day.
+    bUseHexTiling = RImplementation.Resources->m_textures_description.UseHexTiling(base);
 /*
     if (DEV->m_textures_description.UseSteepParallax(base))
     {

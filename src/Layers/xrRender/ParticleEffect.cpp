@@ -640,10 +640,29 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
     TAL_SCOPED_TASK_NAMED("CParticleEffect::Render()");
 #endif // _GPA_ENABLED
 
+    // Distance threshold (r__particle_dist), before everything else: a culled effect must
+    // cost neither the particle fetch, nor the buffer lock, nor the draw. Sibling measured
+    // 0.72 -> 0.53 ms at 200 m on Jupiter; the cut is hard - if far smoke visibly pops,
+    // the fix is a fade near the edge, not a higher threshold.
+    if (ps_r__particle_dist > 0)
+    {
+        Fvector effect_pos;
+        if (m_RT_Flags.is(flRT_XFORM))
+            m_XFORM.transform_tiny(effect_pos, vis.sphere.P);
+        else
+            effect_pos = vis.sphere.P;
+
+        const float lim = float(ps_r__particle_dist);
+        if (Device.vCameraPosition.distance_to_sqr(effect_pos) > lim * lim)
+            return;
+    }
+
 #ifdef USE_OGL
     // Due to the big impact on performance
+    // The threshold above replaces this cull too: this one measured from m_InitialPosition,
+    // which is only right while bXFORM == FALSE, and tied particles to rs_vis_distance.
     const float distSQ = Device.vCameraPosition.distance_to_sqr(m_InitialPosition) + EPS;
-    if (distSQ > _sqr(100.f*psVisDistance))
+    if (ps_r__particle_dist <= 0 && distSQ > _sqr(100.f*psVisDistance))
         return;
 #endif
 

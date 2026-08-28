@@ -27,6 +27,8 @@ public:
     bool bDetail_Diffuse;
     bool bDetail_Bump;
     BOOL bUseSteepParallax;
+    // Hex repeat-breaking allowed for this surface (da_hex_tiling.ltx by base texture).
+    BOOL bUseHexTiling;
     int iElement;
     // Set when a shader script threw; the half-recorded shader must not be published as-is
     bool bScriptFailed{};

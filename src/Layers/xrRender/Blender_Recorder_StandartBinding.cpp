@@ -9,6 +9,11 @@
 #include "xrEngine/Environment.h"
 #include "xrEngine/EnvironmentWeatherState.h"
 
+// Declared BEFORE the render namespace opens on purpose: an extern inside it would introduce
+// its own xray::render::*::psVisDistance that nothing defines, and the build dies at link.
+// The variable lives in the engine (Environment.cpp).
+extern ENGINE_API float psVisDistance;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // matrices
@@ -156,8 +161,27 @@ class cl_fog_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        const float n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
-        const float f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
+        float n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
+        float f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
+
+        // Haze distance (r__fog_dist): 1.0 is exactly the weather values. Both bounds scale
+        // together, so the whole start-end shifts while the gradient shape and the differences
+        // between weathers survive. With the haze master at zero the weather distances stay
+        // untouched. The visibility-distance follow is a RATIO from 1.5 - the position the
+        // haze was tuned at - because a difference goes negative at the slider's low end.
+        float k = (ps_r__fog_dist > 0.f) ? (1.f + (ps_r__fog_dist - 1.f) * ps_r__fog) : 1.f;
+        constexpr float visReference = 1.5f;
+        if (ps_r__fog > 0.001f && ps_r__fog_follow_vis > 0.001f && psVisDistance > 0.01f)
+        {
+            const float ratio = psVisDistance / visReference;
+            k *= 1.f + (ratio - 1.f) * ps_r__fog_follow_vis;
+        }
+        if (_abs(k - 1.f) > 0.001f)
+        {
+            n *= k;
+            f *= k;
+        }
+
         const float r = 1 / (f - n);
         Fvector4 result;
         result.set(-n * r, n, f, r);
@@ -302,6 +326,18 @@ static class cl_screen_res : public R_constant_setup
             1.0f / (float)Device.dwHeight);
     }
 } binder_screen_res;
+
+// Hex repeat-breaking permission for THIS surface. Two constant objects suffice: the value
+// takes exactly two states, no per-material object (as dt_params has) is needed.
+static class cl_hex_allow : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, 1.f, 0.f, 0.f, 0.f); }
+} binder_hex_allow;
+
+static class cl_hex_deny : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, 0.f, 0.f, 0.f, 0.f); }
+} binder_hex_deny;
 
 static class cl_various : public R_constant_setup
 {
@@ -471,6 +507,14 @@ void CBlender_Compile::SetMapping()
     // anyway.
     if (detail_scaler)
         r_Constant("dt_params", detail_scaler);
+
+    // Hex repeat-breaking: allowed for THIS surface or not. A per-material CONSTANT, not a
+    // shader define: blender-supplied defines never reach the shader cache name
+    // (r4_shaders.cpp appends options past sh_name), so a define would silently collapse
+    // all materials onto one compiled variant. Bound ALWAYS, by either branch - an unbound
+    // constant would keep the previous draw's value and leak the permission across surfaces.
+    r_Constant("da_hex_mat", bUseHexTiling ? static_cast<R_constant_setup*>(&binder_hex_allow)
+                                           : static_cast<R_constant_setup*>(&binder_hex_deny));
 
     // other common
     for (u32 it = 0; it < RImplementation.Resources->v_constant_setup.size(); it++)

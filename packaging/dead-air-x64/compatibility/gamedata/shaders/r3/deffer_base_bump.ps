@@ -1,0 +1,79 @@
+#include "common.h"
+// Repeat-breaking is allowed ONLY for shaders whose unwrap is tiled - impostors and props
+// use ATLASES, and a random shift there grabs a piece of the neighbouring cell (verified on
+// the barrel: mush). The define must precede sload.h.
+#define DA_HEX_ALLOW 1
+#include "sload.h"
+
+f_deffer main ( p_bumped I )
+{
+  f_deffer	O;
+
+  surface_bumped 	S 	= sload 	(I);
+
+  // Sample normal, rotate it by matrix, encode position
+  float3 Ne				= mul       (float3x3(I.M1, I.M2, I.M3), S.normal);
+		Ne				= normalize	(Ne);
+
+	// hemi,sun,material
+	float 	ms	= xmaterial		;
+#ifdef USE_LM_HEMI
+//	float4	lm 	= tex2D			(s_hemi, I.lmh);
+	float4	lm 	= s_hemi.Sample( smp_rtlinear, I.lmh);
+//	float 	h  	= dot			(lm.rgb,1.h/3.h);
+	float 	h  	= get_hemi(lm);
+# ifdef USE_R2_STATIC_SUN
+//		 	ms 	= lm.w;
+			ms 	= get_sun(lm);
+# endif
+#else
+	float 	h	= I.position.w	;
+# ifdef USE_R2_STATIC_SUN
+		 	ms	= I.tcdh.w		;
+# endif
+#endif
+
+	S.base.xyz = Vibrance(S.base.xyz, 1.4);
+
+	// Specular antialiasing: damp the peak where the normal no longer resolves within a
+	// pixel. At r__spec_aa 0 the factor is one. Debug: 1 = the factor, 2 = inverted.
+	float da_saa = da_spec_aa_factor( Ne );
+	S.gloss *= da_saa;
+	if (da_spec_aa.w > 0.5h)
+		S.base.xyz = (da_spec_aa.w < 1.5h) ? da_saa.xxx : (1.0h - da_saa).xxx;
+
+	// Relief self-shadow - into the ALBEDO. Without steep parallax the factor is one and the
+	// line changes nothing. Hemi was the first attempt and showed NOTHING: hemi feeds only
+	// the ambient term, which is a small share on a sunlit wall. The mtl channel carries the
+	// sun term only under USE_R2_STATIC_SUN (off in R4), and the G-buffer has no free slot -
+	// so the albedo it is: the shadow acts on ALL light at once. Wrong for light arriving
+	// from elsewhere (a lantern, a fire), but a groove in brick is dark from almost every
+	// side, and the value tracks the REAL sun every frame, unlike a baked cavity map.
+	S.base.rgb *= da_parallax_shadow;
+	// AND THE GLOSS. Without this line the surface turns "mirror-like": albedo damped,
+	// specular unchanged, their ratio slides towards the specular term and the material
+	// reads as plastic (Lagarde: a shaded cavity must damp the highlight too). gloss goes to
+	// the G-buffer as C.w and combine_1.ps builds specular as C.www*L.rgb*5, so this one
+	// multiply IS the highlight shading.
+	S.gloss *= da_parallax_shadow;
+
+	// Debug: 1 = the shadow itself, 2 = height at the found point, 3 = every pixel the
+	// parallax branch reached at all. Modes 1 and 2 paint ONLY parallax pixels (a reliefless
+	// surface has shadow one by definition and would whitewash the world); mode 3 must paint
+	// everything - it is about where the branch did NOT run.
+	if (da_parallax2.w > 0.5h)
+	{
+		if (da_parallax2.w > 2.5h)
+			S.base.xyz = float3( da_parallax_hit, 0.0h, 0.0h );
+		else if (da_parallax_hit > 0.5h)
+			S.base.xyz = (da_parallax2.w < 1.5h) ? da_parallax_shadow.xxx : da_parallax_height.xxx;
+	}
+
+	O			= pack_gbuffer(
+								float4	(Ne, 										h*H_MODELS		),
+								float4 	(I.position.xyz + Ne*S.height*def_virtualh, ms		),
+//								float4 	(I.position.xyz, ms),
+								float4	(S.base.xyz, 								S.gloss	) );
+
+  return O;
+}

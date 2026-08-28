@@ -395,7 +395,21 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     appendShaderOption(ps_r2_filmgrain, "USE_FILMGRAIN", "1");
     appendShaderOption(RImplementation.o.advancedpp && ps_r2_lensdirt, "USE_LENS_DIRT", "1");
     appendShaderOption(ps_r2_lenswater, "USE_LENS_WATER", "1");
-    appendShaderOption(ps_r2_reflections, "USE_REFLECTIONS", ps_r2_reflections > 1 ? "2" : "1");
+    // Water screen-space reflections. USE_REFLECTIONS gates the whole SSLR branch in the
+    // water shader (the R2 engine defined it, R4 never did - "sky reflects but nothing else").
+    // Driven by the existing r3_water_refl token: off drops the define entirely and the water
+    // falls back to the plain cubemap at zero cost; SSR_QUALITY picks the march length in
+    // ogse_reflections.h, and its value lands in the shader-cache name via sh_name.append.
+    {
+        appendShaderOption(ps_r_water_reflection ? 1 : 0, "USE_REFLECTIONS", "1");
+        static string16 c_water_reflection;
+        xr_sprintf(c_water_reflection, "%u", ps_r_water_reflection);
+        appendShaderOption(ps_r_water_reflection, "SSR_QUALITY", c_water_reflection);
+        // Dithers each pixel's ray start so the fixed-stride march breaks its stair-step
+        // banding into fine noise instead of visible terraces along reflection edges.
+        appendShaderOption(
+            ps_r_water_reflection && ps_r2_ls_flags_ext.test(R3FLAGEXT_SSR_JITTER), "SSR_JITTER", "1");
+    }
     appendShaderOption(RImplementation.o.advancedpp && ps_r2_sss_enable, "USE_SSHAFTS", "1");
     appendShaderOption(ps_r2_fxaa, "USE_FXAA", "1");
 

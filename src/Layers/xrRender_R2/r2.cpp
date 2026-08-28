@@ -15,6 +15,10 @@
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
 
+// Declared BEFORE the render namespace opens: a block-scope extern inside it binds to the
+// enclosing namespace and dies at link. These live in the engine (xr_ioc_cmd.cpp).
+extern ENGINE_API float ps_gamma, ps_brightness, ps_contrast;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 #if defined(USE_DX11)
@@ -117,12 +121,20 @@ static class cl_water_intensity : public R_constant_setup
     }
 } binder_water_intensity;
 
+// The roof-over-camera raycast result and its smoothed gate (r2_rendertarget.cpp).
+float da_sun_shafts_gate();
+
 static class cl_sun_shafts_intensity : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float fValue = env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value;
+        // Master/boost/floor computed by the SAME function the pass gate uses - computed
+        // twice differently, the pass dies on the weather zero while a late multiplier
+        // saves nobody. The indoor gate SOFTLY damps the strength itself: an early version
+        // switched shader modes instead and flooded open streets with veil on the way out.
+        float fValue = da_sun_shafts_value(env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value);
+        fValue *= da_sun_shafts_gate();
         cmd_list.set_c(C, fValue, fValue, fValue, 0.f);
     }
 } binder_sun_shafts_intensity;
@@ -136,6 +148,242 @@ static class cl_da_sss : public R_constant_setup
         cmd_list.set_c(C, ps_r__sss, ps_r__sss_len, ps_r__sss_thick, ps_r__sss_steps);
     }
 } binder_da_sss;
+
+// Rain state for surface response: x = rain right now (water ripples scale by it),
+// y = accumulated ground wetness, z = puddle share at full wetness, w = debug mode.
+//
+// The accumulator runs ONCE PER FRAME (frame marker), not per binding: the binder is called
+// per pass and per object, and without the marker wetness would grow at a rate depending on
+// how much geometry is in frame. Rain strength sets the SPEED of soaking, not its ceiling:
+// DA weather rains at 0.1-0.3 most of the time, and an intensity-capped accumulator would
+// never form a puddle - in life a drizzle wets the ground SLOWER, not less. The 0.25 floor
+// keeps the faintest drizzle from taking days: it fills in four buildup periods.
+static class cl_rain_params : public R_constant_setup
+{
+    u32 marker{};
+    float wetness{};
+    Fvector4 result{};
+
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        if (marker != Device.dwFrame)
+        {
+            marker = Device.dwFrame;
+
+            // x stays the RAW rain density regardless of the puddle master: the water
+            // shader scales its rain ripples by it, and the Minimum preset turning
+            // puddles off must not also becalm the lakes.
+            const float rain = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f;
+            const float dbg = float(ps_r__puddles_debug);
+            const float rain_for_wetness = ps_r__puddles ? rain : 0.f;
+
+            if (ps_r__puddles && ps_r__puddles_force > 0.f)
+            {
+                // Hand-set wetness for checking looks - no minutes of waiting for buildup.
+                wetness = ps_r__puddles_force;
+            }
+            else
+            {
+                const float dt = Device.fTimeDelta;
+                if (rain_for_wetness > 0.02f)
+                {
+                    const float speed = (0.25f + 0.75f * rain_for_wetness) / _max(ps_r__puddles_buildup, EPS_S);
+                    wetness += dt * speed;
+                }
+                else
+                {
+                    // Dries the same way, only as many times slower as the knob says.
+                    wetness -= dt / _max(ps_r__puddles_buildup * ps_r__puddles_dry, EPS_S);
+                }
+                clamp(wetness, 0.f, 1.f);
+            }
+            result.set(rain, wetness, ps_r__puddles_size, dbg);
+        }
+        cmd_list.set_c(C, result);
+    }
+} binder_rain_params;
+
+// Puddle look: gloss, darkening factor, wet-ground gloss, ripple strength.
+static class cl_da_puddle_look : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__puddles_gloss, ps_r__puddles_dark, ps_r__puddles_damp, ps_r__puddles_ripple);
+    }
+} binder_da_puddle_look;
+
+// Puddle look 2: draw distance, edge hardness, rim strength, G-buffer half switch.
+static class cl_da_puddle_look2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, float(ps_r__puddles_dist), ps_r__puddles_edge, ps_r__puddles_rim,
+            float(ps_r__puddles_gbuf));
+    }
+} binder_da_puddle_look2;
+
+// Puddle look 3: rim width; three slots left for the future.
+static class cl_da_puddle_look3 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__puddles_rim_width, 0.f, 0.f, 0.f);
+    }
+} binder_da_puddle_look3;
+
+// Sun shaft tint: x = share of horizon-sky colour (sunshaftsdisplay.ps).
+static class cl_da_shafts : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__shafts_sky, 0.f, 0.f, 0.f);
+    }
+} binder_da_shafts;
+
+// Haze: sky-coloured fog and the height layer, consumed by combine_1.ps. The value goes RAW:
+// the shader branches on a 0.001 threshold and applies its own scale inside, so dividing here
+// would put the whole working range under the branch's own cutoff. The master multiplies both
+// halves; zero means "do nothing", which is the invariant every haze branch is written around -
+// gating them with a define would double the shader cache instead.
+static class cl_da_fog : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const float k = ps_r__fog;
+        cmd_list.set_c(C, ps_r__fog_sky * k, ps_r__fog_sky_mip, ps_r__fog_height * k,
+            ps_r__fog_height_falloff);
+    }
+} binder_da_fog;
+
+// Second haze constant: density ceiling, layer reference altitude, horizon flattening.
+static class cl_da_fog2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, 0.f);
+    }
+} binder_da_fog2;
+
+// Tonemap tinting: y = white point, z = luminance-tonemap share, w = late-desaturation power.
+// Consumed by tonemap() in common_functions.h; a zero constant reproduces stock exactly.
+static class cl_da_tonemap_params : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, 0.f, ps_r__tonemap_white, ps_r__tonemap_hue, ps_r__tonemap_desat);
+    }
+} binder_da_tonemap_params;
+
+// Runtime AO strength for combine_1 (r__ssao_power). Only .x is used.
+static class cl_da_ao : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__ssao_power, 0.f, 0.f, 0.f);
+    }
+} binder_da_ao;
+
+// Gamma/brightness/contrast for the final combine, packed the way CGammaControl::GenLUT
+// consumes them. w flags "the hardware ramp is not in charge" - anything but exclusive
+// fullscreen - which is when the shader has to apply the sliders itself.
+static class cl_da_gamma : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const bool rampDead = psDeviceMode.WindowStyle != rsFullscreen;
+        cmd_list.set_c(C, 1.f / _max(::ps_gamma, 0.1f), ::ps_brightness * 0.5f, ::ps_contrast * 0.5f,
+            rampDead ? 1.f : 0.f);
+    }
+} binder_da_gamma;
+
+// Distant-vegetation billboard shading fix (lod.ps): hemi share, saturation, brightness.
+static class cl_da_lod_tune : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__lod_hemi, ps_r__lod_sat, ps_r__lod_bright, 0.f);
+    }
+} binder_da_lod_tune;
+
+// Steep parallax: fade start/end, depth, self-shadow strength.
+static class cl_da_parallax : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__parallax_start, ps_r__parallax_stop, ps_r__parallax_depth,
+            ps_r__parallax_shadow);
+    }
+} binder_da_parallax;
+
+// Steep parallax: search steps max/min, sun-ray steps, debug mode.
+static class cl_da_parallax2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, float(ps_r__parallax_samples), float(ps_r__parallax_samples_min),
+            float(ps_r__parallax_shadow_samples), float(ps_r__parallax_debug));
+    }
+} binder_da_parallax2;
+
+// Specular antialiasing: strength, variance ceiling, power, debug.
+static class cl_da_spec_aa : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__spec_aa, ps_r__spec_aa_max, ps_r__spec_aa_power,
+            float(ps_r__spec_aa_debug));
+    }
+} binder_da_spec_aa;
+
+// Hex-grid repeat breaking: scale, rotation strength, weight contrast, global enable.
+static class cl_da_hex : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__hex_scale, ps_r__hex_rot, ps_r__hex_contrast,
+            float(ps_r__hex_tiling));
+    }
+} binder_da_hex;
+
+// Terrain detail sampling: mip bias, reserved, normal fade distance, coarse far detail.
+static class cl_da_detail_bias : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__detail_mipbias, 0.f, ps_r__detail_nfade, ps_r__macro_detail);
+    }
+} binder_da_detail_bias;
+
+// Far ground variation: strength, 1/coarse step, fade start, fade end (end kept above start).
+static class cl_da_macro_var : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__macro_var, 1.f / _max(ps_r__macro_var_scale, 1.f),
+            ps_r__macro_var_start, _max(ps_r__macro_var_end, ps_r__macro_var_start + 1.f));
+    }
+} binder_da_macro_var;
+
+// Far hue tint, macro relief, height splatting, mask jitter.
+static class cl_da_macro_var2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__macro_tint, ps_r__macro_relief, ps_r__terrain_blend, ps_r__mask_jitter);
+    }
+} binder_da_macro_var2;
+
+// Foliage albedo/gloss knobs for deffer_base_aref_*. Gloss travels SHIFTED BY ONE: the
+// "zero constant = stock picture" invariant (archive shader against a new DLL) would
+// otherwise eat the meaningful zero of the knob - so 0 = unbound, 1 = knob at zero.
+// .y is reserved (their translucency bend needs the TAA pipeline we do not ship).
+static class cl_da_foliage : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__foliage_gloss + 1.f, 0.f, ps_r__foliage_vibrance, ps_r__foliage_debleach);
+    }
+} binder_da_foliage;
 
 static class cl_alpha_ref : public R_constant_setup
 {
@@ -523,6 +771,25 @@ void CRender::create()
     Resources->RegisterConstantSetup("water_intensity", &binder_water_intensity);
     Resources->RegisterConstantSetup("sun_shafts_intensity", &binder_sun_shafts_intensity);
     Resources->RegisterConstantSetup("da_sss", &binder_da_sss);
+    Resources->RegisterConstantSetup("rain_params", &binder_rain_params);
+    Resources->RegisterConstantSetup("da_fog", &binder_da_fog);
+    Resources->RegisterConstantSetup("da_fog2", &binder_da_fog2);
+    Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
+    Resources->RegisterConstantSetup("da_ao", &binder_da_ao);
+    Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
+    Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);
+    Resources->RegisterConstantSetup("da_foliage", &binder_da_foliage);
+    Resources->RegisterConstantSetup("da_detail_bias", &binder_da_detail_bias);
+    Resources->RegisterConstantSetup("da_macro_var", &binder_da_macro_var);
+    Resources->RegisterConstantSetup("da_macro_var2", &binder_da_macro_var2);
+    Resources->RegisterConstantSetup("da_parallax", &binder_da_parallax);
+    Resources->RegisterConstantSetup("da_parallax2", &binder_da_parallax2);
+    Resources->RegisterConstantSetup("da_spec_aa", &binder_da_spec_aa);
+    Resources->RegisterConstantSetup("da_hex", &binder_da_hex);
+    Resources->RegisterConstantSetup("da_puddle_look", &binder_da_puddle_look);
+    Resources->RegisterConstantSetup("da_puddle_look2", &binder_da_puddle_look2);
+    Resources->RegisterConstantSetup("da_puddle_look3", &binder_da_puddle_look3);
+    Resources->RegisterConstantSetup("da_shafts", &binder_da_shafts);
     Resources->RegisterConstantSetup("pos_decompression_params", &binder_pos_decompress_params);
     Resources->RegisterConstantSetup("pos_decompression_params2", &binder_pos_decompress_params2);
     Resources->RegisterConstantSetup("m_AlphaRef", &binder_alpha_ref);

@@ -48,6 +48,17 @@ TorchExtendedConfig& torch_extended_config(const CTorch* torch)
 }
 }
 
+// Does an NPC's torch cast a shadow. 0 = no (default), 1 = stock behaviour.
+//
+// The big flat black wedge crawling over the ground at night IS the NPC's shadow - from his
+// own torch. The actor's lamp is pushed forward by an offset, but an NPC's is placed EXACTLY
+// in the guide bone (set_position(M.c) in the else branch of UpdateCL), inside the chest.
+// The shadow map's near plane is 10 cm and the whole torso lands in the map. The shadow is
+// also pointless there by construction - an NPC never blocks his own chest-mounted light,
+// and walls are already bounded by the stencil volume shared by all lamps. Turning it off
+// additionally saves a full scene pass per lamp-carrying NPC - a camp holds a dozen.
+int ps_r__npc_torch_shadow = 0;
+
 CTorch::CTorch()
     : fBrightness(1.f), lanim(nullptr), guid_bone(BI_NONE),
       m_delta_h(0), m_switched_on(false),
@@ -559,6 +570,11 @@ void CTorch::UpdateCL()
     light_render->set_never_demote(actorOwned);
     light_render2->set_never_demote(actorOwned);
     light_omni->set_never_demote(actorOwned);
+
+    // Only the STALKER's torch loses its shadow (see ps_r__npc_torch_shadow); the actor's
+    // and a dropped torch shadow as before. Refreshed every frame with ownership.
+    const bool npcOwned = H_Parent() && !actorOwned;
+    light_render->set_shadow(!npcOwned || 0 != ps_r__npc_torch_shadow);
 
     if (!m_switched_on)
         return;

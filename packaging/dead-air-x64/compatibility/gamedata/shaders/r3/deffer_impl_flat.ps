@@ -1,0 +1,277 @@
+#include "common.h"
+#include "sload.h"
+#include "da_puddles.h"	// rain puddles
+
+#define	USE_4_DETAIL
+
+#if defined(USE_TDETAIL) && defined(USE_4_DETAIL)
+#	define	USE_4_BUMP
+#endif
+
+// Terrain far-field constants (ported from the sibling engine; every zero reproduces the
+// stock path bit for bit, so archive shaders against a new DLL and vice versa stay stock).
+// da_detail_bias comes from sload.h (shared with the wall detail path):
+//                  x = detail mip bias, y = reserved, z = detail-normal fade distance (m),
+//                  w = coarse four-layer far detail strength.
+// da_macro_var:    x = far brightness variation strength, y = 1/coarse uv step,
+//                  z = fade start (m), w = fade end (m).
+// da_macro_var2:   x = far hue tint to detail mix, y = far macro relief, z = height-based
+//                  layer blend, w = mask uv jitter.
+uniform float4	da_macro_var;
+uniform float4	da_macro_var2;
+
+#ifdef USE_4_BUMP
+f_deffer 	main	( p_bumped I 	)
+#else
+f_deffer 	main	( p_flat I 		)
+#endif
+{
+	f_deffer	O;
+
+ 	// diffuse
+	float4 D		= tbase		(I.tcdh);			// IN:  rgb.a
+//	float4 L 	= tex2D		(s_lmap, I.tcdh);
+	float4 L 	= s_lmap.Sample( smp_base, I.tcdh);
+
+	float	G	= def_gloss	;
+
+# ifdef	USE_TDETAIL
+ # ifdef USE_4_DETAIL
+//	float4	mask= tex2D		(s_mask, I.tcdh);
+	// Mask uv jitter (r__mask_jitter). What shows at distance is not the layer transition
+	// but the MASK itself - a low-res texture whose smooth gradient stretches over tens of
+	// metres and reads as a band. Shifting the sample point by coarse-step noise turns the
+	// smooth arc into tongues. Coarse scale matters: a fine pattern would mip-average away
+	// exactly where the jitter is needed.
+	float2	mask_uv = I.tcdh;
+	[branch] if (da_macro_var2.w > 0.0001f)
+	{
+		const float2 n2 = s_dt_r.Sample( smp_base, I.tcdbump * da_macro_var.y).rg - 0.5f;
+		mask_uv += n2 * da_macro_var2.w;
+	}
+	float4	mask= s_mask.Sample ( smp_base, mask_uv);
+	float 	mag	= dot 		(mask,1);
+			mask= mask/mag	;
+
+	// Pure layer colours first - the weight applies below, after the blend mode is chosen.
+	float3	c_R	= s_dt_r.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float3	c_G	= s_dt_g.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float3	c_B	= s_dt_b.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float3	c_A	= s_dt_a.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+
+	// Height-based splatting (r__terrain_blend); zero = the stock linear mix. Linear
+	// blending smears a soapy band across every layer seam; here the layer with the HIGHER
+	// relief at this point wins and the edge comes out jagged - grass pokes through dirt
+	// instead of fading in a stripe. Texture luminance stands in for the missing height
+	// maps; the weight MULTIPLIES so an absent layer (weight 0) cannot win by brightness.
+	// The 0.2 threshold is the transition width.
+	float4	w	= mask;
+	[branch] if (da_macro_var2.z > 0.001f)
+	{
+		const float3 LUM = float3(0.299f, 0.587f, 0.114f);
+		float4 wh = mask * (1.0f + float4(dot(c_R,LUM), dot(c_G,LUM), dot(c_B,LUM), dot(c_A,LUM)));
+		float  ma = max(max(wh.x, wh.y), max(wh.z, wh.w)) - 0.2f;
+		float4 b  = max(wh - ma, 0.0f);
+		b /= max(dot(b, 1.0f), 1e-5f);
+		w = lerp(mask, b, saturate(da_macro_var2.z));
+	}
+
+	float3	d_R	= c_R*w.r;
+	float3	d_G	= c_G*w.g;
+	float3	d_B	= c_B*w.b;
+	float3	d_A	= c_A*w.a;
+	float3	dt	= d_R+d_G+d_B+d_A;
+
+	// Coarse four-layer far detail (r__macro_detail, off by default - the sibling's own
+	// tuning rejected the look, the code is kept working). Far away a pixel covers hundreds
+	// of detail texels and mips average them to one tone; re-reading the SAME textures at a
+	// step sixteen times coarser keeps the pattern alive to the horizon. Blended with the
+	// SAME weights as up close so distance reads as a scale change, not a material change.
+	[branch] if (da_detail_bias.w > 0.001f)
+	{
+		const float d_cd = length(I.position.xyz);
+		const float f_cd = saturate((d_cd - da_macro_var.z) / max(da_macro_var.w - da_macro_var.z, 1.0f));
+		[branch] if (f_cd > 0.001f)
+		{
+			const float2 uv_cd = I.tcdbump * da_macro_var.y;
+			const float3 k_R = s_dt_r.Sample( smp_base, uv_cd);
+			const float3 k_G = s_dt_g.Sample( smp_base, uv_cd);
+			const float3 k_B = s_dt_b.Sample( smp_base, uv_cd);
+			const float3 k_A = s_dt_a.Sample( smp_base, uv_cd);
+			const float3 dt_coarse = k_R*w.r + k_G*w.g + k_B*w.b + k_A*w.a;
+			dt = lerp(dt, dt_coarse, saturate(da_detail_bias.w * f_cd));
+		}
+	}
+		D.rgb	= 2*D.rgb*dt	 ;
+
+  # ifdef USE_4_BUMP
+
+// 	 float4	n_Rt = tex2D	(s_dn_r, I.tcdbump).wzyx;
+//	 float4	n_Gt = tex2D	(s_dn_g, I.tcdbump).wzyx;
+//	 float4	n_Bt = tex2D	(s_dn_b, I.tcdbump).wzyx;
+//	 float4	n_At = tex2D	(s_dn_a, I.tcdbump).wzyx;
+ 	 float4	n_Rt = s_dn_r.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
+	 float4	n_Gt = s_dn_g.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
+	 float4	n_Bt = s_dn_b.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
+	 float4	n_At = s_dn_a.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
+
+	 // The SAME weights as the albedo (w, not mask) - otherwise colour would transition
+	 // along one border and relief along another, making the seam visible twice.
+ 	 float3	n_R = (n_Rt-0.5)*w.r; float g_R=n_Rt.w*w.r;
+	 float3	n_G = (n_Gt-0.5)*w.g; float g_G=n_Gt.w*w.g;
+	 float3	n_B = (n_Bt-0.5)*w.b; float g_B=n_Bt.w*w.b;
+	 float3	n_A = (n_At-0.5)*w.a; float g_A=n_At.w*w.a;
+
+	 float3	mix		= 	n_R+n_G+n_B+n_A;
+			mix.z	*=	0.5;		//. make bump twice as contrast (fake, remove me if possible)
+	// Detail-normal distance fade (r__detail_normal_fade, metres; 0 = never fades). The
+	// terrain normal is built ENTIRELY from the detail maps, and past Nyquist their pattern
+	// turns into per-pixel ripple. Only xy fade - the in-plane components; z carries
+	// "normal points outward" and zeroing it would normalize(0) into NaN. Zeroed xy leaves
+	// exactly the smooth vertex normal that far detail must converge to anyway.
+	[branch] if (da_detail_bias.z > 0.5f)
+	{
+		const float d_n  = length(I.position.xyz);
+		const float half_n = da_detail_bias.z * 0.5f;
+		mix.xy *= 1.0f - saturate((d_n - half_n) / max(half_n, 0.001f));
+	}
+
+	// Far macro relief (r__macro_relief). Colour alone paints a flat plane - a far surface
+	// is recognised by light on its bumps, so mix in a coarse detail normal whose period
+	// mips do not average away. Only xy, same NaN reasoning as above; same distance ramp as
+	// the colour so both grow together instead of drawing two different borders.
+	[branch] if (da_macro_var2.y > 0.001f && da_macro_var.x > 0.001f)
+	{
+		const float d_mr = length(I.position.xyz);
+		const float f_mr = saturate((d_mr - da_macro_var.z) / max(da_macro_var.w - da_macro_var.z, 1.0f));
+		[branch] if (f_mr > 0.001f)
+		{
+			const float2 nr = s_dn_r.Sample(smp_linear, I.tcdbump * da_macro_var.y).wz - 0.5f;
+			mix.xy += nr * da_macro_var2.y * f_mr;
+		}
+	}
+
+	 float3	N		= 	mul     	(float3x3(I.M1, I.M2, I.M3), mix.xyz);
+
+	 	 	G 		= 	g_R+g_G+g_B+g_A;
+//			G 	= 0			;
+//			G 	= mix.w		;		// gloss
+  # else
+	float3	N 	= I.N.xyz	;
+  # endif
+
+ # else
+//	D.rgb	= 2*D.rgb*tex2D	(s_detail, I.tcdbump).rgb;
+	D.rgb	= 2*D.rgb*s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x).rgb;
+ # endif
+# else
+	float3	N 	= I.N.xyz	;
+# endif
+
+	// Only in the detail-layer variant: I.tcdbump exists only there - without the guard the
+	// no-detail permutation fails to compile and the engine silently substitutes a stub.
+#ifdef USE_4_BUMP
+	// Far brightness variation (r__macro_var). Mips average the detail into one colour and
+	// distant ground becomes a flat fill; one coarse re-read of the red layer gives large
+	// patches whose period survives mipping. Brightness modulation around one, not a colour
+	// mix - the ground tone is owned by the base texture and mask, and touching it would
+	// drift the hue at the near/far seam.
+	[branch] if (da_macro_var.x > 0.001f)
+	{
+		const float d_mv = length(I.position.xyz);
+		const float f_mv = saturate((d_mv - da_macro_var.z) / max(da_macro_var.w - da_macro_var.z, 1.0f));
+		[branch] if (f_mv > 0.001f)
+		{
+			const float3 mv = s_dt_r.Sample(smp_base, I.tcdbump * da_macro_var.y).rgb;
+			const float  lum = dot(mv, float3(0.299f, 0.587f, 0.114f));
+			D.rgb *= 1.0f + (lum - 0.5f) * 2.0f * da_macro_var.x * f_mv;
+
+			// "Fake grass" (r__macro_tint): pull the far ground HUE towards the detail mix.
+			// Real grass ends at r__detail_radius and bare (usually brown) base texture
+			// remains - the "grass just stops" cliff. The tint colour comes from dt - the
+			// weighted mix of ALL FOUR layers, not the red layer alone: probing at strength
+			// one showed the red layer turn distant ground BROWN where it is soil, not
+			// grass. Only the hue transfers: the target is scaled to the GROUND's luminance,
+			// otherwise a shaded slope would match a lit one and the relief would flatten.
+			[branch] if (da_macro_var2.x > 0.001f)
+			{
+				const float lum_d = dot(D.rgb, float3(0.299f, 0.587f, 0.114f));
+				const float lum_t = dot(dt, float3(0.299f, 0.587f, 0.114f));
+				const float3 tinted = dt * (lum_d / max(lum_t, 0.001f));
+				D.rgb = lerp(D.rgb, tinted, saturate(da_macro_var2.x * f_mv));
+			}
+		}
+	}
+#endif
+	// Puddles and wet ground. Placed here, after everything else: by this point the normal
+	// (after detail maps), gloss and colour are all assembled - exactly the three things
+	// water changes. The function computes ONLY the mask and normal; colour and gloss are
+	// changed right here in the shader body - values returned through inout/struct colour
+	// fields did not reach the frame (verified with an absolute-black probe), so the mask
+	// is one number applied where D lives.
+	// "Rain reaches here" source: where the level is compiled with static sun, the SUN
+	// ACCESS from the lightmap (L.w) - zero under a roof by construction; elsewhere the
+	// base texture alpha as before (it was how puddles appeared indoors).
+#ifdef USE_R2_STATIC_SUN
+	const float da_sky_src = L.w;
+#else
+	const float da_sky_src = D.w;
+#endif
+	da_puddle_result PDL = da_puddles(I.position.xyz, da_sky_src, N);
+	D.w = PDL.hemi;
+
+	// G-buffer half switch (r__puddles_gbuf): flat water normal in the G-buffer is what
+	// makes deferred lighting treat the surface as level - it gives the water volume and
+	// response to lamps and fires, at the price of a thin rim at the mask edge (bumpy
+	// ground meets flat water inside one pixel quad). The overlay pass handles only what
+	// the G-buffer cannot: reflecting the world.
+	[branch] if (da_puddle_look2.w > 0.5f)
+	{
+		N = PDL.N;
+
+		[branch] if (PDL.dbg_paint)
+		{
+			D.rgb = PDL.dbg_color;
+			G = 0.0f;
+		}
+		else
+		{
+			// General wetness: wider than puddles and weaker.
+			D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
+			G = max(G, PDL.damp * da_puddle_look.z);
+
+			// Dark rim of soaked soil around the water.
+			D.rgb *= lerp(1.0f, saturate(da_puddle_look2.z), PDL.rim);
+
+			// The water itself: darker and glossier. max(), not replace - water cannot be
+			// more matte than what it stands on.
+			D.rgb *= lerp(1.0f, saturate(da_puddle_look.y), PDL.mask);
+			// Gloss by the SOFT mask: it is a scalar, intermediate values are meaningful -
+			// a step here drew its OWN line wherever strong light hit (full glint on one
+			// side of a pixel, none on the other, visible at campfires).
+			G = lerp(G, max(G, saturate(da_puddle_look.x)), PDL.mask);
+		}
+	}
+	else
+	{
+		// Wetness stays: it is wider than puddles, computed without a noise threshold,
+		// and draws no edges.
+		D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
+		G = max(G, PDL.damp * da_puddle_look.z);
+	}
+
+	// hemi, sun, material
+	float 	ms	= xmaterial	;
+# ifdef USE_R2_STATIC_SUN
+		 	ms 	= L.w		;
+# endif
+
+  // 2. Standart output
+  float4     Ne = float4	(normalize(N), 									D.w*H_TERR			);
+  O				= pack_gbuffer(
+								Ne,	// hemi
+								float4 	(I.position.xyz + Ne.xyz*def_virtualh/2.h, 	ms			),	//
+								sat(float4(D.x,D.y,D.z,G*0.4),0.8));	// OUT: rgb.gloss
+
+  return O;
+}

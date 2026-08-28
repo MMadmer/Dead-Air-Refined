@@ -341,6 +341,38 @@ void CRenderTarget::phase_combine()
         }
     }
 
+    // Scene-grab for water screen-space reflections. The water shader ray-marches the lit
+    // frame through s_image, but water is drawn by the forward pass below straight INTO
+    // rt_Generic_0 - a render target cannot be sampled while it is bound, so the shader reads
+    // a copy taken just before the water goes in. Without this, s_image keeps whatever texture
+    // the previous pass left in the slot.
+    if (rt_SSR)
+    {
+        PIX_EVENT(scene_grab_for_SSLR);
+        // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a
+        // bound RT, so park the output on another RT first (re-bound right after).
+        u_setrt(RCache, rt_Generic_1_r, nullptr, nullptr, rt_MSAADepth);
+
+        if (RImplementation.o.msaa)
+        {
+            rt_Generic_0_r->resolve_into(*rt_SSR); // MSAA -> single-sampled copy
+        }
+        else
+        {
+            ID3DBaseTexture* src = rt_Generic_0->pTexture->surface_get();
+            ID3DBaseTexture* dst = rt_SSR->pTexture->surface_get();
+            if (src && dst)
+                HW.get_context(CHW::IMM_CTX_ID)->CopyResource(dst, src);
+            _RELEASE(src);
+            _RELEASE(dst);
+        }
+    }
+
+    // Puddle reflections - here and only here: the frame copy is taken (that is what gets
+    // reflected) and water is not drawn yet (or puddles would reflect water that then gets
+    // drawn over them).
+    phase_da_puddle_refl();
+
     // Forward rendering
     {
         PIX_EVENT(Forward_rendering);

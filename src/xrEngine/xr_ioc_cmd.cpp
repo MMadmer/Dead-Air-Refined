@@ -481,7 +481,28 @@ public:
 };
 
 //-----------------------------------------------------------------------
-float ps_gamma = 1.f, ps_brightness = 1.f, ps_contrast = 1.f;
+// Rain look. The old sizes were hardcoded 2007 numbers for 800x600: a drop FIVE METRES
+// long and thirty centimetres wide - streaks across the screen, not drops. Proper length
+// follows exposure: a drop covers 0.7-1.3 m in a 60 fps frame at 40-80 m/s. ENGINE_API:
+// consumed by xrEngine's rain simulation and the renderer's dxRainRender alike.
+ENGINE_API float ps_r__rain_len = 2.0f;
+ENGINE_API float ps_r__rain_width = 0.20f; // 0.08 does not read on screen
+// Drop colour multiplier: weather configs paint drops dark grey-brown; real rain catches
+// skylight and reads lighter than the background. Splashes get their own dimmer value -
+// shared colour turned them into white grit ("hail") on dark ground.
+ENGINE_API float ps_r__rain_bright = 2.2f;
+ENGINE_API float ps_r__rain_splash_bright = 0.9f;
+// Drops in the air around the player and their radius. Thinner drops need more of them.
+// Count is EXPENSIVE: every birth raycasts the level for the landing point.
+ENGINE_API int ps_r__rain_drops = 6000;
+ENGINE_API float ps_r__rain_radius = 14.0f;
+// Ground splash share per landed drop (stock refused every second hit) and splash life.
+ENGINE_API float ps_r__rain_splash = 1.0f;
+ENGINE_API float ps_r__rain_splash_time = 0.30f;
+
+// Exported: the renderer's final combine applies the same curve in the shader when the
+// hardware gamma ramp is not in charge (windowed/borderless).
+ENGINE_API float ps_gamma = 1.f, ps_brightness = 1.f, ps_contrast = 1.f;
 class CCC_Gamma : public CCC_Float
 {
 public:
@@ -856,6 +877,14 @@ void CCC_Register()
     CMD2(CCC_Gamma, "rs_c_gamma", &ps_gamma);
     CMD2(CCC_Gamma, "rs_c_brightness", &ps_brightness);
     CMD2(CCC_Gamma, "rs_c_contrast", &ps_contrast);
+    CMD4(CCC_Float, "r__rain_len", &ps_r__rain_len, 0.2f, 8.f);
+    CMD4(CCC_Float, "r__rain_width", &ps_r__rain_width, 0.02f, 0.5f);
+    CMD4(CCC_Float, "r__rain_bright", &ps_r__rain_bright, 0.5f, 6.f);
+    CMD4(CCC_Float, "r__rain_splash_bright", &ps_r__rain_splash_bright, 0.1f, 4.f);
+    CMD4(CCC_Integer, "r__rain_drops", &ps_r__rain_drops, 500, 20000);
+    CMD4(CCC_Float, "r__rain_radius", &ps_r__rain_radius, 5.f, 40.f);
+    CMD4(CCC_Float, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
+    CMD4(CCC_Float, "r__rain_splash_time", &ps_r__rain_splash_time, 0.1f, 1.5f);
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);
 
