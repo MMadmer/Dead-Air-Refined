@@ -372,6 +372,45 @@ static class cl_da_wind_field : public R_constant_setup
     }
 } binder_da_wind_field;
 
+// Wind motors for the vegetation shaders: 8 point sources packed as two 4x4 matrices each
+// (row per motor). pos rows = (xyz, radius), par rows = (bend amp, ring radius, ring width, 0);
+// info.x = number of live motors so the shader loop is free when the world is quiet.
+static class cl_da_wm_pos0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_pos[0]);
+    }
+} binder_da_wm_pos0;
+static class cl_da_wm_pos1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_pos[1]);
+    }
+} binder_da_wm_pos1;
+static class cl_da_wm_par0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_par[0]);
+    }
+} binder_da_wm_par0;
+static class cl_da_wm_par1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_par[1]);
+    }
+} binder_da_wm_par1;
+static class cl_da_wm_info : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_active, 0.f, 0.f, 0.f);
+    }
+} binder_da_wm_info;
+
 static class cl_various_rain : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -520,6 +559,11 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_aref_u", &binder_da_aref);
     r_Constant("da_puddle_wind", &binder_da_puddle_wind);
     r_Constant("da_wind_field", &binder_da_wind_field);
+    r_Constant("da_wm_pos0", &binder_da_wm_pos0);
+    r_Constant("da_wm_pos1", &binder_da_wm_pos1);
+    r_Constant("da_wm_par0", &binder_da_wm_par0);
+    r_Constant("da_wm_par1", &binder_da_wm_par1);
+    r_Constant("da_wm_info", &binder_da_wm_info);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

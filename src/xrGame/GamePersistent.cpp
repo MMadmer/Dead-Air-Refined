@@ -309,6 +309,11 @@ void CGamePersistent::WeathersUpdate()
                     if (eff->sound._handle())
                         eff->sound.play_at_pos(0, pos);
 
+                    // Ambient wind-blast effects (blowout gusts) also ripple the vegetation as
+                    // an expanding wind-motor ring from where the effect fires.
+                    if (eff->wind_blast_strength > 0.f)
+                        Environment().wind_motor_impulse(pos, 40.f, 0.9f);
+
                     Environment().wind_blast_strength_start_value = Environment().wind_strength_factor;
                     Environment().wind_blast_strength_stop_value = eff->wind_blast_strength;
 

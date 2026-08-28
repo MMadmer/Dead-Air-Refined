@@ -1,6 +1,7 @@
 #include "common.h"
 #include "tree_instance.h"
 #include "da_wind_field.h"
+#include "da_wind_motors.h"
 
 uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
@@ -41,6 +42,8 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
     float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
     result += wind.xz * (H * flow.y * 0.5f);
+    // Blast rings rock the crown too (press motors have too small a radius to reach trees).
+    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H) * 0.35f;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

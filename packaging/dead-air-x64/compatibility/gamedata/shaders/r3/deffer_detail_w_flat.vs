@@ -1,5 +1,6 @@
 #include "common.h"
 #include "da_wind_field.h"
+#include "da_wind_motors.h"
 
 uniform float4 		consts; // {1/quant,1/quant,diffusescale,ambient}
 // Fade band for the grass shadow: x = start, y = end, metres from the camera.
@@ -83,6 +84,9 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	// Scaled by height and shelter like the wave itself; the arc-length drop below then pulls
 	// the tip down instead of stretching the blade.
 	result	+= dir2D.xz * (H * flow.y * (0.05f + 0.95f * shelter) * 1.4f);
+	// Wind motors: actor trampling and blast rings. Not scaled by shelter or wind - a boot
+	// presses grass in a windless hangar just the same.
+	result	+= da_wind_motors_bend(float2(m0.w, m2.w), H);
 	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
 	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the
 	// length restores a bend.

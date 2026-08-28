@@ -657,6 +657,70 @@ float CEnvironment::SampleWindField(float x, float z) const
     return 0.40f + 0.75f * g;
 }
 
+void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float strength)
+{
+    // Refresh an existing press motor near this position (one motor per walking actor), or
+    // claim a free slot. No slot free - the oldest impulse yields, presses never do.
+    SWindMotor* slot = nullptr;
+    for (auto& m : wind_motors)
+    {
+        if (m.used && !m.impulse && m.released == 0.f && m.pos.distance_to_sqr(pos) < 1.f)
+        {
+            slot = &m;
+            break;
+        }
+    }
+    if (!slot)
+        for (auto& m : wind_motors)
+            if (!m.used)
+            {
+                slot = &m;
+                break;
+            }
+    if (!slot)
+        return;
+
+    slot->used = true;
+    slot->impulse = false;
+    slot->pos = pos;
+    slot->radius = radius;
+    slot->strength = strength;
+    slot->touched = Device.fTimeGlobal;
+    slot->released = 0.f;
+}
+
+void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float strength)
+{
+    SWindMotor* slot = nullptr;
+    for (auto& m : wind_motors)
+        if (!m.used)
+        {
+            slot = &m;
+            break;
+        }
+    if (!slot)
+    {
+        // steal the oldest impulse - a fresh explosion beats a dying ring
+        float oldest = flt_max;
+        for (auto& m : wind_motors)
+            if (m.impulse && m.touched < oldest)
+            {
+                oldest = m.touched;
+                slot = &m;
+            }
+    }
+    if (!slot)
+        return;
+
+    slot->used = true;
+    slot->impulse = true;
+    slot->pos = pos;
+    slot->radius = radius;
+    slot->strength = strength;
+    slot->touched = Device.fTimeGlobal;
+    slot->released = 0.f;
+}
+
 void CEnvironment::UpdateEffectiveWind()
 {
     const float t = Device.fTimeGlobal;
@@ -704,6 +768,58 @@ void CEnvironment::UpdateEffectiveWind()
     constexpr float field_repeat = 40.f * 64.f;
     eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
     eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
+
+    // ---- Wind motors: simulate and pack for the vegetation shaders. ------------------------
+    const float now = Device.fTimeGlobal;
+    u32 highest = 0;
+    for (u32 i = 0; i < wind_motor_count; ++i)
+    {
+        SWindMotor& m = wind_motors[i];
+        float amp = 0.f, ring_r = 0.f, ring_w = 0.f;
+
+        if (m.used && m.impulse)
+        {
+            // Expanding blast ring: front travels at 14 m/s, height of the bend decays as it
+            // goes. Dead once the ring leaves the authored radius.
+            const float age = now - m.touched;
+            ring_r = 14.f * age;
+            ring_w = 1.5f + age * 2.0f; // the front smears out as it expands
+            amp = m.strength * expf(-age * 2.2f);
+            if (ring_r > m.radius || amp < 0.02f)
+                m.used = false;
+        }
+        else if (m.used)
+        {
+            if (m.released == 0.f && now - m.touched > 0.15f)
+                m.released = now; // the actor moved on - start the spring-back
+            if (m.released == 0.f)
+            {
+                amp = m.strength; // pressed down while the actor stands in it
+                ring_w = m.radius * 0.55f;
+            }
+            else
+            {
+                // Damped spring-back (the Tsushima "damped waves" fix): the grass overshoots
+                // and settles instead of snapping straight. cos keeps phase 0 = still pressed.
+                const float age = now - m.released;
+                amp = m.strength * cosf(age * 13.f) * expf(-age * 3.2f);
+                ring_w = m.radius * 0.55f;
+                if (age > 1.1f)
+                    m.used = false;
+            }
+        }
+
+        if (m.used)
+            highest = i + 1;
+
+        Fmatrix& P = wind_motor_pos[i / 4];
+        Fmatrix& A = wind_motor_par[i / 4];
+        float* prow = &P.m[i % 4][0];
+        float* arow = &A.m[i % 4][0];
+        prow[0] = m.pos.x; prow[1] = m.pos.y; prow[2] = m.pos.z; prow[3] = m.used ? m.radius : 0.f;
+        arow[0] = m.used ? amp : 0.f; arow[1] = ring_r; arow[2] = std::max(ring_w, 0.05f); arow[3] = 0.f;
+    }
+    wind_motor_active = float(highest);
 }
 
 void CEnvironment::OnFrame()

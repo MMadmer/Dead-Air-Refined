@@ -1364,6 +1364,11 @@ void CActor::ConsumeAdrenalineSaveState(u16 objectId)
 
 void CActor::UpdateCL()
 {
+    // Trampling: the actor's feet press the grass around them, and the wind-motor system
+    // drives the damped spring-back once we move on. Refreshed per frame while alive.
+    if (g_Alive())
+        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.1f, 0.55f);
+
     if (g_Alive() && Level().CurrentViewEntity() == this)
     {
         if (CurrentGameUI() && !CurrentGameUI()->TopInputReceiver() && !m_holder)

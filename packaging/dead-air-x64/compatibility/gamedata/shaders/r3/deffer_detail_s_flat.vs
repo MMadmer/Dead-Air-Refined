@@ -1,4 +1,5 @@
 #include "common.h"
+#include "da_wind_motors.h"
 
 uniform float4 		consts; // {1/quant,1/quant,diffusescale,ambient}
 // See deffer_detail_w_flat.vs for the notes on all three.
@@ -39,6 +40,14 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
  	pos.y 		= dot	(m1, v.pos);
  	pos.z 		= dot	(m2, v.pos);
 	pos.w 		= 1;
+
+	// Wind motors: still details do not wave, but a boot or a blast still bends them.
+	{
+		const float H_s = v.pos.y * length(float3(m0.y, m1.y, m2.y));
+		const float2 mb = da_wind_motors_bend(float2(m0.w, m2.w), H_s);
+		pos.x += mb.x;
+		pos.z += mb.y;
+	}
 
 	// Normal in world coords
 	float3 	norm;

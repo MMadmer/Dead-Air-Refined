@@ -345,6 +345,11 @@ void CExplosive::Explode()
     //играем звук взрыва
     m_layered_sounds.PlaySound("sndExplode", pos, smart_cast<IGameObject*>(this), false, false, (u8)-1);
 
+    // Blast wave through the vegetation: an expanding wind-motor ring bends grass and crowns
+    // outward from the epicentre. Radius follows the frag distance so a grenade ripples a
+    // dozen metres and a barrel a couple dozen.
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, 18.f, 1.2f);
+
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);
 

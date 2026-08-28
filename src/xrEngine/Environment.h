@@ -319,6 +319,36 @@ public:
     xr_vector<Fvector> wind_veg_trees;
     float wind_veg_green{};
 
+    // ---- Wind motors (the Tsushima "vorticle" idea, budgeted) ------------------------------
+    // Up to 8 point sources of LOCAL wind response, consumed by the vegetation vertex shaders:
+    //  * press motors - actors walking through grass: a radial push around the feet while the
+    //    actor stands there, and a damped spring-back oscillation once they move on;
+    //  * impulse motors - explosions and blowout starts: an expanding ring that bends grass
+    //    and crowns outward from the epicentre and fades as it travels.
+    enum
+    {
+        wind_motor_count = 8
+    };
+    struct SWindMotor
+    {
+        Fvector pos{};
+        float radius{};
+        float strength{};   // authored strength of the source
+        float touched{};    // press: last refresh time; impulse: birth time
+        float released{};   // press: when the actor left (0 = still pressing)
+        bool impulse{};
+        bool used{};
+    };
+    SWindMotor wind_motors[wind_motor_count];
+    // Packed shader output, refreshed each frame: row i of pos = (xyz, radius),
+    // row i of par = (signed bend amplitude, ring radius, ring width, 0).
+    Fmatrix wind_motor_pos[2];  // rows: motors 0..3, 4..7
+    Fmatrix wind_motor_par[2];
+    float wind_motor_active{};  // how many rows the shader loop has to walk (0 = free)
+
+    void wind_motor_press(const Fvector& pos, float radius, float strength);
+    void wind_motor_impulse(const Fvector& pos, float radius, float strength);
+
     void UpdateEffectiveWind();
 
     // wind blast params

@@ -823,6 +823,14 @@ void CAI_Stalker::UpdateCL()
 
     if (g_Alive())
     {
+        // NPCs trample grass too - but only near the camera, where the effect can be seen;
+        // the motor pool is 8 slots and the actor always keeps one.
+        if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
+            g_pGamePersistent->Environment().wind_motor_press(Position(), 1.0f, 0.45f);
+    }
+
+    if (g_Alive())
+    {
         if (g_mt_config.test(mtObjectHandler) && CObjectHandler::planner().initialized())
         {
             // XXX: task scheduler
