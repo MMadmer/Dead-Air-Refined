@@ -51,11 +51,8 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
 
     const float4 position = float4(gbd.P, 1.0);
     float3 normal = normalize(gbd.N);
-    // Viewmodel exclusion: HUD geometry lives closer than ~35 cm and must not collect rain
-    // normals or the gloss boost (a soaked rifle right in your face reads as a smeared screen).
-    [branch]
-    if (position.z < 0.35)
-        return float4(normal, 1.0);
+    // The viewmodel KEEPS its rain normals (water streaks on the barrel are a feature) - only
+    // the new gloss boost is masked for it, in the apply pass.
     // The engine has been binding RainFallof all along; the hardcoded 5/20 kept the console pair
     // r3_dynamic_wet_surfaces_near/far permanently dead.
     const float distanceFade = 1.0 - smoothstep(RainFallof.x, RainFallof.y, position.z);

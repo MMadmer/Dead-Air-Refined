@@ -17,9 +17,9 @@ struct rain_apply_output
 };
 
 #ifdef MSAA_OPTIMIZATION
-rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, uint iSample : SV_SAMPLEINDEX)
+rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX)
 #else
-rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1)
+rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position)
 #endif
 {
 #ifndef USE_MSAA
@@ -40,9 +40,28 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1)
     // MRT1 blends rgb multiplicatively into albedo (the wet darkening) and ALPHA additively into
     // the G-buffer gloss - which used to receive a hard 0. Recover wetness from the stored
     // darkening term (c = max(1-sqrt(w), 0.5) => w = (1-c)^2) and boost the gloss with it, so wet
-    // concrete/asphalt/metal actually shine. The hemi gate upstream keeps interiors dry, and the
-    // patch pass rejects viewmodel-range depth, so neither gets the boost.
+    // concrete/asphalt/metal actually shine. The hemi gate upstream keeps interiors dry.
     const float wet_back = (1.0 - patched.a) * (1.0 - patched.a);
-    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2));
+
+    // The viewmodel keeps its rain normals and darkening (streaks on the barrel are a feature)
+    // but NOT the gloss boost: the 256px rain smap cannot resolve hands, and a mirror-bright
+    // rifle centimetres from the camera reads as a smeared screen. HUD geometry lives closer
+    // than ~35 cm of view depth.
+#ifdef GBUFFER_OPTIMIZATION
+#ifdef MSAA_OPTIMIZATION
+    const gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, iSample);
+#else
+    const gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, ISAMPLE);
+#endif
+#else
+#ifdef MSAA_OPTIMIZATION
+    const gbuffer_data gbd = gbuffer_load_data(tc, iSample);
+#else
+    const gbuffer_data gbd = gbuffer_load_data(tc, ISAMPLE);
+#endif
+#endif
+    const float not_viewmodel = step(0.35, gbd.P.z);
+
+    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2) * not_viewmodel);
     return output;
 }
