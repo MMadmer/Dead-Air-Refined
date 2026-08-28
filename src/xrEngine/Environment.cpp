@@ -721,6 +721,30 @@ void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float st
     slot->released = 0.f;
 }
 
+float CEnvironment::SampleWindMotors(float x, float z) const
+{
+    // Mirrors da_wind_motors_bend without the height/direction terms: just "how hard is a
+    // motor shaking this spot", for the vegetation-audio triggers.
+    float total = 0.f;
+    for (u32 i = 0; i < wind_motor_count; ++i)
+    {
+        const Fmatrix& P = wind_motor_pos[i / 4];
+        const Fmatrix& A = wind_motor_par[i / 4];
+        const float* prow = &P.m[i % 4][0];
+        const float* arow = &A.m[i % 4][0];
+        if (prow[3] <= 0.f || _abs(arow[0]) <= 0.001f)
+            continue;
+        const float dx = x - prow[0];
+        const float dz = z - prow[2];
+        const float dist = _sqrt(dx * dx + dz * dz);
+        if (dist > prow[3] + arow[2] * 2.f)
+            continue;
+        const float t = (dist - arow[1]) / arow[2];
+        total += _abs(arow[0]) * expf(-t * t);
+    }
+    return total;
+}
+
 void CEnvironment::UpdateEffectiveWind()
 {
     const float t = Device.fTimeGlobal;
@@ -737,9 +761,11 @@ void CEnvironment::UpdateEffectiveWind()
     const float gust_ev = clampr((n_fast - gust_thr) / std::max(1.f - gust_thr, 0.05f), 0.f, 1.f);
 
     // Variability inside the weather envelope: a calm day swings between near-nothing and its
-    // own light ceiling, a storm between fresh and violent. The 0.12 floor keeps air moving.
-    eff_wind_var = clampr(0.12f + n_trend * 0.50f + n_wave * 0.28f + gust_ev * 0.45f, 0.f, 1.f);
-    eff_wind_norm = base * eff_wind_var;
+    // own light ceiling, a storm between fresh and violent. Balanced so the AVERAGE sits near
+    // the weather's nominal strength (multiplying three attenuating layers - variability, the
+    // spatial field, the consumer envelope - once collapsed a storm into a flat calm).
+    eff_wind_var = clampr(0.30f + n_trend * 0.55f + n_wave * 0.35f + gust_ev * 0.55f, 0.f, 1.35f);
+    eff_wind_norm = clampr(base * eff_wind_var, 0.f, 1.2f);
 
     // Gustiness: the fast layers, with the legacy Perlin mixed in - blowout zones override
     // wind_strength_factor directly, and that surge must keep reaching every consumer.

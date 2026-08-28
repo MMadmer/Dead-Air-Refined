@@ -505,7 +505,7 @@ void CDetailManager::UpdateRenderState()
     const float wind_dir = env.eff_wind_dir;
     // Floor keeps a calm morning breathing; above it the effective-wind service supplies the
     // real-life variability (minute trends, waves, discrete gusts) inside the weather envelope.
-    const float wind_norm = 0.20f + 0.80f * env.eff_wind_norm;
+    const float wind_norm = 0.30f + 0.95f * env.eff_wind_norm;
 #else
     constexpr float gust_smooth = 0.3f;
     constexpr float wind_dir = 0.f;

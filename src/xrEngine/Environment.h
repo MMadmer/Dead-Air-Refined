@@ -348,6 +348,9 @@ public:
 
     void wind_motor_press(const Fvector& pos, float radius, float strength);
     void wind_motor_impulse(const Fvector& pos, float radius, float strength);
+    // CPU sum of the live motors' bend strength at a point - the audio layer uses it so a blast
+    // ring makes the bushes it passes through rustle, exactly where the bend is seen.
+    float SampleWindMotors(float x, float z) const;
 
     void UpdateEffectiveWind();
 

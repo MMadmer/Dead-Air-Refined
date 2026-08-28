@@ -45,7 +45,9 @@ float2 da_wind_field_eval(float2 wp)
     const float n = da_wf_noise(q) * 0.62f + da_wf_noise(q * 2.17f + 13.7f) * 0.38f;
     float g = smoothstep(0.35f, 0.85f, n);
     g *= g;
-    const float amp = 0.40f + 0.75f * g;
+    // Lulls at ~60% of nominal, gust tongues up to ~125%: the field VARIES the motion, it must
+    // not also throttle its average (that is what flattened storms on the first flight).
+    const float amp = 0.60f + 0.65f * g;
     // Lean follows the gust tongue and the global gustiness together: only a real gust
     // passing through a real tongue presses the grass flat.
     const float lean = g * saturate(0.35f + 0.65f * da_wind_field.w);

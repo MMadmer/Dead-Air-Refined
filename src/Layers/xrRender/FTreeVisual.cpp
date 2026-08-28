@@ -127,7 +127,7 @@ struct FTreeVisual_setup
         const float dir = env.eff_wind_dir;
         wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
-        wind.mul(desc.m_fTreeAmplitude * (0.35f + 0.65f * env.eff_wind_var));
+        wind.mul(desc.m_fTreeAmplitude * (0.55f + 0.80f * env.eff_wind_var));
 
         scale = 1.f / float(FTreeVisual_quant);
 

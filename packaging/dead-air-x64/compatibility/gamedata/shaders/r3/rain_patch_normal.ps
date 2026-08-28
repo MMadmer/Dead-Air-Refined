@@ -146,7 +146,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         // (view-space Y points UP, so the pattern must march toward negative Y to run down)
         const float2 run = SampleFlowNormal(float2(vp.x * 4.0, vp.y * 2.0 + timers.x * 0.35));
         // Frequent tiny pops: droplets striking the weapon. Small cells, short life.
-        const float3 pop = SplashPops(vp.xy, t, 0.14, 0.30);
+        const float3 pop = SplashPops(vp.xy, t, 0.14, 0.45);
 
         // Perturbation is built directly in view axes (no m_V rotation) and kept SMALL - the
         // old full-strength world perturbation is what deformed the whole model.
@@ -169,8 +169,8 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         const float xWeight = abs(worldNormal.x);
         const float zWeight = abs(worldNormal.z);
 
-        // Sparse ground pops where rings are born - a fleck of water kicked up by the drop.
-        const float3 pop = SplashPops(worldPosition.xz, timers.x * 3.0, 0.5, 0.18);
+        // Ground pops where rings are born - a fleck of water kicked up by the drop.
+        const float3 pop = SplashPops(worldPosition.xz, timers.x * 3.0, 0.5, 0.35);
 
         float3 water;
         water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight;

@@ -11,8 +11,9 @@ namespace
 // Type voicing: grass whispers high and quiet, bushes sit in the middle, trees roar low.
 const float k_volume[] = {0.35f, 0.60f, 1.00f};
 const float k_pitch[] = {1.15f, 1.00f, 0.82f};
-// The local wind strength a spot needs before it can rustle at all.
-constexpr float k_threshold = 0.42f;
+// The local wind strength a spot needs before it can rustle at all. (First calibration sat
+// above what a storm actually produced after the field multiplies in - the world went mute.)
+constexpr float k_threshold = 0.28f;
 // Global polyphony cap across all types - the anti-cacophony valve.
 constexpr u32 k_max_active = 5;
 } // namespace
@@ -135,10 +136,14 @@ void CEffect_WindVeg::OnFrame()
 
         for (const u32 ti : m_near_trees)
         {
-            if (Device.fTimeGlobal < m_tree_cool[ti])
-                continue;
             const Fvector& tp = trees[ti];
-            const float local = wind * env.SampleWindField(tp.x, tp.z);
+            // Wind field + wind motors: a blast ring passing through this crown makes it
+            // rustle even on a windless day - the sound rides the visible bend, and a strong
+            // enough blast punches through the retrigger cooldown.
+            const float motors = env.SampleWindMotors(tp.x, tp.z);
+            if (Device.fTimeGlobal < m_tree_cool[ti] && motors < 0.3f)
+                continue;
+            const float local = wind * env.SampleWindField(tp.x, tp.z) + motors;
             if (local < k_threshold)
                 continue;
             // A stochastic gate on top of the field keeps simultaneous fronts from firing
@@ -159,13 +164,16 @@ void CEffect_WindVeg::OnFrame()
     {
         for (u32 s = 0; s < 8; ++s)
         {
-            if (Device.fTimeGlobal < m_sector_cool[s])
-                continue;
             const float ang = float(s) * (PI_MUL_2 / 8.f) + ::Random.randF(-0.2f, 0.2f);
             const float dist = ::Random.randF(6.f, 16.f);
             Fvector p;
             p.set(cam.x + _sin(ang) * dist, cam.y + 0.4f, cam.z + _cos(ang) * dist);
-            const float local = wind * env.SampleWindField(p.x, p.z) * env.wind_veg_green;
+            // Motors count here too: a grenade going off in the grass makes the grass answer,
+            // cooldown or not.
+            const float motors = env.SampleWindMotors(p.x, p.z);
+            if (Device.fTimeGlobal < m_sector_cool[s] && motors < 0.3f)
+                continue;
+            const float local = (wind * env.SampleWindField(p.x, p.z) + motors) * env.wind_veg_green;
             if (local < k_threshold)
                 continue;
             if (::Random.randF() > 0.45f)

@@ -221,13 +221,17 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 		//     длина — крутизна;
 		//   * снос ветром по направлению погоды, сильнее в порыв;
 		//   * мелкая кромка почти статична — маска лужи работает прокси-глубиной.
+		// ⚠️ Первая калибровка дала дрейф МЕДЛЕННЕЕ кроссфейда слоёв - глаз читал смену узоров
+		// как «туда-сюда», а не течение. Скорости подняты в разы (склон при дожде течёт видимо,
+		// шторм гонит рябь по ветру), период слоя удлинён, чтобы дрейф успевал прочитаться.
 		const float2 downhill = gn_w.xz; // в сторону спуска, длина = крутизна
-		const float2 v_flow = downhill * (saturate(rain_params.x * 1.5f) * 0.55f)
-		                    + da_puddle_wind.xy * ((0.25f + 0.75f * da_puddle_wind.z) * 0.12f);
-		const float depth_k = saturate(puddles * 2.0f);
+		const float2 v_flow = downhill * (saturate(rain_params.x * 1.5f) * 1.8f)
+		                    + da_puddle_wind.xy * ((0.30f + 0.70f * da_puddle_wind.z) * 0.35f);
+		// Мелкая кромка спокойнее середины, но не мёртвая - иначе течение видно только в центре.
+		const float depth_k = saturate(0.25f + puddles * 1.5f);
 		const float2 drift = v_flow * depth_k * 12.0f; // м/с -> единицы q-пространства (wp*12)
 
-		const float T = 6.0f; // период слоя, с
+		const float T = 12.0f; // период слоя, с
 		const float f1 = frac(timers.x / T);
 		const float f2 = frac(timers.x / T + 0.5f);
 		const float w1 = 1.0f - abs(f1 * 2.0f - 1.0f);
