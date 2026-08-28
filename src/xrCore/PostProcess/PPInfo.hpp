@@ -5,7 +5,8 @@ struct XRCORE_API SPPInfo
 {
     struct SColor
     {
-        float r, g, b;
+        // Zero-init: instances get constructed and mixed before validate() ever runs.
+        float r = 0.f, g = 0.f, b = 0.f;
         SColor() {}
         SColor(float _r, float _g, float _b) : r(_r), g(_g), b(_b) {}
         IC operator u32() const
@@ -39,10 +40,10 @@ struct XRCORE_API SPPInfo
             return *this;
         }
     };
-    float blur, gray;
+    float blur = 0.f, gray = 0.f;
     struct SDuality
     {
-        float h, v;
+        float h = 0.f, v = 0.f;
         SDuality() {}
         SDuality(float _h, float _v) : h(_h), v(_v) {}
         IC SDuality& set(float _h, float _v)
@@ -54,8 +55,8 @@ struct XRCORE_API SPPInfo
     } duality;
     struct SNoise
     {
-        float intensity, grain;
-        float fps;
+        float intensity = 0.f, grain = 0.f;
+        float fps = 0.f;
         SNoise() {}
         SNoise(float _i, float _g, float _f) : intensity(_i), grain(_g), fps(_f) {}
         IC SNoise& set(float _i, float _g, float _f)
@@ -70,8 +71,8 @@ struct XRCORE_API SPPInfo
     SColor color_base;
     SColor color_gray;
     SColor color_add;
-    float cm_influence;
-    float cm_interpolate;
+    float cm_influence = 0.f;
+    float cm_interpolate = 0.f;
     shared_str cm_tex1;
     shared_str cm_tex2;
 

@@ -243,6 +243,11 @@ bool CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
 {
     ZoneScoped;
 
+    // A destroyed owner can still sit in the spatial DB for a frame; the Visual() call below
+    // dereferences it, so this guard has to come first.
+    if (!owner || owner->getDestroy())
+        return false;
+
     if (!PKinematics(owner->Visual()))
     {
         cform_report("ray query", owner);
@@ -415,7 +420,14 @@ bool CCF_Shape::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
             Fbox::ERP_Result rp_res = box.Pick2(S1, D1, P);
             if ((rp_res == Fbox::rpOriginOutside) || (!(Q.flags & CDB::OPT_CULL) && (rp_res == Fbox::rpOriginInside)))
             {
-                float d = P.distance_to_sqr(dS);
+                // Pick2 hands P back in box-local space while dS is still object-local; measuring
+                // across the two frames produced a range dominated by |dS|, which scrambled
+                // OPT_ONLYNEAREST ordering for every consumer of hit distances (bullets, vision).
+                // NOTE: box and ibox are one anonymous struct inside the union (add_box fills both),
+                // NOT union alternatives - this transform relies on that.
+                Fvector P_obj;
+                shape.data.box.transform_tiny(P_obj, P);
+                float d = P_obj.distance_to_sqr(dS);
                 if (d < range * range)
                 {
                     range = _sqrt(d);

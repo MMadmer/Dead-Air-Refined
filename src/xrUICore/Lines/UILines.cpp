@@ -327,7 +327,8 @@ void CUILines::Draw(float x, float y)
 
         if (uFlags.test(flPasswordMode))
         {
-            const size_t sz = m_text.size();
+            // Clamp to the buffer - it is static, so an overrun corrupts globals, not the stack.
+            const size_t sz = std::min(m_text.size(), sizeof(passText) - 1);
             for (size_t i = 0; i < sz; i++)
                 passText[i] = '*';
             passText[sz] = 0;

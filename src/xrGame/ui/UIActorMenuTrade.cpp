@@ -475,7 +475,11 @@ void CUIActorMenu::OnBtnPerformTradeSell(CUIWindow* w, void* d)
     actor_money += delta_price;
     partner_money -= delta_price;
 
-    if ((actor_money >= 0) && (partner_money >= 0) && (actor_price >= 0 || partner_price > 0))
+    // An infinite-money trader keeps a flat balance (set_money maxes it, it never grows), so the
+    // partner_money >= 0 test silently rejected selling anything above the trader's nominal stack.
+    // The buy path already escapes this way - mirror it here.
+    const bool partner_can_pay = partner_money >= 0 || m_pPartnerInvOwner->InfinitiveMoney();
+    if ((actor_money >= 0) && partner_can_pay && (actor_price >= 0 || partner_price > 0))
     {
         m_partner_trade->OnPerformTrade(partner_price, actor_price);
 

@@ -3,6 +3,8 @@
 //////////////////////////////////////////////////////////////////////
 #pragma once
 
+#include <bit>
+
 #include "xrCDB.h"
 
 #include "xrCore/FixedVector.h"
@@ -30,7 +32,7 @@ enum EFC_Visible : u32
 
 #define FRUSTUM_SAFE (FRUSTUM_MAXPLANES * 4)
 typedef svector<Fvector, FRUSTUM_SAFE> sPoly;
-extern u32 frustum_aabb_remap[8][6];
+extern XRCDB_API u32 frustum_aabb_remap[8][6];
 
 class XRCDB_API CFrustum
 {
@@ -80,10 +82,85 @@ public:
     sPoly* ClipPoly(sPoly& src, sPoly& dest) const;
 
     u32 getMask() const { return (1 << p_count) - 1; }
-    EFC_Visible testSphere(Fvector& c, float r, u32& test_mask) const;
+
+    // The three hot culling tests live in the header: the per-object callers sit in other DLLs
+    // (dsgraph, detail manager, sun cascades), where LTCG cannot inline a cross-module call.
+    ICF EFC_Visible testSphere(Fvector& c, float r, u32& test_mask) const
+    {
+        u32 activeMask = test_mask & getMask();
+        while (activeMask)
+        {
+            const u32 index = std::countr_zero(activeMask);
+            const u32 bit = 1u << index;
+            activeMask &= activeMask - 1;
+
+            const float cls = planes[index].classify(c);
+            if (cls > r)
+            {
+                test_mask = 0;
+                return fcvNone;
+            } // none  - return
+            if (_abs(cls) >= r)
+                test_mask &= ~bit; // fully - no need to test this plane
+        }
+        return test_mask ? fcvPartial : fcvFully;
+    }
+
+    ICF EFC_Visible testAABB(const float* mM, u32& test_mask) const
+    {
+        // go for trivial rejection or acceptance using "faster overlap test"
+        u32 activeMask = test_mask & getMask();
+        while (activeMask)
+        {
+            const u32 index = std::countr_zero(activeMask);
+            const u32 bit = 1u << index;
+            activeMask &= activeMask - 1;
+
+            const EFC_Visible result = AABB_OverlapPlane(planes[index], mM);
+            if (fcvFully == result)
+                test_mask &= ~bit; // fully - no need to test this plane
+            else if (fcvNone == result)
+            {
+                test_mask = 0;
+                return fcvNone;
+            } // none - return
+        }
+        return test_mask ? fcvPartial : fcvFully;
+    }
+
+    ICF EFC_Visible testSAABB(Fvector& c, float r, const float* mM, u32& test_mask) const
+    {
+        u32 activeMask = test_mask & getMask();
+        while (activeMask)
+        {
+            const u32 index = std::countr_zero(activeMask);
+            const u32 bit = 1u << index;
+            activeMask &= activeMask - 1;
+
+            const float cls = planes[index].classify(c);
+            if (cls > r)
+            {
+                test_mask = 0;
+                return fcvNone;
+            } // none  - return
+            if (_abs(cls) >= r)
+                test_mask &= ~bit; // fully - no need to test this plane
+            else
+            {
+                const EFC_Visible result = AABB_OverlapPlane(planes[index], mM);
+                if (fcvFully == result)
+                    test_mask &= ~bit; // fully - no need to test this plane
+                else if (fcvNone == result)
+                {
+                    test_mask = 0;
+                    return fcvNone;
+                } // none - return
+            }
+        }
+        return test_mask ? fcvPartial : fcvFully;
+    }
+
     bool testSphere_dirty(const Fvector& c, float r) const;
-    EFC_Visible testAABB(const float* mM, u32& test_mask) const;
-    EFC_Visible testSAABB(Fvector& c, float r, const float* mM, u32& test_mask) const;
     bool testPolyInside_dirty(Fvector* p, size_t count) const;
 
     IC bool testPolyInside(sPoly& src) const

@@ -30,15 +30,19 @@ void CControlRunAttack::activate()
 
     //////////////////////////////////////////////////////////////////////////
 
+    // data() genuinely returns null when this com is not the current capturer, and VERIFY is a
+    // release no-op - the combat crash class this whole family fixes.
     SControlDirectionData* ctrl_dir = (SControlDirectionData*)m_man->data(this, ControlCom::eControlDir);
-    VERIFY(ctrl_dir);
+    if (!ctrl_dir)
+        return;
     ctrl_dir->heading.target_speed = 3.f;
     ctrl_dir->heading.target_angle = m_man->direction().angle_to_target(m_object->EnemyMan.get_enemy()->Position());
 
     //////////////////////////////////////////////////////////////////////////
 
     SControlAnimationData* ctrl_anim = (SControlAnimationData*)m_man->data(this, ControlCom::eControlAnimation);
-    VERIFY(ctrl_anim);
+    if (!ctrl_anim)
+        return;
 
     ctrl_anim->global.set_motion(
         smart_cast<IKinematicsAnimated*>(m_object->Visual())->ID_Cycle_Safe("stand_attack_run_0"));
@@ -97,10 +101,10 @@ void CControlRunAttack::on_event(ControlCom::EEventType type, ControlCom::IEvent
     {
         // set animation speed
         [[maybe_unused]] const auto ctrl_data_anim = static_cast<SControlAnimationData*>(m_man->data(this, ControlCom::eControlAnimation));
-        VERIFY(ctrl_data_anim);
 
         const auto blend = m_man->animation().current_blend();
-        VERIFY(blend);
+        if (!ctrl_data_anim || !blend)
+            break;
 
         // animation time
         float anim_time = blend->timeTotal / blend->speed;

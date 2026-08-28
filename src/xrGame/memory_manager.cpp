@@ -159,6 +159,10 @@ void CMemoryManager::update(const xr_vector<T>& objects, bool add_enemies)
         if (!(*I).m_enabled)
             continue;
 
+        // A destroyed object must not be promoted into the enemy/item registries below.
+        if ((*I).m_object && (*I).m_object->getDestroy())
+            continue;
+
         if (m_stalker && !(*I).m_squad_mask.test(mask))
             continue;
 
@@ -333,6 +337,10 @@ void CMemoryManager::on_restrictions_change()
 
 void CMemoryManager::make_object_visible_somewhen(const CEntityAlive* enemy)
 {
+    // Callers pass memory().enemy().selected(), which is routinely null (enemy died this frame).
+    if (!enemy || enemy->getDestroy())
+        return;
+
     squad_mask_type mask = stalker().agent_manager().member().mask(&stalker());
     MemorySpace::CVisibleObject* obj = visual().visible_object(enemy);
     //	if (obj) {

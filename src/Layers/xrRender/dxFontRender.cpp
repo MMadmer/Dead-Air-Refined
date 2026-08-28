@@ -1,11 +1,12 @@
 #include "stdafx.h"
+#include <atomic>
 
 #include "dxFontRender.h"
 
 #include "xrEngine/GameFont.h"
 #include "xrCore/Text/StringConversion.hpp"
 
-extern ENGINE_API bool g_bRendering;
+extern ENGINE_API std::atomic<bool> g_bRendering;
 extern ENGINE_API Fvector2 g_current_font_scale;
 
 namespace xray::render::RENDER_NAMESPACE

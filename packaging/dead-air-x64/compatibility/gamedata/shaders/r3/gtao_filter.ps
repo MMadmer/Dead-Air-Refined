@@ -1,0 +1,103 @@
+// Dead Air: Refined - guided GTAO filter, 8x8 box (filter pass).
+//
+// Ported from IX-Ray (gamedata\shaders\d3d11\gtao_filter.ps.hlsl, author LVutner;
+// local linear model / guided filter after Bart Wronski). One structural change:
+// the donor reads a packed R32_UINT target with a single GatherRed and unpacks
+// (view-z, AO) by bit tricks; our target is R16G16_FLOAT (x = view-z, y = AO),
+// so each fetch is GatherRed for the guide plus GatherGreen for the signal -
+// same values (both were 16-bit halves in the donor too), twice the gathers,
+// still far cheaper than 64 point taps. The offsets stay spelled out because
+// Gather offsets must be immediate literals.
+//
+// The 8x8 window is anchored half a texel up-left of the pixel (the donor notes
+// the same shift); like the donor's combine, ours samples the result at plain
+// texcoords - the half-texel skew is invisible after the linear-model fit.
+//
+// Reads $user$gtao_0, writes the final AO into $user$ssao_temp (R16F), which
+// combine_1 samples as s_occ. Full resolution.
+
+#include "common.h"
+
+Texture2D<float2> t_gtao_packed; // x = view-z, y = raw AO ($user$gtao_0)
+
+float main(float2 tc0 : TEXCOORD0, float4 hpos : SV_Position) : SV_Target
+{
+    // Texel-corner-snapped coordinates for Gather4 (fixes grid-like artifacts,
+    // see reedbeta.com/blog/texture-gathers-and-coordinate-precision)
+    float2 gather_texcoord =
+        (floor(tc0 * pos_decompression_params2.xy - 0.5f) + 1.0f) * pos_decompression_params2.zw;
+
+    // 16 gather quads = the 8x8 footprint, offsets as in the donor.
+    // Depth (R) guides the fit, AO (G) is the filtered signal.
+    float4 depth_taps[16] =
+    {
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 0,  0)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 0,  2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 2,  2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 2,  0)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-2, -2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 0, -2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-2,  0)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-4, -4)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-2, -4)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 0, -4)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 2, -4)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-4, -2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-4,  0)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2( 2, -2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-4,  2)),
+        t_gtao_packed.GatherRed(smp_nofilter, gather_texcoord, int2(-2,  2))
+    };
+
+    float4 occ_taps[16] =
+    {
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 0,  0)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 0,  2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 2,  2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 2,  0)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-2, -2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 0, -2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-2,  0)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-4, -4)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-2, -4)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 0, -4)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 2, -4)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-4, -2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-4,  0)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2( 2, -2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-4,  2)),
+        t_gtao_packed.GatherGreen(smp_nofilter, gather_texcoord, int2(-2,  2))
+    };
+
+    // Only the depth of the center pixel guides the reconstruction
+    float center_tap = t_gtao_packed.Load(int3(hpos.xy, 0)).x;
+
+    // Accumulated moments: E[x], E[x^2], E[y], E[xy] where x = depth, y = AO
+    float4 x_x2_y_xy = (0.0).xxxx;
+
+    [loop]
+    for (int i = 0; i < 16; i++)
+    {
+        float4 depth_tap = depth_taps[i];
+        float4 occ_tap = occ_taps[i];
+
+        x_x2_y_xy += float4(
+            dot(depth_tap, (1.0).xxxx),
+            dot(depth_tap, depth_tap),
+            dot(occ_tap, (1.0).xxxx),
+            dot(occ_tap, depth_tap));
+    }
+
+    // 1/64
+    x_x2_y_xy *= 0.015625;
+
+    // Local linear model AO ~= beta * depth + alpha over the window
+    float cyx = (x_x2_y_xy.w - x_x2_y_xy.x * x_x2_y_xy.z);
+    float vx = (x_x2_y_xy.y - x_x2_y_xy.x * x_x2_y_xy.x) + 1e-4; // bias
+
+    float beta = cyx * rcp(vx);
+    float alpha = x_x2_y_xy.z - beta * x_x2_y_xy.x;
+
+    // Final, filtered value
+    return saturate(beta * center_tap + alpha);
+}

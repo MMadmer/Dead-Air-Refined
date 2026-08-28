@@ -68,6 +68,11 @@ public:
     ref_rt rt_SunShaftsMask;
     ref_rt rt_SunShaftsMaskSmoothed;
     ref_rt rt_SunShaftsPass0;
+    // SMAA working targets (edge mask / blend weights), always single-sampled
+    ref_rt rt_smaa_edges;
+    ref_rt rt_smaa_blend;
+    // Camera-TAA history: the previous resolved LDR frame (same format as generic0)
+    ref_rt rt_taa_history;
     ref_rt rt_Bloom_1; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_Bloom_2; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_LUM_64; // 64bit, 64x64,	log-average in all components
@@ -91,6 +96,11 @@ public:
     ref_texture t_material;
     ref_texture t_noise[TEX_jitter_count];
     ref_texture t_noise_mipped;
+    // SMAA lookup tables baked into the binary (smaa_luts.h)
+    ref_texture t_smaa_area;
+    ref_texture t_smaa_search;
+    // GTAO blue-noise tile (gtao_noise.h)
+    ref_texture t_blue_noise;
 
 private:
     // OCCq
@@ -155,6 +165,10 @@ private:
     ref_shader s_ssao;
     ref_shader s_ssao_msaa[8];
     ref_shader s_hdao_cs;      // HDAO compute shader
+    // GTAO (r2_ssao_mode gtao): raw AO + view-z at full res, guided-filtered into
+    // rt_ssao_temp. Created only when the mode is active at renderer start.
+    ref_rt rt_gtao;
+    ref_shader s_gtao;
 
     // Bloom
     ref_geom g_bloom_build;
@@ -183,6 +197,8 @@ private:
     ref_shader s_combine_msaa[8];
     ref_shader s_combine_volumetric;
     ref_shader s_fxaa;
+    ref_shader s_smaa;
+    ref_shader s_taa;
     ref_shader s_sunshafts;
     ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
     ref_geom g_fxaa;
@@ -276,6 +292,7 @@ public:
     void phase_scene_end();
     void phase_occq();
     void phase_ssao();
+    void phase_gtao(CBackend& cmd_list);
     void phase_hdao();
     void phase_downsamp();
     void phase_wallmarks();
@@ -331,6 +348,8 @@ public:
     void phase_bloom();
     void phase_luminance();
     void phase_fxaa();
+    void phase_smaa();
+    void phase_taa(const Fmatrix& reproject);
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
     void phase_combine();

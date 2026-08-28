@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <atomic>
+
 struct intrusive_base
 {
     intrusive_base() XR_NOEXCEPT : m_ref_count(0) {}
@@ -22,14 +24,16 @@ struct intrusive_base
         catch (...) { }
     }
 
-    void acquire() XR_NOEXCEPT { ++m_ref_count; }
+    void acquire() XR_NOEXCEPT { m_ref_count.fetch_add(1, std::memory_order_relaxed); }
 
-    bool release() XR_NOEXCEPT { return --m_ref_count == 0; }
+    bool release() XR_NOEXCEPT { return m_ref_count.fetch_sub(1, std::memory_order_acq_rel) == 1; }
 
-    bool released() const XR_NOEXCEPT { return m_ref_count == 0; }
+    bool released() const XR_NOEXCEPT { return m_ref_count.load(std::memory_order_acquire) == 0; }
 
 private:
-    size_t m_ref_count;
+    // Holders live on several threads (render workers via dsgraph, Lua finalizers on task workers),
+    // so the bare increment was the same corruption class as the shared_str pool. Keep size_t width.
+    std::atomic<size_t> m_ref_count;
 };
 
 template <typename ObjectType, typename BaseType = intrusive_base>

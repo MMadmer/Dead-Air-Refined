@@ -1,6 +1,8 @@
 #include "stdafx.h"
 
 #include <DirectXTex.h>
+#include "smaa_luts.h"
+#include "gtao_noise.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -274,10 +276,77 @@ void CRenderTarget::build_textures()
             t_noise_mipped->surface_set(t_noise_surf_mipped);
             _RELEASE(t_noise_surf_mipped);
         }
+        // GTAO blue-noise tile: slice 0 of IX-Ray's blue_noise_3x3 volume, baked into
+        // gtao_noise.h. R8G8: x = slice-angle jitter, y = step jitter. Built
+        // unconditionally like the jitter set - one 32 KB texture.
+        {
+            D3D_TEXTURE2D_DESC descBlue{};
+            descBlue.Width = GTAO_NOISE_SIZE;
+            descBlue.Height = GTAO_NOISE_SIZE;
+            descBlue.MipLevels = 1;
+            descBlue.ArraySize = 1;
+            descBlue.SampleDesc.Count = 1;
+            descBlue.Format = DXGI_FORMAT_R8G8_UNORM;
+            descBlue.Usage = D3D_USAGE_DEFAULT;
+            descBlue.BindFlags = D3D_BIND_SHADER_RESOURCE;
+
+            D3D_SUBRESOURCE_DATA blueData{};
+            blueData.pSysMem = GTAO_NOISE_RG;
+            blueData.SysMemPitch = GTAO_NOISE_SIZE * 2;
+
+            ID3DTexture2D* t_blue_surf{};
+            R_CHK(HW.pDevice->CreateTexture2D(&descBlue, &blueData, &t_blue_surf));
+            t_blue_noise = RImplementation.Resources->_CreateTexture(r2_blue_noise);
+            t_blue_noise->surface_set(t_blue_surf);
+            _RELEASE(t_blue_surf);
+        }
+
         for (size_t it2 = 0; it2 < TEX_jitter_count; ++it2)
         {
             _RELEASE(t_noise_surf[it2]);
         }
  }
+
+    // SMAA lookup tables, baked into the binary (smaa_luts.h) - no gamedata dependency
+    {
+        D3D_TEXTURE2D_DESC desc;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
+        desc.Usage = D3D_USAGE_IMMUTABLE;
+        desc.BindFlags = D3D_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = 0;
+        desc.MiscFlags = 0;
+
+        D3D_SUBRESOURCE_DATA subData;
+        subData.SysMemSlicePitch = 0;
+
+        // Area LUT: 160x560, two bytes per texel (the shader reads .rg)
+        desc.Width = SMAA_AREATEX_WIDTH;
+        desc.Height = SMAA_AREATEX_HEIGHT;
+        desc.Format = DXGI_FORMAT_R8G8_UNORM;
+        subData.pSysMem = smaa_area_tex;
+        subData.SysMemPitch = desc.Width * 2;
+
+        ID3DTexture2D* t_area_surf{};
+        R_CHK(HW.pDevice->CreateTexture2D(&desc, &subData, &t_area_surf));
+        t_smaa_area = RImplementation.Resources->_CreateTexture(r2_smaa_area);
+        t_smaa_area->surface_set(t_area_surf);
+        _RELEASE(t_area_surf);
+
+        // Search LUT: 64x16, one byte per texel (the shader reads .r)
+        desc.Width = SMAA_SEARCHTEX_WIDTH;
+        desc.Height = SMAA_SEARCHTEX_HEIGHT;
+        desc.Format = DXGI_FORMAT_R8_UNORM;
+        subData.pSysMem = smaa_search_tex;
+        subData.SysMemPitch = desc.Width;
+
+        ID3DTexture2D* t_search_surf{};
+        R_CHK(HW.pDevice->CreateTexture2D(&desc, &subData, &t_search_surf));
+        t_smaa_search = RImplementation.Resources->_CreateTexture(r2_smaa_search);
+        t_smaa_search->surface_set(t_search_surf);
+        _RELEASE(t_search_surf);
+    }
 }
 } // namespace xray::render::RENDER_NAMESPACE

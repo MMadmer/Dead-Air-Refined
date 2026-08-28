@@ -208,7 +208,16 @@ void CScriptGameObject::set_fastcall(const luabind::functor<bool>& functor, cons
 }
 void CScriptGameObject::set_const_force(const Fvector& dir, float value, u32 time_interval)
 {
-    CPhysicsShell* shell = object().cast_physics_shell_holder()->PPhysicsShell();
+    // A script can call this on any game object; a non-shell-holder crashed one line below,
+    // before the existing guards ever ran.
+    CPhysicsShellHolder* holder = object().cast_physics_shell_holder();
+    if (!holder)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "set_const_force : object %s is not a physics shell holder!", object().cName().c_str());
+        return;
+    }
+    CPhysicsShell* shell = holder->PPhysicsShell();
     // if( !shell->isEnabled() )
     //	shell->set_LinearVel( Fvector().set(0,0,0) );
     if (!physics_world())

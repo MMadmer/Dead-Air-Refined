@@ -5,6 +5,7 @@
 Texture3D s_water;
 Texture2D s_waterFall;
 float4 RainDensity;
+float4 RainFallof; // x = wet radius near, y = far (r3_dynamic_wet_surfaces_near/far)
 
 float2 SampleSplashNormal(float2 tc, float time)
 {
@@ -50,10 +51,21 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
 
     const float4 position = float4(gbd.P, 1.0);
     float3 normal = normalize(gbd.N);
-    const float distanceFade = 1.0 - smoothstep(5.0, 20.0, position.z);
+    // Viewmodel exclusion: HUD geometry lives closer than ~35 cm and must not collect rain
+    // normals or the gloss boost (a soaked rifle right in your face reads as a smeared screen).
+    [branch]
+    if (position.z < 0.35)
+        return float4(normal, 1.0);
+    // The engine has been binding RainFallof all along; the hardcoded 5/20 kept the console pair
+    // r3_dynamic_wet_surfaces_near/far permanently dead.
+    const float distanceFade = 1.0 - smoothstep(RainFallof.x, RainFallof.y, position.z);
     const float upwardFacing = -dot(Ldynamic_dir.xyz, normal);
+    // Baked-hemi gate: pixels the sky never reaches (interiors, under-roof walls) must not get
+    // wet - the 256px rain smap cannot resolve them, hemi already knows. Also fires the cheap
+    // early-out below more often.
     const float rainCoverage =
-        distanceFade * distanceFade * RainDensity.x * saturate(upwardFacing * 10.0 + 5.5);
+        distanceFade * distanceFade * RainDensity.x * saturate(upwardFacing * 10.0 + 5.5) *
+        saturate(gbd.hemi * 10.0);
 
     // Reject pixels that cannot receive rain before the expensive shadow lookup.
     [branch]

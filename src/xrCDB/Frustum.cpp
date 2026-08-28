@@ -65,7 +65,7 @@ void CFrustum::_add(Fvector& P1, Fvector& P2, Fvector& P3)
 #define My 4
 #define Mz 5
 
-u32 frustum_aabb_remap[8][6] =
+XRCDB_API u32 frustum_aabb_remap[8][6] =
 {
     {Mx, My, Mz, mx, my, mz}, {Mx, My, mz, mx, my, Mz},
     {Mx, my, Mz, mx, My, mz}, {Mx, my, mz, mx, My, Mz},
@@ -81,27 +81,6 @@ u32 frustum_aabb_remap[8][6] =
 #undef Mz
 
 //////////////////////////////////////////////////////////////////////
-EFC_Visible CFrustum::testSphere(Fvector& c, float r, u32& test_mask) const
-{
-    u32 activeMask = test_mask & getMask();
-    while (activeMask)
-    {
-        const u32 index = std::countr_zero(activeMask);
-        const u32 bit = 1u << index;
-        activeMask &= activeMask - 1;
-
-        const float cls = planes[index].classify(c);
-        if (cls > r)
-        {
-            test_mask = 0;
-            return fcvNone;
-        } // none  - return
-        if (_abs(cls) >= r)
-            test_mask &= ~bit; // fully - no need to test this plane
-    }
-    return test_mask ? fcvPartial : fcvFully;
-}
-
 bool CFrustum::testSphere_dirty(const Fvector& c, float r) const
 {
     switch (p_count)
@@ -158,60 +137,6 @@ bool CFrustum::testSphere_dirty(const Fvector& c, float r) const
     default: NODEFAULT;
     }
     return TRUE;
-}
-
-EFC_Visible CFrustum::testAABB(const float* mM, u32& test_mask) const
-{
-    // go for trivial rejection or acceptance using "faster overlap test"
-    u32 activeMask = test_mask & getMask();
-    while (activeMask)
-    {
-        const u32 index = std::countr_zero(activeMask);
-        const u32 bit = 1u << index;
-        activeMask &= activeMask - 1;
-
-        const EFC_Visible result = AABB_OverlapPlane(planes[index], mM);
-        if (fcvFully == result)
-            test_mask &= ~bit; // fully - no need to test this plane
-        else if (fcvNone == result)
-        {
-            test_mask = 0;
-            return fcvNone;
-        } // none - return
-    }
-    return test_mask ? fcvPartial : fcvFully;
-}
-
-EFC_Visible CFrustum::testSAABB(Fvector& c, float r, const float* mM, u32& test_mask) const
-{
-    u32 activeMask = test_mask & getMask();
-    while (activeMask)
-    {
-        const u32 index = std::countr_zero(activeMask);
-        const u32 bit = 1u << index;
-        activeMask &= activeMask - 1;
-
-        const float cls = planes[index].classify(c);
-        if (cls > r)
-        {
-            test_mask = 0;
-            return fcvNone;
-        } // none  - return
-        if (_abs(cls) >= r)
-            test_mask &= ~bit; // fully - no need to test this plane
-        else
-        {
-            const EFC_Visible result = AABB_OverlapPlane(planes[index], mM);
-            if (fcvFully == result)
-                test_mask &= ~bit; // fully - no need to test this plane
-            else if (fcvNone == result)
-            {
-                test_mask = 0;
-                return fcvNone;
-            } // none - return
-        }
-    }
-    return test_mask ? fcvPartial : fcvFully;
 }
 
 bool CFrustum::testPolyInside_dirty(Fvector* p, size_t count) const

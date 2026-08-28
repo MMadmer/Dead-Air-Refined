@@ -1,6 +1,9 @@
 #pragma once
 
+#include <shared_mutex>
+
 #include "Common/Noncopyable.hpp"
+#include "xrCore/Threading/Lock.hpp"
 
 #include "xrCore/xrPool.h"
 //#include "xr_collide_defs.h"
@@ -222,7 +225,13 @@ public:
     };
 
 private:
-    Lock cs;
+    // Readers (q_box/q_frustum/q_ray) walk the tree concurrently - sun cascades go through
+    // xr_parallel_for and per-light subspace tasks hit this from workers. Structure writes
+    // (insert/remove) take it exclusively. Query results travel by parameter, NOT through a
+    // shared member, or two concurrent readers would scribble over each other.
+    std::shared_mutex cs;
+    // CStatTimer is not thread-safe; timing runs under its own tiny lock, outside the shared one.
+    Lock stats_cs;
 
     poolSS<ISpatial_NODE, 128> allocator;
 
@@ -234,7 +243,6 @@ public:
     ISpatial_NODE* m_root{};
     Fvector m_center{};
     float m_bounds{};
-    xr_vector<ISpatial*>* q_result{};
     SpatialDBStatistics Stats;
 
 private:

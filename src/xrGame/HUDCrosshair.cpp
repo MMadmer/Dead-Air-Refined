@@ -95,7 +95,7 @@ void CHUDCrosshair::OnRenderFirstBulletDispertion()
 }
 #endif
 
-extern ENGINE_API bool g_bRendering;
+extern ENGINE_API std::atomic<bool> g_bRendering;
 void CHUDCrosshair::OnRender()
 {
     VERIFY(g_bRendering);

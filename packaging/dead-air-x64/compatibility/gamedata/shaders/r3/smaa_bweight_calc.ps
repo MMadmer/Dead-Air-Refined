@@ -1,0 +1,37 @@
+/*
+------------------------------------------------------------------
+SMAA 1x, pass 2/3: blending weight calculation
+Ported from IX-Ray 1.6 stcop (d3d11/smaa_bweight_calc.ps.hlsl).
+Reads the edge mask ($user$smaa_edges) and the two baked lookup
+tables (area 160x560 R8G8, search 64x16 R8 - see smaa_luts.h),
+writes per-pixel blend weights into $user$smaa_blend. The target
+must be cleared to zero before the pass (phase_smaa does).
+------------------------------------------------------------------
+References:
+https://github.com/iryoku/smaa
+------------------------------------------------------------------
+*/
+
+#include "common.h"
+#include "smaa.h"
+
+Texture2D s_edgetex;
+Texture2D s_areatex;
+Texture2D s_searchtex;
+
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+	float4	hpos	: SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	// VS varyings computed per pixel (see smaa_edge_detect.ps for why this is exact)
+	float2 pixcoord;
+	float4 offset[3];
+	SMAABlendingWeightCalculationVS(I.tc0, pixcoord, offset);
+
+	// Zero subsample indices = SMAA 1x
+	return SMAABlendingWeightCalculationPS(I.tc0, pixcoord, offset, s_edgetex, s_areatex, s_searchtex, 0.0f);
+}

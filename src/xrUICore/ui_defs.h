@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "Include/xrRender/FactoryPtr.h"
 #include "Include/xrRender/UIRender.h"
 #include "Include/xrRender/UIShader.h"
@@ -71,4 +73,4 @@ public:
     sPoly2D* ClipPoly(sPoly2D& S, sPoly2D& D) const;
 };
 
-extern ENGINE_API bool g_bRendering;
+extern ENGINE_API std::atomic<bool> g_bRendering;

@@ -362,24 +362,38 @@ bool CALifeUpdateManager::load_game(LPCSTR game_name, bool no_assert)
     return (true);
 }
 
+// Scripts reach these with ids that may already be released - VERIFY is a no-op in release builds,
+// so the stale id went straight into a dereference.
 void CALifeUpdateManager::set_switch_online(ALife::_OBJECT_ID id, bool value)
 {
-    CSE_ALifeDynamicObject* object = objects().object(id);
-    VERIFY(object);
+    CSE_ALifeDynamicObject* object = objects().object(id, true);
+    if (!object)
+    {
+        Msg("! set_switch_online: no alife object with id %u", id);
+        return;
+    }
     object->can_switch_online(value);
 }
 
 void CALifeUpdateManager::set_switch_offline(ALife::_OBJECT_ID id, bool value)
 {
-    CSE_ALifeDynamicObject* object = objects().object(id);
-    VERIFY(object);
+    CSE_ALifeDynamicObject* object = objects().object(id, true);
+    if (!object)
+    {
+        Msg("! set_switch_offline: no alife object with id %u", id);
+        return;
+    }
     object->can_switch_offline(value);
 }
 
 void CALifeUpdateManager::set_interactive(ALife::_OBJECT_ID id, bool value)
 {
-    CSE_ALifeDynamicObject* object = objects().object(id);
-    VERIFY(object);
+    CSE_ALifeDynamicObject* object = objects().object(id, true);
+    if (!object)
+    {
+        Msg("! set_interactive: no alife object with id %u", id);
+        return;
+    }
     object->interactive(value);
 }
 

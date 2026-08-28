@@ -199,7 +199,9 @@ void CShootingObject::Light_Start()
 
         light_build_color.set(Random.randFs(light_var_color, light_base_color.r),
             Random.randFs(light_var_color, light_base_color.g), Random.randFs(light_var_color, light_base_color.b), 1);
-        light_build_range = Random.randFs(light_var_range, light_base_range);
+        // randFs(range, offs) = offs + randF(-range, range): any config with light_var_range >
+        // light_range fed a NEGATIVE radius straight into set_range and the spatial tree.
+        light_build_range = std::max(0.f, Random.randFs(light_var_range, light_base_range));
     }
 }
 

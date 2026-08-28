@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #pragma hdrstop
+#include <atomic>
 
 #include "GameFont.h"
 #include "xr_level_controller.h"
@@ -7,7 +8,7 @@
 #include "Render.h"
 #include "StringTable/StringTable.h"
 
-extern ENGINE_API bool g_bRendering;
+extern ENGINE_API std::atomic<bool> g_bRendering;
 ENGINE_API Fvector2 g_current_font_scale = {1.0f, 1.0f};
 
 #include "Include/xrRender/RenderFactory.h"

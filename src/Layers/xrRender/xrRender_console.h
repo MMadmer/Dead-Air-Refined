@@ -31,6 +31,7 @@ enum
     ssao_mode_default,
     ssao_mode_hdao,
     ssao_mode_hbao,
+    ssao_mode_gtao,
 };
 
 extern ECORE_API u32 ps_r_sun_quality; //	=	0;
@@ -116,6 +117,9 @@ extern ECORE_API float ps_r__vegDISCARD;
 extern ECORE_API float ps_r__grass_fade_start;
 extern ECORE_API float ps_r__grass_fade_flat;
 extern ECORE_API int ps_r__grass_shadow_dist;
+extern ECORE_API int ps_r__aref_quality;
+extern ECORE_API int ps_r__smaa;
+extern ECORE_API int ps_r__taa;
 extern ECORE_API int ps_r__grass_shadow_fade;
 extern ECORE_API float ps_r__grass_tint;
 extern ECORE_API float ps_r__grass_tint_scale;

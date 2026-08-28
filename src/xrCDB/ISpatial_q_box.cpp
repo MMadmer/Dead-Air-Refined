@@ -14,16 +14,18 @@ public:
     Fvector center;
     Fvector size;
     Fbox box;
-    ISpatial_DB* space;
+    // Result travels with the walker: queries run under a SHARED lock now, so no walker may write
+    // through a member of the (shared) DB object.
+    xr_vector<ISpatial*>* result;
 
 public:
-    box_walker(ISpatial_DB* _space, u32 _mask, const Fvector& _center, const Fvector& _size)
+    box_walker(xr_vector<ISpatial*>* _result, u32 _mask, const Fvector& _center, const Fvector& _size)
     {
         mask = _mask;
         center = _center;
         size = _size;
         box.setb(center, size);
-        space = _space;
+        result = _result;
     }
 
     void walk(ISpatial_NODE* N, Fvector& n_C, float n_R)
@@ -49,7 +51,7 @@ public:
             if (!sB.intersect(box))
                 continue;
 
-            space->q_result->push_back(S);
+            result->push_back(S);
             if constexpr (b_first)
                 return;
         }
@@ -65,7 +67,7 @@ public:
             walk(N->children[octant], c_C, c_R);
             if constexpr (b_first)
             {
-                if (!space->q_result->empty())
+                if (!result->empty())
                     return;
             }
         }
@@ -75,21 +77,18 @@ public:
 void ISpatial_DB::q_box(xr_vector<ISpatial*>& R, u32 _o, u32 _mask, const Fvector& _center, const Fvector& _size)
 {
     ZoneScoped;
-    ScopeLock scope(&cs);
-    Stats.Query.Begin();
-    q_result = &R;
-    q_result->clear();
+    std::shared_lock scope(cs);
+    R.clear();
     if (_o & O_ONLYFIRST)
     {
-        box_walker<true> W(this, _mask, _center, _size);
+        box_walker<true> W(&R, _mask, _center, _size);
         W.walk(m_root, m_center, m_bounds);
     }
     else
     {
-        box_walker<false> W(this, _mask, _center, _size);
+        box_walker<false> W(&R, _mask, _center, _size);
         W.walk(m_root, m_center, m_bounds);
     }
-    Stats.Query.End();
 }
 
 void ISpatial_DB::q_sphere(xr_vector<ISpatial*>& R, u32 _o, u32 _mask, const Fvector& _center, const float _radius)

@@ -48,12 +48,18 @@ void CBlendInstance::blend_remove(CBlend* H)
 // Motion control
 void CKinematicsAnimated::Bone_Motion_Start(CBoneData* bd, CBlend* handle)
 {
+    // Writers run off-thread too: CObjectHandler::update() reaches here from seqParallel
+    // (mtObjectHandler is in the default g_mt_config) while render workers walk the same blend
+    // vectors inside CalculateBones. Readers already hold UCalc_Mutex (SkeletonRigid.cpp) and the
+    // lock is recursive, so re-entering from the child recursion is the cheap owned-path.
+    UCalc_mtlock lock;
     LL_GetBlendInstance(bd->GetSelfID()).blend_add(handle);
     for (auto &it : bd->children)
         Bone_Motion_Start(it, handle);
 }
 void CKinematicsAnimated::Bone_Motion_Stop(CBoneData* bd, CBlend* handle)
 {
+    UCalc_mtlock lock;
     LL_GetBlendInstance(bd->GetSelfID()).blend_remove(handle);
     for (auto &it : bd->children)
         Bone_Motion_Stop(it, handle);

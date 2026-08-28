@@ -599,14 +599,27 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
 
                 if (strstr(inc_name, "*.ltx"))
                 {
+                    // file_list matches by file NAME - a mask like "subdir\*.ltx" passed whole
+                    // silently loaded zero files. Split the directory prefix off into the path.
+                    string_path inc_dir, mask;
+                    xr_strcpy(inc_dir, inc_path);
+                    xr_strcpy(mask, inc_name);
+                    if (pstr last_sep = strrchr(mask, _DELIMITER))
+                    {
+                        *last_sep = 0;
+                        xr_strcat(inc_dir, mask);
+                        xr_strcat(inc_dir, DELIMITER);
+                        xr_strcpy(mask, last_sep + 1);
+                    }
+
                     FS_FileSet fset;
-                    FS.file_list(fset, inc_path, FS_ListFiles, inc_name);
+                    FS.file_list(fset, inc_dir, FS_ListFiles, mask);
 
                     for (FS_FileSet::iterator it = fset.begin(); it != fset.end(); it++)
                     {
                         LPCSTR _name = it->name.c_str();
                         string_path _fn;
-                        strconcat(sizeof(_fn), _fn, inc_path, _name);
+                        strconcat(sizeof(_fn), _fn, inc_dir, _name);
                         loadFile(_fn, _name);
                     }
                 }

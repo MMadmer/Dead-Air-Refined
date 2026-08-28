@@ -1,0 +1,65 @@
+#include "common.h"
+
+// Camera-reprojection temporal AA (Dead Air x64). Not a full jittered TAA: there is no
+// per-object velocity and no projection jitter - this pass stabilises what the camera
+// motion aliases (grass shimmer, foliage crawl, spec sparkle) by blending the current
+// frame with the reprojected previous one under a neighbourhood clamp. Runs on the
+// tonemapped LDR frame after SMAA, so the history is LDR too.
+//
+// m_previous comes from the mblur block of phase_combine: previous-frame view-projection
+// composed with the CURRENT inverse view, i.e. it maps current view-space positions into
+// previous-frame clip space directly.
+
+Texture2D s_taa_history;
+
+uniform float4x4 m_taa_previous;
+uniform float4 screen_res;
+
+float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position) : SV_Target
+{
+    gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy);
+
+    float3 current = s_image.Sample(smp_nofilter, tc).rgb;
+
+    // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
+    // skipping keeps cloud motion crisp.
+    [branch]
+    if (is_sky(gbd.P.z))
+        return float4(current, 1.0);
+
+    // Reproject the view-space position into the previous frame.
+    float4 prev_clip = mul(m_taa_previous, float4(gbd.P, 1.0));
+    float2 prev_uv = (prev_clip.xy / prev_clip.w) * float2(0.5, -0.5) + 0.5;
+
+    [branch]
+    if (prev_uv.x < 0.0 || prev_uv.x > 1.0 || prev_uv.y < 0.0 || prev_uv.y > 1.0 || prev_clip.w <= 0.0)
+        return float4(current, 1.0);
+
+    float3 history = s_taa_history.Sample(smp_rtlinear, prev_uv).rgb;
+
+    // Neighbourhood clamp: the history may show something no longer visible (disocclusion,
+    // a moving NPC without velocity). Clamping to the 3x3 min/max of the current frame
+    // bounds any ghost to one frame of error.
+    float3 c_min = current, c_max = current;
+    [unroll]
+    for (int dy = -1; dy <= 1; ++dy)
+    {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            if (dx == 0 && dy == 0)
+                continue;
+            float3 n = s_image.Sample(smp_nofilter, tc + float2(dx, dy) * screen_res.zw).rgb;
+            c_min = min(c_min, n);
+            c_max = max(c_max, n);
+        }
+    }
+    history = clamp(history, c_min, c_max);
+
+    // Blend weight backs off with reprojection distance: fast pans keep the image crisp,
+    // a still or slowly turning camera converges to a stable field.
+    float motion_px = length((prev_uv - tc) * screen_res.xy);
+    float w = 0.88 * saturate(1.0 - motion_px / 24.0);
+
+    return float4(lerp(current, history, w), 1.0);
+}

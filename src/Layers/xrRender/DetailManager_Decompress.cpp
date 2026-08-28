@@ -192,6 +192,9 @@ void CDetailManager::cache_Decompress(Slot* S)
             Fvector dir;
             dir.set(0, -1, 0);
 
+            // Terrain normal for the ground tilt - captured strictly from the triangle that WINS
+            // the height test, not the last one tested, or the tuft aligns to a random surface.
+            Fvector ground_n = {0.f, 1.f, 0.f};
             float r_u, r_v, r_range;
             for (size_t tid = 0; tid < triCount; tid++)
             {
@@ -207,7 +210,20 @@ void CDetailManager::cache_Decompress(Slot* S)
                     {
                         float y_test = Item_P.y - r_range;
                         if (y_test > y)
+                        {
                             y = y_test;
+                            Fvector e1, e2;
+                            e1.sub(Tv[1], Tv[0]);
+                            e2.sub(Tv[2], Tv[0]);
+                            ground_n.crossproduct(e1, e2);
+                            const float m = ground_n.magnitude();
+                            if (m > EPS)
+                                ground_n.div(m);
+                            else
+                                ground_n.set(0.f, 1.f, 0.f);
+                            if (ground_n.y < 0.f)
+                                ground_n.invert();
+                        }
                     }
                 }
             }
@@ -231,6 +247,29 @@ void CDetailManager::cache_Decompress(Slot* S)
 #else
             Item.mRotY.rotateY(0);
 #endif
+
+            // Ground correction: tilt the tuft to the terrain normal so slope grass stops standing
+            // in a vertical comb. Capped at ~60 degrees to survive geometry spikes. Applied BEFORE
+            // the translate and the BB transform, so shadow culling sees the real bounds.
+            if (ground_n.y < 0.9995f)
+            {
+                if (ground_n.y < 0.5f)
+                {
+                    ground_n.y = 0.5f;
+                    ground_n.normalize();
+                }
+                Fvector axis;
+                axis.crossproduct(Fvector{0.f, 1.f, 0.f}, ground_n);
+                const float axis_m = axis.magnitude();
+                if (axis_m > EPS)
+                {
+                    axis.div(axis_m);
+                    Fmatrix mTilt;
+                    mTilt.rotation(axis, acosf(clampr(ground_n.y, -1.f, 1.f)));
+                    Fmatrix mYaw = Item.mRotY;
+                    Item.mRotY.mul_43(mTilt, mYaw);
+                }
+            }
 
             Item.mRotY.translate_over(Item_P);
             mScale.scale(Item.scale, Item.scale, Item.scale);
@@ -282,10 +321,9 @@ gray255[3]						=	255.f*float(c_pal->a3)/15.f;
                     Item.vis_ID = 0;
                 else
                 {
-                    if (::Random.randI(0, 3) == 0)
-                        Item.vis_ID = 2; // Second wave
-                    else
-                        Item.vis_ID = 1; // First wave
+                    // 50/50 between the two wave groups (was 1/3 vs 2/3): with authored amplitudes
+                    // live, the quieter second wave carrying half the field calms it visibly.
+                    Item.vis_ID = ::Random.randI(1, 3);
                 }
             }
 #else

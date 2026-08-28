@@ -45,53 +45,48 @@ float4 da_puddle_march(float3 pos_w, float3 vreflect)
 	float4 s_pixel = proj_to_screen(p_pixel);
 	s_pixel.xy /= s_pixel.w;
 
-	const float3 w_next = pos_w + normalize(vreflect);
+	// Луч, летящий в камеру, отражать нечем.
+	if (dot(eye_direction, normalize(vreflect)) < -0.5f || v_pixel.z > REFL_RANGE)
+		return 0.0f;
+
+	const float3 rdir = normalize(vreflect);
+
+	// Near clip: a segment end behind the camera projects flipped and the march would
+	// walk the wrong way. Same clamp as calc_reflections in ogse_reflections.h.
+	const float dz = mul((float3x4)m_V, float4(rdir, 0.0f)).z;
+	float seg = 1.0f;
+	const float near_z = min(float(SSR_Z_NEAR_LIMIT), v_pixel.z * 0.5f);
+	if (v_pixel.z + dz < near_z)
+		seg = (near_z - v_pixel.z) / dz;
+
+	const float3 w_next = pos_w + rdir * seg;
 	const float3 v_next = mul((float3x4)m_V, float4(w_next, 1.0f));
 	const float4 p_next = mul(m_VP, float4(w_next, 1.0f));
 	float4 s_next = proj_to_screen(p_next);
 	s_next.xy /= s_next.w;
 
-	float3 from = float3(s_pixel.xy, v_pixel.z);
-	float3 to = float3(s_next.xy, v_next.z);
-
-	// Луч, летящий в камеру, отражать нечем.
-	if (dot(eye_direction, normalize(vreflect)) < -0.5f || from.z > REFL_RANGE)
-		return 0.0f;
-
-	const float3 main_vec = to - from;
-	const float3 step_vec = main_vec / (max(abs(main_vec.x), abs(main_vec.y)) * 256.0f);
-
-	float3 cur = from;
-	cur.xy += 0.5f * screen_res.zw;
+	// The half-pixel shift the old march applied to the ray start, kept for both
+	// endpoints so the ray direction stays the same.
+	const float2 uv0 = s_pixel.xy + 0.5f * screen_res.zw;
+	const float2 uv1 = s_next.xy + 0.5f * screen_res.zw;
 
 	// ⛔ Случайного сдвига старта луча здесь НЕТ, и это осознанно. Он добавлялся против полос, а полосы
 	// оказались вовсе не отсюда — это была рябь суммой синусов в da_puddles.h. Зато сам сдвиг дал по
 	// краю лужи тонкую светлую линию: у соседних пикселей луч стартует с разным смещением, и там, где
 	// маска только-только появляется, часть лучей попадает в цель, а часть нет. Полоса и есть граница
 	// между «попал» и «не попал».
+	// jitter_amp = 0 keeps that decision with the IX-Ray march (water passes SSR_JITTER_AMP).
+	const float3 hit = ssr_march_core(uv0, v_pixel.z, uv1, v_next.z, 0.0f);
 
-	[loop]	// без [loop] компилятор разворачивает цикл и падает сам — см. water.ps
-	for (int i = 0; i < SSR_MAX_IT; ++i)
-	{
-		cur.xyz += step_vec;
+	// Геометрию не нашли (или луч ушёл с экрана — марш обрезан краем) — значит там небо.
+	if (hit.z < 0.5f)
+		return da_puddle_sky();
 
-		// Ушли за экран — отражать нечего. Раньше здесь оставался белый цвет.
-		if (cur.x < 0.0f || cur.x > 1.0f || cur.y < 0.0f || cur.y > 1.0f)
-			return da_puddle_sky();
-
-		float depth = get_depth_fast(cur.xy);
-		depth = lerp(depth, 0.0f, is_sky(depth));
-
-		if (depth <= cur.z && from.z <= depth)
-		{
-			// Гасим У КРАЁВ экрана, а не в середине: за краем данных нет, и отражение там обязано
-			// исчезать, иначе последняя выборка размазывается полосой.
-			const float2 d = abs(cur.xy - 0.5f) * 2.0f;
-			const float edge = saturate((1.0f - max(d.x, d.y)) * 5.0f);
-			return float4(s_image.SampleLevel(smp_rtlinear, cur.xy, 0).xyz, edge);
-		}
-	}
-	return da_puddle_sky();	// геометрию не нашли — значит там небо
+	// Гасим У КРАЁВ экрана, а не в середине: за краем данных нет, и отражение там обязано
+	// исчезать, иначе последняя выборка размазывается полосой.
+	const float2 d = abs(hit.xy - 0.5f) * 2.0f;
+	const float edge = saturate((1.0f - max(d.x, d.y)) * 5.0f);
+	return float4(s_image.SampleLevel(smp_rtlinear, hit.xy, 0).xyz, edge);
 }
 
 struct vf

@@ -219,10 +219,13 @@ float4 main( vf I ) : SV_Target
 	// Sun glint. L_sun_dir_w points the way the light travels, so the direction TO the sun is
 	// its negation; v2point runs eye-to-surface, so the eye vector is likewise negated.
 	// Weighted by the same grazing term as the reflection - water only glints seen flat.
+	// Scaled by the baked vertex hemi (I.c0): the glint is added AFTER the c0 multiply above,
+	// so without this a shaded pool under a bridge still sparkled in full sun.
 	{
 		float3 sun_h = normalize(-v2point - L_sun_dir_w);
 		float  glint = pow(saturate(dot(Nw, sun_h)), WATER_SUN_POWER);
-		final += L_sun_color * (glint * WATER_SUN_STRENGTH * saturate(0.25h + power));
+		float  sky_vis = saturate(dot(I.c0.rgb, float3(0.66h, 0.66h, 0.66h)));
+		final += L_sun_color * (glint * WATER_SUN_STRENGTH * saturate(0.25h + power) * sky_vis);
 	}
 
 	// Shoreline foam. The band rides the same depth difference the water fog uses, broken up by

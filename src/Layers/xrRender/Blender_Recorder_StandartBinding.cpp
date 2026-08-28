@@ -336,6 +336,16 @@ static class cl_various : public R_constant_setup
     }
 } binder_various;
 
+// Alpha-ref threshold for every def_aref consumer (foliage clip, lod cards): a preset-laddered
+// uniform instead of the old baked 128/255 literal.
+static class cl_da_aref : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, float(ps_r__aref_quality) / 255.f, 0.f, 0.f, 0.f);
+    }
+} binder_da_aref;
+
 static class cl_various_rain : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -481,6 +491,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("L_ambient", &binder_amb_color);
 #endif
     r_Constant("screen_res", &binder_screen_res);
+    r_Constant("da_aref_u", &binder_da_aref);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

@@ -73,6 +73,7 @@ const xr_token qssao_mode_token[] =
     { "default",  ssao_mode_default },
     { "hdao",     ssao_mode_hdao },
     { "hbao",     ssao_mode_hbao },
+    { "gtao",     ssao_mode_gtao },
     { nullptr,    0 }
 };
 
@@ -277,6 +278,17 @@ float ps_r__grass_fade_flat = 0.f;
 // radius 299) into the 20 m near sun cascade and let the GPU cull it after vertex work -
 // the sibling measured sun_smap 5.05 ms -> 2.42 ms with near-only grass.
 int ps_r__grass_shadow_dist = 40;
+// Alpha-test threshold for foliage/lod (da_aref_u uniform), 0..255. 128 = the historical
+// baked literal; the preset ladder lowers it on top tiers (denser leaf silhouettes) and
+// raises it on low tiers (fewer shaded foliage pixels).
+int ps_r__aref_quality = 128;
+// SMAA 1x in the FXAA slot of phase_combine (see phase_smaa): morphological AA over the
+// tonemapped LDR frame, three fullscreen passes + two RGBA8 targets. Preset-derived; the
+// console command overrides for the session only and supersedes r2_fxaa while on.
+int ps_r__smaa = 0;
+// Camera-reprojection TAA on top of SMAA (phase_taa): stabilises grass/foliage shimmer the
+// spatial pass cannot see. One fullscreen resolve + one RGBA8 history target.
+int ps_r__taa = 0;
 // Fade band width before that cut-off, metres; 0 = hard edge (stock). Blades lie down over
 // the band so their shadows shorten into nothing instead of popping at a moving circle.
 int ps_r__grass_shadow_fade = 10;
@@ -571,6 +583,28 @@ public:
 };
 //-AVO
 
+#if defined(USE_RENDERDOC)
+#include <renderdoc/renderdoc_app.h>
+// One-shot in-app RenderDoc capture of the NEXT frame - catching a specific broken frame
+// (stale constants, blacked-out lamps) without alt-tabbing to the RenderDoc UI.
+class CCC_RdocCapture final : public IConsole_Command
+{
+public:
+    CCC_RdocCapture(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr /*args*/) override
+    {
+        extern RENDERDOC_API_1_0_0* g_renderdoc_api;
+        if (g_renderdoc_api)
+        {
+            g_renderdoc_api->TriggerCapture();
+            Msg("* [rdoc] capture of the next frame triggered");
+        }
+        else
+            Msg("! [rdoc] renderdoc.dll is not loaded (launch through RenderDoc or drop the dll nearby)");
+    }
+};
+#endif
+
 class CCC_ClearModelsOnUnload final : public CCC_Integer
 {
 public:
@@ -759,6 +793,21 @@ public:
             ps_r2_ls_flags_ext.set(R2FLAGEXT_SSAO_OPT_DATA, 1);
             break;
         }
+        case ssao_mode_gtao:
+        {
+            // GTAO is a separate pre-pass: every inline combine_1 technique goes off.
+            // ps_r_ssao stays nonzero - it is also the master AO switch (position-target
+            // clear in phase_scene_prepare, SSAO_QUALITY define).
+            if (ps_r_ssao == 0)
+            {
+                ps_r_ssao = 1;
+            }
+            ps_r2_ls_flags_ext.set(R2FLAGEXT_SSAO_HBAO, 0);
+            ps_r2_ls_flags_ext.set(R2FLAGEXT_SSAO_HDAO, 0);
+            ps_r2_ls_flags_ext.set(R2FLAGEXT_SSAO_OPT_DATA, 0);
+            ps_r2_ls_flags_ext.set(R2FLAGEXT_SSAO_HALF_DATA, 0);
+            break;
+        }
         }
     }
 };
@@ -806,6 +855,35 @@ void xrRender_sync_preset_derived()
     // Rain puddles ladder: 0 = off, 1 = G-buffer puddles (noise + normal/gloss on terrain
     // pixels), 2 = plus the world-reflection pass (a fullscreen ray-march while wet).
     static constexpr u32 puddles_by_preset[] = {0, 1, 1, 2, 2};
+    // Grass density ladder (lower = denser: cell grid is iCeil(2/density)+1 squared). The flat
+    // 0.6 left even Extreme with a 25-cell grid; IX-Ray runs 121 cells there. Default keeps a
+    // near-stock look, the top presets grow the field. Applies on level (re)load (cache_Alloc).
+    static constexpr float detail_density_by_preset[] = {0.6f, 0.6f, 0.5f, 0.35f, 0.25f};
+    // Grass draw radius ladder, metres. Was pinned at the stock 49 on every preset; the ceiling
+    // stays modest because slot count grows quadratically. Applies live (CCC recomputes dm_*).
+    static constexpr int detail_radius_by_preset[] = {49, 49, 60, 80, 100};
+    // Wet-surface radius ladder, metres (r3_dynamic_wet_surfaces_far semantics). The pair of
+    // console knobs existed but the shader hardcoded 5/20 - now that they are live, the far edge
+    // rides the preset. Near stays at its 5 m default.
+    static constexpr float wet_far_by_preset[] = {20.f, 20.f, 20.f, 25.f, 30.f};
+    // Alpha-ref ladder (donor rspec values with Default pinned to our historical 128): lower =
+    // denser foliage silhouettes = more shaded pixels; Minimum/Low trim exactly there.
+    static constexpr int aref_by_preset[] = {180, 160, 128, 110, 100};
+    // SMAA 1x from the Default preset up: better gradients than FXAA for ~3 cheap fullscreen
+    // passes. The two lowest presets keep the reference pipeline (r2_fxaa keeps working there).
+    static constexpr int smaa_by_preset[] = {0, 0, 1, 1, 1};
+    // Camera TAA only on the top preset: it trades a touch of sharpness under motion for a
+    // stable field, which is an Extreme-tier call.
+    static constexpr int taa_by_preset[] = {0, 0, 0, 0, 1};
+    // Sun shadow-map size ladder - the single most expensive shadow knob was pinned at 2048
+    // on every preset ("presets or nothing" gap). Applies on renderer (re)start, since the
+    // smap targets are created once. Default keeps the historical 2048 exactly.
+    static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 3072, 4096};
+    // AO technique ladder. GTAO (ported from IX-Ray: 3-slice horizon integral plus a guided
+    // filter) replaces the inline HDAO/HBAO on the two top presets; Default keeps the reference
+    // inline SSAO, the two lowest presets keep AO off. Applied through the console command so
+    // the R2FLAGEXT_SSAO_* side effects stay in CCC_SSAO_Mode.
+    static constexpr pcstr ssao_mode_by_preset[] = {"disabled", "disabled", "default", "gtao", "gtao"};
 
     if (ps_Preset >= std::size(budget_by_preset))
         return;
@@ -820,6 +898,24 @@ void xrRender_sync_preset_derived()
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
     ps_r__puddles_refl = puddles_by_preset[ps_Preset] > 1;
+    ps_current_detail_density = detail_density_by_preset[ps_Preset];
+    ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
+    ps_r__aref_quality = aref_by_preset[ps_Preset];
+    ps_r__smaa = smaa_by_preset[ps_Preset];
+    ps_r__taa = taa_by_preset[ps_Preset];
+    ps_r2_smapsize = smapsize_by_preset[ps_Preset];
+    {
+        string_path ssao_cmd;
+        strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
+        Console->Execute(ssao_cmd);
+    }
+    // Radius goes through the console command so dm_current_size/dm_fade recompute exactly the
+    // way a manual r__detail_radius change does.
+    {
+        string32 radius_cmd;
+        xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius_by_preset[ps_Preset]);
+        Console->Execute(radius_cmd);
+    }
 
     // QA hook: an optional appdata\qa_autoexec.ltx executes AFTER the derived switches.
     // The rig runs headless and user.ltx executes BEFORE renderer create, so any
@@ -1358,6 +1454,12 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__grass_fade_start", &ps_r__grass_fade_start, 0.f, 0.95f);
     CMD4(CCC_Float, "r__grass_fade_flat", &ps_r__grass_fade_flat, 0.f, 1.f);
     CMD4(CCC_Integer, "r__grass_shadow_dist", &ps_r__grass_shadow_dist, 8, 150);
+    CMD4(CCC_Integer, "r__aref_quality", &ps_r__aref_quality, 64, 255);
+    CMD4(CCC_RuntimeInteger, "r__smaa", &ps_r__smaa, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__taa", &ps_r__taa, 0, 1);
+#if defined(USE_RENDERDOC)
+    CMD1(CCC_RdocCapture, "rdoc_capture");
+#endif
     CMD4(CCC_Integer, "r__grass_shadow_fade", &ps_r__grass_shadow_fade, 0, 50);
     CMD4(CCC_Float, "r__grass_tint", &ps_r__grass_tint, 0.f, 1.f);
     CMD4(CCC_Float, "r__grass_tint_scale", &ps_r__grass_tint_scale, 1.f, 64.f);

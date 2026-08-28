@@ -1257,7 +1257,7 @@ EXPORTS
     ?gTestTimer3@@3VCStatTimer@@A @1255
     ?g_bBenchmark@@3_NA @1256
     ?g_bDisableRedText@@3_NA @1257
-    ?g_bRendering@@3_NA @1258
+    ?g_bRendering@@3U?$atomic@_N@std@@A @1258
     ?g_consoleBindCmds@@3VConsoleBindCmds@@A @1259
     ?g_console_sensitive@@3MA @1260
     ?g_current_font_scale@@3U?$_vector2@M@@A @1261

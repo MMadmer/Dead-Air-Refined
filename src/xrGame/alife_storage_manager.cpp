@@ -1125,20 +1125,29 @@ bool client_save_snapshot_step(const xr_vector<u16>& objectIds, u32& start, u32 
     u32 processedObjects = 0;
     while (start < objectIds.size() && processedObjects < objectBudget)
     {
-        IGameObject* object = Level().Objects.net_Find(objectIds[start++]);
-        ++processedObjects;
+        IGameObject* object = Level().Objects.net_Find(objectIds[start]);
         CGameObject* gameObject = smart_cast<CGameObject*>(object);
         if (!gameObject || gameObject->getDestroy() || !gameObject->net_SaveRelevant())
+        {
+            ++start;
+            ++processedObjects;
             continue;
+        }
 
+        // Budget check BEFORE the write (same fix as Objects_net_Save): an oversized object used to
+        // overrun the 16 KB packet, guarded only by a VERIFY that vanishes in release. Leaving
+        // `start` untouched re-opens the next packet with this object first.
+        constexpr u32 maximumObjectBytes = 8 * 1024;
+        if (maximumObjectBytes >= NET_PacketSizeLimit - packet.w_tell())
+            break;
+
+        ++start;
+        ++processedObjects;
         packet.w_u16(static_cast<u16>(gameObject->ID()));
         u32 position = 0;
         packet.w_chunk_open16(position);
         gameObject->net_Save(packet);
         packet.w_chunk_close16(position);
-        constexpr u32 maximumObjectBytes = 8 * 1024;
-        if (maximumObjectBytes >= NET_PacketSizeLimit - packet.w_tell())
-            break;
     }
 
     if (packet.B.count > 2)

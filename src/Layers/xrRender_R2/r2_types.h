@@ -36,6 +36,10 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_RT_SunShaftsMask "$user$SunShaftsMask"
 #define     r2_RT_SunShaftsMaskSmoothed "$user$SunShaftsMaskSmoothed"
 #define     r2_RT_SunShaftsPass0 "$user$SunShaftsPass0"
+#define     r2_RT_smaa_edges    "$user$smaa_edges"   // --- SMAA pass 1 output (RG edge mask)
+#define     r2_RT_smaa_blend    "$user$smaa_blend"   // --- SMAA pass 2 output (blend weights)
+#define     r2_RT_gtao          "$user$gtao_0"      // GTAO: view-z + raw AO for the guided filter
+#define     r2_RT_taa_history   "$user$taa_history"  // camera-TAA history (previous resolved LDR frame)
 
 #define     r2_RT_ssao_temp     "$user$ssao_temp"   // temporary rt for ssao calculation
 #define     r2_RT_half_depth    "$user$half_depth"  // temporary rt for ssao/hbao calculation
@@ -68,6 +72,9 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 
 #define     r2_jitter           "$user$jitter_"     // --- dither
 #define     r2_jitter_mipped    "$user$jitter_mipped" // --- dither
+#define     r2_smaa_area        "$user$smaa_area"    // --- baked LUT, 160x560 R8G8
+#define     r2_smaa_search      "$user$smaa_search"  // --- baked LUT, 64x16 R8
+#define     r2_blue_noise       "$user$blue_noise"  // --- 128x128 R8G8 blue-noise tile (GTAO jitter)
 #define     r2_sunmask          "sunmask"
 
 #define     r2_base             "$user$base"

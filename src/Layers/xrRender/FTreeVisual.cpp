@@ -158,7 +158,19 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_m_xform(xform); // matrix
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0); // consts/scale
     cmd_list.tree.set_wave(tvs.wave); // wave
-    cmd_list.tree.set_wind(tvs.wind); // wind
+    // Crowns freeze in the SHADOW pass for the same reason the grass does (see
+    // dx11DetailManager_VS.cpp): sub-texel smap motion turns into specular shimmer on whatever the
+    // canopy shades. The on-screen tree keeps swaying.
+#if RENDER != R_R1
+    if (RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    {
+        // set_wind takes a mutable ref; the value itself never changes.
+        static Fvector4 wind_zero{};
+        cmd_list.tree.set_wind(wind_zero);
+    }
+    else
+#endif
+        cmd_list.tree.set_wind(tvs.wind); // wind
 #if RENDER != R_R1
     s *= 1.3333f;
     cmd_list.tree.set_c_scale(s * c_scale.rgb.x, s * c_scale.rgb.y, s * c_scale.rgb.z, s * c_scale.hemi); // scale

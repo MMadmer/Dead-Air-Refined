@@ -511,6 +511,8 @@ void IGame_Persistent::OnFrame()
     if (!Device.Paused() || Device.dwPrecacheFrame)
         Environment().OnFrame();
 
+    // Recursive lock: the delete below re-enters it from ~CPS_Instance.
+    ScopeLock scope{ &ps_lock };
     stats.Starting = ps_needtoplay.size();
     stats.Active = ps_active.size();
     stats.Destroying = ps_destroy.size();
@@ -543,6 +545,7 @@ void IGame_Persistent::destroy_particles(const bool& all_particles)
     ZoneScoped;
 
 #ifndef _EDITOR
+    ScopeLock scope{ &ps_lock };
     ps_needtoplay.clear();
 
     while (ps_destroy.size())

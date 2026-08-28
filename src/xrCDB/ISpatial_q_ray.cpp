@@ -218,10 +218,11 @@ public:
     u32 mask;
     float range;
     float range2;
-    ISpatial_DB* space;
+    // See ISpatial_q_box.cpp: shared-lock queries must not write through DB members.
+    xr_vector<ISpatial*>* q_out;
 
 public:
-    ray_walker(ISpatial_DB* _space, u32 _mask, const Fvector& _start, const Fvector& _dir, float _range)
+    ray_walker(xr_vector<ISpatial*>* _result, u32 _mask, const Fvector& _start, const Fvector& _dir, float _range)
     {
         mask = _mask;
         ray.pos.set(_start);
@@ -248,7 +249,7 @@ public:
         }
         range = _range;
         range2 = _range * _range;
-        space = _space;
+        q_out = _result;
     }
     // fpu
     ICF bool _box_fpu(const Fvector& n_C, const float n_R, Fvector& coord)
@@ -323,7 +324,7 @@ public:
                     }
                     range2 = range * range;
                 }
-                space->q_result->push_back(S);
+                q_out->push_back(S);
                 if constexpr (b_first)
                     return;
             }
@@ -340,7 +341,7 @@ public:
             walk(N->children[octant], c_C, c_R);
             if constexpr (b_first)
             {
-                if (!space->q_result->empty())
+                if (!q_out->empty())
                     return;
             }
         }
@@ -354,22 +355,20 @@ void ISpatial_DB::q_ray(
     using namespace Spatial;
 
     ZoneScoped;
-    ScopeLock scope(&cs);
-    Stats.Query.Begin();
-    q_result = &R;
-    q_result->clear();
+    std::shared_lock scope(cs);
+    R.clear();
     if (CPU::HasSSE)
     {
         if (_o & O_ONLYFIRST)
         {
             if (_o & O_ONLYNEAREST)
             {
-                ray_walker<true, true, true> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<true, true, true> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
             else
             {
-                ray_walker<true, true, false> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<true, true, false> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
         }
@@ -377,12 +376,12 @@ void ISpatial_DB::q_ray(
         {
             if (_o & O_ONLYNEAREST)
             {
-                ray_walker<true, false, true> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<true, false, true> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
             else
             {
-                ray_walker<true, false, false> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<true, false, false> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
         }
@@ -393,12 +392,12 @@ void ISpatial_DB::q_ray(
         {
             if (_o & O_ONLYNEAREST)
             {
-                ray_walker<false, true, true> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<false, true, true> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
             else
             {
-                ray_walker<false, true, false> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<false, true, false> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
         }
@@ -406,15 +405,14 @@ void ISpatial_DB::q_ray(
         {
             if (_o & O_ONLYNEAREST)
             {
-                ray_walker<false, false, true> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<false, false, true> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
             else
             {
-                ray_walker<false, false, false> W(this, _mask_and, _start, _dir, _range);
+                ray_walker<false, false, false> W(&R, _mask_and, _start, _dir, _range);
                 W.walk(m_root, m_center, m_bounds);
             }
         }
     }
-    Stats.Query.End();
 }

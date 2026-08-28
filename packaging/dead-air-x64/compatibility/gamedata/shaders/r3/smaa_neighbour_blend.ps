@@ -1,0 +1,33 @@
+/*
+------------------------------------------------------------------
+SMAA 1x, pass 3/3: neighbourhood blending
+Ported from IX-Ray 1.6 stcop (d3d11/smaa_neighbour_blend.ps.hlsl).
+Reads the LDR frame (s_image = $user$generic0) and the blend
+weights ($user$smaa_blend), writes the antialiased frame into
+rt_Generic; phase_smaa then copies it back over $user$generic0
+(the phase_fxaa resolve pattern).
+------------------------------------------------------------------
+References:
+https://github.com/iryoku/smaa
+------------------------------------------------------------------
+*/
+
+#include "common.h"
+#include "smaa.h"
+
+Texture2D s_blendtex;
+
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+	float4	hpos	: SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	// VS varying computed per pixel (see smaa_edge_detect.ps for why this is exact)
+	float4 offset;
+	SMAANeighborhoodBlendingVS(I.tc0, offset);
+
+	return SMAANeighborhoodBlendingPS(I.tc0, offset, s_image, s_blendtex);
+}

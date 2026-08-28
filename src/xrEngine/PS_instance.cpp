@@ -3,6 +3,7 @@
 //----------------------------------------------------
 #include "stdafx.h"
 #pragma hdrstop
+#include <atomic>
 
 #include "PS_instance.h"
 #include "IGame_Persistent.h"
@@ -10,29 +11,39 @@
 CPS_Instance::CPS_Instance(bool destroy_on_game_load)
     : SpatialBase(g_pGamePersistent->SpatialSpace), m_destroy_on_game_load(destroy_on_game_load)
 {
-    g_pGamePersistent->ps_active.insert(this);
+    {
+        // ctors run from task workers too (Lua-driven spawns) while the main thread walks the set.
+        ScopeLock scope{ &g_pGamePersistent->ps_lock };
+        g_pGamePersistent->ps_active.insert(this);
+    }
     renderable.pROS_Allowed = false;
 
     m_iLifeTime = int_max;
     m_bAutoRemove = true;
     m_bDead = false;
 }
-extern ENGINE_API bool g_bRendering;
-
 //----------------------------------------------------
 CPS_Instance::~CPS_Instance()
 {
-    VERIFY(!g_bRendering);
-    auto it = g_pGamePersistent->ps_active.find(this);
-    VERIFY(it != g_pGamePersistent->ps_active.end());
-    if (it != g_pGamePersistent->ps_active.end())
-        g_pGamePersistent->ps_active.erase(it);
+    {
+        ScopeLock scope{ &g_pGamePersistent->ps_lock };
+        auto it = g_pGamePersistent->ps_active.find(this);
+        VERIFY(it != g_pGamePersistent->ps_active.end());
+        if (it != g_pGamePersistent->ps_active.end())
+            g_pGamePersistent->ps_active.erase(it);
 
-    // deleted past the destroy queue - unlink the record, no dangling pointer remains
-    auto& queue = g_pGamePersistent->ps_destroy;
-    const auto stale = std::remove(queue.begin(), queue.end(), this);
-    if (stale != queue.end())
-        queue.erase(stale, queue.end());
+        // deleted past the destroy queue - unlink the record, no dangling pointer remains
+        auto& queue = g_pGamePersistent->ps_destroy;
+        const auto stale = std::remove(queue.begin(), queue.end(), this);
+        if (stale != queue.end())
+            queue.erase(stale, queue.end());
+
+        // same story for the play queue: a finalizer-deleted instance must not stay scheduled
+        auto& play = g_pGamePersistent->ps_needtoplay;
+        const auto stale_play = std::remove(play.begin(), play.end(), this);
+        if (stale_play != play.end())
+            play.erase(stale_play, play.end());
+    }
 
     spatial_unregister();
     shedule_unregister();
@@ -62,6 +73,7 @@ void CPS_Instance::PSI_destroy()
 
     m_bDead = true;
     m_iLifeTime = 0;
+    ScopeLock scope{ &g_pGamePersistent->ps_lock };
     g_pGamePersistent->ps_destroy.push_back(this);
 }
 //----------------------------------------------------

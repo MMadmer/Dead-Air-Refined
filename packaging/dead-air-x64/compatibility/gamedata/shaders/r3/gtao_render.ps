@@ -1,0 +1,172 @@
+// Dead Air: Refined - ground-truth based ambient occlusion (render pass).
+//
+// Ported from IX-Ray (gamedata\shaders\d3d11\gtao_render.ps.hlsl, author LVutner;
+// no-arccos GTAO after TinyTexel/Jimenez et al). Differences from the donor are
+// dictated by our G-buffer, not by taste:
+//   * the donor reads the hardware depth buffer and reconstructs view-z through
+//     depth_unpack; our deferred position target already stores LINEAR VIEW-Z in
+//     s_position.z under both G-buffer layouts, so the reconstruction is one MAD;
+//   * the donor packs (view-z, AO) into an R32_UINT via f32tof16 - our RT system
+//     has no uint formats, so the pair goes to R16G16_FLOAT verbatim (the packing
+//     was 16-bit halves anyway, the stored values are bit-identical);
+//   * the donor's sky test is "hw depth == 1"; ours is "view-z < 0.01" - the
+//     position target is cleared to zero whenever AO is on (phase_scene_prepare),
+//     the same convention ssao.ps uses;
+//   * blue noise comes from our engine-built $user$blue_noise (R8G8, 128x128,
+//     slice 0 of the donor's volume - see gtao_noise.h), not from a texture file.
+//
+// Drawn with da_fullscreen.vs over g_combine (see r4_rendertarget_phase_gtao.cpp).
+// Runs at FULL resolution, like the donor.
+
+#include "common.h"
+
+Texture2D s_blue_noise; // R8G8: x = slice angle jitter, y = step jitter
+
+// World-space radius -> screen-space radius factor: height / (4 * tan(fov/2)),
+// set by phase_gtao every frame.
+float gtao_parameters;
+
+// View-space position of an arbitrary tap from its texcoord and stored view-z.
+// Same math as gbuffer_load_data (common_functions.h), texcoord form: our
+// pos_decompression_params carries (HorzTan, VertTan) with DX11 signs, exactly
+// like the donor's, so the donor expression survives unchanged.
+float3 gtao_view_pos(float2 tc, float viewz)
+{
+    return float3((tc * 2.0 - 1.0) * pos_decompression_params.xy * viewz, viewz);
+}
+
+float gtao_compute(float3 view_position, float3 view_normal, float2 texcoord, float2 jitter)
+{
+    const float GTAO_TAU = 6.2831854;
+    const float GTAO_HALF_PI = 1.5707964;
+
+    // Donor settings, kept verbatim: 3 slices x 4 steps, 0.85 m radius.
+    const int GTAO_DIRECTIONS = 3;
+    const int GTAO_STEPS = 4;
+    const float GTAO_RADIUS = 0.85;
+    const float GTAO_NEG_1_OVER_RADIUSQR = -1.0 / (GTAO_RADIUS * GTAO_RADIUS);
+
+    // Bias the position to avoid numerical issues
+    view_position *= 0.9992;
+
+    float3 view_direction = -normalize(view_position);
+
+    // Screen-space radius (clamped)
+    float screen_radius = min((GTAO_RADIUS * gtao_parameters) / view_position.z, 256.0);
+
+    // Slice scale; Y flipped: texture v grows down, view-space y grows up
+    float2 slice_scale = pos_decompression_params2.zw * screen_radius * float2(1.0, -1.0);
+
+    // We integrate AO over 2*PI
+    float slice_angle = GTAO_TAU / float(GTAO_DIRECTIONS);
+
+    // Accumulated occlusion and slice weight
+    float2 occ_weight = (0.0).xx;
+
+    for (int i = 0; i < GTAO_DIRECTIONS; i++)
+    {
+        float angle = (float(i) + jitter.x) * slice_angle;
+
+        float3 slice_direction = float3(cos(angle), sin(angle), 0.0);
+
+        // GTAO math
+        float3 axis = cross(view_direction, slice_direction);
+        float3 proj_normal = view_normal - axis * dot(view_normal, axis);
+        float3 proj_tangent = cross(axis, proj_normal);
+        float proj_normal_length = length(proj_normal);
+        float sin_n = dot(proj_tangent, view_direction) * rcp(proj_normal_length);
+
+        // Init horizon
+        float max_horizon_cos = sin_n;
+
+        for (int j = 0; j < GTAO_STEPS; j += 2)
+        {
+            // Ray increment, squared for more detail in crevices
+            float2 increment = (j + float2(0.0, 1.0) + jitter.yy) / GTAO_STEPS;
+            increment *= increment;
+
+            float4 s_texcoord = texcoord.xyxy + slice_direction.xyxy * slice_scale.xyxy * increment.xxyy;
+
+            // Guard band
+            if (dot(s_texcoord.zw - saturate(s_texcoord.zw), 1.0) != 0.0)
+                break;
+
+            // Fetch linear view-z of both taps; a cleared (sky) texel counts as
+            // infinitely far so it can never manufacture occlusion
+            float2 s_depth = float2(
+                s_position.SampleLevel(smp_nofilter, s_texcoord.xy, 0).z,
+                s_position.SampleLevel(smp_nofilter, s_texcoord.zw, 0).z);
+            s_depth = (s_depth < 0.01) ? (10000.0).xx : s_depth;
+
+            // 1st tap (two steps per iteration, manually unrolled)
+            {
+                float3 s_vector = gtao_view_pos(s_texcoord.xy, s_depth.x) - view_position;
+
+                float s_vec_length = dot(s_vector, s_vector);
+                float s_horizon = dot(s_vector, view_direction) * rsqrt(s_vec_length);
+
+                // Obscurance falloff, as in HBAO
+                float falloff = saturate(s_vec_length * GTAO_NEG_1_OVER_RADIUSQR + 1.0);
+                s_horizon = lerp(-1.0, s_horizon, falloff);
+
+                max_horizon_cos = max(max_horizon_cos, s_horizon);
+            }
+
+            // 2nd tap
+            {
+                float3 s_vector = gtao_view_pos(s_texcoord.zw, s_depth.y) - view_position;
+
+                float s_vec_length = dot(s_vector, s_vector);
+                float s_horizon = dot(s_vector, view_direction) * rsqrt(s_vec_length);
+
+                float falloff = saturate(s_vec_length * GTAO_NEG_1_OVER_RADIUSQR + 1.0);
+                s_horizon = lerp(-1.0, s_horizon, falloff);
+
+                max_horizon_cos = max(max_horizon_cos, s_horizon);
+            }
+        }
+
+        // Importance-sampling approximation with the horizon remap baked in
+        // (uniformly weighted GTAO, see the donor header for references)
+        max_horizon_cos = saturate(0.5 * sin(GTAO_HALF_PI * (1.0 + sin_n) - GTAO_HALF_PI * max_horizon_cos) + 0.5);
+
+        // Weight by projected normal length
+        occ_weight += float2(1.0 - max_horizon_cos, 1.0) * proj_normal_length;
+    }
+
+    // Normalize and compensate for the missing hemisphere side
+    occ_weight.x *= rcp(occ_weight.y);
+    return saturate(1.0 - occ_weight.x * 2.0);
+}
+
+float2 main(float2 tc0 : TEXCOORD0, float4 hpos : SV_Position) : SV_Target
+{
+    float4 P = s_position.Sample(smp_nofilter, tc0);
+
+    // Sky / cleared texel: park it far away, fully lit - the guided filter then
+    // rejects it for real geometry by depth variance (the donor writes 1000/1.0
+    // into its packed target for the same reason)
+    if (P.z < 0.01)
+        return float2(10000.0, 1.0);
+
+    // Both channels of the blue-noise tile, tiled by pixel position (static
+    // slice, as the donor default)
+    float2 jitter = s_blue_noise.Load(int3(uint2(hpos.xy) % 128u, 0)).xy;
+
+    // Unpack the G-buffer
+    float3 Point = gtao_view_pos(tc0, P.z);
+#ifdef GBUFFER_OPTIMIZATION
+    float3 Normal = gbuf_unpack_normal(P.xy);
+#else
+    float3 Normal = s_normal.Sample(smp_nofilter, tc0).xyz;
+#endif
+
+    // Don't render GTAO past 60 units - it becomes a noisy mess. The view
+    // position is shifted along the normal to kill self-occlusion.
+    float occlusion = Point.z > 60.0
+        ? 1.0
+        : gtao_compute(Point + Normal * 0.0035, Normal, tc0, jitter);
+
+    // R16G16_FLOAT: x = view-z (filter guide), y = raw occlusion
+    return float2(Point.z, occlusion);
+}

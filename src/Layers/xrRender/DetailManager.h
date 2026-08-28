@@ -154,6 +154,9 @@ public:
     float m_time_rot_2;
     float m_time_pos;
     float m_global_time_old;
+    // Smoothed wind_strength_factor: the raw Perlin flips per-frame; the swing preset lerp needs
+    // the low-passed version or the grass jumps between calm and storm modes every few frames.
+    float m_wind_gust{0.3f};
     Fvector4 m_wind_dir1{};
     Fvector4 m_wind_dir2{};
     u32 m_render_state_frame{u32(-1)};

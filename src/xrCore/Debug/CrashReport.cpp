@@ -588,8 +588,12 @@ bool write_minidump(pcstr path, _EXCEPTION_POINTERS* exceptionPointers)
     MINIDUMP_CALLBACK_INFORMATION callback{};
     callback.CallbackRoutine = minidump_callback;
 
+    // MiniDumpWithFullMemoryInfo adds VA-region metadata WITHOUT contents (privacy-neutral): it
+    // tells whether a crashing pointer was freed/unmapped/guard-paged. Do NOT add
+    // MiniDumpWithDataSegs - the sanitizer below promises contains_data_segments:false.
     const auto dumpType = static_cast<MINIDUMP_TYPE>(
-        MiniDumpNormal | MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules | MiniDumpIgnoreInaccessibleMemory);
+        MiniDumpNormal | MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules | MiniDumpIgnoreInaccessibleMemory |
+        MiniDumpWithFullMemoryInfo);
     const bool result = !!writeDump(GetCurrentProcess(), GetCurrentProcessId(), file, dumpType,
         exceptionPointers ? &exception : nullptr, nullptr, &callback);
 

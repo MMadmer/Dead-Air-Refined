@@ -147,10 +147,14 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	float   occ = ssao_blur_ps( texCoord, ISAMPLE );
 #	endif*/
 
-#ifdef USE_HDAO
+#if defined(USE_GTAO) && defined(SM_5)
+	// GTAO mode: the occlusion was rendered and guided-filtered into $user$ssao_temp
+	// by phase_gtao before combine ran; nothing is computed inline here.
+	float occ = s_occ.Sample( smp_nofilter, I.tc0 ).x;
+#elif defined(USE_HDAO)
 #ifdef SM_5
 #if SSAO_QUALITY > 3
-    float occ = s_occ.Sample( smp_nofilter, I.tc0);	
+    float occ = s_occ.Sample( smp_nofilter, I.tc0);
 #else // SSAO_QUALITY > 3
 	float occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #endif // SSAO_QUALITY > 3

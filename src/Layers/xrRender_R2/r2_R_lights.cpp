@@ -172,8 +172,12 @@ void CRender::render_lights(light_Package& LP)
             // the rest of the face put together (about a quarter of the whole frame with
             // r__light_shadow_budget 0 at the Jupiter station) - so it is a High/Maximum
             // preset feature (r__light_details), gated by the grass shadow option itself.
+            // Beyond ~40 m the light's grass shadows are sub-texel in its smap anyway, and this
+            // pass is the single most expensive part of a grassy face - distance-gate it (donor
+            // lights_render does the same).
+            const bool light_near_enough = L->position.distance_to_sqr(Device.vCameraPosition) < (40.f * 40.f);
             const bool renderDetails = ps_r__light_details && ps_r_sun_details >= detail_shadow_high && Details &&
-                Details->HasRenderableDetails();
+                light_near_enough && Details->HasRenderableDetails();
             if (bNormal || bSpecial || renderDetails)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);

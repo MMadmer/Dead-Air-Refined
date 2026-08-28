@@ -246,6 +246,11 @@ u32 CLevel::Objects_net_Save(NET_Packet* _Packet, u32 start, u32 max_object_size
         //		Msg			("save:iterating:%d:%s, size[%d]",P->ID(),*P->cName(), Packet.w_tell() );
         if (P && !P->getDestroy() && P->net_SaveRelevant())
         {
+            // Budget check BEFORE the write: the old after-write check meant one oversized object
+            // ran past the 16 KB packet buffer with only a release no-op VERIFY in the way.
+            // Returning without ++ makes this object open the next packet instead.
+            if (max_object_size >= (NET_PacketSizeLimit - Packet.w_tell()))
+                return start;
             Packet.w_u16(u16(P->ID()));
             Packet.w_chunk_open16(position);
             //			Msg						("save:saving:%d:%s",P->ID(),*P->cName());
@@ -260,10 +265,6 @@ u32 CLevel::Objects_net_Save(NET_Packet* _Packet, u32 start, u32 max_object_size
             }
 #endif
             Packet.w_chunk_close16(position);
-            //			if (0==(--count))
-            //				break;
-            if (max_object_size >= (NET_PacketSizeLimit - Packet.w_tell()))
-                break;
         }
     }
     return ++start;
@@ -287,34 +288,8 @@ void CLevel::ClientSave()
     }
 }
 
-bool CLevel::ClientSaveStep(u32& start, u32 objectBudget)
-{
-    NET_Packet packet;
-    packet.w_begin(M_SAVE_PACKET);
-
-    u32 processedObjects = 0;
-    const u32 objectCount = Objects.o_count();
-    while (start < objectCount && processedObjects < objectBudget)
-    {
-        IGameObject* object = Objects.o_get_by_iterator(start++);
-        ++processedObjects;
-        CGameObject* gameObject = smart_cast<CGameObject*>(object);
-        if (!gameObject || gameObject->getDestroy() || !gameObject->net_SaveRelevant())
-            continue;
-
-        packet.w_u16(u16(gameObject->ID()));
-        u32 position = 0;
-        packet.w_chunk_open16(position);
-        gameObject->net_Save(packet);
-        packet.w_chunk_close16(position);
-        if (max_objects_size_in_save >= NET_PacketSizeLimit - packet.w_tell())
-            break;
-    }
-
-    if (packet.B.count > 2)
-        Send(packet, net_flags(FALSE));
-    return start >= objectCount;
-}
+// (Removed: CLevel::ClientSaveStep - declared but never called, and it carried the same
+// after-write budget bug this change fixes in the live writers. Dead copies become mines.)
 
 // extern	XRPHYSICS_API	float		phTimefactor;
 extern BOOL g_SV_Disable_Auth_Check;

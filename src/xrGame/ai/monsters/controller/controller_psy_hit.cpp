@@ -81,7 +81,9 @@ void CControllerPsyHit::activate()
     //////////////////////////////////////////////////////////////////////////
     // set direction
     SControlDirectionData* ctrl_dir = (SControlDirectionData*)m_man->data(this, ControlCom::eControlDir);
-    VERIFY(ctrl_dir);
+    // data() returns null when the capture was lost - VERIFY is a release no-op.
+    if (!ctrl_dir)
+        return;
     ctrl_dir->heading.target_speed = 3.f;
     ctrl_dir->heading.target_angle = m_man->direction().angle_to_target(Actor()->Position());
 
@@ -139,7 +141,8 @@ void CControllerPsyHit::on_event(ControlCom::EEventType type, ControlCom::IEvent
 void CControllerPsyHit::play_anim()
 {
     SControlAnimationData* ctrl_anim = (SControlAnimationData*)m_man->data(this, ControlCom::eControlAnimation);
-    VERIFY(ctrl_anim);
+    if (!ctrl_anim)
+        return;
 
     ctrl_anim->global.set_motion(m_stage[m_current_index]);
     ctrl_anim->global.actual = false;
@@ -272,7 +275,9 @@ void CControllerPsyHit::death_glide_start()
     //////////////////////////////////////////////////////////////////////////
     // set direction
     SControlDirectionData* ctrl_dir = (SControlDirectionData*)m_man->data(this, ControlCom::eControlDir);
-    VERIFY(ctrl_dir);
+    // data() returns null when the capture was lost - VERIFY is a release no-op.
+    if (!ctrl_dir)
+        return;
     ctrl_dir->heading.target_speed = 3.f;
     ctrl_dir->heading.target_angle = m_man->direction().angle_to_target(Actor()->Position());
 

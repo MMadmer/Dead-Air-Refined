@@ -34,14 +34,21 @@ void AddOne(pcstr split)
 {
     ScopeLock scope{ &logCS };
 
-    OutputDebugString(split);
-    OutputDebugString("\n");
+    // IsDebuggerPresent is a PEB flag read - cheap enough per line, and keeps attach-later working.
+    if (IsDebuggerPresent())
+    {
+        OutputDebugString(split);
+        OutputDebugString("\n");
+    }
 
     // The console and the crash report read the tail of this buffer, not the whole session; left
     // unbounded it grew by megabytes an hour. Trim from the head, both readers count from size().
+    // Trim in blocks: head-erase is O(size), and a one-element trim per call turns every Msg()
+    // after the cap into a 40k-element shuffle under this lock for the rest of the session.
     constexpr size_t log_lines_kept = 40000;
-    if (LogFile.size() >= log_lines_kept)
-        LogFile.erase(LogFile.begin(), LogFile.begin() + (LogFile.size() - log_lines_kept + 1));
+    constexpr size_t log_trim_block = 4000;
+    if (LogFile.size() >= log_lines_kept + log_trim_block)
+        LogFile.erase(LogFile.begin(), LogFile.begin() + (LogFile.size() - log_lines_kept));
     LogFile.push_back(split);
 
     // exec CallBack
@@ -62,7 +69,18 @@ void Log(pcstr s)
     int i, j;
 
     const u32 length = xr_strlen(s);
-    pstr split = static_cast<pstr>(xr_alloca((length + 1) * sizeof(char)));
+    // Callers are not bounded: shader-compiler error blobs and script dumps arrive here raw, and a
+    // 100+ KB alloca on a failure path is a stack overflow waiting on the worst day. Spill to heap.
+    constexpr u32 stack_split_cap = 16384;
+    xr_vector<char> heap_split;
+    pstr split;
+    if (length + 1 > stack_split_cap)
+    {
+        heap_split.resize(length + 1);
+        split = heap_split.data();
+    }
+    else
+        split = static_cast<pstr>(xr_alloca((length + 1) * sizeof(char)));
     for (i = 0, j = 0; s[i] != 0; i++)
     {
         if (s[i] == '\n')
@@ -106,6 +124,15 @@ void Log(pcstr msg, pcstr dop)
     }
 
     const u32 buffer_size = (xr_strlen(msg) + 1 + xr_strlen(dop) + 1) * sizeof(char);
+    // Same unbounded-input concern as Log(pcstr): this path feeds raw D3D error blobs.
+    if (buffer_size > 16384)
+    {
+        xr_string buf{ msg };
+        buf += ' ';
+        buf += dop;
+        Log(buf.c_str());
+        return;
+    }
     pstr buf = static_cast<pstr>(xr_alloca(buffer_size));
     strconcat(buffer_size, buf, msg, " ", dop);
     Log(buf);

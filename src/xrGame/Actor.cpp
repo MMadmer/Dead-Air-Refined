@@ -630,7 +630,7 @@ void CActor::Hit(SHit* pHDS)
                     ps = CParticlesObject::Create(invincibility_fire_shield_3rd, TRUE);
 
                 ps->UpdateParent(pos, Fvector().set(0.f, 0.f, 0.f));
-                GamePersistent().ps_needtoplay.push_back(ps);
+                GamePersistent().ps_schedule_play(ps);
             };
         };
 

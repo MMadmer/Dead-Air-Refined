@@ -6,6 +6,7 @@
 
 #include "xrCommon/xr_set.h"
 #include "xrCommon/xr_vector.h"
+#include "xrCore/Threading/Lock.hpp"
 
 #include "xrCore/xr_trims.h"
 
@@ -80,11 +81,23 @@ public:
     params m_game_params;
 
 public:
+    // CPS_Instance ctors/dtors run on task workers too (Lua finalizers via script_gc), while
+    // OnFrame/destroy_particles walk these on the main thread - every access goes under this
+    // recursive lock (recursion happens: the destroy loop deletes instances whose dtor re-enters).
+    Lock ps_lock;
     xr_set<CPS_Instance*> ps_active;
     xr_vector<CPS_Instance*> ps_destroy;
     xr_vector<CPS_Instance*> ps_needtoplay;
 
 public:
+    // The one sanctioned way to schedule a particle system for playback - takes ps_lock so game
+    // code never races the worker-side destructor cleanup of the same vector.
+    void ps_schedule_play(CPS_Instance* psi)
+    {
+        ScopeLock scope{ &ps_lock };
+        ps_needtoplay.push_back(psi);
+    }
+
     void destroy_particles(const bool& all_particles);
 
 private:

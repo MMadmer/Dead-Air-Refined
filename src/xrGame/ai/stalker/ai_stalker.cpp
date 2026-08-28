@@ -1140,6 +1140,11 @@ void CAI_Stalker::net_Relcase(IGameObject* O)
     sight().remove_links(O);
     movement().remove_links(O);
 
+    // check_throw_trajectory raypicks through this pointer frames after it was stored - and it must
+    // be cleared even for a dead stalker, so it sits above the g_Alive early-out.
+    if (m_throw_ignore_object == O)
+        m_throw_ignore_object = nullptr;
+
     if (!g_Alive())
         return;
 

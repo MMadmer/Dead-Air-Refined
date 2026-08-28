@@ -37,6 +37,12 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1)
     output.normal = float4(gbuf_pack_normal(patched.xyz), 0.0, 0.0);
 #endif
 
-    output.gloss = float4(patched.aaa, 0.0);
+    // MRT1 blends rgb multiplicatively into albedo (the wet darkening) and ALPHA additively into
+    // the G-buffer gloss - which used to receive a hard 0. Recover wetness from the stored
+    // darkening term (c = max(1-sqrt(w), 0.5) => w = (1-c)^2) and boost the gloss with it, so wet
+    // concrete/asphalt/metal actually shine. The hemi gate upstream keeps interiors dry, and the
+    // patch pass rejects viewmodel-range depth, so neither gets the boost.
+    const float wet_back = (1.0 - patched.a) * (1.0 - patched.a);
+    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2));
     return output;
 }

@@ -322,6 +322,8 @@ void R_dsgraph_structure::add_leafs_dynamic(IRenderable* root, dxRender_Visual* 
     {
         // Add all children, doesn't perform any tests
         PS::CParticleGroup* pG = (PS::CParticleGroup*)pVisual;
+        // Lua finalizers can be tearing this group down on a worker while we walk it.
+        ScopeLock lock{ &pG->render_sync() };
         for (auto& it : pG->items)
         {
             PS::CParticleGroup::SItem& I = it;
@@ -538,6 +540,8 @@ BOOL R_dsgraph_structure::add_Dynamic(dxRender_Visual* pVisual, u32 planes) // n
     {
         // Add all children, doesn't perform any tests
         PS::CParticleGroup* pG = (PS::CParticleGroup*)pVisual;
+        // Same walker-vs-finalizer race as add_leafs_dynamic above.
+        ScopeLock lock{ &pG->render_sync() };
         for (auto& it : pG->items)
         {
             PS::CParticleGroup::SItem& I = it;
@@ -600,7 +604,11 @@ BOOL R_dsgraph_structure::add_Dynamic(dxRender_Visual* pVisual, u32 planes) // n
         else
         {
             pV->CalculateBones(TRUE);
-            pV->CalculateWallmarks(val_pObject ? val_pObject->renderable_HUD() : false); //. bug?
+            // Wallmark bookkeeping mutates a per-visual vector guarded only by a plain wm_frame
+            // check - two parallel shadow contexts hitting one CKinematics both pass it. Wallmarks
+            // only matter in the normal phase anyway, so gate like the :374 call site does.
+            if (o.phase == CRender::PHASE_NORMAL)
+                pV->CalculateWallmarks(val_pObject ? val_pObject->renderable_HUD() : false); //. bug?
             for (auto& i : pV->children)
                 add_leafs_Dynamic(i);
         }

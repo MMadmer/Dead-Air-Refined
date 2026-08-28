@@ -471,6 +471,9 @@ CParticleGroup::CParticleGroup()
 
 CParticleGroup::~CParticleGroup()
 {
+    // Lua finalizers on seqParallel workers destroy groups while a render task can still be walking
+    // the same items (script_gc runs concurrently with DoRender) - same race family 1.3.4 fixed.
+    ScopeLock lock{ &render_lock };
     // Msg ("!!! destroy PG");
     for (auto& pg : items)
         pg.Clear();
@@ -542,6 +545,7 @@ void CParticleGroup::UpdateParent(const Fmatrix& m, const Fvector& velocity, BOO
 
 BOOL CParticleGroup::Compile(CPGDef* def)
 {
+    ScopeLock lock{ &render_lock };
     m_Def = def;
 
     // destroy existing
@@ -587,12 +591,14 @@ void CParticleGroup::Stop(BOOL bDefferedStop)
 
 void CParticleGroup::OnDeviceCreate()
 {
+    ScopeLock lock{ &render_lock };
     for (auto& item : items)
         item.OnDeviceCreate();
 }
 
 void CParticleGroup::OnDeviceDestroy()
 {
+    ScopeLock lock{ &render_lock };
     for (auto& item : items)
         item.OnDeviceDestroy();
 }

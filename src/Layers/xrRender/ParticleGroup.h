@@ -80,6 +80,10 @@ class ECORE_API CParticleGroup : public dxParticleCustom
     Lock render_lock{};
 
 public:
+    // dsgraph walks `items` from render tasks while game-side calls mutate it - external walkers
+    // take the same recursive lock the mutators hold.
+    Lock& render_sync() { return render_lock; }
+
     using VisualVec = xr_vector<dxRender_Visual*>;
     struct SItem
     {

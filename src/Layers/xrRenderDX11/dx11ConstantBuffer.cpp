@@ -129,8 +129,12 @@ void dx11ConstantBuffer::ResetDirtyRange()
 void dx11ConstantBuffer::Update(u16 offset, const void* data, size_t size)
 {
     VERIFY(static_cast<size_t>(offset) + size <= m_uiBufferSize);
+    // QA fork for the stale-constants bug class (blacked-out lamps, stale WVP): with -cb_nocache
+    // every Update dirties unconditionally, splitting "the code is wrong" from "the cache skipped
+    // an upload" in one relaunch. Zero cost on the normal path after the first frame.
+    static const bool cb_nocache = !!strstr(Core.Params, "-cb_nocache");
     auto* destination = static_cast<u8*>(m_pBufferData) + offset;
-    if (!m_bChanged)
+    if (!m_bChanged && !cb_nocache)
     {
         if (!memcmp(destination, data, size))
             return;

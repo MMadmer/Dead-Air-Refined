@@ -23,12 +23,31 @@ add_compile_options($<$<CONFIG:ReleaseMasterGold>:/O2> $<$<CONFIG:ReleaseMasterG
 # (on x64 it's always enabled and produces error if try to to enable it)
 add_compile_options($<$<EQUAL:${CMAKE_SIZEOF_VOID_P},4>:/arch:SSE2>)
 
+# Warning level: CMP0092 (NEW) strips the historical /W3 default, which silently left the whole
+# project at /W1 - uninitialized-variable diagnostics (C4700 family) never printed. No /WX here;
+# CI is the place for that.
+add_compile_options(/W3)
+
 # Disable specific warnings
 add_compile_options(
     /wd4201 # nonstandard extension used : nameless struct/union
     /wd4251 # class 'x' needs to have dll-interface to be used by clients of class 'y'
     /wd4275 # non dll-interface class 'x' used as base for dll-interface class 'y'
 )
+
+# AddressSanitizer: the XRAY_USE_ASAN option existed but only the GNU-like compiler file consumed
+# it, so -DXRAY_USE_ASAN=ON on MSVC silently built nothing special. Prerequisites handled here:
+# /fsanitize=address is incompatible with /RTC, /GL(+LTCG) and incremental linking; the mimalloc
+# allocator hides allocations from ASan, so build with -DMEMORY_ALLOCATOR=standard as well.
+if (XRAY_USE_ASAN)
+    add_compile_options(/fsanitize=address)
+    string(REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+    add_link_options(/INCREMENTAL:NO)
+    if (NOT MEMORY_ALLOCATOR STREQUAL "standard")
+        message(WARNING "XRAY_USE_ASAN works best with -DMEMORY_ALLOCATOR=standard (mimalloc hides allocations from ASan)")
+    endif()
+endif()
 
 # The MSVC linker settings:
 add_link_options("/LARGEADDRESSAWARE")

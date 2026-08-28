@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <atomic>
 
 #include "Render.h"
 
@@ -20,7 +21,9 @@
 ENGINE_API CRenderDevice Device;
 ENGINE_API CLoadScreenRenderer load_screen_renderer;
 
-ENGINE_API bool g_bRendering = false;
+// Read from seqParallel workers (ModelPool::DeleteInternal decides queue-vs-delete on it) while the
+// main thread flips it in RenderBegin/RenderEnd - plain bool was a data race.
+ENGINE_API std::atomic<bool> g_bRendering = false;
 
 ENGINE_API bool g_bBenchmark = false;
 string512 g_sBenchmarkName;

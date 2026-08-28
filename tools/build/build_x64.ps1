@@ -2,7 +2,10 @@
 param(
     [ValidateSet("Debug", "Mixed", "Release", "ReleaseMasterGold")]
     [string]$Configuration = "Release",
-    [switch]$Clean
+    [switch]$Clean,
+    # CI job: unity builds let a forgotten #include compile because a batch neighbour pulled it
+    # in; this catches those before a batch reorder does.
+    [switch]$NoUnity
 )
 
 $ErrorActionPreference = "Stop"
@@ -163,7 +166,8 @@ $presetSuffix = switch ($Configuration) {
     "Release" { "release" }
     "ReleaseMasterGold" { "release-master-gold" }
 }
-$command = "call `"$developerPrompt`" -arch=x64 -host_arch=x64 && cmake --preset $configurePreset && cmake --build --preset windows-x64-$presetSuffix"
+$unityFlag = if ($NoUnity) { " -DCMAKE_UNITY_BUILD=OFF" } else { "" }
+$command = "call `"$developerPrompt`" -arch=x64 -host_arch=x64 && cmake --preset $configurePreset$unityFlag && cmake --build --preset windows-x64-$presetSuffix"
 
 Push-Location $repositoryRoot
 try {

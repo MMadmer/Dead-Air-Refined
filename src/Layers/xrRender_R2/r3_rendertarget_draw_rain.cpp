@@ -27,9 +27,9 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
     W_dirZ.normalize();
 
     // recalculate d_Z, to perform depth-clipping
-    // The pixel shader reaches exactly zero wetness at 20 m, so reject farther pixels in hardware.
-    constexpr float wetSurfaceFadeEnd = 20.f;
-    const float fRainFar = std::min(ps_r3_dyn_wet_surf_far, wetSurfaceFadeEnd);
+    // The pixel shader fades to zero at RainFallof.y now (the 5/20 hardcode is gone), so the
+    // hardware clip follows the console value directly.
+    const float fRainFar = ps_r3_dyn_wet_surf_far;
 
     Fvector center_pt;
     center_pt.mad(Device.vCameraPosition, Device.vCameraDirection, fRainFar);

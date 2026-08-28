@@ -881,7 +881,9 @@ float sunmask( float4 P )
 {
 	float2 		tc	= mul( m_sunmask, P ).xy;		//
 //	return 		tex2D( s_lmap, tc ).w;			// A8
-	return 		s_lmap.Sample( smp_linear, tc ).w;	// A8
+	// SampleLevel(0): the ortho-projected tc has no meaningful derivatives on a fullscreen
+	// pass, and implicit mips smeared the cloud mask at grazing depth gradients.
+	return 		s_lmap.SampleLevel( smp_linear, tc, 0 ).w;	// A8
 }
 #else
 float sunmask( float4 P ) { return 1.h; }		//

@@ -17,7 +17,9 @@ void CControlCriticalWound::activate()
     IKinematicsAnimated* skel = smart_cast<IKinematicsAnimated*>(m_object->Visual());
 
     SControlAnimationData* ctrl_anim = (SControlAnimationData*)m_man->data(this, ControlCom::eControlAnimation);
-    VERIFY(ctrl_anim);
+    // data() returns null when the capture was lost - VERIFY is a release no-op.
+    if (!ctrl_anim)
+        return;
     ctrl_anim->global.set_motion(skel->ID_Cycle_Safe(m_data.animation));
     ctrl_anim->global.actual = false;
 }

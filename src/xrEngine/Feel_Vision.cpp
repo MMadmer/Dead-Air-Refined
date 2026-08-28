@@ -208,7 +208,12 @@ void Vision::o_trace(Fvector& P, float dt, float vis_threshold)
                     // cache outdated. real query.
                     VERIFY(!fis_zero(RD.dir.magnitude()));
 
-                    if (g_pGameLevel->ObjectSpace.RayQuery(RQR, RD, feel_vision_callback, &feel_params, NULL, NULL))
+                    // Skip the observer's own collision model: without this every vision trace
+                    // raytested the owner's cform and folded its own material into fp->vis
+                    // (feel_vision_callback does not filter self). The ignore_object parameter is
+                    // already honoured by CObjectSpace::_RayQuery2.
+                    if (g_pGameLevel->ObjectSpace.RayQuery(
+                            RQR, RD, feel_vision_callback, &feel_params, NULL, const_cast<IGameObject*>(m_owner)))
                     {
                         I->Cache_vis = feel_params.vis;
                         I->Cache.set(P, D, f, true);

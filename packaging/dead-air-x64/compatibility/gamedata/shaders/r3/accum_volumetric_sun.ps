@@ -12,8 +12,11 @@
 		#define RAY_SAMPLES	20
 		#define	JITTER_SUN_SHAFTS
 	#elif SUN_SHAFTS_QUALITY==2
+		// Tier 2 marched WITHOUT jitter while tiers 1 and 3 had it - the middle quality banded
+		// where both neighbours dithered clean. Our own oversight, not a donor feature.
 		#define	FILTER_LOW
 		#define RAY_SAMPLES	40
+		#define	JITTER_SUN_SHAFTS
 	#elif SUN_SHAFTS_QUALITY==3
 		#define	FILTER_LOW
 		#define RAY_SAMPLES	80
@@ -65,7 +68,9 @@ float4 	main (v2p_volume  I) : SV_Target
 //	float2	tcJ = I.tcJ;
 //	Variable ray length, variable step dencity, use jittering
 	//float4	J0 	= tex2D		(jitter0,tcJ);
-	float4	J0 	= jitter0.Sample( smp_jitter, tc*screen_res.x*1.f/JITTER_TEXTURE_SIZE );
+	// Square jitter cells: scaling BOTH axes by the horizontal resolution stretched the 64x64
+	// tile to 64x~36 px on 16:9, which reads as anisotropic dither streaks.
+	float4	J0 	= jitter0.Sample( smp_jitter, tc*screen_res.xy*(1.f/JITTER_TEXTURE_SIZE) );
 	float	coeff = (RAY_SAMPLES - 1*J0.x)/(RAY_SAMPLES*RAY_SAMPLES);
 	float3	direction = P*coeff;
 //	float3	direction = P/(RAY_SAMPLES+(J0.x*4-2));
@@ -104,6 +109,13 @@ float4 	main (v2p_volume  I) : SV_Target
 		depth -= deltaDepth;
 		current -= delta;
 	}
+
+	// Forward-scatter: shafts brighten toward the sun and thin away from it, per PIXEL this time
+	// (the 1.2.1 removal dropped a per-frame scalar of the same physical term - this is its
+	// better-shaped return). Ldynamic_dir is bound in view space, normalize(P) is the view ray;
+	// remap keeps the away-from-sun floor at 0.2 like the old member did.
+	float fScatter = 0.5f * dot(normalize(P), -Ldynamic_dir.xyz) + 0.5f;
+	res *= 0.80f * fScatter + 0.20f;
 
 	float4 sunColor = float4(1,1,1,1);
 	sunColor.xyz = normalize(Vibrance(L_hemi_color.rgb,1));

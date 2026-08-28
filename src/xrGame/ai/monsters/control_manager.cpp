@@ -382,14 +382,17 @@ void CControl_Manager::path_stop(CControl_Com* com)
 void CControl_Manager::move_stop(CControl_Com* com)
 {
     SControlMovementData* ctrl_move = (SControlMovementData*)data(com, ControlCom::eControlMovement);
-    VERIFY(ctrl_move);
+    // data() legitimately returns null when com is not the current capturer.
+    if (!ctrl_move)
+        return;
     ctrl_move->velocity_target = 0;
     ctrl_move->acc = flt_max;
 }
 void CControl_Manager::dir_stop(CControl_Com* com)
 {
     SControlDirectionData* ctrl_dir = (SControlDirectionData*)data(com, ControlCom::eControlDir);
-    VERIFY(ctrl_dir);
+    if (!ctrl_dir)
+        return;
     ctrl_dir->heading.target_speed = 0;
 }
 

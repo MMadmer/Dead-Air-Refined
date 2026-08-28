@@ -35,3 +35,18 @@ jobs:
           name: dead-air-x64-${{ matrix.configuration }}
           path: bin/x64/${{ matrix.configuration }}
           if-no-files-found: error
+
+  # Non-unity build: a forgotten #include compiles in unity mode because a batch neighbour pulled
+  # it in - and breaks on the next file reorder. This job catches those while they are cheap.
+  windows-x64-nonunity:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Build runtime (unity off)
+        shell: pwsh
+        run: tools/build/build_x64.ps1 -Configuration Release -Clean -NoUnity

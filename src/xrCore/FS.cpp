@@ -309,9 +309,16 @@ IReader* IReader::open_chunk(u32 ID)
     {
         if (bCompressed)
         {
-            u8* dest;
-            size_t dest_sz;
-            _decompressLZ(&dest, &dest_sz, pointer(), dwSize);
+            // A truncated compressed chunk makes _decompressLZ bail before writing the outputs -
+            // consuming them anyway meant a reader over a garbage pointer and a wild xr_free later.
+            u8* dest = nullptr;
+            size_t dest_sz = 0;
+            if (!_decompressLZ(&dest, &dest_sz, pointer(), dwSize))
+            {
+                Msg("! IReader::open_chunk: corrupted compressed chunk 0x%08x, skipped", ID);
+                xr_free(dest);
+                return 0;
+            }
             return xr_new<CTempReader>(dest, dest_sz, tell() + dwSize);
         }
         else
@@ -358,10 +365,15 @@ IReader* IReader::open_chunk_iterator(u32& ID, IReader* _prev)
     const size_t _size = r_u32();
     if (ID & CFS_CompressMark)
     {
-        // compressed
-        u8* dest;
-        size_t dest_sz;
-        _decompressLZ(&dest, &dest_sz, pointer(), _size);
+        // compressed - same corrupted-chunk guard as open_chunk above.
+        u8* dest = nullptr;
+        size_t dest_sz = 0;
+        if (!_decompressLZ(&dest, &dest_sz, pointer(), _size))
+        {
+            Msg("! IReader::open_chunk_iterator: corrupted compressed chunk 0x%08x, skipped", ID);
+            xr_free(dest);
+            return NULL;
+        }
         return xr_new<CTempReader>(dest, dest_sz, tell() + _size);
     }
     else

@@ -83,7 +83,9 @@ static ICF void write_inline(
 {
     R_ASSERT(!inistream || wAllow);
     VERIFY(data && count);
-    VERIFY(buffer.count + count < NET_PacketSizeLimit);
+    // A silent overrun here corrupts adjacent memory and, on the save path, the save itself -
+    // fail loudly in release too instead of writing past the buffer.
+    R_ASSERT(buffer.count + count < NET_PacketSizeLimit);
     memcpy(buffer.data + buffer.count, data, count);
     buffer.count += count;
     VERIFY(buffer.count < NET_PacketSizeLimit);

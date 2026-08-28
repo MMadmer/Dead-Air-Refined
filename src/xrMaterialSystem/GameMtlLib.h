@@ -41,7 +41,9 @@ constexpr u32 GAMEMTLPAIR_CHUNK_STEP      = 0x1003;
 //constexpr u32 GAMEMTLPAIR_CHUNK_COLLIDE   = 0x1004; // obsolete / rename HIT
 constexpr u32 GAMEMTLPAIR_CHUNK_COLLIDE   = 0x1005;
 
-constexpr int GAMEMTL_SUBITEM_COUNT       = 4;
+// Purely an artificial ceiling: the storage behind it is xr_vector, and content mods legitimately
+// ship materials with more step sounds / particles. 4 used to hard-crash (R_ASSERT) on such mods.
+constexpr int GAMEMTL_SUBITEM_COUNT       = 24;
 
 constexpr u32 GAMEMTL_NONE_ID             = u32(-1);
 constexpr u32 GAMEMTL_NONE_IDX            = u16(-1);

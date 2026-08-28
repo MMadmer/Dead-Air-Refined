@@ -715,6 +715,8 @@ void CScriptEngine::lua_cast_failed(lua_State* L, const luabind::type_id& info)
     string128 buf;
     xr_sprintf(buf, "cannot cast lua value to %s", info.name());
     print_output(L, "", LUA_ERRRUN, buf);
+    // The fatal alone names the type but not the script - the stack is what identifies the caller.
+    print_stack(L);
     xrDebug::Fatal(DEBUG_INFO, "LUA error: cannot cast lua value to %s", info.name());
 }
 #endif

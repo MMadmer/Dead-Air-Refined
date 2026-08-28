@@ -50,14 +50,26 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
  	pos.z 		= dot	(m2, v.pos);
 	pos.w 		= 1;
 
-	//
-	float 	base 	= m1.w;
-	float 	dp	= calc_cyclic   (dot(pos,wave));
-	float 	H 	= pos.y - base;			// height of vertex (scaled)
+	// Wave shape: pure cosine instead of the stock parabola-over-sawtooth. The stock curve has a
+	// -1/3 DC offset (the whole field leans downwind permanently) and a velocity kink once per
+	// cycle; -cos(2*pi*x) has neither. Local to this file - shared\common.h stays stock.
+	float 	dp;
+	{
+		float s = 1.4142136f * sin(dot(pos, wave) * 3.1415926f);
+		dp = s * s - 1.0f;
+	}
+	// Height above the root measured along the instance basis, not world Y minus base: with
+	// ground-tilted instances the old form picked up cos(tilt) and cross terms, weakening and
+	// skewing the sway on slopes. Also inherits the shadow-fade height scaling through m*_y.
+	float 	H 	= v.pos.y * length(float3(m0.y, m1.y, m2.y));
 	float 	frac 	= v.misc.z*consts.x;		// fractional
 	float 	inten 	= H * dp;
 	float2 	result	= calc_xz_wave	(dir2D.xz*inten,frac);
-	pos		= float4(pos.x+result.x, pos.y, pos.z+result.y, 1);
+	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
+	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the
+	// length restores a bend.
+	float	drop	= H - sqrt(max(H * H - dot(result, result), 0.0f));
+	pos		= float4(pos.x+result.x, pos.y-drop, pos.z+result.y, 1);
 
 	// Normal in world coords
 	float3 	norm;	//	= float3(0,1,0);

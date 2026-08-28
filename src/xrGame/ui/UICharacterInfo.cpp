@@ -128,6 +128,10 @@ void CUICharacterInfo::InitCharacter(u16 id)
     m_ownerID = id;
 
     CSE_ALifeTraderAbstract* T = ch_info_get_from_id(m_ownerID);
+    // Same missing-object window as the relation path below, wider blast radius: every icon setter
+    // here goes through T.
+    if (!T)
+        return;
 
     CCharacterInfo chInfo;
     chInfo.Init(T);
@@ -295,7 +299,15 @@ void CUICharacterInfo::UpdateRelation()
         CSE_ALifeTraderAbstract* T = ch_info_get_from_id(m_ownerID);
         CSE_ALifeTraderAbstract* TA = ch_info_get_from_id(Actor()->ID());
 
-        SetRelation(RELATION_REGISTRY().GetRelationType(T, TA), RELATION_REGISTRY().GetAttitude(T, TA));
+        // Either lookup can miss (an offline/released object mid-loot), and GetAttitude dereferences
+        // both sides immediately - this was a reliable corpse-looting crash.
+        if (T && TA)
+            SetRelation(RELATION_REGISTRY().GetRelationType(T, TA), RELATION_REGISTRY().GetAttitude(T, TA));
+        else
+        {
+            m_icons[eRelationCaption]->Show(false);
+            m_icons[eRelation]->Show(false);
+        }
     }
 }
 

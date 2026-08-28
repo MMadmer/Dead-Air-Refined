@@ -245,6 +245,30 @@ void CDetailManager::Load()
     swing_desc[1].rot1 = pSettings->r_float("details", "swing_fast_rot1");
     swing_desc[1].rot2 = pSettings->r_float("details", "swing_fast_rot2");
     swing_desc[1].speed = pSettings->r_float("details", "swing_fast_speed");
+
+    // Optional x64-pack override: system.ltx is sealed inside the base archives, and the mod's
+    // authored fast-set was tuned against an engine that ignored amplitudes entirely. Retuned
+    // values travel in their own data file instead of a magic constant here.
+    if (FS.exist("$game_config$", "dead_air_x64_details.ltx"))
+    {
+        string_path fn;
+        FS.update_path(fn, "$game_config$", "dead_air_x64_details.ltx");
+        CInifile ini(fn, TRUE);
+        const auto rd = [&ini](pcstr key, float def) {
+            return ini.line_exist("details", key) ? ini.r_float("details", key) : def;
+        };
+        swing_desc[0].amp1 = rd("swing_normal_amp1", swing_desc[0].amp1);
+        swing_desc[0].amp2 = rd("swing_normal_amp2", swing_desc[0].amp2);
+        swing_desc[0].rot1 = rd("swing_normal_rot1", swing_desc[0].rot1);
+        swing_desc[0].rot2 = rd("swing_normal_rot2", swing_desc[0].rot2);
+        swing_desc[0].speed = rd("swing_normal_speed", swing_desc[0].speed);
+        swing_desc[1].amp1 = rd("swing_fast_amp1", swing_desc[1].amp1);
+        swing_desc[1].amp2 = rd("swing_fast_amp2", swing_desc[1].amp2);
+        swing_desc[1].rot1 = rd("swing_fast_rot1", swing_desc[1].rot1);
+        swing_desc[1].rot2 = rd("swing_fast_rot2", swing_desc[1].rot2);
+        swing_desc[1].speed = rd("swing_fast_speed", swing_desc[1].speed);
+        Msg("* [details] swing overridden from dead_air_x64_details.ltx");
+    }
 }
 #endif
 void CDetailManager::Unload()
@@ -476,28 +500,39 @@ void CDetailManager::UpdateRenderState()
     m_render_state_frame = Device.dwFrame;
 
 #ifndef _EDITOR
-    const float factor = g_pGamePersistent->Environment().wind_strength_factor;
+    const float factor_raw = g_pGamePersistent->Environment().wind_strength_factor;
 #else
-    constexpr float factor = 0.3f;
+    constexpr float factor_raw = 0.3f;
 #endif
-    swing_current.lerp(swing_desc[0], swing_desc[1], factor);
 
     float delta = Device.fTimeGlobal - m_global_time_old;
     if (delta < 0.f || delta > 1.f)
         delta = 0.03f;
     m_global_time_old = Device.fTimeGlobal;
 
+    // Low-pass the gust factor (tau ~1.5 s) before it picks the swing preset.
+    m_wind_gust += (factor_raw - m_wind_gust) * (1.f - expf(-delta / 1.5f));
+    swing_current.lerp(swing_desc[0], swing_desc[1], m_wind_gust);
+
     m_time_rot_1 += PI_MUL_2 * delta / swing_current.rot1;
     m_time_rot_2 += PI_MUL_2 * delta / swing_current.rot2;
     m_time_pos += delta * swing_current.speed;
 
     const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
-    m_wind_dir1.set(_sin(m_time_rot_1), 0.f, _cos(m_time_rot_1), 0.f)
-        .normalize()
-        .mul(0.1f + environment.wind_velocity * 0.0016f);
-    m_wind_dir2.set(_sin(m_time_rot_2), 0.f, _cos(m_time_rot_2), 0.f)
-        .normalize()
-        .mul(0.05f + environment.wind_velocity * 0.0008f);
+
+    // Wind direction now follows the weather (rain and cloud shadows already do) with a bounded
+    // wander at the swing periods, instead of the old free 360-degree spin per rot period.
+    constexpr float wander = deg2rad(20.f);
+    const float dir1 = environment.wind_direction + wander * _sin(m_time_rot_1);
+    const float dir2 = environment.wind_direction + wander * _sin(m_time_rot_2);
+
+    // Authored amplitudes from [details] are live again (they were computed and discarded for a
+    // hardcoded wind_velocity line, so gusts changed the frequency without changing the sway).
+    // Weather wind speed scales them the way the rain does (20 m/s = full swing), with a floor so
+    // a calm morning still breathes.
+    const float wind_norm = 0.25f + 0.75f * clampr(environment.wind_velocity / 20.f, 0.f, 1.f);
+    m_wind_dir1.set(_sin(dir1), 0.f, _cos(dir1), 0.f).normalize().mul(swing_current.amp1 * wind_norm);
+    m_wind_dir2.set(_sin(dir2), 0.f, _cos(dir2), 0.f).normalize().mul(swing_current.amp2 * wind_norm);
 }
 
 void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)

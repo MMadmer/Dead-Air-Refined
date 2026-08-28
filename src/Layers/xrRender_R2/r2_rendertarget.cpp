@@ -8,6 +8,7 @@
 #include "Layers/xrRender/blenders/blender_light_reflected.h"
 #include "Layers/xrRender/blenders/blender_combine.h"
 #include "Layers/xrRender/blenders/blender_bloom_build.h"
+#include "Layers/xrRender/blenders/blender_smaa.h"
 #include "Layers/xrRender/blenders/blender_luminance.h"
 #include "Layers/xrRender/blenders/blender_ssao.h"
 
@@ -18,6 +19,7 @@
 #if defined(USE_DX11)
 #    include "Layers/xrRender/blenders/dx11HDAOCSBlender.h"
 #    include "Layers/xrRender/blenders/blender_hud_shadow.h"
+#    include "Layers/xrRender/blenders/blender_gtao.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -327,6 +329,15 @@ CRenderTarget::CRenderTarget()
         rt_SunShaftsMask.create(r2_RT_SunShaftsMask, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsMaskSmoothed.create(r2_RT_SunShaftsMaskSmoothed, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsPass0.create(r2_RT_SunShaftsPass0, w, h, D3DFMT_A8R8G8B8, 1);
+        // SMAA working targets. RGBA8 like the donor's R2 flavour: edge mask lives in RG,
+        // blend weights use all four channels. Always single-sampled - the pass reads and
+        // writes the already-resolved LDR frame.
+        rt_smaa_edges.create(r2_RT_smaa_edges, w, h, D3DFMT_A8R8G8B8, 1);
+        rt_smaa_blend.create(r2_RT_smaa_blend, w, h, D3DFMT_A8R8G8B8, 1);
+        // Camera-TAA history: same format as generic0 so CopyResource works both ways.
+        // The pre-pass reads the deferred position as a plain 2D surface, so not under MSAA.
+        if (!RImplementation.o.msaa)
+            rt_taa_history.create(r2_RT_taa_history, w, h, D3DFMT_A8R8G8B8, 1);
 #endif
 
         if (!options.msaa)
@@ -665,6 +676,29 @@ CRenderTarget::CRenderTarget()
         }
     }
 
+#if RENDER == R_R4
+    // GTAO (ported from IX-Ray): full-res raw pass into rt_gtao, then a guided 8x8
+    // filter into rt_ssao_temp, which combine_1 samples as s_occ. Needs SM5 gathers and
+    // a single-sampled G-buffer, so it is not created under MSAA - combine_1 then keeps
+    // its inline SSAO (USE_GTAO is gated the same way in r4_shaders.cpp).
+    if (ps_r_ssao_mode == ssao_mode_gtao && !RImplementation.o.msaa)
+    {
+        const u32 gw = Device.dwWidth, gh = Device.dwHeight;
+
+        // x = linear view-z (the filter guide), y = raw AO. The donor packed the same
+        // two halves into R32_UINT; our RT system has no uint formats and G16R16F
+        // stores identical values.
+        rt_gtao.create(r2_RT_gtao, gw, gh, D3DFMT_G16R16F);
+
+        // The blur path did not run, so the final-AO target may not exist yet.
+        if (!rt_ssao_temp)
+            rt_ssao_temp.create(r2_RT_ssao_temp, gw, gh, D3DFMT_R16F);
+
+        CBlender_gtao b_gtao;
+        s_gtao.create(&b_gtao, "r2" DELIMITER "gtao");
+    }
+#endif
+
     // TONEMAP
     {
         rt_LUM_64.create(r2_RT_luminance_t64, 64, 64, D3DFMT_A16B16G16R16F);
@@ -701,6 +735,13 @@ CRenderTarget::CRenderTarget()
 #if RENDER == R_R4
         CBlender_fxaa b_fxaa;
         s_fxaa.create(&b_fxaa, "r2" DELIMITER "fxaa");
+        CBlender_smaa b_smaa;
+        s_smaa.create(&b_smaa, "r2" DELIMITER "smaa");
+        if (!RImplementation.o.msaa)
+        {
+            CBlender_taa b_taa;
+            s_taa.create(&b_taa, "r2" DELIMITER "taa");
+        }
         g_fxaa.create(FVF::F_V, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
 
         CBlender_sunshafts b_sunshafts;

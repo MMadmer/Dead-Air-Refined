@@ -2047,7 +2047,7 @@ void CActor::OnPlayHeadShotParticle(NET_Packet P)
     CParticlesObject* ps = CParticlesObject::Create(m_sHeadShotParticle.c_str(), TRUE);
 
     ps->UpdateParent(pos, Fvector().set(0.f, 0.f, 0.f));
-    GamePersistent().ps_needtoplay.push_back(ps);
+    GamePersistent().ps_schedule_play(ps);
 };
 
 void CActor::OnCriticalWoundHealthLoss()

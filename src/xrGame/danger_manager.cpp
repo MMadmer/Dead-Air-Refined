@@ -212,7 +212,8 @@ float CDangerManager::do_evaluate(const CDangerObject& object) const
 
 void CDangerManager::add(const CVisibleObject& object)
 {
-    if (!object.m_enabled)
+    // Destroyed-but-not-yet-released objects still flow through memory managers for a few frames.
+    if (!object.m_object || !object.m_enabled || object.m_object->getDestroy())
         return;
 
     const CEntityAlive* obj = smart_cast<const CEntityAlive*>(object.m_object);
@@ -226,7 +227,9 @@ void CDangerManager::add(const CVisibleObject& object)
 
 void CDangerManager::add(const CSoundObject& object)
 {
-    if (!object.m_enabled)
+    // m_object is legitimately null for sourceless sounds (the INJURING branch handles that), so
+    // only a destroyed source is rejected here.
+    if (!object.m_enabled || (object.m_object && object.m_object->getDestroy()))
         return;
 
     const CEntityAlive* obj = smart_cast<const CEntityAlive*>(object.m_object);
@@ -277,7 +280,7 @@ void CDangerManager::add(const CSoundObject& object)
 
 void CDangerManager::add(const CHitObject& object)
 {
-    if (!object.m_enabled)
+    if (!object.m_object || !object.m_enabled || object.m_object->getDestroy())
         return;
 
     if (fis_zero(object.m_amount))
@@ -287,6 +290,9 @@ void CDangerManager::add(const CHitObject& object)
         return;
 
     const CEntityAlive* obj = smart_cast<const CEntityAlive*>(object.m_object);
+    // A non-CEntityAlive hitter (physics debris) fails the cast, and obj is dereferenced right away.
+    if (!obj)
+        return;
     add(CDangerObject(obj, obj->Position(), object.m_level_time, CDangerObject::eDangerTypeAttacked,
         CDangerObject::eDangerPerceiveTypeHit));
 }

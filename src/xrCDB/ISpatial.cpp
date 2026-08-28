@@ -262,7 +262,7 @@ void ISpatial_DB::_insert(ISpatial_NODE* N, Fvector& n_C, float n_R)
 
 void ISpatial_DB::insert(ISpatial* S)
 {
-    ScopeLock scope(&cs);
+    std::unique_lock scope(cs);
 
     {
         const auto& sd = S->GetSpatialData();
@@ -314,10 +314,12 @@ void ISpatial_DB::insert(ISpatial* S)
         _insert(m_root, m_center, m_bounds);
         VERIFY(S->spatial_inside());
     }
-    else
+    else if (m_root)
     {
         // Object outside our DB, put it into root node and hack bounds
         // Object will reinsert itself until fits into "real", "controlled" space
+        // (m_root is null before initialize() and after destroy() - the verify_sp branch grows the
+        // root itself, this one dereferences it.)
         m_root->_insert(S);
         S->GetSpatialData().node_center.set(m_center);
         S->GetSpatialData().node_radius = m_bounds;
@@ -370,7 +372,7 @@ void ISpatial_DB::_remove(ISpatial_NODE* N, ISpatial_NODE* N_sub)
 
 void ISpatial_DB::remove(ISpatial* S)
 {
-    ScopeLock scope(&cs);
+    std::unique_lock scope(cs);
 #ifdef DEBUG
     Stats.Remove.Begin();
 #endif
@@ -391,7 +393,7 @@ void ISpatial_DB::update(u32 /*nodes = 8 */)
 #ifdef DEBUG
     if (0 == m_root)
         return;
-    ScopeLock scope(&cs);
+    std::unique_lock scope(cs);
     VERIFY(verify());
 #endif
 }

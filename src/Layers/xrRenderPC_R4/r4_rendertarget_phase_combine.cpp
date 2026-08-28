@@ -140,7 +140,14 @@ void CRenderTarget::phase_combine()
         t_LUM_dest->surface_set(rt_LUM_pool[gpu_id * 2 + 1]->pSurface);
     }
 
-    if (s_hdao_cs)
+    if (ps_r_ssao_mode == ssao_mode_gtao && s_gtao)
+    {
+        // GTAO: pre-render + guided filter into rt_ssao_temp; combine_1 samples it as
+        // s_occ (USE_GTAO). s_gtao exists only when the mode was active at renderer
+        // start and MSAA is off - otherwise fall through to the inline paths.
+        phase_gtao(RCache);
+    }
+    else if (s_hdao_cs)
     {
         phase_hdao();
     }
@@ -435,8 +442,17 @@ void CRenderTarget::phase_combine()
 
     RCache.set_Stencil(FALSE);
 
-    if (ps_r2_fxaa)
+    // SMAA supersedes FXAA when both are enabled - one AA pass per frame.
+    if (ps_r__smaa)
+        phase_smaa();
+    else if (ps_r2_fxaa)
         phase_fxaa();
+
+    // Camera TAA stacks on top of the spatial pass: SMAA removes staircases, this removes
+    // the temporal shimmer. Needs the single-sampled G-buffer position (s_taa is only
+    // created without MSAA) and skips menus - the paused background has no valid history.
+    if (ps_r__taa && s_taa && !_menu_pp)
+        phase_taa(m_previous);
 
     if (!_menu_pp)
         phase_sunshafts();

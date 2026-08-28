@@ -249,7 +249,8 @@ void CUICustomEdit::Draw()
         {
             string256 passText;
             shared_str str(istr);
-            int sz = (int)str.size();
+            // Clamp to the buffer: text length is user-controlled and 256 was written blind.
+            int sz = std::min((int)str.size(), (int)sizeof(passText) - 1);
             for (int i = 0; i < sz; i++)
                 passText[i] = '*';
             passText[sz] = 0;

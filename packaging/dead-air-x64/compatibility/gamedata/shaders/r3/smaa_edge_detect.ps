@@ -1,0 +1,39 @@
+/*
+------------------------------------------------------------------
+SMAA 1x, pass 1/3: edge detection
+Ported from IX-Ray 1.6 stcop (d3d11/smaa_edge_detect.ps.hlsl).
+Reads the LDR frame (s_image = $user$generic0), writes the RG edge
+mask into $user$smaa_edges. Non-edge pixels discard, so the target
+must be cleared to zero before the pass (phase_smaa does).
+------------------------------------------------------------------
+References:
+https://github.com/iryoku/smaa
+------------------------------------------------------------------
+*/
+
+#include "common.h"
+
+// Drawn with da_fullscreen.vs over g_combine (FVF::F_TL): the donor's dedicated VS is
+// replaced by calling the SMAA VS helpers per pixel - their outputs are affine in the
+// texcoord, so the result is identical (the donor's own R2 path does exactly this).
+#include "smaa.h"
+
+#define EDGE_DETECT_COLOR
+
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+	float4	hpos	: SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	float4 offset[3];
+	SMAAEdgeDetectionVS(I.tc0, offset);
+
+#if defined(EDGE_DETECT_COLOR)
+	return float4(SMAAColorEdgeDetectionPS(I.tc0, offset, s_image), 0.0f, 0.0f);
+#else
+	return float4(SMAALumaEdgeDetectionPS(I.tc0, offset, s_image), 0.0f, 0.0f);
+#endif
+}

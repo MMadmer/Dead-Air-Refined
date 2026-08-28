@@ -67,7 +67,10 @@ float3	dof(float3 image, float2 center, float centerDepth)
 
 	float2 reciprocalRange = rcp(float2(dof_params.z - dof_params.y, dof_params.x - dof_params.y));
 	float	blur 		= CombinedDOFFactor(centerDepth, reciprocalRange, center);
-	float2 	scale 	= float2	(.5f / 1024.h, .5f / 768.h) * (dof_kernel.z * blur);
+	// Kernel in PIXELS, not in 1024x768-relative UV: both dof.h consumers declare screen_res
+	// before including this header (zw = 1/w, 1/h). Matches the old look at 1024x768 exactly and
+	// stops the bokeh from growing with resolution.
+	float2 	scale 	= screen_res.zw * .5f * (dof_kernel.z * blur);
 	float2 	o  [12];
 		o[0]	= float2(-0.326212f , -0.405810f)*scale;
 		o[1] 	= float2(-0.840144f , -0.073580f)*scale;

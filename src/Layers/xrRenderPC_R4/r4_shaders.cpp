@@ -191,8 +191,9 @@ class shader_name_holder
 public:
     void append(cpcstr string)
     {
+        // string_path is finite and the option list is not - clamp instead of writing past it.
         const size_t size = xr_strlen(string);
-        for (size_t i = 0; i < size; ++i)
+        for (size_t i = 0; i < size && pos < sizeof(name) - 1; ++i)
         {
             name[pos] = string[i];
             ++pos;
@@ -201,8 +202,11 @@ public:
 
     void append(u32 value)
     {
-        name[pos] = '0' + char(value); // NOLINT
-        ++pos;
+        if (pos < sizeof(name) - 1)
+        {
+            name[pos] = '0' + char(value); // NOLINT
+            ++pos;
+        }
     }
 
     void finish()
@@ -268,6 +272,26 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
 
     // External defines
     options.add(m_ShaderOptions);
+    // The external option set must reach the cache KEY too, or adding a define serves stale
+    // bytecode compiled without it. crc32 of name=value pairs, hex-appended (the built-in
+    // appendShaderOption path already contributes digits; this covers everything else).
+    {
+        u32 opt_crc = 0;
+        for (const auto& macro : m_ShaderOptions)
+        {
+            if (!macro.Name)
+                break;
+            opt_crc = crc32(macro.Name, xr_strlen(macro.Name), opt_crc);
+            if (macro.Definition)
+                opt_crc = crc32(macro.Definition, xr_strlen(macro.Definition), opt_crc);
+        }
+        if (opt_crc)
+        {
+            string32 opt_hex;
+            xr_sprintf(opt_hex, "%08x", opt_crc);
+            sh_name.append(static_cast<cpcstr>(opt_hex));
+        }
+    }
 
     // Shadow map size
     {
@@ -351,6 +375,11 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             options.add("USE_HBAO", "1");
         }
     }
+
+    // GTAO: the AO term is pre-rendered and guided-filtered into $user$ssao_temp by
+    // phase_gtao; USE_GTAO switches combine_1 from the inline calc to sampling s_occ.
+    // Not under MSAA - the pre-pass reads the deferred position as a plain 2D surface.
+    appendShaderOption(!o.msaa && ps_r_ssao_mode == ssao_mode_gtao, "USE_GTAO", "1");
 
     // skinning
     // SKIN_NONE
@@ -652,6 +681,10 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         else
         {
             Log("! ", file_name);
+            // The file name alone does not identify the failing permutation - dump the macro set,
+            // otherwise an option-dependent breakage is unreproducible from the log.
+            for (const D3D_SHADER_MACRO* m = options.data(); m && m->Name; ++m)
+                Msg("!   with define: %s=%s", m->Name, m->Definition ? m->Definition : "");
             if (pErrorBuf)
                 Log("! error: ", (LPCSTR)pErrorBuf->GetBufferPointer());
             else
