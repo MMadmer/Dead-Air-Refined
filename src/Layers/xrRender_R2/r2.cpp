@@ -150,6 +150,12 @@ static class cl_da_sss : public R_constant_setup
 // DA weather rains at 0.1-0.3 most of the time, and an intensity-capped accumulator would
 // never form a puddle - in life a drizzle wets the ground SLOWER, not less. The 0.25 floor
 // keeps the faintest drizzle from taking days: it fills in four buildup periods.
+// Accumulated ground wetness for this frame, published by the rain_params binder below.
+// The puddle reflection pass reads it to skip itself entirely while the ground is dry -
+// the fullscreen pass otherwise pays a G-buffer load plus the mask math per pixel just to
+// output zeros.
+float g_da_rain_wetness = 0.f;
+
 static class cl_rain_params : public R_constant_setup
 {
     u32 marker{};
@@ -189,6 +195,7 @@ static class cl_rain_params : public R_constant_setup
                 }
                 clamp(wetness, 0.f, 1.f);
             }
+            g_da_rain_wetness = wetness;
             result.set(rain, wetness, ps_r__puddles_size, dbg);
         }
         cmd_list.set_c(C, result);

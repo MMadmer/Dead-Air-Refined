@@ -2,6 +2,9 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// Accumulated ground wetness, published by the rain_params binder (r2.cpp).
+extern float g_da_rain_wetness;
+
 // World reflections in rain puddles: one fullscreen pass over the lit frame.
 //
 // The spot in the frame is chosen, not incidental. The pass sits RIGHT AFTER the frame copy
@@ -16,6 +19,10 @@ namespace xray::render::RENDER_NAMESPACE
 void CRenderTarget::phase_da_puddle_refl()
 {
     if (!ps_r__puddles || !ps_r__puddles_refl || ps_r__puddles_refl_power <= 0.f)
+        return;
+    // Dry ground: the shader's mask is zero everywhere, the whole pass would only pay a
+    // G-buffer load per pixel to output nothing. The same threshold the mask math uses.
+    if (g_da_rain_wetness < 0.01f)
         return;
     if (!s_puddle_refl || !rt_SSR)
         return;

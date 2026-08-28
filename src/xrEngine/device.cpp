@@ -29,6 +29,8 @@ string512 g_sBenchmarkName;
 int ps_fps_limit = 0;
 // Retained for existing user.ltx files; frame pacing uses the global limit in every game state.
 int ps_fps_limit_in_menu = 60;
+// QA: periodic average-FPS log line, seconds between lines (xr_ioc_cmd.cpp).
+extern ENGINE_API int ps_r__fps_log;
 extern int g_pause_in_background;
 
 bool g_bLoaded = false;
@@ -441,6 +443,36 @@ void CRenderDevice::ProcessFrame()
         // whole quantum and overshoot far worse than the reserve being burned.
         while (CTimerBase::Clock::now() < deadline)
             YieldProcessor();
+    }
+
+    // QA diagnostic (r__fps_log N): every N seconds one parseable line with the average and
+    // the worst frame goes into the log. Measured on the wall clock at the very end of the
+    // frame loop, so it counts everything the player's frame counts.
+    if (ps_r__fps_log > 0)
+    {
+        static CTimer window;
+        static bool started = false;
+        static u32 frames = 0;
+        static float lastElapsed = 0.f;
+        static float worst = 0.f;
+        if (!started)
+        {
+            window.Start();
+            started = true;
+        }
+        ++frames;
+        const float elapsed = window.GetElapsed_sec();
+        worst = _max(worst, elapsed - lastElapsed);
+        lastElapsed = elapsed;
+        if (elapsed >= float(ps_r__fps_log))
+        {
+            Msg("* [FPS] avg %.1f | worst %.1f ms | %u frames / %.2f s",
+                float(frames) / elapsed, worst * 1000.f, frames, elapsed);
+            window.Start();
+            frames = 0;
+            worst = 0.f;
+            lastElapsed = 0.f;
+        }
     }
 
     if (!b_is_Active)

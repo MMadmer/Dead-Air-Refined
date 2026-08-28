@@ -500,6 +500,9 @@ ENGINE_API float ps_r__rain_radius = 14.0f;
 ENGINE_API float ps_r__rain_splash = 1.0f;
 ENGINE_API float ps_r__rain_splash_time = 0.30f;
 
+// QA diagnostic: log one average-FPS line every N seconds (0 = off). See device.cpp.
+ENGINE_API int ps_r__fps_log = 0;
+
 // Exported: the renderer's final combine applies the same curve in the shader when the
 // hardware gamma ramp is not in charge (windowed/borderless).
 ENGINE_API float ps_gamma = 1.f, ps_brightness = 1.f, ps_contrast = 1.f;
@@ -885,6 +888,7 @@ void CCC_Register()
     CMD4(CCC_Float, "r__rain_radius", &ps_r__rain_radius, 5.f, 40.f);
     CMD4(CCC_Float, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
     CMD4(CCC_Float, "r__rain_splash_time", &ps_r__rain_splash_time, 0.1f, 1.5f);
+    CMD4(CCC_Integer, "r__fps_log", &ps_r__fps_log, 0, 60);
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);
 

@@ -820,6 +820,22 @@ void xrRender_sync_preset_derived()
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
     ps_r__puddles_refl = puddles_by_preset[ps_Preset] > 1;
+
+    // QA hook: an optional appdata\qa_autoexec.ltx executes AFTER the derived switches.
+    // The rig runs headless and user.ltx executes BEFORE renderer create, so any
+    // preset-derived value it sets is stomped by the tables above - this is the only
+    // per-feature override a measurement run has. Absent file = zero cost.
+    {
+        string_path qa_cfg;
+        FS.update_path(qa_cfg, "$app_data_root$", "qa_autoexec.ltx");
+        if (FS.exist(qa_cfg))
+        {
+            string_path cmd;
+            strconcat(sizeof(cmd), cmd, "cfg_load ", qa_cfg);
+            Console->Execute(cmd);
+            Msg("* [QA] qa_autoexec.ltx applied after preset sync");
+        }
+    }
 }
 
 class CCC_Preset : public CCC_Token

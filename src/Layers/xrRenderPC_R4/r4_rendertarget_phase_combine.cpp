@@ -7,6 +7,9 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// Accumulated ground wetness, published by the rain_params binder (r2.cpp). Gates the
+// scene grab below together with the water-reflection knob.
+extern float g_da_rain_wetness;
 
 float hclip(float v, float dim) { return 2.f * v / dim - 1.f; }
 
@@ -346,7 +349,11 @@ void CRenderTarget::phase_combine()
     // rt_Generic_0 - a render target cannot be sampled while it is bound, so the shader reads
     // a copy taken just before the water goes in. Without this, s_image keeps whatever texture
     // the previous pass left in the slot.
-    if (rt_SSR)
+    // Skipped when nothing will read it this frame: water reflections off (Minimum preset)
+    // and the puddle pass either off or dry. A stale copy is fine then - no shader samples it.
+    const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl &&
+        ps_r__puddles_refl_power > 0.f && g_da_rain_wetness >= 0.01f;
+    if (rt_SSR && (ps_r_water_reflection > 0 || puddles_read_grab))
     {
         PIX_EVENT(scene_grab_for_SSLR);
         // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a
