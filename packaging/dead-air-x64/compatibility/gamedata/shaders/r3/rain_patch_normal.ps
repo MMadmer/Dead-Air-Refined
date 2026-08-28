@@ -17,6 +17,56 @@ float2 SampleFlowNormal(float2 tc)
     return (s_waterFall.Sample(smp_base, tc).xy - 0.5) * 0.6;
 }
 
+float rain_hash(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float2 rain_hash2(float n)
+{
+    return frac(sin(float2(n * 12.9898, n * 78.233)) * 43758.5453);
+}
+
+// Splash rings with randomised placement. The volume texture animates a ring per tile, so a
+// plain worldPos.xz lookup reborn every ring in the SAME spot each cycle - the repetition the
+// eye catches on puddles. Two half-period layers, each shifted by a per-cycle hash offset and
+// weighted to zero at its own reseed moment, so rings appear in fresh places with no popping.
+float2 SplashRingsRandom(float2 base_uv, float t)
+{
+    const float tA = t;
+    const float tB = t + 0.5;
+    const float wA = 1.0 - abs(frac(tA) * 2.0 - 1.0);
+    const float wB = 1.0 - wA;
+    const float2 offA = rain_hash2(floor(tA)) * 7.31;
+    const float2 offB = rain_hash2(floor(tB)) * 5.17;
+    const float2 sA = SampleSplashNormal(base_uv + offA, tA);
+    const float2 sB = SampleSplashNormal(base_uv + offB, tB);
+    return sA * wA + sB * wB;
+}
+
+// Small sparse splash pops: for a fraction of grid cells, a short-lived steep normal spike at a
+// jittered point - reads as a droplet kicking up a fleck of water where a ring is born. Pure
+// normal-space, the existing specular/gloss chain turns it into a glint for free.
+// cell = grid size in the given coordinate space, rate = fraction of cells that pop.
+float3 SplashPops(float2 uv, float t, float cell, float rate)
+{
+    const float2 grid = floor(uv / cell);
+    const float cycle = floor(t);
+    const float seed = rain_hash(grid + cycle * 0.618);
+    [branch]
+    if (seed > rate)
+        return float3(0.0, 0.0, 0.0);
+
+    // Jittered pop centre inside the cell, alive only for the first ~25% of the cycle.
+    const float2 centre = (grid + float2(rain_hash(grid + cycle), rain_hash(grid + cycle + 17.0))) * cell;
+    const float life = saturate(1.0 - frac(t) * 4.0);
+    const float2 d = uv - centre;
+    const float spike = exp(-dot(d, d) * (900.0 / (cell * cell))) * life;
+    // Tilt direction from the hash so pops do not all lean the same way.
+    const float ang = seed * 40.0;
+    return float3(cos(ang), sin(ang), 0.0) * spike * 2.5;
+}
+
 #ifndef ISAMPLE
 #define ISAMPLE 0
 #endif
@@ -77,24 +127,60 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     if (wetness <= 0.0)
         return float4(normal, 1.0);
 
-    const float upwardWeight = max(0.0, upwardFacing);
-    const float angleFactor = 0.05 * ceil(10.0 * (1.0 - upwardWeight));
-    const float flowTime = worldPosition.y * 0.5 + timers.x * angleFactor;
+    [branch]
+    if (position.z < 0.35)
+    {
+        // ---- Viewmodel branch: its own rain, in VIEW space. -------------------------------
+        // The world coordinates of HUD pixels are stretched by the FOV trick and swing with
+        // every camera turn, which made the streaks crawl over the barrel ("the gun swims").
+        // View-space positions are stable relative to the camera AND the hands, so droplets
+        // sit where they landed. Everything is also much smaller and gentler here: a rifle
+        // collects specks, not the ground-scale ripple rings.
+        const float3 vp = gbd.P;
+        const float t = timers.x * 3.0;
 
-    const float2 splash = SampleSplashNormal(worldPosition.xz, timers.x * 3.0);
-    const float2 flowX = SampleFlowNormal(float2(worldPosition.z * 0.5, flowTime));
-    const float2 flowZ = SampleFlowNormal(float2(worldPosition.x * 0.5, flowTime));
-    const float xWeight = abs(worldNormal.x);
-    const float zWeight = abs(worldNormal.z);
+        // Fine-scale rings, randomised the same way as the world ones.
+        const float2 rings = SplashRingsRandom(vp.xy * 3.0, t);
+        // Thin run-off streaks crawling down the view - view-Y is "down the screen", which is
+        // where water runs on whatever you hold, at any camera pitch.
+        // (view-space Y points UP, so the pattern must march toward negative Y to run down)
+        const float2 run = SampleFlowNormal(float2(vp.x * 4.0, vp.y * 2.0 + timers.x * 0.35));
+        // Frequent tiny pops: droplets striking the weapon. Small cells, short life.
+        const float3 pop = SplashPops(vp.xy, t, 0.14, 0.30);
 
-    float3 water;
-    water.x = splash.x * upwardWeight + flowZ.y * zWeight;
-    water.y = flowX.x * xWeight + flowZ.x * zWeight;
-    water.z = splash.y * upwardWeight + flowX.y * xWeight;
-    water *= wetness;
+        // Perturbation is built directly in view axes (no m_V rotation) and kept SMALL - the
+        // old full-strength world perturbation is what deformed the whole model.
+        float3 water_v = float3(rings * 0.30 + run * 0.35, 0.0) + pop * 0.5;
+        normal = normalize(normal + water_v * wetness);
+        wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
+        // Weaker darkening too: soaked-black gloves centimetres from the eye read as dirt.
+        wetness *= 0.6;
+    }
+    else
+    {
+        // ---- World branch. ----------------------------------------------------------------
+        const float upwardWeight = max(0.0, upwardFacing);
+        const float angleFactor = 0.05 * ceil(10.0 * (1.0 - upwardWeight));
+        const float flowTime = worldPosition.y * 0.5 + timers.x * angleFactor;
 
-    normal = normalize(normal + mul((float3x3)m_V, water));
-    wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
+        const float2 splash = SplashRingsRandom(worldPosition.xz, timers.x * 3.0);
+        const float2 flowX = SampleFlowNormal(float2(worldPosition.z * 0.5, flowTime));
+        const float2 flowZ = SampleFlowNormal(float2(worldPosition.x * 0.5, flowTime));
+        const float xWeight = abs(worldNormal.x);
+        const float zWeight = abs(worldNormal.z);
+
+        // Sparse ground pops where rings are born - a fleck of water kicked up by the drop.
+        const float3 pop = SplashPops(worldPosition.xz, timers.x * 3.0, 0.5, 0.18);
+
+        float3 water;
+        water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight;
+        water.y = flowX.x * xWeight + flowZ.x * zWeight + pop.z;
+        water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight;
+        water *= wetness;
+
+        normal = normalize(normal + mul((float3x3)m_V, water));
+        wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
+    }
 
     // Store the final multiplier so the apply pass only performs bandwidth work.
     const float colorIntensity = max(1.0 - sqrt(wetness), 0.5);
