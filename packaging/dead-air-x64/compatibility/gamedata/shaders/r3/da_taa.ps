@@ -22,9 +22,10 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     float3 current = s_image.Sample(smp_nofilter, tc).rgb;
 
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
-    // skipping keeps cloud motion crisp.
+    // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
+    // target is cleared to zero, so view-z below epsilon means sky.
     [branch]
-    if (is_sky(gbd.P.z))
+    if (gbd.P.z < 0.01)
         return float4(current, 1.0);
 
     // Reproject the view-space position into the previous frame.
