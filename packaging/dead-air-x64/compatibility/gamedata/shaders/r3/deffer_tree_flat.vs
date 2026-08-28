@@ -7,9 +7,6 @@ uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
 uniform float2 c_sun;
 
-// Needs the wind/wave uniforms above, so it comes after them.
-#include "tree_wind.h"
-
 v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
 {
     I.Nh = unpack_D3DCOLOR(I.Nh);
@@ -38,20 +35,15 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     float frac = I.tc.z * consts.x;
     float inten = H * dp;
     float2 result = calc_xz_wave(wind.xz * inten, frac);
-    // Hierarchical wind on top of the stock whole-tree bend - see tree_wind.h.
-    float3 n_obj = unpack_bx2(I.Nh);
-    float3 extra = tree_wind_extra(I.P.xyz, H, mul((float3x3)local_xform, n_obj), frac);
 #ifdef USE_TREEWAVE
     result = 0;
-    extra = 0;
 #endif
-    float4 f_pos = float4(pos.x + result.x + extra.x, pos.y + extra.y, pos.z + result.y + extra.z, 1);
+    float4 f_pos = float4(pos.x + result.x, pos.y, pos.z + result.y, 1);
 
     float3 Pe = mul(m_V, f_pos);
     float hemi = I.Nh.w * local_c_scale.w + local_c_bias.w;
     o.hpos = mul(m_VP, f_pos);
-    // Crown normals rounded outward so the leaf-card heap lights as one volume.
-    o.N = mul((float3x3)local_xform_v, tree_round_normal(n_obj, I.P.xyz));
+    o.N = mul((float3x3)local_xform_v, unpack_bx2(I.Nh));
     o.tcdh = float4((I.tc * consts).xyyy);
     o.position = float4(Pe, hemi);
 

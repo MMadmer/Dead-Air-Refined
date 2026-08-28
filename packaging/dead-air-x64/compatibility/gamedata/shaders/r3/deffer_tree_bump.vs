@@ -7,9 +7,6 @@ uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
 uniform float2 c_sun;
 
-// Needs the wind/wave uniforms above, so it comes after them.
-#include "tree_wind.h"
-
 v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
 {
     I.Nh = unpack_D3DCOLOR(I.Nh);
@@ -37,15 +34,10 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float frac = I.tc.z * consts.x;
     float inten = H * dp;
     float2 result = calc_xz_wave(wind.xz * inten, frac);
-    // Hierarchical wind on top of the stock whole-tree bend - see tree_wind.h. The normal
-    // is kept as authored here: this path carries a TBN for bump mapping (bark), and
-    // rounding one column of it would skew the basis.
-    float3 extra = tree_wind_extra(I.P.xyz, H, mul((float3x3)local_xform, unpack_bx4(I.Nh)), frac);
 #ifdef USE_TREEWAVE
     result = 0;
-    extra = 0;
 #endif
-    float4 w_pos = float4(pos.x + result.x + extra.x, pos.y + extra.y, pos.z + result.y + extra.z, 1);
+    float4 w_pos = float4(pos.x + result.x, pos.y, pos.z + result.y, 1);
     float2 tc = (I.tc * consts).xy;
     float hemi = I.Nh.w * local_c_scale.w + local_c_bias.w;
 
