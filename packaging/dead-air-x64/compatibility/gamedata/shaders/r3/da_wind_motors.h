@@ -25,8 +25,11 @@ float2 da_wind_motors_bend(float2 root_w, float H)
     [loop]
     for (int i = 0; i < count; ++i)
     {
-        const float4 P = (i < 4) ? da_wm_pos0[i] : da_wm_pos1[i - 4];
-        const float4 A = (i < 4) ? da_wm_par0[i] : da_wm_par1[i - 4];
+        // Both ternary sides are evaluated in HLSL, so each index must stay in range on its own.
+        const int lo = min(i, 3);
+        const int hi = max(i - 4, 0);
+        const float4 P = (i < 4) ? da_wm_pos0[lo] : da_wm_pos1[hi];
+        const float4 A = (i < 4) ? da_wm_par0[lo] : da_wm_par1[hi];
         [branch]
         if (P.w <= 0.0f || abs(A.x) <= 0.001f)
             continue;
