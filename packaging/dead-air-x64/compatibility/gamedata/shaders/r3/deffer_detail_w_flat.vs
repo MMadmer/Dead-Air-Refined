@@ -1,4 +1,5 @@
 #include "common.h"
+#include "da_wind_field.h"
 
 uniform float4 		consts; // {1/quant,1/quant,diffusescale,ambient}
 // Fade band for the grass shadow: x = start, y = end, metres from the camera.
@@ -71,7 +72,17 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	// A small floor keeps sheltered air from being perfectly dead.
 	float	shelter	= saturate((c0.w - 0.10f) * 1.8f);
 	inten	*= 0.05f + 0.95f * shelter;
+	// Local flow from the travelling gust field, evaluated at the TUFT ROOT (m0.w/m2.w are the
+	// instance world translation) so one tuft always moves as a whole. This is what breaks the
+	// lockstep: each tuft sways with the flow that is passing over IT right now.
+	float2	flow	= da_wind_field_eval(float2(m0.w, m2.w));
+	inten	*= flow.x;
 	float2 	result	= calc_xz_wave	(dir2D.xz*inten,frac);
+	// Gust lean: inside a passing tongue the grass does not just wave harder - it lies DOWN
+	// along the wind, and the front of that flattening visibly rolls across the meadow.
+	// Scaled by height and shelter like the wave itself; the arc-length drop below then pulls
+	// the tip down instead of stretching the blade.
+	result	+= dir2D.xz * (H * flow.y * (0.05f + 0.95f * shelter) * 1.4f);
 	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
 	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the
 	// length restores a bend.

@@ -359,6 +359,19 @@ static class cl_da_puddle_wind : public R_constant_setup
     }
 } binder_da_puddle_wind;
 
+// The travelling gust-field for vegetation vertex shaders: xy = wrapped world-space scroll
+// offset of the noise field (accumulated downwind on the CPU), z = the slow strength envelope
+// so the field can scale itself, w = gustiness for the lean term.
+static class cl_da_wind_field : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, env.eff_wind_field_ofs.x, env.eff_wind_field_ofs.y,
+            env.eff_wind_norm, env.eff_wind_gust);
+    }
+} binder_da_wind_field;
+
 static class cl_various_rain : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -506,6 +519,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("screen_res", &binder_screen_res);
     r_Constant("da_aref_u", &binder_da_aref);
     r_Constant("da_puddle_wind", &binder_da_puddle_wind);
+    r_Constant("da_wind_field", &binder_da_wind_field);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

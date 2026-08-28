@@ -657,6 +657,18 @@ void CEnvironment::UpdateEffectiveWind()
     const float wander = (wind_vnoise(t * (1.f / 45.f) + 41.7f) * 2.f - 1.f) * wander_amp +
         (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(5.f);
     eff_wind_dir = CurrentEnv.wind_direction + wander;
+
+    // Spatial gust field scroll (the Ghost of Tsushima scheme: constant heading, magnitude
+    // varied place-to-place by travelling noise). Gust fronts ride downwind at a speed that
+    // grows with the weather - light air drifts its tongues, a storm drives them. The
+    // accumulator wraps at the field repeat length (64 lattice cells x 40 m; the shader hash
+    // is periodic over the same 64), so precision never decays over a long session.
+    const float front_speed = 5.f + 9.f * base;
+    eff_wind_field_ofs.x += _sin(eff_wind_dir) * front_speed * delta;
+    eff_wind_field_ofs.y += _cos(eff_wind_dir) * front_speed * delta;
+    constexpr float field_repeat = 40.f * 64.f;
+    eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
+    eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
 }
 
 void CEnvironment::OnFrame()

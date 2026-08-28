@@ -1,5 +1,6 @@
 #include "common.h"
 #include "tree_instance.h"
+#include "da_wind_field.h"
 
 uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
@@ -34,7 +35,12 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
     float inten = H * dp;
-    float2 result = calc_xz_wave(wind.xz * inten, frac);
+    // Local flow from the travelling gust field at the TREE ROOT: a gust tongue leans this
+    // crown while the next tree over stands in a lull. Amplitude rides the field, the lean
+    // term presses the crown downwind as the front passes.
+    float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
+    float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
+    result += wind.xz * (H * flow.y * 0.5f);
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

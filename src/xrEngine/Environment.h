@@ -302,6 +302,12 @@ public:
     float eff_wind_gust{};       // 0..1 gustiness right now (blowout override flows through)
     float eff_wind_gust_smooth{};// low-passed gust for slow mode lerps (grass swing set)
 
+    // Scroll accumulator of the SPATIAL gust field: a 2D noise field of gust tongues that
+    // travels downwind, evaluated per grass tuft / tree root in the vertex shaders. This is
+    // what makes a gust front ROLL across a meadow instead of the whole field swaying in
+    // lockstep. Wrapped to the field's repeat length (2560 m) so precision never degrades.
+    Fvector2 eff_wind_field_ofs{};
+
     void UpdateEffectiveWind();
 
     // wind blast params
