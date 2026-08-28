@@ -36,19 +36,10 @@ static u16 facetable[16][3] =
 };
 } // namespace accum_direct
 
-// PCF kernel controls and the far-shadow distance fade, per sun cascade. The near cascade
-// keeps the stock kernel; the middle takes half the growth so the cascade seam does not
-// read as a step; the far one takes it in full - there a screen pixel covers dozens of
-// shadow texels and the 4-tap filter degenerates into a point probe. da_sun_far_fade is
-// read by accum_sun_far.ps only; for near/middle it silently goes nowhere.
-static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 sub_phase)
+// The far-shadow distance fade (r__sun_shadow_fade). Read by accum_sun_far.ps only; for
+// near/middle the constant silently goes nowhere.
+static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 /*sub_phase*/)
 {
-    const float k = float(ps_r__shadow_kernel_far);
-    const float da_kernel = (SE_SUN_NEAR == sub_phase)   ? 1.f
-                          : (SE_SUN_MIDDLE == sub_phase) ? (1.f + (k - 1.f) * 0.5f)
-                                                         : k;
-    cmd_list.set_c("da_shadow_kernel", da_kernel, k,
-        float(Device.dwFrame & 7) * 0.125f, float(ps_r__shadow_rotate));
     cmd_list.set_c("da_sun_far_fade", 0.75f * ps_r__sun_shadow_fade, ps_r__sun_shadow_fade, 0.f, 0.f);
 }
 

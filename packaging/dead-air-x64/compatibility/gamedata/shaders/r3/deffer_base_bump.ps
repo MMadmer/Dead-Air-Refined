@@ -1,8 +1,4 @@
 #include "common.h"
-// Repeat-breaking is allowed ONLY for shaders whose unwrap is tiled - impostors and props
-// use ATLASES, and a random shift there grabs a piece of the neighbouring cell (verified on
-// the barrel: mush). The define must precede sload.h.
-#define DA_HEX_ALLOW 1
 #include "sload.h"
 
 f_deffer main ( p_bumped I )
@@ -34,13 +30,6 @@ f_deffer main ( p_bumped I )
 #endif
 
 	S.base.xyz = Vibrance(S.base.xyz, 1.4);
-
-	// Specular antialiasing: damp the peak where the normal no longer resolves within a
-	// pixel. At r__spec_aa 0 the factor is one. Debug: 1 = the factor, 2 = inverted.
-	float da_saa = da_spec_aa_factor( Ne );
-	S.gloss *= da_saa;
-	if (da_spec_aa.w > 0.5h)
-		S.base.xyz = (da_spec_aa.w < 1.5h) ? da_saa.xxx : (1.0h - da_saa).xxx;
 
 	// Relief self-shadow - into the ALBEDO. Without steep parallax the factor is one and the
 	// line changes nothing. Hemi was the first attempt and showed NOTHING: hemi feeds only

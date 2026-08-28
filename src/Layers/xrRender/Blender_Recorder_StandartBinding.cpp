@@ -327,18 +327,6 @@ static class cl_screen_res : public R_constant_setup
     }
 } binder_screen_res;
 
-// Hex repeat-breaking permission for THIS surface. Two constant objects suffice: the value
-// takes exactly two states, no per-material object (as dt_params has) is needed.
-static class cl_hex_allow : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, 1.f, 0.f, 0.f, 0.f); }
-} binder_hex_allow;
-
-static class cl_hex_deny : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, 0.f, 0.f, 0.f, 0.f); }
-} binder_hex_deny;
-
 static class cl_various : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -507,14 +495,6 @@ void CBlender_Compile::SetMapping()
     // anyway.
     if (detail_scaler)
         r_Constant("dt_params", detail_scaler);
-
-    // Hex repeat-breaking: allowed for THIS surface or not. A per-material CONSTANT, not a
-    // shader define: blender-supplied defines never reach the shader cache name
-    // (r4_shaders.cpp appends options past sh_name), so a define would silently collapse
-    // all materials onto one compiled variant. Bound ALWAYS, by either branch - an unbound
-    // constant would keep the previous draw's value and leak the permission across surfaces.
-    r_Constant("da_hex_mat", bUseHexTiling ? static_cast<R_constant_setup*>(&binder_hex_allow)
-                                           : static_cast<R_constant_setup*>(&binder_hex_deny));
 
     // other common
     for (u32 it = 0; it < RImplementation.Resources->v_constant_setup.size(); it++)

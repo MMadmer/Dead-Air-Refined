@@ -128,29 +128,14 @@ const u32 LUMINANCE_size = 16;
 #define SE_SUN_RAIN_SMAP    5
 
 extern float ps_r2_gloss_factor;
-extern float ps_r2_gloss_min;
-
-// Floor under a light's specular response (r2_gloss_min, from monolith/OGSR where shader
-// packs use it as the roughness control of their pseudo-PBR). Without a floor a dim light
-// source gives near-zero specular and the highlight flickers in and out. 0 = stock.
 IC float u_diffuse2s(float x, float y, float z)
 {
     float v = (x + y + z) / 3.f;
-    return ps_r2_gloss_min + ps_r2_gloss_factor * ((v < 1) ? powf(v, 2.f / 3.f) : v);
+    return ps_r2_gloss_factor * ((v < 1) ? powf(v, 2.f / 3.f) : v);
 }
 
 IC float u_diffuse2s(Fvector3& c)
 {
     return u_diffuse2s(c.x, c.y, c.z);
-}
-
-// The same computation WITHOUT the floor - only for "is this pass needed at all" gates.
-// The sun phase activates on u_diffuse2s(sun colour) > EPS; with a non-zero floor that
-// would be true ALWAYS and the sun pass would run in pitch darkness. The floor is about
-// highlight brightness, not about whether the sun shines.
-IC float u_diffuse2s_nofloor(float x, float y, float z)
-{
-    float v = (x + y + z) / 3.f;
-    return ps_r2_gloss_factor * ((v < 1) ? powf(v, 2.f / 3.f) : v);
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -15,9 +15,6 @@
 #include "Layers/xrRender/blenders/dx11RainBlender.h"
 
 #include "Layers/xrRender/blenders/dx11MinMaxSMBlender.h"
-// The sun-shafts indoor gate raycasts against static level geometry.
-#include "xrEngine/IGame_Level.h"
-#include "xrCDB/xr_area.h"
 #if defined(USE_DX11)
 #    include "Layers/xrRender/blenders/dx11HDAOCSBlender.h"
 #    include "Layers/xrRender/blenders/blender_hud_shadow.h"
@@ -850,65 +847,6 @@ void CRenderTarget::increment_light_marker(CBackend& cmd_list)
         reset_light_marker(cmd_list, true);
 }
 
-// "Something over the camera" - the gate for r__sun_shafts_indoor. A SHORT VERTICAL ray
-// against static geometry, the same trick rain uses to cut its drops (CEffect_Rain), so
-// the cost and reliability are proven. Vertical on purpose: a first version cast towards
-// the sun for 50 m and the whole map read as "covered" - the ray caught slopes and crowns
-// AHEAD, not overhead. 25 m clears any hangar without touching far hills. Cached per
-// frame; with the gate off (indoor 0) the collision query never runs. The binary result is
-// smoothed (~0.25 s) - production god-ray implementations fade, they never flip.
-static BOOL s_da_shafts_covered = FALSE;
-static u32 s_da_shafts_covered_frame = u32(-1);
-static float s_da_shafts_gate = 1.f;
-
-// Read by the sun_shafts_intensity binder in r2.cpp.
-float da_sun_shafts_gate()
-{
-    return s_da_shafts_gate;
-}
-
-static void da_sun_shafts_update_covered()
-{
-    if (s_da_shafts_covered_frame == Device.dwFrame)
-        return;
-    s_da_shafts_covered_frame = Device.dwFrame;
-
-    s_da_shafts_covered = FALSE;
-    if (ps_r__sun_shafts_indoor >= 0.5f && ps_r__sun_shafts_mod && g_pGameLevel)
-    {
-        // Ray 1: straight up 25 m - roofs, canopies, caves.
-        static const Fvector up = {0.f, 1.f, 0.f};
-        collide::rq_result RQ;
-        s_da_shafts_covered = g_pGameLevel->ObjectSpace.RayPick(Device.vCameraPosition, up, 25.f,
-                                  collide::rqtStatic, RQ, g_pGameLevel->CurrentViewEntity())
-            ? TRUE
-            : FALSE;
-
-        // Ray 2: towards the sun 15 m - tree crowns overhead ("rays in the shade of a
-        // tree"). Short on purpose; and skipped at a low sun (below ~15 deg) where the
-        // near-horizontal ray would catch fences and walls nearby.
-        if (!s_da_shafts_covered)
-        {
-            Fvector to_sun = g_pGamePersistent->Environment().CurrentEnv.sun_dir;
-            to_sun.invert().normalize_safe(); // sun_dir points DOWN along the light
-            if (to_sun.y > 0.25f)
-            {
-                collide::rq_result RQ2;
-                s_da_shafts_covered = g_pGameLevel->ObjectSpace.RayPick(Device.vCameraPosition, to_sun, 15.f,
-                                          collide::rqtStatic, RQ2, g_pGameLevel->CurrentViewEntity())
-                    ? TRUE
-                    : FALSE;
-            }
-        }
-    }
-
-    // Gate target: switch/gate off or roof overhead - effect runs; open ground - to zero.
-    const float target =
-        (!ps_r__sun_shafts_mod || ps_r__sun_shafts_indoor < 0.5f || s_da_shafts_covered) ? 1.f : 0.f;
-    const float k = _min(1.f, Device.fTimeDelta * 5.f);
-    s_da_shafts_gate += (target - s_da_shafts_gate) * k;
-}
-
 bool CRenderTarget::need_to_render_sunshafts()
 {
     if (!(RImplementation.o.advancedpp && ps_r_sun_shafts))
@@ -916,19 +854,11 @@ bool CRenderTarget::need_to_render_sunshafts()
 
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        // The SAME value the shader receives, or the gate and the shader drift apart.
-        const float fValue = da_sun_shafts_value(env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value);
+        const float fValue = env.m_fSunShaftsIntensity;
         // TODO: add multiplication by sun color here
         if (fValue < 0.0001)
             return false;
     }
-
-    // The pass will definitely run - the right frame to refresh the roof raycast.
-    da_sun_shafts_update_covered();
-
-    // The under-roof gate has settled at zero - skip the pass entirely.
-    if (da_sun_shafts_gate() < 0.01f)
-        return false;
 
     return true;
 }

@@ -231,8 +231,6 @@ float ps_r__fog_max = 0.95f;         // density ceiling: keeps hill silhouettes 
 float ps_r__tonemap_hue = 1.f;
 float ps_r__tonemap_desat = 8.f;
 float ps_r__tonemap_white = 1.7f;
-// Runtime AO strength: occ = pow(occ, power) in the combine. 1 = stock, applies live.
-float ps_r__ssao_power = 1.f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -315,16 +313,6 @@ int ps_r__puddles_refl = 1; // world reflections in puddles (own fullscreen pass
 float ps_r__puddles_refl_power = 1.5f; // tuned in game and approved
 float ps_r__puddles_facing = 0.10f; // fresnel floor so top-down puddles keep a reflection
 float ps_r__puddles_sky = 0.15f; // sky share when the ray-march found no geometry
-// Sun shafts controls. All-neutral defaults keep DA's weather-driven shafts untouched;
-// the master at 0 kills the pass entirely (the old checkbox left shafts raining through).
-int ps_r__sun_shafts_mod = 1;
-float ps_r__sun_shafts_boost = 1.f;
-float ps_r__sun_shafts_min = 0.f;
-// 1 = shafts only when something is overhead (short vertical raycast, as rain does);
-// binary result is smoothed so doorways do not flip the picture.
-float ps_r__sun_shafts_indoor = 0.f;
-// Share of horizon-sky colour in the shaft tint (0 = stock normalized hemi colour).
-float ps_r__shafts_sky = 0.f;
 // Steep parallax (POM) family, sibling's in-game tuned values. The stock numbers were
 // hardcoded in sload.h (25/5 samples, 0.013 depth, 8..12 m fade).
 float ps_r__parallax_start = 8.f; // metres: full-strength relief up to here
@@ -342,29 +330,6 @@ int ps_r__parallax_shadow_samples = 8;
 int ps_r__parallax_force = 1;
 // Debug: 1 = self-shadow, 2 = height at hit, 3 = every pixel the branch reached.
 int ps_r__parallax_debug = 0;
-// Specular antialiasing (Toksvig). Present but off by default - damping is a visible look
-// change the sibling left unproven in game; the ceiling/power are Filament's defaults.
-float ps_r__spec_aa = 0.f;
-float ps_r__spec_aa_max = 0.15f;
-float ps_r__spec_aa_power = 24.f;
-int ps_r__spec_aa_debug = 0;
-// Hex-grid repeat breaking (Mikkelsen 2022), three samples instead of one per map. Only
-// materials listed in da_hex_tiling.ltx participate (tiled unwraps only - a random shift
-// on an atlas grabs the neighbouring cell). Off by default: enable deliberately.
-int ps_r__hex_tiling = 0;
-float ps_r__hex_scale = 1.f;
-float ps_r__hex_rot = 0.f;
-float ps_r__hex_contrast = 0.5f;
-// PCF kernel width for the FAR sun cascade (near stays 1, middle takes half the growth).
-// Far away one screen pixel covers dozens of shadow texels and the 4-tap probe degenerates
-// into a point sample of high-frequency foliage; widening the far kernel trades that noise
-// for softness. 1 = stock. Wider also softens legitimate far shadow edges - the sibling
-// ships 1 for the same reason, so the ladder stays a knob, not a default.
-int ps_r__shadow_kernel_far = 1;
-// Rotate the 4-tap PCF square by a per-pixel hash angle, phase-stepped per frame. Turns the
-// hard on/off flip of a shadow edge into fine dither. The per-frame phase needs a temporal
-// filter to average - without one it reads as edge noise, so default off.
-int ps_r__shadow_rotate = 0;
 // Distance (metres from camera) where the far sun shadow has fully dissolved into light.
 // Replaces the stock map-edge fade whose border MOVES with every camera turn (the
 // travelling shadow "wedge"). 140 completes before the 160 m far cascade edge.
@@ -376,14 +341,6 @@ int ps_r__dbg_sun_cascades = 0;
 // Jupiter measure: 585 effects / 0.72 ms unlimited vs 434 / 0.53 ms at 200 m.
 int ps_r__particle_dist = 150;
 // Terrain far-field family (deffer_impl_flat.ps). Every zero = stock path.
-// Detail mip bias for the terrain's nine detail samples. Stock 0: negative sharpens far
-// detail at a shimmer cost - the sibling runs -2 under a temporal upscaler that eats the
-// shimmer; without one we keep stock and leave the knob for those who want it.
-float ps_r__detail_mipbias = 0.f;
-// Distance (m) where the terrain detail NORMAL fully fades to the vertex normal. The
-// terrain normal is built entirely from detail maps whose pattern passes Nyquist within
-// tens of metres and turns into per-pixel ripple on grazing sun. 0 = never fades (stock).
-float ps_r__detail_nfade = 0.f;
 // Far ground brightness variation: mips average the detail into one flat fill; a coarse
 // re-read keeps large patches alive to the horizon. Sibling's in-game tuned values.
 float ps_r__macro_var = 0.5f;
@@ -398,8 +355,6 @@ float ps_r__macro_relief = 0.1f;
 float ps_r__terrain_blend = 1.f;
 // Mask uv jitter against visible low-res mask gradients at distance (mask uv units).
 float ps_r__mask_jitter = 0.005f;
-// Coarse four-layer far detail. The sibling's tuning rejected the look - kept working, off.
-float ps_r__macro_detail = 0.f;
 // Foliage specular multiplier (deffer_base_aref_bump.ps). The engine's specular hits the
 // combine as C.www*L.rgb*5 - additively WHITE - which lays a bleached film on conifer crowns
 // under direct sun; no tint fixes added white light. Sibling tuned it to zero in game.
@@ -417,13 +372,6 @@ float ps_r__foliage_debleach = 0.6f;
 float ps_r__lod_hemi = 2.f;
 float ps_r__lod_sat = 2.f;
 float ps_r__lod_bright = 1.f;
-// Vegetation sway scale, 0 = frozen.
-float ps_r__wind_scale = 1.f;
-// 0 = grass and trees stand still in the SHADOW passes while swaying on screen. A shadow
-// map is a hard edge on a texel boundary; a blade moving a fraction of a texel flips whole
-// shaded pixels between lit and unlit every frame - the colour noise on metal (narrow
-// specular lobes answer illumination sharply). 1 = stock: shadows sway with the geometry.
-int ps_r__wind_shadow = 1;
 float ps_r__ssaDONTSORT = 32.f; // RO
 float ps_r__ssaHZBvsTEX = 96.f; // RO
 
@@ -593,8 +541,6 @@ xr_token ext_quality_token[] = {{"qt_off", 0}, {"qt_low", 1}, {"qt_medium", 2},
 
 //- Mad Max
 float ps_r2_gloss_factor = 4.0f;
-// Specular floor for light sources (u_diffuse2s in r2_types.h). 0 = stock.
-float ps_r2_gloss_min = 0.0f;
 //- Mad Max
 
 //AVO: detail draw radius
@@ -1208,7 +1154,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__tonemap_hue", &ps_r__tonemap_hue, 0.f, 1.f);
     CMD4(CCC_Float, "r__tonemap_desat", &ps_r__tonemap_desat, 1.f, 32.f);
     CMD4(CCC_Float, "r__tonemap_white", &ps_r__tonemap_white, 0.f, 8.f);
-    CMD4(CCC_Float, "r__ssao_power", &ps_r__ssao_power, 0.25f, 4.f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list
@@ -1272,7 +1217,6 @@ void xrRender_initconsole()
 
     //- Mad Max
     CMD4(CCC_Float, "r2_gloss_factor", &ps_r2_gloss_factor, .0f, 10.f);
-    CMD4(CCC_Float, "r2_gloss_min", &ps_r2_gloss_min, 0.f, 1.f);
 //- Mad Max
 
 #ifdef DEBUG
@@ -1402,8 +1346,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__grass_tint", &ps_r__grass_tint, 0.f, 1.f);
     CMD4(CCC_Float, "r__grass_tint_scale", &ps_r__grass_tint_scale, 1.f, 64.f);
     CMD4(CCC_Float, "r__grass_tint_base", &ps_r__grass_tint_base, 0.f, 4.f);
-    CMD4(CCC_Float, "r__wind_scale", &ps_r__wind_scale, 0.f, 4.f);
-    CMD4(CCC_Integer, "r__wind_shadow", &ps_r__wind_shadow, 0, 1);
     CMD4(CCC_Float, "r__lod_hemi", &ps_r__lod_hemi, 0.f, 2.f);
     CMD4(CCC_Float, "r__lod_sat", &ps_r__lod_sat, 0.f, 3.f);
     CMD4(CCC_Float, "r__lod_bright", &ps_r__lod_bright, 0.2f, 2.f);
@@ -1429,11 +1371,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__puddles_refl_power", &ps_r__puddles_refl_power, 0.f, 4.f);
     CMD4(CCC_Float, "r__puddles_facing", &ps_r__puddles_facing, 0.f, 1.f);
     CMD4(CCC_Float, "r__puddles_sky", &ps_r__puddles_sky, 0.f, 1.f);
-    CMD4(CCC_Integer, "r__sun_shafts_mod", &ps_r__sun_shafts_mod, 0, 1);
-    CMD4(CCC_Float, "r__sun_shafts_boost", &ps_r__sun_shafts_boost, 0.f, 8.f);
-    CMD4(CCC_Float, "r__sun_shafts_min", &ps_r__sun_shafts_min, 0.f, 1.f);
-    CMD4(CCC_Float, "r__sun_shafts_indoor", &ps_r__sun_shafts_indoor, 0.f, 1.f);
-    CMD4(CCC_Float, "r__shafts_sky", &ps_r__shafts_sky, 0.f, 1.f);
     CMD4(CCC_Float, "r__parallax_start", &ps_r__parallax_start, 0.f, 300.f);
     CMD4(CCC_Float, "r__parallax_stop", &ps_r__parallax_stop, 0.f, 300.f);
     CMD4(CCC_Float, "r__parallax_depth", &ps_r__parallax_depth, 0.f, 0.2f);
@@ -1443,21 +1380,9 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__parallax_shadow_samples", &ps_r__parallax_shadow_samples, 2, 32);
     CMD4(CCC_Integer, "r__parallax_force", &ps_r__parallax_force, 0, 1);
     CMD4(CCC_Integer, "r__parallax_debug", &ps_r__parallax_debug, 0, 3);
-    CMD4(CCC_Float, "r__spec_aa", &ps_r__spec_aa, 0.f, 64.f);
-    CMD4(CCC_Float, "r__spec_aa_max", &ps_r__spec_aa_max, 0.f, 1.f);
-    CMD4(CCC_Float, "r__spec_aa_power", &ps_r__spec_aa_power, 1.f, 256.f);
-    CMD4(CCC_Integer, "r__spec_aa_debug", &ps_r__spec_aa_debug, 0, 2);
-    CMD4(CCC_Integer, "r__hex_tiling", &ps_r__hex_tiling, 0, 1);
-    CMD4(CCC_Float, "r__hex_scale", &ps_r__hex_scale, 0.05f, 16.f);
-    CMD4(CCC_Float, "r__hex_rot", &ps_r__hex_rot, 0.f, 1.f);
-    CMD4(CCC_Float, "r__hex_contrast", &ps_r__hex_contrast, 0.05f, 0.95f);
-    CMD4(CCC_Integer, "r__shadow_kernel_far", &ps_r__shadow_kernel_far, 1, 16);
-    CMD4(CCC_Integer, "r__shadow_rotate", &ps_r__shadow_rotate, 0, 1);
     CMD4(CCC_Float, "r__sun_shadow_fade", &ps_r__sun_shadow_fade, 20.f, 500.f);
     CMD4(CCC_Integer, "r__dbg_sun_cascades", &ps_r__dbg_sun_cascades, 0, 1);
     CMD4(CCC_Integer, "r__particle_dist", &ps_r__particle_dist, 0, 1000);
-    CMD4(CCC_Float, "r__detail_mipbias", &ps_r__detail_mipbias, -2.f, 4.f);
-    CMD4(CCC_Float, "r__detail_normal_fade", &ps_r__detail_nfade, 0.f, 500.f);
     CMD4(CCC_Float, "r__macro_var", &ps_r__macro_var, 0.f, 1.f);
     CMD4(CCC_Float, "r__macro_var_scale", &ps_r__macro_var_scale, 2.f, 64.f);
     CMD4(CCC_Float, "r__macro_var_start", &ps_r__macro_var_start, 0.f, 300.f);
@@ -1466,7 +1391,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__macro_relief", &ps_r__macro_relief, 0.f, 2.f);
     CMD4(CCC_Float, "r__terrain_blend", &ps_r__terrain_blend, 0.f, 1.f);
     CMD4(CCC_Float, "r__mask_jitter", &ps_r__mask_jitter, 0.f, 0.05f);
-    CMD4(CCC_Float, "r__macro_detail", &ps_r__macro_detail, 0.f, 1.f);
     CMD4(CCC_Float, "r2_mblur_value", &ps_r2_mblur, 0.f, 1.f);
 
     //float ps_r2_dof_near = 0.f; // 0.f

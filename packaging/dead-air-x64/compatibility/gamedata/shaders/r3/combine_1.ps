@@ -16,8 +16,6 @@ uniform	Texture2D					s_half_depth;
 uniform float4 da_fog;
 // x = density ceiling, y = layer reference altitude, z = horizon flattening of the sky sample.
 uniform float4 da_fog2;
-// x = runtime AO strength (r__ssao_power); 1 = stock.
-uniform float4 da_ao;
 
 //#include "ssao_blur.ps"
 
@@ -177,9 +175,6 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 //	hdiffuse*=(D.rgb*0.8 + 0.2h);	// rise texture contrast for diffuse lighting
 //	hdiffuse = 0.8;
 //	hdiffuse *= (occ*(D.rgb + .1h));
-	// Runtime AO strength (r__ssao_power): power of 1 skips the pow and keeps stock exactly.
-	if ( da_ao.x != 1.0h )
-		occ = pow( saturate(occ), da_ao.x );
 	hdiffuse *= occ;
 	hspecular *= occ;
 

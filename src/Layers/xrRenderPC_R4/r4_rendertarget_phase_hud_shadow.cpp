@@ -33,8 +33,7 @@ void CRender::render_hud_shadow()
     light* sun = (light*)Lights.sun._get();
     if (!sun)
         return;
-    // nofloor - see render_phase_sun.cpp.
-    if (u_diffuse2s_nofloor(sun->color.r, sun->color.g, sun->color.b) <= EPS)
+    if (u_diffuse2s(sun->color.r, sun->color.g, sun->color.b) <= EPS)
         return;
 
     const u32 context_id = alloc_context();

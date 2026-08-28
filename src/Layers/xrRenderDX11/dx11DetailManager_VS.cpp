@@ -34,18 +34,6 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);
 
-    // r__wind_shadow 0: grass stands still in the SHADOW passes while swaying on screen.
-    // A shadow map is a hard edge on a texel boundary; a blade moving by a fraction of a
-    // texel flips whole shaded pixels between lit and unlit every frame, which narrow
-    // specular lobes turn into colour noise on metal. Every frustum-culled detail pass
-    // today is a shadow pass (sun cascades, lamp smaps) - the main pass passes none.
-    const bool shadow_pass = frustum != nullptr;
-    Fvector4 wind_zero;
-    wind_zero.set(0.f, 0.f, 0.f, 0.f);
-    const bool freeze_wind = shadow_pass && ps_r__wind_shadow == 0;
-    const Fvector4& dir1 = freeze_wind ? wind_zero : m_wind_dir1;
-    const Fvector4& dir2 = freeze_wind ? wind_zero : m_wind_dir2;
-
     // Wave0
     float scale = 1.f / float(quant);
     Fvector4 wave;
@@ -60,7 +48,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir1); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	1, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir1, 1, 0, collectStats, frustum);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir1, 1, 0, collectStats, frustum);
 
     // Wave1
     // wave.set				(1.f/3.f,		1.f/7.f,	1.f/5.f,	Device.fTimeGlobal*swing_current.speed);
@@ -69,7 +57,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir2); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	2, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), dir2, 2, 0, collectStats, frustum);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 2, 0, collectStats, frustum);
 
     // Still
     consts.set(scale, scale, scale, 1.f);

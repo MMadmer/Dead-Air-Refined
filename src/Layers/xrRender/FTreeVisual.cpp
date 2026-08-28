@@ -124,7 +124,7 @@ struct FTreeVisual_setup
 
         wind.set(_sin(tm_rot), 0, _cos(tm_rot), 0);
         wind.normalize();
-        wind.mul(desc.m_fTreeAmplitude * ps_r__wind_scale); // dir1*amplitude
+        wind.mul(desc.m_fTreeAmplitude); // dir1*amplitude
 
         scale = 1.f / float(FTreeVisual_quant);
 
@@ -158,13 +158,7 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_m_xform(xform); // matrix
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0); // consts/scale
     cmd_list.tree.set_wave(tvs.wave); // wave
-    // r__wind_shadow 0: foliage stands still in the shadow maps while swaying on screen -
-    // a swaying shadow edge flips whole shaded pixels per frame, which reads as colour
-    // noise on specular surfaces. Every dsgraph call site passes phase==SMAP here.
-    Fvector4 wind = tvs.wind;
-    if (ps_r__wind_shadow == 0 && use_fast_geo)
-        wind.set(0.f, 0.f, 0.f, 0.f);
-    cmd_list.tree.set_wind(wind); // wind
+    cmd_list.tree.set_wind(tvs.wind); // wind
 #if RENDER != R_R1
     s *= 1.3333f;
     cmd_list.tree.set_c_scale(s * c_scale.rgb.x, s * c_scale.rgb.y, s * c_scale.rgb.z, s * c_scale.hemi); // scale
@@ -181,16 +175,12 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 #ifdef USE_DX11
 bool FTreeVisual::GetInstancedDraw(float /*LOD*/, FTreeVisualInstancedDraw& /*draw*/) { return false; }
 
-void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list, const bool shadow_pass)
+void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
 {
     FTreeVisual_setup& tvs = GetTreeVisualSetup();
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0);
     cmd_list.tree.set_wave(tvs.wave);
-    // Same shadow-pass wind freeze as the scalar path in Render.
-    Fvector4 wind = tvs.wind;
-    if (ps_r__wind_shadow == 0 && shadow_pass)
-        wind.set(0.f, 0.f, 0.f, 0.f);
-    cmd_list.tree.set_wind(wind);
+    cmd_list.tree.set_wind(tvs.wind);
 }
 
 void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& data) const

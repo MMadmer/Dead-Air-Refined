@@ -36,41 +36,14 @@ float modify_light( float light )
 //////////////////////////////////////////////////////////////////////////////////////////
 // hardware + PCF
 //////////////////////////////////////////////////////////////////////////////////////////
-// PCF kernel controls, set per sun cascade from C++ (accum_direct).
-// x = cascade kernel floor (near 1, middle half-way, far = r__shadow_kernel_far),
-// y = ceiling for the per-pixel footprint scale, z = per-frame rotation phase,
-// w = rotation enable (r__shadow_rotate). All-defaults reproduce the stock kernel exactly.
-uniform float4 da_shadow_kernel;
-
-float sample_hw_pcf (float4 tc, float4 shift, float kscale)
+float sample_hw_pcf (float4 tc,float4 shift)
 {
 	static const float 	ts = KERNEL / float(SMAP_size);
 
 	tc.xyz 	/= tc.w;
-	tc.xy 	+= shift.xy * ts * max(da_shadow_kernel.x, 1.0f) * kscale;
+	tc.xy 	+= shift.xy * ts;
 
 	return s_smap.SampleCmpLevelZero( smp_smap, tc.xy, tc.z).x;
-}
-
-// COMPATIBILITY: the old two-argument form. Shaders living in the game ARCHIVES call this
-// signature (accum_volumetric_sun.ps among them) and cannot be updated from here; without
-// the overload they fail to compile and the engine silently substitutes a stub. One = the
-// exact previous behaviour, kernel unscaled.
-float sample_hw_pcf (float4 tc, float4 shift)
-{
-	return sample_hw_pcf( tc, shift, 1.0f );
-}
-
-// PCF kernel scale by PIXEL FOOTPRINT: how many shadow-map texels one screen pixel covers,
-// from the derivatives of the projected uv. Near ~1 (kernel untouched, shadow stays sharp);
-// far it grows - there a pixel covers dozens of texels and the 4-tap probe degenerates into
-// a point sample of high-frequency foliage patterns. Clamped by da_shadow_kernel.y
-// (r__shadow_kernel_far); at the default 1 the range is [1,1] - stock behaviour.
-float da_pcf_footprint (float4 tc)
-{
-	float3 p = tc.xyz / tc.w;
-	float  f = max(length(ddx(p.xy)), length(ddy(p.xy))) * float(SMAP_size);
-	return clamp(f, 1.0f, max(da_shadow_kernel.y, 1.0f));
 }
 
 float sample_hw_pcf_projected(float3 tc, float2 shift)
@@ -82,31 +55,12 @@ float sample_hw_pcf_projected(float3 tc, float2 shift)
 
 #define GS2 3
 
-// Rotated PCF (r__shadow_rotate): the four probes sit on the CORNERS of a square, so the
-// on/off flip of a shadow edge lands the same way every frame and reads as a hard step.
-// Rotating the square by a per-pixel hash angle turns the step into fine stable dither.
-// The hash comes from the shadow uv itself - neighbouring screen pixels land on different
-// texels - so no screen coordinates are needed here. The frame phase arrives in .z.
 float shadow_hw( float4 tc )
 {
-	float	ks		= da_pcf_footprint( tc );
-
-	// Unit rotation = stock behaviour: knob at zero, picture identical.
-	float2	rot		= float2( 1.0f, 0.0f );
-	[branch] if ( da_shadow_kernel.w > 0.5f )
-	{
-		float3	p	= tc.xyz / tc.w;
-		float	h	= frac( sin( dot( p.xy * float(SMAP_size), float2( 12.9898f, 78.233f ) ) ) * 43758.5453f );
-		float	a	= ( h + da_shadow_kernel.z ) * 6.2831853f;
-		sincos( a, rot.y, rot.x );
-	}
-
-	const float c = rot.x, s = rot.y;
-
-  	float	s0		= sample_hw_pcf( tc, float4( -c + s, -s - c, 0, 0), ks );
-  	float	s1		= sample_hw_pcf( tc, float4( +c + s, +s - c, 0, 0), ks );
-  	float	s2		= sample_hw_pcf( tc, float4( -c - s, -s + c, 0, 0), ks );
-  	float	s3		= sample_hw_pcf( tc, float4( +c - s, +s + c, 0, 0), ks );
+  	float	s0		= sample_hw_pcf( tc, float4( -1, -1, 0, 0) );
+  	float	s1		= sample_hw_pcf( tc, float4( +1, -1, 0, 0) );
+  	float	s2		= sample_hw_pcf( tc, float4( -1, +1, 0, 0) );
+  	float	s3		= sample_hw_pcf( tc, float4( +1, +1, 0, 0) );
 
 	return	(s0+s1+s2+s3)/4.h;
 }

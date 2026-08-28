@@ -494,10 +494,10 @@ void CDetailManager::UpdateRenderState()
     const auto& environment = g_pGamePersistent->Environment().CurrentEnv;
     m_wind_dir1.set(_sin(m_time_rot_1), 0.f, _cos(m_time_rot_1), 0.f)
         .normalize()
-        .mul((0.1f + environment.wind_velocity * 0.0016f) * ps_r__wind_scale);
+        .mul(0.1f + environment.wind_velocity * 0.0016f);
     m_wind_dir2.set(_sin(m_time_rot_2), 0.f, _cos(m_time_rot_2), 0.f)
         .normalize()
-        .mul((0.05f + environment.wind_velocity * 0.0008f) * ps_r__wind_scale);
+        .mul(0.05f + environment.wind_velocity * 0.0008f);
 }
 
 void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)

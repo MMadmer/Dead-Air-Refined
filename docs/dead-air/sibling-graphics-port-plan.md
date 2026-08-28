@@ -5,11 +5,15 @@ Source: DeadAir-Engine-x64-OpenSource 239a785..7a8af8d, full graphics audit
 every portable shader/computation feature; no DX12, no upscalers and their
 velocity/reactive/TAA plumbing, no new assets, no animation/gameplay/UI.
 
+HARD RULE (user, 2026-08-28): a graphics feature either ships through the
+base quality presets (visible by default at its tier) or it does not ship at
+all. Console commands are never a delivery mechanism — they remain only as
+parameters of live features and as QA diagnostics. Everything that was
+default-off/console-only was REMOVED in the follow-up commit.
+
 Method: batches of related features, each batch = implement -> build ->
 rig smoke (shader compile is fatal-checked by the engine itself; visuals by
-captures) -> commit. Defaults follow the graphics-features policy: features
-ship VISIBLE (their in-game tuned defaults), heavyweight ones ride the
-quality presets, console knobs stay as session overrides.
+captures) -> commit.
 
 ## Batch 1 — water (forward pass, one file zone) — DONE, smoke passed
 - [x] water.ps into our overlay (seeded from the pack our players run)
@@ -40,7 +44,6 @@ quality presets, console knobs stay as session overrides.
 - [x] output dithering (+-1/2 LSB triangular, both combine_2 variants)
 - [x] gamma/brightness/contrast in shader (hardware ramp dead in windowed)
 - [x] luminance-preserving tonemap + late desaturation (our common_functions.h)
-- [x] live SSAO strength (r__ssao_power runtime)
 
 ## Batch 3 — vegetation and terrain — DONE, smoke passed
 - [x] lod.ps impostor shading fix (r__lod_hemi/sat/bright, tuned 2/2/1)
@@ -48,8 +51,6 @@ quality presets, console knobs stay as session overrides.
       fade_flat (height-only fade) {0,0,0,.5,.5}
 - [x] grass world-position brightness variation (r__grass_tint 0.12 on for
       all presets, scale 12, base boost 1)
-- [x] wind scale (r__wind_scale) + shadow-pass wind freeze (r__wind_shadow,
-      default 1 = stock; freeze needs no TAA but changes look — their default)
 - [x] grass shadow distance 40 m + fade band 10 m (near sun cascade relief;
       their measure 5.05 -> 2.42 ms sun_smap) — CPU cull per part + VS fade
 - [x] grass instance constant caching (cached_out; their ~47k x 12 mults/frame)
@@ -57,52 +58,31 @@ quality presets, console knobs stay as session overrides.
 - [x] terrain macro variation 0.5 + fake-grass tint 0.6 (from dt blend, not
       the red layer — their brown-distance trap) + macro relief 0.1 + mask
       jitter 0.005 + height splatting 1.0 (deffer_impl_flat.ps overlay)
-- [x] detail mip bias + terrain detail-normal distance fade (knobs, default
-      0 = stock: their -2 bias is tuned for a temporal upscaler we lack)
-- [x] coarse four-layer far detail (r__macro_detail, default 0 — their own
-      tuning rejected the look, code kept working)
 - [x] vegetation impostor separate discard (r__veg_discard 0.5 tuned)
 - [x] particle draw distance (r__particle_dist 150, their Jupiter measure)
 
-## Batch 4 — lighting and shadows — coded, combined smoke with batch 5
+## Batch 4 — lighting and shadows — DONE, smoke passed
 - [x] NPC torch shadow off (r__npc_torch_shadow 0; the crawling black wedge —
       NPC lamp sits inside the chest bone) — actor/dropped torches unchanged
-- [x] rotated PCF kernel (r__shadow_rotate, default 0 — needs temporal
-      accumulation their pipeline has and ours lacks; knob available)
-- [x] per-cascade PCF kernel floor + far kernel width (r__shadow_kernel_far,
-      default 1 = stock — their shipped default; footprint-scaled, clamped)
-- [x] archive-shader compat overload of sample_hw_pcf (volumetric sun calls
-      the two-argument form from inside the game archives)
 - [x] distance-based far sun shadow fade (r__sun_shadow_fade 140 m, replaces
       the map-edge fade whose border travels with the camera; falls back to
       the stock edge fade when the constant is unbound)
-- [x] ultra shadow path retired on extreme sun quality (it bypassed shadow_hw
-      and with it the whole kernel machinery — their instrumented conclusion)
+- [x] ultra shadow path retired on extreme sun quality (it bypassed shadow_hw;
+      extreme now takes the same road as high — their instrumented conclusion)
 - [x] forced early-Z on light accumulation ([earlydepthstencil], accum_base)
 - [x] POM overhaul: distance-scaled step count, SampleGrad (divergent-flow
       mips), [loop] guard, 5-step binary refinement, sun-march self-shadow
       into albedo+gloss, r__parallax_* tuned (8/12/0.0105/shadow 4/32/2/8)
 - [x] POM force onto every surface with a height map (r__parallax_force 1;
       their census: 112 hand-marked vs 2020 carrying height maps)
-- [x] specular AA (Toksvig) in sload.h (r__spec_aa, default 0 — their own
-      default; damping is a visible change their tuning left unproven)
-- [x] hex-grid repeat breaking (Mikkelsen 2022): da_hextile.h, allowlist
-      da_hex_tiling.ltx (268 materials, their auto-classifier), per-material
-      constant plumbing; default OFF — their own verdict
 - [x] anisotropic filtering default 16 (was 8)
-- [x] specular floor r2_gloss_min (CPU u_diffuse2s; nofloor variant guards
-      the sun-pass and hud-shadow gates from a fake always-on sun)
-- [x] sun cascade tint diagnostic (r__dbg_sun_cascades)
+- [x] sun cascade tint diagnostic (r__dbg_sun_cascades — QA tooling)
 - [x] torch brightness multipliers — NOT ported: our torch colours are
       script-owned (Lua setters); an engine multiplier would be a second
       master over the mod's own settings
 
-## Batch 5 — sun shafts and rain surface response — coded, smoke pending
-- [x] sun shafts: master switch r__sun_shafts_mod (0 = pass fully gone; the
-      old checkbox left weather shafts raining through), boost/min knobs
-      (neutral defaults — DA weather keeps its artistic values), indoor gate
-      r__sun_shafts_indoor (default 0; dual short raycast + smoothed fade),
-      horizon-sky shaft tint r__shafts_sky (default 0 — their default)
+## Batch 5 — rain surface response — DONE, smoke passed (puddles verified
+   with forced wetness)
 - [x] rain wetness accumulator (rain_params binder: frame marker, buildup
       90 s / dry-out x4, rain speed drives soaking not its ceiling; raw rain
       density stays live for water ripples on every preset)
@@ -118,13 +98,28 @@ quality presets, console knobs stay as session overrides.
       from exposure (r__rain_len 2, width 0.2), brightness split drop 2.2 /
       splash 0.9, drop count 6000/radius 14 knobs, splash share 1.0 (stock
       refused every second hit), splash pool 4000/cache 1500
-- [x] detail-texture mip bias + detail-normal distance fade — landed in
-      batch 3 (terrain); wall detail bias via sload.h SampleBias
-- [x] detail-bump damping (da_detail_fix) — NOT ported: the measure targets
-      standing noise under a temporal upscaler's jitter; without one the
-      mechanism it damps does not exist, and its default is off even there
 
-## Deliberately NOT ported (recorded verdicts)
+## Deliberately NOT ported / REMOVED (recorded verdicts)
+Removed in the presets-or-nothing follow-up (were coded default-off, i.e.
+console-only — violates the delivery rule; several also rejected or unproven
+by the sibling's own in-game tuning):
+- coarse four-layer far terrain detail (r__macro_detail — their tuning
+  rejected the look outright)
+- Toksvig specular AA (unproven visually even in their build)
+- rotated PCF + per-cascade kernel floor + footprint-scaled far kernel
+  (the rotation needs a temporal filter we do not have; the kernel widening
+  ships off even in their build)
+- hex-grid repeat breaking incl. the material allowlist and per-material
+  constant plumbing (their own default off, look never validated)
+- terrain detail mip bias + detail-normal distance fade (their tuned bias is
+  a temporal-upscaler companion; both default 0 even there)
+- sun shafts master/boost/floor, under-roof gate, horizon-sky shaft tint
+  (all default-neutral; our UI has no checkbox these serve)
+- shadow-pass wind freeze + wind scale (freeze ships off in their build too)
+- specular floor r2_gloss_min (default 0 in both builds)
+- runtime SSAO strength (neutral no-op knob)
+
+Excluded by scope from the start:
 - upscalers/TAA/velocity/reactive/hashed-aref/soft-edges dither, bicubic+RCAS
 - DX12 (does not exist in their tree outside XeSS binaries)
 - seasonal vegetation archive, duckweed/silt (asset rebinds)
@@ -138,4 +133,4 @@ quality presets, console knobs stay as session overrides.
   their TAA pipeline, gated on r__taa)
 - shaft gain/norm knobs (their comments point at accum_volumetric_sun.ps,
   which carries no change in their tree — unverifiable, skipped)
-- torch brightness multipliers, detail-bump damping (see batches 4/5)
+- torch brightness multipliers (see batch 4)

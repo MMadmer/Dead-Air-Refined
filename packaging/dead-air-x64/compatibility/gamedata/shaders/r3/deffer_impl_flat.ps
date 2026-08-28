@@ -10,9 +10,6 @@
 
 // Terrain far-field constants (ported from the sibling engine; every zero reproduces the
 // stock path bit for bit, so archive shaders against a new DLL and vice versa stay stock).
-// da_detail_bias comes from sload.h (shared with the wall detail path):
-//                  x = detail mip bias, y = reserved, z = detail-normal fade distance (m),
-//                  w = coarse four-layer far detail strength.
 // da_macro_var:    x = far brightness variation strength, y = 1/coarse uv step,
 //                  z = fade start (m), w = fade end (m).
 // da_macro_var2:   x = far hue tint to detail mix, y = far macro relief, z = height-based
@@ -54,10 +51,10 @@ f_deffer 	main	( p_flat I 		)
 			mask= mask/mag	;
 
 	// Pure layer colours first - the weight applies below, after the blend mode is chosen.
-	float3	c_R	= s_dt_r.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
-	float3	c_G	= s_dt_g.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
-	float3	c_B	= s_dt_b.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
-	float3	c_A	= s_dt_a.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float3	c_R	= s_dt_r.Sample ( smp_base, I.tcdbump);
+	float3	c_G	= s_dt_g.Sample ( smp_base, I.tcdbump);
+	float3	c_B	= s_dt_b.Sample ( smp_base, I.tcdbump);
+	float3	c_A	= s_dt_a.Sample ( smp_base, I.tcdbump);
 
 	// Height-based splatting (r__terrain_blend); zero = the stock linear mix. Linear
 	// blending smears a soapy band across every layer seam; here the layer with the HIGHER
@@ -81,27 +78,6 @@ f_deffer 	main	( p_flat I 		)
 	float3	d_B	= c_B*w.b;
 	float3	d_A	= c_A*w.a;
 	float3	dt	= d_R+d_G+d_B+d_A;
-
-	// Coarse four-layer far detail (r__macro_detail, off by default - the sibling's own
-	// tuning rejected the look, the code is kept working). Far away a pixel covers hundreds
-	// of detail texels and mips average them to one tone; re-reading the SAME textures at a
-	// step sixteen times coarser keeps the pattern alive to the horizon. Blended with the
-	// SAME weights as up close so distance reads as a scale change, not a material change.
-	[branch] if (da_detail_bias.w > 0.001f)
-	{
-		const float d_cd = length(I.position.xyz);
-		const float f_cd = saturate((d_cd - da_macro_var.z) / max(da_macro_var.w - da_macro_var.z, 1.0f));
-		[branch] if (f_cd > 0.001f)
-		{
-			const float2 uv_cd = I.tcdbump * da_macro_var.y;
-			const float3 k_R = s_dt_r.Sample( smp_base, uv_cd);
-			const float3 k_G = s_dt_g.Sample( smp_base, uv_cd);
-			const float3 k_B = s_dt_b.Sample( smp_base, uv_cd);
-			const float3 k_A = s_dt_a.Sample( smp_base, uv_cd);
-			const float3 dt_coarse = k_R*w.r + k_G*w.g + k_B*w.b + k_A*w.a;
-			dt = lerp(dt, dt_coarse, saturate(da_detail_bias.w * f_cd));
-		}
-	}
 		D.rgb	= 2*D.rgb*dt	 ;
 
   # ifdef USE_4_BUMP
@@ -110,10 +86,10 @@ f_deffer 	main	( p_flat I 		)
 //	 float4	n_Gt = tex2D	(s_dn_g, I.tcdbump).wzyx;
 //	 float4	n_Bt = tex2D	(s_dn_b, I.tcdbump).wzyx;
 //	 float4	n_At = tex2D	(s_dn_a, I.tcdbump).wzyx;
- 	 float4	n_Rt = s_dn_r.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
-	 float4	n_Gt = s_dn_g.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
-	 float4	n_Bt = s_dn_b.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
-	 float4	n_At = s_dn_a.SampleBias( smp_linear, I.tcdbump, da_detail_bias.x).wzyx;
+ 	 float4	n_Rt = s_dn_r.Sample ( smp_linear, I.tcdbump).wzyx;
+	 float4	n_Gt = s_dn_g.Sample ( smp_linear, I.tcdbump).wzyx;
+	 float4	n_Bt = s_dn_b.Sample ( smp_linear, I.tcdbump).wzyx;
+	 float4	n_At = s_dn_a.Sample ( smp_linear, I.tcdbump).wzyx;
 
 	 // The SAME weights as the albedo (w, not mask) - otherwise colour would transition
 	 // along one border and relief along another, making the seam visible twice.
@@ -124,18 +100,6 @@ f_deffer 	main	( p_flat I 		)
 
 	 float3	mix		= 	n_R+n_G+n_B+n_A;
 			mix.z	*=	0.5;		//. make bump twice as contrast (fake, remove me if possible)
-	// Detail-normal distance fade (r__detail_normal_fade, metres; 0 = never fades). The
-	// terrain normal is built ENTIRELY from the detail maps, and past Nyquist their pattern
-	// turns into per-pixel ripple. Only xy fade - the in-plane components; z carries
-	// "normal points outward" and zeroing it would normalize(0) into NaN. Zeroed xy leaves
-	// exactly the smooth vertex normal that far detail must converge to anyway.
-	[branch] if (da_detail_bias.z > 0.5f)
-	{
-		const float d_n  = length(I.position.xyz);
-		const float half_n = da_detail_bias.z * 0.5f;
-		mix.xy *= 1.0f - saturate((d_n - half_n) / max(half_n, 0.001f));
-	}
-
 	// Far macro relief (r__macro_relief). Colour alone paints a flat plane - a far surface
 	// is recognised by light on its bumps, so mix in a coarse detail normal whose period
 	// mips do not average away. Only xy, same NaN reasoning as above; same distance ramp as
@@ -162,7 +126,7 @@ f_deffer 	main	( p_flat I 		)
 
  # else
 //	D.rgb	= 2*D.rgb*tex2D	(s_detail, I.tcdbump).rgb;
-	D.rgb	= 2*D.rgb*s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x).rgb;
+	D.rgb	= 2*D.rgb*s_detail.Sample( smp_base, I.tcdbump).rgb;
  # endif
 # else
 	float3	N 	= I.N.xyz	;

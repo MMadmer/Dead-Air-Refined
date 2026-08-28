@@ -121,20 +121,12 @@ static class cl_water_intensity : public R_constant_setup
     }
 } binder_water_intensity;
 
-// The roof-over-camera raycast result and its smoothed gate (r2_rendertarget.cpp).
-float da_sun_shafts_gate();
-
 static class cl_sun_shafts_intensity : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        // Master/boost/floor computed by the SAME function the pass gate uses - computed
-        // twice differently, the pass dies on the weather zero while a late multiplier
-        // saves nobody. The indoor gate SOFTLY damps the strength itself: an early version
-        // switched shader modes instead and flooded open streets with veil on the way out.
-        float fValue = da_sun_shafts_value(env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value);
-        fValue *= da_sun_shafts_gate();
+        const float fValue = env.m_fSunShaftsIntensity + ps_r2_sun_shafts_value;
         cmd_list.set_c(C, fValue, fValue, fValue, 0.f);
     }
 } binder_sun_shafts_intensity;
@@ -231,14 +223,6 @@ static class cl_da_puddle_look3 : public R_constant_setup
     }
 } binder_da_puddle_look3;
 
-// Sun shaft tint: x = share of horizon-sky colour (sunshaftsdisplay.ps).
-static class cl_da_shafts : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override
-    {
-        cmd_list.set_c(C, ps_r__shafts_sky, 0.f, 0.f, 0.f);
-    }
-} binder_da_shafts;
 
 // Haze: sky-coloured fog and the height layer, consumed by combine_1.ps. The value goes RAW:
 // the shader branches on a 0.001 threshold and applies its own scale inside, so dividing here
@@ -273,15 +257,6 @@ static class cl_da_tonemap_params : public R_constant_setup
         cmd_list.set_c(C, 0.f, ps_r__tonemap_white, ps_r__tonemap_hue, ps_r__tonemap_desat);
     }
 } binder_da_tonemap_params;
-
-// Runtime AO strength for combine_1 (r__ssao_power). Only .x is used.
-static class cl_da_ao : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override
-    {
-        cmd_list.set_c(C, ps_r__ssao_power, 0.f, 0.f, 0.f);
-    }
-} binder_da_ao;
 
 // Gamma/brightness/contrast for the final combine, packed the way CGammaControl::GenLUT
 // consumes them. w flags "the hardware ramp is not in charge" - anything but exclusive
@@ -324,35 +299,6 @@ static class cl_da_parallax2 : public R_constant_setup
             float(ps_r__parallax_shadow_samples), float(ps_r__parallax_debug));
     }
 } binder_da_parallax2;
-
-// Specular antialiasing: strength, variance ceiling, power, debug.
-static class cl_da_spec_aa : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override
-    {
-        cmd_list.set_c(C, ps_r__spec_aa, ps_r__spec_aa_max, ps_r__spec_aa_power,
-            float(ps_r__spec_aa_debug));
-    }
-} binder_da_spec_aa;
-
-// Hex-grid repeat breaking: scale, rotation strength, weight contrast, global enable.
-static class cl_da_hex : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override
-    {
-        cmd_list.set_c(C, ps_r__hex_scale, ps_r__hex_rot, ps_r__hex_contrast,
-            float(ps_r__hex_tiling));
-    }
-} binder_da_hex;
-
-// Terrain detail sampling: mip bias, reserved, normal fade distance, coarse far detail.
-static class cl_da_detail_bias : public R_constant_setup
-{
-    void setup(CBackend& cmd_list, R_constant* C) override
-    {
-        cmd_list.set_c(C, ps_r__detail_mipbias, 0.f, ps_r__detail_nfade, ps_r__macro_detail);
-    }
-} binder_da_detail_bias;
 
 // Far ground variation: strength, 1/coarse step, fade start, fade end (end kept above start).
 static class cl_da_macro_var : public R_constant_setup
@@ -775,21 +721,16 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_fog", &binder_da_fog);
     Resources->RegisterConstantSetup("da_fog2", &binder_da_fog2);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
-    Resources->RegisterConstantSetup("da_ao", &binder_da_ao);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);
     Resources->RegisterConstantSetup("da_foliage", &binder_da_foliage);
-    Resources->RegisterConstantSetup("da_detail_bias", &binder_da_detail_bias);
     Resources->RegisterConstantSetup("da_macro_var", &binder_da_macro_var);
     Resources->RegisterConstantSetup("da_macro_var2", &binder_da_macro_var2);
     Resources->RegisterConstantSetup("da_parallax", &binder_da_parallax);
     Resources->RegisterConstantSetup("da_parallax2", &binder_da_parallax2);
-    Resources->RegisterConstantSetup("da_spec_aa", &binder_da_spec_aa);
-    Resources->RegisterConstantSetup("da_hex", &binder_da_hex);
     Resources->RegisterConstantSetup("da_puddle_look", &binder_da_puddle_look);
     Resources->RegisterConstantSetup("da_puddle_look2", &binder_da_puddle_look2);
     Resources->RegisterConstantSetup("da_puddle_look3", &binder_da_puddle_look3);
-    Resources->RegisterConstantSetup("da_shafts", &binder_da_shafts);
     Resources->RegisterConstantSetup("pos_decompression_params", &binder_pos_decompress_params);
     Resources->RegisterConstantSetup("pos_decompression_params2", &binder_pos_decompress_params2);
     Resources->RegisterConstantSetup("m_AlphaRef", &binder_alpha_ref);

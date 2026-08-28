@@ -29,8 +29,7 @@ void render_sun_old::init()
     sun = (light*)RImplementation.Lights.sun._get();
 
     const Fcolor sun_color = sun->color;
-    // nofloor - see render_phase_sun.cpp.
-    o.active = ps_r2_ls_flags.test(R2FLAG_SUN) && (u_diffuse2s_nofloor(sun_color.r, sun_color.g, sun_color.b) > EPS);
+    o.active = ps_r2_ls_flags.test(R2FLAG_SUN) && (u_diffuse2s(sun_color.r, sun_color.g, sun_color.b) > EPS);
     if (RImplementation.o.sunstatic)
         o.active = false;
 

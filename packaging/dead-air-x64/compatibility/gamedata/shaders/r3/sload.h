@@ -2,7 +2,6 @@
 #define SLOAD_H
 
 #include "common.h"
-#include "da_hextile.h"
 
 #define GLOSS_MUL 2//.1f
 
@@ -31,27 +30,6 @@ struct	surface_bumped
 
 };
 
-// Specular antialiasing by normal variance (Toksvig 2005; the measure is Filament's: the
-// variance of the FINAL normal across the screen, so it sees base relief and detail alike).
-// x = strength (0 = off, multiplier is one), y = ceiling for the added variance (without it
-// far small geometry drives the factor to zero and metal goes matte; 0.15 is Filament's
-// default), z = power, w = debug (1 = show the factor, 2 = inverted).
-// The material table s_material is non-monotonic, so the lobe cannot be WIDENED per pixel -
-// what remains is Toksvig's original form: if the peak cannot widen, damp it by as much.
-uniform float4 da_spec_aa;
-
-float da_spec_aa_factor( float3 N )
-{
-	float3 du	= ddx( N );
-	float3 dv	= ddy( N );
-	float  var	= da_spec_aa.x * ( dot(du,du) + dot(dv,dv) );
-	float  kern	= min( 2.0h * var, da_spec_aa.y );
-	return 1.0h / ( 1.0h + da_spec_aa.z * kern );
-}
-
-// Detail mip bias (r__detail_mipbias, .x) for the wall/prop detail samples; zero = stock.
-uniform float4 da_detail_bias;
-
 // Steep parallax knobs (r__parallax_*): x = full-strength distance (m), y = end distance,
 // z = depth, w = self-shadow strength.
 uniform float4 da_parallax;
@@ -69,20 +47,7 @@ static float da_parallax_hit = 0.0h;
 
 float4 tbase( float2 tc )
 {
-	// Repeat-breaking for FLAT surfaces too - two thirds of the world has no bump map and
-	// never enters sload_i. Checked BEFORE the grid math: there are ddx/ddy inside, and
-	// paying for them under a disabled knob would be waste. The branch is uniform (the value
-	// comes from a constant buffer, one per draw), so derivatives inside it are legal.
-#ifdef DA_HEX_ALLOW
-	if ( da_hex_enabled() )
-	{
-		da_hex_setup H = da_hex_prepare( tc );
-		float4 c; float3 W;
-		da_hex_sample_base( c, W, s_base, smp_base, H );
-		return c;
-	}
-#endif
-	return	s_base.Sample( smp_base, tc);
+   return	s_base.Sample( smp_base, tc);
 }
 
 #if defined(ALLOW_STEEPPARALLAX) && defined(USE_STEEPPARALLAX)
@@ -262,48 +227,12 @@ surface_bumped sload_i( p_bumped I)
 {
 	surface_bumped	S;
 
-	// Repeat-breaking by hex grid - see da_hextile.h. The grid is computed ONLY with the
-	// knob on: there are ddx/ddy inside. The branch is uniform (constant-buffer value, one
-	// per draw call), so the derivatives are legal.
-	da_hex_setup	H		= (da_hex_setup)0;
-#ifdef DA_HEX_ALLOW
-	bool			hexOn	= da_hex_enabled();
-#else
-	bool			hexOn	= false;
-#endif
-
-	// Parallax must walk the DOMINANT tile - the height map that will actually be shown.
-	// Otherwise the offset is computed on one brick and another gets drawn, and the depth
-	// stops matching the picture.
-	if ( hexOn )
-	{
-		H = da_hex_prepare( I.tcdh.xy );
-		I.tcdh.xy = H.stDom;
-	}
-
 	UpdateTC(I);	//	All kinds of parallax are applied here.
 
-	float4	Nu, NuE;
-	if ( hexOn )
-	{
-		// The correction found by parallax is spread over all three samples.
-		da_hex_shift( H, I.tcdh.xy - H.stDom );
-
-		// Weights come FROM THE COLOUR and are reused by relief and height - otherwise those
-		// would drift to different tiles and the normal at a seam would answer for a brick
-		// that is not the one drawn.
-		float3 W;
-		da_hex_sample_base( S.base, W, s_base, smp_base, H );
-		Nu  = da_hex_sample_w( s_bump,  smp_base, H, W );
-		NuE = da_hex_sample_w( s_bumpX, smp_base, H, W );
-	}
-	else
-	{
-	Nu	= s_bump.Sample( smp_base, I.tcdh );		// IN:	normal.gloss
-	NuE	= s_bumpX.Sample( smp_base, I.tcdh);	// IN:	normal_error.height
+	float4 	Nu	= s_bump.Sample( smp_base, I.tcdh );		// IN:	normal.gloss
+	float4 	NuE	= s_bumpX.Sample( smp_base, I.tcdh);	// IN:	normal_error.height
 
 	S.base		= tbase(I.tcdh);				//	IN:  rgb.a
-	}
 	S.normal	= Nu.wzy + (NuE.xyz - 1.0h);	//	(Nu.wzyx - .5h) + (E-.5)
 	S.gloss		= Nu.x*Nu.x;					//	S.gloss = Nu.x*Nu.x;
 	S.height	= NuE.z;
@@ -311,18 +240,18 @@ surface_bumped sload_i( p_bumped I)
 
 #ifdef        USE_TDETAIL
 #ifdef        USE_TDETAIL_BUMP
-	float4 NDetail		= s_detailBump.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
-	float4 NDetailX		= s_detailBumpX.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 NDetail		= s_detailBump.Sample( smp_base, I.tcdbump);
+	float4 NDetailX		= s_detailBumpX.Sample( smp_base, I.tcdbump);
 	S.gloss				= S.gloss * NDetail.x * GLOSS_MUL;
 	//S.normal			+= NDetail.wzy-.5;
 	S.normal			+= NDetail.wzy + NDetailX.xyz - 1.0h; //	(Nu.wzyx - .5h) + (E-.5)
 
-	float4 detail		= s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 detail		= s_detail.Sample( smp_base, I.tcdbump);
 	S.base.rgb			= S.base.rgb * detail.rgb * 2;
 
 //	S.base.rgb			= float3(1,0,0);
 #else        //	USE_TDETAIL_BUMP
-	float4 detail		= s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 detail		= s_detail.Sample( smp_base, I.tcdbump);
 	S.base.rgb			= S.base.rgb * detail.rgb * 2;
 	S.gloss				= S.gloss * detail.w * GLOSS_MUL;
 #endif        //	USE_TDETAIL_BUMP
@@ -359,13 +288,13 @@ surface_bumped sload_i( p_bumped I, float2 pixeloffset )
 #endif
 #endif
 
-	float4 NDetail		= s_detailBump.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
-	float4 NDetailX		= s_detailBumpX.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 NDetail		= s_detailBump.Sample( smp_base, I.tcdbump);
+	float4 NDetailX		= s_detailBumpX.Sample( smp_base, I.tcdbump);
 	S.gloss				= S.gloss * NDetail.x * GLOSS_MUL;
 	//S.normal			+= NDetail.wzy-.5;
 	S.normal			+= NDetail.wzy + NDetailX.xyz - 1.0h; //	(Nu.wzyx - .5h) + (E-.5)
 
-	float4 detail		= s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 detail		= s_detail.Sample( smp_base, I.tcdbump);
 	S.base.rgb			= S.base.rgb * detail.rgb * 2;
 
 //	S.base.rgb			= float3(1,0,0);
@@ -373,7 +302,7 @@ surface_bumped sload_i( p_bumped I, float2 pixeloffset )
 #ifdef MSAA_ALPHATEST_DX10_1
    I.tcdbump.xy += pixeloffset.x * ddx(I.tcdbump.xy) + pixeloffset.y * ddy(I.tcdbump.xy);
 #endif
-	float4 detail		= s_detail.SampleBias( smp_base, I.tcdbump, da_detail_bias.x);
+	float4 detail		= s_detail.Sample( smp_base, I.tcdbump);
 	S.base.rgb			= S.base.rgb * detail.rgb * 2;
 	S.gloss				= S.gloss * detail.w * GLOSS_MUL;
 #endif        //	USE_TDETAIL_BUMP
