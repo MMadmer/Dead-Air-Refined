@@ -75,8 +75,11 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	inten	*= 0.05f + 0.95f * shelter;
 	// Local flow from the travelling gust field, evaluated at the TUFT ROOT (m0.w/m2.w are the
 	// instance world translation) so one tuft always moves as a whole. This is what breaks the
-	// lockstep: each tuft sways with the flow that is passing over IT right now.
-	float2	flow	= da_wind_field_eval(float2(m0.w, m2.w));
+	// lockstep: each tuft sways with the flow that is passing over IT right now. The field's
+	// z channel also turns the LOCAL wind heading - patches of the meadow genuinely blow
+	// different ways, and the swirl pattern travels downwind like a real eddy.
+	float3	flow	= da_wind_field_eval(float2(m0.w, m2.w));
+	const float2 wdir = da_wind_local_dir(dir2D.xz, flow.z);
 	inten	*= flow.x;
 	// Wind motors first: press motors also report their footprint weight, and grass held down
 	// by a boot must not keep waving mid-air - the wave and the gust lean are suppressed
@@ -85,12 +88,12 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	float	press_w;
 	float2	bend	= da_wind_motors_bend(float2(m0.w, m2.w), H, press_w);
 	const float wind_free = 1.0f - press_w;
-	float2 	result	= calc_xz_wave	(dir2D.xz*inten*wind_free,frac);
+	float2 	result	= calc_xz_wave	(wdir*inten*wind_free,frac);
 	// Gust lean: inside a passing tongue the grass does not just wave harder - it lies DOWN
 	// along the wind, and the front of that flattening visibly rolls across the meadow.
 	// Scaled by height and shelter like the wave itself; the arc-length drop below then pulls
 	// the tip down instead of stretching the blade.
-	result	+= dir2D.xz * (H * flow.y * (0.05f + 0.95f * shelter) * 1.4f * wind_free);
+	result	+= wdir * (H * flow.y * (0.05f + 0.95f * shelter) * 1.4f * wind_free);
 	result	+= bend;
 	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
 	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the

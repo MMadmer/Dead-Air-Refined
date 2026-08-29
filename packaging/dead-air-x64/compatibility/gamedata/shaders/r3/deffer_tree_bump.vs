@@ -31,23 +31,27 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
 
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;
-    float dp = calc_cyclic(wave.w + dot(pos, (float3)wave));
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
+    // Root phase + local heading + flexibility rule + total-bend cap: all identical to
+    // deffer_tree_flat.vs - see the notes there.
+    const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
+    float dp = calc_cyclic(wave.w + dot(root3, (float3)wave));
     float inten = H * dp;
-    // Same travelling gust field as deffer_tree_flat - and the same authored-flexibility rule:
-    // every added term multiplies by frac (and the shiver by axis distance too), so trunks
-    // stay anchored and only the flexible outer foliage moves. See deffer_tree_flat.vs.
-    float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
-    float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
-    result += wind.xz * (H * flow.y * 0.5f * frac);
+    float3 flow = da_wind_field_eval(root3.xz);
+    const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
+    float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
+    result += wdir * (H * flow.y * 0.5f * frac);
     float press_unused;
-    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) *
-        (0.35f * saturate(frac * 2.0f));
-    const float axis_r = length(pos.xz - float2(local_xform._14, local_xform._34));
+    result += da_wind_motors_bend(root3.xz, H, press_unused) * (0.35f * saturate(frac * 2.0f));
+    const float axis_r = length(pos.xz - root3.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
-    result += wind.xz * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
+    result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
+    const float bend_len = length(result);
+    const float bend_max = H * 0.38f;
+    if (bend_len > bend_max)
+        result *= bend_max / bend_len;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

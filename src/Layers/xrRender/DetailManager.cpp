@@ -507,7 +507,8 @@ void CDetailManager::UpdateRenderState()
     // real-life variability (minute trends, waves, discrete gusts) inside the weather envelope.
     // The slope is deliberately steep: a field test showed a storm through three multiplied
     // moderating layers reads as near-calm - the envelope has to overshoot to survive them.
-    const float wind_norm = 0.35f + 1.30f * env.eff_wind_norm;
+    // (Floor eased after the next test: calm weather still swayed too much.)
+    const float wind_norm = 0.28f + 1.25f * env.eff_wind_norm;
     const float whip = 0.70f + 0.80f * env.eff_wind_norm;
 #else
     constexpr float gust_smooth = 0.3f;

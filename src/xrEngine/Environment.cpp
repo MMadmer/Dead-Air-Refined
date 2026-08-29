@@ -874,7 +874,7 @@ void CEnvironment::UpdateEffectiveWind()
         delta = 0.03f;
 
     const float base_cfg = powf(clampr(CurrentEnv.wind_velocity / 400.f, 0.f, 1.f), 0.8f);
-    const float base_implied = 0.12f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
+    const float base_implied = 0.10f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
     // The profile switches as a step on the cycle boundary - low-pass it so a new weather
     // swells the wind over ~half a minute instead of snapping the whole world at once.
     const float profile = weather_wind_profile();
@@ -911,10 +911,12 @@ void CEnvironment::UpdateEffectiveWind()
     eff_wind_gust_smooth += (eff_wind_gust - eff_wind_gust_smooth) * (1.f - expf(-delta / 1.5f));
 
     // Direction: the weather heading with a bounded wander - broad and lazy in light air
-    // (real light wind meanders), tight in strong wind (a storm holds its line).
+    // (real light wind meanders), tight in strong wind (a storm holds its line). Sped up
+    // after a field test: at 45 s the heading read as "never changes" over a minute of
+    // watching. The per-place deviation (eddies) lives in the shader field's z channel.
     const float wander_amp = deg2rad(35.f - 22.f * base);
-    const float wander = (wind_vnoise(t * (1.f / 45.f) + 41.7f) * 2.f - 1.f) * wander_amp +
-        (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(5.f);
+    const float wander = (wind_vnoise(t * (1.f / 30.f) + 41.7f) * 2.f - 1.f) * wander_amp +
+        (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(8.f);
     eff_wind_dir = CurrentEnv.wind_direction + wander;
 
     // Spatial gust field scroll (the Ghost of Tsushima scheme: constant heading, magnitude

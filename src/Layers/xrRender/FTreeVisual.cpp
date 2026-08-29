@@ -129,9 +129,11 @@ struct FTreeVisual_setup
         // The authored per-weather amplitude is tiny (DA weathers sit at ~0.05 rad, an
         // imperceptible 3 degrees), so the service envelope has to overshoot hard - but from
         // the authored look in calm air: a clear day stays near x1 (the first curve made even
-        // clear weather "sway pretty hard"), a storm gust reaches ~x4.5. Field-test driven
-        // twice: too weak at (0.55 + 0.80*var), trunk-slide territory at (0.80 + 4.50*norm).
-        wind.mul(desc.m_fTreeAmplitude * (0.55f + 3.60f * env.eff_wind_norm));
+        // clear weather "sway pretty hard"), a storm gust reaches ~x4. Field-test driven
+        // three times: too weak at (0.55 + 0.80*var), trunk-slide territory at
+        // (0.80 + 4.50*norm); the shader also hard-caps the total bend at 0.38*H now, so
+        // storm weathers that author amplitude 0.10 cannot fold a crown over.
+        wind.mul(desc.m_fTreeAmplitude * (0.50f + 3.20f * env.eff_wind_norm));
 
         scale = 1.f / float(FTreeVisual_quant);
 

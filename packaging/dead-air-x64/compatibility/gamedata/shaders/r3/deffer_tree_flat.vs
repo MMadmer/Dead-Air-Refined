@@ -32,33 +32,48 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     v2p_flat o;
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;
-    float dp = calc_cyclic(wave.w + dot(pos, (float3)wave));
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
+    // Wave phase from the INSTANCE ROOT, not the vertex position. The stock per-vertex phase
+    // was fine at the authored 0.05 amplitude (a millimetre shimmer of shape), but scaled up
+    // it desynchronises halves of one crown - one side still leaning while the other springs
+    // back, and the crown visibly SQUASHES every cycle. One phase per tree: the crown moves
+    // as a whole, the arc comes from the baked flexibility, the shiver below keeps the
+    // fine per-vertex life.
+    const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
+    float dp = calc_cyclic(wave.w + dot(root3, (float3)wave));
     float inten = H * dp;
     // Local flow from the travelling gust field at the TREE ROOT: a gust tongue leans this
-    // crown while the next tree over stands in a lull. Amplitude rides the field, the lean
-    // term presses the crown downwind as the front passes.
-    float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
+    // crown while the next tree over stands in a lull. The z channel turns the LOCAL heading:
+    // neighbouring trees in a meander lean slightly different ways, and the swirl travels.
+    float3 flow = da_wind_field_eval(root3.xz);
+    const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
     // frac (tc.z) is the AUTHORED per-vertex flexibility baked into the model: ~0 on the
     // trunk, ~1 at branch tips. The stock wave respects it via calc_xz_wave = dir * frac.
     // Every term we add must respect it too - a lean or shiver applied without frac moves
     // the rigid trunk sideways as a whole ("the tree slides on XY"), which is exactly what
     // a field test showed. Roots are anchored; everything bends as an arc from them.
-    float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
-    result += wind.xz * (H * flow.y * 0.5f * frac);
+    float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
+    result += wdir * (H * flow.y * 0.5f * frac);
     // Blast rings rock the flexible parts too (press motors are too small to reach trees).
     float press_unused;
-    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) *
-        (0.35f * saturate(frac * 2.0f));
+    result += da_wind_motors_bend(root3.xz, H, press_unused) * (0.35f * saturate(frac * 2.0f));
     // Foliage shiver (bushes live on this): a finer, 2.3x faster wave for the OUTER foliage.
-    // Double-gated so the trunk stays dead: by authored flexibility AND by radial distance
-    // from the instance axis - branch tips shiver, the column of the trunk never does. This
-    // is what makes a low bush read as alive without turning tree trunks to jelly.
-    const float axis_r = length(pos.xz - float2(local_xform._14, local_xform._34));
+    // Per-vertex phase is CORRECT here - leaves flutter independently - and the amplitude is
+    // small enough to read as rustle, not shape distortion. Double-gated so the trunk stays
+    // dead: by authored flexibility AND by radial distance from the instance axis.
+    const float axis_r = length(pos.xz - root3.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
-    result += wind.xz * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
+    result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
+    // Hard sanity cap on the TOTAL bend. Storm weathers author amplitude 0.10 (double the
+    // usual), and the service envelope on top of that once folded a crown into a half-circle.
+    // ~22 degrees of tip travel is already a violent gale; nothing bends further without
+    // snapping. The proportional scale-down keeps the bend direction and the crown's shape.
+    const float bend_len = length(result);
+    const float bend_max = H * 0.38f;
+    if (bend_len > bend_max)
+        result *= bend_max / bend_len;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
