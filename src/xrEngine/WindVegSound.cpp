@@ -189,7 +189,7 @@ void CEffect_WindVeg::OnFrame()
             // Wind field + wind motors: a blast ring passing through this crown makes it
             // rustle even on a windless day - the sound rides the visible bend, and a strong
             // enough blast punches through the retrigger cooldown.
-            const float motors = env.SampleWindMotors(tp.x, tp.z);
+            const float motors = env.SampleWindMotors(tp);
             if (Device.fTimeGlobal < m_tree_cool[ti] && motors < 0.3f)
                 continue;
             const float local = wind * env.SampleWindField(tp.x, tp.z) + motors;
@@ -220,7 +220,7 @@ void CEffect_WindVeg::OnFrame()
             p.set(cam.x + _sin(ang) * dist, cam.y + 0.4f, cam.z + _cos(ang) * dist);
             // Motors count here too: a grenade going off in the grass makes the grass answer,
             // cooldown or not.
-            const float motors = env.SampleWindMotors(p.x, p.z);
+            const float motors = env.SampleWindMotors(p);
             if (Device.fTimeGlobal < m_sector_cool[s] && motors < 0.3f)
                 continue;
             const float local = (wind * env.SampleWindField(p.x, p.z) + motors) * env.wind_veg_green;

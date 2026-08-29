@@ -18,11 +18,12 @@ uniform float4x4 da_wm_par0;
 uniform float4x4 da_wm_par1;
 uniform float4 da_wm_info;
 
-// Horizontal bend (world XZ) for a vegetation instance rooted at root_w, scaled by height so
-// tips move and roots stay planted. Returns a displacement to ADD to the wind result.
-// press_w rises to 1 inside a press motor's footprint: the caller suppresses the wind wave
-// with it, because grass held down by a boot must not keep waving mid-air.
-float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
+// Horizontal bend (world XZ) for a vegetation instance rooted at root_w (xyz - the Y matters
+// for the shot-trace height gate), scaled by height so tips move and roots stay planted.
+// Returns a displacement to ADD to the wind result. press_w rises to 1 inside a press motor's
+// footprint: the caller suppresses the wind wave with it, because grass held down by a boot
+// must not keep waving mid-air.
+float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
 {
     float2 bend = float2(0.0f, 0.0f);
     press_w = 0.0f;
@@ -39,7 +40,7 @@ float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
         if (P.w <= 0.0f || abs(A.x) <= 0.001f)
             continue;
 
-        float2 d = root_w - P.xz;
+        float2 d = root_w.xz - P.xz;
 
         [branch]
         if (A.w > 0.5f)
@@ -54,8 +55,18 @@ float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
             [branch]
             if (dist > 0.8f || dist < 0.001f)
                 continue;
+            // Height gate: the trace is a 3D line (A.w carries 1 + vertical slope per metre
+            // of ground track). A shot fired over the grass - or into the sky - must not
+            // stir vegetation metres below its path (field report: "I shoot at the sky and
+            // the grass still reacts"). Full effect while the trace is below ~0.7 m over
+            // the root, gone by ~1.8 m.
+            const float trace_y = P.y + (A.w - 1.0f) * along;
+            const float h_gate = saturate(1.0f - (trace_y - root_w.y - 0.7f) * (1.0f / 1.1f));
+            [branch]
+            if (h_gate <= 0.001f)
+                continue;
             const float t = dist * (1.0f / 0.3f);
-            bend += (d / dist) * (exp(-t * t) * A.x * H);
+            bend += (d / dist) * (exp(-t * t) * A.x * H * h_gate);
             continue;
         }
 
@@ -70,10 +81,10 @@ float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
         float w = exp(-t * t);
         // Blast WAKE: behind the expanding front the radial outflow keeps blowing, fading
         // toward the epicentre (already-spent air) - the whole burst reads as wind rushing
-        // out in every direction, not as a lone travelling ripple.
-        [flatten]
-        if (A.y > 0.5f && dist < A.y)
-            w = max(w, 0.45f * dist / A.y);
+        // out in every direction, not as a lone travelling ripple. safe_r keeps the division
+        // finite even when the (press) ring radius is zero - both ternary sides evaluate.
+        const float safe_r = max(A.y, 0.5f);
+        w = max(w, (A.y > 0.5f && dist < A.y) ? 0.45f * dist / safe_r : 0.0f);
         bend += (d / dist) * (w * A.x * H);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.

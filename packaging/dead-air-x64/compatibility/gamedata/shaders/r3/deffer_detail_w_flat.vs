@@ -90,7 +90,7 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	// inside the press. Not scaled by shelter or wind: a boot presses grass in a windless
 	// hangar just the same.
 	float	press_w;
-	float2	bend	= da_wind_motors_bend(float2(m0.w, m2.w), H, press_w);
+	float2	bend	= da_wind_motors_bend(float3(m0.w, m1.w, m2.w), H, press_w);
 	const float wind_free = 1.0f - press_w;
 	float2 	result	= calc_xz_wave	(wdir*inten*wind_free,frac);
 	// Gust lean: inside a passing tongue the grass does not just wave harder - it lies DOWN

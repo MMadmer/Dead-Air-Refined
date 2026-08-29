@@ -371,6 +371,7 @@ public:
     {
         Fvector pos{};      // press/impulse: centre; shot: trace start
         Fvector2 dir{};     // shot: horizontal trace direction (unit)
+        float dir_y{};      // shot: vertical slope per metre of ground track (clamped)
         float radius{};     // press/impulse: reach; shot: trace length
         float strength{};   // authored strength of the source
         float touched{};    // press: last refresh time; impulse/shot: birth time
@@ -396,7 +397,7 @@ public:
     bool wind_sheltered(const Fvector& pos) const;
     // CPU sum of the live motors' bend strength at a point - the audio layer uses it so a blast
     // ring makes the bushes it passes through rustle, exactly where the bend is seen.
-    float SampleWindMotors(float x, float z) const;
+    float SampleWindMotors(const Fvector& p) const;
 
     void UpdateEffectiveWind();
 

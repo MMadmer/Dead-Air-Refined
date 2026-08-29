@@ -801,14 +801,22 @@ void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float st
     slot->strength = strength;
     slot->touched = Device.fTimeGlobal;
     slot->released = 0.f;
+
+    if (ps_e_wind_dbg)
+        Msg("* [wind] blast motor: r=%.0f s=%.1f at (%.0f, %.0f, %.0f)", radius, strength, pos.x,
+            pos.y, pos.z);
 }
 
 void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength)
 {
     Fvector2 flat{dir.x, dir.z};
     const float flat_len = _sqrt(flat.x * flat.x + flat.y * flat.y);
-    if (flat_len < 0.2f)
-        return; // near-vertical shot: no meaningful ground trace
+    // Near-vertical shots have no meaningful ground trace - firing at the sky must not stir
+    // anything (field report). Flatter shots carry their vertical slope into the motor so
+    // the shader can gate by the trace's actual height above each tuft.
+    if (flat_len < 0.35f)
+        return;
+    const float slope_y = clampr(dir.y / flat_len, -0.45f, 0.95f);
     flat.x /= flat_len;
     flat.y /= flat_len;
 
@@ -833,6 +841,7 @@ void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float
     slot->type = EWindMotor::shot;
     slot->pos = pos;
     slot->dir = flat;
+    slot->dir_y = slope_y;
     slot->radius = length;
     slot->strength = strength;
     slot->touched = Device.fTimeGlobal;
@@ -850,10 +859,11 @@ bool CEnvironment::wind_sheltered(const Fvector& pos) const
     return g_pGameLevel->ObjectSpace.RayPick(start, up, 35.f, collide::rqtStatic, rq, nullptr);
 }
 
-float CEnvironment::SampleWindMotors(float x, float z) const
+float CEnvironment::SampleWindMotors(const Fvector& p) const
 {
-    // Mirrors da_wind_motors_bend without the height/direction terms: just "how hard is a
-    // motor shaking this spot", for the vegetation-audio triggers.
+    // Mirrors da_wind_motors_bend without the direction terms: just "how hard is a motor
+    // shaking this spot", for the vegetation-audio triggers. Keeps the shader's line height
+    // gate and the blast wake so what is heard matches what is seen.
     float total = 0.f;
     for (u32 i = 0; i < wind_motor_count; ++i)
     {
@@ -863,25 +873,29 @@ float CEnvironment::SampleWindMotors(float x, float z) const
         const float* arow = &A.m[i % 4][0];
         if (prow[3] <= 0.f || _abs(arow[0]) <= 0.001f)
             continue;
-        float dx = x - prow[0];
-        float dz = z - prow[2];
+        float dx = p.x - prow[0];
+        float dz = p.z - prow[2];
         if (arow[3] > 0.5f)
         {
             // Line motor: distance to the trace segment (arow[1]/arow[2] carry the direction).
-            // Width mirrors the shader's narrow turbulent tube.
             const float along = clampr(dx * arow[1] + dz * arow[2], 0.f, prow[3]);
             dx -= arow[1] * along;
             dz -= arow[2] * along;
             const float dist = _sqrt(dx * dx + dz * dz);
+            const float trace_y = prow[1] + (arow[3] - 1.f) * along;
+            const float h_gate = clampr(1.f - (trace_y - p.y - 0.7f) / 1.1f, 0.f, 1.f);
             const float t = dist * (1.f / 0.3f);
-            total += _abs(arow[0]) * expf(-t * t);
+            total += _abs(arow[0]) * expf(-t * t) * h_gate;
             continue;
         }
         const float dist = _sqrt(dx * dx + dz * dz);
         if (dist > prow[3] + arow[2] * 2.f)
             continue;
         const float t = (dist - arow[1]) / arow[2];
-        total += _abs(arow[0]) * expf(-t * t);
+        float w = expf(-t * t);
+        if (arow[1] > 0.5f && dist < arow[1])
+            w = std::max(w, 0.45f * dist / std::max(arow[1], 0.5f));
+        total += _abs(arow[0]) * w;
     }
     return total;
 }
@@ -1056,10 +1070,12 @@ void CEnvironment::UpdateEffectiveWind()
         float* arow = &A.m[i % 4][0];
         prow[0] = m.pos.x; prow[1] = m.pos.y; prow[2] = m.pos.z; prow[3] = m.used ? m.radius : 0.f;
         arow[0] = m.used ? amp : 0.f;
-        // Line motors carry their direction where radial ones carry the ring shape.
+        // Line motors carry their direction where radial ones carry the ring shape; w packs
+        // the line flag PLUS the vertical slope (1 + slope, slope clamped well above -0.5 so
+        // the >0.5 flag test never breaks) - the shader gates by the trace height with it.
         arow[1] = line ? m.dir.x : ring_r;
         arow[2] = line ? m.dir.y : std::max(ring_w, 0.05f);
-        arow[3] = line ? 1.f : 0.f;
+        arow[3] = line ? 1.f + m.dir_y : 0.f;
     }
     wind_motor_active = float(highest);
 
