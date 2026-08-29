@@ -1,0 +1,26 @@
+; Dead Air x64: per-weather wind strength profiles.
+;
+; DA weather cycles do not author wind_velocity (1028 of ~1100 entries are zero), so the
+; engine's wind service maps the CYCLE NAME to a base strength here. Matching: an exact
+; cycle-name key wins, otherwise the LONGEST substring key found in the name wins (so
+; "veryfoggy" beats "foggy", "af3_day_storm" can be overridden exactly). Values are the
+; weather's nominal wind in 0..1 (1 = full gale); the service layers its own minute-scale
+; trends, waves, discrete gusts and the travelling gust field on top, and an authored
+; wind_velocity or rain still raises the ceiling if it says more.
+;
+; Substring defaults below cover the whole AF3 set (af3_<light>_<sky>) plus the default_*
+; and special cycles. Add exact names to fine-tune a single cycle.
+
+[wind_profiles]
+storm        = 0.95
+thunder      = 0.85
+rain         = 0.65
+veryfoggy    = 0.18
+foggy        = 0.28
+cloudy       = 0.55
+partly       = 0.38
+clear        = 0.22
+night        = 0.15
+indoor       = 0.05
+stancia      = 0.60
+map          = 0.00

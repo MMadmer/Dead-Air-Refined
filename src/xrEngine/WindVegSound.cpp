@@ -13,6 +13,13 @@ namespace
 // from the rain itself.
 const float k_volume[] = {0.45f, 0.85f, 1.30f};
 const float k_pitch[] = {1.15f, 1.00f, 0.82f};
+// Audible ranges by type, replacing the couple-of-metres range baked into the source file
+// (the walk-through-bush collide sound). Matched to how far these are really heard: a big
+// canopy in wind carries the better part of a hundred metres - it is one of the
+// longest-carrying natural sounds - a bush tens of metres, grass only nearby. min is the
+// full-volume core (a canopy is a WIDE source, not a point).
+const float k_range_min[] = {1.f, 2.f, 4.f};
+const float k_range_max[] = {22.f, 40.f, 90.f};
 // The local wind strength a spot needs before it can rustle at all. (First calibration sat
 // above what a storm actually produced after the field multiplies in - the world went mute.)
 constexpr float k_threshold = 0.28f;
@@ -89,6 +96,10 @@ bool CEffect_WindVeg::play_one(int type, const Fvector& pos, float strength)
             const float vol = k_volume[type] * clampr((strength - 0.30f) / 0.50f, 0.25f, 1.f);
             v.snd.set_volume(vol);
             v.snd.set_frequency(k_pitch[type] * ::Random.randF(0.92f, 1.08f));
+            // The source file is the walk-through-bush collide sound, whose baked audible
+            // range is a couple of metres - played from a canopy 30 m away it was silently
+            // culled ("no rustle from anything"). Per-type realistic ranges above.
+            v.snd.set_range(k_range_min[type], k_range_max[type]);
             const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 1.f;
             v.busy_until = Device.fTimeGlobal + len;
             return true;
@@ -124,7 +135,7 @@ void CEffect_WindVeg::OnFrame()
             m_next_tree_sort = Device.fTimeGlobal + 2.f;
             m_near_trees.clear();
             for (u32 i = 0; i < trees.size(); ++i)
-                if (trees[i].distance_to_sqr(cam) < 45.f * 45.f)
+                if (trees[i].distance_to_sqr(cam) < 70.f * 70.f)
                     m_near_trees.push_back(i);
             if (m_near_trees.size() > 24)
             {
@@ -149,8 +160,9 @@ void CEffect_WindVeg::OnFrame()
             if (local < k_threshold)
                 continue;
             // A stochastic gate on top of the field keeps simultaneous fronts from firing
-            // every crown at once.
-            if (::Random.randF() > 0.55f)
+            // every crown at once - but it opens with the wind: in a gale the canopy MUST
+            // be heard, silence there reads as a bug, not as restraint.
+            if (::Random.randF() > 0.35f + 0.65f * clampr(local, 0.f, 1.f))
                 continue;
             Fvector crown = tp;
             crown.y += 4.f; // the rustle lives in the canopy, not at the root
@@ -178,7 +190,8 @@ void CEffect_WindVeg::OnFrame()
             const float local = (wind * env.SampleWindField(p.x, p.z) + motors) * env.wind_veg_green;
             if (local < k_threshold)
                 continue;
-            if (::Random.randF() > 0.45f)
+            // Same wind-opened gate as the trees: strong wind guarantees ground rustle.
+            if (::Random.randF() > 0.30f + 0.70f * clampr(local, 0.f, 1.f))
                 continue;
             const int type = (::Random.randF() < 0.6f) ? type_bush : type_grass;
             if (play_one(type, p, local))

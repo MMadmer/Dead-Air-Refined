@@ -327,6 +327,14 @@ public:
     // wind blow AT THAT TREE right now". Must stay formula-identical to da_wind_field.h.
     float SampleWindField(float x, float z) const;
 
+    // Per-weather wind profile (dead_air_x64_wind.ltx): DA cycles do not author wind_velocity,
+    // so the cycle NAME maps to a nominal strength. Resolved on weather change, low-passed so
+    // a cycle switch swells the wind over seconds instead of snapping it.
+    float weather_wind_profile();
+    float wind_profile_smooth{-1.f};
+    shared_str wind_profile_for; // cycle name the cached target below belongs to
+    float wind_profile_target{};
+
 
     // Published by the renderer for the vegetation-audio layer: world positions of every tree
     // visual on the level (filled after level load, cleared on unload), and a 0..1 "how much

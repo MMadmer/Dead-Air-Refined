@@ -1368,9 +1368,11 @@ void CActor::UpdateCL()
     // drives the damped spring-back once we move on. Refreshed per frame while alive.
     // Strength >= 1 matters: with the arc-length correction in the grass shader it LAYS the
     // tuft flat instead of tilting it - a 0.55 press drowned in the wind sway and read as
-    // nothing at all in the field test.
+    // nothing at all in the field test. The radius is wider than the body on purpose: the
+    // first-person camera cannot see the half-metre ring at its own feet, so the visible
+    // proof of trampling is the ring's outer slope a couple of metres out.
     if (g_Alive())
-        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.35f, 1.15f);
+        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.9f, 1.15f);
 
     if (g_Alive() && Level().CurrentViewEntity() == this)
     {

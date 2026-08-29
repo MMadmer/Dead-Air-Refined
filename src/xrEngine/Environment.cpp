@@ -661,6 +661,61 @@ float CEnvironment::SampleWindField(float x, float z) const
     return 0.40f + 0.75f * g;
 }
 
+float CEnvironment::weather_wind_profile()
+{
+    // Longest-substring table from dead_air_x64_wind.ltx, loaded once. Exact cycle-name keys
+    // win over substrings; a name that matches nothing contributes no profile (-1).
+    static xr_vector<std::pair<xr_string, float>> table;
+    static bool loaded = false;
+    if (!loaded)
+    {
+        loaded = true;
+        string_path path;
+        FS.update_path(path, "$game_config$", "dead_air_x64_wind.ltx");
+        if (FS.exist(path))
+        {
+            CInifile ini(path, TRUE);
+            if (ini.section_exist("wind_profiles"))
+            {
+                for (const auto& item : ini.r_section("wind_profiles").Data)
+                    if (item.first.size() && item.second.size())
+                        table.emplace_back(item.first.c_str(), float(atof(item.second.c_str())));
+                // Longest key first, so "veryfoggy" is tried before "foggy".
+                std::sort(table.begin(), table.end(),
+                    [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
+                Msg("* [wind] %u weather wind profile(s) loaded", u32(table.size()));
+            }
+        }
+        else
+            Msg("! [wind] dead_air_x64_wind.ltx not found - weather wind profiles disabled");
+    }
+
+    const shared_str& name = CurrentWeatherName;
+    if (!name.size())
+        return -1.f;
+    if (name != wind_profile_for)
+    {
+        wind_profile_for = name;
+        wind_profile_target = -1.f;
+        for (const auto& [key, value] : table)
+            if (key == name.c_str())
+            {
+                wind_profile_target = value;
+                break;
+            }
+        if (wind_profile_target < 0.f)
+            for (const auto& [key, value] : table)
+                if (strstr(name.c_str(), key.c_str()))
+                {
+                    wind_profile_target = value;
+                    break;
+                }
+        if (ps_e_wind_dbg)
+            Msg("* [wind] weather '%s' -> profile %.2f", name.c_str(), wind_profile_target);
+    }
+    return wind_profile_target;
+}
+
 void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float strength)
 {
     // Refresh an existing press motor near this position (one motor per walking actor), or
@@ -810,13 +865,24 @@ void CEnvironment::UpdateEffectiveWind()
     //    dividing by 20 saturated every nonzero weather to "hurricane" and erased the range;
     //  * 1028 of ~1100 DA weather entries say wind_velocity = 0 - their storms are authored as
     //    rain and clouds only, so a config-only ceiling turned a rainstorm into dead calm.
-    // The ceiling is therefore the config value on its own curve, OR the wind IMPLIED by the
-    // precipitation - real overcast rain always carries wind - whichever is stronger. Authored
-    // values keep authority upward (blowout fx set 100..500 and get their gale), silence does
-    // not mean vacuum, and a clear day keeps a light breath instead of a freeze-frame.
+    // The ceiling is the strongest of three voices: the authored value on its own curve
+    // (blowout fx set 100..500 and keep their gale), the PER-WEATHER PROFILE mapped from the
+    // cycle name (dead_air_x64_wind.ltx - a storm cycle IS windy even though its config only
+    // says "rain and clouds"), and the wind implied by precipitation as the floor under both.
+    float delta = Device.fTimeDelta;
+    if (delta < 0.f || delta > 1.f)
+        delta = 0.03f;
+
     const float base_cfg = powf(clampr(CurrentEnv.wind_velocity / 400.f, 0.f, 1.f), 0.8f);
     const float base_implied = 0.12f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
-    const float base = std::max(base_cfg, base_implied);
+    // The profile switches as a step on the cycle boundary - low-pass it so a new weather
+    // swells the wind over ~half a minute instead of snapping the whole world at once.
+    const float profile = weather_wind_profile();
+    if (wind_profile_smooth < 0.f)
+        wind_profile_smooth = std::max(profile, 0.f); // first frame: no swell-in from zero
+    wind_profile_smooth +=
+        (std::max(profile, 0.f) - wind_profile_smooth) * (1.f - expf(-delta / 12.f));
+    const float base = std::max({base_cfg, wind_profile_smooth, base_implied});
 
     // Three time scales, deliberately incommensurable so the pattern never visibly loops:
     // a minute-scale trend (lulls and freshenings), tens-of-seconds waves, and a fast layer
@@ -832,16 +898,16 @@ void CEnvironment::UpdateEffectiveWind()
     // own light ceiling, a storm between fresh and violent. Balanced so the AVERAGE sits near
     // the weather's nominal strength (multiplying three attenuating layers - variability, the
     // spatial field, the consumer envelope - once collapsed a storm into a flat calm).
-    eff_wind_var = clampr(0.30f + n_trend * 0.55f + n_wave * 0.35f + gust_ev * 0.55f, 0.f, 1.35f);
-    eff_wind_norm = clampr(base * eff_wind_var, 0.f, 1.2f);
+    // The floor rises with the weather: a storm may breathe, but it never sinks to a flat
+    // calm - that read as "the weather has no effect at all" in the field.
+    eff_wind_var = clampr(0.30f + 0.35f * base + n_trend * 0.55f + n_wave * 0.35f + gust_ev * 0.55f,
+        0.f, 1.35f + 0.15f * base);
+    eff_wind_norm = clampr(base * eff_wind_var, 0.f, 1.25f);
 
     // Gustiness: the fast layers, with the legacy Perlin mixed in - blowout zones override
     // wind_strength_factor directly, and that surge must keep reaching every consumer.
     eff_wind_gust = clampr(0.5f * wind_strength_factor + n_wave * 0.25f + gust_ev * 0.75f, 0.f, 1.f);
 
-    float delta = Device.fTimeDelta;
-    if (delta < 0.f || delta > 1.f)
-        delta = 0.03f;
     eff_wind_gust_smooth += (eff_wind_gust - eff_wind_gust_smooth) * (1.f - expf(-delta / 1.5f));
 
     // Direction: the weather heading with a bounded wander - broad and lazy in light air

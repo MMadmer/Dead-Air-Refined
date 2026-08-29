@@ -827,7 +827,7 @@ void CAI_Stalker::UpdateCL()
         // the motor pool is 8 slots and the actor always keeps one. Strength ~1 lays the
         // grass flat under their boots (see the actor press note).
         if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
-            g_pGamePersistent->Environment().wind_motor_press(Position(), 1.25f, 1.0f);
+            g_pGamePersistent->Environment().wind_motor_press(Position(), 1.6f, 1.0f);
     }
 
     if (g_Alive())

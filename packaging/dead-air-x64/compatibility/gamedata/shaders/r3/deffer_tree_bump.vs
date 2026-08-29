@@ -42,6 +42,10 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     // Blast rings rock the crown too (press motors have too small a radius to reach trees).
     float press_unused;
     result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) * 0.35f;
+    // Bush foliage shiver - see deffer_tree_flat.vs for the rationale.
+    const float bush_w = saturate(1.8f - H * 0.22f);
+    const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
+    result += wind.xz * (dp2 * bush_w * min(H, 2.5f) * (0.45f + 0.55f * flow.x));
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
