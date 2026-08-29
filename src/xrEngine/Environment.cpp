@@ -910,14 +910,17 @@ void CEnvironment::UpdateEffectiveWind()
 
     eff_wind_gust_smooth += (eff_wind_gust - eff_wind_gust_smooth) * (1.f - expf(-delta / 1.5f));
 
-    // Direction: the weather heading with a bounded wander - broad and lazy in light air
-    // (real light wind meanders), tight in strong wind (a storm holds its line). Sped up
-    // after a field test: at 45 s the heading read as "never changes" over a minute of
-    // watching. The per-place deviation (eddies) lives in the shader field's z channel.
+    // Direction, three time scales on top of the weather's authored heading:
+    //  * synoptic drift - over ~ten minutes the WHOLE wind swings tens of degrees, the way
+    //    real fronts turn the wind (field report: "the global heading never changes");
+    //  * bounded wander - broad and lazy in light air (real light wind meanders), tight in
+    //    strong wind (a storm holds its line);
+    //  * fine jitter. The per-PLACE deviation (eddies) lives in the shader field's z channel.
+    const float drift = (wind_vnoise(t * (1.f / 540.f) + 71.3f) * 2.f - 1.f) * deg2rad(70.f);
     const float wander_amp = deg2rad(35.f - 22.f * base);
     const float wander = (wind_vnoise(t * (1.f / 30.f) + 41.7f) * 2.f - 1.f) * wander_amp +
         (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(8.f);
-    eff_wind_dir = CurrentEnv.wind_direction + wander;
+    eff_wind_dir = CurrentEnv.wind_direction + drift + wander;
 
     // Spatial gust field scroll (the Ghost of Tsushima scheme: constant heading, magnitude
     // varied place-to-place by travelling noise). Gust fronts ride downwind at a speed that

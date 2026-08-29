@@ -247,17 +247,18 @@ static class cl_da_fog : public R_constant_setup
 } binder_da_fog;
 
 // Second haze constant: density ceiling, layer reference altitude, horizon flattening,
-// w = weather fog THICKNESS 0..1 - how deep in murk the world is, from the weather's fog_far
-// (30 m pea soup -> 1, 300 m+ visibility -> 0), scaled by the fog master. The sky shader
-// drowns the horizon in fog colour by it, so distant silhouettes and the sky behind them
-// converge to one tone instead of bright ghosts on a dark backdrop.
+// w = weather fog THICKNESS 0..1 - how deep in murk the world is, from the weather's fog_far,
+// scaled by the fog master. The sky shader drowns the horizon (and, in thick weather, the
+// whole dome) in fog colour by it, the cloud layer dissolves by it. Calibrated against the
+// actual DA weather set: veryfoggy sits at fog_distance 30 (-> 1.0), STORMS at 200 (-> ~0.6,
+// the first 300-cutoff curve left them nearly untouched), clear at 650 (-> 0).
 static class cl_da_fog2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
         const float thickness =
-            clampr((300.f - env.fog_far) / 270.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
+            clampr((450.f - env.fog_far) / 420.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
         cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, thickness);
     }
 } binder_da_fog2;

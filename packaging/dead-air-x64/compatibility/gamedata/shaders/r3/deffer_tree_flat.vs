@@ -79,14 +79,16 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));
     result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
-    // Hard sanity cap on the TOTAL bend. Storm weathers author amplitude 0.10 (double the
-    // usual), and the service envelope on top of that once folded a crown into a half-circle.
-    // ~22 degrees of tip travel is already a violent gale; nothing bends further without
-    // snapping. The proportional scale-down keeps the bend direction and the crown's shape.
+    // Soft saturation of the TOTAL bend. Storm weathers author amplitude 0.10 (double the
+    // usual), and the envelope on top once folded a crown into a half-circle; a HARD cap
+    // fixed that but pinned the treetop against an invisible wall while the lower crown kept
+    // moving (the tip has the highest flexibility, so it hit the limit first). tanh is the
+    // progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
+    // limit (~0.5*H, ~30 degrees) is an asymptote nothing ever visibly slams into.
     const float bend_len = length(result);
-    const float bend_max = H * 0.38f;
-    if (bend_len > bend_max)
-        result *= bend_max / bend_len;
+    const float bend_max = H * 0.50f;
+    [branch] if (bend_len > 0.001f)
+        result *= bend_max * tanh(bend_len / bend_max) / bend_len;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

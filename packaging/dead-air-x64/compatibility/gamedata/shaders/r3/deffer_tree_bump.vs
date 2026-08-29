@@ -52,10 +52,11 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));
     result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
+    // Soft tanh saturation - see deffer_tree_flat.vs.
     const float bend_len = length(result);
-    const float bend_max = H * 0.38f;
-    if (bend_len > bend_max)
-        result *= bend_max / bend_len;
+    const float bend_max = H * 0.50f;
+    [branch] if (bend_len > 0.001f)
+        result *= bend_max * tanh(bend_len / bend_max) / bend_len;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
