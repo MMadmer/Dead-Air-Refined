@@ -40,7 +40,8 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
     result += wind.xz * (H * flow.y * 0.5f);
     // Blast rings rock the crown too (press motors have too small a radius to reach trees).
-    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H) * 0.35f;
+    float press_unused;
+    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) * 0.35f;
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

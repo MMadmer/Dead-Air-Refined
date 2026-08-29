@@ -889,6 +889,10 @@ void CCC_Register()
     CMD4(CCC_Float, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
     CMD4(CCC_Float, "r__rain_splash_time", &ps_r__rain_splash_time, 0.1f, 1.5f);
     CMD4(CCC_Integer, "r__fps_log", &ps_r__fps_log, 0, 60);
+    {
+        extern int ps_e_wind_dbg;
+        CMD4(CCC_Integer, "wind_dbg", &ps_e_wind_dbg, 0, 1);
+    }
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);
 

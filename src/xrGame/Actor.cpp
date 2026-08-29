@@ -1366,8 +1366,11 @@ void CActor::UpdateCL()
 {
     // Trampling: the actor's feet press the grass around them, and the wind-motor system
     // drives the damped spring-back once we move on. Refreshed per frame while alive.
+    // Strength >= 1 matters: with the arc-length correction in the grass shader it LAYS the
+    // tuft flat instead of tilting it - a 0.55 press drowned in the wind sway and read as
+    // nothing at all in the field test.
     if (g_Alive())
-        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.1f, 0.55f);
+        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.35f, 1.15f);
 
     if (g_Alive() && Level().CurrentViewEntity() == this)
     {

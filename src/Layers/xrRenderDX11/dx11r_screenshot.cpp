@@ -24,6 +24,9 @@ struct GamesaveScreenshotJob
     DirectX::ScratchImage image;
     std::string name;
     u64 id{};
+    // Video-capture frames reuse the same async pipeline but save a full-size JPEG to an
+    // absolute path instead of the 128px BC1 gamesave thumbnail.
+    bool videoFrame{};
 };
 
 struct GamesaveGpuCapture
@@ -40,6 +43,7 @@ struct GamesaveGpuCapture
     DXGI_FORMAT format{DXGI_FORMAT_UNKNOWN};
     u32 width{};
     u32 height{};
+    bool videoFrame{};
 };
 
 class GamesaveScreenshotQueue
@@ -57,16 +61,16 @@ public:
         worker.join();
     }
 
-    void enqueue(DirectX::ScratchImage&& image, pcstr name)
+    void enqueue(DirectX::ScratchImage&& image, pcstr name, bool videoFrame = false)
     {
         {
             std::lock_guard lock(mutex);
-            jobs.push_back({std::move(image), name, nextId++});
+            jobs.push_back({std::move(image), name, nextId++, videoFrame});
         }
         condition.notify_one();
     }
 
-    bool enqueue_gpu_capture(ID3D11Resource* source, pcstr name)
+    bool enqueue_gpu_capture(ID3D11Resource* source, pcstr name, bool videoFrame = false)
     {
         ID3D11Texture2D* sourceTexture = nullptr;
         if (FAILED(source->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&sourceTexture))))
@@ -80,6 +84,7 @@ public:
         capture->format = sourceDescription.Format;
         capture->width = sourceDescription.Width;
         capture->height = sourceDescription.Height;
+        capture->videoFrame = videoFrame;
 
         D3D11_TEXTURE2D_DESC stagingDescription = sourceDescription;
         stagingDescription.MipLevels = 1;
@@ -185,7 +190,7 @@ private:
         context->Unmap(capture.staging, 0);
 
         if (SUCCEEDED(initialized))
-            enqueue(std::move(image), capture.name.c_str());
+            enqueue(std::move(image), capture.name.c_str(), capture.videoFrame);
         gpuCaptures.pop_front();
     }
 
@@ -220,6 +225,16 @@ private:
 
     static void execute(GamesaveScreenshotJob&& job)
     {
+        if (job.videoFrame)
+        {
+            // Full-size JPEG straight to the absolute path prepared by the capture tick.
+            DirectX::Blob saved;
+            if (SUCCEEDED(SaveToWICMemory(*job.image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
+                    GUID_ContainerFormatJpeg, saved)))
+                write_file(job.name.c_str(), saved.GetBufferPointer(), saved.GetBufferSize());
+            return;
+        }
+
         DirectX::ScratchImage resized;
         if (FAILED(Resize(*job.image.GetImage(0, 0, 0), GAMESAVE_SIZE, GAMESAVE_SIZE,
                 DirectX::TEX_FILTER_BOX, resized)))
@@ -247,6 +262,8 @@ private:
 
     void run()
     {
+        // WIC (the JPEG encoder of the video path) needs COM on the calling thread.
+        const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         for (;;)
         {
             GamesaveScreenshotJob job;
@@ -254,12 +271,14 @@ private:
                 std::unique_lock lock(mutex);
                 condition.wait(lock, [this] { return stopping || !jobs.empty(); });
                 if (jobs.empty())
-                    return;
+                    break;
                 job = std::move(jobs.front());
                 jobs.pop_front();
             }
             execute(std::move(job));
         }
+        if (SUCCEEDED(com))
+            CoUninitialize();
     }
 
     std::mutex mutex;
@@ -396,6 +415,65 @@ void CRender::ProcessGamesaveScreenshots()
 {
     if (gamesaveScreenshotQueue)
         gamesaveScreenshotQueue->process_gpu_captures();
+}
+
+// ---- Frame-sequence video capture (r__capture <seconds> <fps>). ----------------------------
+// Dev tool for analysing MOTION (wind, water flow, trampling) that single screenshots cannot
+// show. Rides the async gamesave queue: the GPU copy never stalls the frame, JPEG encoding
+// happens on the worker thread, and frames are paced on GAME time so the sequence is a valid
+// timeline even when disk writes momentarily slow the renderer.
+extern float ps_r__capture_stop_at;
+extern float ps_r__capture_fps;
+
+void CRender::VideoCaptureTick()
+{
+    static string_path captureDir{};
+    static float nextFrameTime{};
+    static u32 frameIndex{};
+
+    if (ps_r__capture_stop_at <= 0.f)
+        return;
+
+    if (Device.fTimeGlobal >= ps_r__capture_stop_at)
+    {
+        Msg("* [capture] finished: %u frame(s) -> %s", frameIndex, captureDir);
+        ps_r__capture_stop_at = 0.f;
+        captureDir[0] = 0;
+        frameIndex = 0;
+        return;
+    }
+
+    if (!captureDir[0])
+    {
+        string64 stamp;
+        timestamp(stamp);
+        string_path relative;
+        xr_sprintf(relative, "capture_%s" DELIMITER, stamp);
+        FS.update_path(captureDir, "$screenshots$", relative);
+        VerifyPath(captureDir);
+        nextFrameTime = Device.fTimeGlobal;
+        frameIndex = 0;
+        Msg("* [capture] recording to %s", captureDir);
+    }
+
+    if (Device.fTimeGlobal < nextFrameTime)
+        return;
+    nextFrameTime += 1.f / std::max(ps_r__capture_fps, 1.f);
+    // If rendering falls behind the requested rate, resync instead of accumulating debt -
+    // a burst of back-to-back frames would break the fixed-interval timeline.
+    if (nextFrameTime < Device.fTimeGlobal)
+        nextFrameTime = Device.fTimeGlobal;
+
+    ID3DResource* source;
+    Target->get_base_rt()->GetResource(&source);
+    if (!source)
+        return;
+
+    string_path frameName;
+    xr_sprintf(frameName, "%sframe_%05u.jpg", captureDir, frameIndex);
+    if (gamesave_screenshot_queue().enqueue_gpu_capture(source, frameName, /*videoFrame=*/true))
+        ++frameIndex;
+    _RELEASE(source);
 }
 
 void flush_gamesave_screenshots()

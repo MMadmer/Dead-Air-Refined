@@ -122,17 +122,21 @@ struct FTreeVisual_setup
 
         // The wind heading used to spin full circle every m_fTreeRotation seconds - crowns leaned
         // east, then north, then west on a windless noon. Now it comes from the effective-wind
-        // service (weather heading + bounded wander), and the authored per-weather amplitude
-        // breathes with the service's variability: lulls ease off, gusts lean the crowns harder.
+        // service (weather heading + bounded wander).
         const float dir = env.eff_wind_dir;
         wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
-        wind.mul(desc.m_fTreeAmplitude * (0.55f + 0.80f * env.eff_wind_var));
+        // The authored per-weather amplitude is tiny (DA weathers sit at ~0.05 rad, an
+        // imperceptible 3 degrees), so the service envelope has to overshoot hard: near the
+        // authored look in a lull, around five times it in a storm gust - that is what finally
+        // makes bushes and crowns read as WEATHER instead of a shiver. Field-test driven.
+        wind.mul(desc.m_fTreeAmplitude * (0.80f + 4.50f * env.eff_wind_norm));
 
         scale = 1.f / float(FTreeVisual_quant);
 
-        // setup constants
-        wave.set(desc.m_fTreeWave.x, desc.m_fTreeWave.y, desc.m_fTreeWave.z, Device.fTimeGlobal * desc.m_fTreeSpeed); // wave
+        // setup constants: the wave phase comes from the service accumulator, which advances
+        // faster in strong wind (crowns whip quicker in a gust, they do not just lean further).
+        wave.set(desc.m_fTreeWave.x, desc.m_fTreeWave.y, desc.m_fTreeWave.z, env.eff_tree_phase); // wave
         wave.div(PI_MUL_2);
     }
 };

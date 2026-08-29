@@ -505,11 +505,15 @@ void CDetailManager::UpdateRenderState()
     const float wind_dir = env.eff_wind_dir;
     // Floor keeps a calm morning breathing; above it the effective-wind service supplies the
     // real-life variability (minute trends, waves, discrete gusts) inside the weather envelope.
-    const float wind_norm = 0.30f + 0.95f * env.eff_wind_norm;
+    // The slope is deliberately steep: a field test showed a storm through three multiplied
+    // moderating layers reads as near-calm - the envelope has to overshoot to survive them.
+    const float wind_norm = 0.35f + 1.30f * env.eff_wind_norm;
+    const float whip = 0.70f + 0.80f * env.eff_wind_norm;
 #else
     constexpr float gust_smooth = 0.3f;
     constexpr float wind_dir = 0.f;
     constexpr float wind_norm = 0.5f;
+    constexpr float whip = 1.f;
 #endif
 
     float delta = Device.fTimeGlobal - m_global_time_old;
@@ -520,9 +524,11 @@ void CDetailManager::UpdateRenderState()
     // The swing preset (calm vs storm set) follows the smoothed gustiness from the wind service.
     swing_current.lerp(swing_desc[0], swing_desc[1], gust_smooth);
 
-    m_time_rot_1 += PI_MUL_2 * delta / swing_current.rot1;
-    m_time_rot_2 += PI_MUL_2 * delta / swing_current.rot2;
-    m_time_pos += delta * swing_current.speed;
+    // Phase advances FASTER in strong wind (grass whips, not just leans): the factor scales the
+    // accumulator increments, so a changing wind never jumps the phase.
+    m_time_rot_1 += PI_MUL_2 * delta * whip / swing_current.rot1;
+    m_time_rot_2 += PI_MUL_2 * delta * whip / swing_current.rot2;
+    m_time_pos += delta * swing_current.speed * whip;
 
     // Direction comes from the service (weather heading + its own bounded wander); the two wave
     // groups get a small fixed split so the field does not move as one sheet.

@@ -309,9 +309,24 @@ public:
     // lockstep. Wrapped to the field's repeat length (2560 m) so precision never degrades.
     Fvector2 eff_wind_field_ofs{};
 
+    // Tree sway phase accumulator: phase advances FASTER in strong wind (real crowns whip
+    // quicker in a gust, they do not just lean further). Integrated with the CURRENT weather's
+    // tree speed so consumers never multiply absolute time by a time-varying speed (that jumps
+    // the phase on every change). Wrapped to a whole number of the sawtooth wave's periods.
+    float eff_tree_phase{};
+
+    // Puddle-ripple travel accumulators, in noise-space units (world m x 12), wrapped to the
+    // 64-cell period of the puddle noise. The ripple pattern SCROLLS continuously along the
+    // local flow direction - rain drives the downhill term (scaled by slope per pixel), wind
+    // drives the along-wind term (scaled by puddle depth per pixel). No layer crossfade: the
+    // eye reads crossfading noise layers as "the whole texture rocking back and forth".
+    float eff_water_run_rain{};
+    float eff_water_run_wind{};
+
     // CPU twin of da_wind_field_eval (amplitude half): the audio layer asks "how hard does the
     // wind blow AT THAT TREE right now". Must stay formula-identical to da_wind_field.h.
     float SampleWindField(float x, float z) const;
+
 
     // Published by the renderer for the vegetation-audio layer: world positions of every tree
     // visual on the level (filled after level load, cleared on unload), and a 0..1 "how much
@@ -320,34 +335,45 @@ public:
     float wind_veg_green{};
 
     // ---- Wind motors (the Tsushima "vorticle" idea, budgeted) ------------------------------
-    // Up to 8 point sources of LOCAL wind response, consumed by the vegetation vertex shaders:
+    // Up to 8 local sources of vegetation response, consumed by the vegetation vertex shaders:
     //  * press motors - actors walking through grass: a radial push around the feet while the
     //    actor stands there, and a damped spring-back oscillation once they move on;
     //  * impulse motors - explosions and blowout starts: an expanding ring that bends grass
-    //    and crowns outward from the epicentre and fades as it travels.
+    //    and crowns outward from the epicentre and fades as it travels;
+    //  * shot motors - a narrow line gust along a bullet trace: vegetation shivers outward
+    //    from the trajectory for a fraction of a second after each shot.
     enum
     {
         wind_motor_count = 8
     };
+    enum class EWindMotor : u8
+    {
+        press,
+        impulse,
+        shot
+    };
     struct SWindMotor
     {
-        Fvector pos{};
-        float radius{};
+        Fvector pos{};      // press/impulse: centre; shot: trace start
+        Fvector2 dir{};     // shot: horizontal trace direction (unit)
+        float radius{};     // press/impulse: reach; shot: trace length
         float strength{};   // authored strength of the source
-        float touched{};    // press: last refresh time; impulse: birth time
+        float touched{};    // press: last refresh time; impulse/shot: birth time
         float released{};   // press: when the actor left (0 = still pressing)
-        bool impulse{};
+        EWindMotor type{};
         bool used{};
     };
     SWindMotor wind_motors[wind_motor_count];
-    // Packed shader output, refreshed each frame: row i of pos = (xyz, radius),
-    // row i of par = (signed bend amplitude, ring radius, ring width, 0).
+    // Packed shader output, refreshed each frame: row i of pos = (xyz, radius-or-length),
+    // row i of par = (signed bend amplitude, ring radius | dir.x, ring width | dir.z,
+    // 0 = radial | 1 = line).
     Fmatrix wind_motor_pos[2];  // rows: motors 0..3, 4..7
     Fmatrix wind_motor_par[2];
     float wind_motor_active{};  // how many rows the shader loop has to walk (0 = free)
 
     void wind_motor_press(const Fvector& pos, float radius, float strength);
     void wind_motor_impulse(const Fvector& pos, float radius, float strength);
+    void wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength);
     // CPU sum of the live motors' bend strength at a point - the audio layer uses it so a blast
     // ring makes the bushes it passes through rustle, exactly where the bend is seen.
     float SampleWindMotors(float x, float z) const;

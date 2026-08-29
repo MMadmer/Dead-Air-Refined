@@ -9,7 +9,9 @@
 namespace
 {
 // Type voicing: grass whispers high and quiet, bushes sit in the middle, trees roar low.
-const float k_volume[] = {0.35f, 0.60f, 1.00f};
+// Raised after a field test: under rain ambience the first calibration was indistinguishable
+// from the rain itself.
+const float k_volume[] = {0.45f, 0.85f, 1.30f};
 const float k_pitch[] = {1.15f, 1.00f, 0.82f};
 // The local wind strength a spot needs before it can rustle at all. (First calibration sat
 // above what a storm actually produced after the field multiplies in - the world went mute.)
@@ -84,7 +86,7 @@ bool CEffect_WindVeg::play_one(int type, const Fvector& pos, float strength)
         if (Device.fTimeGlobal >= v.busy_until)
         {
             v.snd.play_at_pos(nullptr, pos, 0);
-            const float vol = k_volume[type] * clampr((strength - 0.35f) / 0.55f, 0.15f, 1.f);
+            const float vol = k_volume[type] * clampr((strength - 0.30f) / 0.50f, 0.25f, 1.f);
             v.snd.set_volume(vol);
             v.snd.set_frequency(k_pitch[type] * ::Random.randF(0.92f, 1.08f));
             const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 1.f;

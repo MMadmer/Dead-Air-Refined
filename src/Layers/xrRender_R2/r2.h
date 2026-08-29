@@ -564,6 +564,7 @@ public:
     void OnFrame() override;
 #if defined(USE_DX11)
     void ProcessGamesaveScreenshots();
+    void VideoCaptureTick();
 #endif
 
     void BeforeWorldRender() override; //--#SM+#-- +SecondVP+ Procedure is called before world render and post-effects

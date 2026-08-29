@@ -606,6 +606,10 @@ void CEnvironment::lerp()
     m_pRender->lerp(CurrentEnv, &*Current[0]->m_pDescriptor, &*Current[1]->m_pDescriptor);
 }
 
+// Console "wind_dbg 1": dump the live wind-service numbers every 2 s. Tuning is done against
+// what the game actually computes, not against what the formulas promise.
+ENGINE_API int ps_e_wind_dbg = 0;
+
 namespace
 {
 // C1-smooth 1D value noise for the wind service: random values on an integer lattice,
@@ -660,11 +664,12 @@ float CEnvironment::SampleWindField(float x, float z) const
 void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float strength)
 {
     // Refresh an existing press motor near this position (one motor per walking actor), or
-    // claim a free slot. No slot free - the oldest impulse yields, presses never do.
+    // claim a free slot. No slot free - transient motors yield (see claim below), presses don't.
     SWindMotor* slot = nullptr;
     for (auto& m : wind_motors)
     {
-        if (m.used && !m.impulse && m.released == 0.f && m.pos.distance_to_sqr(pos) < 1.f)
+        if (m.used && m.type == EWindMotor::press && m.released == 0.f &&
+            m.pos.distance_to_sqr(pos) < 1.f)
         {
             slot = &m;
             break;
@@ -681,7 +686,7 @@ void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float stre
         return;
 
     slot->used = true;
-    slot->impulse = false;
+    slot->type = EWindMotor::press;
     slot->pos = pos;
     slot->radius = radius;
     slot->strength = strength;
@@ -689,33 +694,74 @@ void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float stre
     slot->released = 0.f;
 }
 
+namespace
+{
+// Shared slot claim for the short-lived motor types: take a free slot, otherwise steal the
+// oldest transient (impulse/shot) - a fresh event beats a dying one, presses are never evicted.
+CEnvironment::SWindMotor* wind_motor_claim_transient(CEnvironment::SWindMotor (&motors)[CEnvironment::wind_motor_count])
+{
+    for (auto& m : motors)
+        if (!m.used)
+            return &m;
+
+    CEnvironment::SWindMotor* slot = nullptr;
+    float oldest = flt_max;
+    for (auto& m : motors)
+        if (m.type != CEnvironment::EWindMotor::press && m.touched < oldest)
+        {
+            oldest = m.touched;
+            slot = &m;
+        }
+    return slot;
+}
+} // namespace
+
 void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float strength)
 {
-    SWindMotor* slot = nullptr;
-    for (auto& m : wind_motors)
-        if (!m.used)
-        {
-            slot = &m;
-            break;
-        }
-    if (!slot)
-    {
-        // steal the oldest impulse - a fresh explosion beats a dying ring
-        float oldest = flt_max;
-        for (auto& m : wind_motors)
-            if (m.impulse && m.touched < oldest)
-            {
-                oldest = m.touched;
-                slot = &m;
-            }
-    }
+    SWindMotor* slot = wind_motor_claim_transient(wind_motors);
     if (!slot)
         return;
 
     slot->used = true;
-    slot->impulse = true;
+    slot->type = EWindMotor::impulse;
     slot->pos = pos;
     slot->radius = radius;
+    slot->strength = strength;
+    slot->touched = Device.fTimeGlobal;
+    slot->released = 0.f;
+}
+
+void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength)
+{
+    Fvector2 flat{dir.x, dir.z};
+    const float flat_len = _sqrt(flat.x * flat.x + flat.y * flat.y);
+    if (flat_len < 0.2f)
+        return; // near-vertical shot: no meaningful ground trace
+    flat.x /= flat_len;
+    flat.y /= flat_len;
+
+    // Automatic fire must not eat the whole motor pool: a fresh shot from the same spot in the
+    // same direction re-arms the existing trace instead of claiming a new slot.
+    SWindMotor* slot = nullptr;
+    for (auto& m : wind_motors)
+    {
+        if (m.used && m.type == EWindMotor::shot && m.pos.distance_to_sqr(pos) < 4.f &&
+            (m.dir.x * flat.x + m.dir.y * flat.y) > 0.9f)
+        {
+            slot = &m;
+            break;
+        }
+    }
+    if (!slot)
+        slot = wind_motor_claim_transient(wind_motors);
+    if (!slot)
+        return;
+
+    slot->used = true;
+    slot->type = EWindMotor::shot;
+    slot->pos = pos;
+    slot->dir = flat;
+    slot->radius = length;
     slot->strength = strength;
     slot->touched = Device.fTimeGlobal;
     slot->released = 0.f;
@@ -734,8 +780,19 @@ float CEnvironment::SampleWindMotors(float x, float z) const
         const float* arow = &A.m[i % 4][0];
         if (prow[3] <= 0.f || _abs(arow[0]) <= 0.001f)
             continue;
-        const float dx = x - prow[0];
-        const float dz = z - prow[2];
+        float dx = x - prow[0];
+        float dz = z - prow[2];
+        if (arow[3] > 0.5f)
+        {
+            // Line motor: distance to the trace segment (arow[1]/arow[2] carry the direction).
+            const float along = clampr(dx * arow[1] + dz * arow[2], 0.f, prow[3]);
+            dx -= arow[1] * along;
+            dz -= arow[2] * along;
+            const float dist = _sqrt(dx * dx + dz * dz);
+            const float t = dist * (1.f / 1.1f);
+            total += _abs(arow[0]) * expf(-t * t);
+            continue;
+        }
         const float dist = _sqrt(dx * dx + dz * dz);
         if (dist > prow[3] + arow[2] * 2.f)
             continue;
@@ -795,6 +852,29 @@ void CEnvironment::UpdateEffectiveWind()
     eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
     eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
 
+    // ---- Tree sway phase: advances faster in strong wind. ----------------------------------
+    // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly), so the
+    // whip-up in a gust is continuous - a time-varying speed times absolute time would jump
+    // the phase. The consumer divides by 2*pi (FTreeVisual), after which the sawtooth wave's
+    // period is 1.0 - wrapping at 1024 * 2*pi keeps a whole number of periods.
+    eff_tree_phase = fmodf(
+        eff_tree_phase + delta * CurrentEnv.m_fTreeSpeed * (0.70f + 0.80f * eff_wind_norm),
+        1024.f * PI_MUL_2);
+
+    // ---- Puddle ripple travel. -------------------------------------------------------------
+    // Two accumulated path lengths in noise-space units (world m x 12): rain drives downhill
+    // flow (per-pixel slope scales it in the shader), wind drives along-wind drift (per-pixel
+    // depth scales it). A tiny idle term keeps standing water barely alive instead of frozen.
+    // The wrap CANNOT be the 64-cell noise period: the shader shifts along an arbitrary local
+    // direction, so a 64 jump is not lattice-aligned and would visibly pop. 16384 keeps frac()
+    // precision smooth and pops the pattern once per ~1.5 h of continuous rain - a single
+    // reseed of shapeless noise the eye cannot catch.
+    const float rain_k = clampr(CurrentEnv.rain_density * 1.5f, 0.f, 1.f);
+    constexpr float water_wrap = 16384.f;
+    eff_water_run_rain = fmodf(eff_water_run_rain + delta * (rain_k * 2.2f) * 12.f, water_wrap);
+    eff_water_run_wind =
+        fmodf(eff_water_run_wind + delta * (0.05f + 0.75f * eff_wind_norm) * 12.f, water_wrap);
+
     // ---- Wind motors: simulate and pack for the vegetation shaders. ------------------------
     const float now = Device.fTimeGlobal;
     u32 highest = 0;
@@ -802,8 +882,9 @@ void CEnvironment::UpdateEffectiveWind()
     {
         SWindMotor& m = wind_motors[i];
         float amp = 0.f, ring_r = 0.f, ring_w = 0.f;
+        const bool line = m.type == EWindMotor::shot;
 
-        if (m.used && m.impulse)
+        if (m.used && m.type == EWindMotor::impulse)
         {
             // Expanding blast ring: front travels at 14 m/s, height of the bend decays as it
             // goes. Dead once the ring leaves the authored radius.
@@ -812,6 +893,15 @@ void CEnvironment::UpdateEffectiveWind()
             ring_w = 1.5f + age * 2.0f; // the front smears out as it expands
             amp = m.strength * expf(-age * 2.2f);
             if (ring_r > m.radius || amp < 0.02f)
+                m.used = false;
+        }
+        else if (m.used && line)
+        {
+            // Shot trace: a short shiver along the bullet path, gone in ~a third of a second.
+            // Re-armed by every following shot of a burst (see wind_motor_shot).
+            const float age = now - m.touched;
+            amp = m.strength * expf(-age * 6.5f);
+            if (amp < 0.02f)
                 m.used = false;
         }
         else if (m.used)
@@ -843,9 +933,31 @@ void CEnvironment::UpdateEffectiveWind()
         float* prow = &P.m[i % 4][0];
         float* arow = &A.m[i % 4][0];
         prow[0] = m.pos.x; prow[1] = m.pos.y; prow[2] = m.pos.z; prow[3] = m.used ? m.radius : 0.f;
-        arow[0] = m.used ? amp : 0.f; arow[1] = ring_r; arow[2] = std::max(ring_w, 0.05f); arow[3] = 0.f;
+        arow[0] = m.used ? amp : 0.f;
+        // Line motors carry their direction where radial ones carry the ring shape.
+        arow[1] = line ? m.dir.x : ring_r;
+        arow[2] = line ? m.dir.y : std::max(ring_w, 0.05f);
+        arow[3] = line ? 1.f : 0.f;
     }
     wind_motor_active = float(highest);
+
+    // ---- Optional service dump (wind_dbg 1): ground the tuning in real numbers. ------------
+    if (ps_e_wind_dbg)
+    {
+        static float next_dump = 0.f;
+        if (now >= next_dump)
+        {
+            next_dump = now + 2.f;
+            u32 live = 0;
+            for (const auto& m : wind_motors)
+                if (m.used)
+                    ++live;
+            Msg("* [wind] vel=%.1f base=%.2f norm=%.2f var=%.2f gust=%.2f dir=%.0f deg | motors=%u "
+                "green=%.2f rain=%.2f",
+                CurrentEnv.wind_velocity, base, eff_wind_norm, eff_wind_var, eff_wind_gust,
+                rad2deg(eff_wind_dir), live, wind_veg_green, rain_k);
+        }
+    }
 }
 
 void CEnvironment::OnFrame()

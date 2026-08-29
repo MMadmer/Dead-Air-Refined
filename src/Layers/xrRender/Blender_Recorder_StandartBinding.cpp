@@ -346,16 +346,19 @@ static class cl_da_aref : public R_constant_setup
     }
 } binder_da_aref;
 
-// Effective wind for the puddle ripple drift: xy = world-XZ direction scaled by the current
-// strength, z = gustiness. Straight from the wind service, so ripples drift exactly where the
-// grass bends and the rain slants.
+// Effective wind for the puddle ripple: xy = world-XZ wind direction scaled by the current
+// strength, z = accumulated WIND travel of the ripple pattern, w = accumulated RAIN travel
+// (both in noise-space units, integrated by the wind service). The shader offsets its noise
+// lookup by these, so the ripple pattern SCROLLS continuously - downhill in rain, downwind
+// otherwise - instead of crossfading in place.
 static class cl_da_puddle_wind : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment();
         const float a = env.eff_wind_dir;
-        cmd_list.set_c(C, _sin(a) * env.eff_wind_norm, _cos(a) * env.eff_wind_norm, env.eff_wind_gust, 0.f);
+        cmd_list.set_c(C, _sin(a) * env.eff_wind_norm, _cos(a) * env.eff_wind_norm,
+            env.eff_water_run_wind, env.eff_water_run_rain);
     }
 } binder_da_puddle_wind;
 

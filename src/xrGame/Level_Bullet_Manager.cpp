@@ -8,6 +8,7 @@
 #include "game_cl_base.h"
 #include "Actor.h"
 #include "GamePersistent.h"
+#include "xrEngine/Environment.h"
 #include "mt_config.h"
 #include "game_cl_base_weapon_usage_statistic.h"
 #include "game_cl_mp.h"
@@ -194,6 +195,14 @@ void CBulletManager::AddBullet(const Fvector& position, const Fvector& direction
         sendersweapon_id, e_hit_type, maximum_distance, cartridge, air_resistance_factor, SendHit, iShotNum);
     //	bullet.frame_num			= Device.dwFrame;
     bullet.flags.aim_bullet = AimBullet;
+
+    // Every shot shivers the vegetation along its trace: a narrow line gust in the wind-motor
+    // system, fading in a third of a second. Bursts re-arm the same motor (see the merge in
+    // wind_motor_shot), so automatic fire never floods the pool. Capped near the camera - the
+    // trace is a metre-scale detail, invisible farther out.
+    if (position.distance_to_sqr(Device.vCameraPosition) < 50.f * 50.f)
+        g_pGamePersistent->Environment().wind_motor_shot(
+            position, direction, std::min(maximum_distance, 25.f), 0.5f);
     if (!IsGameTypeSingle())
     {
         if (SendHit)

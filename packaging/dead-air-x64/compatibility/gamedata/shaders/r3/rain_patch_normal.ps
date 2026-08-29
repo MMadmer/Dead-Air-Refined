@@ -6,6 +6,9 @@ Texture3D s_water;
 Texture2D s_waterFall;
 float4 RainDensity;
 float4 RainFallof; // x = wet radius near, y = far (r3_dynamic_wet_surfaces_near/far)
+// Wind service state (same binder as the puddle shader): w = accumulated rain travel phase,
+// used to slide the run-off pattern DOWNHILL on sloped ground.
+float4 da_puddle_wind;
 
 float2 SampleSplashNormal(float2 tc, float time)
 {
@@ -172,10 +175,21 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         // Ground pops where rings are born - a fleck of water kicked up by the drop.
         const float3 pop = SplashPops(worldPosition.xz, timers.x * 3.0, 0.5, 0.35);
 
+        // Downhill sheet flow on sloped GROUND. The stock flowX/flowZ pair only wakes up on
+        // steep surfaces (angleFactor quantises to zero near horizontal), so a wet sloped road
+        // showed rings but no run - "the water does not flow downhill". The horizontal part of
+        // the world normal IS the downhill direction with slope for length; the pattern slides
+        // along it with the accumulated rain-travel phase from the wind service.
+        const float2 downhill = worldNormal.xz;
+        const float slope_k = saturate(length(downhill) * 4.0) * upwardWeight;
+        const float2 flow_uv = worldPosition.xz * 0.7
+            - normalize(downhill + float2(1e-4, 0.0)) * (da_puddle_wind.w * 0.020);
+        const float2 slope_flow = SampleFlowNormal(flow_uv) * (slope_k * 1.4);
+
         float3 water;
-        water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight;
+        water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight + slope_flow.x;
         water.y = flowX.x * xWeight + flowZ.x * zWeight + pop.z;
-        water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight;
+        water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight + slope_flow.y;
         water *= wetness;
 
         normal = normalize(normal + mul((float3x3)m_V, water));

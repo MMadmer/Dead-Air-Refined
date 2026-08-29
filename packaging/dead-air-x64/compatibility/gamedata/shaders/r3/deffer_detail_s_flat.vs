@@ -44,8 +44,13 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	// Wind motors: still details do not wave, but a boot or a blast still bends them.
 	{
 		const float H_s = v.pos.y * length(float3(m0.y, m1.y, m2.y));
-		const float2 mb = da_wind_motors_bend(float2(m0.w, m2.w), H_s);
+		float press_w;
+		const float2 mb = da_wind_motors_bend(float2(m0.w, m2.w), H_s, press_w);
+		// Same arc-length correction as the waving grass: a full-strength press LAYS the
+		// tuft down instead of stretching it sideways.
+		const float drop_s = H_s - sqrt(max(H_s * H_s - dot(mb, mb), 0.0f));
 		pos.x += mb.x;
+		pos.y -= drop_s;
 		pos.z += mb.y;
 	}
 

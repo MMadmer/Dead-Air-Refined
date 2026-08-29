@@ -879,6 +879,7 @@ void CRender::OnFrame()
 
 #if defined(USE_DX11)
     ProcessGamesaveScreenshots();
+    VideoCaptureTick();
 #endif
 
     Models->DeleteQueue();

@@ -741,6 +741,41 @@ public:
     virtual void Execute(LPCSTR /*args*/) { RImplementation.Models->dump(); }
 };
 
+// Frame-sequence video capture: "r__capture <seconds> [fps]" starts recording JPEG frames to
+// $screenshots$\capture_<timestamp>\, "r__capture 0" (or no args) stops early. Dev tool for
+// analysing motion; state lives in globals read by CRender::VideoCaptureTick.
+float ps_r__capture_stop_at = 0.f;
+float ps_r__capture_fps = 20.f;
+
+class CCC_VideoCapture final : public IConsole_Command
+{
+public:
+    CCC_VideoCapture(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        float seconds = 0.f, fps = 20.f;
+        const int parsed = sscanf(args, "%f %f", &seconds, &fps);
+        if (parsed < 1 || seconds <= 0.f)
+        {
+            if (ps_r__capture_stop_at > 0.f)
+            {
+                // Force the tick to run its completion branch on the next frame.
+                ps_r__capture_stop_at = Device.fTimeGlobal;
+                Msg("* [capture] stop requested");
+            }
+            else
+                Msg("* [capture] usage: r__capture <seconds 1..120> [fps 5..60]");
+            return;
+        }
+        clamp(seconds, 1.f, 120.f);
+        clamp(fps, 5.f, 60.f);
+        ps_r__capture_fps = fps;
+        ps_r__capture_stop_at = Device.fTimeGlobal + seconds;
+        Msg("* [capture] recording %.1fs at %.0f fps", seconds, fps);
+    }
+    void Info(TInfo& info) override { xr_strcpy(info, "record a frame sequence: <seconds> [fps]"); }
+};
+
 class CCC_SSAO_Mode : public CCC_Token
 {
 public:
@@ -1206,6 +1241,9 @@ void xrRender_initconsole()
 
     // Common
     CMD1(CCC_Screenshot, "screenshot");
+#if defined(USE_DX11)
+    CMD1(CCC_VideoCapture, "r__capture");
+#endif
 
 #ifdef DEBUG
 #if RENDER != R_R1
