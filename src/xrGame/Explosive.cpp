@@ -347,10 +347,13 @@ void CExplosive::Explode()
 
     // Blast wave through the vegetation: an expanding wind-motor ring bends grass and crowns
     // outward from the epicentre - EVERY explosion (grenades, barrels, rockets) comes through
-    // this base class. Punched up after a field test where the wave was invisible (the real
-    // culprit was press motors starving the pool - fixed - but the wave also deserves to
-    // read as a shockwave, not a breeze).
-    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 2.2f);
+    // this base class.
+    {
+        extern ENGINE_API int ps_e_wind_dbg;
+        if (ps_e_wind_dbg)
+            Msg("* [wind] Explode at (%.0f, %.0f, %.0f)", pos.x, pos.y, pos.z);
+    }
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 3.2f);
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);

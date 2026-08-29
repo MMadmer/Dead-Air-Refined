@@ -884,7 +884,7 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
             const float dist = _sqrt(dx * dx + dz * dz);
             const float trace_y = prow[1] + (arow[3] - 1.f) * along;
             const float h_gate = clampr(1.f - (trace_y - p.y - 0.7f) / 1.1f, 0.f, 1.f);
-            const float t = dist * (1.f / 0.3f);
+            const float t = dist * (1.f / 0.16f);
             total += _abs(arow[0]) * expf(-t * t) * h_gate;
             continue;
         }
@@ -1028,7 +1028,10 @@ void CEnvironment::UpdateEffectiveWind()
             const float age = now - m.touched;
             ring_r = 10.f * age;
             ring_w = 1.3f + age * 1.0f;
-            amp = m.strength * expf(-age * 1.1f);
+            // Slow decay is the whole point: at exp(-1.1t) the ring arrived at its outer
+            // radius with 14% strength and read as nothing (rig telemetry at 18 m showed a
+            // flat line). The blast must stay a BLAST all the way out.
+            amp = m.strength * expf(-age * 0.55f);
             if (ring_r > m.radius || amp < 0.02f)
                 m.used = false;
         }
@@ -1088,10 +1091,12 @@ void CEnvironment::UpdateEffectiveWind()
         if (now >= next_test_blast)
         {
             next_test_blast = now + 5.f;
+            // 18 m out - a realistic grenade-throw distance, so the test verifies the ring's
+            // READABILITY at the range players actually watch it from, not just at their feet.
             Fvector p = Device.vCameraPosition;
-            p.mad(Device.vCameraDirection, 6.f);
+            p.mad(Device.vCameraDirection, 18.f);
             p.y -= 1.5f;
-            wind_motor_impulse(p, 22.f, 2.2f);
+            wind_motor_impulse(p, 22.f, 3.2f);
         }
     }
 
