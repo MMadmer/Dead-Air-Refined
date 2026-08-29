@@ -499,9 +499,6 @@ ENGINE_API float ps_r__rain_radius = 14.0f;
 // Ground splash share per landed drop (stock refused every second hit) and splash life.
 ENGINE_API float ps_r__rain_splash = 1.0f;
 ENGINE_API float ps_r__rain_splash_time = 0.30f;
-// Lying-brass decal cap (shell_litter.cpp). Follows the graphics preset ladder
-// (xrRender_sync_preset_derived); the console overrides for the session only.
-ENGINE_API int ps_r__shell_decals = 96;
 
 // QA diagnostic: log one average-FPS line every N seconds (0 = off). See device.cpp.
 ENGINE_API int ps_r__fps_log = 0;
@@ -891,7 +888,6 @@ void CCC_Register()
     CMD4(CCC_Float, "r__rain_radius", &ps_r__rain_radius, 5.f, 40.f);
     CMD4(CCC_Float, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
     CMD4(CCC_Float, "r__rain_splash_time", &ps_r__rain_splash_time, 0.1f, 1.5f);
-    CMD4(CCC_Integer, "r__shell_decals", &ps_r__shell_decals, 0, 512);
     CMD4(CCC_Integer, "r__fps_log", &ps_r__fps_log, 0, 60);
     {
         extern int ps_e_wind_dbg;

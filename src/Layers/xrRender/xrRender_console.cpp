@@ -22,9 +22,6 @@
 #   endif // MASTER_GOLD
 #endif // (RENDER == R_R3) || (RENDER == R_R4)
 
-// Declared before the namespace opens: inside it the extern would bind to render_r4::.
-extern ENGINE_API int ps_r__shell_decals;
-
 namespace xray::render::RENDER_NAMESPACE
 {
 u32 ps_Preset = 2;
@@ -882,9 +879,6 @@ void xrRender_sync_preset_derived()
     // default (high); Minimum stays on the plain cubemap. A shader-options change, so it
     // applies on renderer (re)start like the token itself.
     static constexpr u32 water_refl_by_preset[] = {0, 1, 2, 3, 3};
-    // Lying-brass shell decals: each landing costs one short raycast and a wallmark, and the
-    // wallmark budget is shared with bullet holes - the cap climbs with the preset.
-    static constexpr int shell_decals_by_preset[] = {0, 48, 96, 160, 256};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.
@@ -934,7 +928,6 @@ void xrRender_sync_preset_derived()
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
     ps_r__sss = sss_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
-    ::ps_r__shell_decals = shell_decals_by_preset[ps_Preset];
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;

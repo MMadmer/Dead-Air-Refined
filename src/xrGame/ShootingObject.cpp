@@ -17,7 +17,6 @@
 #include "Level_Bullet_Manager.h"
 #include "game_cl_single.h"
 #include "xrCommon/xr_hash_map.h"
-#include "shell_litter.h"
 
 #define HIT_POWER_EPSILON 0.05f
 #define WALLMARK_SIZE 0.04f
@@ -323,10 +322,6 @@ void CShootingObject::OnShellDrop(const Fvector& play_pos, const Fvector& parent
 {
     if (!m_sShellParticles)
         return;
-    // The lying-brass decal is queued for every shell within sight, not just the 2 m
-    // particle radius below: NPC fire leaves its brass too.
-    if (Device.vCameraPosition.distance_to_sqr(play_pos) < 30.f * 30.f)
-        shell_litter::queue(play_pos, IsHudModeNow());
     if (Device.vCameraPosition.distance_to_sqr(play_pos) > 2 * 2)
         return;
 
