@@ -805,7 +805,18 @@ float CEnvironment::SampleWindMotors(float x, float z) const
 void CEnvironment::UpdateEffectiveWind()
 {
     const float t = Device.fTimeGlobal;
-    const float base = clampr(CurrentEnv.wind_velocity / 20.f, 0.f, 1.f); // weather ceiling
+    // Weather ceiling. Two hard facts from the field (wind_dbg on real DA configs):
+    //  * wind_velocity is a LEGACY 0..1000-ish scale (typical live values 10..500), not m/s -
+    //    dividing by 20 saturated every nonzero weather to "hurricane" and erased the range;
+    //  * 1028 of ~1100 DA weather entries say wind_velocity = 0 - their storms are authored as
+    //    rain and clouds only, so a config-only ceiling turned a rainstorm into dead calm.
+    // The ceiling is therefore the config value on its own curve, OR the wind IMPLIED by the
+    // precipitation - real overcast rain always carries wind - whichever is stronger. Authored
+    // values keep authority upward (blowout fx set 100..500 and get their gale), silence does
+    // not mean vacuum, and a clear day keeps a light breath instead of a freeze-frame.
+    const float base_cfg = powf(clampr(CurrentEnv.wind_velocity / 400.f, 0.f, 1.f), 0.8f);
+    const float base_implied = 0.12f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
+    const float base = std::max(base_cfg, base_implied);
 
     // Three time scales, deliberately incommensurable so the pattern never visibly loops:
     // a minute-scale trend (lulls and freshenings), tens-of-seconds waves, and a fast layer
