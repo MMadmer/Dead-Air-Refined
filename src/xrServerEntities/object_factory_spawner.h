@@ -310,6 +310,7 @@ constexpr SpawnCategory clsid_to_spawn_category(CLASS_ID clsid)
     case make_clsid("WP_SILEN"):
     case make_clsid("WP_GLAUN"):
     case make_clsid("WP_BINOC"):
+    case make_clsid("WP_PDA3D"):
         return SpawnCategory::WeaponsMiscellaneous;
 
     case CLSID_CAR:

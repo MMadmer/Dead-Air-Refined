@@ -91,5 +91,23 @@ public:
     void UpdatePda();
     void UpdateRankingWnd();
 
+    // 3D PDA. The RT pass raises the in-pass flag, draws this dialog into $user$ui and
+    // stamps the frame; the ordinary fullscreen Draw() then suppresses itself for the rest
+    // of the same frame. The guard means "rasterized to RT THIS frame", never "3D enabled" -
+    // a frame without the RT pass falls back to the plain 2D dialog by construction.
+    void MarkRasterizedToRT();
+    void SetInRTPass(bool b) { m_in_rt_pass = b; }
+    bool RasterizedToRT() const;
+    // The device face sub-rect inside the UI canvas, in 0..1 UV of $user$ui - the screen
+    // shader maps its mesh UVs through this, so layout stays data (pda.xml vs pda_16.xml,
+    // modded layouts) instead of being baked into the model.
+    bool GetScreenRectUV(Fvector4& uv) const;
+
+private:
+    u32 m_rt_frame = u32(-1);
+    bool m_in_rt_pass = false;
+
+public:
+
     pcstr GetDebugType() override { return "CUIPdaWnd"; }
 };

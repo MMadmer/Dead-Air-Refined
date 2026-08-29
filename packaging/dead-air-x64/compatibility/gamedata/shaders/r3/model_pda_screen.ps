@@ -1,0 +1,79 @@
+#include "common.h"
+
+// 3D PDA screen (the Gunslinger original with our two changes; see models_pda.s).
+// m_affects drives EVERY state of the screen from one constant - the data-driven model:
+//   x = interference level 0..1: >0.09 rolling tear, >0.15 travelling wave, >0.27 the UI
+//       feed is lost (the model's own dead-screen texture shows), >0.38 whole-image shift,
+//       >0.41 full blackout. A dead battery is x pushed past the blackout threshold.
+//   y = phase/random driver (stepped a few times a second on the CPU)
+//   z = brightness
+//   a = boot flag: while >0 (and x passes the 0.08 gate) the loading sequence shows.
+uniform float4 m_affects;
+// The PDA dialog face sub-rect inside $user$ui, in UV (xy offset, zw size). Layout is DATA:
+// pda.xml vs pda_16.xml vs modded layouts all land here, nothing is baked into the mesh.
+uniform float4 pda_screen_rect;
+
+// Change vs the original: float3 tc1:TEXCOORD1 is REMOVED - our model_def_lplanes.vs does
+// not emit it (DX11 refuses to link a PS input the VS lacks), and the body never read it.
+struct v2p
+{
+    float2 tc0 : TEXCOORD0; // screen quad UV, 0..1 over the visible screen
+    float4 c0 : COLOR0;     // facing fade from model_def_lplanes.vs
+};
+
+float get_noise(float2 co)
+{
+    return (frac(sin(dot(co.xy, float2(12.9898f, 78.233f))) * 43758.5453f)) * 0.5f;
+}
+
+Texture2D s_vp2;
+Texture2D s_load;
+
+float4 problems_main(v2p I)
+{
+    // rolling horizontal tear line
+    float problems = frac(timers.z * 5 * (1 + 2 * m_affects.x));
+    I.tc0.x += (m_affects.x > 0.09f && I.tc0.y > problems - 0.01f && I.tc0.y < problems)
+        ? sin((I.tc0.y - problems) * 5 * m_affects.y) : 0;
+
+    // travelling wave band
+    problems = cos((frac(timers.z * 2) - 0.5f) * 3.1416f) * 2 - 0.8f;
+    const float AMPL = 0.13f;
+    I.tc0.x -= (m_affects.x > 0.15f && I.tc0.y > problems - AMPL && I.tc0.y < problems + AMPL)
+        ? cos(4.71f * (I.tc0.y - problems) / AMPL) * sin(frac(timers.z) * 6.2831f * 90) * 0.02f *
+            (AMPL - abs(I.tc0.y - problems)) / AMPL : 0;
+
+    // whole-image horizontal shift at high interference
+    I.tc0.x += (m_affects.x > 0.38f) ? (m_affects.y - 0.5f) * 0.04f : 0;
+
+    // Above 0.27 the UI feed is lost - the model's own dead-screen texture takes over. The
+    // live feed maps the (possibly distorted) screen UV through the dialog-face sub-rect;
+    // no wrap sampler and no mips on the RT, so the CLAMP/LINEAR smp_rtlinear it is.
+    float4 t_vp2 = (m_affects.x < 0.27f)
+        ? s_vp2.Sample(smp_rtlinear, pda_screen_rect.xy + saturate(I.tc0) * pda_screen_rect.zw)
+        : s_base.Sample(smp_base, I.tc0);
+
+    // grain
+    float noise = get_noise(I.tc0 * timers.z) * m_affects.x * m_affects.x * 20;
+    t_vp2.rgb += noise;
+
+    // full blackout
+    t_vp2.rgb = (m_affects.x > 0.41f) ? 0 : t_vp2.rgb;
+
+    return float4(t_vp2.rgb, 1);
+}
+
+float4 loading_main(v2p I)
+{
+    float4 t_load = s_load.Sample(smp_base, I.tc0);
+    return float4(t_load.rgb, 1);
+}
+
+float4 main(v2p I) : SV_Target
+{
+    float4 screen = (m_affects.a > 0 && m_affects.x >= 0.08f) ? loading_main(I) : problems_main(I);
+    // Our additions over the original: the vs hands us a facing fade in c0 (the LCD dims at
+    // grazing angles instead of glowing edge-on), and m_affects.z is a brightness knob.
+    screen.rgb *= m_affects.z * (0.35f + 0.65f * saturate(I.c0.w));
+    return screen;
+}

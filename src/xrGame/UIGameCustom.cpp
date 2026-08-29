@@ -6,6 +6,7 @@
 #include "Common/object_broker.h"
 
 #include "InventoryOwner.h"
+#include "da_pda3d.h"
 #include "ui/UIActorMenu.h"
 #include "ui/UIPdaWnd.h"
 #include "ui/UIMainIngameWnd.h"
@@ -226,10 +227,24 @@ void CUIGameCustom::ShowMessagesWindow()
 
 bool CUIGameCustom::ShowPdaMenu()
 {
+    // 3D PDA: the toggle raises/holsters the device in hands instead of flipping a
+    // fullscreen dialog. Every entry point funnels here (the Lua itms_manager key included),
+    // and the 2D path below stays intact as the capability fallback - script missing,
+    // config missing, model missing, all land back on the old dialog.
+    if (da_pda3d::presenter_active())
+    {
+        da_pda3d::request_deactivate();
+        return false;
+    }
     if (PdaMenu->IsShown())
     {
         PdaMenu->HideDialog();
         return false;
+    }
+    if (da_pda3d::available() && da_pda3d::request_activate())
+    {
+        HideActorMenu();
+        return true;
     }
     HideActorMenu();
     PdaMenu->ShowDialog(true);
@@ -238,6 +253,11 @@ bool CUIGameCustom::ShowPdaMenu()
 
 void CUIGameCustom::HidePdaMenu()
 {
+    if (da_pda3d::presenter_active())
+    {
+        da_pda3d::request_deactivate();
+        return;
+    }
     if (PdaMenu->IsShown())
         PdaMenu->HideDialog();
 }

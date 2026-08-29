@@ -519,7 +519,33 @@ void CRender::render_forward()
 }
 
 // Перед началом рендера мира --#SM+#--
-void CRender::BeforeWorldRender() {}
+void CRender::BeforeWorldRender()
+{
+    // 3D PDA: rasterize the PDA dialog into $user$ui before any world pass runs. This spot is
+    // deliberate (see docs/dead-air/pda-3d-port-plan.md §4.2): it is outside the parallel
+    // context window (the UI locks the shared dynamic VB that r_sun/r_rain contexts also
+    // lock), it does not freeze under the pause menu the way a pass inside Render() would,
+    // and no scene target is bound yet.
+    if (!g_pGameLevel || !g_pGameLevel->pHUD || !Target || !Target->rt_ui)
+        return;
+
+    // The HUD side decides whether anything wants the texture this frame (PDA shown, 3D
+    // presenter active or debug forced) - the early-out keeps the pass free when idle.
+    if (!g_pGameLevel->pHUD->RenderPdaScreenUIQuery())
+        return;
+
+    PIX_EVENT(render_pda_screen_ui);
+    Target->u_setrt(RCache, Target->rt_ui, nullptr, nullptr, (ID3DDepthStencilView*)nullptr);
+    // u_setrt does NOT reset the viewport state helpers - rmNormal reads the size the last
+    // u_setrt wrote (the same two lines IX-Ray had to add to their pass after the fact).
+    rmNormal(RCache);
+    RCache.ClearRT(Target->rt_ui, color_rgba(0, 0, 0, 255));
+    g_pGameLevel->pHUD->RenderPdaScreenUI();
+    // Hand the backbuffer back so whatever runs before the scene phases sees the same state
+    // RenderMenu leaves behind.
+    Target->u_setrt(RCache, Device.dwWidth, Device.dwHeight, Target->get_base_rt(), 0, 0, Target->get_base_zb());
+    rmNormal(RCache);
+}
 
 // После рендера мира и пост-эффектов --#SM+#--
 void CRender::AfterWorldRender() {}

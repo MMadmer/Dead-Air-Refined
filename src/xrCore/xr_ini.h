@@ -128,6 +128,8 @@ public:
     bool xms_create_section(pcstr S, pcstr parents_csv);
     // Parses a physical file into this ini with cross-layer merge semantics.
     void xms_load_overlay(pcstr physical_path);
+    // VFS flavour for files living inside game archives (compat item sections).
+    void xms_load_overlay(IReader* R, pcstr name, pcstr base_dir);
 
     bool save_as(pcstr new_fname = nullptr);
     void save_as(IWriter& writer, bool bcheck = false) const;

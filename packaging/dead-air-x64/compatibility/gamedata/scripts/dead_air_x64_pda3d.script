@@ -1,0 +1,128 @@
+-- 3D PDA activation glue (docs/dead-air/pda-3d-port-plan.md §8.4).
+-- The engine asks through _G.da_pda3d_activate/_G.da_pda3d_deactivate; the item itself is
+-- the proven animation-slot recipe of dinamic_hud.clean_animation: alife():create the
+-- presenter, activate slot 13, release and restore the previous slot on the way out.
+-- Everything data-driven: the section name comes from dead_air_x64_pda3d.ltx.
+-- Compat-скрипты живут в своей namespace-таблице: глобалы ТОЛЬКО через _G. (иначе мертво).
+--
+-- pda.get_power / pda.get_interference are the optional engine-polled sources. Power reads
+-- the same battery state DA's own scripts use (axr_battery), guarded so its absence is safe.
+-- DOF note: the installed Revolution II layer's level_weathers has no ui_pda DOF branch, so
+-- no counter-forcing is needed here; the info portions stay exactly as the 2D dialog sent them.
+
+local cfg = nil
+local state = 0          -- 0 idle, 1 spawning, 2 waiting slot, 3 active, 4 releasing
+local last_slot = 0
+local spawn_at = 0
+local item_id = nil
+
+local function section()
+    if cfg == nil then
+        cfg = ini_file("dead_air_x64_pda3d.ltx")
+    end
+    if cfg and cfg:section_exist("pda3d") and cfg:line_exist("pda3d", "animator_section") then
+        return cfg:r_string("pda3d", "animator_section")
+    end
+    return nil
+end
+
+function _G.da_pda3d_activate()
+    if state ~= 0 then
+        return state ~= 4
+    end
+    local sect = section()
+    if not (sect and db.actor and db.actor:alive()) then
+        return false
+    end
+    last_slot = db.actor:active_slot() or 0
+    alife():create(sect, db.actor:position(), db.actor:level_vertex_id(),
+        db.actor:game_vertex_id(), db.actor:id())
+    state = 1
+    spawn_at = time_global()
+    return true
+end
+
+function _G.da_pda3d_deactivate()
+    if state == 0 then
+        return false
+    end
+    if state ~= 4 then
+        state = 4
+        spawn_at = time_global()
+    end
+    return true
+end
+
+local function tick()
+    if state == 0 then
+        return
+    end
+    if not (db.actor and db.actor:alive()) then
+        -- death with the device up: drop the presenter, no slot juggling on a corpse
+        local anm = item_id and level.object_by_id(item_id)
+        if anm then
+            local se = alife_object(item_id)
+            if se then alife():release(se) end
+        end
+        state = 0
+        item_id = nil
+        return
+    end
+
+    if state == 1 then
+        local anm = db.actor:item_in_slot(13)
+        if anm then
+            item_id = anm:id()
+            db.actor:activate_slot(13)
+            state = 2
+        elseif time_global() > spawn_at + 2000 then
+            state = 0 -- spawn never arrived; the 2D dialog stays available
+        end
+    elseif state == 2 then
+        if db.actor:active_slot() == 13 then
+            state = 3
+        elseif time_global() > spawn_at + 3000 then
+            state = 0
+        end
+    elseif state == 4 then
+        local anm = db.actor:item_in_slot(13)
+        if anm then
+            local se = alife_object(anm:id())
+            if se then alife():release(se) end
+            item_id = nil
+        end
+        -- one frame later the slot is empty; hand the previous slot back
+        if not db.actor:item_in_slot(13) then
+            db.actor:activate_slot(last_slot)
+            state = 0
+        elseif time_global() > spawn_at + 3000 then
+            db.actor:activate_slot(last_slot)
+            state = 0
+        end
+    end
+end
+
+-- Engine-polled screen state (da_pda3d.cpp poll_lua, namespace-local on purpose) ----------
+
+-- 0..1 battery charge; reads the same state DA's own scripts read, absence-safe.
+function get_power()
+    if axr_battery and axr_battery.getBatteryCondition then
+        local v = axr_battery.getBatteryCondition()
+        if type(v) == "number" then
+            if v > 1 then v = v / 100 end
+            if v < 0 then v = 0 end
+            if v > 1 then v = 1 end
+            return v
+        end
+    end
+    return 1.0
+end
+
+-- 0..1 extra interference on top of the per-level ltx table (max of the two wins engine-side).
+function get_interference()
+    return 0.0
+end
+
+function on_game_start()
+    RegisterScriptCallback("actor_on_update", tick)
+end

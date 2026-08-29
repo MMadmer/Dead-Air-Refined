@@ -101,6 +101,9 @@ public:
     virtual void OnUIReset() override;
     IC CUIActorMenu& GetActorMenu() const { return *ActorMenu; }
     IC CUIPdaWnd& GetPdaMenu() const { return *PdaMenu; }
+    // Null-safe access for the 3D PDA paths: OnUIReset destroys and rebuilds the dialog
+    // mid-session (resolution/language/style change), so callers must re-query every time.
+    IC CUIPdaWnd* GetPdaMenuPtr() const { return PdaMenu; }
     bool ShowActorMenu();
     void HideActorMenu();
     void UpdateActorMenu(); //Alundaio

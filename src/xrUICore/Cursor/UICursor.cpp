@@ -58,9 +58,22 @@ CUICursor::~CUICursor()
 }
 
 //--------------------------------------------------------------------
+// 3D PDA: draw the cursor and hints into the currently bound PDA screen texture, and mark
+// the frame so the regular fullscreen slot skips its own draw.
+void CUICursor::RenderToPdaScreen()
+{
+    m_in_rt_pass = true;
+    m_rt_frame = Device.dwFrame;
+    OnRender();
+    m_in_rt_pass = false;
+}
+
 u32 last_render_frame = 0;
 void CUICursor::OnRender()
 {
+    if (!m_in_rt_pass && m_rt_frame == Device.dwFrame)
+        return; // this frame's cursor+hints already live on the PDA screen texture
+
     g_btnHint->OnRender();
     g_statHint->OnRender();
 

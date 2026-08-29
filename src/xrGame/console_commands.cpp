@@ -2691,6 +2691,12 @@ void CCC_RegisterCommands()
     CMD1(CCC_FiniteBolts, "g_finite_bolts");
     CMD1(CCC_InfiniteBolts, "g_infinite_bolts");
 
+    // 3D PDA pipeline debugging: 1 = force the RT path with no presenter, 2 = also blit
+    // $user$ui fullscreen for a pixel-for-pixel look at what the screen material samples.
+    {
+        extern int g_pda3d_dbg;
+        CMD4(CCC_Integer, "pda3d_dbg", &g_pda3d_dbg, 0, 2);
+    }
     CMD4(CCC_Integer, "g_inv_highlight_equipped", &g_inv_highlight_equipped, 0, 1);
     CMD4(CCC_Integer, "g_first_person_death", &g_first_person_death, 0, 1);
     CMD4(CCC_Integer, "g_unload_ammo_after_pick_up", &g_auto_ammo_unload, 0, 1);

@@ -1,0 +1,65 @@
+; 3D PDA presenter item (docs/dead-air/pda-3d-port-plan.md). Merged on top of system.ltx by
+; the engine (x_ray.cpp InitSettings) through the XMS overlay path - no DA file is overridden.
+; Inherits DA's own shipped [anm_base]/[anm_base_hud] (misc\items\items_animations.ltx):
+; class WP_PDA3D in the animation slot, hidden from the inventory grid.
+; Hud offsets and the anm_* map come from the Gunslinger original [pda_show_animator_hud],
+; TRIMMED to the exact motion list of pda_hands_animation.omf - every unresolved anm_* key
+; is a fatal R_ASSERT in player_hud_motion_container::load, so nothing speculative here.
+
+[pda_show_animator]:anm_base
+$spawn                      = "weapons\pda_show_animator"
+class                       = WP_PDA3D
+description                 = st_pda_name
+inv_name                    = st_pda_name
+inv_name_short              = st_pda_name
+hud                         = pda_show_animator_hud
+visual                      = dynamics\devices\dev_pda\dev_pda.ogf
+zoom_enabled                = true
+scope_status                = 0
+scope_zoom_factor           = 1.05
+zoom_rotate_time            = 0.25
+snd_draw                    = items\pda\pda_draw
+snd_holster                 = detectorshud\detector_draw
+sprint_allowed              = false
+
+; The Gunslinger pda hand set is authored against ITS hands rig - played on the DA/Revolution
+; hands the fingers collapse (different bind pose). For the PDA episode player_hud swaps to
+; this dedicated hands model and swaps back on holster (CPdaAnimatorItem).
+[pda3d_actor_hud]
+visual                      = dynamics\weapons\wpn_hand\wpn_hand_pda3d
+
+[pda_show_animator_hud]:anm_base_hud
+item_visual                 = dynamics\devices\dev_pda\dev_pda_hud.ogf
+attach_place_idx            = 0
+item_position               = 0,0,0
+item_orientation            = 0,0,0
+
+hands_position              = -0.015,-0.018,0.17
+hands_orientation           = 0,0,0
+hands_position_16x9         = -0.015,-0.018,0.15
+hands_orientation_16x9      = 0,0,0
+
+aim_hud_offset_pos          = 0.0282,0.041,0.15
+aim_hud_offset_rot          = 0.0,0.0,0.0
+aim_hud_offset_pos_16x9     = 0.02,0.041,0.15
+aim_hud_offset_rot_16x9     = 0.0,0.0,0.0
+
+hud_fov                     = 0.9
+
+; ---- hand motions (pda_hands_animation.omf, verified list) ----
+anm_show                    = pda_draw
+anm_hide                    = pda_hide
+anm_idle                    = pda_idle
+anm_bore                    = pda_vibros_end
+anm_idle_moving             = pda_walk
+anm_idle_moving_slow        = pda_walk_slow
+anm_idle_moving_crouch      = pda_walk_slow
+anm_idle_moving_crouch_slow = pda_walk_slow
+anm_idle_sprint             = pda_walk
+
+anm_idle_aim                = pda_aim_idle
+anm_idle_aim_start          = pda_aim_start
+anm_idle_aim_end            = pda_aim_end
+anm_idle_aim_moving         = pda_aim_idle
+anm_idle_aim_moving_slow    = pda_aim_idle
+anm_idle_aim_crouch         = pda_aim_idle

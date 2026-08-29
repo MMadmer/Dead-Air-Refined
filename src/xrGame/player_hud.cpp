@@ -11,6 +11,30 @@
 
 player_hud* g_player_hud = nullptr;
 extern ENGINE_API shared_str current_player_hud_sect;
+extern ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
+extern ENGINE_API int g_player_hud_model_loading;
+
+// Data-driven list of extra hand-animation omfs (the 3D PDA set). Loaded once; the render
+// side appends them to every hands model created while the loading flag is raised.
+static void fill_player_hud_extra_omf()
+{
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+    string_path path;
+    FS.update_path(path, "$game_config$", "dead_air_x64_pda3d.ltx");
+    if (!FS.exist(path))
+        return;
+    CInifile ini(path, TRUE);
+    if (!ini.section_exist("player_hud_extra_omf"))
+        return;
+    for (const auto& [key, value] : ini.r_section("player_hud_extra_omf").Data)
+        if (value.size())
+            g_player_hud_extra_omf.emplace_back(value);
+    if (!g_player_hud_extra_omf.empty())
+        Msg("* [pda3d] %u extra hud omf(s) registered", u32(g_player_hud_extra_omf.size()));
+}
 
 
 // --#SM+# Begin--
@@ -38,6 +62,9 @@ CBlend* PlayHudCycle(
     IKinematicsAnimated& model, const u16 part, const MotionID motion, const BOOL mix_in, const float speed_scale)
 {
     CMotionDef* const motion_def = model.LL_GetMotionDef(motion);
+    if (!motion_def)
+        Msg("! PlayHudCycle: dangling motion id slot=%u idx=%u, hands sect [%s]", u32(motion.slot),
+            u32(motion.idx), current_player_hud_sect.c_str());
     R_ASSERT(motion_def);
     return model.LL_PlayCycle(part, motion, mix_in, motion_def->Accrue(), motion_def->Falloff(),
         motion_def->Speed() * speed_scale, motion_def->StopAtEnd(), nullptr, nullptr);
@@ -557,7 +584,10 @@ void player_hud::load(const shared_str& player_hud_sect)
     }
 
     const shared_str& model_name = pSettings->r_string(m_sect_name, "visual");
+    fill_player_hud_extra_omf();
+    g_player_hud_model_loading = 1;
     m_model = smart_cast<IKinematicsAnimated*>(GEnv.Render->model_Create(model_name.c_str()));
+    g_player_hud_model_loading = 0;
     load_ancors();
     // Msg("hands visual changed to [%s] [%s] [%s]", model_name.c_str(), b_reload ? "R" : "", m_attached_items[0] ? "Y" : "");
 

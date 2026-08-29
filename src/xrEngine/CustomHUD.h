@@ -48,5 +48,13 @@ public:
     virtual void OnConnected() = 0;
     virtual void RenderActiveItemUI() = 0;
     virtual bool RenderActiveItemUIQuery() = 0;
+    // 3D PDA: does anything want the PDA rasterized into $user$ui this frame? Cheap
+    // predicate the renderer asks before paying for the bind+clear.
+    virtual bool RenderPdaScreenUIQuery() = 0;
+    // 3D PDA: rasterize the PDA dialog (widgets, hints, cursor, FONTS) into the currently
+    // bound render target. Called by the renderer with $user$ui bound, before the world
+    // passes. Returns true if anything was drawn - the same frame's ordinary 2D pass is
+    // then suppressed by the dialog itself.
+    virtual bool RenderPdaScreenUI() = 0;
     virtual void net_Relcase(IGameObject* object) = 0;
 };

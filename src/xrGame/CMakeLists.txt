@@ -1151,6 +1151,10 @@ target_sources(xrGame PRIVATE
     xms_spawn_composer.cpp
     setup_manager.h
     setup_manager_inline.h
+    da_pda3d.cpp
+    da_pda3d.h
+    PdaAnimatorItem.cpp
+    PdaAnimatorItem.h
     ShootingObject.cpp
     shootingObject_dump_impl.cpp
     ShootingObject.h

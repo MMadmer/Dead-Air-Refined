@@ -737,6 +737,19 @@ ENGINE_API float ps_r__color_add_r = 0.f;
 ENGINE_API float ps_r__color_add_g = 0.f;
 ENGINE_API float ps_r__color_add_b = 0.f;
 ENGINE_API shared_str current_player_hud_sect{};
+// Extra motion files mixed into the PLAYER HANDS model on load. The 3D PDA hand set ships as
+// its own .omf, while the DA hands models enumerate their weapon omfs explicitly (no wildcard
+// ref) - so the render-side loader appends this list, but only while the flag below is raised
+// around the hands model_Create (ordinary models never pay for the lookup). The list itself is
+// data-driven: player_hud fills it from dead_air_x64_pda3d.ltx.
+ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
+ENGINE_API int g_player_hud_model_loading = 0;
+// 3D PDA screen state, published by the game each frame and bound to the pda screen shader:
+// affects = (interference level, phase driver, brightness, boot flag) - the m_affects
+// contract of the Gunslinger original; rect = the PDA face sub-rect inside $user$ui in UV
+// (so the screen UVs are data, not geometry, and any pda*.xml layout keeps working).
+ENGINE_API Fvector4 g_pda_screen_affects = {0.f, 0.f, 1.f, 0.f};
+ENGINE_API Fvector4 g_pda_screen_rect = {0.f, 0.f, 1.f, 1.f};
 
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;

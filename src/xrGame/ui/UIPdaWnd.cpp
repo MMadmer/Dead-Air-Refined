@@ -1,6 +1,8 @@
 #include "StdAfx.h"
 #include "UIPdaWnd.h"
 #include "PDA.h"
+#include "da_pda3d.h"
+#include "xrEngine/xr_level_controller.h"
 
 #include "xrUICore/XML/xrUIXmlParser.h"
 #include "UIXmlInit.h"
@@ -412,8 +414,30 @@ void CUIPdaWnd::Show_ContactsWnd(bool status)
     }
 }
 
+void CUIPdaWnd::MarkRasterizedToRT() { m_rt_frame = Device.dwFrame; }
+bool CUIPdaWnd::RasterizedToRT() const { return m_rt_frame == Device.dwFrame; }
+
+bool CUIPdaWnd::GetScreenRectUV(Fvector4& uv) const
+{
+    if (!UIMainPdaFrame)
+        return false;
+    Frect r;
+    UIMainPdaFrame->GetAbsoluteRect(r);
+    if (r.width() < 1.f || r.height() < 1.f)
+        return false;
+    uv.set(r.x1 / UI_BASE_WIDTH, r.y1 / UI_BASE_HEIGHT, r.width() / UI_BASE_WIDTH,
+        r.height() / UI_BASE_HEIGHT);
+    return true;
+}
+
 void CUIPdaWnd::Draw()
 {
+    // 3D PDA: while the presenter item is up, the dialog lives on the device screen - never
+    // on the fullscreen canvas (the RT pass may legitimately skip frames when throttled, so
+    // the suppression keys off the presenter, not off the frame stamp alone; the stamp still
+    // covers the debug-forced RT path with no presenter).
+    if (!m_in_rt_pass && (da_pda3d::presenter_active() || m_rt_frame == Device.dwFrame))
+        return;
     inherited::Draw();
     //.	DrawUpdatedSections();
     DrawHint();
@@ -510,6 +534,16 @@ void RearrangeTabButtons(CUITabControl* pTab)
 
 bool CUIPdaWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
 {
+    // 3D PDA, focused stage: ESC only lowers the device from the face (the item consumes
+    // the request in its UpdateCL); the dialog itself must not leave the stack here - the
+    // zoom-out path detaches it in the right order.
+    if (da_pda3d::presenter_active() && da_pda3d::ui_focused() &&
+        keyboard_action == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik))
+    {
+        da_pda3d::request_unzoom();
+        return true;
+    }
+
     if (inherited::OnKeyboardAction(dik, keyboard_action))
         return true;
 

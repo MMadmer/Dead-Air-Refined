@@ -13,6 +13,7 @@ class CHUDManager final : public CCustomHUD
     CUIGameCustom* pUIGame{};
     CHitMarker HitMarker;
     CHUDTarget* m_pHUDTarget;
+    class CUIStatic* m_pda_rt_dbg{}; // 3D PDA: lazy fullscreen blit of $user$ui (pda3d_dbg 2)
     bool b_online{};
 
 public:
@@ -56,6 +57,10 @@ public:
 
     virtual void RenderActiveItemUI();
     virtual bool RenderActiveItemUIQuery();
+
+    // 3D PDA: the UI->texture pass (see CCustomHUD for the contract).
+    bool RenderPdaScreenUIQuery() override;
+    bool RenderPdaScreenUI() override;
 
     // Lain: added
     void SetRenderable(bool renderable) { psHUD_Flags.set(HUD_DRAW_RT2, renderable); }

@@ -201,6 +201,21 @@ void InitSettings()
 
     // module config overlays + .ltxp directive patches on top of system.ltx
     XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
+
+    // Refined compat: engine-shipped item sections (the 3D PDA animator item) merged on top
+    // of system.ltx through the same overlay path XMS uses. No DA file is overridden; the
+    // file is optional and lives in the compatibility archive.
+    if (FS.exist("$game_config$", "dead_air_x64_pda3d_items.ltx"))
+    {
+        if (IReader* R = FS.r_open("$game_config$", "dead_air_x64_pda3d_items.ltx"))
+        {
+            string_path dir;
+            FS.update_path(dir, "$game_config$", "");
+            const_cast<CInifile*>(pSettings)->xms_load_overlay(R, "dead_air_x64_pda3d_items.ltx", dir);
+            FS.r_close(R);
+        }
+    }
+
     AnimationBlend::LoadSettings(pSettings);
 
     if (strstr(Core.Params, "-shoc") || strstr(Core.Params, "-soc"))

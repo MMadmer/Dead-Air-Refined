@@ -14,6 +14,8 @@
 #endif
 
 extern ENGINE_API shared_str current_player_hud_sect;
+extern ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
+extern ENGINE_API int g_player_hud_model_loading;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -871,6 +873,20 @@ void CKinematicsAnimated::Load(const char* N, IReader* data, u32 dwFlags)
         m_Motions.push_back(SMotionsSlot());
         m_Motions.back().motions.create(nm, data, bones);
     }
+
+    // The player HANDS model takes EXTRA motion files on top of its authored refs (the 3D PDA
+    // hand set lives in its own .omf, and the hands models list their omfs explicitly). Gated
+    // by the load flag so ordinary models skip the loop entirely; a missing file only logs -
+    // loadOMF's own Fatal is reserved for refs authored into the model.
+    if (g_player_hud_model_loading)
+        for (const auto& extra : g_player_hud_extra_omf)
+        {
+            string_path fn;
+            if (FS.exist(fn, "$game_meshes$", extra.c_str()) || FS.exist(fn, "$level$", extra.c_str()))
+                loadOMF(extra.c_str());
+            else
+                Msg("! [pda3d] extra hud omf not found: %s", extra.c_str());
+        }
 
     R_ASSERT2(m_Motions.size(), make_string("section '%s'\nmodel '%s'", current_player_hud_sect.c_str(), N).c_str());
 

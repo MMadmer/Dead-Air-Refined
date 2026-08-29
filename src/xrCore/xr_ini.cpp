@@ -1251,6 +1251,18 @@ void CInifile::xms_load_overlay(pcstr physical_path)
     xr_free(buffer);
 }
 
+// VFS flavour: overlay a file that lives inside the game archives (the physical-path
+// variant above cannot fopen those). Used by the Refined compat layer to add its own item
+// sections without overriding any DA file.
+void CInifile::xms_load_overlay(IReader* R, pcstr name, pcstr base_dir)
+{
+    if (!R || !R->length())
+        return;
+    XMS::PushLtxFile(name);
+    Load(R, base_dir, nullptr);
+    XMS::PopLtxFile();
+}
+
 void CInifile::w_u8(pcstr S, pcstr L, u8 V, pcstr comment)
 {
     string128 temp;

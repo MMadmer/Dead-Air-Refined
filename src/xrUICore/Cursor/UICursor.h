@@ -11,10 +11,16 @@ class XRUICORE_API CUICursor : public pureRender, public CDeviceResetNotifier, p
     Fvector2 correction;
     bool bVisible{};
     bool m_bound_to_system_cursor{};
+    // 3D PDA: frame stamp of the last rasterization into the PDA screen texture. While it
+    // matches the current frame, the ordinary fullscreen OnRender (cursor AND button hints)
+    // is suppressed - they already live on the device screen.
+    u32 m_rt_frame = u32(-1);
+    bool m_in_rt_pass = false;
 
     void InitInternal();
 
 public:
+    void RenderToPdaScreen();
     CUICursor();
     ~CUICursor() override;
 

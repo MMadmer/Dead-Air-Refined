@@ -12,6 +12,9 @@
 #include "UIGameCustom.h"
 #include "xrUICore/Cursor/UICursor.h"
 #include "game_cl_base.h"
+#include "da_pda3d.h"
+#include "ui/UIPdaWnd.h"
+#include "xrUICore/Static/UIStatic.h"
 #ifdef DEBUG
 #include "PHDebug.h"
 #endif
@@ -38,6 +41,7 @@ CHUDManager::~CHUDManager()
 
     xr_delete(pUIGame);
     xr_delete(m_pHUDTarget);
+    xr_delete(m_pda_rt_dbg);
 }
 
 //--------------------------------------------------------------------
@@ -50,6 +54,10 @@ void CHUDManager::OnFrame()
 
     if (!b_online)
         return;
+
+    // 3D PDA screen state (interference/power/boot -> m_affects, face sub-rect) is a
+    // once-per-frame service regardless of whether the presenter is up.
+    da_pda3d::update();
 
     if (pUIGame)
         pUIGame->OnFrame();
@@ -210,6 +218,57 @@ void CHUDManager::RenderActiveItemUI()
     g_player_hud->render_item_ui();
 }
 
+// ---- 3D PDA: the UI->texture pass -------------------------------------------------------
+static CUIPdaWnd* pda_for_rt(CUIGameCustom* ui_game, bool online)
+{
+    if (GEnv.isDedicatedServer || !online || !ui_game)
+        return nullptr;
+    if (!da_pda3d::want_rt())
+        return nullptr;
+    CUIPdaWnd* pda = ui_game->GetPdaMenuPtr();
+    return (pda && pda->IsShown()) ? pda : nullptr;
+}
+
+bool CHUDManager::RenderPdaScreenUIQuery()
+{
+    if (!pda_for_rt(pUIGame, b_online))
+        return false;
+    // Throttle the "held in hands" stage: no cursor, no interaction - a ~15 Hz refresh is
+    // indistinguishable there (the RT is persistent, a skipped frame keeps the last image,
+    // and a skipped CUIPdaWnd::Draw queues no glyphs, so nothing leaks into the main frame).
+    // Focused stage runs at full rate.
+    if (!da_pda3d::ui_focused() && g_pda3d_dbg == 0)
+    {
+        static u32 next_frame = 0;
+        if (Device.dwFrame < next_frame)
+            return false;
+        next_frame = Device.dwFrame + 4;
+    }
+    return true;
+}
+
+bool CHUDManager::RenderPdaScreenUI()
+{
+    CUIPdaWnd* pda = pda_for_rt(pUIGame, b_online);
+    if (!pda)
+        return false;
+
+    // Same recipe as CMainMenu::OnRenderPPUI_main, and the exact bug IX-Ray shipped without:
+    // the FONT FLUSH must happen while the PDA texture is still bound, or every glyph queued
+    // here spills onto the backbuffer later and the screen shows a text-free dialog. No
+    // pp_start: the RT is device-sized and the regular in-game scale must match the 2D
+    // dialog pixel for pixel. Note the queue is naturally empty at this point - this pass
+    // runs before any other UI Draw of the frame (CLevel::OnRender entry).
+    pda->SetInRTPass(true);
+    pda->Draw();
+    pda->SetInRTPass(false);
+    if (pda->NeedCursor())
+        GetUICursor().RenderToPdaScreen();
+    UI().RenderFont();
+    pda->MarkRasterizedToRT();
+    return true;
+}
+
 extern ENGINE_API bool bShowPauseString;
 //отрисовка элементов интерфейса
 void CHUDManager::RenderUI()
@@ -227,6 +286,22 @@ void CHUDManager::RenderUI()
         HitMarker.Render();
         if (pUIGame)
             pUIGame->Render();
+
+        // pda3d_dbg 2: blit $user$ui fullscreen over the frame - a pixel-for-pixel view of
+        // what the PDA screen material will sample. Lazy static widget, debug-only cost.
+        if (g_pda3d_dbg > 1)
+        {
+            if (!m_pda_rt_dbg)
+            {
+                m_pda_rt_dbg = xr_new<CUIStatic>("pda3d_rt_dbg");
+                m_pda_rt_dbg->InitTexture("$user$ui");
+                m_pda_rt_dbg->SetWndRect(Frect().set(0.f, 0.f, UI_BASE_WIDTH, UI_BASE_HEIGHT));
+                m_pda_rt_dbg->SetTextureRect(Frect().set(0.f, 0.f, float(Device.dwWidth), float(Device.dwHeight)));
+                m_pda_rt_dbg->SetAutoDelete(false);
+            }
+            m_pda_rt_dbg->Update();
+            m_pda_rt_dbg->Draw();
+        }
 
         UI().RenderFont();
     }
@@ -291,6 +366,9 @@ void CHUDManager::Load()
 void CHUDManager::OnUIReset()
 {
     ZoneScoped;
+
+    // The debug blit widget holds a shader on $user$ui - rebuild it lazily after a reset.
+    xr_delete(m_pda_rt_dbg);
 
     if (!pUIGame)
         return;

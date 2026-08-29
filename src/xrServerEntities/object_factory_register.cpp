@@ -78,6 +78,7 @@
 #include "WeaponAmmo.h"
 #include "WeaponFORT.h"
 #include "WeaponBinoculars.h"
+#include "PdaAnimatorItem.h"
 #include "WeaponShotgun.h"
 #include "WeaponSVD.h"
 #include "WeaponSVU.h"
@@ -275,6 +276,8 @@ void CObjectFactory::register_classes()
     ADD(CWeaponPM, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_PM, "wpn_pm");
     ADD(CWeaponFORT, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_FORT, "wpn_fort");
     ADD(CWeaponBinoculars, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_BINOCULAR, "wpn_binocular");
+    // 3D PDA presenter (class = WP_PDA3D in ltx): binocular machinery, PDA behaviour.
+    ADD(CPdaAnimatorItem, CSE_ALifeItemWeaponMagazined, make_clsid("WP_PDA3D"), "wpn_pda3d");
     ADD(CWeaponShotgun, CSE_ALifeItemWeaponShotGun, CLSID_OBJECT_W_SHOTGUN, "wpn_shotgun");
     ADD(CWeaponSVD, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_SVD, "wpn_svd");
     ADD(CWeaponSVU, CSE_ALifeItemWeaponMagazined, CLSID_OBJECT_W_SVU, "wpn_svu");

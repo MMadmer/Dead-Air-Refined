@@ -24,6 +24,8 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_T_sky0           "$user$sky0"
 #define     r2_T_sky1           "$user$sky1"
 
+// 3D PDA: the whole PDA dialog rasterized once per frame; the pda screen material samples it.
+#define     r2_RT_ui            "$user$ui"
 #define     r2_RT_generic0      "$user$generic0"
 #define     r2_RT_generic0_r    "$user$generic0_r"
 
