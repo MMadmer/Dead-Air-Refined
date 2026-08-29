@@ -13,7 +13,10 @@ namespace
 // was clearly audible even in near-calm - this is that set divided by ~1.7, with the volume
 // floor lowered too, so calm-weather rustle is a barely-there whisper.
 const float k_volume[] = {0.26f, 0.50f, 0.78f};
-const float k_pitch[] = {1.15f, 1.00f, 0.82f};
+// Mild per-type pitch shifts only: grass and canopy now carry their OWN recordings, so the
+// heavy shifts that faked three plants out of one bush sound are no longer needed (and they
+// still sit right when a missing asset falls back to the bush set).
+const float k_pitch[] = {1.05f, 1.00f, 0.94f};
 // Audible ranges by type, replacing the couple-of-metres range baked into the source file
 // (the walk-through-bush collide sound). Matched to how far these are really heard: a big
 // canopy in wind carries the better part of a hundred metres - it is one of the
@@ -34,9 +37,11 @@ void CEffect_WindVeg::lazy_init()
         return;
     m_inited = true;
 
-    // The rustle files come from the actor-through-vegetation collide pair in the material
-    // library - the exact sound the player already hears walking through a bush. Search by
-    // substring so any data setup of the mod resolves without hardcoded ids.
+    // Bush rustle (and the fallback for everything) comes from the actor-through-vegetation
+    // collide pair in the material library - the exact sound the player already hears walking
+    // through a bush. Search by substring so any data setup of the mod resolves without
+    // hardcoded ids.
+    xr_vector<shared_str> mtl_files;
     int idx_actor = -1, idx_veg = -1;
     const auto& mtls = GMLib.Materials();
     for (u32 i = 0; i < mtls.size(); ++i)
@@ -57,25 +62,55 @@ void CEffect_WindVeg::lazy_init()
             for (const ref_sound& s : pair->CollideSounds)
             {
                 if (s._handle())
-                    m_files.push_back(s._handle()->file_name());
+                    mtl_files.push_back(s._handle()->file_name());
             }
         }
     }
 
-    if (m_files.empty())
-    {
-        Msg("! [wind-veg] no actor/vegetation collide sounds in the material library - rustle disabled");
-        return;
-    }
+    // Dedicated per-type sounds: grass hiss and canopy leaves. A quick existence probe keeps
+    // a missing/renamed asset from silencing the layer - it just falls back to the bush set.
+    const auto probe = [](pcstr name) -> bool {
+        ref_sound test;
+        test.create(name, st_Effect, sg_SourceType);
+        const bool ok = !!test._handle();
+        test.destroy();
+        return ok;
+    };
 
+    constexpr pcstr k_grass_file = "dead_air_x64\\grass_rustle";
+    constexpr pcstr k_leaves_file = "dead_air_x64\\leaves_rustle";
+    if (probe(k_grass_file))
+        m_files[type_grass].emplace_back(k_grass_file);
+    if (probe(k_leaves_file))
+        m_files[type_tree].emplace_back(k_leaves_file);
+    m_files[type_bush] = mtl_files;
+    // Fallbacks: dedicated files missing -> bush set; no bush set either -> that type is mute.
+    if (m_files[type_grass].empty())
+        m_files[type_grass] = mtl_files;
+    if (m_files[type_tree].empty())
+        m_files[type_tree] = mtl_files;
+
+    bool any = false;
     for (int t = 0; t < type_count; ++t)
+    {
+        if (m_files[t].empty())
+            continue;
+        any = true;
         for (auto& v : m_voices[t])
         {
-            const shared_str& f = m_files[(&v - m_voices[t]) % m_files.size()];
+            const shared_str& f = m_files[t][size_t(&v - m_voices[t]) % m_files[t].size()];
             v.snd.create(f.c_str(), st_Effect, sg_SourceType);
         }
+    }
+
+    if (!any)
+    {
+        Msg("! [wind-veg] no rustle sources at all (assets and material pair both missing) - disabled");
+        return;
+    }
     m_sound_ok = true;
-    Msg("* [wind-veg] rustle pool ready: %u file(s) from the material library", u32(m_files.size()));
+    Msg("* [wind-veg] rustle pools ready: grass=%u bush=%u tree=%u file(s)", u32(m_files[type_grass].size()),
+        u32(m_files[type_bush].size()), u32(m_files[type_tree].size()));
 }
 
 bool CEffect_WindVeg::play_one(int type, const Fvector& pos, float strength)

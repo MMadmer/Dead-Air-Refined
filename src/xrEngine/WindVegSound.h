@@ -6,8 +6,9 @@
 // over clusters of vegetation, not loops). The travelling gust field decides WHERE: when a
 // gust tongue passes over a tree crown or a grassy sector, that spot plays a rustle one-shot,
 // scaled by the local wind strength. Grass whispers, bushes rustle, trees roar - and in a calm
-// the world goes quiet. Sounds come from the game's own actor-through-bush material pair, so
-// the system carries zero new assets and keeps whatever the mod's data ships.
+// the world goes quiet. Grass and tree canopies carry DEDICATED sounds
+// (sounds\dead_air_x64\grass_rustle / leaves_rustle); bushes keep the game's own
+// actor-through-bush material pair, and any missing dedicated file falls back to it too.
 class ENGINE_API CEffect_WindVeg
 {
     struct SVoice
@@ -16,8 +17,6 @@ class ENGINE_API CEffect_WindVeg
         float busy_until{};
     };
 
-    // Per-type one-shot pools (small polyphony each); grass and bush share the same files at
-    // different pitch/volume, trees drop the pitch and raise the gain.
     enum
     {
         type_grass,
@@ -26,7 +25,9 @@ class ENGINE_API CEffect_WindVeg
         type_count
     };
     SVoice m_voices[type_count][3];
-    xr_vector<shared_str> m_files;
+    // Per-type source files: dedicated assets for grass/trees, the material-pair collide
+    // sounds for bushes (and as the fallback for everything).
+    xr_vector<shared_str> m_files[type_count];
     bool m_inited{};
     bool m_sound_ok{};
 
