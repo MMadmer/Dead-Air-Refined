@@ -36,6 +36,16 @@ uniform float4 da_puddle_look3;
 // q-пространства, копятся на CPU — Environment::UpdateEffectiveWind). Биндер cl_da_puddle_wind.
 uniform float4 da_puddle_wind;
 
+// Водяные импакты (Environment::water_hit, упаковка как у ветро-моторов, с пре-транспозом):
+// pos-строка = (xyz, радиус), par-строка = (амплитуда, радиус фронта кольца, 0 кольцо / 1
+// осушение, 0). info.x — число живых спотов: в тихом мире цикл бесплатен. Конверты считает
+// CPU — сюда приходят готовые амплитуды, поэтому любой спот умирает на нуле без скачка.
+uniform float4x4 da_wh_pos0;
+uniform float4x4 da_wh_pos1;
+uniform float4x4 da_wh_par0;
+uniform float4x4 da_wh_par1;
+uniform float4 da_wh_info;
+
 float da_hash21(float2 p)
 {
 	p = frac(p * float2(127.1f, 311.7f));
@@ -185,7 +195,30 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	const float d_max = max(da_puddle_look2.x, 1.0f);
 	const float dist_fade = saturate((d_max - pos_v.z) / (d_max * 0.25f));
 
-	const float puddles = smoothstep(0.0f, 0.10f, n - thr) * wet * slope * sky * dist_fade;
+	float puddles = smoothstep(0.0f, 0.10f, n - thr) * wet * slope * sky * dist_fade;
+
+	// ---- Осушение от взрывов: вода выплеснута, слой воды исчезает и медленно возвращается.
+	// Гасится ТОЛЬКО маска воды: damp (тёмная мокрая земля) намеренно не трогается — мокрое
+	// место от бывшей лужи остаётся, как и в жизни. Оба прохода (G-буфер и отражение) читают
+	// этот же код — маски сходятся бит-в-бит.
+	const int wh_count = int(da_wh_info.x);
+	[loop]
+	for (int wi = 0; wi < wh_count; ++wi)
+	{
+		const int wlo = min(wi, 3);
+		const int whi = max(wi - 4, 0);
+		const float4 WP = (wi < 4) ? da_wh_pos0[wlo] : da_wh_pos1[whi];
+		const float4 WA = (wi < 4) ? da_wh_par0[wlo] : da_wh_par1[whi];
+		[branch]
+		if (WP.w <= 0.0f || WA.z < 0.5f || abs(WA.x) <= 0.001f)
+			continue;
+		const float wd = length(pos_w.xz - WP.xz);
+		[branch]
+		if (wd > WP.w || abs(pos_w.y - WP.y) > 2.5f)
+			continue;
+		const float dry = WA.x * saturate((WP.w - wd) / max(WP.w * 0.35f, 0.2f));
+		puddles *= 1.0f - dry;
+	}
 	R.mask = puddles;
 
 	// ---- Тёмная кайма вокруг воды ----------------------------------------------------------------
@@ -269,6 +302,30 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 		ripple = (g1 * 0.62f + g2 * 0.38f) * (0.18f * rain_now * near_f * da_puddle_look.w);
 	}
 	R.ripple_amp = 0.18f * rain_now * near_f * da_puddle_look.w;
+
+	// ---- Кольца от попаданий: «блинчик» — расходящийся волновой пакет за фронтом. Гребень на
+	// фронте, за ним затухающий шлейф колец (λ = 0.30 м); всё складывается с дождевой рябью в
+	// тот же градиент нормали. Амплитуда приходит с CPU уже с краевым фейдом — кольцо гаснет
+	// до нуля раньше, чем умирает, скачка нет по построению.
+	[loop]
+	for (int ri = 0; ri < wh_count; ++ri)
+	{
+		const int rlo = min(ri, 3);
+		const int rhi = max(ri - 4, 0);
+		const float4 RP = (ri < 4) ? da_wh_pos0[rlo] : da_wh_pos1[rhi];
+		const float4 RA = (ri < 4) ? da_wh_par0[rlo] : da_wh_par1[rhi];
+		[branch]
+		if (RP.w <= 0.0f || RA.z > 0.5f || RA.x <= 0.001f)
+			continue;
+		float2 rd = pos_w.xz - RP.xz;
+		const float rwd = length(rd);
+		[branch]
+		if (rwd > RA.y + 0.4f || rwd < 0.02f || abs(pos_w.y - RP.y) > 2.5f)
+			continue;
+		const float behind = RA.y - rwd;
+		const float wave = sin(behind * 20.9f) * exp(-behind * 1.7f) * RA.x;
+		ripple += (rd / rwd) * (wave * 0.16f);
+	}
 
 	// Нормаль воды: плоская геометрическая нормаль поверхности плюс рябь. Именно она делает лужу
 	// лужей — освещение начинает считать поверхность ровной.

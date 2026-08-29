@@ -427,6 +427,52 @@ static class cl_da_wm_info : public R_constant_setup
     }
 } binder_da_wm_info;
 
+// Water impact spots for the puddle shader - same packing and the same PRE-transpose
+// requirement as the wind motors above.
+static class cl_da_wh_pos0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_hit_pos[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wh_pos0;
+static class cl_da_wh_pos1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_hit_pos[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wh_pos1;
+static class cl_da_wh_par0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_hit_par[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wh_par0;
+static class cl_da_wh_par1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_hit_par[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wh_par1;
+static class cl_da_wh_info : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().water_hit_active, 0.f, 0.f, 0.f);
+    }
+} binder_da_wh_info;
+
 static class cl_various_rain : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -580,6 +626,11 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_wm_par0", &binder_da_wm_par0);
     r_Constant("da_wm_par1", &binder_da_wm_par1);
     r_Constant("da_wm_info", &binder_da_wm_info);
+    r_Constant("da_wh_pos0", &binder_da_wh_pos0);
+    r_Constant("da_wh_pos1", &binder_da_wh_pos1);
+    r_Constant("da_wh_par0", &binder_da_wh_par0);
+    r_Constant("da_wh_par1", &binder_da_wh_par1);
+    r_Constant("da_wh_info", &binder_da_wh_info);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

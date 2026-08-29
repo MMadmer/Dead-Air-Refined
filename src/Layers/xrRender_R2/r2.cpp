@@ -197,6 +197,13 @@ static class cl_rain_params : public R_constant_setup
             }
             g_da_rain_wetness = wetness;
             result.set(rain, wetness, ps_r__puddles_size, dbg);
+            // Published for gameplay: bullet/blast hits evaluate the same puddle mask the
+            // shader draws (Environment::SamplePuddleMask).
+            if (g_pGamePersistent)
+            {
+                g_pGamePersistent->Environment().eff_puddle_wet = wetness;
+                g_pGamePersistent->Environment().eff_puddle_size = ps_r__puddles_size;
+            }
         }
         cmd_list.set_c(C, result);
     }

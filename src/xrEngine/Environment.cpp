@@ -934,6 +934,91 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
     return total;
 }
 
+// ---- CPU replica of the puddle-shader noise (da_puddles.h) -------------------------------
+// Bit-for-bit the same formulas in fp32: gameplay decides "did this land in water" with the
+// same picture the player sees. Minor GPU/CPU rounding drift only matters within a few
+// centimetres of a puddle's edge - acceptable for a hit test.
+static float da_cpu_hash21(float px, float py)
+{
+    // HLSL source (da_puddles.h): p = frac(p * (127.1, 311.7)); p += dot(p, p + 34.23);
+    // return frac(p.x * p.y);
+    float fx = px * 127.1f, fy = py * 311.7f;
+    fx -= floorf(fx);
+    fy -= floorf(fy);
+    const float dp = fx * (fx + 34.23f) + fy * (fy + 34.23f);
+    fx += dp;
+    fy += dp;
+    const float r = fx * fy;
+    return r - floorf(r);
+}
+
+static float da_cpu_vnoise(float px, float py)
+{
+    const float ix = floorf(px), iy = floorf(py);
+    float fx = px - ix, fy = py - iy;
+    fx = fx * fx * (3.f - 2.f * fx);
+    fy = fy * fy * (3.f - 2.f * fy);
+    const float a = da_cpu_hash21(ix, iy);
+    const float b = da_cpu_hash21(ix + 1.f, iy);
+    const float c = da_cpu_hash21(ix, iy + 1.f);
+    const float d = da_cpu_hash21(ix + 1.f, iy + 1.f);
+    return (a * (1.f - fx) + b * fx) * (1.f - fy) + (c * (1.f - fx) + d * fx) * fy;
+}
+
+float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
+{
+    const float wet = eff_puddle_wet;
+    if (wet < 0.01f || eff_puddle_size < 0.005f)
+        return 0.f;
+    const float slope = clampr((_abs(ground_ny) - 0.62f) * 2.2f, 0.f, 1.f);
+    if (slope < 0.01f)
+        return 0.f;
+    // The shader's hemi "open sky" gate is stood in by the shelter ray: rain does not pool
+    // under a roof, and neither does the shader draw water there.
+    if (wind_sheltered(pos))
+        return 0.f;
+    const float n = da_cpu_vnoise(pos.x * 0.33f, pos.z * 0.33f) * 0.62f +
+        da_cpu_vnoise(pos.x * 1.10f, pos.z * 1.10f) * 0.38f;
+    const float thr =
+        0.86f + (0.30f - 0.86f) * clampr(eff_puddle_size, 0.f, 1.f) + (1.f - wet) * 0.15f;
+    float s = clampr((n - thr) / 0.10f, 0.f, 1.f);
+    s = s * s * (3.f - 2.f * s); // smoothstep(0, 0.10, n - thr)
+    return s * wet * slope;
+}
+
+void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
+{
+    // Drains outrank rings (the pecking-order lesson from the wind motors: a burst of
+    // bullet rings must never evict the crater a grenade just dried).
+    SWaterHit* slot = nullptr;
+    for (auto& h : water_hits)
+        if (!h.used)
+        {
+            slot = &h;
+            break;
+        }
+    if (!slot)
+        for (auto& h : water_hits)
+            if (h.kind == EWaterHit::ring && (!slot || h.birth < slot->birth))
+                slot = &h;
+    if (!slot && kind == EWaterHit::drain)
+        for (auto& h : water_hits)
+            if (!slot || h.birth < slot->birth)
+                slot = &h;
+    if (!slot)
+        return;
+
+    slot->used = true;
+    slot->kind = kind;
+    slot->pos = pos;
+    slot->radius = radius;
+    slot->birth = Device.fTimeGlobal;
+
+    if (ps_e_wind_dbg)
+        Msg("* [water] %s r=%.1f at (%.0f, %.0f, %.0f)", kind == EWaterHit::drain ? "drain" : "ring",
+            radius, pos.x, pos.y, pos.z);
+}
+
 void CEnvironment::UpdateEffectiveWind()
 {
     // Per-session seed: every noise below is a pure function of time, and time starts near
@@ -1125,6 +1210,60 @@ void CEnvironment::UpdateEffectiveWind()
         arow[3] = line ? 1.f + m.dir_y : (m.type == EWindMotor::impulse ? -1.f : 0.f);
     }
     wind_motor_active = float(highest);
+
+    // ---- Water impact spots: simulate and pack for the puddle shader. ----------------------
+    // Envelopes live on the CPU (the wind-motor pattern): the shader only draws what the
+    // rows say, so every kind dies at zero amplitude by construction - no snap, ever.
+    u32 wh_highest = 0;
+    for (u32 i = 0; i < water_hit_count; ++i)
+    {
+        SWaterHit& h = water_hits[i];
+        float amp = 0.f, ring_r = 0.f;
+        if (h.used && h.kind == EWaterHit::ring)
+        {
+            // A stone-skip ring: fast for a blast, gentle for a bullet. The edge fade takes
+            // the crest to zero before the front reaches its rim.
+            const float age = now - h.birth;
+            const bool big = h.radius > 2.5f;
+            const float speed = big ? 4.5f : 1.7f;
+            ring_r = speed * age;
+            const float edge = clampr((h.radius - ring_r) / (0.35f * h.radius), 0.f, 1.f);
+            amp = expf(-age * (big ? 1.1f : 2.2f)) * edge;
+            if (ring_r >= h.radius || amp < 0.02f)
+                h.used = false;
+        }
+        else if (h.used)
+        {
+            // Drain: the blast threw the water out. Hold dry, then seep back - rain refills
+            // it quickly, dry weather takes a minute and a half. The dark wet ground under
+            // it stays untouched (the shader's damp term never sees the drain).
+            const float age = now - h.birth;
+            if (age <= 6.f)
+                amp = 1.f;
+            else
+            {
+                const float rain = clampr(CurrentEnv.rain_density, 0.f, 1.f);
+                const float rate = rain > 0.05f ? (0.030f + 0.09f * rain) : (1.f / 90.f);
+                amp = 1.f - (age - 6.f) * rate;
+            }
+            if (amp < 0.02f)
+                h.used = false;
+        }
+
+        if (h.used)
+            wh_highest = i + 1;
+
+        Fmatrix& P = water_hit_pos[i / 4];
+        Fmatrix& A = water_hit_par[i / 4];
+        float* prow = &P.m[i % 4][0];
+        float* arow = &A.m[i % 4][0];
+        prow[0] = h.pos.x; prow[1] = h.pos.y; prow[2] = h.pos.z; prow[3] = h.used ? h.radius : 0.f;
+        arow[0] = h.used ? amp : 0.f;
+        arow[1] = ring_r;
+        arow[2] = (h.kind == EWaterHit::drain) ? 1.f : 0.f;
+        arow[3] = 0.f;
+    }
+    water_hit_active = float(wh_highest);
 
     // ---- Self-test blast ring (wind_dbg 2/3): a blast motor spawns 18 m ahead of the camera
     // every 5 s - a realistic grenade-throw distance, so the test verifies the ring's

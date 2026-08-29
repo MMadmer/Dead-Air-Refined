@@ -22,6 +22,9 @@
 #include "ik/math3d.h"
 #include "Actor.h"
 #include "ai/monsters/basemonster/base_monster.h"
+#include "da_water_impact.h"
+#include "xrEngine/Environment.h"
+#include "xrEngine/IGame_Persistent.h"
 
 extern ENGINE_API int ps_r__WallmarksOnSkeleton;
 
@@ -165,6 +168,29 @@ void CBulletManager::FireShotmark(SBullet* bullet, const Fvector& vDir, const Fv
     u16 target_material, const Fvector& vNormal, bool ShowMark)
 {
     SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(bullet->bullet_material_idx, target_material);
+
+    // A static hit inside a procedural puddle is a WATER hit: the response is rerouted to
+    // the game's own bullet-x-water material pair (its sound, its splash particles, and no
+    // bullet-hole decal - water pairs author none), plus an expanding ring ripple on the
+    // puddle surface. The mask test replicates the shader, so this fires exactly where the
+    // player sees water.
+    if (!R.O && ShowMark)
+    {
+        const SGameMtl* tgt = GMLib.GetMaterialByIdx(target_material);
+        const auto& wcfg = da_water_impact_cfg();
+        if (tgt && !tgt->Flags.test(SGameMtl::flDynamic) && wcfg.enabled)
+        {
+            auto& env = g_pGamePersistent->Environment();
+            if (env.SamplePuddleMask(vEnd, vNormal.y) > wcfg.mask_threshold)
+            {
+                static const u16 water_idx = GMLib.GetMaterialIdx(wcfg.material.c_str());
+                if (water_idx != u16(GAMEMTL_NONE_IDX))
+                    mtl_pair = GMLib.GetMaterialPairByIndices(bullet->bullet_material_idx, water_idx);
+                env.water_hit(vEnd, wcfg.ring_radius_bullet, CEnvironment::EWaterHit::ring);
+            }
+        }
+    }
+
     Fvector particle_dir;
 
     if (R.O)

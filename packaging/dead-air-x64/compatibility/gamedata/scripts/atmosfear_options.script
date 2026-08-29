@@ -207,17 +207,35 @@ end
 --#									REGISTER OPTIONS
 --######################################################################################################################
 
-function af_options_dialog:OptionsFromIni(combo, section)
+-- The ini "list_*" sections may have GAPS in their values (list_periods skips 1), which
+-- made the inverse table sparse - and pairs() walks a sparse table in HASH order, different
+-- between sessions. The item order in the dropdown drifted after a restart, and everything
+-- keyed off it drifted along. Items are now added in strictly ascending ini value, and each
+-- combo remembers its own option<->row mapping, so get/set never touch translated strings
+-- (two different options translating to the same label used to resolve to a random one).
+function af_options_dialog:OptionsFromIni(combo, section, combo_name)
 	combo:ClearList()
 	local options = self.default_settings:collect_section(section)
-	local inv_options = {}
+	self.combo_maps = self.combo_maps or {}
+	local map = { by_row = {}, row_of = {} }
+	self.combo_maps[combo_name] = map
 	if options~=nil then
+		local inv_options = {}
+		local max_value = -1
 		for option, value in pairs(options) do
-			inv_options[value+1]=option
+			value = tonumber(value)
+			inv_options[value] = option
+			if value > max_value then max_value = value end
 		end
-		--table.sort(inv_options)
-		for value, option in pairs(inv_options) do
-			combo:AddItem(game.translate_string("st_"..option), value-1)
+		local row = 0
+		for value = 0, max_value do
+			local option = inv_options[value]
+			if option then
+				combo:AddItem(game.translate_string("st_"..option), value)
+				map.by_row[row] = option
+				map.row_of[option] = row
+				row = row + 1
+			end
 		end
 	end
 end
@@ -234,7 +252,7 @@ function af_options_dialog:RegisterCombo(xml, dialog, name, ini_section, dialogO
 	if ini_section == nil then
 		ini_section = name
 	end
-	self:OptionsFromIni(self["list_"..name], "list_"..ini_section)
+	self:OptionsFromIni(self["list_"..name], "list_"..ini_section, name)
 	self:Register (self["list_"..name], "list_"..name)
 end
 
@@ -245,9 +263,8 @@ function af_options_dialog:RegisterPeriodCombo(xml, dialog, name, ini_section, d
 	if ini_section == nil then
 		ini_section = name
 	end
-	self:OptionsFromIni(self["list_"..name], "list_"..ini_section)
+	self:OptionsFromIni(self["list_"..name], "list_"..ini_section, name)
 	self:Register (self["list_"..name], "list_"..name)
-	self["list_"..name]:SetText("list_"..name)
 end
 
 function af_options_dialog:RegisterTrack(xml, dialog, name, dialogObj)
@@ -261,12 +278,20 @@ end
 --#								GET/SET FUNCTIONS
 --######################################################################################################################
 
+-- Selects the actual ROW, not just the display text: a combo restored by SetText alone had
+-- no internal selection, so the first stray right-click or hover-arrow (the engine cycles
+-- items on those) jumped it to the first entry - and Accept then silently rewrote that
+-- level's weather with it.
 function af_options_dialog:SetComboValue(option_name,af_option)
 	local combo = self["list_"..option_name]
+	local map = self.combo_maps and self.combo_maps[option_name]
 	if af_option==nil then
 		af_option=self.default_settings:r_value("atmosfear_option_names","opt_"..option_name)
 	end
-	if af_option and self.default_settings:line_exist("atmosfear_option_names",af_option) then
+	local row = map and af_option and map.row_of[af_option]
+	if row then
+		combo:SetCurrentID(row)
+	elseif af_option and self.default_settings:line_exist("atmosfear_option_names",af_option) then
 		local option = self.default_settings:r_value("atmosfear_option_names",af_option)
 		combo:SetText(game.translate_string(option))
 	else
@@ -308,9 +333,30 @@ function af_options_dialog:SetCheckValue(name,af_option)
 	end
 end
 
+-- Reads the selected ROW back through this combo's own map. The old path compared the
+-- displayed text against the translations of EVERY option name in the mod - two options
+-- sharing a translated label resolved to whichever pairs() met first, differently every
+-- session ("apply the rain period, get the balance preset").
 function af_options_dialog:GetComboValue(option_name)
-	local selected = self["list_"..option_name]:GetText()
-
+	local combo = self["list_"..option_name]
+	local map = self.combo_maps and self.combo_maps[option_name]
+	if map then
+		local row = combo:GetCurrentIdx()
+		local option = row and map.by_row[row]
+		if option then
+			return option
+		end
+		-- No live selection (untouched combo restored from an unknown value): fall back to
+		-- matching the displayed text against THIS combo's own options only.
+		local selected = combo:GetText()
+		for opt in pairs(map.row_of) do
+			if game.translate_string("st_"..self.default_settings:r_value("atmosfear_option_names",opt))==selected
+				or game.translate_string(self.default_settings:r_value("atmosfear_option_names",opt))==selected then
+				return opt
+			end
+		end
+	end
+	local selected = combo:GetText()
 	local parameters = self.default_settings:collect_section("atmosfear_option_names")
 	for option, name in pairs(parameters) do
 		if game.translate_string(name)==selected then
@@ -419,14 +465,16 @@ function af_options_dialog:OnBtnAccept()
 		self:SetComboOption(level.."_period_bad",false)
 	end
 
-	if (config:r_value("atmosfear_current_parameters","opt_enable_blowout") and self:GetCheckValue("enable_blowout")==1) or config:r_value("atmosfear_current_parameters","opt_blowout_freq")~=tonumber(self:GetComboValue("blowout_freq")) then
+	-- tonumber BOTH sides: r_value returns strings, and "48" ~= 48 held true forever, so
+	-- every Accept re-rolled the surge/psi-storm timers even with nothing changed.
+	if (tonumber(config:r_value("atmosfear_current_parameters","opt_enable_blowout")) == 0 and self:GetCheckValue("enable_blowout")==1) or tonumber(config:r_value("atmosfear_current_parameters","opt_blowout_freq"))~=tonumber(self:GetComboValue("blowout_freq")) then
 		self:SetComboOption("blowout_freq",true)
 		if (level.present()) then
 			surge_manager.SurgeManager:new_surge_time(true)
 		end
 	end
 
-	if (config:r_value("atmosfear_current_parameters","opt_enable_psi_storm") == 0 and self:GetCheckValue("enable_psi_storm")==1) or config:r_value("atmosfear_current_parameters","opt_psi_storm_freq")~=tonumber(self:GetComboValue("psi_storm_freq")) then
+	if (tonumber(config:r_value("atmosfear_current_parameters","opt_enable_psi_storm")) == 0 and self:GetCheckValue("enable_psi_storm")==1) or tonumber(config:r_value("atmosfear_current_parameters","opt_psi_storm_freq"))~=tonumber(self:GetComboValue("psi_storm_freq")) then
 		self:SetComboOption("psi_storm_freq",true)
 		if (level.present()) then
 			if (psi_storm_manager) then psi_storm_manager.PsiStormManager:new_psi_storm_time(true) end

@@ -32,6 +32,10 @@
 #include "xrPhysics/IPHWorld.h"
 #include "game_base_space.h"
 #include "xrEngine/profiler.h"
+#include "xrEngine/Environment.h"
+#include "xrEngine/IGame_Persistent.h"
+#include "xrCDB/xr_collide_defs.h"
+#include "da_water_impact.h"
 
 #include "Include/xrRender/Kinematics.h"
 #define EFFECTOR_RADIUS 30.f
@@ -356,6 +360,59 @@ void CExplosive::Explode()
     // The wind ring scales with THIS charge's authored lethal radius (Hopkinson-Cranz
     // cube-root scaling: bigger charge = same kick at proportionally larger distance).
     g_pGamePersistent->Environment().wind_motor_impulse(pos, m_fBlastRadius, 1.15f);
+
+    // Water response: an epicentre in a puddle throws the water out. The fountain size
+    // follows how much water is actually THERE (mask x wetness - a shallow film cannot
+    // splash a geyser), the puddle dries in a radius and seeps back, the dark wet ground
+    // stays, and a big ripple ring runs over whatever water remains around the crater.
+    {
+        const auto& wcfg = da_water_impact_cfg();
+        if (wcfg.enabled)
+        {
+            collide::rq_result rq;
+            Fvector probe = pos;
+            probe.y += 0.5f;
+            if (Level().ObjectSpace.RayPick(
+                    probe, Fvector().set(0.f, -1.f, 0.f), 3.5f, collide::rqtStatic, rq, nullptr))
+            {
+                Fvector gp;
+                gp.mad(probe, Fvector().set(0.f, -1.f, 0.f), rq.range);
+                const Fvector* verts = Level().ObjectSpace.GetStaticVerts();
+                const CDB::TRI& tri = Level().ObjectSpace.GetStaticTris()[rq.element];
+                Fvector n;
+                n.mknormal(verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]);
+                auto& env = g_pGamePersistent->Environment();
+                const float mask = env.SamplePuddleMask(gp, n.y);
+                if (mask > wcfg.mid_threshold)
+                {
+                    const float depth = mask * env.eff_puddle_wet;
+                    env.water_hit(gp, std::max(m_fBlastRadius * wcfg.ring_radius_scale, 2.f),
+                        CEnvironment::EWaterHit::ring);
+                    env.water_hit(gp,
+                        clampr(m_fBlastRadius * wcfg.drain_radius_scale, wcfg.drain_radius_min,
+                            wcfg.drain_radius_max),
+                        CEnvironment::EWaterHit::drain);
+
+                    const auto play = [&](const shared_str& name) {
+                        if (!name.size())
+                            return;
+                        CParticlesObject* ps = CParticlesObject::Create(name.c_str(), TRUE);
+                        Fmatrix xf;
+                        xf.identity();
+                        xf.c.set(gp);
+                        ps->UpdateParent(xf, zero_vel);
+                        ps->Play(false);
+                    };
+                    play(wcfg.ps_hit_big);
+                    if (depth > wcfg.deep_threshold)
+                    {
+                        play(wcfg.ps_fountain);
+                        play(wcfg.ps_distort_big);
+                    }
+                }
+            }
+        }
+    }
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);

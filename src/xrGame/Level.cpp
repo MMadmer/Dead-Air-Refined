@@ -5,6 +5,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "ParticlesObject.h"
 #include "Level.h"
+#include "shell_litter.h"
 #include "HUDManager.h"
 #include "xrServer.h"
 #include "NET_Queue.h"
@@ -432,6 +433,8 @@ void CLevel::OnFrame()
     stats.BulletManagerCommit.Begin();
     BulletManager().CommitEvents();
     stats.BulletManagerCommit.End();
+    // Lying-brass decals land on the main thread: wallmark adds are not worker-safe.
+    shell_litter::update();
     // Client receive
     if (net_isDisconnected())
     {

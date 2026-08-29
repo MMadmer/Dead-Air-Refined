@@ -1,0 +1,26 @@
+; Water impact response of the procedural puddles (engine: Environment::water_hit,
+; Level_bullet_manager_firetrace.cpp, Explosive.cpp). Data here, mechanism in code:
+; the material name routes the hit into the game's own bullet-x-water pair (sound,
+; particles, no bullet-hole decal), the particle names are the game's own hit_fx set.
+
+[water_impact]
+; whose material pair a bullet hit in a puddle should play
+material                = materials\water
+; puddle mask threshold (0..1) for "this landed in water"
+mask_threshold          = 0.22
+; bullet ring ripple radius, metres
+ring_radius_bullet      = 0.9
+
+; explosion response
+ring_radius_scale       = 0.9   ; ring reach as a share of blast_r
+drain_radius_scale      = 0.55  ; dried-out spot as a share of blast_r
+drain_radius_min        = 1.5
+drain_radius_max        = 4.0
+; depth = mask * wetness at the epicentre decides how much water there IS to throw:
+; a deep puddle gives the full fountain, a shallow film only the big splash
+deep_threshold          = 0.45
+mid_threshold           = 0.20
+ps_fountain             = amik\hit_fx\water_splash\water_spurt
+ps_hit_big              = hit_fx\effects\hit_water_hit_big
+ps_distort_big          = hit_fx\effects\hit_water_hit_distort_big
+ps_hit                  = hit_fx\effects\hit_water_hit

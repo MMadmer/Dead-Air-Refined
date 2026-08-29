@@ -1151,6 +1151,8 @@ target_sources(xrGame PRIVATE
     xms_spawn_composer.cpp
     setup_manager.h
     setup_manager_inline.h
+    shell_litter.cpp
+    shell_litter.h
     ShootingObject.cpp
     shootingObject_dump_impl.cpp
     ShootingObject.h

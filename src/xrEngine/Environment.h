@@ -391,6 +391,47 @@ public:
     void wind_motor_impulse(const Fvector& pos, float lethal_r, float strength);
     void wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength);
 
+    // ---- Water impact spots: bullet/blast response of the procedural puddles. --------------
+    // Same architecture as the wind motors: a small CPU pool packed into matrices for the
+    // puddle shader. Two kinds: an expanding RING ripple (a bullet "skips a stone" on the
+    // water) and a DRAIN (an explosion splashes the puddle out; the water layer vanishes and
+    // seeps back, while the dark wet ground stays - that is the shader's damp term, which the
+    // drain deliberately does not touch).
+    enum
+    {
+        water_hit_count = 8
+    };
+    enum class EWaterHit : u8
+    {
+        ring,
+        drain
+    };
+    struct SWaterHit
+    {
+        Fvector pos{};
+        float radius{};
+        float birth{};
+        EWaterHit kind{};
+        bool used{};
+    };
+    SWaterHit water_hits[water_hit_count];
+    // rows: pos = (xyz, radius), par = (amplitude/strength, ring radius, kind 0|1, 0)
+    Fmatrix water_hit_pos[2];
+    Fmatrix water_hit_par[2];
+    float water_hit_active{};
+
+    // Published by the renderer's rain_params accumulator once per frame, so gameplay code
+    // can evaluate the same puddle mask the shader draws (wet = ground wetness 0..1,
+    // size = puddle share knob).
+    float eff_puddle_wet{};
+    float eff_puddle_size{};
+
+    void water_hit(const Fvector& pos, float radius, EWaterHit kind);
+    // CPU replica of the shader's puddle mask (da_puddles.h) at a world point: same noise,
+    // same slope curve, same threshold; the hemi "open sky" term is stood in by the shelter
+    // ray. ground_ny = Y of the surface normal at the point.
+    float SamplePuddleMask(const Fvector& pos, float ground_ny);
+
     // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a
     // roof, where the physical wind push on bodies and projectiles must die. One static-only
     // ray up; callers gate their frequency.
