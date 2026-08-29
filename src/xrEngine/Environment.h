@@ -316,6 +316,12 @@ public:
     // the phase on every change). Wrapped to a whole number of the sawtooth wave's periods.
     float eff_tree_phase{};
 
+    // Cloud-shadow travel accumulator (metres): the sun pass builds the stock cloud-shadow
+    // projection matrix (r4_rendertarget_accum_direct) and shifts it downwind by this run -
+    // clouds at altitude move noticeably faster than the ground gust field. Accumulated so a
+    // gust never jumps the shadow field; fmod at a huge bound only guards against infinity.
+    float eff_cloud_run{};
+
     // Puddle-ripple travel accumulators, in noise-space units (world m x 12), wrapped to the
     // 64-cell period of the puddle noise. The ripple pattern SCROLLS continuously along the
     // local flow direction - rain drives the downhill term (scaled by slope per pixel), wind

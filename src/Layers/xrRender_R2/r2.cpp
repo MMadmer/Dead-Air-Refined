@@ -274,6 +274,21 @@ static class cl_da_fog_color : public R_constant_setup
     }
 } binder_da_fog_color;
 
+// Cloud shadows (the sunmask hook in shadow.h): z = shadow density from the weather's
+// cloudiness (clouds_color.w) - thin cirrus barely dims, a heavy deck cuts up to half the
+// sun, and overcast kills the sun itself anyway - w = noise cells per cloud-projection UV
+// tile (the sun pass supplies the m_sunmask projection; its 0.002 scale makes one UV
+// = 500 m, so w=5 puts a shadow blob at ~100 m). Density zero short-circuits the branch.
+static class cl_da_cloud_shadow : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        const float cover = clampr((env.CurrentEnv.clouds_color.w - 0.15f) * 1.3f, 0.f, 1.f);
+        cmd_list.set_c(C, 0.f, 0.f, cover * 0.55f, 5.f);
+    }
+} binder_da_cloud_shadow;
+
 // Tonemap tinting: y = white point, z = luminance-tonemap share, w = late-desaturation power.
 // Consumed by tonemap() in common_functions.h; a zero constant reproduces stock exactly.
 static class cl_da_tonemap_params : public R_constant_setup
@@ -747,6 +762,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_fog", &binder_da_fog);
     Resources->RegisterConstantSetup("da_fog2", &binder_da_fog2);
     Resources->RegisterConstantSetup("da_fog_color", &binder_da_fog_color);
+    Resources->RegisterConstantSetup("da_cloud_shadow", &binder_da_cloud_shadow);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);

@@ -876,14 +876,51 @@ float 	shadow_rain 	(float4 tc, float2 tcJ)			// jittered sampling
 
 //////////////////////////////////////////////////////////////////////////////////////////
 #ifdef  USE_SUNMASK
-float3x4 m_sunmask;	// ortho-projection
+float3x4 m_sunmask;	// ortho-projection (historically; bound as view->world on this build)
+
+// [DA] ТЕНИ ОБЛАКОВ ВОЗВРАЩЕНЫ. sunmask - родной механизм облачных теней X-Ray: в оригинале
+// сюда проецировалась облачная маска через s_lmap.w, но на DX11 в сан-пассах под s_lmap
+// живёт белая заглушка - маска молча стала единицей, и тени облаков исчезли («в старых
+// директах облака лучше, добавляют динамики на локах» - ровно про это). Вместо потерянной
+// текстурной маски - процедурное поле теней: два слоя периодического шума (решётка замкнута
+// по 64 ячейкам - те же гарантии точности, что у поля порывов), едущее по ветру НА ОБЛАЧНОЙ
+// СКОРОСТИ (биндер cl_da_cloud_shadow: xy = снос, z = плотность от облачности погоды,
+// w = 1/размер ячейки). Плотность 0 (чистое небо) отсекает всю ветку.
+uniform float4 da_cloud_shadow;
+
+float da_csh_hash( float2 i )
+{
+	float2 p = fmod( i + 4096.0f, 64.0f );
+	p = frac( p * float2(127.1f, 311.7f) );
+	p += dot( p, p + 34.23f );
+	return frac( p.x * p.y );
+}
+
+float da_csh_noise( float2 p )
+{
+	const float2 i = floor( p );
+	float2 f = p - i;
+	f = f * f * (3.0f - 2.0f * f);
+	const float a = da_csh_hash( i );
+	const float b = da_csh_hash( i + float2(1.0f, 0.0f) );
+	const float c = da_csh_hash( i + float2(0.0f, 1.0f) );
+	const float d = da_csh_hash( i + float2(1.0f, 1.0f) );
+	return lerp( lerp(a, b, f.x), lerp(c, d, f.x), f.y );
+}
+
 float sunmask( float4 P )
 {
-	float2 		tc	= mul( m_sunmask, P ).xy;		//
-//	return 		tex2D( s_lmap, tc ).w;			// A8
-	// SampleLevel(0): the ortho-projected tc has no meaningful derivatives on a fullscreen
-	// pass, and implicit mips smeared the cloud mask at grazing depth gradients.
-	return 		s_lmap.SampleLevel( smp_linear, tc, 0 ).w;	// A8
+	[branch] if ( da_cloud_shadow.z < 0.003f )
+		return 1.0f;
+	// В САН-ПАССАХ m_sunmask - стоковая облачная проекция ВДОЛЬ СОЛНЦА (со сдвигом по ветру,
+	// r4_rendertarget_accum_direct): mul даёт готовые UV облачного поля - утром тени облаков
+	// честно уезжают вбок, как настоящие. Пятна ~100 м, вторая октава рвёт кромку.
+	const float2 q  = mul( m_sunmask, P ).xy * da_cloud_shadow.w;
+	const float  n  = da_csh_noise( q ) * 0.60f + da_csh_noise( q * 2.31f + 17.0f ) * 0.40f;
+	// Широкие просветы, мягкие края облачных пятен; тень не глушит солнце в ноль - небо
+	// подсвечивает даже под плотным облаком.
+	const float cover = smoothstep( 0.48f, 0.72f, n );
+	return 1.0f - da_cloud_shadow.z * cover;
 }
 #else
 float sunmask( float4 P ) { return 1.h; }		//

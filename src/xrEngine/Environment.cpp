@@ -719,24 +719,32 @@ float CEnvironment::weather_wind_profile()
 void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float strength)
 {
     // Refresh an existing press motor near this position (one motor per walking actor), or
-    // claim a free slot. No slot free - transient motors yield (see claim below), presses don't.
+    // claim a free slot. Presses may take at most SIX of the eight slots: with every NPC now
+    // pressing, a village crowd once filled the whole pool and a grenade blast could not get
+    // a motor at all ("no shockwave through the grass") - two slots stay reserved for
+    // transient events, and blasts additionally evict presses outright (see impulse).
     SWindMotor* slot = nullptr;
+    u32 press_count = 0;
     for (auto& m : wind_motors)
     {
-        if (m.used && m.type == EWindMotor::press && m.released == 0.f &&
-            m.pos.distance_to_sqr(pos) < 1.f)
+        if (m.used && m.type == EWindMotor::press)
         {
-            slot = &m;
-            break;
+            ++press_count;
+            if (!slot && m.released == 0.f && m.pos.distance_to_sqr(pos) < 1.f)
+                slot = &m;
         }
     }
     if (!slot)
+    {
+        if (press_count >= 6)
+            return;
         for (auto& m : wind_motors)
             if (!m.used)
             {
                 slot = &m;
                 break;
             }
+    }
     if (!slot)
         return;
 
@@ -774,6 +782,15 @@ CEnvironment::SWindMotor* wind_motor_claim_transient(CEnvironment::SWindMotor (&
 void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float strength)
 {
     SWindMotor* slot = wind_motor_claim_transient(wind_motors);
+    // A blast outranks everything: if even the transient steal failed (pool full of presses),
+    // evict a press - the standing actor re-claims a slot next frame anyway.
+    if (!slot)
+        for (auto& m : wind_motors)
+            if (m.type == EWindMotor::press)
+            {
+                slot = &m;
+                break;
+            }
     if (!slot)
         return;
 
@@ -950,6 +967,10 @@ void CEnvironment::UpdateEffectiveWind()
     eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
     eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
 
+    // Cloud shadows ride the high-altitude wind: noticeably faster than the ground gust
+    // field. The sun pass turns this run into the stock cloud-projection shift.
+    eff_cloud_run = fmodf(eff_cloud_run + (5.f + 10.f * base) * delta, 1.e6f);
+
     // ---- Tree sway phase. ------------------------------------------------------------------
     // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly) at a
     // CONSTANT rate: a tree is a damped harmonic oscillator swinging at its own natural
@@ -1052,9 +1073,10 @@ void CEnvironment::UpdateEffectiveWind()
                 if (m.used)
                     ++live;
             Msg("* [wind] vel=%.1f base=%.2f norm=%.2f var=%.2f gust=%.2f dir=%.0f deg | motors=%u "
-                "green=%.2f rain=%.2f",
+                "green=%.2f rain=%.2f | fog_far=%.0f fog_near=%.0f",
                 CurrentEnv.wind_velocity, base, eff_wind_norm, eff_wind_var, eff_wind_gust,
-                rad2deg(eff_wind_dir), live, wind_veg_green, rain_k);
+                rad2deg(eff_wind_dir), live, wind_veg_green, rain_k, CurrentEnv.fog_far,
+                CurrentEnv.fog_near);
         }
     }
 }

@@ -213,10 +213,13 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
         // clouds xform
         Fmatrix m_clouds_shadow;
         {
-            const float windShift = 0.003f * Device.fTimeGlobal;
+            // Shift and heading come from the effective-wind service: the shadow field
+            // drifts at cloud-level speed (accumulated - a gust never jumps it) along the
+            // SAME wind the vegetation bends to. Stock 0.003*t barely crawled.
+            const float windShift = g_pGamePersistent->Environment().eff_cloud_run * 0.002f;
             Fmatrix m_xform;
             Fvector direction = fuckingsun->direction;
-            float w_dir = g_pGamePersistent->Environment().CurrentEnv.wind_direction;
+            float w_dir = g_pGamePersistent->Environment().eff_wind_dir;
             // float	w_speed				= g_pGamePersistent->Environment().CurrentEnv.wind_velocity	;
             Fvector normal;
             normal.setHP(w_dir, 0);
@@ -532,10 +535,13 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
         // clouds xform
         Fmatrix m_clouds_shadow;
         {
-            const float windShift = 0.003f * Device.fTimeGlobal;
+            // Shift and heading come from the effective-wind service: the shadow field
+            // drifts at cloud-level speed (accumulated - a gust never jumps it) along the
+            // SAME wind the vegetation bends to. Stock 0.003*t barely crawled.
+            const float windShift = g_pGamePersistent->Environment().eff_cloud_run * 0.002f;
             Fmatrix m_xform;
             Fvector direction = fuckingsun->direction;
-            float w_dir = g_pGamePersistent->Environment().CurrentEnv.wind_direction;
+            float w_dir = g_pGamePersistent->Environment().eff_wind_dir;
             // float	w_speed				= g_pGamePersistent->Environment().CurrentEnv.wind_velocity	;
             Fvector normal;
             normal.setHP(w_dir, 0);

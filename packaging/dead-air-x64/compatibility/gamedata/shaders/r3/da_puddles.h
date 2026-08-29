@@ -152,8 +152,11 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// это честный признак «сюда попадает дождь».
 	const float sky = saturate((hemi_in - 0.30f) * 2.2f);
 
-	// Только горизонтальное.
-	const float slope = saturate((abs(gn_w.y) - 0.80f) * 6.0f);
+	// Только горизонтальное. Кривая мягкая: жёсткая (порог 0.8, крутизна 6) в паре с
+	// пер-треугольной геометрической нормалью рисовала ФАСЕТКИ - соседние треугольники
+	// террейна получали в разы разную маску, и на солнечном блике лужа распадалась на
+	// пересвеченные полигоны.
+	const float slope = saturate((abs(gn_w.y) - 0.70f) * 3.0f);
 	const float3 Nn = normalize(N_in);
 
 	// Общая мокрота: шире луж и слабее их. Держать слабой — когда блестит всё, солнце отражается одним
@@ -172,14 +175,18 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	[branch] if (rain_params.z < 0.005f)
 		return R;
 
-	const float thr = lerp(0.86f, 0.30f, saturate(rain_params.z)) + (1.0f - wet) * 0.15f;
+	// Наклон входит В ПОРОГ, а не множителем маски: на негоризонтальном месте лужа просто НЕ
+	// ЗАВОДИТСЯ (порог уезжает вверх), а там, где завелась, её яркость/глянец не модулируются
+	// пер-треугольным slope - это и убирает полигональные фасетки на блике.
+	const float thr = lerp(0.86f, 0.30f, saturate(rain_params.z)) + (1.0f - wet) * 0.15f +
+		(1.0f - slope) * 0.60f;
 
 	// Дальность. Гасим не резко, а на последней четверти: жёсткая граница читается кольцом вокруг
 	// игрока, которое едет вместе с ним, и это заметнее самих луж.
 	const float d_max = max(da_puddle_look2.x, 1.0f);
 	const float dist_fade = saturate((d_max - pos_v.z) / (d_max * 0.25f));
 
-	const float puddles = smoothstep(0.0f, 0.10f, n - thr) * wet * slope * sky * dist_fade;
+	const float puddles = smoothstep(0.0f, 0.10f, n - thr) * wet * sky * dist_fade;
 	R.mask = puddles;
 
 	// ---- Тёмная кайма вокруг воды ----------------------------------------------------------------
@@ -190,7 +197,7 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// ⚠️ Её однажды сняли целиком, решив, что «обводка» — это она. Оказалось нет: обводку давал
 	// дизеринг границы (см. ниже, где считается m_bin). Кайма вернулась как была.
 	const float rim_w = max(da_puddle_look3.x, 0.01f);
-	R.rim = saturate((n - (thr - rim_w)) / rim_w) * (1.0f - puddles) * wet * slope * sky * dist_fade;
+	R.rim = saturate((n - (thr - rim_w)) / rim_w) * (1.0f - puddles) * wet * sky * dist_fade;
 
 	// Отладка 2: заливка чёрным по белому. Свет может сделать белое ярче или тусклее, но чёрное
 	// останется чёрным — по такой картинке видно, сплошная маска или только кайма.

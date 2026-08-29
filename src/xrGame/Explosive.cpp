@@ -346,9 +346,11 @@ void CExplosive::Explode()
     m_layered_sounds.PlaySound("sndExplode", pos, smart_cast<IGameObject*>(this), false, false, (u8)-1);
 
     // Blast wave through the vegetation: an expanding wind-motor ring bends grass and crowns
-    // outward from the epicentre. Radius follows the frag distance so a grenade ripples a
-    // dozen metres and a barrel a couple dozen.
-    g_pGamePersistent->Environment().wind_motor_impulse(pos, 18.f, 1.2f);
+    // outward from the epicentre - EVERY explosion (grenades, barrels, rockets) comes through
+    // this base class. Punched up after a field test where the wave was invisible (the real
+    // culprit was press motors starving the pool - fixed - but the wave also deserves to
+    // read as a shockwave, not a breeze).
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 1.7f);
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);
