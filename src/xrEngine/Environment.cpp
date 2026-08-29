@@ -894,7 +894,7 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
         const float t = (dist - arow[1]) / arow[2];
         float w = expf(-t * t);
         if (arow[1] > 0.5f && dist < arow[1])
-            w = std::max(w, 0.45f * dist / std::max(arow[1], 0.5f));
+            w = std::max(w, 0.75f * _sqrt(dist / std::max(arow[1], 0.5f)));
         total += _abs(arow[0]) * w;
     }
     return total;
@@ -1021,13 +1021,14 @@ void CEnvironment::UpdateEffectiveWind()
 
         if (m.used && m.type == EWindMotor::impulse)
         {
-            // Expanding blast ring: front travels at 14 m/s with a DENSE leading edge and a
-            // slow decay (field-tuned: the earlier wide smeared ring diluted the punch into
-            // an invisible breeze); the shader adds the outflow wake behind the front.
+            // Expanding blast ring. Field lesson: at 14 m/s the front crossed a tuft in a
+            // few FRAMES - the eye never caught it and grenades read as "nothing happened".
+            // 10 m/s keeps the front readable (2.2 s to full radius) and the slower decay
+            // keeps the shader's outflow wake alive behind it for the whole expansion.
             const float age = now - m.touched;
-            ring_r = 14.f * age;
-            ring_w = 1.2f + age * 1.2f;
-            amp = m.strength * expf(-age * 1.4f);
+            ring_r = 10.f * age;
+            ring_w = 1.3f + age * 1.0f;
+            amp = m.strength * expf(-age * 1.1f);
             if (ring_r > m.radius || amp < 0.02f)
                 m.used = false;
         }
@@ -1078,6 +1079,21 @@ void CEnvironment::UpdateEffectiveWind()
         arow[3] = line ? 1.f + m.dir_y : 0.f;
     }
     wind_motor_active = float(highest);
+
+    // ---- Self-test blast ring (wind_dbg 2): a blast motor spawns 6 m ahead of the camera
+    // every 5 s - verifies the whole ring chain on a rig where nobody can throw a grenade.
+    if (ps_e_wind_dbg > 1)
+    {
+        static float next_test_blast = 0.f;
+        if (now >= next_test_blast)
+        {
+            next_test_blast = now + 5.f;
+            Fvector p = Device.vCameraPosition;
+            p.mad(Device.vCameraDirection, 6.f);
+            p.y -= 1.5f;
+            wind_motor_impulse(p, 22.f, 2.2f);
+        }
+    }
 
     // ---- Optional service dump (wind_dbg 1): ground the tuning in real numbers. ------------
     if (ps_e_wind_dbg)

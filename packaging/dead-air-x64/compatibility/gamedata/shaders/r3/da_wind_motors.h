@@ -45,28 +45,26 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
         [branch]
         if (A.w > 0.5f)
         {
-            // Line motor: push outward from the nearest point of the trace segment. The
-            // turbulent tube around a bullet path is NARROW - a wide gaussian read as a
-            // metre-wide wall of motion along the shot (field report).
+            // Line motor: a SPHERE-TRACED turbulent tube around the 3D flight path. The
+            // bullet's wake is measured to the VERTEX (root XZ for tuft coherence, vertex
+            // height for the vertical) - so a burst over the grass stirs nothing, a shot
+            // into a tall bush shakes the branches AT the path, and a downward shot wakes
+            // the grass out where the trace actually drops into it. The push runs mostly
+            // ALONG the shot (the wake drags air with the bullet) with a radial spread.
             const float2 ldir = float2(A.y, A.z);
             const float along = clamp(dot(d, ldir), 0.0f, P.w);
             d -= ldir * along;
-            const float dist = length(d);
-            [branch]
-            if (dist > 0.8f || dist < 0.001f)
-                continue;
-            // Height gate: the trace is a 3D line (A.w carries 1 + vertical slope per metre
-            // of ground track). A shot fired over the grass - or into the sky - must not
-            // stir vegetation metres below its path (field report: "I shoot at the sky and
-            // the grass still reacts"). Full effect while the trace is below ~0.7 m over
-            // the root, gone by ~1.8 m.
+            const float dist_xz = length(d);
             const float trace_y = P.y + (A.w - 1.0f) * along;
-            const float h_gate = saturate(1.0f - (trace_y - root_w.y - 0.7f) * (1.0f / 1.1f));
+            const float dy = trace_y - (root_w.y + H);
+            const float dist3 = sqrt(dist_xz * dist_xz + dy * dy);
             [branch]
-            if (h_gate <= 0.001f)
+            if (dist3 > 0.85f)
                 continue;
-            const float t = dist * (1.0f / 0.3f);
-            bend += (d / dist) * (exp(-t * t) * A.x * H * h_gate);
+            const float t = dist3 * (1.0f / 0.32f);
+            const float2 radial = (dist_xz > 0.02f) ? (d / dist_xz) : float2(-ldir.y, ldir.x);
+            const float2 push = normalize(ldir * 0.75f + radial * 0.50f);
+            bend += push * (exp(-t * t) * A.x * H);
             continue;
         }
 
@@ -80,11 +78,12 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
         const float t = (dist - A.y) / A.z;
         float w = exp(-t * t);
         // Blast WAKE: behind the expanding front the radial outflow keeps blowing, fading
-        // toward the epicentre (already-spent air) - the whole burst reads as wind rushing
-        // out in every direction, not as a lone travelling ripple. safe_r keeps the division
-        // finite even when the (press) ring radius is zero - both ternary sides evaluate.
+        // toward the epicentre (already-spent air). sqrt ramps the wake up fast just behind
+        // the front - the front itself crosses a tuft in a few frames, it is the WAKE that
+        // the eye actually reads as "wind rushing out of the blast". safe_r keeps the
+        // division finite for zero-radius press motors (both ternary sides evaluate).
         const float safe_r = max(A.y, 0.5f);
-        w = max(w, (A.y > 0.5f && dist < A.y) ? 0.45f * dist / safe_r : 0.0f);
+        w = max(w, (A.y > 0.5f && dist < A.y) ? 0.75f * sqrt(dist / safe_r) : 0.0f);
         bend += (d / dist) * (w * A.x * H);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.

@@ -74,7 +74,7 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // Field rule: trees must not shake from gunfire and explosions, bushes must.
     float press_unused;
     result += da_wind_motors_bend(root3, H, press_unused) *
-        (0.6f * saturate(frac * 2.0f) * saturate((3.5f - H) * 0.5f));
+        (0.6f * saturate(frac * 2.0f) * saturate((5.0f - H) * 0.45f));
     // Foliage shiver (bushes live on this): a finer, 2.3x faster wave for the OUTER foliage.
     // Per-vertex phase is CORRECT here - leaves flutter independently - and the amplitude is
     // small enough to read as rustle, not shape distortion. Double-gated so the trunk stays

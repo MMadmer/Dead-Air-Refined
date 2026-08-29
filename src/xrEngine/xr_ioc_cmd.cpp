@@ -891,7 +891,9 @@ void CCC_Register()
     CMD4(CCC_Integer, "r__fps_log", &ps_r__fps_log, 0, 60);
     {
         extern int ps_e_wind_dbg;
-        CMD4(CCC_Integer, "wind_dbg", &ps_e_wind_dbg, 0, 1);
+        // 1 = log the live service numbers; 2 = also self-spawn a test blast ring ahead of
+        // the camera every 5 s (verifies the ring chain without throwing grenades).
+        CMD4(CCC_Integer, "wind_dbg", &ps_e_wind_dbg, 0, 2);
     }
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);
