@@ -371,7 +371,8 @@ public:
     {
         Fvector pos{};      // press/impulse: centre; shot: trace start
         Fvector2 dir{};     // shot: horizontal trace direction (unit)
-        float dir_y{};      // shot: vertical slope per metre of ground track (clamped)
+        float dir_y{};      // shot: vertical slope per metre of ground track; impulse: lethal
+                            // (blast_r) radius - the 1/R anchor of the front's falloff
         float radius{};     // press/impulse: reach; shot: trace length
         float strength{};   // authored strength of the source
         float touched{};    // press: last refresh time; impulse/shot: birth time
@@ -388,7 +389,7 @@ public:
     float wind_motor_active{};  // how many rows the shader loop has to walk (0 = free)
 
     void wind_motor_press(const Fvector& pos, float radius, float strength);
-    void wind_motor_impulse(const Fvector& pos, float radius, float strength);
+    void wind_motor_impulse(const Fvector& pos, float lethal_r, float strength);
     void wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength);
 
     // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a

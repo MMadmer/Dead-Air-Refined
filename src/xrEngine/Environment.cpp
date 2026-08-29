@@ -787,7 +787,7 @@ CEnvironment::SWindMotor* wind_motor_oldest_of(
 }
 } // namespace
 
-void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float strength)
+void CEnvironment::wind_motor_impulse(const Fvector& pos, float lethal_r, float strength)
 {
     // A blast outranks everything: free slot, else the oldest shot, else the oldest OTHER
     // blast, else any press (the standing actor re-claims a slot next frame anyway).
@@ -809,14 +809,19 @@ void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float st
     slot->used = true;
     slot->type = EWindMotor::impulse;
     slot->pos = pos;
-    slot->radius = radius;
+    // Hopkinson-Cranz cube-root scaling, anchored to the charge's own authored lethal
+    // radius (blast_r): a bigger charge shows the SAME kick at proportionally larger
+    // distances, so the visible ring is a fixed multiple of blast_r. F1 (blast_r 8) dies
+    // at ~13 m - the point where its blast wind sinks to ambient-gust level.
+    slot->radius = clampr(lethal_r * 1.6f, 4.f, 30.f);
+    slot->dir_y = std::max(lethal_r, 1.f);
     slot->strength = strength;
     slot->touched = Device.fTimeGlobal;
     slot->released = 0.f;
 
     if (ps_e_wind_dbg)
-        Msg("* [wind] blast motor: r=%.0f s=%.1f at (%.0f, %.0f, %.0f)", radius, strength, pos.x,
-            pos.y, pos.z);
+        Msg("* [wind] blast motor: lethal=%.0f ring=%.0f s=%.1f at (%.0f, %.0f, %.0f)", lethal_r,
+            slot->radius, strength, pos.x, pos.y, pos.z);
 }
 
 void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength)
@@ -1050,13 +1055,17 @@ void CEnvironment::UpdateEffectiveWind()
             const float age = now - m.touched;
             ring_r = 10.f * age;
             ring_w = 1.3f + age * 1.0f;
-            // Slow decay keeps the blast a BLAST all the way out (exp(-1.1t) arrived at the
-            // outer radius with 14% and read as nothing). The edge fade drives the front to
-            // ZERO before the motor dies: a stateless VS has no per-tuft state to relax, the
-            // force envelope IS the state - a source that dies with amplitude left snaps the
-            // whole field straight in one frame.
-            const float edge = clampr((m.radius - ring_r) / 5.f, 0.f, 1.f);
-            amp = m.strength * expf(-age * 0.55f) * edge;
+            // Kinney-Graham far field: for a small charge the particle-velocity "wind"
+            // behind the front falls off as ~1/R (60 g TNT: ~17 m/s at 5 m, ~8 m/s at 10 m,
+            // below ambient gusts past ~15 m). dir_y carries the charge's lethal radius as
+            // the 1/R anchor - full authored kick AT blast_r, weaker beyond it; the
+            // near-field boost is capped (inside the fireball grass is flat either way).
+            // The edge fade still drives the front to ZERO before the motor dies: a
+            // stateless VS has no per-tuft state to relax, the force envelope IS the
+            // state - a source dying with amplitude left snaps the field straight.
+            const float falloff = std::min(1.75f, m.dir_y / std::max(ring_r, 1.f));
+            const float edge = clampr((m.radius - ring_r) / std::max(m.radius * 0.30f, 1.f), 0.f, 1.f);
+            amp = m.strength * falloff * edge;
             if (ring_r >= m.radius || amp < 0.02f)
                 m.used = false;
         }
@@ -1122,7 +1131,7 @@ void CEnvironment::UpdateEffectiveWind()
             Fvector p = Device.vCameraPosition;
             p.mad(Device.vCameraDirection, 18.f);
             p.y -= 1.5f;
-            wind_motor_impulse(p, 25.f, 3.2f);
+            wind_motor_impulse(p, 8.f, 3.2f); // F1-equivalent charge (blast_r 8 -> ~13 m ring)
             if (ps_e_wind_dbg > 2)
                 for (u32 fi = 0; fi < 24; ++fi)
                 {

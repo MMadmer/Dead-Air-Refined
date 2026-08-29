@@ -45,7 +45,9 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	{
 		const float H_s = v.pos.y * length(float3(m0.y, m1.y, m2.y));
 		float press_w;
-		const float2 mb = da_wind_motors_bend(float3(m0.w, m1.w, m2.w), H_s, press_w);
+		float2 mb = da_wind_motors_bend(float3(m0.w, m1.w, m2.w), H_s, press_w);
+		// Cap at "lying flat" - excess bend would pure-stretch the blade (see w_flat).
+		mb *= min(1.0f, H_s / max(length(mb), 0.001f));
 		// Same arc-length correction as the waving grass: a full-strength press LAYS the
 		// tuft down instead of stretching it sideways.
 		const float drop_s = H_s - sqrt(max(H_s * H_s - dot(mb, mb), 0.0f));
