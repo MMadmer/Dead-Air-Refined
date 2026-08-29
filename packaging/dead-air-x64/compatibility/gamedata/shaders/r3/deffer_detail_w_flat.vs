@@ -52,13 +52,17 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
  	pos.z 		= dot	(m2, v.pos);
 	pos.w 		= 1;
 
-	// Wave shape: pure cosine instead of the stock parabola-over-sawtooth. The stock curve has a
-	// -1/3 DC offset (the whole field leans downwind permanently) and a velocity kink once per
-	// cycle; -cos(2*pi*x) has neither. Local to this file - shared\common.h stays stock.
+	// Wave shape: mean lean + smooth oscillation (da_sway), replacing the symmetric wave that
+	// swung blades as far upwind as downwind and ricocheted off its peaks. Real grass under
+	// wind holds a downwind lean proportional to the wind and oscillates around it: light air
+	// = shallow lean with wide swings almost back upright, steady strong wind = deep lean
+	// with only an elastic spring around it. The phase stays PER-VERTEX here (unlike trees):
+	// it is what makes waves visibly travel across a meadow.
 	float 	dp;
 	{
-		float s = 1.4142136f * sin(dot(pos, wave) * 3.1415926f);
-		dp = s * s - 1.0f;
+		const float wind_k = saturate(da_wind_field.z);
+		const float sway_mean = 0.42f + 0.38f * wind_k;
+		dp = sway_mean + (1.0f - sway_mean) * da_sway(dot(pos, wave));
 	}
 	// Height above the root measured along the instance basis, not world Y minus base: with
 	// ground-tilted instances the old form picked up cos(tilt) and cross terms, weakening and

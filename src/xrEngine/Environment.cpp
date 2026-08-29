@@ -931,14 +931,15 @@ void CEnvironment::UpdateEffectiveWind()
     eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
     eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
 
-    // ---- Tree sway phase: advances faster in strong wind. ----------------------------------
-    // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly), so the
-    // whip-up in a gust is continuous - a time-varying speed times absolute time would jump
-    // the phase. The consumer divides by 2*pi (FTreeVisual), after which the sawtooth wave's
-    // period is 1.0 - wrapping at 1024 * 2*pi keeps a whole number of periods.
-    eff_tree_phase = fmodf(
-        eff_tree_phase + delta * CurrentEnv.m_fTreeSpeed * (0.70f + 0.80f * eff_wind_norm),
-        1024.f * PI_MUL_2);
+    // ---- Tree sway phase. ------------------------------------------------------------------
+    // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly) at a
+    // CONSTANT rate: a tree is a damped harmonic oscillator swinging at its own natural
+    // frequency, set by mass and stiffness - wind changes how FAR it leans, not how fast it
+    // swings (the earlier gust "whip-up" factor was right for grass, wrong for trees; grass
+    // keeps its own whip in the detail manager). Accumulated, never time*speed - a varying
+    // speed times absolute time jumps the phase. The consumer divides by 2*pi (FTreeVisual);
+    // wrapping at 1024 * 2*pi keeps a whole number of wave periods.
+    eff_tree_phase = fmodf(eff_tree_phase + delta * CurrentEnv.m_fTreeSpeed, 1024.f * PI_MUL_2);
 
     // ---- Puddle ripple travel. -------------------------------------------------------------
     // Two accumulated path lengths in noise-space units (world m x 12): rain drives downhill

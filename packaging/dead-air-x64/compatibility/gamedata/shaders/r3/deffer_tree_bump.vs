@@ -33,10 +33,14 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float base = local_xform._24;
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
-    // Root phase + local heading + flexibility rule + total-bend cap: all identical to
-    // deffer_tree_flat.vs - see the notes there.
+    // Root phase + per-tree natural frequency + wind-dependent mean/swing split + local
+    // heading + flexibility rule + total-bend cap: all identical to deffer_tree_flat.vs -
+    // see the notes there.
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
-    float dp = calc_cyclic(wave.w + dot(root3, (float3)wave));
+    const float freq_k = 0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f);
+    const float wind_k = saturate(da_wind_field.z);
+    const float sway_mean = 0.45f + 0.35f * wind_k;
+    float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(root3, (float3)wave));
     float inten = H * dp;
     float3 flow = da_wind_field_eval(root3.xz);
     const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
@@ -46,7 +50,7 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     result += da_wind_motors_bend(root3.xz, H, press_unused) * (0.35f * saturate(frac * 2.0f));
     const float axis_r = length(pos.xz - root3.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
-    const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
+    const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));
     result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
     const float bend_len = length(result);
     const float bend_max = H * 0.38f;

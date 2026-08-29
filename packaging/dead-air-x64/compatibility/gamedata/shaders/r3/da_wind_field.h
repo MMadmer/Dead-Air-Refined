@@ -74,4 +74,29 @@ float2 da_wind_local_dir(float2 dir, float dev)
     return float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
 }
 
+// ---- Sway waveform. ------------------------------------------------------------------------
+// The stock calc_cyclic is a parabola over a sawtooth: its VALUE is continuous at the peak but
+// its velocity jumps from +8 to -8 - vegetation accelerates INTO its maximum lean and
+// ricochets off it. And it is symmetric (-1..+1), swinging plants as far against the wind as
+// with it. Real plants do neither: wind gives a plant a STATIC lean it oscillates around,
+// approaching the extremes harmonically (velocity -> 0), lingering, springing back a few
+// degrees and returning - the classic narrow-band resonance around the plant's own frequency
+// with turbulence on top (the SpeedTree / Tsushima model).
+//
+// da_sway: three incommensurable harmonics, C-infinity smooth, range ~[-1..1] with rare full
+// peaks. The beat pattern of the pair IS the "lean - hold - half spring-back - lean again"
+// the eye expects. Consumers use mean + swing*da_sway so the result stays DOWNWIND.
+float da_sway(float ph)
+{
+    const float w = ph * 6.2831853f;
+    return 0.62f * sin(w) + 0.28f * sin(w * 1.731f + 1.3f) + 0.10f * sin(w * 3.09f + 4.1f);
+}
+
+// Foliage flutter: zero-centred (leaves flick both ways), smooth, non-repeating pair.
+float da_flutter(float ph)
+{
+    const float w = ph * 6.2831853f;
+    return 0.60f * sin(w) + 0.40f * sin(w * 1.618f + 0.9f);
+}
+
 #endif // DA_WIND_FIELD_H

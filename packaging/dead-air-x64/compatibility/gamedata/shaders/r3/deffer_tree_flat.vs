@@ -40,8 +40,21 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // back, and the crown visibly SQUASHES every cycle. One phase per tree: the crown moves
     // as a whole, the arc comes from the baked flexibility, the shiver below keeps the
     // fine per-vertex life.
+    //
+    // Each tree also gets its OWN natural frequency (mass and stiffness differ), so the
+    // forest drifts out of step instead of swaying like a drilled parade; and the waveform
+    // is da_sway - a static downwind lean with smooth harmonic oscillation around it - in
+    // place of the stock parabola that ricocheted off its peak and swung crowns as far
+    // upwind as downwind.
+    // The mean/swing split follows the wind strength: light air = shallow mean lean with wide
+    // swings almost back to upright; a steady gale = deep stable lean with only an elastic
+    // spring around it - a plant under CONSTANT wind never straightens back up, the full
+    // lean-recover cycle belongs to gusts (which the field's tongues add on top).
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
-    float dp = calc_cyclic(wave.w + dot(root3, (float3)wave));
+    const float freq_k = 0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f);
+    const float wind_k = saturate(da_wind_field.z);
+    const float sway_mean = 0.45f + 0.35f * wind_k;
+    float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(root3, (float3)wave));
     float inten = H * dp;
     // Local flow from the travelling gust field at the TREE ROOT: a gust tongue leans this
     // crown while the next tree over stands in a lull. The z channel turns the LOCAL heading:
@@ -64,7 +77,7 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // dead: by authored flexibility AND by radial distance from the instance axis.
     const float axis_r = length(pos.xz - root3.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
-    const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
+    const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));
     result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
     // Hard sanity cap on the TOTAL bend. Storm weathers author amplitude 0.10 (double the
     // usual), and the service envelope on top of that once folded a crown into a half-circle.
