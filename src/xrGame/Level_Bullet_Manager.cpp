@@ -202,7 +202,7 @@ void CBulletManager::AddBullet(const Fvector& position, const Fvector& direction
     // trace is a metre-scale detail, invisible farther out.
     if (position.distance_to_sqr(Device.vCameraPosition) < 50.f * 50.f)
         g_pGamePersistent->Environment().wind_motor_shot(
-            position, direction, std::min(maximum_distance, 25.f), 0.375f);
+            position, direction, std::min(maximum_distance, 25.f), 0.5f);
     if (!IsGameTypeSingle())
     {
         if (SendHit)

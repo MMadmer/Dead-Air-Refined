@@ -1147,7 +1147,7 @@ void CEnvironment::UpdateEffectiveWind()
                     const float a = float(fi) * (PI_MUL_2 / 24.f);
                     Fvector fd;
                     fd.set(_sin(a), -0.1f, _cos(a));
-                    wind_motor_shot(p, fd, 25.f, 0.375f);
+                    wind_motor_shot(p, fd, 25.f, 0.5f);
                 }
         }
     }
