@@ -355,7 +355,7 @@ void CExplosive::Explode()
     }
     // The wind ring scales with THIS charge's authored lethal radius (Hopkinson-Cranz
     // cube-root scaling: bigger charge = same kick at proportionally larger distance).
-    g_pGamePersistent->Environment().wind_motor_impulse(pos, m_fBlastRadius, 3.2f);
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, m_fBlastRadius, 1.15f);
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);

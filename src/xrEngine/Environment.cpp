@@ -809,19 +809,19 @@ void CEnvironment::wind_motor_impulse(const Fvector& pos, float lethal_r, float 
     slot->used = true;
     slot->type = EWindMotor::impulse;
     slot->pos = pos;
-    // Hopkinson-Cranz cube-root scaling, anchored to the charge's own authored lethal
-    // radius (blast_r): a bigger charge shows the SAME kick at proportionally larger
-    // distances, so the visible ring is a fixed multiple of blast_r. F1 (blast_r 8) dies
-    // at ~13 m - the point where its blast wind sinks to ambient-gust level.
-    slot->radius = clampr(lethal_r * 1.6f, 4.f, 30.f);
-    slot->dir_y = std::max(lethal_r, 1.f);
+    // Hopkinson-Cranz cube-root scaling by proxy: the ring IS the charge's own authored
+    // lethal radius (blast_r), so a bigger charge reaches proportionally further. All the
+    // spatial shaping (1/R falloff, edge fade, per-root spring-back) lives in the shader,
+    // computed from each root's own distance - the CPU only carries the peak strength.
+    slot->radius = clampr(lethal_r, 3.f, 20.f);
+    slot->dir_y = 0.f;
     slot->strength = strength;
     slot->touched = Device.fTimeGlobal;
     slot->released = 0.f;
 
     if (ps_e_wind_dbg)
-        Msg("* [wind] blast motor: lethal=%.0f ring=%.0f s=%.1f at (%.0f, %.0f, %.0f)", lethal_r,
-            slot->radius, strength, pos.x, pos.y, pos.z);
+        Msg("* [wind] blast motor: ring=%.0f s=%.2f at (%.0f, %.0f, %.0f)", slot->radius,
+            strength, pos.x, pos.y, pos.z);
 }
 
 void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength)
@@ -913,16 +913,23 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
         const float dist = _sqrt(dx * dx + dz * dz);
         if (dist > prow[3] + arow[2] * 2.f)
             continue;
+        float amp = _abs(arow[0]);
         const float t = (dist - arow[1]) / arow[2];
         float w = expf(-t * t);
-        if (arow[1] > 0.5f && dist < arow[1])
+        if (arow[3] < -0.5f)
         {
-            // Behind the front: the same damped spring-back the shader shows (abs - the
-            // audio only cares how agitated the spot is, not which way it leans).
-            const float tau = (arow[1] - dist) * 0.1f;
-            w = _abs(expf(-tau * 3.5f) * cosf(tau * 9.f));
+            // Blast: the same local shaping the shader does - 1/R falloff anchored at a
+            // quarter of the ring reach, edge fade, and the damped spring-back behind the
+            // front (abs - audio only cares how agitated the spot is, not which way).
+            amp *= std::min(1.1f, (0.25f * prow[3]) / std::max(dist, 0.5f)) *
+                clampr((prow[3] - dist) / (0.30f * prow[3]), 0.f, 1.f);
+            if (dist < arow[1])
+            {
+                const float tau = (arow[1] - dist) * (1.f / 22.f);
+                w = _abs(expf(-tau * 3.5f) * cosf(tau * 9.f));
+            }
         }
-        total += _abs(arow[0]) * w;
+        total += amp * w;
     }
     return total;
 }
@@ -960,11 +967,14 @@ void CEnvironment::UpdateEffectiveWind()
     const float base = std::max({base_cfg, wind_profile_smooth, base_implied});
 
     // Three time scales, deliberately incommensurable so the pattern never visibly loops:
-    // a minute-scale trend (lulls and freshenings), tens-of-seconds waves, and a fast layer
-    // that only matters when it spikes - that spike IS a discrete gust. Calm weather raises
-    // the spike threshold (gusts become rare), storms lower it (gusts come often).
+    // a minute-scale trend (lulls and freshenings), ~14 s waves, and a fast layer that only
+    // matters when it spikes - that spike IS a discrete gust. Calm weather raises the spike
+    // threshold (gusts become rare), storms lower it (gusts come often). Field rule: the
+    // SPEED wobble must read clearly faster than the heading wander (real turbulence pumps
+    // the speed on tens of seconds while the direction only meanders over minutes), so the
+    // waves - not the trend - carry the dominant weight below.
     const float n_trend = wind_vnoise(t * (1.f / 170.f) + 3.7f);
-    const float n_wave = wind_vnoise(t * (1.f / 23.f) + 17.3f);
+    const float n_wave = wind_vnoise(t * (1.f / 14.f) + 17.3f);
     const float n_fast = wind_vnoise(t * (1.f / 5.5f) + 29.1f);
     const float gust_thr = 0.55f + 0.25f * (1.f - base);
     const float gust_ev = clampr((n_fast - gust_thr) / std::max(1.f - gust_thr, 0.05f), 0.f, 1.f);
@@ -975,7 +985,7 @@ void CEnvironment::UpdateEffectiveWind()
     // spatial field, the consumer envelope - once collapsed a storm into a flat calm).
     // The floor rises with the weather: a storm may breathe, but it never sinks to a flat
     // calm - that read as "the weather has no effect at all" in the field.
-    eff_wind_var = clampr(0.30f + 0.35f * base + n_trend * 0.55f + n_wave * 0.35f + gust_ev * 0.55f,
+    eff_wind_var = clampr(0.30f + 0.35f * base + n_trend * 0.35f + n_wave * 0.55f + gust_ev * 0.55f,
         0.f, 1.35f + 0.15f * base);
     eff_wind_norm = clampr(base * eff_wind_var, 0.f, 1.25f);
 
@@ -1053,20 +1063,18 @@ void CEnvironment::UpdateEffectiveWind()
             // 10 m/s keeps the front readable; the shader reconstructs a per-tuft spring-back
             // BEHIND the front from this same speed (da_wind_motors.h) - keep them in sync.
             const float age = now - m.touched;
-            ring_r = 10.f * age;
-            ring_w = 1.3f + age * 1.0f;
-            // Kinney-Graham far field: for a small charge the particle-velocity "wind"
-            // behind the front falls off as ~1/R (60 g TNT: ~17 m/s at 5 m, ~8 m/s at 10 m,
-            // below ambient gusts past ~15 m). dir_y carries the charge's lethal radius as
-            // the 1/R anchor - full authored kick AT blast_r, weaker beyond it; the
-            // near-field boost is capped (inside the fireball grass is flat either way).
-            // The edge fade still drives the front to ZERO before the motor dies: a
-            // stateless VS has no per-tuft state to relax, the force envelope IS the
-            // state - a source dying with amplitude left snaps the field straight.
-            const float falloff = std::min(1.75f, m.dir_y / std::max(ring_r, 1.f));
-            const float edge = clampr((m.radius - ring_r) / std::max(m.radius * 0.30f, 1.f), 0.f, 1.f);
-            amp = m.strength * falloff * edge;
-            if (ring_r >= m.radius || amp < 0.02f)
+            // 22 m/s: the real shock is transonic - invisible - so this is the slowest speed
+            // that still reads as a POP rather than a pond ripple (10 m/s did). Kept in sync
+            // with the shader's spring-back tau (da_wind_motors.h).
+            ring_r = 22.f * age;
+            ring_w = 1.0f + age * 1.5f;
+            // The amplitude packed here is the PEAK strength only: the spatial 1/R falloff,
+            // the edge fade and the per-root spring-back are all computed in the shader from
+            // each root's own distance. That lets the motor outlive its front: the ring edge
+            // goes quiet at m.radius, while roots hit earlier finish their own oscillation.
+            // Kill only after the LAST hit root has settled (spring tail ~0.85 s).
+            amp = m.strength;
+            if (age > m.radius / 22.f + 0.85f)
                 m.used = false;
         }
         else if (m.used && line)
@@ -1108,12 +1116,13 @@ void CEnvironment::UpdateEffectiveWind()
         float* arow = &A.m[i % 4][0];
         prow[0] = m.pos.x; prow[1] = m.pos.y; prow[2] = m.pos.z; prow[3] = m.used ? m.radius : 0.f;
         arow[0] = m.used ? amp : 0.f;
-        // Line motors carry their direction where radial ones carry the ring shape; w packs
-        // the line flag PLUS the vertical slope (1 + slope, slope clamped well above -0.5 so
-        // the >0.5 flag test never breaks) - the shader gates by the trace height with it.
+        // Line motors carry their direction where radial ones carry the ring shape.
         arow[1] = line ? m.dir.x : ring_r;
         arow[2] = line ? m.dir.y : std::max(ring_w, 0.05f);
-        arow[3] = line ? 1.f + m.dir_y : 0.f;
+        // w disambiguates the three motor kinds for the shader: line = 1 + trace slope
+        // (slope clamped well above -0.5 so the >0.5 test never breaks), blast = -1
+        // (the shader shapes its own falloff), press = 0.
+        arow[3] = line ? 1.f + m.dir_y : (m.type == EWindMotor::impulse ? -1.f : 0.f);
     }
     wind_motor_active = float(highest);
 
@@ -1129,9 +1138,9 @@ void CEnvironment::UpdateEffectiveWind()
         {
             next_test_blast = now + 5.f;
             Fvector p = Device.vCameraPosition;
-            p.mad(Device.vCameraDirection, 18.f);
+            p.mad(Device.vCameraDirection, 10.f); // realistic throw range for the ~8 m ring
             p.y -= 1.5f;
-            wind_motor_impulse(p, 8.f, 3.2f); // F1-equivalent charge (blast_r 8 -> ~13 m ring)
+            wind_motor_impulse(p, 8.f, 1.15f); // F1-equivalent charge (blast_r 8 = ring reach)
             if (ps_e_wind_dbg > 2)
                 for (u32 fi = 0; fi < 24; ++fi)
                 {

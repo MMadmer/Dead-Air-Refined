@@ -100,9 +100,10 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	result	+= wdir * (H * flow.y * (0.05f + 0.95f * shelter) * 1.4f * wind_free);
 	result	+= bend;
 	// A strong blast can ask for more bend than the blade has length - the arc-drop below
-	// then pins the tip to the ground and the excess would pure-STRETCH the blade. Lying
-	// flat is the physical cap.
-	result	*= min(1.0f, H / max(length(result), 0.001f));
+	// then pins the tip to the ground and the excess would pure-STRETCH the blade. The cap
+	// is slightly SHORT of lying flat: at the full length the tip sits exactly on the
+	// ground plane and visibly buries itself on any slope or bumpy terrain.
+	result	*= min(1.0f, 0.92f * H / max(length(result), 0.001f));
 	// Arc-length correction: the stock bend slides the tip sideways at constant height, stretching
 	// the blade up to +34% at storm amplitude (rubber-hose look). Dropping the tip to keep the
 	// length restores a bend.

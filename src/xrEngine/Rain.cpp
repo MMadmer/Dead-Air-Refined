@@ -29,8 +29,11 @@ static const float max_distance = source_offset * 1.25f;
 // Real rain falls near-vertically at 9 m/s terminal velocity and faster with gusts; the
 // 2007 constants (15-40 m/s at up to 30 degrees) drew slow slanted streaks.
 static const float drop_angle = 3.0f;
-static const float drop_max_angle = deg2rad(10.f);
-static const float drop_max_wind_vel = 20.0f;
+// Readability cap for the wind slant: the physical atan(wind/fall) reaches ~55 deg in a
+// hurricane, but past ~45 the sheets read as a renderer glitch rather than weather.
+static const float drop_max_slant = deg2rad(45.f);
+// Large drops fall at ~9 m/s terminal velocity - the denominator of the slant.
+static const float drop_fall_ms = 9.0f;
 static const float drop_speed_min = 40.f;
 static const float drop_speed_max = 80.f;
 
@@ -84,12 +87,15 @@ void CEffect_Rain::Born(Item& dest, float radius)
     Fvector axis;
     axis.set(0, -1, 0);
     // Slant follows the effective-wind service, so the rain leans exactly where the grass bends
-    // and the puddle ripples drift - and it breathes with the same lulls and gusts.
+    // and the puddle ripples drift - and it breathes with the same lulls and gusts. The angle
+    // is the physical one: a falling drop drifts sideways at the wind speed, so the streak
+    // tilts by atan(wind / fall). eff_wind_norm maps to ~11 m/s at full storm - the same
+    // scale the bullet wind-drift uses.
     const auto& env = g_pGamePersistent->Environment();
-    float k = env.eff_wind_norm * (0.4f + 0.6f * env.eff_wind_gust);
-    clamp(k, 0.f, 1.f);
-    float pitch = drop_max_angle * k - PI_DIV_2;
-    axis.setHP(env.eff_wind_dir, pitch);
+    const float wind_ms = env.eff_wind_norm * 11.f * (0.55f + 0.45f * env.eff_wind_gust);
+    float slant = atanf(wind_ms / drop_fall_ms);
+    clamp(slant, 0.f, drop_max_slant);
+    axis.setHP(env.eff_wind_dir, slant - PI_DIV_2);
 
     Fvector& view = Device.vCameraPosition;
     float angle = ::Random.randF(0, PI_MUL_2);
