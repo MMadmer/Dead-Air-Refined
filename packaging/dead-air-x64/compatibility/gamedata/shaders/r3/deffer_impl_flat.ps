@@ -213,7 +213,9 @@ f_deffer 	main	( p_flat I 		)
 			// Gloss by the SOFT mask: it is a scalar, intermediate values are meaningful -
 			// a step here drew its OWN line wherever strong light hit (full glint on one
 			// side of a pixel, none on the other, visible at campfires).
-			G = lerp(G, max(G, saturate(da_puddle_look.x)), PDL.mask);
+			// Cap at 0.90: at the config's full gloss the sun glint blew the whole puddle
+			// into a white sheet at grazing angles - water is a mirror, not a floodlight.
+			G = lerp(G, max(G, min(saturate(da_puddle_look.x), 0.90f)), PDL.mask);
 		}
 	}
 	else

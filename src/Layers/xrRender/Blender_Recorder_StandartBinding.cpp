@@ -378,32 +378,45 @@ static class cl_da_wind_field : public R_constant_setup
 // Wind motors for the vegetation shaders: 8 point sources packed as two 4x4 matrices each
 // (row per motor). pos rows = (xyz, radius), par rows = (bend amp, ring radius, ring width, 0);
 // info.x = number of live motors so the shader loop is free when the world is quiet.
+// ⚠️ dx11ConstantBuffer::set(Fmatrix) TRANSPOSES on write (column-major cbuffer layout for
+// the mul(v,M) convention). Row-per-motor packing therefore needs a PRE-transpose, or the
+// shader's da_wm_pos0[i] reads a column - the x-coordinates of four different motors instead
+// of motor i. That scramble is exactly why trampling and blast rings never showed while the
+// (untransposed float4) motor counter probed fine.
 static class cl_da_wm_pos0 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_pos[0]);
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().wind_motor_pos[0]);
+        cmd_list.set_c(C, t);
     }
 } binder_da_wm_pos0;
 static class cl_da_wm_pos1 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_pos[1]);
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().wind_motor_pos[1]);
+        cmd_list.set_c(C, t);
     }
 } binder_da_wm_pos1;
 static class cl_da_wm_par0 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_par[0]);
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().wind_motor_par[0]);
+        cmd_list.set_c(C, t);
     }
 } binder_da_wm_par0;
 static class cl_da_wm_par1 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_par[1]);
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().wind_motor_par[1]);
+        cmd_list.set_c(C, t);
     }
 } binder_da_wm_par1;
 static class cl_da_wm_info : public R_constant_setup

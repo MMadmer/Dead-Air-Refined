@@ -16,6 +16,8 @@ uniform	Texture2D					s_half_depth;
 uniform float4 da_fog;
 // x = density ceiling, y = layer reference altitude, z = horizon flattening of the sky sample.
 uniform float4 da_fog2;
+// Skydome tint (weather sky_color) for the sky-matched haze - see the mip-fog block.
+uniform float4 da_sky_tint;
 
 //#include "ssao_blur.ps"
 
@@ -272,7 +274,12 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 			vd = normalize( vd );
 			const float3 s0 = sky_s0.SampleLevel( smp_rtlinear, vd, da_fog.y );
 			const float3 s1 = sky_s1.SampleLevel( smp_rtlinear, vd, da_fog.y );
-			const float3 sky = env_color.xyz * lerp( s0, s1, env_color.w );
+			// The SKYDOME tint and brightness, not env_color: sky_s0/s1 are the very skybox
+			// textures, but the dome on screen is tinted by the weather's sky_color and
+			// scaled 2*0.33 (sky2.vs/ps), while env_color is the IBL tint - a different
+			// value. Fogged silhouettes converged to a colour the visible sky NEVER had -
+			// the bright-ghosts-in-front-of-dark-sky bug, all four rounds of it.
+			const float3 sky = da_sky_tint.rgb * lerp( s0, s1, env_color.w ) * 0.66h;
 			fog_rgb = lerp( fog_rgb, sky, saturate( da_fog.x ) );
 		}
 	}

@@ -246,38 +246,30 @@ static class cl_da_fog : public R_constant_setup
     }
 } binder_da_fog;
 
-// Second haze constant: density ceiling, layer reference altitude, horizon flattening,
-// w = HORIZON murk 0..1: how fogged an object at "sky distance" (1.8 km) is under the
-// engine's own linear fog model, from the LIVE mixer fog_near/fog_far. wind_dbg on real
-// weather showed the mixer's fog_far is a scaled value (990 on a windy day whose config
-// says a few hundred) - a config-scale cutoff never fired. This metric is self-calibrated:
-// whatever the scale, it matches what the fog does to distant geometry on screen, so the
-// horizon sky and the fogged hills in front of it converge by construction.
+// Second haze constant: density ceiling, layer reference altitude, horizon flattening.
+// (The sky-band experiment that lived in w is gone: painting the skydome by an altitude
+// band read as a dirty stripe, and the mixer's scaled fog_far made every density metric
+// unreliable. Silhouette convergence is solved from the OBJECT side instead - the mip fog
+// in combine_1 now converges to the true skydome colour via da_sky_tint.)
 static class cl_da_fog2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float span = std::max(env.fog_far - env.fog_near, 1.f);
-        const float horizon_murk =
-            clampr((1800.f - env.fog_near) / span, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
-        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, horizon_murk);
+        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, 0.f);
     }
 } binder_da_fog2;
 
-// Weather fog colour for shaders outside the combine pass (the sky): combine gets fog_color
-// hand-set per draw, the sky draws BEFORE that and needs its own feed. w = FULL-DOME murk:
-// only real pea soup (mixer fog_far a few hundred) swallows the whole sky and the clouds.
-static class cl_da_fog_color : public R_constant_setup
+// Skydome tint for the sky-matched haze in combine_1: the dome is painted with the weather
+// sky_color (per-vertex on the dome), NOT env_color - fog that converges to the sky must
+// use the same tint or silhouettes converge to a colour the visible sky never had.
+static class cl_da_sky_tint : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float full_murk =
-            clampr((450.f - env.fog_far) / 350.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
-        cmd_list.set_c(C, env.fog_color.x, env.fog_color.y, env.fog_color.z, full_murk);
+        cmd_list.set_c(C, env.sky_color.x, env.sky_color.y, env.sky_color.z, 0.f);
     }
-} binder_da_fog_color;
+} binder_da_sky_tint;
 
 // Cloud shadows (the sunmask hook in shadow.h): z = shadow density from the weather's
 // cloudiness (clouds_color.w) - thin cirrus barely dims, a heavy deck cuts up to half the
@@ -766,7 +758,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("rain_params", &binder_rain_params);
     Resources->RegisterConstantSetup("da_fog", &binder_da_fog);
     Resources->RegisterConstantSetup("da_fog2", &binder_da_fog2);
-    Resources->RegisterConstantSetup("da_fog_color", &binder_da_fog_color);
+    Resources->RegisterConstantSetup("da_sky_tint", &binder_da_sky_tint);
     Resources->RegisterConstantSetup("da_cloud_shadow", &binder_da_cloud_shadow);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
