@@ -27,9 +27,12 @@ endif()
 
 # The resource compiler gets no dependency scanning, so a version bump would relink the
 # executable while leaving the stale VERSIONINFO in place. Diagnostic reports key off it.
+# Same story for the splash bitmap: repainting it silently shipped the OLD embedded image.
 set_property(
     SOURCE resource.rc
-    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/src/xrCore/ProductVersion.h"
+    APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/xrCore/ProductVersion.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/splash_oxr.bmp"
 )
 
 set_property(

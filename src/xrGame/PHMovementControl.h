@@ -278,6 +278,12 @@ public:
     float GetFrictionFactor();
     void MulFrictionFactor(float f);
     void ApplyImpulse(const Fvector& dir, const float P);
+    // Continuous environmental force in NEWTONS (wind on the body), safe to call every frame:
+    // scaled by frame-time/physics-step so the average force stays right at any FPS, and it
+    // touches only the physics body. ApplyImpulse is NOT that - it also injects P/fixed_step
+    // as a control VELOCITY (the knocked-by-explosion path); called per frame it launches the
+    // character into orbit, which a field test demonstrated vividly.
+    void ApplySteadyForce(const Fvector& force);
     void ApplyHit(const Fvector& dir, const float P, ALife::EHitType hit_type);
     void SetJumpUpVelocity(float velocity);
     void EnableCharacter();

@@ -454,10 +454,10 @@ void CCustomMonster::UpdateCL()
         if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
             !env.wind_sheltered(Position()))
         {
-            Fvector wdir;
-            wdir.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
-            character_physics_support()->movement()->ApplyImpulse(
-                wdir, 0.46f * w_ms * w_ms * Device.fTimeDelta);
+            Fvector wind_f;
+            wind_f.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
+            wind_f.mul(0.46f * w_ms * w_ms);
+            character_physics_support()->movement()->ApplySteadyForce(wind_f);
         }
     }
 

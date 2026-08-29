@@ -116,6 +116,17 @@ void CPHMovementControl::AddControlVel(const Fvector& vel)
     vExternalImpulse.add(vel);
     bExernalImpulse = true;
 }
+void CPHMovementControl::ApplySteadyForce(const Fvector& force)
+{
+    if (!m_character || !m_character->b_exist)
+        return;
+    // One AddForce feeds exactly one physics step; frames and steps run at different rates,
+    // so scale by their ratio to keep the per-second force integral FPS-independent.
+    Fvector f = force;
+    f.mul(Device.fTimeDelta / fixed_step);
+    m_character->ApplyForce(f);
+}
+
 void CPHMovementControl::ApplyImpulse(const Fvector& dir, const float P)
 {
     VERIFY(m_character);
