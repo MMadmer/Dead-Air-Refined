@@ -821,14 +821,8 @@ void CAI_Stalker::UpdateCL()
     START_PROFILE("stalker/client_update")
     VERIFY2(PPhysicsShell() || getEnabled(), cName().c_str());
 
-    if (g_Alive())
-    {
-        // NPCs trample grass too - but only near the camera, where the effect can be seen;
-        // the motor pool is 8 slots and the actor always keeps one. Strength ~1 lays the
-        // grass flat under their boots (see the actor press note).
-        if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
-            g_pGamePersistent->Environment().wind_motor_press(Position(), 1.6f, 1.0f);
-    }
+    // Grass trampling and the wind's push on the body live in CCustomMonster::UpdateCL now -
+    // the common ancestor of stalkers and mutants, so every live NPC gets both.
 
     if (g_Alive())
     {

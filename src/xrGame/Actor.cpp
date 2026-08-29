@@ -1372,7 +1372,25 @@ void CActor::UpdateCL()
     // first-person camera cannot see the half-metre ring at its own feet, so the visible
     // proof of trampling is the ring's outer slope a couple of metres out.
     if (g_Alive())
-        g_pGamePersistent->Environment().wind_motor_press(Position(), 1.9f, 1.15f);
+    {
+        auto& env = g_pGamePersistent->Environment();
+        env.wind_motor_press(Position(), 1.9f, 1.15f);
+
+        // Wind pushes the body too: the drag equation F = 0.5*rho*Cd*A*v^2 gives ~0.46*v^2 N
+        // for a standing human - about 56 N in a real gale. Ground friction eats most of it
+        // (running upwind just gets a touch heavier), but airborne - a jump, a fall - the
+        // same force genuinely drifts you. Nobody gets carried away in a breeze: below a
+        // stiff wind the force is single-digit newtons and the threshold skips it entirely.
+        const float w_ms = env.eff_wind_norm * 11.f;
+        if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
+            !env.wind_sheltered(Position()))
+        {
+            Fvector wdir;
+            wdir.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
+            character_physics_support()->movement()->ApplyImpulse(
+                wdir, 0.46f * w_ms * w_ms * Device.fTimeDelta);
+        }
+    }
 
     if (g_Alive() && Level().CurrentViewEntity() == this)
     {

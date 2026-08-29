@@ -570,7 +570,7 @@ void CApplication::ShowSplash(bool topmost)
     if (topmost)
         flags |= SDL_WINDOW_ALWAYS_ON_TOP;
 
-    m_window = SDL_CreateWindow("OpenXRay", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_surface->w, m_surface->h, flags);
+    m_window = SDL_CreateWindow("XFined Engine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_surface->w, m_surface->h, flags);
     SDL_ShowWindow(m_window);
 
     m_splash_thread = Threading::RunThread("Splash Thread", &CApplication::SplashProc, this);

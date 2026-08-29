@@ -542,8 +542,45 @@ void CCustomRocket::UpdateLights()
     m_pTrailLight->set_position(Position());
 }
 
+#include "xrEngine/Environment.h"
+#include "xrEngine/IGame_Persistent.h"
+
 void CCustomRocket::PhDataUpdate(float step) {}
-void CCustomRocket::PhTune(float step) { UpdateEnginePh(); }
+void CCustomRocket::PhTune(float step)
+{
+    UpdateEnginePh();
+
+    // Wind drift for anything on a free ballistic arc - rockets, underbarrel and hand
+    // grenades (CGrenade inherits this). Only the crosswind component, perpendicular to the
+    // velocity: the along-track ballistics stay exactly as tuned. The acceleration scale is
+    // the aerodynamic estimate for a grenade-sized body (~0.1 1/s of the wind speed), which
+    // turns a gale into roughly a metre of drift over a hand grenade's arc and barely moves
+    // a fast rocket - matching how these behave for real.
+    if (m_pPhysicsShell && m_pPhysicsShell->isActive())
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        const float w = env.eff_wind_norm * 11.f; // m/s
+        if (w > 0.5f && !env.wind_sheltered(Position()))
+        {
+            Fvector wind;
+            wind.set(_sin(env.eff_wind_dir) * w, 0.f, _cos(env.eff_wind_dir) * w);
+            Fvector vel;
+            m_pPhysicsShell->get_LinearVel(vel);
+            Fvector dir = vel;
+            if (dir.magnitude() > 1.f)
+            {
+                dir.normalize();
+                wind.mad(dir, -wind.dotproduct(dir)); // strip the along-track component
+            }
+            const float mag = wind.magnitude();
+            if (mag > 0.1f)
+            {
+                wind.div(mag);
+                m_pPhysicsShell->applyImpulse(wind, 0.10f * mag * m_pPhysicsShell->getMass() * step);
+            }
+        }
+    }
+}
 //////////////////////////////////////////////////////////////////////////
 //	Particles
 //////////////////////////////////////////////////////////////////////////

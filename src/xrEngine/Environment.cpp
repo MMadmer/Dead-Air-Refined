@@ -822,6 +822,17 @@ void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float
     slot->released = 0.f;
 }
 
+bool CEnvironment::wind_sheltered(const Fvector& pos) const
+{
+    if (!g_pGameLevel)
+        return true;
+    collide::rq_result rq;
+    Fvector start = pos;
+    start.y += 0.6f; // clear own capsule/ground
+    static const Fvector up = {0.f, 1.f, 0.f};
+    return g_pGameLevel->ObjectSpace.RayPick(start, up, 35.f, collide::rqtStatic, rq, nullptr);
+}
+
 float CEnvironment::SampleWindMotors(float x, float z) const
 {
     // Mirrors da_wind_motors_bend without the height/direction terms: just "how hard is a
@@ -859,7 +870,12 @@ float CEnvironment::SampleWindMotors(float x, float z) const
 
 void CEnvironment::UpdateEffectiveWind()
 {
-    const float t = Device.fTimeGlobal;
+    // Per-session seed: every noise below is a pure function of time, and time starts near
+    // zero every launch - so every session used to OPEN with the same wind heading and the
+    // same first gusts. One random offset shifts the whole session elsewhere in the field.
+    if (eff_wind_seed < 0.f)
+        eff_wind_seed = ::Random.randF(0.f, 4096.f);
+    const float t = Device.fTimeGlobal + eff_wind_seed;
     // Weather ceiling. Two hard facts from the field (wind_dbg on real DA configs):
     //  * wind_velocity is a LEGACY 0..1000-ish scale (typical live values 10..500), not m/s -
     //    dividing by 20 saturated every nonzero weather to "hurricane" and erased the range;

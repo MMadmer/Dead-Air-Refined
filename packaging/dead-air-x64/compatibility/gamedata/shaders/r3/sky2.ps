@@ -5,6 +5,9 @@ struct         v2p
 	float4	factor	: COLOR0;        // for SM3 - factor.rgb - tonemap-prescaled
 	float3	tc0		: TEXCOORD0;
 	float3	tc1		: TEXCOORD1;
+	// [DA] Тонмап-скейл из вершинника: PS ская s_tonemap НЕ биндится (его не было в стоковом
+	// sky2.ps), и семпл возвращал ноль - купол мглы красился в ЧЁРНЫЙ (полевой скрин).
+	float	tm		: TEXCOORD2;
 };
 struct        _out
 {
@@ -53,10 +56,8 @@ _out main( v2p I )
 		// 0.94 - не 1.0: два процента неба сверху оставляют куполу глубину.
 		const float  full    = saturate( (thick - 0.50f) / 0.42f );
 		const float  f       = max( pow( horizon, 1.7f ) * thick, full * 0.94f );
-		// Тот же tm-прескейл, что у самого неба (sky2.vs), чтобы после общего тонмапа небо у
-		// горизонта сошлось с затуманенной геометрией в один тон.
-		const float  scale   = s_tonemap.Load( int3(0,0,0) ).x;
-		sky = lerp( sky, da_fog_color.rgb * scale, f );
+		// Тот же tm-прескейл, что у самого неба (sky2.vs передаёт его готовым числом).
+		sky = lerp( sky, da_fog_color.rgb * I.tm, f );
 	}
 
 	// final tone-mapping

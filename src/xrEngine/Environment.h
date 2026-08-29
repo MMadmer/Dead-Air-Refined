@@ -298,6 +298,7 @@ public:
     // real-life variability inside one weather: minute-scale trends, tens-of-seconds waves and
     // short discrete gusts, plus a bounded direction wander. Scalar math once per frame.
     float eff_wind_dir{};        // radians; weather heading + bounded wander
+    float eff_wind_seed{-1.f};   // per-session offset into the noise fields (set on first use)
     float eff_wind_norm{};       // 0..1 current strength: weather envelope x variability
     float eff_wind_var{};        // 0..1 the variability alone (envelope-free, for amplitude mods)
     float eff_wind_gust{};       // 0..1 gustiness right now (blowout override flows through)
@@ -382,6 +383,11 @@ public:
     void wind_motor_press(const Fvector& pos, float radius, float strength);
     void wind_motor_impulse(const Fvector& pos, float radius, float strength);
     void wind_motor_shot(const Fvector& pos, const Fvector& dir, float length, float strength);
+
+    // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a
+    // roof, where the physical wind push on bodies and projectiles must die. One static-only
+    // ray up; callers gate their frequency.
+    bool wind_sheltered(const Fvector& pos) const;
     // CPU sum of the live motors' bend strength at a point - the audio layer uses it so a blast
     // ring makes the bushes it passes through rustle, exactly where the bend is seen.
     float SampleWindMotors(float x, float z) const;

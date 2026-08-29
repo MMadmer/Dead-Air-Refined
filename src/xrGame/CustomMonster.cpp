@@ -425,6 +425,9 @@ void CCustomMonster::net_update::lerp(CCustomMonster::net_update& A, CCustomMons
 }
 
 void CCustomMonster::update_sound_player() { sound().update(client_update_fdelta()); }
+#include "xrEngine/Environment.h"
+#include "xrEngine/IGame_Persistent.h"
+
 void CCustomMonster::UpdateCL()
 {
     START_PROFILE("CustomMonster/client_update")
@@ -435,6 +438,28 @@ void CCustomMonster::UpdateCL()
     if (animation_movement())
         animation_movement()->DBG_verify_position_not_chaged();
 #endif
+
+    // Every live NPC - stalkers AND mutants alike (this is their common ancestor):
+    //  * tramples the grass around its feet through the wind-motor system (near the camera
+    //    only - the motor pool is 8 slots and the actor always keeps one);
+    //  * takes the wind's push on the body (drag equation, see Actor.cpp) - friction hides
+    //    it on the ground, an airborne body drifts with the gale.
+    if (g_Alive())
+    {
+        auto& env = g_pGamePersistent->Environment();
+        if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
+            env.wind_motor_press(Position(), 1.6f, 1.0f);
+
+        const float w_ms = env.eff_wind_norm * 11.f;
+        if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
+            !env.wind_sheltered(Position()))
+        {
+            Fvector wdir;
+            wdir.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
+            character_physics_support()->movement()->ApplyImpulse(
+                wdir, 0.46f * w_ms * w_ms * Device.fTimeDelta);
+        }
+    }
 
     START_PROFILE("CustomMonster/client_update/inherited")
     inherited::UpdateCL();

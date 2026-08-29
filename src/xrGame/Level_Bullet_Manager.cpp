@@ -240,10 +240,27 @@ void CBulletManager::UpdateWorkload()
     }
 }
 
+// Wind the bullets fly through, from the effective-wind service. Didion's classical result
+// (1859, still the core of every ballistic solver): crosswind drift D = W * lag_time, where
+// lag = actual flight time minus vacuum time. In this engine's analytic trajectory the lag
+// works out EXACTLY to air_resistance * t^2 / 2 - the same coefficient the drag term already
+// carries - so the drift is one extra mad() with the drift velocity being W * ar * t.
+// norm 1.0 maps to ~11 m/s: a fresh gale at ground level. Bullet flight lives on the main
+// thread (see the VERIFY in AddBullet), so reading the environment here is safe.
+static Fvector bullet_wind()
+{
+    const auto& env = g_pGamePersistent->Environment();
+    const float w = env.eff_wind_norm * 11.f;
+    return Fvector().set(_sin(env.eff_wind_dir) * w, 0.f, _cos(env.eff_wind_dir) * w);
+}
+
 static Fvector parabolic_velocity(
     Fvector const& start_velocity, Fvector const& gravity, float const air_resistance, float const time)
 {
-    return (Fvector(start_velocity).mul(_max(0.f, 1.f - air_resistance * time)).mad(gravity, time));
+    return (Fvector(start_velocity)
+                .mul(_max(0.f, 1.f - air_resistance * time))
+                .mad(gravity, time)
+                .mad(bullet_wind(), air_resistance * time));
 }
 
 static Fvector trajectory_velocity(
@@ -281,7 +298,9 @@ static Fvector parabolic_position(Fvector const& start_position, Fvector const& 
     return (Fvector()
                 .mad(start_position, start_velocity, time)
                 .mad(Fvector(start_velocity).mul(-air_resistance), sqr_t_div_2)
-                .mad(gravity, sqr_t_div_2));
+                .mad(gravity, sqr_t_div_2)
+                // Didion wind drift: lag time = ar * t^2 / 2 (see bullet_wind above).
+                .mad(bullet_wind(), air_resistance * sqr_t_div_2));
 }
 
 // BOOL g_use_new_ballistics	= 0;
