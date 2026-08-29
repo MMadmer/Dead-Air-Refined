@@ -127,10 +127,11 @@ struct FTreeVisual_setup
         wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
         // The authored per-weather amplitude is tiny (DA weathers sit at ~0.05 rad, an
-        // imperceptible 3 degrees), so the service envelope has to overshoot hard: near the
-        // authored look in a lull, around five times it in a storm gust - that is what finally
-        // makes bushes and crowns read as WEATHER instead of a shiver. Field-test driven.
-        wind.mul(desc.m_fTreeAmplitude * (0.80f + 4.50f * env.eff_wind_norm));
+        // imperceptible 3 degrees), so the service envelope has to overshoot hard - but from
+        // the authored look in calm air: a clear day stays near x1 (the first curve made even
+        // clear weather "sway pretty hard"), a storm gust reaches ~x4.5. Field-test driven
+        // twice: too weak at (0.55 + 0.80*var), trunk-slide territory at (0.80 + 4.50*norm).
+        wind.mul(desc.m_fTreeAmplitude * (0.55f + 3.60f * env.eff_wind_norm));
 
         scale = 1.f / float(FTreeVisual_quant);
 

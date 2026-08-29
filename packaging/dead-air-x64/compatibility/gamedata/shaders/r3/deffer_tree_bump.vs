@@ -35,21 +35,25 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
     float inten = H * dp;
-    // Same travelling gust field as deffer_tree_flat: amplitude and downwind lean per tree root.
+    // Same travelling gust field as deffer_tree_flat - and the same authored-flexibility rule:
+    // every added term multiplies by frac (and the shiver by axis distance too), so trunks
+    // stay anchored and only the flexible outer foliage moves. See deffer_tree_flat.vs.
     float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
     float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
-    result += wind.xz * (H * flow.y * 0.5f);
-    // Blast rings rock the crown too (press motors have too small a radius to reach trees).
+    result += wind.xz * (H * flow.y * 0.5f * frac);
     float press_unused;
-    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) * 0.35f;
-    // Bush foliage shiver - see deffer_tree_flat.vs for the rationale.
-    const float bush_w = saturate(1.8f - H * 0.22f);
+    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) *
+        (0.35f * saturate(frac * 2.0f));
+    const float axis_r = length(pos.xz - float2(local_xform._14, local_xform._34));
+    const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
-    result += wind.xz * (dp2 * bush_w * min(H, 2.5f) * (0.45f + 0.55f * flow.x));
+    result += wind.xz * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
-    float4 w_pos = float4(pos.x + result.x, pos.y, pos.z + result.y, 1);
+    // Arc-length correction: displaced tips drop, the bend reads as a bend.
+    const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
+    float4 w_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);
     float2 tc = (I.tc * consts).xy;
     float hemi = I.Nh.w * local_c_scale.w + local_c_bias.w;
 

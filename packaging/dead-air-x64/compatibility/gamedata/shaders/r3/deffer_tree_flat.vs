@@ -40,22 +40,32 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // crown while the next tree over stands in a lull. Amplitude rides the field, the lean
     // term presses the crown downwind as the front passes.
     float2 flow = da_wind_field_eval(float2(local_xform._14, local_xform._34));
+    // frac (tc.z) is the AUTHORED per-vertex flexibility baked into the model: ~0 on the
+    // trunk, ~1 at branch tips. The stock wave respects it via calc_xz_wave = dir * frac.
+    // Every term we add must respect it too - a lean or shiver applied without frac moves
+    // the rigid trunk sideways as a whole ("the tree slides on XY"), which is exactly what
+    // a field test showed. Roots are anchored; everything bends as an arc from them.
     float2 result = calc_xz_wave(wind.xz * (inten * flow.x), frac);
-    result += wind.xz * (H * flow.y * 0.5f);
-    // Blast rings rock the crown too (press motors have too small a radius to reach trees).
+    result += wind.xz * (H * flow.y * 0.5f * frac);
+    // Blast rings rock the flexible parts too (press motors are too small to reach trees).
     float press_unused;
-    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) * 0.35f;
-    // Bush foliage shiver. Displacement scales with height, so a 1.5 m bush moves a fifth of
-    // what an 8 m crown does and reads as dead - but real bushes do not BEND in wind, they
-    // SHIVER: a second wave, spatially finer and 2.3x faster, weighted toward small heights
-    // (full below ~3.5 m, gone by 8 m) with an amplitude that stops growing past bush size.
-    const float bush_w = saturate(1.8f - H * 0.22f);
+    result += da_wind_motors_bend(float2(local_xform._14, local_xform._34), H, press_unused) *
+        (0.35f * saturate(frac * 2.0f));
+    // Foliage shiver (bushes live on this): a finer, 2.3x faster wave for the OUTER foliage.
+    // Double-gated so the trunk stays dead: by authored flexibility AND by radial distance
+    // from the instance axis - branch tips shiver, the column of the trunk never does. This
+    // is what makes a low bush read as alive without turning tree trunks to jelly.
+    const float axis_r = length(pos.xz - float2(local_xform._14, local_xform._34));
+    const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = calc_cyclic(wave.w * 2.3f + dot(pos, (float3)wave * 3.7f));
-    result += wind.xz * (dp2 * bush_w * min(H, 2.5f) * (0.45f + 0.55f * flow.x));
+    result += wind.xz * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
-    float4 f_pos = float4(pos.x + result.x, pos.y, pos.z + result.y, 1);
+    // Arc-length correction, same as the grass: a branch keeps its length, so a displaced
+    // tip drops instead of sliding sideways at constant height - the bend reads as a BEND.
+    const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
+    float4 f_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);
 
     float3 Pe = mul(m_V, f_pos);
     float hemi = I.Nh.w * local_c_scale.w + local_c_bias.w;
