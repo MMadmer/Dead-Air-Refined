@@ -759,18 +759,26 @@ void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float stre
 
 namespace
 {
-// Shared slot claim for the short-lived motor types: take a free slot, otherwise steal the
-// oldest transient (impulse/shot) - a fresh event beats a dying one, presses are never evicted.
-CEnvironment::SWindMotor* wind_motor_claim_transient(CEnvironment::SWindMotor (&motors)[CEnvironment::wind_motor_count])
+// Slot claims follow a strict pecking order: blast > press > shot. The order matters in one
+// very real scenario: an F1 explodes, its ring motor is born, and THE SAME FRAME sprays 20+
+// fragments through AddBullet - each spawning a shot motor. With a naive "steal the oldest
+// transient" the fragments evicted the freshly born blast ring of their own grenade, and the
+// explosion read as nothing (while the fragment-free debug ring worked fine).
+CEnvironment::SWindMotor* wind_motor_free_slot(CEnvironment::SWindMotor (&motors)[CEnvironment::wind_motor_count])
 {
     for (auto& m : motors)
         if (!m.used)
             return &m;
+    return nullptr;
+}
 
+CEnvironment::SWindMotor* wind_motor_oldest_of(
+    CEnvironment::SWindMotor (&motors)[CEnvironment::wind_motor_count], CEnvironment::EWindMotor type)
+{
     CEnvironment::SWindMotor* slot = nullptr;
     float oldest = flt_max;
     for (auto& m : motors)
-        if (m.type != CEnvironment::EWindMotor::press && m.touched < oldest)
+        if (m.used && m.type == type && m.touched < oldest)
         {
             oldest = m.touched;
             slot = &m;
@@ -781,9 +789,13 @@ CEnvironment::SWindMotor* wind_motor_claim_transient(CEnvironment::SWindMotor (&
 
 void CEnvironment::wind_motor_impulse(const Fvector& pos, float radius, float strength)
 {
-    SWindMotor* slot = wind_motor_claim_transient(wind_motors);
-    // A blast outranks everything: if even the transient steal failed (pool full of presses),
-    // evict a press - the standing actor re-claims a slot next frame anyway.
+    // A blast outranks everything: free slot, else the oldest shot, else the oldest OTHER
+    // blast, else any press (the standing actor re-claims a slot next frame anyway).
+    SWindMotor* slot = wind_motor_free_slot(wind_motors);
+    if (!slot)
+        slot = wind_motor_oldest_of(wind_motors, EWindMotor::shot);
+    if (!slot)
+        slot = wind_motor_oldest_of(wind_motors, EWindMotor::impulse);
     if (!slot)
         for (auto& m : wind_motors)
             if (m.type == EWindMotor::press)
@@ -832,8 +844,12 @@ void CEnvironment::wind_motor_shot(const Fvector& pos, const Fvector& dir, float
             break;
         }
     }
+    // Shots are the LOWEST caste: free slot or the oldest fellow shot - never a blast (an
+    // F1's own fragments once evicted its freshly born ring), never a press.
     if (!slot)
-        slot = wind_motor_claim_transient(wind_motors);
+        slot = wind_motor_free_slot(wind_motors);
+    if (!slot)
+        slot = wind_motor_oldest_of(wind_motors, EWindMotor::shot);
     if (!slot)
         return;
 
@@ -863,7 +879,8 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
 {
     // Mirrors da_wind_motors_bend without the direction terms: just "how hard is a motor
     // shaking this spot", for the vegetation-audio triggers. Keeps the shader's line height
-    // gate and the blast wake so what is heard matches what is seen.
+    // gate and the per-tuft spring-back behind a blast front so what is heard matches
+    // what is seen.
     float total = 0.f;
     for (u32 i = 0; i < wind_motor_count; ++i)
     {
@@ -894,7 +911,12 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
         const float t = (dist - arow[1]) / arow[2];
         float w = expf(-t * t);
         if (arow[1] > 0.5f && dist < arow[1])
-            w = std::max(w, 0.75f * _sqrt(dist / std::max(arow[1], 0.5f)));
+        {
+            // Behind the front: the same damped spring-back the shader shows (abs - the
+            // audio only cares how agitated the spot is, not which way it leans).
+            const float tau = (arow[1] - dist) * 0.1f;
+            w = _abs(expf(-tau * 3.5f) * cosf(tau * 9.f));
+        }
         total += _abs(arow[0]) * w;
     }
     return total;
@@ -1023,16 +1045,19 @@ void CEnvironment::UpdateEffectiveWind()
         {
             // Expanding blast ring. Field lesson: at 14 m/s the front crossed a tuft in a
             // few FRAMES - the eye never caught it and grenades read as "nothing happened".
-            // 10 m/s keeps the front readable (2.2 s to full radius) and the slower decay
-            // keeps the shader's outflow wake alive behind it for the whole expansion.
+            // 10 m/s keeps the front readable; the shader reconstructs a per-tuft spring-back
+            // BEHIND the front from this same speed (da_wind_motors.h) - keep them in sync.
             const float age = now - m.touched;
             ring_r = 10.f * age;
             ring_w = 1.3f + age * 1.0f;
-            // Slow decay is the whole point: at exp(-1.1t) the ring arrived at its outer
-            // radius with 14% strength and read as nothing (rig telemetry at 18 m showed a
-            // flat line). The blast must stay a BLAST all the way out.
-            amp = m.strength * expf(-age * 0.55f);
-            if (ring_r > m.radius || amp < 0.02f)
+            // Slow decay keeps the blast a BLAST all the way out (exp(-1.1t) arrived at the
+            // outer radius with 14% and read as nothing). The edge fade drives the front to
+            // ZERO before the motor dies: a stateless VS has no per-tuft state to relax, the
+            // force envelope IS the state - a source that dies with amplitude left snaps the
+            // whole field straight in one frame.
+            const float edge = clampr((m.radius - ring_r) / 5.f, 0.f, 1.f);
+            amp = m.strength * expf(-age * 0.55f) * edge;
+            if (ring_r >= m.radius || amp < 0.02f)
                 m.used = false;
         }
         else if (m.used && line)
@@ -1083,20 +1108,29 @@ void CEnvironment::UpdateEffectiveWind()
     }
     wind_motor_active = float(highest);
 
-    // ---- Self-test blast ring (wind_dbg 2): a blast motor spawns 6 m ahead of the camera
-    // every 5 s - verifies the whole ring chain on a rig where nobody can throw a grenade.
+    // ---- Self-test blast ring (wind_dbg 2/3): a blast motor spawns 18 m ahead of the camera
+    // every 5 s - a realistic grenade-throw distance, so the test verifies the ring's
+    // READABILITY at the range players actually watch it from. Level 3 additionally sprays
+    // 24 fragment shot-motors from the same point in the same frame - the exact F1 scenario
+    // whose fragments once evicted their own freshly born ring from the motor pool.
     if (ps_e_wind_dbg > 1)
     {
         static float next_test_blast = 0.f;
         if (now >= next_test_blast)
         {
             next_test_blast = now + 5.f;
-            // 18 m out - a realistic grenade-throw distance, so the test verifies the ring's
-            // READABILITY at the range players actually watch it from, not just at their feet.
             Fvector p = Device.vCameraPosition;
             p.mad(Device.vCameraDirection, 18.f);
             p.y -= 1.5f;
-            wind_motor_impulse(p, 22.f, 3.2f);
+            wind_motor_impulse(p, 25.f, 3.2f);
+            if (ps_e_wind_dbg > 2)
+                for (u32 fi = 0; fi < 24; ++fi)
+                {
+                    const float a = float(fi) * (PI_MUL_2 / 24.f);
+                    Fvector fd;
+                    fd.set(_sin(a), -0.1f, _cos(a));
+                    wind_motor_shot(p, fd, 25.f, 0.375f);
+                }
         }
     }
 

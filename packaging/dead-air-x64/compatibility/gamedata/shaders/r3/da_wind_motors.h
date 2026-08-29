@@ -6,8 +6,9 @@
 // here per instance root.
 //  * press motors - an actor standing in the grass pushes it radially outward; when they move
 //    on, the CPU drives a damped spring-back oscillation (grass overshoots and settles);
-//  * impulse motors - explosions/blowouts send an expanding ring that bends everything
-//    outward from the epicentre as the front passes;
+//  * impulse motors - explosions/blowouts send an expanding ring: the front hits each root
+//    ONCE as it passes, and behind it every root relaxes on its own (a source only owns a
+//    root while the root is inside its active zone - never the whole disc);
 //  * shot motors - a narrow line gust along a bullet trace: a brief outward shiver.
 // Rows: pos = (world xyz, radius-or-length),
 //       par = (signed amplitude, ring radius | dir.x, ring width | dir.z, 0 radial / 1 line).
@@ -73,17 +74,23 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
         if (dist > P.w + A.z * 2.0f || dist < 0.001f)
             continue;
 
-        // Ring profile: a gaussian around the current ring radius. Press motors keep ring
+        // Ring FRONT: a gaussian around the current ring radius. Press motors keep ring
         // radius at 0, which turns the same formula into a bump centred on the actor.
         const float t = (dist - A.y) / A.z;
         float w = exp(-t * t);
-        // Blast WAKE: behind the expanding front the radial outflow keeps blowing, fading
-        // toward the epicentre (already-spent air). sqrt ramps the wake up fast just behind
-        // the front - the front itself crosses a tuft in a few frames, it is the WAKE that
-        // the eye actually reads as "wind rushing out of the blast". safe_r keeps the
-        // division finite for zero-radius press motors (both ternary sides evaluate).
-        const float safe_r = max(A.y, 0.5f);
-        w = max(w, (A.y > 0.5f && dist < A.y) ? 0.75f * sqrt(dist / safe_r) : 0.0f);
+        [branch]
+        if (A.y > 0.5f && dist < A.y)
+        {
+            // The front already passed this root, so the ring no longer owns it: the hit was
+            // a ONE-TIME push and from then on the root springs back to rest by itself. A
+            // stateless VS still gets per-root memory for free, because the moment the front
+            // crossed HERE is a pure function of distance: tau = seconds since the hit
+            // (front expands at 10 m/s, kept in sync with Environment.cpp). Damped cosine =
+            // ease back with one soft overshoot past vertical; tau 0 matches the gaussian
+            // peak, so the handover at the front is seamless.
+            const float tau = (A.y - dist) * 0.1f;
+            w = exp(-tau * 3.5f) * cos(tau * 9.0f);
+        }
         bend += (d / dist) * (w * A.x * H);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.

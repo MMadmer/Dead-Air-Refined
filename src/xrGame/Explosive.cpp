@@ -353,7 +353,7 @@ void CExplosive::Explode()
         if (ps_e_wind_dbg)
             Msg("* [wind] Explode at (%.0f, %.0f, %.0f)", pos.x, pos.y, pos.z);
     }
-    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 3.2f);
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, 25.f, 3.2f);
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);
