@@ -68,9 +68,13 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // a field test showed. Roots are anchored; everything bends as an arc from them.
     float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
     result += wdir * (H * flow.y * 0.5f * frac);
-    // Blast rings rock the flexible parts too (press motors are too small to reach trees).
+    // Motors (blast rings, shot traces) reach BUSHES only: the height weight dies out by
+    // ~3.5 m, so a bush - all its foliage sits low - shivers fully, while a tree crown is
+    // out of reach and the stiff lower trunk is killed by the baked-flexibility factor.
+    // Field rule: trees must not shake from gunfire and explosions, bushes must.
     float press_unused;
-    result += da_wind_motors_bend(root3.xz, H, press_unused) * (0.35f * saturate(frac * 2.0f));
+    result += da_wind_motors_bend(root3.xz, H, press_unused) *
+        (0.6f * saturate(frac * 2.0f) * saturate((3.5f - H) * 0.5f));
     // Foliage shiver (bushes live on this): a finer, 2.3x faster wave for the OUTER foliage.
     // Per-vertex phase is CORRECT here - leaves flutter independently - and the amplitude is
     // small enough to read as rustle, not shape distortion. Double-gated so the trunk stays

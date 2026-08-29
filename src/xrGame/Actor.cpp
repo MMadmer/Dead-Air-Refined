@@ -1367,14 +1367,12 @@ void CActor::UpdateCL()
     // Trampling: the actor's feet press the grass around them, and the wind-motor system
     // drives the damped spring-back once we move on. Refreshed per frame while alive.
     // Strength >= 1 matters: with the arc-length correction in the grass shader it LAYS the
-    // tuft flat instead of tilting it - a 0.55 press drowned in the wind sway and read as
-    // nothing at all in the field test. The radius is wider than the body on purpose: the
-    // first-person camera cannot see the half-metre ring at its own feet, so the visible
-    // proof of trampling is the ring's outer slope a couple of metres out.
+    // tuft flat instead of tilting it. Radius ~body-sized (field-tuned: the wide 1.9 ring
+    // read as too much once the motors actually worked).
     if (g_Alive())
     {
         auto& env = g_pGamePersistent->Environment();
-        env.wind_motor_press(Position(), 1.9f, 1.15f);
+        env.wind_motor_press(Position(), 1.2f, 1.15f);
 
         // Wind pushes the body too: the drag equation F = 0.5*rho*Cd*A*v^2 gives ~0.46*v^2 N
         // for a standing human - about 56 N in a real gale. Ground friction eats most of it

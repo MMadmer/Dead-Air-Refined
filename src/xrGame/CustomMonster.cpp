@@ -448,7 +448,7 @@ void CCustomMonster::UpdateCL()
     {
         auto& env = g_pGamePersistent->Environment();
         if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
-            env.wind_motor_press(Position(), 1.6f, 1.0f);
+            env.wind_motor_press(Position(), 1.1f, 1.0f);
 
         const float w_ms = env.eff_wind_norm * 11.f;
         if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&

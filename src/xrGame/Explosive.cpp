@@ -350,7 +350,7 @@ void CExplosive::Explode()
     // this base class. Punched up after a field test where the wave was invisible (the real
     // culprit was press motors starving the pool - fixed - but the wave also deserves to
     // read as a shockwave, not a breeze).
-    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 1.7f);
+    g_pGamePersistent->Environment().wind_motor_impulse(pos, 22.f, 2.2f);
 
     //показываем эффекты
     m_wallmark_manager.PlaceWallmarks(pos);

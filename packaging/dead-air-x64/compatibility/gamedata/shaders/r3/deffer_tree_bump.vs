@@ -46,8 +46,10 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
     float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
     result += wdir * (H * flow.y * 0.5f * frac);
+    // Motors reach bushes only - see deffer_tree_flat.vs.
     float press_unused;
-    result += da_wind_motors_bend(root3.xz, H, press_unused) * (0.35f * saturate(frac * 2.0f));
+    result += da_wind_motors_bend(root3.xz, H, press_unused) *
+        (0.6f * saturate(frac * 2.0f) * saturate((3.5f - H) * 0.5f));
     const float axis_r = length(pos.xz - root3.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));

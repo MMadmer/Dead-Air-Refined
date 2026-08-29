@@ -868,11 +868,12 @@ float CEnvironment::SampleWindMotors(float x, float z) const
         if (arow[3] > 0.5f)
         {
             // Line motor: distance to the trace segment (arow[1]/arow[2] carry the direction).
+            // Width mirrors the shader's narrow turbulent tube.
             const float along = clampr(dx * arow[1] + dz * arow[2], 0.f, prow[3]);
             dx -= arow[1] * along;
             dz -= arow[2] * along;
             const float dist = _sqrt(dx * dx + dz * dz);
-            const float t = dist * (1.f / 1.1f);
+            const float t = dist * (1.f / 0.3f);
             total += _abs(arow[0]) * expf(-t * t);
             continue;
         }
@@ -1006,12 +1007,13 @@ void CEnvironment::UpdateEffectiveWind()
 
         if (m.used && m.type == EWindMotor::impulse)
         {
-            // Expanding blast ring: front travels at 14 m/s, height of the bend decays as it
-            // goes. Dead once the ring leaves the authored radius.
+            // Expanding blast ring: front travels at 14 m/s with a DENSE leading edge and a
+            // slow decay (field-tuned: the earlier wide smeared ring diluted the punch into
+            // an invisible breeze); the shader adds the outflow wake behind the front.
             const float age = now - m.touched;
             ring_r = 14.f * age;
-            ring_w = 1.5f + age * 2.0f; // the front smears out as it expands
-            amp = m.strength * expf(-age * 2.2f);
+            ring_w = 1.2f + age * 1.2f;
+            amp = m.strength * expf(-age * 1.4f);
             if (ring_r > m.radius || amp < 0.02f)
                 m.used = false;
         }

@@ -44,15 +44,17 @@ float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
         [branch]
         if (A.w > 0.5f)
         {
-            // Line motor: push outward from the nearest point of the trace segment.
+            // Line motor: push outward from the nearest point of the trace segment. The
+            // turbulent tube around a bullet path is NARROW - a wide gaussian read as a
+            // metre-wide wall of motion along the shot (field report).
             const float2 ldir = float2(A.y, A.z);
             const float along = clamp(dot(d, ldir), 0.0f, P.w);
             d -= ldir * along;
             const float dist = length(d);
             [branch]
-            if (dist > 2.5f || dist < 0.001f)
+            if (dist > 0.8f || dist < 0.001f)
                 continue;
-            const float t = dist * (1.0f / 1.1f);
+            const float t = dist * (1.0f / 0.3f);
             bend += (d / dist) * (exp(-t * t) * A.x * H);
             continue;
         }
@@ -65,7 +67,13 @@ float2 da_wind_motors_bend(float2 root_w, float H, out float press_w)
         // Ring profile: a gaussian around the current ring radius. Press motors keep ring
         // radius at 0, which turns the same formula into a bump centred on the actor.
         const float t = (dist - A.y) / A.z;
-        const float w = exp(-t * t);
+        float w = exp(-t * t);
+        // Blast WAKE: behind the expanding front the radial outflow keeps blowing, fading
+        // toward the epicentre (already-spent air) - the whole burst reads as wind rushing
+        // out in every direction, not as a lone travelling ripple.
+        [flatten]
+        if (A.y > 0.5f && dist < A.y)
+            w = max(w, 0.45f * dist / A.y);
         bend += (d / dist) * (w * A.x * H);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.
