@@ -247,30 +247,35 @@ static class cl_da_fog : public R_constant_setup
 } binder_da_fog;
 
 // Second haze constant: density ceiling, layer reference altitude, horizon flattening,
-// w = weather fog THICKNESS 0..1 - how deep in murk the world is, from the weather's fog_far,
-// scaled by the fog master. The sky shader drowns the horizon (and, in thick weather, the
-// whole dome) in fog colour by it, the cloud layer dissolves by it. Calibrated against the
-// actual DA weather set: veryfoggy sits at fog_distance 30 (-> 1.0), STORMS at 200 (-> ~0.6,
-// the first 300-cutoff curve left them nearly untouched), clear at 650 (-> 0).
+// w = HORIZON murk 0..1: how fogged an object at "sky distance" (1.8 km) is under the
+// engine's own linear fog model, from the LIVE mixer fog_near/fog_far. wind_dbg on real
+// weather showed the mixer's fog_far is a scaled value (990 on a windy day whose config
+// says a few hundred) - a config-scale cutoff never fired. This metric is self-calibrated:
+// whatever the scale, it matches what the fog does to distant geometry on screen, so the
+// horizon sky and the fogged hills in front of it converge by construction.
 static class cl_da_fog2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float thickness =
-            clampr((450.f - env.fog_far) / 420.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
-        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, thickness);
+        const float span = std::max(env.fog_far - env.fog_near, 1.f);
+        const float horizon_murk =
+            clampr((1800.f - env.fog_near) / span, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
+        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, horizon_murk);
     }
 } binder_da_fog2;
 
 // Weather fog colour for shaders outside the combine pass (the sky): combine gets fog_color
-// hand-set per draw, the sky draws BEFORE that and needs its own feed.
+// hand-set per draw, the sky draws BEFORE that and needs its own feed. w = FULL-DOME murk:
+// only real pea soup (mixer fog_far a few hundred) swallows the whole sky and the clouds.
 static class cl_da_fog_color : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        cmd_list.set_c(C, env.fog_color.x, env.fog_color.y, env.fog_color.z, 0.f);
+        const float full_murk =
+            clampr((450.f - env.fog_far) / 350.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
+        cmd_list.set_c(C, env.fog_color.x, env.fog_color.y, env.fog_color.z, full_murk);
     }
 } binder_da_fog_color;
 
