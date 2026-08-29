@@ -97,19 +97,28 @@ void CEffect_Rain::Born(Item& dest, float radius)
     clamp(slant, 0.f, drop_max_slant);
     axis.setHP(env.eff_wind_dir, slant - PI_DIV_2);
 
+    // Landing-disc spawn (the NVIDIA rain-SDK camera-volume idea): pick where the streak's
+    // LINE crosses eye level inside the radius, then back-project a random distance up the
+    // fall axis. That keeps the player inside the sheet at ANY slant - the old top-disc
+    // spawn built a vertical column whose sheared edge read as a rain shaft in the sky the
+    // moment the slant grew real.
     Fvector& view = Device.vCameraPosition;
-    float angle = ::Random.randF(0, PI_MUL_2);
-    float dist = ::Random.randF();
-    dist = _sqrt(dist) * radius;
-    float x = dist * _cos(angle);
-    float z = dist * _sin(angle);
+    const float angle = ::Random.randF(0, PI_MUL_2);
+    const float dist = _sqrt(::Random.randF()) * radius;
     dest.D.random_dir(axis, deg2rad(drop_angle));
-    dest.P.set(x + view.x - dest.D.x * source_offset, source_offset + view.y, z + view.z - dest.D.z * source_offset);
-    // dest.P.set (x+view.x,height+view.y,z+view.z);
+    Fvector land;
+    land.set(view.x + dist * _cos(angle), view.y, view.z + dist * _sin(angle));
+    const float up_range = source_offset / std::max(-dest.D.y, 0.4f);
+    dest.P.mad(land, dest.D, -::Random.randF(0.f, up_range));
     dest.fSpeed = ::Random.randF(drop_speed_min, drop_speed_max);
 
-    float height = max_distance;
-    RenewItem(dest, height, RayPick(dest.P, dest.D, height, collide::rqtBoth));
+    // Probe from the spawn point through the eye plane down to the sink margin, so valleys
+    // below the player still get their drops and splashes.
+    float range =
+        (dest.P.y - view.y + (max_distance - source_offset)) / std::max(-dest.D.y, 0.4f);
+    // Sequenced explicitly: RayPick shortens the range in place on a hit.
+    const bool hit = RayPick(dest.P, dest.D, range, collide::rqtBoth);
+    RenewItem(dest, range, hit);
 }
 
 bool CEffect_Rain::RayPick(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt)
