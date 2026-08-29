@@ -246,14 +246,32 @@ static class cl_da_fog : public R_constant_setup
     }
 } binder_da_fog;
 
-// Second haze constant: density ceiling, layer reference altitude, horizon flattening.
+// Second haze constant: density ceiling, layer reference altitude, horizon flattening,
+// w = weather fog THICKNESS 0..1 - how deep in murk the world is, from the weather's fog_far
+// (30 m pea soup -> 1, 300 m+ visibility -> 0), scaled by the fog master. The sky shader
+// drowns the horizon in fog colour by it, so distant silhouettes and the sky behind them
+// converge to one tone instead of bright ghosts on a dark backdrop.
 static class cl_da_fog2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, 0.f);
+        const auto& env = g_pGamePersistent->Environment().CurrentEnv;
+        const float thickness =
+            clampr((300.f - env.fog_far) / 270.f, 0.f, 1.f) * clampr(ps_r__fog, 0.f, 1.f);
+        cmd_list.set_c(C, ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, thickness);
     }
 } binder_da_fog2;
+
+// Weather fog colour for shaders outside the combine pass (the sky): combine gets fog_color
+// hand-set per draw, the sky draws BEFORE that and needs its own feed.
+static class cl_da_fog_color : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment().CurrentEnv;
+        cmd_list.set_c(C, env.fog_color.x, env.fog_color.y, env.fog_color.z, 0.f);
+    }
+} binder_da_fog_color;
 
 // Tonemap tinting: y = white point, z = luminance-tonemap share, w = late-desaturation power.
 // Consumed by tonemap() in common_functions.h; a zero constant reproduces stock exactly.
@@ -727,6 +745,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("rain_params", &binder_rain_params);
     Resources->RegisterConstantSetup("da_fog", &binder_da_fog);
     Resources->RegisterConstantSetup("da_fog2", &binder_da_fog2);
+    Resources->RegisterConstantSetup("da_fog_color", &binder_da_fog_color);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);

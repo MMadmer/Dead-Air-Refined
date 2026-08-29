@@ -9,9 +9,10 @@
 namespace
 {
 // Type voicing: grass whispers high and quiet, bushes sit in the middle, trees roar low.
-// Raised after a field test: under rain ambience the first calibration was indistinguishable
-// from the rain itself.
-const float k_volume[] = {0.45f, 0.85f, 1.30f};
+// Calibrated twice in the field: the first set drowned under rain ambience, the raised set
+// was clearly audible even in near-calm - this is that set divided by ~1.7, with the volume
+// floor lowered too, so calm-weather rustle is a barely-there whisper.
+const float k_volume[] = {0.26f, 0.50f, 0.78f};
 const float k_pitch[] = {1.15f, 1.00f, 0.82f};
 // Audible ranges by type, replacing the couple-of-metres range baked into the source file
 // (the walk-through-bush collide sound). Matched to how far these are really heard: a big
@@ -93,7 +94,7 @@ bool CEffect_WindVeg::play_one(int type, const Fvector& pos, float strength)
         if (Device.fTimeGlobal >= v.busy_until)
         {
             v.snd.play_at_pos(nullptr, pos, 0);
-            const float vol = k_volume[type] * clampr((strength - 0.30f) / 0.50f, 0.25f, 1.f);
+            const float vol = k_volume[type] * clampr((strength - 0.30f) / 0.50f, 0.12f, 1.f);
             v.snd.set_volume(vol);
             v.snd.set_frequency(k_pitch[type] * ::Random.randF(0.92f, 1.08f));
             // The source file is the walk-through-bush collide sound, whose baked audible

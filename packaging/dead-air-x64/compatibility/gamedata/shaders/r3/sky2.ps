@@ -1,0 +1,63 @@
+#include "common.h"
+
+struct         v2p
+{
+	float4	factor	: COLOR0;        // for SM3 - factor.rgb - tonemap-prescaled
+	float3	tc0		: TEXCOORD0;
+	float3	tc1		: TEXCOORD1;
+};
+struct        _out
+{
+	float4	low		: SV_Target0;
+	float4	high	: SV_Target1;
+};
+
+
+TextureCube	s_sky0	:register(t0);
+TextureCube	s_sky1	:register(t1);
+
+// [DA] Горизонтный туман на САМОМ НЕБЕ. Combine_1 красит туманом только геометрию (стенсиль),
+// а небо рисуется здесь, раньше и мимо него - поэтому в плотный туман дальние объекты тонули
+// в светлой мгле (fog_rgb), а небо ЗА НИМИ оставалось тёмным: белёсые силуэты-негативы на
+// тёмном фоне, тот самый давний баг. По реальной физике при такой оптической толщине неба у
+// горизонта не видно - там та же мгла. Приводим небо у горизонта к ТОМУ ЖЕ цвету, каким
+// combine красит бесконечно затуманенный объект: fog_color погоды, умноженный на текущий
+// тонмап-скейл (небо пишется тонмап-прескейлнутым - см. sky2.vs). Сила эффекта приходит из
+// биндера cl_da_fog2: w = плотность тумана погоды (0 в ясную, 1 в молоко), помноженная на
+// мастер r__fog. В ясную погоду выражение обнуляется и небо в точности стоковое.
+uniform float4	da_fog2;      // w = weather fog thickness 0..1 (binder cl_da_fog2)
+uniform float4	da_fog_color; // rgb = weather fog colour (binder cl_da_fog_color)
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Pixel
+_out main( v2p I )
+{
+//        float3         	s0  	= texCUBE        (s_sky0,I.tc0);
+//        float3         	s1      = texCUBE        (s_sky1,I.tc1);
+	float3	s0		= s_sky0.Sample( smp_rtlinear, I.tc0 );
+	float3	s1		= s_sky1.Sample( smp_rtlinear, I.tc1 );
+	float3	sky		= I.factor*lerp( s0, s1, I.factor.w );
+
+	//sky = Vibrance(sky,1.3);
+			sky		*= 0.33f;
+
+	[branch] if ( da_fog2.w > 0.001f )
+	{
+		// tc0 - направление на скайдоме; вращение дома идёт вокруг Y, вертикаль не трогает.
+		const float3 vd      = normalize( I.tc0 );
+		const float  horizon = saturate( 1.0f - vd.y * 2.6f );  // 1 у горизонта, 0 выше ~23°
+		const float  f       = pow( horizon, 1.7f ) * saturate( da_fog2.w );
+		// Тот же tm-прескейл, что у самого неба (sky2.vs), чтобы после общего тонмапа небо у
+		// горизонта сошлось с затуманенной геометрией в один тон.
+		const float  scale   = s_tonemap.Load( int3(0,0,0) ).x;
+		sky = lerp( sky, da_fog_color.rgb * scale, f );
+	}
+
+	// final tone-mapping
+	_out			o;
+
+	o.low        	=		sky.xyzz		;
+	o.high        	=		o.low/def_hdr	;
+
+	return        	o;
+}
