@@ -11,7 +11,7 @@
 -- no counter-forcing is needed here; the info portions stay exactly as the 2D dialog sent them.
 
 local cfg = nil
-local state = 0          -- 0 idle, 1 spawning, 2 waiting slot, 3 active, 4 releasing
+local state = 0          -- 0 idle, 1 spawning, 2 waiting slot, 3 active, 4 holstering, 5 releasing
 local last_slot = 0
 local spawn_at = 0
 local item_id = nil
@@ -27,8 +27,16 @@ local function section()
 end
 
 function _G.da_pda3d_activate()
+    -- toggled back mid-holster: the item still lives in the slot, so just re-raise it
+    -- instead of finishing the drop - the key stays instantly responsive
+    if (state == 4 or state == 5) and db.actor and db.actor:item_in_slot(13) then
+        db.actor:activate_slot(13)
+        state = 2
+        spawn_at = time_global()
+        return true
+    end
     if state ~= 0 then
-        return state ~= 4
+        return true -- raise already in flight; swallow the repeat
     end
     local sect = section()
     if not (sect and db.actor and db.actor:alive()) then
@@ -44,9 +52,18 @@ end
 
 function _G.da_pda3d_deactivate()
     if state == 0 then
+        -- a save made with the device up restores the item while this state machine is
+        -- idle: adopt it, otherwise the PDA could never be put away after such a load
+        if db.actor and db.actor:item_in_slot(13) then
+            last_slot = 0
+            state = 4
+            spawn_at = time_global()
+            return true
+        end
         return false
     end
-    if state ~= 4 then
+    -- 5 must not fall back to 4: that would replay the slot switch and reset the timeout
+    if state ~= 4 and state ~= 5 then
         state = 4
         spawn_at = time_global()
     end
@@ -85,18 +102,23 @@ local function tick()
             state = 0
         end
     elseif state == 4 then
-        local anm = db.actor:item_in_slot(13)
-        if anm then
-            local se = alife_object(anm:id())
-            if se then alife():release(se) end
+        -- Put the device away PROPERLY first: activating the previous slot plays the hide
+        -- animation and walks the item through eHiding -> eHidden, which is where the C++
+        -- side detaches the dialog and releases the presenter flag. Releasing the object
+        -- outright skipped all of that and left the feature wedged (stuck hands, dialog
+        -- suppressed forever).
+        db.actor:activate_slot(last_slot)
+        state = 5
+        spawn_at = time_global()
+    elseif state == 5 then
+        -- The slot switch finished (or timed out) - the device is hidden, now drop it.
+        if db.actor:active_slot() == last_slot or time_global() > spawn_at + 3000 then
+            local anm = db.actor:item_in_slot(13)
+            if anm then
+                local se = alife_object(anm:id())
+                if se then alife():release(se) end
+            end
             item_id = nil
-        end
-        -- one frame later the slot is empty; hand the previous slot back
-        if not db.actor:item_in_slot(13) then
-            db.actor:activate_slot(last_slot)
-            state = 0
-        elseif time_global() > spawn_at + 3000 then
-            db.actor:activate_slot(last_slot)
             state = 0
         end
     end

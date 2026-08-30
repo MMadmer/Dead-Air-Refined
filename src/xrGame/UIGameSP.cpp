@@ -259,11 +259,12 @@ void CUIGameSP::StartDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators)
 {
     // 3D PDA: EVERY entry point that opens the fullscreen PDA dialog funnels through here -
     // ShowPdaMenu, tutorials, and the Lua key handler that calls ShowDialog straight on the
-    // window (the P key). All of them raise the device instead. Our own focused stage never
-    // lands here (it uses FocusHeldDialog), and a failed/unavailable activation falls
-    // through to the plain 2D dialog.
-    if (pDialog == PdaMenu && !da_pda3d::presenter_active() && da_pda3d::available() &&
-        da_pda3d::request_activate())
+    // window (the P key). All become the one toggle: raise / lower from the face / holster.
+    // With the device already up this MUST return (never reach inherited::StartDialog -
+    // StartMenu asserts on a shown window; that was the P-then-M breakage). Our own focused
+    // stage never lands here (it uses FocusHeldDialog), and a failed/unavailable raise
+    // falls through to the plain 2D dialog.
+    if (pDialog == PdaMenu && da_pda3d::available() && da_pda3d::toggle())
         return;
 
     inherited::StartDialog(pDialog, bDoHideIndicators);

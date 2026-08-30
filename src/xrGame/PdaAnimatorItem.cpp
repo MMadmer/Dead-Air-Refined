@@ -72,6 +72,15 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
     }
 }
 
+void CPdaAnimatorItem::net_Destroy()
+{
+    // Safety net for every abrupt end - death with the device up, a script releasing the
+    // object outright, level change. Without this the presenter flag stayed raised forever:
+    // hands stuck on the pda rig, the 2D dialog suppressed, every toggle swallowed.
+    detach_ui();
+    inherited::net_Destroy();
+}
+
 void CPdaAnimatorItem::OnZoomIn()
 {
     inherited::OnZoomIn();

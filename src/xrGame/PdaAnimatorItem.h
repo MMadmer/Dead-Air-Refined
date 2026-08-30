@@ -23,6 +23,7 @@ public:
     void OnZoomIn() override;
     void OnZoomOut() override;
     void UpdateCL() override;
+    void net_Destroy() override;
 
     // No binocular overlay, no crosshair, no dynamic "vision" marks on the PDA.
     void render_item_ui() override {}

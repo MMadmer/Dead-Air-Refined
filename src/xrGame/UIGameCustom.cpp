@@ -233,7 +233,7 @@ bool CUIGameCustom::ShowPdaMenu()
     // config missing, model missing, all land back on the old dialog.
     if (da_pda3d::presenter_active())
     {
-        da_pda3d::request_deactivate();
+        da_pda3d::toggle(); // at the face -> lower it; in hands -> put it away
         return false;
     }
     if (PdaMenu->IsShown())

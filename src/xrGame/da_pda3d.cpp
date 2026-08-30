@@ -5,7 +5,9 @@
 #include "Actor.h"
 #include "Inventory.h"
 #include "UIGameCustom.h"
+#include "UIGameSP.h"
 #include "ui/UIPdaWnd.h"
+#include "UITimeDilator.h"
 #include "player_hud.h"
 #include "xrScriptEngine/script_engine.hpp"
 
@@ -163,6 +165,19 @@ bool request_activate()
     return call_toggle("_G.da_pda3d_activate");
 }
 
+bool toggle()
+{
+    if (presenter)
+    {
+        if (focused)
+            request_unzoom(); // at the face: first step back is lowering it
+        else
+            request_deactivate();
+        return true;
+    }
+    return request_activate();
+}
+
 bool request_deactivate()
 {
     // Throttled: the force-hidden watchdog in UpdateCL fires per frame until the item
@@ -248,6 +263,38 @@ void update()
         if (!actor || !actor->inventory().ItemFromSlot(13))
             swap_hands_out();
     }
+
+    // Self-heal: the presenter flag with no item behind it for over a second means some
+    // path we did not foresee killed the item without its state machine (net_Destroy covers
+    // the known ones). A leaked flag is the worst failure mode - it suppresses the 2D
+    // dialog and swallows every toggle - so it gets force-cleared here.
+    static float orphan_since = -1.f;
+    if (presenter)
+    {
+        CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
+        if (actor && actor->inventory().ItemFromSlot(13))
+            orphan_since = -1.f;
+        else if (orphan_since < 0.f)
+            orphan_since = now;
+        else if (now - orphan_since > 1.f)
+        {
+            Msg("! [pda3d] presenter flag with no item in the slot - force reset");
+            orphan_since = -1.f;
+            if (CUIGameCustom* ui = CurrentGameUI())
+                if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
+                {
+                    if (focused)
+                    {
+                        ui->UnfocusHeldDialog(pda);
+                        TimeDilator()->SetCurrentMode(UITimeDilator::None);
+                    }
+                    ui->RemoveDialogToRender(pda);
+                }
+            set_presenter_active(false);
+        }
+    }
+    else
+        orphan_since = -1.f;
 
     // Interference: the strongest of the per-level base and the Lua-supplied value. A dead
     // battery pushes the SAME channel past the shader's blackout threshold - one contract,

@@ -41,6 +41,11 @@ bool consume_unzoom_request();
 bool request_activate();
 bool request_deactivate();
 
+// THE one PDA-key behaviour, used by every entry point: not up -> raise; up and at the
+// face -> just lower it from the face; up in hands -> put it away. Returns false only
+// when a raise was needed and the script side is unavailable (2D fallback).
+bool toggle();
+
 // Hands swap for the PDA episode: the Gunslinger animation set is authored against its own
 // hands rig, so player_hud switches to the configured hands model while the device is up
 // and back on holster. Data-driven; an empty/missing hands_section keeps the current hands.
