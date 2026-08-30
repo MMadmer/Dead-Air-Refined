@@ -258,14 +258,17 @@ void CUIGameSP::ChangeLevel(GameGraph::_GRAPH_ID game_vert_id, u32 level_vert_id
 void CUIGameSP::StartDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators)
 {
     // 3D PDA: EVERY entry point that opens the fullscreen PDA dialog funnels through here -
-    // ShowPdaMenu, tutorials, and the Lua key handler that calls ShowDialog straight on the
-    // window (the P key). All become the one toggle: raise / lower from the face / holster.
-    // With the device already up this MUST return (never reach inherited::StartDialog -
-    // StartMenu asserts on a shown window; that was the P-then-M breakage). Our own focused
-    // stage never lands here (it uses FocusHeldDialog), and a failed/unavailable raise
-    // falls through to the plain 2D dialog.
-    if (pDialog == PdaMenu && da_pda3d::available() && da_pda3d::toggle())
+    // ShowPdaMenu, tutorials, and direct StartDialog calls. All become the one WINDOW
+    // toggle: show / lower from the face / hide; the ownership watch raises and holsters
+    // the device to match the window. With the window already up this MUST return (never
+    // reach inherited::StartDialog - StartMenu asserts on a shown window; that was the
+    // P-then-M breakage). Our own focused stage never lands here (it uses FocusHeldDialog);
+    // an unavailable feature falls through to the plain 2D dialog.
+    if (pDialog == PdaMenu && da_pda3d::available())
+    {
+        da_pda3d::toggle();
         return;
+    }
 
     inherited::StartDialog(pDialog, bDoHideIndicators);
 

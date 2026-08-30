@@ -28,6 +28,7 @@
 #include "WeaponKnife.h"
 #include "CustomOutfit.h"
 #include "ActorBackpack.h"
+#include "da_pda3d.h"
 
 #include "actor_anim_defs.h"
 
@@ -557,7 +558,13 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
     }
 
     if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_LOCAL) && TRUE == E->s_flags.is(M_SPAWN_OBJECT_ASPLAYER))
+    {
         g_actor = this;
+        // A fresh actor life (savegame load, level change, respawn): drop every 3D PDA
+        // session flag - the remembered hands, the interference ramp, the boot window.
+        // Nothing from the previous life may leak into this one.
+        da_pda3d::reset();
+    }
 
     VERIFY(m_pActorEffector == NULL);
 

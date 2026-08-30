@@ -231,20 +231,19 @@ bool CUIGameCustom::ShowPdaMenu()
     // fullscreen dialog. Every entry point funnels here (the Lua itms_manager key included),
     // and the 2D path below stays intact as the capability fallback - script missing,
     // config missing, model missing, all land back on the old dialog.
-    if (da_pda3d::presenter_active())
+    if (da_pda3d::available())
     {
-        da_pda3d::toggle(); // at the face -> lower it; in hands -> put it away
-        return false;
+        // Window-led 3D mode: the toggle acts on the window (shown -> lower from the face
+        // or hide; hidden -> show), and the ownership watch walks the device after it.
+        if (!da_pda3d::window_shown())
+            HideActorMenu();
+        da_pda3d::toggle();
+        return da_pda3d::window_shown();
     }
     if (PdaMenu->IsShown())
     {
         PdaMenu->HideDialog();
         return false;
-    }
-    if (da_pda3d::available() && da_pda3d::request_activate())
-    {
-        HideActorMenu();
-        return true;
     }
     HideActorMenu();
     PdaMenu->ShowDialog(true);
@@ -253,9 +252,9 @@ bool CUIGameCustom::ShowPdaMenu()
 
 void CUIGameCustom::HidePdaMenu()
 {
-    if (da_pda3d::presenter_active())
+    if (da_pda3d::available() && (da_pda3d::window_shown() || da_pda3d::presenter_active()))
     {
-        da_pda3d::request_deactivate();
+        da_pda3d::hide_window();
         return;
     }
     if (PdaMenu->IsShown())

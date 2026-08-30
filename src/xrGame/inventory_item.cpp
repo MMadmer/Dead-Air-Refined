@@ -123,6 +123,7 @@ void CInventoryItem::Load(LPCSTR section)
     m_flags.set(FCanTrade, m_can_trade);
     m_flags.set(FIsQuestItem, READ_IF_EXISTS(pSettings, r_bool, section, "quest_item", FALSE));
     m_flags.set(FSystemItem, READ_IF_EXISTS(pSettings, r_bool, section, "system_item", FALSE));
+    m_flags.set(FIgnoreSlotsBlocked, READ_IF_EXISTS(pSettings, r_bool, section, "ignore_slots_blocked", FALSE));
     m_flags.set(FNoStack, READ_IF_EXISTS(pSettings, r_bool, section, "dont_stack", FALSE));
 
     // Added by Axel, to enable optional condition use on any item

@@ -1554,5 +1554,11 @@ bool CInventory::IsSlotBlocked(u16 slot_id) const
 bool CInventory::IsSlotBlocked(PIItem const iitem) const
 {
     VERIFY(iitem);
+    // An item flagged ignore_slots_blocked (the 3D PDA presenter - not a weapon) treats a
+    // blocked slot as free FOR ITSELF: it can be raised inside no-weapon zones and is not
+    // force-holstered on entering one. The per-slot counters stay untouched, so every real
+    // weapon still obeys the zone, and the zone's own prev-slot restore keeps working.
+    if (iitem->IgnoresSlotsBlocked())
+        return false;
     return IsSlotBlocked(iitem->BaseSlot());
 }

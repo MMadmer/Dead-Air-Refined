@@ -86,6 +86,10 @@ protected:
         FIsHelperItem = (1 << 12),
         FSystemItem = (1 << 13),
         FNoStack = (1 << 14),
+        // The item may be activated (and stays up) while inventory slots are blocked by a
+        // no-weapon zone / ladder / vehicle: it is not a weapon. Data-driven via the
+        // "ignore_slots_blocked" section key; the 3D PDA presenter is the intended user.
+        FIgnoreSlotsBlocked = (1 << 15),
     };
 
     Flags16 m_flags;
@@ -146,6 +150,7 @@ public:
     BOOL IsInvalid() const;
 
     BOOL IsQuestItem() const { return m_flags.test(FIsQuestItem); }
+    bool IgnoresSlotsBlocked() const { return !!m_flags.test(FIgnoreSlotsBlocked); }
     bool CanShow() const { return !m_flags.test(FSystemItem); }
     bool CanStack() const { return !m_flags.test(FNoStack); }
     virtual u32 Cost() const { return m_cost; }

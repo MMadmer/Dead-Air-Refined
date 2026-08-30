@@ -526,13 +526,23 @@ void CRender::BeforeWorldRender()
     // context window (the UI locks the shared dynamic VB that r_sun/r_rain contexts also
     // lock), it does not freeze under the pause menu the way a pass inside Render() would,
     // and no scene target is bound yet.
-    if (!g_pGameLevel || !g_pGameLevel->pHUD || !Target || !Target->rt_ui)
+    if (!g_pGameLevel || !g_pGameLevel->pHUD || !Target)
         return;
 
     // The HUD side decides whether anything wants the texture this frame (PDA shown, 3D
     // presenter active or debug forced) - the early-out keeps the pass free when idle.
     if (!g_pGameLevel->pHUD->RenderPdaScreenUIQuery())
         return;
+
+    // Lazy target: allocated on the first frame anything actually wants it, so installs
+    // without the 3D PDA data never pay the VRAM. Survives until device reset like every
+    // other member target; recreated here afterwards the same way.
+    if (!Target->rt_ui)
+    {
+        Target->rt_ui.create(r2_RT_ui, Device.dwWidth, Device.dwHeight, D3DFMT_A8R8G8B8, 1);
+        if (!Target->rt_ui)
+            return;
+    }
 
     PIX_EVENT(render_pda_screen_ui);
     Target->u_setrt(RCache, Target->rt_ui, nullptr, nullptr, (ID3DDepthStencilView*)nullptr);

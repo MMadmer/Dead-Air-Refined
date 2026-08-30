@@ -109,15 +109,10 @@ void CDialogHolder::FocusHeldDialog(CUIDialogWnd* pDialog, bool bDoHideIndicator
         m_become_visible_time = Device.dwTimeContinual;
     }
 
-    if (g_pGameLevel)
-    {
-        CActor* A = smart_cast<CActor*>(Level().CurrentViewEntity());
-        if (A)
-        {
-            A->IR_OnKeyboardRelease(kWPN_ZOOM);
-            A->IR_OnKeyboardRelease(kWPN_FIRE);
-        }
-    }
+    // NOTE: StartMenu ends with IR_OnKeyboardRelease(kWPN_ZOOM/kWPN_FIRE) to unstick held
+    // keys when a fullscreen menu opens. Here that block is POISON: focusing happens from
+    // inside OnZoomIn, and the release lands in CWeapon::Action which promptly calls
+    // OnZoomOut - the device silently lost its zoom the moment it gained focus.
 }
 
 // Counterpart: drop the input focus but KEEP the dialog rendered - the device stays in

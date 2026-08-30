@@ -567,6 +567,11 @@ public:
     CCartridge m_DefaultCartridge;
     float m_fCurrentCartirdgeDisp;
     float m_hud_fov_add_mod;
+    // Per-item hud fov multipliers (Gunslinger's hud_fov_factor / hud_fov_zoom_factor):
+    // hip and aimed values, lerped by the zoom rotation factor. Both default to 1.0, so
+    // items without the keys render bit-exactly as before.
+    float m_hud_fov_factor;
+    float m_hud_fov_zoom_factor;
     float m_nearwall_dist_max;
     float m_nearwall_dist_min;
     float m_nearwall_last_hud_fov;

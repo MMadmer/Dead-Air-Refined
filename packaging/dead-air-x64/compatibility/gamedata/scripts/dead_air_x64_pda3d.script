@@ -1,20 +1,23 @@
--- 3D PDA activation glue (docs/dead-air/pda-3d-port-plan.md §8.4).
--- The engine asks through _G.da_pda3d_activate/_G.da_pda3d_deactivate; the item itself is
--- the proven animation-slot recipe of dinamic_hud.clean_animation: alife():create the
--- presenter, activate slot 13, release and restore the previous slot on the way out.
--- Everything data-driven: the section name comes from dead_air_x64_pda3d.ltx.
+-- 3D PDA activation glue (docs/dead-air/pda-3d-port-plan.md, docs/dead-air/pda-1to1-plan.md).
+-- WINDOW-LED: the engine's da_pda3d::update() watches the PDA window each frame and calls
+-- _G.da_pda3d_activate/_G.da_pda3d_deactivate to make the in-hands item match it. This
+-- script only owns the alife side (create / activate_slot / release) - the proven
+-- animation-slot recipe of dinamic_hud. Everything data-driven: the section name comes
+-- from dead_air_x64_pda3d.ltx.
 -- Compat-скрипты живут в своей namespace-таблице: глобалы ТОЛЬКО через _G. (иначе мертво).
 --
--- pda.get_power / pda.get_interference are the optional engine-polled sources. Power reads
--- the same battery state DA's own scripts use (axr_battery), guarded so its absence is safe.
--- DOF note: the installed Revolution II layer's level_weathers has no ui_pda DOF branch, so
--- no counter-forcing is needed here; the info portions stay exactly as the 2D dialog sent them.
+-- get_power / get_interference are the engine-polled screen sources (4 Hz). Power reads
+-- the same battery state DA's own scripts use (axr_battery), gated the same way DA gates
+-- it (enable_use_battery); interference is fed from the surge manager's real phases, the
+-- psi storm and the jammed-levels table - all through pcall-guarded soft references, no
+-- hard dependency on any of them.
 
 local cfg = nil
 local state = 0          -- 0 idle, 1 spawning, 2 waiting slot, 3 active, 4 holstering, 5 releasing
 local last_slot = 0
 local spawn_at = 0
 local item_id = nil
+local holster_fallback_done = false
 
 local function section()
     if cfg == nil then
@@ -116,45 +119,43 @@ local function tick()
     elseif state == 2 then
         if db.actor:active_slot() == 13 then
             state = 3
-            spawn_at = time_global()
         elseif time_global() > spawn_at + 3000 then
-            state = 0
-        end
-    elseif state == 3 then
-        -- janitor: the player left the device by switching slots and never came back -
-        -- after half a minute quietly drop the hidden item (a fresh press respawns it)
-        if db.actor:active_slot() == 13 then
-            spawn_at = time_global()
-        elseif time_global() > spawn_at + 30000 then
-            local anm = db.actor:item_in_slot(13)
-            if anm then
-                local se = alife_object(anm:id())
-                if se then alife():release(se) end
-            end
-            item_id = nil
             state = 0
         end
     elseif state == 4 then
         -- Put the device away PROPERLY first: activating the previous slot plays the hide
         -- animation and walks the item through eHiding -> eHidden, which is where the C++
-        -- side detaches the dialog and releases the presenter flag. Releasing the object
-        -- outright skipped all of that and left the feature wedged (stuck hands, dialog
-        -- suppressed forever).
+        -- side cleans up. Releasing the object outright skipped all of that and left the
+        -- feature wedged (stuck hands, dialog suppressed forever).
         db.actor:activate_slot(last_slot)
         state = 5
         spawn_at = time_global()
+        holster_fallback_done = false
     elseif state == 5 then
-        -- The slot switch finished (or timed out) - the device is hidden, now drop it. When
-        -- teardown raced the spawn, the item may still be in flight: keep waiting for it
-        -- until the timeout so it never gets orphaned in the slot.
         local anm = db.actor:item_in_slot(13)
         local expired = time_global() > spawn_at + 3000
-        if anm and (db.actor:active_slot() == last_slot or expired) then
+        if not anm then
+            -- gone already (external release); nothing left to do
+            if expired then
+                item_id = nil
+                state = 0
+            end
+        elseif db.actor:active_slot() ~= 13 then
+            -- the device is out of the hands (holstered by the slot switch or by the
+            -- player grabbing a weapon) - drop the object
             local se = alife_object(anm:id())
             if se then alife():release(se) end
             item_id = nil
             state = 0
-        elseif not anm and expired then
+        elseif not holster_fallback_done and time_global() > spawn_at + 700 then
+            -- the previous slot refused to activate (blocked in a no-weapon zone, item
+            -- dropped meanwhile): holster into empty hands instead. The zone's own
+            -- prev-slot restore still brings the weapon back on exit.
+            holster_fallback_done = true
+            db.actor:activate_slot(0)
+        elseif expired then
+            local se = alife_object(anm:id())
+            if se then alife():release(se) end
             item_id = nil
             state = 0
         end
@@ -163,11 +164,26 @@ end
 
 -- Engine-polled screen state (da_pda3d.cpp poll_lua, namespace-local on purpose) ----------
 
--- 0..1 battery charge; reads the same state DA's own scripts read, absence-safe.
+-- 0..1 battery charge; reads the same state DA's own scripts read, gated the same way DA
+-- gates the whole battery mechanic - a disabled option or a missing wpn_upd means "no
+-- battery simulation", which is a FULL charge, not an empty one.
 function get_power()
+    local enabled = false
+    if axr_main and axr_main.config then
+        local ok, v = pcall(function()
+            return axr_main.config:r_value("mm_options", "enable_use_battery", 1, false)
+        end)
+        enabled = ok and v == true
+    end
+    if not enabled then
+        return 1.0
+    end
+    if not (db.actor and db.actor.object and db.actor:object("wpn_upd")) then
+        return 1.0
+    end
     if axr_battery and axr_battery.getBatteryCondition then
-        local v = axr_battery.getBatteryCondition()
-        if type(v) == "number" then
+        local ok, v = pcall(axr_battery.getBatteryCondition)
+        if ok and type(v) == "number" then
             if v > 1 then v = v / 100 end
             if v < 0 then v = 0 end
             if v > 1 then v = 1 end
@@ -177,9 +193,99 @@ function get_power()
     return 1.0
 end
 
--- 0..1 extra interference on top of the per-level ltx table (max of the two wins engine-side).
+-- Interference curve tables, read once from the ltx: "p1:v1, p2:v2, ..." where p is the
+-- 0..1 phase progress and v the interference level at (and past) that point.
+local curves = nil
+local function parse_curve(str)
+    local t = {}
+    if not str then return t end
+    for pair in string.gmatch(str, "[^,]+") do
+        local p, v = string.match(pair, "([%d%.]+)%s*:%s*([%d%.]+)")
+        if p and v then
+            t[#t + 1] = { tonumber(p), tonumber(v) }
+        end
+    end
+    return t
+end
+
+local function curve_value(t, progress)
+    local v = 0
+    for i = 1, #t do
+        if progress >= t[i][1] then
+            v = t[i][2]
+        end
+    end
+    return v
+end
+
+local function load_curves()
+    if curves then return end
+    curves = { surge = {}, psi = {}, jammed = 0 }
+    if cfg == nil then
+        cfg = ini_file("dead_air_x64_pda3d.ltx")
+    end
+    if cfg and cfg:section_exist("pda3d_interference") then
+        if cfg:line_exist("pda3d_interference", "surge_curve") then
+            curves.surge = parse_curve(cfg:r_string("pda3d_interference", "surge_curve"))
+        end
+        if cfg:line_exist("pda3d_interference", "psi_storm_curve") then
+            curves.psi = parse_curve(cfg:r_string("pda3d_interference", "psi_storm_curve"))
+        end
+        if cfg:line_exist("pda3d_interference", "jammed_level") then
+            curves.jammed = cfg:r_float("pda3d_interference", "jammed_level")
+        end
+    end
+end
+
+-- 0..1 extra interference; the strongest active source wins (the engine additionally
+-- maxes this with its own per-level ltx table and ramps the result over time).
 function get_interference()
-    return 0.0
+    load_curves()
+    local v = 0
+
+    -- emission: level rises with the surge phase, exactly the original's ladder feel
+    if surge_manager and surge_manager.get_surge_manager then
+        local ok, m = pcall(surge_manager.get_surge_manager)
+        if ok and m and m.started and m.inited_time and m.surge_time then
+            local ok2, diff = pcall(function()
+                return math.ceil(game.get_game_time():diffSec(m.inited_time) / level.get_time_factor())
+            end)
+            if ok2 and diff then
+                local progress = diff / m.surge_time
+                if progress > 1 then progress = 1 end
+                if progress < 0 then progress = 0 end
+                local sv = curve_value(curves.surge, progress)
+                if sv > v then v = sv end
+            end
+        end
+    end
+
+    -- psi storm: same idea, its own curve
+    if psi_storm_manager and psi_storm_manager.get_psi_storm_manager then
+        local ok, m = pcall(psi_storm_manager.get_psi_storm_manager)
+        if ok and m and m.started and m.inited_time and m.psi_storm_duration then
+            local ok2, diff = pcall(function()
+                return math.ceil(game.get_game_time():diffSec(m.inited_time) / level.get_time_factor())
+            end)
+            if ok2 and diff then
+                local progress = diff / m.psi_storm_duration
+                if progress > 1 then progress = 1 end
+                if progress < 0 then progress = 0 end
+                local pv = curve_value(curves.psi, progress)
+                if pv > v then v = pv end
+            end
+        end
+    end
+
+    -- jammed levels (Red Forest / Generators): DA's own table via axr_battery
+    if axr_battery and axr_battery.is_jammed then
+        local ok, j = pcall(axr_battery.is_jammed)
+        if ok and j == true and curves.jammed > v then
+            v = curves.jammed
+        end
+    end
+
+    return v
 end
 
 function on_game_start()

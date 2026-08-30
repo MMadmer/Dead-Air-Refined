@@ -221,10 +221,11 @@ void CUIPdaWnd::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
 
 void CUIPdaWnd::ShowDialog(bool bDoHideIndicators)
 {
-    // The device is up: any "open the PDA" call is the toggle - lower it from the face,
-    // or put it away. The fullscreen path would either no-op (window already shown
-    // render-only) or assert in StartMenu.
-    if (da_pda3d::presenter_active())
+    // Window-led 3D mode: any "open the PDA" call is the toggle on the WINDOW - show it
+    // (the ownership watch raises the device), lower it from the face, or hide it (the
+    // watch holsters). The fullscreen path would either no-op (window already shown
+    // render-only) or assert in StartMenu; it stays the capability fallback.
+    if (da_pda3d::available())
     {
         da_pda3d::toggle();
         return;
@@ -234,14 +235,38 @@ void CUIPdaWnd::ShowDialog(bool bDoHideIndicators)
 
 void CUIPdaWnd::HideDialog()
 {
-    // Tutorials and scripts hide the dialog directly; with the device up that means
-    // holstering it (the window itself stays owned by the render list until eHidden).
-    if (da_pda3d::presenter_active())
+    // Tutorials and scripts hide the dialog directly; in the 3D mode that hides the
+    // window, and the ownership watch puts the device away after it.
+    if (da_pda3d::available() && (da_pda3d::window_shown() || da_pda3d::presenter_active()))
     {
-        da_pda3d::request_deactivate();
+        da_pda3d::hide_window();
         return;
     }
     inherited::HideDialog();
+}
+
+bool CUIPdaWnd::OnMouseAction(float x, float y, EUIMessages mouse_action)
+{
+    // Focused stage: cursor motion drives the thumb-on-joystick animation. The handler
+    // receives canvas-space positions; the accumulator wants deltas.
+    if (da_pda3d::ui_focused())
+    {
+        static Fvector2 prev{};
+        static u32 prev_frame{u32(-1)};
+        if (mouse_action == WINDOW_MOUSE_MOVE)
+        {
+            // A stale prev from the previous focus episode must not produce a phantom
+            // swipe - only frame-adjacent samples count.
+            if (prev_frame != u32(-1) && Device.dwFrame - prev_frame <= 2)
+                da_pda3d::joystick_accum(x - prev.x, y - prev.y);
+            prev.set(x, y);
+            prev_frame = Device.dwFrame;
+        }
+        else if (mouse_action == WINDOW_LBUTTON_DOWN)
+            da_pda3d::joystick_click();
+    }
+    CUIDialogWnd::OnMouseAction(x, y, mouse_action);
+    return true; // always true because StopAnyMove() == false
 }
 
 void CUIPdaWnd::Show(bool status)
@@ -457,11 +482,13 @@ bool CUIPdaWnd::GetScreenRectUV(Fvector4& uv) const
 
 void CUIPdaWnd::Draw()
 {
-    // 3D PDA: while the presenter item is up, the dialog lives on the device screen - never
-    // on the fullscreen canvas (the RT pass may legitimately skip frames when throttled, so
-    // the suppression keys off the presenter, not off the frame stamp alone; the stamp still
-    // covers the debug-forced RT path with no presenter).
-    if (!m_in_rt_pass && (da_pda3d::presenter_active() || m_rt_frame == Device.dwFrame))
+    // 3D PDA: while the feature owns the window, the dialog lives on the device screen -
+    // never on the fullscreen canvas. available() covers the whole window-led life
+    // (including the brief window-up-item-not-yet phase and throttled RT frames); the
+    // frame stamp still covers the debug-forced RT path.
+    if (!m_in_rt_pass &&
+        (m_rt_frame == Device.dwFrame || da_pda3d::presenter_active() ||
+            (da_pda3d::available() && IsShown())))
         return;
     inherited::Draw();
     //.	DrawUpdatedSections();

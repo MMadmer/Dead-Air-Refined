@@ -63,16 +63,15 @@ public:
     virtual void Draw();
     virtual void Update();
     virtual void Show(bool status);
-    // 3D PDA: with the presenter up these ARE the toggle. The P key's Lua handler calls
-    // ShowDialog straight on this window, which is already shown render-only in that
-    // state - without the override the call was a silent no-op and the key went dead.
+    // 3D PDA: in the 3D mode these ARE the toggle - the window is the source of truth,
+    // and every entry point (the P key's Lua handler calls ShowDialog straight on this
+    // window) lands here. Without the override the call was a silent no-op on the
+    // already-shown window and the key went dead.
     void ShowDialog(bool bDoHideIndicators) override;
     void HideDialog() override;
-    virtual bool OnMouseAction(float x, float y, EUIMessages mouse_action)
-    {
-        CUIDialogWnd::OnMouseAction(x, y, mouse_action);
-        return true;
-    } // always true because StopAnyMove() == false
+    // Feeds the joystick accumulator in the focused stage; always returns true because
+    // StopAnyMove() == false.
+    bool OnMouseAction(float x, float y, EUIMessages mouse_action) override;
     virtual bool OnKeyboardAction(int dik, EUIMessages keyboard_action);
     bool OnControllerAction(int axis, const ControllerAxisState& state, EUIMessages controller_action) override;
 

@@ -32,6 +32,15 @@ struct SCfg
     float blackout_level{0.42f};
     float power_low{0.05f};
     float brightness{1.f};
+    // The moment of the show motion (0..1 of its length) when the screen physically turns
+    // on - the thumb hits the power button there. Before it the screen is dark.
+    float screen_on_mark{0.85f};
+    // Interference approach speed, normalized units per second (the original ramps its
+    // electronics counter at a fixed rate - a step change reads as a toggle, not a wave).
+    float interference_ramp{0.15f};
+    // Joystick quantizer: refresh period (ms) and cursor deadzone (canvas px per period).
+    u32 joystick_period{100};
+    float joystick_deadzone{2.f};
     // level name -> base interference, straight from the ltx; unknown levels contribute 0
     xr_vector<std::pair<shared_str, float>> level_interference;
 };
@@ -39,13 +48,16 @@ SCfg cfg;
 
 bool presenter{};
 bool focused{};
-float boot_until{-1.f};
 float lua_poll_at{};
 float lua_power{1.f};
 float lua_interference{};
 float x_smooth{};
 float phase_at{};
 float phase{};
+
+// Screen power-on gate: dark until screen_on_at, boot sequence until boot_until.
+float screen_on_at{-1.f};
+float boot_until{-1.f};
 
 void load_cfg()
 {
@@ -72,6 +84,19 @@ void load_cfg()
     cfg.power_low =
         ini.line_exist("pda3d", "power_low_threshold") ? ini.r_float("pda3d", "power_low_threshold") : 0.05f;
     cfg.brightness = ini.line_exist("pda3d", "brightness") ? ini.r_float("pda3d", "brightness") : 1.f;
+    cfg.screen_on_mark =
+        ini.line_exist("pda3d", "screen_on_mark") ? ini.r_float("pda3d", "screen_on_mark") : 0.85f;
+    cfg.interference_ramp =
+        ini.line_exist("pda3d", "interference_ramp") ? ini.r_float("pda3d", "interference_ramp") : 0.15f;
+    cfg.joystick_period =
+        ini.line_exist("pda3d", "joystick_update_period") ? ini.r_u32("pda3d", "joystick_update_period") : 100;
+    cfg.joystick_deadzone =
+        ini.line_exist("pda3d", "joystick_deadzone") ? ini.r_float("pda3d", "joystick_deadzone") : 2.f;
+    cfg.screen_on_mark = clampr(cfg.screen_on_mark, 0.f, 1.f);
+    if (cfg.interference_ramp <= 0.f)
+        cfg.interference_ramp = 0.15f;
+    if (cfg.joystick_period < 16)
+        cfg.joystick_period = 16;
     if (ini.section_exist("pda3d_interference_levels"))
         for (const auto& [name, value] : ini.r_section("pda3d_interference_levels").Data)
             if (name.size() && value.size())
@@ -136,6 +161,7 @@ void poll_lua()
 namespace
 {
 bool unzoom_request{};
+float activate_at{};
 float deactivate_at{};
 bool hands_swapped{};
 shared_str prev_hands;
@@ -147,6 +173,81 @@ bool call_toggle(pcstr fn_name)
         return false;
     return fn();
 }
+
+// The Lua bridge stays the transport (alife create / activate_slot / release live there),
+// but ONLY update() drives it now - key handlers never call these directly.
+bool request_activate()
+{
+    load_cfg();
+    if (!cfg.available)
+        return false;
+    const float now = Device.fTimeGlobal;
+    if (now < activate_at)
+        return true;
+    activate_at = now + 0.3f;
+    return call_toggle("_G.da_pda3d_activate");
+}
+
+bool request_deactivate()
+{
+    const float now = Device.fTimeGlobal;
+    if (now < deactivate_at)
+        return true;
+    deactivate_at = now + 0.3f;
+    return call_toggle("_G.da_pda3d_deactivate");
+}
+
+CUIPdaWnd* pda_wnd()
+{
+    CUIGameCustom* ui = CurrentGameUI();
+    return ui ? ui->GetPdaMenuPtr() : nullptr;
+}
+
+// Joystick state: the accumulated cursor motion of the current period, quantized into
+// 8 compass directions + click + idle - becomes an animation-name suffix, exactly the
+// original's thumb-on-the-stick mechanic.
+enum class EDir : u8
+{
+    Idle,
+    Up,
+    UpRight,
+    Right,
+    DownRight,
+    Down,
+    DownLeft,
+    Left,
+    UpLeft,
+    Click
+};
+struct SJoystick
+{
+    Fvector2 accum{};
+    EDir dir{EDir::Idle};
+    u32 next_step{};
+    bool click_pending{};
+} joy;
+
+EDir dir_by_angle(float a)
+{
+    // atan2 result mapped onto 8 sectors of 45 degrees (PI/4), sector centers on the axes.
+    // Screen y grows downward, so +y is Down.
+    constexpr float S = PI / 8.f; // half-sector
+    if (a >= -S && a < S)
+        return EDir::Right;
+    if (a >= S && a < 3 * S)
+        return EDir::DownRight;
+    if (a >= 3 * S && a < 5 * S)
+        return EDir::Down;
+    if (a >= 5 * S && a < 7 * S)
+        return EDir::DownLeft;
+    if (a >= -3 * S && a < -S)
+        return EDir::UpRight;
+    if (a >= -5 * S && a < -3 * S)
+        return EDir::Up;
+    if (a >= -7 * S && a < -5 * S)
+        return EDir::UpLeft;
+    return EDir::Left;
+}
 } // namespace
 
 void request_unzoom() { unzoom_request = true; }
@@ -157,36 +258,107 @@ bool consume_unzoom_request()
     return r;
 }
 
-bool request_activate()
+bool show_window()
 {
     load_cfg();
     if (!cfg.available)
         return false;
-    return call_toggle("_G.da_pda3d_activate");
+    CUIGameCustom* ui = CurrentGameUI();
+    CUIPdaWnd* pda = ui ? ui->GetPdaMenuPtr() : nullptr;
+    if (!pda)
+        return false;
+    ui->AddDialogToRender(pda); // fires Show(true) itself - info portions once
+    return true;
+}
+
+void hide_window()
+{
+    CUIGameCustom* ui = CurrentGameUI();
+    CUIPdaWnd* pda = ui ? ui->GetPdaMenuPtr() : nullptr;
+    if (!pda)
+        return;
+    if (focused)
+    {
+        ui->UnfocusHeldDialog(pda);
+        TimeDilator()->SetCurrentMode(UITimeDilator::None);
+        set_ui_focused(false);
+    }
+    ui->RemoveDialogToRender(pda); // fires Show(false) itself
+}
+
+bool window_shown()
+{
+    CUIPdaWnd* pda = pda_wnd();
+    return pda && pda->IsShown();
 }
 
 bool toggle()
 {
-    if (presenter)
+    if (window_shown())
     {
         if (focused)
             request_unzoom(); // at the face: first step back is lowering it
         else
-            request_deactivate();
+            hide_window();
         return true;
     }
-    return request_activate();
+    return show_window();
 }
 
-bool request_deactivate()
+void joystick_accum(float dx, float dy)
 {
-    // Throttled: the force-hidden watchdog in UpdateCL fires per frame until the item
-    // actually starts hiding.
-    const float now = Device.fTimeGlobal;
-    if (now < deactivate_at)
-        return true;
-    deactivate_at = now + 0.5f;
-    return call_toggle("_G.da_pda3d_deactivate");
+    joy.accum.x += dx;
+    joy.accum.y += dy;
+}
+
+void joystick_click() { joy.click_pending = true; }
+
+bool joystick_step()
+{
+    load_cfg();
+    const u32 now = Device.dwTimeGlobal;
+    if (now < joy.next_step)
+        return false;
+    joy.next_step = now + cfg.joystick_period;
+
+    EDir dir = EDir::Idle;
+    if (joy.click_pending)
+        dir = EDir::Click;
+    else if (_abs(joy.accum.x) >= cfg.joystick_deadzone || _abs(joy.accum.y) >= cfg.joystick_deadzone)
+        dir = dir_by_angle(atan2f(joy.accum.y, joy.accum.x));
+
+    joy.click_pending = false;
+    joy.accum.set(0.f, 0.f);
+
+    if (dir == joy.dir)
+        return false;
+    joy.dir = dir;
+    return true;
+}
+
+const char* joystick_suffix()
+{
+    switch (joy.dir)
+    {
+    case EDir::Up: return "_up";
+    case EDir::UpRight: return "_up_right";
+    case EDir::Right: return "_right";
+    case EDir::DownRight: return "_down_right";
+    case EDir::Down: return "_down";
+    case EDir::DownLeft: return "_down_left";
+    case EDir::Left: return "_left";
+    case EDir::UpLeft: return "_up_left";
+    case EDir::Click: return "_click";
+    default: return "";
+    }
+}
+
+void joystick_reset()
+{
+    joy.accum.set(0.f, 0.f);
+    joy.dir = EDir::Idle;
+    joy.click_pending = false;
+    joy.next_step = 0;
 }
 
 void swap_hands_in()
@@ -225,10 +397,15 @@ void set_presenter_active(bool active)
         focused = false;
 }
 bool presenter_active() { return presenter; }
-void set_ui_focused(bool f) { focused = f; }
+void set_ui_focused(bool f)
+{
+    focused = f;
+    if (f)
+        joystick_reset();
+}
 bool ui_focused() { return focused; }
 
-bool want_rt() { return presenter || g_pda3d_dbg > 0; }
+bool want_rt() { return window_shown() || presenter || g_pda3d_dbg > 0; }
 
 bool available()
 {
@@ -242,10 +419,40 @@ const shared_str& animator_section()
     return cfg.animator_section;
 }
 
-void on_shown()
+void on_shown(u32 motion_start_ms, u32 motion_end_ms)
 {
     load_cfg();
-    boot_until = Device.fTimeGlobal + cfg.boot_time;
+    const float now = Device.fTimeGlobal;
+    // The screen turns on at screen_on_mark of the show motion - the moment the thumb
+    // presses the power button. Unknown timings degrade to "on immediately".
+    float delay = 0.f;
+    if (motion_end_ms > motion_start_ms)
+    {
+        const u32 now_ms = Device.dwTimeGlobal;
+        const u32 on_ms = motion_start_ms + u32(cfg.screen_on_mark * float(motion_end_ms - motion_start_ms));
+        if (on_ms > now_ms)
+            delay = float(on_ms - now_ms) / 1000.f;
+    }
+    screen_on_at = now + delay;
+    boot_until = screen_on_at + cfg.boot_time;
+}
+
+void reset()
+{
+    presenter = false;
+    focused = false;
+    unzoom_request = false;
+    hands_swapped = false;
+    prev_hands = "";
+    x_smooth = 0.f;
+    lua_interference = 0.f;
+    lua_power = 1.f;
+    lua_poll_at = 0.f;
+    screen_on_at = -1.f;
+    boot_until = -1.f;
+    activate_at = 0.f;
+    deactivate_at = 0.f;
+    joystick_reset();
 }
 
 void update()
@@ -255,24 +462,58 @@ void update()
 
     const float now = Device.fTimeGlobal;
 
+    // ---- Window-led ownership: derive the presenter from the window, every frame -------
+    // The window shown but no presenter item -> raise one. The window hidden but the item
+    // still up -> put it away. State never leaks because nothing here is remembered.
+    if (cfg.available && g_pGameLevel && Level().bReady)
+    {
+        CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
+        if (actor && !actor->g_Alive())
+            actor = nullptr;
+        const bool win = window_shown();
+        PIItem in_slot = actor ? actor->inventory().ItemFromSlot(ANIMATION_SLOT) : nullptr;
+        if (actor)
+        {
+            // window up, device not raised (missing, spawned-but-idle, or mid-holster) ->
+            // ask the script to raise; window down but anything still up -> put it away.
+            if (win && !presenter)
+            {
+                if (!request_activate())
+                {
+                    // The script bridge refused with a live actor: the Lua side is absent
+                    // or broken. Kill the 3D capability for this session and reopen the
+                    // plain 2D dialog - a shown window that can never grow a device is the
+                    // one state the player cannot escape.
+                    Msg("! [pda3d] activation bridge dead - falling back to the 2D dialog");
+                    cfg.available = false;
+                    hide_window();
+                    if (CUIGameCustom* ui = CurrentGameUI())
+                        ui->ShowPdaMenu();
+                }
+            }
+            else if (!win && (presenter || in_slot))
+                request_deactivate();
+        }
+    }
+
     // Hands swap back only AFTER the presenter item is fully gone (released from the slot):
     // reloading the hands while any hud item is attached dangles its resolved MotionIDs.
     if (hands_swapped && !presenter)
     {
         CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
-        if (!actor || !actor->inventory().ItemFromSlot(13))
+        if (!actor || !actor->inventory().ItemFromSlot(ANIMATION_SLOT))
             swap_hands_out();
     }
 
     // Self-heal: the presenter flag with no item behind it for over a second means some
     // path we did not foresee killed the item without its state machine (net_Destroy covers
-    // the known ones). A leaked flag is the worst failure mode - it suppresses the 2D
-    // dialog and swallows every toggle - so it gets force-cleared here.
+    // the known ones). A leaked flag suppresses the 2D dialog and swallows every toggle -
+    // force-clear it.
     static float orphan_since = -1.f;
     if (presenter)
     {
         CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
-        if (actor && actor->inventory().ItemFromSlot(13))
+        if (actor && actor->inventory().ItemFromSlot(ANIMATION_SLOT))
             orphan_since = -1.f;
         else if (orphan_since < 0.f)
             orphan_since = now;
@@ -280,22 +521,14 @@ void update()
         {
             Msg("! [pda3d] presenter flag with no item in the slot - force reset");
             orphan_since = -1.f;
-            if (CUIGameCustom* ui = CurrentGameUI())
-                if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
-                {
-                    if (focused)
-                    {
-                        ui->UnfocusHeldDialog(pda);
-                        TimeDilator()->SetCurrentMode(UITimeDilator::None);
-                    }
-                    ui->RemoveDialogToRender(pda);
-                }
+            hide_window();
             set_presenter_active(false);
         }
     }
     else
         orphan_since = -1.f;
 
+    // ---- Screen state ------------------------------------------------------------------
     // Interference: the strongest of the per-level base and the Lua-supplied value. A dead
     // battery pushes the SAME channel past the shader's blackout threshold - one contract,
     // three states (see model_pda_screen.ps).
@@ -305,14 +538,18 @@ void update()
 
     // Boot window: while it lasts the shader's `a` branch shows the loading sequence, and x
     // is floored to the 0.08 gate that branch requires.
-    const bool booting = boot_until > 0.f && now < boot_until;
+    const bool booting = boot_until > 0.f && now >= screen_on_at && now < boot_until;
     if (booting)
         x_target = std::max(x_target, 0.10f);
 
-    // Ease the level instead of stepping it: the screen dying/waking reads as electronics,
-    // not as a toggle.
-    const float k = 1.f - expf(-Device.fTimeDelta / 0.15f);
-    x_smooth += (x_target - x_smooth) * k;
+    // Rate-limited approach (the original's electronics counter): the screen degrades and
+    // recovers as a wave, never as a switch flip.
+    const float max_step = cfg.interference_ramp * Device.fTimeDelta;
+    const float delta = x_target - x_smooth;
+    if (_abs(delta) <= max_step)
+        x_smooth = x_target;
+    else
+        x_smooth += (delta > 0.f ? max_step : -max_step);
 
     // The y channel is the original's "phase/random driver" - it feeds tear amplitude and
     // the high-interference image shift. A held value stepped a few times a second reads as
@@ -323,16 +560,19 @@ void update()
         phase = ::Random.randF(0.f, 1.f);
     }
 
-    g_pda_screen_affects.set(x_smooth, phase, cfg.brightness, booting ? 1.f : 0.f);
+    // Brightness gates on the power-on mark: the device comes out of the pocket dark and
+    // lights up when the thumb hits the button during the draw motion.
+    const float bright = (screen_on_at > 0.f && now < screen_on_at) ? 0.f : cfg.brightness;
+
+    g_pda_screen_affects.set(x_smooth, phase, bright, booting ? 1.f : 0.f);
 
     // The PDA face sub-rect: taken from the live layout every frame, so aspect swaps
     // (pda.xml vs pda_16.xml), UI resets and modded layouts all stay correct.
-    if (CUIGameCustom* ui = CurrentGameUI())
-        if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
-        {
-            Fvector4 uv;
-            if (pda->GetScreenRectUV(uv))
-                g_pda_screen_rect = uv;
-        }
+    if (CUIPdaWnd* pda = pda_wnd())
+    {
+        Fvector4 uv;
+        if (pda->GetScreenRectUV(uv))
+            g_pda_screen_rect = uv;
+    }
 }
 } // namespace da_pda3d

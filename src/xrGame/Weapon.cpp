@@ -518,6 +518,8 @@ void CWeapon::Load(LPCSTR section)
     fireDispersionConditionFactor = pSettings->r_float(section, "fire_dispersion_condition_factor");
 
     m_hud_fov_add_mod = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_addition_modifier", 0.0f);
+    m_hud_fov_factor = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_factor", 1.0f);
+    m_hud_fov_zoom_factor = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_zoom_factor", m_hud_fov_factor);
     m_nearwall_dist_min = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_min", 0.5f);
     m_nearwall_dist_max = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_max", 1.0f);
     m_nearwall_target_hud_fov = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_target_hud_fov", 0.27f);
@@ -2595,7 +2597,17 @@ float CWeapon::GetHudFov()
             m_nearwall_last_hud_fov * (1.0f - interpolation) + target_fov * interpolation;
     }
 
-    return m_nearwall_last_hud_fov;
+    // Per-item multiplier, hip -> aimed along the zoom rotation (Gunslinger's
+    // hud_fov_factor 0.9 -> hud_fov_zoom_factor 0.29 is how the PDA screen becomes
+    // readable at the face: ~3.1x linear magnification). Both default to 1.0, so every
+    // item without the keys is bit-exact stock.
+    float k = m_hud_fov_factor;
+    if (!fsimilar(m_hud_fov_zoom_factor, m_hud_fov_factor))
+    {
+        const float af = clampr(m_zoom_params.m_fZoomRotationFactor, 0.0f, 1.0f);
+        k = m_hud_fov_factor + (m_hud_fov_zoom_factor - m_hud_fov_factor) * af;
+    }
+    return m_nearwall_last_hud_fov * k;
 }
 
 bool CWeapon::MovingAnimAllowedNow() { return !IsZoomed(); }

@@ -325,10 +325,11 @@ CRenderTarget::CRenderTarget()
         rt_Generic_0.create(r2_RT_generic0, w, h, D3DFMT_A8R8G8B8, 1);
         rt_Generic_1.create(r2_RT_generic1, w, h, D3DFMT_A8R8G8B8, 1);
         rt_Generic.create(r2_RT_generic, w, h, D3DFMT_A8R8G8B8, 1);
-        // 3D PDA UI target: full device size on purpose - the UI canvas, the scissors, the
-        // font-atlas pick and the glyph emitter are all pinned to Device.dwWidth/dwHeight,
-        // so any other size would need a cascade of UI changes (see the pda-3d port plan).
-        rt_ui.create(r2_RT_ui, w, h, D3DFMT_A8R8G8B8, 1);
+        // 3D PDA UI target is created LAZILY in BeforeWorldRender on first demand: a full
+        // device-size RGBA8 (~14.7 MB at 1440p) that only 3D-PDA-capable installs ever
+        // sample must not tax everyone else. Full device size on purpose - the UI canvas,
+        // the scissors, the font-atlas pick and the glyph emitter are all pinned to
+        // Device.dwWidth/dwHeight (see the pda-3d port plan).
 #if RENDER == R_R4
         rt_SunShaftsMask.create(r2_RT_SunShaftsMask, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsMaskSmoothed.create(r2_RT_SunShaftsMaskSmoothed, w, h, D3DFMT_A8R8G8B8, 1);

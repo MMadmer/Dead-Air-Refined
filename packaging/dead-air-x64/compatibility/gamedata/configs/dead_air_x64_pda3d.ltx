@@ -1,4 +1,4 @@
-; 3D PDA feature data (engine: da_pda3d.cpp, player_hud.cpp; docs/dead-air/pda-3d-port-plan.md).
+; 3D PDA feature data (engine: da_pda3d.cpp, player_hud.cpp; docs/dead-air/pda-1to1-plan.md).
 ; Mechanism in code, bindings here: no section names, level names or mod script names in C++.
 
 [pda3d]
@@ -6,7 +6,7 @@
 animator_section        = pda_show_animator
 ; hands model for the PDA episode (the animation set's native rig); empty = keep current hands
 hands_section           = pda3d_actor_hud
-; boot sequence length (the shader's `a` channel window), seconds
+; boot sequence length (the shader's `a` channel window), seconds - starts at screen-on
 boot_time               = 1.4
 ; m_affects.x pushed here when the battery reports empty (the shader blacks out past 0.41)
 blackout_level          = 0.55
@@ -14,13 +14,32 @@ blackout_level          = 0.55
 power_low_threshold     = 0.05
 ; screen brightness multiplier (m_affects.z)
 brightness              = 1.0
+; the moment of the show motion (0..1 of its length) when the thumb hits the power button:
+; the screen stays dark before it, the boot sequence starts at it (Gunslinger mark_anm_show)
+screen_on_mark          = 0.85
+; interference approach speed, normalized units per second - the screen degrades and
+; recovers as a wave, never as a switch flip (Gunslinger electronics-counter ramp)
+interference_ramp       = 0.15
+; joystick quantizer: refresh period (ms) and cursor deadzone (canvas px per period)
+joystick_update_period  = 100
+joystick_deadzone       = 2
 
 ; Base interference per level, 0..1 (the shader ladder: 0.09 tear / 0.15 wave / 0.27 feed
-; lost / 0.38 shift / 0.41 blackout). Unknown level names are silently skipped; a Lua-side
-; pda.get_interference() combines with these by maximum.
+; lost / 0.38 shift / 0.41 blackout). Unknown level names are silently skipped; the script
+; side (surge / psi storm / jammed levels) combines with these by maximum.
 [pda3d_interference_levels]
 ; l10_red_forest      = 0.20
 ; l13_generators      = 0.30
+
+; Script-side interference sources (dead_air_x64_pda3d.get_interference). Curves are
+; "progress:level" breakpoints over the event's phase 0..1 - the level holds from its
+; breakpoint until the next one. Values tuned to walk the shader ladder as the event
+; escalates: light tear -> travelling wave -> feed lost -> blackout at the peak.
+[pda3d_interference]
+surge_curve             = 0.0:0.12, 0.35:0.20, 0.65:0.30, 0.85:0.45
+psi_storm_curve         = 0.0:0.20, 0.50:0.32, 0.80:0.50
+; constant level on jammed levels (axr_battery.is_jammed - Red Forest, Generators)
+jammed_level            = 0.20
 
 ; Extra hand-animation omfs appended to EVERY player hands model on load
 ; (engine: SkeletonAnimated.cpp + player_hud.cpp; a missing file only logs).
