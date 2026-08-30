@@ -25,6 +25,7 @@
 constexpr size_t VFS_STANDARD_FILE = std::numeric_limits<size_t>::max();
 
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/Content/ContentPin.h"
 constexpr u32 VFS_INDEX_CACHE_MAGIC = 0x31494656;
 constexpr u32 VFS_INDEX_CACHE_VERSION = 5;
 constexpr u32 MAX_VFS_INDEX_ENTRIES = 2'000'000;
@@ -691,6 +692,16 @@ void CLocatorAPI::archive::close()
 #endif
 }
 
+// Just the file name - the content gate matches manifest entries, which carry no path.
+static pcstr archive_file_name(pcstr path)
+{
+    pcstr name = path;
+    for (pcstr it = path; *it; ++it)
+        if (*it == _DELIMITER || *it == '/')
+            name = it + 1;
+    return name;
+}
+
 // The same archive file reaches ProcessArchive under several spellings: `$arch_dir$` expands
 // to `database\` while its aliases expand to `database\.\`, and the duplicate check
 // compared those strings literally. Every archive was therefore opened, memory-mapped and
@@ -719,7 +730,7 @@ static void normalize_archive_key(pcstr path, string_path& out)
     *write = '\0';
 }
 
-void CLocatorAPI::ProcessArchive(pcstr _path)
+void CLocatorAPI::ProcessArchive(pcstr _path, size_t size)
 {
     ZoneScoped;
 
@@ -736,12 +747,47 @@ void CLocatorAPI::ProcessArchive(pcstr _path)
             return;
     }
 
+    // The content gate. Only bundle-shaped names are its business, and it wants the size the
+    // directory scan reported rather than the mapped size, so a truncated file is refused
+    // before A.open() ever touches it.
+    if (!ContentPin::ShouldMount(archive_file_name(_path), size))
+        return;
+
     m_archives.push_back(archive());
     archive& A = m_archives.back();
     A.vfs_idx = m_archives.size() - 1;
     A.path = path;
 
     A.open();
+
+    // Name and size cannot catch a flipped bit inside a 400 MB bundle - corruption there is
+    // size-preserving - and every step from here on answers malformed data with an assert:
+    // GetArchiveChunkSignature via R_ASSERT3 in LoadArchive, and the auto_load read below via
+    // CInifile's own. For content that turns the one realistic corruption into an
+    // unrecoverable boot crash, so a bundle is validated first and its failure is routed to
+    // repair. The order matters: the index is checked before the header is even parsed,
+    // because a corrupt header is just as fatal and just as likely.
+    const bool bundle = ContentPin::IsBundle(archive_file_name(_path));
+    const auto refuse = [&](pcstr reason)
+    {
+        ContentPin::RecordSkipped(archive_file_name(_path), reason);
+        // close() releases the mapping and the handles but not the header - nothing else ever
+        // discards an archive mid-flight, so this is the only path that has to.
+        xr_delete(A.header);
+        A.close();
+        m_archives.pop_back();
+    };
+
+    if (bundle)
+    {
+        u32 chunkSize = 0;
+        u32 chunkCrc = 0;
+        if (!GetArchiveChunkSignature(A, 1, chunkSize, chunkCrc))
+        {
+            refuse("invalid index");
+            return;
+        }
+    }
 
     // Read header
     bool bProcessArchiveLoading = true;
@@ -751,8 +797,21 @@ void CLocatorAPI::ProcessArchive(pcstr _path)
     {
         A.header = xr_new<CInifile>(hdr, "archive_header");
         hdr->close();
+        if (bundle && !A.header->line_exist("header", "auto_load"))
+        {
+            refuse("invalid header");
+            return;
+        }
         bProcessArchiveLoading = A.header->r_bool("header", "auto_load");
     }
+    else if (bundle)
+    {
+        // Every bundle is written by the packaging script with a header chunk. Its absence
+        // means the file is not the bundle its name claims to be.
+        refuse("invalid header");
+        return;
+    }
+
     if (bProcessArchiveLoading || strstr(Core.Params, "-auto_load_arch"))
         LoadArchive(A);
     else
@@ -846,7 +905,7 @@ void CLocatorAPI::ProcessOne(pcstr path, const _finddata_t& entry)
     else
     {
         if (strext(N) && (0 == strncmp(strext(N), ".db", 3) || 0 == strncmp(strext(N), ".xdb", 4)))
-            ProcessArchive(N);
+            ProcessArchive(N, entry.size);
         else
             Register(N, VFS_STANDARD_FILE, 0, 0, entry.size, entry.size, (u32)entry.time_write);
     }
@@ -1154,6 +1213,9 @@ void CLocatorAPI::_initialize(u32 flags, pcstr target_folder, pcstr fs_name)
     t.Start();
     Log("Initializing File System...");
     const size_t M1 = Memory.mem_usage();
+
+    // Before a single archive is opened: this decides which content bundles may be mounted.
+    ContentPin::Load(Core.ApplicationPath);
 
     m_Flags.set(flags, true);
 

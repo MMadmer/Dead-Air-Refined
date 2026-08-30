@@ -36,6 +36,7 @@
 #include "ui/UIOptConCom.h"
 #include "UIGameSP.h"
 #include "ui/UIActorMenu.h"
+#include "ui/ContentService.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/ui_styles.h"
 #include "zone_effector.h"
@@ -945,6 +946,25 @@ public:
         FlushLog();
         Msg("* Log file has been saved successfully!");
     }
+};
+
+// The content commands are read-only or repair-only by design. There is deliberately nothing
+// here that can skip content or mark a broken installation as good: content is not optional,
+// so a switch that pretended otherwise would only ever produce a crash further downstream.
+class CCC_ContentVerify : public IConsole_Command
+{
+public:
+    CCC_ContentVerify(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    virtual void Execute(LPCSTR) { ContentService::ForceVerify(); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "re-hash every content bundle and report the result"); }
+};
+
+class CCC_ContentState : public IConsole_Command
+{
+public:
+    CCC_ContentState(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    virtual void Execute(LPCSTR) { ContentService::LogState(); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "dump the content installation state to the log"); }
 };
 
 class CCC_ClearLog : public IConsole_Command
@@ -2490,6 +2510,9 @@ void CCC_RegisterCommands()
     CMD1(CCC_LoadLastSave, "load_last_save"); // load last saved game from ...
     CMD2(CCC_CameraRotate, "cam_yaw_rotate", &ConfigureActorCameraYawRotation);
     CMD2(CCC_CameraRotate, "cam_pitch_rotate", &ConfigureActorCameraPitchRotation);
+
+    CMD1(CCC_ContentVerify, "dar_content_verify");
+    CMD1(CCC_ContentState, "dar_content_state");
 
     CMD1(CCC_FlushLog, "flush"); // flush log
     CMD1(CCC_ClearLog, "clear_log");

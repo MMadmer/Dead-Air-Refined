@@ -119,6 +119,14 @@ target_sources_grouped(
 
 target_sources_grouped(
     TARGET xrCore
+    NAME "Content"
+    FILES
+    Content/ContentPin.cpp
+    Content/ContentPin.h
+)
+
+target_sources_grouped(
+    TARGET xrCore
     NAME "Crypto"
     FILES
     Crypto/trivial_encryptor.cpp
@@ -478,6 +486,7 @@ target_link_libraries(xrCore
     SDL2::SDL2
 
     PRIVATE
+    xrContentSync
     xrMiscMath
     ZLIB::ZLIBSTATIC
     MINIZIP::minizipstatic

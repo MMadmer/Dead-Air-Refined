@@ -2490,8 +2490,12 @@ target_sources(xrGame PRIVATE
     "${CMAKE_SOURCE_DIR}/Externals/GameSpy/src/GameSpy/md5c.c"
     ui/BugReportService.cpp
     ui/BugReportService.h
+    ui/ContentService.cpp
+    ui/ContentService.h
     ui/UIBugReportWnd.cpp
     ui/UIBugReportWnd.h
+    ui/UIContentWnd.cpp
+    ui/UIContentWnd.h
     ui/UIMajorUpdateWnd.cpp
     ui/UIMajorUpdateWnd.h
     ui/UIUpdateWnd.cpp
@@ -2515,6 +2519,7 @@ target_include_directories(xrGame
 
 target_link_libraries(xrGame
     PRIVATE
+    xrContentSync
     xrCore
     xrEngine
     xrMaterialSystem

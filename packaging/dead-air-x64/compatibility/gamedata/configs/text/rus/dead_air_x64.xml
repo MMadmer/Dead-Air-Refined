@@ -157,4 +157,19 @@
     <string id="ui_mm_cursor_sens_hint">
         <text>Скорость курсора в меню и инвентаре. 1.00 — как у системного курсора.</text>
     </string>
+    <string id="st_content_caption">
+        <text>Контент мода неполный</text>
+    </string>
+    <string id="st_content_message">
+        <text>Часть игрового контента отсутствует или повреждена, поэтому запускать игру нельзя.\nПереустановите мод или дождитесь встроенного восстановления контента.\n\nПодробности ниже и в файле журнала.</text>
+    </string>
+    <string id="st_content_message_recovery">
+        <text>Установка не может сказать, какой контент ей нужен: файл манифеста отсутствует\nили повреждён. Переустановите мод поверх текущей папки.\n\nПодробности ниже и в файле журнала.</text>
+    </string>
+    <string id="st_content_exit">
+        <text>Выйти из игры</text>
+    </string>
+    <string id="ui_mm_content_incomplete">
+        <text>Контент мода неполный: играть нельзя</text>
+    </string>
 </string_table>

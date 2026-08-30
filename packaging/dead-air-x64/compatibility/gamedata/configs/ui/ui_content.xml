@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <background x="242" y="189" width="540" height="390" stretch="1">
+            <texture>ui_frame_error</texture>
+        </background>
+        <caption x="268" y="208" width="488" height="32">
+            <text font="graffiti22" align="c" vert_align="c">st_content_caption</text>
+        </caption>
+        <message x="274" y="246" width="476" height="86">
+            <text font="letterica16" align="c" vert_align="t" complex_mode="1"/>
+        </message>
+        <problems x="274" y="340" width="476" height="150" always_show_scroll="1" vert_interval="4"
+                  right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
+        <problems_text x="0" y="0" width="448" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+        </problems_text>
+        <exit x="437" y="520" width="150" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_content_exit</text>
+        </exit>
+    </main>
+</w>

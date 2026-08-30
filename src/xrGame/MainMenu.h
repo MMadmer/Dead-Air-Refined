@@ -7,6 +7,7 @@ class CUIMessageBoxEx;
 class CUIBugReportWnd;
 class CUIUpdateWnd;
 class CUIMajorUpdateWnd;
+class CUIContentWnd;
 class CGameSpy_HTTP;
 class CGameSpy_Full;
 
@@ -122,6 +123,8 @@ protected:
     CUIBugReportWnd* m_bugReportDialog{};
     CUIUpdateWnd* m_updateDialog{};
     CUIMajorUpdateWnd* m_majorUpdateDialog{};
+    CUIContentWnd* m_contentDialog{};
+    bool m_contentDialogFailed{};
     bool m_crashReportChecked{};
     bool ReloadUI();
 
@@ -214,9 +217,11 @@ private:
     CUIMessageBoxEx* EnsureErrorDialog(EErrorDlg type);
     bool EnsureBugReportDialog();
     bool CheckCrashReportDialog();
+    bool CheckContentDialog();
     void CheckUpdateDialog();
     void DrawProductVersion();
     void DrawModOptOutNotice();
+    void DrawContentNotice();
     DECLARE_SCRIPT_REGISTER_FUNCTION(CDialogHolder, CUIDialogWnd, CUIWindow);
 };
 

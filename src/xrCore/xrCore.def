@@ -686,7 +686,7 @@ EXPORTS
     ?PreviousSibling@TiXmlNode@@QEBAPEBV1@XZ @685
     ?PrintBuildInfo@xrCore@@AEAAXXZ @686
     ?Process@BasicPostProcessAnimator@@UEAAHMAEAUSPPInfo@@@Z @687
-    ?ProcessArchive@CLocatorAPI@@AEAAXPEBD@Z @688
+    ?ProcessArchive@CLocatorAPI@@AEAAXPEBD_K@Z @688
     ?ProcessOne@CLocatorAPI@@AEAAXPEBDAEBU_finddata64i32_t@@@Z @689
     ?ProcessingFailure@xrDebug@@SA_NXZ @690
     ?PushTask@TaskManager@@SAXAEAVTask@@@Z @691
@@ -1513,3 +1513,7 @@ EXPORTS
     DXTraceA @1513
     DXTraceW @1514
     ?SetSavePath@CrashReporter@@YAXPEBD@Z @786
+    ?ManifestLoaded@ContentPin@@YA_NXZ @1515
+    ?Skipped@ContentPin@@YAAEBV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@XZ @1516
+    ?MetaDirectory@ContentPin@@YAPEBDXZ @1517
+    ?SkipReasons@ContentPin@@YAAEBV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@XZ @1518

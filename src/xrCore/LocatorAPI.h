@@ -167,7 +167,9 @@ private:
 
     const file* RegisterExternal(pcstr name);
     const file* Register(pcstr name, size_t vfs, u32 crc, u32 ptr, u32 size_real, u32 size_compressed, u32 modif);
-    void ProcessArchive(pcstr path);
+    // `size` is what the directory scan reported, threaded through so the content gate can
+    // refuse a truncated bundle before the file is opened and mapped.
+    void ProcessArchive(pcstr path, size_t size);
     void ProcessOne(pcstr path, const _finddata_t& entry);
     bool Recurse(pcstr path);
 

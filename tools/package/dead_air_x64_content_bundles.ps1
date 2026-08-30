@@ -252,6 +252,14 @@ level_ver = $contentDigest
     if ($info.Length -gt $layout.Shard.max_mb * 1MB) {
         throw "Bundle $($info.Name) is $([math]::Round($info.Length/1MB)) MB, above the $($layout.Shard.max_mb) MB ceiling. Split its directories across shards in groups.ltx."
     }
+    # The engine's mount gate compares against _finddata_t::size, which is 32 bits wide on
+    # Windows and truncates silently. A 4 GiB bundle would present a plausible wrong size and
+    # be refused for a reason nobody could diagnose. The shard ceiling above is far lower, so
+    # this can only fire if someone raises max_mb past all sense - which is exactly when it
+    # needs to fire.
+    if ($info.Length -ge 4GB) {
+        throw "Bundle $($info.Name) is $([math]::Round($info.Length/1GB, 2)) GB. Bundles must stay below 4 GiB: the engine reads archive sizes through a 32-bit field."
+    }
     $bundles.Add([pscustomobject]@{
         Name    = $info.Name
         Hash    = Get-Sha256 -Path $info.FullName
@@ -281,7 +289,12 @@ if ($DisjointFrom) {
 }
 
 # ---- manifest --------------------------------------------------------------------------------
-$sorted = $bundles | Sort-Object Name
+# Ordinal, not Sort-Object: the engine recomputes this content-id with std::string comparison and
+# a culture-aware sort disagrees with that on underscores and digits. The two only have to differ
+# once for every installed player to be told their manifest was tampered with.
+$sorted = [Linq.Enumerable]::ToArray(
+    [Linq.Enumerable]::OrderBy([object[]]$bundles, [Func[object, string]] { param($b) $b.Name },
+        [StringComparer]::Ordinal))
 $idInput = [Text.StringBuilder]::new()
 foreach ($b in $sorted) { [void]$idInput.Append($b.Name).Append("`n").Append($b.Hash).Append("`n") }
 $contentId = [Convert]::ToHexString(

@@ -5,6 +5,7 @@
 #include "StackTrace.h"
 #include "xrCore/ProductVersion.h"
 #include "xrCore/LocatorAPI.h"
+#include "xrCore/Content/ContentPin.h"
 #include "xrCore/_math.h"
 #include "xrCore/log.h"
 #include "xrCore/xrDebug.h"
@@ -22,6 +23,7 @@
 #include <atomic>
 #include <charconv>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -154,6 +156,14 @@ struct ContentSnapshot
     std::vector<ArchiveInfo> archives;
     std::vector<LooseFileInfo> looseFiles;
     u64 looseBytes{};
+
+    // The content bundle picture. A report from an installation whose bundles were refused or
+    // whose latch is set describes a completely different failure from the same crash on a
+    // healthy install, and without these three fields the two are indistinguishable.
+    xr_string contentId;
+    std::vector<xr_string> skippedBundles;
+    bool contentManifest{};
+    bool contentIncomplete{};
 };
 
 struct Attachment
@@ -1680,11 +1690,45 @@ bool should_hash_loose_file(const std::filesystem::path& path, u64 size)
     return std::ranges::find(importantExtensions, extension) != importantExtensions.end();
 }
 
+// Deliberately a line scan rather than the full manifest parser: this runs while the process
+// is already dying, so it reads the two facts the triage needs and allocates almost nothing.
+void read_content_metadata(ContentSnapshot& snapshot)
+{
+    std::filesystem::path meta(ContentPin::MetaDirectory());
+
+    std::error_code error;
+    snapshot.contentIncomplete = std::filesystem::exists(meta / "content-incomplete.txt", error) && !error;
+
+    std::ifstream input(meta / "content-manifest.txt", std::ios::binary);
+    if (!input)
+        return;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
+            line.pop_back();
+        constexpr std::string_view prefix = "content-id=";
+        if (line.starts_with(prefix))
+        {
+            snapshot.contentId = line.substr(prefix.size()).c_str();
+            return;
+        }
+        if (line == "[bundles]")
+            return;
+    }
+}
+
 ContentSnapshot capture_content_snapshot(const Sanitizer& sanitizer)
 {
     ContentSnapshot snapshot;
     if (!xr_FS)
         return snapshot;
+
+    snapshot.contentManifest = ContentPin::ManifestLoaded();
+    for (const shared_str& skipped : ContentPin::Skipped())
+        snapshot.skippedBundles.push_back(sanitizer.Apply(xr_string(skipped.c_str()), false));
+
+    read_content_metadata(snapshot);
 
     snapshot.archives.reserve(FS.m_archives.size());
     for (const CLocatorAPI::archive& archive : FS.m_archives)
@@ -2090,6 +2134,19 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
             append_json_string(json, file.sha256);
         }
         json.push_back('}');
+    }
+    json.append("],\"content_id\":");
+    append_json_string(json, content.contentId);
+    json.append(",\"content_manifest\":");
+    json.append(content.contentManifest ? "true" : "false");
+    json.append(",\"content_incomplete\":");
+    json.append(content.contentIncomplete ? "true" : "false");
+    json.append(",\"skipped_bundles\":[");
+    for (size_t index = 0; index != content.skippedBundles.size(); ++index)
+    {
+        if (index)
+            json.push_back(',');
+        append_json_string(json, content.skippedBundles[index]);
     }
     json.append("]}}");
     return json;

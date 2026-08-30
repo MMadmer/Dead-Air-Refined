@@ -6,6 +6,8 @@
 #include "ui/UIUpdateWnd.h"
 #include "ui/UIMajorUpdateWnd.h"
 #include "ui/UpdateService.h"
+#include "ui/UIContentWnd.h"
+#include "ui/ContentService.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/x_ray.h"
@@ -144,6 +146,7 @@ CMainMenu::~CMainMenu()
     Device.seqFrame.Remove(this);
 
     UpdateService::Shutdown();
+    ContentService::Shutdown();
 
     xr_delete(g_btnHint);
     xr_delete(g_statHint);
@@ -152,6 +155,7 @@ CMainMenu::~CMainMenu()
     xr_delete(m_bugReportDialog);
     xr_delete(m_updateDialog);
     xr_delete(m_majorUpdateDialog);
+    xr_delete(m_contentDialog);
 
     xr_delete(m_account_mngr);
     xr_delete(m_login_mngr);
@@ -192,6 +196,7 @@ void CMainMenu::Activate(bool bActivate)
             return;
 
         UpdateService::StartCheck();
+        ContentService::StartVerify();
 
         m_Flags.set(flRestoreConsole, Console->bVisible);
 
@@ -601,7 +606,9 @@ void CMainMenu::OnFrame()
 
     if (IsActive())
     {
-        if (!CheckCrashReportDialog())
+        // Content first: an installation that cannot load a level has nothing useful to say
+        // about updates or crash reports until that is fixed.
+        if (!CheckContentDialog() && !CheckCrashReportDialog())
         {
             CheckUpdateDialog();
             CheckForErrorDlg();
@@ -788,6 +795,51 @@ bool CMainMenu::CheckCrashReportDialog()
     return true;
 }
 
+bool CMainMenu::CheckContentDialog()
+{
+    if (!ContentService::PlayBlocked())
+    {
+        // The block can clear under the dialog - the verification pass finishes and finds the
+        // installation intact. This window has no Escape and one button, which quits the game,
+        // so leaving it up would trap a player whose problem has just gone away.
+        if (m_contentDialog && m_contentDialog->IsShown())
+        {
+            Msg("* Content notification dismissed - the installation verified clean");
+            m_contentDialog->HideDialog();
+        }
+        return false;
+    }
+
+    if (TopInputReceiver() != m_startDialog)
+        return m_contentDialog && m_contentDialog->IsShown();
+
+    if (!m_contentDialog)
+    {
+        // One attempt. Without the latch a failed Init() is retried, and logged, on every
+        // frame for the rest of the session.
+        if (m_contentDialogFailed)
+            return false;
+
+        m_contentDialog = xr_new<CUIContentWnd>();
+        if (!m_contentDialog->Init())
+        {
+            xr_delete(m_contentDialog);
+            m_contentDialogFailed = true;
+            // The banner and the play gate still hold, so a failed dialog degrades the
+            // message, not the protection.
+            Msg("! Failed to initialize the content window");
+            return false;
+        }
+    }
+
+    if (!m_contentDialog->IsShown())
+    {
+        Msg("* Content notification shown: %s", ContentService::BlockReason().c_str());
+        m_contentDialog->ShowDialog(true);
+    }
+    return true;
+}
+
 void CMainMenu::CheckUpdateDialog()
 {
     const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
@@ -851,6 +903,7 @@ void CMainMenu::DrawProductVersion()
     font->OutI(0.97f, 0.927f, "%s v%s", DeadAirRefined::ProductName, DeadAirRefined::Version);
 
     DrawModOptOutNotice();
+    DrawContentNotice();
 }
 
 void CMainMenu::DrawModOptOutNotice()
@@ -886,6 +939,24 @@ void CMainMenu::DrawModOptOutNotice()
     font->SetColor(color_rgba(220, 60, 50, 255));
     font->OutI(0.0f, 0.965f, "%s %s", CStringTable().translate("ui_mm_auto_update_disabled").c_str(),
         cached_names.c_str());
+    font->SetAligment(CGameFont::alRight);
+}
+
+void CMainMenu::DrawContentNotice()
+{
+    if (!ContentService::PlayBlocked())
+        return;
+
+    CGameFont* font = UI().Font().pFontGraffiti19Russian;
+    if (!font)
+        return;
+
+    // Above the version line, not below it. OutI maps y from [-1,1] onto the full height, so
+    // the three bottom lines sit 0.927 / 0.965 for version and mod opt-out; a fourth wedged
+    // between them would overlap the version glyph by most of its height. This one goes above.
+    font->SetAligment(CGameFont::alCenter);
+    font->SetColor(color_rgba(220, 60, 50, 255));
+    font->OutI(0.0f, 0.870f, "%s", CStringTable().translate("ui_mm_content_incomplete").c_str());
     font->SetAligment(CGameFont::alRight);
 }
 

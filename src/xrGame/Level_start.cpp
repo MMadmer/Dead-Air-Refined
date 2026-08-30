@@ -14,6 +14,7 @@
 #include "saved_game_wrapper.h"
 #include "xrCore/Debug/CrashReport.h"
 #include "xrNetServer/NET_Messages.h"
+#include "ui/ContentService.h"
 
 int g_cl_save_demo = 0;
 
@@ -104,6 +105,24 @@ shared_str level_name(const shared_str& server_options);
 bool CLevel::net_start1()
 {
     ZoneScoped;
+
+    // The content gate. It sits on the loading chain rather than on the menu buttons because
+    // this is the single point every route into a level passes through - `start`, `-start`,
+    // new game, load, level change, demo playback, and the console commands user.ltx runs at
+    // startup. With content unmounted a level load is a missing-asset crash, so this is a
+    // crash guard, not a policy switch.
+    //
+    // It refuses the way every other start failure does - by clearing net_start_result_total
+    // and letting net_start6 tear down. Returning out of net_Start instead would leave the
+    // process with the menu already off (IGame_Persistent::OnEvent), a level object created
+    // and nothing to destroy it.
+    if (ContentService::PlayBlocked())
+    {
+        Msg("! Cannot start a level: %s", ContentService::BlockReason().c_str());
+        Msg("! Run `dar_content_verify` after repairing the installation.");
+        net_start_result_total = FALSE;
+        return true;
+    }
 
     // Start client and server if need it
     if (m_caServerOptions.size())
