@@ -202,6 +202,16 @@ void CDetailManager::Load()
     }
     m_fs->close();
 
+    // The trample-rustle grass test classifies details by height (see k_veg_min_height).
+    // Dump what this level actually ships so the threshold can be checked against real
+    // models rather than guessed.
+    if (strstr(Core.Params, "-wvdbg"))
+        for (u32 i = 0; i < objects.size(); ++i)
+            Msg("* [wind-veg] detail[%u] model height %.3f m, scale %.2f-%.2f -> world %.2f-%.2f", i,
+                objects[i]->bv_bb.vMax.y - objects[i]->bv_bb.vMin.y, objects[i]->m_fMinScale,
+                objects[i]->m_fMaxScale, (objects[i]->bv_bb.vMax.y - objects[i]->bv_bb.vMin.y) * objects[i]->m_fMinScale,
+                (objects[i]->bv_bb.vMax.y - objects[i]->bv_bb.vMin.y) * objects[i]->m_fMaxScale);
+
     // Get pointer to database (slots)
     IReader* m_slots = dtFS->open_chunk(2);
     dtSlots = (DetailSlot*)m_slots->pointer();
@@ -599,6 +609,17 @@ void CDetailManager::WaitForCalc()
         std::this_thread::yield();
 }
 
+namespace
+{
+// How far around a presser to look for a tuft: a boot's reach, matching the press motor's
+// own footprint (Actor.cpp).
+constexpr float k_veg_probe_r = 0.55f;
+// Minimum WORLD height of a detail instance for it to count as something you brush through.
+// Below this it is ground clutter - gravel, twigs, moss patches - which a road is full of
+// and which must not rustle. Picked off the level's own model heights (-wvdbg dumps them).
+constexpr float k_veg_min_height = 0.25f;
+} // namespace
+
 void CDetailManager::DispatchMTCalc()
 {
 #ifndef _EDITOR
@@ -631,6 +652,12 @@ void CDetailManager::DispatchMTCalc()
         // grass in the detail cache under the pressing entity. The sound layer
         // (WindVegSound) reads it for the walking-through-grass rustle - so pavement and
         // bare dirt stay silent. Same task, cache coherent; a float write is benign.
+        //
+        // The first cut asked the SLOT ("does this 2x2 m cell hold any details at all") and
+        // was wrong twice over, reported from the field as rustle while walking a bare road:
+        // a cell that big straddles the verge, and details are not only grass - gravel and
+        // dry litter are details too. So walk the actual tufts near the feet and judge each
+        // by its own height: what a boot brushes through is TALL, ground clutter is flat.
         if (g_pGamePersistent)
         {
             auto& env = g_pGamePersistent->Environment();
@@ -638,15 +665,51 @@ void CDetailManager::DispatchMTCalc()
             {
                 if (!m.used || m.type != CEnvironment::EWindMotor::press)
                     continue;
-                const int mx = iFloor(m.pos.x / dm_slot_size + .5f) - s_x;
-                const int mz = iFloor(m.pos.z / dm_slot_size + .5f) - s_z;
-                if (abs(mx) >= int(dm_size) || abs(mz) >= int(dm_size))
+
+                m.veg = 0.f;
+                // Only the slots the search disc actually touches (it is smaller than a cell,
+                // so at most four), each clamped into the cache the same way as before.
+                const int lo_x = iFloor((m.pos.x - k_veg_probe_r) / dm_slot_size + .5f) - s_x;
+                const int hi_x = iFloor((m.pos.x + k_veg_probe_r) / dm_slot_size + .5f) - s_x;
+                const int lo_z = iFloor((m.pos.z - k_veg_probe_r) / dm_slot_size + .5f) - s_z;
+                const int hi_z = iFloor((m.pos.z + k_veg_probe_r) / dm_slot_size + .5f) - s_z;
+                for (int cz = lo_z; cz <= hi_z && m.veg == 0.f; ++cz)
                 {
-                    m.veg = 0.f;
-                    continue;
+                    for (int cx = lo_x; cx <= hi_x && m.veg == 0.f; ++cx)
+                    {
+                        if (abs(cx) >= int(dm_size) || abs(cz) >= int(dm_size))
+                            continue;
+                        Slot* s = cache_Query(cx, cz);
+                        // A slot still queued for decompression carries no items yet.
+                        if (!s || s->empty || s->type != stReady)
+                            continue;
+                        for (const auto& part : s->G)
+                        {
+                            if (part.items.empty() || part.id >= objects.size())
+                                continue;
+                            // Model height scales with the instance, so this is the tuft's
+                            // real height in the world.
+                            const CDetail* obj = objects[part.id];
+                            if (!obj)
+                                continue;
+                            const float model_h = obj->bv_bb.vMax.y - obj->bv_bb.vMin.y;
+                            for (const SlotItem* it : part.items)
+                            {
+                                if (!it || model_h * it->scale < k_veg_min_height)
+                                    continue;
+                                const float dx = it->mRotY.c.x - m.pos.x;
+                                const float dz = it->mRotY.c.z - m.pos.z;
+                                if (dx * dx + dz * dz <= k_veg_probe_r * k_veg_probe_r)
+                                {
+                                    m.veg = 1.f;
+                                    break;
+                                }
+                            }
+                            if (m.veg > 0.f)
+                                break;
+                        }
+                    }
                 }
-                Slot* s = cache_Query(mx, mz);
-                m.veg = (s && !s->empty) ? 1.f : 0.f;
             }
         }
 

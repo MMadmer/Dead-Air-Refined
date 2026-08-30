@@ -261,14 +261,15 @@ void CEffect_WindVeg::OnFrame()
             // canopy rustling twenty metres away, and a sprint clearly above it. Speed
             // 0.6 m/s is the "actually moving" floor.
             const float k = clampr((m.speed - 0.6f) / 4.4f, 0.f, 1.f);
-            v.snd.set_volume(0.22f + 0.26f * k);
+            const float vol = 0.15f + 0.20f * k;
+            v.snd.set_volume(vol);
             v.snd.set_frequency(1.10f * ::Random.randF(0.94f, 1.06f));
             v.snd.set_range(1.f, 12.f);
             const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 0.6f;
             v.busy_until = Device.fTimeGlobal + len * 0.55f; // overlap: continuous while moving
             m_press_cool[mi] = Device.fTimeGlobal + ::Random.randF(0.28f, 0.45f);
             if (dbg)
-                Msg("* [wind-veg] press PLAY vol=%.2f", 0.28f + 0.34f * k);
+                Msg("* [wind-veg] press PLAY vol=%.2f", vol);
             break;
         }
     }

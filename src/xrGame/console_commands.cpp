@@ -2419,10 +2419,15 @@ public:
     }
 };
 
-class CCC_CameraYawRotate final : public IConsole_Command
+// Scripted camera rotation, for QA runs on a headless rig where there is no mouse: turn or
+// look up/down at a fixed rate. Pitch is clamped to the camera's own limits.
+class CCC_CameraRotate : public IConsole_Command
 {
+    using rotate_fn = void (*)(float, float);
+    rotate_fn m_apply;
+
 public:
-    explicit CCC_CameraYawRotate(LPCSTR name) : IConsole_Command(name) {}
+    CCC_CameraRotate(LPCSTR name, rotate_fn apply) : IConsole_Command(name), m_apply(apply) {}
 
     void Execute(LPCSTR args) override
     {
@@ -2435,7 +2440,7 @@ public:
             return;
         }
 
-        ConfigureActorCameraYawRotation(speed, duration);
+        m_apply(speed, duration);
         Msg("* %s: speed=%.3f deg/s, duration=%.3f s", cName, speed, duration);
     }
 
@@ -2475,7 +2480,8 @@ void CCC_RegisterCommands()
     CMD2(CCC_ALifeSave, "save_silent", false); // save game without UI messages
     CMD1(CCC_ALifeLoadFrom, "load"); // load game from ...
     CMD1(CCC_LoadLastSave, "load_last_save"); // load last saved game from ...
-    CMD1(CCC_CameraYawRotate, "cam_yaw_rotate");
+    CMD2(CCC_CameraRotate, "cam_yaw_rotate", &ConfigureActorCameraYawRotation);
+    CMD2(CCC_CameraRotate, "cam_pitch_rotate", &ConfigureActorCameraPitchRotation);
 
     CMD1(CCC_FlushLog, "flush"); // flush log
     CMD1(CCC_ClearLog, "clear_log");

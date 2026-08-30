@@ -36,6 +36,7 @@ struct CameraYawRotationState
 };
 
 CameraYawRotationState cameraYawRotation;
+CameraYawRotationState cameraPitchRotation;
 
 float ConsumeCameraRotation(CameraYawRotationState& state, float dt)
 {
@@ -54,6 +55,7 @@ float ConsumeCameraRotation(CameraYawRotationState& state, float dt)
 }
 
 float ConsumeCameraYawRotation(float dt) { return ConsumeCameraRotation(cameraYawRotation, dt); }
+float ConsumeCameraPitchRotation(float dt) { return ConsumeCameraRotation(cameraPitchRotation, dt); }
 
 void ConfigureCameraRotation(CameraYawRotationState& state, float speedDegreesPerSecond, float durationSeconds)
 {
@@ -66,6 +68,11 @@ void ConfigureCameraRotation(CameraYawRotationState& state, float speedDegreesPe
 void ConfigureActorCameraYawRotation(float speedDegreesPerSecond, float durationSeconds)
 {
     ConfigureCameraRotation(cameraYawRotation, speedDegreesPerSecond, durationSeconds);
+}
+
+void ConfigureActorCameraPitchRotation(float speedDegreesPerSecond, float durationSeconds)
+{
+    ConfigureCameraRotation(cameraPitchRotation, speedDegreesPerSecond, durationSeconds);
 }
 
 void CActor::cam_Set(EActorCameras style)
@@ -339,6 +346,26 @@ void CActor::cam_Update(float dt, float fFOV)
         const float yawDelta = ConsumeCameraYawRotation(dt);
         if (!fis_zero(yawDelta))
             cam_Active()->yaw += yawDelta;
+
+        // Pitch, unlike yaw, has hard limits that the camera enforces on mouse input; a
+        // scripted request must respect them or the view flips past vertical. lim_pitch is
+        // authored data and is NOT guaranteed to be (low, high) - order the pair here, or a
+        // reversed one turns clamping into "pin to a constant" and every request lands on
+        // the same angle. Both zero means the camera runs unclamped; keep it upright anyway.
+        const float pitchDelta = ConsumeCameraPitchRotation(dt);
+        if (!fis_zero(pitchDelta))
+        {
+            CCameraBase* C = cam_Active();
+            constexpr float upright = PI_DIV_2 - 0.05f;
+            float lo = std::min(C->lim_pitch.x, C->lim_pitch.y);
+            float hi = std::max(C->lim_pitch.x, C->lim_pitch.y);
+            if (fis_zero(lo) && fis_zero(hi))
+            {
+                lo = -upright;
+                hi = upright;
+            }
+            C->pitch = clampr(C->pitch + pitchDelta, lo, hi);
+        }
     }
 
     if (this == Level().CurrentViewEntity())
