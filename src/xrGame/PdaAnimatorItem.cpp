@@ -5,6 +5,7 @@
 #include "Level.h"
 #include "UIGameCustom.h"
 #include "UIGameSP.h"
+#include "player_hud.h"
 #include "ui/UIPdaWnd.h"
 
 void CPdaAnimatorItem::attach_ui()
@@ -67,7 +68,16 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
         if (IsZoomed())
             OnZoomOut();
         break;
-    case eHidden: detach_ui(); break;
+    case eHidden:
+        detach_ui();
+        // Hand the DA hands back BEFORE the previous weapon starts its show (the actor tick
+        // attaches it right after the slot switch lands). Detach self first so the hands
+        // reload touches no attached item; the weapon then binds to the restored rig, where
+        // its MotionIDs resolved originally. Without this the weapon raised on the pda rig.
+        if (g_player_hud)
+            g_player_hud->detach_item(this);
+        da_pda3d::swap_hands_out();
+        break;
     default: break;
     }
 }
@@ -75,9 +85,19 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
 void CPdaAnimatorItem::net_Destroy()
 {
     // Safety net for every abrupt end - death with the device up, a script releasing the
-    // object outright, level change. Without this the presenter flag stayed raised forever:
-    // hands stuck on the pda rig, the 2D dialog suppressed, every toggle swallowed.
-    detach_ui();
+    // object outright. Without this the presenter flag stayed raised forever: hands stuck
+    // on the pda rig, the 2D dialog suppressed, every toggle swallowed. During level
+    // teardown (net_Stop clears bReady before remove_objects) the UI widgets are already
+    // half-dead - poking Show(false) into the map window crashed on quit - so only the
+    // flags are cleared there; the whole UI goes down right after us anyway.
+    if (g_pGameLevel && Level().bReady)
+        detach_ui();
+    else
+    {
+        m_ui_attached = false;
+        da_pda3d::set_presenter_active(false);
+        da_pda3d::set_ui_focused(false);
+    }
     inherited::net_Destroy();
 }
 

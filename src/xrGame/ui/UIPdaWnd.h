@@ -63,6 +63,11 @@ public:
     virtual void Draw();
     virtual void Update();
     virtual void Show(bool status);
+    // 3D PDA: with the presenter up these ARE the toggle. The P key's Lua handler calls
+    // ShowDialog straight on this window, which is already shown render-only in that
+    // state - without the override the call was a silent no-op and the key went dead.
+    void ShowDialog(bool bDoHideIndicators) override;
+    void HideDialog() override;
     virtual bool OnMouseAction(float x, float y, EUIMessages mouse_action)
     {
         CUIDialogWnd::OnMouseAction(x, y, mouse_action);

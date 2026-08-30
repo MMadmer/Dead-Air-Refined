@@ -219,6 +219,31 @@ void CUIPdaWnd::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
     };
 }
 
+void CUIPdaWnd::ShowDialog(bool bDoHideIndicators)
+{
+    // The device is up: any "open the PDA" call is the toggle - lower it from the face,
+    // or put it away. The fullscreen path would either no-op (window already shown
+    // render-only) or assert in StartMenu.
+    if (da_pda3d::presenter_active())
+    {
+        da_pda3d::toggle();
+        return;
+    }
+    inherited::ShowDialog(bDoHideIndicators);
+}
+
+void CUIPdaWnd::HideDialog()
+{
+    // Tutorials and scripts hide the dialog directly; with the device up that means
+    // holstering it (the window itself stays owned by the render list until eHidden).
+    if (da_pda3d::presenter_active())
+    {
+        da_pda3d::request_deactivate();
+        return;
+    }
+    inherited::HideDialog();
+}
+
 void CUIPdaWnd::Show(bool status)
 {
     inherited::Show(status);
@@ -534,11 +559,13 @@ void RearrangeTabButtons(CUITabControl* pTab)
 
 bool CUIPdaWnd::OnKeyboardAction(int dik, EUIMessages keyboard_action)
 {
-    // 3D PDA, focused stage: ESC only lowers the device from the face (the item consumes
-    // the request in its UpdateCL); the dialog itself must not leave the stack here - the
-    // zoom-out path detaches it in the right order.
-    if (da_pda3d::presenter_active() && da_pda3d::ui_focused() &&
-        keyboard_action == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik))
+    // 3D PDA, focused stage: ESC and every PDA-opening bind (P/M/contacts) only lower the
+    // device from the face (the item consumes the request in its UpdateCL); the dialog
+    // itself must not leave the stack here - the zoom-out path detaches it in the right
+    // order. In this stage the window owns the input, so this is the ONLY place those
+    // keys can reach.
+    if (da_pda3d::presenter_active() && da_pda3d::ui_focused() && keyboard_action == WINDOW_KEY_PRESSED &&
+        (IsBinded(kQUIT, dik) || IsBinded(kACTIVE_JOBS, dik) || IsBinded(kMAP, dik) || IsBinded(kCONTACTS, dik)))
     {
         da_pda3d::request_unzoom();
         return true;

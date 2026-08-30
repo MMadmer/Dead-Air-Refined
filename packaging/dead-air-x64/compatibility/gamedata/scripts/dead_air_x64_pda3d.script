@@ -35,6 +35,14 @@ function _G.da_pda3d_activate()
         spawn_at = time_global()
         return true
     end
+    -- the player switched slots away by hand (weapon key with the device up): the item is
+    -- hidden but still ours - raise it back instead of swallowing the press
+    if state == 3 and db.actor and db.actor:item_in_slot(13) and db.actor:active_slot() ~= 13 then
+        db.actor:activate_slot(13)
+        state = 2
+        spawn_at = time_global()
+        return true
+    end
     if state ~= 0 then
         return true -- raise already in flight; swallow the repeat
     end
@@ -43,6 +51,16 @@ function _G.da_pda3d_activate()
         return false
     end
     last_slot = db.actor:active_slot() or 0
+    -- an item already sitting in the slot (save restore, or a leftover from an interrupted
+    -- teardown): raise IT - spawning a second one on top would wedge the slot
+    local left = db.actor:item_in_slot(13)
+    if left then
+        item_id = left:id()
+        db.actor:activate_slot(13)
+        state = 2
+        spawn_at = time_global()
+        return true
+    end
     alife():create(sect, db.actor:position(), db.actor:level_vertex_id(),
         db.actor:game_vertex_id(), db.actor:id())
     state = 1
@@ -98,7 +116,22 @@ local function tick()
     elseif state == 2 then
         if db.actor:active_slot() == 13 then
             state = 3
+            spawn_at = time_global()
         elseif time_global() > spawn_at + 3000 then
+            state = 0
+        end
+    elseif state == 3 then
+        -- janitor: the player left the device by switching slots and never came back -
+        -- after half a minute quietly drop the hidden item (a fresh press respawns it)
+        if db.actor:active_slot() == 13 then
+            spawn_at = time_global()
+        elseif time_global() > spawn_at + 30000 then
+            local anm = db.actor:item_in_slot(13)
+            if anm then
+                local se = alife_object(anm:id())
+                if se then alife():release(se) end
+            end
+            item_id = nil
             state = 0
         end
     elseif state == 4 then
@@ -111,13 +144,17 @@ local function tick()
         state = 5
         spawn_at = time_global()
     elseif state == 5 then
-        -- The slot switch finished (or timed out) - the device is hidden, now drop it.
-        if db.actor:active_slot() == last_slot or time_global() > spawn_at + 3000 then
-            local anm = db.actor:item_in_slot(13)
-            if anm then
-                local se = alife_object(anm:id())
-                if se then alife():release(se) end
-            end
+        -- The slot switch finished (or timed out) - the device is hidden, now drop it. When
+        -- teardown raced the spawn, the item may still be in flight: keep waiting for it
+        -- until the timeout so it never gets orphaned in the slot.
+        local anm = db.actor:item_in_slot(13)
+        local expired = time_global() > spawn_at + 3000
+        if anm and (db.actor:active_slot() == last_slot or expired) then
+            local se = alife_object(anm:id())
+            if se then alife():release(se) end
+            item_id = nil
+            state = 0
+        elseif not anm and expired then
             item_id = nil
             state = 0
         end
