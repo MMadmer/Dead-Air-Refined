@@ -32,6 +32,10 @@ public:
 
     void PlayAnimIdle() override;
     void PlayAnimHide() override;
+    // Blends the hud inertion from the hip set to the AIM set as the device rises, so the
+    // damped aim values in the ltx actually get used (the stock factor is a flat 1.0,
+    // which pins the engine to the hip values in both states).
+    float GetInertionFactor() override;
 
     // No binocular overlay, no crosshair, no dynamic "vision" marks on the PDA.
     void render_item_ui() override {}

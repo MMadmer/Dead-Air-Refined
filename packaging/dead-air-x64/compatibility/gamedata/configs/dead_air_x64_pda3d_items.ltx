@@ -52,9 +52,15 @@ aim_hud_offset_rot_16x9     = 0.0,0.0,0.0
 hud_fov_factor              = 0.9
 hud_fov_zoom_factor         = 0.29
 
-; hud sway, straight from the Gunslinger original
+; Hud sway. Hip values are the Gunslinger original. The AIM pair is damped to a quarter
+; of it: raised to the face the screen fills the view, so the rotation lag that reads as
+; "alive" on a weapon reads as nausea on a display - walking bob rotates the camera, the
+; lag turns that rotation into hand displacement, and both of the player's complaints
+; (walking and turning) come out of this one number. Steady-state sway is
+; offset/tendto_speed, so 0.0075 at the same speed is exactly -75%.
+; The blend is driven by CPdaAnimatorItem::GetInertionFactor (zoom rotation).
 inertion_origin_offset      = 0.03
-inertion_origin_aim_offset  = 0
+inertion_origin_aim_offset  = 0.0075
 inertion_tendto_speed       = 10
 inertion_tendto_aim_speed   = 10
 

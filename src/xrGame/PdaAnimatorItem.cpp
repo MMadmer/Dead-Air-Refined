@@ -138,6 +138,16 @@ void CPdaAnimatorItem::OnZoomOut()
     da_pda3d::set_ui_focused(false);
 }
 
+float CPdaAnimatorItem::GetInertionFactor()
+{
+    // player_hud::update_inertion lerps hip->aim as: value = aim - (aim - hip) * factor.
+    // CHudItem returns a constant 1.0, i.e. the hip numbers win even while aiming - the
+    // aim keys are dead for every item in the fork. Here the zoom rotation drives it, so
+    // the device smoothly takes the aim inertion (damped, see the ltx) as it comes up to
+    // the face and the hip feel back as it lowers. Nothing else reads this value.
+    return 1.f - clampr(m_zoom_params.m_fZoomRotationFactor, 0.f, 1.f);
+}
+
 bool CPdaAnimatorItem::Action(u16 cmd, u32 flags)
 {
     switch (cmd)
