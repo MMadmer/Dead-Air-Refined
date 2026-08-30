@@ -58,6 +58,10 @@ public:
     void OnExternalHideIndicators();
     CUIDialogWnd* TopInputReceiver();
     void AddDialogToRender(CUIWindow* pDialog);
+    // 3D PDA focused stage: input focus for an already shown dialog / release it while the
+    // dialog keeps rendering (see the .cpp notes).
+    void FocusHeldDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators);
+    void UnfocusHeldDialog(CUIDialogWnd* pDialog);
     void RemoveDialogToRender(CUIWindow* pDialog);
     void SetMainInputReceiver(CUIDialogWnd* ir, bool _find_remove);
     virtual void OnFrame();

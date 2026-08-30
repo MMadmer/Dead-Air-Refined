@@ -78,6 +78,72 @@ void CDialogHolder::StartMenu(CUIDialogWnd* pDialog, bool bDoHideIndicators)
     }
 }
 
+// 3D PDA focused stage: put an ALREADY SHOWN dialog on the input stack. StartMenu asserts
+// !IsShown() because it expects to be the one showing the dialog; here the dialog already
+// lives on the device screen (render list included - AddDialogToRender dedups) and only
+// needs input. Mirror of StartMenu minus the assert.
+void CDialogHolder::FocusHeldDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators)
+{
+    AddDialogToRender(pDialog);
+    SetMainInputReceiver(pDialog, false);
+
+    if (UseIndicators() && !m_input_receivers.empty())
+    {
+        bool b = !!psHUD_Flags.test(HUD_CROSSHAIR_RT);
+        m_input_receivers.back().m_flags.set(recvItem::eCrosshair, b);
+
+        b = CurrentGameUI()->GameIndicatorsShown();
+        m_input_receivers.back().m_flags.set(recvItem::eIndicators, b);
+
+        if (bDoHideIndicators)
+        {
+            psHUD_Flags.set(HUD_CROSSHAIR_RT, FALSE);
+            CurrentGameUI()->ShowGameIndicators(false);
+        }
+    }
+    pDialog->SetHolder(this);
+
+    if (pDialog->NeedCursor())
+    {
+        GetUICursor().Show();
+        m_become_visible_time = Device.dwTimeContinual;
+    }
+
+    if (g_pGameLevel)
+    {
+        CActor* A = smart_cast<CActor*>(Level().CurrentViewEntity());
+        if (A)
+        {
+            A->IR_OnKeyboardRelease(kWPN_ZOOM);
+            A->IR_OnKeyboardRelease(kWPN_FIRE);
+        }
+    }
+}
+
+// Counterpart: drop the input focus but KEEP the dialog rendered - the device stays in
+// hands with its screen alive. Mirror of StopMenu minus RemoveDialogToRender.
+void CDialogHolder::UnfocusHeldDialog(CUIDialogWnd* pDialog)
+{
+    if (TopInputReceiver() == pDialog)
+    {
+        if (UseIndicators() && !m_input_receivers.empty())
+        {
+            bool b = !!m_input_receivers.back().m_flags.test(recvItem::eCrosshair);
+            psHUD_Flags.set(HUD_CROSSHAIR_RT, b);
+            b = !!m_input_receivers.back().m_flags.test(recvItem::eIndicators);
+            CurrentGameUI()->ShowGameIndicators(b);
+        }
+        SetMainInputReceiver(NULL, false);
+    }
+    else
+        SetMainInputReceiver(pDialog, true);
+
+    pDialog->SetHolder(NULL);
+
+    if (!TopInputReceiver() || !TopInputReceiver()->NeedCursor())
+        GetUICursor().Hide();
+}
+
 void CDialogHolder::StopMenu(CUIDialogWnd* pDialog)
 {
     R_ASSERT(pDialog->IsShown());

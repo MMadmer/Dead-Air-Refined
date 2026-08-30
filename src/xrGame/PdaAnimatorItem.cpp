@@ -4,6 +4,7 @@
 #include "da_pda3d.h"
 #include "Level.h"
 #include "UIGameCustom.h"
+#include "UIGameSP.h"
 #include "ui/UIPdaWnd.h"
 
 void CPdaAnimatorItem::attach_ui()
@@ -18,12 +19,10 @@ void CPdaAnimatorItem::attach_ui()
         return;
     // Render-only: the dialog is drawn (into $user$ui via the RT pass) but takes NO input -
     // it never enters the dialog stack here, so the player keeps full movement and combat
-    // control, and the PDA time dilation stays off. Show(true) fires the same info portions
-    // the 2D dialog always fired - mods listening for ui_pda keep working.
+    // control, and the PDA time dilation stays off. AddDialogToRender fires Show(true)
+    // itself - the same info portions the 2D dialog always fired, exactly once.
     da_pda3d::set_presenter_active(true);
     da_pda3d::on_shown();
-    if (!pda->IsShown())
-        pda->Show(true);
     ui->AddDialogToRender(pda);
     m_ui_attached = true;
 }
@@ -41,11 +40,13 @@ void CPdaAnimatorItem::detach_ui()
     if (!pda)
         return;
     if (da_pda3d::ui_focused())
-        ui->StopDialog(pda);
+    {
+        ui->UnfocusHeldDialog(pda);
+        TimeDilator()->SetCurrentMode(UITimeDilator::None);
+    }
     da_pda3d::set_ui_focused(false);
+    // RemoveDialogToRender fires Show(false) itself - the ui_pda_hide portion, once.
     ui->RemoveDialogToRender(pda);
-    if (pda->IsShown())
-        pda->Show(false);
 }
 
 void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
@@ -74,14 +75,17 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
 void CPdaAnimatorItem::OnZoomIn()
 {
     inherited::OnZoomIn();
-    // Second stage: the dialog enters the stack, the cursor comes alive, the UI eats the
-    // mouse. WASD still reaches the actor - CUIPdaWnd::StopAnyMove() is false.
+    // Second stage: the ALREADY SHOWN dialog gains input focus (StartDialog would assert on
+    // it), the cursor comes alive, the UI eats the mouse. WASD still reaches the actor -
+    // CUIPdaWnd::StopAnyMove() is false. Time dilation matches the 2D dialog's behaviour:
+    // on while the player is actually looking at the screen.
     if (CUIGameCustom* ui = CurrentGameUI())
         if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
         {
             if (!m_ui_attached)
                 attach_ui();
-            ui->StartDialog(pda, true);
+            ui->FocusHeldDialog(pda, true);
+            TimeDilator()->SetCurrentMode(UITimeDilator::Pda);
             da_pda3d::set_ui_focused(true);
         }
 }
@@ -92,7 +96,10 @@ void CPdaAnimatorItem::OnZoomOut()
     if (da_pda3d::ui_focused())
         if (CUIGameCustom* ui = CurrentGameUI())
             if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
-                ui->StopDialog(pda);
+            {
+                ui->UnfocusHeldDialog(pda);
+                TimeDilator()->SetCurrentMode(UITimeDilator::None);
+            }
     da_pda3d::set_ui_focused(false);
 }
 

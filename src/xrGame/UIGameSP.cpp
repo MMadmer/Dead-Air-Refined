@@ -12,6 +12,7 @@
 #include "game_cl_single.h"
 #include "xrEngine/xr_level_controller.h"
 #include "ActorCondition.h"
+#include "da_pda3d.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "Common/object_broker.h"
 #include "GametaskManager.h"
@@ -256,6 +257,15 @@ void CUIGameSP::ChangeLevel(GameGraph::_GRAPH_ID game_vert_id, u32 level_vert_id
 
 void CUIGameSP::StartDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators)
 {
+    // 3D PDA: EVERY entry point that opens the fullscreen PDA dialog funnels through here -
+    // ShowPdaMenu, tutorials, and the Lua key handler that calls ShowDialog straight on the
+    // window (the P key). All of them raise the device instead. Our own focused stage never
+    // lands here (it uses FocusHeldDialog), and a failed/unavailable activation falls
+    // through to the plain 2D dialog.
+    if (pDialog == PdaMenu && !da_pda3d::presenter_active() && da_pda3d::available() &&
+        da_pda3d::request_activate())
+        return;
+
     inherited::StartDialog(pDialog, bDoHideIndicators);
 
     if (pDialog == ActorMenu && ActorMenu->GetMenuMode() == mmInventory)

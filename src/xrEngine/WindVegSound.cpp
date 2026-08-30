@@ -26,7 +26,10 @@ const float k_range_min[] = {1.f, 2.f, 4.f};
 const float k_range_max[] = {22.f, 40.f, 90.f};
 // The local wind strength a spot needs before it can rustle at all. (First calibration sat
 // above what a storm actually produced after the field multiplies in - the world went mute.)
-constexpr float k_threshold = 0.28f;
+// Trigger floor: low on purpose - a light breeze already whispers. LOUDNESS carries the
+// wind strength (see play_one): near the floor the rustle is barely audible, a gale is
+// full volume, and a true calm fires nothing at all.
+constexpr float k_threshold = 0.10f;
 // Global polyphony cap across all types - the anti-cacophony valve.
 constexpr u32 k_max_active = 5;
 } // namespace
@@ -129,7 +132,11 @@ bool CEffect_WindVeg::play_one(int type, const Fvector& pos, float strength)
         if (Device.fTimeGlobal >= v.busy_until)
         {
             v.snd.play_at_pos(nullptr, pos, 0);
-            const float vol = k_volume[type] * clampr((strength - 0.30f) / 0.50f, 0.12f, 1.f);
+            // Volume follows the wind, not a fixed floor: the old clamp(…, 0.12, 1) made the
+            // quietest possible rustle clearly audible in near-calm. The curve starts at
+            // near-zero just above the trigger floor and eases up to full in a gale.
+            const float vol =
+                k_volume[type] * powf(clampr((strength - 0.08f) / 0.72f, 0.f, 1.f), 1.4f);
             v.snd.set_volume(vol);
             v.snd.set_frequency(k_pitch[type] * ::Random.randF(0.92f, 1.08f));
             // The source file is the walk-through-bush collide sound, whose baked audible
