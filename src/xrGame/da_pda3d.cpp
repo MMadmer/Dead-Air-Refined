@@ -538,20 +538,21 @@ void update()
     if (lua_power <= cfg.power_low)
         x_target = std::max(x_target, cfg.blackout_level);
 
-    // Boot window: while it lasts the shader's `a` branch shows the loading sequence, and x
-    // is floored to the 0.08 gate that branch requires.
-    const bool booting = boot_until > 0.f && now >= screen_on_at && now < boot_until;
-    if (booting)
-        x_target = std::max(x_target, 0.10f);
-
     // Rate-limited approach (the original's electronics counter): the screen degrades and
-    // recovers as a wave, never as a switch flip.
+    // recovers as a wave, never as a switch flip. Only the ORGANIC sources ride this ramp.
     const float max_step = cfg.interference_ramp * Device.fTimeDelta;
     const float delta = x_target - x_smooth;
     if (_abs(delta) <= max_step)
         x_smooth = x_target;
     else
         x_smooth += (delta > 0.f ? max_step : -max_step);
+
+    // Boot window: the shader shows the loading sequence only while `a` is set AND x is at
+    // or past its 0.08 gate, so the floor is applied to the OUTPUT, after the ramp - never
+    // through it. Ramping into the gate made the boot screen arrive ~0.5 s late (0.08 at
+    // 0.15/s), so the live UI flashed first, then the loader, then the UI again.
+    const bool booting = boot_until > 0.f && now >= screen_on_at && now < boot_until;
+    const float x_out = booting ? std::max(x_smooth, 0.10f) : x_smooth;
 
     // The y channel is the original's "phase/random driver" - it feeds tear amplitude and
     // the high-interference image shift. A held value stepped a few times a second reads as
@@ -566,7 +567,7 @@ void update()
     // lights up when the thumb hits the button during the draw motion.
     const float bright = (screen_on_at > 0.f && now < screen_on_at) ? 0.f : cfg.brightness;
 
-    g_pda_screen_affects.set(x_smooth, phase, bright, booting ? 1.f : 0.f);
+    g_pda_screen_affects.set(x_out, phase, bright, booting ? 1.f : 0.f);
 
     // The PDA face sub-rect: taken from the live layout every frame, so aspect swaps
     // (pda.xml vs pda_16.xml), UI resets and modded layouts all stay correct.
