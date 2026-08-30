@@ -14,12 +14,22 @@ Texture2D s_taa_history;
 
 uniform float4x4 m_taa_previous;
 uniform float4 screen_res;
+// Screen-space uv bbox (min.xy, max.xy) of the held 3D PDA. Its screen is a forward pass
+// with no G-buffer depth, so reprojection under it follows the BACKGROUND and smears the
+// display while moving. Inside the box the current frame passes through untouched. Empty
+// (min > max) when no device is up.
+uniform float4 pda_taa_bbox;
 
 float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position) : SV_Target
 {
     gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy);
 
     float3 current = s_image.Sample(smp_nofilter, tc).rgb;
+
+    [branch]
+    if (tc.x >= pda_taa_bbox.x && tc.y >= pda_taa_bbox.y && tc.x <= pda_taa_bbox.z &&
+        tc.y <= pda_taa_bbox.w)
+        return float4(current, 1.0);
 
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
     // skipping keeps cloud motion crisp. Same convention as gtao_render: the position

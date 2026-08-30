@@ -16,6 +16,7 @@ extern ENGINE_API float psVisDistance;
 // 3D PDA screen state (same rule; both live in xr_ioc_cmd.cpp).
 extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
+extern ENGINE_API Fvector4 g_pda_taa_bbox;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -493,6 +494,13 @@ static class cl_pda_screen_rect : public R_constant_setup
             g_pda_screen_rect.w);
     }
 } binder_pda_screen_rect;
+static class cl_pda_taa_bbox : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pda_taa_bbox.x, g_pda_taa_bbox.y, g_pda_taa_bbox.z, g_pda_taa_bbox.w);
+    }
+} binder_pda_taa_bbox;
 
 static class cl_various_rain : public R_constant_setup
 {
@@ -654,6 +662,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_wh_info", &binder_da_wh_info);
     r_Constant("m_affects", &binder_pda_affects);
     r_Constant("pda_screen_rect", &binder_pda_screen_rect);
+    r_Constant("pda_taa_bbox", &binder_pda_taa_bbox);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
     r_Constant("temp", &binder_temp);

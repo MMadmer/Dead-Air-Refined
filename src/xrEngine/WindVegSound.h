@@ -35,6 +35,10 @@ class ENGINE_API CEffect_WindVeg
     // Per-emitter retrigger cooldowns: 8 azimuth sectors for grass/bush + the tracked trees.
     float m_sector_cool[8]{};
     xr_vector<float> m_tree_cool;
+    // Trampling rustle: dedicated voices (grass sound, direct volume - not the wind curve)
+    // and a per-wind-motor retrigger cooldown, footstep-paced.
+    SVoice m_press_voices[2];
+    float m_press_cool[8]{};
     // Nearest-trees cache, refreshed on a slow timer.
     xr_vector<u32> m_near_trees;
     float m_next_tree_sort{};

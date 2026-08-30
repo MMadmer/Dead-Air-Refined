@@ -518,8 +518,17 @@ void CWeapon::Load(LPCSTR section)
     fireDispersionConditionFactor = pSettings->r_float(section, "fire_dispersion_condition_factor");
 
     m_hud_fov_add_mod = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_addition_modifier", 0.0f);
-    m_hud_fov_factor = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_factor", 1.0f);
-    m_hud_fov_zoom_factor = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_zoom_factor", m_hud_fov_factor);
+    // Per-item hud fov multipliers live in the HUD section (the Gunslinger convention -
+    // their patcher reads GetHUDSection), with the item section as the fallback.
+    {
+        pcstr fov_sect = section;
+        if (hud_sect.size() && pSettings->section_exist(hud_sect) &&
+            pSettings->line_exist(hud_sect, "hud_fov_factor"))
+            fov_sect = hud_sect.c_str();
+        m_hud_fov_factor = READ_IF_EXISTS(pSettings, r_float, fov_sect, "hud_fov_factor", 1.0f);
+        m_hud_fov_zoom_factor =
+            READ_IF_EXISTS(pSettings, r_float, fov_sect, "hud_fov_zoom_factor", m_hud_fov_factor);
+    }
     m_nearwall_dist_min = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_min", 0.5f);
     m_nearwall_dist_max = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_max", 1.0f);
     m_nearwall_target_hud_fov = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_target_hud_fov", 0.27f);

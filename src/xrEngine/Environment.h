@@ -376,6 +376,11 @@ public:
         float strength{};   // authored strength of the source
         float touched{};    // press: last refresh time; impulse/shot: birth time
         float released{};   // press: when the actor left (0 = still pressing)
+        // press only: smoothed ground speed of the pressing entity (m/s) and whether the
+        // detail cache actually holds grass under it (written by the renderer) - together
+        // they drive the walking-through-grass rustle (WindVegSound).
+        float speed{};
+        float veg{};
         EWindMotor type{};
         bool used{};
     };

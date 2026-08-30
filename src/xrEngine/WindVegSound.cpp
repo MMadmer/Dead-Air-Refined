@@ -106,6 +106,12 @@ void CEffect_WindVeg::lazy_init()
         }
     }
 
+    // Trampling voices share the grass source but carry their own direct volume (the wind
+    // curve does not apply - feet rustle in a dead calm too).
+    if (!m_files[type_grass].empty())
+        for (auto& v : m_press_voices)
+            v.snd.create(m_files[type_grass][0].c_str(), st_Effect, sg_SourceType);
+
     if (!any)
     {
         Msg("! [wind-veg] no rustle sources at all (assets and material pair both missing) - disabled");
@@ -214,6 +220,43 @@ void CEffect_WindVeg::OnFrame()
         }
     }
 
+    // ---- Trampling: entities pressing through actual grass. -------------------------------
+    // The press wind-motors already know who is flattening grass and where; the renderer
+    // marks which of them stand in real detail-cache grass (m.veg), and the motor carries
+    // the presser's smoothed speed. A soft, footstep-paced rustle at the feet - silent when
+    // standing still, a light swish walking, a touch more running. Direct volume: unlike
+    // the wind layer this must sound in a dead calm.
+    for (u32 mi = 0; mi < CEnvironment::wind_motor_count; ++mi)
+    {
+        const auto& m = env.wind_motors[mi];
+        if (!m.used || m.type != CEnvironment::EWindMotor::press || m.released != 0.f)
+            continue;
+        if (m.veg <= 0.f || m.speed < 0.6f)
+            continue;
+        if (Device.fTimeGlobal < m_press_cool[mi])
+            continue;
+        if (m.pos.distance_to_sqr(cam) > 20.f * 20.f)
+            continue;
+        for (auto& v : m_press_voices)
+        {
+            if (Device.fTimeGlobal < v.busy_until)
+                continue;
+            Fvector feet = m.pos;
+            feet.y += 0.25f;
+            v.snd.play_at_pos(nullptr, feet, 0);
+            // Weak on purpose: a walk sits well under the footsteps, a sprint reads as a
+            // clear swish. Speed 0.6 m/s is the "actually moving" floor.
+            const float k = clampr((m.speed - 0.6f) / 4.4f, 0.f, 1.f);
+            v.snd.set_volume(0.10f + 0.16f * k);
+            v.snd.set_frequency(1.10f * ::Random.randF(0.94f, 1.06f));
+            v.snd.set_range(1.f, 12.f);
+            const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 0.6f;
+            v.busy_until = Device.fTimeGlobal + len * 0.55f; // overlap: continuous while moving
+            m_press_cool[mi] = Device.fTimeGlobal + ::Random.randF(0.28f, 0.45f);
+            break;
+        }
+    }
+
     // ---- Grass and bushes: eight azimuth sectors around the listener. ---------------------
     // Gate on the published green density so bare concrete yards stay silent; the field
     // decides which sector speaks. Bush voice at ground level, grass slightly quieter still.
@@ -250,10 +293,15 @@ void CEffect_WindVeg::OnLevelUnload()
     m_next_tree_sort = 0.f;
     for (auto& c : m_sector_cool)
         c = 0.f;
+    for (auto& c : m_press_cool)
+        c = 0.f;
     for (int t = 0; t < type_count; ++t)
         for (auto& v : m_voices[t])
             if (v.snd._feedback())
                 v.snd.stop();
+    for (auto& v : m_press_voices)
+        if (v.snd._feedback())
+            v.snd.stop();
 }
 
 CEffect_WindVeg::~CEffect_WindVeg()
@@ -261,4 +309,6 @@ CEffect_WindVeg::~CEffect_WindVeg()
     for (int t = 0; t < type_count; ++t)
         for (auto& v : m_voices[t])
             v.snd.destroy();
+    for (auto& v : m_press_voices)
+        v.snd.destroy();
 }

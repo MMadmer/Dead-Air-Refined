@@ -748,6 +748,23 @@ void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float stre
     if (!slot)
         return;
 
+    // Smoothed ground speed of the presser, for the rustle volume: a fresh claim starts
+    // still, a refresh measures the move since the last one.
+    if (slot->used && slot->type == EWindMotor::press && slot->released == 0.f)
+    {
+        const float dt = Device.fTimeGlobal - slot->touched;
+        if (dt > EPS_S)
+        {
+            const float v = slot->pos.distance_to(pos) / dt;
+            slot->speed = slot->speed * 0.85f + v * 0.15f;
+        }
+    }
+    else
+    {
+        slot->speed = 0.f;
+        slot->veg = 0.f;
+    }
+
     slot->used = true;
     slot->type = EWindMotor::press;
     slot->pos = pos;

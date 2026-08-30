@@ -750,6 +750,10 @@ ENGINE_API int g_player_hud_model_loading = 0;
 // (so the screen UVs are data, not geometry, and any pda*.xml layout keeps working).
 ENGINE_API Fvector4 g_pda_screen_affects = {0.f, 0.f, 1.f, 0.f};
 ENGINE_API Fvector4 g_pda_screen_rect = {0.f, 0.f, 1.f, 1.f};
+// Screen-space bbox (uv min.xy, max.xy) of the held 3D PDA for the TAA exclusion: the
+// device screen is a forward pass with no depth in the G-buffer, so reprojection under it
+// follows the BACKGROUND and smears the display. Empty when min > max.
+ENGINE_API Fvector4 g_pda_taa_bbox = {1.f, 1.f, 0.f, 0.f};
 
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;

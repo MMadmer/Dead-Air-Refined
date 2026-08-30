@@ -15,6 +15,8 @@ extern ENGINE_API shared_str current_player_hud_sect;
 
 extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
+extern ENGINE_API Fvector4 g_pda_taa_bbox;
+extern ENGINE_API float psHUD_FOV;
 
 int g_pda3d_dbg = 0;
 
@@ -574,5 +576,50 @@ void update()
         if (pda->GetScreenRectUV(uv))
             g_pda_screen_rect = uv;
     }
+
+    // TAA exclusion bbox: project the held device's bounds with the SAME hud projection
+    // the renderer uses this frame (psHUD_FOV already carries the zoom factor). The device
+    // screen is a forward pass with no G-buffer depth - reprojection under it follows the
+    // background and smears the display, so da_taa.ps passes this box through untouched.
+    g_pda_taa_bbox.set(1.f, 1.f, 0.f, 0.f);
+    if (presenter && g_player_hud)
+        if (attachable_hud_item* hi = g_player_hud->attached_item(0))
+            if (hi->m_model)
+                if (IRenderVisual* v = hi->m_model->dcast_RenderVisual())
+                {
+                    Fmatrix proj;
+                    proj.build_projection(
+                        deg2rad(psHUD_FOV * Device.fFOV), Device.fASPECT, 0.05f, 100.f);
+                    Fmatrix view_proj, to_clip;
+                    view_proj.mul(proj, Device.mView);
+                    to_clip.mul(view_proj, hi->m_item_transform); // full 4x4: keeps the w row
+                    const Fbox& box = v->getVisData().box;
+                    Fvector2 mn{2.f, 2.f}, mx{-2.f, -2.f};
+                    bool ok = true;
+                    for (int i = 0; i < 8 && ok; ++i)
+                    {
+                        Fvector c;
+                        box.getpoint(i, c);
+                        Fvector4 clip;
+                        to_clip.transform(clip, c);
+                        if (clip.w <= 0.01f)
+                            ok = false;
+                        else
+                        {
+                            const float x = clip.x / clip.w * 0.5f + 0.5f;
+                            const float y = clip.y / clip.w * -0.5f + 0.5f;
+                            mn.x = std::min(mn.x, x);
+                            mn.y = std::min(mn.y, y);
+                            mx.x = std::max(mx.x, x);
+                            mx.y = std::max(mx.y, y);
+                        }
+                    }
+                    if (ok)
+                    {
+                        constexpr float m = 0.012f; // one clamp-neighbourhood of margin
+                        g_pda_taa_bbox.set(clampr(mn.x - m, 0.f, 1.f), clampr(mn.y - m, 0.f, 1.f),
+                            clampr(mx.x + m, 0.f, 1.f), clampr(mx.y + m, 0.f, 1.f));
+                    }
+                }
 }
 } // namespace da_pda3d

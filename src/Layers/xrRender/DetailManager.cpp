@@ -626,6 +626,30 @@ void CDetailManager::DispatchMTCalc()
         RImplementation.BasicStats.DetailCache.End();
 
         UpdateVisibleM();
+
+        // Feed the press wind-motors the one fact only this side knows: is there actual
+        // grass in the detail cache under the pressing entity. The sound layer
+        // (WindVegSound) reads it for the walking-through-grass rustle - so pavement and
+        // bare dirt stay silent. Same task, cache coherent; a float write is benign.
+        if (g_pGamePersistent)
+        {
+            auto& env = g_pGamePersistent->Environment();
+            for (auto& m : env.wind_motors)
+            {
+                if (!m.used || m.type != CEnvironment::EWindMotor::press)
+                    continue;
+                const int mx = iFloor(m.pos.x / dm_slot_size + .5f) - s_x;
+                const int mz = iFloor(m.pos.z / dm_slot_size + .5f) - s_z;
+                if (abs(mx) >= int(dm_size) || abs(mz) >= int(dm_size))
+                {
+                    m.veg = 0.f;
+                    continue;
+                }
+                Slot* s = cache_Query(mx, mz);
+                m.veg = (s && !s->empty) ? 1.f : 0.f;
+            }
+        }
+
         m_calc_running.store(false, std::memory_order_release);
     }), std::memory_order_release);
 }
