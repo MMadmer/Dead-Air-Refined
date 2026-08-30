@@ -25,6 +25,12 @@ snd_holster                 = detectorshud\detector_draw
 sprint_allowed              = true
 ignore_slots_blocked        = true
 
+; The PDA episode swaps to the animation set's native rig (rest poses differ per hand from
+; the DA rigs, a rigid two-handed grip cannot survive a retarget); its texture is recolored
+; to the DA look.
+[pda3d_actor_hud]
+visual                      = dynamics\weapons\wpn_hand\wpn_hand_pda3d
+
 [pda_show_animator_hud]:anm_base_hud
 item_visual                 = dynamics\devices\dev_pda\dev_pda_hud.ogf
 attach_place_idx            = 0
