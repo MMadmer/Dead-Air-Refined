@@ -488,8 +488,18 @@ std::optional<Manifest> parse_manifest(const std::filesystem::path& path)
 bool matches_payload(const std::filesystem::path& path, const PayloadFile& file)
 {
     std::error_code error;
-    return std::filesystem::is_regular_file(path, error) && !error &&
-        std::filesystem::file_size(path, error) == file.size && !error && sha256_file(path) == file.hash;
+    if (!std::filesystem::is_regular_file(path, error) || error)
+        return false;
+    if (std::filesystem::file_size(path, error) != file.size || error)
+        return false;
+
+    // sha256_file emits lowercase hex. The manifest parser accepts either case, so compare
+    // case-insensitively - an uppercase manifest hash used to match nothing at all, and a
+    // patch would report itself unpatchable against a perfectly good installation.
+    const std::string actual = sha256_file(path);
+    return actual.size() == file.hash.size() &&
+        std::ranges::equal(actual, file.hash, [](unsigned char left, unsigned char right)
+        { return std::tolower(left) == std::tolower(right); });
 }
 
 // Every manifest entry must be accounted for before anything is touched. A full archive has
@@ -586,11 +596,13 @@ std::wstring current_version(const std::filesystem::path& gameDirectory)
 
 void append_unique(std::vector<std::filesystem::path>& values, const std::filesystem::path& value)
 {
-    if (std::ranges::none_of(values, [&](const auto& existing)
-        { return _wcsicmp(existing.c_str(), value.c_str()) == 0; }))
-    {
+    // Compare through lower_key: managed-files.txt spells separators as backslashes and the
+    // manifest as forward slashes, so a raw _wcsicmp on the native string sees one file as
+    // two - which quietly widened the backup scope and, worse, let the payload GC below miss
+    // a file it was supposed to keep.
+    const std::wstring key = lower_key(value);
+    if (std::ranges::none_of(values, [&](const auto& existing) { return lower_key(existing) == key; }))
         values.push_back(value);
-    }
 }
 
 std::optional<std::filesystem::path> create_backup(const std::filesystem::path& gameDirectory,
@@ -693,8 +705,9 @@ bool apply_payload(const std::filesystem::path& gameDirectory, const std::filesy
     }
     for (const auto& oldFile : scope)
     {
+        const std::wstring oldKey = lower_key(oldFile);
         if (std::ranges::none_of(manifest.files, [&](const PayloadFile& incoming)
-            { return _wcsicmp(incoming.relativePath.c_str(), oldFile.c_str()) == 0; }))
+            { return lower_key(incoming.relativePath) == oldKey; }))
         {
             DeleteFileW((gameDirectory / oldFile).c_str());
         }
@@ -935,6 +948,14 @@ int apply_update(const Arguments& arguments)
     }
 
     DeleteFileW((arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt").c_str());
+
+    // The update succeeded, so the pre-update snapshot has served its purpose. Nothing reads
+    // it afterwards and nothing prunes it, so `backups\` grew by the full managed set on
+    // every single update - the restore path only ever needs the snapshot of the update that
+    // is currently in flight.
+    std::error_code snapshotError;
+    std::filesystem::remove_all(*backup, snapshotError);
+
     if (!start_finish_process(arguments.gameDirectory, cache, arguments.restartCommand))
         return 19;
     return 0;

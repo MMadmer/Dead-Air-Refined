@@ -691,6 +691,34 @@ void CLocatorAPI::archive::close()
 #endif
 }
 
+// The same archive file reaches ProcessArchive under several spellings: `$arch_dir$` expands
+// to `database\` while its aliases expand to `database\.\`, and the duplicate check
+// compared those strings literally. Every archive was therefore opened, memory-mapped and
+// indexed TWICE - a stock install reported "36 archives" for the 18 files actually on disk,
+// with the file index and its memory doubled to match. Compare on a normalised key instead:
+// identical files collapse, genuinely different paths still do not.
+static void normalize_archive_key(pcstr path, string_path& out)
+{
+    xr_strcpy(out, path);
+    xr_strlwr(out);
+
+    // Collapse "\.\" segments and unify separators in place. These paths are absolute or
+    // root-relative and no caller produces "..", so this is the whole normalisation needed.
+    char* write = out;
+    for (const char* read = out; *read;)
+    {
+        const bool separator = (*read == '\\' || *read == '/');
+        if (separator && read[1] == '.' && (read[2] == '\\' || read[2] == '/'))
+        {
+            read += 2; // drop the "." segment, keep the separator that follows
+            continue;
+        }
+        *write++ = separator ? '\\' : *read;
+        ++read;
+    }
+    *write = '\0';
+}
+
 void CLocatorAPI::ProcessArchive(pcstr _path)
 {
     ZoneScoped;
@@ -698,9 +726,15 @@ void CLocatorAPI::ProcessArchive(pcstr _path)
     // find existing archive
     shared_str path = _path;
 
+    string_path key;
+    normalize_archive_key(_path, key);
     for (const auto& it : m_archives)
-        if (it.path == path)
+    {
+        string_path existing;
+        normalize_archive_key(it.path.c_str(), existing);
+        if (xr_strcmp(existing, key) == 0)
             return;
+    }
 
     m_archives.push_back(archive());
     archive& A = m_archives.back();
