@@ -28,6 +28,11 @@ the process described here.
   `.scov` chunks. The game and the editor evolve independently: a Dead Air
   Refined update has no right to break a mod built by any earlier editor
   version.
+- The project targets a player who installs the game, picks a graphics preset,
+  and plays. Customization is minimized on purpose: setup steps, optional
+  downloads, and per-feature switches are not features, they are friction, and
+  every one of them is a decision the project failed to make on the player's
+  behalf. See section 4 for what this means for content.
 - Native x86 plugins are not declared x64-compatible without a dedicated port.
 
 ## 2. Starting work
@@ -111,7 +116,31 @@ the process described here.
   simultaneously: a change in one backend must not break the build or the
   behavior of the others, and shared code stays shared.
 
-## 4. Asynchronous saves
+## 4. Content and assets
+
+- Shipped content is never optional. Once an asset — a model, texture,
+  animation, sound — is part of a release, every installation of that release
+  has it. There is no opt-in download, no "lite" edition, no per-feature
+  content toggle, and no setting whose only purpose is to avoid fetching data.
+- Assets travel inside the install and update payload, verified by hash like
+  everything else, and applied atomically: an installation either has the
+  complete set for its version or the operation fails and changes nothing. An
+  install that cannot obtain its assets is a failed install, not a reduced one.
+- Content lives outside this repository. The engine sources stay free of
+  binary asset trees; released assets are published as versioned, hashed
+  bundles and pinned per game version, so a version always knows exactly which
+  content belongs to it. Integrity is established by hash, which makes the host
+  a replaceable detail rather than a dependency.
+- Missing or corrupt required content is a broken installation and is reported
+  as one, with a repair path that re-fetches it. Silently disabling the feature
+  that needed it is forbidden: it turns a fixable install into a game that is
+  quietly missing parts.
+- Defensive fallbacks remain correct for broken *logic* — an absent script
+  bridge, a failed subsystem — and must not be reused to paper over absent
+  *content*. The two failures need opposite responses: one degrades safely, the
+  other demands repair.
+
+## 5. Asynchronous saves
 
 - The current shared main-thread budget for save preparation is `3 ms` per
   frame.
@@ -138,7 +167,7 @@ the process described here.
 The full binary contract and evolution rules are described in
 `docs/dead-air/SAVE_COMPATIBILITY.md`.
 
-## 5. Code
+## 6. Code
 
 - Use C++20 and language features when they do not hurt logic, compatibility,
   or performance.
@@ -157,7 +186,7 @@ The full binary contract and evolution rules are described in
   final batch.
 - The Release build must pass with the active warnings-as-errors policy.
 
-## 6. Optimization
+## 7. Optimization
 
 1. First obtain a profile on the real `xrEngine.exe` and name the specific hot
    path, function, shader, object, or wait.
@@ -180,7 +209,7 @@ The full binary contract and evolution rules are described in
    or no reproducible win. Remove a failed experiment completely before the
    next attempt.
 
-## 7. Build and deployment
+## 8. Build and deployment
 
 - The only supported pipeline: CMake presets and Ninja Multi-Config. Legacy
   Visual Studio projects, XMake, and parallel alternative pipelines are not
@@ -205,7 +234,7 @@ The full binary contract and evolution rules are described in
 - The main game installation receives only a confirmed candidate. Place test
   roots and temporary files separately and remove them after verification.
 
-## 7.1. Player bug report handling
+## 8.1. Player bug report handling
 
 - Do not take reports at face value: the player's description is a symptom and
   a hypothesis, not a diagnosis. Expected behavior is checked against the
@@ -227,7 +256,7 @@ The full binary contract and evolution rules are described in
   rejected with a reason. A report is not handled without one of these
   verdicts.
 
-## 8. Runtime QA
+## 9. Runtime QA
 
 - Test the `xrEngine.exe` from the configured main game root, not a separate
   harness or a random binary copy.
@@ -292,7 +321,7 @@ The full binary contract and evolution rules are described in
     the normal exit did not happen, kill only this test's PID. Remove the
     temporary QA files and fat Windows dumps.
 
-## 9. Commits
+## 10. Commits
 
 - A commit is created after a large successful and verified batch.
 - Do not commit failed experiments, temporary telemetry, profilers, logs,
@@ -303,7 +332,7 @@ The full binary contract and evolution rules are described in
 - If an attempt is abandoned, return the branch to the last successful state
   without keeping fictitious intermediate commits.
 
-## 10. Release and updates
+## 11. Release and updates
 
 - The version follows SemVer and is updated simultaneously in the product
   version, packaging scripts, Inno Setup, compatibility metadata, and user
@@ -398,7 +427,7 @@ Do not install both. Existing saves are preserved.
 Не устанавливайте оба варианта. Существующие сохранения будут сохранены.
 ```
 
-## 11. Documentation
+## 12. Documentation
 
 - The README and packaging README contain only current user information.
   Forbidding manual Update ZIP installation is not allowed.
@@ -411,7 +440,7 @@ Do not install both. Existing saves are preserved.
 - When a contract changes, update the corresponding specification and the
   README references in the same batch.
 
-## 12. Active technical specifications
+## 13. Active technical specifications
 
 - `docs/dead-air/AUTO_UPDATE.md` — release/update protocol.
 - `docs/dead-air/DEPENDENCIES.md` — pinned dependencies and build policy.

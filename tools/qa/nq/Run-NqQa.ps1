@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Acceptance test of the NQ quest runtime inside the real game (PROJECT_RULES.md section 8).
+    Acceptance test of the NQ quest runtime inside the real game (PROJECT_RULES.md section 9).
 
 .DESCRIPTION
     Builds an isolated QA root next to the installed game (<GameRoot>\_qa\nq) and runs the engine

@@ -11,7 +11,7 @@ alongside it.
 pwsh -NoProfile -File tools\qa\nq\Run-NqQa.ps1 -Scenario All -ResultLabel run1
 ```
 
-The engine is started detached on a **hidden desktop** (PROJECT_RULES 8/8.1: only render
+The engine is started detached on a **hidden desktop** (PROJECT_RULES 9: only render
 measurements run on the main desktop), so no game window ever appears on the user's screen. The
 command line of every launch is
 
