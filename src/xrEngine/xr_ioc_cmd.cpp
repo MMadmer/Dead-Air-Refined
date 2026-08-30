@@ -743,6 +743,10 @@ ENGINE_API shared_str current_player_hud_sect{};
 // around the hands model_Create (ordinary models never pay for the lookup). The list itself is
 // data-driven: player_hud fills it from dead_air_x64_pda3d.ltx.
 ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
+// Per-rig-family overrides: when the hands model path contains `first`, the extra list is
+// replaced by the matching `second` files (exo rigs carry a different bind pose, so the
+// same animations exist retargeted per family). Data-driven from [player_hud_extra_omf_variants].
+ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_variants;
 ENGINE_API int g_player_hud_model_loading = 0;
 // 3D PDA screen state, published by the game each frame and bound to the pda screen shader:
 // affects = (interference level, phase driver, brightness, boot flag) - the m_affects

@@ -4,6 +4,7 @@
 #include "da_pda3d.h"
 #include "Level.h"
 #include "Actor.h"
+#include "xrEngine/xr_level_controller.h"
 #include "Inventory.h"
 #include "Torch.h"
 #include "UIGameCustom.h"
@@ -52,6 +53,7 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
         m_aim_started = false;
         m_oneshot_playing = false;
         m_torch_nv_valid = false;
+        m_want_focus = false;
         attach_ui();
         break;
     case eHiding:
@@ -93,15 +95,12 @@ void CPdaAnimatorItem::net_Destroy()
     inherited::net_Destroy();
 }
 
-void CPdaAnimatorItem::OnZoomIn()
+void CPdaAnimatorItem::enter_focus()
 {
-    // Skip CWeaponBinoculars: its zoom path plays binocular sounds and VERIFYs the
-    // m_binoc_vision it never created (vision_present = false on animator items).
-    CWeaponMagazined::OnZoomIn();
-    // Second stage: the ALREADY SHOWN dialog gains input focus (StartDialog would assert on
-    // it), the cursor comes alive, the UI eats the mouse. WASD still reaches the actor -
+    // The ALREADY SHOWN dialog gains input focus (StartDialog would assert on it), the
+    // cursor comes alive, the UI eats the mouse. WASD still reaches the actor -
     // CUIPdaWnd::StopAnyMove() is false. Time dilation matches the 2D dialog's behaviour:
-    // on while the player is actually looking at the screen. set_ui_focused BEFORE
+    // on while the player is actually driving the screen. set_ui_focused BEFORE
     // FocusHeldDialog so any re-entrant zoom-out sees the guard armed.
     if (CUIGameCustom* ui = CurrentGameUI())
         if (CUIPdaWnd* pda = ui->GetPdaMenuPtr())
@@ -114,8 +113,20 @@ void CPdaAnimatorItem::OnZoomIn()
         }
 }
 
+void CPdaAnimatorItem::OnZoomIn()
+{
+    // Skip CWeaponBinoculars: its zoom path plays binocular sounds and VERIFYs the
+    // m_binoc_vision it never created (vision_present = false on animator items).
+    CWeaponMagazined::OnZoomIn();
+    // LMB look-zoom raises the device to the eyes and stops there - the mouse stays on
+    // the camera; only the RMB focus toggle brings the cursor in.
+    if (m_want_focus)
+        enter_focus();
+}
+
 void CPdaAnimatorItem::OnZoomOut()
 {
+    m_want_focus = false;
     CWeaponMagazined::OnZoomOut();
     if (da_pda3d::ui_focused())
         if (CUIGameCustom* ui = CurrentGameUI())
@@ -125,6 +136,59 @@ void CPdaAnimatorItem::OnZoomOut()
                 TimeDilator()->SetCurrentMode(UITimeDilator::None);
             }
     da_pda3d::set_ui_focused(false);
+}
+
+bool CPdaAnimatorItem::Action(u16 cmd, u32 flags)
+{
+    switch (cmd)
+    {
+    case kWPN_FIRE:
+        // LMB = hold-to-look (the Anomaly convention the player asked for): press raises
+        // the device to the eyes with the mouse STAYING on the camera - read on the move,
+        // sprint drops via the normal zoom rules - release lowers it back. In the focused
+        // stage the window owns the input, so this never fires there and LMB stays a UI
+        // click. Also overrides CWeaponBinoculars' kWPN_FIRE->kWPN_ZOOM remap.
+        if (flags & CMD_START)
+        {
+            if (!IsZoomed() && !IsPending())
+            {
+                m_want_focus = false;
+                if (GetState() != eIdle)
+                    SwitchState(eIdle);
+                OnZoomIn();
+            }
+        }
+        else if (IsZoomed() && !da_pda3d::ui_focused())
+            OnZoomOut();
+        return true;
+
+    case kWPN_ZOOM:
+        // RMB = focus TOGGLE (holding it would fight the cursor): press with the device
+        // down raises straight into focus; press during a look-zoom promotes it to focus;
+        // leaving focus happens inside the UI (RMB/ESC there -> request_unzoom). The
+        // release is eaten - the stock hold-to-zoom path must not lower the device.
+        if (!(flags & CMD_START))
+            return true;
+        if (!IsZoomed())
+        {
+            if (!IsPending())
+            {
+                m_want_focus = true;
+                if (GetState() != eIdle)
+                    SwitchState(eIdle);
+                OnZoomIn();
+            }
+        }
+        else if (!da_pda3d::ui_focused())
+        {
+            m_want_focus = true;
+            enter_focus();
+        }
+        return true;
+
+    default: break;
+    }
+    return inherited::Action(cmd, flags);
 }
 
 bool CPdaAnimatorItem::play_first_existing(std::initializer_list<pcstr> names, bool mix_in)

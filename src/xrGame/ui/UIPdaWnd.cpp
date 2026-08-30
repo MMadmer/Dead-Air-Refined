@@ -264,6 +264,14 @@ bool CUIPdaWnd::OnMouseAction(float x, float y, EUIMessages mouse_action)
         }
         else if (mouse_action == WINDOW_LBUTTON_DOWN)
             da_pda3d::joystick_click();
+        else if (mouse_action == WINDOW_RBUTTON_DOWN)
+        {
+            // RMB inside the focused stage leaves it (the toggle's other half - the press
+            // that entered focus went to the item, this one lands here because the window
+            // owns the input now).
+            da_pda3d::request_unzoom();
+            return true;
+        }
     }
     CUIDialogWnd::OnMouseAction(x, y, mouse_action);
     return true; // always true because StopAnyMove() == false

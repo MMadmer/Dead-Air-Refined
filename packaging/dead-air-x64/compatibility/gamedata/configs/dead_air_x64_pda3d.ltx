@@ -4,8 +4,10 @@
 [pda3d]
 ; the presenter item raised into hands instead of the fullscreen dialog
 animator_section        = pda_show_animator
-; hands model for the PDA episode (the animation set's native rig); empty = keep current hands
-hands_section           = pda3d_actor_hud
+; hands model for the PDA episode; EMPTY on purpose: the animations are retargeted to the
+; DA rigs (base + exo families via [player_hud_extra_omf_variants]), so the player's own
+; hands - outfit gloves included - stay on. The swap machinery remains available for mods.
+hands_section           =
 ; boot sequence length (the shader's `a` channel window), seconds - starts at screen-on
 boot_time               = 1.4
 ; m_affects.x pushed here when the battery reports empty (the shader blacks out past 0.41)
@@ -43,5 +45,12 @@ jammed_level            = 0.20
 
 ; Extra hand-animation omfs appended to EVERY player hands model on load
 ; (engine: SkeletonAnimated.cpp + player_hud.cpp; a missing file only logs).
+; The pda set is retargeted from the Gunslinger rig to the DA base rig (all regular hands
+; share one bind pose - verified across 49 models).
 [player_hud_extra_omf]
 pda_hands               = dynamics\weapons\hud_hands_animation\pda_hands_animation.omf
+
+; Rig-family variants: a hands model whose PATH contains the key gets these file(s)
+; INSTEAD of the base list. The 16 exoskeleton hand models share their own bind pose.
+[player_hud_extra_omf_variants]
+exo                     = dynamics\weapons\hud_hands_animation\pda_hands_animation_exo.omf

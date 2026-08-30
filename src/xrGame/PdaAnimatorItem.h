@@ -28,6 +28,7 @@ public:
     void UpdateCL() override;
     void net_Destroy() override;
     void OnAnimationEnd(u32 state) override;
+    bool Action(u16 cmd, u32 flags) override;
 
     void PlayAnimIdle() override;
     void PlayAnimHide() override;
@@ -40,12 +41,18 @@ public:
 private:
     void attach_ui();
     void detach_ui();
+    // The focused stage on top of an already-raised zoom: dialog onto the input stack,
+    // cursor alive, time dilation on.
+    void enter_focus();
     // Composed idle: "anm_idle" [+ "_aim"] [+ joystick suffix] [+ "_moving"[ "_crouch"]],
     // walked right-to-left through isHUDAnimationExist until something resolves.
     void play_composed_idle();
     bool play_first_existing(std::initializer_list<pcstr> names, bool mix_in);
 
     bool m_ui_attached{};
+    // Two flavours of zoom: LMB hold = look-only (mouse stays on the camera, read on the
+    // move); RMB toggle = full focus (cursor + UI input). The flag routes OnZoomIn.
+    bool m_want_focus{};
     // Edge latch for the raise-to-face transition animations.
     bool m_aim_started{};
     // A one-shot overlay motion (aim start/end, headlamp ack) is playing; when it ends,

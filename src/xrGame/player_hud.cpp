@@ -12,6 +12,7 @@
 player_hud* g_player_hud = nullptr;
 extern ENGINE_API shared_str current_player_hud_sect;
 extern ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
+extern ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_variants;
 extern ENGINE_API int g_player_hud_model_loading;
 
 // Data-driven list of extra hand-animation omfs (the 3D PDA set). Loaded once; the render
@@ -27,13 +28,20 @@ static void fill_player_hud_extra_omf()
     if (!FS.exist(path))
         return;
     CInifile ini(path, TRUE);
-    if (!ini.section_exist("player_hud_extra_omf"))
-        return;
-    for (const auto& [key, value] : ini.r_section("player_hud_extra_omf").Data)
-        if (value.size())
-            g_player_hud_extra_omf.emplace_back(value);
+    if (ini.section_exist("player_hud_extra_omf"))
+        for (const auto& [key, value] : ini.r_section("player_hud_extra_omf").Data)
+            if (value.size())
+                g_player_hud_extra_omf.emplace_back(value);
+    // Variants: "substring = path". A hands model whose path contains the substring gets
+    // the matching file(s) INSTEAD of the base list - the exo rig family carries its own
+    // bind pose and needs its own retargeted animations.
+    if (ini.section_exist("player_hud_extra_omf_variants"))
+        for (const auto& [key, value] : ini.r_section("player_hud_extra_omf_variants").Data)
+            if (key.size() && value.size())
+                g_player_hud_extra_omf_variants.emplace_back(key, value);
     if (!g_player_hud_extra_omf.empty())
-        Msg("* [pda3d] %u extra hud omf(s) registered", u32(g_player_hud_extra_omf.size()));
+        Msg("* [pda3d] %u extra hud omf(s) registered (+%u variant(s))",
+            u32(g_player_hud_extra_omf.size()), u32(g_player_hud_extra_omf_variants.size()));
 }
 
 
