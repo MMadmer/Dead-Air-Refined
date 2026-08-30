@@ -34,9 +34,13 @@ struct SCfg
     float blackout_level{0.42f};
     float power_low{0.05f};
     float brightness{1.f};
-    // The moment of the show motion (0..1 of its length) when the screen physically turns
-    // on - the thumb hits the power button there. Before it the screen is dark.
-    float screen_on_mark{0.85f};
+    // Two marks along the show motion, as fractions of its length. The screen lights up and
+    // the loading sequence starts at the first; the UI goes live at the second. The boot
+    // therefore plays WHILE the device is being raised and is done as it settles - the
+    // Gunslinger mark_anm_show 0.85 is that second one ("display is active"), not the
+    // power-on. Lighting up at 0.85 instead put the whole loader after the draw.
+    float screen_on_mark{0.06f};
+    float boot_done_mark{0.85f};
     // Interference approach speed, normalized units per second (the original ramps its
     // electronics counter at a fixed rate - a step change reads as a toggle, not a wave).
     float interference_ramp{0.15f};
@@ -87,7 +91,9 @@ void load_cfg()
         ini.line_exist("pda3d", "power_low_threshold") ? ini.r_float("pda3d", "power_low_threshold") : 0.05f;
     cfg.brightness = ini.line_exist("pda3d", "brightness") ? ini.r_float("pda3d", "brightness") : 1.f;
     cfg.screen_on_mark =
-        ini.line_exist("pda3d", "screen_on_mark") ? ini.r_float("pda3d", "screen_on_mark") : 0.85f;
+        ini.line_exist("pda3d", "screen_on_mark") ? ini.r_float("pda3d", "screen_on_mark") : 0.06f;
+    cfg.boot_done_mark =
+        ini.line_exist("pda3d", "boot_done_mark") ? ini.r_float("pda3d", "boot_done_mark") : 0.85f;
     cfg.interference_ramp =
         ini.line_exist("pda3d", "interference_ramp") ? ini.r_float("pda3d", "interference_ramp") : 0.15f;
     cfg.joystick_period =
@@ -95,6 +101,7 @@ void load_cfg()
     cfg.joystick_deadzone =
         ini.line_exist("pda3d", "joystick_deadzone") ? ini.r_float("pda3d", "joystick_deadzone") : 2.f;
     cfg.screen_on_mark = clampr(cfg.screen_on_mark, 0.f, 1.f);
+    cfg.boot_done_mark = clampr(cfg.boot_done_mark, cfg.screen_on_mark, 1.f);
     if (cfg.interference_ramp <= 0.f)
         cfg.interference_ramp = 0.15f;
     if (cfg.joystick_period < 16)
@@ -425,18 +432,31 @@ void on_shown(u32 motion_start_ms, u32 motion_end_ms)
 {
     load_cfg();
     const float now = Device.fTimeGlobal;
-    // The screen turns on at screen_on_mark of the show motion - the moment the thumb
-    // presses the power button. Unknown timings degrade to "on immediately".
-    float delay = 0.f;
+    // Both boot marks ride the show motion, so the sequence scales with whatever draw
+    // animation the data provides: dark while the device leaves the pocket, the loader
+    // running as it comes up, and the live UI the moment it settles in front of the eyes.
     if (motion_end_ms > motion_start_ms)
     {
-        const u32 now_ms = Device.dwTimeGlobal;
-        const u32 on_ms = motion_start_ms + u32(cfg.screen_on_mark * float(motion_end_ms - motion_start_ms));
-        if (on_ms > now_ms)
-            delay = float(on_ms - now_ms) / 1000.f;
+        const float dur = float(motion_end_ms - motion_start_ms) / 1000.f;
+        // The motion has just been started by the caller, so elapsed is ~0 - measure it
+        // anyway, a late call must not push the whole sequence past the animation.
+        const float elapsed = float(s32(Device.dwTimeGlobal - motion_start_ms)) / 1000.f;
+        screen_on_at = now + (cfg.screen_on_mark * dur - elapsed);
+        boot_until = now + (cfg.boot_done_mark * dur - elapsed);
     }
-    screen_on_at = now + delay;
-    boot_until = screen_on_at + cfg.boot_time;
+    else
+    {
+        // No timings (savegame restore, missing motion): fall back to a fixed window.
+        screen_on_at = now;
+        boot_until = now + cfg.boot_time;
+    }
+    if (boot_until <= screen_on_at)
+        boot_until = screen_on_at + 0.05f;
+
+    if (g_pda3d_dbg > 0)
+        Msg("* [pda3d] boot: draw %.2fs, screen on at +%.2fs, ui live at +%.2fs",
+            motion_end_ms > motion_start_ms ? float(motion_end_ms - motion_start_ms) / 1000.f : 0.f,
+            screen_on_at - now, boot_until - now);
 }
 
 void reset()

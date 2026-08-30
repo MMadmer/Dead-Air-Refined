@@ -10,7 +10,8 @@ animator_section        = pda_show_animator
 ; a rigid two-handed device in both palms. So the episode swaps to the native rig, with
 ; its texture recolored to the DA look (no camo gloves).
 hands_section           = pda3d_actor_hud
-; boot sequence length (the shader's `a` channel window), seconds - starts at screen-on
+; Fallback boot length in seconds, used only when the show motion has no timings
+; (savegame restore). Normally the two marks below drive the sequence.
 boot_time               = 1.4
 ; m_affects.x pushed here when the battery reports empty (the shader blacks out past 0.41)
 blackout_level          = 0.55
@@ -18,9 +19,15 @@ blackout_level          = 0.55
 power_low_threshold     = 0.05
 ; screen brightness multiplier (m_affects.z)
 brightness              = 1.0
-; the moment of the show motion (0..1 of its length) when the thumb hits the power button:
-; the screen stays dark before it, the boot sequence starts at it (Gunslinger mark_anm_show)
-screen_on_mark          = 0.85
+; Boot marks along the show motion, as fractions of its length (pda_draw is 1.15 s):
+;   screen_on_mark - the screen lights up and the loading sequence starts. Kept just off
+;     zero so the device leaves the pocket dark for a beat.
+;   boot_done_mark - the loading ends and the live UI takes over. This is Gunslinger's
+;     mark_anm_show 0.85: "the display is active", i.e. the END of the boot, not the
+;     power-on. The loader therefore plays WHILE the device is being raised (~0.9 s here)
+;     and the screen is live exactly as it settles in front of the eyes.
+screen_on_mark          = 0.06
+boot_done_mark          = 0.85
 ; interference approach speed, normalized units per second - the screen degrades and
 ; recovers as a wave, never as a switch flip (Gunslinger electronics-counter ramp)
 interference_ramp       = 0.15
