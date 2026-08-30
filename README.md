@@ -191,14 +191,46 @@ Dependency versions and compatibility pins are recorded in
 
 ## Credits
 
-Special thanks to the Dead Air developers for creating the game and its systems,
-to Lanforse for preserving and sharing the surviving Dead Air 1.0 source
-reference, and to the Dead Air community for long-term testing, addons,
+Dead Air: Refined is built on other people's work. Everyone below has code,
+assets, or solutions in what ships here.
+
+To the **Dead Air** developers, for the game and the systems this project
+extends. To **Lanforse**, for preserving and sharing the surviving Dead Air 1.0
+source reference. To the **Dead Air community**, for years of testing, addons,
 research, and technical documentation.
 
-Dead Air: Refined also incorporates work from the OpenXRay project and its
-contributors. Individual third-party components retain their respective
-copyright notices and licenses.
+To **[GSC Game World](https://www.gsc-game.com/)**, for the X-Ray Engine that
+every fork here descends from.
+
+To the **[OpenXRay](https://github.com/OpenXRay/xray-16)** team, for the engine
+foundation this port is built on.
+
+To the **[IX-Ray](https://github.com/ixray-team/ixray-1.6-stcop)** team, for
+much of the current graphics stack and a long list of engine fixes — their
+shader code and lookup data ship inside this build. Particular thanks to
+**LVutner**, named in those shaders themselves.
+
+To the **[Gunslinger](https://github.com/gunslingermod)** team, for the 3D PDA:
+the models, animations, textures, sounds, and shaders it is built from come from
+their mod.
+
+To **DanesCrail**, author of
+**[DeadAir-Engine-x64-OpenSource](https://github.com/DeadAir-x64/DeadAir-Engine-x64-OpenSource)**
+— an independent x64 port of the same mod — for solutions adopted here.
+
+To **Jorge Jimenez** and the authors of
+**[SMAA](https://github.com/iryoku/smaa)**, for the anti-aliasing library.
+
+To **Manuel (ascii1457)** and **Screen Space Shaders for Anomaly**, for a
+rendering technique reimplemented here.
+
+To **Cromm Cruac**, **Peacemaker**, **Alundaio**, **DoctorX**,
+**LostAlphaRus**, and **Andrey Fidrya (Zmey)**, whose gamedata scripts ship in
+the compatibility overlay.
+
+Dead Air: Refined also builds on a number of open-source libraries, listed with
+their versions in [`DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md). Individual
+third-party components retain their respective copyright notices and licenses.
 
 ## License
 
