@@ -30,6 +30,8 @@ private:
     bool CanDismiss(UpdateService::State state) const;
 
     CUIStatic* m_caption{};
+    // Optional release headline above the change list; hidden when the notes carry none.
+    CUIStatic* m_theme{};
     CUIStatic* m_message{};
     CUIStatic* m_size{};
     CUIScrollView* m_changes{};

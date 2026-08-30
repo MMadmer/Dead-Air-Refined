@@ -13,7 +13,10 @@
         <size x="274" y="274" width="476" height="24">
             <text font="letterica16" align="c" vert_align="c"/>
         </size>
-        <changes x="274" y="310" width="476" height="215" always_show_scroll="1" vert_interval="4"
+        <theme x="274" y="302" width="476" height="26">
+            <text font="graffiti19" align="c" vert_align="c" complex_mode="1"/>
+        </theme>
+        <changes x="274" y="334" width="476" height="191" always_show_scroll="1" vert_interval="4"
                  right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
         <changes_text x="0" y="0" width="448" height="16">
             <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>

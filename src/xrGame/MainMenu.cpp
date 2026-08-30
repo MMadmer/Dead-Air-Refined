@@ -795,7 +795,7 @@ void CMainMenu::CheckUpdateDialog()
     // A release from a higher major line is announced first and separately - it is not an
     // update this build can install. The ordinary offer, if any, waits its turn: a player can
     // legitimately have both (a fix inside their own major line, and a new major elsewhere).
-    if (!snapshot.majorVersion.empty() && !snapshot.majorDismissed)
+    if (!snapshot.majorVersion.empty() && !snapshot.majorDismissed && UpdateService::MajorNoticeEnabled())
     {
         if (TopInputReceiver() != m_startDialog)
             return;

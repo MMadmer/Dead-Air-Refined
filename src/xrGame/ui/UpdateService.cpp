@@ -5,9 +5,10 @@
 #include "xrCore/ProductVersion.h"
 #include "xrEngine/Engine.h"
 
-// Console-backed user switch, registered as `dar_update_check` (console_commands.cpp) so the
-// options system persists it like any other setting.
-int g_dar_update_check = 1;
+// Console-backed user switch for the MAJOR-release notice only, registered as
+// `dar_major_update_notice` (console_commands.cpp) so the options system persists it like any
+// other setting. Ordinary updates are never gated on it.
+int g_dar_major_update_notice = 1;
 
 #ifdef XR_PLATFORM_WINDOWS
 #include <bcrypt.h>
@@ -96,8 +97,12 @@ struct ServiceState
     xr_string downloadUrl;
     xr_string digest;
     xr_string assetName;
+    xr_string themeEn;
+    xr_string themeRu;
     xr_string majorVersion;
     xr_string majorUrl;
+    xr_string majorThemeEn;
+    xr_string majorThemeRu;
     xr_string majorChangesEn;
     xr_string majorChangesRu;
     std::filesystem::path archivePath;
@@ -685,8 +690,52 @@ std::string_view trim_markdown_line(std::string_view line)
     return line;
 }
 
-xr_string extract_release_changes(
-    std::string_view body, std::string_view languageHeading, std::string_view changesHeading)
+// The optional headline of a release, shown above the change list. Lives in its own section
+// inside the language block; a release without one simply has no section and the dialogs drop
+// the line. The first non-empty, non-bullet line under the heading is the theme.
+xr_string extract_release_theme(
+    std::string_view body, std::string_view languageHeading, std::string_view themeHeading)
+{
+    bool inLanguage = false;
+    bool inTheme = false;
+    while (!body.empty())
+    {
+        const size_t end = body.find('\n');
+        const std::string_view line = trim_markdown_line(body.substr(0, end));
+        if (end == std::string_view::npos)
+            body = {};
+        else
+            body.remove_prefix(end + 1);
+
+        if (line.starts_with("## "))
+        {
+            if (inTheme)
+                return {}; // the section ended without any text in it
+            if (!inLanguage)
+                inLanguage = line == languageHeading;
+            else if (line == themeHeading)
+                inTheme = true;
+            else if (line == "## EN" || line == "## RU")
+                return {}; // the language block ended
+            continue;
+        }
+
+        if (!inTheme || line.empty())
+            continue;
+        // A bullet here means the section holds a list, not a headline - not a theme.
+        if ((line[0] == '*' || line[0] == '-') && line.size() > 1 && line[1] == ' ')
+            return {};
+
+        constexpr size_t MaximumThemeBytes = 256;
+        if (line.size() > MaximumThemeBytes)
+            return {};
+        return xr_string(line.data(), line.size());
+    }
+    return {};
+}
+
+xr_string extract_release_changes(std::string_view body, std::string_view languageHeading,
+    std::string_view changesHeading, std::string_view themeHeading)
 {
     enum class ParseState
     {
@@ -715,6 +764,10 @@ xr_string extract_release_changes(
             }
             else if (state == ParseState::SeekingChanges && line == changesHeading)
                 state = ParseState::Collecting;
+            // The theme section may sit between the language heading and the changes; step
+            // over it instead of treating it as the end of the block.
+            else if (state == ParseState::SeekingChanges && line == themeHeading)
+                continue;
             else
                 break;
             continue;
@@ -917,9 +970,12 @@ void check_worker()
         std::lock_guard lock(instance.dataMutex);
         instance.majorVersion = major->tag;
         instance.majorUrl = major->url;
-        instance.majorChangesEn = extract_release_changes(major->body, "## EN", "## Changes");
+        instance.majorThemeEn = extract_release_theme(major->body, "## EN", "## Theme");
+        instance.majorThemeRu = utf8_to_windows_1251(
+            extract_release_theme(major->body, "## RU", "## Тема"));
+        instance.majorChangesEn = extract_release_changes(major->body, "## EN", "## Changes", "## Theme");
         instance.majorChangesRu = utf8_to_windows_1251(
-            extract_release_changes(major->body, "## RU", "## Изменения"));
+            extract_release_changes(major->body, "## RU", "## Изменения", "## Тема"));
         Msg("* Major release announced: %s (installed %s)", major->tag.c_str(), DeadAirRefined::Version);
     }
 
@@ -941,9 +997,12 @@ void check_worker()
     {
         std::lock_guard lock(instance.dataMutex);
         instance.version = update->release.tag;
-        instance.changesEn = extract_release_changes(update->release.body, "## EN", "## Changes");
+        instance.themeEn = extract_release_theme(update->release.body, "## EN", "## Theme");
+        instance.themeRu = utf8_to_windows_1251(
+            extract_release_theme(update->release.body, "## RU", "## Тема"));
+        instance.changesEn = extract_release_changes(update->release.body, "## EN", "## Changes", "## Theme");
         instance.changesRu = utf8_to_windows_1251(
-            extract_release_changes(update->release.body, "## RU", "## Изменения"));
+            extract_release_changes(update->release.body, "## RU", "## Изменения", "## Тема"));
         instance.downloadUrl = update->asset.url;
         instance.digest = update->asset.digest;
         instance.assetName = update->asset.name;
@@ -1192,24 +1251,12 @@ bool write_restart_command(const std::filesystem::path& path)
 }
 }
 
-bool UpdateService::ChecksEnabled() { return g_dar_update_check != 0; }
+bool UpdateService::MajorNoticeEnabled() { return g_dar_major_update_notice != 0; }
 
-void UpdateService::SetChecksEnabled(bool enabled) { g_dar_update_check = enabled ? 1 : 0; }
+void UpdateService::SetMajorNoticeEnabled(bool enabled) { g_dar_major_update_notice = enabled ? 1 : 0; }
 
 void UpdateService::StartCheck()
 {
-    // The player asked not to be checked on - honour it before anything reaches the network.
-    if (!ChecksEnabled())
-    {
-        static bool reportedByUser = false;
-        if (!reportedByUser)
-        {
-            reportedByUser = true;
-            Msg("* Update check skipped: disabled in the game options");
-        }
-        return;
-    }
-
     // A mod that changed the installation owns it: an update would overwrite its files
     // with our payload, so the check does not even start.
     if (ModOptOut::AutoUpdateDisabled())
@@ -1344,10 +1391,14 @@ UpdateService::Snapshot UpdateService::GetSnapshot()
         std::lock_guard lock(instance.dataMutex);
         snapshot.version = instance.version;
         snapshot.message = instance.message;
+        snapshot.themeEn = instance.themeEn;
+        snapshot.themeRu = instance.themeRu;
         snapshot.changesEn = instance.changesEn;
         snapshot.changesRu = instance.changesRu;
         snapshot.majorVersion = instance.majorVersion;
         snapshot.majorUrl = instance.majorUrl;
+        snapshot.majorThemeEn = instance.majorThemeEn;
+        snapshot.majorThemeRu = instance.majorThemeRu;
         snapshot.majorChangesEn = instance.majorChangesEn;
         snapshot.majorChangesRu = instance.majorChangesRu;
     }
@@ -1370,6 +1421,6 @@ void UpdateService::DismissMajor() {}
 void UpdateService::OpenMajorReleasePage() {}
 UpdateService::Snapshot UpdateService::GetSnapshot() { return {}; }
 void UpdateService::Shutdown() {}
-bool UpdateService::ChecksEnabled() { return g_dar_update_check != 0; }
-void UpdateService::SetChecksEnabled(bool enabled) { g_dar_update_check = enabled ? 1 : 0; }
+bool UpdateService::MajorNoticeEnabled() { return g_dar_major_update_notice != 0; }
+void UpdateService::SetMajorNoticeEnabled(bool enabled) { g_dar_major_update_notice = enabled ? 1 : 0; }
 #endif

@@ -140,10 +140,10 @@
         <text>Закрыть</text>
     </string>
     <string id="st_update_major_disable">
-        <text>Больше не проверять обновления</text>
+        <text>Больше не уведомлять о новых крупных версиях</text>
     </string>
-    <string id="ui_mm_update_check">
-        <text>Проверять обновления</text>
+    <string id="ui_mm_major_update_notice">
+        <text>Уведомлять о крупных версиях</text>
     </string>
     <string id="ui_mm_fps_limit">
         <text>Ограничение FPS</text>

@@ -29,6 +29,10 @@ struct Snapshot
     State state{State::Idle};
     xr_string version;
     xr_string message;
+    // Optional headline of the release, shown above the change list. Empty when the release
+    // notes carry no theme section.
+    xr_string themeEn;
+    xr_string themeRu;
     xr_string changesEn;
     xr_string changesRu;
     u64 downloadedBytes{};
@@ -41,6 +45,8 @@ struct Snapshot
     // be offered 1.99.1 here AND told that 2.1.0 exists.
     xr_string majorVersion;
     xr_string majorUrl;
+    xr_string majorThemeEn;
+    xr_string majorThemeRu;
     xr_string majorChangesEn;
     xr_string majorChangesRu;
     bool majorDismissed{};
@@ -57,8 +63,10 @@ void OpenMajorReleasePage();
 Snapshot GetSnapshot();
 void Shutdown();
 
-// User-facing switch, mirrored by the Game options checkbox and by the one inside the
-// major-release notice. Persisted through the console command `dar_update_check`.
-bool ChecksEnabled();
-void SetChecksEnabled(bool enabled);
+// Whether the major-release notice may appear. It covers ONLY that notice: updates inside the
+// installed major line are always checked, because those are the ones a player is expected to
+// take. Mirrored by the Game options checkbox and by the one inside the notice itself, and
+// persisted through the console command `dar_major_update_notice`.
+bool MajorNoticeEnabled();
+void SetMajorNoticeEnabled(bool enabled);
 }

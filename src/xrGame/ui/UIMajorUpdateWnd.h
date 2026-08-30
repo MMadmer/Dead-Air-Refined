@@ -36,6 +36,8 @@ private:
     CUIStatic* m_caption{};
     CUIStatic* m_message{};
     CUIStatic* m_folderHint{};
+    // Optional release headline above the change list; hidden when the notes carry none.
+    CUIStatic* m_theme{};
     CUIScrollView* m_changes{};
     CUIStatic* m_changesText{};
     CUIStatic* m_disableLabel{};

@@ -34,6 +34,7 @@ bool CUIMajorUpdateWnd::Init()
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
     m_folderHint = UIHelper::CreateStatic(xml, "main:folder_hint", this);
+    m_theme = UIHelper::CreateStatic(xml, "main:theme", this);
     m_changes = UIHelper::CreateScrollView(xml, "main:changes", this);
     m_changesText = xr_new<CUIStatic>("Major release changelog");
     CUIXmlInit::InitStatic(xml, "main:changes_text", 0, m_changesText);
@@ -63,19 +64,23 @@ void CUIMajorUpdateWnd::Show(bool status)
         return;
 
     const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
-    const xr_string& changes = is_russian_language() ? snapshot.majorChangesRu : snapshot.majorChangesEn;
+    const bool russian = is_russian_language();
+    const xr_string& changes = russian ? snapshot.majorChangesRu : snapshot.majorChangesEn;
+    const xr_string& theme = russian ? snapshot.majorThemeRu : snapshot.majorThemeEn;
 
     string512 text{};
     xr_sprintf(text, sizeof(text), StringTable().translate("st_update_major_message").c_str(),
         DeadAirRefined::Version, snapshot.majorVersion.c_str());
     m_message->SetText(text);
+    m_theme->SetText(theme.c_str());
+    m_theme->Show(!theme.empty());
     m_changesText->SetText(changes.c_str());
     m_changesText->AdjustHeightToText();
     m_changes->ScrollToBegin();
     m_changes->Show(!changes.empty());
     // The switch reflects the live setting rather than the last click: the same option lives
     // in the Game tab and may have been changed there.
-    m_disable->SetCheck(!UpdateService::ChecksEnabled());
+    m_disable->SetCheck(!UpdateService::MajorNoticeEnabled());
 }
 
 void CUIMajorUpdateWnd::SendMessage(CUIWindow* window, s16 message, void* data)
@@ -104,5 +109,5 @@ void CUIMajorUpdateWnd::OnClose(CUIWindow*, void*)
 
 void CUIMajorUpdateWnd::OnDisableChecks(CUIWindow*, void*)
 {
-    UpdateService::SetChecksEnabled(!m_disable->GetCheck());
+    UpdateService::SetMajorNoticeEnabled(!m_disable->GetCheck());
 }

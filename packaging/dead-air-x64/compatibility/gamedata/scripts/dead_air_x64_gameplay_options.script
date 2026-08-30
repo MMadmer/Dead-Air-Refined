@@ -19,9 +19,9 @@ local function on_init(menu)
 	menu.gameplay_options["infinite_bolts"] = {typ="check"}
 	menu.gameplay_options["pause_in_background"] = {typ="check"}
 	menu.gameplay_options["crosshair_dot"] = {typ="check"}
-	-- The same switch the major-release notice offers: off means the game never asks GitHub
-	-- about releases at all. Caption comes from ui_mm_update_check.
-	menu.gameplay_options["update_check"] = {typ="check"}
+	-- The same switch the major-release notice offers. It covers ONLY that notice: updates
+	-- inside the installed major line are always checked. Caption: ui_mm_major_update_notice.
+	menu.gameplay_options["major_update_notice"] = {typ="check"}
 	menu.gameplay_options["cursor_sens"] = {typ="list", list=CURSOR_SENS_STEPS}
 end
 
@@ -42,9 +42,9 @@ local function on_set_values(menu, opt_manager)
 		crosshair_dot.ctrl:SetCheck(console:get_bool("hud_crosshair_dot"))
 	end
 
-	local update_check = menu.gameplay_options["update_check"]
-	if (update_check and update_check.ctrl) then
-		update_check.ctrl:SetCheck(console:get_bool("dar_update_check"))
+	local major_update_notice = menu.gameplay_options["major_update_notice"]
+	if (major_update_notice and major_update_notice.ctrl) then
+		major_update_notice.ctrl:SetCheck(console:get_bool("dar_major_update_notice"))
 	end
 
 	local cursor_sens = menu.gameplay_options["cursor_sens"]
@@ -69,9 +69,9 @@ local function on_accept(menu, opt_manager, console)
 		console:execute("hud_crosshair_dot " .. (crosshair_dot.ctrl:GetCheck() and "1" or "0"))
 	end
 
-	local update_check = menu.gameplay_options["update_check"]
-	if (update_check and update_check.ctrl) then
-		console:execute("dar_update_check " .. (update_check.ctrl:GetCheck() and "1" or "0"))
+	local major_update_notice = menu.gameplay_options["major_update_notice"]
+	if (major_update_notice and major_update_notice.ctrl) then
+		console:execute("dar_major_update_notice " .. (major_update_notice.ctrl:GetCheck() and "1" or "0"))
 	end
 
 	local cursor_sens = menu.gameplay_options["cursor_sens"]

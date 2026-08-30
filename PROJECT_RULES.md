@@ -347,8 +347,17 @@ The full binary contract and evolution rules are described in
 
 Release body template:
 
+`Theme` is optional: one short line naming what the release is about. The
+update dialog prints it in bold above the change list, and drops the line when
+the section is absent or empty. Keep it to a headline — a bullet list there is
+ignored.
+
 ```markdown
 ## EN
+
+## Theme
+
+[One short line naming the release, or omit this section entirely]
 
 ## Changes
 
@@ -360,11 +369,17 @@ Release body template:
 Choose one option:
 
 * **Setup** — recommended guided installation.
-* **Update ZIP** — manual installation or updater payload.
+* **Setup_Manual ZIP** — the complete payload for manual installation.
+* **Update_Patch ZIP** — only what changed since the previous version; the
+  in-game updater picks it automatically when it fits.
 
 Do not install both. Existing saves are preserved.
 ---
 ## RU
+
+## Тема
+
+[Одна короткая строка о том, чему посвящён релиз, либо раздел не указывать]
 
 ## Изменения
 
@@ -376,7 +391,9 @@ Do not install both. Existing saves are preserved.
 Выберите один вариант:
 
 * **Setup** — рекомендуемая пошаговая установка.
-* **Update ZIP** — ручная установка или архив для встроенного средства обновления.
+* **Setup_Manual ZIP** — полный архив для ручной установки.
+* **Update_Patch ZIP** — только изменения относительно прошлой версии;
+  встроенное обновление выбирает его само, когда он подходит.
 
 Не устанавливайте оба варианта. Существующие сохранения будут сохранены.
 ```

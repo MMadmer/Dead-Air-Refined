@@ -10,10 +10,13 @@
         <message x="274" y="214" width="476" height="44">
             <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
         </message>
-        <folder_hint x="274" y="264" width="476" height="104">
+        <folder_hint x="274" y="262" width="476" height="96">
             <text font="letterica16" align="c" vert_align="t" complex_mode="1">st_update_major_folder</text>
         </folder_hint>
-        <changes x="274" y="378" width="476" height="118" always_show_scroll="1" vert_interval="4"
+        <theme x="274" y="362" width="476" height="26">
+            <text font="graffiti19" align="c" vert_align="c" complex_mode="1"/>
+        </theme>
+        <changes x="274" y="394" width="476" height="102" always_show_scroll="1" vert_interval="4"
                  right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
         <changes_text x="0" y="0" width="448" height="16">
             <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>

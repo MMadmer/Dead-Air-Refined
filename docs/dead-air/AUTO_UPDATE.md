@@ -32,6 +32,12 @@ The English `## Changes` list must be inside `## EN`, and the Russian
 sections are shown by the client; installation instructions and the other
 language are never included in the update dialog.
 
+Each language block may also carry an optional `## Theme` / `## Тема` section
+holding one short line — the headline of the release. The dialogs print it in
+bold above the change list; a release without the section simply has no such
+line. Only the first non-empty line is read, a bullet list there is ignored,
+and anything longer than 256 bytes is dropped.
+
 References:
 
 - [GitHub REST API for releases](https://docs.github.com/en/rest/releases/releases)
@@ -40,23 +46,26 @@ References:
 
 ## Client behavior
 
-The check starts once per game process after the main menu has initialized, and
-only when update checking is enabled — the Game options carry a `Проверять
-обновления` switch, backed by the `dar_update_check` console command and
-persisted in `user.ltx` like any other setting. Turning it off stops the check
-before it reaches the network. An empty release list, a network error or the
-absence of a valid newer release does not open a dialog and does not block the
-menu.
+The check starts once per game process after the main menu has initialized. An
+empty release list, a network error or the absence of a valid newer release does
+not open a dialog and does not block the menu. Updates inside the installed
+major line are always checked — those are the ones a player is expected to take,
+so there is no switch that turns them off.
 
-The ordinary offer is confined to the installed MAJOR line: a build on 1.9.0 is
-offered 1.9.1 and 1.12.0, never 2.x. Crossing a major is not an update — saves
-and mods do not carry over — so a release from a higher major line is announced
-by its own dialog, which links to the release page and asks the player to
-install it into a separate folder, leaving the current build in place. That
-notice is decided independently of the ordinary offer and both can be pending at
-once: the notice comes first, the update dialog behind it. It reappears on every
-launch whose check succeeds; the checkbox inside it is the same
-`dar_update_check` switch as in the options.
+The ordinary offer is confined to that major line: a build on 1.9.0 is offered
+1.9.1 and 1.12.0, never 2.x. Crossing a major is not an update — saves and mods
+do not carry over — so a release from a higher major line is announced by its own
+dialog, which links to the release page and asks the player to install it into a
+separate folder, leaving the current build in place. That notice is decided
+independently of the ordinary offer and both can be pending at once: the notice
+comes first, the update dialog behind it, and it reappears on every launch whose
+check succeeds.
+
+Only that notice can be switched off, by the checkbox inside it or by
+`Уведомлять о крупных версиях` in the Game options — one setting, backed by the
+`dar_major_update_notice` console command and persisted in `user.ltx` like any
+other. With it off the check still runs and still offers updates within the
+installed major line.
 
 When a release publishes a patch and the installed version is the release
 immediately below it, the client downloads the patch instead of the full

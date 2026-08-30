@@ -40,6 +40,7 @@ bool CUIUpdateWnd::Init()
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
     m_size = UIHelper::CreateStatic(xml, "main:size", this);
+    m_theme = UIHelper::CreateStatic(xml, "main:theme", this);
     m_changes = UIHelper::CreateScrollView(xml, "main:changes", this);
     m_changesText = xr_new<CUIStatic>("Update changelog");
     CUIXmlInit::InitStatic(xml, "main:changes_text", 0, m_changesText);
@@ -121,7 +122,9 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
     const bool ready = snapshot.state == UpdateService::State::Ready;
     const bool failed = snapshot.state == UpdateService::State::DownloadFailed ||
         snapshot.state == UpdateService::State::ApplyFailed;
-    const xr_string& changes = is_russian_language() ? snapshot.changesRu : snapshot.changesEn;
+    const bool russian = is_russian_language();
+    const xr_string& changes = russian ? snapshot.changesRu : snapshot.changesEn;
+    const xr_string& theme = russian ? snapshot.themeRu : snapshot.themeEn;
 
     if (snapshot.state != m_lastState || snapshot.version != m_lastVersion || changes != m_lastChanges)
     {
@@ -140,6 +143,7 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
                 mebibytes(snapshot.totalBytes));
             m_size->SetText(text);
             m_action->SetText(StringTable().translate("st_update_download").c_str());
+            m_theme->SetText(theme.c_str());
             m_changesText->SetText(changes.c_str());
             m_changesText->AdjustHeightToText();
             m_changes->ScrollToBegin();
@@ -154,6 +158,7 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
 
         m_error->SetText(failed ? StringTable().translate("st_update_failed").c_str() : "");
         m_size->Show(available);
+        m_theme->Show(available && !theme.empty());
         m_changes->Show(available && !changes.empty());
         m_progressText->Show(downloading || ready);
         m_progress->Show(downloading || ready);

@@ -17,7 +17,9 @@ param(
     [string]$Scenario = "Both",
     [Parameter(Mandatory)][string]$InstalledVersion,
     [int]$Port = 8791,
-    [string]$AssetRoot = (Join-Path $env:TEMP "dar-update-mock-assets")
+    [string]$AssetRoot = (Join-Path $env:TEMP "dar-update-mock-assets"),
+    # Serve release notes without a theme section, to check that the dialogs drop the line.
+    [switch]$NoTheme
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,17 +56,21 @@ $prefix = "Dead-Air-Refined-"
 $assets = @{}
 $releases = [Collections.Generic.List[object]]::new()
 
+# Release notes carrying the optional theme section. Pass -NoTheme to serve notes without it
+# and confirm the dialogs simply drop the line.
+$themeBlock = if ($NoTheme) { "" } else { "## Тема`n`nВозвращение на Болота`n`n" }
+$themeBlockEn = if ($NoTheme) { "" } else { "## Theme`n`nReturn to the Marshes`n`n" }
 $body = @"
 ## RU
 
-## Изменения
+$themeBlock## Изменения
 
 * Проверочный пункт списка изменений.
 * Второй пункт, чтобы список был виден.
 
 ## EN
 
-## Changes
+$themeBlockEn## Changes
 
 * Mock changelog entry.
 "@
