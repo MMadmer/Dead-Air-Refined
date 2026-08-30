@@ -124,6 +124,27 @@
     <string id="st_update_failed">
         <text>Не удалось завершить операцию обновления. Повторите попытку.</text>
     </string>
+    <string id="st_update_major_caption">
+        <text>Доступна новая версия игры</text>
+    </string>
+    <string id="st_update_major_message">
+        <text>Установленная версия: %s\nДоступная версия: %s</text>
+    </string>
+    <string id="st_update_major_folder">
+        <text>Это крупное обновление. Оно несовместимо с установленной версией:\nсохранения и моды, рассчитанные на неё, работать не будут.\n\nПоэтому обновление из игры для него недоступно. Скачайте его со\nстраницы релиза и установите в отдельную папку, не удаляя текущую сборку.</text>
+    </string>
+    <string id="st_update_major_open">
+        <text>Открыть страницу загрузки</text>
+    </string>
+    <string id="st_update_major_close">
+        <text>Закрыть</text>
+    </string>
+    <string id="st_update_major_disable">
+        <text>Больше не проверять обновления</text>
+    </string>
+    <string id="ui_mm_update_check">
+        <text>Проверять обновления</text>
+    </string>
     <string id="ui_mm_fps_limit">
         <text>Ограничение FPS</text>
     </string>

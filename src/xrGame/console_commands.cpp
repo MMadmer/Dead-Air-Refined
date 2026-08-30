@@ -71,6 +71,9 @@ string_path g_last_saved_game;
 extern float air_resistance_epsilon;
 #endif // #ifdef DEBUG
 
+// ui/UpdateService.cpp - the user's update-checking switch.
+extern int g_dar_update_check;
+
 extern void show_smart_cast_stats();
 extern void clear_smart_cast_stats();
 extern void release_smart_cast_stats();
@@ -2469,6 +2472,10 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "g_backrun", &psActorFlags, AF_RUN_BACKWARD);
 
     CMD3(CCC_Mask, "g_multi_item_pickup", &psActorFlags, AF_MULTI_ITEM_PICKUP);
+
+    // Update checking, as a plain 0/1 so the Game options checkbox can bind to it by name
+    // (CConsole::GetBool accepts CCC_Integer) and user.ltx keeps it across launches.
+    CMD4(CCC_Integer, "dar_update_check", &g_dar_update_check, 0, 1);
 
     // alife
 #ifdef DEBUG

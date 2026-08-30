@@ -5,6 +5,10 @@
 #include "xrCore/ProductVersion.h"
 #include "xrEngine/Engine.h"
 
+// Console-backed user switch, registered as `dar_update_check` (console_commands.cpp) so the
+// options system persists it like any other setting.
+int g_dar_update_check = 1;
+
 #ifdef XR_PLATFORM_WINDOWS
 #include <bcrypt.h>
 #include <shellapi.h>
@@ -33,7 +37,13 @@ namespace
 constexpr std::wstring_view ReleasesUrl =
     L"https://api.github.com/repos/MMadmer/Dead-Air-Refined/releases?per_page=30";
 constexpr pcstr UpdateAssetPrefix = "Dead-Air-Refined-";
-constexpr pcstr UpdateAssetSuffix = "-Update.zip";
+// The complete payload, for a manual install or for a player who cannot take the patch.
+constexpr pcstr FullAssetSuffix = "-Setup_Manual.zip";
+// The name that suffix used to carry. Releases published before the rename still use it, and
+// a release may keep it as an alias so that clients older than this one keep updating.
+constexpr pcstr LegacyFullAssetSuffix = "-Update.zip";
+// Only the files that differ from the previous release.
+constexpr pcstr PatchAssetSuffix = "-Update_Patch.zip";
 constexpr size_t MaximumApiResponseBytes = 4 * 1024 * 1024;
 
 struct SemanticVersion
@@ -57,6 +67,7 @@ struct Release
 {
     xr_string tag;
     xr_string body;
+    xr_string url;
     bool draft{};
     bool prerelease{};
     xr_vector<ReleaseAsset> assets;
@@ -75,6 +86,8 @@ struct ServiceState
     std::atomic<u64> totalBytes{};
     std::atomic_bool started{};
     std::atomic_bool stopRequested{};
+    std::atomic_bool majorDismissed{};
+    std::atomic<UpdateService::Payload> payload{UpdateService::Payload::Full};
     std::mutex dataMutex;
     xr_string version;
     xr_string message;
@@ -82,6 +95,11 @@ struct ServiceState
     xr_string changesRu;
     xr_string downloadUrl;
     xr_string digest;
+    xr_string assetName;
+    xr_string majorVersion;
+    xr_string majorUrl;
+    xr_string majorChangesEn;
+    xr_string majorChangesRu;
     std::filesystem::path archivePath;
     std::thread worker;
 };
@@ -383,6 +401,11 @@ bool parse_release(JsonReader& reader, Release& release)
                     return false;
             }
             else if (!reader.SkipValue())
+                return false;
+        }
+        else if (key == "html_url")
+        {
+            if (!reader.ReadString(release.url))
                 return false;
         }
         else if (key == "draft")
@@ -733,43 +756,126 @@ xr_string utf8_to_windows_1251(std::string_view value)
     return result;
 }
 
-std::optional<std::pair<Release, ReleaseAsset>> select_update(const xr_vector<Release>& releases, xr_string& error)
+const ReleaseAsset* find_asset(const Release& release, pcstr suffix)
 {
-    const auto current = parse_version(DeadAirRefined::Version);
-    if (!current)
+    const xr_string expectedName = xr_string(UpdateAssetPrefix) + release.tag + suffix;
+    const auto asset = std::ranges::find_if(release.assets, [&](const ReleaseAsset& candidate)
     {
-        error = "The installed version is not valid SemVer";
-        return std::nullopt;
-    }
+        return candidate.name == expectedName && candidate.size && !candidate.url.empty() &&
+            valid_digest(candidate.digest);
+    });
+    return asset == release.assets.end() ? nullptr : &*asset;
+}
 
-    const Release* selectedRelease = nullptr;
-    const ReleaseAsset* selectedAsset = nullptr;
-    SemanticVersion selectedVersion = *current;
+// The version a patch on this release was cut against: the newest published release below it.
+// Releases come out in ascending order, so that is the "previous version" the build script
+// diffed. A wrong guess cannot corrupt anything - the applier checks every file it did not
+// receive against the installation and refuses the patch instead - it would only cost one
+// wasted download, and the refusal is remembered (see patch_rejected_version).
+std::optional<SemanticVersion> previous_release_version(
+    const xr_vector<Release>& releases, const SemanticVersion& selected)
+{
+    std::optional<SemanticVersion> best;
     for (const Release& release : releases)
     {
         if (release.draft || release.prerelease)
             continue;
         const auto version = parse_version(release.tag);
-        if (!version || *version <= selectedVersion)
+        if (!version || *version >= selected)
+            continue;
+        if (!best || *best < *version)
+            best = version;
+    }
+    return best;
+}
+
+xr_string patch_rejected_version()
+{
+    const std::filesystem::path marker = game_directory() / L".dead-air-x64" / L"patch-rejected.txt";
+    std::ifstream input(marker, std::ios::binary);
+    if (!input)
+        return {};
+    std::string value;
+    std::getline(input, value);
+    while (!value.empty() && (value.back() == '\r' || value.back() == '\n'))
+        value.pop_back();
+    return xr_string(value.c_str());
+}
+
+struct UpdateChoice
+{
+    Release release;
+    ReleaseAsset asset;
+    UpdateService::Payload payload{UpdateService::Payload::Full};
+};
+
+// The ordinary offer, deliberately confined to the installed MAJOR line. Crossing a major is
+// not an update - it is a separate product install - so it is reported through select_major
+// instead and never downloaded in place.
+std::optional<UpdateChoice> select_update(
+    const xr_vector<Release>& releases, const SemanticVersion& current, xr_string& error)
+{
+    (void)error;
+    const Release* selectedRelease = nullptr;
+    const ReleaseAsset* selectedAsset = nullptr;
+    SemanticVersion selectedVersion = current;
+    for (const Release& release : releases)
+    {
+        if (release.draft || release.prerelease)
+            continue;
+        const auto version = parse_version(release.tag);
+        if (!version || version->major != current.major || *version <= selectedVersion)
             continue;
 
-        const xr_string expectedName = xr_string(UpdateAssetPrefix) + release.tag + UpdateAssetSuffix;
-        const auto asset = std::ranges::find_if(release.assets, [&](const ReleaseAsset& candidate)
-        {
-            return candidate.name == expectedName && candidate.size && !candidate.url.empty() &&
-                valid_digest(candidate.digest);
-        });
-        if (asset == release.assets.end())
+        // The full archive is what makes a release offerable at all: every installation can
+        // take it. Its legacy name still counts, so a release published either way works.
+        const ReleaseAsset* full = find_asset(release, FullAssetSuffix);
+        if (!full)
+            full = find_asset(release, LegacyFullAssetSuffix);
+        if (!full)
             continue;
 
         selectedVersion = *version;
         selectedRelease = &release;
-        selectedAsset = &*asset;
+        selectedAsset = full;
     }
 
     if (!selectedRelease)
         return std::nullopt;
-    return std::pair{*selectedRelease, *selectedAsset};
+
+    UpdateChoice choice{*selectedRelease, *selectedAsset, UpdateService::Payload::Full};
+    if (const ReleaseAsset* patch = find_asset(*selectedRelease, PatchAssetSuffix))
+    {
+        const auto base = previous_release_version(releases, selectedVersion);
+        if (base && *base == current && patch_rejected_version() != selectedRelease->tag)
+        {
+            choice.asset = *patch;
+            choice.payload = UpdateService::Payload::Patch;
+        }
+    }
+    return choice;
+}
+
+// The highest release above the installed major line, whatever assets it carries: the notice
+// only points the player at the release page.
+const Release* select_major(const xr_vector<Release>& releases, const SemanticVersion& current)
+{
+    const Release* selected = nullptr;
+    SemanticVersion best{};
+    for (const Release& release : releases)
+    {
+        if (release.draft || release.prerelease || release.url.empty())
+            continue;
+        const auto version = parse_version(release.tag);
+        if (!version || version->major <= current.major)
+            continue;
+        if (!selected || best < *version)
+        {
+            best = *version;
+            selected = &release;
+        }
+    }
+    return selected;
 }
 
 void set_state(UpdateService::State state, xr_string message = {})
@@ -793,6 +899,30 @@ void check_worker()
         return;
     }
 
+    const auto current = parse_version(DeadAirRefined::Version);
+    if (!current)
+    {
+        error = "The installed version is not valid SemVer";
+        Msg("! Update check skipped: %s", error.c_str());
+        set_state(UpdateService::State::CheckFailed, std::move(error));
+        return;
+    }
+
+    ServiceState& instance = service();
+
+    // The major notice is decided on its own and survives a "no update" verdict: the two
+    // answers are independent.
+    if (const Release* major = select_major(releases, *current))
+    {
+        std::lock_guard lock(instance.dataMutex);
+        instance.majorVersion = major->tag;
+        instance.majorUrl = major->url;
+        instance.majorChangesEn = extract_release_changes(major->body, "## EN", "## Changes");
+        instance.majorChangesRu = utf8_to_windows_1251(
+            extract_release_changes(major->body, "## RU", "## Изменения"));
+        Msg("* Major release announced: %s (installed %s)", major->tag.c_str(), DeadAirRefined::Version);
+    }
+
     if (releases.empty())
     {
         Msg("* Update check completed: no published releases");
@@ -800,7 +930,7 @@ void check_worker()
         return;
     }
 
-    const auto update = select_update(releases, error);
+    const auto update = select_update(releases, *current, error);
     if (!update)
     {
         Msg("* Update check completed: version %s is current", DeadAirRefined::Version);
@@ -808,21 +938,23 @@ void check_worker()
         return;
     }
 
-    ServiceState& instance = service();
     {
         std::lock_guard lock(instance.dataMutex);
-        instance.version = update->first.tag;
-        instance.changesEn = extract_release_changes(update->first.body, "## EN", "## Changes");
+        instance.version = update->release.tag;
+        instance.changesEn = extract_release_changes(update->release.body, "## EN", "## Changes");
         instance.changesRu = utf8_to_windows_1251(
-            extract_release_changes(update->first.body, "## RU", "## Изменения"));
-        instance.downloadUrl = update->second.url;
-        instance.digest = update->second.digest;
+            extract_release_changes(update->release.body, "## RU", "## Изменения"));
+        instance.downloadUrl = update->asset.url;
+        instance.digest = update->asset.digest;
+        instance.assetName = update->asset.name;
         instance.message.clear();
     }
-    instance.totalBytes.store(update->second.size, std::memory_order_release);
+    instance.payload.store(update->payload, std::memory_order_release);
+    instance.totalBytes.store(update->asset.size, std::memory_order_release);
     instance.downloadedBytes.store(0, std::memory_order_release);
-    Msg("* Update available: %s -> %s (%llu bytes)", DeadAirRefined::Version,
-        update->first.tag.c_str(), static_cast<unsigned long long>(update->second.size));
+    Msg("* Update available: %s -> %s, %s (%llu bytes)", DeadAirRefined::Version,
+        update->release.tag.c_str(), update->asset.name.c_str(),
+        static_cast<unsigned long long>(update->asset.size));
     Msg("* Update changelog: EN %zu bytes, RU %zu bytes",
         instance.changesEn.size(), instance.changesRu.size());
     instance.state.store(UpdateService::State::Available, std::memory_order_release);
@@ -977,11 +1109,13 @@ void download_worker()
     xr_string url;
     xr_string digest;
     xr_string version;
+    xr_string assetName;
     {
         std::lock_guard lock(instance.dataMutex);
         url = instance.downloadUrl;
         digest = instance.digest;
         version = instance.version;
+        assetName = instance.assetName;
     }
 
     const std::filesystem::path root = game_directory();
@@ -991,8 +1125,10 @@ void download_worker()
         return;
     }
 
+    // Cache under the asset's own name: full and patch archives of one version must not
+    // collide, and a leftover from a rejected patch must not be mistaken for the full one.
     const std::filesystem::path archive = root / L".dead-air-x64" / L"update-cache" /
-        utf8_to_wide(version) / utf8_to_wide(xr_string(UpdateAssetPrefix) + version + UpdateAssetSuffix);
+        utf8_to_wide(version) / utf8_to_wide(assetName);
     xr_string error;
     if (!download_update(url, digest, instance.totalBytes.load(std::memory_order_acquire), archive, error))
     {
@@ -1056,8 +1192,24 @@ bool write_restart_command(const std::filesystem::path& path)
 }
 }
 
+bool UpdateService::ChecksEnabled() { return g_dar_update_check != 0; }
+
+void UpdateService::SetChecksEnabled(bool enabled) { g_dar_update_check = enabled ? 1 : 0; }
+
 void UpdateService::StartCheck()
 {
+    // The player asked not to be checked on - honour it before anything reaches the network.
+    if (!ChecksEnabled())
+    {
+        static bool reportedByUser = false;
+        if (!reportedByUser)
+        {
+            reportedByUser = true;
+            Msg("* Update check skipped: disabled in the game options");
+        }
+        return;
+    }
+
     // A mod that changed the installation owns it: an update would overwrite its files
     // with our payload, so the check does not even start.
     if (ModOptOut::AutoUpdateDisabled())
@@ -1165,6 +1317,20 @@ void UpdateService::Dismiss()
         instance.state.store(State::Dismissed, std::memory_order_release);
 }
 
+void UpdateService::DismissMajor() { service().majorDismissed.store(true, std::memory_order_release); }
+
+void UpdateService::OpenMajorReleasePage()
+{
+    xr_string url;
+    {
+        std::lock_guard lock(service().dataMutex);
+        url = service().majorUrl;
+    }
+    // Only ever a GitHub release page, straight from the API response we already trust.
+    if (url.starts_with("https://github.com/"))
+        ShellExecuteW(nullptr, L"open", utf8_to_wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 UpdateService::Snapshot UpdateService::GetSnapshot()
 {
     ServiceState& instance = service();
@@ -1172,12 +1338,18 @@ UpdateService::Snapshot UpdateService::GetSnapshot()
     snapshot.state = instance.state.load(std::memory_order_acquire);
     snapshot.downloadedBytes = instance.downloadedBytes.load(std::memory_order_acquire);
     snapshot.totalBytes = instance.totalBytes.load(std::memory_order_acquire);
+    snapshot.payload = instance.payload.load(std::memory_order_acquire);
+    snapshot.majorDismissed = instance.majorDismissed.load(std::memory_order_acquire);
     {
         std::lock_guard lock(instance.dataMutex);
         snapshot.version = instance.version;
         snapshot.message = instance.message;
         snapshot.changesEn = instance.changesEn;
         snapshot.changesRu = instance.changesRu;
+        snapshot.majorVersion = instance.majorVersion;
+        snapshot.majorUrl = instance.majorUrl;
+        snapshot.majorChangesEn = instance.majorChangesEn;
+        snapshot.majorChangesRu = instance.majorChangesRu;
     }
     return snapshot;
 }
@@ -1194,6 +1366,10 @@ void UpdateService::StartCheck() {}
 bool UpdateService::StartDownload() { return false; }
 bool UpdateService::RestartAndApply() { return false; }
 void UpdateService::Dismiss() {}
+void UpdateService::DismissMajor() {}
+void UpdateService::OpenMajorReleasePage() {}
 UpdateService::Snapshot UpdateService::GetSnapshot() { return {}; }
 void UpdateService::Shutdown() {}
+bool UpdateService::ChecksEnabled() { return g_dar_update_check != 0; }
+void UpdateService::SetChecksEnabled(bool enabled) { g_dar_update_check = enabled ? 1 : 0; }
 #endif

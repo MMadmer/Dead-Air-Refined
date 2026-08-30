@@ -4,6 +4,7 @@
 #include "ui/UIMessageBoxEx.h"
 #include "ui/UIBugReportWnd.h"
 #include "ui/UIUpdateWnd.h"
+#include "ui/UIMajorUpdateWnd.h"
 #include "ui/UpdateService.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
@@ -150,6 +151,7 @@ CMainMenu::~CMainMenu()
     xr_delete(m_startDialog);
     xr_delete(m_bugReportDialog);
     xr_delete(m_updateDialog);
+    xr_delete(m_majorUpdateDialog);
 
     xr_delete(m_account_mngr);
     xr_delete(m_login_mngr);
@@ -788,8 +790,35 @@ bool CMainMenu::CheckCrashReportDialog()
 
 void CMainMenu::CheckUpdateDialog()
 {
-    if (UpdateService::GetSnapshot().state != UpdateService::State::Available ||
-        TopInputReceiver() != m_startDialog)
+    const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
+
+    // A release from a higher major line is announced first and separately - it is not an
+    // update this build can install. The ordinary offer, if any, waits its turn: a player can
+    // legitimately have both (a fix inside their own major line, and a new major elsewhere).
+    if (!snapshot.majorVersion.empty() && !snapshot.majorDismissed)
+    {
+        if (TopInputReceiver() != m_startDialog)
+            return;
+        if (!m_majorUpdateDialog)
+        {
+            m_majorUpdateDialog = xr_new<CUIMajorUpdateWnd>();
+            if (!m_majorUpdateDialog->Init())
+            {
+                xr_delete(m_majorUpdateDialog);
+                Msg("! Failed to initialize the major release window");
+                UpdateService::DismissMajor();
+                return;
+            }
+        }
+        if (!m_majorUpdateDialog->IsShown())
+        {
+            Msg("* Major release notification shown: %s", snapshot.majorVersion.c_str());
+            m_majorUpdateDialog->ShowDialog(true);
+        }
+        return;
+    }
+
+    if (snapshot.state != UpdateService::State::Available || TopInputReceiver() != m_startDialog)
         return;
 
     if (!m_updateDialog)

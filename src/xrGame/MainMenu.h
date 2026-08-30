@@ -6,6 +6,7 @@ class CUICursor;
 class CUIMessageBoxEx;
 class CUIBugReportWnd;
 class CUIUpdateWnd;
+class CUIMajorUpdateWnd;
 class CGameSpy_HTTP;
 class CGameSpy_Full;
 
@@ -120,6 +121,7 @@ protected:
     xr_vector<CUIMessageBoxEx*> m_pMB_ErrDlgs;
     CUIBugReportWnd* m_bugReportDialog{};
     CUIUpdateWnd* m_updateDialog{};
+    CUIMajorUpdateWnd* m_majorUpdateDialog{};
     bool m_crashReportChecked{};
     bool ReloadUI();
 

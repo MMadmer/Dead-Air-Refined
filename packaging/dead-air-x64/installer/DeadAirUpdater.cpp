@@ -29,7 +29,16 @@ extern "C"
 
 namespace
 {
-constexpr std::string_view ManifestSchema = "dead-air-refined.update/1";
+// Two archive shapes share one applier.
+//   /1 - the full payload: every managed file of the target version is packed.
+//   /2 - a patch: the manifest still lists EVERY file of the target version, but only the
+//        ones that differ from the base version are packed. A file the manifest declares and
+//        the archive omits must already sit in the installation with exactly that hash - so
+//        the end state is identical to a full install, and a mismatch is caught before the
+//        first byte is written. Schema /1 is deliberately left untouched: an older installed
+//        updater must keep applying full archives.
+constexpr std::string_view ManifestSchemaFull = "dead-air-refined.update/1";
+constexpr std::string_view ManifestSchemaPatch = "dead-air-refined.update/2";
 constexpr size_t MaximumFiles = 1024;
 constexpr unsigned long long MaximumExpandedBytes = 1024ull * 1024 * 1024;
 
@@ -55,8 +64,20 @@ struct PayloadFile
 struct Manifest
 {
     std::wstring version;
+    // Set for schema /2. `base` is the version the delta was cut against - informational:
+    // the per-file hash check below is what actually decides whether the patch fits.
+    bool patch{};
+    std::wstring base;
     std::vector<PayloadFile> files;
 };
+
+std::wstring lower_key(const std::filesystem::path& path)
+{
+    std::wstring key = path.generic_wstring();
+    std::ranges::transform(key, key.begin(),
+        [](wchar_t character) { return static_cast<wchar_t>(towlower(character)); });
+    return key;
+}
 
 std::optional<std::wstring> value_after(std::span<wchar_t*> arguments, std::wstring_view name)
 {
@@ -398,15 +419,38 @@ std::optional<Manifest> parse_manifest(const std::filesystem::path& path)
     if (!input)
         return std::nullopt;
 
+    const auto next_line = [&input](std::string& value)
+    {
+        if (!std::getline(input, value))
+            return false;
+        if (!value.empty() && value.back() == '\r')
+            value.pop_back();
+        return true;
+    };
+
     Manifest manifest;
     std::string line;
-    if (!std::getline(input, line) || line != "schema=" + std::string(ManifestSchema))
+    if (!next_line(line))
         return std::nullopt;
-    if (!std::getline(input, line) || !line.starts_with("version="))
+    if (line == "schema=" + std::string(ManifestSchemaPatch))
+        manifest.patch = true;
+    else if (line != "schema=" + std::string(ManifestSchemaFull))
+        return std::nullopt;
+    if (!next_line(line) || !line.starts_with("version="))
         return std::nullopt;
     manifest.version = utf8_to_wide(std::string_view(line).substr(8));
     if (!valid_version(manifest.version))
         return std::nullopt;
+    if (manifest.patch)
+    {
+        if (!next_line(line) || line != "kind=patch")
+            return std::nullopt;
+        if (!next_line(line) || !line.starts_with("base="))
+            return std::nullopt;
+        manifest.base = utf8_to_wide(std::string_view(line).substr(5));
+        if (!valid_version(manifest.base) || manifest.base == manifest.version)
+            return std::nullopt;
+    }
 
     std::set<std::wstring, std::less<>> unique;
     unsigned long long total = 0;
@@ -431,10 +475,7 @@ std::optional<Manifest> parse_manifest(const std::filesystem::path& path)
         {
             return std::nullopt;
         }
-        std::wstring key = file.relativePath.generic_wstring();
-        std::ranges::transform(key, key.begin(),
-            [](wchar_t character) { return static_cast<wchar_t>(towlower(character)); });
-        if (!unique.insert(key).second)
+        if (!unique.insert(lower_key(file.relativePath)).second)
             return std::nullopt;
         total += file.size;
         manifest.files.push_back(std::move(file));
@@ -444,22 +485,47 @@ std::optional<Manifest> parse_manifest(const std::filesystem::path& path)
     return manifest;
 }
 
-bool verify_stage(const std::filesystem::path& stage, const Manifest& manifest,
-    const std::set<std::wstring, std::less<>>& extractedFiles)
+bool matches_payload(const std::filesystem::path& path, const PayloadFile& file)
 {
-    if (extractedFiles.size() != manifest.files.size() + 1 || !extractedFiles.contains(L"update-manifest.txt"))
+    std::error_code error;
+    return std::filesystem::is_regular_file(path, error) && !error &&
+        std::filesystem::file_size(path, error) == file.size && !error && sha256_file(path) == file.hash;
+}
+
+// Every manifest entry must be accounted for before anything is touched. A full archive has
+// to carry all of them; a patch may leave one out only when the installation already holds
+// that exact file. `unpatchable` reports the second case failing, which is the one worth
+// telling the client about: the answer is to fetch the full archive instead.
+bool verify_stage(const std::filesystem::path& stage, const std::filesystem::path& gameDirectory,
+    const Manifest& manifest, const std::set<std::wstring, std::less<>>& extractedFiles, bool& unpatchable)
+{
+    unpatchable = false;
+    if (!extractedFiles.contains(L"update-manifest.txt"))
         return false;
+    if (!manifest.patch && extractedFiles.size() != manifest.files.size() + 1)
+        return false;
+
+    size_t packed = 0;
     for (const PayloadFile& file : manifest.files)
     {
-        const std::filesystem::path source = stage / file.relativePath;
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(source, error) || error ||
-            std::filesystem::file_size(source, error) != file.size || error || sha256_file(source) != file.hash)
+        if (extractedFiles.contains(lower_key(file.relativePath)))
+        {
+            ++packed;
+            if (!matches_payload(stage / file.relativePath, file))
+                return false;
+        }
+        else if (!manifest.patch)
         {
             return false;
         }
+        else if (!matches_payload(gameDirectory / file.relativePath, file))
+        {
+            unpatchable = true;
+            return false;
+        }
     }
-    return true;
+    // Nothing may ride along that the manifest does not declare.
+    return extractedFiles.size() == packed + 1;
 }
 
 std::vector<std::filesystem::path> read_paths(const std::filesystem::path& path)
@@ -613,10 +679,15 @@ bool restore_backup(const std::filesystem::path& gameDirectory, const std::files
 }
 
 bool apply_payload(const std::filesystem::path& gameDirectory, const std::filesystem::path& stage,
-    const Manifest& manifest, const std::vector<std::filesystem::path>& scope)
+    const Manifest& manifest, const std::vector<std::filesystem::path>& scope,
+    const std::set<std::wstring, std::less<>>& extractedFiles)
 {
     for (const PayloadFile& file : manifest.files)
     {
+        // A patch omits everything that is already correct on disk - verify_stage proved it,
+        // so those files are simply left alone.
+        if (!extractedFiles.contains(lower_key(file.relativePath)))
+            continue;
         if (!copy_atomically(stage / file.relativePath, gameDirectory / file.relativePath))
             return false;
     }
@@ -632,29 +703,28 @@ bool apply_payload(const std::filesystem::path& gameDirectory, const std::filesy
 }
 
 bool synchronize_payload(const std::filesystem::path& gameDirectory, const std::filesystem::path& stage,
-    const Manifest& manifest)
+    const std::filesystem::path& backupFiles, const Manifest& manifest,
+    const std::set<std::wstring, std::less<>>& extractedFiles)
 {
     for (const PayloadFile& file : manifest.files)
     {
         const std::filesystem::path destination = gameDirectory / file.relativePath;
-        std::error_code error;
-        const bool matches = std::filesystem::is_regular_file(destination, error) && !error &&
-            std::filesystem::file_size(destination, error) == file.size && !error &&
-            sha256_file(destination) == file.hash;
-        if (!matches && !copy_atomically(stage / file.relativePath, destination))
+        if (matches_payload(destination, file))
+            continue;
+        // The maintenance installer removed a file it does not know about. A packed file
+        // comes back from the stage; one the patch left out was identical before the update,
+        // so the snapshot taken a moment ago holds exactly the right bytes.
+        const std::filesystem::path source = extractedFiles.contains(lower_key(file.relativePath))
+            ? stage / file.relativePath
+            : backupFiles / file.relativePath;
+        if (!copy_atomically(source, destination))
             return false;
     }
 
     for (const PayloadFile& file : manifest.files)
     {
-        const std::filesystem::path destination = gameDirectory / file.relativePath;
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(destination, error) || error ||
-            std::filesystem::file_size(destination, error) != file.size || error ||
-            sha256_file(destination) != file.hash)
-        {
+        if (!matches_payload(gameDirectory / file.relativePath, file))
             return false;
-        }
     }
     return true;
 }
@@ -800,8 +870,23 @@ int apply_update(const Arguments& arguments)
     if (!extract_archive(arguments.archive, stage, extracted))
         return 13;
     const auto manifest = parse_manifest(stage / L"update-manifest.txt");
-    if (!manifest || manifest->version != arguments.version || !verify_stage(stage, *manifest, extracted))
+    bool unpatchable = false;
+    if (!manifest || manifest->version != arguments.version ||
+        !verify_stage(stage, arguments.gameDirectory, *manifest, extracted, unpatchable))
+    {
+        // A patch that does not fit this installation is not a failure of the release - the
+        // full archive still applies. Leave a note so the client stops offering the patch for
+        // this version instead of looping the player through the same rejection.
+        if (unpatchable)
+        {
+            std::error_code markerError;
+            std::filesystem::create_directories(arguments.gameDirectory / L".dead-air-x64", markerError);
+            write_text(arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt",
+                wide_to_utf8(arguments.version));
+            return 24;
+        }
         return 14;
+    }
 
     std::vector<std::filesystem::path> incoming;
     incoming.reserve(manifest->files.size());
@@ -812,15 +897,27 @@ int apply_update(const Arguments& arguments)
     const auto backup = create_backup(arguments.gameDirectory, incoming, scope);
     if (!backup)
         return 15;
-    if (!apply_payload(arguments.gameDirectory, stage, *manifest, scope))
+    if (!apply_payload(arguments.gameDirectory, stage, *manifest, scope, extracted))
     {
         restore_backup(arguments.gameDirectory, *backup, scope);
         return 16;
     }
 
-    // Run the installer outside its destination so Inno Setup can safely refresh its uninstall data.
-    const std::filesystem::path maintenance =
+    // Run the installer outside its destination so Inno Setup can safely refresh its uninstall
+    // data. A patch only carries it when it changed, so fall back to the copy just applied -
+    // either way it runs from the cache, never from inside the installation.
+    const std::filesystem::path stagedMaintenance =
         stage / L".dead-air-x64" / L"Dead-Air-Refined-Maintenance.exe";
+    const std::filesystem::path maintenance = cache / L"Dead-Air-Refined-Maintenance.exe";
+    std::error_code maintenanceError;
+    const std::filesystem::path maintenanceSource = std::filesystem::is_regular_file(stagedMaintenance, maintenanceError)
+        ? stagedMaintenance
+        : arguments.gameDirectory / L".dead-air-x64" / L"Dead-Air-Refined-Maintenance.exe";
+    if (!copy_atomically(maintenanceSource, maintenance))
+    {
+        restore_backup(arguments.gameDirectory, *backup, scope);
+        return 25;
+    }
     const std::filesystem::path maintenanceLog = cache / L"maintenance.log";
     const std::wstring maintenanceArguments = L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /BACKUP=no /TARGET=" +
         quote_argument(arguments.gameDirectory.wstring()) + L" /LOG=" + quote_argument(maintenanceLog.wstring());
@@ -831,12 +928,13 @@ int apply_update(const Arguments& arguments)
     }
 
     // Inno Setup may remove payload files that are absent from its maintenance-only file table.
-    if (!synchronize_payload(arguments.gameDirectory, stage, *manifest))
+    if (!synchronize_payload(arguments.gameDirectory, stage, *backup / L"files", *manifest, extracted))
     {
         restore_backup(arguments.gameDirectory, *backup, scope);
         return 18;
     }
 
+    DeleteFileW((arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt").c_str());
     if (!start_finish_process(arguments.gameDirectory, cache, arguments.restartCommand))
         return 19;
     return 0;

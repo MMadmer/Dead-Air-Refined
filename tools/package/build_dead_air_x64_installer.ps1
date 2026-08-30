@@ -3,7 +3,19 @@ param(
     [string]$PortVersion = "1.4.0",
     [string]$ConverterPath = "D:\Games\Dead Air\tools\AXRToolset\bin\converter.exe",
     [switch]$CompatibilityArchiveOnly,
-    [switch]$SkipArchive
+    [switch]$SkipArchive,
+    # Full archive of the release this one follows. Given it, a patch archive is built next to
+    # the full one carrying only the files that actually changed. Without it only the full
+    # archive is produced (correct for the very first release, or after a version is pulled).
+    [string]$PreviousFullArchive,
+    # Also publish the full archive under its historical "-Update.zip" name. Clients older
+    # than the rename look for exactly that asset and see no update without it, so keep this
+    # on for at least one release after switching.
+    [switch]$NoLegacyUpdateAlias,
+    # Rebuild only the patch, from the payload tree an earlier run of this script already
+    # produced ("$packageName-update-files"). Useful to cut a patch against a different base
+    # without repeating the whole release build.
+    [switch]$PatchOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +25,10 @@ if ($PortVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "PortVersion must use numeric SemVer format, for example 1.0.1."
 }
 
+if ($PatchOnly -and -not $PreviousFullArchive) {
+    throw "PatchOnly needs PreviousFullArchive."
+}
+
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $productVersionHeader = Join-Path $repositoryRoot "src\xrCore\ProductVersion.h"
 $productVersionSource = [IO.File]::ReadAllText($productVersionHeader)
@@ -20,7 +36,10 @@ $productVersionMatch = [regex]::Match(
     $productVersionSource,
     '(?m)^#define\s+DAR_VERSION_STRING\s+"(?<version>\d+\.\d+\.\d+)"\s*$'
 )
-if (-not $productVersionMatch.Success -or $PortVersion -ne $productVersionMatch.Groups['version'].Value) {
+# A patch rebuild works off an already-built payload tree, so it is free to target a version
+# other than the one currently compiled.
+if (-not $PatchOnly -and
+    (-not $productVersionMatch.Success -or $PortVersion -ne $productVersionMatch.Groups['version'].Value)) {
     throw "PortVersion must match the version compiled into the game."
 }
 
@@ -28,7 +47,12 @@ $artifactRoot = Join-Path $repositoryRoot "artifacts"
 $packageName = "Dead-Air-Refined-$PortVersion"
 $outputRoot = Join-Path $artifactRoot "$packageName-installer-files"
 $rawOutputRoot = Join-Path $artifactRoot "$packageName-update-files"
-$archivePath = Join-Path $artifactRoot "$packageName-Update.zip"
+# The complete payload. Named for what it is: a manual setup, the fallback every installation
+# can always take. The patch beside it is the bandwidth-saving path.
+$archivePath = Join-Path $artifactRoot "$packageName-Setup_Manual.zip"
+$legacyArchivePath = Join-Path $artifactRoot "$packageName-Update.zip"
+$patchArchivePath = Join-Path $artifactRoot "$packageName-Update_Patch.zip"
+$patchOutputRoot = Join-Path $artifactRoot "$packageName-patch-files"
 $runtimeRoot = Join-Path $repositoryRoot "bin\x64\Release"
 $installerSource = Join-Path $repositoryRoot "packaging\dead-air-x64\installer\DeadAir-x64.iss"
 $runtimeManifestPath = Join-Path $repositoryRoot "packaging\dead-air-x64\installer\runtime-files.txt"
@@ -217,6 +241,126 @@ function New-UpdateArchive {
     finally {
         Pop-Location
     }
+
+    if (-not $NoLegacyUpdateAlias) {
+        Assert-PathInside -Parent $artifactRoot -Child $legacyArchivePath
+        Copy-Item -LiteralPath $archivePath -Destination $legacyArchivePath -Force
+    }
+}
+
+function Get-ArchiveManifest {
+    param([Parameter(Mandatory)][string]$ArchivePath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $zip.GetEntry("update-manifest.txt")
+        if (-not $entry) {
+            throw "The previous archive has no update-manifest.txt: $ArchivePath"
+        }
+        $reader = [IO.StreamReader]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    }
+    finally {
+        $zip.Dispose()
+    }
+
+    $lines = $text -split "`n"
+    if ($lines[0] -notmatch '^schema=dead-air-refined\.update/1$') {
+        throw "The previous archive must be a full one (schema /1), got: $($lines[0])"
+    }
+    if ($lines[1] -notmatch '^version=(?<version>\d+\.\d+\.\d+)$') {
+        throw "The previous archive has no usable version line: $($lines[1])"
+    }
+
+    $files = @{}
+    foreach ($line in $lines | Select-Object -Skip 2) {
+        if (-not $line.Trim()) { continue }
+        $parts = $line -split "`t"
+        if ($parts.Count -ne 3) { throw "Malformed manifest line: $line" }
+        $files[$parts[2]] = $parts[0]
+    }
+    [pscustomobject]@{ Version = $Matches['version']; Files = $files }
+}
+
+function New-PatchArchive {
+    if ($SkipArchive -or -not $PreviousFullArchive) {
+        return $null
+    }
+    if (-not (Test-Path -LiteralPath $PreviousFullArchive -PathType Leaf)) {
+        throw "PreviousFullArchive was not found: $PreviousFullArchive"
+    }
+
+    $previous = Get-ArchiveManifest -ArchivePath $PreviousFullArchive
+    if ($previous.Version -eq $PortVersion) {
+        throw "PreviousFullArchive is the same version as this build ($PortVersion)."
+    }
+
+    Assert-PathInside -Parent $artifactRoot -Child $patchOutputRoot
+    Assert-PathInside -Parent $artifactRoot -Child $patchArchivePath
+    if (Test-Path -LiteralPath $patchOutputRoot) {
+        Remove-Item -LiteralPath $patchOutputRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $patchArchivePath) {
+        Remove-Item -LiteralPath $patchArchivePath -Force
+    }
+    New-Item -ItemType Directory -Path $patchOutputRoot -Force | Out-Null
+
+    # The manifest still describes the WHOLE target version - that is what lets the applier
+    # end up in exactly the state a full install would reach, and what tells it which stale
+    # files to drop. Only the payload is trimmed.
+    $manifest = [Collections.Generic.List[string]]::new()
+    $manifest.Add("schema=dead-air-refined.update/2")
+    $manifest.Add("version=$PortVersion")
+    $manifest.Add("kind=patch")
+    $manifest.Add("base=$($previous.Version)")
+
+    $packed = 0
+    $packedBytes = 0L
+    $totalBytes = 0L
+    Get-ChildItem -LiteralPath $rawOutputRoot -Recurse -File |
+        Where-Object { $_.FullName.Substring($rawOutputRoot.Length + 1) -ne "update-manifest.txt" } |
+        Sort-Object { $_.FullName.Substring($rawOutputRoot.Length + 1) } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($rawOutputRoot.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $manifest.Add("$hash`t$($_.Length)`t$relative")
+            $totalBytes += $_.Length
+            if ($previous.Files[$relative] -ne $hash) {
+                $destination = Join-Path $patchOutputRoot $relative.Replace('/', '\')
+                New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+                Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+                $packed++
+                $packedBytes += $_.Length
+            }
+        }
+
+    [IO.File]::WriteAllText(
+        (Join-Path $patchOutputRoot "update-manifest.txt"),
+        [string]::Join("`n", $manifest) + "`n",
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+    Push-Location $patchOutputRoot
+    try {
+        & $sevenZip a -tzip -mx=9 $patchArchivePath "*"
+        if ($LASTEXITCODE -ne 0) {
+            throw "7-Zip failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    [pscustomobject]@{
+        Path = $patchArchivePath
+        Base = $previous.Version
+        PackedFiles = $packed
+        TotalFiles = $manifest.Count - 4
+        PackedMB = [math]::Round($packedBytes / 1MB, 1)
+        FullMB = [math]::Round($totalBytes / 1MB, 1)
+    }
 }
 
 function Build-CompatibilityArchive {
@@ -231,6 +375,14 @@ function Build-CompatibilityArchive {
 if ($CompatibilityArchiveOnly) {
     Build-CompatibilityArchive
     Get-Item -LiteralPath $compatibilityArchive
+    return
+}
+
+if ($PatchOnly) {
+    if (-not (Test-Path -LiteralPath $rawOutputRoot -PathType Container)) {
+        throw "No payload tree to diff against: $rawOutputRoot"
+    }
+    New-PatchArchive
     return
 }
 
@@ -283,10 +435,17 @@ if ($LASTEXITCODE -ne 0) {
 
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "packaging\dead-air-x64\README_RU.md") -Destination $outputRoot
 New-UpdateArchive
+$patch = New-PatchArchive
 
 $checksumFiles = @(Get-ChildItem -LiteralPath $outputRoot -File)
 if (-not $SkipArchive) {
     $checksumFiles += Get-Item -LiteralPath $archivePath
+    if (-not $NoLegacyUpdateAlias) {
+        $checksumFiles += Get-Item -LiteralPath $legacyArchivePath
+    }
+    if ($patch) {
+        $checksumFiles += Get-Item -LiteralPath $patch.Path
+    }
 }
 $checksums = $checksumFiles |
     Sort-Object Name |
@@ -301,6 +460,11 @@ $installerFiles = Get-ChildItem -LiteralPath $outputRoot -File
     InstallerDirectory = $outputRoot
     InstallerFiles = $installerFiles.Count
     InstallerSizeGB = [math]::Round(($installerFiles | Measure-Object Length -Sum).Sum / 1GB, 3)
-    UpdateArchive = if ($SkipArchive) { $null } else { $archivePath }
-    UpdateArchiveSizeMB = if ($SkipArchive) { $null } else { [math]::Round((Get-Item $archivePath).Length / 1MB, 1) }
+    FullArchive = if ($SkipArchive) { $null } else { $archivePath }
+    FullArchiveSizeMB = if ($SkipArchive) { $null } else { [math]::Round((Get-Item $archivePath).Length / 1MB, 1) }
+    LegacyAlias = if ($SkipArchive -or $NoLegacyUpdateAlias) { $null } else { $legacyArchivePath }
+    PatchArchive = if ($patch) { $patch.Path } else { $null }
+    PatchBaseVersion = if ($patch) { $patch.Base } else { $null }
+    PatchFiles = if ($patch) { "$($patch.PackedFiles) of $($patch.TotalFiles)" } else { $null }
+    PatchArchiveSizeMB = if ($patch) { [math]::Round((Get-Item $patch.Path).Length / 1MB, 1) } else { $null }
 }
