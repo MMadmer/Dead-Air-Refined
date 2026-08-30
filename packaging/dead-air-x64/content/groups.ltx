@@ -1,0 +1,40 @@
+; Content bundle layout for Dead Air: Refined.
+;
+; Content is split into bundles so that changing one texture re-publishes one bundle instead
+; of the whole set. A bundle is an .xdb0 archive whose filename carries the SHA-256 of the
+; packed file, so unchanged content keeps its name and is never re-uploaded or re-downloaded.
+;
+; THE ASSIGNMENT TABLE BELOW IS APPEND-ONLY.
+; Editing or removing a line moves files between bundles, which changes both bundles' bytes,
+; which changes both filenames - and every installed player re-downloads both. New directories
+; are appended automatically by the builder into the smallest shard of their group; that edit
+; is committed and reviewed like any other, but existing lines are never touched.
+;
+; Sharding is an explicit directory table rather than `hash % shard_count` precisely because
+; the shard count WILL grow: a modulo scheme re-shuffles every file the moment it changes, so
+; a single new bundle would cost a full re-download of everything.
+
+[groups]
+; group name = the gamedata subtree it draws from
+textures        = textures
+meshes          = meshes
+sounds          = sounds
+anims           = anims
+
+[shard]
+; A shard aims for this size. It is a target, not a limit: a directory is never split across
+; shards, so one oversized directory produces one oversized bundle (the builder warns).
+target_mb       = 250
+; Hard ceiling per bundle file. GitHub refuses a release asset above 2 GiB.
+max_mb          = 1536
+
+[assign]
+; <root>/<first path component> = <shard index>
+textures/act            = 00
+textures/item           = 00
+textures/ui             = 01
+meshes/dynamics         = 00
+sounds/dead_air_x64     = 00
+sounds/detectorshud     = 00
+sounds/items            = 00
+anims/camera_effects    = 00

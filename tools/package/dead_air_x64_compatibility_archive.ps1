@@ -1,6 +1,12 @@
-# Shared compatibility archive builder for the Dead Air x64 packaging scripts.
+# Compatibility archive builder for the Dead Air x64 packaging scripts.
 # Dot-source this file, then call New-DeadAirCompatibilityArchive.
 # The archive is always written as <WorkRoot>\xtra_dead_air_x64.xdb0.
+#
+# Packing and verification live in dead_air_x64_archive.ps1 and are shared with the content
+# bundles. What stays here is what is specific to THIS archive: the core script overrides
+# that must shadow the packed Dead Air copies, and the cp1251 text fix-ups. Neither may ever
+# run over a content bundle, which is why they are not in the shared builder.
+. (Join-Path $PSScriptRoot "dead_air_x64_archive.ps1")
 
 function New-DeadAirCompatibilityArchive {
     [CmdletBinding()]
@@ -78,33 +84,10 @@ function New-DeadAirCompatibilityArchive {
     }
     [IO.File]::WriteAllText($gravityGunScriptPath, $gravityGunScript, $windows1251)
 
-    & $converter -pack -xdb -xdb_ud $compatibilityUserData -out $compatibilityArchive $compatibilityStageGameRoot
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $compatibilityArchive -PathType Leaf)) {
-        throw "The Dead Air x64 compatibility archive build failed."
-    }
-
-    if (Test-Path -LiteralPath $compatibilityVerifyRoot) {
-        Remove-Item -LiteralPath $compatibilityVerifyRoot -Recurse -Force
-    }
-    New-Item -ItemType Directory -Path $compatibilityVerifyRoot -Force | Out-Null
-    & $converter -unpack -xdb -dir $compatibilityVerifyRoot $compatibilityArchive
-    if ($LASTEXITCODE -ne 0) {
-        throw "The Dead Air x64 compatibility archive verification failed."
-    }
-
-    $sourceFiles = Get-ChildItem -LiteralPath $compatibilityStageGameRoot -Recurse -File
-    $verifiedFiles = Get-ChildItem -LiteralPath $compatibilityVerifyRoot -Recurse -File
-    if ($sourceFiles.Count -ne $verifiedFiles.Count) {
-        throw "The Dead Air x64 compatibility archive file count is invalid."
-    }
-
-    foreach ($sourceFile in $sourceFiles) {
-        $relativePath = $sourceFile.FullName.Substring($compatibilityStageGameRoot.Length + 1)
-        $verifiedFile = Join-Path $compatibilityVerifyRoot $relativePath
-        if (-not (Test-Path -LiteralPath $verifiedFile -PathType Leaf) -or
-            (Get-FileHash -LiteralPath $sourceFile.FullName).Hash -ne
-                (Get-FileHash -LiteralPath $verifiedFile).Hash) {
-            throw "Compatibility archive verification failed: $relativePath"
-        }
-    }
+    New-XdbArchive `
+        -StageRoot $compatibilityStageGameRoot `
+        -OutputPath $compatibilityArchive `
+        -UserDataPath $compatibilityUserData `
+        -ConverterPath $converter `
+        -VerifyRoot $compatibilityVerifyRoot
 }

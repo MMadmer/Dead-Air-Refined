@@ -122,10 +122,15 @@ the process described here.
   animation, sound — is part of a release, every installation of that release
   has it. There is no opt-in download, no "lite" edition, no per-feature
   content toggle, and no setting whose only purpose is to avoid fetching data.
-- Assets travel inside the install and update payload, verified by hash like
-  everything else, and applied atomically: an installation either has the
-  complete set for its version or the operation fails and changes nothing. An
-  install that cannot obtain its assets is a failed install, not a reduced one.
+- Assets are published as versioned, hashed bundles pinned per game version,
+  obtained by the installer or by the game's repair path, and committed
+  atomically: an installation either has the complete set for its version, or it
+  is reported as incomplete and play is refused until it is repaired. An install
+  that cannot obtain its assets is a failed install, not a reduced one. Assets
+  are deliberately NOT carried inside the update archive: the applier is bounded
+  at 1 GiB expanded and 1024 files and its second stage has a five-minute wall,
+  none of which survive a multi-gigabyte payload. An update is armed only after
+  every required bundle is verified on disk.
 - Content lives outside this repository. The engine sources stay free of
   binary asset trees; released assets are published as versioned, hashed
   bundles and pinned per game version, so a version always knows exactly which
@@ -367,9 +372,20 @@ The full binary contract and evolution rules are described in
   installation instruction.
 - In `Changes` list only the user-visible outcome: fixes, improvements, and
   compatibility. If a category is empty, do not add it.
-- In `Installation` state explicitly that Setup and Update ZIP are
+- In `Installation` state explicitly that Setup and the manual ZIP are
   alternatives and only one is needed; the ZIP is allowed for manual
   installation. Warn separately that existing saves must not be clobbered.
+- A release carries four assets, not two: `Setup.exe`, `Setup_Manual.zip`,
+  `Update_Patch.zip` when a patch is cut, and the legacy `Update.zip` alias
+  while pre-rename clients are still in the field, plus the content manifest
+  `Dead-Air-Refined-<version>-content-manifest.txt`.
+- The content release is published BEFORE the game release: a game release whose
+  content manifest points at assets that do not exist yet is broken for every
+  installation made in that window.
+- **A published content release tag is never deleted, and no asset inside one is
+  ever replaced.** Bundle names are content-addressed, so replacing bytes under
+  an existing name makes every installed manifest wrong and is unrecoverable in
+  the field. Republish under a new tag instead.
 - Before publishing run a clean build if one has not been done yet, and verify
   the version number, both asset names, and the text against the actually
   built packages.
