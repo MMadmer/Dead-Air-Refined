@@ -34,8 +34,13 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
     // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
     // target is cleared to zero, so view-z below epsilon means sky.
+    // The other end of the same test is the HUD: hands and the weapon live in the first
+    // ~0.6 m of view-z and move with the player, not the world - the camera reprojection is
+    // simply wrong for them, and running history over the barrel doubles it on every turn
+    // and every bob step. World geometry this close to the eye is a wall filling the whole
+    // view; losing TAA on it for a moment is invisible.
     [branch]
-    if (gbd.P.z < 0.01)
+    if (gbd.P.z < 0.65)
         return float4(current, 1.0);
 
     // Reproject the view-space position into the previous frame.
@@ -48,10 +53,14 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
 
     float3 history = s_taa_history.Sample(smp_rtlinear, prev_uv).rgb;
 
-    // Neighbourhood clamp: the history may show something no longer visible (disocclusion,
-    // a moving NPC without velocity). Clamping to the 3x3 min/max of the current frame
-    // bounds any ghost to one frame of error.
-    float3 c_min = current, c_max = current;
+    // Variance clipping (Karis / INSIDE): the history may show something no longer visible
+    // (disocclusion, a moving NPC, a rain streak - none carry velocity here). A raw 3x3
+    // min/max clamp leaves bounds wide wherever the neighbourhood has any contrast, and a
+    // ghost inside those bounds survives for many frames; the mu +/- sigma box hugs the
+    // actual distribution, so anything the current frame does not corroborate is pulled
+    // back within a frame or two. Clipping toward the mean (uniform scale) instead of a
+    // per-component clamp keeps the hue - corner-of-the-box clamping tints the ghost.
+    float3 m1 = current, m2 = current * current;
     [unroll]
     for (int dy = -1; dy <= 1; ++dy)
     {
@@ -61,11 +70,18 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
             if (dx == 0 && dy == 0)
                 continue;
             float3 n = s_image.Sample(smp_nofilter, tc + float2(dx, dy) * screen_res.zw).rgb;
-            c_min = min(c_min, n);
-            c_max = max(c_max, n);
+            m1 += n;
+            m2 += n * n;
         }
     }
-    history = clamp(history, c_min, c_max);
+    m1 /= 9.0;
+    m2 /= 9.0;
+    float3 sigma = sqrt(max(m2 - m1 * m1, 0.0));
+    float3 dist = history - m1;
+    float3 excess = abs(dist) / max(sigma, 0.001);
+    float t = max(excess.x, max(excess.y, excess.z));
+    if (t > 1.0)
+        history = m1 + dist / t;
 
     // Blend weight backs off with reprojection distance: fast pans keep the image crisp,
     // a still or slowly turning camera converges to a stable field.

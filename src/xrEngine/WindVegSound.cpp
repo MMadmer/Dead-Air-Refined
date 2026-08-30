@@ -226,11 +226,15 @@ void CEffect_WindVeg::OnFrame()
     // the presser's smoothed speed. A soft, footstep-paced rustle at the feet - silent when
     // standing still, a light swish walking, a touch more running. Direct volume: unlike
     // the wind layer this must sound in a dead calm.
+    static const bool dbg = !!strstr(Core.Params, "-wvdbg");
     for (u32 mi = 0; mi < CEnvironment::wind_motor_count; ++mi)
     {
         const auto& m = env.wind_motors[mi];
         if (!m.used || m.type != CEnvironment::EWindMotor::press || m.released != 0.f)
             continue;
+        if (dbg && m.speed > 0.1f)
+            Msg("* [wind-veg] press[%u]: veg=%.0f speed=%.2f dist=%.1f", mi, m.veg, m.speed,
+                m.pos.distance_to(cam));
         if (m.veg <= 0.f || m.speed < 0.6f)
             continue;
         if (Device.fTimeGlobal < m_press_cool[mi])
@@ -244,15 +248,18 @@ void CEffect_WindVeg::OnFrame()
             Fvector feet = m.pos;
             feet.y += 0.25f;
             v.snd.play_at_pos(nullptr, feet, 0);
-            // Weak on purpose: a walk sits well under the footsteps, a sprint reads as a
-            // clear swish. Speed 0.6 m/s is the "actually moving" floor.
+            // Clearly audible under the footsteps (field report: the first calibration,
+            // 0.10-0.26, was inaudible in play). Speed 0.6 m/s is the "actually moving"
+            // floor; a walk is a soft swish, a sprint a loud one.
             const float k = clampr((m.speed - 0.6f) / 4.4f, 0.f, 1.f);
-            v.snd.set_volume(0.10f + 0.16f * k);
+            v.snd.set_volume(0.28f + 0.34f * k);
             v.snd.set_frequency(1.10f * ::Random.randF(0.94f, 1.06f));
             v.snd.set_range(1.f, 12.f);
             const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 0.6f;
             v.busy_until = Device.fTimeGlobal + len * 0.55f; // overlap: continuous while moving
             m_press_cool[mi] = Device.fTimeGlobal + ::Random.randF(0.28f, 0.45f);
+            if (dbg)
+                Msg("* [wind-veg] press PLAY vol=%.2f", 0.28f + 0.34f * k);
             break;
         }
     }
