@@ -12,6 +12,15 @@ namespace
 // Calibrated twice in the field: the first set drowned under rain ambience, the raised set
 // was clearly audible even in near-calm - this is that set divided by ~1.7, with the volume
 // floor lowered too, so calm-weather rustle is a barely-there whisper.
+//
+// That calibration was done against the BUSH source - the stock actor-through-vegetation
+// collide sound. The dedicated grass and canopy recordings arrived later and went in behind
+// the very same multipliers while sitting 15-20 dB below stock level (grass peaked at
+// -35 dB, leaves at -20 dB, against -15 dB for a sound the player hears fine), so those two
+// layers were inaudible no matter what these numbers said - twice reported from the field.
+// Both files are now normalized to a -8 dB peak, i.e. stock loudness, which is what this
+// ladder always assumed. Keep it that way: a replacement sample must be normalized too, or
+// this whole table silently stops meaning anything.
 const float k_volume[] = {0.26f, 0.50f, 0.78f};
 // Mild per-type pitch shifts only: grass and canopy now carry their OWN recordings, so the
 // heavy shifts that faked three plants out of one bush sound are no longer needed (and they
@@ -248,11 +257,11 @@ void CEffect_WindVeg::OnFrame()
             Fvector feet = m.pos;
             feet.y += 0.25f;
             v.snd.play_at_pos(nullptr, feet, 0);
-            // Clearly audible under the footsteps (field report: the first calibration,
-            // 0.10-0.26, was inaudible in play). Speed 0.6 m/s is the "actually moving"
-            // floor; a walk is a soft swish, a sprint a loud one.
+            // Against the normalized source this lands a walk at about the loudness of a
+            // canopy rustling twenty metres away, and a sprint clearly above it. Speed
+            // 0.6 m/s is the "actually moving" floor.
             const float k = clampr((m.speed - 0.6f) / 4.4f, 0.f, 1.f);
-            v.snd.set_volume(0.28f + 0.34f * k);
+            v.snd.set_volume(0.22f + 0.26f * k);
             v.snd.set_frequency(1.10f * ::Random.randF(0.94f, 1.06f));
             v.snd.set_range(1.f, 12.f);
             const float len = v.snd._handle() ? v.snd._handle()->length_sec() : 0.6f;

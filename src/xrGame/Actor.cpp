@@ -1367,12 +1367,17 @@ void CActor::UpdateCL()
     // Trampling: the actor's feet press the grass around them, and the wind-motor system
     // drives the damped spring-back once we move on. Refreshed per frame while alive.
     // Strength >= 1 matters: with the arc-length correction in the grass shader it LAYS the
-    // tuft flat instead of tilting it. Radius ~body-sized (field-tuned: the wide 1.9 ring
-    // read as too much once the motors actually worked).
+    // tuft flat instead of tilting it.
+    //
+    // Radius is NOT the reach: the shader builds a gaussian of sigma = radius * 0.55 around
+    // the actor, so tufts still visibly bend out to about one sigma and a half. At the old
+    // 1.2 that was a metre of flattened grass on every side - reported from the field as
+    // laying down far too early, ahead and to the sides, even crouched. 0.55 puts the bend
+    // inside a body's footprint (~0.45 m), where a boot can actually reach.
     if (g_Alive())
     {
         auto& env = g_pGamePersistent->Environment();
-        env.wind_motor_press(Position(), 1.2f, 1.15f);
+        env.wind_motor_press(Position(), 0.55f, 1.15f);
 
         // Wind pushes the body too: the drag equation F = 0.5*rho*Cd*A*v^2 gives ~0.46*v^2 N
         // for a standing human - about 56 N in a real gale. Ground friction eats most of it

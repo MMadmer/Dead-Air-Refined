@@ -447,8 +447,11 @@ void CCustomMonster::UpdateCL()
     if (g_Alive())
     {
         auto& env = g_pGamePersistent->Environment();
+        // Same footprint reasoning as the actor (see Actor.cpp): the shader's gaussian makes
+        // the visible bend roughly 1.5 * 0.55 * radius, so this is a body, not a clearing.
+        // A touch wider than the actor's - this covers boars and bloodsuckers too.
         if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
-            env.wind_motor_press(Position(), 1.1f, 1.0f);
+            env.wind_motor_press(Position(), 0.6f, 1.0f);
 
         const float w_ms = env.eff_wind_norm * 11.f;
         if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
