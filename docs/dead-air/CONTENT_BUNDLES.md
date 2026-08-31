@@ -751,6 +751,27 @@ index caches.
 
 ## Building and publishing
 
+### The assets repository holds no content
+
+`MMadmer/Dead-Air-Refined_Assets` exists to hang releases off, not to store bytes. Its
+`.gitignore` excludes the authoring tree, the bundle cache and the generated manifest, so no
+content object ever enters git there; the bytes live only as release assets, which are already
+content-addressed and immutable without git's help. What is versioned is a README and
+`index/content-<version>.txt`, the ledger `publish_dead_air_x64_content.ps1` writes after an
+upload — a few kilobytes per release, and the only local record that makes the never-replace
+rule auditable without asking GitHub.
+
+One consequence is easy to trip over: a GitHub release hangs off a tag, and a tag needs a
+commit. A repository with zero commits cannot take a release at all, so
+`gh release create` — and therefore the publisher — fails against a genuinely empty one. The
+README commit is what makes the repository publishable.
+
+Neither the authoring tree nor the bundle cache can be regenerated from anything in git, and a
+repack is not guaranteed to reproduce published bytes, so both need a backup that is not this
+repository.
+
+### The builder
+
 `tools/package/dead_air_x64_content_bundles.ps1` turns an authored gamedata tree into bundles
 plus the manifest:
 
