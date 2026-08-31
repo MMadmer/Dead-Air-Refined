@@ -1,5 +1,6 @@
 #include "ContentResolver.h"
 
+#include "ContentDelta.h"
 #include "ContentHash.h"
 #include "ContentState.h"
 
@@ -28,6 +29,11 @@ constexpr auto PartLifetime = std::chrono::hours(24 * 14);
 // the one it replaces both exist for the length of the move.
 constexpr std::uint64_t FreeSpaceMargin = 512ull * 1024 * 1024;
 
+// A delta is only worth it when it is decisively smaller. At two thirds of the target it saves
+// a third of the bandwidth and buys a base re-hash, an apply pass, twice the peak cache use and
+// a whole extra way to fail; below about a third the saving is large enough to pay for that.
+constexpr double DeltaSkipRatio = 0.35;
+
 std::uint64_t file_size_or_zero(const std::filesystem::path& path)
 {
     std::error_code error;
@@ -38,6 +44,112 @@ std::uint64_t file_size_or_zero(const std::filesystem::path& path)
 
 namespace ContentResolver
 {
+namespace
+{
+// Finds the cheapest published chain of deltas from a revision this installation can produce to
+// the one each job wants.
+//
+// The base is normally one of the obsolete files. An update renames a bundle whose bytes
+// changed, so the previous revision sits in the database directory under its own name while the
+// new one is simply missing - and because a bundle's name carries the first sixteen hex of its
+// hash, a candidate base can be recognised from its name and size without reading a byte of it.
+// The apply step re-hashes it in full before trusting it.
+void plan_deltas(const ContentManifest::Manifest& manifest, const ContentPaths::Layout& paths,
+    const Options& options, Plan& plan)
+{
+    if (!options.useDeltas || manifest.deltas.empty() || plan.jobs.empty())
+        return;
+
+    // Where a chain may start: any delta base this installation already holds, at the size that
+    // delta says it should be.
+    std::vector<std::string> available;
+    for (const ContentManifest::Delta& delta : manifest.deltas)
+    {
+        const std::filesystem::path installed = paths.Database() / delta.baseName;
+        const std::filesystem::path staged = paths.Cache() / delta.baseHash;
+        if (file_size_or_zero(installed) == delta.baseSize || file_size_or_zero(staged) == delta.baseSize)
+            available.push_back(delta.baseHash);
+    }
+    if (available.empty())
+        return;
+
+    const std::filesystem::path rejected = paths.RejectedDeltas();
+
+    for (Job& job : plan.jobs)
+    {
+        if (job.cached)
+            continue;
+
+        // Dijkstra over a graph of a few hundred edges: cheapest total asset bytes from any
+        // hash we can already produce to the one this job wants. Cheapest rather than shortest,
+        // because two small hops beat one large one.
+        struct Reached
+        {
+            std::string hash;
+            std::uint64_t cost{};
+            std::vector<ContentManifest::Delta> path;
+        };
+        std::vector<Reached> frontier;
+        for (const std::string& hash : available)
+            frontier.push_back({hash, 0, {}});
+
+        std::vector<std::string> settled;
+        std::vector<ContentManifest::Delta> best;
+        std::uint64_t bestCost = 0;
+        bool found = false;
+
+        while (!frontier.empty() && !found)
+        {
+            const auto cheapest = std::ranges::min_element(frontier,
+                [](const Reached& a, const Reached& b) { return a.cost < b.cost; });
+            const Reached current = *cheapest;
+            frontier.erase(cheapest);
+
+            if (std::ranges::find(settled, current.hash) != settled.end())
+                continue;
+            settled.push_back(current.hash);
+
+            if (current.hash == job.bundle.hash && !current.path.empty())
+            {
+                best = current.path;
+                bestCost = current.cost;
+                found = true;
+                break;
+            }
+
+            for (const ContentManifest::Delta& delta : manifest.deltas)
+            {
+                if (delta.baseHash != current.hash)
+                    continue;
+                // A delta that already failed a hash verdict is not tried again - that verdict
+                // means the published asset is wrong, and re-fetching it would waste the same
+                // bandwidth to reach the same conclusion.
+                if (ContentDelta::IsRejected(rejected, delta.name))
+                    continue;
+                if (std::ranges::find(settled, delta.targetHash) != settled.end())
+                    continue;
+
+                Reached next{delta.targetHash, current.cost + delta.size, current.path};
+                next.path.push_back(delta);
+                frontier.push_back(std::move(next));
+            }
+        }
+
+        if (!found)
+            continue;
+
+        // Only decisively cheaper chains are worth the extra machinery. The peak cache cost of
+        // a multi-hop chain is two intermediates at once, which is another reason not to take a
+        // marginal saving.
+        if (static_cast<double>(bestCost) >= DeltaSkipRatio * static_cast<double>(job.bundle.size))
+            continue;
+
+        job.deltaPath = std::move(best);
+        job.deltaBytes = bestCost;
+    }
+}
+}
+
 bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layout& paths,
     const Options& options, Plan& plan, std::string& error)
 {
@@ -110,10 +222,6 @@ bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layo
             job.cached = true;
             plan.bytesToMove += bundle.size;
         }
-        else
-        {
-            plan.bytesToFetch += bundle.size;
-        }
         if (cancel.load(std::memory_order_acquire))
         {
             // A cancelled probe answers "not cached", which would otherwise be published as a
@@ -141,6 +249,15 @@ bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layo
                 plan.obsolete.push_back(name);
         }
         entry.increment(scanError);
+    }
+
+    plan_deltas(manifest, paths, options, plan);
+
+    for (const Job& job : plan.jobs)
+    {
+        if (job.cached)
+            continue;
+        plan.bytesToFetch += job.deltaPath.empty() ? job.bundle.size : job.deltaBytes;
     }
 
     return true;

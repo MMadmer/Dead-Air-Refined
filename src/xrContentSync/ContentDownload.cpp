@@ -1,5 +1,6 @@
 #include "ContentDownload.h"
 
+#include "ContentDelta.h"
 #include "ContentHash.h"
 
 #include <algorithm>
@@ -217,9 +218,20 @@ namespace ContentDownload
 {
 namespace
 {
+// What the transfer loop needs to know about the thing it is fetching. A delta asset and a
+// whole bundle are the same problem - a named file of a known size and hash, published under a
+// release tag - so they go down one resumable, verifying path rather than two.
+struct Asset
+{
+    std::string name;
+    std::string hash;
+    std::string releaseTag;
+    std::uint64_t size{};
+};
+
 // One asset, start to finish: resume if there is a usable part, otherwise from zero; verify;
 // publish into the cache under its hash.
-bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout& paths,
+bool fetch_one(const Asset& bundle, const ContentPaths::Layout& paths,
     const Options& options, const std::atomic_bool& cancel, Shared& shared, std::string& error)
 {
     const std::filesystem::path part = paths.Cache() / (bundle.hash + ".part");
@@ -519,6 +531,77 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
 }
 }
 
+// Walks a fetched chain of deltas, rebuilding each hop from the previous one. Every intermediate
+// is freed the moment the next hop has verified, so the peak cost of a chain is two bundles at
+// once rather than the whole path.
+bool apply_chain(const std::vector<ContentManifest::Delta>& path, const std::string& targetHash,
+    const ContentPaths::Layout& paths, const std::atomic_bool& cancel, const Options& options,
+    std::string& error)
+{
+    const std::filesystem::path rejected = paths.RejectedDeltas();
+    std::filesystem::path intermediate;
+
+    for (std::size_t hop = 0; hop != path.size(); ++hop)
+    {
+        const ContentManifest::Delta& delta = path[hop];
+        const bool last = hop + 1 == path.size();
+
+        // The base is whatever the previous hop produced, or - for the first hop - the revision
+        // this installation already holds, wherever it holds it.
+        std::filesystem::path base = intermediate;
+        if (base.empty())
+        {
+            base = paths.Database() / delta.baseName;
+            std::error_code exists;
+            if (!std::filesystem::is_regular_file(base, exists) || exists)
+                base = paths.Cache() / delta.baseHash;
+        }
+
+        const std::filesystem::path output = paths.Cache() / (delta.targetHash + ".rebuilt");
+        std::error_code removeError;
+        std::filesystem::remove(output, removeError);
+
+        if (options.onLog)
+            options.onLog("applying " + delta.name);
+
+        const ContentDelta::Result applied = ContentDelta::Apply(paths.Cache() / delta.hash, base,
+            output, delta.targetHash, cancel);
+        if (!applied.ok)
+        {
+            // Only an integrity verdict is remembered. A disk that filled up or a cancelled
+            // repair says nothing about the delta, and recording it would permanently upgrade a
+            // twenty-megabyte download into a four-hundred-megabyte one.
+            if (applied.failure == ContentDelta::Failure::Integrity)
+                ContentDelta::RecordRejected(rejected, delta.name);
+            error = delta.name + ": " + applied.error;
+            std::filesystem::remove(output, removeError);
+            return false;
+        }
+
+        // The delta asset has done its job; the rebuilt bundle takes its place in the cache.
+        std::filesystem::remove(paths.Cache() / delta.hash, removeError);
+        if (!intermediate.empty())
+            std::filesystem::remove(intermediate, removeError);
+
+        std::filesystem::path published = paths.Cache() / delta.targetHash;
+        std::filesystem::rename(output, published, removeError);
+        if (removeError)
+        {
+            error = delta.name + ": the rebuilt bundle could not be published into the cache";
+            std::filesystem::remove(output, removeError);
+            return false;
+        }
+        intermediate = last ? std::filesystem::path{} : published;
+
+        if (last && delta.targetHash != targetHash)
+        {
+            error = delta.name + ": the chain does not end at the bundle this version wants";
+            return false;
+        }
+    }
+    return true;
+}
+
 std::string QaBaseUrl()
 {
     wchar_t value[512]{};
@@ -553,11 +636,37 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
     Result result;
     const std::atomic_bool& cancel = options.cancel ? *options.cancel : g_never;
 
-    std::vector<ContentManifest::Bundle> work;
+    // One work item per job: either the whole bundle, or the chain of delta assets that
+    // reconstructs it. A chain is fetched and applied by the same worker, so an intermediate
+    // never outlives the hop that consumes it.
+    struct Work
+    {
+        std::vector<Asset> assets;
+        std::vector<ContentManifest::Delta> deltaPath;
+        std::string targetHash;
+        std::string targetName;
+    };
+
+    std::vector<Work> work;
     for (const ContentResolver::Job& job : plan.jobs)
     {
-        if (!job.cached)
-            work.push_back(job.bundle);
+        if (job.cached)
+            continue;
+
+        Work item;
+        item.targetHash = job.bundle.hash;
+        item.targetName = job.bundle.name;
+        item.deltaPath = job.deltaPath;
+        if (job.deltaPath.empty())
+        {
+            item.assets.push_back({job.bundle.name, job.bundle.hash, job.bundle.releaseTag, job.bundle.size});
+        }
+        else
+        {
+            for (const ContentManifest::Delta& delta : job.deltaPath)
+                item.assets.push_back({delta.name, delta.hash, delta.releaseTag, delta.size});
+        }
+        work.push_back(std::move(item));
     }
     if (work.empty())
     {
@@ -566,8 +675,11 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
     }
 
     Shared shared;
-    for (const ContentManifest::Bundle& bundle : work)
-        shared.total += bundle.size;
+    for (const Work& item : work)
+    {
+        for (const Asset& asset : item.assets)
+            shared.total += asset.size;
+    }
 
     const unsigned threads = std::max(1u, std::min(options.concurrency, static_cast<unsigned>(work.size())));
     shared.running = threads;
@@ -580,7 +692,7 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
         {
             while (true)
             {
-                ContentManifest::Bundle bundle;
+                Work item;
                 {
                     std::lock_guard guard(shared.mutex);
                     if (shared.failed || shared.next >= work.size())
@@ -588,7 +700,7 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
                         --shared.running;
                         return;
                     }
-                    bundle = work[shared.next++];
+                    item = work[shared.next++];
                 }
                 if (cancel.load(std::memory_order_acquire))
                 {
@@ -597,17 +709,30 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
                     return;
                 }
 
-                if (options.onLog)
-                    options.onLog("fetching " + bundle.name);
-
                 std::string error;
-                if (!fetch_one(bundle, paths, options, cancel, shared, error))
+                bool ok = true;
+                for (const Asset& asset : item.assets)
+                {
+                    if (options.onLog)
+                        options.onLog("fetching " + asset.name);
+                    if (!fetch_one(asset, paths, options, cancel, shared, error))
+                    {
+                        error = asset.name + ": " + (error.empty() ? "download failed" : error);
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (ok && !item.deltaPath.empty())
+                    ok = apply_chain(item.deltaPath, item.targetHash, paths, cancel, options, error);
+
+                if (!ok)
                 {
                     std::lock_guard guard(shared.mutex);
                     if (!shared.failed)
                     {
                         shared.failed = true;
-                        shared.error = bundle.name + ": " + (error.empty() ? "download failed" : error);
+                        shared.error = error;
                     }
                     --shared.running;
                     return;

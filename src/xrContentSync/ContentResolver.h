@@ -37,6 +37,16 @@ struct Job
     // True when content-cache\ already holds a verified copy: the job is a move, not a
     // download. This is what makes "quit instead of restarting" cost nothing next launch.
     bool cached{};
+
+    // A chain of published deltas leading from a revision this installation already has to the
+    // one it wants, cheapest first. Empty when there is no usable chain, or when the chain is
+    // not enough cheaper than the whole bundle to be worth the extra failure path.
+    //
+    // The base is normally one of the OBSOLETE files: an update renames a bundle whose bytes
+    // changed, so the previous revision is sitting in the database directory under its own name
+    // while the new one is missing. That is what the chain starts from.
+    std::vector<ContentManifest::Delta> deltaPath;
+    std::uint64_t deltaBytes{};
 };
 
 struct Plan
@@ -48,7 +58,8 @@ struct Plan
     // cache, never deleted inside a commit - see the add-before-delete rule.
     std::vector<std::string> obsolete;
 
-    std::uint64_t bytesToFetch{}; // sum of jobs that are not already cached
+    std::uint64_t bytesToFetch{}; // sum of jobs that are not already cached, deltas counted at
+                                  // their asset size rather than the bundle's
     std::uint64_t bytesToMove{};  // sum of jobs that are
 
     // How many installed bundles had to be read rather than vouched for by the state cache.
@@ -70,6 +81,10 @@ struct Options
     // a cache file, so a caller that wants a genuinely cheap pass clears it and accepts the
     // pessimistic answer - a job reported as a download that turns out to be a move.
     bool probeCache{true};
+
+    // Whether to look for a delta chain instead of a whole bundle. Cleared on the cheap pass,
+    // where the answer is not needed and the search would read the manifest's whole edge list.
+    bool useDeltas{true};
 
     // Whether content-state.txt may vouch for an installed bundle. Cleared by a forced verify,
     // which exists precisely to re-read what the cache claims. The file itself is left alone:

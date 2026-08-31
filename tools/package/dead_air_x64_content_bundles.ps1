@@ -37,7 +37,14 @@ param(
     # Archive whose members must not collide with content. Normally the compatibility archive.
     [string]$DisjointFrom,
     # Force packing even when the cache could satisfy the bundle. Diagnostic only.
-    [switch]$AllowRepack
+    [switch]$AllowRepack,
+    # The previous release's content manifest. Given it, a delta is built for every bundle whose
+    # bytes changed, and every edge that manifest already carried is carried forward - the delta
+    # list is cumulative so a player who skipped releases can still be walked from whatever
+    # revision they actually hold. Without it only whole bundles are published, which is correct
+    # for the first content release.
+    [string]$PreviousManifest,
+    [string]$DeltaTool = (Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe")
 )
 
 $ErrorActionPreference = "Stop"
@@ -177,6 +184,30 @@ foreach ($entry in $hashed) {
     $buckets[$bucketKey].Add($entry)
 }
 
+function Read-ContentManifest {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $bundles = [Collections.Generic.List[object]]::new()
+    $deltas = [Collections.Generic.List[object]]::new()
+    $section = ""
+    foreach ($line in [IO.File]::ReadAllLines($Path)) {
+        if ($line -eq "[bundles]") { $section = "bundles"; continue }
+        if ($line -eq "[deltas]") { $section = "deltas"; continue }
+        if (-not $line.Trim()) { continue }
+        $f = $line -split "`t"
+        if ($section -eq "bundles" -and $f.Count -eq 4) {
+            $bundles.Add([pscustomobject]@{ Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3] })
+        }
+        elseif ($section -eq "deltas" -and $f.Count -eq 8) {
+            $deltas.Add([pscustomobject]@{
+                Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3]
+                BaseName = $f[4]; BaseHash = $f[5]; BaseSize = [int64]$f[6]; TargetHash = $f[7]
+            })
+        }
+    }
+    return [pscustomobject]@{ Bundles = $bundles; Deltas = $deltas }
+}
+
 # ---- build each bundle --------------------------------------------------------------------
 $bundles = [Collections.Generic.List[object]]::new()
 $packed = 0
@@ -269,6 +300,73 @@ level_ver = $contentDigest
     })
 }
 
+# ---- deltas --------------------------------------------------------------------------------
+# A delta is published for every bundle whose bytes changed since the previous release, and only
+# when it is decisively smaller than the whole bundle: below that the saving does not pay for the
+# base re-hash, the apply pass, the doubled peak cache use and the extra way to fail. The engine
+# applies the same ratio when it decides whether to use one.
+$deltaSkipRatio = 0.35
+$deltas = [Collections.Generic.List[object]]::new()
+
+if ($PreviousManifest) {
+    if (-not (Test-Path -LiteralPath $PreviousManifest -PathType Leaf)) {
+        throw "The previous content manifest was not found: $PreviousManifest"
+    }
+    if (-not (Test-Path -LiteralPath $DeltaTool -PathType Leaf)) {
+        throw "DarDelta.exe was not found: $DeltaTool. Build the x64 Release tools first."
+    }
+
+    $previous = Read-ContentManifest -Path $PreviousManifest
+
+    # Carried forward verbatim. An edge published two releases ago is what lets a player who
+    # skipped a release be walked forward in two hops instead of downloading everything, and
+    # dropping it would silently cost exactly the bandwidth this feature exists to save.
+    foreach ($edge in $previous.Deltas) {
+        $stillWanted = $bundles | Where-Object { $_.Hash -eq $edge.TargetHash }
+        $leadsOn = $previous.Deltas | Where-Object { $_.BaseHash -eq $edge.TargetHash }
+        if ($stillWanted -or $leadsOn) { $deltas.Add($edge) }
+    }
+
+    foreach ($bundle in $bundles) {
+        $slot = $bundle.Name -replace '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$', '$1'
+        $before = $previous.Bundles | Where-Object {
+            ($_.Name -replace '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$', '$1') -eq $slot
+        } | Select-Object -First 1
+        if (-not $before -or $before.Hash -eq $bundle.Hash) { continue }
+
+        $basePath = Join-Path $BundleCache $before.Name
+        if (-not (Test-Path -LiteralPath $basePath -PathType Leaf)) {
+            # The cache is what makes a delta possible at all: without the previous bytes there
+            # is nothing to diff against. Say so rather than silently publishing whole bundles.
+            Write-Host "  delta: skipped $($bundle.Name) - $($before.Name) is not in the bundle cache"
+            continue
+        }
+
+        $deltaName = "content_" + $slot + "_" + $before.Hash.Substring(0, 16) + "_to_" +
+            $bundle.Hash.Substring(0, 16) + ".darpatch"
+        $deltaPath = Join-Path $BundleCache $deltaName
+        if (-not (Test-Path -LiteralPath $deltaPath -PathType Leaf)) {
+            & $DeltaTool $basePath (Join-Path $BundleCache $bundle.Name) $deltaPath | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "DarDelta failed for $($bundle.Name)" }
+        }
+
+        $deltaSize = (Get-Item -LiteralPath $deltaPath).Length
+        $share = [math]::Round(100.0 * $deltaSize / $bundle.Size, 1)
+        if ($deltaSize -ge $deltaSkipRatio * $bundle.Size) {
+            Remove-Item -LiteralPath $deltaPath -Force
+            Write-Host "  delta: skipped $($bundle.Name) - $share% of the bundle, not worth it"
+            continue
+        }
+
+        $deltas.Add([pscustomobject]@{
+            Hash = (Get-Sha256 -Path $deltaPath); Size = $deltaSize; Name = $deltaName; Tag = $ReleaseTag
+            BaseName = $before.Name; BaseHash = $before.Hash; BaseSize = $before.Size
+            TargetHash = $bundle.Hash
+        })
+        Write-Host "  delta: $deltaName ($([math]::Round($deltaSize / 1MB, 2)) MB, $share% of the bundle)"
+    }
+}
+
 # ---- disjointness --------------------------------------------------------------------------
 $seen = @{}
 foreach ($bundle in $bundles) {
@@ -308,6 +406,10 @@ $manifest.Add("repo=$AssetsRepo")
 $manifest.Add("[bundles]")
 foreach ($b in $sorted) { $manifest.Add($b.Hash + "`t" + $b.Size + "`t" + $b.Name + "`t" + $b.Tag) }
 $manifest.Add("[deltas]")
+foreach ($d in $deltas) {
+    $manifest.Add($d.Hash + "`t" + $d.Size + "`t" + $d.Name + "`t" + $d.Tag + "`t" +
+        $d.BaseName + "`t" + $d.BaseHash + "`t" + $d.BaseSize + "`t" + $d.TargetHash)
+}
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputManifest) -Force | Out-Null
 [IO.File]::WriteAllText($OutputManifest, [string]::Join("`n", $manifest) + "`n", [Text.UTF8Encoding]::new($false))
@@ -319,6 +421,7 @@ $totalBytes = ($sorted | Measure-Object Size -Sum).Sum
     Bundles           = $sorted.Count
     Packed            = $packed
     Reused            = $reused
+    Deltas            = $deltas.Count
     SourceFiles       = $hashed.Count
     TotalMB           = [math]::Round($totalBytes / 1MB, 2)
     GroupsFileChanged = $assignChanged

@@ -28,6 +28,10 @@ struct Layout
     // trivially findable by a player wondering where the gigabytes went.
     std::filesystem::path Cache() const { return Meta() / L"content-cache"; }
 
+    // Deltas that failed a hash verdict with every I/O call succeeding. Consulted so a bad
+    // delta is not fetched twice, and cleared by a commit against a new content-id.
+    std::filesystem::path RejectedDeltas() const { return Meta() / L"rejected-deltas.txt"; }
+
     // Progress and result files for a fetch driven by another process (the installer wizard).
     std::filesystem::path FetchProgress() const { return Cache() / L"content-fetch-progress.txt"; }
     std::filesystem::path FetchResult() const { return Cache() / L"content-fetch-result.txt"; }
