@@ -2,6 +2,8 @@
 #include "ContentService.h"
 
 #include "xrCore/Content/ContentPin.h"
+#include "xrContentSync/ContentCommit.h"
+#include "xrContentSync/ContentDownload.h"
 #include "xrContentSync/ContentManifest.h"
 #include "xrContentSync/ContentPaths.h"
 #include "xrContentSync/ContentResolver.h"
@@ -43,6 +45,9 @@ struct ServiceState
     xr_vector<xr_string> notices;
     u32 present{};
     u64 missingBytes{};
+    xr_string activity;
+    std::atomic<u64> repairDone{};
+    std::atomic<u64> repairTotal{};
     // How many entries of `problems` came from the initial pass. A verify pass owns everything
     // after that mark and rewrites it; what came before is not its to retract.
     size_t initialProblems{};
@@ -206,6 +211,125 @@ void verify_worker(bool ignoreCache)
             Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
         instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
     }
+}
+
+// The assets repository, pinned in shipped code. A manifest's own `repo=` line is
+// informational: taking the download host from a downloaded file would let whoever wrote it
+// choose where the next gigabytes come from.
+constexpr pcstr AssetsRepository = "MMadmer/Dead-Air-Refined_Assets";
+
+// Keep at most this much finished content in the cache - a full set plus its predecessor, so
+// an update that is reverted costs nothing to put back.
+constexpr u64 ContentCacheCapBytes = 6ull * 1024 * 1024 * 1024;
+
+void set_activity(ServiceState& instance, const xr_string& line)
+{
+    std::lock_guard guard(instance.dataMutex);
+    instance.activity = line;
+}
+
+void repair_worker()
+{
+    ServiceState& instance = service();
+
+    ContentPaths::Layout paths;
+    ContentManifest::Manifest manifest;
+    {
+        std::lock_guard guard(instance.dataMutex);
+        paths = instance.paths;
+        manifest = instance.manifest;
+    }
+
+    const auto fail = [&](const xr_string& line)
+    {
+        {
+            std::lock_guard guard(instance.dataMutex);
+            instance.activity = line;
+        }
+        Msg("! [content] repair failed: %s", line.c_str());
+        instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
+    };
+
+    // A repair is a mutation of database\, so the installation is marked incomplete before the
+    // first byte moves. If the game dies mid-repair the next launch finds the latch and knows
+    // not to trust what it sees.
+    if (!ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::RepairCommit))
+        Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
+
+    set_activity(instance, xr_string("Проверка установленного контента..."));
+    ContentResolver::Options options;
+    options.verifyHashes = true;
+    options.cancel = &instance.stopRequested;
+
+    ContentResolver::Plan plan;
+    std::string error;
+    if (!ContentResolver::Resolve(manifest, paths, options, plan, error))
+    {
+        fail(format("не удалось проверить контент: %s", error.c_str()));
+        return;
+    }
+
+    const u64 required = ContentResolver::RequiredFreeBytes(plan);
+    const u64 free = ContentResolver::FreeBytes(paths.root);
+    if (free && free < required)
+    {
+        fail(format("не хватает места на диске: нужно %llu МБ, доступно %llu МБ",
+            static_cast<unsigned long long>(required / (1024 * 1024)),
+            static_cast<unsigned long long>(free / (1024 * 1024))));
+        return;
+    }
+
+    instance.repairTotal.store(plan.bytesToFetch, std::memory_order_release);
+    instance.repairDone.store(0, std::memory_order_release);
+
+    if (plan.bytesToFetch)
+    {
+        set_activity(instance, xr_string("Загрузка контента..."));
+
+        ContentDownload::Options download;
+        download.repo = AssetsRepository;
+        download.qaBaseUrl = ContentDownload::QaBaseUrl();
+        download.cancel = &instance.stopRequested;
+        download.onProgress = [&](const ContentDownload::Progress& progress)
+        {
+            instance.repairDone.store(progress.done, std::memory_order_release);
+            instance.repairTotal.store(progress.total, std::memory_order_release);
+        };
+        download.onLog = [](const std::string& line) { Msg("* [content] %s", line.c_str()); };
+
+        const ContentDownload::Result result = ContentDownload::Fetch(plan, paths, download);
+        if (!result.ok)
+        {
+            fail(format("не удалось загрузить контент: %s", result.error.c_str()));
+            return;
+        }
+    }
+
+    set_activity(instance, xr_string("Установка контента..."));
+
+    // Re-resolved after the download so the commit works from what is actually in the cache
+    // now, rather than from a plan made before any of it arrived.
+    ContentResolver::Plan ready;
+    if (!ContentResolver::Resolve(manifest, paths, options, ready, error))
+    {
+        fail(format("не удалось проверить контент: %s", error.c_str()));
+        return;
+    }
+
+    ContentCommit::Options commit;
+    commit.onLog = [](const std::string& line) { Msg("* [content] %s", line.c_str()); };
+    const ContentCommit::Result committed = ContentCommit::Run(manifest, ready, paths, commit);
+    if (!committed.ok)
+    {
+        fail(format("не удалось установить контент: %s", committed.error.c_str()));
+        return;
+    }
+
+    ContentResolver::CollectCache(paths, manifest, ready, ContentCacheCapBytes);
+
+    Msg("* [content] repair installed %u bundle(s), retired %u", committed.installed, committed.demoted);
+    set_activity(instance, xr_string("Контент восстановлен. Требуется перезапуск игры."));
+    instance.state.store(ContentService::State::Repaired, std::memory_order_release);
 }
 
 // The cheap pass, split out from the public entry point so that every early return still gets
@@ -439,6 +563,62 @@ void ContentService::ForceVerify()
     instance.worker = std::thread([] { verify_worker(true); });
 }
 
+void ContentService::StartRepair()
+{
+    Initialize();
+    ServiceState& instance = service();
+
+    const State current = instance.state.load(std::memory_order_acquire);
+    if (current == State::Repairing || current == State::Repaired)
+        return;
+    if (current == State::Recovery)
+    {
+        // No manifest means nothing to repair against. Fetching the manifest itself is a
+        // reinstall, not a repair, and saying so is more useful than a download that cannot
+        // know what to download.
+        Msg("! [content] no usable manifest - the installation has to be reinstalled");
+        return;
+    }
+
+    instance.stopRequested.store(true, std::memory_order_release);
+    if (instance.worker.joinable())
+        instance.worker.join();
+    instance.stopRequested.store(false, std::memory_order_release);
+
+    instance.state.store(State::Repairing, std::memory_order_release);
+    instance.worker = std::thread(repair_worker);
+}
+
+bool ContentService::RepairRunning()
+{
+    return service().state.load(std::memory_order_acquire) == State::Repairing;
+}
+
+bool ContentService::Relaunch()
+{
+    // The same command line, so a relaunch after a repair lands the player back where they
+    // were - including any -start or level argument they were launched with.
+    std::wstring commandLine(GetCommandLineW());
+    if (commandLine.empty())
+        return false;
+
+    string_path root;
+    xr_strcpy(root, Core.ApplicationPath);
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr,
+            std::filesystem::path(root).c_str(), &startup, &process))
+    {
+        Msg("! [content] could not restart the game");
+        return false;
+    }
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+}
+
 ContentService::Snapshot ContentService::GetSnapshot()
 {
     Initialize();
@@ -454,7 +634,10 @@ ContentService::Snapshot ContentService::GetSnapshot()
         snapshot.missingBytes = instance.missingBytes;
         snapshot.problems = instance.problems;
         snapshot.notices = instance.notices;
+        snapshot.activity = instance.activity;
     }
+    snapshot.repairDone = instance.repairDone.load(std::memory_order_acquire);
+    snapshot.repairTotal = instance.repairTotal.load(std::memory_order_acquire);
     return snapshot;
 }
 
@@ -474,6 +657,8 @@ bool ContentService::PlayBlocked()
         return false;
 
     default:
+        // Repaired blocks too. The bundles are on disk but the filesystem was indexed without
+        // them, so a level loaded now would still be missing every asset they carry.
         return true;
     }
 }
@@ -485,6 +670,8 @@ xr_string ContentService::BlockReason()
         return {};
 
     std::lock_guard guard(instance.dataMutex);
+    if (instance.state.load(std::memory_order_acquire) == State::Repaired)
+        return xr_string("content was repaired - restart the game to use it");
     if (instance.problems.empty())
         return xr_string("the content installation has not been checked yet");
     return instance.problems.front();
@@ -498,6 +685,8 @@ void ContentService::LogState()
     {
     case State::Complete: name = "complete"; break;
     case State::Verifying: name = "verifying"; break;
+    case State::Repairing: name = "repairing"; break;
+    case State::Repaired: name = "repaired, restart required"; break;
     case State::Incomplete: name = "incomplete"; break;
     case State::Recovery: name = "recovery"; break;
     default: break;
@@ -525,6 +714,9 @@ void ContentService::Shutdown()
 void ContentService::Initialize() {}
 void ContentService::StartVerify() {}
 void ContentService::ForceVerify() {}
+void ContentService::StartRepair() {}
+bool ContentService::RepairRunning() { return false; }
+bool ContentService::Relaunch() { return false; }
 ContentService::Snapshot ContentService::GetSnapshot() { return {}; }
 bool ContentService::PlayBlocked() { return false; }
 xr_string ContentService::BlockReason() { return {}; }

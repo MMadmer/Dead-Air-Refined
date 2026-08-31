@@ -6,6 +6,7 @@
 #include "UIXmlInit.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrUICore/Buttons/UI3tButton.h"
+#include "xrUICore/ProgressBar/UIProgressBar.h"
 #include "xrUICore/ScrollView/UIScrollView.h"
 #include "xrUICore/Static/UIStatic.h"
 
@@ -26,10 +27,15 @@ bool CUIContentWnd::Init()
     CUIXmlInit::InitStatic(xml, "main:problems_text", 0, m_problemsText);
     m_problemsText->SetWidth(m_problems->GetDesiredChildWidth());
     m_problems->AddWindow(m_problemsText, true);
+    m_progress = UIHelper::CreateProgressBar(xml, "main:progress", this);
+    m_action = UIHelper::Create3tButton(xml, "main:action", this);
     m_exit = UIHelper::Create3tButton(xml, "main:exit", this);
 
+    m_action->SetWindowName("action");
     m_exit->SetWindowName("exit");
+    Register(m_action);
     Register(m_exit);
+    AddCallback(m_action, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUIContentWnd::OnAction));
     AddCallback(m_exit, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUIContentWnd::OnExit));
     return true;
 }
@@ -37,19 +43,56 @@ bool CUIContentWnd::Init()
 void CUIContentWnd::Show(bool status)
 {
     inherited::Show(status);
-    if (!status)
-        return;
+    if (status)
+        Refresh();
+}
 
+void CUIContentWnd::Update()
+{
+    inherited::Update();
+
+    // A repair moves; the dialog has to move with it, or the player is left staring at a frozen
+    // window through a download that can take an hour.
+    if (ContentService::RepairRunning() || m_repairFinished != (ContentService::GetSnapshot().state ==
+        ContentService::State::Repaired))
+    {
+        Refresh();
+    }
+}
+
+void CUIContentWnd::Refresh()
+{
     const ContentService::Snapshot snapshot = ContentService::GetSnapshot();
+    m_repairFinished = snapshot.state == ContentService::State::Repaired;
 
+    pcstr message = "st_content_message";
+    switch (snapshot.state)
+    {
     // Recovery means the installation cannot even say what content it should have, which is a
     // different repair from "three bundles are missing" - name it separately so a bug report
     // carries the distinction.
-    const pcstr message = snapshot.state == ContentService::State::Recovery ? "st_content_message_recovery"
-                                                                           : "st_content_message";
+    case ContentService::State::Recovery: message = "st_content_message_recovery"; break;
+    case ContentService::State::Repairing: message = "st_content_message_repairing"; break;
+    case ContentService::State::Repaired: message = "st_content_message_repaired"; break;
+    default: break;
+    }
     m_message->SetText(StringTable().translate(message).c_str());
 
+    const bool repairing = snapshot.state == ContentService::State::Repairing;
+    m_progress->Show(repairing);
+    if (repairing && snapshot.repairTotal)
+    {
+        m_progress->SetProgressPos(
+            100.0f * static_cast<float>(snapshot.repairDone) / static_cast<float>(snapshot.repairTotal));
+    }
+    else if (repairing)
+    {
+        m_progress->SetProgressPos(0.0f);
+    }
+
     string4096 text{};
+    if (!snapshot.activity.empty())
+        xr_strcat(text, sizeof(text), snapshot.activity.c_str());
     for (const auto& problem : snapshot.problems)
     {
         if (text[0])
@@ -59,6 +102,26 @@ void CUIContentWnd::Show(bool status)
     m_problemsText->SetText(text);
     m_problemsText->AdjustHeightToText();
     m_problems->ScrollToBegin();
+
+    // One primary action, and what it is depends on where the repair got to. Recovery has none:
+    // without a manifest there is nothing to repair against, and offering a button that cannot
+    // work would be worse than not offering one.
+    pcstr caption = "st_content_repair";
+    bool enabled = true;
+    if (snapshot.state == ContentService::State::Repaired)
+        caption = "st_content_restart";
+    else if (repairing)
+    {
+        caption = "st_content_repairing";
+        enabled = false;
+    }
+    else if (snapshot.state == ContentService::State::Recovery)
+    {
+        enabled = false;
+    }
+
+    m_action->SetText(StringTable().translate(caption).c_str());
+    m_action->Enable(enabled);
 }
 
 void CUIContentWnd::SendMessage(CUIWindow* window, s16 message, void* data)
@@ -69,11 +132,30 @@ void CUIContentWnd::SendMessage(CUIWindow* window, s16 message, void* data)
 
 bool CUIContentWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
 {
-    // Escape does not dismiss this one. The dialog has exactly one way out, because there is
-    // exactly one thing a player can usefully do with a broken installation.
+    // Escape does not dismiss this one. The dialog has exactly two ways out and both of them
+    // leave the installation in a state the game can explain.
     if (keyboardAction == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik))
         return true;
     return inherited::OnKeyboardAction(dik, keyboardAction);
+}
+
+void CUIContentWnd::OnAction(CUIWindow*, void*)
+{
+    if (m_repairFinished)
+    {
+        // The filesystem indexed its archives at startup, so bundles that arrived since are not
+        // usable in this session. The relaunch is not a courtesy - it is the only way to use
+        // what was just installed.
+        if (ContentService::Relaunch())
+            Console->Execute("quit");
+        return;
+    }
+
+    if (!ContentService::RepairRunning())
+    {
+        ContentService::StartRepair();
+        Refresh();
+    }
 }
 
 void CUIContentWnd::OnExit(CUIWindow*, void*) { Console->Execute("quit"); }

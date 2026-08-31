@@ -519,6 +519,35 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
 }
 }
 
+std::string QaBaseUrl()
+{
+    wchar_t value[512]{};
+    const DWORD length =
+        GetEnvironmentVariableW(L"DAR_QA_CONTENT_BASE", value, static_cast<DWORD>(std::size(value)));
+    if (!length || length >= std::size(value))
+        return {};
+
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    wchar_t host[256]{};
+    wchar_t user[256]{};
+    parts.lpszHostName = host;
+    parts.dwHostNameLength = static_cast<DWORD>(std::size(host));
+    parts.lpszUserName = user;
+    parts.dwUserNameLength = static_cast<DWORD>(std::size(user));
+    if (!WinHttpCrackUrl(value, length, 0, &parts))
+        return {};
+    if (parts.nScheme != INTERNET_SCHEME_HTTP || user[0])
+        return {};
+    if (_wcsicmp(host, L"127.0.0.1") != 0 && _wcsicmp(host, L"localhost") != 0 &&
+        _wcsicmp(host, L"::1") != 0)
+        return {};
+
+    // Rebuilt from what was parsed rather than echoed back, so nothing the parser ignored can
+    // ride along into the URL the downloader builds.
+    return "http://" + narrow(host) + ":" + std::to_string(parts.nPort);
+}
+
 Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& paths, const Options& options)
 {
     Result result;

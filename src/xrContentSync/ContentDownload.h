@@ -54,6 +54,15 @@ struct Result
     std::uint64_t fetched{};
 };
 
+// The QA download override, read from DAR_QA_CONTENT_BASE. Empty unless the variable is set to
+// a loopback http URL, which is judged on the parsed host rather than on a prefix - the string
+// "http://127.0.0.1:@evil.example/" starts with the right characters and points somewhere else.
+//
+// It redirects where the bytes come from and nothing else: every hash still gates every commit,
+// and there is deliberately no companion switch that skips the fetch. One implementation,
+// because the game and the updater must not disagree about what counts as loopback.
+std::string QaBaseUrl();
+
 // Downloads every job in `plan` that is not already cached, verifies each against its manifest
 // hash, and leaves the verified files in `content-cache\<sha256>`. Installs nothing: putting
 // bytes into `database\` is the commit's job and only ever happens by rename.

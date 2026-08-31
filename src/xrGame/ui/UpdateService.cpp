@@ -1339,6 +1339,11 @@ bool UpdateService::RestartAndApply()
     commandLine.append(L" --digest ").append(quote_argument(utf8_to_wide(digest)));
     commandLine.append(L" --wait-pid ").append(std::to_wstring(GetCurrentProcessId()));
     commandLine.append(L" --restart-command ").append(quote_argument(restartCommand.wstring()));
+    // Appended, never depended on. The launched 1.4.x commits content itself when it starts, so
+    // this is only the belt to that braces - and an updater from before the content system
+    // simply never reads the token, which is exactly what lets an installed 1.3.5 apply the
+    // 1.4.0 payload without knowing content exists.
+    commandLine.append(L" --content-commit");
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);

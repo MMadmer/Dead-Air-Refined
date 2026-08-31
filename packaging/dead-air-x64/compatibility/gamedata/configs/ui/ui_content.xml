@@ -10,12 +10,21 @@
         <message x="274" y="246" width="476" height="86">
             <text font="letterica16" align="c" vert_align="t" complex_mode="1"/>
         </message>
-        <problems x="274" y="340" width="476" height="150" always_show_scroll="1" vert_interval="4"
+        <problems x="274" y="340" width="476" height="130" always_show_scroll="1" vert_interval="4"
                   right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
         <problems_text x="0" y="0" width="448" height="16">
             <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
         </problems_text>
-        <exit x="437" y="520" width="150" height="30" stretch="1">
+        <progress x="274" y="482" width="476" height="12" horz="1" min="0" max="100">
+            <progress>
+                <texture>ui_patch_progress</texture>
+            </progress>
+        </progress>
+        <action x="274" y="520" width="230" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_content_repair</text>
+        </action>
+        <exit x="520" y="520" width="230" height="30" stretch="1">
             <texture>ui_inGame2_Mp_bigbuttone</texture>
             <text font="letterica16" align="c" vert_align="c">st_content_exit</text>
         </exit>

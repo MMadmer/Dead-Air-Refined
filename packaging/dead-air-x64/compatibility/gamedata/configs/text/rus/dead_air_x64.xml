@@ -166,6 +166,21 @@
     <string id="st_content_message_recovery">
         <text>Установка не может сказать, какой контент ей нужен: файл манифеста отсутствует\nили повреждён. Переустановите мод поверх текущей папки.\n\nПодробности ниже и в файле журнала.</text>
     </string>
+    <string id="st_content_message_repairing">
+        <text>Идёт восстановление контента. Не закрывайте игру.\n\nПосле завершения игру нужно будет перезапустить.</text>
+    </string>
+    <string id="st_content_message_repaired">
+        <text>Контент восстановлен.\n\nФайловая система читает архивы один раз при запуске, поэтому перезапустите игру, чтобы загруженный контент заработал.</text>
+    </string>
+    <string id="st_content_repair">
+        <text>Восстановить контент</text>
+    </string>
+    <string id="st_content_repairing">
+        <text>Восстановление...</text>
+    </string>
+    <string id="st_content_restart">
+        <text>Перезапустить игру</text>
+    </string>
     <string id="st_content_exit">
         <text>Выйти из игры</text>
     </string>

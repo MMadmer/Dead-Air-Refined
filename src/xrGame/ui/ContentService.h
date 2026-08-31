@@ -22,6 +22,11 @@ enum class State : u8
 {
     // Initialize() has not run yet.
     Unknown,
+    // A repair is in flight: downloading, or installing what was downloaded.
+    Repairing,
+    // A repair finished. The bundles are in place but the filesystem was initialised without
+    // them, so the game has to be restarted before it can use them.
+    Repaired,
     // Everything the manifest declares is present, and hashing has confirmed it (or is still
     // running - see Verifying).
     Complete,
@@ -46,6 +51,11 @@ struct Snapshot
     // report. Ordered as found, so the first line is the most useful one to show. Every entry
     // here blocks play.
     xr_vector<xr_string> problems;
+
+    // What a running repair is doing, and how far along it is. Both zero when none is running.
+    xr_string activity;
+    u64 repairDone{};
+    u64 repairTotal{};
 
     // Wrong on disk but harmless to a session - a leftover bundle from an older revision that
     // is not mounted and not needed. Reported and cleaned up, never a reason to refuse a game.
@@ -76,6 +86,22 @@ bool PlayBlocked();
 // Human-readable reason for the refusal, for the console and the dialog. Empty when nothing
 // is wrong.
 xr_string BlockReason();
+
+// Fetches whatever is missing and installs it, on a worker thread. Reports progress through
+// the snapshot; the state ends at Repaired or back at Incomplete.
+//
+// A repair always ends in a relaunch. The filesystem indexes archives once, at startup, and
+// unmounting or adding one afterwards is not something the engine supports - so bundles that
+// arrive during a session are not usable in that session, and pretending otherwise would trade
+// a clear "restart the game" for an unexplained missing-asset crash.
+void StartRepair();
+
+// True while a repair is running, so the UI can refuse to start a second one.
+bool RepairRunning();
+
+// Starts a fresh copy of the game with this process's command line. Returns false if it could
+// not, in which case the caller must say so rather than quitting into nothing.
+bool Relaunch();
 
 // Dumps the current picture to the log. Behind `dar_content_state`.
 void LogState();

@@ -959,6 +959,14 @@ public:
     virtual void Info(TInfo& I) { xr_strcpy(I, "re-hash every content bundle and report the result"); }
 };
 
+class CCC_ContentRepair : public IConsole_Command
+{
+public:
+    CCC_ContentRepair(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    virtual void Execute(LPCSTR) { ContentService::StartRepair(); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "download and install whatever content is missing"); }
+};
+
 class CCC_ContentState : public IConsole_Command
 {
 public:
@@ -2512,6 +2520,7 @@ void CCC_RegisterCommands()
     CMD2(CCC_CameraRotate, "cam_pitch_rotate", &ConfigureActorCameraPitchRotation);
 
     CMD1(CCC_ContentVerify, "dar_content_verify");
+    CMD1(CCC_ContentRepair, "dar_content_repair");
     CMD1(CCC_ContentState, "dar_content_state");
 
     CMD1(CCC_FlushLog, "flush"); // flush log
