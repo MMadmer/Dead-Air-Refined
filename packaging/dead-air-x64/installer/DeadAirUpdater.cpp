@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <atomic>
 #include <charconv>
 #include <cwctype>
 #include <filesystem>
@@ -15,6 +16,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 extern "C"
@@ -24,8 +26,21 @@ extern "C"
 #include "contrib/minizip/unzip.h"
 }
 
+// The content system's shared core, compiled straight into this executable. It depends on
+// nothing but the standard library and the OS, which is the entire reason it can be: the game
+// and this program must never disagree about a manifest, a hash or a latch, and the only way
+// to guarantee that is to give them the same translation units.
+#include "xrContentSync/ContentCommit.h"
+#include "xrContentSync/ContentDownload.h"
+#include "xrContentSync/ContentHash.h"
+#include "xrContentSync/ContentManifest.h"
+#include "xrContentSync/ContentPaths.h"
+#include "xrContentSync/ContentResolver.h"
+#include "xrContentSync/ContentState.h"
+
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "winhttp.lib")
 
 namespace
 {
@@ -42,16 +57,36 @@ constexpr std::string_view ManifestSchemaPatch = "dead-air-refined.update/2";
 constexpr size_t MaximumFiles = 1024;
 constexpr unsigned long long MaximumExpandedBytes = 1024ull * 1024 * 1024;
 
+// What this invocation is for. The mode is decided before any option is demanded, because the
+// content modes are launched standalone - without --wait-pid or --restart-command - and a
+// parser that insisted on those would answer a content command line with a modal error box
+// that nobody can see under a silent install.
+enum class Mode
+{
+    Apply,
+    Finish,
+    ContentPlan,
+    ContentFetch,
+    ContentCommit
+};
+
 struct Arguments
 {
+    Mode mode{Mode::Apply};
     std::filesystem::path gameDirectory;
     std::filesystem::path archive;
     std::filesystem::path restartCommand;
     std::filesystem::path cache;
+    // Touched by the caller to cancel a running fetch. Polled, rather than signalled, so the
+    // Inno wizard can create it with nothing but a file write.
+    std::filesystem::path cancelFlag;
     std::wstring version;
     std::wstring digest;
     DWORD waitPid{};
-    bool finish{};
+    // Appended to an ordinary apply command line. An updater from before the content system
+    // simply never reads the token, which is what lets 1.3.5 apply the 1.4.0 payload without
+    // knowing content exists - the launched 1.4.0 then repairs what is missing.
+    bool commitContent{};
 };
 
 struct PayloadFile
@@ -79,14 +114,34 @@ std::wstring lower_key(const std::filesystem::path& path)
     return key;
 }
 
+// Scans the whole span rather than returning on the first hit, and refuses a value that is
+// itself an option. With five modes assembling command lines, `--archive --version 1.4.0`
+// silently yielding an archive path of "--version", or a duplicated --game-dir quietly
+// resolving in favour of the first, stops being theoretical.
 std::optional<std::wstring> value_after(std::span<wchar_t*> arguments, std::wstring_view name)
 {
-    for (size_t index = 1; index + 1 < arguments.size(); ++index)
+    std::optional<std::wstring> found;
+    for (size_t index = 1; index < arguments.size(); ++index)
+    {
+        if (name != arguments[index])
+            continue;
+        if (index + 1 >= arguments.size() || std::wstring_view(arguments[index + 1]).starts_with(L"--"))
+            return std::nullopt;
+        if (found)
+            return std::nullopt;
+        found = arguments[index + 1];
+    }
+    return found;
+}
+
+bool has_flag(std::span<wchar_t*> arguments, std::wstring_view name)
+{
+    for (size_t index = 1; index < arguments.size(); ++index)
     {
         if (name == arguments[index])
-            return arguments[index + 1];
+            return true;
     }
-    return std::nullopt;
+    return false;
 }
 
 bool parse_unsigned(std::wstring_view value, DWORD& result)
@@ -141,8 +196,38 @@ std::optional<Arguments> parse_arguments()
     const std::span arguments(raw, static_cast<size_t>(count));
 
     Arguments result;
-    result.finish = std::ranges::any_of(arguments,
-        [](const wchar_t* value) { return std::wstring_view(value) == L"--finish"; });
+
+    // Mode first, options second. --finish is checked before the content modes so an
+    // old-shaped command line behaves bit for bit as it always has.
+    if (has_flag(arguments, L"--finish"))
+        result.mode = Mode::Finish;
+    else if (has_flag(arguments, L"--content-plan"))
+        result.mode = Mode::ContentPlan;
+    else if (has_flag(arguments, L"--content-fetch"))
+        result.mode = Mode::ContentFetch;
+    else if (has_flag(arguments, L"--content-commit") && !value_after(arguments, L"--archive"))
+        result.mode = Mode::ContentCommit;
+
+    if (result.mode == Mode::ContentPlan || result.mode == Mode::ContentFetch ||
+        result.mode == Mode::ContentCommit)
+    {
+        // Content modes take a game directory and nothing else. In particular they never take
+        // a manifest path: the trust root is the installed manifest at its pinned location,
+        // and accepting one on a command line would let anything nominate what "complete"
+        // means.
+        const auto gameDirectory = value_after(arguments, L"--game-dir");
+        if (!gameDirectory)
+        {
+            LocalFree(raw);
+            return std::nullopt;
+        }
+        result.gameDirectory = *gameDirectory;
+        if (const auto cancel = value_after(arguments, L"--cancel-flag"))
+            result.cancelFlag = *cancel;
+        LocalFree(raw);
+        return result;
+    }
+
     const auto waitPid = value_after(arguments, L"--wait-pid");
     const auto restart = value_after(arguments, L"--restart-command");
     if (!waitPid || !restart || !parse_unsigned(*waitPid, result.waitPid))
@@ -152,7 +237,7 @@ std::optional<Arguments> parse_arguments()
     }
     result.restartCommand = *restart;
 
-    if (result.finish)
+    if (result.mode == Mode::Finish)
     {
         const auto cache = value_after(arguments, L"--cache");
         if (!cache)
@@ -164,6 +249,7 @@ std::optional<Arguments> parse_arguments()
     }
     else
     {
+        result.commitContent = has_flag(arguments, L"--content-commit");
         const auto gameDirectory = value_after(arguments, L"--game-dir");
         const auto archive = value_after(arguments, L"--archive");
         const auto version = value_after(arguments, L"--version");
@@ -221,61 +307,12 @@ std::string wide_to_utf8(std::wstring_view value)
     return result;
 }
 
-std::string sha256_file(const std::filesystem::path& path)
-{
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-        FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-        return {};
-
-    BCRYPT_ALG_HANDLE algorithm{};
-    BCRYPT_HASH_HANDLE hash{};
-    DWORD objectLength = 0;
-    DWORD hashLength = 0;
-    DWORD returned = 0;
-    NTSTATUS status = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
-    if (status >= 0)
-        status = BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
-            reinterpret_cast<PUCHAR>(&objectLength), sizeof(objectLength), &returned, 0);
-    if (status >= 0)
-        status = BCryptGetProperty(algorithm, BCRYPT_HASH_LENGTH,
-            reinterpret_cast<PUCHAR>(&hashLength), sizeof(hashLength), &returned, 0);
-
-    std::vector<unsigned char> object(objectLength);
-    std::vector<unsigned char> digest(hashLength);
-    if (status >= 0)
-        status = BCryptCreateHash(algorithm, &hash, object.data(), objectLength, nullptr, 0, 0);
-
-    std::array<unsigned char, 64 * 1024> buffer{};
-    DWORD bytes = 0;
-    while (status >= 0 && ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()), &bytes, nullptr) && bytes)
-        status = BCryptHashData(hash, buffer.data(), bytes, 0);
-    if (status >= 0)
-        status = BCryptFinishHash(hash, digest.data(), hashLength, 0);
-
-    std::string result;
-    if (status >= 0)
-    {
-        static constexpr char hex[] = "0123456789abcdef";
-        result.reserve(digest.size() * 2);
-        for (const unsigned char byte : digest)
-        {
-            result.push_back(hex[byte >> 4]);
-            result.push_back(hex[byte & 0x0f]);
-        }
-    }
-
-    if (hash)
-        BCryptDestroyHash(hash);
-    if (algorithm)
-        BCryptCloseAlgorithmProvider(algorithm, 0);
-    CloseHandle(file);
-    return result;
-}
-
+// The one hashing implementation in the tree lives in xrContentSync. A second one here is
+// exactly the drift the shared library exists to prevent.
 bool hash_matches(const std::filesystem::path& path, std::wstring_view expected)
 {
-    const std::string actual = sha256_file(path);
+    static const std::atomic_bool never{};
+    const std::string actual = ContentHash::File(path.wstring(), never);
     const std::wstring_view hexadecimal = expected.substr(std::wstring_view(L"sha256:").size());
     if (actual.size() != hexadecimal.size())
         return false;
@@ -493,10 +530,12 @@ bool matches_payload(const std::filesystem::path& path, const PayloadFile& file)
     if (std::filesystem::file_size(path, error) != file.size || error)
         return false;
 
-    // sha256_file emits lowercase hex. The manifest parser accepts either case, so compare
-    // case-insensitively - an uppercase manifest hash used to match nothing at all, and a
-    // patch would report itself unpatchable against a perfectly good installation.
-    const std::string actual = sha256_file(path);
+    // ContentHash emits lowercase hex. The UPDATE manifest parser accepts either case - unlike
+    // the content one, which enforces lowercase on parse - so compare case-insensitively: an
+    // uppercase manifest hash used to match nothing at all, and a patch would report itself
+    // unpatchable against a perfectly good installation.
+    static const std::atomic_bool never{};
+    const std::string actual = ContentHash::File(path.wstring(), never);
     return actual.size() == file.hash.size() &&
         std::ranges::equal(actual, file.hash, [](unsigned char left, unsigned char right)
         { return std::tolower(left) == std::tolower(right); });
@@ -615,6 +654,14 @@ std::optional<std::filesystem::path> create_backup(const std::filesystem::path& 
         current = read_paths(control / L"runtime-files.txt");
         append_unique(current, L"database/xtra_dead_air_x64.xdb0");
     }
+
+    // Content bundles are never managed files, and this is where that stops being a rule on
+    // paper. Everything in `scope` that the incoming manifest does not name gets deleted, and
+    // the backup could not restore a bundle because the update manifest never declared it -
+    // so one stray bundle name in managed-files.txt would be permanent, silent data loss.
+    std::erase_if(current, [](const std::filesystem::path& path)
+    { return ContentManifest::IsBundleName(path.filename().string()); });
+
     scope = current;
     for (const auto& file : incoming)
         append_unique(scope, file);
@@ -822,6 +869,264 @@ bool launch_command(std::wstring command, const std::filesystem::path& workingDi
     return true;
 }
 
+// ------------------------------------------------------------------------------------------
+// Content modes
+//
+// These run standalone, usually under a silent installer, so they never open a dialog and
+// never wait on another process: a five-minute WaitForSingleObject is fatal next to a fetch
+// that legitimately takes an hour. Everything they know reaches the caller through an exit
+// code and content-fetch-result.txt.
+
+constexpr int ContentExitOk = 0;
+constexpr int ContentExitFailed = 26;   // the work could not be completed
+constexpr int ContentExitUnusable = 27; // the installation cannot be worked on at all
+
+// The assets repository is pinned here, in shipped code. A manifest's own `repo=` line is
+// informational: taking the download host from a downloaded file would let whoever wrote it
+// choose where the next gigabytes come from.
+constexpr std::string_view AssetsRepository = "MMadmer/Dead-Air-Refined_Assets";
+
+// Keep at most this much finished content in the cache. Sized so a full set plus its
+// predecessor survives, which is what makes an update that reverts cost nothing.
+constexpr std::uint64_t ContentCacheCapBytes = 6ull * 1024 * 1024 * 1024;
+
+struct ContentSession
+{
+    ContentPaths::Layout paths;
+    ContentManifest::Manifest manifest;
+};
+
+// QA only, and deliberately narrow. It redirects where the bytes come from and nothing else:
+// every hash still gates the commit, and there is no companion switch that skips the fetch.
+// Loopback only, so a stray environment variable on a player's machine cannot point the
+// downloader at somebody else's server.
+std::string qa_content_base()
+{
+    wchar_t value[512]{};
+    const DWORD length = GetEnvironmentVariableW(L"DAR_QA_CONTENT_BASE", value, static_cast<DWORD>(std::size(value)));
+    if (!length || length >= std::size(value))
+        return {};
+
+    const std::string base = wide_to_utf8(value);
+    if (!base.starts_with("http://127.0.0.1:") && !base.starts_with("http://localhost:"))
+        return {};
+    return base;
+}
+
+void write_content_result(const ContentPaths::Layout& paths, int code, std::string_view message)
+{
+    // Open-write-close, deliberately: the wizard's poll loop keys off the file's timestamp, and
+    // a handle held open across a long fetch does not reliably move it.
+    std::error_code error;
+    std::filesystem::create_directories(paths.Cache(), error);
+    std::string body = std::to_string(code);
+    body += "\n";
+    body.append(message);
+    body += "\n";
+    write_text(paths.FetchResult(), body);
+}
+
+bool open_content_session(const Arguments& arguments, ContentSession& session, std::string& error)
+{
+    if (arguments.gameDirectory.empty())
+    {
+        error = "no game directory was given";
+        return false;
+    }
+    session.paths.root = arguments.gameDirectory;
+
+    // The installed manifest at its pinned location is the trust root. It arrived inside a
+    // hash-verified payload; nothing else is accepted, from any source.
+    return ContentManifest::ParseFile(session.paths.Manifest().wstring(), session.manifest, error);
+}
+
+// Reports what would have to happen, and whether there is room to do it. Writes nothing to the
+// installation - the installer calls this before it has touched anything.
+int content_plan(const Arguments& arguments)
+{
+    ContentSession session;
+    std::string error;
+    if (!open_content_session(arguments, session, error))
+    {
+        write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
+        return ContentExitUnusable;
+    }
+
+    ContentResolver::Options options;
+    options.verifyHashes = false; // a plan is a stat pass; the fetch verifies what it writes
+    ContentResolver::Plan plan;
+    if (!ContentResolver::Resolve(session.manifest, session.paths, options, plan, error))
+    {
+        write_content_result(session.paths, ContentExitUnusable, error);
+        return ContentExitUnusable;
+    }
+
+    const std::uint64_t required = ContentResolver::RequiredFreeBytes(plan);
+    const std::uint64_t free = ContentResolver::FreeBytes(session.paths.root);
+    const std::string message = "bundles=" + std::to_string(session.manifest.bundles.size()) +
+        " missing=" + std::to_string(plan.jobs.size()) +
+        " fetch=" + std::to_string(plan.bytesToFetch) +
+        " cached=" + std::to_string(plan.bytesToMove) +
+        " required=" + std::to_string(required) +
+        " free=" + std::to_string(free);
+
+    // A zero from FreeBytes means "could not determine", which is not the same as "full" and
+    // must not fail an install on a volume the API simply would not answer for.
+    if (free && free < required)
+    {
+        write_content_result(session.paths, ContentExitUnusable, "not enough free space; " + message);
+        return ContentExitUnusable;
+    }
+    write_content_result(session.paths, ContentExitOk, message);
+    return ContentExitOk;
+}
+
+// Downloads everything missing into the cache and verifies it there. Installs nothing: putting
+// bytes into the database directory is the commit's job.
+int content_fetch(const Arguments& arguments)
+{
+    ContentSession session;
+    std::string error;
+    if (!open_content_session(arguments, session, error))
+    {
+        write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
+        return ContentExitUnusable;
+    }
+
+    // Held for the process lifetime. The wizard polls it to tell "still working" from "died
+    // without writing a result", which a progress file alone cannot distinguish.
+    const HANDLE liveness = CreateMutexW(nullptr, TRUE, ContentPaths::FetchMutexName);
+
+    std::error_code createError;
+    std::filesystem::create_directories(session.paths.Cache(), createError);
+    write_text(session.paths.Cache() / L"README.txt",
+        "Dead Air: Refined keeps downloaded content here while it is being installed.\r\n"
+        "It is safe to delete when the game is not running; the files will be fetched again.\r\n");
+
+    std::atomic_bool cancel{false};
+    std::thread watchdog;
+    if (!arguments.cancelFlag.empty())
+    {
+        watchdog = std::thread([&]
+        {
+            while (!cancel.load(std::memory_order_acquire))
+            {
+                std::error_code flagError;
+                if (std::filesystem::exists(arguments.cancelFlag, flagError))
+                {
+                    cancel.store(true, std::memory_order_release);
+                    return;
+                }
+                Sleep(200);
+            }
+        });
+    }
+
+    ContentResolver::Options resolveOptions;
+    resolveOptions.verifyHashes = false;
+    resolveOptions.cancel = &cancel;
+    ContentResolver::Plan plan;
+    int code = ContentExitOk;
+    std::string message;
+
+    if (!ContentResolver::Resolve(session.manifest, session.paths, resolveOptions, plan, error))
+    {
+        code = ContentExitUnusable;
+        message = error;
+    }
+    else if (plan.Complete())
+    {
+        message = "nothing to fetch";
+    }
+    else
+    {
+        const std::uint64_t required = ContentResolver::RequiredFreeBytes(plan);
+        const std::uint64_t free = ContentResolver::FreeBytes(session.paths.root);
+        if (free && free < required)
+        {
+            code = ContentExitUnusable;
+            message = "not enough free space: " + std::to_string(required) + " bytes needed, " +
+                std::to_string(free) + " available";
+        }
+        else
+        {
+            ContentDownload::Options options;
+            options.repo = std::string(AssetsRepository);
+            options.qaBaseUrl = qa_content_base();
+            options.cancel = &cancel;
+            options.onProgress = [&](const ContentDownload::Progress& progress)
+            {
+                write_text(session.paths.FetchProgress(),
+                    std::to_string(progress.done) + " " + std::to_string(progress.total) + "\n");
+            };
+
+            const ContentDownload::Result result = ContentDownload::Fetch(plan, session.paths, options);
+            if (!result.ok)
+            {
+                code = ContentExitFailed;
+                message = result.error;
+            }
+            else
+            {
+                message = "fetched " + std::to_string(result.fetched) + " bytes";
+            }
+        }
+    }
+
+    cancel.store(true, std::memory_order_release);
+    if (watchdog.joinable())
+        watchdog.join();
+
+    write_content_result(session.paths, code, message);
+    if (liveness)
+    {
+        ReleaseMutex(liveness);
+        CloseHandle(liveness);
+    }
+    return code;
+}
+
+// Moves verified cache files into the database directory and retires what the manifest no
+// longer declares. Idempotent: arriving with the work already done is success, not a second
+// commit - the game may well have done it already in its own process.
+int content_commit(const Arguments& arguments)
+{
+    ContentSession session;
+    std::string error;
+    if (!open_content_session(arguments, session, error))
+    {
+        write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
+        return ContentExitUnusable;
+    }
+
+    ContentResolver::Options options;
+    options.verifyHashes = false;
+    ContentResolver::Plan plan;
+    if (!ContentResolver::Resolve(session.manifest, session.paths, options, plan, error))
+    {
+        write_content_result(session.paths, ContentExitUnusable, error);
+        return ContentExitUnusable;
+    }
+    if (plan.Complete() && plan.obsolete.empty())
+    {
+        ContentState::ClearLatch(session.paths.Latch());
+        write_content_result(session.paths, ContentExitOk, "already complete");
+        return ContentExitOk;
+    }
+
+    const ContentCommit::Result result = ContentCommit::Run(session.manifest, plan, session.paths, {});
+    if (!result.ok)
+    {
+        write_content_result(session.paths, ContentExitFailed, result.error);
+        return ContentExitFailed;
+    }
+
+    ContentResolver::CollectCache(session.paths, session.manifest, plan, ContentCacheCapBytes);
+    write_content_result(session.paths, ContentExitOk,
+        "installed " + std::to_string(result.installed) + ", retired " + std::to_string(result.demoted));
+    return ContentExitOk;
+}
+
 int finish_update(const Arguments& arguments)
 {
     if (!wait_for_process(arguments.waitPid))
@@ -947,6 +1252,22 @@ int apply_update(const Arguments& arguments)
         return 18;
     }
 
+    // The payload is in place, which means the manifest under .dead-air-x64 is now the TARGET
+    // version's. Committing content here is a fallback, not a dependency: the game normally
+    // does this in its own process before arming the update, and arriving with the work
+    // already done returns success without touching anything.
+    if (arguments.commitContent)
+    {
+        Arguments commit;
+        commit.mode = Mode::ContentCommit;
+        commit.gameDirectory = arguments.gameDirectory;
+        if (content_commit(commit) != ContentExitOk)
+        {
+            restore_backup(arguments.gameDirectory, *backup, scope);
+            return 26;
+        }
+    }
+
     DeleteFileW((arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt").c_str());
 
     // The update succeeded, so the pre-update snapshot has served its purpose. Nothing reads
@@ -967,13 +1288,33 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, wchar_t*, int)
     const auto arguments = parse_arguments();
     if (!arguments)
     {
-        MessageBoxW(nullptr, L"Параметры запуска средства обновления недействительны.",
-            L"Dead Air: Refined", MB_OK | MB_ICONERROR);
+        // Parsing failed, so there is no mode to consult - ask the raw command line instead. A
+        // malformed content invocation must still fail silently with a code, because the only
+        // thing watching it is a poll loop.
+        const std::wstring_view line(GetCommandLineW());
+        const bool silent = line.find(L"--content-") != std::wstring_view::npos;
+        if (!silent)
+        {
+            MessageBoxW(nullptr, L"Параметры запуска средства обновления недействительны.",
+                L"Dead Air: Refined", MB_OK | MB_ICONERROR);
+        }
         return 1;
     }
 
-    const int result = arguments->finish ? finish_update(*arguments) : apply_update(*arguments);
-    if (result)
+    int result = 0;
+    switch (arguments->mode)
+    {
+    case Mode::Finish: result = finish_update(*arguments); break;
+    case Mode::ContentPlan: result = content_plan(*arguments); break;
+    case Mode::ContentFetch: result = content_fetch(*arguments); break;
+    case Mode::ContentCommit: result = content_commit(*arguments); break;
+    default: result = apply_update(*arguments); break;
+    }
+
+    // Only the update flow talks to the player through a dialog. A modal box under a silent
+    // install or a silent fetch is an invisible hang, not an error message, so the content
+    // modes report through their result file and their exit code alone.
+    if (result && (arguments->mode == Mode::Apply || arguments->mode == Mode::Finish))
     {
         wchar_t message[256]{};
         swprintf_s(message, L"Не удалось завершить обновление. Код ошибки: %d.", result);

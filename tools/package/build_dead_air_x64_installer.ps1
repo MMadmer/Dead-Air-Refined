@@ -63,6 +63,20 @@ $launcherObject = Join-Path $launcherOutputRoot "UninstallLauncher.obj"
 $updaterSource = Join-Path $repositoryRoot "packaging\dead-air-x64\installer\DeadAirUpdater.cpp"
 $updaterOutput = Join-Path $launcherOutputRoot "DeadAirUpdater.exe"
 $updaterObject = Join-Path $launcherOutputRoot "DeadAirUpdater.obj"
+# The content system's shared core, compiled straight into the updater rather than linked from
+# the CMake build. These translation units depend on nothing but the standard library and the
+# OS by design, and linking the engine's artefact would couple this executable to the engine's
+# toolset and CRT settings for no benefit.
+$contentSyncRoot = Join-Path $repositoryRoot "src\xrContentSync"
+$contentSyncSources = @(
+    "ContentCommit.cpp"
+    "ContentDownload.cpp"
+    "ContentHash.cpp"
+    "ContentManifest.cpp"
+    "ContentResolver.cpp"
+    "ContentState.cpp"
+) | ForEach-Object { Join-Path $contentSyncRoot $_ }
+$contentFetcherOutput = Join-Path $launcherOutputRoot "DeadAirContent.exe"
 $ioWin32Source = Join-Path $repositoryRoot "Externals\zlib\contrib\minizip\iowin32.c"
 $ioWin32Object = Join-Path $launcherOutputRoot "iowin32.obj"
 $zlibInclude = Join-Path $repositoryRoot "Externals\zlib"
@@ -152,18 +166,38 @@ function Build-NativeHelpers {
     if (-not (Test-Path -LiteralPath $zlibLibrary -PathType Leaf)) {
         throw "The x64 Release zlib library was not found: $zlibLibrary"
     }
+    $contentSyncObjects = @()
+    $contentSyncCompile = ""
+    $sourceInclude = Join-Path $repositoryRoot "src"
+    foreach ($source in $contentSyncSources) {
+        $object = Join-Path $launcherOutputRoot ([IO.Path]::GetFileNameWithoutExtension($source) + ".obj")
+        $contentSyncObjects += $object
+        $contentSyncCompile +=
+            'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MD /W4 /WX /DUNICODE /D_UNICODE ' +
+            '/I"' + $sourceInclude + '" /Fo:"' + $object + '" "' + $source + '" && '
+    }
+    $contentSyncLinkInputs = ($contentSyncObjects | ForEach-Object { '"' + $_ + '"' }) -join ' '
+
     $command =
         'call "' + $developerPrompt + '" -arch=x64 -host_arch=x64 && ' +
         'cl.exe /nologo /c /O2 /MD /W3 /WX /TC /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
         '/I"' + $zlibInclude + '" /Fo:"' + $ioWin32Object + '" "' + $ioWin32Source + '" && ' +
+        $contentSyncCompile +
         'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MD /W4 /WX /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
-        '/I"' + $zlibInclude + '" /Fo:"' + $updaterObject + '" "' + $updaterSource + '" && ' +
+        '/I"' + $zlibInclude + '" /I"' + $sourceInclude + '" ' +
+        '/Fo:"' + $updaterObject + '" "' + $updaterSource + '" && ' +
         'link.exe /nologo /OUT:"' + $updaterOutput + '" /SUBSYSTEM:WINDOWS ' +
-        '"' + $updaterObject + '" "' + $ioWin32Object + '" "' + $zlibLibrary + '" bcrypt.lib shell32.lib user32.lib'
+        '"' + $updaterObject + '" "' + $ioWin32Object + '" ' + $contentSyncLinkInputs + ' "' + $zlibLibrary +
+        '" bcrypt.lib shell32.lib user32.lib winhttp.lib'
     & cmd.exe /d /s /c $command
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $updaterOutput)) {
         throw "The update helper build failed."
     }
+
+    # The installer's content fetcher IS the updater - the mode comes from the command line. A
+    # byte copy rather than a second link keeps one binary and removes any possibility of the
+    # two drifting apart.
+    Copy-Item -LiteralPath $updaterOutput -Destination $contentFetcherOutput -Force
 }
 
 function Build-MaintenanceInstaller {

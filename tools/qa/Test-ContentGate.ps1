@@ -66,7 +66,7 @@ Invoke-Case -Name "healthy install" -Arrange $noop -Cleanup $noop `
     -Expect @("5 bundle(s) present") -Reject @("Cannot start a level", "skipped")
 
 Invoke-Case -Name "second launch uses the state cache" -Arrange $noop -Cleanup $noop `
-    -Expect @("0 hashed") -Reject @("Cannot start a level")
+    -Expect @("5 bundle(s), 0 hashed") -Reject @("Cannot start a level")
 
 Invoke-Case -Name "missing bundle" `
     -Arrange { Move-Item -LiteralPath $sounds "$sounds.stash" -Force } `

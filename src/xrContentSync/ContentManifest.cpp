@@ -1,5 +1,7 @@
 #include "ContentManifest.h"
 
+#include "ContentHash.h"
+
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -153,6 +155,28 @@ const Bundle* Manifest::FindBySlot(std::string_view group, std::string_view shar
         return SplitBundleName(b.name, parts) && parts.group == group && parts.shard == shard;
     });
     return it == bundles.end() ? nullptr : &*it;
+}
+
+bool Manifest::ContentIdMatches() const
+{
+    std::vector<const Bundle*> sorted;
+    sorted.reserve(bundles.size());
+    for (const Bundle& bundle : bundles)
+        sorted.push_back(&bundle);
+    // Ordinal, because the publisher sorts ordinally too. A culture-aware sort disagrees with
+    // it on underscores and digits, and the two only have to differ once for every installed
+    // player to be told their manifest was tampered with.
+    std::ranges::sort(sorted, [](const Bundle* a, const Bundle* b) { return a->name < b->name; });
+
+    std::string blob;
+    for (const Bundle* bundle : sorted)
+    {
+        blob += bundle->name;
+        blob += '\n';
+        blob += bundle->hash;
+        blob += '\n';
+    }
+    return ContentHash::Buffer(blob.data(), blob.size()) == contentId;
 }
 
 bool Parse(std::string_view text, Manifest& manifest, std::string& error)

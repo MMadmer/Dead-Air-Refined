@@ -61,6 +61,11 @@ struct Manifest
     // Finding the slot but not the name is what separates "stale bundle from an older release"
     // from "file we have never heard of", and those deserve different diagnostics.
     const Bundle* FindBySlot(std::string_view group, std::string_view shard) const;
+
+    // Recomputes content-id from the bundle list and compares it against the declared one. A
+    // manifest whose own id does not match has been edited by hand, and every claim in it is
+    // then worth exactly nothing.
+    bool ContentIdMatches() const;
 };
 
 // The three parts of a bundle file name. They are views into the name that was passed in, so
