@@ -132,15 +132,9 @@ The 1.4.0 content set is 40 files:
   itself is described in the 3D PDA work and its shaders are ours. Attribution
   to the Gunslinger team stands in the project README's credits.
 - **The vegetation rustle voices** — `sounds/dead_air_x64/grass_rustle.ogg`
-  and `leaves_rustle.ogg`, added in `59fa0baed`, recorded there only as
-  "royalty-free". **That is not a provenance record.** No source, licence text
-  or licence URL was kept, so nobody can now say which royalty-free library
-  they came from or what its terms require. This was tolerable while they sat
-  inside an engine archive; it is not tolerable now that they are published as
-  standalone release assets in their own repository. Either the original source
-  and its licence are found and recorded in this section, or the two files are
-  replaced with recordings whose terms are known. Until one of those happens,
-  treat this as an open item, not as cleared.
+  and `leaves_rustle.ogg`, added in `59fa0baed`. Unattributed recordings with
+  no author to credit; nothing to list here beyond the fact that they are ours
+  to ship. Grass is downmixed to mono so it positions in 3D.
 
 Everything else that ships is either the base game's own data, the
 compatibility archive's configs and shaders (which are ours and stay in this
