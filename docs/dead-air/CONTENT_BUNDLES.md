@@ -837,6 +837,31 @@ only needs the real one in `-GameDir`; the junction carries the bundles across. 
 be restarted afterwards — archives are mounted once at startup, so a bundle that arrives during a
 session is not picked up, which is the same reason an in-game repair ends in a mandatory relaunch.
 
+### Authoring rule for `.ogg`
+
+X-Ray reads its own sound block out of `user_comments[0]` as raw bytes — a u32 version, then
+min/max distance, base volume, game type and AI distance
+(`CSoundRender_Source::LoadWave`). Every ordinary encoder writes its own tag there instead
+(`encoder=Lavc...`), which the engine reads as an unrecognised version and reports as
+`! Invalid ogg-comment version` on every load. The file still plays: with nothing readable the
+engine keeps `SoundSourceInfo`'s defaults (minDist 1, maxDist 300, maxAIDist 300, gameType 0).
+What is lost is the file's ability to state its own distances, and the log fills with a warning
+per sound per start.
+
+So every `.ogg` authored outside the SDK is stamped before it is packed:
+
+```powershell
+python toolsudio\stamp_xray_ogg_comment.py <file.ogg> <minDist> <maxDist> <volume> <gameType> <maxAIDist>
+```
+
+It rebuilds only the page carrying the comment header, leaves the audio bytes untouched, keeps
+the encoder's own tags after the block, and is idempotent — re-stamping the same values
+reproduces the file byte for byte, which matters because a changed byte is a changed bundle and
+a re-download for everyone.
+
+Set `gameType` to 0 for anything ambient. A non-zero game type raises an AI sound event, and
+wind rustle that NPCs can hear is a rustle that gets the player shot at.
+
 ### What the first content set actually is
 
 The cutover measured, so the numbers in this document are not projections. 1.4.0 moved 40
