@@ -806,6 +806,37 @@ hard-throws when the manifest is missing or declares no bundles. `SHA256SUMS.txt
 installer artefacts; it structurally cannot cover bundles, which are covered by the manifest
 itself and by digest verification against the assets release.
 
+### The local development loop
+
+Content changes several times a day while a version is being built, and none of it is published
+yet. That leaves the developer's own installation as the one machine that can never satisfy its
+own manifest: the game would sit in `Incomplete`, and its repair button would ask GitHub for a
+`content-<version>` release that does not exist. Publishing a release per edit is not an answer —
+a published tag is permanent.
+
+`tools/package/deploy_dead_air_x64_content.ps1` closes that loop. It does what
+`ContentCommit::Run` does, against the bundle cache instead of a download cache: latch, install
+everything the manifest names, demote what it no longer names into the content cache, write the
+manifest, drop the state cache, re-verify by hash, clear the latch. It is a development tool and
+ships to nobody.
+
+```powershell
+tools\package\dead_air_x64_content_bundles.ps1 -SourceRoot <tree> -BundleCache <cache> `
+    -OutputManifest <manifest> -PortVersion 1.4.1 -ReleaseTag content-1.4.1
+tools\package\deploy_dead_air_x64_content.ps1 -Manifest <manifest> -BundleCache <cache> `
+    -GameDir "D:\Games\Dead Air"
+```
+
+The one rule it does not relax is the one that matters: nothing enters `database\` that has not
+matched the manifest's SHA-256 first, and the copy goes through a `.deploy-part` temporary so an
+interrupted run cannot leave a short file under a name that promises a hash. A bundle cache that
+does not match the manifest stops the run rather than installing something the game will reject.
+
+Two consequences worth stating. A QA rig whose `database` is a junction to the real installation
+only needs the real one in `-GameDir`; the junction carries the bundles across. And the game must
+be restarted afterwards — archives are mounted once at startup, so a bundle that arrives during a
+session is not picked up, which is the same reason an in-game repair ends in a mandatory relaunch.
+
 ### What the first content set actually is
 
 The cutover measured, so the numbers in this document are not projections. 1.4.0 moved 40
