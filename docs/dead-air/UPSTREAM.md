@@ -111,6 +111,42 @@ Additional adaptations recorded in the reference-integration final report are
 attributed the same way: design from the named reference commit,
 implementation rewritten for Refined.
 
+## Content asset provenance
+
+Since 1.4.0 the binary assets Refined authors or borrows no longer live in this
+repository. They are published as content bundles from
+`https://github.com/MMadmer/Dead-Air-Refined_Assets` and are authored from
+`source/gamedata/` in that repository's working copy. Moving them out did not
+move their provenance, which is recorded here, because this is the file that
+owns provenance for everything Refined ships.
+
+The 1.4.0 content set is 40 files:
+
+- **The 3D PDA** — `meshes/dynamics/devices/dev_pda/`,
+  `meshes/dynamics/weapons/` (the PDA hands rig and its `.omf`),
+  `anims/camera_effects/weapon/pda_*.anm`, `sounds/items/pda/`,
+  `sounds/detectorshud/detector_draw.ogg`, `textures/item/item_kpk*`,
+  `textures/act/act_arm_3.*`, and the `textures/ui/ui_deadpda*` and
+  `textures/ui/ui_pda_loadscreen*` sequences. All from the Gunslinger mod,
+  taken as assets and re-authored into this engine's shader dialect; the port
+  itself is described in the 3D PDA work and its shaders are ours. Attribution
+  to the Gunslinger team stands in the project README's credits.
+- **The vegetation rustle voices** — `sounds/dead_air_x64/grass_rustle.ogg`
+  and `leaves_rustle.ogg`, added in `59fa0baed`, recorded there only as
+  "royalty-free". **That is not a provenance record.** No source, licence text
+  or licence URL was kept, so nobody can now say which royalty-free library
+  they came from or what its terms require. This was tolerable while they sat
+  inside an engine archive; it is not tolerable now that they are published as
+  standalone release assets in their own repository. Either the original source
+  and its licence are found and recorded in this section, or the two files are
+  replaced with recordings whose terms are known. Until one of those happens,
+  treat this as an open item, not as cleared.
+
+Everything else that ships is either the base game's own data, the
+compatibility archive's configs and shaders (which are ours and stay in this
+repository because they are version-coupled to the engine), or content the
+player already had.
+
 ## Attribution
 
 Original copyright notices, dependency licenses, submodule histories, and
