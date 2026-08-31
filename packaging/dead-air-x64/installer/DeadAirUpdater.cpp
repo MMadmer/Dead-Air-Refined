@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <shellapi.h>
+#include <winhttp.h>
 
 #include <algorithm>
 #include <array>
@@ -216,7 +217,7 @@ std::optional<Arguments> parse_arguments()
         // and accepting one on a command line would let anything nominate what "complete"
         // means.
         const auto gameDirectory = value_after(arguments, L"--game-dir");
-        if (!gameDirectory)
+        if (!gameDirectory || gameDirectory->empty())
         {
             LocalFree(raw);
             return std::nullopt;
@@ -907,10 +908,27 @@ std::string qa_content_base()
     if (!length || length >= std::size(value))
         return {};
 
-    const std::string base = wide_to_utf8(value);
-    if (!base.starts_with("http://127.0.0.1:") && !base.starts_with("http://localhost:"))
+    // Judged on the parsed host, never on a prefix: "http://127.0.0.1:@evil.example/" starts
+    // with the right characters and points somewhere else entirely.
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    wchar_t host[256]{};
+    wchar_t user[256]{};
+    parts.lpszHostName = host;
+    parts.dwHostNameLength = static_cast<DWORD>(std::size(host));
+    parts.lpszUserName = user;
+    parts.dwUserNameLength = static_cast<DWORD>(std::size(user));
+    if (!WinHttpCrackUrl(value, length, 0, &parts))
         return {};
-    return base;
+    if (parts.nScheme != INTERNET_SCHEME_HTTP || user[0])
+        return {};
+    if (_wcsicmp(host, L"127.0.0.1") != 0 && _wcsicmp(host, L"localhost") != 0 &&
+        _wcsicmp(host, L"::1") != 0)
+        return {};
+
+    // Rebuilt from what was parsed rather than echoed back, so nothing the parser ignored can
+    // ride along into the URL the downloader builds.
+    return "http://" + wide_to_utf8(host) + ":" + std::to_string(parts.nPort);
 }
 
 void write_content_result(const ContentPaths::Layout& paths, int code, std::string_view message)
@@ -919,14 +937,26 @@ void write_content_result(const ContentPaths::Layout& paths, int code, std::stri
     // a handle held open across a long fetch does not reliably move it.
     std::error_code error;
     std::filesystem::create_directories(paths.Cache(), error);
-    std::string body = std::to_string(code);
-    body += "\n";
+    // Keyed rather than positional: the installer parses this, and a bare number on line one is
+    // the kind of format that survives exactly until someone adds a field.
+    std::string body = "exit=";
+    body += std::to_string(code);
+    body += "\nmessage=";
     body.append(message);
     body += "\n";
     write_text(paths.FetchResult(), body);
 }
 
-bool open_content_session(const Arguments& arguments, ContentSession& session, std::string& error)
+// A fetch may be asked to acquire content for a version that is not installed yet - that is the
+// whole shape of a fresh install, where the payload has not been written when the download has
+// to start. The installer stages the manifest from the Setup payload at a FIXED path under the
+// cache and this finds it there; it is never named on a command line, so nothing external can
+// nominate what "complete" means.
+//
+// A commit is the opposite case: it finalises the version that is actually installed, so it
+// only ever reads the pinned manifest.
+bool open_content_session(const Arguments& arguments, ContentSession& session, std::string& error,
+    bool acceptPending)
 {
     if (arguments.gameDirectory.empty())
     {
@@ -935,9 +965,28 @@ bool open_content_session(const Arguments& arguments, ContentSession& session, s
     }
     session.paths.root = arguments.gameDirectory;
 
-    // The installed manifest at its pinned location is the trust root. It arrived inside a
-    // hash-verified payload; nothing else is accepted, from any source.
-    return ContentManifest::ParseFile(session.paths.Manifest().wstring(), session.manifest, error);
+    bool parsed = false;
+    if (acceptPending)
+    {
+        const std::filesystem::path pending = session.paths.Cache() / L"pending-manifest.txt";
+        std::error_code exists;
+        if (std::filesystem::is_regular_file(pending, exists) && !exists)
+            parsed = ContentManifest::ParseFile(pending.wstring(), session.manifest, error);
+    }
+    if (!parsed)
+        parsed = ContentManifest::ParseFile(session.paths.Manifest().wstring(), session.manifest, error);
+    if (!parsed)
+        return false;
+
+    // The same test the engine applies at startup. Without it the two disagree about whether an
+    // installation is workable: this program would spend an hour fetching content the game will
+    // then refuse to look at.
+    if (!session.manifest.ContentIdMatches())
+    {
+        error = "the content manifest has been modified - its content-id does not match its bundles";
+        return false;
+    }
+    return true;
 }
 
 // Reports what would have to happen, and whether there is room to do it. Writes nothing to the
@@ -946,7 +995,7 @@ int content_plan(const Arguments& arguments)
 {
     ContentSession session;
     std::string error;
-    if (!open_content_session(arguments, session, error))
+    if (!open_content_session(arguments, session, error, true))
     {
         write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
         return ContentExitUnusable;
@@ -987,7 +1036,7 @@ int content_fetch(const Arguments& arguments)
 {
     ContentSession session;
     std::string error;
-    if (!open_content_session(arguments, session, error))
+    if (!open_content_session(arguments, session, error, true))
     {
         write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
         return ContentExitUnusable;
@@ -1056,8 +1105,17 @@ int content_fetch(const Arguments& arguments)
             options.cancel = &cancel;
             options.onProgress = [&](const ContentDownload::Progress& progress)
             {
-                write_text(session.paths.FetchProgress(),
-                    std::to_string(progress.done) + " " + std::to_string(progress.total) + "\n");
+                // Written on every tick whether or not a byte moved, and through a temporary so
+                // the installer never reads a torn line. The installer's stall detector keys off
+                // this file's timestamp, so a heartbeat that only ticked on progress would
+                // declare a slow but healthy transfer dead.
+                const std::filesystem::path final = session.paths.FetchProgress();
+                const std::filesystem::path temporary = final.wstring() + L".tmp";
+                if (write_text(temporary, std::to_string(progress.done) + "\t" +
+                        std::to_string(progress.total) + "\n"))
+                {
+                    MoveFileExW(temporary.c_str(), final.c_str(), MOVEFILE_REPLACE_EXISTING);
+                }
             };
 
             const ContentDownload::Result result = ContentDownload::Fetch(plan, session.paths, options);
@@ -1093,7 +1151,7 @@ int content_commit(const Arguments& arguments)
 {
     ContentSession session;
     std::string error;
-    if (!open_content_session(arguments, session, error))
+    if (!open_content_session(arguments, session, error, false))
     {
         write_content_result(session.paths, ContentExitUnusable, "content manifest: " + error);
         return ContentExitUnusable;
@@ -1261,11 +1319,14 @@ int apply_update(const Arguments& arguments)
         Arguments commit;
         commit.mode = Mode::ContentCommit;
         commit.gameDirectory = arguments.gameDirectory;
+
+        // A failure here is NOT an update failure. The runtime update is complete and correct;
+        // what did not happen is a content commit that the game does perfectly well on its own,
+        // and that has its own recovery channel - the latch is still set, so the next launch
+        // reports an incomplete installation and repairs it. Rolling the whole update back
+        // would turn a self-healing state into a lost one.
         if (content_commit(commit) != ContentExitOk)
-        {
-            restore_backup(arguments.gameDirectory, *backup, scope);
-            return 26;
-        }
+            Sleep(0);
     }
 
     DeleteFileW((arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt").c_str());

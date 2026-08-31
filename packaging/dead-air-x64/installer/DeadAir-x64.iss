@@ -23,6 +23,20 @@
   #define ApplicationId "{{9732DFF1-E40D-4B23-B215-6D28B1DD0DE0}"
 #endif
 
+; Content is never optional, so there is deliberately no default here: a build that forgot to
+; pass these must fail loudly rather than quietly produce a contentless Setup.
+#ifndef MaintenanceOnly
+  #ifndef ContentBytes
+    #error ContentBytes must be the total packed size of the content bundles.
+  #endif
+  #ifndef ContentManifestPath
+    #error ContentManifestPath must point to the built content-manifest.txt.
+  #endif
+  #ifndef ContentFetcherPath
+    #error ContentFetcherPath must point to the built DeadAirContent.exe.
+  #endif
+#endif
+
 #define ProductName "Dead Air: Refined"
 #define ProductVersion PortVersion
 #define RuntimeRoot AddBackslash(RepoRoot) + "bin\x64\Release"
@@ -50,6 +64,12 @@ WizardSizePercent=110
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
+; The running game creates this mutex (src/xr_3da/entry_point.cpp), so install and uninstall
+; refuse while it has files open. Session-local rather than Global\: creating a global mutex
+; needs a privilege a standard user does not reliably hold, and setup stays in the same session
+; even when it elevates.
+; Covers both install and uninstall - Inno records the name in the uninstall data.
+AppMutex=DeadAirRefined-xrEngine
 UsePreviousAppDir=no
 UsePreviousGroup=no
 UsePreviousTasks=no
@@ -69,6 +89,12 @@ SolidCompression=no
 DiskSpanning=no
 CreateAppDir=yes
 DirExistsWarning=no
+#ifndef MaintenanceOnly
+; A display value and a second net only - Inno evaluates it at the transition into the install,
+; which is after the content page has already spent the bandwidth. The gate that actually runs
+; before the download is the free-space check at wpSelectDir.
+ExtraDiskSpaceRequired={#ContentBytes}
+#endif
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
@@ -84,6 +110,13 @@ Source: "{#CompatibilityArchive}"; DestDir: "{app}\database"; Flags: ignoreversi
 Source: "{#LauncherPath}"; DestDir: "{app}"; DestName: "Uninstall Dead Air Refined.exe"; Flags: ignoreversion
 Source: "{#UpdaterPath}"; DestDir: "{app}"; DestName: "DeadAirUpdater.exe"; Flags: ignoreversion
 Source: "{#MaintenancePath}"; DestDir: "{app}\.dead-air-x64"; DestName: "Dead-Air-Refined-Maintenance.exe"; Flags: ignoreversion
+; dontcopy extracts under the SOURCE basename, so these two files must already be named
+; DeadAirContent.exe and content-manifest.txt on disk.
+Source: "{#ContentFetcherPath}"; Flags: dontcopy
+Source: "{#ContentManifestPath}"; Flags: dontcopy
+; The trust root. It arrives inside the hash-verified Setup payload and is what the commit and
+; every later launch measure the installation against.
+Source: "{#ContentManifestPath}"; DestDir: "{app}\.dead-air-x64"; DestName: "content-manifest.txt"; Flags: ignoreversion
 #endif
 Source: "{#InstallerRoot}\runtime-files.txt"; Flags: dontcopy
 Source: "{#InstallerRoot}\runtime-files.txt"; DestDir: "{app}\.dead-air-x64"; Flags: ignoreversion
@@ -107,6 +140,11 @@ Type: files; Name: "{app}\.dead-air-x64\maintenance-small.bmp"
 
 [UninstallDelete]
 Type: files; Name: "{app}\.dead-air-x64\maintenance-small.png"
+; Deliberately no database\xtra_dead_air_x64_content_*.xdb0 entry: Inno's wildcard deleter has no
+; reparse-point check and would follow a junctioned database\ into another installation.
+; RemoveContentBundles is the sole delete authority for that directory.
+Type: filesandordirs; Name: "{app}\.dead-air-x64\content-cache"
+Type: files; Name: "{app}\appdata\vfs-index-*.cache"
 Type: dirifempty; Name: "{app}\.dead-air-x64"
 Type: dirifempty; Name: "{app}\database"
 Type: dirifempty; Name: "{app}"
@@ -117,27 +155,39 @@ const
   Scs64BitBinary = 6;
   UninstallActionCancel = 0;
   UninstallActionRemove = 1;
-  UninstallActionRollback = 2;
+  // The access mask OpenMutexW needs to probe whether the content fetcher is still alive.
   SynchronizeAccess = $00100000;
-  InfiniteTimeout = $FFFFFFFF;
+  FileAttributeReparsePoint = $00000400;
+  InvalidFileAttributes = $FFFFFFFF;
+  MoveFileDelayUntilReboot = $00000004;
   MaintenanceFooterHeight = 74;
   SmCxFrame = 32;
   SmCyCaption = 4;
   SmCxPaddedBorder = 92;
+#ifndef MaintenanceOnly
+  ContentMutexName = 'DeadAirRefined-ContentFetch';
+  ContentPollIntervalMs = 200;
+  // The fetcher creates its mutex a moment after it starts. Without a grace window the first
+  // poll would report a crash that has not happened.
+  ContentStartGraceMs = 10000;
+  // Generous on purpose: the fetcher's own retry ladder plus its idle timeout can legitimately
+  // stay quiet for well over two minutes, and killing a healthy slow download is worse than
+  // waiting out a dead one.
+  ContentHeartbeatTimeoutMs = 240000;
+  ContentProgressSteps = 1000;
+#endif
 
 var
-  BackupPage: TInputOptionWizardPage;
   RuntimeFiles: TArrayOfString;
   ManagedFiles: TArrayOfString;
-  DeleteBackupsOnUninstall: Boolean;
   RestoreOriginalX86OnUninstall: Boolean;
-  BackupDirectoryEdit: TNewEdit;
-  BackupBrowseButton: TNewButton;
-  RemovePatchRadio: TNewRadioButton;
-  RollbackPatchRadio: TNewRadioButton;
-  DeleteBackupsCheck: TNewCheckBox;
-  SelectedBackupDirectory: String;
-  SelectedDeleteBackups: Boolean;
+#ifndef MaintenanceOnly
+  ContentProgressPage: TOutputProgressWizardPage;
+  ContentFetchRunning: Boolean;
+  ContentFetchCancelled: Boolean;
+  ContentLastHeartbeat: TFileTime;
+  ContentLastHeartbeatTick: Cardinal;
+#endif
   MaintenanceForm: TSetupForm;
   MaintenanceContentPanel: TPanel;
   MaintenanceFooterPanel: TPanel;
@@ -145,17 +195,27 @@ var
   MaintenanceCancelButton: TNewButton;
   MaintenanceButtonWidth: Integer;
 
-function GetCurrentProcessId: Cardinal;
-  external 'GetCurrentProcessId@kernel32.dll stdcall';
+function OpenMutexW(DesiredAccess: Cardinal; InheritHandle: Boolean; Name: String): THandle;
+  external 'OpenMutexW@kernel32.dll stdcall';
 
-function OpenProcess(DesiredAccess: Cardinal; InheritHandle: Boolean; ProcessId: Cardinal): THandle;
-  external 'OpenProcess@kernel32.dll stdcall';
-
-function WaitForSingleObject(Handle: THandle; Milliseconds: Cardinal): Cardinal;
-  external 'WaitForSingleObject@kernel32.dll stdcall';
-
+// Closes the mutex probe handle from the content-fetch poll.
 function CloseHandle(Handle: THandle): Boolean;
   external 'CloseHandle@kernel32.dll stdcall';
+
+function GetDiskFreeSpaceEx(DirectoryName: String;
+  var FreeBytesAvailable, TotalNumberOfBytes, TotalNumberOfFreeBytes: Int64): Boolean;
+  external 'GetDiskFreeSpaceExW@kernel32.dll stdcall';
+
+function GetFileAttributesW(FileName: String): Cardinal;
+  external 'GetFileAttributesW@kernel32.dll stdcall';
+
+function GetTickCount: Cardinal;
+  external 'GetTickCount@kernel32.dll stdcall';
+
+// A second name over the same export, with the destination typed as Cardinal: a delayed delete
+// needs a NULL destination and Pascal Script cannot pass nil for a String parameter.
+function MoveFileExDeleteW(ExistingFileName: String; NewFileName: Cardinal; Flags: Cardinal): Boolean;
+  external 'MoveFileExW@kernel32.dll stdcall';
 
 function GetBinaryType(ApplicationName: String; var BinaryType: Cardinal): Boolean;
   external 'GetBinaryTypeW@kernel32.dll stdcall';
@@ -171,35 +231,268 @@ begin
   Result := RemoveBackslashUnlessRoot(Trim(ExpandConstant('{param:TARGET|}')));
 end;
 
-function BackupParameterEnabled: Boolean;
-var
-  Value: String;
-begin
-  Value := Lowercase(Trim(ExpandConstant('{param:BACKUP|yes}')));
-  Result := (Value <> 'no') and (Value <> 'off') and (Value <> '0');
-end;
-
 function CommandLineParameter(Name: String; DefaultValue: String): String;
 begin
   Result := ExpandConstant('{param:' + Name + '|' + DefaultValue + '}');
 end;
 
+// Moved up from the uninstall section: Pascal Script is single-pass and the content fetch
+// launcher below needs it.
+function QuoteParameter(Value: String): String;
+begin
+  Result := '"' + Value + '"';
+end;
+
+#ifndef MaintenanceOnly
+function ContentCacheDirectory(GameDirectory: String): String;
+begin
+  Result := AddBackslash(GameDirectory) + '.dead-air-x64\content-cache';
+end;
+
+// The only disk check that runs BEFORE the download. ExtraDiskSpaceRequired fires at the
+// transition into the install, by which point the bandwidth has already been spent.
+function ContentFreeSpaceOk(GameDirectory: String; var FreeBytes: Int64): Boolean;
+var
+  Total: Int64;
+  TotalFree: Int64;
+  Root: String;
+begin
+  FreeBytes := 0;
+  Root := AddBackslash(GameDirectory);
+  if not GetDiskFreeSpaceEx(Root, FreeBytes, Total, TotalFree) then
+  begin
+    // The volume would not answer. That is "unknown", not "full", and refusing the install on
+    // it would be worse than letting the fetcher's own check decide.
+    Result := True;
+    exit;
+  end;
+  Result := FreeBytes >= {#ContentBytes};
+end;
+
+// The fetcher rewrites this file through a temporary, so a torn read is not expected - but a
+// failed parse still has to leave the caller's previous values alone rather than jump the bar
+// back to zero.
+function ContentReadProgress(GameDirectory: String; var Done, Total: Int64): Boolean;
+var
+  Lines: TArrayOfString;
+  Separator: Integer;
+  Line: String;
+begin
+  Result := False;
+  if not LoadStringsFromFile(AddBackslash(ContentCacheDirectory(GameDirectory)) +
+    'content-fetch-progress.txt', Lines) then
+    exit;
+  if GetArrayLength(Lines) = 0 then
+    exit;
+
+  Line := Trim(Lines[0]);
+  Separator := Pos(#9, Line);
+  if Separator <= 1 then
+    exit;
+
+  Done := StrToInt64Def(Copy(Line, 1, Separator - 1), -1);
+  Total := StrToInt64Def(Copy(Line, Separator + 1, Length(Line) - Separator), -1);
+  Result := (Done >= 0) and (Total > 0);
+end;
+
+// Alive means the fetcher still holds its mutex. A progress file alone cannot tell a working
+// download from a process that died without writing a result.
+function ContentFetcherAlive: Boolean;
+var
+  Handle: THandle;
+begin
+  Handle := OpenMutexW(SynchronizeAccess, False, ContentMutexName);
+  Result := Handle <> 0;
+  if Result then
+    CloseHandle(Handle);
+end;
+
+function ContentHeartbeatStalled(GameDirectory: String): Boolean;
+var
+  Records: TFindRec;
+  Changed: Boolean;
+begin
+  Result := False;
+  Changed := True;
+  if FindFirst(AddBackslash(ContentCacheDirectory(GameDirectory)) +
+    'content-fetch-progress.txt', Records) then
+  begin
+    Changed := (Records.LastWriteTime.dwLowDateTime <> ContentLastHeartbeat.dwLowDateTime) or
+      (Records.LastWriteTime.dwHighDateTime <> ContentLastHeartbeat.dwHighDateTime);
+    if Changed then
+      ContentLastHeartbeat := Records.LastWriteTime;
+    FindClose(Records);
+  end;
+
+  if Changed then
+    ContentLastHeartbeatTick := GetTickCount
+  else
+    Result := (GetTickCount - ContentLastHeartbeatTick) > ContentHeartbeatTimeoutMs;
+end;
+
+function ContentResultValue(Lines: TArrayOfString; Key: String): String;
+var
+  Index: Integer;
+  Line: String;
+begin
+  Result := '';
+  for Index := 0 to GetArrayLength(Lines) - 1 do
+  begin
+    Line := Trim(Lines[Index]);
+    if Pos(Key, Line) = 1 then
+    begin
+      Result := Copy(Line, Length(Key) + 1, Length(Line) - Length(Key));
+      exit;
+    end;
+  end;
+end;
+
+// Drives one fetch to completion. Returns '' on success and a message otherwise.
+//
+// Interactive mode drives the standard output progress page, whose SetProgress pumps the
+// message queue - without that the wizard would be frozen for the whole download and the
+// Cancel button could not even be clicked. Silent mode simply blocks: there is no page to
+// update and nobody to answer.
+function RunContentFetch(GameDirectory: String; Interactive: Boolean): String;
+var
+  CacheDirectory: String;
+  ResultFile: String;
+  ResultLines: TArrayOfString;
+  ExitText: String;
+  MessageText: String;
+  ResultCode: Integer;
+  Done: Int64;
+  Total: Int64;
+  Started: Cardinal;
+  Position: Integer;
+begin
+  Result := '';
+  CacheDirectory := ContentCacheDirectory(GameDirectory);
+  if not ForceDirectories(CacheDirectory) then
+  begin
+    Result := 'Не удалось создать папку для загрузки контента.';
+    exit;
+  end;
+
+  SaveStringToFile(AddBackslash(CacheDirectory) + 'README.txt',
+    'Здесь хранится загруженный контент Dead Air: Refined.' + Chr(13) + Chr(10) +
+    'Папку можно удалить, когда игра не запущена - файлы будут загружены заново.' +
+    Chr(13) + Chr(10), False);
+
+  ResultFile := AddBackslash(CacheDirectory) + 'content-fetch-result.txt';
+  DeleteFile(ResultFile);
+  DeleteFile(AddBackslash(CacheDirectory) + 'content-fetch-progress.txt');
+  DeleteFile(AddBackslash(CacheDirectory) + 'content-fetch-cancel.txt');
+
+  // Both come out of the hash-verified Setup payload. The manifest is staged at a fixed path
+  // the fetcher knows: it is never named on a command line, so nothing external can nominate
+  // what "complete" means for this installation.
+  try
+    ExtractTemporaryFile('DeadAirContent.exe');
+    ExtractTemporaryFile('content-manifest.txt');
+  except
+    Result := 'Не удалось распаковать средство загрузки контента.';
+    exit;
+  end;
+
+  if not FileCopy(ExpandConstant('{tmp}\content-manifest.txt'),
+    AddBackslash(CacheDirectory) + 'pending-manifest.txt', False) then
+  begin
+    Result := 'Не удалось подготовить список контента.';
+    exit;
+  end;
+
+  ContentFetchCancelled := False;
+  ContentLastHeartbeatTick := GetTickCount;
+  ContentLastHeartbeat.dwLowDateTime := 0;
+  ContentLastHeartbeat.dwHighDateTime := 0;
+
+  if not Exec(ExpandConstant('{tmp}\DeadAirContent.exe'),
+    '--content-fetch --game-dir ' + QuoteParameter(GameDirectory) +
+    ' --cancel-flag ' + QuoteParameter(AddBackslash(CacheDirectory) + 'content-fetch-cancel.txt'),
+    '', SW_HIDE, ewNoWait, ResultCode) then
+  begin
+    Result := 'Не удалось запустить загрузку контента.';
+    exit;
+  end;
+
+  ContentFetchRunning := True;
+  if Interactive then
+  begin
+    ContentProgressPage.SetProgress(0, ContentProgressSteps);
+    ContentProgressPage.Show;
+  end;
+
+  try
+    Started := GetTickCount;
+    while True do
+    begin
+      Sleep(ContentPollIntervalMs);
+
+      if FileExists(ResultFile) then
+      begin
+        if not LoadStringsFromFile(ResultFile, ResultLines) then
+        begin
+          Result := 'Не удалось прочитать результат загрузки контента.';
+          exit;
+        end;
+        ExitText := ContentResultValue(ResultLines, 'exit=');
+        MessageText := ContentResultValue(ResultLines, 'message=');
+        if ExitText <> '0' then
+          Result := 'Не удалось загрузить контент: ' + MessageText;
+        exit;
+      end;
+
+      if ContentFetchCancelled then
+      begin
+        // The flag file already told the fetcher to stop. Whatever landed stays in the cache
+        // and the next attempt resumes from it.
+        Result := 'Загрузка контента отменена.';
+        exit;
+      end;
+
+      // The grace window matters: the fetcher creates its mutex a moment after Exec returns,
+      // so an eager first poll would report a crash that has not happened.
+      if (GetTickCount - Started) > ContentStartGraceMs then
+      begin
+        if not ContentFetcherAlive then
+        begin
+          Result := 'Загрузка контента прервалась.';
+          exit;
+        end;
+        if ContentHeartbeatStalled(GameDirectory) then
+        begin
+          Result := 'Загрузка контента не отвечает.';
+          exit;
+        end;
+      end;
+
+      if Interactive then
+      begin
+        Position := 0;
+        if ContentReadProgress(GameDirectory, Done, Total) and (Total > 0) then
+        begin
+          Position := Integer((Done * ContentProgressSteps) / Total);
+          if Position > ContentProgressSteps then
+            Position := ContentProgressSteps;
+          ContentProgressPage.SetText('Загружено ' + IntToStr(Done / 1048576) + ' из ' +
+            IntToStr(Total / 1048576) + ' МБ', '');
+        end;
+        // Pumps the message queue as a side effect, which is what keeps Cancel clickable.
+        ContentProgressPage.SetProgress(Position, ContentProgressSteps);
+      end;
+    end;
+  finally
+    ContentFetchRunning := False;
+    if Interactive then
+      ContentProgressPage.Hide;
+  end;
+end;
+#endif
+
 function UninstallActionParameter: String;
 begin
   Result := Lowercase(Trim(CommandLineParameter('ACTION', 'ask')));
-end;
-
-function BackupDirectoryParameter: String;
-begin
-  Result := RemoveBackslashUnlessRoot(Trim(CommandLineParameter('BACKUPDIR', '')));
-end;
-
-function DeleteBackupsParameterEnabled: Boolean;
-var
-  Value: String;
-begin
-  Value := Lowercase(Trim(CommandLineParameter('DELETEBACKUPS', 'no')));
-  Result := (Value = 'yes') or (Value = 'on') or (Value = '1');
 end;
 
 function ExistingX64Directory: String;
@@ -294,15 +587,13 @@ end;
 
 procedure InitializeWizard;
 begin
-  BackupPage := CreateInputOptionPage(
-    wpSelectDir,
-    'Резервная копия',
-    'Сохранение текущей версии',
-    'Перед заменой файлов установщик может сохранить текущую версию для последующего восстановления.',
-    False,
-    False);
-  BackupPage.Add('Создать резервную копию текущей версии');
-  BackupPage.Values[0] := BackupParameterEnabled;
+#ifndef MaintenanceOnly
+  // A standard output progress page rather than a custom one: SetProgress pumps the message
+  // queue, which is the only way the wizard stays responsive - and the only way the Cancel
+  // button can be clicked at all - while a script-driven download runs for tens of minutes.
+  ContentProgressPage := CreateOutputProgressPage('Загрузка контента',
+    'Установщик загружает игровой контент. Загрузку можно прервать и продолжить позже.');
+#endif
 
   if TargetParameter <> '' then
     WizardForm.DirEdit.Text := TargetParameter;
@@ -311,6 +602,9 @@ end;
 function NextButtonClick(CurrentPageId: Integer): Boolean;
 var
   ValidationError: String;
+#ifndef MaintenanceOnly
+  FreeBytes: Int64;
+#endif
 begin
   Result := True;
 
@@ -322,7 +616,19 @@ begin
       SuppressibleMsgBox(ValidationError, mbError, MB_OK, IDOK);
       Result := False;
     end;
+
+#ifndef MaintenanceOnly
+    // Before the download, not after it.
+    if Result and not ContentFreeSpaceOk(WizardDirValue, FreeBytes) then
+    begin
+      SuppressibleMsgBox('На выбранном диске недостаточно места. Нужно около ' +
+        IntToStr({#ContentBytes} / 1073741824 + 1) + ' ГБ, доступно ' +
+        IntToStr(FreeBytes / 1073741824) + ' ГБ.', mbError, MB_OK, IDOK);
+      Result := False;
+    end;
+#endif
   end;
+
 end;
 
 function LoadRuntimeFiles(FileName: String): Boolean;
@@ -375,6 +681,18 @@ begin
   end;
 end;
 
+// The managed list decides what gets backed up, what gets deleted when it drops out of a new
+// version, what the updater snapshots on every update, and what the uninstaller removes.
+//
+// Content bundles and the content cache are NEVER in it. Bundle names carry a content hash, so
+// they change whenever the bytes do - a bundle in this list would be deleted from database\ the
+// moment a version renamed it, outside the content commit, destroying the very file the commit
+// wanted to keep in the cache. It would also be copied into every backup, at gigabytes a time.
+// The uninstall path is the one consumer where a bundle here would appear to work, which is
+// exactly why the mistake would survive review.
+//
+// content-manifest.txt is different and does belong: two kilobytes, and the record of what the
+// installation is supposed to contain.
 procedure BuildManagedFiles;
 var
   Index: Integer;
@@ -387,6 +705,7 @@ begin
   AppendUniqueString(ManagedFiles, 'DeadAirUpdater.exe');
   AppendUniqueString(ManagedFiles, '.dead-air-x64\Dead-Air-Refined-Maintenance.exe');
   AppendUniqueString(ManagedFiles, '.dead-air-x64\runtime-files.txt');
+  AppendUniqueString(ManagedFiles, '.dead-air-x64\content-manifest.txt');
   AppendUniqueString(ManagedFiles, '.dead-air-x64\unins000.exe');
   AppendUniqueString(ManagedFiles, '.dead-air-x64\unins000.dat');
   AppendUniqueString(ManagedFiles, '.dead-air-x64\unins000.msg');
@@ -451,23 +770,6 @@ begin
     Result := 'unknown-x64';
 end;
 
-function NextBackupDirectory(DirectoryName: String; VersionName: String): String;
-var
-  BackupRoot: String;
-  BaseName: String;
-  Suffix: Integer;
-begin
-  BackupRoot := AddBackslash(DirectoryName) + '.dead-air-x64\backups';
-  BaseName := GetDateTimeString('yyyy-mm-dd_hh-nn-ss', '-', ':') + '_' + VersionName;
-  Result := AddBackslash(BackupRoot) + BaseName;
-  Suffix := 1;
-  while DirExists(Result) do
-  begin
-    Result := AddBackslash(BackupRoot) + BaseName + '_' + IntToStr(Suffix);
-    Suffix := Suffix + 1;
-  end;
-end;
-
 function PrepareOriginalX86Backup(DirectoryName: String): String;
 var
   ControlDirectory: String;
@@ -521,106 +823,6 @@ begin
   end;
 end;
 
-function PrepareUpgradeBackup(DirectoryName: String): String;
-var
-  BackupDirectory: String;
-  BackupFilesDirectory: String;
-  CurrentManagedFiles: TArrayOfString;
-  CaptureFiles: TArrayOfString;
-  PresentFiles: TArrayOfString;
-  Index: Integer;
-  FileName: String;
-  SourcePath: String;
-  DestinationPath: String;
-  VersionName: String;
-begin
-  Result := '';
-  SetArrayLength(CurrentManagedFiles, 0);
-  LoadManagedFilesFromControl(DirectoryName, CurrentManagedFiles);
-
-  // Capture the union so upgrades also preserve files removed by the incoming version.
-  SetArrayLength(CaptureFiles, 0);
-  for Index := 0 to GetArrayLength(CurrentManagedFiles) - 1 do
-    AppendUniqueString(CaptureFiles, Trim(CurrentManagedFiles[Index]));
-  for Index := 0 to GetArrayLength(ManagedFiles) - 1 do
-    AppendUniqueString(CaptureFiles, Trim(ManagedFiles[Index]));
-
-  VersionName := CurrentVersionName(DirectoryName);
-  BackupDirectory := NextBackupDirectory(DirectoryName, VersionName);
-  BackupFilesDirectory := AddBackslash(BackupDirectory) + 'files';
-  if not ForceDirectories(BackupFilesDirectory) then
-  begin
-    Result := 'Не удалось создать папку резервной копии.';
-    exit;
-  end;
-
-  SetArrayLength(PresentFiles, 0);
-  for Index := 0 to GetArrayLength(CaptureFiles) - 1 do
-  begin
-    FileName := Trim(CaptureFiles[Index]);
-    SourcePath := AddBackslash(DirectoryName) + FileName;
-    if FileExists(SourcePath) then
-    begin
-      DestinationPath := AddBackslash(BackupFilesDirectory) + FileName;
-      if not ForceDirectories(ExtractFileDir(DestinationPath)) then
-      begin
-        Result := 'Не удалось создать структуру резервной копии: ' + FileName;
-        exit;
-      end;
-      if not CopyFile(SourcePath, DestinationPath, False) then
-      begin
-        Result := 'Не удалось сохранить текущий файл: ' + FileName;
-        exit;
-      end;
-      AppendString(PresentFiles, FileName);
-    end;
-  end;
-
-  if not SaveStringsToFile(
-    AddBackslash(BackupDirectory) + 'present-files.txt',
-    PresentFiles,
-    False) then
-  begin
-    Result := 'Не удалось записать список сохранённых файлов.';
-    exit;
-  end;
-
-  if not SaveStringsToFile(
-    AddBackslash(BackupDirectory) + 'restore-scope.txt',
-    CaptureFiles,
-    False) then
-  begin
-    Result := 'Не удалось записать область восстановления.';
-    exit;
-  end;
-
-  if not SaveStringsToFile(
-    AddBackslash(BackupDirectory) + 'managed-files.txt',
-    CurrentManagedFiles,
-    False) then
-  begin
-    Result := 'Не удалось записать состав сохранённой версии.';
-    exit;
-  end;
-
-  if not SaveStringToFile(
-    AddBackslash(BackupDirectory) + 'port-version.txt',
-    VersionName,
-    False) then
-  begin
-    Result := 'Не удалось записать версию резервной копии.';
-    exit;
-  end;
-
-  if not SaveStringToFile(
-    AddBackslash(BackupDirectory) + 'snapshot-kind.txt',
-    'refined-version',
-    False) then
-  begin
-    Result := 'Не удалось записать тип резервной копии.';
-  end;
-end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ValidationError: String;
@@ -646,20 +848,43 @@ begin
   BuildManagedFiles;
 
   ControlDirectory := AddBackslash(WizardDirValue) + '.dead-air-x64';
-  if BackupPage.Values[0] then
-  begin
-    if CurrentVersionName(WizardDirValue) = 'original-x86' then
-      Result := PrepareOriginalX86Backup(WizardDirValue)
-    else
-      Result := PrepareUpgradeBackup(WizardDirValue);
-    if Result <> '' then
-      exit;
-  end;
-
   if not ForceDirectories(ControlDirectory) then
   begin
     Result := 'Не удалось создать служебную папку .dead-air-x64.';
     exit;
+  end;
+
+#ifndef MaintenanceOnly
+  // The fetch is the first thing that happens and the last thing that can fail harmlessly:
+  // nothing below has run yet, so returning a message here aborts the install with the
+  // installation untouched. It also means a silent Setup fetches exactly like an interactive
+  // one - there is no wizard page to skip, so content cannot become optional by accident.
+  Result := RunContentFetch(WizardDirValue, not WizardSilent);
+  if Result <> '' then
+    exit;
+
+  // The point of no return, and the first line of it. Everything below mutates the
+  // installation; from here on a crash must not be able to present as a healthy install. The
+  // latch is deliberately NOT written on the wizard page: a player who lets the download
+  // finish and then cancels at the ready page still has the installation they started with.
+  SaveStringToFile(
+    AddBackslash(ControlDirectory) + 'content-incomplete.txt',
+    'schema=dead-air-refined.content-incomplete/1'#10 +
+    'version={#ProductVersion}'#10 +
+    'reason=install-commit'#10 +
+    'time=0'#10,
+    False);
+#endif
+
+  // The original x86 game is backed up unconditionally: it is the only restore target that
+  // still exists, and the updater passes /BACKUP=no on every update, so an opt-in would mean
+  // it never happened. CurrentVersionName reads port-version.txt first, so after the first
+  // Refined install this never fires again.
+  if CurrentVersionName(WizardDirValue) = 'original-x86' then
+  begin
+    Result := PrepareOriginalX86Backup(WizardDirValue);
+    if Result <> '' then
+      exit;
   end;
 
   if not SaveStringToFile(
@@ -697,53 +922,33 @@ end;
 procedure RemoveControlMetadata(DirectoryName: String);
 var
   ControlDirectory: String;
+  CacheDirectory: String;
+  Records: TFindRec;
 begin
   ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
   DeleteFile(AddBackslash(ControlDirectory) + 'install-mode.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'original-files.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'port-version.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'managed-files.txt');
-end;
+  DeleteFile(AddBackslash(ControlDirectory) + 'content-manifest.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'content-state.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'content-incomplete.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'patch-rejected.txt');
 
-function LoadBackupSnapshot(
-  BackupDirectory: String;
-  var BackupFilesDirectory: String;
-  var PresentFiles: TArrayOfString;
-  var RestoreScope: TArrayOfString;
-  var SnapshotManagedFiles: TArrayOfString;
-  var SnapshotVersion: String): Boolean;
-var
-  StoredVersion: AnsiString;
-  SnapshotKind: AnsiString;
-begin
-  Result := False;
-  BackupDirectory := RemoveBackslashUnlessRoot(BackupDirectory);
-  BackupFilesDirectory := AddBackslash(BackupDirectory) + 'files';
-
-  if not DirExists(BackupFilesDirectory) or
-     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'present-files.txt', PresentFiles) or
-     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'restore-scope.txt', RestoreScope) or
-     not LoadStringsFromFile(AddBackslash(BackupDirectory) + 'managed-files.txt', SnapshotManagedFiles) or
-     not LoadStringFromFile(AddBackslash(BackupDirectory) + 'snapshot-kind.txt', SnapshotKind) or
-     (CompareText(Trim(String(SnapshotKind)), 'refined-version') <> 0) then
+  // In code rather than only in [UninstallDelete]: those entries are baked into unins000.dat at
+  // install time, so they never run for an installation made by an earlier Setup - and those are
+  // exactly the ones carrying the accumulated index caches.
+  CacheDirectory := AddBackslash(DirectoryName) + 'appdata';
+  if FindFirst(AddBackslash(CacheDirectory) + 'vfs-index-*.cache', Records) then
   begin
-    MsgBox(
-      'В выбранной папке не найдена резервная копия ранее установленной версии Dead Air: Refined.' + #13#10 +
-      'Выберите резервную копию, созданную при обновлении программы.',
-      mbError,
-      MB_OK);
-    exit;
+    try
+      repeat
+        DeleteFile(AddBackslash(CacheDirectory) + Records.Name);
+      until not FindNext(Records);
+    finally
+      FindClose(Records);
+    end;
   end;
-
-  if LoadStringFromFile(AddBackslash(BackupDirectory) + 'port-version.txt', StoredVersion) then
-    SnapshotVersion := Trim(String(StoredVersion))
-  else
-  begin
-    MsgBox('Не удалось определить версию выбранной резервной копии.', mbError, MB_OK);
-    exit;
-  end;
-
-  Result := True;
 end;
 
 function OriginalX86BackupAvailable(DirectoryName: String): Boolean;
@@ -801,225 +1006,6 @@ begin
   Result := True;
 end;
 
-function ValidateBackupFiles(
-  BackupFilesDirectory: String;
-  PresentFiles: TArrayOfString): Boolean;
-var
-  Index: Integer;
-  FileName: String;
-  BackupPath: String;
-begin
-  Result := True;
-  for Index := 0 to GetArrayLength(PresentFiles) - 1 do
-  begin
-    FileName := Trim(PresentFiles[Index]);
-    BackupPath := AddBackslash(BackupFilesDirectory) + FileName;
-    if not FileExists(BackupPath) then
-    begin
-      MsgBox(
-        'Резервная копия неполна. Отсутствует файл:' + #13#10 + FileName,
-        mbError,
-        MB_OK);
-      Result := False;
-      exit;
-    end;
-  end;
-end;
-
-function RestoreBackupSnapshot(DirectoryName: String; BackupDirectory: String): Boolean;
-var
-  BackupFilesDirectory: String;
-  PresentFiles: TArrayOfString;
-  RestoreScope: TArrayOfString;
-  SnapshotManagedFiles: TArrayOfString;
-  CurrentManagedFiles: TArrayOfString;
-  FilesToRemove: TArrayOfString;
-  SnapshotVersion: String;
-  ControlDirectory: String;
-  Index: Integer;
-  FileName: String;
-  TargetPath: String;
-  BackupPath: String;
-begin
-  Result := False;
-  if not LoadBackupSnapshot(
-    BackupDirectory,
-    BackupFilesDirectory,
-    PresentFiles,
-    RestoreScope,
-    SnapshotManagedFiles,
-    SnapshotVersion) then
-  begin
-    exit;
-  end;
-
-  if not ValidateBackupFiles(BackupFilesDirectory, PresentFiles) then
-    exit;
-
-  SetArrayLength(CurrentManagedFiles, 0);
-  LoadManagedFilesFromControl(DirectoryName, CurrentManagedFiles);
-
-  // Build the union so files absent from the selected snapshot can be removed after restoration.
-  SetArrayLength(FilesToRemove, 0);
-  for Index := 0 to GetArrayLength(CurrentManagedFiles) - 1 do
-    AppendUniqueString(FilesToRemove, Trim(CurrentManagedFiles[Index]));
-  for Index := 0 to GetArrayLength(RestoreScope) - 1 do
-    AppendUniqueString(FilesToRemove, Trim(RestoreScope[Index]));
-
-  // Overwrite snapshot files without deleting the working installation first.
-  for Index := 0 to GetArrayLength(PresentFiles) - 1 do
-  begin
-    FileName := Trim(PresentFiles[Index]);
-    BackupPath := AddBackslash(BackupFilesDirectory) + FileName;
-    TargetPath := AddBackslash(DirectoryName) + FileName;
-    if not ForceDirectories(ExtractFileDir(TargetPath)) or
-       not CopyFile(BackupPath, TargetPath, False) then
-    begin
-      MsgBox(
-        'Не удалось восстановить файл: ' + FileName + #13#10 +
-        'Выбранная резервная копия не изменена.',
-        mbError,
-        MB_OK);
-      exit;
-    end;
-  end;
-
-  for Index := 0 to GetArrayLength(FilesToRemove) - 1 do
-  begin
-    FileName := Trim(FilesToRemove[Index]);
-    if StringArrayContains(PresentFiles, FileName) then
-      continue;
-
-    TargetPath := AddBackslash(DirectoryName) + FileName;
-    if FileExists(TargetPath) and not DeleteFile(TargetPath) then
-    begin
-      MsgBox('Не удалось удалить файл текущей версии: ' + FileName, mbError, MB_OK);
-      exit;
-    end;
-  end;
-
-  ControlDirectory := AddBackslash(DirectoryName) + '.dead-air-x64';
-  if not ForceDirectories(ControlDirectory) or
-     not SaveStringsToFile(
-       AddBackslash(ControlDirectory) + 'managed-files.txt',
-       SnapshotManagedFiles,
-       False) or
-     not SaveStringToFile(
-       AddBackslash(ControlDirectory) + 'port-version.txt',
-       SnapshotVersion,
-       False) then
-  begin
-    MsgBox(
-      'Файлы восстановлены, но не удалось обновить сведения об установленной версии.',
-      mbError,
-      MB_OK);
-    exit;
-  end;
-
-  Result := True;
-end;
-
-function QuoteParameter(Value: String): String;
-begin
-  Result := '"' + Value + '"';
-end;
-
-function WaitForProcess(ProcessId: Cardinal): Boolean;
-var
-  ProcessHandle: THandle;
-begin
-  Result := True;
-  if ProcessId = 0 then
-    exit;
-
-  ProcessHandle := OpenProcess(SynchronizeAccess, False, ProcessId);
-  if ProcessHandle = 0 then
-    exit;
-
-  Result := WaitForSingleObject(ProcessHandle, InfiniteTimeout) = 0;
-  CloseHandle(ProcessHandle);
-end;
-
-procedure ScheduleRollbackCleanup(BackupDirectory: String);
-var
-  Parameters: String;
-  ResultCode: Integer;
-begin
-  // The setup bootstrap owns its source file until this process has exited.
-  Parameters := '/D /Q /C ping 127.0.0.1 -n 3 >NUL & del /F /Q ' +
-    QuoteParameter(AddBackslash(BackupDirectory) + 'Dead-Air-Refined-Rollback.exe') + ' ' +
-    QuoteParameter(AddBackslash(BackupDirectory) + 'rollback-helper.log');
-  Exec(ExpandConstant('{cmd}'), Parameters, '', SW_HIDE, ewNoWait, ResultCode);
-end;
-
-function StartRollbackHelper(BackupDirectory: String; Quiet: Boolean): Boolean;
-var
-  InstalledHelper: String;
-  TemporaryHelper: String;
-  Parameters: String;
-  ResultCode: Integer;
-begin
-  Result := False;
-  InstalledHelper := ExpandConstant('{app}\.dead-air-x64\Dead-Air-Refined-Maintenance.exe');
-  TemporaryHelper := AddBackslash(BackupDirectory) + 'Dead-Air-Refined-Rollback.exe';
-
-  if not FileExists(InstalledHelper) or
-     not CopyFile(InstalledHelper, TemporaryHelper, False) then
-  begin
-    MsgBox('Не удалось подготовить восстановление выбранной версии.', mbError, MB_OK);
-    exit;
-  end;
-
-  Parameters := '/CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DELETEAFTERINSTALL' +
-    ' /ROLLBACKTARGET=' + QuoteParameter(ExpandConstant('{app}')) +
-    ' /BACKUPDIR=' + QuoteParameter(BackupDirectory) +
-    ' /WAITPID=' + IntToStr(GetCurrentProcessId) +
-    ' /LOG=' + QuoteParameter(AddBackslash(BackupDirectory) + 'rollback-helper.log');
-  if Quiet then
-    Parameters := Parameters + ' /ROLLBACKQUIET=yes';
-  Result := Exec(TemporaryHelper, Parameters, '', SW_HIDE, ewNoWait, ResultCode);
-  if not Result then
-  begin
-    DeleteFile(TemporaryHelper);
-    MsgBox('Не удалось запустить восстановление выбранной версии.', mbError, MB_OK);
-  end;
-end;
-
-function InitializeSetup: Boolean;
-var
-  RollbackTarget: String;
-  RollbackBackup: String;
-  WaitProcessId: Cardinal;
-  Quiet: Boolean;
-begin
-  Result := True;
-  RollbackTarget := RemoveBackslashUnlessRoot(
-    Trim(CommandLineParameter('ROLLBACKTARGET', '')));
-  if RollbackTarget = '' then
-    exit;
-
-  Result := False;
-  RollbackBackup := RemoveBackslashUnlessRoot(
-    Trim(CommandLineParameter('BACKUPDIR', '')));
-  WaitProcessId := StrToIntDef(CommandLineParameter('WAITPID', '0'), 0);
-  Quiet := CompareText(CommandLineParameter('ROLLBACKQUIET', 'no'), 'yes') = 0;
-  if (RollbackBackup = '') or not WaitForProcess(WaitProcessId) then
-  begin
-    MsgBox('Не удалось подготовить восстановление выбранной версии.', mbError, MB_OK);
-    exit;
-  end;
-
-  if RestoreBackupSnapshot(RollbackTarget, RollbackBackup) then
-  begin
-    if not Quiet then
-      MsgBox(
-        'Ранее установленная версия Dead Air: Refined успешно восстановлена.',
-        mbInformation,
-        MB_OK);
-    ScheduleRollbackCleanup(RollbackBackup);
-  end;
-end;
-
 procedure RemoveX64Runtime(DirectoryName: String);
 var
   Manifest: TArrayOfString;
@@ -1032,20 +1018,160 @@ begin
   end;
 end;
 
-procedure UpdateUninstallActionControls(Sender: TObject);
+function IsReparsePoint(Path: String): Boolean;
+var
+  Attributes: Cardinal;
 begin
-  BackupDirectoryEdit.Enabled := RollbackPatchRadio.Checked;
-  BackupBrowseButton.Enabled := RollbackPatchRadio.Checked;
-  DeleteBackupsCheck.Enabled := RemovePatchRadio.Checked;
+  Attributes := GetFileAttributesW(Path);
+  Result := (Attributes <> InvalidFileAttributes) and
+    ((Attributes and FileAttributeReparsePoint) <> 0);
 end;
 
-procedure BrowseBackupDirectory(Sender: TObject);
+// Inno has no regular expressions, and this is a delete authority - a bare
+// xtra_dead_air_x64_content_*.xdb0 wildcard would also match a third-party archive that happens
+// to share the prefix. Every wildcard hit goes through this before it is deleted.
+// Shape: xtra_dead_air_x64_content_<group>_<NN>_<16 lowercase hex>.xdb0
+function ContentBundleNameValid(Name: String): Boolean;
 var
-  SelectedDirectory: String;
+  Prefix: String;
+  Body: String;
+  Index: Integer;
+  Character: Char;
 begin
-  SelectedDirectory := BackupDirectoryEdit.Text;
-  if BrowseForFolder('Выберите папку резервной копии', SelectedDirectory, False) then
-    BackupDirectoryEdit.Text := SelectedDirectory;
+  Result := False;
+  Prefix := 'xtra_dead_air_x64_content_';
+  if (Pos(Prefix, Name) <> 1) or (Length(Name) < Length(Prefix) + 24) then
+    exit;
+  if Lowercase(Copy(Name, Length(Name) - 4, 5)) <> '.xdb0' then
+    exit;
+
+  Body := Copy(Name, Length(Prefix) + 1, Length(Name) - Length(Prefix) - 5);
+  // "<group>_<NN>_<16 hex>" - so at least one group character plus 20 fixed ones.
+  if Length(Body) < 21 then
+    exit;
+
+  for Index := Length(Body) - 15 to Length(Body) do
+  begin
+    Character := Body[Index];
+    if not (((Character >= '0') and (Character <= '9')) or
+            ((Character >= 'a') and (Character <= 'f'))) then
+      exit;
+  end;
+  if Body[Length(Body) - 16] <> '_' then
+    exit;
+  if not ((Body[Length(Body) - 18] >= '0') and (Body[Length(Body) - 18] <= '9')) then
+    exit;
+  if not ((Body[Length(Body) - 17] >= '0') and (Body[Length(Body) - 17] <= '9')) then
+    exit;
+  if Body[Length(Body) - 19] <> '_' then
+    exit;
+
+  for Index := 1 to Length(Body) - 19 do
+  begin
+    Character := Body[Index];
+    if not (((Character >= 'a') and (Character <= 'z')) or
+            ((Character >= '0') and (Character <= '9')) or (Character = '_')) then
+      exit;
+  end;
+  Result := True;
+end;
+
+// Removes the game content. Runs BEFORE anything that deletes managed files, because
+// content-manifest.txt is one of them and it is the only record of what should have been
+// removed.
+function RemoveContentBundles(GameDirectory: String; var Remaining: String): Boolean;
+var
+  DatabaseDirectory: String;
+  ManifestLines: TArrayOfString;
+  Line: String;
+  Index: Integer;
+  InBundles: Boolean;
+  FirstTab: Integer;
+  SecondTab: Integer;
+  ThirdTab: Integer;
+  BundleName: String;
+  Records: TFindRec;
+  Target: String;
+begin
+  Result := True;
+  Remaining := '';
+  DatabaseDirectory := AddBackslash(GameDirectory) + 'database';
+
+  // If database\ is a junction, deleting through it would destroy another installation's
+  // bundles. Refuse before touching anything rather than after.
+  if IsReparsePoint(DatabaseDirectory) then
+  begin
+    Remaining := DatabaseDirectory + ' (символьная ссылка - содержимое не удалялось)';
+    Result := False;
+    exit;
+  end;
+
+  // The manifest names exactly what this installation was supposed to have.
+  InBundles := False;
+  if LoadStringsFromFile(AddBackslash(GameDirectory) + '.dead-air-x64\content-manifest.txt',
+    ManifestLines) then
+  begin
+    for Index := 0 to GetArrayLength(ManifestLines) - 1 do
+    begin
+      Line := Trim(ManifestLines[Index]);
+      if Line = '[bundles]' then
+      begin
+        InBundles := True;
+        Continue;
+      end;
+      if (Line = '[deltas]') or (Copy(Line, 1, 1) = '[') then
+      begin
+        InBundles := False;
+        Continue;
+      end;
+      if not InBundles or (Line = '') then
+        Continue;
+
+      FirstTab := Pos(#9, Line);
+      if FirstTab <= 0 then
+        Continue;
+      SecondTab := FirstTab + Pos(#9, Copy(Line, FirstTab + 1, Length(Line) - FirstTab));
+      if SecondTab <= FirstTab then
+        Continue;
+      ThirdTab := SecondTab + Pos(#9, Copy(Line, SecondTab + 1, Length(Line) - SecondTab));
+      if ThirdTab <= SecondTab then
+        ThirdTab := Length(Line) + 1;
+
+      BundleName := Copy(Line, SecondTab + 1, ThirdTab - SecondTab - 1);
+      if ContentBundleNameValid(BundleName) then
+        DeleteFile(AddBackslash(DatabaseDirectory) + BundleName);
+    end;
+  end;
+
+  // Then anything bundle-shaped the manifest did not name: a stale revision, or content from a
+  // version this installation was updated away from.
+  if FindFirst(AddBackslash(DatabaseDirectory) + 'xtra_dead_air_x64_content_*.xdb0', Records) then
+  begin
+    try
+      repeat
+        if (Records.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          Continue;
+        if not ContentBundleNameValid(Records.Name) then
+          Continue;
+
+        Target := AddBackslash(DatabaseDirectory) + Records.Name;
+        if DeleteFile(Target) then
+          Continue;
+
+        // Held open by something. A delayed delete needs administrator rights, so its return
+        // value decides whether this is reported as left behind - it is not an assumption.
+        if not MoveFileExDeleteW(Target, 0, MoveFileDelayUntilReboot) then
+        begin
+          Remaining := Remaining + Target + #13#10;
+          Result := False;
+        end;
+      until not FindNext(Records);
+    finally
+      FindClose(Records);
+    end;
+  end;
+
+  DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\content-cache', True, True, True);
 end;
 
 procedure LayoutMaintenanceForm(Sender: TObject);
@@ -1086,14 +1212,14 @@ var
   TitleLabel: TNewStaticText;
   SubtitleLabel: TNewStaticText;
   DescriptionLabel: TNewStaticText;
-  BackupLabel: TNewStaticText;
+  ActionLabel: TNewStaticText;
   OkButton: TNewButton;
   CancelButton: TNewButton;
   ButtonWidth: Integer;
   ImagePath: String;
 begin
   Result := UninstallActionCancel;
-  ActionForm := CreateCustomForm(500, 377, False, True);
+  ActionForm := CreateCustomForm(500, 253, False, True);
   try
     ActionForm.Caption := 'Удаление — Dead Air: Refined {#PortVersion}';
     ActionForm.Position := poScreenCenter;
@@ -1153,53 +1279,18 @@ begin
     DescriptionLabel.Color := clWhite;
     DescriptionLabel.WordWrap := True;
     DescriptionLabel.Caption :=
-      'Выберите удаление Dead Air: Refined {#PortVersion} или восстановление ранее установленной версии.';
+      'Dead Air: Refined {#PortVersion} будет удалён вместе с загруженным игровым контентом.';
 
-    RemovePatchRadio := TNewRadioButton.Create(ActionForm);
-    RemovePatchRadio.Parent := ContentPanel;
-    RemovePatchRadio.SetBounds(ScaleX(34), ScaleY(128),
+    ActionLabel := TNewStaticText.Create(ActionForm);
+    ActionLabel.Parent := ContentPanel;
+    ActionLabel.SetBounds(ScaleX(34), ScaleY(128),
       ActionForm.ClientWidth - ScaleX(68), ScaleY(22));
+    ActionLabel.AutoSize := False;
+    ActionLabel.Color := clWhite;
     if OriginalX86BackupAvailable(ExpandConstant('{app}')) then
-      RemovePatchRadio.Caption := 'Удалить программу и восстановить исходную версию игры'
+      ActionLabel.Caption := 'Будет восстановлена исходная версия игры.'
     else
-      RemovePatchRadio.Caption := 'Удалить Dead Air: Refined';
-    RemovePatchRadio.Checked := True;
-    RemovePatchRadio.OnClick := @UpdateUninstallActionControls;
-
-    DeleteBackupsCheck := TNewCheckBox.Create(ActionForm);
-    DeleteBackupsCheck.Parent := ContentPanel;
-    DeleteBackupsCheck.SetBounds(ScaleX(50), ScaleY(157),
-      ActionForm.ClientWidth - ScaleX(84), ScaleY(22));
-    DeleteBackupsCheck.Caption := 'Удалить также сохранённые версии программы';
-    DeleteBackupsCheck.Checked := DeleteBackupsParameterEnabled;
-
-    RollbackPatchRadio := TNewRadioButton.Create(ActionForm);
-    RollbackPatchRadio.Parent := ContentPanel;
-    RollbackPatchRadio.SetBounds(ScaleX(34), ScaleY(199),
-      ActionForm.ClientWidth - ScaleX(68), ScaleY(22));
-    RollbackPatchRadio.Caption := 'Восстановить ранее установленную версию';
-    RollbackPatchRadio.OnClick := @UpdateUninstallActionControls;
-
-    BackupLabel := TNewStaticText.Create(ActionForm);
-    BackupLabel.Parent := ContentPanel;
-    BackupLabel.SetBounds(ScaleX(50), ScaleY(228),
-      ActionForm.ClientWidth - ScaleX(84), ScaleY(19));
-    BackupLabel.AutoSize := False;
-    BackupLabel.Color := clWhite;
-    BackupLabel.Caption := 'Папка резервной копии:';
-
-    BackupDirectoryEdit := TNewEdit.Create(ActionForm);
-    BackupDirectoryEdit.Parent := ContentPanel;
-    BackupDirectoryEdit.SetBounds(ScaleX(50), ScaleY(250),
-      ActionForm.ClientWidth - ScaleX(150), ScaleY(23));
-    BackupDirectoryEdit.Text := BackupDirectoryParameter;
-
-    BackupBrowseButton := TNewButton.Create(ActionForm);
-    BackupBrowseButton.Parent := ContentPanel;
-    BackupBrowseButton.SetBounds(ActionForm.ClientWidth - ScaleX(92), ScaleY(249),
-      ScaleX(74), ScaleY(25));
-    BackupBrowseButton.Caption := 'Обзор...';
-    BackupBrowseButton.OnClick := @BrowseBackupDirectory;
+      ActionLabel.Caption := 'Файлы Dead Air: Refined будут удалены.';
 
     OkButton := TNewButton.Create(ActionForm);
     OkButton.Parent := FooterPanel;
@@ -1222,76 +1313,83 @@ begin
     MaintenanceButtonWidth := ButtonWidth;
     ActionForm.OnShow := @LayoutMaintenanceForm;
 
-    UpdateUninstallActionControls(nil);
     if ActionForm.ShowModal = mrOk then
-    begin
-      SelectedBackupDirectory := BackupDirectoryEdit.Text;
-      SelectedDeleteBackups := DeleteBackupsCheck.Checked;
-      if RollbackPatchRadio.Checked then
-        Result := UninstallActionRollback
-      else
-        Result := UninstallActionRemove;
-    end;
+      Result := UninstallActionRemove;
   finally
     ActionForm.Free;
   end;
 end;
 
+#ifndef MaintenanceOnly
+// Cancel during the fetch. Inno's own handling would terminate Setup and orphan the fetcher,
+// which would keep downloading into a directory nobody is going to use; the flag file stops it
+// first. Whatever it managed to fetch stays: the cache is the resume state, so cancelling is a
+// pause rather than a discard.
+procedure CancelButtonClick(CurrentPageId: Integer; var Cancel, Confirm: Boolean);
+begin
+  if not ContentFetchRunning then
+    exit;
+
+  SaveStringToFile(AddBackslash(ContentCacheDirectory(WizardDirValue)) + 'content-fetch-cancel.txt',
+    'cancel', False);
+  ContentFetchCancelled := True;
+end;
+#endif
+
 procedure CurStepChanged(CurrentStep: TSetupStep);
 var
   ImagePath: String;
+#ifndef MaintenanceOnly
+  ResultCode: Integer;
+#endif
 begin
   if CurrentStep <> ssPostInstall then
     exit;
 
   ImagePath := ExpandConstant('{app}\.dead-air-x64\maintenance-small.png');
   WizardForm.WizardSmallBitmapImage.PngImage.SaveToFile(ImagePath);
+
+#ifndef MaintenanceOnly
+  // The payload is installed, so .dead-air-x64\content-manifest.txt is now this version's.
+  // Move the downloaded bundles into database\ and clear the latch.
+  //
+  // An Inno install cannot be failed from here - CurStepChanged returns nothing. So a failed
+  // commit is not a rolled-back install: the latch stays, the engine refuses to mount what it
+  // cannot vouch for, and the first launch goes straight to repair. Say that plainly rather
+  // than pretending anything was undone.
+  if not Exec(ExpandConstant('{tmp}\DeadAirContent.exe'),
+    '--content-commit --game-dir ' + QuoteParameter(ExpandConstant('{app}')),
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    SuppressibleMsgBox('Не удалось установить игровой контент.' + #13#10 +
+      'Игра предложит восстановить его при первом запуске.', mbError, MB_OK, IDOK);
+    exit;
+  end;
+
+  DeleteFile(AddBackslash(ContentCacheDirectory(ExpandConstant('{app}'))) + 'pending-manifest.txt');
+#endif
 end;
 
 function InitializeUninstall: Boolean;
 var
   ActionName: String;
   Action: Integer;
-  BackupDirectory: String;
 begin
   Result := False;
-  DeleteBackupsOnUninstall := False;
   RestoreOriginalX86OnUninstall := False;
-  SelectedBackupDirectory := '';
-  SelectedDeleteBackups := False;
   ActionName := UninstallActionParameter;
   Log('Maintenance action: ' + ActionName);
 
+  // /ACTION=rollback is no longer a thing. It is not rejected either - a stale shortcut must
+  // not produce an error dialog - it simply falls through to the removal prompt, which in a
+  // silent context declines and does nothing.
   if ActionName = 'remove' then
     Action := UninstallActionRemove
-  else if ActionName = 'rollback' then
-    Action := UninstallActionRollback
   else
     Action := ShowUninstallActionDialog;
 
   if Action = UninstallActionCancel then
     exit;
-
-  if Action = UninstallActionRollback then
-  begin
-    BackupDirectory := BackupDirectoryParameter;
-    if BackupDirectory = '' then
-      BackupDirectory := SelectedBackupDirectory;
-    Log('Rollback backup: ' + BackupDirectory);
-
-    if BackupDirectory = '' then
-    begin
-      MsgBox('Выберите папку резервной копии.', mbError, MB_OK);
-      exit;
-    end;
-
-    StartRollbackHelper(BackupDirectory, ActionName <> 'ask');
-    exit;
-  end;
-
-  DeleteBackupsOnUninstall := DeleteBackupsParameterEnabled;
-  if ActionName = 'ask' then
-    DeleteBackupsOnUninstall := SelectedDeleteBackups;
 
   RestoreOriginalX86OnUninstall := OriginalX86BackupAvailable(ExpandConstant('{app}'));
 
@@ -1319,11 +1417,21 @@ end;
 procedure CurUninstallStepChanged(CurrentStep: TUninstallStep);
 var
   GameDirectory: String;
+  ContentRemoved: Boolean;
+  Remaining: String;
 begin
   if CurrentStep <> usUninstall then
     exit;
 
   GameDirectory := ExpandConstant('{app}');
+
+  // Content goes first, and the ordering is load-bearing: content-manifest.txt is a managed
+  // file, so RemoveX64Runtime, RestoreOriginalX86Runtime and RemoveControlMetadata all delete
+  // it. Losing it before the sweep would destroy the only record of what had to be removed and
+  // leave gigabytes behind that nothing can name. The restore failure below exits early, and
+  // that is harmless now precisely because content has already been dealt with.
+  ContentRemoved := RemoveContentBundles(GameDirectory, Remaining);
+
   if RestoreOriginalX86OnUninstall then
   begin
     if not RestoreOriginalX86Runtime(GameDirectory) then
@@ -1339,10 +1447,15 @@ begin
   else
     RemoveX64Runtime(GameDirectory);
 
+  if not ContentRemoved then
+  begin
+    MsgBox('Часть файлов игрового контента удалить не удалось. Их можно удалить вручную:' +
+      Chr(13) + Chr(10) + Chr(13) + Chr(10) + Remaining, mbError, MB_OK);
+  end;
+
   RemoveControlMetadata(GameDirectory);
 
-  if DeleteBackupsOnUninstall then
-  begin
-    DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backups', True, True, True);
-  end;
+  // Unconditional: the updater deletes its own in-flight snapshot on success, so anything left
+  // here is orphaned by definition.
+  DelTree(AddBackslash(GameDirectory) + '.dead-air-x64\backups', True, True, True);
 end;

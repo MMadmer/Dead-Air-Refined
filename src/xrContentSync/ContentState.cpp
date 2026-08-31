@@ -61,6 +61,10 @@ bool WriteLatch(const std::filesystem::path& path, const std::string& version, R
     output << "version=" << (version.empty() ? "0.0.0" : version) << '\n';
     output << "reason=" << ReasonText(reason) << '\n';
     output << "time=" << stamp << '\n';
+    // Flushed before the verdict: a stream that has buffered everything is still "good"
+    // and would report success for a write that never reached the disk - which is precisely the
+    // failure this function exists to be able to report.
+    output.flush();
     return output.good();
 }
 

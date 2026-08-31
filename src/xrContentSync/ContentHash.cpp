@@ -93,6 +93,8 @@ Stream& Stream::operator=(Stream&&) noexcept = default;
 
 bool Stream::Open()
 {
+    if (!m_impl)
+        return false;
     Impl& impl = *m_impl;
     DWORD written = 0;
     if (BCryptOpenAlgorithmProvider(&impl.algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0 ||
@@ -109,6 +111,8 @@ bool Stream::Open()
 
 bool Stream::Append(const void* data, std::size_t size)
 {
+    if (!m_impl)
+        return false;
     Impl& impl = *m_impl;
     if (!impl.hash)
         return false;
@@ -129,6 +133,8 @@ bool Stream::Append(const void* data, std::size_t size)
 
 std::string Stream::Finish()
 {
+    if (!m_impl)
+        return {};
     Impl& impl = *m_impl;
     if (!impl.hash)
         return {};

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 
 #define WIN32_LEAN_AND_MEAN
 // std::min / std::max are used throughout; the windows.h macros of the same name would
@@ -46,8 +47,9 @@ bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layo
     const std::atomic_bool& cancel = options.cancel ? *options.cancel : g_never;
     const std::filesystem::path database = paths.Database();
     const std::filesystem::path cache = paths.Cache();
-    const ContentState::Cache known =
-        options.verifyHashes ? ContentState::LoadCache(paths.State()) : ContentState::Cache{};
+    const ContentState::Cache known = (options.verifyHashes && options.trustCache)
+        ? ContentState::LoadCache(paths.State())
+        : ContentState::Cache{};
 
     for (const ContentManifest::Bundle& bundle : manifest.bundles)
     {
@@ -98,9 +100,11 @@ bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layo
         job.foundSize = size;
 
         // A verified copy already in the cache turns the job into a move. This is what lets a
-        // player who downloaded and then quit before restarting pay nothing the second time.
+        // player who downloaded and then quit before restarting pay nothing the second time -
+        // but it is a full hash of a cache file, so a caller that asked for a cheap pass gets
+        // the pessimistic answer instead.
         const std::filesystem::path staged = cache / bundle.hash;
-        if (file_size_or_zero(staged) == bundle.size &&
+        if (options.probeCache && file_size_or_zero(staged) == bundle.size &&
             ContentHash::File(staged.wstring(), cancel) == bundle.hash)
         {
             job.cached = true;
@@ -110,21 +114,33 @@ bool Resolve(const ContentManifest::Manifest& manifest, const ContentPaths::Layo
         {
             plan.bytesToFetch += bundle.size;
         }
+        if (cancel.load(std::memory_order_acquire))
+        {
+            // A cancelled probe answers "not cached", which would otherwise be published as a
+            // plan that says a bundle already on disk has to be downloaded again.
+            error = "cancelled";
+            return false;
+        }
         plan.jobs.push_back(std::move(job));
     }
 
     // Anything bundle-shaped in database\ that this version does not declare. Listed, never
     // deleted here: the commit demotes them to the cache once the replacements are in place.
+    // Driven by hand: the error_code overload only covers construction, and a range-for would
+    // throw out of Resolve if the directory changed under the scan.
     std::error_code scanError;
-    for (const auto& entry : std::filesystem::directory_iterator(database, scanError))
+    std::filesystem::directory_iterator entry(database, scanError);
+    const std::filesystem::directory_iterator last;
+    while (!scanError && entry != last)
     {
-        if (scanError)
-            break;
-        if (!entry.is_regular_file(scanError))
-            continue;
-        const std::string name = entry.path().filename().string();
-        if (ContentManifest::IsBundleName(name) && !manifest.FindByName(name))
-            plan.obsolete.push_back(name);
+        std::error_code entryError;
+        if (entry->is_regular_file(entryError) && !entryError)
+        {
+            const std::string name = entry->path().filename().string();
+            if (ContentManifest::IsBundleName(name) && !manifest.FindByName(name))
+                plan.obsolete.push_back(name);
+        }
+        entry.increment(scanError);
     }
 
     return true;
@@ -135,7 +151,17 @@ std::uint64_t RequiredFreeBytes(const Plan& plan)
     std::uint64_t largest = 0;
     for (const Job& job : plan.jobs)
         largest = std::max(largest, job.bundle.size);
-    return plan.bytesToFetch + largest + FreeSpaceMargin;
+
+    // Saturating, because this feeds a "do we have room?" comparison: a wrapped total would
+    // read as a tiny requirement and wave through an install that cannot possibly fit.
+    constexpr std::uint64_t ceiling = (std::numeric_limits<std::uint64_t>::max)();
+    std::uint64_t required = plan.bytesToFetch;
+    if (ceiling - required < largest)
+        return ceiling;
+    required += largest;
+    if (ceiling - required < FreeSpaceMargin)
+        return ceiling;
+    return required + FreeSpaceMargin;
 }
 
 std::uint64_t FreeBytes(const std::filesystem::path& path)
@@ -190,38 +216,52 @@ void CollectCache(const ContentPaths::Layout& paths, const ContentManifest::Mani
     std::vector<Candidate> candidates;
     std::uint64_t total = 0;
 
-    for (const auto& entry : std::filesystem::directory_iterator(cache, error))
+    // Every call gets its own error_code and one bad entry is skipped rather than ending the
+    // sweep: a single locked or unstattable file must not stop the cache from being trimmed.
+    std::filesystem::directory_iterator entry(cache, error);
+    const std::filesystem::directory_iterator last;
+    while (!error && entry != last)
     {
-        if (error)
-            return;
-        if (!entry.is_regular_file(error))
+        const std::filesystem::path path = entry->path();
+        std::error_code entryError;
+        const bool regular = entry->is_regular_file(entryError) && !entryError;
+        entry.increment(error);
+        if (!regular)
             continue;
 
-        const std::filesystem::path path = entry.path();
         const std::string name = path.filename().string();
         const std::uint64_t size = file_size_or_zero(path);
 
         if (path.extension() == L".part")
         {
             // Resumable, so worth keeping - but only for as long as somebody might plausibly
-            // come back to it.
-            const auto age = std::filesystem::file_time_type::clock::now() -
-                std::filesystem::last_write_time(path, error);
-            if (!error && age > PartLifetime)
-                std::filesystem::remove(path, error);
+            // come back to it. Its bytes still count towards the cap: they occupy the same
+            // disk the cap exists to bound.
+            std::error_code timeError;
+            const auto written = std::filesystem::last_write_time(path, timeError);
+            if (!timeError && (std::filesystem::file_time_type::clock::now() - written) > PartLifetime)
+            {
+                std::error_code removeError;
+                if (std::filesystem::remove(path, removeError))
+                    continue;
+            }
+            total += size;
             continue;
         }
 
         if (!ContentManifest::IsSha256Hex(name))
             continue; // the README and the progress files are not ours to collect
 
-        if (wanted(name))
-        {
-            total += size;
-            continue;
-        }
-        candidates.push_back({path, size, std::filesystem::last_write_time(path, error)});
         total += size;
+        if (wanted(name))
+            continue;
+
+        std::error_code timeError;
+        const auto written = std::filesystem::last_write_time(path, timeError);
+        if (timeError)
+            continue; // unknown age, so it cannot be ranked - leave it rather than guess
+
+        candidates.push_back({path, size, written});
     }
 
     if (total <= capBytes)
@@ -234,7 +274,8 @@ void CollectCache(const ContentPaths::Layout& paths, const ContentManifest::Mani
     {
         if (total <= capBytes)
             break;
-        if (std::filesystem::remove(candidate.path, error))
+        std::error_code removeError;
+        if (std::filesystem::remove(candidate.path, removeError))
             total -= candidate.size;
     }
 }

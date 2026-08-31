@@ -249,47 +249,75 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
         const std::uint64_t partSize = std::filesystem::exists(part, fsError)
             ? std::filesystem::file_size(part, fsError)
             : 0;
-        if (!fsError && partSize > ResumeRewind && partSize < bundle.size)
+
+        if (!fsError && partSize >= bundle.size)
         {
-            // Rewind, then prove what is left really is a prefix of THIS bundle before
-            // continuing. Without the proof a resume can splice two different revisions.
-            const std::uint64_t keep = partSize - ResumeRewind;
-            const std::string prefix = ContentHash::FilePrefix(part.wstring(), keep, cancel);
-            if (!prefix.empty())
+            // A part that is already long enough is usually the finished file from a run that
+            // died between the last write and the rename. One local hash is far cheaper than
+            // re-fetching hundreds of megabytes to discover the same thing.
+            if (ContentHash::File(part.wstring(), cancel) == bundle.hash)
             {
-                std::filesystem::resize_file(part, keep, fsError);
-                if (!fsError)
+                std::error_code renameError;
+                std::filesystem::rename(part, finished, renameError);
+                if (!renameError)
+                    return true;
+            }
+            if (cancel.load(std::memory_order_acquire))
+            {
+                error = "cancelled";
+                return false;
+            }
+        }
+        else if (!fsError && partSize > ResumeRewind)
+        {
+            // Rewind past the last write, which is the one most likely to be short or torn,
+            // and re-feed what is kept so the running digest covers the whole file. That read
+            // is the proof: bytes that cannot be read back are not bytes to resume from.
+            const std::uint64_t keep = partSize - ResumeRewind;
+            std::filesystem::resize_file(part, keep, fsError);
+            if (!fsError)
+            {
+                ContentHash::Stream resumed;
+                if (resumed.Open())
                 {
-                    ContentHash::Stream resumed;
-                    if (resumed.Open())
+                    std::vector<unsigned char> buffer(TransferBuffer);
+                    HANDLE handle = CreateFileW(part.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+                    bool ok = handle != INVALID_HANDLE_VALUE;
+                    while (ok)
                     {
-                        // Re-feed the kept prefix so the running digest covers the whole file.
-                        std::vector<unsigned char> buffer(TransferBuffer);
-                        HANDLE handle = CreateFileW(part.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-                        bool ok = handle != INVALID_HANDLE_VALUE;
-                        while (ok)
+                        if (cancel.load(std::memory_order_acquire))
                         {
-                            DWORD read = 0;
-                            if (!ReadFile(handle, buffer.data(), TransferBuffer, &read, nullptr))
-                            {
-                                ok = false;
-                                break;
-                            }
-                            if (!read)
-                                break;
-                            ok = resumed.Append(buffer.data(), read);
+                            ok = false;
+                            break;
                         }
-                        if (handle != INVALID_HANDLE_VALUE)
-                            CloseHandle(handle);
-                        if (ok)
+                        DWORD read = 0;
+                        if (!ReadFile(handle, buffer.data(), TransferBuffer, &read, nullptr))
                         {
-                            digest = std::move(resumed);
-                            offset = keep;
+                            ok = false;
+                            break;
                         }
+                        if (!read)
+                            break;
+                        ok = resumed.Append(buffer.data(), read);
+                    }
+                    if (handle != INVALID_HANDLE_VALUE)
+                        CloseHandle(handle);
+                    if (ok)
+                    {
+                        digest = std::move(resumed);
+                        offset = keep;
                     }
                 }
             }
+        }
+
+        if (cancel.load(std::memory_order_acquire))
+        {
+            // Cancelled while examining the part. Leave it alone - it is the resume state, and
+            // deleting it here would turn a pause into a discard.
+            error = "cancelled";
+            return false;
         }
         if (!offset)
             std::filesystem::remove(part, fsError);
@@ -309,6 +337,10 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
         SetFilePointerEx(output, seek, nullptr, FILE_BEGIN);
 
         bool transferred = false;
+        bool restartFromZero = false;
+        // Bytes this pass has already reported as progress. A restart gives them back, so the
+        // bar cannot climb past the total on a retry.
+        std::uint64_t credited = 0;
         for (unsigned attempt = 0; attempt < MaximumAttempts && !transferred; ++attempt)
         {
             if (attempt)
@@ -319,6 +351,15 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
             }
             if (cancel.load(std::memory_order_acquire))
                 break;
+
+            // The write position is re-established from `offset` on every attempt. A previous
+            // attempt that died on a short write left the OS file pointer past `offset`, and
+            // resuming from there would splice the incoming bytes at the wrong place while the
+            // digest - which was never fed the failed chunk - still hashed the correct stream.
+            // The file would then verify against a hash it does not contain.
+            seek.QuadPart = static_cast<LONGLONG>(offset);
+            SetFilePointerEx(output, seek, nullptr, FILE_BEGIN);
+            SetEndOfFile(output);
 
             HttpGet request;
             std::wstring headers;
@@ -339,7 +380,11 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
                 if (!parse_content_range(request.Header(WINHTTP_QUERY_CONTENT_RANGE), start, total) ||
                     start != offset || total != bundle.size)
                 {
+                    // The server is answering about something else. Discard what we have and
+                    // let the outer loop start the bundle from zero - keeping the part and
+                    // giving up would make the state permanently unresumable.
                     error = "the server answered a partial request about a different file";
+                    restartFromZero = true;
                     break;
                 }
             }
@@ -360,6 +405,10 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
                         break;
                     }
                     digest = std::move(fresh);
+
+                    std::lock_guard guard(shared.mutex);
+                    shared.done -= credited;
+                    credited = 0;
                 }
             }
             else
@@ -396,10 +445,13 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
                     break;
                 }
                 offset += read;
+                credited += read;
 
                 std::lock_guard guard(shared.mutex);
                 shared.done += read;
             }
+            if (restartFromZero)
+                break;
             if (!broke)
                 transferred = offset >= bundle.size;
             if (!transferred && !cancel.load(std::memory_order_acquire))
@@ -417,8 +469,32 @@ bool fetch_one(const ContentManifest::Bundle& bundle, const ContentPaths::Layout
             error = "cancelled";
             return false;
         }
+        if (restartFromZero)
+        {
+            // Drop the part so the next pass of the outer loop starts clean.
+            std::error_code discardError;
+            std::filesystem::remove(part, discardError);
+            {
+                std::lock_guard guard(shared.mutex);
+                shared.done -= credited;
+            }
+            continue;
+        }
         if (!transferred)
             return false;
+
+        // The logical counter says the transfer is complete; the file on disk is the thing
+        // that actually has to be. A length that disagrees means a write went somewhere the
+        // digest did not follow, and the hash below would then vouch for bytes the file does
+        // not contain.
+        std::error_code lengthError;
+        if (std::filesystem::file_size(part, lengthError) != bundle.size || lengthError)
+        {
+            std::error_code discardError;
+            std::filesystem::remove(part, discardError);
+            error = "the downloaded bundle is the wrong length";
+            continue;
+        }
 
         const std::string actual = digest.Finish();
         if (actual == bundle.hash)
@@ -512,7 +588,10 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
     }
 
     // The progress pump runs on the calling thread so the caller's file writes and UI updates
-    // stay on one thread and need no locking of their own.
+    // stay on one thread and need no locking of their own. It keeps running until the last
+    // worker is gone, cancellation included: the installer's stall detector watches the
+    // progress file's timestamp, and going quiet while the workers wind down would look
+    // exactly like a fetcher that died.
     while (true)
     {
         bool running = false;
@@ -527,7 +606,7 @@ Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& path
         }
         if (options.onProgress)
             options.onProgress(progress);
-        if (!running || cancel.load(std::memory_order_acquire))
+        if (!running)
             break;
         Sleep(CancelPollMs * 2);
     }

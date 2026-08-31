@@ -55,24 +55,48 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
         return result;
     }
 
-    // Phase 1: install. Every source has already been hash-verified into the cache, but verify
-    // again here - the file may have sat in the cache across a reboot, and this is the last
-    // point at which a wrong bundle can still be stopped.
+    // Phase 1: install everything the plan says is ready. A job the plan already reports as not
+    // cached is skipped rather than treated as a failure - stopping on the first one would make
+    // the outcome depend on manifest row order and leave bundles uninstalled that were sitting
+    // in the cache all along. What is genuinely missing is caught by the re-resolve at the end,
+    // which is what actually decides whether the latch may go.
+    //
+    // Every source was hash-verified when it entered the cache, and is verified again here: it
+    // may have sat there across a reboot, and this is the last point at which a wrong bundle
+    // can still be stopped.
+    ContentState::Cache verified;
     for (const ContentResolver::Job& job : plan.jobs)
     {
+        if (!job.cached)
+        {
+            log(job.bundle.name + " is not in the content cache");
+            continue;
+        }
+
         const std::filesystem::path staged = paths.Cache() / job.bundle.hash;
         if (ContentHash::File(staged.wstring(), g_never) != job.bundle.hash)
         {
-            result.error = job.bundle.name + " is not in the content cache";
+            result.error = job.bundle.name + " does not match its hash in the content cache";
             return result;
         }
-        if (!move_over(staged, paths.Database() / job.bundle.name))
+
+        const std::filesystem::path installed = paths.Database() / job.bundle.name;
+        if (!move_over(staged, installed))
         {
             result.error = "could not install " + job.bundle.name;
             return result;
         }
         ++result.installed;
         log("installed " + job.bundle.name);
+
+        // Recorded because this pass actually read the bytes. Nothing else may be added below.
+        std::error_code sizeError;
+        const auto size = std::filesystem::file_size(installed, sizeError);
+        if (!sizeError)
+        {
+            verified.emplace(job.bundle.name,
+                ContentState::Entry{job.bundle.hash, size, ContentState::FileTime(installed)});
+        }
     }
 
     // Phase 2: demote. Only now, and by rename into the cache under the file's own hash, so a
@@ -82,8 +106,16 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
     {
         const std::filesystem::path installed = paths.Database() / name;
         const std::string hash = ContentHash::File(installed.wstring(), g_never);
-        const std::filesystem::path destination = paths.Cache() / (hash.empty() ? name : hash);
-        if (move_over(installed, destination))
+        if (hash.empty())
+        {
+            // A file the commit cannot read is a file the cache collector could never reclaim
+            // once it was renamed to something it does not recognise. Leave it where it is and
+            // let the gate keep reporting it.
+            log("could not read " + name + " - it will be reported and retried");
+            continue;
+        }
+
+        if (move_over(installed, paths.Cache() / hash))
         {
             ++result.demoted;
             log("retired " + name);
@@ -96,24 +128,24 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
         }
     }
 
-    // Rebuild the state cache from what is now installed, so the next launch is a stat per
-    // bundle rather than a full rehash of everything just written.
-    ContentState::Cache state;
-    for (const ContentManifest::Bundle& bundle : manifest.bundles)
-    {
-        const std::filesystem::path file = paths.Database() / bundle.name;
-        std::error_code sizeError;
-        const auto size = std::filesystem::file_size(file, sizeError);
-        if (sizeError)
-            continue;
-        state.emplace(bundle.name, ContentState::Entry{bundle.hash, size, ContentState::FileTime(file)});
-    }
+    // The advisory cache carries the entries this pass READ, on top of whatever a previous pass
+    // recorded. Writing an entry for a bundle nobody hashed would be worse than writing
+    // nothing: the resolver trusts a matching (size, mtime) entry and would then skip that
+    // bundle forever, so a corrupt file would be vouched for by a record invented from the very
+    // manifest it fails to match.
+    ContentState::Cache state = ContentState::LoadCache(paths.State());
+    for (const auto& entry : verified)
+        state[entry.first] = entry.second;
     ContentState::SaveCache(paths.State(), manifest.contentId, state);
 
-    // The latch goes only when a fresh look says there is nothing left to do. Trusting the
-    // loop above would clear it on a commit that installed four bundles out of five.
+    // The latch goes only when a fresh look says there is nothing left to do, and that look
+    // hashes. A stat-only pass structurally cannot see the corruption a latch may have been set
+    // for, so clearing it on that word would be clearing it on no evidence. Everything this
+    // commit touched is in the state cache now, so the cost is a stat for those and a real read
+    // only for bundles nothing has vouched for.
     ContentResolver::Options verify;
-    verify.verifyHashes = false; // everything was just hashed; a stat is enough
+    verify.verifyHashes = true;
+    verify.probeCache = false; // the question here is about the database directory, not the cache
     ContentResolver::Plan after;
     std::string resolveError;
     if (!ContentResolver::Resolve(manifest, paths, verify, after, resolveError) || !after.Complete())

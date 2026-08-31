@@ -15,7 +15,11 @@ param(
     # Rebuild only the patch, from the payload tree an earlier run of this script already
     # produced ("$packageName-update-files"). Useful to cut a patch against a different base
     # without repeating the whole release build.
-    [switch]$PatchOnly
+    [switch]$PatchOnly,
+    # The content manifest for this release, produced by dead_air_x64_content_bundles.ps1. It
+    # ships inside the Setup payload and is the trust root every later check measures against,
+    # so there is no default: content is never optional.
+    [string]$ContentManifest = "D:\Games\Dead-Air-Refined_Assetsuild\content-manifest.txt"
 )
 
 $ErrorActionPreference = "Stop"
@@ -452,6 +456,32 @@ if (Test-Path -LiteralPath $archivePath) {
 }
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 
+# The content manifest is the trust root: it ships inside the Setup payload and everything
+# afterwards measures the installation against it. No default and no fallback - a build that
+# cannot find it must fail here rather than produce a Setup that installs no content.
+if (-not (Test-Path -LiteralPath $ContentManifest -PathType Leaf)) {
+    throw "The content manifest was not found: $ContentManifest. Build the content bundles first."
+}
+$contentManifestStaged = Join-Path $launcherOutputRoot "content-manifest.txt"
+Copy-Item -LiteralPath $ContentManifest -Destination $contentManifestStaged -Force
+
+# Sized from the manifest itself so it cannot go stale: the sum of every declared bundle, plus
+# a tenth for the filesystem's own overhead. Bundles are committed by rename within one volume,
+# so the peak is one copy rather than two.
+$contentBytes = 0
+$inBundles = $false
+foreach ($line in [IO.File]::ReadAllLines($contentManifestStaged)) {
+    if ($line -eq "[bundles]") { $inBundles = $true; continue }
+    if ($line -like "[[]*[]]") { $inBundles = $false; continue }
+    if (-not $inBundles -or -not $line.Trim()) { continue }
+    $fields = $line -split "`t"
+    if ($fields.Count -ge 2) { $contentBytes += [int64]$fields[1] }
+}
+if ($contentBytes -le 0) {
+    throw "The content manifest declares no bundles: $ContentManifest"
+}
+$contentBytes = [int64]($contentBytes * 1.1)
+
 $compilerArguments = @(
     "/DRepoRoot=$repositoryRoot",
     "/DPortVersion=$PortVersion",
@@ -460,6 +490,9 @@ $compilerArguments = @(
     "/DCompatibilityArchive=$compatibilityArchive",
     "/DUpdaterPath=$updaterOutput",
     "/DMaintenancePath=$maintenanceOutput",
+    "/DContentBytes=$contentBytes",
+    "/DContentManifestPath=$contentManifestStaged",
+    "/DContentFetcherPath=$contentFetcherOutput",
     $installerSource
 )
 & $innoCompiler @compilerArguments

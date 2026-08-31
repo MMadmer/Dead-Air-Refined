@@ -26,7 +26,8 @@ public:
     Stream(const Stream&) = delete;
     Stream& operator=(const Stream&) = delete;
     // Movable, because a download that has to restart mid-flight replaces its running digest
-    // rather than trying to rewind one.
+    // rather than trying to rewind one. A moved-from Stream is left empty; every method on it
+    // then fails cleanly rather than dereferencing nothing.
     Stream(Stream&&) noexcept;
     Stream& operator=(Stream&&) noexcept;
 

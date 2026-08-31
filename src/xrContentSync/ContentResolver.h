@@ -65,6 +65,16 @@ struct Plan
 struct Options
 {
     bool verifyHashes{true};
+
+    // Whether to look for an already-downloaded copy in the cache. That check is a full hash of
+    // a cache file, so a caller that wants a genuinely cheap pass clears it and accepts the
+    // pessimistic answer - a job reported as a download that turns out to be a move.
+    bool probeCache{true};
+
+    // Whether content-state.txt may vouch for an installed bundle. Cleared by a forced verify,
+    // which exists precisely to re-read what the cache claims. The file itself is left alone:
+    // a pass that is cancelled halfway must not cost the next launch a full rehash.
+    bool trustCache{true};
     // Consulted between files so a cancelled wizard page does not have to wait out a 5 GB pass.
     const std::atomic_bool* cancel{};
 };

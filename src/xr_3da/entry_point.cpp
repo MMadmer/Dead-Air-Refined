@@ -3,6 +3,7 @@
 #include "xrEngine/x_ray.h"
 #include "xrGame/xrGame.h"
 #include "Include/xrRender/xrRender.h"
+#include "xrContentSync/ContentPaths.h"
 
 #if !defined(XR_PLATFORM_WINDOWS)
 #include <unistd.h>
@@ -46,11 +47,27 @@ int entry_point(pcstr commandLine)
 {
     StartupProfileBegin();
     tracy_raii raii;
+
+#if defined(XR_PLATFORM_WINDOWS)
+    // The installer and the uninstaller watch this name (AppMutex / CheckForMutexes) and refuse
+    // to run while it exists, which is what stops either of them from replacing or deleting
+    // files the running game has open. It is NOT a single-instance guard: an existing mutex is
+    // fine, the handle simply has to live as long as the process does.
+    const HANDLE running = CreateMutexW(nullptr, FALSE, ContentPaths::GameMutexName);
+#endif
+
     auto* game = strstr(commandLine, "-nogame") ? nullptr : &xrGame;
 
     CApplication app{ commandLine, game, s_render_modules };
 
-    return app.Run();
+    const int result = app.Run();
+
+#if defined(XR_PLATFORM_WINDOWS)
+    if (running)
+        CloseHandle(running);
+#endif
+
+    return result;
 }
 
 #if defined(XR_PLATFORM_WINDOWS)

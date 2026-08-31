@@ -48,6 +48,7 @@ target_include_directories(xr_3da
 
 target_link_libraries(xr_3da
     PRIVATE
+    xrContentSync
     xrCore
     xrAPI
     xrEngine

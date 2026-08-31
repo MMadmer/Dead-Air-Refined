@@ -133,16 +133,15 @@ void verify_worker(bool ignoreCache)
         manifest = instance.manifest;
     }
 
-    // A forced pass drops the advisory cache first: without that it would trust exactly the
-    // entries the player asked to have re-checked.
-    if (ignoreCache)
-        ContentState::SaveCache(paths.State(), manifest.contentId, {});
-
     CTimer timer;
     timer.Start();
 
     ContentResolver::Options options;
     options.verifyHashes = true;
+    // Ignored in memory rather than deleted from disk: a forced pass that is cancelled halfway
+    // must not leave the installation with no cache at all, which would cost the next launch a
+    // full rehash of everything.
+    options.trustCache = !ignoreCache;
     options.cancel = &instance.stopRequested;
 
     ContentResolver::Plan plan;
@@ -203,7 +202,8 @@ void verify_worker(bool ignoreCache)
     }
     else
     {
-        ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::VerifyFailed);
+        if (!ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::VerifyFailed))
+            Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
         instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
     }
 }
@@ -223,10 +223,18 @@ void run_initial_pass(ServiceState& instance)
     instance.present = 0;
     instance.missingBytes = 0;
 
+    // An installation that cannot record its own incompleteness will present as healthy after a
+    // crash, so a latch that will not write is itself worth reporting.
+    const auto latch = [&](ContentState::Reason reason)
+    {
+        if (!ContentState::WriteLatch(instance.paths.Latch(), instance.manifest.version, reason))
+            Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
+    };
+
     const auto fail = [&](pcstr line, ContentState::Reason reason, State state)
     {
         add_problem(instance, xr_string(line));
-        ContentState::WriteLatch(instance.paths.Latch(), instance.manifest.version, reason);
+        latch(reason);
         instance.state.store(state, std::memory_order_release);
     };
 
@@ -244,7 +252,7 @@ void run_initial_pass(ServiceState& instance)
     if (!ContentManifest::ParseFile(instance.paths.Manifest().wstring(), instance.manifest, error))
     {
         add_problem(instance, format("the content manifest is invalid: %s", error.c_str()));
-        ContentState::WriteLatch(instance.paths.Latch(), {}, ContentState::Reason::ManifestInvalid);
+        latch(ContentState::Reason::ManifestInvalid);
         instance.state.store(State::Recovery, std::memory_order_release);
         return;
     }
@@ -270,22 +278,25 @@ void run_initial_pass(ServiceState& instance)
         // re-download forever. Report it instead of entering that loop.
         add_problem(instance, format("$arch_dir$ points at %s instead of %s - content cannot be repaired there",
             mounted.string().c_str(), instance.paths.Database().string().c_str()));
-        ContentState::WriteLatch(instance.paths.Latch(), instance.manifest.version,
-            ContentState::Reason::VerifyFailed);
+        latch(ContentState::Reason::VerifyFailed);
         instance.state.store(State::Incomplete, std::memory_order_release);
         return;
     }
 
     ContentResolver::Options options;
-    options.verifyHashes = false; // stat only; the hash pass is the worker's job
+    options.verifyHashes = false;
+    // The cache probe is a full hash of a cache file, which on this path would run on the main
+    // thread before the window exists. A job reported as a download that turns out to be a move
+    // costs nothing; a multi-gigabyte synchronous read at startup costs the launch.
+    options.probeCache = false;
+    options.cancel = &instance.stopRequested;
     ContentResolver::Plan plan;
     std::string resolveError;
     if (!ContentResolver::Resolve(instance.manifest, instance.paths, options, plan, resolveError))
     {
         add_problem(instance, format("the content installation could not be examined: %s",
             resolveError.c_str()));
-        ContentState::WriteLatch(instance.paths.Latch(), instance.manifest.version,
-            ContentState::Reason::VerifyFailed);
+        latch(ContentState::Reason::VerifyFailed);
         instance.state.store(State::Incomplete, std::memory_order_release);
         return;
     }
@@ -327,8 +338,7 @@ void run_initial_pass(ServiceState& instance)
 
     if (!instance.problems.empty())
     {
-        ContentState::WriteLatch(instance.paths.Latch(), instance.manifest.version,
-            ContentState::Reason::VerifyFailed);
+        latch(ContentState::Reason::VerifyFailed);
         instance.state.store(State::Incomplete, std::memory_order_release);
         return;
     }
@@ -400,18 +410,29 @@ void ContentService::ForceVerify()
 {
     Initialize();
     ServiceState& instance = service();
-    if (instance.state.load(std::memory_order_acquire) == State::Recovery)
-    {
-        Msg("! [content] no usable manifest - nothing to verify against");
-        return;
-    }
 
     instance.stopRequested.store(true, std::memory_order_release);
     if (instance.worker.joinable())
         instance.worker.join();
     instance.stopRequested.store(false, std::memory_order_release);
 
-    // Off-thread, like the background pass, and deliberately without touching the state: a
+    // The whole picture is re-derived, not just the hashes. The command exists to be run after
+    // a repair, and the findings from the previous pass describe a disk that no longer looks
+    // like that - inheriting them would mean a forced verify could never retire anything and
+    // would re-latch a fixed installation, which is the opposite of what the engine tells the
+    // player to do.
+    instance.state.store(State::Unknown, std::memory_order_release);
+    instance.latchedOnly.store(false, std::memory_order_release);
+    run_initial_pass(instance);
+    instance.initialProblems = instance.problems.size();
+
+    if (instance.state.load(std::memory_order_acquire) == State::Recovery)
+    {
+        Msg("! [content] no usable manifest - nothing to verify against");
+        return;
+    }
+
+    // Off-thread, like the background pass, and deliberately without entering Verifying: a
     // forced re-hash must not open the play gate for its own duration, and it must not freeze
     // the game for the length of a full content set either. The worker publishes the verdict.
     instance.verifyStarted.store(true, std::memory_order_release);
