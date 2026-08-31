@@ -11,8 +11,11 @@ Required game: **Dead Air 0.98b or Dead Air Revolution II**
 
 Supported platform: **Windows x64**
 
-The release is distributed as a patch for an existing game installation. Game
-content is not included.
+The release is distributed as a patch for an existing game installation. The
+base game's content is not included. Refined's own assets are not inside the
+download either: they are published separately as versioned, hash-named bundles
+and fetched during installation, so an installation always holds exactly the
+content its version declares.
 
 ## Project lineage
 
@@ -47,8 +50,11 @@ provenance statement.
   both the main menu and the in-game menu.
 - Automatic update checks against GitHub releases, verified update archives,
   download progress, restart-based installation, and automatic cleanup.
-- Patch installer with versioned backups, rollback to an earlier Refined build,
-  and restoration of the original 32-bit runtime during removal.
+- Versioned content bundles pinned to the game version and verified by hash at
+  every start: an installation is either complete or reported as broken, with a
+  repair that re-fetches exactly what is missing.
+- Patch installer that fetches and verifies the release's content before it
+  changes anything, and restores the original 32-bit runtime during removal.
 
 Development and validation rules are defined in
 [`PROJECT_RULES.md`](PROJECT_RULES.md). Technical specifications are available
@@ -58,48 +64,79 @@ in [`docs/dead-air`](docs/dead-air).
 
 Download only one release asset. Most users need
 `Dead-Air-Refined-1.4.0-Setup.exe`; it supports both first-time installation
-and manual upgrades from an earlier Refined version. Use
-`Dead-Air-Refined-1.4.0-Update.zip` when you prefer a fully manual installation:
-extract it into the game root and replace the existing files. The built-in
-updater downloads the same ZIP automatically. You do not need both files.
+and manual upgrades from an earlier Refined version, and it is the only asset
+that installs content on a machine that has none. Use
+`Dead-Air-Refined-1.4.0-Setup_Manual.zip` when you prefer to upgrade an
+existing Refined installation by hand: extract it into the game root and
+replace the existing files. It carries the runtime and the content manifest but
+not the content itself, so it can upgrade an installation that already has its
+bundles; extracted into a folder Refined was never installed into, it produces a
+game that knows what content it is missing and offers to fetch it, not one that
+is ready to play.
+The built-in updater downloads the patch archive on its own. You do not need
+more than one file.
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
 3. Download `Dead-Air-Refined-1.4.0-Setup.exe` from the latest release.
 4. Select the root game directory containing `xrEngine.exe`, `fsgame.ltx`, and
    the `database` directory.
-5. Keep backup creation enabled unless the current Refined installation is
-   already backed up separately.
+5. Let the content download finish. It runs before anything on disk is
+   changed, so cancelling it leaves the installation exactly as it was, and
+   what was already downloaded is kept and reused on the next attempt.
 6. Complete the wizard and start the game normally.
 
 The installer updates both an original 32-bit installation and an earlier
-Dead Air: Refined installation. It does not replace `database`, `gamedata`,
-`appdata`, saves, `MODS`, or JSGME state.
+Dead Air: Refined installation. An installation consists of three parts:
+
+- the x64 runtime in the game root;
+- `database`, holding the game's own archives, the Refined compatibility
+  archive, and the content bundles for the installed version;
+- `.dead-air-x64`, holding the content manifest that pins this version to its
+  bundles, the download cache, the file lists the installer and the updater
+  maintain, and a backup of the original 32-bit runtime.
+
+Those are the only places inside the game folder the installer writes; outside
+it, it creates Start-menu shortcuts, an optional desktop shortcut, and the
+standard Windows uninstall entry, all of which the uninstaller removes. The
+game's own archives are never replaced, and `gamedata`, `appdata`, saves,
+`MODS`, and JSGME state are left alone.
+
+If content ever goes missing or is damaged, the game reports the installation
+as incomplete, refuses to load a level, and offers to repair it from the main
+menu. A repair downloads only what is missing and ends with a restart.
 
 ## Automatic updates
 
 The game checks this repository once after the main menu appears. When a newer
 stable version is available, the update dialog displays the installed version,
-the available version, and the download size.
+the available version, and the download size. Nothing is offered while the
+installation's content is incomplete — the repair comes first.
 
 Downloaded archives are validated by version, file manifest, size, and SHA-256.
-After confirmation, the updater closes the game, creates a versioned backup,
-replaces the runtime files, updates the maintenance utility, removes its cache,
-and starts the updated game.
+After confirmation, the updater closes the game, snapshots the files it is about
+to replace, replaces the runtime files, updates the maintenance utility, removes
+its cache, and starts the updated game. The snapshot exists only to undo a
+failed update and is deleted as soon as one succeeds.
 
-The installer remains the recommended option. The `Update.zip` asset can also
-be extracted manually or used by the integrated updater.
+Update archives never carry content bundles. The update payload is deliberately
+capped far below what a content set weighs, and content is versioned and
+verified on its own, so an update replaces the runtime and leaves the content
+where it is.
 
-## Backups, rollback, and removal
+The installer remains the recommended option. The `Setup_Manual.zip` asset can
+also be extracted manually; the integrated updater uses the patch archive.
 
-`Uninstall Dead Air Refined.exe` provides two maintenance operations:
+## Removal
 
-- remove Dead Air: Refined and restore the original 32-bit runtime;
-- restore a selected backup of an earlier Dead Air: Refined version.
+`Uninstall Dead Air Refined.exe` removes Dead Air: Refined and restores the
+original 32-bit runtime when its backup is present. It also removes the content
+the installation downloaded: the bundles its manifest names, any bundle-shaped
+file left over from an earlier revision, and the download cache. Anything it
+cannot delete is reported by name instead of being quietly left behind.
 
-The original 32-bit backup is reserved for removal and is not presented as a
-normal Refined rollback target. User saves and configuration files are not
-removed automatically.
+Rolling back to an earlier Refined version is not offered. User saves,
+configuration files, `gamedata`, `MODS`, and JSGME state are not removed.
 
 ## Bug reports and diagnostics
 
@@ -110,7 +147,10 @@ an anonymous diagnostic archive.
 Diagnostic archives exclude player identity, command-line data, environment
 contents, save payloads, installation paths, and raw stack memory. They retain
 the build identifier, module offsets, hardware and runtime information, sanitized
-logs, and content metadata required to investigate a problem.
+logs, and content metadata required to investigate a problem: the installed
+content identifier, whether the installation is currently marked incomplete, the
+mounted archives, and every bundle the engine refused to mount with the reason
+it was refused.
 
 A diagnostic archive can also be created without submitting a report by running
 `session_report` in the game console. Reports are stored under
@@ -126,6 +166,14 @@ for the report schema and privacy contract.
 Dead Air: Refined preserves the established content loading order and supports
 packed and loose addons that use the standard `database`, `gamedata`, and `MODS`
 paths. Existing 32-bit saves remain compatible.
+
+Content bundles are ordinary archives in `database` and get no special
+priority: loose `gamedata`, JSGME, and XMS modules override them, and so does
+an archive that sorts after them. Verification looks at the bundle files
+themselves and never at the paths a mod resolves, so overriding content does
+not make an installation look broken. See
+[`docs/dead-air/CONTENT_BUNDLES.md`](docs/dead-air/CONTENT_BUNDLES.md) for the
+bundle and manifest contract.
 
 Refined-specific persistent state is stored in one optional, forward-compatible
 `.scov` companion. The original `.scop` and `.scoc` formats remain unchanged,
@@ -162,14 +210,29 @@ CMake preset with Ninja Multi-Config. Binaries land in `bin\x64\<configuration>`
 is only needed after changing CMake files, the toolchain, or dependencies, since
 an ordinary rebuild is incremental and a repeated run does no work.
 
-Build the patch installer and automatic-update archive:
+A release is built in two steps, content first, because the installer refuses to
+be built without a content manifest:
 
 ```powershell
-tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.4.0
+tools\package\dead_air_x64_content_bundles.ps1 -SourceRoot <authored gamedata> `
+    -BundleCache <bundle cache> -OutputManifest <manifest> `
+    -PortVersion 1.4.0 -ReleaseTag <content tag>
+tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.4.0 `
+    -ContentManifest <manifest>
 ```
 
-Generated release files are written to `artifacts` and are not tracked by Git.
-Dependency versions and compatibility pins are recorded in
+The first script packs the authored content into bundles, reuses every bundle
+whose files did not change, and writes the manifest that pins this version to
+exactly those bundles. The second builds the compatibility archive, the
+installer and the manual archive against that manifest, plus the patch archive
+when it is given the previous release to diff against. Generated release files
+are written to `artifacts` and are not tracked by Git.
+
+The content release is published before the game release, and a published
+bundle is never replaced or deleted: a bundle name carries the hash of its own
+bytes, so overwriting one under that name makes every installed manifest wrong.
+The publication rules are in [`PROJECT_RULES.md`](PROJECT_RULES.md); dependency
+versions and compatibility pins are recorded in
 [`docs/dead-air/DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md).
 
 ## Project documentation
@@ -179,14 +242,17 @@ Dependency versions and compatibility pins are recorded in
 - [`TEST_MATRIX.md`](docs/dead-air/TEST_MATRIX.md) — release validation matrix.
 - [`AUTO_UPDATE.md`](docs/dead-air/AUTO_UPDATE.md) — update archive and client
   protocol.
+- [`CONTENT_BUNDLES.md`](docs/dead-air/CONTENT_BUNDLES.md) — content bundle,
+  manifest, delta, and repair contract.
 - [`DIAGNOSTIC_REPORTS.md`](docs/dead-air/DIAGNOSTIC_REPORTS.md) — diagnostic
   archive format and privacy guarantees.
 - [`SAVE_COMPATIBILITY.md`](docs/dead-air/SAVE_COMPATIBILITY.md) — original-save
   compatibility, extension chunks, and atomic transaction format.
 - [`DEPENDENCIES.md`](docs/dead-air/DEPENDENCIES.md) — dependency versions and
   build policy.
-- [`MODDING.md`](docs/dead-air/MODDING.md) — Refined-specific modding
-  capabilities: loose particle overrides and addon script audit tooling.
+- [`MODDING.md`](docs/dead-air/MODDING.md) — the compatibility contract for
+  addons: XMS modules, content bundles and load order, loose particle
+  overrides.
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
 
 ## Credits

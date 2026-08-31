@@ -80,11 +80,39 @@ The manifest records:
 - texture, model, sound-cache and Lua memory;
 - ALife, online and pending-release object counts;
 - XDB archives and loose content with safe relative names, sizes, timestamps and
-  hashes for diagnostically important files.
+  hashes for diagnostically important files;
+- the state of the installed content set.
 
 The developer must retain the matching PDB files for public builds. The report
 contains enough `build + module + RVA` information to symbolize a stack without
 shipping PDB files to players.
+
+## Content fields
+
+Content bundles are ordinary archives, so a mounted bundle already appears as a
+row in `content.archives` like any other. What that row cannot say is which
+content set the installation was supposed to have and whether it actually had it,
+so the `content` object of `report.json` carries four more values:
+
+| Field | Type | Value |
+| --- | --- | --- |
+| `content_id` | string | The `content-id=` line of `.dead-air-x64\content-manifest.txt`. Empty when no manifest could be read. |
+| `content_manifest` | boolean | Whether the mount gate found and parsed a manifest. False means the installation cannot state what content it should have. |
+| `content_incomplete` | boolean | Whether `.dead-air-x64\content-incomplete.txt` exists. This is the latch that refuses to start a level. |
+| `skipped_bundles` | array of strings | File names of bundle-shaped archives the mount gate refused. Empty on a healthy installation. |
+
+`content_id` is read by a short line scan rather than the manifest parser,
+because the collector runs while the process is already dying; the scan stops at
+the first `content-id=` line or at `[bundles]`, whichever comes first. It is
+therefore possible for `content_id` to be non-empty while `content_manifest` is
+false, and that combination is itself diagnostic: the manifest is present but
+malformed, so every bundle was refused.
+
+The reason each bundle was refused is not in the manifest. The mount gate writes
+it to the engine log, which arrives with the report as `session.log`.
+
+The schema string `dead-air-refined.session-report/1` is unchanged. The object
+gained fields, and consumers already interpret only the fields they understand.
 
 ## Privacy contract
 
@@ -103,6 +131,24 @@ markers. Module, PDB and content paths retain only safe file names or relative
 content paths. The minidump keeps thread contexts and module metadata but not
 raw stack pages.
 
+The four content fields carry nothing specific to the installation that sent
+them:
+
+- `content_id` is a SHA-256 over the manifest's bundle names and hashes in
+  ordinal order. Every installation on the same content set reports the same
+  value, which is what makes it useful for triage and harmless for privacy. It
+  is the one field copied out of a file verbatim rather than composed by the
+  collector, so it is exactly as safe as the manifest: a manifest the build
+  produced holds a digest, and a hand-edited one holds whatever was typed there.
+- `content_manifest` and `content_incomplete` are booleans and carry nothing.
+- `skipped_bundles` holds bare archive file names. The mount gate is given the
+  file name with every directory component already stripped, and each name is
+  then run through the same sanitizer as every other name in the report, so no
+  path can reach it even when the bundle was found through an aliased root.
+
+The archive rows the bundles add to `content.archives` follow the existing rule
+for archives: file name, size and timestamp, no path.
+
 ## Go receiver contract
 
 The receiver treats every ZIP as untrusted input without restricting its payload:
@@ -120,7 +166,15 @@ The receiver treats every ZIP as untrusted input without restricting its payload
 7. Store the original ZIP unchanged so future inspection and symbolization can
    be repeated.
 
-The current validated manual and crash reports are approximately 58-61 KiB.
+The current validated manual and crash reports are approximately 58-61 KiB. That
+range was measured on an installation without content bundles. Every mounted
+bundle adds one `content.archives` row of roughly 110 bytes before Deflate, and
+the rows differ only in their hash, size and timestamp, so they compress well: a
+content set in the tens of bundles moves the packed report by well under a
+kilobyte, and the range above still describes it. Re-measure on a content-bearing
+installation before quoting a figure, rather than adjusting this one by
+arithmetic.
+
 The upper limits leave room for a much larger real-world log while remaining
 small enough for Discord transport.
 
@@ -135,3 +189,9 @@ The release implementation passed:
 - ASCII and UTF-16 privacy scans of every non-save ZIP entry;
 - 13-to-10 report rotation while retaining the newest report;
 - a CMake x64 `Release` build with warnings treated as errors.
+
+Every entry above was recorded before the content fields existed. The privacy
+scan and the size measurement have not been re-run against a content-bearing
+installation. The run that matters is one with a refused bundle, so that
+`skipped_bundles` is not empty: an empty array proves nothing about how a name
+is sanitized.

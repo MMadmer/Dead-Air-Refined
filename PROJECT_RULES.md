@@ -122,20 +122,77 @@ the process described here.
   animation, sound — is part of a release, every installation of that release
   has it. There is no opt-in download, no "lite" edition, no per-feature
   content toggle, and no setting whose only purpose is to avoid fetching data.
-- Assets are published as versioned, hashed bundles pinned per game version,
-  obtained by the installer or by the game's repair path, and committed
-  atomically: an installation either has the complete set for its version, or it
-  is reported as incomplete and play is refused until it is repaired. An install
-  that cannot obtain its assets is a failed install, not a reduced one. Assets
-  are deliberately NOT carried inside the update archive: the applier is bounded
-  at 1 GiB expanded and 1024 files and its second stage has a five-minute wall,
-  none of which survive a multi-gigabyte payload. An update is armed only after
-  every required bundle is verified on disk.
+- Assets are published as versioned, hashed bundles pinned per game version and
+  obtained by the installer or by the game's repair path. An installation either
+  has the complete set for its version, or it is reported as incomplete and play
+  is refused until it is repaired. The incomplete latch is written before the
+  first change to `database` and removed only after a fresh hash-verifying pass
+  over the manifest finds nothing outstanding, so an interrupted commit cannot
+  present itself as healthy. An install that cannot obtain its assets is a
+  failed install, not a reduced one: the fetch runs before the installer has
+  touched anything, and a failure aborts with the installation as it was.
+  Assets are deliberately NOT carried inside the update archive: the applier is
+  bounded at 1 GiB expanded and 1024 files and its second stage has a
+  five-minute wall, none of which survive a multi-gigabyte payload. An update is
+  not offered while content is incomplete — the repair comes first.
+- Nothing enters `database` except by renaming a file whose SHA-256 has already
+  matched the manifest. Downloads land in the content cache under the hash they
+  are supposed to have, a partial file carries a `.part` suffix, and installing
+  a bundle is a move. A truncated download, a wrong revision, or a delta that
+  reconstructed the wrong bytes therefore cannot acquire a bundle name — not
+  because a check rejects them, but because nothing writes into `database`
+  directly. Any future producer of bundle bytes commits through the same rename
+  or it does not commit at all.
+- A bundle-shaped archive is mounted only when the installed manifest declares
+  that exact name and size. A leftover revision, a truncated file, or an archive
+  renamed by hand is skipped and reported instead, because content the build was
+  never tested against surfaces as a missing-asset crash far from its cause. The
+  gate has no opinion about any other archive: stock archives and third-party
+  ones mount exactly as before.
+- Content bundles are ordinary archives and get no priority. Loose `gamedata`,
+  JSGME and XMS modules override them, and so does an archive that sorts after
+  them — a mod overriding content is a mod working. Do not give the content
+  system a privileged mount position to protect its own assets.
+- A binary delta is an optimisation and never a requirement. An ineligible base,
+  a missing edge, or a failed apply falls back to the full bundle silently, and
+  the result is committed only after it hashes to the bundle the manifest
+  declares. A delta is recorded as rejected only when its output fails that
+  check with every I/O call having succeeded: a full disk, a read error, or a
+  cancellation is retryable, and blacklisting one would permanently turn a small
+  download into a large one for that installation.
+- Add before delete. A commit installs everything the manifest declares and only
+  then demotes what it no longer declares back into the cache; obsolete bundles
+  are never removed as part of installing their replacements. An interrupted
+  commit leaves an installation with too many bundles instead of one with too
+  few: the extra ones are refused by the mount gate, reported as a notice rather
+  than a fault, and demoted by the next commit — the next update, install or
+  repair. Too few bundles is a broken game; too many is untidy.
+- Content bundles are never managed files. They must not appear in
+  `managed-files.txt`, in `runtime-files.txt`, in an update manifest, in the
+  installer's file table, or in a backup scope. That list decides what is backed
+  up, what is deleted when it drops out of a new version, what the updater
+  snapshots, and what the uninstaller removes — and a bundle name carries the
+  hash of its own bytes, so it changes whenever the content does. A bundle named
+  there would be deleted from `database` the moment a version renamed it,
+  outside the content commit, and no backup could restore it because the update
+  manifest never declared it. It would also be copied into every backup, at
+  gigabytes a time. Bundles are removed only by the content commit, the cache
+  collector, and the uninstaller's own sweep, all of which delete by the
+  bundle-name pattern and nothing else.
+- The trust root is the installed content manifest in the control directory. It
+  arrives inside a hash-verified payload and is the only thing that decides what
+  an installation must contain. No manifest path is ever accepted on a command
+  line, and no downloaded manifest replaces it: the assets host is pinned in
+  shipped code, and the `repo=` line of a fetched manifest is informational.
+  Moving the assets to another host is a code change and a release. The one
+  override that exists redirects the download host to a loopback address for QA
+  and cannot skip a hash, and no switch that skips content may be added beside
+  it.
 - Content lives outside this repository. The engine sources stay free of
   binary asset trees; released assets are published as versioned, hashed
   bundles and pinned per game version, so a version always knows exactly which
-  content belongs to it. Integrity is established by hash, which makes the host
-  a replaceable detail rather than a dependency.
+  content belongs to it. Integrity is established by hash, so the host is a
+  delivery detail rather than something that has to be trusted.
 - Missing or corrupt required content is a broken installation and is reported
   as one, with a repair path that re-fetches it. Silently disabling the feature
   that needed it is forbidden: it turns a fixable install into a game that is
@@ -342,22 +399,51 @@ The full binary contract and evolution rules are described in
 - The version follows SemVer and is updated simultaneously in the product
   version, packaging scripts, Inno Setup, compatibility metadata, and user
   documentation.
-- A release contains two alternative installation options:
-  `Dead-Air-Refined-VERSION-Setup.exe` and
-  `Dead-Air-Refined-VERSION-Update.zip`. The user needs one of them: Setup is
-  the recommended option, the ZIP is a manual installation or the payload of
-  the built-in updater.
+- A release contains alternative installation options and the user needs
+  exactly one of them: `Dead-Air-Refined-VERSION-Setup.exe` is the recommended
+  path and the only one that installs content on a machine that has none,
+  `Dead-Air-Refined-VERSION-Setup_Manual.zip` is the same runtime payload for a
+  manual installation, and `Dead-Air-Refined-VERSION-Update_Patch.zip` carries
+  only what changed since the previous version. None of them contains content
+  bundles, so a manual archive upgrades an installation that already has its
+  content and does not create one from nothing. All of them carry the content
+  manifest, which is what lets an installation that was updated by hand say what
+  it is missing and repair itself instead of landing in recovery.
+- Beyond those, a release carries the legacy `Update.zip` alias for as long as
+  pre-rename clients are still in the field, and the content manifest
+  `Dead-Air-Refined-VERSION-content-manifest.txt` as the published record of
+  which bundles that version pins. The patch is cut only when there is a
+  previous release to cut it against.
 - The Update ZIP must contain an empty `appdata/savedgames`, and the manifest
   must not contain a single save file. The installer and uninstaller do not
   delete existing saves.
 - Package building is a local operation. Push, tag, GitHub Release, and asset
   upload happen only after the user's direct permission.
+- The content release is published BEFORE the game release: a game release whose
+  content manifest points at assets that do not exist yet is broken for every
+  installation made in that window. A content release with no game release after
+  it is harmless — an orphan tag that is simply never referenced.
+- **A published content release tag is never deleted, and no asset inside one is
+  ever replaced.** Bundle and delta names are content-addressed, so replacing
+  bytes under an existing name makes every installed manifest wrong and is
+  unrecoverable in the field: the clients that already hold the old bytes see a
+  hash mismatch they cannot repair, and the clients that fetch the new ones are
+  told their manifest lies. Deleting an asset is worse, because the manifests
+  that name it stay valid forever. Republish under a new tag instead. This
+  applies to the game releases too — an asset a shipped client can ask for is
+  not editable after publication, only superseded.
 - Address all GitHub commands explicitly to the `MMadmer/Dead-Air-Refined`
-  repository; do not rely on auto-detection while an `upstream` exists.
+  repository, and every content-asset command to
+  `MMadmer/Dead-Air-Refined_Assets`; do not rely on auto-detection while an
+  `upstream` exists.
+- A release cannot be built without a content manifest. The packaging script
+  refuses a manifest that is missing or declares no bundles, and the installer
+  script refuses to compile without one, because a Setup that installs no
+  content is exactly the optional-content build section 4 forbids.
 - Before publishing verify a clean HEAD, the binary version, the package
   contents, hashes, install/update, and save-file preservation.
 - After publishing verify the tag target, the release status, the names and
-  SHA-256 of both assets, and the release list the updater actually reads:
+  SHA-256 of every asset, and the release list the updater actually reads:
   `repos/MMadmer/Dead-Air-Refined/releases?per_page=30`. The client picks the
   highest parseable version on that page, so the GitHub "Latest" badge is
   cosmetic for updating; a tag it cannot parse, a draft or a pre-release is
@@ -372,23 +458,20 @@ The full binary contract and evolution rules are described in
   installation instruction.
 - In `Changes` list only the user-visible outcome: fixes, improvements, and
   compatibility. If a category is empty, do not add it.
-- In `Installation` state explicitly that Setup and the manual ZIP are
-  alternatives and only one is needed; the ZIP is allowed for manual
+- In `Installation` state explicitly that Setup, the manual ZIP and the patch
+  ZIP are alternatives and only one is needed; the ZIP is allowed for manual
   installation. Warn separately that existing saves must not be clobbered.
-- A release carries four assets, not two: `Setup.exe`, `Setup_Manual.zip`,
-  `Update_Patch.zip` when a patch is cut, and the legacy `Update.zip` alias
-  while pre-rename clients are still in the field, plus the content manifest
-  `Dead-Air-Refined-<version>-content-manifest.txt`.
-- The content release is published BEFORE the game release: a game release whose
-  content manifest points at assets that do not exist yet is broken for every
-  installation made in that window.
-- **A published content release tag is never deleted, and no asset inside one is
-  ever replaced.** Bundle names are content-addressed, so replacing bytes under
-  an existing name makes every installed manifest wrong and is unrecoverable in
-  the field. Republish under a new tag instead.
 - Before publishing run a clean build if one has not been done yet, and verify
-  the version number, both asset names, and the text against the actually
-  built packages.
+  the version number, the asset names, and the text against the actually built
+  packages.
+- Any release whose content set changed must state, in `Installation`, the size
+  of the content download and the free space Setup will require. The packaging
+  README tells the player to look for that number on the release page, so a
+  release that omits it leaves the one figure that decides whether the install
+  can succeed nowhere at all. Take it from the `ContentBytes` the installer
+  build prints - the sum of every bundle the manifest declares plus a tenth for
+  filesystem overhead, which is exactly the bar Setup checks the volume against
+  before it spends any bandwidth.
 
 Release body template:
 
@@ -418,7 +501,8 @@ Choose one option:
 * **Update_Patch ZIP** — only what changed since the previous version; the
   in-game updater picks it automatically when it fits.
 
-Do not install both. Existing saves are preserved.
+Setup downloads [N] GB of game content and needs [N] GB free on the target
+drive. Do not install both. Existing saves are preserved.
 ---
 ## RU
 
@@ -440,13 +524,17 @@ Do not install both. Existing saves are preserved.
 * **Update_Patch ZIP** — только изменения относительно прошлой версии;
   встроенное обновление выбирает его само, когда он подходит.
 
-Не устанавливайте оба варианта. Существующие сохранения будут сохранены.
+Установщик загружает [N] ГБ игрового контента и требует [N] ГБ свободного
+места на выбранном диске. Не устанавливайте оба варианта. Существующие сохранения
+будут сохранены.
 ```
 
 ## 12. Documentation
 
 - The README and packaging README contain only current user information.
-  Forbidding manual Update ZIP installation is not allowed.
+  Forbidding manual archive installation is not allowed; saying what the manual
+  archive does not carry — content bundles and the content manifest — and what
+  that means for a first-time installation is required.
 - `docs/dead-air` holds only active technical specifications, currently open
   problems, and the release validation matrix.
 - Finished plans, temporary iteration reports, local absolute paths, old
@@ -459,6 +547,8 @@ Do not install both. Existing saves are preserved.
 ## 13. Active technical specifications
 
 - `docs/dead-air/AUTO_UPDATE.md` — release/update protocol.
+- `docs/dead-air/CONTENT_BUNDLES.md` — the content bundle, manifest, delta and
+  repair contract.
 - `docs/dead-air/DEPENDENCIES.md` — pinned dependencies and build policy.
 - `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema and privacy contract.
 - `docs/dead-air/MODDING.md` — compatibility contract for addons.

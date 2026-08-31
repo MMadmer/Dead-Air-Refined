@@ -67,9 +67,12 @@ struct Result
     std::string error;
 };
 
-// Applies `delta` to `base` and writes `target`, which must not exist. The output is hashed as
-// it is written and must match both the delta header's target hash and `expectedHash`; on any
-// mismatch the output is removed and nothing is left behind.
+// Applies `delta` to `base` and writes `target`, truncating whatever is already there. Callers
+// pass a cache path named by the hash the output is supposed to have, so the only file that can
+// be standing in the way is a leftover from an apply that was killed mid-write - overwriting it
+// is the recovery, and refusing would jam that path until someone deleted the file by hand.
+// The output is hashed as it is written and must match both the delta header's target hash and
+// `expectedHash`; on any mismatch the output is removed and nothing is left behind.
 //
 // `base` is re-hashed here rather than trusted from the plan: time passes between deciding a
 // delta is eligible and applying it, and the whole point of a delta is that it is meaningless

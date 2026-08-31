@@ -1,5 +1,6 @@
 #include "ContentCommit.h"
 
+#include "ContentDelta.h"
 #include "ContentHash.h"
 #include "ContentState.h"
 
@@ -133,6 +134,13 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
     // nothing: the resolver trusts a matching (size, mtime) entry and would then skip that
     // bundle forever, so a corrupt file would be vouched for by a record invented from the very
     // manifest it fails to match.
+    // A delta blacklisted for the previous release says nothing about this one: the base it was
+    // wrong against may not even be part of the new content set. Read before the state file is
+    // rewritten, because rewriting it is what erases the answer.
+    const std::string previousId = ContentState::LoadContentId(paths.State());
+    if (!previousId.empty() && previousId != manifest.contentId)
+        ContentDelta::ClearRejected(paths.RejectedDeltas());
+
     ContentState::Cache state = ContentState::LoadCache(paths.State());
     for (const auto& entry : verified)
         state[entry.first] = entry.second;

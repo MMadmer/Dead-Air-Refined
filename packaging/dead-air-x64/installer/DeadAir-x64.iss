@@ -64,12 +64,13 @@ WizardSizePercent=110
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
-; The running game creates this mutex (src/xr_3da/entry_point.cpp), so install and uninstall
+; The running game creates this mutex (ContentPaths::GameMutexName, created in
+; src/xr_3da/entry_point.cpp), so install and uninstall
 ; refuse while it has files open. Session-local rather than Global\: creating a global mutex
 ; needs a privilege a standard user does not reliably hold, and setup stays in the same session
 ; even when it elevates.
 ; Covers both install and uninstall - Inno records the name in the uninstall data.
-AppMutex=DeadAirRefined-xrEngine
+AppMutex=Local\DeadAirRefined.Game
 UsePreviousAppDir=no
 UsePreviousGroup=no
 UsePreviousTasks=no
@@ -933,6 +934,7 @@ begin
   DeleteFile(AddBackslash(ControlDirectory) + 'content-manifest.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'content-state.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'content-incomplete.txt');
+  DeleteFile(AddBackslash(ControlDirectory) + 'rejected-deltas.txt');
   DeleteFile(AddBackslash(ControlDirectory) + 'patch-rejected.txt');
 
   // In code rather than only in [UninstallDelete]: those entries are baked into unins000.dat at

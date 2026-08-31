@@ -1110,7 +1110,12 @@ every kind that the catalog declares but nobody implemented.
 **Classic mods are untouched.** NQ adds engine entry points, it does not change
 existing behaviour. `character_dialogs.xml`, `dialogs.xml`, `game_tasks.xml`,
 `task_manager.ltx`, info portions, JSGME layers, loose `gamedata`, `xtra_*.xdb0`
-and content addons all work exactly as before. With no module mounted the dialog
+and content addons all work exactly as before, with one qualification that
+predates NQ and is enforced below it: an `xtra_*.xdb0` whose name matches the
+reserved content-bundle shape is refused by `ContentPin::ShouldMount` unless the
+installed manifest declares it, so every other archive name — including every
+third-party `xtra_*` — mounts exactly as it always did. See *Content bundles* in
+`docs/dead-air/MODDING.md` for the grammar. With no module mounted the dialog
 hook returns immediately, the virtual dialog registry is empty and the NQ
 callbacks are never registered.
 

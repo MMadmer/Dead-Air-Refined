@@ -61,7 +61,8 @@ meshes\dynamics\old_crate.ogf = meshes\dynamics\props\crate_a.ogf
 mapping wins over the mirror); between modules the usual load order applies.
 `[redirects]` are resolved after EVERY module has mounted, so a redirect may
 point at any module's content or at a loose base file; archive-backed targets
-cannot be redirected to. Both sections refuse `..` and report bad or missing
+cannot be redirected to — and that covers nearly everything the game ships, see
+*Content bundles* below. Both sections refuse `..` and report bad or missing
 entries in the log instead of silently dropping them.
 
 Visual overlay registry — one section per entry, section name is free-form. A
@@ -139,8 +140,11 @@ Runtime facts:
 - Spawn ids for module objects come from persistent per-module ranges
   (`appdata/xms_registry.ltx`); base `all.spawn` ids never change.
 - Kill switch: `-no_xms` command line. JSGME layers and `xtra_*.xdb0` keep
-  working unchanged; a folder without `mod.ltx` is not a module and is ignored
-  in either root.
+  working unchanged, with one exception: an archive whose name matches the
+  reserved content bundle shape is mounted only when the installed content
+  manifest declares it at that exact size — see *Content bundles* below for the
+  grammar to stay out of. A folder without `mod.ltx` is not a module and is
+  ignored in either root.
 - What `mode=` gates, exactly. Everything that edits a LEVEL is gated - the
   spawn composer, `overlay.xcform` (including its cut boxes), `overlay.aimap`,
   `overlay_visuals.ltx` (both the added `.ogf` and the `hide` boxes) and the
@@ -300,6 +304,106 @@ hardcore, rerum, good weapons, good loot) is deliberately not listed - those
 are modifiers and stay multi-select; note their keys carry `_mode` too, the
 suffix proves nothing.
 
+## Content bundles
+
+Refined's own assets ship as versioned archives in `database\` instead of riding
+inside the update payload: the installer fetches them, the game verifies them on
+every launch and refuses to start a level while any of them is missing or wrong.
+The full contract — manifest format, resolver, repair, the play gate — is in
+`CONTENT_BUNDLES.md`. What a mod has to know is here.
+
+### The reserved name shape
+
+A file in `database\` is treated as a content bundle when its name matches this
+grammar exactly:
+
+```
+xtra_dead_air_x64_content_<group>_<NN>_<hash16>.xdb0
+```
+
+| Part | Grammar |
+| --- | --- |
+| `<group>` | one or more of `a`–`z`, `0`–`9`, `_`; never empty |
+| `<NN>` | exactly two decimal digits |
+| `<hash16>` | exactly 16 lowercase hex digits (`0`–`9`, `a`–`f`), the first 16 of the packed file's SHA-256 |
+
+A name that fails any of those rules is not a bundle and mounts as an ordinary
+archive: `xtra_dead_air_x64_content_pack.xdb0` and
+`xtra_dead_air_x64_content_textures_1_deadbeef.xdb0` both load normally. It is
+the shape that is reserved, not the prefix.
+
+The match is strict because this grammar is a delete authority. The uninstaller
+sweeps `database\` by it, and a content commit moves every file matching it that
+the installed manifest does not name out of `database\` into the content cache.
+An archive that lands in the shape by accident is therefore not merely refused —
+it is moved out from under the game and removed with Refined.
+
+**So do not use the `xtra_dead_air_x64_content_` prefix for a mod archive at
+all.** Every other `xtra_*.xdb0` name is yours and behaves exactly as it always
+has.
+
+A refused archive is named in the log as `! [content] skipped <name> (<reason>)`
+and listed by the `dar_content_state` console command. A refused archive the
+manifest does not declare is reported as a notice, not a problem: it does not
+mark the installation incomplete and does not stop the game from starting.
+
+### Where bundles sit in load order
+
+Archives mount in byte order of file name (`xr_strcmp`, ascending) and the later
+archive wins per virtual path. So bundles mount after `xtra_dead_air_x64.xdb0`
+— `.` (0x2E) sorts before `_` (0x5F) — and after `configs`, `meshes`,
+`sounds`, `textures`, `levels` and `xtra.xdb0`, which is what makes content
+override the base game.
+
+Against a third-party `xtra_*.xdb0` the answer is whatever the byte order says,
+and it cuts both ways. `xtra_zzz.xdb0` mounts after the bundles and overrides
+them; `xtra_dar2.xdb0` mounts BEFORE them, because at the seventh character `e`
+(0x65) sorts before `r` (0x72), so a bundle overrides it. Neither is a special
+case worth designing around — work out where your archive lands and name it for
+the outcome you want. A mod overriding content is a mod doing its job; a mod
+that expected to override content and did not is a mod that got outsorted.
+
+Loose files beat all of it. `$arch_dir$` (`database\`) is listed before
+`$game_data$` (`gamedata\`) in `fsgame.ltx` and a second registration of the same
+virtual path replaces the entry, so loose `gamedata\`, JSGME layers and XMS
+overlays (a module's `gamedata/` mirror and its `[vfs]` mappings) override
+content bundles exactly the way they override any other archive. Content changes
+nothing about that order.
+
+### Verification never looks at your mod
+
+The startup check, `dar_content_verify` and the repair path look at bundle FILES
+in `database\` by name — stat, then SHA-256 — straight through the filesystem,
+never at a resolved virtual path. No override can make an installation report
+incomplete, and verification can never break an override. The two systems do not
+meet.
+
+### Redirects and archive-backed content
+
+`[redirects]` cannot point at anything an archive supplies, and that limit now
+covers nearly everything the game ships: the base game's `database\*.xdb*`, the
+Refined compatibility archive and the content bundles are all archives. A
+redirect target has to be a loose file or a file some module supplies itself.
+
+### Never write into `database\` or the content cache
+
+Dropping a plain `xtra_*.xdb0` into `database\` is still the classic pipeline and
+still works. Everything else in there belongs to the content system:
+
+- Never add, edit, rename, move or delete a content bundle. Verification hashes
+  every one of them, and a mismatch marks the installation incomplete and blocks
+  play until it is repaired — which re-downloads the bundle and discards whatever
+  was done to it.
+- Never write a file with the reserved shape. It is sidelined on the next commit
+  and removed on uninstall, as above.
+- Never write into `<game>\.dead-air-x64\content-cache\`. It is download and
+  retirement staging: its garbage collector deletes entries by hash name, and the
+  uninstaller deletes the whole directory.
+
+Nothing in the engine enforces this — `database\` has no write guard. The
+consequence of breaking it is a player whose installation reports itself broken
+for a reason that points at the game rather than at the mod.
+
 ## Loose particle overrides
 
 Individual particle effects and groups can be replaced or added through loose
@@ -308,6 +412,8 @@ files without rebuilding `particles.xr`:
 - Location: `gamedata/particles/**` (also works from XDB archives and JSGME
   layers — the engine enumerates the virtual namespace with normal VFS
   precedence, loose files win over archives exactly like other gamedata).
+  Content bundles are archives in that same namespace and lose to loose files
+  like every other archive.
 - Format: the engine's ini-style single-particle formats — `.pe` for an effect,
   `.pg` for a group (the same files the SDK particle editor reads and writes).
 - Naming: the effect name is the file path without extension relative to the

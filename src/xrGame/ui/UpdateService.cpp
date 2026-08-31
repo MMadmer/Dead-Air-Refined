@@ -5,6 +5,12 @@
 #include "xrCore/ProductVersion.h"
 #include "xrEngine/Engine.h"
 
+#include "xrContentSync/ContentDownload.h"
+#include "xrContentSync/ContentManifest.h"
+#include "xrContentSync/ContentPaths.h"
+#include "xrContentSync/ContentResolver.h"
+#include "xrContentSync/ContentState.h"
+
 // Console-backed user switch for the MAJOR-release notice only, registered as
 // `dar_major_update_notice` (console_commands.cpp) so the options system persists it like any
 // other setting. Ordinary updates are never gated on it.
@@ -45,6 +51,14 @@ constexpr pcstr FullAssetSuffix = "-Setup_Manual.zip";
 constexpr pcstr LegacyFullAssetSuffix = "-Update.zip";
 // Only the files that differ from the previous release.
 constexpr pcstr PatchAssetSuffix = "-Update_Patch.zip";
+// The target version's content manifest, published alongside the installers. It is the one
+// asset a client reads before deciding anything, which is why it cannot live only inside a
+// payload the client has not applied yet.
+constexpr pcstr ContentManifestAssetSuffix = "-content-manifest.txt";
+// The assets repository, pinned in shipped code - a manifest's own repo= line is
+// informational, and taking the download host from a downloaded file would let whoever
+// wrote it choose where the next gigabytes come from.
+constexpr pcstr AssetsRepository = "MMadmer/Dead-Air-Refined_Assets";
 constexpr size_t MaximumApiResponseBytes = 4 * 1024 * 1024;
 
 struct SemanticVersion
@@ -97,6 +111,8 @@ struct ServiceState
     xr_string downloadUrl;
     xr_string digest;
     xr_string assetName;
+    xr_string contentManifestUrl;
+    xr_string contentManifestDigest;
     xr_string themeEn;
     xr_string themeRu;
     xr_string majorVersion;
@@ -860,6 +876,9 @@ struct UpdateChoice
     Release release;
     ReleaseAsset asset;
     UpdateService::Payload payload{UpdateService::Payload::Full};
+    // Empty when the release publishes no manifest - an older release, or one cut before the
+    // content system. The update is still offerable; the launched build simply repairs.
+    ReleaseAsset contentManifest;
 };
 
 // The ordinary offer, deliberately confined to the installed MAJOR line. Crossing a major is
@@ -897,6 +916,8 @@ std::optional<UpdateChoice> select_update(
         return std::nullopt;
 
     UpdateChoice choice{*selectedRelease, *selectedAsset, UpdateService::Payload::Full};
+    if (const ReleaseAsset* manifest = find_asset(*selectedRelease, ContentManifestAssetSuffix))
+        choice.contentManifest = *manifest;
     if (const ReleaseAsset* patch = find_asset(*selectedRelease, PatchAssetSuffix))
     {
         const auto base = previous_release_version(releases, selectedVersion);
@@ -1006,6 +1027,8 @@ void check_worker()
         instance.downloadUrl = update->asset.url;
         instance.digest = update->asset.digest;
         instance.assetName = update->asset.name;
+        instance.contentManifestUrl = update->contentManifest.url;
+        instance.contentManifestDigest = update->contentManifest.digest;
         instance.message.clear();
     }
     instance.payload.store(update->payload, std::memory_order_release);
@@ -1162,6 +1185,91 @@ bool download_update(const xr_string& url, const xr_string& digest, u64 expected
     return success;
 }
 
+// Puts the incoming version's content into the cache before the update is armed.
+//
+// Only into the CACHE. Installing it here would mean moving files the running game has mapped,
+// which fails, and demoting the bundles it is currently reading, which it would not survive.
+// The updater does the rename after this process has exited - that is what the appended
+// --content-commit is for - so by the time the player is back in the game the content is in
+// place and the second wait is a rename rather than another download.
+//
+// Failure is not fatal to the update. The worst case is the installation the player would have
+// had anyway: it comes up incomplete and offers to repair.
+void prefetch_content(const std::filesystem::path& root, const xr_string& manifestUrl,
+    const xr_string& manifestDigest, const xr_string& version)
+{
+    if (manifestUrl.empty())
+    {
+        Msg("* Update: the release publishes no content manifest, content will be fetched after the restart");
+        return;
+    }
+
+    ContentPaths::Layout paths;
+    paths.root = root;
+
+    std::error_code createError;
+    std::filesystem::create_directories(paths.Cache(), createError);
+    const std::filesystem::path pending = paths.Cache() / L"pending-manifest.txt";
+
+    xr_string error;
+    if (!download_update(manifestUrl, manifestDigest, 0, pending, error))
+    {
+        Msg("! Update: could not fetch the target content manifest: %s", error.c_str());
+        return;
+    }
+
+    ContentManifest::Manifest manifest;
+    std::string parseError;
+    if (!ContentManifest::ParseFile(pending.wstring(), manifest, parseError) ||
+        !manifest.ContentIdMatches())
+    {
+        Msg("! Update: the target content manifest is not usable: %s",
+            parseError.empty() ? "its content-id does not match its bundles" : parseError.c_str());
+        std::filesystem::remove(pending, createError);
+        return;
+    }
+
+    ContentResolver::Options options;
+    options.verifyHashes = false; // the bundles on disk were verified at startup
+    ContentResolver::Plan plan;
+    std::string resolveError;
+    if (!ContentResolver::Resolve(manifest, paths, options, plan, resolveError))
+    {
+        Msg("! Update: could not plan the content for %s: %s", version.c_str(), resolveError.c_str());
+        return;
+    }
+    if (plan.Complete())
+    {
+        Msg("* Update: the installed content already satisfies %s", version.c_str());
+        return;
+    }
+
+    // Marked before the first byte lands. Nothing here mutates database\, but the cache now
+    // holds bytes for a version that is not installed, and a crash between here and the commit
+    // must not read as a healthy installation.
+    ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::UpdateCommit);
+
+    Msg("* Update: fetching %llu byte(s) of content for %s",
+        static_cast<unsigned long long>(plan.bytesToFetch), version.c_str());
+
+    ContentDownload::Options download;
+    download.repo = AssetsRepository;
+    download.qaBaseUrl = ContentDownload::QaBaseUrl();
+    download.cancel = &service().stopRequested;
+    download.onLog = [](const std::string& line) { Msg("* [content] %s", line.c_str()); };
+
+    const ContentDownload::Result result = ContentDownload::Fetch(plan, paths, download);
+    if (!result.ok)
+    {
+        // The update still goes ahead. Whatever arrived stays in the cache, so the repair the
+        // player is offered after the restart resumes rather than starting over.
+        Msg("! Update: content could not be fetched now (%s) - the game will offer to repair",
+            result.error.c_str());
+        return;
+    }
+    Msg("* Update: content for %s is staged and will be installed with the update", version.c_str());
+}
+
 void download_worker()
 {
     ServiceState& instance = service();
@@ -1169,12 +1277,16 @@ void download_worker()
     xr_string digest;
     xr_string version;
     xr_string assetName;
+    xr_string manifestUrl;
+    xr_string manifestDigest;
     {
         std::lock_guard lock(instance.dataMutex);
         url = instance.downloadUrl;
         digest = instance.digest;
         version = instance.version;
         assetName = instance.assetName;
+        manifestUrl = instance.contentManifestUrl;
+        manifestDigest = instance.contentManifestDigest;
     }
 
     const std::filesystem::path root = game_directory();
@@ -1195,6 +1307,10 @@ void download_worker()
         set_state(UpdateService::State::DownloadFailed, std::move(error));
         return;
     }
+
+    // The payload is in hand; now the content it will want. Done before the update is offered
+    // as ready so the player takes one restart, not a restart and then a download.
+    prefetch_content(root, manifestUrl, manifestDigest, version);
 
     {
         std::lock_guard lock(instance.dataMutex);

@@ -51,6 +51,10 @@ using Cache = std::map<std::string, Entry>;
 // Both are best-effort. A missing or malformed state file yields an empty cache, which costs
 // a full rescan and nothing else.
 Cache LoadCache(const std::filesystem::path& path);
+// The content-id the state file records, or empty when there is no readable state. Used to tell
+// "the same content set as last time" from "a different release", which is the only thing that
+// makes a previously rejected delta worth trying again.
+std::string LoadContentId(const std::filesystem::path& path);
 void SaveCache(const std::filesystem::path& path, const std::string& contentId, const Cache& cache);
 
 // Last-write FILETIME as a decimal, or 0 when the file cannot be stat'ed. Zero never matches

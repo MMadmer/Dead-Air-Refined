@@ -44,7 +44,11 @@ param(
     # revision they actually hold. Without it only whole bundles are published, which is correct
     # for the first content release.
     [string]$PreviousManifest,
-    [string]$DeltaTool = (Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe")
+    [string]$DeltaTool = (Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe"),
+    # Report the shard layout and stop, without packing anything. A shard assignment is
+    # permanent the moment it is published, so being able to look at one first is worth a
+    # switch - and it lets the scale test measure the real policy instead of a copy of it.
+    [switch]$LayoutOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -149,8 +153,16 @@ $hashed = $files | ForEach-Object -ThrottleLimit ([Environment]::ProcessorCount)
 }
 
 # ---- assign to group and shard -----------------------------------------------------------
+# Two passes, because assignment needs sizes and sizes need the whole file list. The first pass
+# measures every source directory; the second places the ones that have no shard yet.
+#
+# Placement is by accumulated BYTES, not by lowest shard index. That distinction is the whole
+# difference between a layout that survives to five gigabytes and one that does not: filling the
+# lowest index first piles everything into shard 00 until it passes the hard ceiling, and by then
+# the table is append-only and there is no way out that does not move existing files - which
+# renames their bundles and costs every installed player a full re-download.
 $assignChanged = $false
-$buckets = [ordered]@{}
+$directories = [ordered]@{}
 foreach ($entry in $hashed) {
     $parts = $entry.Rel.Split('/')
     $root = $parts[0].ToLowerInvariant()
@@ -165,23 +177,95 @@ foreach ($entry in $hashed) {
         throw "Content file must live in a subdirectory of its group root: $($entry.Rel)"
     }
 
+    # The assignment key is normally the first path component, which keeps a .dds and its .thm
+    # in the same bundle for free. A directory that is already assigned at a deeper granularity
+    # keeps it: the table is append-only, so the more specific line wins wherever one exists.
     $key = "$root/$($parts[1])".ToLowerInvariant()
-    if (-not $layout.Assign.Contains($key)) {
-        # New directory: append it to the lowest existing shard of this group, or 00.
-        $existing = @()
-        foreach ($assigned in $layout.Assign.Keys) {
-            if ($assigned.StartsWith("$root/")) { $existing += $layout.Assign[$assigned] }
-        }
-        $shardIndex = if ($existing.Count -eq 0) { "00" } else { ($existing | Sort-Object -Unique | Select-Object -First 1) }
-        $layout.Assign[$key] = $shardIndex
-        Add-AssignLine -Path $GroupsFile -Key $key -Shard $shardIndex
-        $assignChanged = $true
-        Write-Host "  assign: $key -> $group/$shardIndex (new directory, appended to groups.ltx)"
+    if ($parts.Count -gt 2) {
+        $deeper = "$root/$($parts[1])/$($parts[2])".ToLowerInvariant()
+        if ($layout.Assign.Contains($deeper)) { $key = $deeper }
     }
 
-    $bucketKey = "$group/$($layout.Assign[$key])"
+    if (-not $directories.Contains($key)) {
+        $directories[$key] = [pscustomobject]@{
+            Key = $key; Root = $root; Group = $group
+            Bytes = [int64]0; Entries = [Collections.Generic.List[object]]::new()
+        }
+    }
+    $directories[$key].Bytes += $entry.Size
+    $directories[$key].Entries.Add($entry)
+}
+
+$targetBytes = [int64]$layout.Shard.target_mb * 1MB
+$shardBytes = @{}
+foreach ($directory in $directories.Values) {
+    if (-not $layout.Assign.Contains($directory.Key)) { continue }
+    $bucketKey = "$($directory.Root)/$($layout.Assign[$directory.Key])"
+    if (-not $shardBytes.ContainsKey($bucketKey)) { $shardBytes[$bucketKey] = [int64]0 }
+    $shardBytes[$bucketKey] += $directory.Bytes
+}
+
+# Largest first: a big directory placed last would have to go somewhere already full, and one
+# directory is never split, so it would produce one oversized bundle.
+$unassigned = $directories.Values |
+    Where-Object { -not $layout.Assign.Contains($_.Key) } |
+    Sort-Object -Property Bytes -Descending
+
+foreach ($directory in $unassigned) {
+    $root = $directory.Root
+
+    # The emptiest shard of this group that still has room. Failing that, a new one - which is
+    # exactly the growth the append-only table is designed to absorb.
+    $best = $null
+    $bestBytes = [int64]0
+    foreach ($bucketKey in $shardBytes.Keys) {
+        if (-not $bucketKey.StartsWith("$root/")) { continue }
+        $bytes = $shardBytes[$bucketKey]
+        if ($bytes + $directory.Bytes -gt $targetBytes) { continue }
+        if (-not $best -or $bytes -lt $bestBytes) { $best = $bucketKey; $bestBytes = $bytes }
+    }
+
+    if ($best) {
+        $shardIndex = $best.Split('/')[1]
+    }
+    else {
+        $used = @($shardBytes.Keys | Where-Object { $_.StartsWith("$root/") } |
+            ForEach-Object { [int]$_.Split('/')[1] })
+        # Cast, because Measure-Object hands back a Double and the D format specifier only
+        # accepts integrals - which surfaces as an unhelpful "format specifier was invalid"
+        # from somewhere else entirely.
+        $next = [int]$(if ($used.Count -eq 0) { 0 } else { ($used | Measure-Object -Maximum).Maximum + 1 })
+        if ($next -gt 99) {
+            throw "Group '$($directory.Group)' needs more than 100 shards. Split it into two groups."
+        }
+        $shardIndex = "{0:D2}" -f $next
+    }
+
+    $bucketKey = "$root/$shardIndex"
+    if (-not $shardBytes.ContainsKey($bucketKey)) { $shardBytes[$bucketKey] = [int64]0 }
+    $shardBytes[$bucketKey] += $directory.Bytes
+
+    $layout.Assign[$directory.Key] = $shardIndex
+    Add-AssignLine -Path $GroupsFile -Key $directory.Key -Shard $shardIndex
+    $assignChanged = $true
+    Write-Host ("  assign: {0} -> {1}/{2} ({3} MB, new directory, appended to groups.ltx)" -f
+        $directory.Key, $directory.Group, $shardIndex, [math]::Round($directory.Bytes / 1MB, 1))
+
+    if ($directory.Bytes -gt 1.5 * $targetBytes) {
+        $note = "  note:   {0} alone is {1} MB, above 1.5x the {2} MB target." -f
+            $directory.Key, [math]::Round($directory.Bytes / 1MB, 1), $layout.Shard.target_mb
+        Write-Host $note
+        Write-Host ("          Its bundle will be oversized until it is subdivided by hand. Add deeper " +
+            "keys for its subdirectories BEFORE it is first published: moving it afterwards renames " +
+            "its bundle and costs every player a re-download.")
+    }
+}
+
+$buckets = [ordered]@{}
+foreach ($directory in $directories.Values) {
+    $bucketKey = "$($directory.Group)/$($layout.Assign[$directory.Key])"
     if (-not $buckets.Contains($bucketKey)) { $buckets[$bucketKey] = [Collections.Generic.List[object]]::new() }
-    $buckets[$bucketKey].Add($entry)
+    foreach ($entry in $directory.Entries) { $buckets[$bucketKey].Add($entry) }
 }
 
 function Read-ContentManifest {
@@ -206,6 +290,22 @@ function Read-ContentManifest {
         }
     }
     return [pscustomobject]@{ Bundles = $bundles; Deltas = $deltas }
+}
+
+if ($LayoutOnly) {
+    $report = [Collections.Generic.List[object]]::new()
+    foreach ($bucketKey in $buckets.Keys) {
+        $group, $shardIndex = $bucketKey.Split('/')
+        $bytes = ($buckets[$bucketKey] | Measure-Object -Property Size -Sum).Sum
+        $report.Add([pscustomobject]@{
+            Group = $group
+            Shard = $shardIndex
+            Files = $buckets[$bucketKey].Count
+            MB    = [math]::Round($bytes / 1MB, 1)
+            Bytes = [int64]$bytes
+        })
+    }
+    return ($report | Sort-Object Group, Shard)
 }
 
 # ---- build each bundle --------------------------------------------------------------------

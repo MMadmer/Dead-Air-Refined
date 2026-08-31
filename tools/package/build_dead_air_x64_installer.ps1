@@ -19,7 +19,7 @@ param(
     # The content manifest for this release, produced by dead_air_x64_content_bundles.ps1. It
     # ships inside the Setup payload and is the trust root every later check measures against,
     # so there is no default: content is never optional.
-    [string]$ContentManifest = "D:\Games\Dead-Air-Refined_Assetsuild\content-manifest.txt"
+    [Parameter(Mandatory)][string]$ContentManifest
 )
 
 $ErrorActionPreference = "Stop"
@@ -252,6 +252,10 @@ function New-UpdateArchive {
     Copy-Item -LiteralPath $updaterOutput -Destination (Join-Path $rawOutputRoot "DeadAirUpdater.exe")
     Copy-Item -LiteralPath $maintenanceOutput -Destination (Join-Path $rawOutputRoot ".dead-air-x64\Dead-Air-Refined-Maintenance.exe")
     Copy-Item -LiteralPath $runtimeManifestPath -Destination (Join-Path $rawOutputRoot ".dead-air-x64\runtime-files.txt")
+    # The trust root travels with the payload. Without it a manual extraction produces an
+    # installation that cannot say what content it should have, comes up in recovery, and cannot
+    # even repair itself - the repair needs a manifest to repair against.
+    Copy-Item -LiteralPath $contentManifestStaged -Destination (Join-Path $rawOutputRoot ".dead-air-x64\content-manifest.txt")
 
     $manifest = [Collections.Generic.List[string]]::new()
     $manifest.Add("schema=dead-air-refined.update/1")
@@ -446,29 +450,18 @@ Build-NativeHelpers
 Build-CompatibilityArchive
 Build-MaintenanceInstaller
 
-New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
-Assert-PathInside -Parent $artifactRoot -Child $outputRoot
-Assert-PathInside -Parent $artifactRoot -Child $archivePath
-if (Test-Path -LiteralPath $outputRoot) {
-    Remove-Item -LiteralPath $outputRoot -Recurse -Force
-}
-if (Test-Path -LiteralPath $archivePath) {
-    Remove-Item -LiteralPath $archivePath -Force
-}
-New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
-
-# The content manifest is the trust root: it ships inside the Setup payload and everything
-# afterwards measures the installation against it. No default and no fallback - a build that
-# cannot find it must fail here rather than produce a Setup that installs no content.
+# The content manifest is the trust root: it ships inside every payload and everything afterwards
+# measures the installation against it. No default and no fallback - a build that cannot find it
+# must fail here rather than produce a release that installs no content.
 if (-not (Test-Path -LiteralPath $ContentManifest -PathType Leaf)) {
     throw "The content manifest was not found: $ContentManifest. Build the content bundles first."
 }
 $contentManifestStaged = Join-Path $launcherOutputRoot "content-manifest.txt"
 Copy-Item -LiteralPath $ContentManifest -Destination $contentManifestStaged -Force
 
-# Sized from the manifest itself so it cannot go stale: the sum of every declared bundle, plus
-# a tenth for the filesystem's own overhead. Bundles are committed by rename within one volume,
-# so the peak is one copy rather than two.
+# Sized from the manifest itself so it cannot go stale: the sum of every declared bundle, plus a
+# tenth for the filesystem's own overhead. Bundles are committed by rename within one volume, so
+# the peak is one copy rather than two.
 $contentBytes = 0
 $inBundles = $false
 foreach ($line in [IO.File]::ReadAllLines($contentManifestStaged)) {
@@ -482,6 +475,17 @@ if ($contentBytes -le 0) {
     throw "The content manifest declares no bundles: $ContentManifest"
 }
 $contentBytes = [int64]($contentBytes * 1.1)
+
+New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
+Assert-PathInside -Parent $artifactRoot -Child $outputRoot
+Assert-PathInside -Parent $artifactRoot -Child $archivePath
+if (Test-Path -LiteralPath $outputRoot) {
+    Remove-Item -LiteralPath $outputRoot -Recurse -Force
+}
+if (Test-Path -LiteralPath $archivePath) {
+    Remove-Item -LiteralPath $archivePath -Force
+}
+New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 
 $compilerArguments = @(
     "/DRepoRoot=$repositoryRoot",
@@ -504,6 +508,12 @@ if ($LASTEXITCODE -ne 0) {
 Copy-Item -LiteralPath (Join-Path $repositoryRoot "packaging\dead-air-x64\README_RU.md") -Destination $outputRoot
 New-UpdateArchive
 $patch = New-PatchArchive
+
+# Published alongside the installers under the name the update client looks for. It is the one
+# release asset a client fetches before deciding anything, so it cannot live only inside a
+# payload the client has not downloaded yet.
+Copy-Item -LiteralPath $contentManifestStaged `
+    -Destination (Join-Path $outputRoot "$packageName-content-manifest.txt") -Force
 
 $checksumFiles = @(Get-ChildItem -LiteralPath $outputRoot -File)
 if (-not $SkipArchive) {

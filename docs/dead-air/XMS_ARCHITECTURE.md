@@ -39,7 +39,11 @@ Runtime implementation notes:
 ## 0. The problem
 
 1. The old DA modding pipelines (JSGME layers in `gamedata\`, `xtra_*.xdb0` in `database\`) keep
-   working **as is**, without a single change on the modder's side.
+   working **as is**, without a single change on the modder's side. One name shape in `database\`
+   is reserved since content bundles shipped: an archive matching
+   `xtra_dead_air_x64_content_<group>_<NN>_<16 hex>.xdb0` mounts only when the installed content
+   manifest declares it at that exact size (`src/xrCore/Content/ContentPin.cpp`). Every other
+   archive name is untouched; the grammar and its consequences are in `MODDING.md`.
 2. On top of them — a new mod format that can do what the classics cannot: two mods edit
    one config section, one script, one level, one spawn — and **do not clobber each other**.
 3. No "monoliths that must be rewritten whole" (`all.spawn`, `game.graph`, `level.cform`,
@@ -59,7 +63,7 @@ Runtime implementation notes:
 
 | Mode | What it is | Behavior |
 |---|---|---|
-| **Legacy** | a mod as a `gamedata\` folder or `xtra_*.xdb0` | exactly as today: the last layer wins per file. Plus — now it is visible who overrode whom |
+| **Legacy** | a mod as a `gamedata\` folder or `xtra_*.xdb0` | exactly as today: the last layer wins per file (the one reserved bundle name shape aside, §0). Plus — now it is visible who overrode whom |
 | **Module** | an XMS package (`mods/<id>/`) | additive composition, conflicts are declarative |
 | **Export** | building a module into a flat `gamedata\` | for those playing on vanilla DA. Works when the mod uses no XFined-only runtime |
 
@@ -74,7 +78,7 @@ Not guesses — the exact points where things break:
 | Subsystem | What happens | Anchor |
 |---|---|---|
 | VFS | a second `Register()` of the same path silently overwrites the entry, no diagnostics | `src/xrCore/LocatorAPI.cpp:344-353` |
-| VFS | archive mount order is lexicographic by file name, no priorities | `src/xrCore/LocatorAPI.cpp:846` |
+| VFS | archive mount order is lexicographic by file name, no priorities; the only precondition is the content gate, which refuses a bundle-shaped name the manifest does not declare | `src/xrCore/LocatorAPI.cpp:1050` (sort), `:753` (gate) |
 | LTX | **a second `[section]` with the same name = Fatal**, the process dies | `src/xrCore/xr_ini.cpp:421` |
 | LTX | key-over-key inside a section is silent last-wins, no log | `src/xrCore/xr_ini.cpp:392` |
 | XML | one document = one file, no node merging, `#include "*.xml"` does not exist | `src/xrCore/XML/XMLDocument.cpp:69` |
@@ -239,9 +243,14 @@ Derived deterministically from `ns`:
 * New API `FS.r_open_all(alias, path, out)` — return **all** layers of a path. Needed by every
   merge subsystem (configs, XML, scripts).
 * Legacy layers (`gamedata\`, `xtra_*.xdb0`) get priorities by the current rules and participate in
-  the ledger equally — so already at this phase the player sees which JSGME mod clobbered what.
-* On the way, `unload_archive` is fixed (`LocatorAPI.cpp:720`): the loop `break`s after the first
-  file and leaves dangling entries pointing at a closed archive.
+  the ledger equally — so already at this phase the player sees which JSGME mod clobbered what. An
+  archive the content gate refuses never mounts, so it never reaches the ledger either; it is
+  reported through the content service instead (`dar_content_state`).
+* Still to be done here: `unload_archive` (`LocatorAPI.cpp:821`) `break`s after the first file and
+  leaves dangling entries pointing at a closed archive. It is **not** fixed. Content repair is
+  written around that — a repaired bundle cannot be mounted into the running session, so repair
+  always ends in a mandatory relaunch (`src/xrGame/ui/UIContentWnd.cpp`). Fixing the loop does not
+  by itself license remounting content in place: the file index was built without those archives.
 
 **What this gives immediately:** breaking nothing, the engine starts answering "why does my mod not
 work" — the `xms_conflicts` console command and `xms_report.json`.

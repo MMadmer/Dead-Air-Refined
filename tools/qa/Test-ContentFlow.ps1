@@ -189,6 +189,127 @@ try {
 }
 finally { Stop-Mock $mock }
 
+Write-Host "a changed bundle arrives as a delta, not as a whole bundle"
+# Two revisions of one bundle, a published delta between them, and an installation sitting on
+# the older one. The point of the case is not that the bytes come out right - the applier is
+# tested directly elsewhere - it is that the client CHOOSES the delta: the resolver has to find
+# a base among the files it is about to call obsolete, and the downloader has to fetch and apply
+# the chain instead of the bundle.
+$deltaTool = Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe"
+if (-not (Test-Path -LiteralPath $deltaTool -PathType Leaf)) {
+    # A case that cannot run is not a case that passed. This suite is a release gate, and a run
+    # that quietly drops the only delta coverage and still prints "all cases passed" is worse
+    # than one that fails: it is a green light for something nobody looked at.
+    $failures.Add("the delta case did not run: DarDelta.exe is not built (build it with tools\build\build_x64.ps1)")
+    Write-Host "  FAIL the delta case did not run: DarDelta.exe is not built" -ForegroundColor Red
+}
+else {
+    # Beside the work root, not inside it: New-Installation wipes the work root, and the fixture
+    # has to survive being installed onto.
+    $deltaRoot = "$WorkRoot-delta"
+    if (Test-Path -LiteralPath $deltaRoot) { Remove-Item -LiteralPath $deltaRoot -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $deltaRoot | Out-Null
+    Copy-Item (Join-Path $AssetRoot "*") $deltaRoot -Force
+
+    # Pick the biggest bundle, since a delta is only taken when it is decisively smaller.
+    $victim = Get-ChildItem $deltaRoot -Filter "xtra_dead_air_x64_content_*" |
+        Sort-Object Length -Descending | Select-Object -First 1
+    $slot = [regex]::Match($victim.Name, '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$').Groups[1].Value
+
+    # A small edit, which is what a delta exists for.
+    $bytes = [IO.File]::ReadAllBytes($victim.FullName)
+    $middle = [int]($bytes.Length / 2)
+    for ($i = 0; $i -lt 4096; $i++) { $bytes[$middle + $i] = [byte]((($i * 29) + 7) % 256) }
+    $newBytes = $bytes
+    $newHash = [BitConverter]::ToString(
+        [Security.Cryptography.SHA256]::HashData($newBytes)).Replace("-", "").ToLower()
+    $newName = "xtra_dead_air_x64_content_${slot}_" + $newHash.Substring(0, 16) + ".xdb0"
+    [IO.File]::WriteAllBytes((Join-Path $deltaRoot $newName), $newBytes)
+
+    $oldHash = (Get-FileHash -Algorithm SHA256 $victim.FullName).Hash.ToLower()
+    $patchName = "content_${slot}_" + $oldHash.Substring(0, 16) + "_to_" + $newHash.Substring(0, 16) + ".darpatch"
+    & $deltaTool $victim.FullName (Join-Path $deltaRoot $newName) (Join-Path $deltaRoot $patchName) | Out-Null
+    $patch = Get-Item (Join-Path $deltaRoot $patchName)
+
+    # The v2 manifest: the same bundles with one replaced, plus the edge between the two.
+    $lines = [Collections.Generic.List[string]]::new()
+    $bundleRows = [Collections.Generic.List[string]]::new()
+    $inBundles = $false
+    foreach ($line in [IO.File]::ReadAllLines($Manifest)) {
+        if ($line -eq "[bundles]") { $inBundles = $true; continue }
+        if ($line -eq "[deltas]") { $inBundles = $false; continue }
+        if (-not $inBundles) {
+            if ($line.StartsWith("content-id=")) { continue }
+            $lines.Add($line)
+            continue
+        }
+        if (-not $line.Trim()) { continue }
+        $f = $line -split "`t"
+        if ($f[2] -eq $victim.Name) {
+            $bundleRows.Add($newHash + "`t" + $newBytes.Length + "`t" + $newName + "`t" + $f[3])
+        }
+        else { $bundleRows.Add($line) }
+    }
+
+    $ordered = $bundleRows | Sort-Object { ($_ -split "`t")[2] }
+    $idInput = [Text.StringBuilder]::new()
+    foreach ($row in $ordered) {
+        $f = $row -split "`t"
+        [void]$idInput.Append($f[2]).Append("`n").Append($f[0]).Append("`n")
+    }
+    $contentId = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData(
+        [Text.Encoding]::UTF8.GetBytes($idInput.ToString()))).Replace("-", "").ToLower()
+
+    $out = [Collections.Generic.List[string]]::new()
+    $out.Add($lines[0])
+    $out.Add($lines[1])
+    $out.Add("content-id=$contentId")
+    $out.Add($lines[2])
+    $out.Add("[bundles]")
+    foreach ($row in $ordered) { $out.Add($row) }
+    $out.Add("[deltas]")
+    $out.Add((Get-FileHash -Algorithm SHA256 $patch.FullName).Hash.ToLower() + "`t" + $patch.Length +
+        "`t" + $patchName + "`t" + "content-1.4.0" + "`t" + $victim.Name + "`t" + $oldHash +
+        "`t" + $victim.Length + "`t" + $newHash)
+    $manifestV2 = Join-Path $deltaRoot "content-manifest-v2.txt"
+    [IO.File]::WriteAllText($manifestV2, [string]::Join("`n", $out) + "`n", [Text.UTF8Encoding]::new($false))
+
+    # Install v1, then hand the installation the v2 manifest.
+    New-Installation
+    $mock = Start-Mock
+    try {
+        Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot) | Out-Null
+        Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot) | Out-Null
+    }
+    finally { Stop-Mock $mock }
+
+    Copy-Item -LiteralPath $manifestV2 -Destination (Join-Path $WorkRoot ".dead-air-x64\content-manifest.txt") -Force
+    # The mock has to serve the v2 assets, so point it at the directory that holds them.
+    $deltaLog = Join-Path $deltaRoot "delta-mock.log"
+    $savedRoot = $AssetRoot
+    $AssetRoot = $deltaRoot
+    $mock = Start-Mock @{} $deltaLog
+    try {
+        $code = Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot)
+        Assert-Case "the upgrade fetch succeeds" ($code -eq 0) "exit $code, $(Get-Result)"
+
+        $served = Get-Content -LiteralPath $deltaLog -ErrorAction SilentlyContinue
+        $tookDelta = $served | Where-Object { $_ -like "*$patchName*" }
+        $tookBundle = $served | Where-Object { $_ -like "*$newName*" }
+        Assert-Case "it fetched the delta" ([bool]$tookDelta)
+        Assert-Case "it did not fetch the whole bundle" (-not $tookBundle)
+
+        $code = Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot)
+        Assert-Case "the rebuilt bundle commits" ($code -eq 0) "exit $code, $(Get-Result)"
+        Assert-Case "the rebuilt bundle is installed" `
+            (Test-Path (Join-Path $WorkRoot "database\$newName"))
+    }
+    finally {
+        Stop-Mock $mock
+        $AssetRoot = $savedRoot
+    }
+}
+
 Write-Host ""
 if ($failures.Count -eq 0) {
     Write-Host "all content flow cases passed" -ForegroundColor Green

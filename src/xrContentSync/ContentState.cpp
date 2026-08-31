@@ -1,5 +1,7 @@
 #include "ContentState.h"
 
+#include <string_view>
+
 #include "ContentManifest.h"
 
 #include <charconv>
@@ -87,6 +89,29 @@ std::uint64_t FileTime(const std::filesystem::path& path)
         return 0;
     return (static_cast<std::uint64_t>(attributes.ftLastWriteTime.dwHighDateTime) << 32) |
         attributes.ftLastWriteTime.dwLowDateTime;
+}
+
+std::string LoadContentId(const std::filesystem::path& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input)
+        return {};
+
+    std::string line;
+    if (!std::getline(input, line))
+        return {};
+    strip_eol(line);
+    if (line != std::string("schema=") + ContentManifest::SchemaState)
+        return {};
+
+    if (!std::getline(input, line))
+        return {};
+    strip_eol(line);
+
+    constexpr std::string_view prefix = "content-id=";
+    if (line.compare(0, prefix.size(), prefix) != 0)
+        return {};
+    return line.substr(prefix.size());
 }
 
 Cache LoadCache(const std::filesystem::path& path)
