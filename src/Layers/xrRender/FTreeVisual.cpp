@@ -67,6 +67,15 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
         // Msg				("hemi[%f / %f], sun[%f / %f]",c_scale.hemi,c_bias.hemi,c_scale.sun,c_bias.sun);
     }
 
+    // Natural frequency from the real height: f = 1.2 / sqrt(H) Hz is the field regression
+    // for trees (a 15 m crown swings at ~0.3 Hz, a 3 m bush at ~0.7). The old per-tree
+    // factor came from a position hash and made every tree on the map swing at roughly
+    // the same rate, size-blind.
+    {
+        const float H = std::max(vis.box.vMax.y - vis.box.vMin.y, 1.f);
+        m_wind_omega = PI_MUL_2 * 1.2f / _sqrt(H);
+    }
+
     /*if (RImplementation.o.ffp && dcl_equal(vFormat, mu_model_decl_unpacked))
     {
         const size_t vertices_size = vCount * sizeof(mu_model_vert_unpacked);
@@ -155,6 +164,50 @@ FTreeVisual_setup& GetTreeVisualSetup()
     return setup;
 }
 
+void FTreeVisual::UpdateWindState() const
+{
+    // Once per frame per tree, whichever pass gets here first (the main pass and the cascades
+    // run on different contexts; the exchange makes the first caller the integrator and the
+    // others readers).
+    const u32 frame = Device.dwFrame;
+    if (m_wind_frame.exchange(frame, std::memory_order_acq_rel) == frame)
+        return;
+    if (!g_pGamePersistent || m_wind_omega <= 0.f)
+        return;
+    const auto& env = g_pGamePersistent->Environment();
+
+    // The target is the wind at THIS root: the gust-field tongue passing over it, lifted by
+    // a gust event. The shader multiplies its own bend by q, so 1 means "exactly the wind".
+    const float target = env.SampleWindField(xform.c.x, xform.c.z) * (1.f + 0.6f * env.eff_wind_gust_event);
+
+    float dt = Device.fTimeDelta;
+    if (dt <= 0.f || dt > 0.25f)
+        dt = 0.016f;
+    // Semi-implicit Euler, sub-stepped so a stiff bush (omega ~4) stays stable at any frame
+    // rate. zeta = 0.06: two to four visible cycles of ring-down after a gust.
+    constexpr float zeta = 0.06f;
+    const float w = m_wind_omega;
+    const u32 steps = std::max(1u, u32(dt * w * 4.f) + 1);
+    const float h = dt / float(steps);
+    for (u32 i = 0; i < steps; ++i)
+    {
+        const float acc = w * w * (target - m_wind_q) - 2.f * zeta * w * m_wind_qd;
+        m_wind_qd += acc * h;
+        m_wind_q += m_wind_qd * h;
+    }
+    m_wind_q = clampr(m_wind_q, 0.05f, 2.5f);
+}
+
+Fvector4 FTreeVisual::wind_state_row(float s) const
+{
+    UpdateWindState();
+    // The shader's sway phase advances at the weather's tree speed; the factor turns that
+    // into this tree's own natural frequency.
+    const float speed = std::max(g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.m_fTreeSpeed : 1.f, 0.2f);
+    const float freq_k = clampr(m_wind_omega / speed, 0.4f, 6.f);
+    return Fvector4{s * c_scale.sun, s * c_bias.sun, m_wind_q, freq_k};
+}
+
 void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 {
     FTreeVisual_setup& tvs = GetTreeVisualSetup();
@@ -168,11 +221,12 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_m_xform(xform); // matrix
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0); // consts/scale
     cmd_list.tree.set_wave(tvs.wave); // wave
-    // Crowns freeze in the SHADOW pass for the same reason the grass does (see
-    // dx11DetailManager_VS.cpp): sub-texel smap motion turns into specular shimmer on whatever the
-    // canopy shades. The on-screen tree keeps swaying.
+    // Crowns freeze in the SHADOW pass on the lower presets for the same reason the grass does
+    // (see dx11DetailManager_VS.cpp): sub-texel smap motion turns into specular shimmer on
+    // whatever the canopy shades. On High and Extreme (r__tree_shadow_sway) the shadow sways
+    // with the crown - the cost is the wind chain once more per cascade.
 #if RENDER != R_R1
-    if (RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    if (!ps_r__tree_shadow_sway && RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
     {
         // set_wind takes a mutable ref; the value itself never changes.
         static Fvector4 wind_zero{};
@@ -191,7 +245,8 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_c_bias(s * c_bias.rgb.x + desc.ambient.x, s * c_bias.rgb.y + desc.ambient.y,
         s * c_bias.rgb.z + desc.ambient.z, s * c_bias.hemi); // bias
 #endif
-    cmd_list.tree.set_c_sun(s * c_scale.sun, s * c_bias.sun, 0, 0); // sun
+    const Fvector4 row = wind_state_row(s);
+    cmd_list.tree.set_c_sun(row.x, row.y, row.z, row.w); // sun + crown wind state
 }
 
 #ifdef USE_DX11
@@ -206,7 +261,7 @@ void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
     // take the frozen wind. Without this the batched trees swayed in the cascades while the
     // scalar-path trees stood still, and the mismatch showed as a crown's shadow sliding
     // across the ground it stands on.
-    if (RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    if (!ps_r__tree_shadow_sway && RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
     {
         static Fvector4 wind_zero{};
         cmd_list.tree.set_wind(wind_zero);
@@ -233,7 +288,7 @@ void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& 
         scale * c_scale.hemi);
     data.vectors[7].set(scale * c_bias.rgb.x, scale * c_bias.rgb.y, scale * c_bias.rgb.z,
         scale * c_bias.hemi);
-    data.vectors[8].set(scale * c_scale.sun, scale * c_bias.sun, 0, 0);
+    data.vectors[8] = wind_state_row(scale);
 }
 #endif
 

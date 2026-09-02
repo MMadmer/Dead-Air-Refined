@@ -189,6 +189,9 @@ int ps_r__light_dyn_shared = 1;
 // actor's body and the item's world model already cast. Maximum preset only (see CCC_Preset).
 int ps_r__hud_shadow = 0;
 int ps_r__actor_shadow = 0;
+// Trees sway in the sun cascades too (their shadows move with the crowns). Below High the
+// shadow pass keeps the frozen wind: the deformation runs once more per cascade there.
+int ps_r__tree_shadow_sway = 0;
 // How far the self-shadow lifts a sample off its own surface, in metres, and how much depth
 // slope one shadow texel may carry. Both exist for the same reason the sun has its own depth
 // bias pair: the deferred position a first-person pixel reconstructs from is not exactly on
@@ -931,6 +934,10 @@ void xrRender_sync_preset_derived()
     ps_r__light_details = light_details_by_preset[ps_Preset];
     ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
+    // Swaying tree shadows: the full wind chain in every cascade the tree lands in. Measured
+    // on the rig as a per-cascade vertex cost only, so the two top presets carry it.
+    static constexpr int tree_shadow_sway_by_preset[] = {0, 0, 0, 1, 1};
+    ps_r__tree_shadow_sway = tree_shadow_sway_by_preset[ps_Preset];
     ps_r__sss = sss_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
@@ -1318,6 +1325,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__light_dyn_shared", &ps_r__light_dyn_shared, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__actor_shadow", &ps_r__actor_shadow, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__tree_shadow_sway", &ps_r__tree_shadow_sway, 0, 1);
     CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);
     CMD4(CCC_Float, "r__hud_shadow_slope_bias", &ps_r__hud_shadow_slope_bias, 0.f, 0.05f);
     CMD4(CCC_Float, "r__sss", &ps_r__sss, 0.f, 1.f);

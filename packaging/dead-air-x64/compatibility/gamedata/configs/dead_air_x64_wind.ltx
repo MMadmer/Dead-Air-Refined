@@ -11,6 +11,14 @@
 ; Substring defaults below cover the whole AF3 set (af3_<light>_<sky>) plus the default_*
 ; and special cycles. Add exact names to fine-tune a single cycle.
 
+; Service tunables.
+;   z0 - surface roughness length in metres, the one number behind the vertical profile:
+;        0.03 is open grassland, 0.1 farmland with hedges, 0.3-0.5 forest and village. The
+;        Zone is mostly the middle case. It sets how much faster the wind is at a treetop
+;        than at the grass, and how fast the cloud deck moves relative to the ground.
+[wind_service]
+z0 = 0.12
+
 [wind_profiles]
 storm        = 0.95
 thunder      = 0.85

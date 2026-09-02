@@ -609,9 +609,30 @@ void CEnvironment::lerp()
 // Console "wind_dbg 1": dump the live wind-service numbers every 2 s. Tuning is done against
 // what the game actually computes, not against what the formulas promise.
 ENGINE_API int ps_e_wind_dbg = 0;
+// A seed asked for before the environment existed (user.ltx runs before the level does):
+// consumed at the service's first tick. -1 = none.
+ENGINE_API float g_wind_seed_override = -1.f;
+
+// The wind-field maths, shared with the vertex shaders: one file, two compilers.
+#include "../../packaging/dead-air-x64/compatibility/gamedata/shaders/r3/da_wind_core.h"
 
 namespace
 {
+// Deterministic generator for the gust events. Seeded from the session seed, so a pinned
+// -wind_seed replays the same gusts at the same times; never touches the engine's global
+// Random, whose sequence gameplay consumes.
+struct wind_rng
+{
+    u32 state{0x9E3779B9u};
+    float next()
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return float(state & 0xFFFFFFu) * (1.f / 16777216.f);
+    }
+} g_wind_rng;
+
 // C1-smooth 1D value noise for the wind service: random values on an integer lattice,
 // smoothstep-interpolated between them. Cheap, continuous, no library dependencies.
 float wind_vnoise(float x)
@@ -627,41 +648,107 @@ float wind_vnoise(float x)
 }
 } // namespace
 
-// CPU twin of da_wind_field_eval (the amplitude half). MUST stay formula-identical to
-// packaging\...\shaders\r3\da_wind_field.h - the audio layer decides "does that tree rustle"
-// with this, and the tree it hears must be the tree it sees leaning.
+// The gust field at a world point - the very function the vertex shaders run
+// (da_wind_core.h), so what the audio hears, what a bullet drifts by and what the eye sees
+// leaning are one wind.
 float CEnvironment::SampleWindField(float x, float z) const
 {
-    // shader: p = frac(fmod(i+4096,64) * {127.1,311.7}); p += dot(p, p+34.23); frac(p.x*p.y)
-    const auto lattice = [](float ix, float iz) {
-        float hx = fmodf(fmodf(ix + 4096.f, 64.f) * 127.1f, 1.f);
-        float hz = fmodf(fmodf(iz + 4096.f, 64.f) * 311.7f, 1.f);
-        const float d = hx * (hx + 34.23f) + hz * (hz + 34.23f);
-        hx += d;
-        hz += d;
-        const float r = hx * hz;
-        return r - floorf(r);
-    };
-    const auto vnoise = [&](float px, float pz) {
-        const float ix = floorf(px), iz = floorf(pz);
-        float fx = px - ix, fz = pz - iz;
-        fx = fx * fx * (3.f - 2.f * fx);
-        fz = fz * fz * (3.f - 2.f * fz);
-        const float a = lattice(ix, iz), b = lattice(ix + 1.f, iz);
-        const float c = lattice(ix, iz + 1.f), d = lattice(ix + 1.f, iz + 1.f);
-        return (a * (1.f - fx) + b * fx) * (1.f - fz) + (c * (1.f - fx) + d * fx) * fz;
-    };
+    return da_wind_field_amp(da_wind_field_gust(x, z, eff_wind_field_ofs.x, eff_wind_field_ofs.y));
+}
 
-    const float qx = (x - eff_wind_field_ofs.x) * (1.f / 40.f);
-    const float qz = (z - eff_wind_field_ofs.y) * (1.f / 40.f);
-    const float n = vnoise(qx, qz) * 0.62f + vnoise(qx * 2.17f + 13.7f, qz * 2.17f + 13.7f) * 0.38f;
-    float g = clampr((n - 0.35f) / 0.5f, 0.f, 1.f);
-    g = g * g * (3.f - 2.f * g); // smoothstep
-    g *= g;
-    // Lulls at 60 % of nominal, gust tongues to 125 %: identical to da_wind_field.h. The two
-    // had drifted (0.40 + 0.75 g here against the shader's 0.60 + 0.65 g), so at lull spots
-    // the audio judged the wind a third weaker than the eye saw it and stayed silent.
-    return 0.60f + 0.65f * g;
+float CEnvironment::SampleWindDeviation(float x, float z) const
+{
+    return da_wind_field_dev(x, z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
+}
+
+float CEnvironment::WindSpeedMs() const { return eff_wind_norm * DA_WIND_MS_PER_NORM; }
+
+Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p) const
+{
+    // The shader's da_wind_motors_bend, direction kept, in metres per second of air: a blast
+    // ring pushes outward from its centre, a line motor drags along the shot, a press pushes
+    // radially. The bend amplitudes are unit-less; 6 m/s per unit turns "grass flattened by a
+    // grenade" into a push that sends a can rolling, which is what the eye expects to see.
+    Fvector out{0.f, 0.f, 0.f};
+    for (u32 i = 0; i < wind_motor_count; ++i)
+    {
+        const Fmatrix& P = wind_motor_pos[i / 4];
+        const Fmatrix& A = wind_motor_par[i / 4];
+        const float* prow = &P.m[i % 4][0];
+        const float* arow = &A.m[i % 4][0];
+        if (prow[3] <= 0.f || _abs(arow[0]) <= 0.001f)
+            continue;
+        float dx = p.x - prow[0];
+        float dz = p.z - prow[2];
+        if (arow[3] > 0.5f)
+        {
+            const float along = clampr(dx * arow[1] + dz * arow[2], 0.f, prow[3]);
+            dx -= arow[1] * along;
+            dz -= arow[2] * along;
+            const float dist = _sqrt(dx * dx + dz * dz);
+            const float trace_y = prow[1] + (arow[3] - 1.f) * along;
+            const float dy = trace_y - p.y;
+            const float dist3 = _sqrt(dist * dist + dy * dy);
+            if (dist3 > 0.45f)
+                continue;
+            const float t = dist3 * (1.f / 0.16f);
+            const float w = expf(-t * t) * arow[0] * 6.f;
+            out.x += arow[1] * w;
+            out.z += arow[2] * w;
+            continue;
+        }
+        const float dist = _sqrt(dx * dx + dz * dz);
+        if (dist > prow[3] + arow[2] * 2.f || dist < 0.001f)
+            continue;
+        float amp = arow[0];
+        const bool is_blast = arow[3] < -0.5f;
+        if (is_blast)
+            amp *= std::min(1.1f, (0.25f * prow[3]) / std::max(dist, 0.5f)) *
+                clampr((prow[3] - dist) / (0.30f * prow[3]), 0.f, 1.f);
+        const float t = (dist - arow[1]) / arow[2];
+        float w = expf(-t * t);
+        if (is_blast && dist < arow[1])
+        {
+            const float tau = (arow[1] - dist) * (1.f / 22.f);
+            w = expf(-tau * 3.5f) * cosf(tau * 9.f);
+        }
+        const float k = w * amp * 6.f / dist;
+        out.x += dx * k;
+        out.z += dz * k;
+    }
+    return out;
+}
+
+Fvector CEnvironment::WindAt(const Fvector& pos, float height_above_ground) const
+{
+    const float g = da_wind_field_gust(pos.x, pos.z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
+    const float dev = da_wind_field_dev(pos.x, pos.z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
+    const float heading = eff_wind_dir + da_wind_dev_angle(dev, eff_wind_norm);
+    const float speed = WindSpeedMs() * da_wind_field_amp(g) * da_wind_profile(height_above_ground, eff_wind_z0);
+    Fvector v;
+    v.set(_sin(heading) * speed, 0.f, _cos(heading) * speed);
+    v.add(SampleWindMotorsVec(pos));
+    return v;
+}
+
+float CEnvironment::WindExposure(const Fvector& pos) const
+{
+    if (!g_pGameLevel)
+        return 0.f;
+    collide::rq_result rq;
+    Fvector start = pos;
+    start.y += 0.8f; // clear the caller's own capsule and the ground
+    static const Fvector up = {0.f, 1.f, 0.f};
+    // Under a roof or indoors: no wind at all. The old test stopped here, which is why a wall
+    // on the windward side never sheltered anyone.
+    if (g_pGameLevel->ObjectSpace.RayPick(start, up, 35.f, collide::rqtStatic, rq, nullptr))
+        return 0.f;
+    // Upwind: the air arrives from the side the wind blows FROM.
+    Fvector upwind;
+    upwind.set(-_sin(eff_wind_dir), 0.f, -_cos(eff_wind_dir));
+    if (g_pGameLevel->ObjectSpace.RayPick(start, upwind, 12.f, collide::rqtStatic, rq, nullptr))
+        return 0.35f; // in the lee: the wind still swirls round, at a third
+    return 1.f;
 }
 
 float CEnvironment::weather_wind_profile()
@@ -688,6 +775,10 @@ float CEnvironment::weather_wind_profile()
                     [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
                 Msg("* [wind] %u weather wind profile(s) loaded", u32(table.size()));
             }
+            // Service tunables: the roughness length that shapes the vertical profile (0.03 m
+            // is open grassland; a level of forest and village sits nearer 0.3).
+            if (ini.section_exist("wind_service") && ini.line_exist("wind_service", "z0"))
+                eff_wind_z0 = clampr(ini.r_float("wind_service", "z0"), 0.001f, 2.f);
         }
         else
             Msg("! [wind] dead_air_x64_wind.ltx not found - weather wind profiles disabled");
@@ -1040,14 +1131,27 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
             radius, pos.x, pos.y, pos.z);
 }
 
-void CEnvironment::UpdateEffectiveWind()
+void CEnvironment::wind_reseed(float seed)
 {
-    // Per-session seed: every noise below is a pure function of time, and time starts near
-    // zero every launch - so every session used to OPEN with the same wind heading and the
-    // same first gusts. One random offset shifts the whole session elsewhere in the field.
-    if (eff_wind_seed < 0.f)
-        eff_wind_seed = ::Random.randF(0.f, 4096.f);
-    const float t = Device.fTimeGlobal + eff_wind_seed;
+    eff_wind_seed = seed < 0.f ? ::Random.randF(0.f, 4096.f) : seed;
+    eff_wind_time = 0.f;
+    eff_wind_tick_acc = 0.f;
+    for (auto& g : wind_gusts)
+        g.used = false;
+    eff_wind_gust_event = 0.f;
+    g_wind_rng.state = 0x9E3779B9u ^ u32(eff_wind_seed * 977.f);
+    if (g_wind_rng.state == 0)
+        g_wind_rng.state = 1;
+    Msg("* [wind] reseeded: %.1f", eff_wind_seed);
+}
+
+// One fixed step of the wind service. Everything that is a function of time or accumulates
+// lives here and sees the same dt on every machine; the per-frame packing of motors stays in
+// UpdateEffectiveWind.
+void CEnvironment::wind_tick(float delta)
+{
+    eff_wind_time += delta;
+    const float t = eff_wind_time + eff_wind_seed;
     // Weather ceiling. Two hard facts from the field (wind_dbg on real DA configs):
     //  * wind_velocity is a LEGACY 0..1000-ish scale (typical live values 10..500), not m/s -
     //    dividing by 20 saturated every nonzero weather to "hurricane" and erased the range;
@@ -1057,9 +1161,6 @@ void CEnvironment::UpdateEffectiveWind()
     // (blowout fx set 100..500 and keep their gale), the PER-WEATHER PROFILE mapped from the
     // cycle name (dead_air_x64_wind.ltx - a storm cycle IS windy even though its config only
     // says "rain and clouds"), and the wind implied by precipitation as the floor under both.
-    float delta = Device.fTimeDelta;
-    if (delta < 0.f || delta > 1.f)
-        delta = 0.03f;
 
     const float base_cfg = powf(clampr(CurrentEnv.wind_velocity / 400.f, 0.f, 1.f), 0.8f);
     const float base_implied = 0.10f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
@@ -1070,7 +1171,8 @@ void CEnvironment::UpdateEffectiveWind()
         wind_profile_smooth = std::max(profile, 0.f); // first frame: no swell-in from zero
     wind_profile_smooth +=
         (std::max(profile, 0.f) - wind_profile_smooth) * (1.f - expf(-delta / 12.f));
-    const float base = std::max({base_cfg, wind_profile_smooth, base_implied});
+    const float base = eff_wind_force >= 0.f ? eff_wind_force : std::max({base_cfg, wind_profile_smooth, base_implied});
+    eff_wind_base = base;
 
     // Three time scales, deliberately incommensurable so the pattern never visibly loops:
     // a minute-scale trend (lulls and freshenings), ~14 s waves, and a fast layer that only
@@ -1083,7 +1185,45 @@ void CEnvironment::UpdateEffectiveWind()
     const float n_wave = wind_vnoise(t * (1.f / 14.f) + 17.3f);
     const float n_fast = wind_vnoise(t * (1.f / 5.5f) + 29.1f);
     const float gust_thr = 0.55f + 0.25f * (1.f - base);
-    const float gust_ev = clampr((n_fast - gust_thr) / std::max(1.f - gust_thr, 0.05f), 0.f, 1.f);
+    float gust_ev = clampr((n_fast - gust_thr) / std::max(1.f - gust_thr, 0.05f), 0.f, 1.f);
+
+    // ---- Discrete gust events. -------------------------------------------------------------
+    // Poisson arrivals: a calm day gets one every couple of minutes, a storm several a minute.
+    // Each is a raised-cosine envelope with a quicker attack than release (a gust hits, then
+    // lets go), 3-10 s long, stronger in stronger weather. Three may overlap.
+    {
+        const float rate = (1.f / 150.f) + base * (1.f / 25.f); // per second
+        if (g_wind_rng.next() < rate * delta)
+        {
+            for (auto& g : wind_gusts)
+            {
+                if (g.used)
+                    continue;
+                g.used = true;
+                g.start = eff_wind_time;
+                g.duration = 3.f + 7.f * g_wind_rng.next();
+                g.amplitude = (0.25f + 0.35f * g_wind_rng.next()) * (0.5f + base);
+                break;
+            }
+        }
+        float sum = 0.f;
+        for (auto& g : wind_gusts)
+        {
+            if (!g.used)
+                continue;
+            const float u = (eff_wind_time - g.start) / g.duration;
+            if (u >= 1.f)
+            {
+                g.used = false;
+                continue;
+            }
+            // u^0.7 skews the peak early: attack ~40 % of the duration, release the rest.
+            const float phase = powf(clampr(u, 0.f, 1.f), 0.7f);
+            sum += g.amplitude * (0.5f - 0.5f * cosf(phase * PI_MUL_2));
+        }
+        eff_wind_gust_event = clampr(sum, 0.f, 1.f);
+        gust_ev = clampr(gust_ev + eff_wind_gust_event, 0.f, 1.f);
+    }
 
     // Variability inside the weather envelope: a calm day swings between near-nothing and its
     // own light ceiling, a storm between fresh and violent. Balanced so the AVERAGE sits near
@@ -1129,9 +1269,13 @@ void CEnvironment::UpdateEffectiveWind()
     eff_wind_field_ofs.x = fmodf(eff_wind_field_ofs.x + field_repeat, field_repeat);
     eff_wind_field_ofs.y = fmodf(eff_wind_field_ofs.y + field_repeat, field_repeat);
 
-    // Cloud shadows ride the high-altitude wind: noticeably faster than the ground gust
-    // field. The sun pass turns this run into the stock cloud-projection shift.
-    eff_cloud_run = fmodf(eff_cloud_run + (5.f + 10.f * base) * delta, 1.e6f);
+    // The wind aloft: the surface-layer log profile evaluated at the cloud deck (1.5 km) over
+    // the level's roughness, capped absolutely - the profile is unbounded as a ratio and a
+    // storm would otherwise put the clouds at highway speed. The cloud deck and its shadow
+    // travel this many METRES per second along eff_wind_dir_aloft; the accumulator wraps far
+    // out only to guard against infinity.
+    eff_wind_aloft_ms = std::min(25.f, WindSpeedMs() * da_wind_profile(1500.f, eff_wind_z0));
+    eff_cloud_run = fmodf(eff_cloud_run + std::max(eff_wind_aloft_ms, 0.4f) * delta, 1.e6f);
 
     // ---- Tree sway phase. ------------------------------------------------------------------
     // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly) at a
@@ -1156,6 +1300,46 @@ void CEnvironment::UpdateEffectiveWind()
     eff_water_run_rain = fmodf(eff_water_run_rain + delta * (rain_k * 2.2f) * 12.f, water_wrap);
     eff_water_run_wind =
         fmodf(eff_water_run_wind + delta * (0.05f + 0.75f * eff_wind_norm) * 12.f, water_wrap);
+
+}
+
+void CEnvironment::UpdateEffectiveWind()
+{
+    // Per-session seed: every noise is a pure function of the service clock, which starts
+    // near zero every launch - so every session used to OPEN with the same wind heading and
+    // the same first gusts. One offset shifts the whole session elsewhere in the field.
+    // -wind_seed N pins it (benchmarks, screenshot comparisons); so does the console.
+    if (eff_wind_seed < 0.f)
+    {
+        float pinned = g_wind_seed_override;
+        if (pcstr p = strstr(Core.Params, "-wind_seed "))
+            pinned = float(atof(p + 11));
+        eff_wind_seed = pinned >= 0.f ? pinned : ::Random.randF(0.f, 4096.f);
+        g_wind_rng.state = 0x9E3779B9u ^ u32(eff_wind_seed * 977.f);
+        if (g_wind_rng.state == 0)
+            g_wind_rng.state = 1;
+        Msg("* [wind] seed %.1f%s", eff_wind_seed, pinned >= 0.f ? " (pinned)" : "");
+    }
+
+    // Fixed 60 Hz ticks. A frame longer than eight ticks (a load hitch) drops its remainder
+    // rather than fast-forwarding the wind through it.
+    float delta = Device.fTimeDelta;
+    if (delta < 0.f || delta > 1.f)
+        delta = 0.03f;
+    if (!eff_wind_freeze)
+    {
+        constexpr float tick = 1.f / 60.f;
+        eff_wind_tick_acc += delta;
+        int steps = 0;
+        while (eff_wind_tick_acc >= tick && steps < 8)
+        {
+            wind_tick(tick);
+            eff_wind_tick_acc -= tick;
+            ++steps;
+        }
+        if (steps == 8)
+            eff_wind_tick_acc = 0.f;
+    }
 
     // ---- Wind motors: simulate and pack for the vegetation shaders. ------------------------
     const float now = Device.fTimeGlobal;
@@ -1346,11 +1530,11 @@ void CEnvironment::UpdateEffectiveWind()
             for (const auto& m : wind_motors)
                 if (m.used)
                     ++live;
-            Msg("* [wind] vel=%.1f base=%.2f norm=%.2f var=%.2f gust=%.2f dir=%.0f deg | motors=%u "
-                "green=%.2f rain=%.2f | fog_far=%.0f fog_near=%.0f",
-                CurrentEnv.wind_velocity, base, eff_wind_norm, eff_wind_var, eff_wind_gust,
-                rad2deg(eff_wind_dir), live, wind_veg_green, rain_k, CurrentEnv.fog_far,
-                CurrentEnv.fog_near);
+            Msg("* [wind] vel=%.1f base=%.2f norm=%.2f (%.1f m/s) var=%.2f gust=%.2f ev=%.2f dir=%.0f deg "
+                "aloft=%.1f m/s @%.0f deg | motors=%u green=%.2f rain=%.2f | t=%.1f",
+                CurrentEnv.wind_velocity, eff_wind_base, eff_wind_norm, WindSpeedMs(), eff_wind_var,
+                eff_wind_gust, eff_wind_gust_event, rad2deg(eff_wind_dir), eff_wind_aloft_ms,
+                rad2deg(eff_wind_dir_aloft), live, wind_veg_green, CurrentEnv.rain_density, eff_wind_time);
         }
     }
 }

@@ -559,11 +559,15 @@ void CCustomRocket::PhTune(float step)
     if (m_pPhysicsShell && m_pPhysicsShell->isActive())
     {
         const auto& env = g_pGamePersistent->Environment();
-        const float w = env.eff_wind_norm * 11.f; // m/s
-        if (w > 0.5f && !env.wind_sheltered(Position()))
+        // Sampled where the grenade IS, at its height: a blast ring from a neighbouring
+        // explosion pushes it too, and the exposure of the spot (a doorway, a trench) scales
+        // it the same way it scales the bullets fired from there.
+        Fvector wind = env.WindAt(Position(), 1.5f);
+        const float exposure = env.WindExposure(Position());
+        wind.mul(exposure);
+        const float w = wind.magnitude();
+        if (w > 0.5f)
         {
-            Fvector wind;
-            wind.set(_sin(env.eff_wind_dir) * w, 0.f, _cos(env.eff_wind_dir) * w);
             Fvector vel;
             m_pPhysicsShell->get_LinearVel(vel);
             Fvector dir = vel;

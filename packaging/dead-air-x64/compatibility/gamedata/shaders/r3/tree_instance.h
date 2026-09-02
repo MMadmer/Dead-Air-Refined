@@ -41,9 +41,13 @@ float4 tree_instance_bias(uint instance_id)
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 7];
 }
 
-float2 tree_instance_sun(uint instance_id)
+// Row 8: xy = the static sun scale/bias, z = the tree's WIND STATE - the CPU-integrated
+// damped-oscillator response of this crown (1 = following the wind exactly, above 1 while it
+// overshoots after a gust, below while it lags), w = its natural-frequency factor from the
+// real height of the model. The scalar path passes the same four in c_sun.
+float4 tree_instance_sun(uint instance_id)
 {
-    return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 8].xy;
+    return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 8];
 }
 
 #endif

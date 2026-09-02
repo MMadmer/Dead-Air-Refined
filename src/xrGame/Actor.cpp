@@ -1384,14 +1384,22 @@ void CActor::UpdateCL()
         // (running upwind just gets a touch heavier), but airborne - a jump, a fall - the
         // same force genuinely drifts you. Nobody gets carried away in a breeze: below a
         // stiff wind the force is single-digit newtons and the threshold skips it entirely.
-        const float w_ms = env.eff_wind_norm * 11.f;
-        if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
-            !env.wind_sheltered(Position()))
+        // The local wind at chest height: the gust field, the eddy, the height profile and any
+        // blast ring are all in it; exposure kills it under a roof and thirds it behind a wall.
+        if (env.WindSpeedMs() > 3.f && character_physics_support() && character_physics_support()->movement())
         {
-            Fvector wind_f;
-            wind_f.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
-            wind_f.mul(0.46f * w_ms * w_ms);
-            character_physics_support()->movement()->ApplySteadyForce(wind_f);
+            const float exposure = env.WindExposure(Position());
+            if (exposure > 0.f)
+            {
+                Fvector wind_v = env.WindAt(Position(), 1.2f);
+                const float w_ms = wind_v.magnitude();
+                if (w_ms > 4.f)
+                {
+                    Fvector wind_f = wind_v;
+                    wind_f.mul(0.46f * w_ms * exposure);
+                    character_physics_support()->movement()->ApplySteadyForce(wind_f);
+                }
+            }
         }
     }
 

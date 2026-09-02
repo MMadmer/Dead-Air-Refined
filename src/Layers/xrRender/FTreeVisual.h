@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "FBasicVisual.h"
 
 struct FSlideWindowItem;
@@ -39,6 +41,23 @@ protected:
     _5color c_scale;
     _5color c_bias;
     Fmatrix xform;
+
+    // The crown's memory. A tree is a damped oscillator: it lags a gust, overshoots after it
+    // and rings down over several cycles (measured damping ratios sit at 0.04-0.09). The
+    // shader can only be a function of "now", so the state lives here and is integrated once
+    // per frame for every tree that is drawn; the shader multiplies its bend by it.
+    //   m_wind_q      - response, 1 = following the wind exactly
+    //   m_wind_qd     - its rate
+    //   m_wind_omega  - natural angular frequency from the model's height (rad/s)
+    //   m_wind_frame  - frame the state was last integrated in (first caller wins)
+    mutable float m_wind_q{1.f};
+    mutable float m_wind_qd{};
+    float m_wind_omega{};
+    mutable std::atomic<u32> m_wind_frame{};
+    void UpdateWindState() const;
+    // Row 8 of the per-instance data / c_sun of the scalar path: (sun scale, sun bias,
+    // state, frequency factor for the sway phase).
+    Fvector4 wind_state_row(float s) const;
 
 public:
     // The vegetation-audio layer harvests tree world positions once per level load.

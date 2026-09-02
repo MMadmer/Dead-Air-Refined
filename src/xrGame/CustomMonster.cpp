@@ -453,12 +453,13 @@ void CCustomMonster::UpdateCL()
         if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
             env.wind_motor_press(Position(), 0.6f, 1.0f);
 
-        const float w_ms = env.eff_wind_norm * 11.f;
-        if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement() &&
-            !env.wind_sheltered(Position()))
+        Fvector wind_v = env.WindAt(Position(), 1.0f);
+        const float exposure = env.WindSpeedMs() > 3.f ? env.WindExposure(Position()) : 0.f;
+        const float w_ms = wind_v.magnitude() * exposure;
+        if (w_ms > 4.f && character_physics_support() && character_physics_support()->movement())
         {
-            Fvector wind_f;
-            wind_f.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
+            Fvector wind_f = wind_v;
+            wind_f.normalize_safe();
             wind_f.mul(0.46f * w_ms * w_ms);
             character_physics_support()->movement()->ApplySteadyForce(wind_f);
         }

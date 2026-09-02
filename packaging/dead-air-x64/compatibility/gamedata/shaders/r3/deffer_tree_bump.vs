@@ -7,7 +7,7 @@ uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
 uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
-uniform float2 c_sun;
+uniform float4 c_sun;
 
 v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
 {
@@ -19,7 +19,7 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float3x4 local_xform_v = m_xform_v;
     float4 local_c_scale = c_scale;
     float4 local_c_bias = c_bias;
-    float2 local_c_sun = c_sun;
+    float4 local_c_sun = c_sun;
     if (tree_instance_control.x > 0.5f)
     {
         local_xform = tree_instance_xform(instance_id);
@@ -37,15 +37,22 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     // heading + flexibility rule + total-bend cap: all identical to deffer_tree_flat.vs -
     // see the notes there.
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
-    const float freq_k = 0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f);
+    // Natural frequency from the model's real height (CPU, c_sun.w) - a birch does not swing
+    // at an oak's rate. The position hash is only the fallback for a tree without one.
+    const float freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
+    // The crown's memory: a damped oscillator integrated on the CPU tracks the wind at this
+    // root (c_sun.z). It lags a gust, overshoots after it and rings down over several
+    // cycles - the thing an algebraic response can never do, and the thing the eye reads
+    // as a real tree rather than a waving card.
+    const float q_state = local_c_sun.z > 0.001f ? local_c_sun.z : 1.0f;
     const float wind_k = saturate(da_wind_field.z);
     const float sway_mean = 0.45f + 0.35f * wind_k;
     float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(root3, (float3)wave));
-    float inten = H * dp;
+    float inten = H * dp * q_state;
     float3 flow = da_wind_field_eval(root3.xz);
     const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
     float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
-    result += wdir * (H * flow.y * 0.5f * frac);
+    result += wdir * (H * flow.y * 0.5f * frac * q_state);
     // Motors reach bushes only - see deffer_tree_flat.vs.
     float press_unused;
     result += da_wind_motors_bend(root3, H, press_unused) *

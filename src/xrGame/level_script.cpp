@@ -360,6 +360,30 @@ void remove_calls_for_object(const luabind::object& lua_object)
 
 CEnvironment* environment() { return (g_pGamePersistent->pEnvironment); }
 CEnvDescriptor* current_environment(CEnvironment* self) { return &self->CurrentEnv; }
+
+// ---- The wind service, for scripts. ---------------------------------------------------------
+// Everything a mod might want to ask or do: the mean speed and heading, the local wind at a
+// point (gust field, eddies, height profile, blast rings), how exposed a point is, and two
+// ways to push on it - a blast ring (an explosion the engine did not see) and a freeze for
+// screenshots. Speeds are m/s, headings radians (0 = +Z, clockwise from above).
+float env_wind_speed(CEnvironment* self) { return self->WindSpeedMs(); }
+float env_wind_direction(CEnvironment* self) { return self->eff_wind_dir; }
+float env_wind_gust(CEnvironment* self) { return self->eff_wind_gust; }
+Fvector env_wind_at(CEnvironment* self, const Fvector& pos) { return self->WindAt(pos, 1.5f); }
+Fvector env_wind_at_height(CEnvironment* self, const Fvector& pos, float height)
+{
+    return self->WindAt(pos, height);
+}
+float env_wind_exposure(CEnvironment* self, const Fvector& pos) { return self->WindExposure(pos); }
+void env_wind_blast(CEnvironment* self, const Fvector& pos, float radius, float strength)
+{
+    self->wind_motor_impulse(pos, radius, strength);
+}
+void env_wind_press(CEnvironment* self, const Fvector& pos, float radius, float strength)
+{
+    self->wind_motor_press(pos, radius, strength);
+}
+void env_wind_freeze(CEnvironment* self, bool freeze) { self->eff_wind_freeze = freeze ? 1 : 0; }
 extern bool g_bDisableAllInput;
 extern bool g_bDisableAllActions;
 void disable_input()
@@ -728,7 +752,16 @@ void CLevel::script_register(lua_State* luaState)
         .def_readonly("far_plane", &CEnvDescriptor::far_plane),
 
     class_<CEnvironment>("CEnvironment")
-        .def("current", current_environment);
+        .def("current", current_environment)
+        .def("wind_speed", env_wind_speed)
+        .def("wind_direction", env_wind_direction)
+        .def("wind_gust", env_wind_gust)
+        .def("wind_at", env_wind_at)
+        .def("wind_at_height", env_wind_at_height)
+        .def("wind_exposure", env_wind_exposure)
+        .def("wind_blast", env_wind_blast)
+        .def("wind_press", env_wind_press)
+        .def("wind_freeze", env_wind_freeze);
 
     module(luaState)
     [

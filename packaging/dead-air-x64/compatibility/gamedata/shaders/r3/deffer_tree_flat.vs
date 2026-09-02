@@ -7,7 +7,7 @@ uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
 uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
-uniform float2 c_sun;
+uniform float4 c_sun;
 
 v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
 {
@@ -19,7 +19,7 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     float3x4 local_xform_v = m_xform_v;
     float4 local_c_scale = c_scale;
     float4 local_c_bias = c_bias;
-    float2 local_c_sun = c_sun;
+    float4 local_c_sun = c_sun;
     if (tree_instance_control.x > 0.5f)
     {
         local_xform = tree_instance_xform(instance_id);
@@ -51,11 +51,18 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // spring around it - a plant under CONSTANT wind never straightens back up, the full
     // lean-recover cycle belongs to gusts (which the field's tongues add on top).
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
-    const float freq_k = 0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f);
+    // Natural frequency from the model's real height (CPU, c_sun.w) - a birch does not swing
+    // at an oak's rate. The position hash is only the fallback for a tree without one.
+    const float freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
+    // The crown's memory: a damped oscillator integrated on the CPU tracks the wind at this
+    // root (c_sun.z). It lags a gust, overshoots after it and rings down over several
+    // cycles - the thing an algebraic response can never do, and the thing the eye reads
+    // as a real tree rather than a waving card.
+    const float q_state = local_c_sun.z > 0.001f ? local_c_sun.z : 1.0f;
     const float wind_k = saturate(da_wind_field.z);
     const float sway_mean = 0.45f + 0.35f * wind_k;
     float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(root3, (float3)wave));
-    float inten = H * dp;
+    float inten = H * dp * q_state;
     // Local flow from the travelling gust field at the TREE ROOT: a gust tongue leans this
     // crown while the next tree over stands in a lull. The z channel turns the LOCAL heading:
     // neighbouring trees in a meander lean slightly different ways, and the swirl travels.
@@ -67,7 +74,7 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // the rigid trunk sideways as a whole ("the tree slides on XY"), which is exactly what
     // a field test showed. Roots are anchored; everything bends as an arc from them.
     float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
-    result += wdir * (H * flow.y * 0.5f * frac);
+    result += wdir * (H * flow.y * 0.5f * frac * q_state);
     // Motors (blast rings, shot traces) reach BUSHES only: the height weight dies out by
     // ~3.5 m, so a bush - all its foliage sits low - shivers fully, while a tree crown is
     // out of reach and the stiff lower trunk is killed by the baked-flexibility factor.

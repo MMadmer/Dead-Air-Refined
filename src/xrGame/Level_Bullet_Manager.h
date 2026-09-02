@@ -48,6 +48,10 @@ struct SBullet
 
     float fly_dist{}; //дистанция которую пуля пролетела
     Fvector tracer_start_position;
+    // The wind this bullet flies through (m/s, world), sampled ONCE at the muzzle with the
+    // shooter's exposure applied: a shot from a doorway is sheltered like the grenade thrown
+    // from it, and a gust mid-flight no longer bends the whole trajectory back to the muzzle.
+    Fvector wind{};
 
     Fvector start_position;
     Fvector start_velocity;

@@ -335,9 +335,54 @@ public:
     float eff_water_run_rain{};
     float eff_water_run_wind{};
 
-    // CPU twin of da_wind_field_eval (amplitude half): the audio layer asks "how hard does the
-    // wind blow AT THAT TREE right now". Must stay formula-identical to da_wind_field.h.
+    // The service clock. Advanced in fixed 60 Hz ticks from the frame time, so every noise
+    // and every accumulator sees the same dt on every machine, and a pinned seed replays the
+    // same wind. Frozen by wind_freeze for screenshots.
+    float eff_wind_time{};
+    float eff_wind_tick_acc{};
+    float eff_wind_base{}; // the weather ceiling the tick resolved (diagnostics)
+    float eff_wind_force{-1.f}; // wind_force N: pin the weather ceiling (0..1.25), -1 = off
+    int eff_wind_freeze{};
+    // Surface roughness length (m) and the derived wind aloft: speed at the cloud deck via the
+    // log profile (capped - the profile is unbounded as a ratio), heading in eff_wind_dir_aloft.
+    float eff_wind_z0{0.03f};
+    float eff_wind_aloft_ms{};
+    // Discrete gust events: Poisson arrivals with a raised-cosine envelope. The noise layers
+    // give the wind its texture; these give it EVENTS - the gust that arrives, peaks and lets
+    // go, which is what a player remembers as "a gust".
+    struct SWindGust
+    {
+        float start{};
+        float duration{};
+        float amplitude{};
+        bool used{};
+    };
+    SWindGust wind_gusts[3];
+    float eff_wind_gust_event{}; // 0..1 sum of the live envelopes
+
+    // Gust-field amplitude at a world XZ (0.60 lull .. 1.25 tongue) and the local heading
+    // deviation (-1..1). Same maths as the vertex shaders: both compile da_wind_core.h.
     float SampleWindField(float x, float z) const;
+    float SampleWindDeviation(float x, float z) const;
+
+    // ---- The query surface every physical consumer uses. ---------------------------------
+    // Mean speed at 10 m over open ground, m/s (normalised strength x DA_WIND_MS_PER_NORM).
+    float WindSpeedMs() const;
+    // Wind velocity (m/s, world space, y = 0) at a point: the global heading turned by the
+    // local eddy, the gust-field amplitude, the surface-layer profile for the height above
+    // ground, and the directional push of any live motor (a blast ring, a walker). This is
+    // what particles, debris and bodies integrate.
+    Fvector WindAt(const Fvector& pos, float height_above_ground = 1.5f) const;
+    // Directional push of the live motors at a point (m/s equivalent).
+    Fvector SampleWindMotorsVec(const Fvector& p) const;
+    // 0..1 how exposed a point is to the wind: 0 under a roof or indoors, 0.35 in the lee of
+    // a wall or a bank (the wind still swirls round), 1 in the open. Two static rays: one up,
+    // one upwind. Callers gate their own frequency.
+    float WindExposure(const Fvector& pos) const;
+
+    void wind_tick(float dt);
+    // Re-seed the service and restart its clock: the same seed replays the same wind.
+    void wind_reseed(float seed);
 
     // Per-weather wind profile (dead_air_x64_wind.ltx): DA cycles do not author wind_velocity,
     // so the cycle NAME maps to a nominal strength. Resolved on weather change, low-passed so

@@ -379,6 +379,17 @@ static class cl_da_wind_field : public R_constant_setup
     }
 } binder_da_wind_field;
 
+// The wind state for every shader that wants physics rather than a bend: xy = unit heading in
+// world XZ, z = speed in m/s at 10 m, w = the service clock in seconds.
+static class cl_da_wind_state : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, _sin(env.eff_wind_dir), _cos(env.eff_wind_dir), env.WindSpeedMs(), env.eff_wind_time);
+    }
+} binder_da_wind_state;
+
 // Wind motors for the vegetation shaders: 8 point sources packed as two 4x4 matrices each
 // (row per motor). pos rows = (xyz, radius), par rows = (bend amp, ring radius, ring width, 0);
 // info.x = number of live motors so the shader loop is free when the world is quiet.
@@ -650,6 +661,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_aref_u", &binder_da_aref);
     r_Constant("da_puddle_wind", &binder_da_puddle_wind);
     r_Constant("da_wind_field", &binder_da_wind_field);
+    r_Constant("da_wind_state", &binder_da_wind_state);
     r_Constant("da_wm_pos0", &binder_da_wm_pos0);
     r_Constant("da_wm_pos1", &binder_da_wm_pos1);
     r_Constant("da_wm_par0", &binder_da_wm_par0);

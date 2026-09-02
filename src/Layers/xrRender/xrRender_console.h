@@ -116,6 +116,7 @@ extern ECORE_API float ps_r__ssaDISCARD;
 extern ECORE_API float ps_r__vegDISCARD;
 extern ECORE_API float ps_r__grass_fade_start;
 extern ECORE_API int ps_r__gpu_log;
+extern ECORE_API int ps_r__tree_shadow_sway;
 extern ECORE_API float ps_r__grass_fade_flat;
 extern ECORE_API int ps_r__grass_shadow_dist;
 extern ECORE_API int ps_r__aref_quality;

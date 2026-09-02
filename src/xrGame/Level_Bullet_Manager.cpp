@@ -23,6 +23,9 @@
 #define HIT_POWER_EPSILON 0.05f
 #define WALLMARK_SIZE 0.04f
 
+// See bullet_wind() below: the wind of the bullet being processed, published per bullet.
+static Fvector s_bullet_wind{};
+
 float CBulletManager::m_fMinBulletSpeed = 2.f;
 float const CBulletManager::parent_ignore_distance = 3.f;
 
@@ -196,6 +199,15 @@ void CBulletManager::AddBullet(const Fvector& position, const Fvector& direction
     //	bullet.frame_num			= Device.dwFrame;
     bullet.flags.aim_bullet = AimBullet;
 
+    // The wind this shot drifts by, decided at the muzzle: the local field at chest height
+    // scaled by how exposed the shooter's spot is. Sheltered means no drift, exactly as the
+    // grenade thrown from the same spot.
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        bullet.wind = env.WindAt(position, 1.5f);
+        bullet.wind.mul(env.WindExposure(position));
+    }
+
     // Every shot shivers the vegetation along its trace: a narrow line gust in the wind-motor
     // system, fading in a third of a second. Bursts re-arm the same motor (see the merge in
     // wind_motor_shot), so automatic fire never floods the pool. Capped near the camera - the
@@ -232,6 +244,7 @@ void CBulletManager::UpdateWorkload()
     const auto e = m_Bullets.rend();
     for (u16 j = u16(e - i); i != e; ++i, --j)
     {
+        s_bullet_wind = i->wind;
         if (process_bullet(rq_storage, *i, time_delta * g_bullet_time_factor))
             continue;
 
@@ -245,14 +258,11 @@ void CBulletManager::UpdateWorkload()
 // lag = actual flight time minus vacuum time. In this engine's analytic trajectory the lag
 // works out EXACTLY to air_resistance * t^2 / 2 - the same coefficient the drag term already
 // carries - so the drift is one extra mad() with the drift velocity being W * ar * t.
-// norm 1.0 maps to ~11 m/s: a fresh gale at ground level. Bullet flight lives on the main
-// thread (see the VERIFY in AddBullet), so reading the environment here is safe.
-static Fvector bullet_wind()
-{
-    const auto& env = g_pGamePersistent->Environment();
-    const float w = env.eff_wind_norm * 11.f;
-    return Fvector().set(_sin(env.eff_wind_dir) * w, 0.f, _cos(env.eff_wind_dir) * w);
-}
+// The wind is per bullet (SBullet::wind, sampled at the muzzle) and the analytic helpers
+// below are pure functions of the launch state, so the bullet being processed publishes its
+// wind here before the helpers run. Bullet flight lives on the main thread (see the VERIFY in
+// AddBullet), so a plain static is safe.
+static Fvector bullet_wind() { return s_bullet_wind; }
 
 static Fvector parabolic_velocity(
     Fvector const& start_velocity, Fvector const& gravity, float const air_resistance, float const time)

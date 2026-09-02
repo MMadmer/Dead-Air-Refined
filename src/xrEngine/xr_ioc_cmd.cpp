@@ -8,6 +8,65 @@
 
 #include "CameraManager.h"
 #include "Environment.h"
+#include "IGame_Persistent.h"
+
+namespace
+{
+class CCC_WindSeed : public IConsole_Command
+{
+public:
+    CCC_WindSeed(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        extern float g_wind_seed_override;
+        if (args && *args)
+            g_wind_seed_override = float(atof(args)); // honoured at the first tick if that is still ahead
+        if (!g_pGamePersistent)
+            return;
+        auto& env = g_pGamePersistent->Environment();
+        if (!args || !*args)
+        {
+            Msg("* [wind] seed %.1f, time %.1f s%s", env.eff_wind_seed, env.eff_wind_time,
+                env.eff_wind_freeze ? " (frozen)" : "");
+            return;
+        }
+        env.wind_reseed(g_wind_seed_override);
+    }
+    void Info(TInfo& I) override { xr_strcpy(I, "wind_seed [N] - show or pin the wind service seed"); }
+};
+
+// wind_force N pins the weather ceiling (0 = dead calm, 1 = full gale, 1.25 = the storm
+// maximum) regardless of the cycle; -1 or no argument releases it. For tuning and QA.
+class CCC_WindForce : public IConsole_Command
+{
+public:
+    CCC_WindForce(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        auto& env = g_pGamePersistent->Environment();
+        env.eff_wind_force = (args && *args) ? clampr(float(atof(args)), -1.f, 1.25f) : -1.f;
+        Msg("* [wind] force %s", env.eff_wind_force >= 0.f ? "pinned" : "released");
+    }
+    void Info(TInfo& I) override { xr_strcpy(I, "wind_force [0..1.25|-1] - pin or release the wind ceiling"); }
+};
+
+class CCC_WindFreeze : public IConsole_Command
+{
+public:
+    CCC_WindFreeze(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        auto& env = g_pGamePersistent->Environment();
+        env.eff_wind_freeze = (args && *args) ? (atoi(args) != 0 ? 1 : 0) : !env.eff_wind_freeze;
+        Msg("* [wind] %s", env.eff_wind_freeze ? "frozen" : "running");
+    }
+    void Info(TInfo& I) override { xr_strcpy(I, "wind_freeze [0|1] - hold the wind field still"); }
+};
+} // namespace
 #include "xr_input.h"
 #include "CustomHUD.h"
 
@@ -915,6 +974,11 @@ void CCC_Register()
         // 1 = log the live service numbers; 2 = also self-spawn a test blast ring ahead of
         // the camera every 5 s (verifies the ring chain without throwing grenades).
         CMD4(CCC_Integer, "wind_dbg", &ps_e_wind_dbg, 0, 3);
+        // wind_seed N re-seeds the service and restarts its clock (the same N replays the
+        // same wind - benchmarks, screenshot comparisons); wind_freeze 1 holds the field.
+        CMD1(CCC_WindSeed, "wind_seed");
+        CMD1(CCC_WindFreeze, "wind_freeze");
+        CMD1(CCC_WindForce, "wind_force");
     }
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);
