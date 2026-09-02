@@ -90,24 +90,30 @@ float4 	main (v2p_volume  I) : SV_Target
 	if (depth<0.0001)
 		res = max_density;
 
+	// [DA] Every sample also sees the cloud shadow: a shaft is lit air, and air under a cloud
+	// is not lit. The march position in view space is P minus i steps of the same direction
+	// the shadow-space walk takes - no second projection needed.
+	float3 Pv = P;
 	[loop]
 	for ( int i=0; i<RAY_SAMPLES; ++i )
 	{
 		if (depth <= 0.3)
 			break;
 
+		const float cloud = sunmask( float4( Pv, 1.0f ) );
 #ifndef	FILTER_LOW
 #ifndef SM_MINMAX
-		res += density * shadow_hw_projected(current);
+		res += density * cloud * shadow_hw_projected(current);
 #else
-		res += density * shadow_dx10_1_sunshafts_projected(current);
+		res += density * cloud * shadow_dx10_1_sunshafts_projected(current);
 #endif
 #else	//	FILTER_LOW
-		res += density * sample_hw_pcf_projected(current, float2(0, 0));
+		res += density * cloud * sample_hw_pcf_projected(current, float2(0, 0));
 #endif	//	FILTER_LOW
 
 		depth -= deltaDepth;
 		current -= delta;
+		Pv -= direction;
 	}
 
 	// Forward-scatter: shafts brighten toward the sun and thin away from it, per PIXEL this time

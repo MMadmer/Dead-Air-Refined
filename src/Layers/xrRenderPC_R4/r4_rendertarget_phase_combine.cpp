@@ -2,6 +2,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 #include "Layers/xrRender/dxEnvironmentRender.h"
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
 
 #define STENCIL_CULL 0
 
@@ -185,6 +186,7 @@ void CRenderTarget::phase_combine()
         // RCache.set_ColorWriteEnable					();
         //	Moved to shader!
         // RCache.set_Z(FALSE);
+        dx11GpuTimerScope gpu_clouds(dx11GpuTimers::Clouds);
         g_pGamePersistent->Environment().RenderSky();
 
         //	Igor: Render clouds before compine without Z-test

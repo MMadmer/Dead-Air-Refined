@@ -1,102 +1,52 @@
 #ifndef DA_WIND_FIELD_H
 #define DA_WIND_FIELD_H
 
-// Travelling spatial gust field (the Ghost of Tsushima scheme: wind keeps one heading, its
-// MAGNITUDE varies place to place with noise that rides downwind). Evaluated once per grass
-// tuft / tree root in the vertex shader, so a gust front visibly rolls across a meadow while
-// thirty metres away the air stands still - instead of the whole field swaying in lockstep.
+#include "da_wind_core.h"
+
+// Shader-side view of the wind service. The maths lives in da_wind_core.h, which the engine
+// compiles too; this file only binds it to the constants and gives the vertex shaders their
+// vector-typed entry points.
 //
-// da_wind_field const (cl_da_wind_field): xy = wrapped world-space scroll offset of the field
-// (accumulated downwind on the CPU, wrapped at 64 cells x 40 m), z = slow strength envelope,
-// w = gustiness (drives the lean term).
+// da_wind_field (cl_da_wind_field): xy = wrapped world-space scroll offset of the gust field
+// (accumulated downwind on the CPU), z = strength envelope 0..1.25, w = gustiness 0..1.
 uniform float4 da_wind_field;
+// da_wind_state (cl_da_wind_state): xy = unit heading (world XZ), z = speed in m/s at 10 m,
+// w = the wind-tick time in seconds (for consumers that animate on the service clock).
+uniform float4 da_wind_state;
 
-// Periodic lattice hash: fmod over the same 64-cell period the CPU wraps the offset with -
-// the field tiles seamlessly at 2560 m (bigger than any level, invisible), and neither side
-// of the maths ever feeds large numbers into frac().
-float da_wf_hash(float2 i)
-{
-    float2 p = fmod(i + 4096.0f, 64.0f);
-    p = frac(p * float2(127.1f, 311.7f));
-    p += dot(p, p + 34.23f);
-    return frac(p.x * p.y);
-}
+// Vector-typed conveniences over the scalar core for the shaders that hash positions.
+float da_wf_hash(float2 i) { return da_wf_hash(i.x, i.y); }
+float da_wf_noise(float2 p) { return da_wf_noise(p.x, p.y); }
 
-float da_wf_noise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0f - 2.0f * f);
-    float a = da_wf_hash(i);
-    float b = da_wf_hash(i + float2(1.0f, 0.0f));
-    float c = da_wf_hash(i + float2(0.0f, 1.0f));
-    float d = da_wf_hash(i + float2(1.0f, 1.0f));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
-
-// Returns: x = amplitude multiplier (~0.40 lull .. ~1.15 gust tongue),
+// Returns: x = amplitude multiplier (0.60 lull .. 1.25 gust tongue),
 //          y = lean 0..1 (how hard the local flow presses vegetation down-wind),
-//          z = local heading deviation -1..1 (an INDEPENDENT, broader noise pattern riding
-//              the same scroll - the consumer turns its wind direction by this, so different
-//              parts of the map genuinely blow different ways and eddies read as eddies).
-// Two octaves: broad tongues (~40 m) carry the front, a half-scale layer breaks its edge up.
-// The smoothstep + square shaping makes wide calm areas with rare gust tongues whose edges
-// are soft and NONLINEAR - the "thin seam of in-between speed" between two flows.
+//          z = local heading deviation -1..1.
 float3 da_wind_field_eval(float2 wp)
 {
-    const float2 q = (wp - da_wind_field.xy) * (1.0f / 40.0f);
-    const float n = da_wf_noise(q) * 0.62f + da_wf_noise(q * 2.17f + 13.7f) * 0.38f;
-    float g = smoothstep(0.35f, 0.85f, n);
-    g *= g;
-    // Lulls at ~60% of nominal, gust tongues up to ~125%: the field VARIES the motion, it must
-    // not also throttle its average (that is what flattened storms on the first flight).
-    const float amp = 0.60f + 0.65f * g;
-    // Lean follows the gust tongue and the global gustiness together: only a real gust
-    // passing through a real tongue presses the grass flat.
-    const float lean = g * saturate(0.35f + 0.65f * da_wind_field.w);
-    // Heading deviation: an even broader pattern (~75 m swirls) sampled off to the side so it
-    // does not correlate with the amplitude tongues. NOTE: the amplitude half above has a CPU
-    // twin (CEnvironment::SampleWindField) that must stay formula-identical; this channel is
-    // shader-only and free to differ.
-    const float nd = da_wf_noise(q * 0.53f + float2(91.7f, 33.1f));
-    return float3(amp, lean, nd * 2.0f - 1.0f);
+    const float g = da_wind_field_gust(wp.x, wp.y, da_wind_field.x, da_wind_field.y);
+    const float dev = da_wind_field_dev(wp.x, wp.y, da_wind_field.x, da_wind_field.y);
+    return float3(da_wind_field_amp(g), da_wind_field_lean(g, da_wind_field.w), dev);
 }
 
-// The local wind direction for a consumer rooted at this spot: the global heading dir2D
-// turned by the field's deviation channel. Light air meanders up to ~28 degrees place to
-// place, a storm stream straightens to ~11 - and the whole pattern rides downwind, so the
-// swirls TRAVEL like real eddies instead of being painted on the ground.
+// The local wind direction for a consumer rooted at this spot: the global heading turned by
+// the field's deviation channel.
 float2 da_wind_local_dir(float2 dir, float dev)
 {
-    const float ang = dev * (0.50f - 0.30f * saturate(da_wind_field.z));
+    const float ang = da_wind_dev_angle(dev, da_wind_field.z);
     float sa, ca;
     sincos(ang, sa, ca);
     return float2(dir.x * ca - dir.y * sa, dir.x * sa + dir.y * ca);
 }
 
-// ---- Sway waveform. ------------------------------------------------------------------------
-// The stock calc_cyclic is a parabola over a sawtooth: its VALUE is continuous at the peak but
-// its velocity jumps from +8 to -8 - vegetation accelerates INTO its maximum lean and
-// ricochets off it. And it is symmetric (-1..+1), swinging plants as far against the wind as
-// with it. Real plants do neither: wind gives a plant a STATIC lean it oscillates around,
-// approaching the extremes harmonically (velocity -> 0), lingering, springing back a few
-// degrees and returning - the classic narrow-band resonance around the plant's own frequency
-// with turbulence on top (the SpeedTree / Tsushima model).
-//
-// da_sway: three incommensurable harmonics, C-infinity smooth, range ~[-1..1] with rare full
-// peaks. The beat pattern of the pair IS the "lean - hold - half spring-back - lean again"
-// the eye expects. Consumers use mean + swing*da_sway so the result stays DOWNWIND.
-float da_sway(float ph)
+// Wind velocity (m/s, world XZ) at a world position, for consumers that want physics rather
+// than a bend: particles, cloth, debris. Height applies the surface-layer profile.
+float2 da_wind_velocity(float3 wp, float ground_y)
 {
-    const float w = ph * 6.2831853f;
-    return 0.62f * sin(w) + 0.28f * sin(w * 1.731f + 1.3f) + 0.10f * sin(w * 3.09f + 4.1f);
-}
-
-// Foliage flutter: zero-centred (leaves flick both ways), smooth, non-repeating pair.
-float da_flutter(float ph)
-{
-    const float w = ph * 6.2831853f;
-    return 0.60f * sin(w) + 0.40f * sin(w * 1.618f + 0.9f);
+    const float g = da_wind_field_gust(wp.x, wp.z, da_wind_field.x, da_wind_field.y);
+    const float dev = da_wind_field_dev(wp.x, wp.z, da_wind_field.x, da_wind_field.y);
+    const float2 dir = da_wind_local_dir(da_wind_state.xy, dev);
+    const float speed = da_wind_state.z * da_wind_field_amp(g) * da_wind_profile(wp.y - ground_y, 0.03f);
+    return dir * speed;
 }
 
 #endif // DA_WIND_FIELD_H

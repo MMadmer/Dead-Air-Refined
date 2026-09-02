@@ -398,8 +398,16 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
 
     pcstr cloudsColor = config.r_string(identifier, "clouds_color");
 
-    float multiplier = 0, save = 0;
-    sscanf(cloudsColor, "%f,%f,%f,%f,%f", &clouds_color.x, &clouds_color.y, &clouds_color.z, &clouds_color.w, &multiplier);
+    // The fifth value is a brightness multiplier the SDK writes; Dead Air's weather configs
+    // (and this engine's own save path) write four. A missing fifth value used to read as 0,
+    // which multiplied the cloud colour to black: no weather could ever tint its clouds and
+    // the dome drew silhouettes. Four values now mean "as authored" (multiplier 2, so the
+    // historical .5 prescale cancels), five keep the SDK meaning exactly.
+    float multiplier = 2.f, save = 0;
+    const int fields = sscanf(cloudsColor, "%f,%f,%f,%f,%f", &clouds_color.x, &clouds_color.y, &clouds_color.z,
+        &clouds_color.w, &multiplier);
+    if (fields < 5)
+        multiplier = 2.f;
 
     save = clouds_color.w;
     clouds_color.mul(.5f * multiplier);

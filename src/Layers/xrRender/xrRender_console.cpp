@@ -7,6 +7,9 @@
 
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/xr_ioc_cmd.h"
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#endif
 
 #if RENDER != R_R1
 #include "r__pixel_calculator.h"
@@ -268,6 +271,8 @@ float ps_r__vegDISCARD = 0.5f;
 // Those blades are already paid for (cache, visibility, matrices); this only shows them.
 // Preset-derived: the extra fill has a real cost (their measure: +69% pixels = -5 FPS).
 float ps_r__grass_fade_start = 0.f;
+// GPU pass timings to the log every N frames (0 = off). A diagnostic, never persisted.
+int ps_r__gpu_log = 0;
 // Share of the grass fade that goes into HEIGHT instead of uniform shrink. Uniform makes the
 // blade smaller in every direction until it is discarded by area and the ground bares out;
 // height-only lays the tuft flat while its footprint keeps covering the soil - reads as a
@@ -997,6 +1002,35 @@ public:
     }
 };
 
+// Logs the last resolved GPU pass timings. The stats HUD shows the same numbers; this one
+// exists so a QA probe can read them back from the log.
+class CCC_gpu_stats : public IConsole_Command
+{
+public:
+    CCC_gpu_stats(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR /*args*/)
+    {
+#if defined(USE_DX11)
+        if (!GpuTimers.enabled())
+        {
+            Msg("* [gpu] timestamp queries unavailable");
+            return;
+        }
+        if (!GpuTimers.valid())
+        {
+            Msg("* [gpu] no resolved frame yet");
+            return;
+        }
+        Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f combine=%.3f ms",
+            GpuTimers.ms(dx11GpuTimers::Frame), GpuTimers.ms(dx11GpuTimers::Scene),
+            GpuTimers.ms(dx11GpuTimers::Sun), GpuTimers.ms(dx11GpuTimers::Lights),
+            GpuTimers.ms(dx11GpuTimers::Clouds), GpuTimers.ms(dx11GpuTimers::Combine));
+#else
+        Msg("* [gpu] timing is a DX11 feature");
+#endif
+    }
+};
+
 class CCC_memory_stats : public IConsole_Command
 {
 public:
@@ -1614,6 +1648,8 @@ void xrRender_initconsole()
 
     CMD3(CCC_Mask, "r3_volumetric_smoke", &ps_r2_ls_flags, R3FLAG_VOLUMETRIC_SMOKE);
     CMD1(CCC_memory_stats, "render_memory_stats");
+    CMD1(CCC_gpu_stats, "r__gpu_stats");
+    CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
 
     //CMD3(CCC_Mask, "r2_sun_ignore_portals", &ps_r2_ls_flags, R2FLAG_SUN_IGNORE_PORTALS);
 

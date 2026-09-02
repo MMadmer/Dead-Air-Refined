@@ -38,6 +38,32 @@ static u16 facetable[16][3] =
 
 // The far-shadow distance fade (r__sun_shadow_fade). Read by accum_sun_far.ps only; for
 // near/middle the constant silently goes nowhere.
+// The cloud-shadow projection: view space -> the cloud field's UV, looking along the sun with
+// the wind heading as "up", shifted downwind by the cloud-level travel the wind service
+// accumulates. One builder for every sun pass, so the cascades, the far pass and the
+// volumetric shafts cannot disagree about where the clouds are.
+static Fmatrix da_cloud_shadow_xform(const Fvector& sun_direction)
+{
+    const auto& env = g_pGamePersistent->Environment();
+    const float windShift = env.eff_cloud_run * 0.002f;
+    Fmatrix m_xform;
+    Fvector normal;
+    normal.setHP(env.eff_wind_dir_aloft, 0);
+    Fvector position;
+    position.set(0, 0, 0);
+    m_xform.build_camera_dir(position, sun_direction, normal);
+    Fvector localnormal;
+    m_xform.transform_dir(localnormal, normal);
+    localnormal.normalize();
+    Fmatrix result;
+    result.mul(m_xform, Device.mInvView);
+    m_xform.scale(0.002f, 0.002f, 1.f);
+    result.mulA_44(m_xform);
+    m_xform.translate(localnormal.mul(windShift));
+    result.mulA_44(m_xform);
+    return result;
+}
+
 static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 /*sub_phase*/)
 {
     cmd_list.set_c("da_sun_far_fade", 0.75f * ps_r__sun_shadow_fade, ps_r__sun_shadow_fade, 0.f, 0.f);
@@ -210,31 +236,8 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
             }
         }
 
-        // clouds xform
-        Fmatrix m_clouds_shadow;
-        {
-            // Shift and heading come from the effective-wind service: the shadow field
-            // drifts at cloud-level speed (accumulated - a gust never jumps it) along the
-            // SAME wind the vegetation bends to. Stock 0.003*t barely crawled.
-            const float windShift = g_pGamePersistent->Environment().eff_cloud_run * 0.002f;
-            Fmatrix m_xform;
-            Fvector direction = fuckingsun->direction;
-            float w_dir = g_pGamePersistent->Environment().eff_wind_dir;
-            // float	w_speed				= g_pGamePersistent->Environment().CurrentEnv.wind_velocity	;
-            Fvector normal;
-            normal.setHP(w_dir, 0);
-            Fvector position;
-            position.set(0, 0, 0);
-            m_xform.build_camera_dir(position, direction, normal);
-            Fvector localnormal;
-            m_xform.transform_dir(localnormal, normal);
-            localnormal.normalize();
-            m_clouds_shadow.mul(m_xform, Device.mInvView);
-            m_xform.scale(0.002f, 0.002f, 1.f);
-            m_clouds_shadow.mulA_44(m_xform);
-            m_xform.translate(localnormal.mul(windShift));
-            m_clouds_shadow.mulA_44(m_xform);
-        }
+        // clouds xform - one builder for every sun pass (see da_cloud_shadow_xform)
+        const Fmatrix m_clouds_shadow = da_cloud_shadow_xform(fuckingsun->direction);
 
         // Make jitter texture
         Fvector2 j0, j1;
@@ -532,31 +535,8 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
             }
         }
 
-        // clouds xform
-        Fmatrix m_clouds_shadow;
-        {
-            // Shift and heading come from the effective-wind service: the shadow field
-            // drifts at cloud-level speed (accumulated - a gust never jumps it) along the
-            // SAME wind the vegetation bends to. Stock 0.003*t barely crawled.
-            const float windShift = g_pGamePersistent->Environment().eff_cloud_run * 0.002f;
-            Fmatrix m_xform;
-            Fvector direction = fuckingsun->direction;
-            float w_dir = g_pGamePersistent->Environment().eff_wind_dir;
-            // float	w_speed				= g_pGamePersistent->Environment().CurrentEnv.wind_velocity	;
-            Fvector normal;
-            normal.setHP(w_dir, 0);
-            Fvector position;
-            position.set(0, 0, 0);
-            m_xform.build_camera_dir(position, direction, normal);
-            Fvector localnormal;
-            m_xform.transform_dir(localnormal, normal);
-            localnormal.normalize();
-            m_clouds_shadow.mul(m_xform, Device.mInvView);
-            m_xform.scale(0.002f, 0.002f, 1.f);
-            m_clouds_shadow.mulA_44(m_xform);
-            m_xform.translate(localnormal.mul(windShift));
-            m_clouds_shadow.mulA_44(m_xform);
-        }
+        // clouds xform - one builder for every sun pass (see da_cloud_shadow_xform)
+        const Fmatrix m_clouds_shadow = da_cloud_shadow_xform(fuckingsun->direction);
 
         // Compute textgen texture for pixel shader, for possitions texture.
         Fmatrix m_Texgen;
@@ -1302,7 +1282,11 @@ void CRenderTarget::accum_direct_volumetric(CBackend& cmd_list, u32 sub_phase,
         u_compute_texgen_screen(cmd_list, m_Texgen);
 
         cmd_list.set_c("m_texgen", m_Texgen);
-        //		cmd_list.set_c				("m_sunmask",			m_clouds_shadow);
+        // The shafts march the same air the clouds shade. Without the cloud projection here
+        // the ground darkened under a cloud while the shaft through the same air stayed at
+        // full brightness - a lit beam standing in a shadow.
+        const Fmatrix m_clouds_shadow = da_cloud_shadow_xform(fuckingsun->direction);
+        cmd_list.set_c("m_sunmask", m_clouds_shadow);
         cmd_list.set_c("volume_range", zMin, zMax, 0.f, 0.f);
 
         // nv-DBT

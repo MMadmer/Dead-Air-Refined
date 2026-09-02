@@ -202,7 +202,17 @@ void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
     FTreeVisual_setup& tvs = GetTreeVisualSetup();
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0);
     cmd_list.tree.set_wave(tvs.wave);
-    cmd_list.tree.set_wind(tvs.wind);
+    // Same rule as the scalar path in Render(): instanced batches drawn into a shadow map
+    // take the frozen wind. Without this the batched trees swayed in the cascades while the
+    // scalar-path trees stood still, and the mismatch showed as a crown's shadow sliding
+    // across the ground it stands on.
+    if (RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    {
+        static Fvector4 wind_zero{};
+        cmd_list.tree.set_wind(wind_zero);
+    }
+    else
+        cmd_list.tree.set_wind(tvs.wind);
 }
 
 void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& data) const

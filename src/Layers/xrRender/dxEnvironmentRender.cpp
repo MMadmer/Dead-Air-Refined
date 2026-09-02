@@ -270,8 +270,11 @@ void dxEnvironmentRender::RenderSky(CEnvironment& env)
     mSky.translate_over(Device.vCameraPosition);
 
     u32 i_offset, v_offset;
-    u32 C = color_rgba(iFloor(env.CurrentEnv.sky_color.x * 255.f), iFloor(env.CurrentEnv.sky_color.y * 255.f),
-        iFloor(env.CurrentEnv.sky_color.z * 255.f), iFloor(env.CurrentEnv.weight * 255.f));
+    // D3DCOLOR is declared as R8G8B8A8 on DX11 (dx11BufferUtils.cpp) and the sky shader reads
+    // the colour unswizzled, so the byte order has to be written the way the shader expects:
+    // blue first. Packing the "correct" way handed the shader the sky's R and B swapped.
+    u32 C = color_rgba(iFloor(env.CurrentEnv.sky_color.z * 255.f), iFloor(env.CurrentEnv.sky_color.y * 255.f),
+        iFloor(env.CurrentEnv.sky_color.x * 255.f), iFloor(env.CurrentEnv.weight * 255.f));
 
     // Fill index buffer
     u16* pib = RImplementation.Index.Lock(20 * 3, i_offset);
@@ -350,9 +353,12 @@ void dxEnvironmentRender::RenderClouds(CEnvironment& env)
     wd1.setHP(PI_DIV_4 + PI_DIV_8, 0);
     wind_dir.set(wd0.x, wd0.z, wd1.x, wd1.z).mul(0.5f).add(0.5f).mul(255.f);
     u32 i_offset, v_offset;
-    u32 C0 = color_rgba(iFloor(wind_dir.x), iFloor(wind_dir.y), iFloor(wind_dir.w), iFloor(wind_dir.z));
-    u32 C1 = color_rgba(iFloor(env.CurrentEnv.clouds_color.x * 255.f), iFloor(env.CurrentEnv.clouds_color.y * 255.f),
-        iFloor(env.CurrentEnv.clouds_color.z * 255.f), iFloor(env.CurrentEnv.clouds_color.w * 255.f));
+    // Byte order as the DX11 vertex declaration reads it (R8G8B8A8, see RenderSky): the stock
+    // packing handed the shader the two layer directions with x and z crossed between the
+    // layers, so the two cloud sheets drifted roughly opposite ways instead of 22 degrees apart.
+    u32 C0 = color_rgba(iFloor(wind_dir.w), iFloor(wind_dir.y), iFloor(wind_dir.x), iFloor(wind_dir.z));
+    u32 C1 = color_rgba(iFloor(env.CurrentEnv.clouds_color.z * 255.f), iFloor(env.CurrentEnv.clouds_color.y * 255.f),
+        iFloor(env.CurrentEnv.clouds_color.x * 255.f), iFloor(env.CurrentEnv.clouds_color.w * 255.f));
 
     // Fill index buffer
     u16* pib = RImplementation.Index.Lock(env.CloudsIndices.size(), i_offset);

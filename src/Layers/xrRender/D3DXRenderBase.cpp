@@ -5,6 +5,9 @@
 #include "dxUIRender.h"
 #include "xrEngine/GameFont.h"
 #include "xrEngine/PerformanceAlert.hpp"
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#endif
 
 #if defined(XR_PLATFORM_WINDOWS) || defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_APPLE)
 #   ifndef MASTER_GOLD
@@ -432,6 +435,24 @@ void D3DXRenderBase::DumpStatistics(IGameFont& font, IPerformanceAlert* alert)
 #endif
 #define PPP(a) (100.f * float(a) / renderTotal)
     font.OutNext("*** RENDER:   %2.2fms", renderTotal);
+#if RENDER == R_R4 && defined(USE_DX11)
+    // GPU pass timing (timestamp queries, ~3 frames old). "n/a" until the first readback or
+    // while the GPU clock is disjoint.
+    if (GpuTimers.enabled())
+    {
+        if (GpuTimers.valid())
+        {
+            font.OutNext("GPU frame:    %2.2fms", GpuTimers.ms(dx11GpuTimers::Frame));
+            font.OutNext("- scene:      %2.2fms", GpuTimers.ms(dx11GpuTimers::Scene));
+            font.OutNext("- sun:        %2.2fms", GpuTimers.ms(dx11GpuTimers::Sun));
+            font.OutNext("- lights:     %2.2fms", GpuTimers.ms(dx11GpuTimers::Lights));
+            font.OutNext("- clouds:     %2.2fms", GpuTimers.ms(dx11GpuTimers::Clouds));
+            font.OutNext("- combine:    %2.2fms", GpuTimers.ms(dx11GpuTimers::Combine));
+        }
+        else
+            font.OutNext("GPU frame:    n/a");
+    }
+#endif
     font.OutNext("Calc:         %2.2fms, %2.1f%%", BasicStats.Culling.result, PPP(BasicStats.Culling.result));
     font.OutNext("Skeletons:    %2.2fms, %d", BasicStats.Animation.result, BasicStats.Animation.count);
     font.OutNext("Primitives:   %2.2fms, %2.1f%%", BasicStats.Primitives.result, PPP(BasicStats.Primitives.result));

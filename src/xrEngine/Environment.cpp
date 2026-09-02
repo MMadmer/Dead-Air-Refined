@@ -658,7 +658,10 @@ float CEnvironment::SampleWindField(float x, float z) const
     float g = clampr((n - 0.35f) / 0.5f, 0.f, 1.f);
     g = g * g * (3.f - 2.f * g); // smoothstep
     g *= g;
-    return 0.40f + 0.75f * g;
+    // Lulls at 60 % of nominal, gust tongues to 125 %: identical to da_wind_field.h. The two
+    // had drifted (0.40 + 0.75 g here against the shader's 0.60 + 0.65 g), so at lull spots
+    // the audio judged the wind a third weaker than the eye saw it and stayed silent.
+    return 0.60f + 0.65f * g;
 }
 
 float CEnvironment::weather_wind_profile()
@@ -761,8 +764,9 @@ void CEnvironment::wind_motor_press(const Fvector& pos, float radius, float stre
     }
     else
     {
+        // veg is deliberately left alone: the detail manager's calc task is its only writer
+        // (it re-judges every live press each pass), so the main thread never touches it.
         slot->speed = 0.f;
-        slot->veg = 0.f;
     }
 
     slot->used = true;
@@ -1108,6 +1112,10 @@ void CEnvironment::UpdateEffectiveWind()
     const float wander = (wind_vnoise(t * (1.f / 30.f) + 41.7f) * 2.f - 1.f) * wander_amp +
         (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(8.f);
     eff_wind_dir = CurrentEnv.wind_direction + drift + wander;
+    // Aloft: the authored heading plus the slow synoptic drift, then the Ekman veer - in the
+    // northern hemisphere the wind turns clockwise with height, about 25 degrees by the cloud
+    // deck. None of the surface wander or jitter reaches it.
+    eff_wind_dir_aloft = CurrentEnv.wind_direction + drift + deg2rad(25.f);
 
     // Spatial gust field scroll (the Ghost of Tsushima scheme: constant heading, magnitude
     // varied place-to-place by travelling noise). Gust fronts ride downwind at a speed that
@@ -1209,13 +1217,17 @@ void CEnvironment::UpdateEffectiveWind()
             }
         }
 
-        if (m.used)
-            highest = i + 1;
+        // Live motors pack into rows 0..n-1 and the shader walks exactly n rows. Packing by
+        // slot index made the row count "the highest used slot", so one press in slot 7 cost
+        // every vertex eight fetch-and-compare iterations for one real motor.
+        if (!m.used)
+            continue;
+        const u32 row = highest++;
 
-        Fmatrix& P = wind_motor_pos[i / 4];
-        Fmatrix& A = wind_motor_par[i / 4];
-        float* prow = &P.m[i % 4][0];
-        float* arow = &A.m[i % 4][0];
+        Fmatrix& P = wind_motor_pos[row / 4];
+        Fmatrix& A = wind_motor_par[row / 4];
+        float* prow = &P.m[row % 4][0];
+        float* arow = &A.m[row % 4][0];
         prow[0] = m.pos.x; prow[1] = m.pos.y; prow[2] = m.pos.z; prow[3] = m.used ? m.radius : 0.f;
         arow[0] = m.used ? amp : 0.f;
         // Line motors carry their direction where radial ones carry the ring shape.
@@ -1225,6 +1237,13 @@ void CEnvironment::UpdateEffectiveWind()
         // (slope clamped well above -0.5 so the >0.5 test never breaks), blast = -1
         // (the shader shapes its own falloff), press = 0.
         arow[3] = line ? 1.f + m.dir_y : (m.type == EWindMotor::impulse ? -1.f : 0.f);
+    }
+    // Rows past the live count hold whatever the last frame packed; the CPU sampler walks all
+    // eight and gates on radius, so they must read as empty.
+    for (u32 row = highest; row < wind_motor_count; ++row)
+    {
+        wind_motor_pos[row / 4].m[row % 4][3] = 0.f;
+        wind_motor_par[row / 4].m[row % 4][0] = 0.f;
     }
     wind_motor_active = float(highest);
 
@@ -1267,18 +1286,26 @@ void CEnvironment::UpdateEffectiveWind()
                 h.used = false;
         }
 
-        if (h.used)
-            wh_highest = i + 1;
+        // Packed compactly, like the wind motors: the puddle shader walks exactly the live
+        // count, not the highest used slot.
+        if (!h.used)
+            continue;
+        const u32 row = wh_highest++;
 
-        Fmatrix& P = water_hit_pos[i / 4];
-        Fmatrix& A = water_hit_par[i / 4];
-        float* prow = &P.m[i % 4][0];
-        float* arow = &A.m[i % 4][0];
-        prow[0] = h.pos.x; prow[1] = h.pos.y; prow[2] = h.pos.z; prow[3] = h.used ? h.radius : 0.f;
-        arow[0] = h.used ? amp : 0.f;
+        Fmatrix& P = water_hit_pos[row / 4];
+        Fmatrix& A = water_hit_par[row / 4];
+        float* prow = &P.m[row % 4][0];
+        float* arow = &A.m[row % 4][0];
+        prow[0] = h.pos.x; prow[1] = h.pos.y; prow[2] = h.pos.z; prow[3] = h.radius;
+        arow[0] = amp;
         arow[1] = ring_r;
         arow[2] = (h.kind == EWaterHit::drain) ? 1.f : 0.f;
         arow[3] = 0.f;
+    }
+    for (u32 row = wh_highest; row < water_hit_count; ++row)
+    {
+        water_hit_pos[row / 4].m[row % 4][3] = 0.f;
+        water_hit_par[row / 4].m[row % 4][0] = 0.f;
     }
     water_hit_active = float(wh_highest);
 

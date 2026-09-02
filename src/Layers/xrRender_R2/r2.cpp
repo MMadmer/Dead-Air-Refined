@@ -10,6 +10,9 @@
 #include "Layers/xrRender/SkeletonCustom.h"
 #include "Layers/xrRender/dxWallMarkArray.h"
 #include "Layers/xrRender/dxUIShader.h"
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#endif
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
@@ -786,6 +789,9 @@ void CRender::create()
 #endif
 
     Target = xr_new<CRenderTarget>(); // Main target
+#if defined(USE_DX11)
+    GpuTimers.OnDeviceCreate();
+#endif
 
     Models = xr_new<CModelPool>();
     PSLibrary.OnCreate();
@@ -811,6 +817,9 @@ void CRender::destroy()
     q_sync_point.Destroy();
     HWOCC.occq_destroy();
     xr_delete(Models);
+#if defined(USE_DX11)
+    GpuTimers.OnDeviceDestroy();
+#endif
     xr_delete(Target);
     PSLibrary.OnDestroy();
     Device.seqFrame.Remove(this);
@@ -861,6 +870,9 @@ void CRender::reset_begin()
     }
     //-AVO
 
+#if defined(USE_DX11)
+    GpuTimers.OnDeviceDestroy();
+#endif
     xr_delete(Target);
     HWOCC.occq_destroy();
     q_sync_point.Destroy();
@@ -873,6 +885,9 @@ void CRender::reset_end()
     HWOCC.occq_create(occq_size);
 
     Target = xr_new<CRenderTarget>();
+#if defined(USE_DX11)
+    GpuTimers.OnDeviceCreate();
+#endif
 
     //AVO: let's reload details while changed details options on vid_restart
     if (b_loaded && (dm_current_size != dm_size ||

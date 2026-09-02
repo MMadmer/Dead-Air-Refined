@@ -115,6 +115,7 @@ extern ECORE_API float ps_r__ssaDISCARD;
 // Separate discard threshold for vegetation billboards (FLOD); see xrRender_console.cpp.
 extern ECORE_API float ps_r__vegDISCARD;
 extern ECORE_API float ps_r__grass_fade_start;
+extern ECORE_API int ps_r__gpu_log;
 extern ECORE_API float ps_r__grass_fade_flat;
 extern ECORE_API int ps_r__grass_shadow_dist;
 extern ECORE_API int ps_r__aref_quality;

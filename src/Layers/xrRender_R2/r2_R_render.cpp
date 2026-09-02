@@ -7,6 +7,9 @@
 #include "xrEngine/xr_object.h"
 
 #include "Layers/xrRender/FBasicVisual.h"
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -125,6 +128,10 @@ void CRender::Render()
     //.	VERIFY					(g_pGameLevel && g_pGameLevel->pHUD);
     auto& dsgraph = get_imm_context();
 
+#if defined(USE_DX11)
+    GpuTimers.FrameBegin();
+#endif
+
     //******* Z-prefill calc - DEFERRER RENDERER
     if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
     {
@@ -202,6 +209,9 @@ void CRender::Render()
     if (psDeviceFlags.test(rsWireframe))
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 #endif
+#if defined(USE_DX11)
+    GpuTimers.Begin(dx11GpuTimers::Scene);
+#endif
     if (!split_the_scene_to_minimize_wait)
     {
         PIX_EVENT(DEFER_PART0_NO_SPLIT);
@@ -225,6 +235,10 @@ void CRender::Render()
 #ifdef USE_OGL
     if (psDeviceFlags.test(rsWireframe))
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
+
+#if defined(USE_DX11)
+    GpuTimers.End(dx11GpuTimers::Scene);
 #endif
 
     //******* Occlusion testing of volume-limited light-sources
@@ -429,6 +443,9 @@ void CRender::Render()
     // Directional light - fucking sun
     {
         PIX_EVENT(DEFER_SUN);
+#if defined(USE_DX11)
+        dx11GpuTimerScope gpu_sun(dx11GpuTimers::Sun);
+#endif
         Stats.l_visible++;
         if (!RImplementation.o.oldshadowcascades)
             r_sun.sync();
@@ -473,6 +490,9 @@ void CRender::Render()
         dx11_debug_drain_messages("pre_lights");
     }
 
+#if defined(USE_DX11)
+    GpuTimers.Begin(dx11GpuTimers::Lights);
+#endif
     // Lighting, non dependant on OCCQ
     {
         PIX_EVENT(DEFER_LIGHT_NO_OCCQ);
@@ -484,6 +504,9 @@ void CRender::Render()
         PIX_EVENT(DEFER_LIGHT_OCCQ);
         render_lights(LP_pending);
     }
+#if defined(USE_DX11)
+    GpuTimers.End(dx11GpuTimers::Lights);
+#endif
 
     // Diagnostics (-dxdebug): drain the D3D11 debug-layer validator messages into the log.
     if (drainDebugMessages)
@@ -495,8 +518,27 @@ void CRender::Render()
     // Postprocess
     {
         PIX_EVENT(DEFER_LIGHT_COMBINE);
+#if defined(USE_DX11)
+        GpuTimers.Begin(dx11GpuTimers::Combine);
+#endif
         Target->phase_combine();
+#if defined(USE_DX11)
+        GpuTimers.End(dx11GpuTimers::Combine);
+#endif
     }
+
+#if defined(USE_DX11)
+    GpuTimers.FrameEnd();
+    // r__gpu_log N: write the pass timings to the log every N frames. This is how a QA probe
+    // reads GPU cost back - the stats HUD never reaches the log.
+    if (ps_r__gpu_log > 0 && GpuTimers.valid() && (Device.dwFrame % u32(ps_r__gpu_log)) == 0)
+    {
+        Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f combine=%.3f ms",
+            GpuTimers.ms(dx11GpuTimers::Frame), GpuTimers.ms(dx11GpuTimers::Scene),
+            GpuTimers.ms(dx11GpuTimers::Sun), GpuTimers.ms(dx11GpuTimers::Lights),
+            GpuTimers.ms(dx11GpuTimers::Clouds), GpuTimers.ms(dx11GpuTimers::Combine));
+    }
+#endif
 
     VERIFY(dsgraph.mapDistort.empty());
 }
