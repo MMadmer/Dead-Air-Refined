@@ -445,7 +445,7 @@ static class cl_da_hud_light2 : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const bool on = ps_r__hud_shadow && !RImplementation.o.msaa;
-        cmd_list.set_c(C, r2_hud_depth_limit, on ? 1.f : 0.f, ps_r__hud_shadow_normal_offset, ps_r__hud_shadow_local ? 1.f : 0.f);
+        cmd_list.set_c(C, r2_hud_depth_limit, on ? 1.f : 0.f, ps_r__hud_shadow_normal_offset, 0.f);
     }
 } binder_da_hud_light2;
 

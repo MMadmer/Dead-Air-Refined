@@ -628,10 +628,10 @@ their own. From the sun it is a dedicated 1024-texel map around the eye (`hud_sh
 Under local lights the first-person pixels are at least lit from the right side now: the
 depth buffer is copied once after the g-buffer, a first-person pixel is told apart by its
 depth slice and its position is rebuilt with the HUD field of view (the deferred
-decompression put it about twice as far off-axis). The screen-space self-shadow toward each
-local light that builds on this (`da_hud_light.h`) is experimental and off by default -
-`r__hud_shadow_local 1` turns it on; along silhouettes it still reads as a dotted contact
-band. Both are off under MSAA, where the depth copy does not exist.
+decompression put it about twice as far off-axis). The self-shadow of the hands is the sun's
+alone; a screen-space march toward each local light was tried and removed - along a
+silhouette it read as a dotted contact band. Off under MSAA, where the depth copy does not
+exist.
 
 ## Actor movement tuning
 

@@ -291,6 +291,12 @@ function af_options_dialog:SetComboValue(option_name,af_option)
 	local row = map and af_option and map.row_of[af_option]
 	if row then
 		combo:SetCurrentID(row)
+	elseif map and map.by_row[0] then
+		-- A stored value this combo does not know (a period the list no longer offers, a
+		-- level added since the settings were written): the FIRST row, selected for real.
+		-- Text alone left the combo without a selection, and Accept then walked a fallback
+		-- that concatenated a nil option name - the main-menu weather crash of 1.4.0.
+		combo:SetCurrentID(0)
 	elseif af_option and self.default_settings:line_exist("atmosfear_option_names",af_option) then
 		local option = self.default_settings:r_value("atmosfear_option_names",af_option)
 		combo:SetText(game.translate_string(option))
@@ -347,13 +353,21 @@ function af_options_dialog:GetComboValue(option_name)
 			return option
 		end
 		-- No live selection (untouched combo restored from an unknown value): fall back to
-		-- matching the displayed text against THIS combo's own options only.
+		-- matching the displayed text against THIS combo's own options only. Options without
+		-- a name entry (the period lists) are skipped - concatenating their nil name is what
+		-- crashed the main-menu weather apply.
 		local selected = combo:GetText()
 		for opt in pairs(map.row_of) do
-			if game.translate_string("st_"..self.default_settings:r_value("atmosfear_option_names",opt))==selected
-				or game.translate_string(self.default_settings:r_value("atmosfear_option_names",opt))==selected then
+			local name = self.default_settings:line_exist("atmosfear_option_names",opt)
+				and self.default_settings:r_value("atmosfear_option_names",opt)
+			if name and (game.translate_string("st_"..name)==selected or game.translate_string(name)==selected)
+				or game.translate_string("st_"..opt)==selected then
 				return opt
 			end
+		end
+		-- Still nothing: the first option of this combo, never a nil into the config.
+		if map.by_row[0] then
+			return map.by_row[0]
 		end
 	end
 	local selected = combo:GetText()
