@@ -18,6 +18,8 @@ extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
 extern ENGINE_API Fvector4 g_pda_taa_bbox;
 
+extern ENGINE_API float psHUD_FOV;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // matrices
@@ -48,6 +50,7 @@ DECLARE_TREE_BIND(consts);
 DECLARE_TREE_BIND(wave);
 DECLARE_TREE_BIND(wind);
 DECLARE_TREE_BIND(c_scale);
+DECLARE_TREE_BIND(c_tree);
 DECLARE_TREE_BIND(c_bias);
 DECLARE_TREE_BIND(c_sun);
 
@@ -394,6 +397,17 @@ static class cl_da_wind_state : public R_constant_setup
 // shafts. params: coverage from the weather's cloud opacity, the deck's base altitude, and
 // the field's world-space drift - the aloft wind integrated by the service, along the aloft
 // heading. params2: quality tier, thickness, the service clock, shadow density.
+// The weather's clouds_color alpha was the OPACITY of the stock cloud texture, never a sky
+// fraction: a "clear" cycle authors ~0.3 and means "faint clouds", not "70% blue". Mapped to
+// coverage it spans scattered fair-weather cumulus at the low end and a closed deck at the
+// top, so no weather ever shows an empty sky for hours. r__clouds_cover pins the raw value.
+static float da_cloud_cover_from_weather(float alpha)
+{
+    if (ps_r__clouds_cover >= 0.f)
+        return ps_r__clouds_cover;
+    return clampr(0.2f + 0.55f * clampr(alpha, 0.f, 1.f), 0.f, 1.f);
+}
+
 static class cl_da_cloud_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -402,7 +416,7 @@ static class cl_da_cloud_params : public R_constant_setup
         const float run = env.eff_cloud_run;
         const float a = env.eff_wind_dir_aloft;
         // r__clouds_cover pins the coverage for tuning and QA; -1 follows the weather.
-        const float cover = ps_r__clouds_cover >= 0.f ? ps_r__clouds_cover : clampr(env.CurrentEnv.clouds_color.w, 0.f, 1.f);
+        const float cover = da_cloud_cover_from_weather(env.CurrentEnv.clouds_color.w);
         cmd_list.set_c(C, cover, env.eff_cloud_altitude, _sin(a) * run, _cos(a) * run);
     }
 } binder_da_cloud_params;
@@ -410,6 +424,36 @@ static class cl_da_cloud_params : public R_constant_setup
 extern float g_da_cloud_map_center_x;
 extern float g_da_cloud_map_center_z;
 extern float g_da_cloud_map_extent;
+
+// First-person pixels under local lights (da_hud_light.h): the HUD field of view for the
+// lateral rebuild of their position, in the deferred decompression layout.
+static class cl_da_hud_light : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const float hud_fov = psHUD_FOV * Device.fFOV;
+        const float VertTan = -1.0f * tanf(deg2rad(hud_fov / 2.0f));
+        const float HorzTan = -VertTan / Device.fASPECT;
+        cmd_list.set_c(C, HorzTan, VertTan, (2.0f * HorzTan) / float(Device.dwWidth), (2.0f * VertTan) / float(Device.dwHeight));
+    }
+} binder_da_hud_light;
+
+// x = the depth-range slice the HUD is rasterized into, y = on/off (the sun self-shadow
+// switch, and never under MSAA where the depth copy does not exist), z = normal offset (m).
+static class cl_da_hud_light2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const bool on = ps_r__hud_shadow && !RImplementation.o.msaa;
+        cmd_list.set_c(C, r2_hud_depth_limit, on ? 1.f : 0.f, ps_r__hud_shadow_normal_offset, 0.f);
+    }
+} binder_da_hud_light2;
+
+static class cl_da_cloud_debug : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, float(ps_r__clouds_debug), 0.f, 0.f, 0.f); }
+} binder_da_cloud_debug;
+
 static class cl_da_cloud_map : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -426,7 +470,7 @@ static class cl_da_cloud_params2 : public R_constant_setup
         const auto& env = g_pGamePersistent->Environment();
         // Thin cirrus barely dims the sun, a heavy deck cuts more than half of it. Overcast
         // weathers author their own dim sun on top.
-        const float cover = ps_r__clouds_cover >= 0.f ? ps_r__clouds_cover : clampr(env.CurrentEnv.clouds_color.w, 0.f, 1.f);
+        const float cover = da_cloud_cover_from_weather(env.CurrentEnv.clouds_color.w);
         const float density = clampr((cover - 0.05f) * 1.6f, 0.f, 1.f) * 0.8f;
         const int quality = ps_r__clouds_quality_override >= 0 ? ps_r__clouds_quality_override : ps_r__clouds_quality;
         cmd_list.set_c(C, float(quality), env.eff_cloud_thickness, env.eff_wind_time, density);
@@ -666,6 +710,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("c_scale", &tree_binder_c_scale);
     r_Constant("c_bias", &tree_binder_c_bias);
     r_Constant("c_sun", &tree_binder_c_sun);
+    r_Constant("c_tree", &tree_binder_c_tree);
 
     // hemi cube
     r_Constant("L_material", &binder_material);
@@ -708,6 +753,9 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_cloud_params", &binder_da_cloud_params);
     r_Constant("da_cloud_params2", &binder_da_cloud_params2);
     r_Constant("da_cloud_map", &binder_da_cloud_map);
+    r_Constant("da_cloud_debug", &binder_da_cloud_debug);
+    r_Constant("da_hud_light", &binder_da_hud_light);
+    r_Constant("da_hud_light2", &binder_da_hud_light2);
     r_Constant("da_wm_pos0", &binder_da_wm_pos0);
     r_Constant("da_wm_pos1", &binder_da_wm_pos1);
     r_Constant("da_wm_par0", &binder_da_wm_par0);

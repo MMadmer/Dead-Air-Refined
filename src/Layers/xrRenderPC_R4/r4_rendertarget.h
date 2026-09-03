@@ -206,6 +206,10 @@ private:
     // camera; the sun passes, the shafts and the visible deck all read it instead of evaluating
     // the field's noise per pixel.
     ref_rt rt_cloud_map;
+    ref_rt rt_clouds[2]; // the volumetric march at half resolution: current, history
+    ref_shader s_clouds_march;
+    ref_shader s_clouds_composite;
+    ref_rt rt_depth_copy; // depth as the g-buffer left it, readable during light accumulation
     ref_shader s_cloud_map;
     ref_geom g_fxaa;
 
@@ -358,7 +362,11 @@ public:
     void phase_taa(const Fmatrix& reproject);
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
-    void phase_cloud_map(); // the cloud deck field for this frame (before the sun)
+    void phase_cloud_map();
+    void dump_cloud_map();
+    void phase_clouds_march();
+    void phase_clouds_composite();
+    void copy_depth_for_hud(); // the cloud deck field for this frame (before the sun)
     void phase_combine();
     void phase_combine_volumetric();
     void phase_pp();

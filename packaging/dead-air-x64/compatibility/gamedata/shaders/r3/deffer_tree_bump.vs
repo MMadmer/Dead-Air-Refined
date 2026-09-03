@@ -1,13 +1,14 @@
 #include "common.h"
 #include "tree_instance.h"
 #include "da_wind_field.h"
-#include "da_wind_motors.h"
+#include "da_tree_bend.h"
 
 uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
 uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
 uniform float4 c_sun;
+uniform float4 c_tree;
 
 v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
 {
@@ -20,6 +21,7 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     float4 local_c_scale = c_scale;
     float4 local_c_bias = c_bias;
     float4 local_c_sun = c_sun;
+    float4 local_c_tree = c_tree;
     if (tree_instance_control.x > 0.5f)
     {
         local_xform = tree_instance_xform(instance_id);
@@ -27,49 +29,31 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
         local_c_scale = tree_instance_scale(instance_id);
         local_c_bias = tree_instance_bias(instance_id);
         local_c_sun = tree_instance_sun(instance_id);
+        local_c_tree = tree_instance_tree(instance_id);
     }
 
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;
     float H = pos.y - base;
     float frac = I.tc.z * consts.x;
-    // Root phase + per-tree natural frequency + wind-dependent mean/swing split + local
-    // heading + flexibility rule + total-bend cap: all identical to deffer_tree_flat.vs -
-    // see the notes there.
+
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);
-    // Natural frequency from the model's real height (CPU, c_sun.w) - a birch does not swing
-    // at an oak's rate. The position hash is only the fallback for a tree without one.
-    const float freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
-    // The crown's memory: a damped oscillator integrated on the CPU tracks the wind at this
-    // root (c_sun.z). It lags a gust, overshoots after it and rings down over several
-    // cycles - the thing an algebraic response can never do, and the thing the eye reads
-    // as a real tree rather than a waving card.
-    const float q_state = local_c_sun.z > 0.001f ? local_c_sun.z : 1.0f;
-    const float wind_k = saturate(da_wind_field.z);
-    const float sway_mean = 0.45f + 0.35f * wind_k;
-    float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(root3, (float3)wave));
-    float inten = H * dp * q_state;
-    float3 flow = da_wind_field_eval(root3.xz);
-    const float2 wdir = da_wind_local_dir(wind.xz, flow.z);
-    float2 result = calc_xz_wave(wdir * (inten * flow.x), frac);
-    result += wdir * (H * flow.y * 0.5f * frac * q_state);
-    // Motors reach bushes only - see deffer_tree_flat.vs.
-    float press_unused;
-    result += da_wind_motors_bend(root3, H, press_unused) *
-        (0.6f * saturate(frac * 2.0f) * saturate((5.0f - H) * 0.45f));
-    const float axis_r = length(pos.xz - root3.xz);
-    const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
-    const float dp2 = da_flutter(wave.w * 2.3f * freq_k + dot(pos, (float3)wave * 3.7f));
-    result += wdir * (dp2 * leaf_w * saturate(H * 1.5f) * frac * 1.2f);
-    // Soft tanh saturation - see deffer_tree_flat.vs.
-    const float bend_len = length(result);
-    const float bend_max = H * 0.50f;
-    [branch] if (bend_len > 0.001f)
-        result *= bend_max * tanh(bend_len / bend_max) / bend_len;
+    // The bend itself lives in da_tree_bend.h - one deformation for the crown, the trunk and
+    // the shadow. c_sun.z is the crown's CPU-integrated oscillator state, c_sun.w its
+    // natural-frequency factor from the model's real height; the hash is the fallback for a
+    // tree that carries neither.
+    da_tree_bend_in bi;
+    bi.pos = pos;
+    bi.root = root3;
+    bi.H = H;
+    bi.tree_h = local_c_tree.x;
+    bi.frac = frac;
+    bi.q_state = local_c_sun.z > 0.001f ? local_c_sun.z : 1.0f;
+    bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
+    float2 result = da_tree_bend(bi, wave, wind);
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
-    // Arc-length correction: displaced tips drop, the bend reads as a bend.
     const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
     float4 w_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);
     float2 tc = (I.tc * consts).xy;

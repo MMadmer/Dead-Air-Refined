@@ -80,7 +80,10 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define     r2_sunmask          "sunmask"
 // The cloud deck field rendered once per frame (phase_cloud_map); the sun passes read it
 // through s_lmap, the visible deck through s_cloud_map.
-#define     r2_RT_cloud_map     "$user$cloud_map"
+#define r2_RT_cloud_map "$user$cloud_map"
+#define r2_RT_depth_copy "$user$depth_copy"
+#define r2_RT_clouds0 "$user$clouds0"
+#define r2_RT_clouds1 "$user$clouds1"
 
 #define     r2_base             "$user$base"
 

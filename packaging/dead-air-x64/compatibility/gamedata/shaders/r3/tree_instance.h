@@ -1,7 +1,7 @@
 #ifndef TREE_INSTANCE_H
 #define TREE_INSTANCE_H
 
-#define TREE_INSTANCE_VECTOR_COUNT 9
+#define TREE_INSTANCE_VECTOR_COUNT 10
 #define TREE_INSTANCE_MAX_COUNT 64
 
 cbuffer tree_instance_data_buffer
@@ -48,6 +48,13 @@ float4 tree_instance_bias(uint instance_id)
 float4 tree_instance_sun(uint instance_id)
 {
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 8];
+}
+
+// Row 9: x = the height of the model in metres (the trunk bend profile runs on it). The
+// scalar path passes the same in c_tree.
+float4 tree_instance_tree(uint instance_id)
+{
+    return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 9];
 }
 
 #endif

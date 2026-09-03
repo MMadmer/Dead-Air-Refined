@@ -9,7 +9,7 @@ struct FSlideWindowItem;
 namespace xray::render::RENDER_NAMESPACE
 {
 #ifdef USE_DX11
-constexpr u32 FTreeVisualInstanceVectorCount = 9;
+constexpr u32 FTreeVisualInstanceVectorCount = 10;
 
 struct FTreeVisualInstanceData
 {
@@ -53,6 +53,8 @@ protected:
     mutable float m_wind_q{1.f};
     mutable float m_wind_qd{};
     float m_wind_omega{};
+    // Height of the model: the trunk bend profile in the shaders runs on it (c_tree, row 9).
+    float m_tree_height{1.f};
     mutable std::atomic<u32> m_wind_frame{};
     void UpdateWindState() const;
     // Row 8 of the per-instance data / c_sun of the scalar path: (sun scale, sun bias,

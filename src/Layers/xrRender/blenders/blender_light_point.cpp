@@ -170,6 +170,7 @@ void CBlender_accum_point::Compile(CBlender_Compile& C)
         // C.r_Sampler			("s_lmap",			C.L_textures[0]);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -194,6 +195,7 @@ void CBlender_accum_point::Compile(CBlender_Compile& C)
         // jitter				(C);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -221,6 +223,7 @@ void CBlender_accum_point::Compile(CBlender_Compile& C)
         // jitter				(C);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -248,6 +251,7 @@ void CBlender_accum_point::Compile(CBlender_Compile& C)
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         // jitter				(C);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -350,6 +354,7 @@ void CBlender_accum_point_msaa::Compile(CBlender_Compile& C)
         // C.r_Sampler			("s_lmap",			C.L_textures[0]);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -374,6 +379,7 @@ void CBlender_accum_point_msaa::Compile(CBlender_Compile& C)
         // jitter				(C);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -401,6 +407,7 @@ void CBlender_accum_point_msaa::Compile(CBlender_Compile& C)
         // jitter				(C);
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);
@@ -428,6 +435,7 @@ void CBlender_accum_point_msaa::Compile(CBlender_Compile& C)
         // C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
         // jitter				(C);
         C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_lmap", C.L_textures[0]);

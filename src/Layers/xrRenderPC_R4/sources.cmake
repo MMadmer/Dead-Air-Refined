@@ -21,6 +21,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11DetailManager_VS.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11GpuTimers.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_cloud_map.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_clouds.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11HW.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11HWCaps.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11ResourceManager_Resources.cpp"

@@ -72,8 +72,9 @@ float da_cloud_coverage(float2 xz)
     const float2 q = (xz - da_cloud_params.zw) * (1.0f / 2200.0f);
     const float n = da_cl_fbm3(q);
     const float c = saturate(da_cloud_params.x);
-    const float thr = 0.80f - 0.70f * c;
-    return smoothstep(thr, thr + 0.16f, n);
+    // Calibrated to the fbm: the covered fraction of the sky tracks c itself.
+    const float thr = 0.55f - 0.28f * c;
+    return smoothstep(thr, thr + 0.14f, n);
 }
 
 // Fine erosion (~300 m), drifting a touch faster than the cells: shear between the layers is
@@ -129,7 +130,11 @@ float3 da_cloud_field(Texture2D map, float2 xz)
         return m;
     const float cov = da_cloud_coverage(xz);
     const float det = da_cloud_detail(xz);
-    const float3 n = float3(da_cloud_erode(cov, det), cov, det);
+    float3 n = float3(da_cloud_erode(cov, det), cov, det);
+    // A NaN here poisons every probe sum and comparison downstream of it (the march skipped
+    // whole rays); the noise is finite for finite input, so this only guards the input.
+    [flatten] if (any(isnan(n)) || any(isinf(n)))
+        n = m;
     return lerp(m, n, smoothstep(0.8f, 1.0f, edge));
 }
 

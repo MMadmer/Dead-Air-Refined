@@ -1,0 +1,114 @@
+#include "common.h"
+#include "da_clouds_vol.h"
+
+// The volumetric march, at half resolution, for every direction in the frame (the sky mask
+// is applied at composite). Output: rgb = in-scattered light (premultiplied), a = the
+// transmittance of the deck along the ray. Accumulated over frames: the start offset is
+// jittered per frame and the result is blended with the previous frame's, reprojected by
+// direction - the deck is far enough that the camera's translation does not matter.
+Texture2D s_cloud_map;
+Texture2D s_clouds_hist;
+
+// da_cloud_temporal: x = history blend (0 = none), y = frame index, z = history valid, w = steps.
+uniform float4 da_cloud_temporal;
+// The previous frame's camera basis, the same layout as da_cloud_cam_*.
+uniform float4 da_cloud_prev_r;
+uniform float4 da_cloud_prev_u;
+uniform float4 da_cloud_prev_d;
+
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+};
+
+float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
+{
+	const float3 dir = da_cloud_view_ray(I.tc0);
+	const float cover = da_cloud_params.x;
+	float4 result = float4(0, 0, 0, 1);
+
+	const float base_alt = da_cloud_params.y;
+	const float thickness = max(da_cloud_params2.y, 50.0f);
+	const float rise = base_alt - eye_position.y;
+	// Below the horizon there is no deck; the far deck is edge-on anyway.
+	[branch] if (dir.y > 0.012f && cover > 0.001f && rise > 50.0f)
+	{
+		const float3 to_sun = -L_sun_dir_w;
+		const float cos_t = dot(dir, to_sun);
+		const float sun_up = saturate(to_sun.y * 4.0f + 0.2f);
+		float3 sun, sky;
+		da_cloud_lights(sun_up, sun, sky);
+		const float ext = 0.045f;
+
+		const float t0 = rise / dir.y;
+		// A grazing ray would cross the slab for tens of kilometres; past a few of them the
+		// deck is haze anyway (below), so the march budget stops there and the steps stay fine.
+		const float t1 = min((rise + thickness) / dir.y, t0 + 7000.0f);
+		// More steps toward the horizon, where a ray crosses kilometres of slab and the step
+		// planes would otherwise show as streaks.
+		const int steps = int(da_cloud_temporal.w + 0.5f) + int(14.0f * saturate(1.0f - dir.y * 2.5f));
+		const float dt = (t1 - t0) / float(steps);
+		// Golden-ratio frame offset over a per-pixel hash: with the temporal blend the step
+		// planes average out over a dozen frames.
+		const float jitter = frac(da_cl_hash(pos2d.xy) + da_cloud_temporal.y * 0.618034f);
+
+		// Nothing along the slab where the weather map is empty: three probes decide.
+		const float3 w0 = da_cloud_field(s_cloud_map, (eye_position + dir * t0).xz);
+		const float3 w1 = da_cloud_field(s_cloud_map, (eye_position + dir * (0.5f * (t0 + t1))).xz);
+		const float3 w2 = da_cloud_field(s_cloud_map, (eye_position + dir * t1).xz);
+		const float probe = w0.y + w1.y + w2.y;
+		[branch] if (probe > 0.006f || isnan(probe))
+		{
+			float T = 1.0f;
+			float3 acc = 0;
+			[loop]
+			for (int i = 0; i < steps; ++i)
+			{
+				const float t = t0 + (float(i) + jitter) * dt;
+				const float3 p = eye_position + dir * t;
+				const float hn = saturate((p.y - base_alt) / thickness);
+				const float3 w = da_cloud_field(s_cloud_map, p.xz);
+				// The far deck thins: what is kilometres away is haze, not a wall of cloud.
+				const float d = da_cloud_density_vol(p, w, hn, false) * exp(-t * (1.0f / 12000.0f));
+				[branch] if (d <= 0.002f)
+					continue;
+				const float tau = da_cloud_sun_depth(s_cloud_map, p, to_sun, base_alt, thickness, ext);
+				const float3 lit = da_cloud_sun_scatter(tau, cos_t, d);
+				// Sky light: dark base, bright top, a touch of the ground's bounce below.
+				const float3 amb = sky * (0.42f + 0.58f * hn);
+				const float3 c = amb + sun * lit * 1.15f;
+				const float a = 1.0f - exp(-d * ext * dt);
+				acc += T * a * c;
+				T *= 1.0f - a;
+				[branch] if (T < 0.01f)
+					break;
+			}
+			// Aerial perspective: a deck kilometres away takes the horizon's colour and thins
+			// into the sky - the far edge of the slab must never stand as a wall.
+			const float haze = 1.0f - exp(-t0 * (1.0f / 12000.0f));
+			acc = lerp(acc, fog_color.rgb * (1.0f - T), haze);
+			T = lerp(T, 1.0f, haze);
+			acc *= 1.0f - haze;
+			result = float4(acc, T);
+		}
+	}
+
+	// Temporal accumulation: the previous frame's result where this direction fell on it.
+	// The deck is far enough that only the camera's rotation matters.
+	[branch] if (da_cloud_temporal.x > 0.001f && da_cloud_temporal.z > 0.5f)
+	{
+		const float fwd = dot(dir, da_cloud_prev_d.xyz);
+		[branch] if (fwd > 0.05f)
+		{
+			const float2 ndc = float2(dot(dir, da_cloud_prev_r.xyz) / (fwd * da_cloud_prev_r.w),
+			                          dot(dir, da_cloud_prev_u.xyz) / (fwd * da_cloud_prev_u.w));
+			const float2 puv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
+			[branch] if (all(puv > 0.001f) && all(puv < 0.999f))
+			{
+				const float4 hist = s_clouds_hist.SampleLevel(smp_rtlinear, puv, 0);
+				result = lerp(result, hist, da_cloud_temporal.x);
+			}
+		}
+	}
+	return result;
+}

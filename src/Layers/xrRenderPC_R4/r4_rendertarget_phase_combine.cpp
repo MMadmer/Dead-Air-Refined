@@ -189,9 +189,9 @@ void CRenderTarget::phase_combine()
         dx11GpuTimerScope gpu_clouds(dx11GpuTimers::Clouds);
         g_pGamePersistent->Environment().RenderSky();
 
-        //	Igor: Render clouds before compine without Z-test
-        //	to avoid siluets. HOwever, it's a bit slower process.
-        g_pGamePersistent->Environment().RenderClouds();
+        // The deck: a full-screen pass over the sky pixels, in place of the stock cloud dome
+        // (whose cap never reached the zenith). See r4_rendertarget_phase_clouds.cpp.
+        phase_clouds_composite();
 
         //	Moved to shader!
         // RCache.set_Z(TRUE);

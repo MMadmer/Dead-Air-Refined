@@ -16,6 +16,7 @@ void R_tree::unmap()
     c_c_scale = nullptr;
     c_c_bias = nullptr;
     c_c_sun = nullptr;
+    c_c_tree = nullptr;
 }
 
 void R_tree::set_m_xform_v(Fmatrix& mat)
@@ -64,5 +65,11 @@ void R_tree::set_c_sun(float x, float y, float z, float w)
 {
     if (c_c_sun)
         cmd_list.set_c(c_c_sun, x, y, z, w);
+}
+
+void R_tree::set_c_tree(float x, float y, float z, float w)
+{
+    if (c_c_tree)
+        cmd_list.set_c(c_c_tree, x, y, z, w);
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -15,6 +15,7 @@ pcstr dx11GpuTimers::name(Slot slot)
     case Sun: return "sun";
     case Lights: return "lights";
     case Clouds: return "clouds";
+    case CloudsMarch: return "clouds_march";
     case Combine: return "combine";
     default: return "?";
     }

@@ -1,0 +1,88 @@
+#include "common.h"
+#include "da_clouds_vol.h"
+
+// The deck on the sky: a full-screen pass over the sky pixels (stencil), blended over the
+// skybox as premultiplied colour + transmittance (ONE, SRCALPHA).
+//
+// Tiers (da_cloud_params2.x):
+//   0/1 - the flat deck: the view ray meets the base plane, the weather map's column is the
+//         cloud, lit by a one-tap sun probe (tier 1 adds a per-pixel rim and the probe).
+//   2/3 - the volumetric march (da_clouds_march.ps) upsampled from half resolution.
+Texture2D s_cloud_map;
+Texture2D s_clouds;
+uniform float4 da_cloud_debug; // x: 0 off, 1 transmittance, 2 raw colour
+
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+};
+
+float da_cl_lit_flat(float tau)
+{
+	return (exp(-tau) + 0.5f * exp(-tau * 0.2f) + 0.3f * exp(-tau * 0.05f)) * (1.0f / 1.8f);
+}
+
+float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
+{
+	const float3 dir = da_cloud_view_ray(I.tc0);
+	const float horizon = saturate((dir.y - 0.012f) * 9.0f);
+	[branch] if (horizon <= 0.0f || da_cloud_params.x <= 0.001f)
+		return float4(0, 0, 0, 1);
+
+	const int tier = int(da_cloud_params2.x + 0.5f);
+	float3 col = 0;
+	float T = 1.0f;
+
+	[branch] if (tier >= 2)
+	{
+		const float4 c = s_clouds.SampleLevel(smp_rtlinear, I.tc0, 0);
+		col = c.rgb;
+		T = c.a;
+	}
+	else
+	{
+		const float base_alt = da_cloud_params.y;
+		const float thickness = max(da_cloud_params2.y, 50.0f);
+		const float rise = max(base_alt - eye_position.y, 100.0f);
+		const float3 to_sun = -L_sun_dir_w;
+		const float sun_up = saturate(to_sun.y * 4.0f + 0.2f);
+		float3 sun, sky;
+		da_cloud_lights(sun_up, sun, sky);
+		const float phase = da_cloud_phase(dot(dir, to_sun), 1.0f);
+		const float sun_lat = thickness / max(to_sun.y, 0.2f);
+
+		const float t = rise / dir.y;
+		const float2 hit = eye_position.xz + dir.xz * t;
+		const float d2 = da_cloud_field(s_cloud_map, hit).x;
+		[branch] if (d2 > 0.002f)
+		{
+			const float d = tier > 0 ? saturate(d2 - da_cloud_fine(hit, 0.5f) * 0.45f * (1.0f - d2)) : d2;
+			[branch] if (d > 0.002f)
+			{
+				const float above = tier > 0 ? da_cloud_field(s_cloud_map, hit + to_sun.xz * sun_lat * 0.6f).x : d2;
+				const float lit = da_cl_lit_flat(above * 2.2f + d * 1.6f);
+				const float rim = da_cl_lit_flat(d * 6.0f);
+				float3 c = sky * (0.55f + 0.3f * (1.0f - d)) + sun * (lit * 0.8f + rim * phase * 0.3f);
+				const float alpha = saturate(d * 1.6f);
+				const float haze = pow(1.0f - dir.y, 4.0f);
+				c = lerp(c, fog_color.rgb * 1.2f, haze * 0.85f);
+				col = c * alpha;
+				T = 1.0f - alpha;
+			}
+		}
+	}
+
+	// Debug views replace the sky: the transmittance as grey, or the raw colour.
+	const float scale = s_tonemap.Load(int3(0, 0, 0)).x;
+	[branch] if (da_cloud_debug.x > 0.5f)
+	{
+		[branch] if (da_cloud_debug.x < 1.5f)
+			return float4(T.xxx * scale, 0.0f);
+		return float4(col * scale, 0.0f);
+	}
+	col *= scale * horizon;
+	T = lerp(1.0f, T, horizon);
+	// Output dithering against 8-bit banding on a half-sky gradient.
+	col += (da_cl_hash(pos2d.xy) - 0.5f) * (1.0f / 255.0f);
+	return float4(col, T);
+}

@@ -194,6 +194,7 @@ int ps_r__actor_shadow = 0;
 int ps_r__tree_shadow_sway = 0;
 // Cloud deck tier (da_clouds.h): 0/1 flat deck, 2 volumetric 6 steps, 3 volumetric 12 steps.
 int ps_r__clouds_quality = 1;
+int ps_r__clouds_debug = 0; // 0 off, 1 the deck's transmittance, 2 its raw colour
 // r__clouds_quality: pin the tier for tuning and QA; -1 follows the preset.
 int ps_r__clouds_quality_override = -1;
 // r__clouds_cover: pin the deck's coverage (0..1) for tuning and QA; -1 follows the weather.
@@ -1026,6 +1027,14 @@ public:
 
 // Logs the last resolved GPU pass timings. The stats HUD shows the same numbers; this one
 // exists so a QA probe can read them back from the log.
+void da_dump_cloud_map();
+class CCC_CloudMapDump final : public IConsole_Command
+{
+public:
+    CCC_CloudMapDump(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override { da_dump_cloud_map(); }
+};
+
 class CCC_gpu_stats : public IConsole_Command
 {
 public:
@@ -1674,6 +1683,8 @@ void xrRender_initconsole()
     CMD3(CCC_Mask, "r3_volumetric_smoke", &ps_r2_ls_flags, R3FLAG_VOLUMETRIC_SMOKE);
     CMD1(CCC_memory_stats, "render_memory_stats");
     CMD1(CCC_gpu_stats, "r__gpu_stats");
+    CMD1(CCC_CloudMapDump, "r__cloud_map_dump");
+    CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 2);
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
     CMD4(CCC_Integer, "r__screenshot_every", &ps_r__screenshot_every, 0, 100000);
 

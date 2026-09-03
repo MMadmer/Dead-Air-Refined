@@ -447,6 +447,7 @@ void D3DXRenderBase::DumpStatistics(IGameFont& font, IPerformanceAlert* alert)
             font.OutNext("- sun:        %2.2fms", GpuTimers.ms(dx11GpuTimers::Sun));
             font.OutNext("- lights:     %2.2fms", GpuTimers.ms(dx11GpuTimers::Lights));
             font.OutNext("- clouds:     %2.2fms", GpuTimers.ms(dx11GpuTimers::Clouds));
+            font.OutNext("- march:      %2.2fms", GpuTimers.ms(dx11GpuTimers::CloudsMarch));
             font.OutNext("- combine:    %2.2fms", GpuTimers.ms(dx11GpuTimers::Combine));
         }
         else

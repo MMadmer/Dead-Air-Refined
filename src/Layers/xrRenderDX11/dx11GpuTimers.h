@@ -28,6 +28,7 @@ public:
         Sun, // sun accumulation, cloud shadows included
         Lights, // local lights
         Clouds, // the cloud cache retrace and the sky/cloud composite
+        CloudsMarch, // the volumetric march at half resolution
         Combine, // combine + post-processing + AA
         Count
     };

@@ -74,6 +74,7 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
     {
         const float H = std::max(vis.box.vMax.y - vis.box.vMin.y, 1.f);
         m_wind_omega = PI_MUL_2 * 1.2f / _sqrt(H);
+        m_tree_height = H;
     }
 
     /*if (RImplementation.o.ffp && dcl_equal(vFormat, mu_model_decl_unpacked))
@@ -263,6 +264,7 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 #endif
     const Fvector4 row = wind_state_row(s);
     cmd_list.tree.set_c_sun(row.x, row.y, row.z, row.w); // sun + crown wind state
+    cmd_list.tree.set_c_tree(m_tree_height, 0.f, 0.f, 0.f); // model height for the trunk bend
 }
 
 #ifdef USE_DX11
@@ -305,6 +307,7 @@ void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& 
     data.vectors[7].set(scale * c_bias.rgb.x, scale * c_bias.rgb.y, scale * c_bias.rgb.z,
         scale * c_bias.hemi);
     data.vectors[8] = wind_state_row(scale);
+    data.vectors[9].set(m_tree_height, 0.f, 0.f, 0.f);
 }
 #endif
 

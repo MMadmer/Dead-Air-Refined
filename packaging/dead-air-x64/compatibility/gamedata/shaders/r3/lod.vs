@@ -56,9 +56,10 @@ vf 	main	( vv I )
 		const float wind_k = saturate(da_wind_field.z);
 		const float sway_mean = 0.45f + 0.35f * wind_k;
 		const float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * freq_k + dot(p, (float3)wave));
-		float2 bend = wdir * (12.0f * top * dp * flow.x) + wdir * (12.0f * top * flow.y * 0.5f);
+		// (top*top): the trunk profile of da_tree_bend.h - stiff at the base, most travel at the crown.
+		float2 bend = wdir * (12.0f * top * top * (dp * flow.x * 0.8f + flow.y * 0.4f));
 		const float bend_len = length(bend);
-		const float bend_max = 12.0f * top * 0.50f;
+		const float bend_max = 12.0f * top * 0.14f;
 		[branch] if (bend_len > 0.001f)
 			bend *= bend_max * tanh(bend_len / bend_max) / bend_len;
 		p.xz += bend;

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <DirectXTex.h>
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
@@ -32,6 +33,9 @@ void CRenderTarget::phase_cloud_map()
     g_da_cloud_map_center_z = floorf(eye.z / texel) * texel;
 
     u_setrt(RCache, rt_cloud_map, nullptr, nullptr, (ID3DDepthStencilView*)nullptr);
+    // u_setrt binds the target but leaves the viewport alone (the stock passes set their own);
+    // without this the quad rasterizes at screen size and only its top-left lands in the target.
+    RCache.SetViewport({ 0.f, 0.f, float(rt_cloud_map->dwWidth), float(rt_cloud_map->dwHeight), 0.f, 1.f });
     RCache.set_Stencil(FALSE);
     RCache.set_Z(FALSE);
     RCache.set_CullMode(CULL_NONE);
@@ -51,5 +55,62 @@ void CRenderTarget::phase_cloud_map()
 
     // Back to the device-sized viewport for whatever renders next.
     u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), nullptr, nullptr, get_base_zb());
+}
+
+// Diagnostic (r__cloud_map_dump): the map as a PNG next to the screenshots, so a "no clouds
+// overhead" report can be checked against what the field actually holds around the camera.
+void CRenderTarget::dump_cloud_map()
+{
+    if (!rt_cloud_map || !rt_cloud_map->pSurface)
+        return;
+    DirectX::ScratchImage image;
+    if (FAILED(DirectX::CaptureTexture(HW.pDevice, HW.get_context(CHW::IMM_CTX_ID), rt_cloud_map->pSurface, image)))
+    {
+        Log("! cloud map dump: capture failed");
+        return;
+    }
+    string_path path;
+    FS.update_path(path, "$screenshots$", "cloud_map.png");
+    wchar_t wpath[MAX_PATH];
+    mbstowcs(wpath, path, MAX_PATH);
+    const HRESULT hr = DirectX::SaveToWICFile(*image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
+        DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+    Msg("* cloud map dump -> %s (%s) centre=(%.0f, %.0f) extent=%.0f", path, SUCCEEDED(hr) ? "ok" : "FAILED",
+        g_da_cloud_map_center_x, g_da_cloud_map_center_z, g_da_cloud_map_extent);
+
+    // The march buffer too (half-res RGBA16F -> 8-bit, alpha dropped: the colour is what shows).
+    if (rt_clouds[0] && rt_clouds[0]->pSurface)
+    {
+        DirectX::ScratchImage march, converted;
+        if (SUCCEEDED(DirectX::CaptureTexture(HW.pDevice, HW.get_context(CHW::IMM_CTX_ID), rt_clouds[0]->pSurface, march)) &&
+            SUCCEEDED(DirectX::Convert(*march.GetImage(0, 0, 0), DXGI_FORMAT_B8G8R8X8_UNORM, DirectX::TEX_FILTER_DEFAULT, 0.f, converted)))
+        {
+            static u32 dump_index = 0; string64 dump_name; xr_sprintf(dump_name, "cloud_march_%u.png", dump_index++); FS.update_path(path, "$screenshots$", dump_name);
+            mbstowcs(wpath, path, MAX_PATH);
+            const HRESULT hr2 = DirectX::SaveToWICFile(*converted.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
+                DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+            Msg("* cloud march dump -> %s (%s)", path, SUCCEEDED(hr2) ? "ok" : "FAILED");
+            // The transmittance too, as grey: white = clear sky, black = opaque cloud.
+            DirectX::ScratchImage tgrey, tconv;
+            const HRESULT hr3 = DirectX::TransformImage(*march.GetImage(0, 0, 0),
+                [](DirectX::XMVECTOR* out, const DirectX::XMVECTOR* in, size_t w, size_t) {
+                    for (size_t x = 0; x < w; ++x)
+                        out[x] = DirectX::XMVectorSetW(DirectX::XMVectorSplatW(in[x]), 1.f);
+                }, tgrey);
+            if (SUCCEEDED(hr3) && SUCCEEDED(DirectX::Convert(*tgrey.GetImage(0, 0, 0), DXGI_FORMAT_B8G8R8X8_UNORM, DirectX::TEX_FILTER_DEFAULT, 0.f, tconv)))
+            {
+                xr_sprintf(dump_name, "cloud_march_t_%u.png", dump_index - 1);
+                FS.update_path(path, "$screenshots$", dump_name);
+                mbstowcs(wpath, path, MAX_PATH);
+                DirectX::SaveToWICFile(*tconv.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE, DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+            }
+        }
+    }
+}
+
+void da_dump_cloud_map()
+{
+    if (RImplementation.Target)
+        RImplementation.Target->dump_cloud_map();
 }
 } // namespace xray::render::RENDER_NAMESPACE

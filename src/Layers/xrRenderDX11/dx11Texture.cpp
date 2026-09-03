@@ -352,8 +352,12 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
             return nullptr;
         });
 
+        // A volume's images are laid out slice by slice within each mip, so the mip skip below
+        // (an offset into the image array, width/height halved) would shift it by SLICES and
+        // leave the depth untouched - the volume came out as garbage. Volumes keep every mip.
+        const bool is_volume = IMG.dimension == DirectX::TEX_DIMENSION_TEXTURE3D;
         size_t mip_lod = 0;
-        if (img_loaded_lod && !IMG.IsCubemap())
+        if (img_loaded_lod && !IMG.IsCubemap() && !is_volume)
         {
             const auto old_mipmap_cnt = IMG.mipLevels;
             Reduce(IMG.width, IMG.height, IMG.mipLevels, img_loaded_lod);

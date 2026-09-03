@@ -334,6 +334,10 @@ CRenderTarget::CRenderTarget()
         // The cloud deck field: 512 texels over a 6 km square is ~12 m per texel, which is
         // finer than any cloud edge the field produces. One megabyte.
         rt_cloud_map.create(r2_RT_cloud_map, 1024, 1024, D3DFMT_A8R8G8B8, 1);
+        // Same format as the base depth so CopyResource works; the light accumulation reads
+        // it to tell first-person pixels apart (see da_hud_light.h).
+        if (!options.msaa)
+            rt_depth_copy.create(r2_RT_depth_copy, w, h, HW.Caps.fDepth, 1);
         rt_SunShaftsMask.create(r2_RT_SunShaftsMask, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsMaskSmoothed.create(r2_RT_SunShaftsMaskSmoothed, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsPass0.create(r2_RT_SunShaftsPass0, w, h, D3DFMT_A8R8G8B8, 1);
@@ -758,6 +762,12 @@ CRenderTarget::CRenderTarget()
         // The cloud deck field pass (phase_cloud_map): reads nothing from the frame, so it is
         // fine under MSAA too.
         s_cloud_map.create("da_cloud_map");
+        // The volumetric deck: marched at half resolution into clouds0, clouds1 keeps the
+        // previous frame for the temporal blend; the composite lays it over the sky.
+        rt_clouds[0].create(r2_RT_clouds0, Device.dwWidth / 2, Device.dwHeight / 2, D3DFMT_A16B16G16R16F, 1);
+        rt_clouds[1].create(r2_RT_clouds1, Device.dwWidth / 2, Device.dwHeight / 2, D3DFMT_A16B16G16R16F, 1);
+        s_clouds_march.create("da_clouds_march");
+        s_clouds_composite.create("da_clouds");
 
         // Puddle reflections read the single-sampled G-buffer helpers; under MSAA common.h
         // types s_position as Texture2DMS and the shader would only fail to compile.

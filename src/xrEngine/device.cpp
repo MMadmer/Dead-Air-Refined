@@ -621,7 +621,13 @@ void CRenderDevice::FrameMove()
 
     dwFrame++;
     Core.dwFrame = dwFrame;
-    dwTimeContinual = TimerMM.GetElapsed_ms() - app_inactive_time;
+    {
+        static u32 continual_prev = TimerMM.GetElapsed_ms() - app_inactive_time;
+        const u32 continual_now = TimerMM.GetElapsed_ms() - app_inactive_time;
+        fTimeDeltaUnscaled = std::clamp(float(continual_now - continual_prev) * 0.001f, EPS_S + EPS_S, 0.25f);
+        continual_prev = continual_now;
+        dwTimeContinual = continual_now;
+    }
 
     fTimeDeltaReal = Timer.GetElapsed_sec();
     if (!_valid(fTimeDeltaReal))
@@ -655,7 +661,9 @@ void CRenderDevice::FrameMove()
         dwTimeGlobal = TimerGlobal.GetElapsed_ms();
         dwTimeDelta = dwTimeGlobal - _old_global;
     }
-    ImGui::GetIO().DeltaTime = fTimeDeltaReal;
+    // Wall clock: with time_factor 20 the console's key repeat used to type twenty characters
+    // per press, because ImGui paces repeats on this delta.
+    ImGui::GetIO().DeltaTime = fTimeDeltaUnscaled;
 
     m_imgui_render->Frame();
     ImGui::NewFrame();

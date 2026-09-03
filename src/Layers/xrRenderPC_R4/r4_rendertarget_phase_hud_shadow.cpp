@@ -133,6 +133,17 @@ void CRender::render_hud_shadow()
     Target->phase_hud_shadow(RCache);
 }
 
+// The depth buffer as the g-buffer left it, copied once before the local lights accumulate:
+// their shader reads it to tell first-person pixels (rasterized into the top slice of the
+// depth range) from the world, rebuilds their position with the HUD field of view and marches
+// the self-shadow toward each light. Nothing to copy under MSAA - the feature stays off there.
+void CRenderTarget::copy_depth_for_hud()
+{
+    if (!ps_r__hud_shadow || !rt_depth_copy || RImplementation.o.msaa)
+        return;
+    HW.get_context(RCache.context_id)->CopyResource(rt_depth_copy->pSurface, rt_Base_Depth->pSurface);
+}
+
 void CRenderTarget::phase_smap_hud(CBackend& cmd_list)
 {
     // Depth only, like the rain map: the caster set is the first-person hands and item, and

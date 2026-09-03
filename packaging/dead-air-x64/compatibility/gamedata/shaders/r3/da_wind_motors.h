@@ -61,9 +61,9 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
             const float dy = trace_y - (root_w.y + H);
             const float dist3 = sqrt(dist_xz * dist_xz + dy * dy);
             [branch]
-            if (dist3 > 0.45f)
+            if (dist3 > 1.0f)
                 continue;
-            const float t = dist3 * (1.0f / 0.16f);
+            const float t = dist3 * (1.0f / 0.4f);
             const float2 radial = (dist_xz > 0.02f) ? (d / dist_xz) : float2(-ldir.y, ldir.x);
             const float2 push = normalize(ldir * 0.75f + radial * 0.50f);
             bend += push * (exp(-t * t) * A.x * H);

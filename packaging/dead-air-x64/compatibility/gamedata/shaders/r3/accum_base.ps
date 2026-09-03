@@ -1,6 +1,7 @@
 #include "common.h"
 #include "lmodel.h"
 #include "shadow.h"
+#include "da_hud_light.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // This is the basic primitive used by convex, volumetric lights
@@ -28,7 +29,7 @@ uniform float4              m_lmap        [2]        ;
 float4 main( p_volume I, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX ) : SV_Target
 #else
 [earlydepthstencil]
-float4 main( p_volume I, uint iSample : SV_SAMPLEINDEX  ) : SV_Target
+float4 main( p_volume I, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX  ) : SV_Target
 #endif
 #else
 #ifdef GBUFFER_OPTIMIZATION
@@ -36,7 +37,7 @@ float4 main( p_volume I, uint iSample : SV_SAMPLEINDEX  ) : SV_Target
 float4 main( p_volume I, float4 pos2d : SV_Position ) : SV_Target
 #else
 [earlydepthstencil]
-float4 main( p_volume I ) : SV_Target
+float4 main( p_volume I, float4 pos2d : SV_Position ) : SV_Target
 #endif
 #endif
 {
@@ -54,6 +55,15 @@ float4 main( p_volume I ) : SV_Target
 
 	float4 _P				= float4( gbd.P, gbd.mtl );
 	float4 _N				= float4( gbd.N, gbd.hemi );
+
+	// First-person pixel: its position rebuilt with the HUD field of view (da_hud_light.h),
+	// lifted a touch off its own surface the way the g-buffer path does above.
+	bool hud = false;
+#ifndef MSAA_OPTIMIZATION
+	hud = da_hud_pixel( pos2d.xy );
+	[branch] if ( hud )
+		_P.xyz = da_hud_position( pos2d.xy, gbd.P.z ) + gbd.N * 0.004f;
+#endif
 
 	float 	m	= xmaterial	;
 # ifndef USE_R2_STATIC_SUN
@@ -74,6 +84,12 @@ float4 main( p_volume I ) : SV_Target
 							s		= shadow( PS );
                 #endif
         #endif
+
+#ifndef MSAA_OPTIMIZATION
+		// The hands shadow themselves from this light: screen-space, since no shadow map has them.
+		[branch] if ( hud )
+			s *= da_hud_ss_shadow( _P.xyz, _N.xyz, Ldynamic_pos.xyz, pos2d.xy );
+#endif
 
         // ----- lightmap
         float4         lightmap= 1.h;

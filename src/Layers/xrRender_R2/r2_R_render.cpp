@@ -444,6 +444,10 @@ void CRender::Render()
     // shafts march through it, and the deck itself is drawn from it in combine.
 #if RENDER == R_R4
     Target->phase_cloud_map();
+    {
+        dx11GpuTimerScope gpu_march(dx11GpuTimers::CloudsMarch);
+        Target->phase_clouds_march();
+    }
 #endif
 
     // Directional light - fucking sun
@@ -502,6 +506,9 @@ void CRender::Render()
     // Lighting, non dependant on OCCQ
     {
         PIX_EVENT(DEFER_LIGHT_NO_OCCQ);
+#if RENDER == R_R4
+        Target->copy_depth_for_hud();
+#endif
         render_lights(LP_normal);
     }
 
@@ -544,10 +551,10 @@ void CRender::Render()
     // reads GPU cost back - the stats HUD never reaches the log.
     if (ps_r__gpu_log > 0 && GpuTimers.valid() && (Device.dwFrame % u32(ps_r__gpu_log)) == 0)
     {
-        Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f combine=%.3f ms",
+        Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f march=%.3f combine=%.3f ms",
             GpuTimers.ms(dx11GpuTimers::Frame), GpuTimers.ms(dx11GpuTimers::Scene),
             GpuTimers.ms(dx11GpuTimers::Sun), GpuTimers.ms(dx11GpuTimers::Lights),
-            GpuTimers.ms(dx11GpuTimers::Clouds), GpuTimers.ms(dx11GpuTimers::Combine));
+            GpuTimers.ms(dx11GpuTimers::Clouds), GpuTimers.ms(dx11GpuTimers::CloudsMarch), GpuTimers.ms(dx11GpuTimers::Combine));
     }
 #endif
 

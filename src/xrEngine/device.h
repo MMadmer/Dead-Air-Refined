@@ -134,6 +134,9 @@ public:
     // Engine flow-control
     float fTimeDelta{};
     float fTimeDeltaReal{};
+    // Wall-clock frame delta. fTimeDeltaReal comes off the game timer and follows time_factor;
+    // input repeat and UI animation must not.
+    float fTimeDeltaUnscaled{};
     float fTimeGlobal{};
     u32 dwTimeDelta{};
     u32 dwTimeGlobal{};
