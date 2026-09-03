@@ -1463,14 +1463,17 @@ void CEnvironment::UpdateEffectiveWind()
         float amp = 0.f, ring_r = 0.f;
         if (h.used && h.kind == EWaterHit::ring)
         {
-            // A stone-skip ring: fast for a blast, gentle for a bullet. The edge fade takes
-            // the crest to zero before the front reaches its rim.
+            // A ring on water: the front runs at the group speed of a small gravity-capillary
+            // packet (~0.9 m/s; a blast's is a bore, 4.5), the crest thins as the circle grows
+            // (energy spread over the circumference, ~1/sqrt(r)) and decays in time; the edge
+            // fade takes it to zero before the front reaches its rim, so a ring never snaps.
             const float age = now - h.birth;
             const bool big = h.radius > 2.5f;
-            const float speed = big ? 4.5f : 1.7f;
+            const float speed = big ? 4.5f : 0.9f;
             ring_r = speed * age;
             const float edge = clampr((h.radius - ring_r) / (0.35f * h.radius), 0.f, 1.f);
-            amp = expf(-age * (big ? 1.1f : 2.2f)) * edge;
+            const float spread = big ? 1.f : 1.f / _sqrt(1.f + ring_r * 1.5f);
+            amp = expf(-age * (big ? 1.1f : 0.9f)) * spread * edge;
             if (ring_r >= h.radius || amp < 0.02f)
                 h.used = false;
         }

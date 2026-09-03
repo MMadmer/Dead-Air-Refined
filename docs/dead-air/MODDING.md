@@ -655,8 +655,11 @@ footsteps of the actor, stalkers and monsters (`step_manager.cpp`) and physics b
 footsteps). Whether a spot is water, and where the ring goes, is one function
 (`da_water_surface`): a liquid material, the rain puddle mask, or a liquid surface straight
 above the spot - the water mesh is passable, so a foot on the lake floor and a body that sank
-report the bottom's material, and the ring is placed on the surface above them. One ring per spot per quarter second, so a body sliding in makes one. The knobs
-are the `ring_*` lines of `[water_impact]` in `dead_air_x64_water.ltx`. The cost is the
+report the bottom's material, and the ring is placed on the surface above them. One ring per spot per quarter second, so a body sliding in makes one. A ring is a wave
+packet: the front runs at ~0.9 m/s (a blast's bore at 4.5), the longest crest (~30 cm) leads,
+shorter ones trail and die out behind it, nothing runs ahead of the front, and the crest thins
+as the circle grows, fading out before it reaches its rim. The knobs are the `ring_*` lines
+of `[water_impact]` in `dead_air_x64_water.ltx`. The cost is the
 same loop the puddles already ran: a quiet world walks nothing, a busy one at most eight
 rows per water pixel - no preset gate is warranted. Scripts can drive the actor's input
 for a probe: `level.press_action(id)`, `level.hold_action(id)` (every frame, like a held

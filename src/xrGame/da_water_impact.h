@@ -16,7 +16,7 @@ struct SDaWaterImpactCfg
 {
     shared_str material{"materials\\water"};
     float mask_threshold{0.22f};
-    float ring_radius_bullet{0.9f};
+    float ring_radius_bullet{1.4f};
     float ring_radius_scale{0.9f};
     float drain_radius_scale{0.55f};
     float drain_radius_min{1.5f};
@@ -24,9 +24,9 @@ struct SDaWaterImpactCfg
     float deep_threshold{0.45f};
     float mid_threshold{0.20f};
     // Rings from feet and bodies (step_manager.cpp, physics_game.cpp).
-    float ring_radius_step{0.45f};
-    float ring_radius_object_min{0.35f};
-    float ring_radius_object_max{1.4f};
+    float ring_radius_step{1.6f};
+    float ring_radius_object_min{0.7f};
+    float ring_radius_object_max{2.4f};
     float ring_object_threshold{1.5f};
     float ring_object_velocity{12.f};
     float ring_distance{45.f};

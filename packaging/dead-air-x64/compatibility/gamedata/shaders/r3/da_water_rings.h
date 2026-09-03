@@ -12,8 +12,13 @@ uniform float4x4 da_wh_par0;
 uniform float4x4 da_wh_par1;
 uniform float4 da_wh_info;
 
-// The ripple gradient (world XZ) of every live ring at this point: a crest at the front with
-// a decaying train of rings behind it (lambda = 0.30 m). Drains are the puddles' own business.
+// The ripple gradient (world XZ) of every live ring at this point. A ring is a wave packet:
+// the front is the LONGEST wave (the fastest, ~30 cm), behind it a train of crests that
+// shorten toward the centre and die out over half a metre, and ahead of it nothing - the
+// old profile let the sinusoid run past the front with a GROWING envelope (exp of a
+// negative distance), which drew the front as a hard thin line. The surface window is
+// tight because every emitter now places its ring ON the surface it hit. Drains are the
+// puddles' own business.
 float2 da_water_rings(float3 pos_w)
 {
 	float2 ripple = 0.0f;
@@ -31,10 +36,15 @@ float2 da_water_rings(float3 pos_w)
 		float2 rd = pos_w.xz - RP.xz;
 		const float rwd = length(rd);
 		[branch]
-		if (rwd > RA.y + 0.4f || rwd < 0.02f || abs(pos_w.y - RP.y) > 2.5f)
+		if (rwd > RA.y + 0.12f || rwd < 0.02f || abs(pos_w.y - RP.y) > 0.6f)
 			continue;
 		const float behind = RA.y - rwd;
-		const float wave = sin(behind * 20.9f) * exp(-behind * 1.7f) * RA.x;
+		// Soft leading edge over the last 12 cm ahead of the front.
+		const float lead = saturate(1.0f + behind * (1.0f / 0.12f));
+		const float back = max(behind, 0.0f);
+		// Chirp: 30 cm at the front, shorter behind (the slow short waves lag the front).
+		const float k = 20.9f + 14.0f * back;
+		const float wave = sin(behind * k) * exp(-back * 1.9f) * lead * RA.x;
 		ripple += (rd / rwd) * (wave * 0.16f);
 	}
 	return ripple;

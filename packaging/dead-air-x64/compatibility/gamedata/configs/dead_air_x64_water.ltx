@@ -9,7 +9,7 @@ material                = materials\water
 ; puddle mask threshold (0..1) for "this landed in water"
 mask_threshold          = 0.22
 ; bullet ring ripple radius, metres
-ring_radius_bullet      = 0.9
+ring_radius_bullet      = 1.4
 
 ; explosion response
 ring_radius_scale       = 0.9   ; ring reach as a share of blast_r
@@ -28,9 +28,9 @@ ps_hit                  = hit_fx\effects\hit_water_hit
 ; rings from feet and bodies (step_manager.cpp, physics_game.cpp). A liquid material (open
 ; water: a lake, a river) counts as water for every response in this section, as does a
 ; puddle; only the drain is puddle-only - a lake does not dry out.
-ring_radius_step        = 0.45  ; a footstep's ring, metres
-ring_radius_object_min  = 0.35  ; a body's ring at the threshold impact...
-ring_radius_object_max  = 1.4   ; ...and at ring_object_velocity
+ring_radius_step        = 1.6   ; a footstep's ring, metres (the front runs ~0.9 m/s)
+ring_radius_object_min  = 0.7   ; a body's ring at the threshold impact...
+ring_radius_object_max  = 2.4   ; ...and at ring_object_velocity
 ring_object_threshold   = 1.5   ; impact measure (speed x sqrt(mass)) below which a body makes no ring
 ring_object_velocity    = 12.0  ; impact measure of the largest ring
 ring_distance           = 45    ; metres from the camera past which feet and bodies skip the ring
