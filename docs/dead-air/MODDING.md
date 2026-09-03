@@ -582,8 +582,11 @@ and bend rolled per discharge - lit like a capsule, falling off over a few hundr
 from the line and scattered by the cloud around it. The flash's share of the fog and sun
 colours is taken back out of the deck's own light, and the deck keeps the sun's real
 direction while the engine lends sun_dir to the bolt - so the clouds along the channel go
-white and the far deck stays as it was, instead of every cloud brightening with the fog. A
-third of the discharges stay inside the cloud (no channel is drawn): sheet lightning. The
+white and the far deck stays as it was, instead of every cloud brightening with the fog.
+Strikes cluster around a storm-cell heading that wanders from bolt to bolt (the stock effect
+kept every bolt in one narrow sector opposite the sun); two in five discharges stay inside
+the cloud with no channel drawn - sheet lightning, anywhere in the sky, living 0.6-1.8 s
+with two to five pulses of flicker, the flash of the scene following the same envelope. The
 deck's sun light also follows the weather's authored sun strength now: under a thunder
 cycle's near-black sun the clouds are lit by the sky alone.
 

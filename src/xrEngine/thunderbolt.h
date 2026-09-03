@@ -131,6 +131,14 @@ private:
     float channel_heading{};
     float channel_length{3000.f};
     float channel_bend{};
+    // The storm cell: strikes cluster around a heading that wanders from bolt to bolt, so
+    // they are neither all in one spot nor scattered like dice. Sheet lightning flickers:
+    // a few pulses at rolled times inside a longer life.
+    float storm_heading{};
+    bool storm_heading_set{};
+    int pulse_count{};
+    float pulse_t[5]{};
+    float pulse_w[5]{};
 
     float life_time;
     float current_time;

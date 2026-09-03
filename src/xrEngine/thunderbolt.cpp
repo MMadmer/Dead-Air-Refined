@@ -234,11 +234,23 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
     VERIFY(current);
     // A third of the discharges stay inside the cloud: the deck lights up around them and
     // no channel is drawn - the sheet lightning of a real storm.
-    bolt_hidden = Random.randF() < 0.35f;
+    bolt_hidden = Random.randF() < 0.4f;
+    pulse_count = 0;
+    if (bolt_hidden)
+    {
+        // Sheet lightning: a longer life with two to five pulses of flicker inside it.
+        life_time = Random.randF(0.6f, 1.8f);
+        pulse_count = Random.randI(2, 6);
+        for (int i = 0; i < pulse_count; ++i)
+        {
+            pulse_t[i] = Random.randF(0.05f, 0.95f);
+            pulse_w[i] = Random.randF(0.035f, 0.11f);
+        }
+    }
     channel_heading = Random.randF(0.f, PI_MUL_2);
     channel_length = Random.randF(1500.f, 4500.f);
     channel_bend = Random.randF(-0.35f, 0.35f);
-    Msg("* [lightning] bolt: hidden=%d life=%.2f", bolt_hidden ? 1 : 0, life_time);
+    Msg("* [lightning] bolt: hidden=%d life=%.2f pulses=%d", bolt_hidden ? 1 : 0, life_time, pulse_count);
 
     float sun_h, sun_p;
     currentEnv.sun_dir.getHP(sun_h, sun_p);
@@ -250,6 +262,22 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
     float alt = Random.randF(p_var_alt.x, p_var_alt.y);
     float lng = Random.randF(sun_h - p_var_long + PI, sun_h + p_var_long + PI);
     float dist = Random.randF(far_dist * p_min_dist, far_dist * .95f);
+    // The stock heading kept every bolt in one narrow sector opposite the sun. A storm cell
+    // has a centre that wanders: each strike steps it a little and lands within a wide arc
+    // of it; sheet lightning can be anywhere in the sky, low on the horizon or overhead.
+    if (!storm_heading_set)
+    {
+        storm_heading = sun_h + PI + Random.randF(-1.5f, 1.5f);
+        storm_heading_set = true;
+    }
+    storm_heading += Random.randF(-0.35f, 0.35f);
+    if (bolt_hidden)
+    {
+        lng = Random.randF(0.f, PI_MUL_2);
+        alt = Random.randF(0.12f, 1.1f);
+    }
+    else
+        lng = storm_heading + Random.randF(-0.9f, 0.9f);
     current_direction.setHP(lng, alt);
     pos.mad(Device.vCameraPosition, current_direction, dist);
     dev.x = Random.randF(-p_tilt, p_tilt);
@@ -316,6 +344,19 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
 
         lightning_phase = 1.5f * (current_time / life_time);
         clamp(lightning_phase, 0.f, 1.f);
+        if (bolt_hidden && pulse_count > 0)
+        {
+            // The flicker envelope: the pulses summed, each a narrow bell in the life.
+            const float u = current_time / life_time;
+            float env = 0.f;
+            for (int i = 0; i < pulse_count; ++i)
+            {
+                const float x = (u - pulse_t[i]) / pulse_w[i];
+                env += expf(-x * x);
+            }
+            lightning_phase = std::min(env, 1.f);
+            fClr.mul(lightning_phase);
+        }
 
         Fvector& sky_color = currentEnv.sky_color;
         sky_color.mad(fClr, p_sky_color);
