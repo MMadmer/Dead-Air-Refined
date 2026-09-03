@@ -95,7 +95,12 @@ void CEffect_Rain::Born(Item& dest, float radius)
     const float wind_ms = env.eff_wind_norm * 11.f * (0.55f + 0.45f * env.eff_wind_gust);
     float slant = atanf(wind_ms / drop_fall_ms);
     clamp(slant, 0.f, drop_max_slant);
-    axis.setHP(env.eff_wind_dir, slant - PI_DIV_2);
+    // Downwind is (sin dir, 0, cos dir) - the convention the service (WindAt), the grass, the
+    // trees, the puddles and the clouds share. setHP's heading runs the other way round on x,
+    // so the rain fell MIRRORED: dead on at north and south, ninety degrees off on the
+    // diagonals, against the wind at east and west.
+    const float sl = _sin(slant), cl = _cos(slant);
+    axis.set(_sin(env.eff_wind_dir) * sl, -cl, _cos(env.eff_wind_dir) * sl);
 
     // Landing-disc spawn (the NVIDIA rain-SDK camera-volume idea): pick where the streak's
     // LINE crosses eye level inside the radius, then back-project a random distance up the
