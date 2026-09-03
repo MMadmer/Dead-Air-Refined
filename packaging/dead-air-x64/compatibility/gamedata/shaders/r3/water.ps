@@ -31,6 +31,7 @@ float3	water_intensity;
 #endif	//	defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
 #include "settings_da_water.h"	// every water knob lives there
 #include "da_wind_field.h"	// the wind service: heading, speed, gust field
+#include "da_water_rings.h"	// impact rings, shared with the puddles
 
 // Rain strength rides the same constant the future puddle work uses: x = rain density.
 uniform float4 rain_params;
@@ -138,6 +139,11 @@ float4 main( vf I ) : SV_Target
 			         * (WATER_RIPPLE_AMP * da_rain * da_near);
 	}
 #endif
+
+	// Impact rings (Environment::water_hit): the rings the puddles show - bullets, blasts,
+	// feet and bodies - on open water too. A quiet world walks nothing.
+	[branch] if (da_wh_info.x > 0.5h && da_water_dist < WATER_RIPPLE_FADE)
+		Navg.xy += da_water_rings(I.position_w.xyz) * WATER_RING_AMP;
 
 	float3	Nw	= mul (float3x3(I.M1, I.M2, I.M3), Navg);
 			Nw	= normalize (Nw);

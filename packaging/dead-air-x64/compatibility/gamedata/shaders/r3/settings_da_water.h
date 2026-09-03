@@ -70,6 +70,7 @@
 #define WATER_RAIN_RIPPLES     1
 #define WATER_RIPPLE_SCALE     0.55   // map tiles per metre; larger = finer ripples
 #define WATER_RIPPLE_AMP       0.55   // normal perturbation at full rain
+#define WATER_RING_AMP         1.3    // impact ring normal perturbation: bullets, blasts, feet, bodies
 #define WATER_RIPPLE_SPEED     0.09   // layer drift speed
 #define WATER_RIPPLE_FADE      35.0   // metres, past this a ripple is subpixel
 

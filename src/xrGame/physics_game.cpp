@@ -11,6 +11,7 @@
 #include "PhysicsShellHolder.h"
 #include "xrPhysics/PHCommander.h"
 #include "xrPhysics/MathUtils.h"
+#include "da_water_impact.h"
 #include "xrPhysics/IPHWorld.h"
 
 #include "xrPhysics/PHReqComparer.h"
@@ -217,6 +218,33 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
         SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(T->material, data->material);
         if (mtl_pair)
         {
+            // Ripples: a body landing in water (a liquid material) or on a rain puddle spreads
+            // a ring, its radius growing with the impact. Characters make theirs per footstep
+            // (step_manager.cpp), not per capsule contact; Environment::water_hit folds the
+            // burst of contacts of one landing into one ring.
+            {
+                const auto& wcfg = da_water_impact_cfg();
+                const bool character = data->ph_object && data->ph_object->CastType() == CPHObject::tpCharacter;
+                extern ENGINE_API int ps_e_wind_dbg;
+                if (wcfg.enabled && !character && vel_cret > wcfg.ring_object_threshold &&
+                    square_cam_dist < wcfg.ring_distance * wcfg.ring_distance)
+                {
+                    Fvector surface;
+                    const bool water = da_water_surface(cast_fv(c->pos), int(T->material), 1.f, surface);
+                    // wind_dbg: every body impact near the camera, so a missing ring can be
+                    // read as "not water here" or "too soft" instead of guessed.
+                    if (ps_e_wind_dbg && square_cam_dist < 225.f)
+                        Msg("* [water] body contact vel=%.1f water=%d at (%.0f, %.0f, %.0f)", vel_cret, water ? 1 : 0,
+                            c->pos[0], c->pos[1], c->pos[2]);
+                    if (water)
+                    {
+                        const float k = clampr(vel_cret / wcfg.ring_object_velocity, 0.f, 1.f);
+                        g_pGamePersistent->Environment().water_hit(surface,
+                            wcfg.ring_radius_object_min + (wcfg.ring_radius_object_max - wcfg.ring_radius_object_min) * k,
+                            CEnvironment::EWaterHit::ring);
+                    }
+                }
+            }
             if (vel_cret > Pars::vel_cret_wallmark && !mtl_pair->CollideMarks->empty())
             {
                 wm_shader WallmarkShader = mtl_pair->CollideMarks->GenerateWallmark();

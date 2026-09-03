@@ -9,6 +9,7 @@
 #include "pch_script.h"
 #include "Level.h"
 #include "Actor.h"
+#include "xrEngine/xr_level_controller.h"
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
 #include "xrAICore/Navigation/PatrolPath/patrol_path_storage.h"
@@ -368,6 +369,27 @@ CEnvDescriptor* current_environment(CEnvironment* self) { return &self->CurrentE
 // screenshots. Speeds are m/s, headings radians (0 = +Z, clockwise from above).
 float env_wind_speed(CEnvironment* self) { return self->WindSpeedMs(); }
 float env_wind_direction(CEnvironment* self) { return self->eff_wind_dir; }
+
+// Input actions from script: press, hold (every frame, the way a held key arrives) and release
+// an action of xr_level_controller.h by id, or look an id up by its binding name. The QA probes
+// walk the actor through water with these; a mod can drive the player the same way.
+static CActor* script_input_actor() { return smart_cast<CActor*>(Level().CurrentEntity()); }
+void level_press_action(int action)
+{
+    if (CActor* a = script_input_actor())
+        a->IR_OnKeyboardPress(action);
+}
+void level_hold_action(int action)
+{
+    if (CActor* a = script_input_actor())
+        a->IR_OnKeyboardHold(action);
+}
+void level_release_action(int action)
+{
+    if (CActor* a = script_input_actor())
+        a->IR_OnKeyboardRelease(action);
+}
+int level_action_id(pcstr name) { return int(ActionNameToId(name, true)); }
 float env_wind_gust(CEnvironment* self) { return self->eff_wind_gust; }
 Fvector env_wind_at(CEnvironment* self, const Fvector& pos) { return self->WindAt(pos, 1.5f); }
 Fvector env_wind_at_height(CEnvironment* self, const Fvector& pos, float height)
@@ -865,6 +887,10 @@ void CLevel::script_register(lua_State* luaState)
         def("check_object", check_object),
 
         def("get_weather", get_weather),
+        def("press_action", &level_press_action),
+        def("hold_action", &level_hold_action),
+        def("release_action", &level_release_action),
+        def("action_id", &level_action_id),
         def("set_weather", set_weather),
         def("set_weather_fx", set_weather_fx),
         def("start_weather_fx_from_time", start_weather_fx_from_time),

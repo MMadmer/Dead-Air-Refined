@@ -7,6 +7,7 @@
 #include "material_manager.h"
 #include "xrEngine/profiler.h"
 #include "IKLimbsController.h"
+#include "da_water_impact.h"
 
 #ifdef DEBUG
 BOOL debug_step_info = FALSE;
@@ -224,6 +225,22 @@ void CStepManager::update(bool b_hud_view)
 
             // Play Camera FXs
             event_on_step();
+
+            // Ripples: a foot landing in water or in a rain puddle spreads a ring on it - the
+            // same ring a bullet makes (Environment::water_hit) - within the distance a ring
+            // can be seen from. The pair's ground material tells open water, the puddle mask
+            // tells the rain layer.
+            {
+                const auto& wcfg = da_water_impact_cfg();
+                if (wcfg.enabled && dist_sqr < wcfg.ring_distance * wcfg.ring_distance)
+                {
+                    const Fvector foot = get_foot_position(ELegType(i));
+                    Fvector surface;
+                    if (da_water_surface(foot, mtl_pair->GetMtl0(), 1.f, surface) ||
+                        da_water_surface(foot, mtl_pair->GetMtl1(), 1.f, surface))
+                        g_pGamePersistent->Environment().water_hit(surface, wcfg.ring_radius_step, CEnvironment::EWaterHit::ring);
+                }
+            }
 
             // обновить поле handle
             m_step_info.activity[i].handled = true;

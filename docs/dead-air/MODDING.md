@@ -644,6 +644,27 @@ a crown hard; 0.06 rang for cycles and read as rocking), the natural frequency i
 1.0/sqrt(H) Hz from the tree's real height, and the state starts at the field's value on
 the first frame after a load rather than swinging down to it.
 
+Water impact rings on all water. `Environment::water_hit` keeps eight impact spots (rings
+and, for puddles, drains) that the puddle shader and the open-water shader read through one
+header (`da_water_rings.h`): a bullet, a blast, a foot or a body makes the same ring on a
+lake as on a rain puddle. Emitters: bullets (`Level_bullet_manager_firetrace.cpp`),
+explosions (`Explosive.cpp` - the surface below or above the epicentre, since a grenade
+sinks before it goes off; open water takes the splash and the ring and never dries),
+footsteps of the actor, stalkers and monsters (`step_manager.cpp`) and physics bodies
+(`physics_game.cpp` - the ring grows with the impact; characters are left to their
+footsteps). Whether a spot is water, and where the ring goes, is one function
+(`da_water_surface`): a liquid material, the rain puddle mask, or a liquid surface straight
+above the spot - the water mesh is passable, so a foot on the lake floor and a body that sank
+report the bottom's material, and the ring is placed on the surface above them. One ring per spot per quarter second, so a body sliding in makes one. The knobs
+are the `ring_*` lines of `[water_impact]` in `dead_air_x64_water.ltx`. The cost is the
+same loop the puddles already ran: a quiet world walks nothing, a busy one at most eight
+rows per water pixel - no preset gate is warranted. Scripts can drive the actor's input
+for a probe: `level.press_action(id)`, `level.hold_action(id)` (every frame, like a held
+key), `level.release_action(id)`, `level.action_id("fwd")` (the binding names of the `bind` command);
+`qa_water_goto` (console) puts the actor on the nearest shore of the level facing the water,
+looking down at it, and `wind_dbg 1` logs every ring (`[water] ring`) and every body impact
+near the camera (`[water] body contact`, with whether the spot counted as water).
+
 Scripts read and drive the service through the environment object:
 
 ```lua

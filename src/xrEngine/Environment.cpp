@@ -1109,6 +1109,14 @@ float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
 
 void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
 {
+    // A body sliding into water fires a contact every physics step: one ring per spot per
+    // quarter second, the rest is the same splash.
+    if (kind == EWaterHit::ring)
+        for (const auto& h : water_hits)
+            if (h.used && h.kind == EWaterHit::ring && Device.fTimeGlobal - h.birth < 0.25f &&
+                h.pos.distance_to_sqr(pos) < 0.35f * 0.35f)
+                return;
+
     // Drains outrank rings (the pecking-order lesson from the wind motors: a burst of
     // bullet rings must never evict the crater a grenade just dried).
     SWaterHit* slot = nullptr;

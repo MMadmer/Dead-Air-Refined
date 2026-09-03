@@ -36,15 +36,10 @@ uniform float4 da_puddle_look3;
 // q-пространства, копятся на CPU — Environment::UpdateEffectiveWind). Биндер cl_da_puddle_wind.
 uniform float4 da_puddle_wind;
 
-// Водяные импакты (Environment::water_hit, упаковка как у ветро-моторов, с пре-транспозом):
-// pos-строка = (xyz, радиус), par-строка = (амплитуда, радиус фронта кольца, 0 кольцо / 1
-// осушение, 0). info.x — число живых спотов: в тихом мире цикл бесплатен. Конверты считает
-// CPU — сюда приходят готовые амплитуды, поэтому любой спот умирает на нуле без скачка.
-uniform float4x4 da_wh_pos0;
-uniform float4x4 da_wh_pos1;
-uniform float4x4 da_wh_par0;
-uniform float4x4 da_wh_par1;
-uniform float4 da_wh_info;
+// Водяные импакты (Environment::water_hit): константы и сами кольца живут в da_water_rings.h,
+// общем с открытой водой (water.ps) — кольцо есть кольцо на любой воде. Здесь остаётся только
+// осушение: лужу взрыв выплёскивает, озеро — нет.
+#include "da_water_rings.h"
 
 float da_hash21(float2 p)
 {
@@ -307,25 +302,7 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// фронте, за ним затухающий шлейф колец (λ = 0.30 м); всё складывается с дождевой рябью в
 	// тот же градиент нормали. Амплитуда приходит с CPU уже с краевым фейдом — кольцо гаснет
 	// до нуля раньше, чем умирает, скачка нет по построению.
-	[loop]
-	for (int ri = 0; ri < wh_count; ++ri)
-	{
-		const int rlo = min(ri, 3);
-		const int rhi = max(ri - 4, 0);
-		const float4 RP = (ri < 4) ? da_wh_pos0[rlo] : da_wh_pos1[rhi];
-		const float4 RA = (ri < 4) ? da_wh_par0[rlo] : da_wh_par1[rhi];
-		[branch]
-		if (RP.w <= 0.0f || RA.z > 0.5f || RA.x <= 0.001f)
-			continue;
-		float2 rd = pos_w.xz - RP.xz;
-		const float rwd = length(rd);
-		[branch]
-		if (rwd > RA.y + 0.4f || rwd < 0.02f || abs(pos_w.y - RP.y) > 2.5f)
-			continue;
-		const float behind = RA.y - rwd;
-		const float wave = sin(behind * 20.9f) * exp(-behind * 1.7f) * RA.x;
-		ripple += (rd / rwd) * (wave * 0.16f);
-	}
+	ripple += da_water_rings(pos_w);
 
 	// Нормаль воды: плоская геометрическая нормаль поверхности плюс рябь. Именно она делает лужу
 	// лужей — освещение начинает считать поверхность ровной.

@@ -369,29 +369,58 @@ void CExplosive::Explode()
         const auto& wcfg = da_water_impact_cfg();
         if (wcfg.enabled)
         {
+            // Where the water is: the surface of a lake or a river (a liquid material) below
+            // or above the epicentre - a grenade sinks before it goes off - or a rain puddle
+            // under it. Open water takes the splash and the ring; it does not dry out.
             collide::rq_result rq;
-            Fvector probe = pos;
-            probe.y += 0.5f;
-            if (Level().ObjectSpace.RayPick(
-                    probe, Fvector().set(0.f, -1.f, 0.f), 3.5f, collide::rqtStatic, rq, nullptr))
-            {
-                Fvector gp;
-                gp.mad(probe, Fvector().set(0.f, -1.f, 0.f), rq.range);
+            const Fvector down{0.f, -1.f, 0.f};
+            const Fvector up{0.f, 1.f, 0.f};
+            auto& env = g_pGamePersistent->Environment();
+            const auto pick = [&](const Fvector& from, const Fvector& dir, float range, Fvector& hit, Fvector& hn,
+                                  bool& liquid) {
+                if (!Level().ObjectSpace.RayPick(from, dir, range, collide::rqtStatic, rq, nullptr))
+                    return false;
+                hit.mad(from, dir, rq.range);
                 const Fvector* verts = Level().ObjectSpace.GetStaticVerts();
                 const CDB::TRI& tri = Level().ObjectSpace.GetStaticTris()[rq.element];
-                Fvector n;
-                n.mknormal(verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]);
-                auto& env = g_pGamePersistent->Environment();
-                const float mask = env.SamplePuddleMask(gp, n.y);
+                hn.mknormal(verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]);
+                const SGameMtl* m = GMLib.GetMaterialByIdx(u16(tri.material));
+                liquid = m && m->Flags.test(SGameMtl::flLiquid);
+                return true;
+            };
+            Fvector probe = pos;
+            probe.y += 0.5f;
+            Fvector gp, n, gp_d, n_d, gp_u, n_u;
+            bool liq_d = false, liq_u = false, open_water = false, found = true;
+            const bool has_d = pick(probe, down, 3.5f, gp_d, n_d, liq_d);
+            const bool has_u = pick(pos, up, 3.5f, gp_u, n_u, liq_u);
+            if (has_d && liq_d)
+            {
+                gp = gp_d; n = n_d; open_water = true;
+            }
+            else if (has_u && liq_u)
+            {
+                gp = gp_u; n = n_u; open_water = true;
+            }
+            else if (has_d)
+            {
+                gp = gp_d; n = n_d;
+            }
+            else
+                found = false;
+            if (found)
+            {
+                const float mask = open_water ? 1.f : env.SamplePuddleMask(gp, n.y);
                 if (mask > wcfg.mid_threshold)
                 {
-                    const float depth = mask * env.eff_puddle_wet;
+                    const float depth = open_water ? 1.f : mask * env.eff_puddle_wet;
                     env.water_hit(gp, std::max(m_fBlastRadius * wcfg.ring_radius_scale, 2.f),
                         CEnvironment::EWaterHit::ring);
-                    env.water_hit(gp,
-                        clampr(m_fBlastRadius * wcfg.drain_radius_scale, wcfg.drain_radius_min,
-                            wcfg.drain_radius_max),
-                        CEnvironment::EWaterHit::drain);
+                    if (!open_water)
+                        env.water_hit(gp,
+                            clampr(m_fBlastRadius * wcfg.drain_radius_scale, wcfg.drain_radius_min,
+                                wcfg.drain_radius_max),
+                            CEnvironment::EWaterHit::drain);
 
                     const auto play = [&](const shared_str& name) {
                         if (!name.size())

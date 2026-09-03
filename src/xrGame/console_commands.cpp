@@ -2481,6 +2481,124 @@ public:
     }
 };
 
+
+// qa_water_goto: the nearest liquid-material vertex of the level, and the actor moved to the
+// shore beside it, facing the water and looking down at it - the water probes (rings on open
+// water) start from here on any level that has a lake or a river.
+class CCC_QaWaterGoto : public IConsole_Command
+{
+public:
+    CCC_QaWaterGoto(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
+        if (!actor)
+        {
+            Msg("! [qa] qa_water_goto: no actor");
+            return;
+        }
+        const Fvector from = actor->Position();
+        auto& space = Level().ObjectSpace;
+        const CDB::TRI* tris = space.GetStaticTris();
+        const Fvector* verts = space.GetStaticVerts();
+        const u32 count = space.GetStaticModel()->get_tris_count();
+        // The densest cluster of liquid triangles (a lake is tessellated finely; the largest
+        // single triangle once picked a flooded room), under open sky. O(n^2) over the liquid
+        // centroids - a QA command, run once.
+        xr_vector<Fvector> centers;
+        xr_vector<u32> owners;
+        for (u32 i = 0; i < count; ++i)
+        {
+            const CDB::TRI& t = tris[i];
+            const SGameMtl* m = GMLib.GetMaterialByIdx(u16(t.material));
+            if (!m || !m->Flags.test(SGameMtl::flLiquid))
+                continue;
+            Fvector c;
+            c.add(verts[t.verts[0]], verts[t.verts[1]]);
+            c.add(verts[t.verts[2]]);
+            c.div(3.f);
+            centers.push_back(c);
+            owners.push_back(i);
+        }
+        const CDB::TRI* best_tri = nullptr;
+        u32 best_n = 0;
+        Fvector best_c{};
+        for (size_t a = 0; a < centers.size(); ++a)
+        {
+            u32 n = 0;
+            for (size_t b = 0; b < centers.size(); ++b)
+                if (centers[a].distance_to_sqr(centers[b]) < 15.f * 15.f)
+                    ++n;
+            if (n <= best_n)
+                continue;
+            Fvector c = centers[a];
+            c.y += 0.5f;
+            collide::rq_result sky;
+            if (space.RayPick(c, Fvector{0.f, 1.f, 0.f}, 80.f, collide::rqtStatic, sky, nullptr))
+                continue;
+            best_n = n;
+            best_tri = &tris[owners[a]];
+            best_c = centers[a];
+        }
+        if (!best_tri)
+        {
+            Msg("! [qa] qa_water_goto: no open-air liquid material on this level");
+            return;
+        }
+        // Diagnostics: can the static ray query see this water from above and from below?
+        {
+            collide::rq_result d, u;
+            Fvector above = best_c;
+            above.y += 3.f;
+            Fvector below = best_c;
+            below.y -= 1.f;
+            const bool hd = space.RayPick(above, Fvector{0.f, -1.f, 0.f}, 6.f, collide::rqtStatic, d, nullptr);
+            const bool hu = space.RayPick(below, Fvector{0.f, 1.f, 0.f}, 6.f, collide::rqtStatic, u, nullptr);
+            const auto liquid = [&](bool hit, const collide::rq_result& r) {
+                if (!hit)
+                    return -1;
+                const SGameMtl* m = GMLib.GetMaterialByIdx(u16(tris[r.element].material));
+                return (m && m->Flags.test(SGameMtl::flLiquid)) ? 1 : 0;
+            };
+            Msg("* [qa] water cluster: %u tris within 15 m; ray from above liquid=%d (range %.2f), from below liquid=%d (range %.2f)",
+                best_n, liquid(hd, d), hd ? d.range : 0.f, liquid(hu, u), hu ? u.range : 0.f);
+        }
+        float best = flt_max;
+        Fvector v_best{};
+        for (int k = 0; k < 3; ++k)
+        {
+            const float d = verts[best_tri->verts[k]].distance_to_sqr(from);
+            if (d < best)
+            {
+                best = d;
+                v_best = verts[best_tri->verts[k]];
+            }
+        }
+        Fvector to = v_best;
+        to.sub(from);
+        to.y = 0.f;
+        const float dist = to.magnitude();
+        if (dist > 0.01f)
+            to.div(dist);
+        else
+            to.set(0.f, 0.f, 1.f);
+        // 1.5 m short of the shore vertex, on the ground there.
+        Fvector pos;
+        pos.mad(v_best, to, -1.5f);
+        pos.y = v_best.y + 3.f;
+        collide::rq_result rq;
+        if (space.RayPick(pos, Fvector{0.f, -1.f, 0.f}, 6.f, collide::rqtStatic, rq, nullptr))
+            pos.y -= rq.range - 0.1f;
+        else
+            pos.y = v_best.y + 0.2f;
+        // MoveActor takes angles: x = -torso pitch, y = -yaw, with forward = (sin yaw, cos yaw).
+        const float yaw = atan2f(to.x, to.z);
+        actor->MoveActor(pos, Fvector{0.5f, -yaw, 0.f});
+        Msg("* [qa] water at (%.1f, %.1f, %.1f), %.0f m away; actor at (%.1f, %.1f, %.1f) yaw=%.0f",
+            v_best.x, v_best.y, v_best.z, _sqrt(best), pos.x, pos.y, pos.z, rad2deg(yaw));
+    }
+};
+
 void CCC_RegisterCommands()
 {
     ZoneScoped;
@@ -3015,6 +3133,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "auto_continue_on_load", &g_auto_continue_on_load, 0, 1);
     CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start_legacy, 0, 1);
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
+    CMD1(CCC_QaWaterGoto, "qa_water_goto");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

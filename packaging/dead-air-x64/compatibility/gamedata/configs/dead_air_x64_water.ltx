@@ -24,3 +24,13 @@ ps_fountain             = amik\hit_fx\water_splash\water_spurt
 ps_hit_big              = hit_fx\effects\hit_water_hit_big
 ps_distort_big          = hit_fx\effects\hit_water_hit_distort_big
 ps_hit                  = hit_fx\effects\hit_water_hit
+
+; rings from feet and bodies (step_manager.cpp, physics_game.cpp). A liquid material (open
+; water: a lake, a river) counts as water for every response in this section, as does a
+; puddle; only the drain is puddle-only - a lake does not dry out.
+ring_radius_step        = 0.45  ; a footstep's ring, metres
+ring_radius_object_min  = 0.35  ; a body's ring at the threshold impact...
+ring_radius_object_max  = 1.4   ; ...and at ring_object_velocity
+ring_object_threshold   = 1.5   ; impact measure (speed x sqrt(mass)) below which a body makes no ring
+ring_object_velocity    = 12.0  ; impact measure of the largest ring
+ring_distance           = 45    ; metres from the camera past which feet and bodies skip the ring

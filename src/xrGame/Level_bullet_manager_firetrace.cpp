@@ -181,7 +181,9 @@ void CBulletManager::FireShotmark(SBullet* bullet, const Fvector& vDir, const Fv
         if (tgt && !tgt->Flags.test(SGameMtl::flDynamic) && wcfg.enabled)
         {
             auto& env = g_pGamePersistent->Environment();
-            if (env.SamplePuddleMask(vEnd, vNormal.y) > wcfg.mask_threshold)
+            // Water is water: the liquid material of a lake or a river as much as the rain
+            // puddle - the same ring, the same splash pair.
+            if (tgt->Flags.test(SGameMtl::flLiquid) || env.SamplePuddleMask(vEnd, vNormal.y) > wcfg.mask_threshold)
             {
                 static const u16 water_idx = GMLib.GetMaterialIdx(wcfg.material.c_str());
                 if (water_idx != u16(GAMEMTL_NONE_IDX))
