@@ -1,0 +1,51 @@
+#include "common.h"
+
+// The stock sky dome, with the lightning flash local: a glow around the bolt in the dome
+// (the deck's own glow is da_cloud_lightning in the cloud march), a faint share everywhere
+// else, instead of the whole dome brightening at once.
+uniform float4 da_lightning_a;   // where the channel meets the deck, w = 1 while a bolt flashes
+uniform float4 da_lightning_sky; // what the flash added to the sky colour this frame
+
+struct v2p
+{
+	float4	factor	: COLOR0;		// tonemap-prescaled sky colour, the flash's share taken out
+	float3	tc0		: TEXCOORD0;
+	float3	tc1		: TEXCOORD1;
+	float3	dir		: TEXCOORD2;
+	float	scale	: TEXCOORD3;
+};
+struct _out
+{
+	float4	low		: SV_Target0;
+	float4	high	: SV_Target1;
+};
+
+TextureCube	s_sky0	: register(t0);
+TextureCube	s_sky1	: register(t1);
+
+_out main(v2p I)
+{
+	float3	s0		= s_sky0.Sample(smp_rtlinear, I.tc0);
+	float3	s1		= s_sky1.Sample(smp_rtlinear, I.tc1);
+	float3	tex		= lerp(s0, s1, I.factor.w);
+	float3	factor	= I.factor.rgb;
+
+	[branch] if (da_lightning_a.w > 0.001f)
+	{
+		// Angular falloff around the bolt, sixteen degrees wide: the dome near the channel
+		// lights up like the deck around it, the far dome keeps a sixth of the stock share.
+		const float3 to_bolt = normalize(da_lightning_a.xyz - eye_position);
+		const float c = dot(normalize(I.dir), to_bolt);
+		const float ang = sqrt(saturate(2.0f - 2.0f * c));		// chord ~ angle for small angles
+		const float g = exp(-ang * ang * (1.0f / (2.0f * 0.28f * 0.28f)));
+		factor += da_lightning_sky.rgb * (0.15f + 3.5f * g) * I.scale;
+	}
+
+	float3	sky		= factor * tex;
+			sky		*= 0.33f;
+
+	_out	o;
+	o.low			= sky.xyzz;
+	o.high			= o.low / def_hdr;
+	return	o;
+}

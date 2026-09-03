@@ -133,7 +133,12 @@ float3 da_cloud_lightning(float3 p, float d)
         return 0;
     const float dist = min(da_seg_dist(p, da_lightning_a.xyz, da_lightning_m.xyz),
                            da_seg_dist(p, da_lightning_m.xyz, da_lightning_b.xyz));
-    const float att = da_lightning_a.w * 5.0f / (1.0f + dist * dist * (1.0f / (700.0f * 700.0f)));
+    // A Lorentzian core with an exponential skirt: the bare 1/(1+d^2) tail was still a few
+    // percent of the peak eight kilometres out, which on a near-black storm deck read as
+    // the whole sky brightening; the skirt keeps the glow within a few kilometres of the
+    // channel, the way light diffuses through a dense cloud.
+    const float att = da_lightning_a.w * 5.0f / (1.0f + dist * dist * (1.0f / (700.0f * 700.0f)))
+        * exp(-dist * (1.0f / 1500.0f));
     return da_lightning2.rgb * att * (0.5f + 0.5f * saturate(d * 3.0f));
 }
 

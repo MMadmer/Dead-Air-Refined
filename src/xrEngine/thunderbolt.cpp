@@ -250,7 +250,6 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
     channel_heading = Random.randF(0.f, PI_MUL_2);
     channel_length = Random.randF(1500.f, 4500.f);
     channel_bend = Random.randF(-0.35f, 0.35f);
-    Msg("* [lightning] bolt: hidden=%d life=%.2f pulses=%d", bolt_hidden ? 1 : 0, life_time, pulse_count);
 
     float sun_h, sun_p;
     currentEnv.sun_dir.getHP(sun_h, sun_p);
@@ -279,6 +278,9 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
     else
         lng = storm_heading + Random.randF(-0.9f, 0.9f);
     current_direction.setHP(lng, alt);
+    bolt_dir = current_direction;
+    Msg("* [lightning] bolt: hidden=%d life=%.2f pulses=%d az=%.0f el=%.0f", bolt_hidden ? 1 : 0, life_time,
+        pulse_count, rad2deg(fmodf(lng + PI_MUL_2 * 4.f, PI_MUL_2)), rad2deg(alt));
     pos.mad(Device.vCameraPosition, current_direction, dist);
     dev.x = Random.randF(-p_tilt, p_tilt);
     dev.y = Random.randF(0, PI_MUL_2);
@@ -331,9 +333,16 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
     {
         if (current_time > life_time)
         {
+            // The flash is over: the adds go to zero and nothing is applied this frame. The
+            // stock code still added the last colour after switching to idle, so sun_color
+            // carried a full-strength flash while the readers (the deck, the dome) saw no
+            // flash to take back out - one frame of the whole deck lit by a noon sun, smeared
+            // over the next ten by the temporal blend. That was the "every cloud brightens".
             state = stIdle;
             lightning_fog_add.set(0.f, 0.f, 0.f);
             lightning_sun_add.set(0.f, 0.f, 0.f);
+            lightning_sky_add.set(0.f, 0.f, 0.f);
+            return;
         }
         current_time += Device.fTimeDelta;
         Fvector fClr;
@@ -359,10 +368,14 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
         }
 
         Fvector& sky_color = currentEnv.sky_color;
+        const Fvector sky_before = sky_color;
         sky_color.mad(fClr, p_sky_color);
         clamp(sky_color.x, 0.f, 1.f);
         clamp(sky_color.y, 0.f, 1.f);
         clamp(sky_color.z, 0.f, 1.f);
+        // The uniform share of the flash in the sky colour as it landed (after the clamp):
+        // sky2.ps takes it back out and lights the dome around the bolt instead.
+        lightning_sky_add.sub(sky_color, sky_before);
 
         currentEnv.sun_color.mad(fClr, p_sun_color);
         currentEnv.fog_color.mad(fClr, p_fog_color);

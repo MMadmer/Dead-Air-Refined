@@ -1,0 +1,57 @@
+#include "common.h"
+#include "MrProperCommon.h" // [FX to mrmnwar] Cheking includes, please
+// Dead Air x64: the stock shaft generation with the sun's own direction. The engine lends
+// sun_dir to a lightning bolt while it flashes; shafts radiating from the bolt's screen
+// position swept the whole frame with every discharge.
+uniform float4 da_sun_dir_real;
+
+
+uniform float4		screen_res;
+#define NUM_SAMPLES int(11)
+//////////////////////////////////////////////////////////////////////////////////////////
+//
+float4		main		(	AntiAliasingStruct	INStruct	)		:		SV_Target
+{
+	float4 outColor = float4(0,0,0,0);
+	
+#ifdef USE_SSHAFTS
+	
+	float sunFar = MrProperDepthConstant/sqrt(1-da_sun_dir_real.xyz.y*da_sun_dir_real.xyz.y);
+	float4 sunProj = mul(m_VP,float4(sunFar*da_sun_dir_real.xyz+eye_position,1));
+	float4 sunScreen = proj2screen(sunProj)/sunProj.w;//projective 2 screen and normalize
+	
+	float fSign = dot(-eye_direction,normalize(da_sun_dir_real.xyz));
+	
+	float2 sunVector =(sunScreen.xy-INStruct.texCoord0.xy);
+	
+
+	float fAspectRatio = 1.333*screen_res.y/screen_res.x;
+	
+	float sunDist =saturate(fSign)*saturate(1-saturate(length(sunVector*float2(1,fAspectRatio))*SSParams.y));
+	//float sunDist = saturate(fSign)*saturate(1-saturate(length(sunVector*float2(1,fAspectRatio))*SunShaftsRadius.x));
+	float2 sunDir=(sunScreen.xy-INStruct.texCoord0.xy);//redefinition sunVector???
+	
+	float4 accum = float4(0,0,0,0);
+	//sunDir.xy*=SampleStepParams.x*fSign;
+	sunDir.xy*=SSParams.x*fSign;
+
+	
+	for (int i = 0; i < NUM_SAMPLES; i++)
+
+	{
+		float4 Depth = sMaskBlur.Sample(smp_nofilter,(INStruct.texCoord0.xy+sunDir.xy*i));
+		accum+=Depth*(1-i/NUM_SAMPLES);
+	}
+	
+
+	accum/=NUM_SAMPLES;
+	
+
+	outColor = accum*2*float4(sunDist.xxx,1);
+	outColor.w +=1-saturate(saturate(fSign*0.1+0.9));
+	
+#endif //USE_SSHAFTS
+
+	
+	return outColor;
+}

@@ -468,11 +468,16 @@ static bool da_lightning_points(Fvector& a, Fvector& m, Fvector& b, float& inten
     const auto* bolt = env.eff_Thunderbolt;
     if (!bolt || !bolt->lightning_active())
         return false;
+    // The channel starts where the line of sight through the bolt enters the deck: just
+    // inside the base for a visible bolt (the glow sits on the channel's top), in the body
+    // of the slab for sheet lightning. The direction is eye-to-bolt: the effect's own
+    // current_direction is inverted after the roll to stand in for the sun, and reading
+    // that put the glow twelve kilometres away on the far side of the sky.
     const Fvector& dir = bolt->lightning_direction();
     const Fvector& eye = Device.vCameraPosition;
-    const float mid = env.eff_cloud_altitude + env.eff_cloud_thickness * 0.35f;
-    const float t = std::min((mid - eye.y) / std::max(dir.y, 0.08f), 12000.f);
-    a.set(eye.x + dir.x * t, mid, eye.z + dir.z * t);
+    const float y = env.eff_cloud_altitude + env.eff_cloud_thickness * (bolt->bolt_is_hidden() ? 0.4f : 0.12f);
+    const float t = std::min((y - eye.y) / std::max(dir.y, 0.08f), 12000.f);
+    a.set(eye.x + dir.x * t, y, eye.z + dir.z * t);
     const float h = bolt->channel_heading_rad();
     const float len = bolt->channel_length_m();
     const Fvector along{_sin(h), 0.f, _cos(h)};
@@ -530,7 +535,7 @@ static class cl_da_lightning_fog : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto* bolt = g_pGamePersistent->Environment().eff_Thunderbolt;
-        const Fvector f = bolt && bolt->lightning_active() ? bolt->lightning_fog_added() : Fvector{0.f, 0.f, 0.f};
+        const Fvector f = bolt ? bolt->lightning_fog_added() : Fvector{0.f, 0.f, 0.f};
         cmd_list.set_c(C, f.x, f.y, f.z, 0.f);
     }
 } binder_da_lightning_fog;
@@ -540,10 +545,20 @@ static class cl_da_lightning_sun : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto* bolt = g_pGamePersistent->Environment().eff_Thunderbolt;
-        const Fvector f = bolt && bolt->lightning_active() ? bolt->lightning_sun_added() : Fvector{0.f, 0.f, 0.f};
+        const Fvector f = bolt ? bolt->lightning_sun_added() : Fvector{0.f, 0.f, 0.f};
         cmd_list.set_c(C, f.x, f.y, f.z, 0.f);
     }
 } binder_da_lightning_sun;
+
+static class cl_da_lightning_sky : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto* bolt = g_pGamePersistent->Environment().eff_Thunderbolt;
+        const Fvector f = bolt ? bolt->lightning_sky_added() : Fvector{0.f, 0.f, 0.f};
+        cmd_list.set_c(C, f.x, f.y, f.z, 0.f);
+    }
+} binder_da_lightning_sky;
 
 static class cl_da_sun_dir_real : public R_constant_setup
 {
@@ -863,6 +878,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_lightning2", &binder_da_lightning2);
     r_Constant("da_lightning_fog", &binder_da_lightning_fog);
     r_Constant("da_lightning_sun", &binder_da_lightning_sun);
+    r_Constant("da_lightning_sky", &binder_da_lightning_sky);
     r_Constant("da_sun_dir_real", &binder_da_sun_dir_real);
     r_Constant("da_cloud_debug", &binder_da_cloud_debug);
     r_Constant("da_hud_light", &binder_da_hud_light);

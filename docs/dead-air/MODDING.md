@@ -577,12 +577,27 @@ shadow of the cloud that shows, and the lens flare and the sun sprite fade by th
 between the camera and the sun (read back from the map one frame late).
 
 Lightning lights the deck locally: the discharge is a bent channel inside the slab - a line
-a few kilometres long from where the bolt's direction meets the deck, its heading, length
-and bend rolled per discharge - lit like a capsule, falling off over a few hundred metres
-from the line and scattered by the cloud around it. The flash's share of the fog and sun
-colours is taken back out of the deck's own light, and the deck keeps the sun's real
-direction while the engine lends sun_dir to the bolt - so the clouds along the channel go
-white and the far deck stays as it was, instead of every cloud brightening with the fog.
+a few kilometres long from where the line of sight through the bolt enters the deck (just
+inside the base for a visible bolt, so the glow sits on the channel's top; in the body of
+the slab for sheet lightning), its heading, length and bend rolled per discharge - lit like
+a capsule, falling off over a few hundred metres from the line and scattered by the cloud
+around it. The flash's share of the fog and sun colours is taken back out of the deck's own
+light, and the deck keeps the sun's real direction while the engine lends sun_dir to the
+bolt - so the clouds along the channel go white and the far deck stays as it was, instead of
+every cloud brightening with the fog. The sky dome behind the deck gets the same treatment:
+the compatibility archive carries `sky2.vs`/`sky2.ps`, which take the flash's uniform share
+of the sky colour (thunderbolt.ltx `sky_color`) back out and light the dome in a glow
+around the bolt, sixteen degrees wide, with a sixth of the stock share left everywhere else.
+The bolt's own direction is read before the effect inverts it to stand in for the sun -
+reading the inverted one had put the glow twelve kilometres away on the far side of the sky,
+a broad far brightening instead of a burst around the channel. The effect applies nothing
+on the frame it goes idle: the stock code still added the last flash colour after switching
+state, so for one frame the sun colour carried a full-strength flash that the deck had no
+record of - the whole deck lit by a noon sun, smeared over the next ten frames by the
+temporal blend. The sun shafts (`sunshaftsgeneration.ps` in the compatibility archive) take
+the sun's own direction, not the bolt's, so a discharge no longer sweeps the frame with rays
+from its screen position. The glow's falloff is a Lorentzian core with an exponential skirt
+(1.5 km), so a flash lights a few kilometres of deck around the channel and nothing beyond.
 Strikes cluster around a storm-cell heading that wanders from bolt to bolt (the stock effect
 kept every bolt in one narrow sector opposite the sun); two in five discharges stay inside
 the cloud with no channel drawn - sheet lightning, anywhere in the sky, living 0.6-1.8 s

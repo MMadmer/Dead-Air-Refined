@@ -126,6 +126,11 @@ private:
     Fvector lightning_sun_add{};
     Fvector sun_dir_real{0.f, -1.f, 0.f};
     bool bolt_hidden{};
+    // The bolt as the eye sees it: the unit direction from the camera to the discharge
+    // (current_direction is inverted after the roll so it can stand in for the sun), and
+    // what the flash added to the sky colour this frame, so the dome can take it back out.
+    Fvector bolt_dir{0.f, 1.f, 0.f};
+    Fvector lightning_sky_add{};
     // The channel inside the cloud: a bent line a few kilometres long, its heading, length
     // and bend rolled per discharge - the glow is that shape, not a ball.
     float channel_heading{};
@@ -165,8 +170,12 @@ private:
 
 public:
     bool lightning_active() const { return state == stWorking; }
-    const Fvector3& lightning_direction() const { return current_direction; }
-    float lightning_intensity() const { return state == stWorking ? lightning_phase : 0.f; }
+    const Fvector& lightning_direction() const { return bolt_dir; }
+    // The flash's brightness lives in its colour (the colour animation, the flicker
+    // envelope); lightning_phase only drives the channel texture's frames.
+    float lightning_intensity() const { return state == stWorking ? 1.f : 0.f; }
+    bool bolt_is_hidden() const { return bolt_hidden; }
+    const Fvector& lightning_sky_added() const { return lightning_sky_add; }
     const Fvector& lightning_colour() const { return lightning_color; }
     const Fvector& lightning_fog_added() const { return lightning_fog_add; }
     const Fvector& lightning_sun_added() const { return lightning_sun_add; }
