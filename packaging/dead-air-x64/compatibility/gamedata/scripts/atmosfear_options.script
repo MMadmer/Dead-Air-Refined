@@ -238,6 +238,29 @@ function af_options_dialog:OptionsFromIni(combo, section, combo_name)
 			end
 		end
 	end
+	-- The list keys ("list_freq_48", "list_periods_clear") are not what the config stores
+	-- ("48", "clear"): the bridge is atmosfear_option_names, whose KEY is the config value and
+	-- whose name is "st_"..list key. Built once per combo so Get/Set never guess.
+	map.value_of = {}
+	map.row_of_value = {}
+	local names = self.default_settings:collect_section("atmosfear_option_names")
+	if names then
+		for value, name in pairs(names) do
+			for option, row in pairs(map.row_of) do
+				if name == "st_"..option or name == option then
+					map.value_of[option] = value
+					map.row_of_value[value] = row
+				end
+			end
+		end
+	end
+	for option, row in pairs(map.row_of) do
+		if map.value_of[option] == nil then
+			-- No name entry (a bare list): the key is the value.
+			map.value_of[option] = option
+			map.row_of_value[option] = row
+		end
+	end
 end
 
 function af_options_dialog:RegisterCheck(xml, dialog, name, dialogObj)
@@ -288,7 +311,7 @@ function af_options_dialog:SetComboValue(option_name,af_option)
 	if af_option==nil then
 		af_option=self.default_settings:r_value("atmosfear_option_names","opt_"..option_name)
 	end
-	local row = map and af_option and map.row_of[af_option]
+	local row = map and af_option and (map.row_of_value[tostring(af_option)] or map.row_of[af_option])
 	if row then
 		combo:SetCurrentID(row)
 	elseif map and map.by_row[0] then
@@ -350,24 +373,20 @@ function af_options_dialog:GetComboValue(option_name)
 		local row = combo:GetCurrentIdx()
 		local option = row and map.by_row[row]
 		if option then
-			return option
+			-- The config value ("48", "clear"), not the list key ("list_freq_48"): a key
+			-- written into the config was what the surge timer choked on.
+			return map.value_of[option] or option
 		end
-		-- No live selection (untouched combo restored from an unknown value): fall back to
-		-- matching the displayed text against THIS combo's own options only. Options without
-		-- a name entry (the period lists) are skipped - concatenating their nil name is what
-		-- crashed the main-menu weather apply.
+		-- No live selection: match the displayed text against THIS combo's own rows.
 		local selected = combo:GetText()
 		for opt in pairs(map.row_of) do
-			local name = self.default_settings:line_exist("atmosfear_option_names",opt)
-				and self.default_settings:r_value("atmosfear_option_names",opt)
-			if name and (game.translate_string("st_"..name)==selected or game.translate_string(name)==selected)
-				or game.translate_string("st_"..opt)==selected then
-				return opt
+			if game.translate_string("st_"..opt)==selected then
+				return map.value_of[opt] or opt
 			end
 		end
-		-- Still nothing: the first option of this combo, never a nil into the config.
+		-- Still nothing: the first row's value, never a nil into the config.
 		if map.by_row[0] then
-			return map.by_row[0]
+			return map.value_of[map.by_row[0]] or map.by_row[0]
 		end
 	end
 	local selected = combo:GetText()
