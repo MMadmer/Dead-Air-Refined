@@ -576,12 +576,16 @@ volume, so the shadow the deck casts on the ground (and the break in the sun sha
 shadow of the cloud that shows, and the lens flare and the sun sprite fade by the column
 between the camera and the sun (read back from the map one frame late).
 
-Lightning lights the deck locally: the discharge is a point of light inside the slab along
-the bolt's direction, falling off over about a kilometre and scattered by the cloud around
-it, while the flash's share of the fog colour is taken back out of the deck's sky light - so
-the clouds near the bolt go white and the far deck stays as it was, instead of every cloud
-brightening with the fog. A third of the discharges stay inside the cloud (no channel is
-drawn): sheet lightning.
+Lightning lights the deck locally: the discharge is a bent channel inside the slab - a line
+a few kilometres long from where the bolt's direction meets the deck, its heading, length
+and bend rolled per discharge - lit like a capsule, falling off over a few hundred metres
+from the line and scattered by the cloud around it. The flash's share of the fog and sun
+colours is taken back out of the deck's own light, and the deck keeps the sun's real
+direction while the engine lends sun_dir to the bolt - so the clouds along the channel go
+white and the far deck stays as it was, instead of every cloud brightening with the fog. A
+third of the discharges stay inside the cloud (no channel is drawn): sheet lightning. The
+deck's sun light also follows the weather's authored sun strength now: under a thunder
+cycle's near-black sun the clouds are lit by the sky alone.
 
 The volumetric tiers march real volumes: a Perlin-Worley base shape carved by Worley
 octaves, a height profile from stratus to cumulus chosen per cell, a Worley detail volume

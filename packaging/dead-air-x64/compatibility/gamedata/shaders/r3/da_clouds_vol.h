@@ -25,9 +25,13 @@ uniform float4 da_cloud_cam_u;
 uniform float4 da_cloud_cam_d;
 // Lightning (cl_da_lightning*): the flash inside the deck, its colour, and what it added to
 // the fog colour this frame.
-uniform float4 da_lightning;
-uniform float4 da_lightning2;
-uniform float4 da_lightning_fog;
+uniform float4 da_lightning_a;   // channel start (where the bolt meets the deck), w = intensity
+uniform float4 da_lightning_m;   // channel midpoint, pushed sideways by the bend
+uniform float4 da_lightning_b;   // channel end
+uniform float4 da_lightning2;    // the flash's colour
+uniform float4 da_lightning_fog; // what the flash added to the fog colour
+uniform float4 da_lightning_sun; // what the flash added to the sun colour
+uniform float4 da_sun_dir_real;  // the sun's own direction (the bolt borrows sun_dir while it flashes)
 
 float3 da_cloud_view_ray(float2 uv)
 {
@@ -95,23 +99,41 @@ float da_cloud_density_vol(float3 p, float3 weather, float hn, bool cheap)
 void da_cloud_lights(float sun_up, out float3 sun, out float3 sky)
 {
     const float3 lum = float3(0.299f, 0.587f, 0.114f);
-    const float3 sun_t = L_sun_color.rgb / max(dot(L_sun_color.rgb, lum), 0.05f);
-    sun = sun_t * 0.95f * sun_up;
+    // The sun as the weather authored it, the flash's share taken back out. Its STRENGTH
+    // follows the authored luminance (a thunder cycle's sun is nearly off; normalising it
+    // to a unit tint lit the whole deck as if by a clear-day sun, and a flash's small add
+    // then switched that sun on everywhere at once).
+    const float3 sun_c = max(L_sun_color.rgb - da_lightning_sun.rgb, 0.0f);
+    const float sun_l = dot(sun_c, lum);
+    const float3 sun_t = sun_c / max(sun_l, 0.02f);
+    sun = sun_t * 0.95f * sun_up * saturate(sun_l * (1.0f / 0.7f));
     // The flash's share of the fog colour comes back out: a bolt lights the clouds around it
     // (da_cloud_lightning), not every cloud in the sky.
     sky = saturate((fog_color.rgb - da_lightning_fog.rgb) * 1.05f + 0.06f);
 }
 
+// Distance from p to the segment ab.
+float da_seg_dist(float3 p, float3 a, float3 b)
+{
+    const float3 ab = b - a;
+    const float t = saturate(dot(p - a, ab) / max(dot(ab, ab), 1.0f));
+    return length(p - (a + ab * t));
+}
+
 // The glow of a discharge inside the deck: a point of light in the slab, falling off over a
 // kilometre or so, scattered by the cloud around it. Dense cloud near the bolt goes white,
 // the far deck stays as it was.
+// The glow of a discharge inside the deck: not a ball but the channel - a bent line a few
+// kilometres long (A-M-B), lit like a capsule: the light falls off with the distance to the
+// line, and the cloud around it scatters it. Dense cloud along the channel goes white, the
+// far deck stays as it was.
 float3 da_cloud_lightning(float3 p, float d)
 {
-    [branch] if (da_lightning.w <= 0.001f)
+    [branch] if (da_lightning_a.w <= 0.001f)
         return 0;
-    const float3 dv = da_lightning.xyz - p;
-    const float r2 = dot(dv, dv);
-    const float att = da_lightning.w * 4.0f / (1.0f + r2 * (1.0f / (1200.0f * 1200.0f)));
+    const float dist = min(da_seg_dist(p, da_lightning_a.xyz, da_lightning_m.xyz),
+                           da_seg_dist(p, da_lightning_m.xyz, da_lightning_b.xyz));
+    const float att = da_lightning_a.w * 5.0f / (1.0f + dist * dist * (1.0f / (700.0f * 700.0f)));
     return da_lightning2.rgb * att * (0.5f + 0.5f * saturate(d * 3.0f));
 }
 

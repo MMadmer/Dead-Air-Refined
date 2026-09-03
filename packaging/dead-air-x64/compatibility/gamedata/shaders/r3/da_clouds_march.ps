@@ -34,7 +34,7 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 	// Below the horizon there is no deck; the far deck is edge-on anyway.
 	[branch] if (dir.y > 0.012f && cover > 0.001f && rise > 50.0f)
 	{
-		const float3 to_sun = -L_sun_dir_w;
+		const float3 to_sun = -da_sun_dir_real.xyz;
 		const float cos_t = dot(dir, to_sun);
 		const float sun_up = saturate(to_sun.y * 4.0f + 0.2f);
 		float3 sun, sky;

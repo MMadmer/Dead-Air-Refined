@@ -235,6 +235,9 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
     // A third of the discharges stay inside the cloud: the deck lights up around them and
     // no channel is drawn - the sheet lightning of a real storm.
     bolt_hidden = Random.randF() < 0.35f;
+    channel_heading = Random.randF(0.f, PI_MUL_2);
+    channel_length = Random.randF(1500.f, 4500.f);
+    channel_bend = Random.randF(-0.35f, 0.35f);
     Msg("* [lightning] bolt: hidden=%d life=%.2f", bolt_hidden ? 1 : 0, life_time);
 
     float sun_h, sun_p;
@@ -302,6 +305,7 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
         {
             state = stIdle;
             lightning_fog_add.set(0.f, 0.f, 0.f);
+            lightning_sun_add.set(0.f, 0.f, 0.f);
         }
         current_time += Device.fTimeDelta;
         Fvector fClr;
@@ -323,10 +327,12 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
         currentEnv.fog_color.mad(fClr, p_fog_color);
         lightning_color = fClr;
         lightning_fog_add.mul(fClr, p_fog_color);
+        lightning_sun_add.mul(fClr, p_sun_color);
 
         if (GEnv.Render->GenerationIsR2OrHigher())
         {
             R_ASSERT(_valid(current_direction));
+            sun_dir_real = currentEnv.sun_dir; // the sun as the weather has it, before the bolt borrows its slot
             currentEnv.sun_dir = current_direction;
             VERIFY2(currentEnv.sun_dir.y < 0,
                 "Invalid sun direction settings while CEffect_Thunderbolt");

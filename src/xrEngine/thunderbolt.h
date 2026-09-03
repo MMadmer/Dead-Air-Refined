@@ -123,7 +123,14 @@ private:
     // hidden inside the cloud - sheet lightning, a glow with no channel to look at.
     Fvector lightning_color{};
     Fvector lightning_fog_add{};
+    Fvector lightning_sun_add{};
+    Fvector sun_dir_real{0.f, -1.f, 0.f};
     bool bolt_hidden{};
+    // The channel inside the cloud: a bent line a few kilometres long, its heading, length
+    // and bend rolled per discharge - the glow is that shape, not a ball.
+    float channel_heading{};
+    float channel_length{3000.f};
+    float channel_bend{};
 
     float life_time;
     float current_time;
@@ -154,6 +161,11 @@ public:
     float lightning_intensity() const { return state == stWorking ? lightning_phase : 0.f; }
     const Fvector& lightning_colour() const { return lightning_color; }
     const Fvector& lightning_fog_added() const { return lightning_fog_add; }
+    const Fvector& lightning_sun_added() const { return lightning_sun_add; }
+    const Fvector& sun_direction_real() const { return sun_dir_real; }
+    float channel_heading_rad() const { return channel_heading; }
+    float channel_length_m() const { return channel_length; }
+    float channel_bend_k() const { return channel_bend; }
 
     CEffect_Thunderbolt();
     ~CEffect_Thunderbolt();
