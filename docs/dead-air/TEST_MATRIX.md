@@ -30,6 +30,10 @@
 | PDA script tabs | Widescreen PDA, relations tab and one native tab | Pass only when text placement remains stable, tabs accept input, and no Lua/UI lifecycle error is logged |
 | Debug script tabs | Debug mode, spawner plus every available non-spawner tab | Pass only when each tab is created, drawn, and switched without Lua/UI lifecycle errors |
 | Outfit and helmet night vision | Equipped NV-capable outfit and helmet, R4 renderer | Pass only when both activation paths start and stop the configured post-process effector |
+| Wind service replay | `wind_seed N` twice on the same save, `wind_dbg 1` | Pass only when both logs print the same `[wind]` lines tick for tick, and `wind_force 1.0` pins the base at 1.00 within one tick |
+| Tree crown oscillator | Outdoor save, `wind_dbg 1`, a gust event | Pass only when the watched tree's `[wind-tree]` line shows q overshooting the target and ringing down (damped, never clamped at the target), and the shadow of the crown moves with it on every preset but Minimum |
+| Cloud deck and its shadow | Midday save, `r__clouds_quality 1` then `3`, `r__clouds_cover 0.25/0.55/0.85` | Pass only when the deck reads as masses with edges (not a haze), the ground shows the shadows of the clouds overhead, the shafts break where the deck is dense, no square edge of the cloud map shows in the sky, and tier 3 costs under 3 ms at 1440p on the rig |
+| Wind on particles, bodies and water | Smoke source, a dropped can, a lake in a `storm` weather | Pass only when the smoke leans downwind and returns when the wind drops, a resting can stays put in a breeze and rolls in a gale, and the lake shows streaks along the heading that a `clear` weather does not |
 | Third-party script compatibility | Binding parity fixture plus a representative packed or loose addon | Pass only when the addon starts without missing export, signature, or Lua ownership errors |
 | Level transition | Underground to Agroprom | Pass |
 | Transition-save reload | Fresh underground and Agroprom saves | Pass |

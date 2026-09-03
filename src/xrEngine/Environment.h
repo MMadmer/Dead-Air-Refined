@@ -347,6 +347,11 @@ public:
     // log profile (capped - the profile is unbounded as a ratio), heading in eff_wind_dir_aloft.
     float eff_wind_z0{0.03f};
     float eff_wind_aloft_ms{};
+    // The cloud deck: base altitude above the level's ground and its thickness (m). Read from
+    // [clouds] in dead_air_x64_wind.ltx; the deck field drifts eff_cloud_run metres along
+    // eff_wind_dir_aloft.
+    float eff_cloud_altitude{1500.f};
+    float eff_cloud_thickness{600.f};
     // Discrete gust events: Poisson arrivals with a raised-cosine envelope. The noise layers
     // give the wind its texture; these give it EVENTS - the gust that arrives, peaks and lets
     // go, which is what a player remembers as "a gust".

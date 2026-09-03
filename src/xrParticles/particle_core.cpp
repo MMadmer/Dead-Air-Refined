@@ -5,6 +5,8 @@
 
 using namespace PAPI;
 
+PAPI::WindSampler PAPI::g_wind_sampler = nullptr;
+
 // To offset [0 .. 1] vectors to [-.5 .. .5]
 static pVector vHalf(0.5, 0.5, 0.5);
 

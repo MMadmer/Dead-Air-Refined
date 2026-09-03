@@ -13,8 +13,10 @@
 // intrinsics beyond the DA_* wrappers below, no statics. If it does not compile on both
 // sides, it does not go in here.
 
+// No #include here on purpose, not even for C++: the shader cache walks every #include line of
+// a shader's dependency tree to hash it, cannot read <angle brackets>, and dies on the empty
+// name. The C++ includer already has <cmath> through its precompiled header.
 #ifdef __cplusplus
-#include <cmath>
 #define DA_FUNC inline
 #define DA_FLOOR(x) std::floor(x)
 #define DA_FRAC(x) ((x) - std::floor(x))

@@ -1,0 +1,20 @@
+#include "common.h"
+#include "da_clouds.h"
+
+// One texel of the cloud map: the deck field at this world position.
+//   x = density (coverage eroded by detail) - what the deck is made of and what shades,
+//   y = coverage alone - the soft, cell-scale envelope,
+//   z = detail noise - so a reader can re-erode at its own strength.
+struct v2p
+{
+	float2	tc0		: TEXCOORD0;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	const float2 xz = da_cloud_map.xy + (I.tc0 - 0.5f) * da_cloud_map.z;
+	const float cov = da_cloud_coverage(xz);
+	const float det = da_cloud_detail(xz);
+	const float d = da_cloud_erode(cov, det);
+	return float4(d, cov, det, 1.0f);
+}

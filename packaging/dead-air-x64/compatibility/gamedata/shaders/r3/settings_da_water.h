@@ -73,6 +73,13 @@
 #define WATER_RIPPLE_SPEED     0.09   // layer drift speed
 #define WATER_RIPPLE_FADE      35.0   // metres, past this a ripple is subpixel
 
+// Wind on open water: two more normal-map layers stretched along the wind and advected with
+// it, and the base waves calm down when the air is still.
+#define WATER_WIND_WAVES       1
+#define WATER_WIND_AMP         0.50   // normal perturbation at a full gale
+#define WATER_WIND_CALM        0.55   // share of the base waves left in still air
+#define WATER_WIND_FADE        90.0   // metres, past this a wind wave is subpixel
+
 // ---- Screen-space refraction --------------------------------------------------------------
 #define WATER_REFRACT          1
 #define WATER_REFRACT_STRENGTH 0.030  // screen share per unit of wave slope

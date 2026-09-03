@@ -42,26 +42,12 @@ static u16 facetable[16][3] =
 // the wind heading as "up", shifted downwind by the cloud-level travel the wind service
 // accumulates. One builder for every sun pass, so the cascades, the far pass and the
 // volumetric shafts cannot disagree about where the clouds are.
-static Fmatrix da_cloud_shadow_xform(const Fvector& sun_direction)
+static Fmatrix da_cloud_shadow_xform(const Fvector& /*sun_direction*/)
 {
-    const auto& env = g_pGamePersistent->Environment();
-    const float windShift = env.eff_cloud_run * 0.002f;
-    Fmatrix m_xform;
-    Fvector normal;
-    normal.setHP(env.eff_wind_dir_aloft, 0);
-    Fvector position;
-    position.set(0, 0, 0);
-    m_xform.build_camera_dir(position, sun_direction, normal);
-    Fvector localnormal;
-    m_xform.transform_dir(localnormal, normal);
-    localnormal.normalize();
-    Fmatrix result;
-    result.mul(m_xform, Device.mInvView);
-    m_xform.scale(0.002f, 0.002f, 1.f);
-    result.mulA_44(m_xform);
-    m_xform.translate(localnormal.mul(windShift));
-    result.mulA_44(m_xform);
-    return result;
+    // The shader walks the receiver up the sun ray to the deck plane itself (da_clouds.h),
+    // so all it needs from here is view space -> world space. The sun direction and the
+    // deck's drift reach it through the global constants.
+    return Device.mInvView;
 }
 
 static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 /*sub_phase*/)

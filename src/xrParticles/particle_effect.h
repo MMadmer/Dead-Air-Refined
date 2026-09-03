@@ -13,6 +13,10 @@ struct PARTICLES_API ParticleEffect
     OnDeadParticleCB d_cb;
     void* owner;
     u32 param;
+    // The wind this effect drifts in (m/s, world), sampled by the engine's wind service at
+    // the effect's position a few times a second (PAMove). Not serialised - it is weather.
+    pVector wind{};
+    float wind_stamp{-1.f};
 
     ParticleEffect(int mp);
 

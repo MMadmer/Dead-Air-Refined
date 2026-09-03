@@ -612,6 +612,8 @@ ENGINE_API int ps_e_wind_dbg = 0;
 // A seed asked for before the environment existed (user.ltx runs before the level does):
 // consumed at the service's first tick. -1 = none.
 ENGINE_API float g_wind_seed_override = -1.f;
+// Likewise for wind_force issued from user.ltx: applied at the first tick.
+ENGINE_API float g_wind_force_override = -1.f;
 
 // The wind-field maths, shared with the vertex shaders: one file, two compilers.
 #include "../../packaging/dead-air-x64/compatibility/gamedata/shaders/r3/da_wind_core.h"
@@ -779,6 +781,13 @@ float CEnvironment::weather_wind_profile()
             // is open grassland; a level of forest and village sits nearer 0.3).
             if (ini.section_exist("wind_service") && ini.line_exist("wind_service", "z0"))
                 eff_wind_z0 = clampr(ini.r_float("wind_service", "z0"), 0.001f, 2.f);
+            if (ini.section_exist("clouds"))
+            {
+                if (ini.line_exist("clouds", "altitude"))
+                    eff_cloud_altitude = clampr(ini.r_float("clouds", "altitude"), 200.f, 6000.f);
+                if (ini.line_exist("clouds", "thickness"))
+                    eff_cloud_thickness = clampr(ini.r_float("clouds", "thickness"), 50.f, 3000.f);
+            }
         }
         else
             Msg("! [wind] dead_air_x64_wind.ltx not found - weather wind profiles disabled");
@@ -1319,6 +1328,11 @@ void CEnvironment::UpdateEffectiveWind()
         if (g_wind_rng.state == 0)
             g_wind_rng.state = 1;
         Msg("* [wind] seed %.1f%s", eff_wind_seed, pinned >= 0.f ? " (pinned)" : "");
+        if (g_wind_force_override >= 0.f)
+        {
+            eff_wind_force = g_wind_force_override;
+            Msg("* [wind] force pinned at %.2f", eff_wind_force);
+        }
     }
 
     // Fixed 60 Hz ticks. A frame longer than eight ticks (a load hitch) drops its remainder

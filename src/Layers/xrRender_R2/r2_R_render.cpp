@@ -440,6 +440,12 @@ void CRender::Render()
 
     r_rain.sync();
 
+    // The cloud deck field for this frame: the sun passes below shade the ground with it, the
+    // shafts march through it, and the deck itself is drawn from it in combine.
+#if RENDER == R_R4
+    Target->phase_cloud_map();
+#endif
+
     // Directional light - fucking sun
     {
         PIX_EVENT(DEFER_SUN);
@@ -526,6 +532,11 @@ void CRender::Render()
         GpuTimers.End(dx11GpuTimers::Combine);
 #endif
     }
+
+    // r__screenshot_every N: the finished 3D frame, before the HUD and the stats text, so a
+    // hidden-desktop QA run can hand back what it rendered.
+    if (ps_r__screenshot_every > 0 && (Device.dwFrame % u32(ps_r__screenshot_every)) == 0)
+        Screenshot(SM_NORMAL);
 
 #if defined(USE_DX11)
     GpuTimers.FrameEnd();

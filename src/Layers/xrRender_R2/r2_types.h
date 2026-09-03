@@ -78,6 +78,9 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define     r2_smaa_search      "$user$smaa_search"  // --- baked LUT, 64x16 R8
 #define     r2_blue_noise       "$user$blue_noise"  // --- 128x128 R8G8 blue-noise tile (GTAO jitter)
 #define     r2_sunmask          "sunmask"
+// The cloud deck field rendered once per frame (phase_cloud_map); the sun passes read it
+// through s_lmap, the visible deck through s_cloud_map.
+#define     r2_RT_cloud_map     "$user$cloud_map"
 
 #define     r2_base             "$user$base"
 

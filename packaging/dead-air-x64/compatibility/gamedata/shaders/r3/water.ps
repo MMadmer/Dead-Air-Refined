@@ -30,6 +30,7 @@ uniform float4		various;
 float3	water_intensity;
 #endif	//	defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
 #include "settings_da_water.h"	// every water knob lives there
+#include "da_wind_field.h"	// the wind service: heading, speed, gust field
 
 // Rain strength rides the same constant the future puddle work uses: x = rain density.
 uniform float4 rain_params;
@@ -58,6 +59,21 @@ float2 da_water_ripples( float2 wxz, float t )
 	float2 r0  = s_nmap.Sample( smp_base, uv0 ).xy - 0.5h;
 	float2 r1  = s_nmap.Sample( smp_base, uv1 ).xy - 0.5h;
 	return r0 + r1 * 0.7h;
+}
+
+// Wind waves as two more layers of the same normal map, sampled in a frame aligned with the
+// wind: stretched along it, short across it, advected downwind at a share of the wind speed.
+// The slope comes back rotated into world XZ.
+float2 da_water_wind_waves( float2 wxz, float2 wdir, float wind_ms, float t )
+{
+	float2 along = float2( dot(wxz, wdir), dot(wxz, float2(-wdir.y, wdir.x)) );
+	float drift = t * (0.12h + 0.025h * wind_ms);
+	float2 uv0 = along * float2(0.07h, 0.19h) - float2(drift, 0.0h);
+	float2 uv1 = along * float2(0.16h, 0.43h) - float2(drift * 1.6h, t * 0.03h);
+	float2 r0  = s_nmap.Sample( smp_base, uv0 ).xy - 0.5h;
+	float2 r1  = s_nmap.Sample( smp_base, uv1 ).xy - 0.5h;
+	float2 r   = r0 + r1 * 0.6h;
+	return float2( r.x * wdir.x - r.y * wdir.y, r.x * wdir.y + r.y * wdir.x );
 }
 
 float3 calc_moon_road(float3 color, float3 vreflect, float2 tc, float depth, float Nz)
@@ -90,8 +106,26 @@ float4 main( vf I ) : SV_Target
 	float	da_water_dist	= length(I.v2point);
 	float	da_water_far	= saturate((da_water_dist - WATER_FAR_START) / max(WATER_FAR_END - WATER_FAR_START, 0.001h));
 	float	da_water_amp	= WATER_WAVE_AMP * lerp(1.0h, WATER_FAR_AMP, da_water_far);
+	// Still air leaves a mirror; the base waves only grow with the wind.
+	float	da_wind_ms	= da_wind_state.z;
+	float	da_wind_k	= smoothstep(0.8h, 9.0h, da_wind_ms);
+			da_water_amp	*= lerp(WATER_WIND_CALM, 1.0h, da_wind_k);
 
 	float3	Navg	= (n0 + n1 - 1) * float3(da_water_amp, da_water_amp, 1.0h);
+
+#if WATER_WIND_WAVES
+	{
+		float da_wind_near = saturate(1.0h - da_water_dist / WATER_WIND_FADE);
+		[branch] if (da_wind_k * da_wind_near > 0.001h)
+		{
+			// Gust tongues of the service's field darken the water in patches - the cat's
+			// paws a squall drags across a lake.
+			float3 wf = da_wind_field_eval(I.position_w.xz);
+			Navg.xy += da_water_wind_waves(I.position_w.xz, da_wind_state.xy, da_wind_ms, da_wind_state.w)
+			         * (WATER_WIND_AMP * da_wind_k * da_wind_near * wf.x);
+		}
+	}
+#endif
 
 #if WATER_RAIN_RIPPLES
 	// Fade with distance: past WATER_RIPPLE_FADE a ripple is subpixel and turns to noise.

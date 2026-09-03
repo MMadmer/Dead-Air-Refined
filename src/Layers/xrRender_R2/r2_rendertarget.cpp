@@ -331,6 +331,9 @@ CRenderTarget::CRenderTarget()
         // the scissors, the font-atlas pick and the glyph emitter are all pinned to
         // Device.dwWidth/dwHeight (see the pda-3d port plan).
 #if RENDER == R_R4
+        // The cloud deck field: 512 texels over a 6 km square is ~12 m per texel, which is
+        // finer than any cloud edge the field produces. One megabyte.
+        rt_cloud_map.create(r2_RT_cloud_map, 1024, 1024, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsMask.create(r2_RT_SunShaftsMask, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsMaskSmoothed.create(r2_RT_SunShaftsMaskSmoothed, w, h, D3DFMT_A8R8G8B8, 1);
         rt_SunShaftsPass0.create(r2_RT_SunShaftsPass0, w, h, D3DFMT_A8R8G8B8, 1);
@@ -751,6 +754,10 @@ CRenderTarget::CRenderTarget()
 
         CBlender_sunshafts b_sunshafts;
         s_sunshafts.create(&b_sunshafts, "r2" DELIMITER "sunshafts");
+
+        // The cloud deck field pass (phase_cloud_map): reads nothing from the frame, so it is
+        // fine under MSAA too.
+        s_cloud_map.create("da_cloud_map");
 
         // Puddle reflections read the single-sampled G-buffer helpers; under MSAA common.h
         // types s_position as Texture2DMS and the shader would only fail to compile.

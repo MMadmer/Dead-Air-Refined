@@ -1072,9 +1072,42 @@ void PAMatchVelocity::Transform(const Fmatrix&) { ; }
 
 void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
+    // The wind. Every effect drifts in it - smoke leans downwind, dust and sparks are carried,
+    // a blast ring shoves the smoke beside it - through the same service the grass reads.
+    // The wind at the effect is refreshed a few times a second (it is a world query with a
+    // shelter test; per particle per frame would be absurd), and each particle relaxes
+    // toward it with a rate set by its size: a big soft puff follows the air, a small hot
+    // spark barely notices. Nothing here changes an effect's authored motion when the sampler
+    // is absent or the air is still.
+    bool windy = false;
+    pVector wind;
+    if (g_wind_sampler && effect->p_count > 0)
+    {
+        effect->wind_stamp += dt;
+        if (effect->wind_stamp < 0.f || effect->wind_stamp > 0.33f)
+        {
+            effect->wind_stamp = 0.f;
+            Fvector w;
+            g_wind_sampler(effect->particles[0].pos, w);
+            effect->wind.set(w);
+        }
+        wind = effect->wind;
+        windy = wind.square_magnitude() > 0.01f;
+    }
+
     // Step particle positions forward by dt, and age the particles.
     for_each_particle(effect, [&](Particle& particle)
     {
+        if (windy)
+        {
+            // Relaxation rate from size: 1/s for a metre-wide puff, quicker for anything
+            // smaller, capped so a spark is not snapped sideways in one frame.
+            const float size = (particle.size.x + particle.size.y) * 0.5f;
+            const float rate = size > 0.05f ? (1.0f / size) : 20.f;
+            const float k = 1.f - expf(-dt * (rate < 20.f ? rate : 20.f));
+            particle.vel.x += (wind.x - particle.vel.x) * k;
+            particle.vel.z += (wind.z - particle.vel.z) * k;
+        }
         // move
         particle.age += dt;
         particle.posB = particle.pos;

@@ -196,6 +196,22 @@ void FTreeVisual::UpdateWindState() const
         m_wind_q += m_wind_qd * h;
     }
     m_wind_q = clampr(m_wind_q, 0.05f, 2.5f);
+
+    // wind_dbg: one tree's response against its target, twice a second, so the ring-down can
+    // be read as numbers rather than trusted from a screenshot.
+    extern ENGINE_API int ps_e_wind_dbg;
+    if (ps_e_wind_dbg)
+    {
+        static const FTreeVisual* watched = nullptr;
+        static float next = 0.f;
+        if (!watched)
+            watched = this;
+        if (watched == this && Device.fTimeGlobal >= next)
+        {
+            next = Device.fTimeGlobal + 0.5f;
+            Msg("* [wind-tree] target=%.3f q=%.3f qd=%.3f omega=%.2f", target, m_wind_q, m_wind_qd, m_wind_omega);
+        }
+    }
 }
 
 Fvector4 FTreeVisual::wind_state_row(float s) const

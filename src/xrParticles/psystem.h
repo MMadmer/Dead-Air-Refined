@@ -130,6 +130,15 @@ struct Particle
 using OnBirthParticleCB = void(*)(void* owner, u32 param, PAPI::Particle& P, u32 idx);
 using OnDeadParticleCB = void(*)(void* owner, u32 param, PAPI::Particle& P, u32 idx);
 
+// The wind service, seen from here. This library sits below the engine and cannot ask it
+// anything; the renderer installs the sampler at startup and PAMove pulls the wind at each
+// effect's position through it. Null means "no wind" (the editor, the dedicated server).
+//   pos      - world position to sample at
+//   out      - wind velocity, m/s, world space (y = 0 for the ambient wind)
+//   returns  - exposure 0..1 of that spot (0 under a roof), already applied to `out`
+using WindSampler = float (*)(const Fvector& pos, Fvector& out);
+PARTICLES_API extern WindSampler g_wind_sampler;
+
 //////////////////////////////////////////////////////////////////////
 // Type codes for domains
 enum PDomainEnum : u32

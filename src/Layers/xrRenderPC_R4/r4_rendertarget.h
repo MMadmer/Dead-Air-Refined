@@ -202,6 +202,11 @@ private:
     ref_shader s_taa;
     ref_shader s_sunshafts;
     ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
+    // The cloud deck field, rendered once per frame over a square of the deck plane around the
+    // camera; the sun passes, the shafts and the visible deck all read it instead of evaluating
+    // the field's noise per pixel.
+    ref_rt rt_cloud_map;
+    ref_shader s_cloud_map;
     ref_geom g_fxaa;
 
 public:
@@ -353,6 +358,7 @@ public:
     void phase_taa(const Fmatrix& reproject);
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
+    void phase_cloud_map(); // the cloud deck field for this frame (before the sun)
     void phase_combine();
     void phase_combine_volumetric();
     void phase_pp();

@@ -43,10 +43,13 @@ public:
     CCC_WindForce(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
     void Execute(pcstr args) override
     {
+        extern float g_wind_force_override;
+        const float value = (args && *args) ? clampr(float(atof(args)), -1.f, 1.25f) : -1.f;
+        g_wind_force_override = value; // honoured at the first tick if that is still ahead
         if (!g_pGamePersistent)
             return;
         auto& env = g_pGamePersistent->Environment();
-        env.eff_wind_force = (args && *args) ? clampr(float(atof(args)), -1.f, 1.25f) : -1.f;
+        env.eff_wind_force = value;
         Msg("* [wind] force %s", env.eff_wind_force >= 0.f ? "pinned" : "released");
     }
     void Info(TInfo& I) override { xr_strcpy(I, "wind_force [0..1.25|-1] - pin or release the wind ceiling"); }

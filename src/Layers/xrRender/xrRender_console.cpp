@@ -192,6 +192,12 @@ int ps_r__actor_shadow = 0;
 // Trees sway in the sun cascades too (their shadows move with the crowns). Below High the
 // shadow pass keeps the frozen wind: the deformation runs once more per cascade there.
 int ps_r__tree_shadow_sway = 0;
+// Cloud deck tier (da_clouds.h): 0/1 flat deck, 2 volumetric 6 steps, 3 volumetric 12 steps.
+int ps_r__clouds_quality = 1;
+// r__clouds_quality: pin the tier for tuning and QA; -1 follows the preset.
+int ps_r__clouds_quality_override = -1;
+// r__clouds_cover: pin the deck's coverage (0..1) for tuning and QA; -1 follows the weather.
+float ps_r__clouds_cover = -1.f;
 // How far the self-shadow lifts a sample off its own surface, in metres, and how much depth
 // slope one shadow texel may carry. Both exist for the same reason the sun has its own depth
 // bias pair: the deferred position a first-person pixel reconstructs from is not exactly on
@@ -276,6 +282,9 @@ float ps_r__vegDISCARD = 0.5f;
 float ps_r__grass_fade_start = 0.f;
 // GPU pass timings to the log every N frames (0 = off). A diagnostic, never persisted.
 int ps_r__gpu_log = 0;
+// A screenshot of the finished 3D frame every N frames (0 = off): how the QA rig, which runs
+// on a hidden desktop nobody can see, hands back pictures. Never persisted.
+int ps_r__screenshot_every = 0;
 // Share of the grass fade that goes into HEIGHT instead of uniform shrink. Uniform makes the
 // blade smaller in every direction until it is discarded by area and the ground bares out;
 // height-only lays the tuft flat while its footprint keeps covering the soil - reads as a
@@ -935,9 +944,15 @@ void xrRender_sync_preset_derived()
     ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
     // Swaying tree shadows: the full wind chain in every cascade the tree lands in. Measured
-    // on the rig as a per-cascade vertex cost only, so the two top presets carry it.
-    static constexpr int tree_shadow_sway_by_preset[] = {0, 0, 0, 1, 1};
+    // on the rig (foliage save, 1440p, Extreme): sun pass 8.2-8.8 ms with it, 8.2-9.4 ms
+    // without - the cascades are pixel-bound and the vertex work vanishes in the noise. So
+    // every preset but Minimum has it; Minimum keeps the frozen shadow for the oldest cards.
+    static constexpr int tree_shadow_sway_by_preset[] = {0, 1, 1, 1, 1};
     ps_r__tree_shadow_sway = tree_shadow_sway_by_preset[ps_Preset];
+    // Cloud deck: the flat deck everywhere (it is a few noise reads per sky pixel), the
+    // volumetric slab on the two top presets - 6 steps on High, 12 on Extreme.
+    static constexpr int clouds_by_preset[] = {0, 1, 1, 2, 3};
+    ps_r__clouds_quality = clouds_by_preset[ps_Preset];
     ps_r__sss = sss_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
@@ -1326,6 +1341,8 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__actor_shadow", &ps_r__actor_shadow, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__tree_shadow_sway", &ps_r__tree_shadow_sway, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__clouds_quality", &ps_r__clouds_quality_override, -1, 3);
+    CMD4(CCC_Float, "r__clouds_cover", &ps_r__clouds_cover, -1.f, 1.f);
     CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);
     CMD4(CCC_Float, "r__hud_shadow_slope_bias", &ps_r__hud_shadow_slope_bias, 0.f, 0.05f);
     CMD4(CCC_Float, "r__sss", &ps_r__sss, 0.f, 1.f);
@@ -1658,6 +1675,7 @@ void xrRender_initconsole()
     CMD1(CCC_memory_stats, "render_memory_stats");
     CMD1(CCC_gpu_stats, "r__gpu_stats");
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
+    CMD4(CCC_Integer, "r__screenshot_every", &ps_r__screenshot_every, 0, 100000);
 
     //CMD3(CCC_Mask, "r2_sun_ignore_portals", &ps_r2_ls_flags, R2FLAG_SUN_IGNORE_PORTALS);
 

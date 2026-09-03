@@ -2,6 +2,9 @@
 #pragma hdrstop
 #include "ParticleEffect.h"
 
+#include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/IGame_Level.h"
+#include "xrEngine/Environment.h"
 #include "xrCore/Threading/ParallelFor.hpp"
 
 #ifndef _EDITOR
@@ -78,8 +81,27 @@ void PS::OnEffectParticleDead(void*, u32, PAPI::Particle&, u32)
 //------------------------------------------------------------------------------
 // class CParticleEffect
 //------------------------------------------------------------------------------
+// The wind service, handed down to the particle library (which sits below the engine and
+// cannot include it): the local wind at a point, shelter applied. Installed once, by the first
+// effect ever created.
+static float da_particle_wind(const Fvector& pos, Fvector& out)
+{
+    if (!g_pGamePersistent || !g_pGameLevel)
+    {
+        out.set(0.f, 0.f, 0.f);
+        return 0.f;
+    }
+    const auto& env = g_pGamePersistent->Environment();
+    const float exposure = env.WindExposure(pos);
+    out = env.WindAt(pos, 1.5f);
+    out.mul(exposure);
+    return exposure;
+}
+
 CParticleEffect::CParticleEffect()
 {
+    if (!PAPI::g_wind_sampler)
+        PAPI::g_wind_sampler = &da_particle_wind;
     m_HandleEffect = ParticleManager()->CreateEffect(1);
     VERIFY(m_HandleEffect >= 0);
     m_HandleActionList = ParticleManager()->CreateActionList();

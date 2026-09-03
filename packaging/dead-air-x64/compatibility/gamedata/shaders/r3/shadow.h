@@ -887,6 +887,7 @@ float3x4 m_sunmask;	// ortho-projection (historically; bound as view->world on t
 // СКОРОСТИ (биндер cl_da_cloud_shadow: xy = снос, z = плотность от облачности погоды,
 // w = 1/размер ячейки). Плотность 0 (чистое небо) отсекает всю ветку.
 uniform float4 da_cloud_shadow;
+#include "da_clouds.h"
 
 float da_csh_hash( float2 i )
 {
@@ -910,17 +911,14 @@ float da_csh_noise( float2 p )
 
 float sunmask( float4 P )
 {
-	[branch] if ( da_cloud_shadow.z < 0.003f )
+	// [DA] The receiver's world position, up the sun ray to the deck plane, into the same
+	// coverage field the visible deck is drawn from (da_clouds.h): the shadow on the ground
+	// is the shadow of the cloud overhead. m_sunmask is bound as view->world by every sun
+	// pass (da_cloud_shadow_xform).
+	[branch] if ( da_cloud_params2.w < 0.003f )
 		return 1.0f;
-	// В САН-ПАССАХ m_sunmask - стоковая облачная проекция ВДОЛЬ СОЛНЦА (со сдвигом по ветру,
-	// r4_rendertarget_accum_direct): mul даёт готовые UV облачного поля - утром тени облаков
-	// честно уезжают вбок, как настоящие. Пятна ~100 м, вторая октава рвёт кромку.
-	const float2 q  = mul( m_sunmask, P ).xy * da_cloud_shadow.w;
-	const float  n  = da_csh_noise( q ) * 0.60f + da_csh_noise( q * 2.31f + 17.0f ) * 0.40f;
-	// Широкие просветы, мягкие края облачных пятен; тень не глушит солнце в ноль - небо
-	// подсвечивает даже под плотным облаком.
-	const float cover = smoothstep( 0.48f, 0.72f, n );
-	return 1.0f - da_cloud_shadow.z * cover;
+	const float3 Pw = mul( m_sunmask, P ).xyz;
+	return da_cloud_transmittance( s_lmap, Pw );
 }
 #else
 float sunmask( float4 P ) { return 1.h; }		//

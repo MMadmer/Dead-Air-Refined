@@ -19,6 +19,13 @@
 [wind_service]
 z0 = 0.12
 
+; The cloud deck: base altitude above the level's ground and thickness, metres. Stratocumulus
+; over the Zone sits at 1-2 km; the aloft wind (the log profile at this altitude, see z0)
+; is what moves it and its shadow.
+[clouds]
+altitude  = 1500
+thickness = 600
+
 [wind_profiles]
 storm        = 0.95
 thunder      = 0.85

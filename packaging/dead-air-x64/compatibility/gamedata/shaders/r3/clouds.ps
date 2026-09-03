@@ -1,38 +1,157 @@
 #include "common.h"
+#include "da_clouds.h"
 
-struct 	v2p
+// The visible cloud deck. A world-anchored layer at a real altitude, drifting with the wind
+// aloft, lit by the sun and the sky, read from the same field that casts its shadow.
+//
+// Tiers (da_cloud_params2.x, from the quality preset):
+//   0/1 - a flat deck: the view ray meets the deck plane, the column's density becomes the
+//         cloud. Tier 0 is one map fetch; tier 1 adds a per-pixel rim erosion and a one-tap
+//         sun probe.
+//   2/3 - a volumetric slab: the ray is marched between the deck's base and top, density
+//         accumulates, each sample is lit through the column above it. 4 or 7 steps.
+Texture2D s_cloud_map;
+
+struct v2p
 {
-	float4	color	: COLOR0;	// rgb. intensity, for SM3 - tonemap prescaled
-  	float2	tc0		: TEXCOORD0;
-  	float2	tc1		: TEXCOORD1;
+	float4	color	: COLOR0;
+	float3	wdir	: TEXCOORD0;
 };
 
-//uniform sampler2D 	s_clouds0	: register(s0);
-//uniform sampler2D 	s_clouds1	: register(s1);
-Texture2D	s_clouds0	: register(t0);
-Texture2D	s_clouds1	: register(t1);
+// Henyey-Greenstein, the forward lobe: the silver lining when the sun sits behind the cloud.
+float da_cl_hg(float cos_t, float g)
+{
+	const float g2 = g * g;
+	return (1.0f - g2) / (4.0f * 3.14159265f * pow(max(1.0f + g2 - 2.0f * g * cos_t, 0.0001f), 1.5f));
+}
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Pixel
+// Two lobes, normalised so a side-lit cloud sits near 1: the forward lobe is the silver
+// lining, the small back lobe is the glow of a cloud with the sun behind the viewer.
+float da_cl_phase(float cos_t)
+{
+	return min(12.566f * (0.7f * da_cl_hg(cos_t, 0.55f) + 0.3f * da_cl_hg(cos_t, -0.25f)), 3.0f);
+}
+
+// Light through a column of cloud: Beer-Lambert plus a weaker, wider second octave standing
+// in for multiple scattering - what keeps a cloud's shaded side grey rather than black.
+float da_cl_lit(float tau)
+{
+	return (exp(-tau) + 0.5f * exp(-tau * 0.2f) + 0.3f * exp(-tau * 0.05f)) * (1.0f / 1.8f);
+}
+
 float4 	main	( v2p I, float4 pos2d : SV_Position )	: SV_Target
 {
-	float4 	s0		= s_clouds0.Sample( smp_base, I.tc0 );
-	float4 	s1		= s_clouds1.Sample( smp_base, I.tc1 );
-	// [DA] Формула строго стоковая. Попытка «смягчить» сумму screen-смешением ОСЛАБИЛА
-	// плотную грозовую пелену - и сквозь неё просветился тёмный верх штормовых скай-кубмап,
-	// который эта пелена по дизайну и прикрывает («чёрные стенки скайбокса», полевой тест).
-	float4 	mix 	= I.color * (s0 + s1)	;
+	const float3 dir = normalize(I.wdir);
+	// Below the horizon there is no deck; just above it the deck is edge-on and the sky's
+	// own haze owns the picture.
+	const float horizon = saturate((dir.y - 0.015f) * 9.0f);
+	[branch] if (horizon <= 0.0f || da_cloud_params.x <= 0.001f)
+		return float4(0, 0, 0, 0);
 
-	float4 	rgb		= mix		;
+	// The deck sits at an absolute altitude - the same plane the shadow projects onto.
+	const float base_alt = da_cloud_params.y;
+	const float thickness = max(da_cloud_params2.y, 50.0f);
+	const float rise = max(base_alt - eye_position.y, 100.0f);
+	const int tier = int(da_cloud_params2.x + 0.5f);
+	const float3 to_sun = -L_sun_dir_w;
+	const float cos_t = dot(dir, to_sun);
+	// A sun just below the horizon still lights the deck from beneath.
+	const float sun_up = saturate(to_sun.y * 4.0f + 0.2f);
 
-	// [DA] Единственная правка: выходной дизеринг. Облачные градиенты - худший случай
-	// 8-битного бандинга (плавный купол на полнеба). Треугольный шум +-1/2 LSB, только от
-	// экранной позиции - статичный кадр остаётся статичным.
+	// The weather's cloud colour is a tint - its hue, not its brightness: a heavy deck darkens
+	// by its own coverage, a fair-weather deck is white whatever grey the weather file says.
+	// Its alpha is the coverage and already reached the field through the binder.
+	const float wlum = dot(I.color.rgb, float3(0.299f, 0.587f, 0.114f));
+	const float3 wcol = (wlum > 0.03f ? I.color.rgb / wlum : 1.0f) * (1.0f - 0.3f * saturate(da_cloud_params.x));
+	const float3 sun = L_sun_color.rgb * wcol * 1.5f * sun_up;
+	// Sky light on a cloud: the hemisphere, floored at a share of the sun - a fair sky is a
+	// quarter of the sun's light, and the engine's hemisphere term is tuned for the ground.
+	const float3 sky = max(L_hemi_color.rgb * 1.5f, L_sun_color.rgb * 0.22f * sun_up) * wcol;
+	const float phase = da_cl_phase(cos_t);
+	// Horizontal metres per slab height along the sun: where the column above a sample lies.
+	const float sun_lat = thickness / max(to_sun.y, 0.2f);
+
+	float3 col = 0;
+	float alpha = 0;
+
+	[branch] if (tier < 2)
 	{
-		const float dn0 = frac(sin(dot(pos2d.xy, float2(12.9898f, 78.233f))) * 43758.5453f);
-		const float dn1 = frac(sin(dot(pos2d.xy, float2(39.3468f, 11.135f))) * 24634.6345f);
-		rgb.rgb += (dn0 + dn1 - 1.0f) * (1.0f / 255.0f);
+		// Flat deck. Where the ray meets the base plane, in world metres.
+		const float t = rise / dir.y;
+		const float2 hit = eye_position.xz + dir.xz * t;
+		const float d2 = da_cloud_field(s_cloud_map, hit).x;
+		[branch] if (d2 <= 0.002f)
+			return float4(0, 0, 0, 0);
+		// Tier 1 erodes the rim per pixel (the map's texel is 16 m, the eye wants a ragged
+		// edge) and probes the column toward the sun; tier 0 takes the map as it is.
+		const float d = tier > 0 ? saturate(d2 - da_cloud_fine(hit, 0.5f) * 0.45f * (1.0f - d2)) : d2;
+		[branch] if (d <= 0.002f)
+			return float4(0, 0, 0, 0);
+		// The column between this one and the sun: dense = a darker base, thin = a lit rim.
+		// A base is what the flat deck shows, and a base is lit by the light diffusing down
+		// through the cloud - grey-white, never slate.
+		const float above = tier > 0 ? da_cloud_field(s_cloud_map, hit + to_sun.xz * sun_lat * 0.6f).x : d2;
+		const float lit = da_cl_lit(above * 2.2f + d * 1.6f);
+		// Light leaking through a thin edge, toward the viewer.
+		const float rim = da_cl_lit(d * 6.0f);
+		col = sky * (0.55f + 0.3f * (1.0f - d)) + sun * (lit * 0.8f + rim * phase * 0.3f);
+		alpha = saturate(d * 1.6f);
+	}
+	else
+	{
+		// Volumetric slab between the base and the top of the deck.
+		const int steps = tier >= 3 ? 7 : 4;
+		const float t0 = rise / dir.y;
+		const float t1 = (rise + thickness) / dir.y;
+		const float dt = (t1 - t0) / float(steps);
+		// A per-pixel white-noise dither breaks the step planes into grain the eye ignores
+		// (an interleaved gradient shows its diagonals at this few steps).
+		const float jitter = da_cl_hash(pos2d.xy);
+		float T = 1.0f;
+		float3 acc = 0;
+		// Extinction for the whole slab at full density: opaque after a third of the steps.
+		const float sigma = 8.0f / float(steps);
+		[loop]
+		for (int i = 0; i < steps; ++i)
+		{
+			const float t = t0 + (float(i) + jitter) * dt;
+			const float3 p = eye_position + dir * t;
+			const float h01 = saturate((p.y - base_alt) / thickness);
+			const float2 dd = da_cloud_density3d(s_cloud_map, p.xz, h01);
+			const float d = dd.x;
+			[branch] if (d <= 0.002f)
+				continue;
+			// How much of this column still stands between the sample and the sun.
+			const float remain = max(da_cloud_top(dd.y) - h01, 0.0f);
+			const float above = da_cloud_field(s_cloud_map, p.xz + to_sun.xz * sun_lat * remain).x;
+			const float lit = da_cl_lit(above * remain * 7.0f + d);
+			const float a = 1.0f - exp(-d * sigma);
+			const float3 c = sky * (0.35f + 0.65f * h01) * (1.0f - 0.25f * (1.0f - exp(-d * 3.0f)))
+				+ sun * lit * (0.85f + 0.4f * phase);
+			acc += T * a * c;
+			T *= 1.0f - a;
+			[branch] if (T < 0.02f)
+				break;
+		}
+		alpha = 1.0f - T;
+		[branch] if (alpha <= 0.003f)
+			return float4(0, 0, 0, 0);
+		col = acc / alpha;
 	}
 
-	return  rgb;
+	// Distance haze: a far deck sinks into the horizon's fog colour.
+	const float haze = pow(1.0f - dir.y, 4.0f);
+	col = lerp(col, fog_color.rgb * 1.2f, haze * 0.85f);
+	alpha *= horizon;
+
+	// The sky buffer is tonemap-prescaled (stock clouds.vs did the same).
+	const float scale = s_tonemap.Load(int3(0, 0, 0)).x;
+	col *= scale;
+
+	// Output dithering against 8-bit banding on a half-sky gradient.
+	const float dn0 = frac(sin(dot(pos2d.xy, float2(12.9898f, 78.233f))) * 43758.5453f);
+	const float dn1 = frac(sin(dot(pos2d.xy, float2(39.3468f, 11.135f))) * 24634.6345f);
+	col += (dn0 + dn1 - 1.0f) * (1.0f / 255.0f);
+
+	return float4(col, alpha);
 }

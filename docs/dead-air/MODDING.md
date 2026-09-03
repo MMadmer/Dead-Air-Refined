@@ -522,6 +522,70 @@ start. Tuning knobs: `r__sss_len` (ray length in metres, default 0.35), `r__sss_
 technique: only visible geometry casts, and the shadow fades at the screen edge. Ported
 from the sibling open-source engine.
 
+## Wind service and cloud deck
+
+One wind for the whole world. The engine's environment keeps a single wind state - heading,
+speed, a minute-scale trend, discrete gust events and a travelling gust field - ticked at a
+fixed 60 Hz on its own clock, and every consumer reads that one state at its own position:
+grass and tree crowns (the trees are damped oscillators, so a gust sets a crown ringing
+instead of snapping it over), impostors, the wind sound, rain slant, particle systems, the
+bullet drift, the actor and NPC movement, light physics bodies (a can or a box a gale can
+out-pull from the ground), open water (wind waves stretched along the heading, calm air
+leaves a mirror) and the cloud deck, which drifts with the wind aloft - the same log profile
+that says a treetop feels more wind than the grass, evaluated at the deck's altitude.
+
+The shader-side maths and the C++ maths are one header (`shaders/r3/da_wind_core.h`), so a
+blade of grass, a particle and a cloud shadow agree on what the wind is doing at a spot.
+
+Configuration lives in `configs/dead_air_x64_wind.ltx` (the compatibility archive; a mod
+overrides it like any other config):
+
+```ini
+[wind_service]
+z0 = 0.12          ; surface roughness in metres: 0.03 open steppe, 0.3-0.5 forest/village
+
+[clouds]
+altitude  = 1500   ; deck base above the level's ground, metres
+thickness = 600    ; deck thickness, metres (tiers 2-3 march through it)
+
+[wind_profiles]    ; weather cycle name (exact, or the longest substring match) -> base 0..1
+storm = 0.95
+clear = 0.14
+```
+
+The cloud deck is a world object: one coverage field, rendered once per frame into a 16 km
+map around the camera, is what the sky shows, what the sun passes shade the ground with and
+what the sun shafts read. Coverage comes from the weather's `clouds_color` alpha, so a
+weather that authored a heavy deck gets heavy shadows. The deck's quality follows the
+preset like the other preset-driven switches - off on Minimum, a flat deck on Low/Medium
+(Medium adds the per-pixel rim and the sun probe), a volumetric slab on High (4 steps) and
+Maximum (7 steps). `r__clouds_quality -1..3` overrides the tier for the session (`-1`
+follows the preset), `r__clouds_cover -1..1` pins the coverage. Tree shadows follow the sway
+on every preset but Minimum (`r__tree_shadow_sway`); the sway itself costs nothing extra in
+the shadow pass.
+
+Scripts read and drive the service through the environment object:
+
+```lua
+local env = level.environment() -- CEnvironment
+env:wind_speed()                      -- m/s at 10 m, gusts included
+env:wind_direction()                  -- heading, radians
+env:wind_gust()                       -- 0..1 gustiness envelope
+env:wind_at(pos)                      -- vector, m/s, 1.5 m above the ground at pos
+env:wind_at_height(pos, h)            -- the same at a height of your choice
+env:wind_exposure(pos)                -- 0 under a roof, 0.35 in the lee of a wall, 1 in the open
+env:wind_blast(pos, radius, strength) -- a burst (an explosion): grass, particles and bodies feel it
+env:wind_press(pos, radius, strength) -- a sustained push (rotor wash)
+env:wind_freeze(true)                 -- pause the service clock (cutscenes)
+```
+
+Diagnostics: `wind_dbg 1` logs the state once a second (with one watched tree's oscillator),
+`wind_seed N` pins the random stream so a scene replays identically, `wind_force 0..1` pins
+the base strength (`-1` releases it), `wind_freeze 1` stops the clock. `r__gpu_stats` dumps
+the GPU timers (frame, scene, shadows, sun, lights, clouds, combine) once, `r__gpu_log N`
+logs them every N frames, `r__screenshot_every N` photographs every N-th frame - the
+headless QA rig uses the last two to grade a run without a window.
+
 ## Actor movement tuning
 
 The speed penalty a held weapon applies, and the overweight slowdown curve, used to be

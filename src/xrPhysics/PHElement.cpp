@@ -7,6 +7,10 @@
 #include "MathUtils.h"
 #include "matrix_utils.h"
 #include "IPhysicsShellHolder.h"
+#include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/IGame_Level.h"
+#include "xrEngine/Environment.h"
+#include "xrEngine/device.h"
 #include "ph_valid_ode.h"
 
 #include "Include/xrRender/Kinematics.h"
@@ -376,6 +380,49 @@ void CPHElement::PhTune(dReal step)
         contact_effector->Apply();
     VERIFY_BOUNDARIES2(cast_fv(dBodyGetPosition(m_body)), phBoundaries, PhysicsRefObject(), "PhTune body position");
 }
+// Wind drag on a free body. Only the light ones can notice: a can, a box, a sheet of paper -
+// for a barrel the force is as real and the acceleration is nothing, so bodies past a mass
+// ceiling skip the work. Sleeping bodies are polled too: a gust that beats the ground's grip
+// wakes them.
+void CPHElement::ApplyWind()
+{
+    if (!g_pGamePersistent || !g_pGameLevel)
+        return;
+    const float mass = m_mass.mass;
+    if (mass <= 0.f || mass > 15.f)
+        return;
+    const auto& env = g_pGamePersistent->Environment();
+    const Fvector pos = cast_fv(dBodyGetPosition(m_body));
+    const float now = Device.fTimeGlobal;
+    if (m_wind_stamp < 0.f || now - m_wind_stamp > 0.25f)
+    {
+        m_wind_stamp = now;
+        m_wind_ms = env.WindAt(pos, 0.5f);
+        m_wind_ms.mul(env.WindExposure(pos));
+    }
+    if (m_wind_ms.square_magnitude() < 0.25f)
+        return;
+
+    // Drag: F = 1/2 rho Cd A |v_rel| v_rel, the frontal area from the volume of a compact body.
+    const float* v = dBodyGetLinearVel(m_body);
+    const Fvector rel{m_wind_ms.x - v[0], 0.f, m_wind_ms.z - v[2]};
+    const float rel_mag = rel.magnitude();
+    if (rel_mag < 0.05f)
+        return;
+    const float area = 0.8f * powf(std::max(getVolume(), 1e-4f), 2.f / 3.f);
+    // The acceleration is capped: nothing of ours gets launched.
+    const float f_mag = std::min(0.5f * 1.2f * area * rel_mag * rel_mag, mass * 12.f);
+    if (!dBodyIsEnabled(m_body))
+    {
+        // Friction holds a resting body until the wind out-pulls it.
+        if (f_mag < mass * 9.81f * 0.4f)
+            return;
+        dBodyEnable(m_body);
+    }
+    const float k = f_mag / rel_mag;
+    dBodyAddForce(m_body, rel.x * k, 0.f, rel.z * k);
+}
+
 void CPHElement::PhDataUpdate(dReal step)
 {
     if (!isActive())
@@ -389,6 +436,8 @@ void CPHElement::PhDataUpdate(dReal step)
         dBodySetTorque(m_body,0,0,0);
         return;
     }
+
+    ApplyWind();
 
 ///////////////skip for disabled elements////////////////////////////////////////////////////////////
 // b_enabled_onstep=!!dBodyIsEnabled(m_body);

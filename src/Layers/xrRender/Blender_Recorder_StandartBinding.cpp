@@ -390,6 +390,49 @@ static class cl_da_wind_state : public R_constant_setup
     }
 } binder_da_wind_state;
 
+// The cloud deck (da_clouds.h): one field for the visible clouds, their shadow and the sun
+// shafts. params: coverage from the weather's cloud opacity, the deck's base altitude, and
+// the field's world-space drift - the aloft wind integrated by the service, along the aloft
+// heading. params2: quality tier, thickness, the service clock, shadow density.
+static class cl_da_cloud_params : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        const float run = env.eff_cloud_run;
+        const float a = env.eff_wind_dir_aloft;
+        // r__clouds_cover pins the coverage for tuning and QA; -1 follows the weather.
+        const float cover = ps_r__clouds_cover >= 0.f ? ps_r__clouds_cover : clampr(env.CurrentEnv.clouds_color.w, 0.f, 1.f);
+        cmd_list.set_c(C, cover, env.eff_cloud_altitude, _sin(a) * run, _cos(a) * run);
+    }
+} binder_da_cloud_params;
+// Where this frame's cloud map sits: centre XZ, edge length, 1/edge (phase_cloud_map).
+extern float g_da_cloud_map_center_x;
+extern float g_da_cloud_map_center_z;
+extern float g_da_cloud_map_extent;
+static class cl_da_cloud_map : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_da_cloud_map_center_x, g_da_cloud_map_center_z, g_da_cloud_map_extent,
+            1.f / g_da_cloud_map_extent);
+    }
+} binder_da_cloud_map;
+
+static class cl_da_cloud_params2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        // Thin cirrus barely dims the sun, a heavy deck cuts more than half of it. Overcast
+        // weathers author their own dim sun on top.
+        const float cover = ps_r__clouds_cover >= 0.f ? ps_r__clouds_cover : clampr(env.CurrentEnv.clouds_color.w, 0.f, 1.f);
+        const float density = clampr((cover - 0.05f) * 1.6f, 0.f, 1.f) * 0.8f;
+        const int quality = ps_r__clouds_quality_override >= 0 ? ps_r__clouds_quality_override : ps_r__clouds_quality;
+        cmd_list.set_c(C, float(quality), env.eff_cloud_thickness, env.eff_wind_time, density);
+    }
+} binder_da_cloud_params2;
+
 // Wind motors for the vegetation shaders: 8 point sources packed as two 4x4 matrices each
 // (row per motor). pos rows = (xyz, radius), par rows = (bend amp, ring radius, ring width, 0);
 // info.x = number of live motors so the shader loop is free when the world is quiet.
@@ -662,6 +705,9 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_puddle_wind", &binder_da_puddle_wind);
     r_Constant("da_wind_field", &binder_da_wind_field);
     r_Constant("da_wind_state", &binder_da_wind_state);
+    r_Constant("da_cloud_params", &binder_da_cloud_params);
+    r_Constant("da_cloud_params2", &binder_da_cloud_params2);
+    r_Constant("da_cloud_map", &binder_da_cloud_map);
     r_Constant("da_wm_pos0", &binder_da_wm_pos0);
     r_Constant("da_wm_pos1", &binder_da_wm_pos1);
     r_Constant("da_wm_par0", &binder_da_wm_par0);
