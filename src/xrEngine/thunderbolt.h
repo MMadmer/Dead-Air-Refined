@@ -118,6 +118,12 @@ private:
     Fvector lightning_center;
     float lightning_size;
     float lightning_phase;
+    // The flash as the clouds see it: the colour of this instant, the amount the flash
+    // added to the fog colour (so a reader can take it back out), and whether the bolt is
+    // hidden inside the cloud - sheet lightning, a glow with no channel to look at.
+    Fvector lightning_color{};
+    Fvector lightning_fog_add{};
+    bool bolt_hidden{};
 
     float life_time;
     float current_time;
@@ -143,6 +149,12 @@ private:
     void Bolt(const CEnvDescriptorMixer& currentEnv);
 
 public:
+    bool lightning_active() const { return state == stWorking; }
+    const Fvector3& lightning_direction() const { return current_direction; }
+    float lightning_intensity() const { return state == stWorking ? lightning_phase : 0.f; }
+    const Fvector& lightning_colour() const { return lightning_color; }
+    const Fvector& lightning_fog_added() const { return lightning_fog_add; }
+
     CEffect_Thunderbolt();
     ~CEffect_Thunderbolt();
 

@@ -23,6 +23,11 @@ Texture3D s_cloud_detail;  // RGB = Worley octaves
 uniform float4 da_cloud_cam_r;
 uniform float4 da_cloud_cam_u;
 uniform float4 da_cloud_cam_d;
+// Lightning (cl_da_lightning*): the flash inside the deck, its colour, and what it added to
+// the fog colour this frame.
+uniform float4 da_lightning;
+uniform float4 da_lightning2;
+uniform float4 da_lightning_fog;
 
 float3 da_cloud_view_ray(float2 uv)
 {
@@ -92,7 +97,22 @@ void da_cloud_lights(float sun_up, out float3 sun, out float3 sky)
     const float3 lum = float3(0.299f, 0.587f, 0.114f);
     const float3 sun_t = L_sun_color.rgb / max(dot(L_sun_color.rgb, lum), 0.05f);
     sun = sun_t * 0.95f * sun_up;
-    sky = saturate(fog_color.rgb * 1.05f + 0.06f);
+    // The flash's share of the fog colour comes back out: a bolt lights the clouds around it
+    // (da_cloud_lightning), not every cloud in the sky.
+    sky = saturate((fog_color.rgb - da_lightning_fog.rgb) * 1.05f + 0.06f);
+}
+
+// The glow of a discharge inside the deck: a point of light in the slab, falling off over a
+// kilometre or so, scattered by the cloud around it. Dense cloud near the bolt goes white,
+// the far deck stays as it was.
+float3 da_cloud_lightning(float3 p, float d)
+{
+    [branch] if (da_lightning.w <= 0.001f)
+        return 0;
+    const float3 dv = da_lightning.xyz - p;
+    const float r2 = dot(dv, dv);
+    const float att = da_lightning.w * 4.0f / (1.0f + r2 * (1.0f / (1200.0f * 1200.0f)));
+    return da_lightning2.rgb * att * (0.5f + 0.5f * saturate(d * 3.0f));
 }
 
 float da_cloud_hg(float cos_t, float g)

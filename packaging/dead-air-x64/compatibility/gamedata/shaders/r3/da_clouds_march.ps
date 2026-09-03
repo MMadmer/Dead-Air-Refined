@@ -77,7 +77,7 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 				const float3 lit = da_cloud_sun_scatter(tau, cos_t, d);
 				// Sky light: dark base, bright top, a touch of the ground's bounce below.
 				const float3 amb = sky * (0.42f + 0.58f * hn);
-				const float3 c = amb + sun * lit * 1.15f;
+				const float3 c = amb + sun * lit * 1.15f + da_cloud_lightning(p, d);
 				const float a = 1.0f - exp(-d * ext * dt);
 				acc += T * a * c;
 				T *= 1.0f - a;
@@ -87,7 +87,9 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 			// Aerial perspective: a deck kilometres away takes the horizon's colour and thins
 			// into the sky - the far edge of the slab must never stand as a wall.
 			const float haze = 1.0f - exp(-t0 * (1.0f / 12000.0f));
-			acc = lerp(acc, fog_color.rgb * (1.0f - T), haze);
+			// The flash's share of the fog stays out of the haze too: a bolt lights its own
+			// neighbourhood (da_cloud_lightning), not the far deck through the air.
+			acc = lerp(acc, (fog_color.rgb - da_lightning_fog.rgb) * (1.0f - T), haze);
 			T = lerp(T, 1.0f, haze);
 			acc *= 1.0f - haze;
 			result = float4(acc, T);

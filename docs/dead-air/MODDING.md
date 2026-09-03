@@ -576,6 +576,13 @@ volume, so the shadow the deck casts on the ground (and the break in the sun sha
 shadow of the cloud that shows, and the lens flare and the sun sprite fade by the column
 between the camera and the sun (read back from the map one frame late).
 
+Lightning lights the deck locally: the discharge is a point of light inside the slab along
+the bolt's direction, falling off over about a kilometre and scattered by the cloud around
+it, while the flash's share of the fog colour is taken back out of the deck's sky light - so
+the clouds near the bolt go white and the far deck stays as it was, instead of every cloud
+brightening with the fog. A third of the discharges stay inside the cloud (no channel is
+drawn): sheet lightning.
+
 The volumetric tiers march real volumes: a Perlin-Worley base shape carved by Worley
 octaves, a height profile from stratus to cumulus chosen per cell, a Worley detail volume
 eroding the edges (wispy at the base, billowy at the top), a light march toward the sun with
@@ -614,7 +621,8 @@ env:wind_press(pos, radius, strength) -- a sustained push (rotor wash)
 env:wind_freeze(true)                 -- pause the service clock (cutscenes)
 ```
 
-Diagnostics: `wind_dbg 1` logs the state once a second (with one watched tree's oscillator),
+Diagnostics: `weather_list` logs every weather cycle and effect the environment loaded (the
+names `set_weather` accepts live in packed configs), `wind_dbg 1` logs the state once a second (with one watched tree's oscillator),
 `wind_seed N` pins the random stream so a scene replays identically, `wind_force 0..1` pins
 the base strength (`-1` releases it), `wind_freeze 1` stops the clock. `r__gpu_stats` dumps
 the GPU timers (frame, scene, shadows, sun, lights, clouds, combine) once, `r__gpu_log N`

@@ -8,6 +8,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/EnvironmentWeatherState.h"
+#include "xrEngine/thunderbolt.h"
 
 // Declared BEFORE the render namespace opens on purpose: an extern inside it would introduce
 // its own xray::render::*::psVisDistance that nothing defines, and the build dies at link.
@@ -454,6 +455,50 @@ static class cl_da_cloud_debug : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, float(ps_r__clouds_debug), 0.f, 0.f, 0.f); }
 } binder_da_cloud_debug;
 
+
+// Lightning as the clouds see it. da_lightning: xyz = the flash inside the deck (the bolt's
+// direction carried up to the slab), w = intensity 0..1. da_lightning2: rgb = its colour,
+// w = 0. da_lightning_fog: rgb = what the flash added to the fog colour this frame, so the
+// deck can light locally instead of brightening everywhere with the fog.
+static class cl_da_lightning : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        const auto* bolt = env.eff_Thunderbolt;
+        if (!bolt || !bolt->lightning_active())
+        {
+            cmd_list.set_c(C, 0.f, 0.f, 0.f, 0.f);
+            return;
+        }
+        const Fvector& dir = bolt->lightning_direction();
+        const Fvector& eye = Device.vCameraPosition;
+        const float mid = env.eff_cloud_altitude + env.eff_cloud_thickness * 0.35f;
+        const float t = std::min((mid - eye.y) / std::max(dir.y, 0.08f), 12000.f);
+        cmd_list.set_c(C, eye.x + dir.x * t, mid, eye.z + dir.z * t, bolt->lightning_intensity());
+    }
+} binder_da_lightning;
+
+static class cl_da_lightning2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto* bolt = g_pGamePersistent->Environment().eff_Thunderbolt;
+        const Fvector c = bolt && bolt->lightning_active() ? bolt->lightning_colour() : Fvector{0.f, 0.f, 0.f};
+        cmd_list.set_c(C, c.x, c.y, c.z, 0.f);
+    }
+} binder_da_lightning2;
+
+static class cl_da_lightning_fog : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto* bolt = g_pGamePersistent->Environment().eff_Thunderbolt;
+        const Fvector f = bolt && bolt->lightning_active() ? bolt->lightning_fog_added() : Fvector{0.f, 0.f, 0.f};
+        cmd_list.set_c(C, f.x, f.y, f.z, 0.f);
+    }
+} binder_da_lightning_fog;
+
 static class cl_da_cloud_map : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -755,6 +800,9 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_cloud_params", &binder_da_cloud_params);
     r_Constant("da_cloud_params2", &binder_da_cloud_params2);
     r_Constant("da_cloud_map", &binder_da_cloud_map);
+    r_Constant("da_lightning", &binder_da_lightning);
+    r_Constant("da_lightning2", &binder_da_lightning2);
+    r_Constant("da_lightning_fog", &binder_da_lightning_fog);
     r_Constant("da_cloud_debug", &binder_da_cloud_debug);
     r_Constant("da_hud_light", &binder_da_hud_light);
     r_Constant("da_hud_light2", &binder_da_hud_light2);

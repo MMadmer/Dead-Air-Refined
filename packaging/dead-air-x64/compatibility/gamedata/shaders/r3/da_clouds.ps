@@ -62,10 +62,11 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 				const float above = tier > 0 ? da_cloud_field(s_cloud_map, hit + to_sun.xz * sun_lat * 0.6f).x : d2;
 				const float lit = da_cl_lit_flat(above * 2.2f + d * 1.6f);
 				const float rim = da_cl_lit_flat(d * 6.0f);
-				float3 c = sky * (0.55f + 0.3f * (1.0f - d)) + sun * (lit * 0.8f + rim * phase * 0.3f);
+				float3 c = sky * (0.55f + 0.3f * (1.0f - d)) + sun * (lit * 0.8f + rim * phase * 0.3f)
+					+ da_cloud_lightning(float3(hit.x, base_alt + thickness * 0.3f, hit.y), d);
 				const float alpha = saturate(d * 1.6f);
 				const float haze = pow(1.0f - dir.y, 4.0f);
-				c = lerp(c, fog_color.rgb * 1.2f, haze * 0.85f);
+				c = lerp(c, (fog_color.rgb - da_lightning_fog.rgb) * 1.2f, haze * 0.85f);
 				col = c * alpha;
 				T = 1.0f - alpha;
 			}

@@ -12,6 +12,24 @@
 
 namespace
 {
+// Every weather cycle the environment loaded, by name: what set_weather accepts. The names
+// live in packed configs, so the log is the only place a QA rig can read them from.
+class CCC_WeatherList : public IConsole_Command
+{
+public:
+    CCC_WeatherList(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        const auto& env = g_pGamePersistent->Environment();
+        for (const auto& cycle : env.WeatherCycles)
+            Msg("* [weather] cycle '%s' (%zu descriptors)", cycle.first.c_str(), cycle.second.size());
+        for (const auto& fx : env.WeatherFXs)
+            Msg("* [weather] fx '%s'", fx.first.c_str());
+    }
+};
+
 class CCC_WindSeed : public IConsole_Command
 {
 public:
@@ -980,6 +998,7 @@ void CCC_Register()
         // wind_seed N re-seeds the service and restarts its clock (the same N replays the
         // same wind - benchmarks, screenshot comparisons); wind_freeze 1 holds the field.
         CMD1(CCC_WindSeed, "wind_seed");
+        CMD1(CCC_WeatherList, "weather_list");
         CMD1(CCC_WindFreeze, "wind_freeze");
         CMD1(CCC_WindForce, "wind_force");
     }

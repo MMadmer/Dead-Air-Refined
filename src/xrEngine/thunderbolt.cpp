@@ -232,6 +232,10 @@ void CEffect_Thunderbolt::Bolt(const CEnvDescriptorMixer& currentEnv)
 
     current = currentEnv.thunderbolt->GetRandomDesc();
     VERIFY(current);
+    // A third of the discharges stay inside the cloud: the deck lights up around them and
+    // no channel is drawn - the sheet lightning of a real storm.
+    bolt_hidden = Random.randF() < 0.35f;
+    Msg("* [lightning] bolt: hidden=%d life=%.2f", bolt_hidden ? 1 : 0, life_time);
 
     float sun_h, sun_p;
     currentEnv.sun_dir.getHP(sun_h, sun_p);
@@ -295,7 +299,10 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
     if (state == stWorking)
     {
         if (current_time > life_time)
+        {
             state = stIdle;
+            lightning_fog_add.set(0.f, 0.f, 0.f);
+        }
         current_time += Device.fTimeDelta;
         Fvector fClr;
         int frame;
@@ -314,6 +321,8 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
 
         currentEnv.sun_color.mad(fClr, p_sun_color);
         currentEnv.fog_color.mad(fClr, p_fog_color);
+        lightning_color = fClr;
+        lightning_fog_add.mul(fClr, p_fog_color);
 
         if (GEnv.Render->GenerationIsR2OrHigher())
         {
@@ -327,7 +336,7 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
 
 void CEffect_Thunderbolt::Render()
 {
-    if (state == stWorking)
+    if (state == stWorking && !bolt_hidden)
         m_pRender->Render(*this);
 }
 

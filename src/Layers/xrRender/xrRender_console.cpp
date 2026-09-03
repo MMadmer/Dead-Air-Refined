@@ -932,8 +932,8 @@ void xrRender_sync_preset_derived()
     // on every preset ("presets or nothing" gap). Applies on renderer (re)start, since the
     // smap targets are created once. Default keeps the historical 2048 exactly.
     // 4096 cascades cost ~3.5 ms more than 2048 in the sun pass at 1440p (rig, 3 cascades);
-    // 3072 keeps most of the sharpness for a third of that.
-    static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 2048, 3072};
+    // 2048 on the top presets too: the clouds are where those milliseconds go now.
+    static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 2048, 2048};
     // AO technique ladder. GTAO (ported from IX-Ray: 3-slice horizon integral plus a guided
     // filter) replaces the inline HDAO/HBAO on the two top presets; Default keeps the reference
     // inline SSAO, the two lowest presets keep AO off. Applied through the console command so
