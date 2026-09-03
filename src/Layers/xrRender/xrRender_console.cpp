@@ -194,7 +194,8 @@ int ps_r__actor_shadow = 0;
 int ps_r__tree_shadow_sway = 0;
 // Cloud deck tier (da_clouds.h): 0/1 flat deck, 2 volumetric 6 steps, 3 volumetric 12 steps.
 int ps_r__clouds_quality = 1;
-int ps_r__clouds_debug = 0; // 0 off, 1 the deck's transmittance, 2 its raw colour
+int ps_r__clouds_debug = 0; // 0 off, 1 the deck transmittance, 2 its raw colour, 3 the reprojection offset
+float ps_r__clouds_temporal = 0.85f; // share of the previous frame kept by the march (0 = none)
 // r__clouds_quality: pin the tier for tuning and QA; -1 follows the preset.
 int ps_r__clouds_quality_override = -1;
 // r__clouds_cover: pin the deck's coverage (0..1) for tuning and QA; -1 follows the weather.
@@ -1684,7 +1685,8 @@ void xrRender_initconsole()
     CMD1(CCC_memory_stats, "render_memory_stats");
     CMD1(CCC_gpu_stats, "r__gpu_stats");
     CMD1(CCC_CloudMapDump, "r__cloud_map_dump");
-    CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 2);
+    CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 3);
+    CMD4(CCC_Float, "r__clouds_temporal", &ps_r__clouds_temporal, 0.f, 0.95f);
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
     CMD4(CCC_Integer, "r__screenshot_every", &ps_r__screenshot_every, 0, 100000);
 

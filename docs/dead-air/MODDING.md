@@ -545,8 +545,8 @@ overrides it like any other config):
 z0 = 0.12          ; surface roughness in metres: 0.03 open steppe, 0.3-0.5 forest/village
 
 [clouds]
-altitude  = 1500   ; deck base above the level's ground, metres
-thickness = 600    ; deck thickness, metres (tiers 2-3 march through it)
+altitude  = 1300   ; deck base above the level's ground, metres
+thickness = 1200   ; deck thickness, metres (tiers 2-3 march through it)
 
 [wind_profiles]    ; weather cycle name (exact, or the longest substring match) -> base 0..1
 storm = 0.95
@@ -583,7 +583,9 @@ result reprojected by direction, so the cost stays at a few milliseconds on Maxi
 `r__clouds_quality -1..3` overrides the tier for the session (`-1` follows the preset),
 `r__clouds_cover -1..1` pins the coverage, `r__cloud_map_dump` writes the weather map and the
 march buffer (colour and transmittance) as PNGs next to the screenshots, `r__clouds_debug 1`
-shows the deck's transmittance in place of the sky and `2` its raw colour. Tree shadows follow the sway on every preset but Minimum
+shows the deck's transmittance in place of the sky, `2` its raw colour, `3` the temporal
+reprojection's offset; `r__clouds_temporal 0..0.95` is the share of the previous frame the
+march keeps (it fades out on its own while the view turns). Tree shadows follow the sway on every preset but Minimum
 (`r__tree_shadow_sway`); the sway itself costs nothing extra in the shadow pass.
 
 Trees bend as one body: the trunk bends with height ((h/H)^2 from the root, the model's

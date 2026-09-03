@@ -21,7 +21,8 @@ static int da_cloud_tier()
 static void da_cloud_set_camera(CBackend& cmd_list)
 {
     const float tan_y = tanf(deg2rad(Device.fFOV * 0.5f));
-    const float tan_x = tan_y * Device.fASPECT;
+    // fASPECT is height / width in this engine (see the HUD decompression): divide, not multiply.
+    const float tan_x = tan_y / Device.fASPECT;
     const Fvector& r = Device.vCameraRight;
     const Fvector& u = Device.vCameraTop;
     const Fvector& d = Device.vCameraDirection;
@@ -33,7 +34,8 @@ static void da_cloud_set_camera(CBackend& cmd_list)
 static void da_cloud_remember_camera()
 {
     const float tan_y = tanf(deg2rad(Device.fFOV * 0.5f));
-    const float tan_x = tan_y * Device.fASPECT;
+    // fASPECT is height / width in this engine (see the HUD decompression): divide, not multiply.
+    const float tan_x = tan_y / Device.fASPECT;
     g_da_cloud_prev_r.set(Device.vCameraRight.x, Device.vCameraRight.y, Device.vCameraRight.z, tan_x);
     g_da_cloud_prev_u.set(Device.vCameraTop.x, Device.vCameraTop.y, Device.vCameraTop.z, tan_y);
     g_da_cloud_prev_d.set(Device.vCameraDirection.x, Device.vCameraDirection.y, Device.vCameraDirection.z, 0.f);
@@ -82,7 +84,7 @@ void CRenderTarget::phase_clouds_march()
     da_cloud_set_camera(RCache);
     // Tier 2 marches 16 steps, tier 3 marches 28; the temporal blend gives both the rest.
     const float steps = tier >= 3 ? 28.f : 16.f;
-    const float blend = g_da_cloud_hist_valid ? 0.88f : 0.f;
+    const float blend = g_da_cloud_hist_valid ? ps_r__clouds_temporal : 0.f;
     RCache.set_c("da_cloud_temporal", blend, float(g_da_cloud_frame % 4096), g_da_cloud_hist_valid ? 1.f : 0.f, steps);
     RCache.set_c("da_cloud_prev_r", g_da_cloud_prev_r);
     RCache.set_c("da_cloud_prev_u", g_da_cloud_prev_u);

@@ -36,45 +36,46 @@ float2 da_hud_project(float3 Pe)
 
 // Screen-space shadow toward a local light: walk from the surface toward the light through
 // the HUD's own depth; a first-person pixel closer than the ray is the hand or the item in
-// the way. World pixels never count - the world is never nearer than the hands.
+// the way. World pixels never count - the world is never nearer than the hands. The bias
+// grows with the distance walked (a curved surface seen along the ray drifts in depth by
+// more than any fixed epsilon), the first centimetres are skipped (they are the surface
+// itself), and the result is a soft darkening, never black.
 float da_hud_ss_shadow(float3 Pe, float3 N, float3 Lpos, float2 pos2d)
 {
     float3 to_l = Lpos - Pe;
     const float dist = length(to_l);
-    [branch] if (dist < 0.02f)
+    [branch] if (dist < 0.04f)
         return 1.0f;
     to_l /= dist;
     // The hands and the item: half a metre of march is the whole first-person scene.
-    const float len = min(dist, 0.5f);
-    const int steps = 12;
-    const float3 start = Pe + N * (da_hud_light2.z + 0.003f);
-    // A per-pixel start jitter turns the step planes into grain.
-    const float jitter = frac(52.9829189f * frac(0.06711056f * pos2d.x + 0.00583715f * pos2d.y));
-    float shadow = 1.0f;
+    const float len = min(dist, 0.45f);
+    const int steps = 10;
+    const float t_start = 0.025f;
+    const float3 start = Pe + N * (da_hud_light2.z + 0.004f);
+    // No per-pixel jitter: on a surface this small it reads as dither, not as softness.
+    float hit = 0.0f;
     [loop]
     for (int i = 0; i < steps; ++i)
     {
-        const float t = (float(i) + 0.5f + (jitter - 0.5f)) / float(steps) * len;
+        const float t = t_start + (float(i) + 0.5f) / float(steps) * (len - t_start);
         const float3 p = start + to_l * t;
         [branch] if (p.z <= 0.03f)
             break;
         const float2 sp = da_hud_project(p);
-        // The screen size, from the decompression params: w = 2*HorzTan/z, h = 2*VertTan/w.
         [branch] if (any(sp < 0.0f) || any(sp >= 2.0f * da_hud_light.xy / da_hud_light.zw))
             break;
         [branch] if (!da_hud_pixel(sp))
             continue;
         const float zs = s_position.Load(int3(sp, 0)).z;
         const float dz = p.z - zs;
-        // In front of the ray by more than the bias, and not so far that it is another finger
-        // seen past the edge of the hand: an occluder of a plausible thickness.
-        [branch] if (dz > 0.004f && dz < 0.10f)
-        {
-            shadow = 0.0f;
+        const float bias = 0.008f + 0.06f * t;
+        // A soft edge: the occlusion ramps in over a centimetre instead of switching.
+        [branch] if (dz < 0.12f + bias)
+            hit = max(hit, saturate((dz - bias) * 100.0f));
+        [branch] if (hit >= 0.999f)
             break;
-        }
     }
-    return shadow;
+    return 1.0f - 0.7f * hit;
 }
 
 #endif // DA_HUD_LIGHT_H

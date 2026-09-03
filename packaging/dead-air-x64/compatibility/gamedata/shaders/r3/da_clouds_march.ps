@@ -12,6 +12,7 @@ Texture2D s_clouds_hist;
 // da_cloud_temporal: x = history blend (0 = none), y = frame index, z = history valid, w = steps.
 uniform float4 da_cloud_temporal;
 // The previous frame's camera basis, the same layout as da_cloud_cam_*.
+uniform float4 da_cloud_debug; // x: 3 = show the reprojection offset
 uniform float4 da_cloud_prev_r;
 uniform float4 da_cloud_prev_u;
 uniform float4 da_cloud_prev_d;
@@ -103,10 +104,16 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 			const float2 ndc = float2(dot(dir, da_cloud_prev_r.xyz) / (fwd * da_cloud_prev_r.w),
 			                          dot(dir, da_cloud_prev_u.xyz) / (fwd * da_cloud_prev_u.w));
 			const float2 puv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
+			[branch] if (da_cloud_debug.x > 2.5f)
+				return float4(abs(puv - I.tc0) * 20.0f, 0.0f, 1.0f);
 			[branch] if (all(puv > 0.001f) && all(puv < 0.999f))
 			{
+				// The history only helps while the view is nearly still: a turn drags it
+				// into streaks, so the blend fades out with the reprojection's own motion.
+				const float motion = length(puv - I.tc0);
+				const float blend = da_cloud_temporal.x * saturate(1.0f - motion * 150.0f);
 				const float4 hist = s_clouds_hist.SampleLevel(smp_rtlinear, puv, 0);
-				result = lerp(result, hist, da_cloud_temporal.x);
+				result = lerp(result, hist, blend);
 			}
 		}
 	}

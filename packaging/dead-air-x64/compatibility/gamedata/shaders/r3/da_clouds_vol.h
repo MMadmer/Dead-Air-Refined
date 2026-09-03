@@ -62,9 +62,9 @@ float da_cloud_density_vol(float3 p, float3 weather, float hn, bool cheap)
         return 0.0f;
 
     const float2 drift = da_cloud_params.zw;
-    // The shape tiles every 6 km, taller than wide: billows the size of a village, not a house.
-    float3 sp = float3(p.x - drift.x, p.y, p.z - drift.y) * (1.0f / 6000.0f);
-    sp.y = p.y * (1.0f / 3000.0f);
+    // The shape tiles every 5 km in all three axes: billows the size of a village, as tall
+    // as they are wide - the slab is thick enough now for them to stand up in it.
+    float3 sp = float3(p.x - drift.x, p.y, p.z - drift.y) * (1.0f / 5000.0f);
     const float4 sh = s_cloud_shape.SampleLevel(smp_linear, sp, cheap ? 1.0f : 0.0f);
     const float fbm = sh.y * 0.625f + sh.z * 0.25f + sh.w * 0.125f;
     float base = saturate(da_remap(sh.x, -(1.0f - fbm), 1.0f, 0.0f, 1.0f)) * hg;
