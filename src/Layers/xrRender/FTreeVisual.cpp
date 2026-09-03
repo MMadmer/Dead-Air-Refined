@@ -7,6 +7,77 @@
 #include "FTreeVisual.h"
 #include "Common/OGF_GContainer_Vertices.hpp"
 
+#include <mutex>
+
+namespace xray::render::RENDER_NAMESPACE
+{
+// One wind state per TREE. A tree in a level is several visuals sharing one root (the trunk,
+// the crown, ...); each used to carry its own oscillator and its own height from its own
+// bounding box, so the crown swung at a different rate and bent by a different profile than
+// the trunk - the foliage "living apart from the trunk". The record is keyed by the root
+// position (the placement every visual of the model carries) and refcounted by the visuals.
+struct TreeWindShared
+{
+    u64 key{};
+    float top{1.f};           // height of the tallest visual above the root (m)
+    float omega{};            // natural angular frequency (rad/s), from top
+    float q{1.f};             // response, 1 = following the gust field exactly
+    float qd{};
+    std::atomic<u32> frame{}; // frame the state was last integrated in (first caller wins)
+    u32 refs{};
+    bool settled{};           // the state has been set to its first target (no swing on load)
+};
+
+static xr_map<u64, TreeWindShared*> g_tree_wind_shared;
+static std::mutex g_tree_wind_shared_lock;
+
+static u64 tree_wind_key(const Fvector& root)
+{
+    // 5 cm cells: the visuals of one model carry the same placement to the bit.
+    const auto q = [](float v) { return u64(u32(iFloor(v * 20.f) + 0x100000)) & 0x1FFFFFu; };
+    return q(root.x) | (q(root.y) << 21) | (q(root.z) << 42);
+}
+
+static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top)
+{
+    std::lock_guard lock(g_tree_wind_shared_lock);
+    const u64 key = tree_wind_key(root);
+    TreeWindShared*& s = g_tree_wind_shared[key];
+    if (!s)
+    {
+        s = xr_new<TreeWindShared>();
+        s->key = key;
+    }
+    ++s->refs;
+    s->top = std::max(s->top, top);
+    // Natural frequency from the real height, f = 1.0 / sqrt(H) Hz: a 15 m crown swings at
+    // ~0.26 Hz, a 3 m bush at ~0.6 (the field regression sits a little above; this leans
+    // toward the slower sway the trees had before they knew their height).
+    s->omega = PI_MUL_2 * 1.0f / _sqrt(std::max(s->top, 1.f));
+    return s;
+}
+
+static void tree_wind_shared_addref(TreeWindShared* s)
+{
+    if (!s)
+        return;
+    std::lock_guard lock(g_tree_wind_shared_lock);
+    ++s->refs;
+}
+
+static void tree_wind_shared_release(TreeWindShared* s)
+{
+    if (!s)
+        return;
+    std::lock_guard lock(g_tree_wind_shared_lock);
+    if (--s->refs == 0)
+    {
+        g_tree_wind_shared.erase(s->key);
+        xr_delete(s);
+    }
+}
+} // namespace xray::render::RENDER_NAMESPACE
+
 namespace xray::render::RENDER_NAMESPACE
 {
 shared_str m_xform;
@@ -19,7 +90,7 @@ shared_str c_c_scale;
 shared_str c_c_sun;
 
 FTreeVisual::FTreeVisual(void) {}
-FTreeVisual::~FTreeVisual(void) {}
+FTreeVisual::~FTreeVisual(void) { tree_wind_shared_release(m_shared); }
 void FTreeVisual::Release() { dxRender_Visual::Release(); }
 void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
 {
@@ -67,15 +138,10 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
         // Msg				("hemi[%f / %f], sun[%f / %f]",c_scale.hemi,c_bias.hemi,c_scale.sun,c_bias.sun);
     }
 
-    // Natural frequency from the real height: f = 1.2 / sqrt(H) Hz is the field regression
-    // for trees (a 15 m crown swings at ~0.3 Hz, a 3 m bush at ~0.7). The old per-tree
-    // factor came from a position hash and made every tree on the map swing at roughly
-    // the same rate, size-blind.
-    {
-        const float H = std::max(vis.box.vMax.y - vis.box.vMin.y, 1.f);
-        m_wind_omega = PI_MUL_2 * 1.2f / _sqrt(H);
-        m_tree_height = H;
-    }
+    // One wind state per tree, registered by the root; the tallest visual sets the height.
+    // The box of a level visual is world-space, so the top is measured from the root - a
+    // crown visual's own box starts at its lowest branch and said nothing about the tree.
+    m_shared = tree_wind_shared_acquire(xform.c, std::max(vis.box.vMax.y - xform.c.y, 1.f));
 
     /*if (RImplementation.o.ffp && dcl_equal(vFormat, mu_model_decl_unpacked))
     {
@@ -165,38 +231,59 @@ FTreeVisual_setup& GetTreeVisualSetup()
     return setup;
 }
 
+float FTreeVisual::tree_height() const { return m_shared ? m_shared->top : 1.f; }
+
 void FTreeVisual::UpdateWindState() const
 {
-    // Once per frame per tree, whichever pass gets here first (the main pass and the cascades
-    // run on different contexts; the exchange makes the first caller the integrator and the
-    // others readers).
-    const u32 frame = Device.dwFrame;
-    if (m_wind_frame.exchange(frame, std::memory_order_acq_rel) == frame)
+    TreeWindShared* s = m_shared;
+    if (!s)
         return;
-    if (!g_pGamePersistent || m_wind_omega <= 0.f)
+    // Once per frame per tree, whichever visual and pass gets here first (the main pass and
+    // the cascades run on different contexts; the exchange makes the first caller the
+    // integrator and the others readers).
+    const u32 frame = Device.dwFrame;
+    if (s->frame.exchange(frame, std::memory_order_acq_rel) == frame)
+        return;
+    if (!g_pGamePersistent || s->omega <= 0.f)
         return;
     const auto& env = g_pGamePersistent->Environment();
 
-    // The target is the wind at THIS root: the gust-field tongue passing over it, lifted by
-    // a gust event. The shader multiplies its own bend by q, so 1 means "exactly the wind".
+    // The target is the gust field at THIS root - the tongue passing over it - lifted by a
+    // gust event. The shader uses the state IN PLACE of the field's instantaneous value, so
+    // the crown follows the tongues through its own inertia (lags one, overshoots a little
+    // after it). Multiplying the field by a ringing copy of itself, as before, squared the
+    // lull-to-tongue contrast and rocked every crown.
     const float target = env.SampleWindField(xform.c.x, xform.c.z) * (1.f + 0.6f * env.eff_wind_gust_event);
+
+    if (!s->settled)
+    {
+        // The first frame after a load starts AT the field, not at 1: every crown on the level
+        // swinging down to its lull at once was a visible settle.
+        s->q = target;
+        s->qd = 0.f;
+        s->settled = true;
+    }
 
     float dt = Device.fTimeDelta;
     if (dt <= 0.f || dt > 0.25f)
         dt = 0.016f;
     // Semi-implicit Euler, sub-stepped so a stiff bush (omega ~4) stays stable at any frame
-    // rate. zeta = 0.06: two to four visible cycles of ring-down after a gust.
-    constexpr float zeta = 0.06f;
-    const float w = m_wind_omega;
+    // rate. zeta = 0.30: foliage damps a crown hard (0.04-0.09 is the bare trunk) - one
+    // visible overshoot after a gust, then it settles. 0.06 rang for cycles and read as
+    // rocking, in calm air too.
+    constexpr float zeta = 0.30f;
+    const float w = s->omega;
     const u32 steps = std::max(1u, u32(dt * w * 4.f) + 1);
     const float h = dt / float(steps);
     for (u32 i = 0; i < steps; ++i)
     {
-        const float acc = w * w * (target - m_wind_q) - 2.f * zeta * w * m_wind_qd;
-        m_wind_qd += acc * h;
-        m_wind_q += m_wind_qd * h;
+        const float acc = w * w * (target - s->q) - 2.f * zeta * w * s->qd;
+        s->qd += acc * h;
+        s->q += s->qd * h;
     }
-    m_wind_q = clampr(m_wind_q, 0.05f, 2.5f);
+    // Wide enough for the natural undershoot after a tongue passes: pinning at the floor held
+    // the crown at a flat half-sway for a second.
+    s->q = clampr(s->q, 0.35f, 1.6f);
 
     // wind_dbg: one tree's response against its target, twice a second, so the ring-down can
     // be read as numbers rather than trusted from a screenshot.
@@ -210,7 +297,7 @@ void FTreeVisual::UpdateWindState() const
         if (watched == this && Device.fTimeGlobal >= next)
         {
             next = Device.fTimeGlobal + 0.5f;
-            Msg("* [wind-tree] target=%.3f q=%.3f qd=%.3f omega=%.2f", target, m_wind_q, m_wind_qd, m_wind_omega);
+            Msg("* [wind-tree] target=%.3f q=%.3f qd=%.3f omega=%.2f top=%.1f", target, s->q, s->qd, s->omega, s->top);
         }
     }
 }
@@ -221,8 +308,10 @@ Fvector4 FTreeVisual::wind_state_row(float s) const
     // The shader's sway phase advances at the weather's tree speed; the factor turns that
     // into this tree's own natural frequency.
     const float speed = std::max(g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.m_fTreeSpeed : 1.f, 0.2f);
-    const float freq_k = clampr(m_wind_omega / speed, 0.4f, 6.f);
-    return Fvector4{s * c_scale.sun, s * c_bias.sun, m_wind_q, freq_k};
+    const float omega = m_shared ? m_shared->omega : 0.f;
+    const float q = m_shared ? m_shared->q : 0.f; // 0 = no state, the shader falls back to the field
+    const float freq_k = omega > 0.f ? clampr(omega / speed, 0.4f, 6.f) : 0.f;
+    return Fvector4{s * c_scale.sun, s * c_bias.sun, q, freq_k};
 }
 
 void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
@@ -264,7 +353,7 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 #endif
     const Fvector4 row = wind_state_row(s);
     cmd_list.tree.set_c_sun(row.x, row.y, row.z, row.w); // sun + crown wind state
-    cmd_list.tree.set_c_tree(m_tree_height, 0.f, 0.f, 0.f); // model height for the trunk bend
+    cmd_list.tree.set_c_tree(tree_height(), 0.f, 0.f, 0.f); // tree height for the trunk bend
 }
 
 #ifdef USE_DX11
@@ -307,7 +396,7 @@ void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& 
     data.vectors[7].set(scale * c_bias.rgb.x, scale * c_bias.rgb.y, scale * c_bias.rgb.z,
         scale * c_bias.hemi);
     data.vectors[8] = wind_state_row(scale);
-    data.vectors[9].set(m_tree_height, 0.f, 0.f, 0.f);
+    data.vectors[9].set(tree_height(), 0.f, 0.f, 0.f);
 }
 #endif
 
@@ -319,6 +408,8 @@ void FTreeVisual::Copy(dxRender_Visual* pSrc)
     FTreeVisual* pFrom = dynamic_cast<FTreeVisual*>(pSrc);
 
     PCOPY(rm_geom);
+    PCOPY(m_shared);
+    tree_wind_shared_addref(m_shared);
     PCOPY(p_rm_Vertices);
     if (p_rm_Vertices)
         p_rm_Vertices->AddRef();

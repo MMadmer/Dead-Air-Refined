@@ -7,17 +7,17 @@
 // The bend of a tree under wind, shared by the three tree vertex shaders (flat, bump, shadow)
 // so a crown, its trunk and its shadow are ONE deformation.
 //
-// Two profiles, two jobs:
-//  * the TRUNK bend - a function of height only, (h/H)^2 from the root - moves every vertex at
-//    a height the same way. The trunk bends with the crown, and a branch card's base stays on
-//    the trunk it grows from. Amplitude: the authored wind amplitude times the height, softly
-//    capped near 8 degrees at the top - a real trunk in a gale;
-//  * the BRANCH term - the authored per-vertex flexibility (tc.z: ~0 trunk, ~1 tips) - adds
-//    the extra travel of branch tips and the leaf flutter on top, small enough that a card
-//    never leaves what it grows on. (The old chain put the WHOLE bend behind that channel:
-//    the trunk stood still while the cards leaned metres away from it.)
-// Motors (shot wakes, blasts, presses) are measured at the VERTEX: a bullet through a bush
-// shakes the branches at the trace, not only a bush shot at its root.
+// The sway is the crown's: height times the waveform (a static downwind lean with harmonic
+// oscillation around it, one phase per tree), times the crown's response to the gust field
+// (the CPU oscillator following the tongues that pass this root), the gust lean on top.
+// Who moves how far is the larger, softly, of two weights:
+//  * the TRUNK - a cantilever profile of height only, (h/H)^1.5 from the root, three
+//    quarters of the crown's travel at the top - so every vertex at a height moves with the
+//    trunk at that height and a branch card's base rides the trunk it grows from;
+//  * the authored per-vertex FLEXIBILITY (tc.z: ~0 trunk, ~1 tips) - the travel the models
+//    were made for, which is the crown motion the field liked: tips out past the trunk.
+// The leaf flutter rides the flexibility; motors (shot wakes, blasts, presses) are measured at
+// the VERTEX, so a bullet through a bush shakes the branches at the trace.
 struct da_tree_bend_in
 {
     float3 pos;     // world position of the vertex, unbent
@@ -25,7 +25,7 @@ struct da_tree_bend_in
     float H;        // height of the vertex above the root
     float tree_h;   // height of the model (c_tree.x, instance row 9)
     float frac;     // authored flexibility (tc.z * consts.x)
-    float q_state;  // crown oscillator state (c_sun.z)
+    float q_state;  // crown oscillator state (c_sun.z); 0 = none, the field's value is used
     float freq_k;   // natural-frequency factor (c_sun.w)
 };
 
@@ -42,11 +42,16 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
     const float3 flow = da_wind_field_eval(I.root.xz);
     const float2 wdir = da_wind_local_dir(wind.xz, flow.z); // its length is the authored amplitude
 
-    // Trunk: the whole tree from the root up, sway plus the gust lean.
-    const float trunk = I.H * hn * I.q_state;
-    float2 result = wdir * (trunk * (dp * flow.x * 0.8f + flow.y * 0.4f));
-    // Branches: the extra travel of the flexible tips over the trunk they sit on.
-    result += wdir * (I.H * dp * I.q_state * flow.x * I.frac * 0.35f);
+    // The crown's response to the gust field: the oscillator state where the CPU keeps one,
+    // the field's instantaneous value where it does not (impostors, tools). Never both.
+    const float resp = I.q_state > 0.001f ? I.q_state : flow.x;
+    const float sway = I.H * (dp * resp + flow.y * 0.5f);
+    // Trunk profile against authored flexibility, soft max: a card whose base is stiff rides
+    // the trunk, a tip keeps its own travel.
+    const float trunk_w = hn * sqrt(hn) * 0.75f;
+    const float dw = trunk_w - I.frac;
+    const float w = 0.5f * (trunk_w + I.frac + sqrt(dw * dw + 0.0025f));
+    float2 result = wdir * (sway * w);
     // Leaf flutter: a finer, 2.3x faster wave on the outer foliage, per-vertex phase.
     const float axis_r = length(I.pos.xz - I.root.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
@@ -55,9 +60,11 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
     // Motors at the vertex. The trunk is stiff (frac), the foliage is not.
     float press_unused;
     result += da_wind_motors_bend(float3(I.pos.x, I.root.y, I.pos.z), I.H, press_unused) * (0.8f * saturate(I.frac * 2.0f));
-    // Progressive stiffness: the top of a tree leans a few degrees, it never folds.
+    // Progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
+    // limit (~0.5 H, ~30 degrees) is an asymptote nothing visibly slams into. (An 8-degree
+    // cap tried here left the trees leaning less in a storm than they used to.)
     const float bend_len = length(result);
-    const float bend_max = I.H * 0.14f;
+    const float bend_max = I.H * 0.50f;
     [branch] if (bend_len > 0.001f)
         result *= bend_max * tanh(bend_len / bend_max) / bend_len;
     return result;

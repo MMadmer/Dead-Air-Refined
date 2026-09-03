@@ -527,8 +527,8 @@ from the sibling open-source engine.
 One wind for the whole world. The engine's environment keeps a single wind state - heading,
 speed, a minute-scale trend, discrete gust events and a travelling gust field - ticked at a
 fixed 60 Hz on its own clock, and every consumer reads that one state at its own position:
-grass and tree crowns (the trees are damped oscillators, so a gust sets a crown ringing
-instead of snapping it over), impostors, the wind sound, rain slant, particle systems, the
+grass and tree crowns (each tree is a damped oscillator that follows the gust field with
+its own inertia - it lags a tongue and overshoots a little after it), impostors, the wind sound, rain slant, particle systems, the
 bullet drift, the actor and NPC movement, light physics bodies (a can or a box a gale can
 out-pull from the ground), open water (wind waves stretched along the heading, calm air
 leaves a mirror) and the cloud deck, which drifts with the wind aloft - the same log profile
@@ -622,11 +622,27 @@ reprojection's offset; `r__clouds_temporal 0..0.95` is the share of the previous
 march keeps (it fades out on its own while the view turns). Tree shadows follow the sway on every preset but Minimum
 (`r__tree_shadow_sway`); the sway itself costs nothing extra in the shadow pass.
 
-Trees bend as one body: the trunk bends with height ((h/H)^2 from the root, the model's
-height rides in `c_tree` / instance row 9), so a branch card's base stays on the trunk it
-grows from; the authored per-vertex flexibility (`tc.z`) only adds the extra travel of the
-tips and the leaf flutter. Shot wakes, blasts and presses are measured at the vertex, so a
-bullet through a bush shakes the branches at the trace.
+Trees bend as one body. The sway is the crown's: height times the waveform (a static
+downwind lean with harmonic oscillation around it, one phase per tree) times the tree's
+response to the gust field, the gust lean on top. Who moves how far is the larger, softly,
+of two weights: the trunk's cantilever profile ((h/H)^1.5 from the root, three quarters of
+the crown's travel at the top - the tree's height rides in `c_tree` / instance row 9) and
+the authored per-vertex flexibility (`tc.z`), so a branch card's stiff base rides the trunk
+it grows from while its tip keeps the travel the model was made for; the total is softly
+capped at half the height (~30 degrees). The leaf flutter rides the flexibility. Shot
+wakes, blasts and presses are measured at the vertex, so a bullet through a bush shakes the
+branches at the trace.
+
+One wind state per tree. A tree in a level is several visuals on one root (the trunk, the
+crown, sometimes more); the oscillator and the height are kept in one record per root that
+every visual of the model shares (refcounted, integrated once per frame by the first visual
+drawn). A state per visual gave the crown its own natural frequency and its own height
+(its box starts at the lowest branch), and the crown visibly swung against its trunk. The
+state stands IN for the gust field's instantaneous value in the shader - it never multiplies
+it (that squared the lull-to-tongue contrast) - with a damping ratio of 0.3 (foliage damps
+a crown hard; 0.06 rang for cycles and read as rocking), the natural frequency is
+1.0/sqrt(H) Hz from the tree's real height, and the state starts at the field's value on
+the first frame after a load rather than swinging down to it.
 
 Scripts read and drive the service through the environment object:
 

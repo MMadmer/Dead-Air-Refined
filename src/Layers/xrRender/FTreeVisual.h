@@ -8,6 +8,8 @@ struct FSlideWindowItem;
 
 namespace xray::render::RENDER_NAMESPACE
 {
+struct TreeWindShared;
+
 #ifdef USE_DX11
 constexpr u32 FTreeVisualInstanceVectorCount = 10;
 
@@ -42,21 +44,15 @@ protected:
     _5color c_bias;
     Fmatrix xform;
 
-    // The crown's memory. A tree is a damped oscillator: it lags a gust, overshoots after it
-    // and rings down over several cycles (measured damping ratios sit at 0.04-0.09). The
-    // shader can only be a function of "now", so the state lives here and is integrated once
-    // per frame for every tree that is drawn; the shader multiplies its bend by it.
-    //   m_wind_q      - response, 1 = following the wind exactly
-    //   m_wind_qd     - its rate
-    //   m_wind_omega  - natural angular frequency from the model's height (rad/s)
-    //   m_wind_frame  - frame the state was last integrated in (first caller wins)
-    mutable float m_wind_q{1.f};
-    mutable float m_wind_qd{};
-    float m_wind_omega{};
-    // Height of the model: the trunk bend profile in the shaders runs on it (c_tree, row 9).
-    float m_tree_height{1.f};
-    mutable std::atomic<u32> m_wind_frame{};
+    // The tree's memory - ONE record per tree, shared by every visual of it. A tree model in
+    // a level is several visuals on one root (the trunk, the crown, sometimes more); a state
+    // per visual gave each its own natural frequency and its own height from its own box,
+    // and the crown visibly swung against the trunk it grows on. The record is keyed by the
+    // root position, refcounted by the visuals, integrated once per frame by the first of
+    // them drawn (see TreeWindShared in FTreeVisual.cpp).
+    TreeWindShared* m_shared{};
     void UpdateWindState() const;
+    float tree_height() const;
     // Row 8 of the per-instance data / c_sun of the scalar path: (sun scale, sun bias,
     // state, frequency factor for the sway phase).
     Fvector4 wind_state_row(float s) const;
