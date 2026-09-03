@@ -568,8 +568,13 @@ Quality follows the preset like the other preset-driven switches:
 | Minimum | 0 | flat: the map's column at the base plane, one fetch |
 | Low | 1 | flat, plus a per-pixel rim and a one-tap sun probe |
 | Medium | 1 | the same |
-| High | 2 | volumetric: 16 steps through the slab at half resolution, temporal blend |
-| Maximum | 3 | volumetric: 28 steps |
+| High | 2 | volumetric: 14 steps through the slab at half resolution, temporal blend |
+| Maximum | 3 | volumetric: 24 steps (more toward the horizon) |
+
+The weather map's alpha carries the transmittance of the vertical column through the
+volume, so the shadow the deck casts on the ground (and the break in the sun shafts) is the
+shadow of the cloud that shows, and the lens flare and the sun sprite fade by the column
+between the camera and the sun (read back from the map one frame late).
 
 The volumetric tiers march real volumes: a Perlin-Worley base shape carved by Worley
 octaves, a height profile from stratus to cumulus chosen per cell, a Worley detail volume
@@ -620,13 +625,13 @@ headless QA rig uses the last two to grade a run without a window.
 
 `r__hud_shadow` (on for the Maximum preset) gives the hands and the held item a shadow of
 their own. From the sun it is a dedicated 1024-texel map around the eye (`hud_shadow.ps`).
-From every local light - a lamp, a fire, the torch in the player's hand - it is marched in
-screen space inside the light accumulation (`da_hud_light.h`): the depth buffer is copied
-once after the g-buffer, a first-person pixel is told apart by its depth slice, its position
-is rebuilt with the HUD field of view (the deferred decompression put it about twice as far
-off-axis, which is why a lamp lit the weapon from the wrong side), and the ray toward the
-light is tested against the HUD's own depth. Off under MSAA, where the depth copy does not
-exist.
+Under local lights the first-person pixels are at least lit from the right side now: the
+depth buffer is copied once after the g-buffer, a first-person pixel is told apart by its
+depth slice and its position is rebuilt with the HUD field of view (the deferred
+decompression put it about twice as far off-axis). The screen-space self-shadow toward each
+local light that builds on this (`da_hud_light.h`) is experimental and off by default -
+`r__hud_shadow_local 1` turns it on; along silhouettes it still reads as a dotted contact
+band. Both are off under MSAA, where the depth copy does not exist.
 
 ## Actor movement tuning
 

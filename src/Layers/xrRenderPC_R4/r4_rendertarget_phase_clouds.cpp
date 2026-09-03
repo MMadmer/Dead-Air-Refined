@@ -83,7 +83,7 @@ void CRenderTarget::phase_clouds_march()
     RCache.set_Element(s_clouds_march->E[0]);
     da_cloud_set_camera(RCache);
     // Tier 2 marches 16 steps, tier 3 marches 28; the temporal blend gives both the rest.
-    const float steps = tier >= 3 ? 28.f : 16.f;
+    const float steps = tier >= 3 ? 24.f : 14.f;
     const float blend = g_da_cloud_hist_valid ? ps_r__clouds_temporal : 0.f;
     RCache.set_c("da_cloud_temporal", blend, float(g_da_cloud_frame % 4096), g_da_cloud_hist_valid ? 1.f : 0.f, steps);
     RCache.set_c("da_cloud_prev_r", g_da_cloud_prev_r);

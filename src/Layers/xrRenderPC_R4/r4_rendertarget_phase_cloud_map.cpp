@@ -55,6 +55,62 @@ void CRenderTarget::phase_cloud_map()
 
     // Back to the device-sized viewport for whatever renders next.
     u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), nullptr, nullptr, get_base_zb());
+
+    // The sun's column: the texel the camera-to-sun ray hits, copied to a staging texture and
+    // read back a frame later (no stall), so the engine knows how much deck stands between the
+    // player and the sun - the lens flare and the sun sprite fade with it.
+    auto& env = g_pGamePersistent->Environment();
+    Fvector to_sun = env.CurrentEnv.sun_dir;
+    to_sun.invert();
+    if (to_sun.y > 0.05f)
+    {
+        auto* ctx = HW.get_context(RCache.context_id);
+        for (auto& tex : cloud_readback)
+        {
+            if (tex)
+                continue;
+            D3D11_TEXTURE2D_DESC desc{};
+            desc.Width = 1;
+            desc.Height = 1;
+            desc.MipLevels = 1;
+            desc.ArraySize = 1;
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+            desc.Usage = D3D11_USAGE_STAGING;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            HW.pDevice->CreateTexture2D(&desc, nullptr, &tex);
+        }
+        static u32 slot = 0;
+        if (cloud_readback[0] && cloud_readback[1])
+        {
+            const float t = (env.eff_cloud_altitude - eye.y) / to_sun.y;
+            const float hx = eye.x + to_sun.x * t;
+            const float hz = eye.z + to_sun.z * t;
+            const float ux = (hx - g_da_cloud_map_center_x) / g_da_cloud_map_extent + 0.5f;
+            const float uz = (hz - g_da_cloud_map_center_z) / g_da_cloud_map_extent + 0.5f;
+            if (ux > 0.f && ux < 1.f && uz > 0.f && uz < 1.f)
+            {
+                const u32 px = std::min<u32>(u32(ux * float(rt_cloud_map->dwWidth)), rt_cloud_map->dwWidth - 1);
+                const u32 py = std::min<u32>(u32(uz * float(rt_cloud_map->dwHeight)), rt_cloud_map->dwHeight - 1);
+                const D3D11_BOX box{px, py, 0, px + 1, py + 1, 1};
+                ctx->CopySubresourceRegion(cloud_readback[slot], 0, 0, 0, 0, rt_cloud_map->pSurface, 0, &box);
+                // The other slot holds last frame's texel: read it without waiting.
+                D3D11_MAPPED_SUBRESOURCE mapped{};
+                if (SUCCEEDED(ctx->Map(cloud_readback[slot ^ 1], 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped)))
+                {
+                    const u8 a = static_cast<const u8*>(mapped.pData)[3];
+                    ctx->Unmap(cloud_readback[slot ^ 1], 0);
+                    const float target = float(a) / 255.f;
+                    env.cloud_sun_visibility += (target - env.cloud_sun_visibility) * 0.15f;
+                }
+                slot ^= 1;
+            }
+            else
+                env.cloud_sun_visibility += (1.f - env.cloud_sun_visibility) * 0.15f;
+        }
+    }
+    else
+        env.cloud_sun_visibility = 1.f;
 }
 
 // Diagnostic (r__cloud_map_dump): the map as a PNG next to the screenshots, so a "no clouds

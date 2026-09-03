@@ -2,6 +2,7 @@
 #include "dxLensFlareRender.h"
 #include "xrEngine/xr_efflensflare.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/Environment.h"
 #define MAX_Flares 24
 
 #define FAR_DIST g_pGamePersistent->Environment().CurrentEnv.far_plane
@@ -75,7 +76,8 @@ void dxLensFlareRender::Render(CLensFlare& owner, BOOL bSun, BOOL bFlares, BOOL 
                     vec.add(owner.vecCenter);
                     vecSx.mul(vecDx, F.fRadius * fDistance);
                     vecSy.mul(vecDy, F.fRadius * fDistance);
-                    float cl = F.fOpacity * owner.fBlend * owner.m_StateBlend;
+                    // A cloud between the player and the sun dims the flare and the sun itself.
+                    float cl = F.fOpacity * owner.fBlend * owner.m_StateBlend * g_pGamePersistent->Environment().cloud_sun_visibility;
                     color.set(dwLight);
                     color.mul_rgba(cl);
                     u32 c = color.get();

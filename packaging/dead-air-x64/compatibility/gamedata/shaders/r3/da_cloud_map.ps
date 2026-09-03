@@ -1,10 +1,12 @@
 #include "common.h"
-#include "da_clouds.h"
+#include "da_clouds_vol.h"
 
 // One texel of the cloud map: the deck field at this world position.
-//   x = density (coverage eroded by detail) - what the deck is made of and what shades,
+//   x = density (coverage eroded by detail) - the flat deck's cloud,
 //   y = coverage alone - the soft, cell-scale envelope,
-//   z = detail noise - so a reader can re-erode at its own strength.
+//   z = detail noise - so a reader can re-erode at its own strength,
+//   w = the transmittance of the vertical column through the VOLUME (the same 3D field the
+//       march draws), so the shadow on the ground is the shadow of the cloud that shows.
 struct v2p
 {
 	float2	tc0		: TEXCOORD0;
@@ -16,5 +18,21 @@ float4 main(v2p I) : SV_Target
 	const float cov = da_cloud_coverage(xz);
 	const float det = da_cloud_detail(xz);
 	const float d = da_cloud_erode(cov, det);
-	return float4(d, cov, det, 1.0f);
+	// The column: eight samples of the cheap (shape-only) volume density from base to top.
+	float tau = 0.0f;
+	[branch] if (cov > 0.002f)
+	{
+		const float3 weather = float3(d, cov, det);
+		const float base_alt = da_cloud_params.y;
+		const float thickness = max(da_cloud_params2.y, 50.0f);
+		const float dh = thickness / 8.0f;
+		[unroll]
+		for (int i = 0; i < 8; ++i)
+		{
+			const float hn = (float(i) + 0.5f) / 8.0f;
+			const float3 p = float3(xz.x, base_alt + hn * thickness, xz.y);
+			tau += da_cloud_density_vol(p, weather, hn, true) * 0.045f * dh;
+		}
+	}
+	return float4(d, cov, det, exp(-tau));
 }

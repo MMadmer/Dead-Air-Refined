@@ -196,6 +196,7 @@ int ps_r__tree_shadow_sway = 0;
 int ps_r__clouds_quality = 1;
 int ps_r__clouds_debug = 0; // 0 off, 1 the deck transmittance, 2 its raw colour, 3 the reprojection offset
 float ps_r__clouds_temporal = 0.85f; // share of the previous frame kept by the march (0 = none)
+int ps_r__hud_shadow_local = 0; // the screen-space first-person shadow from local lights (experimental)
 // r__clouds_quality: pin the tier for tuning and QA; -1 follows the preset.
 int ps_r__clouds_quality_override = -1;
 // r__clouds_cover: pin the deck's coverage (0..1) for tuning and QA; -1 follows the weather.
@@ -931,7 +932,9 @@ void xrRender_sync_preset_derived()
     // Sun shadow-map size ladder - the single most expensive shadow knob was pinned at 2048
     // on every preset ("presets or nothing" gap). Applies on renderer (re)start, since the
     // smap targets are created once. Default keeps the historical 2048 exactly.
-    static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 3072, 4096};
+    // 4096 cascades cost ~3.5 ms more than 2048 in the sun pass at 1440p (rig, 3 cascades);
+    // 3072 keeps most of the sharpness for a third of that.
+    static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 2048, 3072};
     // AO technique ladder. GTAO (ported from IX-Ray: 3-slice horizon integral plus a guided
     // filter) replaces the inline HDAO/HBAO on the two top presets; Default keeps the reference
     // inline SSAO, the two lowest presets keep AO off. Applied through the console command so
@@ -1687,6 +1690,7 @@ void xrRender_initconsole()
     CMD1(CCC_CloudMapDump, "r__cloud_map_dump");
     CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 3);
     CMD4(CCC_Float, "r__clouds_temporal", &ps_r__clouds_temporal, 0.f, 0.95f);
+    CMD4(CCC_Integer, "r__hud_shadow_local", &ps_r__hud_shadow_local, 0, 1);
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
     CMD4(CCC_Integer, "r__screenshot_every", &ps_r__screenshot_every, 0, 100000);
 

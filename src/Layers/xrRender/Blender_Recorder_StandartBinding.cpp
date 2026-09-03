@@ -445,7 +445,7 @@ static class cl_da_hud_light2 : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const bool on = ps_r__hud_shadow && !RImplementation.o.msaa;
-        cmd_list.set_c(C, r2_hud_depth_limit, on ? 1.f : 0.f, ps_r__hud_shadow_normal_offset, 0.f);
+        cmd_list.set_c(C, r2_hud_depth_limit, on ? 1.f : 0.f, ps_r__hud_shadow_normal_offset, ps_r__hud_shadow_local ? 1.f : 0.f);
     }
 } binder_da_hud_light2;
 
@@ -471,7 +471,9 @@ static class cl_da_cloud_params2 : public R_constant_setup
         // Thin cirrus barely dims the sun, a heavy deck cuts more than half of it. Overcast
         // weathers author their own dim sun on top.
         const float cover = da_cloud_cover_from_weather(env.CurrentEnv.clouds_color.w);
-        const float density = clampr((cover - 0.05f) * 1.6f, 0.f, 1.f) * 0.55f;
+        // The map's alpha holds the column's transmittance through the volume; this is only
+        // the switch (0 = no shadow) and the strength the deck casts with.
+        const float density = cover > 0.02f ? 1.f : 0.f;
         const int quality = ps_r__clouds_quality_override >= 0 ? ps_r__clouds_quality_override : ps_r__clouds_quality;
         cmd_list.set_c(C, float(quality), env.eff_cloud_thickness, env.eff_wind_time, density);
     }

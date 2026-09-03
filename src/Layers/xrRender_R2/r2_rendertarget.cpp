@@ -827,6 +827,10 @@ CRenderTarget::CRenderTarget()
 
 CRenderTarget::~CRenderTarget()
 {
+#if RENDER == R_R4
+    for (auto& tex : cloud_readback)
+        _RELEASE(tex);
+#endif
 #if defined(USE_DX11)
     _RELEASE(t_ss_async);
 #elif defined(USE_OGL)

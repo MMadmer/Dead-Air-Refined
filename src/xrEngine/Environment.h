@@ -350,6 +350,9 @@ public:
     // The cloud deck: base altitude above the level's ground and its thickness (m). Read from
     // [clouds] in dead_air_x64_wind.ltx; the deck field drifts eff_cloud_run metres along
     // eff_wind_dir_aloft.
+    // Transmittance of the deck between the camera and the sun, read back from the cloud map
+    // by the renderer (1 = clear). The lens flare and the sun sprite fade with it.
+    float cloud_sun_visibility{1.f};
     float eff_cloud_altitude{1500.f};
     float eff_cloud_thickness{600.f};
     // Discrete gust events: Poisson arrivals with a raised-cosine envelope. The noise layers

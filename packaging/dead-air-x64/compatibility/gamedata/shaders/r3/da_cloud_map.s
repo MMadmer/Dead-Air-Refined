@@ -6,4 +6,7 @@ function normal (shader, t_base, t_second, t_detail)
 			: fog	(false)
 			: zb 	(false,false)
 			: blend	(false, blend.one, blend.zero)
+	shader:dx10texture	("s_cloud_shape",	"da\\da_cloud_shape")
+	shader:dx10texture	("s_cloud_detail",	"da\\da_cloud_detail")
+	shader:dx10sampler	("smp_linear")
 end

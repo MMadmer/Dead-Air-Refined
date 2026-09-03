@@ -210,6 +210,7 @@ private:
     ref_shader s_clouds_march;
     ref_shader s_clouds_composite;
     ref_rt rt_depth_copy; // depth as the g-buffer left it, readable during light accumulation
+    ID3DTexture2D* cloud_readback[2]{}; // one texel of the cloud map, the sun's column, two frames deep
     ref_shader s_cloud_map;
     ref_geom g_fxaa;
 

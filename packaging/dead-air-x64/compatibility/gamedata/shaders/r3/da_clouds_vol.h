@@ -111,11 +111,11 @@ float da_cloud_phase(float cos_t, float g_scale)
 // near ones catch a cloud's own edge and the far one the deck above.
 float da_cloud_sun_depth(Texture2D map, float3 p, float3 to_sun, float base_alt, float thickness, float ext)
 {
-    const float taps[4] = { 14.0f, 36.0f, 80.0f, 170.0f };
+    const float taps[3] = { 16.0f, 48.0f, 140.0f };
     float tau = 0.0f;
     float prev = 0.0f;
     [unroll]
-    for (int k = 0; k < 4; ++k)
+    for (int k = 0; k < 3; ++k)
     {
         const float3 lp = p + to_sun * taps[k];
         const float hn = (lp.y - base_alt) / thickness;

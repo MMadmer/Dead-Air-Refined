@@ -138,6 +138,23 @@ float3 da_cloud_field(Texture2D map, float2 xz)
     return lerp(m, n, smoothstep(0.8f, 1.0f, edge));
 }
 
+// The map's alpha channel (column transmittance), with the same edge blend to the analytic
+// fallback - the fallback carries no volume, so beyond the map the flat density stands in.
+float da_cloud_field_a(Texture2D map, float2 xz)
+{
+    const float2 uv = da_cloud_map_uv(xz);
+    const float edge = da_cloud_map_edge(uv);
+    float a = 1.0f;
+    [branch] if (edge < 1.0f)
+        a = map.SampleLevel(smp_rtlinear, uv, 0).w;
+    [branch] if (edge < 0.8f)
+        return a;
+    const float cov = da_cloud_coverage(xz);
+    const float det = da_cloud_detail(xz);
+    const float n = 1.0f - 0.8f * da_cloud_erode(cov, det);
+    return lerp(a, n, smoothstep(0.8f, 1.0f, edge));
+}
+
 // Cloud top as a fraction of the slab: dense columns tower, thin ones stay low.
 float da_cloud_top(float d2) { return 0.4f + 0.6f * d2; }
 
@@ -175,9 +192,10 @@ float da_cloud_transmittance(Texture2D map, float3 Pw)
     // The deck's own thickness under the sun angle sets how dark a full cloud gets; a low sun
     // crosses more of it. Cells are large, the penumbra at a few km is metres - the field's
     // own softness is the softness.
-    const float d = da_cloud_field(map, hit).x;
-    const float path = 1.0f + 0.6f * (1.0f - to_sun.y);
-    return 1.0f - density * saturate(d * path);
+    // The column's transmittance (map alpha), floored: the sky still lights the ground under
+    // a cloud, and a sun at zero would flatten the scene to its ambient alone.
+    const float T = max(da_cloud_field_a(map, hit), 0.12f);
+    return 1.0f - density * (1.0f - T);
 }
 
 #endif // DA_CLOUDS_H

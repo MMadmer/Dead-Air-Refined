@@ -87,7 +87,7 @@ float4 main( p_volume I, float4 pos2d : SV_Position ) : SV_Target
 
 #ifndef MSAA_OPTIMIZATION
 		// The hands shadow themselves from this light: screen-space, since no shadow map has them.
-		[branch] if ( hud )
+		[branch] if ( hud && da_hud_light2.w > 0.5f )
 			s *= da_hud_ss_shadow( _P.xyz, _N.xyz, Ldynamic_pos.xyz, pos2d.xy );
 #endif
 

@@ -13,7 +13,7 @@
 // fire, the torch in the player's own hand.
 Texture2D s_depth_copy;
 uniform float4 da_hud_light;   // HorzTan, VertTan, 2*HorzTan/w, 2*VertTan/h
-uniform float4 da_hud_light2;  // hud depth limit, enabled, normal offset (m), -
+uniform float4 da_hud_light2;  // hud depth limit, enabled, normal offset (m), local-light shadow on
 
 bool da_hud_pixel(float2 pos2d)
 {
