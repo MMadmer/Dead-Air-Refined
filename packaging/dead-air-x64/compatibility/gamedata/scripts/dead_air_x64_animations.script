@@ -31,8 +31,8 @@ end
 
 -- ---- stock item effects vs the module ------------------------------------------------------------
 -- Both sets hang on the same use event. Without this the stock set (camera shake, weapon hide)
--- played over the module's hands. The stock set is muted only for what the module covers, and
--- only in the "new" mode; in "old" the module is silent and the stock set plays as always.
+-- played over the module's hands. The stock set is muted for what the module covers and plays
+-- as always for everything else (repair kits, weapon cleaning, ...).
 local function install_actor_effects_patch()
 	if not (actor_effects and actor_effects.use_item) then return end
 	if (actor_effects.da_use_item_original) then return end
@@ -41,31 +41,16 @@ local function install_actor_effects_patch()
 	actor_effects.da_use_item_original = original
 
 	actor_effects.use_item = function(name)
-		local skin = (name == "mutant_looting") or (name == "mutant_looting_fast")
 		local wear = (name == "outfit") or (name == "helm")
-		local wear_slot = (name == "helm") and 12 or 7
-
-		local mode = "old"
-		if (da_item_anims) then
-			if (skin) then
-				mode = da_item_anims.skin_mode()
-			elseif (wear) then
-				mode = da_item_anims.wear_mode()
-			else
-				mode = da_item_anims.mode()
-			end
-		end
-
-		if (mode == "off") then return end
-
-		-- Wear: the stock set is muted only for an item the module really covers, judged by the
-		-- item now in the slot, not by a remembered flag that outlives a mode switch.
-		if (wear and mode ~= "old") then
+		if (wear) then
+			-- Judged by the item now in the slot: a helmet the module has no scene for keeps
+			-- the stock effect.
+			local wear_slot = (name == "helm") and 12 or 7
 			local worn = db.actor and db.actor:item_in_slot(wear_slot)
 			if (not worn) or (da_wear_anims and da_wear_anims.covers(worn, wear_slot)) then return end
 		end
 
-		if (mode ~= "old") and enhanced_animations and enhanced_animations.da_has_anim(name) then return end
+		if enhanced_animations and enhanced_animations.da_has_anim(name) then return end
 
 		return original(name)
 	end
@@ -87,22 +72,6 @@ local function install_knife_manager_patch()
 	end
 end
 
--- ---- options ---------------------------------------------------------------------------------------
--- The entries carry a default, so the stock axr_main_options handlers save and restore them in
--- mm_options like every other Dead Air option (enable_<key> for checks, <key> for lists).
-local function on_opt_init(menu)
-	if (da_anim_options and da_anim_options.register) then
-		da_anim_options.register(menu)
-	end
-end
-
--- The module scripts cache their switches; re-read them when the player accepts the options.
-local function on_opt_accept(menu, opt_manager, console)
-	if (enhanced_animations and enhanced_animations.loadsettings) then enhanced_animations.loadsettings() end
-	if (take_item_anim and take_item_anim.loadsettings) then take_item_anim.loadsettings() end
-	if (demonized_ledge_grabbing and demonized_ledge_grabbing.load_settings) then demonized_ledge_grabbing.load_settings() end
-end
-
 function on_game_start()
 	install_actor_effects_patch()
 	install_knife_manager_patch()
@@ -110,6 +79,3 @@ end
 
 install_actor_effects_patch()
 install_knife_manager_patch()
-
-RegisterScriptCallback("opt_menu_on_init", on_opt_init)
-RegisterScriptCallback("opt_menu_on_accept", on_opt_accept)

@@ -54,15 +54,11 @@ function on_game_load()
 	activate()
 end
 
+-- Not optional: the item scenes and the skinning scene are always on.
 function loadsettings()
-	if not (da_item_anims and da_item_anims.mode) then
-		enable_item_anims, mutant_loot_mod, enable_animations = false, false, false
-		return
-	end
-	-- Two independent switches: the item scenes and the skinning scene.
-	enable_item_anims = (da_item_anims.mode() == "new")
-	mutant_loot_mod = (da_item_anims.skin_mode() == "new")
-	enable_animations = enable_item_anims or mutant_loot_mod
+	enable_item_anims = true
+	mutant_loot_mod = true
+	enable_animations = true
 end
 
 function activate()

@@ -60,31 +60,32 @@ function reset()
 	item, slot, busy, wait_ticks, settle_target = nil, nil, false, 0, 0
 end
 
+-- Not optional.
 function enabled()
-	-- По умолчанию ВЫКЛЮЧЕНО, и это осознанно.
-	--
-	-- CUIActorMenu::ToSlot - не "игрок надел вещь", а внутренний примитив "попробовать положить".
-	-- Он зовётся при перетаскивании любой вещи на слот, при двойном щелчке, при автоподборе, и с
-	-- ПОВТОРОМ: получив отказ, вызывающий пробует снова с force_place. Наш отказ он понимает как
-	-- "не влезло", отсюда лишние запуски сцены.
-	--
-	-- Пока не найдена точка, означающая именно действие игрока, пункт выключен.
-	-- Пункт «Игра -> Анимации -> Анимации надевания»: Новые / Старые / Отключены.
-	-- «Старые» возвращают штатный набор Dead Air (actor_effects, записи outfit и helm), наш при
-	-- этом молчит - иначе они играли бы вместе, как это уже было с едой.
-	return da_item_anims.wear_mode() == "new"
+	return true
 end
 
--- Сколько ждать, пока доиграет убирание оружия. Длину берём у движка, а не числом: у ножа,
--- автомата и детектора она разная. Разбор - в da_body_search.
-local function hide_ticks()
+-- The holster length of the item in the hands, ms, from the engine (a knife, a rifle and a
+-- detector all differ). Zero when nothing is held.
+local function hide_ms()
 	local itm = db.actor and db.actor:active_item()
-	if not itm then return 2 end
+	if not itm then return 0 end
 	local hud = system_ini():r_string_ex(itm:section(), "hud")
-	if not hud then return 6 end
-	local ms = game.get_motion_length(hud, "anm_hide", 1.0)
-	if not ms or ms <= 0 then return 6 end
-	return math.floor(ms / 50) + 1
+	local ms = hud and game.get_motion_length(hud, "anm_hide", 1.0) or 0
+	if not ms or ms <= 0 then ms = 600 end
+	return ms
+end
+
+-- When the weapon is surely away. A time event, once due, is called EVERY FRAME - counting
+-- its calls as ticks made the wait a dozen frames and the scene started over the holster.
+-- The scene waits for the slot to empty (the holster cycle has ended) and for the holster
+-- length to pass; the holster length plus a margin is the cap should the slot never empty.
+local settle_until = 0
+local had_weapon = false
+local function weapon_away()
+	local now = time_global()
+	if had_weapon and db.actor:active_slot() ~= 0 and now < settle_until + 800 then return false end
+	return now >= settle_until
 end
 
 -- [DA_PORT] Возвращаем ИСТИНУ: вещь надевается СРАЗУ, сцена играет после.
@@ -113,7 +114,8 @@ function before_wear(obj, slot_id)
 	item, slot = obj, slot_id
 	busy = true
 	wait_ticks = 0
-	settle_target = hide_ticks()
+	had_weapon = db.actor:active_slot() ~= 0
+	settle_until = time_global() + hide_ms() + 80
 
 	db.actor:hide_weapon()
 	-- [DA_PORT] Глушилка ввода снята: она резала МЫШЬ, и игрок терял взгляд на всю сцену.
@@ -135,8 +137,7 @@ function start_anim()
 	-- Здесь мы уже в обработчике времени, то есть вне стека UI, и закрывать безопасно.
 	if hide_hud_inventory then hide_hud_inventory() end
 
-	wait_ticks = wait_ticks + 1
-	if wait_ticks < settle_target then return false end
+	if not weapon_away() then return false end
 
 	local sect = section_for(item, slot)
 	local ms = game.get_motion_length(sect, "anm_ea_show", 1.0)

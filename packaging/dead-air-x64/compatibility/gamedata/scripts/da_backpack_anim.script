@@ -28,9 +28,9 @@ function reset()
 	busy, wait_ticks = false, 0
 end
 
+-- Not optional.
 function enabled()
-	if not axr_main or not axr_main.config then return true end
-	return axr_main.config:r_value("mm_options", "enable_da_backpack_anim", 1, true)
+	return true
 end
 
 -- [DA_PORT] Раздел сцены под НАДЕТЫЙ рюкзак: da_backpack_<секция>_hud, иначе общий.
@@ -52,19 +52,27 @@ local function scene_section()
 	return SECT_BASE
 end
 
--- Сколько ждать, пока доиграет убирание оружия. Разбор тот же, что в da_body_search.
-local function hide_ticks()
+-- The holster length of the item in the hands, ms, from the engine (a knife, a rifle and a
+-- detector all differ). Zero when nothing is held.
+local function hide_ms()
 	local itm = db.actor and db.actor:active_item()
-	if not itm then return 2 end
-
+	if not itm then return 0 end
 	local hud = system_ini():r_string_ex(itm:section(), "hud")
-	if not hud then return 6 end
+	local ms = hud and game.get_motion_length(hud, "anm_hide", 1.0) or 0
+	if not ms or ms <= 0 then ms = 600 end
+	return ms
+end
 
-	local ms = game.get_motion_length(hud, "anm_hide", 1.0)
-	if not ms or ms <= 0 then return 6 end
-
-	-- Такт опроса 50 мс, плюс один сверху на округление.
-	return math.floor(ms / 50) + 1
+-- When the weapon is surely away. A time event, once due, is called EVERY FRAME - counting
+-- its calls as ticks made the wait a dozen frames and the scene started over the holster.
+-- The scene waits for the slot to empty (the holster cycle has ended) and for the holster
+-- length to pass; the holster length plus a margin is the cap should the slot never empty.
+local settle_until = 0
+local had_weapon = false
+local function weapon_away()
+	local now = time_global()
+	if had_weapon and db.actor:active_slot() ~= 0 and now < settle_until + 800 then return false end
+	return now >= settle_until
 end
 
 -- Возвращаем ЛОЖЬ, чтобы движок окно не открывал.
@@ -77,7 +85,8 @@ function before_open()
 
 	busy = true
 	wait_ticks = 0
-	settle_target = hide_ticks()
+	had_weapon = db.actor:active_slot() ~= 0
+	settle_until = time_global() + hide_ms() + 80
 
 	-- Сцена ДВУРУКАЯ: обе руки заняты сумкой, поэтому оружие убираем.
 	db.actor:hide_weapon()
@@ -91,8 +100,7 @@ function before_open()
 end
 
 function start_anim()
-	wait_ticks = wait_ticks + 1
-	if wait_ticks < settle_target then return false end
+	if not weapon_away() then return false end
 
 	-- Раздел выбираем ЗДЕСЬ, а не при перехвате: между нажатием и пуском сцены игрок ничего
 	-- сменить не успевает, зато так выбор стоит рядом с использованием и не разъедется.

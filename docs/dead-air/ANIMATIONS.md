@@ -7,8 +7,7 @@ carry the assets are described in [`CONTENT_BUNDLES.md`](CONTENT_BUNDLES.md).
 ## What the player gets
 
 - **Item scenes** (FDDA): food, drinks, medical items and cigarettes are used in the hands
-  instead of vanishing from the inventory. Options -> Game -> "Item animations": New / Old
-  (the stock Dead Air effects) / Off.
+  instead of vanishing from the inventory.
 - **Skinning** with a knife: a scene on the carcass, then the stock loot window. "Skinning
   animations" in the same menu.
 - **Body search**: a scene before the search window opens.
@@ -47,11 +46,11 @@ tune the scene item seat in game and `hud_scene_item_dump` prints the config lin
 
 | Script | Role |
 | --- | --- |
-| `dead_air_x64_animations` | The glue, loaded from `script.ltx`: the `_G.da_before_item_use` registry, the `actor_effects.use_item` patch (stock effects muted only for what the module covers, in the "new" mode), the `knife_manager.can_loot` empty-hands guard, the options registration and the reload of the module switches on Accept. |
+| `dead_air_x64_animations` | The glue, loaded from `script.ltx`: the `_G.da_before_item_use` registry, the `actor_effects.use_item` patch (stock effects muted only for what the module covers), the `knife_manager.can_loot` empty-hands guard. |
 | `da_mod_compat` | The Anomaly helpers the addons capture at load (`normalize`, `clamp`, `IsMoveState`, `move_state`, `nextTick`, `GetEvent/SetEvent`, `SYS_GetParam`, `ui_options`, ...). Only names that do not exist yet. |
 | `enhanced_animations`, `take_item_anim`, `ciga_effects`, `fov_anim_manager`, `ea_callbacks`, `ea_prefetcher` | FDDA. No helper inventory item, no version window, no key toggle. |
-| `da_item_anims`, `da_anim_options` | The mode switches and the option rows. |
-| `da_body_search`, `da_backpack_anim`, `da_wear_anims` | The three hook-driven scenes. |
+| `da_item_anims` | Answers "new" to the addons that ask which mode is active. The module is not optional: no option row, no key in `axr_options.ltx` or `user.ltx`. |
+| `da_body_search`, `da_backpack_anim`, `da_wear_anims` | The three hook-driven scenes. A two-hand scene starts only when the weapon is away: the active slot has emptied (the holster cycle has ended) and the holster length has passed, the holster length plus a margin being the cap. Frames are not a clock here: a time event, once due, is called every frame. |
 | `demonized_ledge_grabbing` (+ `_animation_data`, `demonized_geometry_ray`, `demonized_randomizing_functions`) | Parkour. Rays only while the jump key is held and at most every 40 ms; a climb needs the key held 100 ms and the actor within 0.75 m of the wall. `probe_now()` runs one pass regardless of the key; `debug_log = true` explains a miss in the log. |
 
 `configs/items/items/`: the FDDA lists (`anims_list.ltx`, `ea_addon_*.ltx`, `anims_skip.ltx`,

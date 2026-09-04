@@ -24,44 +24,32 @@ function reset()
 	body, busy, wait_ticks, settle, prev_slot, one_hand = nil, false, 0, 0, nil, false
 end
 
+-- Not optional.
 function enabled()
-	-- [DA_PORT] Без модуля анимаций сцены нет — и ЖДАТЬ её тоже нечего.
-	--
-	-- Скрипт базовый, а движение, которое он играет, приезжает в архиве модуля. Когда модуль снят
-	-- или выключен, get_motion_length отвечает нулём, длительность откатывается на запасное число,
-	-- и сцена честно выжидает его целиком: анимации нет, а пауза есть, и всё это время действия
-	-- заблокированы. Со стороны выглядит как «выключил анимации, а тормоза остались».
-	--
-	-- Настройка тут не спасает: её регистрирует сам модуль, и без него значение по умолчанию
-	-- «включено». Поэтому проверяем не настройку, а НАЛИЧИЕ модуля — его ядро da_item_anims живёт
-	-- только в архиве и без него в глобальные имена не попадает.
-	-- Признак модуля — секция из ЕГО конфига (da_hud_animations.ltx, подключается
-	-- необязательно). Скрипты для этого не годятся: da_item_anims и enhanced_animations
-	-- лежат в базовой сборке РОССЫПЬЮ, то есть существуют и без модуля.
-	if not system_ini():section_exist("da_hud_animations") then return false end
-	if not axr_main or not axr_main.config then return true end
-	return axr_main.config:r_value("mm_options", "enable_da_body_search_anim", 1, true)
+	return true
 end
 
--- [DA_PORT] Сколько ждать, пока доиграет убирание оружия.
---
--- Раньше это было число, подобранное на глаз, и промахивалось: у ножа, автомата и детектора
--- убирание разной длины. Теперь спрашиваем движок: game.get_motion_length даёт длину цикла из
--- секции HUD оружия, ту же самую, что играет при убирании.
---
--- Ноль означает "цикла нет" - тогда берём небольшой запас, чтобы не начать сцену в тот же кадр.
-local function hide_ticks()
+-- The holster length of the item in the hands, ms, from the engine (a knife, a rifle and a
+-- detector all differ). Zero when nothing is held.
+local function hide_ms()
 	local itm = db.actor and db.actor:active_item()
-	if not itm then return 2 end
-
+	if not itm then return 0 end
 	local hud = system_ini():r_string_ex(itm:section(), "hud")
-	if not hud then return 6 end
+	local ms = hud and game.get_motion_length(hud, "anm_hide", 1.0) or 0
+	if not ms or ms <= 0 then ms = 600 end
+	return ms
+end
 
-	local ms = game.get_motion_length(hud, "anm_hide", 1.0)
-	if not ms or ms <= 0 then return 6 end
-
-	-- Такт опроса 50 мс, плюс один сверху на округление.
-	return math.floor(ms / 50) + 1
+-- When the weapon is surely away. A time event, once due, is called EVERY FRAME - counting
+-- its calls as ticks made the wait a dozen frames and the scene started over the holster.
+-- The scene waits for the slot to empty (the holster cycle has ended) and for the holster
+-- length to pass; the holster length plus a margin is the cap should the slot never empty.
+local settle_until = 0
+local had_weapon = false
+local function weapon_away()
+	local now = time_global()
+	if had_weapon and db.actor:active_slot() ~= 0 and now < settle_until + 800 then return false end
+	return now >= settle_until
 end
 
 -- Возвращаем ЛОЖЬ, чтобы движок окно не открывал.
@@ -72,7 +60,6 @@ function before_search(obj)
 	body = obj
 	busy = true
 	wait_ticks, settle = 0, 0
-	settle_target = hide_ticks()
 	-- [DA_PORT] Прячем вещь hide_weapon и ЖДЁМ ПО ВРЕМЕНИ, а не по слоту.
 	--
 	-- Замер показал две вещи. Первая: в Dead Air слот не пустеет НИ от hide_weapon, ни от
@@ -90,9 +77,11 @@ function before_search(obj)
 	-- на посадке ствола и продолжает его держать, левая переезжает на посадку сцены и играет цикл.
 	-- Пока копия была одна, посадка была общая и рука тянулась мимо — см. разбор там же.
 	one_hand = db.actor:active_slot() ~= 0
+	had_weapon = false
 	if not one_hand then
 		db.actor:hide_weapon()
 	end
+	settle_until = time_global()
 	game.only_allow_movekeys(true)
 	CreateTimeEvent("da_body_search", "start", 0.05, start_anim)
 	return false
@@ -116,21 +105,21 @@ function after_pickup(obj)
 
 	busy = true
 	wait_ticks = 0
-	settle_target = hide_ticks()
 
 	-- [DA_PORT] Оружие в руках — играем одной левой, разбор выше, в before_search.
 	one_hand = db.actor:active_slot() ~= 0
+	had_weapon = false
 	if not one_hand then
 		db.actor:hide_weapon()
 	end
+	settle_until = time_global()
 	game.only_allow_movekeys(true)
 	CreateTimeEvent("da_body_search", "start", 0.05, start_anim)
 end
 
 function start_anim()
-	wait_ticks = wait_ticks + 1
 	-- Ждём только если оружие убирали: одноручной сцене ждать нечего.
-	if (not one_hand) and wait_ticks < settle_target then return false end
+	if (not one_hand) and not weapon_away() then return false end
 
 	-- Длительность спрашиваем у движка, а не задаём числом: поменяется цикл - расписание сойдётся
 	-- само, без правки скрипта.

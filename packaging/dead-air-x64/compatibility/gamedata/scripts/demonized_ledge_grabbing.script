@@ -37,8 +37,8 @@ local clamp = clamp
 local drf = demonized_randomizing_functions
 local dgr = demonized_geometry_ray
 
--- Settings. The player switch (enable) comes from Options -> Game; the rest are the addon's
--- own defaults, kept here since Dead Air has no MCM page for them.
+-- Settings: the addon's defaults, kept here since Dead Air has no MCM page for them. Nothing
+-- is read from or written to the options files - the module is not optional.
 settings = {
 	enable = true,
 	alternativeClimbDetection = true,
@@ -194,10 +194,9 @@ local function randomPlusMinus(v)
 	return random_float(-v, v)
 end
 
+-- Not optional: no switch is read from any options file.
 function load_settings()
-	if axr_main and axr_main.config then
-		settings.enable = axr_main.config:r_value("mm_options", "enable_da_parkour", 1, true)
-	end
+	settings.enable = true
 	return settings
 end
 

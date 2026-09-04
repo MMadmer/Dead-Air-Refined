@@ -1,32 +1,5 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <string_table>
-	<string id="ui_mm_da_item_anims">
-		<text>Item animations</text>
-	</string>
-	<string id="ui_mm_da_item_anims_new">
-		<text>New</text>
-	</string>
-	<string id="ui_mm_da_item_anims_old">
-		<text>Old</text>
-	</string>
-	<string id="ui_mm_da_item_anims_off">
-		<text>Off</text>
-	</string>
-	<string id="ui_mm_da_wear_anims">
-		<text>Wear animations</text>
-	</string>
-	<string id="ui_mm_da_skin_anims">
-		<text>Skinning animations</text>
-	</string>
-	<string id="ui_mm_da_body_search_anim">
-		<text>Body search animation</text>
-	</string>
-	<string id="ui_mm_da_backpack_anim">
-		<text>Backpack opening animation</text>
-	</string>
-	<string id="ui_mm_da_parkour">
-		<text>Parkour (hold jump)</text>
-	</string>
 	<string id="st_EA_ladder_item_not_allowed">
 		<text>Cannot use this on a ladder</text>
 	</string>
