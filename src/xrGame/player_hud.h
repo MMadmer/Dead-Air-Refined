@@ -193,6 +193,11 @@ private:
     void update_additional(Fmatrix& trans) const;
     bool inertion_allowed() const;
     void scene_item_release();
+    // The scene item's matrix: the grip bone of the half that plays, plus the section's own
+    // seat. Shared by the frame update and the scene's first frame.
+    void scene_item_calc_transform();
+    // Everything the frame update does for a scene, done once at the moment it starts.
+    void scene_first_frame();
     player_hud_motion_container& scene_motions(const shared_str& sect);
 
 private:
@@ -234,6 +239,9 @@ private:
     bool m_scene_item_root_lock{ true };
     bool m_scene_item_lead_gun{};
     Fmatrix m_scene_item_transform{};
+    // The camera matrix of the last update, before any item's own additions: a scene starts
+    // after that update and needs a base for its first frame.
+    Fmatrix m_last_cam_trans{ Fidentity };
 
     // Bones are the same in both copies (one model), so one anchor list serves both.
     xr_vector<u16> m_ancors;

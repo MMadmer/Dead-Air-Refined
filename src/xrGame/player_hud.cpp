@@ -872,6 +872,7 @@ void player_hud::update(const Fmatrix& cam_trans)
     // matrix, the left-hand item the left one. trans_b is the state before any addition - the
     // hand a scene owns returns to it.
     const Fmatrix trans_b = trans;
+    m_last_cam_trans = trans_b;
     Fmatrix trans_2 = trans;
 
     if (item0)
@@ -955,49 +956,7 @@ void player_hud::update(const Fmatrix& cam_trans)
     // Not in render_hud - that runs once per context and the animation would run ahead.
     if (m_scene_item_visual)
     {
-        // The seat matrix is rebuilt every frame so the console corrections lie on top of the
-        // section values while tuning.
-        {
-            Fvector ypr = m_scene_item_rot;
-            ypr.add(g_hud_scene_item_rot_adj);
-            ypr.mul(PI / 180.f);
-            m_scene_item_offset.setHPB(ypr.x, ypr.y, ypr.z);
-
-            Fvector pos = m_scene_item_pos;
-            pos.add(g_hud_scene_item_pos_adj);
-            m_scene_item_offset.translate_over(pos);
-
-            const float sc = m_scene_item_scale * g_hud_scene_item_scale_adj;
-            if (!fsimilar(sc, 1.f))
-            {
-                Fmatrix S;
-                S.scale(sc, sc, sc);
-                m_scene_item_offset.mulB_43(S);
-            }
-        }
-
-        if (m_scene_item_attached)
-        {
-            // The item hangs on the same half as the playing hand, or it would follow the right
-            // matrix while the hand lives on the left. lh_lead_gun asks for the weapon grip
-            // (anchor 0, the right half) whatever hand plays.
-            const u16 idx = m_scene_item_lead_gun ? u16(0) : m_scene_item_attach;
-            const bool left = !m_scene_item_lead_gun && (m_scene_hand == 1) && m_model_2;
-            IKinematicsAnimated* model = left ? m_model_2 : m_model;
-            const Fmatrix& base = left ? m_transform_2 : m_transform;
-
-            IKinematics* k = model ? model->dcast_PKinematics() : nullptr;
-            if (k && idx < m_ancors.size())
-            {
-                const Fmatrix ancor = k->LL_GetTransform(m_ancors[idx]);
-                m_scene_item_transform.mul(base, ancor);
-                m_scene_item_transform.mulB_43(m_scene_item_offset);
-            }
-            else
-                m_scene_item_transform.mul(base, m_scene_item_offset);
-        }
-        else
-            m_scene_item_transform.mul(m_transform, m_scene_item_offset);
+        scene_item_calc_transform();
 
         if (m_scene_item_model)
         {
@@ -1109,6 +1068,99 @@ u32 player_hud::scene_motion_length(pcstr section, pcstr anim, float speed)
 
     const CMotionDef* md = nullptr;
     return motion_length(motion->m_animations[0].mid, md, speed > 0.f ? speed : 1.f, nullptr);
+}
+
+void player_hud::scene_item_calc_transform()
+{
+    if (!m_scene_item_visual)
+        return;
+
+    // The seat matrix is rebuilt every frame so the console corrections lie on top of the
+    // section values while tuning.
+    {
+        Fvector ypr = m_scene_item_rot;
+        ypr.add(g_hud_scene_item_rot_adj);
+        ypr.mul(PI / 180.f);
+        m_scene_item_offset.setHPB(ypr.x, ypr.y, ypr.z);
+
+        Fvector pos = m_scene_item_pos;
+        pos.add(g_hud_scene_item_pos_adj);
+        m_scene_item_offset.translate_over(pos);
+
+        const float sc = m_scene_item_scale * g_hud_scene_item_scale_adj;
+        if (!fsimilar(sc, 1.f))
+        {
+            Fmatrix S;
+            S.scale(sc, sc, sc);
+            m_scene_item_offset.mulB_43(S);
+        }
+    }
+
+    if (m_scene_item_attached)
+    {
+        // The item hangs on the same half as the playing hand, or it would follow the right
+        // matrix while the hand lives on the left. lh_lead_gun asks for the weapon grip
+        // (anchor 0, the right half) whatever hand plays.
+        const u16 idx = m_scene_item_lead_gun ? u16(0) : m_scene_item_attach;
+        const bool left = !m_scene_item_lead_gun && (m_scene_hand == 1) && m_model_2;
+        IKinematicsAnimated* model = left ? m_model_2 : m_model;
+        const Fmatrix& base = left ? m_transform_2 : m_transform;
+
+        IKinematics* k = model ? model->dcast_PKinematics() : nullptr;
+        if (k && idx < m_ancors.size())
+        {
+            const Fmatrix ancor = k->LL_GetTransform(m_ancors[idx]);
+            m_scene_item_transform.mul(base, ancor);
+            m_scene_item_transform.mulB_43(m_scene_item_offset);
+        }
+        else
+            m_scene_item_transform.mul(base, m_scene_item_offset);
+    }
+    else
+        m_scene_item_transform.mul(m_transform, m_scene_item_offset);
+}
+
+// A scene is started from a script, and the script phase of the frame runs AFTER the hud update
+// of that frame: the frame a scene starts on used to be drawn with the seat of the weapon just
+// put away, an item matrix left from the previous scene and bones nobody recalculated after the
+// new cycle was laid on - one frame of a pose out of nowhere before the animation began. Doing
+// the update's scene work here, once, makes that frame the first frame of the animation.
+void player_hud::scene_first_frame()
+{
+    if (!m_model)
+        return;
+
+    // A two-hand scene takes the seat at once (the update does the same); a one-hand seat
+    // slides in over the next frames and must not be snapped here.
+    if (m_scene_hand == 2)
+    {
+        Fvector ypr = m_scene_hands_rot;
+        ypr.mul(PI / 180.f);
+        m_attach_offset.setHPB(ypr.x, ypr.y, ypr.z);
+        m_attach_offset.translate_over(m_scene_hands_pos);
+        m_attach_offset_2 = m_attach_offset;
+        m_transform.mul(m_last_cam_trans, m_attach_offset);
+        m_transform_2.mul(m_last_cam_trans, m_attach_offset_2);
+    }
+
+    // The cycles were laid on above and the bones only invalidated: without the recalculation
+    // the halves are drawn from whatever the pose was. UpdateTracks is not called on purpose -
+    // the blends stand at the start of the cycle and the frame update advances them.
+    m_model->dcast_PKinematics()->CalculateBones_Invalidate();
+    m_model->dcast_PKinematics()->CalculateBones(TRUE);
+    if (m_model_2)
+    {
+        m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
+        m_model_2->dcast_PKinematics()->CalculateBones(TRUE);
+    }
+
+    // The item's matrix hangs on the grip bone just recalculated, so this order, not the other.
+    scene_item_calc_transform();
+    if (m_scene_item_model)
+    {
+        m_scene_item_model->dcast_PKinematics()->CalculateBones_Invalidate();
+        m_scene_item_model->dcast_PKinematics()->CalculateBones(TRUE);
+    }
 }
 
 u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms)
@@ -1230,6 +1282,8 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
 
     m_scene_end = length ? (Device.dwTimeGlobal + length) : 0;
     m_scene_on = true;
+
+    scene_first_frame();
 
     return length;
 }
