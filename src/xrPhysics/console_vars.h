@@ -1,5 +1,9 @@
 #pragma once
 
+// The ledge climb moves the actor by hand; a ladder next to it would grab him mid-climb. Read
+// by the physics side, set from game scripts (game.set_actor_allow_ladder).
+extern XRPHYSICS_API bool g_da_actor_allow_ladder;
+
 struct XRPHYSICS_API ph_console
 {
     static BOOL g_bDebugDumpPhysicsStep; //= 0;

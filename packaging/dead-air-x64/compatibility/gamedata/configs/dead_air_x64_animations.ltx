@@ -1,0 +1,74 @@
+; Animation module (FDDA item scenes, body search, backpack, wear, ledge climb): the hud sections
+; and the extra hand motion sets, merged on top of system.ltx by the engine (x_ray.cpp) through
+; the same overlay path the 3D PDA uses. No DA file is overridden. Scene sections carry only
+; hands_position / item_visual / anm_* keys - nothing here is a spawnable object, so saves stay
+; compatible with the original game.
+
+#include "items\items\items_anm_antirad.ltx"
+#include "items\items\items_anm_backpack.ltx"
+#include "items\items\items_anm_bints.ltx"
+#include "items\items\items_anm_drinks.ltx"
+#include "items\items\items_anm_food.ltx"
+#include "items\items\items_anm_harvest.ltx"
+#include "items\items\items_anm_medkit.ltx"
+#include "items\items\items_anm_napitki_banki.ltx"
+#include "items\items\items_anm_napitki_butilki_steklo.ltx"
+#include "items\items\items_anm_tabletki.ltx"
+#include "items\items\items_anm_take.ltx"
+#include "items\items\items_anm_vodka.ltx"
+#include "items\items\items_anm_mirrowel.ltx"
+#include "items\items\items_anm_mfs.ltx"
+#include "items\items\items_anm_ledge_grabbing.ltx"
+#include "items\items\items_anm_da_body_search.ltx"
+#include "items\items\items_anm_da_wear.ltx"
+#include "items\items\items_anm_da_backpack.ltx"
+#include "items\items\items_anm_da_headgear.ltx"
+
+; Extra hand motion sets, per hands model (the file stem of the model): the engine appends the
+; files to the model's own sets when the hands are loaded (SkeletonAnimated.cpp). Every Dead Air
+; and DAR2 hands model is listed - the set has to reach every outfit, or the scenes play in one
+; suit and stand still in another. The 3D PDA rig is not listed on purpose: its bones differ.
+[da_hud_animations]
+wpn_hand_01                         = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_bandit_exolight            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_bandit_merc                = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_bandit_novice              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_bandit_trench              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_cs1                        = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_cs2                        = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_cs3a                       = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_cs3b                       = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_cs_exolight                = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_duty_exolight              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_duty_ps5m                  = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_duty_psz9d                 = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_duty_seva                  = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_ecologist_guard            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_ecologist_ssp99            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_ecologist_ssp99m           = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_exo                        = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_exolight                   = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_freedom_exolight           = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_freedom_guard              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_freedom_guardian           = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_freedom_seva               = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_freedom_wind               = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_hunter_b_trench            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_hunter_d_trench            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_hunter_f_trench            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_hunter_s_trench            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_loner_novice               = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_loner_seva                 = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_loner_sunrise              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_merc_exolight              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_merc_seva                  = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_merc_suit                  = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_military_berill            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_military_exolight          = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_military_novice            = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_military_skat9             = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_monolith_exolight          = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_monolith_seva              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_monolith_suit              = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_no_outfit                  = anomaly_weapons\hud_hands_animation\*.omf
+wpn_hand_stalker_trench             = anomaly_weapons\hud_hands_animation\*.omf

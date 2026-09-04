@@ -1,0 +1,56 @@
+-- [DA_PORT] Выбор набора анимаций употребления вещей.
+--
+-- Зачем понадобилось. В Dead Air УЖЕ есть свои анимации на употребление: actor_effects строит по
+-- таблице item_fx покадровый сценарий из камерных эффекторов и убирания оружия. Перенесённый нами
+-- FDDA (enhanced_animations) делает то же самое своими анимациями рук. Оба набора висят на одном
+-- событии, поэтому играли ОДНОВРЕМЕННО — руки от одного, тряска камеры от другого.
+--
+-- Здесь один переключатель на оба набора. Значение хранится строкой в mm_options/da_item_anims и
+-- задаётся во вкладке «Игра». Строка — ПЕРЕВЕДЁННАЯ подпись: рамка меню показывает в списке ровно
+-- то, что в него положили, отдельного поля «значение» у неё нет. Поэтому обратное сопоставление
+-- идёт через те же game.translate_string, а при несовпадении (сменили язык) берётся набор по
+-- умолчанию, а не пустой режим.
+
+local IDS = { "ui_mm_da_item_anims_new", "ui_mm_da_item_anims_old", "ui_mm_da_item_anims_off" }
+local KEYS = { "new", "old", "off" }
+
+function labels()
+	local t = {}
+	for i = 1, #IDS do
+		t[i] = game.translate_string(IDS[i])
+	end
+	return t
+end
+
+function default_label()
+	return game.translate_string(IDS[1])
+end
+
+-- "new" — только наши перенесённые анимации рук, "old" — только штатный набор Dead Air,
+-- "off" — ни того, ни другого (вещь употребляется мгновенно, как в чистом X-Ray).
+local function read(key)
+	if not axr_main or not axr_main.config then return "new" end
+	local v = axr_main.config:r_value("mm_options", key, 0, nil)
+	if not v then return "new" end
+	local l = labels()
+	for i = 1, #l do
+		if v == l[i] then return KEYS[i] end
+	end
+	return "new"
+end
+
+-- Употребление вещей: еда, питьё, таблетки, курево, подбор с земли.
+function mode()
+	return read("da_item_anims")
+end
+
+-- Надевание брони и шлемов. Отдельно от предметов: сцены разные и по длине, и по смыслу.
+function wear_mode()
+	return read("da_wear_anims")
+end
+
+-- Свежевание туш. Отдельным пунктом намеренно: сцена там своя, длинная, с ножом и мешком, и
+-- отношение к ней у игроков расходится с отношением к анимации глотка воды.
+function skin_mode()
+	return read("da_skin_anims")
+end

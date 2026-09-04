@@ -1,0 +1,396 @@
+-- FDDA: first-person item use animations (food, drink, medical, cigarettes) and the mutant
+-- harvest scene. Script by thales100, reworked by Feel_Fried; animations by LilGABE, denis2000,
+-- ValeroK, STRIFER, Feel_Fried, Mirrowel, MFS team. Ported to Dead Air: Refined from the
+-- DeadAir-x64 module. Differences from that port: no fake inventory item (a section absent from
+-- stock Dead Air must never reach a save), no Anomaly version window, no key toggle - the
+-- switches live in Options -> Game.
+--
+-- The compatibility layer MUST run first: the addon captures Anomaly helpers at load time.
+da_mod_compat.install()
+
+local ini_eff = {}
+enable_animations = true
+enable_item_anims = true
+-- The harvest scene hooks the point where Dead Air opens its loot window (ui_mutant_loot.loot_ui),
+-- so the stock knife, condition and decay checks run FIRST and the scene never starts where
+-- skinning is refused anyway.
+mutant_loot_mod = true
+local ea_debug = false
+ini_eff = ini_file("items\\items\\animations_settings.ltx")
+local anim_exist_tm, wpn, item_usage_snd, monster_usage_snd, item, anim_use_time, obj_m, used_monster = nil
+local anim_section = nil
+active_slot = nil
+det_active = nil
+used_item = nil
+fake_monster = nil
+ea_flag = nil
+local tmr = nil
+
+-- Stacked items ([vodka_2]:vodka) inherit their base's cost and grid cell as separate
+-- sections; the animation entries are keyed by the base name, so the numeric tail is cut.
+function da_anim_section(section)
+	if not section then return nil end
+	if ini_eff:r_string_ex(section, "snd") then return section end
+	local base = string.match(section, "^(.+)_%d+$")
+	if base and ini_eff:r_string_ex(base, "snd") then return base end
+	return section
+end
+
+function da_has_anim(section)
+	if not section then return false end
+	-- The harvest is called with a pseudo section by the loot window, not by an item.
+	if section == "mutant_looting" or section == "mutant_looting_fast" then
+		return mutant_loot_mod == true
+	end
+	return ini_eff:r_string_ex(da_anim_section(section), "snd") ~= nil
+end
+
+function on_game_start()
+	da_register_before_item_use(da_on_before_item_use)
+	RegisterScriptCallback("on_game_load", on_game_load)
+end
+
+function on_game_load()
+	activate()
+end
+
+function loadsettings()
+	if not (da_item_anims and da_item_anims.mode) then
+		enable_item_anims, mutant_loot_mod, enable_animations = false, false, false
+		return
+	end
+	-- Two independent switches: the item scenes and the skinning scene.
+	enable_item_anims = (da_item_anims.mode() == "new")
+	mutant_loot_mod = (da_item_anims.skin_mode() == "new")
+	enable_animations = enable_item_anims or mutant_loot_mod
+end
+
+function activate()
+	ini_eff = ini_file("items\\items\\animations_settings.ltx")
+	RegisterScriptCallback("actor_on_first_update", actor_on_first_update)
+end
+
+--< Animations engine
+function anim_prepare()
+	game.only_allow_movekeys(true)
+	hide_det()
+	active_slot = db.actor:active_slot()
+	anim_exist_tm = nil
+	-- The weapon is put away by BLOCKING the slots (hide_weapon), not by switching to the empty
+	-- slot: the switch goes through a net event and does not always finish here. restore_weapon
+	-- in ea_restore_actor is its symmetric half.
+	db.actor:hide_weapon()
+	RegisterScriptCallback("actor_on_update", actor_on_update)
+end
+
+function use_item(obj)
+	item = obj:section()
+	obj_m = obj
+	-- Everything below reads the ANIMATION section; the object itself stays in obj_m.
+	used_item = da_anim_section(item)
+	hide_hud_inventory()
+	anim_section = ini_eff:r_string_ex(used_item, "anm")
+	mask_hud_switcher()
+	anim_prepare()
+end
+
+function monster_on_actor_use(obj)
+	if (not mutant_loot_mod) or (not enable_animations) then
+		used_monster = nil
+		anim_exist_tm = nil
+		return
+	end
+	wpn = db.actor:active_item()
+	if wpn then
+		wpn = wpn:clsid() == clsid.wpn_knife_s and wpn:section() or "wpn_knife5"
+		wpn = string.gsub(wpn, "-", "_")
+	end
+	-- Knife wear is charged by the loot window itself (ui_mutant_loot), not here.
+	used_monster = obj
+	game.only_allow_movekeys(true)
+	anim_prepare()
+	recalc_actor_campos()
+end
+
+function start_anim(anim_section_hud)
+	UnregisterScriptCallback("actor_on_update", actor_on_update)
+	fov_anim_manager.change_fov(0.45)
+	local speed = ini_eff:r_float_ex(used_item or "nothing", "speed", 1)
+	-- The sixth argument stretches the cycle to the scene length, or the hands freeze on the
+	-- last frame for the remainder (bread: 5970 ms cycle against a 7000 ms scene).
+	local scene_ms = used_item and ini_eff:r_float_ex(used_item, "tm") or 0
+	game.play_hud_motion(2, anim_section_hud, "anm_ea_show", false, speed, scene_ms and math.floor(scene_ms) or 0)
+end
+
+function anim_manager_item(anim_section_hud)
+	item_usage_snd = sound_object(ini_eff:r_string_ex(used_item, "snd"))
+	item_usage_snd:play(db.actor, 0, sound_object.s2d)
+	level.add_cam_effector(ini_eff:r_string_ex(used_item, "cam"), 8555, false, "")
+	tmr = ini_eff:r_float_ex(used_item, "tm")
+	anim_exist_tm = tmr * 0.001
+	anim_use_time = anim_exist_tm * 0.367
+	CreateTimeEvent("ea_object_eater", "eat_my_obj", anim_use_time, eat_my_obj)
+	CreateTimeEvent("ea_slot_returner", "call_my_slot_back", (anim_exist_tm + 0.1), call_my_slot_back)
+	if ciga_effects and ini_eff:line_exist(used_item, "smoke") then
+		ciga_effects.ciga_start(used_item)
+	end
+	CreateTimeEvent("ea_anim_stoper", "stop_my_item_anim", anim_exist_tm, stop_my_item_anim)
+	ea_callbacks.EA_SendScriptCallback("ea_on_item_use", used_item, anim_exist_tm)
+end
+
+function anim_manager_monster()
+	monster_usage_snd = sound_object(ini_eff:r_string_ex("item_ea_harv_wpn_knife", "anim_sound"))
+	monster_usage_snd:play(db.actor, 0, sound_object.s2d)
+	level.add_cam_effector("itemuse_anm_effects\\harvest_skin_use.anm", 8558, false, "")
+	level.add_cam_effector("itemuse_anm_effects\\test.anm", 8559, false, "")
+	tmr = ini_eff:r_float_ex("item_ea_harv_wpn_knife", "anim_length")
+	anim_exist_tm = tmr * 0.001
+	CreateTimeEvent("ea_slot_returner", "call_my_slot_back", (anim_exist_tm + 0.5), call_my_slot_back)
+	CreateTimeEvent("ea_blood_fx", "blood_fx", (1), blood_fx)
+	CreateTimeEvent("ea_blood_fx2", "blood_fx2", (1.6), blood_fx)
+	CreateTimeEvent("ea_blood_fx3", "blood_fx3", (2.1), blood_fx)
+	CreateTimeEvent("ea_blood_fx4", "blood_fx4", (2.2), blood_fx)
+	CreateTimeEvent("ea_anim_stoper", "stop_my_monster_anim", anim_exist_tm, stop_my_monster_anim)
+end
+
+local failure_timer = 0
+function actor_on_update()
+	failure_timer = failure_timer + (device().time_delta / 17)
+	if (db.actor:active_slot() ~= 0 or db.actor:active_detector()) and (failure_timer < 100) then
+		return
+	elseif (failure_timer >= 100) then
+		-- The scene starts with the weapon still up; said out loud, it is an inventory problem.
+		printf("![da_anims] the weapon did not hide in time, slot=%s, detector=%s",
+			tostring(db.actor:active_slot()), tostring(db.actor:active_detector() ~= nil))
+	end
+	local anim_section_hud = nil
+	if used_monster then
+		anim_section_hud = "item_ea_harv_" .. (wpn or "wpn_knife5") .. "_hud"
+		-- A knife from another addon has no hud section of its own: fall back to the base knife
+		-- instead of hitting the model pool with a section without item_visual.
+		if (not system_ini():section_exist(anim_section_hud)) then
+			anim_section_hud = "item_ea_harv_wpn_knife_hud"
+		end
+		start_anim(anim_section_hud)
+		anim_manager_monster()
+		failure_timer = 0
+		return
+	end
+	failure_timer = 0
+	anim_section_hud = anim_section .. "_hud"
+	anim_section = nil
+	start_anim(anim_section_hud)
+	anim_manager_item(anim_section_hud)
+end
+-- Animations engine >--
+
+--< Monkey patches
+-- use_weapon is called by the base game itself (also on a plain pickup), so the extra input
+-- gate is armed only while the module is on: otherwise a missing pair call leaves the player
+-- without actions for seconds and no animation to show for it.
+local originalUW = actor_effects.use_weapon
+function actor_effects.use_weapon(f)
+	if not enable_animations then
+		originalUW(f)
+		return
+	end
+	if f == 1 then
+		CreateTimeEvent("ea_def_use", "def_use_end", 0.5, def_use_end)
+	end
+	if f == 0 then
+		hide_hud_inventory()
+		game.only_allow_movekeys(true)
+	end
+	originalUW(f)
+end
+
+-- The intent to use an item, before the use (da_before_item_use, engine side CInventory::Eat).
+function da_on_before_item_use(npc, obj, flags)
+	if (not obj) then return end
+
+	-- CInventory::Eat belongs to EVERY inventory owner: an NPC bandaging himself would start a
+	-- bandage scene on the player's hands. Only the actor's own use is a scene.
+	if npc == nil or not db.actor or npc:id() ~= db.actor:id() then return end
+
+	-- The scene consumes the item through db.actor:eat and lands here again: not a new scene.
+	if used_item then return end
+
+	local item = obj:section()
+	if IsMoveState("mcClimb") then
+		SetHudMsg(game.translate_string("st_EA_ladder_item_not_allowed"), 3)
+		flags.ret_value = false
+		return
+	end
+	if da_has_anim(item) and enable_item_anims and flags.ret_value then
+		use_item(obj)
+		flags.ret_value = false
+		return
+	end
+end
+
+-- The harvest: hooked where Dead Air opens the loot window, after its own checks. The scene
+-- plays instead of the window and opens it itself at the end (ea_flag lifts the hook for that
+-- one call).
+if ui_mutant_loot and ui_mutant_loot.loot_ui then
+	local original_loot_ui = ui_mutant_loot.loot_ui
+	ea_open_loot_ui = original_loot_ui
+	ui_mutant_loot.loot_ui = function(hud, obj)
+		if (not ea_flag) and enable_animations and mutant_loot_mod and obj then
+			monster_on_actor_use(obj)
+			return
+		end
+		return original_loot_ui(hud, obj)
+	end
+end
+-- Monkey patches >--
+
+--< Time Events
+function call_my_slot_back()
+	game.only_allow_movekeys(false)
+	if take_item_anim and fake_monster then
+		return true
+	end
+	-- Slot 0 is "put everything away", not "as it was": the engine restores the previous slot
+	-- itself, and repeating a remembered 0 drew the weapon only to hide it again.
+	if active_slot and active_slot ~= 0 then
+		db.actor:activate_slot(active_slot)
+	end
+	if det_active then det_active:switch_state(1) end
+	return true
+end
+
+local bone_list = {
+	[1] = "bip01_spine1",
+	[2] = "bip01_spine2",
+	[3] = "bip01_spine",
+	[4] = "bip01_pelvis",
+	[5] = "bip01_head",
+}
+
+-- Blood on the carcass during the skinning. The particle names come from the config: an
+-- unknown particle name is fatal in the engine, so nothing is hard-coded here.
+local blood_particles = nil
+local function blood_particle_names()
+	if blood_particles then return blood_particles end
+	blood_particles = {}
+	local list = ini_eff:r_string_ex("anim_settings", "blood_particles")
+	if list then
+		for name in string.gmatch(list, "[^,%s]+") do
+			table.insert(blood_particles, name)
+		end
+	end
+	return blood_particles
+end
+
+function blood_fx()
+	if not used_monster or used_monster:id() == 65535 then return true end
+	local fx_pos = used_monster:bone_position(bone_list[math.random(1, 5)])
+	fx_pos.y = fx_pos.y + 0.1
+	for _, name in ipairs(blood_particle_names()) do
+		local fx = particles_object(name)
+		fx:play_at_pos(fx_pos)
+	end
+	return true
+end
+
+-- The item is consumed mid-scene, at the bite.
+function eat_my_obj()
+	if obj_m then
+		db.actor:eat(obj_m)
+	end
+	return true
+end
+
+function stop_my_item_anim()
+	-- Closed explicitly: the engine closes a scene by time too, but a zero-length cycle would
+	-- leave the scene item in the hands otherwise.
+	game.stop_hud_motion()
+	ea_callbacks.EA_SendScriptCallback("ea_on_item_anim_stop", used_item)
+	ea_restore_actor()
+	mask_hud_switcher()
+	used_item = nil
+	obj_m = nil
+	return true
+end
+
+function stop_my_monster_anim()
+	game.stop_hud_motion()
+	ea_restore_actor()
+	if used_monster:id() == 65535 or (not take_item_anim) then
+		used_monster = nil
+		return true
+	end
+	fake_monster = used_monster
+	used_monster = nil
+
+	-- Open the stock window; ea_flag keeps the hook above from starting the scene again.
+	ea_flag = true
+	local hud = get_hud()
+	if hud and ea_open_loot_ui then
+		ea_open_loot_ui(hud, fake_monster)
+	end
+	ea_flag = nil
+	return true
+end
+
+function def_use_end()
+	game.only_allow_movekeys(false)
+	return true
+end
+-- Time Events >--
+
+--< Additional animations and effects
+function mask_hud_switcher()
+	if (not ini_eff:r_bool_ex(used_item, "helm")) and ui_options.get("video/player/mask_hud")
+	and actor_effects.switch_helm and actor_effects.Update_Mask then
+		actor_effects.switch_helm()
+		actor_effects.Update_Mask(db.actor)
+	end
+end
+
+function ea_restore_actor()
+	-- hide_weapon blocks ALL slots (INV_STATE_BLOCK_ALL); the block is lifted here, and the
+	-- engine brings the previous slot back with it.
+	db.actor:unblock_all_slots()
+	fov_anim_manager.restore_fov()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+end
+
+function hide_det()
+	det_active = db.actor:active_detector() or nil
+	if det_active then det_active:switch_state(2) end
+end
+
+-- A load in the middle of a scene keeps the engine-side state (input gate, blocked slots, the
+-- owned camera) but loses the deferred calls that would lift it. Lifted unconditionally on the
+-- first frame: harmless without a scene, a rescue with one.
+function actor_on_first_update()
+	used_item = nil
+	used_monster = nil
+	obj_m = nil
+	fake_monster = nil
+	ea_flag = nil
+	anim_exist_tm = nil
+	db.actor:unblock_all_slots()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+	game.set_actor_allow_ladder(true)
+	game.stop_hud_motion()
+	level.remove_cam_custom_position_direction()
+	exec_console_cmd("hud_weapon 1")
+
+	loadsettings()
+end
+
+-- Look at the carcass during the skinning.
+function recalc_actor_campos()
+	local pm = used_monster:bone_position("bip01_spine1")
+	pm.y = pm.y + 0.8
+	db.actor:actor_look_at_point(pm)
+end
+
+function skip_functor(item)
+	return mutant_loot_mod and ini_eff:r_bool_ex("skip_mutant", item)
+end
+-- Additional animations and effects >--

@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "xrScriptEngine/script_engine.hpp"
 #include "UIActorMenu.h"
 #include "UITradeBar.h"
 #include "Inventory.h"
@@ -564,6 +565,19 @@ bool CUIActorMenu::ToSlot(CUICellItem* itm, bool force_place, u16 slot_id)
 {
     CUIDragDropListEx* old_owner = itm->OwnerList();
     PIItem iitem = (PIItem)itm->m_pData;
+
+    // Here and not in CInventory::Slot: Slot() also runs on load, spawn and restore, and a scene
+    // there would leave the player without his armour after every load. ToSlot is the player's
+    // own action. A false answer keeps the item out; the script finishes the wear itself.
+    if (slot_id == OUTFIT_SLOT || slot_id == HELMET_SLOT || slot_id == BACKPACK_SLOT)
+    {
+        luabind::functor<bool> before;
+        if (GEnv.ScriptEngine->functor("_G.da_before_wear", before))
+        {
+            if (!before(iitem->object().lua_game_object(), slot_id))
+                return false;
+        }
+    }
 
     bool b_own_item = (iitem->parent_id() == m_pActorInvOwner->object_id());
     if (slot_id == HELMET_SLOT)

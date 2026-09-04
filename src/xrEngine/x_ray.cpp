@@ -205,13 +205,15 @@ void InitSettings()
     // Refined compat: engine-shipped item sections (the 3D PDA animator item) merged on top
     // of system.ltx through the same overlay path XMS uses. No DA file is overridden; the
     // file is optional and lives in the compatibility archive.
-    if (FS.exist("$game_config$", "dead_air_x64_pda3d_items.ltx"))
+    for (pcstr overlay : {"dead_air_x64_pda3d_items.ltx", "dead_air_x64_animations.ltx"})
     {
-        if (IReader* R = FS.r_open("$game_config$", "dead_air_x64_pda3d_items.ltx"))
+        if (!FS.exist("$game_config$", overlay))
+            continue;
+        if (IReader* R = FS.r_open("$game_config$", overlay))
         {
             string_path dir;
             FS.update_path(dir, "$game_config$", "");
-            const_cast<CInifile*>(pSettings)->xms_load_overlay(R, "dead_air_x64_pda3d_items.ltx", dir);
+            const_cast<CInifile*>(pSettings)->xms_load_overlay(R, overlay, dir);
             FS.r_close(R);
         }
     }

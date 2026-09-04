@@ -827,6 +827,9 @@ ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
 // replaced by the matching `second` files (exo rigs carry a different bind pose, so the
 // same animations exist retargeted per family). Data-driven from [player_hud_extra_omf_variants].
 ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_variants;
+// Per hands model: `model file stem = omf path or dir\*.omf glob`, appended IN ADDITION to the
+// lists above. Data-driven from [da_hud_animations] in system.ltx (the animation module).
+ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_by_model;
 ENGINE_API int g_player_hud_model_loading = 0;
 // 3D PDA screen state, published by the game each frame and bound to the pda screen shader:
 // affects = (interference level, phase driver, brightness, boot flag) - the m_affects

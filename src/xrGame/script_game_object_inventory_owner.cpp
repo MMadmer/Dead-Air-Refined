@@ -2559,3 +2559,89 @@ void CScriptGameObject::SetCharacterIcon(pcstr iconName)
     return pInventoryOwner->SetIcon(iconName);
 }
 //-Alundaio
+
+void CScriptGameObject::IterateBelt(luabind::functor<bool> functor, luabind::object object)
+{
+    CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&this->object());
+    if (!inventory_owner)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CScriptGameObject::IterateBelt non-CInventoryOwner object !!!");
+        return;
+    }
+
+    for (PIItem item : inventory_owner->inventory().m_belt)
+        if (functor(object, item->object().lua_game_object()) == true)
+            return;
+}
+
+u32 CScriptGameObject::GetActorMovementState()
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CScriptGameObject::get_actor_movement_state non-CActor object !!!");
+        return 0;
+    }
+    return actor->MovingState();
+}
+
+// Scenes park the weapon in the ruck and bring it back through the inventory's own events.
+// The slot packet carries only the slot number: that is what Actor_Events reads.
+void CScriptGameObject::MoveItemToRuck(CScriptGameObject* pItem)
+{
+    CInventoryOwner* owner = smart_cast<CInventoryOwner*>(&object());
+    if (!owner || !pItem)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CScriptGameObject::move_to_ruck non-CInventoryOwner object !!!");
+        return;
+    }
+
+    CInventoryItem* item = smart_cast<CInventoryItem*>(&pItem->object());
+    if (!item || !owner->inventory().CanPutInRuck(item))
+        return;
+
+    NET_Packet P;
+    CGameObject::u_EventGen(P, GEG_PLAYER_ITEM2RUCK, owner->object_id());
+    P.w_u16(item->object().ID());
+    CGameObject::u_EventSend(P);
+}
+
+void CScriptGameObject::MoveItemToSlot(CScriptGameObject* pItem, u16 slot_id)
+{
+    CInventoryOwner* owner = smart_cast<CInventoryOwner*>(&object());
+    if (!owner || !pItem)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CScriptGameObject::move_to_slot non-CInventoryOwner object !!!");
+        return;
+    }
+
+    CInventoryItem* item = smart_cast<CInventoryItem*>(&pItem->object());
+    if (!item)
+        return;
+
+    // An occupied slot is vacated first, or the item silently does not land.
+    NET_Packet P;
+    if (CInventoryItem* in_slot = owner->inventory().ItemFromSlot(slot_id))
+    {
+        CGameObject::u_EventGen(P, GEG_PLAYER_ITEM2RUCK, owner->object_id());
+        P.w_u16(in_slot->object().ID());
+        CGameObject::u_EventSend(P);
+    }
+
+    CGameObject::u_EventGen(P, GEG_PLAYER_ITEM2SLOT, owner->object_id());
+    P.w_u16(item->object().ID());
+    P.w_u16(slot_id);
+    CGameObject::u_EventSend(P);
+}
+
+void CScriptGameObject::UnblockAllSlots()
+{
+    CInventoryOwner* owner = smart_cast<CInventoryOwner*>(&object());
+    if (!owner)
+        return;
+    owner->inventory().UnblockAllSlots();
+}

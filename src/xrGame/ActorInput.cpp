@@ -761,8 +761,17 @@ void CActor::ActorUse()
                         {
                             if (pEntityAliveWeLookingAt->AlreadyDie() &&
                                 pEntityAliveWeLookingAt->GetLevelDeathTime() + 3000 < Device.dwTimeGlobal)
-                                // 99.9% dead
-                                pGameSP->StartCarBody(this, m_pPersonWeLookingAt);
+                            {
+                                // 99.9% dead. The search scene plays BEFORE the window: the script
+                                // answers false and opens it itself with obj:use(actor), which
+                                // goes through CScriptGameObject::Use and not through here.
+                                bool allow = true;
+                                luabind::functor<bool> before;
+                                if (GEnv.ScriptEngine->functor("_G.da_before_body_search", before))
+                                    allow = before(pEntityAliveWeLookingAt->lua_game_object());
+                                if (allow)
+                                    pGameSP->StartCarBody(this, m_pPersonWeLookingAt);
+                            }
                         }
                     }
                 }

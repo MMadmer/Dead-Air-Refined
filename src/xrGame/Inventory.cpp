@@ -1124,6 +1124,19 @@ bool CInventory::Eat(PIItem pIItem)
     if (pItemToEat->object().H_Parent()->ID() != entity_alive->ID())
         return false;
 
+    // The intent to use, BEFORE the use. CInventory__eat below runs after the item is already
+    // consumed, so its refusal cancels nothing; the item-use animations need to catch the
+    // intent, play the scene and consume the item themselves at the right frame.
+    {
+        luabind::functor<bool> before;
+        if (GEnv.ScriptEngine->functor("_G.da_before_item_use", before))
+        {
+            if (!before(smart_cast<CGameObject*>(pItemToEat->object().H_Parent())->lua_game_object(),
+                    smart_cast<CGameObject*>(pIItem)->lua_game_object()))
+                return false;
+        }
+    }
+
     if (!pItemToEat->UseBy(entity_alive))
         return false;
 
@@ -1542,6 +1555,13 @@ void CInventory::UnblockSlot(u16 slot_id)
         return;
 
     --m_blocked_slots[slot_id];
+}
+
+void CInventory::UnblockAllSlots()
+{
+    for (u8& count : m_blocked_slots)
+        count = 0;
+    TryActivatePrevSlot();
 }
 
 bool CInventory::IsSlotBlocked(u16 slot_id) const

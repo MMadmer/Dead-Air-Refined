@@ -1,0 +1,115 @@
+-- Glue between the animation module (FDDA item scenes, body search, backpack, wear, ledge
+-- climb) and the stock Dead Air scripts. Everything the module needs from the base game is
+-- patched from here, so no stock script file is replaced.
+-- Compat scripts live in their own namespace table: globals ONLY through _G.
+
+-- ---- the intent to use an item ----------------------------------------------------------------
+-- The engine asks _G.da_before_item_use(npc, item) in CInventory::Eat BEFORE the item is used.
+-- CInventory__eat runs after the fact and its refusal cancels nothing; the item scenes need to
+-- catch the intent, play and consume the item themselves at the right frame. The flag travels
+-- as a table because a Lua boolean is passed by value.
+_G.da_before_item_use_handlers = {}
+
+function _G.da_register_before_item_use(func)
+	if (type(func) ~= "function") then return end
+	for i = 1, #_G.da_before_item_use_handlers do
+		if (_G.da_before_item_use_handlers[i] == func) then return end
+	end
+	table.insert(_G.da_before_item_use_handlers, func)
+end
+
+function _G.da_before_item_use(npc, item)
+	local flags = { ret_value = true }
+	for i = 1, #_G.da_before_item_use_handlers do
+		local ok, err = pcall(_G.da_before_item_use_handlers[i], npc, item, flags)
+		if (not ok) then
+			printf("![da_anims] before_item_use handler failed: %s", tostring(err))
+		end
+	end
+	return flags.ret_value
+end
+
+-- ---- stock item effects vs the module ------------------------------------------------------------
+-- Both sets hang on the same use event. Without this the stock set (camera shake, weapon hide)
+-- played over the module's hands. The stock set is muted only for what the module covers, and
+-- only in the "new" mode; in "old" the module is silent and the stock set plays as always.
+local function install_actor_effects_patch()
+	if not (actor_effects and actor_effects.use_item) then return end
+	if (actor_effects.da_use_item_original) then return end
+
+	local original = actor_effects.use_item
+	actor_effects.da_use_item_original = original
+
+	actor_effects.use_item = function(name)
+		local skin = (name == "mutant_looting") or (name == "mutant_looting_fast")
+		local wear = (name == "outfit") or (name == "helm")
+		local wear_slot = (name == "helm") and 12 or 7
+
+		local mode = "old"
+		if (da_item_anims) then
+			if (skin) then
+				mode = da_item_anims.skin_mode()
+			elseif (wear) then
+				mode = da_item_anims.wear_mode()
+			else
+				mode = da_item_anims.mode()
+			end
+		end
+
+		if (mode == "off") then return end
+
+		-- Wear: the stock set is muted only for an item the module really covers, judged by the
+		-- item now in the slot, not by a remembered flag that outlives a mode switch.
+		if (wear and mode ~= "old") then
+			local worn = db.actor and db.actor:item_in_slot(wear_slot)
+			if (not worn) or (da_wear_anims and da_wear_anims.covers(worn, wear_slot)) then return end
+		end
+
+		if (mode ~= "old") and enhanced_animations and enhanced_animations.da_has_anim(name) then return end
+
+		return original(name)
+	end
+end
+
+-- ---- knife check with empty hands ----------------------------------------------------------------
+-- can_loot is reached from the harvest scene with nothing in the hands; the stock code indexes
+-- the active item without a check.
+local function install_knife_manager_patch()
+	if not (knife_manager and knife_manager.can_loot) then return end
+	if (knife_manager.da_can_loot_original) then return end
+
+	local original = knife_manager.can_loot
+	knife_manager.da_can_loot_original = original
+
+	knife_manager.can_loot = function(monster)
+		if (db.actor and not db.actor:active_item()) then return true end
+		return original(monster)
+	end
+end
+
+-- ---- options ---------------------------------------------------------------------------------------
+-- The entries carry a default, so the stock axr_main_options handlers save and restore them in
+-- mm_options like every other Dead Air option (enable_<key> for checks, <key> for lists).
+local function on_opt_init(menu)
+	if (da_anim_options and da_anim_options.register) then
+		da_anim_options.register(menu)
+	end
+end
+
+-- The module scripts cache their switches; re-read them when the player accepts the options.
+local function on_opt_accept(menu, opt_manager, console)
+	if (enhanced_animations and enhanced_animations.loadsettings) then enhanced_animations.loadsettings() end
+	if (take_item_anim and take_item_anim.loadsettings) then take_item_anim.loadsettings() end
+	if (demonized_ledge_grabbing and demonized_ledge_grabbing.load_settings) then demonized_ledge_grabbing.load_settings() end
+end
+
+function on_game_start()
+	install_actor_effects_patch()
+	install_knife_manager_patch()
+end
+
+install_actor_effects_patch()
+install_knife_manager_patch()
+
+RegisterScriptCallback("opt_menu_on_init", on_opt_init)
+RegisterScriptCallback("opt_menu_on_accept", on_opt_accept)

@@ -1153,6 +1153,8 @@ target_sources(xrGame PRIVATE
     setup_manager_inline.h
     da_pda3d.cpp
     da_pda3d.h
+    da_script_cam.cpp
+    da_script_cam.h
     PdaAnimatorItem.cpp
     PdaAnimatorItem.h
     ShootingObject.cpp

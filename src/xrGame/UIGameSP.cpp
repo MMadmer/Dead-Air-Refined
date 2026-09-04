@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "xrScriptEngine/script_engine.hpp"
 #include "UIGameSP.h"
 #include "Actor.h"
 #include "Level.h"
@@ -133,7 +134,21 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
     case kINVENTORY:
     {
         if (!pActor->inventory_disabled())
-            ShowActorMenu();
+        {
+            // The backpack scene plays BEFORE the window opens: the script answers false, plays
+            // and opens the menu itself through get_hud():ShowActorMenu(), which does not come
+            // back here. Asked on opening only - ShowActorMenu toggles, and asking on closing
+            // would keep the menu open for the length of a scene.
+            bool allow = true;
+            if (ActorMenu && !ActorMenu->IsShown())
+            {
+                luabind::functor<bool> before;
+                if (GEnv.ScriptEngine->functor("_G.da_before_inventory", before))
+                    allow = before();
+            }
+            if (allow)
+                ShowActorMenu();
+        }
 
         break;
     }

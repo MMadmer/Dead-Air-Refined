@@ -1,0 +1,175 @@
+-- [DA_PORT] Анимации надевания брони, шлема и рюкзака.
+--
+-- Механика своя. Готовые наборы под это есть (Headgear Animations, FDDA Redone Outfit), но оба
+-- помечены Proprietary; письма авторам отправлены, разбор в da_port/docs/anim_permission_letters.md.
+-- До ответа играем движениями из FDDA 0.9b (Public Domain), а разделы вынесены в
+-- items_anm_da_wear.ltx - когда разрешение придёт, менять надо будет только их.
+--
+-- Как работает. Движок зовёт da_before_wear ДО того, как вещь встанет в слот (CUIActorMenu::ToSlot,
+-- то есть только по действию игрока). Мы отвечаем отказом, играем сцену, а по её концу надеваем
+-- сами через db.actor:move_to_slot - тот путь идёт мимо перехвата, поэтому по кругу не пойдёт.
+
+local OUTFIT_SLOT, HELMET_SLOT, BACKPACK_SLOT = 7, 12, 15
+
+-- Запасные разделы: играют на наших движениях, если для вещи нет своего.
+local FALLBACK = {
+	[OUTFIT_SLOT]   = "da_wear_outfit_hud",
+	[HELMET_SLOT]   = "da_wear_helmet_hud",
+	[BACKPACK_SLOT] = "da_wear_backpack_hud",
+}
+
+-- [DA_PORT] Раздел под конкретную вещь: сперва по её имени, потом запасной.
+--
+-- Для шлемов заведены da_wear_<секция>_hud — по одному на каждый наш шлем; для брони общий.
+-- Так добавление нового шлема сводится к одной записи в конфиге, скрипт править не нужно.
+-- [DA_PORT] Покрывает ли наш набор эту вещь.
+--
+-- ⚠️ Смотреть надо не только именную запись. У шлемов она своя на каждый, а у брони ОДНА общая:
+-- костюмов в моде полсотни, заводить каждому раздел незачем, анимация надевания у них одна.
+--
+-- Первая версия спрашивала только именную, и все костюмы считались непокрытыми: наш набор играл,
+-- а штатный не глушился — на экране обе анимации разом. Замер: «cs_outfit, режим=new, покрыта=false».
+function covers(obj, slot_id)
+	if not obj then return false end
+	if system_ini():section_exist("da_wear_" .. obj:section() .. "_hud") then return true end
+	if slot_id == OUTFIT_SLOT then
+		return system_ini():section_exist("da_wear_outfit_real_hud")
+	end
+	return false
+end
+
+local function section_for(obj, slot_id)
+	local named = "da_wear_" .. obj:section() .. "_hud"
+	if system_ini():section_exist(named) then return named end
+	if slot_id == OUTFIT_SLOT and system_ini():section_exist("da_wear_outfit_real_hud") then
+		return "da_wear_outfit_real_hud"
+	end
+	return FALLBACK[slot_id]
+end
+
+local item, slot, busy, wait_ticks, settle_target, wear_snd = nil, nil, false, 0, 0, nil
+
+function on_game_start()
+	-- Слой совместимости кладёт в _G помощников, которых в Dead Air нет: hide_hud_inventory и
+	-- прочих. FDDA зовёт установку у себя, но полагаться на порядок загрузки скриптов нельзя.
+	if da_mod_compat and da_mod_compat.install then da_mod_compat.install() end
+	RegisterScriptCallback("actor_on_first_update", reset)
+end
+
+function reset()
+	item, slot, busy, wait_ticks, settle_target = nil, nil, false, 0, 0
+end
+
+function enabled()
+	-- По умолчанию ВЫКЛЮЧЕНО, и это осознанно.
+	--
+	-- CUIActorMenu::ToSlot - не "игрок надел вещь", а внутренний примитив "попробовать положить".
+	-- Он зовётся при перетаскивании любой вещи на слот, при двойном щелчке, при автоподборе, и с
+	-- ПОВТОРОМ: получив отказ, вызывающий пробует снова с force_place. Наш отказ он понимает как
+	-- "не влезло", отсюда лишние запуски сцены.
+	--
+	-- Пока не найдена точка, означающая именно действие игрока, пункт выключен.
+	-- Пункт «Игра -> Анимации -> Анимации надевания»: Новые / Старые / Отключены.
+	-- «Старые» возвращают штатный набор Dead Air (actor_effects, записи outfit и helm), наш при
+	-- этом молчит - иначе они играли бы вместе, как это уже было с едой.
+	return da_item_anims.wear_mode() == "new"
+end
+
+-- Сколько ждать, пока доиграет убирание оружия. Длину берём у движка, а не числом: у ножа,
+-- автомата и детектора она разная. Разбор - в da_body_search.
+local function hide_ticks()
+	local itm = db.actor and db.actor:active_item()
+	if not itm then return 2 end
+	local hud = system_ini():r_string_ex(itm:section(), "hud")
+	if not hud then return 6 end
+	local ms = game.get_motion_length(hud, "anm_hide", 1.0)
+	if not ms or ms <= 0 then return 6 end
+	return math.floor(ms / 50) + 1
+end
+
+-- [DA_PORT] Возвращаем ИСТИНУ: вещь надевается СРАЗУ, сцена играет после.
+--
+-- Порядок именно такой, и это не мелочь. Модель рук зависит от надетого костюма: пока броня не в
+-- слоте, руки обычные, и анимация надевания играет НЕ ТЕМИ руками - на экране видно голые кисти
+-- вместо перчаток нового костюма.
+--
+-- Побочно это убрало и вторую беду: ToSlot - внутренний примитив «попробовать положить», и на
+-- отказ вызывающий отвечает повтором с force_place. Пока мы отказывали, приходилось отличать
+-- повтор от чужой вещи; теперь отказа нет вовсе.
+function before_wear(obj, slot_id)
+	if not obj then return true end
+	if busy or not enabled() then return true end
+	if not db.actor or not FALLBACK[slot_id] then return true end
+	if db.actor:item_in_slot(slot_id) then return true end
+
+	-- [DA_PORT] Вещи без своей записи отдаём ШТАТНОМУ набору.
+	--
+	-- Запасной раздел играет чужое движение, и на вещи вроде тканевой маски это выглядит поломкой:
+	-- анимации под неё нет, а подставная не подходит. Лучше отдать штатную, чем показывать чужую.
+	--
+	-- Штатный набор сам спросит covers() про вещь в слоте, признак хранить не нужно.
+	if not covers(obj, slot_id) then return true end
+
+	item, slot = obj, slot_id
+	busy = true
+	wait_ticks = 0
+	settle_target = hide_ticks()
+
+	db.actor:hide_weapon()
+	-- [DA_PORT] Глушилка ввода снята: она резала МЫШЬ, и игрок терял взгляд на всю сцену.
+	-- Заслонка ниже блокирует только действия (всё выше kCAM_1: огонь, использование, смена
+	-- оружия), а движение и взгляд оставляет. level.enable_input() на выходе сохранён как
+	-- страховка: если ввод погасит кто-то другой, сцена его вернёт.
+	game.only_allow_movekeys(true)
+	CreateTimeEvent("da_wear", "start", 0.05, start_anim)
+	return true
+end
+
+function start_anim()
+	-- [DA_PORT] Инвентарь закрываем ЗДЕСЬ, а не в перехвате.
+	--
+	-- Перехват вызывается ИЗНУТРИ CUIActorMenu::ToSlot, и закрытие окна прямо там выдёргивает меню
+	-- из-под кода, который продолжает работать с его списками: игра падала на ValidCell(pos) в
+	-- UIDragDropListEx::GetCellAt.
+	--
+	-- Здесь мы уже в обработчике времени, то есть вне стека UI, и закрывать безопасно.
+	if hide_hud_inventory then hide_hud_inventory() end
+
+	wait_ticks = wait_ticks + 1
+	if wait_ticks < settle_target then return false end
+
+	local sect = section_for(item, slot)
+	local ms = game.get_motion_length(sect, "anm_ea_show", 1.0)
+	if not ms or ms <= 0 then ms = 1500 end
+
+	-- Камера и звук берутся из той же записи, если заданы.
+	local cam = system_ini():r_string_ex(sect, "cam")
+	if cam then level.add_cam_effector(cam, 8570, false, "") end
+
+	local snd = system_ini():r_string_ex(sect, "snd")
+	if snd then
+		wear_snd = sound_object(snd)
+		wear_snd:play(db.actor, 0, sound_object.s2d)
+	end
+
+	game.play_hud_motion(2, sect, "anm_ea_show", false, 1.0, 0)
+	CreateTimeEvent("da_wear", "finish", ms / 1000, finish)
+	return true
+end
+
+function finish()
+	game.stop_hud_motion()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+
+	item, slot = nil, nil
+	db.actor:restore_weapon()
+	busy = false
+	return true
+end
+
+-- Точка входа для движка: имя обязано лежать в НАСТОЯЩЕЙ глобальной области, иначе functor его не
+-- найдёт. Присваивание внутри скрипта такой области не создаёт (setfenv), поэтому пишем в _G.
+_G.da_before_wear = function(obj, slot_id)
+	return before_wear(obj, slot_id)
+end

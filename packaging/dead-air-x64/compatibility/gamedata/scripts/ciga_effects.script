@@ -1,0 +1,65 @@
+--[[
+cigarettes smoke effect script
+Author: Feel_Fried
+--]]
+local smoke = false
+local ltx = ini_file("items\\items\\anims_cigga_smoke.ltx")
+-- The particle name comes from [anim_settings] cig_smoke_particle: an unknown particle name
+-- is fatal in the engine, and Dead Air's set is not Anomaly's. No name - no smoke.
+local function smoke_particle()
+	local ini = ini_file("items\\items\\animations_settings.ltx")
+	return ini and ini:r_string_ex("anim_settings", "cig_smoke_particle") or nil
+end
+local function create_smoke()
+	local name = smoke_particle()
+	if not name then return true end
+	if not smoke then
+		smoke = particles_object(name)
+		local dir2 = vector():set(device().cam_dir)
+		smoke:set_direction(dir2)
+		smoke:play_at_pos(db.actor:bone_position("jaw_1"))
+	end
+	return true
+end
+
+local function move_smoke()
+	if smoke then
+		-- copies: device().cam_pos / cam_dir are references to the engine's vectors in this build
+		local dir2 = vector():set(device().cam_dir)
+		local pos = vector():set(device().cam_pos)
+		pos.y = pos.y - 0.35 + 0.3*dir2.y
+		pos.x = pos.x + 0.3*dir2.x
+		pos.z = pos.z + 0.3*dir2.z
+		smoke:set_direction(dir2)
+		smoke:move_to(pos, dir2)
+		return false
+	else
+		return true
+	end
+end
+
+local function destroy_smoke()
+	if smoke then
+		smoke:stop()
+		smoke = nil
+	end
+	return true
+end
+
+function ciga_start(used_item)
+	local t = {}
+	if not ltx:section_exist(used_item) then return end
+	local lines = ltx:line_count(used_item)
+	if lines % 2 ~= 0 then return end
+	local variable, value, result, i  = "", "", "", ""
+	for current_line = 0, lines - 1 do
+		i = current_line+1
+		result, variable, value = ltx:r_line(used_item, current_line, "", "")
+		t[i] = value
+		if i % 2 == 0 then
+			CreateTimeEvent("ea_s_c".. i, "ea_s_c" .. i, t[current_line], create_smoke)
+			CreateTimeEvent("ea_s_m".. i, "ea_s_m".. i, t[current_line] + 0.050, move_smoke)
+			CreateTimeEvent("ea_s_d".. i, "ea_s_d".. i, t[i], destroy_smoke)
+		end
+	end
+end

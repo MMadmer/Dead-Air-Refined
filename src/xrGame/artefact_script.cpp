@@ -25,7 +25,8 @@ void CArtefact::script_register(lua_State* luaState)
             .def(constructor<>())
             .def("FollowByPath", &CArtefact::FollowByPath)
             .def("SwitchVisibility", &CArtefact::SwitchVisibility)
-            .def("GetAfRank", &CArtefact::GetAfRank),
+            .def("GetAfRank", &CArtefact::GetAfRank)
+            .def("AdditionalInventoryWeight", &CArtefact::AdditionalInventoryWeight),
 
         class_<CMercuryBall, CArtefact>("CMercuryBall")
             .def(constructor<>()),

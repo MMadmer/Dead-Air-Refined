@@ -1,0 +1,225 @@
+ --[[
+item pickup animation script
+Author: Feel_Fried
+--]]
+local skin_anim, harv_usage_snd,enable_take
+local ltx = ini_file("items\\items\\anims_loot_list.ltx")
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update",actor_on_first_update)
+	RegisterScriptCallback("on_option_change", loadsettings)
+end
+
+function actor_on_first_update()
+	RegisterScriptCallback("actor_on_item_take",actor_on_item_take)
+	RegisterScriptCallback("actor_on_item_before_pickup",actor_on_item_before_pickup)
+	loadsettings()
+end
+
+function loadsettings()
+	if ui_mcm then
+		enable_animations = ui_mcm.get("EA_settings/enable_animations")
+		enable_take = ui_mcm.get("EA_settings/take_item_anim")
+	else
+		enable_animations = ui_options.get("video/player/animations")
+		enable_take = true
+	end
+	enable_multipickup = ui_options.get("control/general/pickup_mode")
+
+	-- [DA_PORT] Анимация подбора относится к тому же перенесённому набору, что и употребление,
+	-- и подчиняется тому же пункту меню. Штатного набора для подбора у Dead Air нет вовсе,
+	-- поэтому в «Старых» она просто выключается, как и в «Отключено».
+	-- [DA_PORT] Подбор вещей ведёт НАШ скрипт (da_body_search), поэтому здешний выключен всегда.
+	--
+	-- Тот же цикл движений, но общий путь: убрать оружие, дождаться убирания, сыграть, вернуть.
+	-- Здешний обработчик оружие не убирал, и с ним в руках сцена шла поверх живой руки.
+	--
+	-- Остальное в этом файле - сцена с мешком после разделки - работает как работало.
+	enable_take = false
+end
+
+
+local anim_plays = nil
+local anm_name = "camera_effects\\weapon\\two_handed_weapon_effect.anm"
+function actor_on_item_before_pickup(item,flags)
+	if (not enable_take) or (not enable_animations) then return end --1 - 10 single press, 50+ - long press
+	flags.ret_value = false
+	if not anim_plays and not enhanced_animations.used_item then
+		-- [DA_PORT] Длительность сцены шестым доводом здесь НЕ передаём.
+		--
+		-- Я её было добавил, чтобы движок закрывал сцену сам, и этим растянул цикл под окно: у
+		-- мешка скорость упала с 0.75 до 0.57, то есть анимация пошла медленнее авторской. Закрытие
+		-- и без того делается явной остановкой ниже, а трогать заданный автором темп незачем.
+		game.play_hud_motion(db.actor:active_slot()==0 and 2 or 1, "item_ea_take_hud", "anm_ea_take", true, 1.4)
+		-- [DA_PORT] см. разбор у enhanced_animations: подсистемы play_hud_anm у нас нет.
+		if game.play_hud_anm then game.play_hud_anm(anm_name, 0, 1.4, 1, false) end
+		CreateTimeEvent("ea_item_take","take_delay",0.65,take_delay,item)
+		CreateTimeEvent("ea_item_take","anim_delay",1.33,anim_delay)
+		anim_plays = true
+	end
+end
+
+function anim_delay()
+	anim_plays = nil
+	-- [DA_PORT] Закрываем СВОЮ сцену подбора и только её. Если к этому времени уже идёт сцена с
+	-- мешком после разделки, остановка срезала бы её на середине.
+	if not skin_anim then
+		game.stop_hud_motion()
+	end
+	return true
+end
+
+function take_delay(obj_o)
+	local actor = db.actor
+	actor:take_item(obj_o)
+	if enable_multipickup then
+		multipickup(1.5,0.75,actor)
+		multipickup(1,0.5,actor)
+		multipickup(0.5,0.25,actor)
+	end
+	printf(obj_o:section() .. " taken with id " .. obj_o:id())
+	actor = nil
+	return true
+end
+
+function multipickup(dist,radius,actor)
+	-- copies: device().cam_pos / cam_dir are references to the engine's vectors in this build
+	local pos = vector():set(device().cam_pos)
+	local dir = vector():set(device().cam_dir)
+	pos = pos:add(dir:mul(dist))
+	level.iterate_nearest(pos,dist,function(obj)
+		if obj:cast_InventoryItem() and (pos:distance_to(obj:position()) <= radius) then
+			actor:take_item(obj)
+			printf(obj:section() .. " taken with id " .. obj:id())
+		end
+	end)
+	pos,dir = nil
+end
+
+function actor_on_item_take(item)
+	--mutant loot bag animation
+	if enhanced_animations.fake_monster then
+		-- [DA_PORT] Мешок в руках НЕ показываем — остаются камера и звук.
+		--
+		-- Анимация мешка нарисована под скелет рук Anomaly: у наших рук от CoC кость хвата стоит
+		-- относительно ладоней иначе, и мешок приезжал в стороне от рук. Подогнать это можно только
+		-- смещением, своим для каждой из 19 моделей, и держать такой набор чисел ради полутора
+		-- секунд сцены не стоит.
+		--
+		-- Поэтому от сцены оставлено то, что от скелета не зависит: разворот камеры к добыче и
+		-- звук. Выбор модели мешка вместе с ней не нужен и убран, поле зрения тоже не трогаем —
+		-- менять его было нужно только ради рук.
+		enhanced_animations.fake_monster = nil
+		-- [DA_PORT] Глушилка ввода снята: она резала МЫШЬ, и игрок терял взгляд на всю сцену.
+		-- Заслонка ниже блокирует только действия (всё выше kCAM_1: огонь, использование, смена
+		-- оружия), а движение и взгляд оставляет. level.enable_input() на выходе сохранён как
+		-- страховка: если ввод погасит кто-то другой, сцена его вернёт.
+		game.only_allow_movekeys(true)
+		-- [DA_PORT] Нож на время сцены убираем.
+		--
+		-- Разделка кончилась, добыча уже в рюкзаке, а нож остаётся в руках и торчит поперёк кадра,
+		-- пока камера разворачивается к телу. Возврат — в restore_knife по концу сцены.
+		db.actor:hide_weapon()
+		harv_usage_snd = sound_object("interface\\item_usage\\harvest_use_success")
+		harv_usage_snd:play(db.actor, 0, sound_object.s2d)
+		level.add_cam_effector("itemuse_anm_effects\\harvest_loot.anm", 8560, false, "")
+		CreateTimeEvent("restore_knife", "restor_knife", 1.8 , restore_knife)
+		skin_anim = true
+	end
+end
+
+
+
+--patching mutant loot dialog close call
+-- [DA_PORT] Правка закрытия окна переделана под Dead Air.
+--
+-- У Anomaly мод правит метод UIMutantLoot:Close. У нас класс называется loot_ui, а закрывается он
+-- через OnButton_cancel и OnButton_ok — двумя разными путями. Поэтому цепляемся к __finalize:
+-- он отрабатывает при любом закрытии, чем бы окно ни закрыли.
+--
+-- Что делаем при закрытии: убираем отметку о теле и, если игрок ничего не взял, возвращаем нож в
+-- руки — иначе он остался бы убранным до следующего действия.
+-- ⚠️ Берём класс у enhanced_animations, а НЕ из ui_mutant_loot.
+--
+-- Тот скрипт грузится раньше нашего и подменяет ui_mutant_loot.loot_ui своей функцией-перехватом.
+-- Обращение к полю функции здесь и падало: "attempt to index field 'loot_ui' (a function value)".
+-- Исходный класс он сохраняет в ea_open_loot_ui — его и правим.
+-- ⚠️ Цепляться к __finalize НЕЛЬЗЯ, хотя он и стоял здесь сначала.
+--
+-- Это не «закрытие окна», а destructor luabind: он отрабатывает при сборке мусора, то есть когда
+-- угодно позже, а то и вовсе не в этом сеансе. Уборка при этом опаздывала целиком: мешок оставался
+-- прицепленным к рукам и всплывал в следующей анимации любого предмета, нож не возвращался, а
+-- hud_fov так и оставался 0.45 от сцены разделки — ровно те три симптома, что ловились в игре.
+--
+-- Выходов из окна у Dead Air ровно три — «взять», «взять всё» и «отмена»; Esc и Enter сведены к
+-- ним же в OnKeyboard. Все три написаны на Lua, поэтому оборачиваем именно их.
+local loot_class = enhanced_animations and enhanced_animations.ea_open_loot_ui
+if loot_class then
+	local original = loot_class.OnButton_cancel
+	if original then
+		loot_class.OnButton_cancel = function(self, ...)
+			local r = original(self, ...)
+			CreateTimeEvent("delete_fake", "delete_fake", 0.2, take_item_anim.delete_fake)
+			return r
+		end
+	end
+end
+
+-- ⚠️ Цепляемся ТОЛЬКО к «отмене», хотя выходов из окна три.
+--
+-- «Взять» и «взять всё» сами приводят к actor_on_item_take, а он и убирает метку тела, и запускает
+-- сцену с мешком, и ставит своё восстановление на конец. Если повесить уборку ещё и на них, она
+-- уходит в гонку со спавном добычи: alife():create кладёт вещь в рюкзак не в тот же кадр, поэтому
+-- delete_fake успевал отработать ПЕРВЫМ, видел skin_anim пустым и звал return_slots. Тот доставал
+-- нож обратно — а вытащенное оружие подменяет руки сцены, и мешок пропадал с экрана. Снаружи это
+-- выглядело так, будто предмет вовсе не появился: «махнул рукой и всё».
+--
+-- Прежняя правка на __finalize этого не показывала лишь потому, что не срабатывала вовсе.
+
+if false then -- [DA_PORT] прежняя правка Anomaly, оставлена для сверки с исходником
+function ui_mutant_loot.UIMutantLoot:Close()
+	--deleting fake mutant object to prevent bag animation if mutant was empty
+	CreateTimeEvent("delete_fake", "delete_fake", 0.2, take_item_anim.delete_fake)
+	self:SetMutantState()
+	self:HideDialog()
+	Unregister_UI("UIMutantLoot")
+end
+end
+
+function delete_fake()
+	enhanced_animations.fake_monster = nil
+	--draw knife if mutant was empty or player just closed dialog without looting anything
+	if not skin_anim then
+		return_slots()
+	end
+	return true
+end
+
+function restore_knife()
+	-- [DA_PORT] Сцену закрываем явно. Без этого мешок оставался прицепленным к рукам и вылезал
+	-- в следующей анимации любого предмета: движок держит предмет сцены до остановки.
+	game.stop_hud_motion()
+	-- [DA_PORT] Возврат ножа после сцены. unblock_all_slots обязателен: убирание оружия
+	-- СЧИТАЕТСЯ, а не переключается, и без обнуления счётчика слоты остались бы запертыми.
+	-- [DA_PORT] Только снятие блокировки; сам слот вернёт return_slots ниже, явным вызовом.
+	-- unblock_all_slots убран: он тоже дёргает TryActivatePrevSlot, и слот восстанавливался дважды.
+	db.actor:restore_weapon()
+	return_slots()
+	skin_anim = nil
+	level.enable_input()
+	-- [DA_PORT] Заслонку снимаем ЗДЕСЬ же. Раньше её снимал level.enable_input(), но он
+	-- гасил другую величину; после разделения одна без другой оставляла игрока без действий
+	-- насовсем: сцена кончилась, а запрет остался.
+	game.only_allow_movekeys(false)
+	return true
+end
+
+function return_slots()
+	fov_anim_manager.restore_fov()
+	local slot = enhanced_animations.active_slot
+	db.actor:activate_slot(slot or 1)
+	local device = enhanced_animations.det_active
+	if device then device:switch_state(1) end
+	device = nil
+	slot = nil
+end

@@ -834,3 +834,32 @@ Notes:
   it runs.
 - Nothing else changes: the crash report prompt, saves, and every other menu entry keep
   working exactly as before.
+
+## First-person animation scenes
+
+The animation module (FDDA item scenes, skinning, body search, backpack, wear, parkour) is
+described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
+
+- **A new item scene**: an `item_ea_<name>_hud` section (`hands_position`, `item_visual`,
+  `anm_ea_show = hands_cycle, item_cycle[, speed]`) plus an entry in `anims_list.ltx`
+  (`anm`, `snd`, `cam`, `tm`) or an `ea_addon_*.ltx` file - the settings file includes them by
+  mask. Hud sections go through the `dead_air_x64_animations.ltx` overlay path or any config
+  merged into `system.ltx`.
+- **A bag for a new backpack**: `[da_backpack_<section>_hud]:da_backpack_hud` with its own
+  `item_visual`; tune the seat in game with `hud_scene_item_pos/rot/scale` and paste what
+  `hud_scene_item_dump` prints.
+- **A helmet or outfit equip scene**: `[da_wear_<section>_hud]` with `anm_ea_show`, `cam`,
+  `snd`; `da_wear_anims.covers()` decides by the presence of that section.
+- **Hand cycles for a new hands model**: add the model stem to `[da_hud_animations]`, or the
+  scenes will stand still in that suit.
+- **Scripted scenes of your own**: `game.play_hud_motion(hand, section, "anm_xxx", mix, speed,
+  target_ms)` returns the length in ms (0 = nothing to play); `game.stop_hud_motion()` ends it;
+  `game.only_allow_movekeys(true/false)` gates the input; `level.set_cam_custom_position_direction`
+  owns the camera until `level.remove_cam_custom_position_direction()`.
+- **Intent hooks**: `_G.da_register_before_item_use(function(npc, item, flags) ... end)` sees
+  every use before it happens (`flags.ret_value = false` cancels it); `_G.da_before_inventory`,
+  `_G.da_before_body_search`, `_G.da_before_wear` are single functions - wrap the existing one
+  if you replace it.
+
+Do not add spawnable sections for the sake of a scene: a section the original game does not
+know ends up in saves. Every scene here is a hud section and an existing item.

@@ -9,25 +9,23 @@ struct script_rq_result
     CScriptGameObject* O;
     float range;
     int element;
+    // The material under the hit: a static triangle's, or the bone's of a dynamic object. The
+    // names the community scripts read; empty / zero when the hit carries no material.
+    pcstr material_name;
+    u32 material_flags;
+    float material_shoot_factor;
 
     script_rq_result()
     {
         O = nullptr;
         range = 0;
         element = 0;
+        material_name = "";
+        material_flags = 0;
+        material_shoot_factor = 0.f;
     };
 
-    void set(collide::rq_result& R)
-    {
-        if (R.O)
-        {
-            IGameObject* go = smart_cast<IGameObject*>(R.O);
-            if (go)
-                O = go->lua_game_object();
-        }
-        range = R.range;
-        element = R.element;
-    };
+    void set(collide::rq_result& R);
 };
 
 // class for performing ray pick

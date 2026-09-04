@@ -67,6 +67,7 @@
 #include "InventoryBox.h"
 #include "location_manager.h"
 #include "player_hud.h"
+#include "da_script_cam.h"
 #include "ai/monsters/basemonster/base_monster.h"
 
 #include "Include/xrRender/UIRender.h"
@@ -2656,3 +2657,25 @@ void CActor::On_SetEntity()
 }
 
 bool CActor::unlimited_ammo() { return !!psActorFlags.test(AF_UNLIMITEDAMMO); }
+
+CDaScriptCamEffector* CActor::script_cam_init()
+{
+    if (m_script_cam)
+        return m_script_cam;
+
+    m_script_cam = xr_new<CDaScriptCamEffector>();
+    m_script_cam->m_on_b_remove_callback.bind(this, &CActor::script_cam_forget);
+    Cameras().AddCamEffector(m_script_cam);
+    return m_script_cam;
+}
+
+void CActor::script_cam_remove()
+{
+    if (!m_script_cam)
+        return;
+    // By type: the manager has no removal by pointer, and AddCamEffector keeps one effector per
+    // type. The removal callback clears the handle.
+    Cameras().RemoveCamEffector(cefScriptOverride);
+}
+
+void CActor::script_cam_forget() { m_script_cam = nullptr; }

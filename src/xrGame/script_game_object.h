@@ -231,6 +231,11 @@ public:
     void ResetActionQueue();
     // Actor only
     void SetActorPosition(Fvector pos);
+    // Script scenes: skip the collision correction (the climb sets the position itself) and
+    // optionally keep the accumulated velocity.
+    void SetActorPosition(Fvector pos, bool skip_collision_correct);
+    void SetActorPosition(Fvector pos, bool skip_collision_correct, bool keep_speed);
+    u32 GetActorMovementState();
     void SetActorDirection(float dir);
     void SetNpcPosition(Fvector pos);
     void DisableHitMarks(bool disable);
@@ -356,7 +361,11 @@ public:
 
     void ActorLookAtPoint(Fvector point);
     void IterateInventory(luabind::functor<bool> functor, luabind::adl::object object);
+    void IterateBelt(luabind::functor<bool> functor, luabind::adl::object object);
     void IterateInventoryBox(luabind::functor<bool> functor, luabind::adl::object object);
+    void MoveItemToRuck(CScriptGameObject* item);
+    void MoveItemToSlot(CScriptGameObject* item, u16 slot_id);
+    void UnblockAllSlots();
     void MarkItemDropped(CScriptGameObject* item);
     bool MarkedDropped(CScriptGameObject* item);
     void UnloadMagazine();

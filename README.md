@@ -280,6 +280,18 @@ To the **[Gunslinger](https://github.com/gunslingermod)** team, for the 3D PDA:
 the models, animations, textures, sounds, and shaders it is built from come from
 their mod.
 
+To **Akinaro**, for the **[Stalker Two-K](https://www.moddb.com/mods/stalker-two-k)**
+texture set, used unchanged, and to **Cromm Cruac**, for the tree and foliage
+textures of **[Absolute Nature 4](http://absolute.crommcruac.com)**. Both sets are
+free, for S.T.A.L.K.E.R. games only, and stay that way here.
+
+To **Feel_Fried** (FDDA), **themrdemonized** (Ledge Grabbing), **Mirrowel**
+(FDDA Enhanced Animations), **lizzardman** (Headgear Animations, FDDA Redone)
+and **ZeburG** with the **MFS team** (bread and sausage animations), for the
+first-person animations of the animation module; and to **DanesCrail**'s
+DeadAir-x64 project for collecting them. Who made what, on what terms, is in
+[`ASSET_CREDITS.md`](docs/dead-air/ASSET_CREDITS.md).
+
 To **DanesCrail**, author of
 **[DeadAir-Engine-x64-OpenSource](https://github.com/DeadAir-x64/DeadAir-Engine-x64-OpenSource)**
 — an independent x64 port of the same mod — for solutions adopted here.

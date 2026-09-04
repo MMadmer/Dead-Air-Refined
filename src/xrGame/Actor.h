@@ -39,6 +39,7 @@ class ENGINE_API CBoneInstance;
 class ENGINE_API CBlend;
 class CWeaponList;
 class CEffectorBobbing;
+class CDaScriptCamEffector;
 class CHolderCustom;
 struct SShootingEffector;
 
@@ -369,6 +370,14 @@ public:
     IC CCameraBase* cam_Active() { return cameras[cam_active]; }
     IC CCameraBase* cam_FirstEye() { return cameras[eacFirstEye]; }
 
+    // Script-owned camera (the ledge climb, scenes). Not owned here: the camera manager deletes
+    // the effector, and its removal callback clears this handle so no dangling pointer survives
+    // a level change or a death that resets the effectors.
+    CDaScriptCamEffector* script_cam() const { return m_script_cam; }
+    CDaScriptCamEffector* script_cam_init();
+    void script_cam_remove();
+    void script_cam_forget();
+
     EActorCameras active_cam() const { return cam_active; } // KD: we need to know which cam is active outside actor methods
     virtual void cam_Set(EActorCameras style); //Alundaio: made public
 
@@ -389,6 +398,7 @@ protected:
     Fvector vPrevCamDir;
     float fCurAVelocity;
     CEffectorBobbing* pCamBobbing;
+    CDaScriptCamEffector* m_script_cam{};
 
     //менеджер эффекторов, есть у каждого актрера
     CActorCameraManager* m_pActorEffector;

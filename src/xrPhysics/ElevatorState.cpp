@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "console_vars.h"
 #include "ElevatorState.h"
 #include "IClimableObject.h"
 #include "PHCharacter.h"
@@ -41,6 +42,21 @@ void CElevatorState::PhTune(float step)
     VERIFY(m_character && m_character->b_exist && m_character->is_active());
     if (!m_ladder)
         return;
+
+    // A scene forbids ladders: an actor already on one is taken off, or he would hang in the
+    // ladder state until the scene ends.
+    if (!g_da_actor_allow_ladder && m_character->RestrictionType() == rtActor)
+    {
+        if (m_state != clbNoLadder)
+            UpdateDepart();
+        else
+        {
+            m_state = clbNoLadder;
+            m_ladder = nullptr;
+        }
+        return;
+    }
+
     switch (m_state)
     {
     case clbNone: UpdateStNone(); break;

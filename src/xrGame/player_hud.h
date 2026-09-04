@@ -30,7 +30,9 @@ struct player_hud_motion_container
     [[nodiscard]]
     const player_hud_motion* find_motion(const shared_str& name) const;
 
-    void load(IKinematicsAnimated* model, const shared_str& sect);
+    // lenient: a cycle missing from the hands model is logged and skipped instead of asserting -
+    // scene sections come from an addon whose motion sets may not be attached to every rig.
+    void load(IKinematicsAnimated* model, const shared_str& sect, bool lenient = false);
 };
 
 struct hud_item_measures
@@ -155,6 +157,31 @@ public:
     };
 
     void calc_transform(u16 attach_slot_idx, const Fmatrix& offset, Fmatrix& result) const;
+
+    // The hands are TWO copies of one model: the right half (m_model, left arm hidden) and the
+    // left half (m_model_2, right arm hidden), each with its own matrix, seat and cycles. That
+    // is what lets a one-hand scene take one hand while the weapon keeps the other, seated where
+    // its own section puts it. pid 0 = both, 1 = left, 2 = right; script_anim bypasses the
+    // ownership lock a running scene holds on a hand.
+    void play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim);
+    // Seat of a half: 0 = right, 1 = left. Without its own item a half takes the other's seat;
+    // with no item at all, the scene's.
+    Fvector attach_pos(u8 part) const;
+    Fvector attach_rot(u8 part) const;
+
+    // Script scenes (game.play_hud_motion): a hand cycle from any hud section, with an optional
+    // item in the hand and no CHudItem behind it. Length in ms, 0 = nothing to play; target_ms
+    // stretches the cycle to the scene length, 0 plays it as recorded.
+    u32 scene_motion_length(pcstr section, pcstr anim, float speed);
+    u32 scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms = 0);
+    void scene_stop();
+    bool scene_active() const;
+    void scene_item_tune(Fvector& pos, Fvector& rot, float& scale) const
+    {
+        pos = m_scene_item_pos;
+        rot = m_scene_item_rot;
+        scale = m_scene_item_scale;
+    }
     void tune(Ivector values);
     u32 motion_length(const MotionID& M, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel) const;
     u32 motion_length(const shared_str& anim_name, const shared_str& hud_name, const CMotionDef*& md);
@@ -165,6 +192,8 @@ private:
     void update_inertion(Fmatrix& trans) const;
     void update_additional(Fmatrix& trans) const;
     bool inertion_allowed() const;
+    void scene_item_release();
+    player_hud_motion_container& scene_motions(const shared_str& sect);
 
 private:
     shared_str m_sect_name;
@@ -173,6 +202,40 @@ private:
 
     Fmatrix m_transform{ Fidentity };
     IKinematicsAnimated* m_model{};
+    IKinematicsAnimated* m_model_2{};
+    Fmatrix m_transform_2{ Fidentity };
+    Fmatrix m_attach_offset_2{};
+
+    // Scene state. Motion sets are cached per section: loading walks the config and looks each
+    // cycle up in the hands model, and a section is played on every climb or bite.
+    xr_map<shared_str, player_hud_motion_container> m_scene_motions;
+    u32 m_scene_end{};
+    bool m_scene_on{};
+    Fvector m_scene_hands_pos{};
+    Fvector m_scene_hands_rot{}; // degrees
+    bool m_scene_one_hand{};
+    // The hand the scene owns: 0 right, 1 left, 2 both, u8(-1) none. While owned, the items'
+    // cycles skip it. The seat of the owned hand slides toward the scene seat (k 0..1); the hand
+    // whose seat slides is remembered apart, because ownership ends at once while the seat still
+    // returns for a moment - to the same hand.
+    u8 m_scene_hand{ u8(-1) };
+    float m_scene_seat_k{};
+    u8 m_scene_hand_seat{ 1 };
+    // The scene item (a bottle, a bag): owned here, created on play, deleted on stop. The
+    // animated view may be null: a model without motions is held still.
+    IRenderVisual* m_scene_item_visual{};
+    IKinematicsAnimated* m_scene_item_model{};
+    Fmatrix m_scene_item_offset{};
+    Fvector m_scene_item_pos{};
+    Fvector m_scene_item_rot{}; // degrees
+    float m_scene_item_scale{ 1.f };
+    u16 m_scene_item_attach{};
+    bool m_scene_item_attached{ true };
+    bool m_scene_item_root_lock{ true };
+    bool m_scene_item_lead_gun{};
+    Fmatrix m_scene_item_transform{};
+
+    // Bones are the same in both copies (one model), so one anchor list serves both.
     xr_vector<u16> m_ancors;
     attachable_hud_item* m_attached_items[2]{};
     xr_unordered_map<shared_str, attachable_hud_item*> m_pool;

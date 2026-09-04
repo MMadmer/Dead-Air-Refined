@@ -37,6 +37,7 @@
 #include "UIGameSP.h"
 #include "ui/UIActorMenu.h"
 #include "ui/ContentService.h"
+#include "player_hud.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/ui_styles.h"
 #include "zone_effector.h"
@@ -555,6 +556,34 @@ public:
     virtual void Save(IWriter* F) { ; }
 };
 Fvector CCC_DemoRecordSetPos::p = {0, 0, 0};
+
+// Prints the tuned scene item seat as config lines: the numbers live in the console until a
+// restart and copying them by eye is one more way to get them wrong.
+class CCC_HudSceneItemDump : public IConsole_Command
+{
+public:
+    CCC_HudSceneItemDump(pcstr N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    void Execute(pcstr /*args*/) override
+    {
+        extern Fvector g_hud_scene_item_pos_adj, g_hud_scene_item_rot_adj;
+        extern float g_hud_scene_item_scale_adj;
+        if (!g_player_hud)
+        {
+            Msg("! [hud-scene] no hands yet");
+            return;
+        }
+        Fvector pos, rot;
+        float scale = 1.f;
+        g_player_hud->scene_item_tune(pos, rot, scale);
+        pos.add(g_hud_scene_item_pos_adj);
+        rot.add(g_hud_scene_item_rot_adj);
+        scale *= g_hud_scene_item_scale_adj;
+        Msg("~ [hud-scene] scene item seat, for the section:");
+        Msg("item_position                            = %.4f, %.4f, %.4f", pos.x, pos.y, pos.z);
+        Msg("item_orientation                         = %.2f, %.2f, %.2f", rot.x, rot.y, rot.z);
+        Msg("item_scale                               = %.4f", scale);
+    }
+};
 
 class CCC_DemoPlay : public IConsole_Command
 {
@@ -2695,6 +2724,21 @@ void CCC_RegisterCommands()
 
     CMD4(CCC_Float, "hud_fov", &psHUD_FOV_def, 0.1f, 1.0f);
     CMD4(CCC_Float, "fov", &g_fov, 5.0f, 180.0f);
+
+    // Hand scenes (the animation module): the scene item seat tuned in game, the seat slide
+    // speeds and the cycle trace. Definitions in player_hud.cpp.
+    {
+        extern Fvector g_hud_scene_item_pos_adj, g_hud_scene_item_rot_adj;
+        extern float g_hud_scene_item_scale_adj, g_hud_scene_seat_in, g_hud_scene_seat_out;
+        extern int g_hud_scene_dbg;
+        CMD4(CCC_Vector3, "hud_scene_item_pos", &g_hud_scene_item_pos_adj, Fvector().set(-2.f, -2.f, -2.f), Fvector().set(2.f, 2.f, 2.f));
+        CMD4(CCC_Vector3, "hud_scene_item_rot", &g_hud_scene_item_rot_adj, Fvector().set(-360.f, -360.f, -360.f), Fvector().set(360.f, 360.f, 360.f));
+        CMD4(CCC_Float, "hud_scene_item_scale", &g_hud_scene_item_scale_adj, 0.05f, 20.f);
+        CMD4(CCC_Float, "hud_scene_seat_in", &g_hud_scene_seat_in, 0.5f, 20.f);
+        CMD4(CCC_Float, "hud_scene_seat_out", &g_hud_scene_seat_out, 0.5f, 40.f);
+        CMD4(CCC_Integer, "hud_scene_dbg", &g_hud_scene_dbg, 0, 1);
+        CMD1(CCC_HudSceneItemDump, "hud_scene_item_dump");
+    }
 
     // Demo
     CMD1(CCC_DemoPlay, "demo_play");

@@ -482,7 +482,11 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("wounded", (void (CScriptGameObject::*)(bool))(&CScriptGameObject::wounded))
 
         .def("iterate_inventory", &CScriptGameObject::IterateInventory)
+        .def("iterate_belt", &CScriptGameObject::IterateBelt)
         .def("iterate_inventory_box", &CScriptGameObject::IterateInventoryBox)
+        .def("get_actor_movement_state", &CScriptGameObject::GetActorMovementState)
+        .def("move_to_ruck", &CScriptGameObject::MoveItemToRuck)
+        .def("move_to_slot", &CScriptGameObject::MoveItemToSlot)
         .def("mark_item_dropped", &CScriptGameObject::MarkItemDropped)
         .def("marked_dropped", &CScriptGameObject::MarkedDropped)
         .def("unload_magazine", &CScriptGameObject::UnloadMagazine)

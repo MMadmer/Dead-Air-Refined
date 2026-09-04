@@ -31,6 +31,8 @@
 #include "danger_manager.h"
 #include "memory_space.h"
 #include "Actor.h"
+#include "CharacterPhysicsSupport.h"
+#include "PHMovementControl.h"
 #include "Include/xrRender/Kinematics.h"
 #include "xrEngine/CameraBase.h"
 #include "ai/stalker/ai_stalker.h"
@@ -352,20 +354,39 @@ void CScriptGameObject::RestoreDefaultStartDialog()
     pDialogManager->RestoreDefaultStartDialog();
 }
 
-void CScriptGameObject::SetActorPosition(Fvector pos)
+void CScriptGameObject::SetActorPosition(Fvector pos, bool skip_collision_correct, bool keep_speed)
 {
     CActor* actor = smart_cast<CActor*>(&object());
-    if (actor)
+    if (!actor)
     {
-        Fmatrix F = actor->XFORM();
-        F.c = pos;
-        actor->ForceTransform(F);
-        //		actor->XFORM().c = pos;
-    }
-    else
         GEnv.ScriptEngine->script_log(
             LuaMessageType::Error, "ScriptGameObject : attempt to call SetActorPosition method for non-actor object");
+        return;
+    }
+
+    Fmatrix F = actor->XFORM();
+    F.c = pos;
+
+    if (!skip_collision_correct)
+    {
+        actor->ForceTransform(F);
+        return;
+    }
+
+    // A scene places the actor per frame; the collision correction would drag him back. The
+    // velocity is dropped by default: the fall accumulated during the scene would otherwise
+    // throw him down at its end.
+    actor->XFORM().set(F);
+    if (actor->character_physics_support()->movement()->CharacterExist())
+    {
+        actor->character_physics_support()->movement()->SetPosition(F.c);
+        if (!keep_speed)
+            actor->character_physics_support()->movement()->SetVelocity(Fvector().set(0.f, 0.f, 0.f));
+    }
 }
+
+void CScriptGameObject::SetActorPosition(Fvector pos) { SetActorPosition(pos, false, false); }
+void CScriptGameObject::SetActorPosition(Fvector pos, bool skip) { SetActorPosition(pos, skip, false); }
 
 void CScriptGameObject::SetNpcPosition(Fvector pos)
 {

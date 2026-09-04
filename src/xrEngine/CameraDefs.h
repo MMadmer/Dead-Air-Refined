@@ -34,6 +34,8 @@ enum ECamEffectorType
 {
     cefDemo = 0,
     cefAnsel,
+    // A script owns the camera outright (the ledge climb): see xrGame/da_script_cam.h.
+    cefScriptOverride,
     cefNext
 };
 

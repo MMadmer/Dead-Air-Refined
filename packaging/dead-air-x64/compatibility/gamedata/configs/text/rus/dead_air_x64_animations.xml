@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="ui_mm_da_item_anims">
+		<text>Анимации предметов</text>
+	</string>
+	<string id="ui_mm_da_item_anims_new">
+		<text>Новые</text>
+	</string>
+	<string id="ui_mm_da_item_anims_old">
+		<text>Старые</text>
+	</string>
+	<string id="ui_mm_da_item_anims_off">
+		<text>Отключены</text>
+	</string>
+	<string id="ui_mm_da_wear_anims">
+		<text>Анимации надевания</text>
+	</string>
+	<string id="ui_mm_da_skin_anims">
+		<text>Анимации свежевания</text>
+	</string>
+	<string id="ui_mm_da_body_search_anim">
+		<text>Анимация обыска тел</text>
+	</string>
+	<string id="ui_mm_da_backpack_anim">
+		<text>Анимация открытия рюкзака</text>
+	</string>
+	<string id="ui_mm_da_parkour">
+		<text>Паркур (удержание прыжка)</text>
+	</string>
+	<string id="st_EA_ladder_item_not_allowed">
+		<text>На лестнице этим не воспользоваться</text>
+	</string>
+</string_table>

@@ -125,6 +125,9 @@ public:
 
     void BlockSlot(u16 slot_id);
     void UnblockSlot(u16 slot_id);
+    // Zero every block counter (a scene that could not pair its hide/restore) and bring the
+    // previous slot back.
+    void UnblockAllSlots();
     bool IsSlotBlocked(PIItem const iitem) const;
 
     TIItemContainer m_all;

@@ -1,0 +1,51 @@
+; [DA_PORT] Настоящие анимации вместо наших подстановок.
+;
+; Источник: FDDA Enhanced Animations - Food and Drinks, автор Mirrowel, ModDB, лицензия
+; Creative Commons. Указание авторства обязательно, поэтому оно здесь.
+;
+; Что изменилось: до этого орехи и изюм ели КАК ХЛЕБ, чай пили как минералку, мята и анабиотик
+; шли как коагулянт, а табак, самокрутка, косяк и сигара - как обычные сигареты. Теперь у каждой
+; вещи своя анимация и своя модель в руках.
+;
+; Взято НЕ всё: водку, энергетик, воду, флягу, металлическую бутылку и гидрокарбонат аддон тоже
+; переделывает, но у нас они и так играют. Их разделы живут в anims_list.ltx, и подмена там
+; означала бы правку чужого файла ради вкусовой разницы.
+;
+; Приставки DLTX (! и @) сняты: у нас этого механизма нет.
+
+[drug_anabiotic]
+anm = item_ga_anabiotic
+snd = interface\item_usage\anabiotic
+cam = itemuse_anm_effects\biotic.anm
+tm = 22000
+helm = false
+
+[nuts]:tushonka
+anm = item_ro_nuts
+
+[raisins]:tushonka
+anm = item_ro_raisins
+
+[tea]
+snd = interface\item_usage\new_drink_flask
+anm = item_ro_beard
+cam = itemuse_anm_effects\sexo_flask_drink.anm
+tm = 7250
+helm = false
+
+[tobacco]:cigar1
+anm = item_ro_cigarettes_rus
+
+[joint]:cigar1
+anm = item_ro_cigarettes_joint
+
+[marijuana]:joint
+
+[cigar]:cigar1
+anm = item_ro_cigarettes_cuban
+
+[hand_rolling_tobacco]:cigar1
+anm = item_ro_cigarettes_handroll
+
+[mint]:akvatab
+anm = item_ro_mint

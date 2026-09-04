@@ -16,6 +16,7 @@
 extern ENGINE_API shared_str current_player_hud_sect;
 extern ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
 extern ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_variants;
+extern ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_by_model;
 extern ENGINE_API int g_player_hud_model_loading;
 
 namespace xray::render::RENDER_NAMESPACE
@@ -896,6 +897,38 @@ void CKinematicsAnimated::Load(const char* N, IReader* data, u32 dwFlags)
                 loadOMF(extra.c_str());
             else
                 Msg("! [pda3d] extra hud omf not found: %s", extra.c_str());
+        }
+
+        // Per-model sets (the animation module): matched on the model file stem, a glob takes
+        // every file of the directory. Added on top of the lists above.
+        if (!g_player_hud_extra_omf_by_model.empty())
+        {
+            pcstr stem = N;
+            for (pcstr p = N; *p; ++p)
+                if (*p == '\\' || *p == '/')
+                    stem = p + 1;
+            for (const auto& [model, path] : g_player_hud_extra_omf_by_model)
+            {
+                if (0 != xr_stricmp(stem, model.c_str()))
+                    continue;
+                if (strstr(path.c_str(), "*"))
+                {
+                    FS_FileSet fset;
+                    FS.file_list(fset, "$game_meshes$", FS_ListFiles, path.c_str());
+                    for (const auto& f : fset)
+                        loadOMF(f.name.c_str());
+                    if (fset.empty())
+                        Msg("! [hud-anim] no omf matches %s for hands model %s", path.c_str(), stem);
+                }
+                else
+                {
+                    string_path fn;
+                    if (FS.exist(fn, "$game_meshes$", path.c_str()) || FS.exist(fn, "$level$", path.c_str()))
+                        loadOMF(path.c_str());
+                    else
+                        Msg("! [hud-anim] extra omf not found: %s (hands model %s)", path.c_str(), stem);
+                }
+            }
         }
     }
 

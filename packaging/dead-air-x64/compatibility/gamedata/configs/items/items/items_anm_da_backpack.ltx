@@ -1,0 +1,93 @@
+; [DA_PORT] Анимация возни с рюкзаком при открытии инвентаря.
+;
+; Материал СВОЙ, аддон не переносился. Движения рук уже лежат у нас в
+; meshes\anomaly_weapons\hud_hands_animation\zzzz_ea_backpack.omf (FDDA Enhanced Animations,
+; Mirrowel, Creative Commons - этот набор мы и так используем), модель сумки и её собственные
+; движения - в meshes\dynamics\weapons\wpn_eat\backpack\. Имена сходятся попарно:
+; руки open_b_backpack <-> сумка open_b_backpack_itm.
+;
+; Пак lizzardman (liz_backpack_hands.omf, liz_backpack_hud_*.ogf) для этого НЕ нужен: у него
+; другие имена циклов и своя механика, а лицензия Proprietary - см. anim_permission_letters.md.
+;
+; У Anomaly модель сумки выбирается по ГРУППИРОВКЕ, поэтому их пятнадцать. У нас рюкзак - это
+; ПРЕДМЕТ (kit_hunt и родня, слот 14), а не свойство костюма, поэтому хватает одной. Остальные
+; четырнадцать файлов wpn_backpack_act_hud_*.ogf лежат рядом и не используются.
+;
+; ВАЖНО: в строке "anm_xxx = руки, предмет" второе имя - цикл САМОЙ сумки. Без него движок возьмёт
+; для предмета имя цикла РУК, не найдёт его в модели сумки и отступит к idle: сумка будет висеть
+; неподвижно в двигающихся руках.
+
+[da_backpack_hud]
+hands_position                           = 0, 0, 0
+hands_orientation                        = 0, 0, 0
+hands_position_16x9                      = 0, 0, 0
+hands_orientation_16x9                   = 0, 0, 0
+
+item_visual                              = dynamics\weapons\wpn_eat\backpack\wpn_backpack_act_hud.ogf
+item_position                            = 0, 0, 0
+item_orientation                         = 0, 0, 0
+
+; Если сумка окажется НЕ в руках - это первая ручка, которую надо трогать.
+;
+; Корень модели предмета движок по умолчанию подавляет: у бутылок и еды в нём записан проезд по
+; мировым координатам, и без подавления они улетают за сотню метров. Но бывает наоборот - у мешка
+; после разделки в корне лежала вся расстановка сцены, и подавление её стирало. Что здесь, заранее
+; не известно; ставим как у всех, а false пробуем первым, если сумка стоит не там.
+item_root_lock                           = true
+
+; Звук молнии. Тот же файл, что у набора в ea_addon_backpack.ltx - он и рисовался под эти движения.
+; У каждого раздела может быть свой: достаточно дописать snd в секцию рюкзака.
+snd                                      = interface\item_usage\backpack_open
+
+anm_ea_show                              = open_b_backpack, open_b_backpack_itm
+anm_ea_idle                              = idle_b_backpack, idle_b_backpack_itm
+anm_ea_hide                              = close_b_backpack, close_b_backpack_itm
+
+
+; [DA_PORT] По разделу на каждый наш рюкзак: меняется только модель сумки в руках.
+;
+; Раздел ищется по имени вещи в слоте рюкзака: da_backpack_<секция>_hud. Нет такого - играет общий
+; [da_backpack_hud] выше. Поэтому airtank, который этот слот тоже занимает, но рюкзаком не является,
+; берёт общий вид, и отдельной записи ему не нужно.
+;
+; ВАЖНО: варианты различаются ТОЛЬКО текстурой - сетка у всех одна (act\act_morthbag*). Поэтому
+; раскладка ниже - вопрос вкуса, а не техники: любую строку можно заменить на другой вариант из той
+; же папки, их там пятнадцать. Ни движок, ни скрипт от этого не меняются.
+
+; [DA_PORT] Здесь стоят НАШИ модели рюкзаков, а не сумка из набора.
+;
+; Плата за это названа заранее: у наших моделей нет циклов *_b_backpack_itm - они рисовались, чтобы
+; висеть на спине, а не чтобы их открывали. Значит сумка в руках будет НЕПОДВИЖНОЙ: руки возятся,
+; сама она не раскрывается. Если такое не устроит - вернуть строку на wpn_backpack_act_hud*.ogf из
+; meshes\dynamics\weapons\wpn_eat\backpack\, они анимированные.
+;
+; По той же причине их точка привязки выверена под спину, а не под ладони: item_position и
+; item_orientation почти наверняка придётся подобрать, по одной паре на модель.
+;
+; У экзоброни оставлена сумка из набора - так попросили.
+[da_backpack_backpack_light_hud]:da_backpack_hud
+item_visual                              = dynamics\equipments\sumka2.ogf
+; Посадка вычислена из габаритов: масштаб = радиус эталонной сумки / радиус этой
+; модели, сдвиг ставит её центр туда же, где центр эталона. Это НАЧАЛЬНАЯ точка -
+; доводить в игре через da_scene_item_pos / _rot / _scale, печатать da_scene_item_dump.
+item_position                            = 0.0264, -0.0632, 0.0111
+item_scale                               = 0.7953
+
+[da_backpack_backpack_heavy_hud]:da_backpack_hud
+item_visual                              = dynamics\equipments\sumka4.ogf
+; Посадка вычислена из габаритов: масштаб = радиус эталонной сумки / радиус этой
+; модели, сдвиг ставит её центр туда же, где центр эталона. Это НАЧАЛЬНАЯ точка -
+; доводить в игре через da_scene_item_pos / _rot / _scale, печатать da_scene_item_dump.
+item_position                            = 0.0021, -0.0471, 0.0016
+item_scale                               = 0.5586
+
+[da_backpack_kit_hunt_hud]:da_backpack_hud
+item_visual                              = dynamics\equipments\trade\kit_hunt.ogf
+; Посадка вычислена из габаритов: масштаб = радиус эталонной сумки / радиус этой
+; модели, сдвиг ставит её центр туда же, где центр эталона. Это НАЧАЛЬНАЯ точка -
+; доводить в игре через da_scene_item_pos / _rot / _scale, печатать da_scene_item_dump.
+item_position                            = 0.0013, -0.0568, 0.0096
+item_scale                               = 1.0579
+
+[da_backpack_exobackpack_hud]:da_backpack_hud
+item_visual                              = dynamics\weapons\wpn_eat\backpack\wpn_backpack_act_hud_monolith.ogf

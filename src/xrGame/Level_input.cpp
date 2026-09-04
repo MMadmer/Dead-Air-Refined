@@ -38,6 +38,9 @@ extern void try_change_current_entity();
 extern void restore_actor();
 #endif
 
+// A script scene keeps only movement and the always-available keys (game.only_allow_movekeys).
+extern bool g_da_block_all_except_movement;
+
 bool g_bDisableAllInput = false;
 bool g_bDisableAllActions = false;
 extern float g_fTimeFactor;
@@ -154,6 +157,17 @@ void CLevel::IR_OnKeyboardPress(int key)
 
     EGameActions _curr = GetBindedAction(key);
     const bool actionDisabled = is_action_disabled(key);
+
+    // Presses only: the release of a key held before the scene must still reach the game, or it
+    // stays pressed forever. Everything below kCAM_1 is movement and look.
+    if (g_da_block_all_except_movement)
+    {
+        const bool allowed = _curr < kCAM_1 || _curr == kPAUSE || _curr == kCONSOLE || _curr == kSCREENSHOT ||
+            _curr == kQUIT || _curr == kQUICK_SAVE || _curr == kQUICK_LOAD;
+        if (!allowed)
+            return;
+    }
+
     /* avo: script callback */
     if (!g_bDisableAllInput && !actionDisabled && g_actor)
     {

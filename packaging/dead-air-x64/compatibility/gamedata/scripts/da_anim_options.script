@@ -1,0 +1,53 @@
+-- [DA_PORT] Настройки модуля анимаций — приезжают ВМЕСТЕ с ним.
+--
+-- Зачем отдельный файл. Пункты меню жили в axr_main_options.script, то есть в базовых файлах
+-- игры, а сами анимации — в архиве da_animations.xdb0. Разъехалось это некрасиво: у того, кто
+-- модуль не ставил или выключил, в «Опции → Игра» всё равно висел раздел «Анимации» с шестью
+-- переключателями, которые ничего не переключают. Хуже того, три из них спрашивали значения по
+-- умолчанию у da_item_anims — скрипта, который лежит в том же архиве и без него просто не
+-- существует.
+--
+-- Теперь так: этот файл лежит ТОЛЬКО в архиве. Есть модуль — есть настройки; нет модуля — нет
+-- ни раздела, ни строки в меню. Базовая сторона зовёт register через проверку на существование,
+-- поэтому её вызов безвреден в обоих случаях.
+--
+-- ⚠️ Значения по умолчанию берутся у da_item_anims намеренно, а не дублируются здесь: список
+-- режимов там один на все три ручки, и вторая его копия разошлась бы с первой при первом же
+-- изменении.
+
+function register(menu)
+	if not menu or not menu.gameplay_options then return end
+
+	-- Режимы употребления вещей: новые расширенные / старые / выключено.
+	-- Разбор — в da_item_anims.script.
+	menu.gameplay_options["da_item_anims"] =
+		{default = da_item_anims.default_label(), debug_only = false, typ = "list", list = da_item_anims.labels()}
+
+	-- Свежевание туш ножом.
+	menu.gameplay_options["da_skin_anims"] =
+		{default = da_item_anims.default_label(), debug_only = false, typ = "list", list = da_item_anims.labels()}
+
+	-- Обыск тел.
+	menu.gameplay_options["da_body_search_anim"] = {default = true, debug_only = false, typ = "check"}
+
+	-- Открытие рюкзака.
+	menu.gameplay_options["da_backpack_anim"] = {default = true, debug_only = false, typ = "check"}
+
+	-- Надевание снаряжения: шлемы, костюмы, респираторы. Разбор — в da_wear_anims.script.
+	menu.gameplay_options["da_wear_anims"] =
+		{default = da_item_anims.default_label(), debug_only = false, typ = "list", list = da_item_anims.labels()}
+
+	-- Паркур: подтягивание на уступ.
+	--
+	-- ⚠️ У самого аддона настройки живут в MCM, а MCM в Dead Air нет — поэтому его settings.enable
+	-- ни при каких условиях не поменять изнутри. Эта ручка и есть замена: она читается в
+	-- demonized_ledge_grabbing.load_settings.
+	menu.gameplay_options["da_parkour"] = {default = true, debug_only = false, typ = "check"}
+end
+
+-- [DA_PORT] Ключи раздела — чтобы базовая сторона не держала их у себя списком.
+-- Порядок здесь и есть порядок строк в меню.
+function keys()
+	return {"da_item_anims", "da_wear_anims", "da_skin_anims",
+	        "da_body_search_anim", "da_backpack_anim", "da_parkour"}
+end

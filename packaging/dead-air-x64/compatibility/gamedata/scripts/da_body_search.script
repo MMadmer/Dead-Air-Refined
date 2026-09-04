@@ -1,0 +1,194 @@
+-- [DA_PORT] Анимация обыска тела.
+--
+-- Написана заново, а не перенесена: пак FDDA Redone, где такая механика есть, помечен на ModDB
+-- как Proprietary, и брать оттуда нельзя. Движение берётся из FDDA 0.9b (Public Domain), которое
+-- у нас уже лежит: take_anim_enhanced, то же, что играет при подборе вещей с земли.
+--
+-- Как это работает. Движок зовёт da_before_body_search ДО открытия окна обыска (ActorInput.cpp).
+-- Мы отвечаем отказом, играем сцену, а по её концу открываем окно сами через obj:use(db.actor) --
+-- этот путь идёт мимо перехвата, поэтому по кругу не пойдёт.
+
+-- Длительность сцены берётся у движка по самой анимации; это запасное значение.
+local ANIM_FALLBACK_MS = 1100
+local anim_ms = 1100
+-- Пауза после убирания оружия. Считается по длине самой анимации убирания, см. hide_ticks.
+local settle_target = 0
+local body, busy, wait_ticks, settle, prev_slot, one_hand = nil, false, 0, 0, nil, false
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", reset)
+	RegisterScriptCallback("actor_on_item_take_from_ground", after_pickup)
+end
+
+function reset()
+	body, busy, wait_ticks, settle, prev_slot, one_hand = nil, false, 0, 0, nil, false
+end
+
+function enabled()
+	-- [DA_PORT] Без модуля анимаций сцены нет — и ЖДАТЬ её тоже нечего.
+	--
+	-- Скрипт базовый, а движение, которое он играет, приезжает в архиве модуля. Когда модуль снят
+	-- или выключен, get_motion_length отвечает нулём, длительность откатывается на запасное число,
+	-- и сцена честно выжидает его целиком: анимации нет, а пауза есть, и всё это время действия
+	-- заблокированы. Со стороны выглядит как «выключил анимации, а тормоза остались».
+	--
+	-- Настройка тут не спасает: её регистрирует сам модуль, и без него значение по умолчанию
+	-- «включено». Поэтому проверяем не настройку, а НАЛИЧИЕ модуля — его ядро da_item_anims живёт
+	-- только в архиве и без него в глобальные имена не попадает.
+	-- Признак модуля — секция из ЕГО конфига (da_hud_animations.ltx, подключается
+	-- необязательно). Скрипты для этого не годятся: da_item_anims и enhanced_animations
+	-- лежат в базовой сборке РОССЫПЬЮ, то есть существуют и без модуля.
+	if not system_ini():section_exist("da_hud_animations") then return false end
+	if not axr_main or not axr_main.config then return true end
+	return axr_main.config:r_value("mm_options", "enable_da_body_search_anim", 1, true)
+end
+
+-- [DA_PORT] Сколько ждать, пока доиграет убирание оружия.
+--
+-- Раньше это было число, подобранное на глаз, и промахивалось: у ножа, автомата и детектора
+-- убирание разной длины. Теперь спрашиваем движок: game.get_motion_length даёт длину цикла из
+-- секции HUD оружия, ту же самую, что играет при убирании.
+--
+-- Ноль означает "цикла нет" - тогда берём небольшой запас, чтобы не начать сцену в тот же кадр.
+local function hide_ticks()
+	local itm = db.actor and db.actor:active_item()
+	if not itm then return 2 end
+
+	local hud = system_ini():r_string_ex(itm:section(), "hud")
+	if not hud then return 6 end
+
+	local ms = game.get_motion_length(hud, "anm_hide", 1.0)
+	if not ms or ms <= 0 then return 6 end
+
+	-- Такт опроса 50 мс, плюс один сверху на округление.
+	return math.floor(ms / 50) + 1
+end
+
+-- Возвращаем ЛОЖЬ, чтобы движок окно не открывал.
+function before_search(obj)
+	if busy or not obj or not enabled() then return true end
+	if not db.actor then return true end
+
+	body = obj
+	busy = true
+	wait_ticks, settle = 0, 0
+	settle_target = hide_ticks()
+	-- [DA_PORT] Прячем вещь hide_weapon и ЖДЁМ ПО ВРЕМЕНИ, а не по слоту.
+	--
+	-- Замер показал две вещи. Первая: в Dead Air слот не пустеет НИ от hide_weapon, ни от
+	-- activate_slot(0) — все 60 тактов ожидания там оставалось слот=1, вещь=true. Визуально при
+	-- этом вещь из рук уходит, то есть прячется HUD, а инвентарь считает её активной.
+	--
+	-- Вторая, и это была моя ошибка: выдержка обнулялась на каждом такте, пока слот не пуст. Раз он
+	-- не пустеет никогда, вычисленная пауза не применялась ни разу — сцена стартовала по потолку
+	-- ожидания, поверх живой руки. Отсюда и рывок, который я трижды объяснял неправильно.
+	--
+	-- Поэтому ждём просто отмеренное время: длину анимации убирания у той вещи, что в руках.
+	-- [DA_PORT] Оружие в руках — играем ОДНОЙ левой, оружие не убираем.
+	--
+	-- Держится это на двух копиях модели рук в движке (player_hud::load): правая половина остаётся
+	-- на посадке ствола и продолжает его держать, левая переезжает на посадку сцены и играет цикл.
+	-- Пока копия была одна, посадка была общая и рука тянулась мимо — см. разбор там же.
+	one_hand = db.actor:active_slot() ~= 0
+	if not one_hand then
+		db.actor:hide_weapon()
+	end
+	game.only_allow_movekeys(true)
+	CreateTimeEvent("da_body_search", "start", 0.05, start_anim)
+	return false
+end
+
+-- [DA_PORT] Подбор вещи с земли — той же сценой, что и обыск тела.
+--
+-- ⚠️ Сцена играет ПОСЛЕ подбора, а не до. Отменить подбор нечем: событие
+-- actor_on_item_take_from_ground - уведомление, вещь к этому моменту уже в рюкзаке. Событие
+-- actor_on_item_before_pickup, на которое подписан FDDA, в Dead Air не существует вовсе: его нет в
+-- белом списке axr_main, а callback_set молча пропускает неизвестные имена. То есть анимация
+-- подбора у FDDA здесь не работала НИКОГДА.
+--
+-- Чтобы играть до подбора, нужна точка перехвата в движке, как у употребления вещей и обыска тел.
+-- Скажи, если захочешь - сделаю, это тот же приём.
+--
+-- Движение то же самое, take_anim_enhanced: она и рисовалась под подбор вещи с земли.
+function after_pickup(obj)
+	if busy or not obj or not enabled() then return end
+	if not db.actor then return end
+
+	busy = true
+	wait_ticks = 0
+	settle_target = hide_ticks()
+
+	-- [DA_PORT] Оружие в руках — играем одной левой, разбор выше, в before_search.
+	one_hand = db.actor:active_slot() ~= 0
+	if not one_hand then
+		db.actor:hide_weapon()
+	end
+	game.only_allow_movekeys(true)
+	CreateTimeEvent("da_body_search", "start", 0.05, start_anim)
+end
+
+function start_anim()
+	wait_ticks = wait_ticks + 1
+	-- Ждём только если оружие убирали: одноручной сцене ждать нечего.
+	if (not one_hand) and wait_ticks < settle_target then return false end
+
+	-- Длительность спрашиваем у движка, а не задаём числом: поменяется цикл - расписание сойдётся
+	-- само, без правки скрипта.
+	anim_ms = game.get_motion_length("da_body_search_hud", "anm_ea_show", 1.0)
+	if not anim_ms or anim_ms <= 0 then anim_ms = ANIM_FALLBACK_MS end
+
+	game.play_hud_motion(one_hand and 1 or 2, "da_body_search_hud", "anm_ea_show", false, 1.0, 0)
+	CreateTimeEvent("da_body_search", "open", anim_ms / 1000, open_window)
+	return true
+end
+
+function open_window()
+	game.stop_hud_motion()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+
+	-- Подбор: вещь уже в рюкзаке, окна нет — только вернуть оружие.
+	if not body then
+		db.actor:restore_weapon()
+		busy = false
+		return true
+	end
+
+	-- Тело могло исчезнуть за время сцены: разложиться, уехать с уровнем, быть съеденным.
+	if body and body:id() ~= 65535 and level.object_by_id(body:id()) then
+		body:use(db.actor)
+	end
+	body = nil
+
+	-- [DA_PORT] Оружие возвращаем не сейчас, а после ЗАКРЫТИЯ окна.
+	--
+	-- Иначе оно появляется в руках поверх открытого инвентаря и тут же прячется снова, когда игрок
+	-- окно закроет. Готового события «окно закрылось» в Dead Air нет, поэтому следим за приёмником
+	-- ввода: пока меню открыто, level.main_input_receiver() не пуст.
+	--
+	-- Полсекунды форы нужны на само открытие: окно появляется не в том же кадре, и без задержки
+	-- сторож увидел бы пустой приёмник сразу и вернул оружие раньше времени.
+	CreateTimeEvent("da_body_search", "restore", 0.5, watch_close)
+	return true
+end
+
+function watch_close()
+	if level.main_input_receiver() then return false end
+	-- [DA_PORT] ⚠️ unblock_all_slots здесь НЕ зовём.
+	--
+	-- И restore_weapon, и unblock_all_slots ведут к TryActivatePrevSlot: первый через
+	-- SetSlotsBlocked(mask, false), второй напрямую. Вызвав оба, мы восстанавливали слот ДВАЖДЫ, и
+	-- на экране оружие возвращалось и тут же убиралось.
+	--
+	-- Наши hide_weapon и restore_weapon симметричны, поэтому счётчик блокировок сходится сам.
+	if not one_hand then db.actor:restore_weapon() end
+	one_hand = false
+	busy = false
+	return true
+end
+
+-- Точка входа для движка: имя обязано лежать в НАСТОЯЩЕЙ глобальной области, иначе functor его не
+-- найдёт. Присваивание внутри скрипта такой области не создаёт (setfenv), поэтому пишем в _G.
+_G.da_before_body_search = function(obj)
+	return before_search(obj)
+end

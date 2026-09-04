@@ -14,9 +14,21 @@ extern ENGINE_API shared_str current_player_hud_sect;
 extern ENGINE_API xr_vector<shared_str> g_player_hud_extra_omf;
 extern ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_variants;
 extern ENGINE_API int g_player_hud_model_loading;
+extern ENGINE_API xr_vector<std::pair<shared_str, shared_str>> g_player_hud_extra_omf_by_model;
 
-// Data-driven list of extra hand-animation omfs (the 3D PDA set). Loaded once; the render
-// side appends them to every hands model created while the loading flag is raised.
+// Scene knobs (console, console_commands.cpp): the scene item seat corrections laid over the
+// section values, the seat slide speeds (in slow so the hand does not peck at the start, out
+// fast because a finished cycle only has to return to the weapon) and the cycle trace.
+Fvector g_hud_scene_item_pos_adj{};
+Fvector g_hud_scene_item_rot_adj{};
+float g_hud_scene_item_scale_adj = 1.f;
+float g_hud_scene_seat_in = 2.5f;
+float g_hud_scene_seat_out = 9.f;
+int g_hud_scene_dbg = 0;
+
+// Data-driven lists of extra hand-animation omfs. Loaded once; the render side appends them to
+// every hands model created while the loading flag is raised. The 3D PDA set comes from its own
+// config, the animation module's per-model sets from [da_hud_animations] in system.ltx.
 static void fill_player_hud_extra_omf()
 {
     static bool done = false;
@@ -25,23 +37,29 @@ static void fill_player_hud_extra_omf()
     done = true;
     string_path path;
     FS.update_path(path, "$game_config$", "dead_air_x64_pda3d.ltx");
-    if (!FS.exist(path))
-        return;
-    CInifile ini(path, TRUE);
-    if (ini.section_exist("player_hud_extra_omf"))
-        for (const auto& [key, value] : ini.r_section("player_hud_extra_omf").Data)
-            if (value.size())
-                g_player_hud_extra_omf.emplace_back(value);
-    // Variants: "substring = path". A hands model whose path contains the substring gets
-    // the matching file(s) INSTEAD of the base list - the exo rig family carries its own
-    // bind pose and needs its own retargeted animations.
-    if (ini.section_exist("player_hud_extra_omf_variants"))
-        for (const auto& [key, value] : ini.r_section("player_hud_extra_omf_variants").Data)
+    if (FS.exist(path))
+    {
+        CInifile ini(path, TRUE);
+        if (ini.section_exist("player_hud_extra_omf"))
+            for (const auto& [key, value] : ini.r_section("player_hud_extra_omf").Data)
+                if (value.size())
+                    g_player_hud_extra_omf.emplace_back(value);
+        // Variants: "substring = path". A hands model whose path contains the substring gets
+        // the matching file(s) INSTEAD of the base list - the exo rig family carries its own
+        // bind pose and needs its own retargeted animations.
+        if (ini.section_exist("player_hud_extra_omf_variants"))
+            for (const auto& [key, value] : ini.r_section("player_hud_extra_omf_variants").Data)
+                if (key.size() && value.size())
+                    g_player_hud_extra_omf_variants.emplace_back(key, value);
+    }
+    if (pSettings->section_exist("da_hud_animations"))
+        for (const auto& [key, value] : pSettings->r_section("da_hud_animations").Data)
             if (key.size() && value.size())
-                g_player_hud_extra_omf_variants.emplace_back(key, value);
-    if (!g_player_hud_extra_omf.empty())
-        Msg("* [pda3d] %u extra hud omf(s) registered (+%u variant(s))",
-            u32(g_player_hud_extra_omf.size()), u32(g_player_hud_extra_omf_variants.size()));
+                g_player_hud_extra_omf_by_model.emplace_back(key, value);
+    if (!g_player_hud_extra_omf.empty() || !g_player_hud_extra_omf_by_model.empty())
+        Msg("* [hud-anim] %u extra hud omf(s) registered (+%u variant(s), %u per-model set(s))",
+            u32(g_player_hud_extra_omf.size()), u32(g_player_hud_extra_omf_variants.size()),
+            u32(g_player_hud_extra_omf_by_model.size()));
 }
 
 
@@ -84,7 +102,7 @@ const player_hud_motion* player_hud_motion_container::find_motion(const shared_s
     return it != m_anims.end() ? &it->second : nullptr;
 }
 
-void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect)
+void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect, bool lenient)
 {
     const CInifile::Sect& _sect = pSettings->r_section(sect);
 
@@ -131,6 +149,12 @@ void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_
 //					Msg(" alias=[%s] base=[%s] name=[%s]",pm.m_alias_name.c_str(), pm.m_base_name.c_str(), buff);
 #endif // #ifdef DEBUG
                 }
+            }
+            if (pm.m_animations.empty() && lenient)
+            {
+                Msg("! [hud-scene] motion [%s] of [%s] is not in the hands model, skipped",
+                    pm.m_base_name.c_str(), sect.c_str());
+                continue;
             }
             R_ASSERT2(!pm.m_animations.empty(), make_string("motion not found [%s]", pm.m_base_name.c_str()).c_str());
 
@@ -482,6 +506,11 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
     const motion_descr& M = anm->m_animations[rnd_idx];
 
     IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(m_model);
+
+    if (g_hud_scene_dbg)
+        Msg("~ [hud-scene] item [%s] plays [%s] (place %u, mix %d, scene %s)", m_sect_name.c_str(), anim_name_r,
+            u32(m_attach_place_idx), int(bMixIn), m_parent->scene_active() ? "ON" : "off");
+
     const u32 ret = m_parent->anim_play(m_attach_place_idx, M.mid, bMixIn, md, speed, m_monolithic ? ka : nullptr);
 
     if (ka)
@@ -550,9 +579,17 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
 
 player_hud::~player_hud()
 {
+    scene_item_release();
+
     if (m_model)
     {
         IRenderVisual* v = m_model->dcast_RenderVisual();
+        GEnv.Render->model_Delete(v);
+    }
+
+    if (m_model_2)
+    {
+        IRenderVisual* v = m_model_2->dcast_RenderVisual();
         GEnv.Render->model_Delete(v);
     }
 
@@ -577,6 +614,13 @@ void player_hud::load(const shared_str& player_hud_sect)
         GEnv.Render->model_Delete(v);
     }
 
+    if (m_model_2)
+    {
+        IRenderVisual* v = m_model_2->dcast_RenderVisual();
+        GEnv.Render->model_Delete(v);
+        m_model_2 = nullptr;
+    }
+
     if (!pSettings->section_exist(m_sect_name))
     {
         if (b_reload)
@@ -593,15 +637,44 @@ void player_hud::load(const shared_str& player_hud_sect)
 
     const shared_str& model_name = pSettings->r_string(m_sect_name, "visual");
     fill_player_hud_extra_omf();
+    // Both copies are created under the loading flag: the extra motion sets must reach the
+    // left half as well, or a scene cycle exists on one hand only.
     g_player_hud_model_loading = 1;
     m_model = smart_cast<IKinematicsAnimated*>(GEnv.Render->model_Create(model_name.c_str()));
+    m_model_2 = smart_cast<IKinematicsAnimated*>(GEnv.Render->model_Create(model_name.c_str()));
     g_player_hud_model_loading = 0;
+
+    // Same model, same bone and motion ids: a cycle found through one copy plays on the other.
+    // The clavicle name differs between rigs (l_clavicle, bip01_l_clavicle) - both are tried,
+    // and a miss is said out loud: without the hiding the arms double on screen.
+    if (m_model && m_model_2)
+    {
+        const auto hide_arm = [&](IKinematicsAnimated* model, pcstr n1, pcstr n2, pcstr side)
+        {
+            IKinematics* k = model->dcast_PKinematics();
+            u16 id = k->LL_BoneID(n1);
+            if (id == BI_NONE)
+                id = k->LL_BoneID(n2);
+            if (id == BI_NONE)
+            {
+                Msg("! [hud-scene] hands [%s]: no %s clavicle bone (%s / %s), the arms will double",
+                    model_name.c_str(), side, n1, n2);
+                return;
+            }
+            k->LL_SetBoneVisible(id, FALSE, TRUE);
+        };
+        hide_arm(m_model, "l_clavicle", "bip01_l_clavicle", "left");
+        hide_arm(m_model_2, "r_clavicle", "bip01_r_clavicle", "right");
+    }
+
     load_ancors();
     // Msg("hands visual changed to [%s] [%s] [%s]", model_name.c_str(), b_reload ? "R" : "", m_attached_items[0] ? "Y" : "");
 
     if (!b_reload)
     {
         m_model->PlayCycle("hand_idle_doun");
+        if (m_model_2)
+            m_model_2->PlayCycle("hand_idle_doun");
     }
     else
     {
@@ -613,6 +686,29 @@ void player_hud::load(const shared_str& player_hud_sect)
     }
     m_model->dcast_PKinematics()->CalculateBones_Invalidate();
     m_model->dcast_PKinematics()->CalculateBones(TRUE);
+    if (m_model_2)
+    {
+        m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
+        m_model_2->dcast_PKinematics()->CalculateBones(TRUE);
+    }
+}
+
+Fvector player_hud::attach_pos(u8 part) const
+{
+    if (m_attached_items[part])
+        return m_attached_items[part]->hands_attach_pos();
+    if (m_attached_items[part ? 0 : 1])
+        return m_attached_items[part ? 0 : 1]->hands_attach_pos();
+    return m_scene_hands_pos;
+}
+
+Fvector player_hud::attach_rot(u8 part) const
+{
+    if (m_attached_items[part])
+        return m_attached_items[part]->hands_attach_rot();
+    if (m_attached_items[part ? 0 : 1])
+        return m_attached_items[part ? 0 : 1]->hands_attach_rot();
+    return m_scene_hands_rot;
 }
 
 void player_hud::load_ancors()
@@ -653,37 +749,55 @@ void player_hud::render_hud(u32 context_id, IRenderable* root)
     attachable_hud_item* item0 = m_attached_items[0];
     attachable_hud_item* item1 = m_attached_items[1];
 
-    if (!item0 && !item1)
+    // A scene draws the hands by itself: it parks the weapon first and then asks for a cycle, so
+    // "no item, nothing to draw" would leave a playing scene invisible.
+    const bool scene = scene_active();
+
+    if (!item0 && !item1 && !scene)
         return;
 
     const bool b_r0 = item0 && item0->need_renderable();
     const bool b_r1 = item1 && item1->need_renderable();
 
-    if (!b_r0 && !b_r1)
+    if (!b_r0 && !b_r1 && !scene)
         return;
 
     if (m_model)
         GEnv.Render->add_Visual(context_id, root, m_model->dcast_RenderVisual(), m_transform);
 
-    if (item0)
-        item0->render(context_id, root);
+    if (m_model_2)
+        GEnv.Render->add_Visual(context_id, root, m_model_2->dcast_RenderVisual(), m_transform_2);
 
-    if (item1)
-        item1->render(context_id, root);
+    // A two-hand scene owns the hands whole: the weapon is put away logically but its hud item
+    // stays attached, and drawing it would put the knife over the scene. A one-hand scene keeps
+    // the weapon in the other hand, so it is drawn. need_renderable is not the test - it is
+    // about the scope zoom, not about a holstered item.
+    if (!scene || m_scene_one_hand)
+    {
+        if (item0)
+            item0->render(context_id, root);
+
+        if (item1)
+            item1->render(context_id, root);
+    }
+
+    if (m_scene_item_visual && scene)
+        GEnv.Render->add_Visual(context_id, root, m_scene_item_visual, m_scene_item_transform);
 }
 
 void player_hud::render_shadow(u32 context_id, IRenderable* root)
 {
     attachable_hud_item* item0 = m_attached_items[0];
     attachable_hud_item* item1 = m_attached_items[1];
+    const bool scene = scene_active();
 
-    if (!item0 && !item1)
+    if (!item0 && !item1 && !scene)
         return;
 
     const bool b_r0 = item0 && item0->need_renderable();
     const bool b_r1 = item1 && item1->need_renderable();
 
-    if (!b_r0 && !b_r1)
+    if (!b_r0 && !b_r1 && !scene)
         return;
 
     // Visuals only, with the same transforms the main pass uses. attachable_hud_item::render
@@ -692,11 +806,20 @@ void player_hud::render_shadow(u32 context_id, IRenderable* root)
     if (m_model)
         GEnv.Render->add_Visual(context_id, root, m_model->dcast_RenderVisual(), m_transform);
 
-    if (item0 && item0->m_model)
-        GEnv.Render->add_Visual(context_id, root, item0->m_model->dcast_RenderVisual(), item0->m_item_transform);
+    if (m_model_2)
+        GEnv.Render->add_Visual(context_id, root, m_model_2->dcast_RenderVisual(), m_transform_2);
 
-    if (item1 && item1->m_model)
-        GEnv.Render->add_Visual(context_id, root, item1->m_model->dcast_RenderVisual(), item1->m_item_transform);
+    if (!scene || m_scene_one_hand)
+    {
+        if (item0 && item0->m_model)
+            GEnv.Render->add_Visual(context_id, root, item0->m_model->dcast_RenderVisual(), item0->m_item_transform);
+
+        if (item1 && item1->m_model)
+            GEnv.Render->add_Visual(context_id, root, item1->m_model->dcast_RenderVisual(), item1->m_item_transform);
+    }
+
+    if (m_scene_item_visual && scene)
+        GEnv.Render->add_Visual(context_id, root, m_scene_item_visual, m_scene_item_transform);
 }
 
 #include "xrCore/Animation/Motion.hpp"
@@ -741,37 +864,147 @@ void player_hud::update(const Fmatrix& cam_trans)
     }
 
     update_inertion(trans);
-    update_additional(trans);
 
     attachable_hud_item* item0 = m_attached_items[0];
     attachable_hud_item* item1 = m_attached_items[1];
 
+    // Each item's additions (sway, recoil) go to its own half: the weapon drives the right
+    // matrix, the left-hand item the left one. trans_b is the state before any addition - the
+    // hand a scene owns returns to it.
+    const Fmatrix trans_b = trans;
+    Fmatrix trans_2 = trans;
+
+    if (item0)
+        item0->update_hud_additional(trans);
+    if (item1)
+        item1->update_hud_additional(trans_2);
+
+    if (item0 && !item1)
+        trans_2 = trans;
+    else if (item1 && !item0)
+        trans = trans_2;
+
     const bool monolithic = item0 && item0->m_monolithic || item1 && item1->m_monolithic;
     if (!m_model || monolithic)
+    {
         m_transform = trans;
+        m_transform_2 = trans_2;
+    }
     else
     {
-        Fvector ypr{};
-        if (item0)
-            ypr = item0->hands_attach_rot();
-        else if (item1)
-            ypr = item1->hands_attach_rot();
+        Fvector m1pos = attach_pos(0), m2pos = attach_pos(1);
+        Fvector m1rot = attach_rot(0), m2rot = attach_rot(1);
 
-        ypr.mul(PI / 180.f);
-        m_attach_offset.setHPB(ypr.x, ypr.y, ypr.z);
+        const bool scene = scene_active();
 
-        Fvector tmp{};
-        if (item0)
-            tmp = item0->hands_attach_pos();
-        else if (item1)
-            tmp = item1->hands_attach_pos();
+        if (scene && (m_scene_hand == 2 || (!item0 && !item1)))
+        {
+            // The scene owns both hands (or nothing is held): the seat is the scene's.
+            m1pos = m2pos = m_scene_hands_pos;
+            m1rot = m2rot = m_scene_hands_rot;
+            trans = trans_b;
+            trans_2 = trans_b;
+        }
+        else if (m_scene_seat_k > 0.f)
+        {
+            // One-hand scene: the owned hand slides to the scene seat, the other stays on its
+            // item. The factor itself is driven at the end of update.
+            const bool right = (m_scene_hand_seat == 0);
+            Fvector& hp = right ? m1pos : m2pos;
+            Fvector& hr = right ? m1rot : m2rot;
+            hp.lerp(hp, m_scene_hands_pos, m_scene_seat_k);
+            hr.lerp(hr, m_scene_hands_rot, m_scene_seat_k);
 
-        m_attach_offset.translate_over(tmp);
+            Fmatrix tb = trans_b;
+            if (right)
+            {
+                tb.inertion(trans, m_scene_seat_k);
+                trans = tb;
+            }
+            else
+            {
+                tb.inertion(trans_2, m_scene_seat_k);
+                trans_2 = tb;
+            }
+        }
+
+        m1rot.mul(PI / 180.f);
+        m_attach_offset.setHPB(m1rot.x, m1rot.y, m1rot.z);
+        m_attach_offset.translate_over(m1pos);
+
+        m2rot.mul(PI / 180.f);
+        m_attach_offset_2.setHPB(m2rot.x, m2rot.y, m2rot.z);
+        m_attach_offset_2.translate_over(m2pos);
+
         m_transform.mul(trans, m_attach_offset);
+        m_transform_2.mul(trans_2, m_attach_offset_2);
 
         m_model->UpdateTracks();
         m_model->dcast_PKinematics()->CalculateBones_Invalidate();
         m_model->dcast_PKinematics()->CalculateBones(TRUE);
+
+        if (m_model_2)
+        {
+            m_model_2->UpdateTracks();
+            m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
+            m_model_2->dcast_PKinematics()->CalculateBones(TRUE);
+        }
+    }
+
+    // The scene item moves here, once per frame, right after the hands: the grip bone is fresh.
+    // Not in render_hud - that runs once per context and the animation would run ahead.
+    if (m_scene_item_visual)
+    {
+        // The seat matrix is rebuilt every frame so the console corrections lie on top of the
+        // section values while tuning.
+        {
+            Fvector ypr = m_scene_item_rot;
+            ypr.add(g_hud_scene_item_rot_adj);
+            ypr.mul(PI / 180.f);
+            m_scene_item_offset.setHPB(ypr.x, ypr.y, ypr.z);
+
+            Fvector pos = m_scene_item_pos;
+            pos.add(g_hud_scene_item_pos_adj);
+            m_scene_item_offset.translate_over(pos);
+
+            const float sc = m_scene_item_scale * g_hud_scene_item_scale_adj;
+            if (!fsimilar(sc, 1.f))
+            {
+                Fmatrix S;
+                S.scale(sc, sc, sc);
+                m_scene_item_offset.mulB_43(S);
+            }
+        }
+
+        if (m_scene_item_attached)
+        {
+            // The item hangs on the same half as the playing hand, or it would follow the right
+            // matrix while the hand lives on the left. lh_lead_gun asks for the weapon grip
+            // (anchor 0, the right half) whatever hand plays.
+            const u16 idx = m_scene_item_lead_gun ? u16(0) : m_scene_item_attach;
+            const bool left = !m_scene_item_lead_gun && (m_scene_hand == 1) && m_model_2;
+            IKinematicsAnimated* model = left ? m_model_2 : m_model;
+            const Fmatrix& base = left ? m_transform_2 : m_transform;
+
+            IKinematics* k = model ? model->dcast_PKinematics() : nullptr;
+            if (k && idx < m_ancors.size())
+            {
+                const Fmatrix ancor = k->LL_GetTransform(m_ancors[idx]);
+                m_scene_item_transform.mul(base, ancor);
+                m_scene_item_transform.mulB_43(m_scene_item_offset);
+            }
+            else
+                m_scene_item_transform.mul(base, m_scene_item_offset);
+        }
+        else
+            m_scene_item_transform.mul(m_transform, m_scene_item_offset);
+
+        if (m_scene_item_model)
+        {
+            m_scene_item_model->UpdateTracks();
+            m_scene_item_model->dcast_PKinematics()->CalculateBones_Invalidate();
+            m_scene_item_model->dcast_PKinematics()->CalculateBones(TRUE);
+        }
     }
 
     if (item0)
@@ -779,26 +1012,276 @@ void player_hud::update(const Fmatrix& cam_trans)
 
     if (item1)
         item1->update(true);
+
+    // A one-hand scene gives the hand back the moment its own cycle is over, without waiting
+    // for the script's stop: between the two the hand hung in the last pose. The scene itself
+    // (item, drawing) stays until the stop.
+    if (m_scene_hand != u8(-1) && m_scene_one_hand && m_scene_end && Device.dwTimeGlobal >= m_scene_end)
+    {
+        m_scene_hand = u8(-1);
+        if (attachable_hud_item* hi = m_attached_items[0])
+            if (hi->m_parent_hud_item)
+                hi->m_parent_hud_item->PlayAnimIdle();
+    }
+
+    if (m_scene_hand != u8(-1))
+        m_scene_seat_k += Device.fTimeDelta * g_hud_scene_seat_in;
+    else
+        m_scene_seat_k -= Device.fTimeDelta * g_hud_scene_seat_out;
+
+    clamp(m_scene_seat_k, 0.f, 1.f);
+}
+
+// Right copy: partitions 0 and 2 (partition 1 is its hidden left arm). Left copy: 0, 1 and 2.
+// The ownership lock: while a scene holds a hand, an item's cycle skips that copy - with one
+// model the root partition went to whoever played last, and the weapon's idle overrode the scene.
+void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim)
+{
+    switch (pid)
+    {
+    case 0: // both hands
+    {
+        if (!script_anim && m_scene_hand == 2)
+            return;
+        // Down without the scene flag: each half checks its own lock, otherwise a two-hand scene
+        // would unlock a hand another scene owns.
+        play_blend(1, M, bMixIn, speed, false);
+        play_blend(2, M, bMixIn, speed, false);
+        break;
+    }
+    case 1: // left
+    {
+        if (!script_anim && m_scene_hand == 1)
+            return;
+        if (!m_model_2)
+            return;
+        const u16 pc = m_model_2->partitions().count();
+        for (u16 i = 0; i < pc; ++i)
+            PlayHudCycle(*m_model_2, i, M, bMixIn, speed);
+        m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
+        break;
+    }
+    case 2: // right
+    {
+        if (!script_anim && m_scene_hand == 0)
+            return;
+        if (!m_model)
+            return;
+        const u16 pc = m_model->partitions().count();
+        for (u16 i = 0; i < pc; ++i)
+        {
+            if (i == 1)
+                continue;
+            PlayHudCycle(*m_model, i, M, bMixIn, speed);
+        }
+        m_model->dcast_PKinematics()->CalculateBones_Invalidate();
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+player_hud_motion_container& player_hud::scene_motions(const shared_str& sect)
+{
+    auto it = m_scene_motions.find(sect);
+    if (it == m_scene_motions.end())
+    {
+        player_hud_motion_container container;
+        container.load(m_model, sect, true);
+        it = m_scene_motions.emplace(sect, std::move(container)).first;
+    }
+    return it->second;
+}
+
+u32 player_hud::scene_motion_length(pcstr section, pcstr anim, float speed)
+{
+    if (!m_model || !section || !anim)
+        return 0;
+
+    const shared_str sect(section);
+    if (!pSettings->section_exist(sect))
+        return 0;
+
+    const player_hud_motion* motion = scene_motions(sect).find_motion(anim);
+    if (!motion || motion->m_animations.empty())
+        return 0;
+
+    const CMotionDef* md = nullptr;
+    return motion_length(motion->m_animations[0].mid, md, speed > 0.f ? speed : 1.f, nullptr);
+}
+
+u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms)
+{
+    if (!m_model || !section || !anim)
+        return 0;
+
+    const shared_str sect = section;
+    if (!pSettings->section_exist(sect))
+    {
+        Msg("! [hud-scene] section [%s] does not exist", section);
+        return 0;
+    }
+
+    const player_hud_motion* motion = scene_motions(sect).find_motion(anim);
+    if (!motion || motion->m_animations.empty())
+    {
+        // The usual case with a ported addon: the cycle sits in an omf for another rig and the
+        // hands model knows nothing of it. Said out loud, or it looks like a broken scene.
+        Msg("! [hud-scene] cycle [%s] of [%s] is not in the hands model", anim, section);
+        return 0;
+    }
+
+    {
+        const Fvector zero{ 0.f, 0.f, 0.f };
+        pcstr key = UICore::is_widescreen() ? "hands_position_16x9" : "hands_position";
+        m_scene_hands_pos = pSettings->read_if_exists<Fvector>(sect, key, zero);
+        pcstr rkey = UICore::is_widescreen() ? "hands_orientation_16x9" : "hands_orientation";
+        m_scene_hands_rot = pSettings->read_if_exists<Fvector>(sect, rkey, zero);
+    }
+
+    const motion_descr& M = motion->m_animations[Random.randI(motion->m_animations.size())];
+
+    // Stretch the cycle to the scene length when one is given: a cycle marked stop-at-end
+    // freezes on its last frame and the hands stand still for the rest of the scene otherwise.
+    float eff_speed = speed;
+    if (target_ms > 0)
+    {
+        const CMotionDef* base_md = nullptr;
+        const u32 base = motion_length(M.mid, base_md, 1.f, nullptr);
+        if (base > 0)
+            eff_speed = float(base) / float(target_ms);
+    }
+
+    scene_item_release();
+    if (pSettings->line_exist(sect, "item_visual"))
+    {
+        pcstr visual = pSettings->r_string(sect, "item_visual");
+        m_scene_item_visual = GEnv.Render->model_Create(visual);
+        m_scene_item_model = smart_cast<IKinematicsAnimated*>(m_scene_item_visual);
+        // A static model is the norm for things not drawn for a scene (a backpack that was
+        // made to hang on the back): it is held still.
+        if (m_scene_item_visual && !m_scene_item_model && g_hud_scene_dbg)
+            Msg("~ [hud-scene] model [%s] has no motions, held still", visual);
+    }
+
+    if (m_scene_item_visual)
+    {
+        const Fvector zero{ 0.f, 0.f, 0.f };
+        m_scene_item_pos = pSettings->read_if_exists<Fvector>(sect, "item_position", zero);
+        m_scene_item_rot = pSettings->read_if_exists<Fvector>(sect, "item_orientation", zero);
+        m_scene_item_scale = pSettings->read_if_exists<float>(sect, "item_scale", 1.f);
+        m_scene_item_attach = pSettings->read_if_exists<u16>(sect, "attach_place_idx", 0);
+        // item_attached: on the grip bone (default) or by its own matrix before the camera.
+        // item_root_lock: the root of a bottle carries a world-space travel that has to be
+        // dropped, while a harvest bag carries its whole staging in the root and needs it.
+        m_scene_item_attached = pSettings->read_if_exists<bool>(sect, "item_attached", true);
+        m_scene_item_root_lock = pSettings->read_if_exists<bool>(sect, "item_root_lock", true);
+        m_scene_item_lead_gun = pSettings->read_if_exists<bool>(sect, "lh_lead_gun", false);
+
+        // The item's cycle is the second name of `anm_xxx = hands, item`; with one name the
+        // item takes the hands' name.
+        const shared_str item_anim =
+            (motion->m_base_name != motion->m_additional_name) ? motion->m_additional_name : M.name;
+
+        MotionID mid;
+        if (m_scene_item_model)
+            mid = m_scene_item_model->ID_Cycle_Safe(item_anim);
+        if (m_scene_item_model && !mid.valid())
+            mid = m_scene_item_model->ID_Cycle_Safe("idle");
+
+        if (mid.valid())
+        {
+            IKinematics* k_item = m_scene_item_model->dcast_PKinematics();
+            if (k_item && m_scene_item_root_lock)
+            {
+                const u16 root_id = k_item->LL_GetBoneRoot();
+                CBoneInstance& root = k_item->LL_GetBoneInstance(root_id);
+                root.set_callback_overwrite(TRUE);
+                root.mTransform.identity();
+            }
+
+            const u16 pc = m_scene_item_model->partitions().count();
+            for (u16 pid = 0; pid < pc; ++pid)
+                PlayHudCycle(*m_scene_item_model, pid, mid, mix_in ? TRUE : FALSE, eff_speed);
+            m_scene_item_model->dcast_PKinematics()->CalculateBones_Invalidate();
+        }
+        else if (m_scene_item_model)
+            Msg("! [hud-scene] item [%s] has neither cycle [%s] nor idle", pSettings->r_string(sect, "item_visual"),
+                item_anim.c_str());
+    }
+
+    // hand: 0 right, 1 left, 2 both. A one-hand scene lays its cycle on its hand only; the other
+    // keeps holding and drawing the weapon (render_hud, the seat, play_blend all read this).
+    m_scene_one_hand = (hand != 2);
+    m_scene_hand = hand;
+    m_scene_hand_seat = (hand == 0) ? u8(0) : u8(1);
+    const u16 part = (hand == 2) ? u16(0) : (hand == 0 ? u16(2) : u16(1));
+
+    if (g_hud_scene_dbg)
+        Msg("~ [hud-scene] play: section [%s], cycle [%s] -> motion [%s], hand %u, target %u ms, attached [%s] + [%s]",
+            section, anim, M.name.c_str(), u32(hand), target_ms,
+            m_attached_items[0] ? m_attached_items[0]->m_sect_name.c_str() : "-",
+            m_attached_items[1] ? m_attached_items[1]->m_sect_name.c_str() : "-");
+
+    const CMotionDef* md = nullptr;
+    play_blend(part, M.mid, mix_in ? TRUE : FALSE, eff_speed, true);
+    const u32 length = motion_length(M.mid, md, eff_speed, nullptr);
+
+    m_scene_end = length ? (Device.dwTimeGlobal + length) : 0;
+    m_scene_on = true;
+
+    return length;
+}
+
+void player_hud::scene_item_release()
+{
+    if (!m_scene_item_visual)
+        return;
+
+    IRenderVisual* v = m_scene_item_visual;
+    m_scene_item_visual = nullptr;
+    m_scene_item_model = nullptr;
+    GEnv.Render->model_Delete(v);
+}
+
+void player_hud::scene_stop()
+{
+    scene_item_release();
+
+    // After a one-hand scene the weapon replays its idle: our cycle sat on the partition of the
+    // other hand and does not go away by itself.
+    if (m_scene_one_hand)
+    {
+        if (attachable_hud_item* hi = m_attached_items[0])
+            if (hi->m_parent_hud_item)
+                hi->m_parent_hud_item->PlayAnimIdle();
+    }
+    m_scene_one_hand = false;
+    m_scene_hand = u8(-1);
+    m_scene_on = false;
+    m_scene_end = 0;
+}
+
+bool player_hud::scene_active() const
+{
+    if (!m_scene_on)
+        return false;
+    // A scene ends by time as well as by the script's stop: the addons rely on the engine
+    // closing it when the cycle is over, and a flag alone kept the scene item in the hands
+    // forever with the real weapon undrawn.
+    if (m_scene_end && Device.dwTimeGlobal >= m_scene_end)
+        return false;
+    return true;
 }
 
 u32 player_hud::anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel)
 {
     if (!itemModel && m_model)
     {
-        u16 part_id = u16(-1);
-        if (attached_item(0) && attached_item(1))
-            part_id = m_model->partitions().part_id((part == 0) ? "right_hand" : "left_hand");
-
-        const u16 pc = m_model->partitions().count();
-        for (u16 pid = 0; pid < pc; ++pid)
-        {
-            if (pid == 0 || pid == part_id || part_id == u16(-1))
-            {
-                CBlend* B = PlayHudCycle(*m_model, pid, M, bMixIn, speed);
-                R_ASSERT(B);
-            }
-        }
-        m_model->dcast_PKinematics()->CalculateBones_Invalidate();
+        // One item drives BOTH hands (it is held with two). Two items - each its own half.
+        const u16 pid = (attached_item(0) && attached_item(1)) ? ((part == 0) ? u16(2) : u16(1)) : u16(0);
+        play_blend(pid, M, bMixIn, speed, false);
     }
 
     return motion_length(M, md, speed, itemModel);
@@ -987,6 +1470,22 @@ void player_hud::detach_item_idx(u16 idx)
                     }
                 }
             }
+
+            // The left copy follows the weapon too, at the same point of the cycle: otherwise
+            // it keeps the detached item's last pose until the weapon's next cycle.
+            if (m_model_2 && BR->blend_state() != CBlend::eFREE_SLOT)
+            {
+                const u16 pc2 = m_model_2->partitions().count();
+                for (u16 pid = 0; pid < pc2; ++pid)
+                {
+                    if (CBlend* B2 = m_model_2->PlayCycle(pid, M, TRUE))
+                    {
+                        u16 bop = B2->bone_or_part;
+                        *B2 = *BR;
+                        B2->bone_or_part = bop;
+                    }
+                }
+            }
         }
     }
     else if (idx == 0 && attached_item(1))
@@ -1010,17 +1509,22 @@ void player_hud::detach_item(CHudItem* item)
 
 void player_hud::calc_transform(u16 attach_slot_idx, const Fmatrix& offset, Fmatrix& result) const
 {
+    // An item is placed from ITS half: anchor 0 lives on the right copy, anchor 1 on the left.
+    const bool left = (attach_slot_idx != 0) && (m_model_2 != nullptr);
+    IKinematicsAnimated* model = left ? m_model_2 : m_model;
+    const Fmatrix& base = left ? m_transform_2 : m_transform;
+
     const attachable_hud_item* item = m_attached_items[attach_slot_idx];
-    if (item && !item->m_monolithic)
+    if (item && !item->m_monolithic && model && attach_slot_idx < m_ancors.size())
     {
-        IKinematics* k = smart_cast<IKinematics*>(m_model);
+        IKinematics* k = model->dcast_PKinematics();
         const Fmatrix ancor_m = k->LL_GetTransform(m_ancors[attach_slot_idx]);
-        result.mul(m_transform, ancor_m);
+        result.mul(base, ancor_m);
         result.mulB_43(offset);
     }
     else
     {
-        result.mul(m_transform, offset);
+        result.mul(base, offset);
         VERIFY(!fis_zero(DET(result)));
     }
 }

@@ -82,6 +82,12 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .property("morale", &CScriptGameObject::GetMorale, &CScriptGameObject::SetMorale)
         .property("bleeding", &CScriptGameObject::GetBleeding, &CScriptGameObject::SetBleeding)
 
+        // Increments under the names the community scripts use (the properties above write
+        // increments too: CEntityCondition::Change* accumulates a delta).
+        .def("change_power", &CScriptGameObject::SetPower)
+        .def("change_satiety", &CScriptGameObject::ChangeSatiety)
+        .def("unblock_all_slots", &CScriptGameObject::UnblockAllSlots)
+
         .def("get_bleeding", &CScriptGameObject::GetBleeding)
         .def("center", &CScriptGameObject::Center)
         .def("position", &CScriptGameObject::Position)
@@ -339,7 +345,9 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
 
         .def("head_orientation", &CScriptGameObject::head_orientation)
 
-        .def("set_actor_position", &CScriptGameObject::SetActorPosition)
+        .def("set_actor_position", (void (CScriptGameObject::*)(Fvector))&CScriptGameObject::SetActorPosition)
+        .def("set_actor_position", (void (CScriptGameObject::*)(Fvector, bool))&CScriptGameObject::SetActorPosition)
+        .def("set_actor_position", (void (CScriptGameObject::*)(Fvector, bool, bool))&CScriptGameObject::SetActorPosition)
         .def("set_actor_direction", &CScriptGameObject::SetActorDirection)
         .def("disable_hit_marks", (void (CScriptGameObject::*)(bool)) & CScriptGameObject::DisableHitMarks)
         .def("disable_hit_marks", (bool (CScriptGameObject::*)() const) & CScriptGameObject::DisableHitMarks)

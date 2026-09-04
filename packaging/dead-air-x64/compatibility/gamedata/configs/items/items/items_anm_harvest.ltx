@@ -1,0 +1,128 @@
+;___________________________________________________________________________________________________________________
+;___________________________________________________________________________________________________________________
+;РђРЅРёРјР°С†РёРё - СЃРІРµР¶РµРІР°РЅРёРµ
+
+;РќРѕР¶Рё - Р±Р°Р·РѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹
+; [DA_PORT] Модели ножей переведены на наши.
+;
+; Здесь стояли пути Anomaly (anomaly_weapons\wpn_knife\...) — этих файлов в Dead Air нет вовсе,
+; и первая же разделка падала намертво: ModelPool.cpp, "Can not find model file". Ножей у нас
+; ровно пять, wpn_knife..wpn_knife5, а раздел выбирается по имени секции оружия в руках, поэтому
+; сопоставление вышло один в один.
+;
+; Разделы для knife6..knife9 и топоров оставлены как были: оружия с такими именами в Dead Air
+; нет, выбраться в них неоткуда. Появится такое оружие — пути надо будет проверить.
+[item_ea_harv_useknife_animset]
+anim_length                 = 2868
+anim_sound                  = interface\item_usage\harvest_use
+
+[item_ea_harv_useknife_animset_hud]
+hands_position                           = -0.0055,-0.07, 0.36
+hands_position_16x9                      = -0.0055,-0.07, 0.36
+
+anm_ea_show                    = skinning_knife, idle
+
+
+;____РќРѕР¶Рё
+[item_ea_harv_wpn_knife]:item_ea_harv_useknife_animset
+
+[item_ea_harv_wpn_knife_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knife_1_hud.ogf
+
+[item_ea_harv_wpn_knife2_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knife_2_hud.ogf
+
+[item_ea_harv_wpn_knife3_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knife_3_hud.ogf
+
+[item_ea_harv_wpn_knife4_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knife_4_hud.ogf
+
+[item_ea_harv_wpn_knife5_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knife_5_hud.ogf
+
+[item_ea_harv_wpn_knife6_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_knifebf4_hud.ogf
+
+[item_ea_harv_wpn_knife7_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_tactical_knife_hud.ogf
+
+[item_ea_harv_wpn_knife8_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_kukri_hud.ogf
+
+[item_ea_harv_wpn_knife9_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_knife\wpn_tomahawk_hud.ogf
+
+[item_ea_harv_wpn_axe3_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_axe\wpn_axe3_hud.ogf
+
+[item_ea_harv_wpn_axe2_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_axe\wpn_axe_hud.ogf
+
+[item_ea_harv_wpn_axe_hud]:item_ea_harv_useknife_animset_hud
+item_visual                      = dynamics\weapons\wpn_axe\wpn_axe_hud.ogf
+
+
+
+
+
+;___________________________________________________________________________________________________________________
+;___________________________________________________________________________________________________________________
+;РђРЅРёРјР°С†РёРё - СЃР±РѕСЂ РјСЏСЃР° РІ РјРµС€РѕРє
+
+;РњСЏСЃРѕ_Р±Р°Р·РѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹
+
+;
+[item_ea_harv_meat_animset_hud]
+hands_position                           = -0.0055,-0.085, 0.32
+hands_position_16x9                      = -0.0055,-0.085, 0.32
+
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_1_hud.ogf
+
+anm_ea_show                    = harv_loot_hands, harvest_success_wpn_eat
+
+
+;____РњСЏСЃРѕ
+
+[item_ea_harv_meat_1_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_1_hud.ogf
+test_motion_names = harv_loot_hands, harvest_success_wpn_eat
+
+[item_ea_harv_meat_4_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_boar_hud.ogf
+
+[item_ea_harv_meat_6_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_dog_hud.ogf
+
+[item_ea_harv_meat_8_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_eye_hud.ogf
+
+[item_ea_harv_meat_3_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_flesh_hud.ogf
+
+[item_ea_harv_meat_9_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_himera_hud.ogf
+
+[item_ea_harv_meat_2_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_hud.ogf
+
+[item_ea_harv_meat_10_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_krovosos_hud.ogf
+
+[item_ea_harv_meat_12_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_nose_hud.ogf
+
+[item_ea_harv_meat_14_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_polter_hud.ogf
+
+[item_ea_harv_meat_13_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_pseudodog_hud.ogf
+
+[item_ea_harv_meat_5_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_snork_hud.ogf
+
+[item_ea_harv_meat_7_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_tushkan_tail_hud.ogf
+
+[item_ea_harv_meat_11_hud]:item_ea_harv_meat_animset_hud
+item_visual                 = dynamics\weapons\wpn_eat\harvest\meat_1\wpn_harvest_meat_zombie_hud.ogf

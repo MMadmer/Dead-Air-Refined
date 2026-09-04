@@ -38,6 +38,10 @@
 #include "xrServer_Objects_ALife_Monsters.h"
 #include "HUDManager.h"
 #include "raypick.h"
+#include "player_hud.h"
+#include "da_script_cam.h"
+#include "xrPhysics/console_vars.h"
+#include "xrUICore/ui_defs.h"
 #include "ui/UIMainIngameWnd.h"
 #include "UIZoneMap.h"
 #include "xrCDB/xr_collide_defs.h"
@@ -760,6 +764,92 @@ void jump_to_level(const Fvector& m_position, u32 m_level_vertex_id, GameGraph::
     Level().Send(p, net_flags(TRUE));
 }
 
+// ---- script scenes (the ledge climb, the hand animations of the animation module) ----
+
+// Read by CLevel::IR_OnKeyboardPress: only movement and the always-available keys pass while a
+// scene runs. A plain global: the reader and the writer are different translation units.
+bool g_da_block_all_except_movement = false;
+
+static void scene_only_movekeys(bool b) { g_da_block_all_except_movement = b; }
+static bool scene_only_movekeys_allowed() { return g_da_block_all_except_movement; }
+static void scene_allow_ladder(bool b) { g_da_actor_allow_ladder = b; }
+
+// Script-owned camera. Angles come as HPB, the convention device().cam_dir:getH()/getP() report,
+// so a script can take the current direction, change it and hand it back. smoothing: 1 snaps
+// (the script integrates its own path), 0 is the default, larger is softer. The actor is taken
+// through Actor(), not the current entity: a vehicle or a pseudo-player may be controlled, the
+// camera still belongs to the player.
+static void scene_cam_set5(Fvector& position, Fvector& hpb, u32 smoothing, bool hud_enabled, bool hud_affect)
+{
+    CActor* actor = Actor();
+    if (!actor)
+        return;
+    CDaScriptCamEffector* cam = actor->script_cam_init();
+    cam->m_hpb.set(hpb);
+    cam->m_position.set(position);
+    cam->m_smoothing = smoothing;
+    cam->m_hud_enabled = hud_enabled;
+    cam->SetHudAffect(hud_affect);
+}
+static void scene_cam_set2(Fvector& p, Fvector& d) { scene_cam_set5(p, d, 0, false, false); }
+static void scene_cam_set3(Fvector& p, Fvector& d, u32 sm) { scene_cam_set5(p, d, sm, false, false); }
+static void scene_cam_set4(Fvector& p, Fvector& d, u32 sm, bool hud) { scene_cam_set5(p, d, sm, hud, false); }
+static void scene_cam_remove()
+{
+    if (CActor* actor = Actor())
+        actor->script_cam_remove();
+}
+
+// A world point on the 1024x768 UI grid (the grid every layout lives in). Behind the camera or
+// off screen the x is -9999: zero is a legal coordinate, so it cannot mean "do not show".
+static Fvector2 scene_world2ui3(Fvector pos, bool /*hud*/, bool allow_offscreen)
+{
+    Fmatrix world, res;
+    world.identity();
+    world.c = pos;
+    res.mul(Device.mFullTransform, world);
+
+    const float w = res._44;
+    const float x = res._41 / w;
+    const float y = res._42 / w;
+    const float z = res._43 / w;
+
+    if (!allow_offscreen)
+    {
+        if (z < 0.f || w < 0.f)
+            return { -9999.f, 0.f };
+        if (_abs(x) > 1.f || _abs(y) > 1.f)
+            return { -9999.f, 0.f };
+    }
+
+    const float px = (1.f + x) * 0.5f * float(Device.dwWidth);
+    const float py = (1.f - y) * 0.5f * float(Device.dwHeight);
+    return { px / (float(Device.dwWidth) / UI_BASE_WIDTH), py / (float(Device.dwHeight) / UI_BASE_HEIGHT) };
+}
+static Fvector2 scene_world2ui1(Fvector pos) { return scene_world2ui3(pos, false, false); }
+static Fvector2 scene_world2ui2(Fvector pos, bool hud) { return scene_world2ui3(pos, hud, false); }
+
+// Hand scenes: hand 0 = right, 1 = left, 2 = both. Length in ms, 0 = nothing to play, so a
+// script never waits for an animation that does not exist. The sixth argument stretches the
+// cycle to the scene length.
+static u32 scene_play_hud_motion6(u8 hand, pcstr item_name, pcstr anm_name, bool mix_in, float speed, u32 target_ms)
+{
+    return g_player_hud ? g_player_hud->scene_play(hand, item_name, anm_name, mix_in, speed, target_ms) : 0;
+}
+static u32 scene_play_hud_motion5(u8 hand, pcstr item_name, pcstr anm_name, bool mix_in, float speed)
+{
+    return scene_play_hud_motion6(hand, item_name, anm_name, mix_in, speed, 0);
+}
+static u32 scene_get_motion_length(pcstr section, pcstr anm_name, float speed)
+{
+    return g_player_hud ? g_player_hud->scene_motion_length(section, anm_name, speed) : 0;
+}
+static void scene_stop_hud_motion()
+{
+    if (g_player_hud)
+        g_player_hud->scene_stop();
+}
+
 // XXX nitrocaster: one can export enum like class, without defining dummy type
 template<typename T>
 struct EnumCallbackType {};
@@ -804,6 +894,9 @@ void CLevel::script_register(lua_State* luaState)
             .def_readonly("object", &script_rq_result::O)
             .def_readonly("range", &script_rq_result::range)
             .def_readonly("element", &script_rq_result::element)
+            .def_readonly("material_name", &script_rq_result::material_name)
+            .def_readonly("material_flags", &script_rq_result::material_flags)
+            .def_readonly("material_shoot_factor", &script_rq_result::material_shoot_factor)
             .def(constructor<>()),
         class_<EnumCallbackType<collide::rq_target>>("rq_target")
             .enum_("targets")
@@ -890,6 +983,12 @@ void CLevel::script_register(lua_State* luaState)
         def("press_action", &level_press_action),
         def("hold_action", &level_hold_action),
         def("release_action", &level_release_action),
+        // Script-owned camera for scenes; the names the community's modded engines use.
+        def("set_cam_custom_position_direction", &scene_cam_set2),
+        def("set_cam_custom_position_direction", &scene_cam_set3),
+        def("set_cam_custom_position_direction", &scene_cam_set4),
+        def("set_cam_custom_position_direction", &scene_cam_set5),
+        def("remove_cam_custom_position_direction", &scene_cam_remove),
         def("action_id", &level_action_id),
         def("set_weather", set_weather),
         def("set_weather_fx", set_weather_fx),
@@ -1089,6 +1188,17 @@ void CLevel::script_register(lua_State* luaState)
         def("jump_to_level", +[](const Fvector& m_position, u32 m_level_vertex_id, GameGraph::_GRAPH_ID m_game_vertex_id)
         {
             jump_to_level(m_position, m_level_vertex_id, m_game_vertex_id, {});
-        })
+        }),
+        // Script scenes: the input gate, the ladder gate, world-to-UI and the hand scenes.
+        def("only_allow_movekeys", &scene_only_movekeys),
+        def("only_movekeys_allowed", &scene_only_movekeys_allowed),
+        def("set_actor_allow_ladder", &scene_allow_ladder),
+        def("world2ui", &scene_world2ui1),
+        def("world2ui", &scene_world2ui2),
+        def("world2ui", &scene_world2ui3),
+        def("play_hud_motion", &scene_play_hud_motion5),
+        def("play_hud_motion", &scene_play_hud_motion6),
+        def("get_motion_length", &scene_get_motion_length),
+        def("stop_hud_motion", &scene_stop_hud_motion)
     ];
 }

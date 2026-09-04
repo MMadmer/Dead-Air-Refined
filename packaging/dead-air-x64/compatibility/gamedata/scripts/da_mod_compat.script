@@ -1,0 +1,205 @@
+-- Compatibility layer for the Anomaly-born animation scripts (FDDA, Ledge Grabbing).
+--
+-- They lean on a few helpers of Anomaly's _g.script that Dead Air does not have. The helpers
+-- live here, apart from the addons, so the addons stay close to their upstream and the next
+-- sync is a diff, not a rewrite.
+--
+-- install() MUST run before the first line of an addon: they capture globals at load time
+-- (`local normalize = normalize`), and a helper defined later stays nil in that local forever.
+-- Names are written through _G on purpose: a plain assignment lands in this script's own
+-- namespace table (setfenv) and no other script sees it.
+
+local installed = false
+
+-- Where a value sits between lo and hi as a 0..1 share. A degenerate range gives zero.
+local function da_normalize(value, lo, hi)
+	if (not value) or (not lo) or (not hi) then return 0 end
+	if (hi == lo) then return 0 end
+	return (value - lo) / (hi - lo)
+end
+
+local function da_clamp(value, lo, hi)
+	if (not value) then return lo end
+	if (value < lo) then return lo end
+	if (value > hi) then return hi end
+	return value
+end
+
+-- Cross-script flags. Only "actor_climbing" is used: the climb mutes strike damage through it.
+local events = {}
+local function da_get_event(name) return events[name] end
+local function da_set_event(name, value) events[name] = value end
+
+-- Run a function on the next actor update. The climb takes the camera in one frame and asks
+-- for the hand cycle in the next, otherwise the hands blink in the old place. A true return
+-- means "done", false keeps the call for another frame; n delays the first attempt by n frames.
+local pending = {}
+
+local function da_next_tick(func, n)
+	if (type(func) ~= "function") then return end
+	pending[#pending + 1] = { f = func, n = math.max(math.floor(n or 1), 1) }
+end
+
+local function on_update()
+	if (#pending == 0) then return end
+	-- Taken whole and cleared before the calls: a call may queue another one.
+	local batch = pending
+	pending = {}
+	for i = 1, #batch do
+		local entry = batch[i]
+		if (entry.n > 1) then
+			entry.n = entry.n - 1
+			pending[#pending + 1] = entry
+		else
+			local ok, keep = pcall(entry.f)
+			if (not ok) then
+				printf("![da_mod_compat] deferred call failed: %s", tostring(keep))
+			elseif (keep ~= true) then
+				pending[#pending + 1] = entry
+			end
+		end
+	end
+end
+
+local function da_print_tip(fmt, ...)
+	if (not fmt) then return end
+	printf("~[da_mod_compat] " .. tostring(fmt), ...)
+end
+
+local function da_random_float(lo, hi)
+	if (not lo) then return 0 end
+	if (not hi) then lo, hi = 0, lo end
+	return lo + math.random() * (hi - lo)
+end
+
+-- Anomaly lets an addon declare a new callback name; Dead Air's list (axr_main.intercepts) is
+-- closed. The name is remembered and nothing more: the call sits at file level in the addons
+-- and must not fail.
+local declared = {}
+local function da_add_script_callback(name)
+	if (name) then declared[name] = true end
+end
+
+-- Console value by kind: 1 integer, 2 float, 3 bool, else string (the Anomaly convention).
+local function da_get_console_cmd(kind, cmd)
+	if (not cmd) then return end
+	local c = get_console()
+	if (not c) then return end
+	if (kind == 1) then return c:get_integer(cmd) end
+	if (kind == 2) then return c:get_float(cmd) end
+	if (kind == 3) then return c:get_bool(cmd) end
+	return c:get_string(cmd)
+end
+
+local function da_dup_table(t)
+	if (type(t) ~= "table") then return t end
+	local r = {}
+	for k, v in pairs(t) do
+		r[k] = (type(v) == "table") and da_dup_table(v) or v
+	end
+	return r
+end
+
+-- The engine's EMoveCommand flags (actor_defs.h); Anomaly exports them as `move_state`.
+local da_move_state = {
+	mcFwd = 1, mcBack = 2, mcLStrafe = 4, mcRStrafe = 8, mcCrouch = 16, mcAccel = 32,
+	mcTurn = 64, mcJump = 128, mcFall = 256, mcLanding = 512, mcLanding2 = 1024,
+	mcClimb = 2048, mcSprint = 4096, mcLLookout = 8192, mcRLookout = 16384,
+}
+da_move_state.mcAnyMove = 15
+da_move_state.mcAnyAction = 15 + 128 + 256 + 512 + 1024
+da_move_state.mcAnyState = 16 + 32 + 2048 + 4096
+da_move_state.mcLookout = 8192 + 16384
+
+local function da_is_move_state(name)
+	if (not name) or (not db.actor) then return false end
+	local flag = da_move_state[name]
+	if (not flag) or (not db.actor.get_actor_movement_state) then return false end
+	local ms = db.actor:get_actor_movement_state()
+	if (not ms) then return false end
+	return bit_and(ms, flag) ~= 0
+end
+
+-- kind: 0 string, 1 bool, 2 float, else string.
+local function da_sys_get_param(kind, section, param, default)
+	if (not section) or (not param) then return default end
+	local ini = system_ini()
+	if (not ini) or (not ini:section_exist(section)) then return default end
+	if (kind == 0) then return ini:r_string_ex(section, param) or default end
+	if (kind == 1) then return ini:r_bool_ex(section, param, default) end
+	if (kind == 2) then return ini:r_float_ex(section, param) or default end
+	return ini:r_string_ex(section, param) or default
+end
+
+local function da_exec_console_cmd(cmd)
+	if (cmd) then get_console():execute(cmd) end
+end
+
+local function da_alife_create_item(section, obj, data)
+	if (not section) or (not obj) or (not alife()) then return end
+	return alife():create(section, obj:position(), obj:level_vertex_id(), obj:game_vertex_id(), obj:id())
+end
+
+local function da_alife_release(obj)
+	if (not obj) or (not alife()) then return end
+	local se = alife():object(obj:id())
+	if (se) then alife():release(se, true) end
+end
+
+local function da_hide_hud_inventory()
+	local hud = get_hud()
+	if (hud and hud.HideActorMenu) then hud:HideActorMenu() end
+end
+
+-- Anomaly settings the addons ask for. Answered with defaults: animations on, no mask overlay.
+local da_options_defaults = {
+	["video/player/animations"] = true,
+	["video/player/mask_hud"] = false,
+	["control/general/pickup_mode"] = false,
+}
+
+local da_ui_options = {}
+function da_ui_options.get(path)
+	local v = da_options_defaults[path]
+	if (v ~= nil) then return v end
+	return false
+end
+
+function install()
+	if (installed) then return end
+	installed = true
+
+	-- Only names that do not exist yet: a future Dead Air helper of the same name wins.
+	local add = {
+		alife_create_item = da_alife_create_item,
+		alife_release = da_alife_release,
+		hide_hud_inventory = da_hide_hud_inventory,
+		ui_options = da_ui_options,
+		move_state = da_move_state,
+		normalize = da_normalize,
+		clamp = da_clamp,
+		GetEvent = da_get_event,
+		SetEvent = da_set_event,
+		nextTick = da_next_tick,
+		print_tip = da_print_tip,
+		exec_console_cmd = da_exec_console_cmd,
+		random_float = da_random_float,
+		AddScriptCallback = da_add_script_callback,
+		get_console_cmd = da_get_console_cmd,
+		dup_table = da_dup_table,
+		IsMoveState = da_is_move_state,
+		SYS_GetParam = da_sys_get_param,
+	}
+
+	for name, func in pairs(add) do
+		if (_G[name] == nil) then
+			_G[name] = func
+		end
+	end
+end
+
+-- The update subscription is separate from install(): install() runs while the addons load,
+-- before the game has started, and axr_main may not be ready for a subscription yet.
+function on_game_start()
+	RegisterScriptCallback("actor_on_update", on_update)
+end

@@ -1,0 +1,22 @@
+; [DA_PORT] Анимации надевания брони, шлема и рюкзака.
+;
+; Написано заново. Готовые наборы под это есть (Headgear Animations, FDDA Redone Outfit), но оба
+; помечены на ModDB как Proprietary - см. da_port/docs/anim_permission_letters.md, письма авторам
+; отправлены. Пока ответа нет, механика работает на движениях из FDDA 0.9b (Public Domain).
+;
+; item_visual тут НЕТ намеренно: предмет в руках расставляется по скелету рук Anomaly, а у наших
+; рук от CoC кость хвата стоит иначе. На мешке после разделки это вышло боком, повторять незачем.
+;
+; Когда разрешение придёт, менять надо будет ТОЛЬКО эти разделы: имена циклов и модели. Скрипт и
+; точка перехвата в движке останутся как есть.
+
+[da_wear_outfit_hud]
+hands_position                           = 0, 0.00, -0.1
+hands_position_16x9                      = 0, 0.00, -0.1
+anm_ea_show                              = open_b_backpack
+
+[da_wear_helmet_hud]:da_wear_outfit_hud
+anm_ea_show                              = actor_use_protector
+
+[da_wear_backpack_hud]:da_wear_outfit_hud
+anm_ea_show                              = idle_b_backpack

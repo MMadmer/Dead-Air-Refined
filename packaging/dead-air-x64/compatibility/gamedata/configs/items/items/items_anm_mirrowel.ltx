@@ -1,0 +1,201 @@
+; [DA_PORT] Разделы анимаций из аддона Mirrowel (ModDB, Creative Commons).
+;
+; Взято ради вещей, которые у нас до этого играли ЧУЖИЕ анимации по подстановке: орехи и изюм
+; ели как хлеб, лосось как консерву, чай как минералку, мята и анабиотик как коагулянт, а вся
+; курительная мелочь - как сигареты. Здесь у каждой из них своя.
+;
+; Файлы мода написаны на DLTX (приставки ! и @ у разделов) - у нас его нет, поэтому приставки
+; сняты, а перекрытия разведены руками: одноимённый раздел в двух файлах роняет разбор конфигов.
+;
+; Автор набора: Mirrowel. Лицензия Creative Commons, указание авторства обязательно.
+
+; ---- из mod_system_anims_drinks_roanims.ltx ----
+;Р“Р•Р РљРЈР›Р•РЎ
+
+[item_ga_booster_weight_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9		= 0.0,0.0,0.0
+
+item_visual             	= dynamics\drinks\hercules_hud.ogf
+anm_ea_show					= gerkules, gerkules
+
+;Р’РћР”Рђ
+
+[item_ga_flask_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9		= 0.0,0.0,0.0
+item_visual             	= dynamics\flask\wpn_water_flask_hud.ogf
+anm_ea_show					= flask_rework_hand_drink, flask_rework_drink
+
+[item_ga_mineral_water_hud]
+item_visual             	= dynamics\drinks\water_hud.ogf
+anm_ea_show					= voda, water
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9		= 0.0,0.0,0.0
+
+[item_ga_flask2_hud]
+hands_position              = 0, 0, 0.08
+hands_position_16x9         = 0, 0, 0.08
+
+item_visual             	= dynamics\flask\wpn_faster_vodka_flask_hud.ogf
+anm_ea_show					= flask_faster_rework_hand_drink, flask_rework_drink
+
+[item_ga_water_flask_hud]
+hands_position              = 0, 0, 0.08
+hands_position_16x9         = 0, 0, 0.08
+item_visual             	= dynamics\flask\wpn_faster_metal_flask_hud.ogf
+anm_ea_show					= flask_faster_rework_hand_drink, flask_rework_drink
+
+;Р­РќР•Р Р“Р•РўР?Рљ РќРћРќРЎРўРћРџ
+
+[item_ga_energy_drink_nonstop_hud]
+hands_position				= 0.0,-0.02,0.12
+hands_orientation			= 0.0,0.05,0.0
+hands_position_16x9			= 0.0,-0.02,0.12
+hands_orientation_16x9			= 0.0,0.05,0.0
+item_visual             	= dynamics\banki\energy_hud.ogf
+anm_ea_show					= energetic, energy_drink
+
+;Р­РќР•Р Р“Р•РўР?Рљ
+
+[item_ga_energy_drink_hud]:item_ga_energy_drink_nonstop_hud
+hands_position				= 0.0,-0.02,0.12
+hands_orientation			= 0.0,0.05,0.0
+hands_position_16x9			= 0.0,-0.02,0.12
+hands_orientation_16x9			= 0.0,0.05,0.0
+item_visual             	= dynamics\banki\energy_hud.ogf
+anm_ea_show					= energetic, energy_drink
+
+;Р’РћР”РљРђ РќР•РњР?Р РћР¤
+
+[item_ga_hemupob_vodka_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9			= 0.0,0.0,0.0
+
+item_visual             	= dynamics\vodki\vodka_hud.ogf
+anm_ea_show					= vodara, vodka
+
+;Р’РћР”РљРђ РЎРњР?Р РќРћР’
+
+[item_ga_cmuphob_vodka_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9			= 0.0,0.0,0.0
+
+item_visual             	= dynamics\vodki\vodka_hud.ogf
+anm_ea_show					= vodara, vodka
+
+;Р’Р?РќРћ
+
+[item_ga_vodka_wine_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9			= 0.0,0.0,0.0
+
+item_visual             	= dynamics\vodki\vodka_hud.ogf
+anm_ea_show					= vodara, vodka
+
+[item_ga_anabiotic_hud]:
+hands_position				= 0.0,-0.01,0.17
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.01,0.17
+hands_orientation_16x9		= 0.0,0.0,0.0
+
+item_visual             	= dynamics\drugs\anabiotic_hud
+anm_ea_show					= anabio, biotic
+
+; ---- из mod_system_anims_new_roanims.ltx ----
+[item_ro_water_can_1_hud]:item_ga_energy_drink_nonstop_hud
+item_visual             	= dynamics\banki\water_can_hud.ogf
+
+[item_ro_mineral_water_hud]:item_ga_flask_hud
+item_visual             	= dynamics\drinks\wpn_voda_hud.ogf
+
+[item_ro_beard_hud]:item_ga_flask_hud
+item_visual             	= dynamics\drinks\wpn_beard_hud.ogf
+
+[item_ro_nuts_hud]:item_ea_conserva_hud
+item_visual             	= dynamics\psut\wpn_eat_nuts.ogf
+
+[item_ro_raisins_hud]:item_ea_conserva_hud
+item_visual             	= dynamics\psut\wpn_eat_raisins.ogf
+
+[item_ro_cigarettes_rus_hud]:item_ea_cigar1_hud
+item_visual             	= dynamics\smokes\rus.ogf
+
+[item_ro_cigarettes_joint_hud]:item_ea_cigar1_hud
+item_visual             	= dynamics\smokes\joint.ogf
+
+[item_ro_cigarettes_cuban_hud]:item_ea_cigar1_hud
+item_visual             	= dynamics\smokes\cuban.ogf
+
+[item_ro_cigarettes_handroll_hud]:item_ea_cigar1_hud
+item_visual             	= dynamics\smokes\handroll.ogf
+
+[item_ro_mint_hud]
+hands_position = -0.0055, 0.00, 0.12
+hands_position_16x9 = -0.0055, 0.00, 0.12
+item_visual = dynamics\psut\wpn_tablet_mint_hud
+anm_ea_show = testww2.skls, drug_2.skls
+
+[item_ro_hemupob_vodka_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9			= 0.0,0.0,0.0
+
+item_visual             	= dynamics\vodki\wpn_vodka_hemupob_hud.ogf
+anm_ea_show					= vodara, vodka
+
+;Р’РћР”РљРђ РЎРњР?Р РќРћР’
+
+[item_ro_cmuphob_vodka_hud]
+hands_position				= 0.0,-0.02,0.14
+hands_orientation			= 0.0,0.0,0.0
+hands_position_16x9			= 0.0,-0.02,0.14
+hands_orientation_16x9			= 0.0,0.0,0.0
+
+item_visual             	= dynamics\vodki\wpn_vodka_cmuphob_hud.ogf
+anm_ea_show					= vodara, vodka
+; ---- из mod_system_mfs_anims_roanims.ltx ----
+;РљРћР›Р‘РђРЎРђ
+[item_mfs_kolbasa_hud]
+hands_position				= 0.0, 0.0, 0.0
+hands_orientation			= 0.0, 0.0, 0.0
+hands_position_16x9			= -0.0365, 0.0, 0.035
+hands_orientation_16x9		= -15.0, 0.0, 0.0
+
+item_visual = dynamics\mfs\mfs_kolbasa_hud.ogf
+anm_ea_show = mfs_use_kolbasa, mfs_use_kolbasa, 0.7
+
+
+;РҐР›Р•Р‘
+[item_mfs_bread_hud]
+hands_position				= 0.0, 0.0, 0.0
+hands_orientation			= 0.0, 0.0, 0.0
+hands_position_16x9			= -0.0365, 0.0, 0.045
+hands_orientation_16x9		= -15.0, 0.0, 0.0
+
+item_visual = dynamics\mfs\mfs_bread_hud.ogf
+anm_ea_show = mfs_use_bread, mfs_use_bread, 0.7
+
+
+;РЎРўРђР Р«Р™ РҐР›Р•Р‘
+[item_mfs_bread_old_hud]
+hands_position				= 0.0, 0.0, 0.0
+hands_orientation			= 0.0, 0.0, 0.0
+hands_position_16x9			= -0.0365, 0.0, 0.045
+hands_orientation_16x9		= -15.0, 0.0, 0.0
+
+item_visual = dynamics\mfs\mfs_bread_old_hud.ogf
+anm_ea_show = mfs_use_bread, mfs_use_bread, 0.7
