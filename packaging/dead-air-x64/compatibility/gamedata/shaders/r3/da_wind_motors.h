@@ -70,7 +70,10 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
             const float t = dist3 * (1.0f / 0.16f);
             const float2 radial = (dist_xz > 0.02f) ? (d / dist_xz) : float2(-ldir.y, ldir.x);
             const float2 push = normalize(ldir * 0.75f + radial * 0.50f);
-            bend += push * (exp(-t * t) * A.x * H);
+            // The lever stops at a metre: the wake shakes the leaves it passes, it does not
+            // swing a crown twelve metres up by twelve metres (that was the spike a shot
+            // through a tree left behind).
+            bend += push * (exp(-t * t) * A.x * min(H, 1.0f));
             continue;
         }
 
@@ -110,7 +113,14 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
             const float tau = (A.y - dist) * (1.0f / 22.0f);
             w = exp(-tau * 3.5f) * cos(tau * 9.0f);
         }
-        bend += (d / dist) * (w * amp * H);
+        // The height lever belongs to grass and bushes, where the whole plant bends from its
+        // root. On a tree it turned a stalker walking past the trunk into crown cards thrown
+        // out by metres (H at the top times the press strength, then the 0.5 H cap). A press
+        // keeps a lever of at most 1.5 m and reaches nothing above three metres; a blast
+        // keeps the full lever - its front is meant to bend the whole tree.
+        const float lever = is_blast ? H : min(H, 1.5f);
+        const float reach = is_blast ? 1.0f : saturate((3.0f - H) * 0.5f);
+        bend += (d / dist) * (w * amp * lever * reach);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.
         press_w = max(press_w, w * saturate(A.x * 2.0f) * ((A.y <= 0.001f && !is_blast) ? 1.0f : 0.0f));

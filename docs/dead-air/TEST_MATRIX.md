@@ -143,6 +143,7 @@ cannot point a shipped build at an arbitrary server.
 | Landing roll sound | Any drop that triggers the roll | Pass: `actor\fall_roll` plays once, 2D, as the roll begins; the log shows no `Invalid ogg-comment version` for it and no missing-sound line |
 | Landing roll from the console | Rig, `time_factor 0.2`, `r__screenshot_every 1`, `fall_roll_test` | Pass: the frames show the view going down, over and back up in one forward turn with a small overshoot before it settles, the body ends crouched and moved ahead, and the log reads `- fall roll: sound 'actor/fall_roll' handle ok, 179548 bytes, 1.02 s, feedback yes` (a `none` handle or `feedback no` is the failure) |
 | Weight bonus of a kit in the backpack slot | Console open, hold jump at a ledge with `kit_hunt` (class SCRPTART) in the backpack slot, with and without enough stamina | Pass: no `cannot access class member GetAdditionalMaxWeight` line - `get_additional_max_weight` returns the artefact's `additional_inventory_weight` - and a stamina refusal is re-tried once a second, not every frame |
+| Wind motors do not tear tree crowns | Rookie village, stalkers walking under the poplars, a shot fired through a crown, a grenade beside a tree | Pass: no crown card shoots out into a spike while someone walks past the trunk or a bullet passes through the leaves - a press motor keeps a lever of at most 1.5 m and reaches nothing above three metres, a shot's wake a lever of one metre; the grenade blast still bends the whole tree and it springs back |
 
 ## Content coverage limits
 

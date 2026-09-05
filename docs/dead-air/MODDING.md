@@ -785,6 +785,17 @@ the GPU timers (frame, scene, shadows, sun, lights, clouds, combine) once, `r__g
 logs them every N frames, `r__screenshot_every N` photographs every N-th frame - the
 headless QA rig uses the last two to grade a run without a window.
 
+### Wind motors and tall vegetation
+
+The motors (`da_wind_motors.h`: a press under a walking actor or creature, the wake of a shot, the
+ring of a blast) displace a vertex by strength times a lever. For grass and bushes the lever is
+the vertex height above the root - the whole plant bends from its base. A tree is not a blade of
+grass: a stalker walking past the trunk used to swing crown cards twelve metres up by up to the
+0.5 H cap, and single cards shot out as spikes while people moved about. A press now keeps a lever
+of at most 1.5 m and reaches nothing above three metres, a shot's wake a lever of one metre (it
+shakes the leaves it passes), and a blast keeps the full lever, its front being meant to bend the
+whole tree. Grass shorter than a metre sees no change.
+
 ## First-person self-shadow
 
 `r__hud_shadow` (on for the Maximum preset) gives the hands and the held item a shadow of
