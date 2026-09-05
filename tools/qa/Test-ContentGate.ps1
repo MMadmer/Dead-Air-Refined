@@ -38,13 +38,18 @@ function Invoke-Case {
         [Parameter(Mandatory)][scriptblock]$Cleanup,
         [string[]]$Expect = @(),
         [string[]]$Reject = @(),
-        [int]$RunSeconds = 0
+        [int]$RunSeconds = 0,
+        # A log line that ends the run early: the hash pass over the real content set takes a
+        # minute or more after the level has loaded, so a case that needs its verdict waits for
+        # the line that carries it instead of quitting on a fixed clock.
+        [string]$WaitFor = ""
     )
 
     & $Arrange
     try {
-        $output = & pwsh -NoProfile -File $probe -Label $Name -Commands $script:start -RunSeconds $RunSeconds |
-            Out-String
+        $probeArgs = @("-Label", $Name, "-Commands", $script:start, "-RunSeconds", $RunSeconds)
+        if ($WaitFor) { $probeArgs += @("-WaitFor", $WaitFor) }
+        $output = & pwsh -NoProfile -File $probe @probeArgs | Out-String
     }
     finally {
         & $Cleanup
@@ -75,10 +80,12 @@ $noop = { }
 $clearLatch = { Remove-Item -LiteralPath $latch -Force -ErrorAction SilentlyContinue }
 
 Invoke-Case -Name "healthy install" -Arrange $noop -Cleanup $noop `
-    -Expect @("$bundleCount bundle(s) present") -Reject @("Cannot start a level", "skipped")
+    -Expect @("$bundleCount bundle(s) present", "verified $bundleCount of $bundleCount") `
+    -Reject @("Cannot start a level", "skipped") -RunSeconds 150 -WaitFor "] verified"
 
 Invoke-Case -Name "second launch uses the state cache" -Arrange $noop -Cleanup $noop `
-    -Expect @("$bundleCount bundle(s), 0 hashed") -Reject @("Cannot start a level")
+    -Expect @("$bundleCount bundle(s), 0 hashed") -Reject @("Cannot start a level") `
+    -RunSeconds 150 -WaitFor "] verified"
 
 Invoke-Case -Name "missing bundle" `
     -Arrange { Move-Item -LiteralPath $sounds "$sounds.stash" -Force } `
@@ -114,7 +121,7 @@ Invoke-Case -Name "flipped data byte" `
         [IO.File]::WriteAllBytes($sounds, $bytes)
     } `
     -Cleanup { Move-Item -LiteralPath "$sounds.stash" $sounds -Force; & $clearLatch } `
-    -Expect @("does not match the manifest")
+    -Expect @("does not match the manifest") -RunSeconds 150 -WaitFor "does not match the manifest"
 
 Invoke-Case -Name "stale and unrecognised leftovers do not block play" `
     -Arrange {
@@ -140,7 +147,8 @@ Invoke-Case -Name "a leftover latch on an intact install clears itself" `
             "schema=dead-air-refined.content-incomplete/1`nversion=1.4.0`nreason=repair-commit`ntime=1`n")
     } `
     -Cleanup { & $clearLatch } `
-    -Expect @("the incomplete latch is set", "the incomplete latch is cleared") -RunSeconds 45
+    -Expect @("the incomplete latch is set", "the incomplete latch is cleared") `
+    -RunSeconds 150 -WaitFor "the incomplete latch is cleared"
 
 if (Test-Path -LiteralPath $latch) {
     $failures.Add("the rig was left latched")
