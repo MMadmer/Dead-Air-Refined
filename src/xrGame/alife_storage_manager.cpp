@@ -2209,6 +2209,10 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
     for (auto& object : objects().objects())
         object.second->on_register();
 
+    // XMS: what a module that is no longer installed had spawned into this save goes now,
+    // registered and offline, before any client asks for a visual that left with the module.
+    XmsGame::ReleaseOrphanedModuleSpawns(*this);
+
     if (!g_pGameLevel)
         return;
 

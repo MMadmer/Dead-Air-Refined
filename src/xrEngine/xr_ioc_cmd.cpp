@@ -810,9 +810,12 @@ extern int g_ErrorLineCount;
 
 ENGINE_API int ps_r__Supersample = 1;
 ENGINE_API int ps_r__WallmarksOnSkeleton = 0;
-ENGINE_API float ps_r__color_base_r = 0.42f;
+// Colour correction sliders (Options -> Video). 0.5 on every channel is a neutral white
+// balance: whites stay white and the scene takes its colour from the light and the sky. The
+// 0.42 / 0.50 / 0.65 the x86 build shipped was Dead Air's cold cast; a real camera shows none.
+ENGINE_API float ps_r__color_base_r = 0.5f;
 ENGINE_API float ps_r__color_base_g = 0.5f;
-ENGINE_API float ps_r__color_base_b = 0.65f;
+ENGINE_API float ps_r__color_base_b = 0.5f;
 ENGINE_API float ps_r__color_add_r = 0.f;
 ENGINE_API float ps_r__color_add_g = 0.f;
 ENGINE_API float ps_r__color_add_b = 0.f;

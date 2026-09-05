@@ -43,7 +43,8 @@ void dxLensFlareRender::Render(CLensFlare& owner, BOOL bSun, BOOL bFlares, BOOL 
                 color.set(1.f, 1.f, 1.f, 1.f);
             else
                 color.set(dwLight);
-            color.a *= owner.m_StateBlend;
+            // The sun disc behind a cloud fades with the cloud, like the light it casts.
+            color.a *= owner.m_StateBlend * g_pGamePersistent->Environment().cloud_sun_visibility;
             u32 c = color.get();
             pv->set(owner.vecLight.x + vecSx.x - vecSy.x, owner.vecLight.y + vecSx.y - vecSy.y,
                 owner.vecLight.z + vecSx.z - vecSy.z, c, 0, 0);
@@ -102,7 +103,10 @@ void dxLensFlareRender::Render(CLensFlare& owner, BOOL bSun, BOOL bFlares, BOOL 
                 vecSy.mul(owner.vecY, owner.m_Current->m_Gradient.fRadius * owner.fGradientValue * fDistance);
 
                 color.set(dwLight);
-                color.mul_rgba(owner.fGradientValue * owner.m_StateBlend);
+                // The glare in the eyes is the sun seen through the cover, not the flare
+                // descriptor alone: a deck that dims the ground dims the glare as much.
+                color.mul_rgba(owner.fGradientValue * owner.m_StateBlend *
+                    g_pGamePersistent->Environment().cloud_sun_visibility);
 
                 u32 c = color.get();
                 pv->set(owner.vecLight.x + vecSx.x - vecSy.x, owner.vecLight.y + vecSx.y - vecSy.y,

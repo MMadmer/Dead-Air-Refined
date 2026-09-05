@@ -515,6 +515,18 @@ is composite).
    section name already exposed to Lua. A module may declare `on_install` / `on_uninstall` hooks.
 6. **`REGISTRY_CHUNK` stays untouched.** Positional concatenation without framing
    (`alife_registry_container.cpp:52`) — any edit breaks everything; module state lives in `.scov`.
+7. **Removing a mod from an existing save.** The manifest names every module the save was written
+   with, its `ns` and its spawn-id range. A module that is gone or gated off at load is reported
+   (`! XMS: save was made with module [...] which is no longer installed`) and then
+   `XmsGame::ReleaseOrphanedModuleSpawns` releases what it had composed: every registered object
+   whose spawn id lies in the module's range or in its applied-spawn ledger, children with their
+   parents, server-side and offline, right after `on_register` and before the level goes online.
+   The module's ledger goes with the objects, so a module that comes back places its spawns
+   again. Objects the module's scripts created by hand carry no spawn id and stay: they are made
+   of stock sections and visuals. Skipping unknown sections (item 3) covers the other half - a
+   record whose section left with the module. Without this pass a box the module had placed
+   stayed in the save with a visual that left with the module, and the load died on
+   `Can't find model file`.
 
 ---
 

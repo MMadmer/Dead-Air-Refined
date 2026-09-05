@@ -33,6 +33,19 @@ struct BlobState
     xr_unordered_map<u16, xr_vector<u16>> pending_ledgers;
     xr_unordered_map<u16, xr_vector<u16>> loaded_ledgers;
     u32 skipped_objects{0};
+    // Modules the loaded save was written with that are gone or gated off now, with the
+    // spawn-id range the manifest kept for them: their composed objects are released after
+    // the registry is up, before the level goes online. Without this a box the module placed
+    // stays in the save with a visual that left with the module - and the load dies on it.
+    struct OrphanModule
+    {
+        shared_str id;
+        shared_str version;
+        u16 ns{};
+        u32 base{};
+        u32 size{};
+    };
+    xr_vector<OrphanModule> orphans;
 };
 
 BlobState& bs()
@@ -122,6 +135,7 @@ void parse_manifest(const xr_vector<u8>& payload)
             ++missing;
             Msg("! XMS: save was made with module [%s %s] which is no longer installed", id.c_str(), version.c_str());
             XMS::AddConflict(XMS::ConflictKind::Other, id.c_str(), "present in savegame", "missing at load");
+            bs().orphans.push_back({ id, version, ns, base, size });
         }
         else if (current->version != version.c_str())
             Msg("* XMS: module [%s] version changed since the save: %s -> %s", id.c_str(), version.c_str(),
@@ -214,6 +228,7 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     state.loaded.clear();
     state.pending_ledgers.clear();
     state.loaded_ledgers.clear();
+    state.orphans.clear();
     state.skipped_objects = 0;
 
     // The mode set is process-global and outlives "quit to menu, load another
@@ -259,6 +274,7 @@ void SyncModesFromNewGameOptions()
     state.loaded.clear();
     state.pending_ledgers.clear();
     state.loaded_ledgers.clear();
+    state.orphans.clear();
     state.skipped_objects = 0;
     if (!XMS::Active())
         return;
@@ -389,6 +405,62 @@ u32 LateSpawnCompose(CALifeSimulatorBase& sim)
         created_total += created;
     }
     return created_total;
+}
+
+u32 ReleaseOrphanedModuleSpawns(CALifeSimulatorBase& sim)
+{
+    BlobState& state = bs();
+    if (state.orphans.empty())
+        return 0;
+
+    u32 released_total = 0;
+    for (const BlobState::OrphanModule& orphan : state.orphans)
+    {
+        // Everything the module composed carries a spawn id from its range; the ledger of
+        // what this playthrough instantiated is the second net for a range the manifest
+        // could not keep. Objects its scripts created by hand carry no spawn id and stay -
+        // they are made of stock sections and visuals.
+        xr_vector<bool> owned(65536, false);
+        bool any = false;
+        if (orphan.size)
+        {
+            const u32 top = std::min(orphan.base + orphan.size, 65535u);
+            for (u32 id = orphan.base; id < top; ++id)
+                owned[id] = any = true;
+        }
+        const auto ledger = state.loaded_ledgers.find(orphan.ns);
+        if (ledger != state.loaded_ledgers.end())
+            for (const u16 id : ledger->second)
+                owned[id] = any = true;
+        if (!any)
+            continue;
+
+        xr_vector<ALife::_OBJECT_ID> victims;
+        for (const auto& [id, object] : sim.objects().objects())
+            if (object->m_tSpawnID != ALife::_SPAWN_ID(-1) && owned[object->m_tSpawnID])
+                victims.push_back(id);
+
+        u32 released = 0;
+        for (const ALife::_OBJECT_ID id : victims)
+        {
+            // a child released with its parent is gone by the time its own turn comes
+            CSE_ALifeDynamicObject* object = sim.objects().object(id, true);
+            if (!object)
+                continue;
+            sim.release(object, true);
+            ++released;
+        }
+
+        // The ledger said "applied": with the objects gone it must not, or the module coming
+        // back would find its spawns marked done and place nothing.
+        state.loaded_ledgers.erase(orphan.ns);
+        state.pending_ledgers.erase(orphan.ns);
+
+        Msg("! XMS: module [%s %s] is gone - released %u object(s) it had spawned into this save", orphan.id.c_str(),
+            orphan.version.c_str(), released);
+        released_total += released;
+    }
+    return released_total;
 }
 
 u32 RecomposeAndLateSpawn(CALifeSimulatorBase& sim)

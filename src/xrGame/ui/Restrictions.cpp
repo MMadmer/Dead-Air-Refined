@@ -50,8 +50,11 @@ u32 get_rank(const shared_str& section)
     if (res == -1)
     {
         std::lock_guard lock(missingRankMutex);
+        // The rank lists are the multiplayer tables (mp_ranks.ltx); in single player they
+        // only order weapons for the NPC swap logic, and a weapon the lists never mention is
+        // simply the lowest tier. A data note, once, not an error.
         if (missingRanks.emplace(section, true).second)
-            Msg("! Setting rank to 0. Cannot find rank for: [%s]", section.c_str());
+            Msg("~ Weapon [%s] is in no rank_N list of mp_ranks.ltx, rank 0 assumed", section.c_str());
         // Xottab_DUTY: I'm not sure if it's save to leave it -1
         res = 0;
     }

@@ -71,6 +71,13 @@ IReader* ComposeGameGraph(IReader* base_chunk);
 // Returns how many objects were created.
 u32 LateSpawnCompose(class CALifeSimulatorBase& sim);
 
+// Releases the objects a module composed into a save that is now loaded without that
+// module (gone or gated off): everything with a spawn id in the module's range or in its
+// applied-spawn ledger, children with their parents, and the ledger with them. Runs after
+// the registry is registered and before the level goes online, so a visual that left with
+// the module is never asked for. Returns how many objects were released.
+u32 ReleaseOrphanedModuleSpawns(class CALifeSimulatorBase& sim);
+
 // Re-runs the spawn composer and then the late pass. For the Lua-side mode
 // restore on LEGACY saves: the manifestless save's modes become known only
 // once the game world is up, which is long after spawns().load composed with

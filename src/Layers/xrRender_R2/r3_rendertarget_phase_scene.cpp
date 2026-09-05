@@ -12,8 +12,7 @@ void CRenderTarget::phase_scene_prepare()
     //	Igor: soft particles
 
     const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-    const float fValue = env.m_fSunShaftsIntensity;
-    //	TODO: add multiplication by sun color here
+    const float fValue = env.m_fSunShaftsIntensity * g_pGamePersistent->Environment().cloud_sun_visibility;
     // if (fValue<0.0001) FlagSunShafts = 0;
 
     //	TODO: DX11: Check if complete clear of _ALL_ rendertargets will increase

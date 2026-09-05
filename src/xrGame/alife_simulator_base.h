@@ -44,6 +44,7 @@ namespace XmsGame
 {
 u32 LateSpawnCompose(CALifeSimulatorBase& sim);
 u32 RecomposeAndLateSpawn(CALifeSimulatorBase& sim);
+u32 ReleaseOrphanedModuleSpawns(CALifeSimulatorBase& sim);
 }
 
 class CALifeSimulatorBase : public IPureDestroyableObject
@@ -52,6 +53,7 @@ class CALifeSimulatorBase : public IPureDestroyableObject
     // spawn_new_spawns does; it needs the protected registries for that
     friend u32 XmsGame::LateSpawnCompose(CALifeSimulatorBase&);
     friend u32 XmsGame::RecomposeAndLateSpawn(CALifeSimulatorBase&);
+    friend u32 XmsGame::ReleaseOrphanedModuleSpawns(CALifeSimulatorBase&);
 
 protected:
     IPureServer* m_server;

@@ -921,8 +921,8 @@ bool CRenderTarget::need_to_render_sunshafts()
 
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        const float fValue = env.m_fSunShaftsIntensity;
-        // TODO: add multiplication by sun color here
+        // Under a full cover the pass is skipped altogether, not drawn at zero strength.
+        const float fValue = env.m_fSunShaftsIntensity * g_pGamePersistent->Environment().cloud_sun_visibility;
         if (fValue < 0.0001)
             return false;
     }
