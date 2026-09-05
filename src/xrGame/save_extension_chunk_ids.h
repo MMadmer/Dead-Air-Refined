@@ -10,6 +10,8 @@ inline constexpr u32 ActorAdrenaline = 0x31524441;
 inline constexpr u32 HelmetFilters = 0x31544648;
 inline constexpr u32 ArtefactOverrides = 0x314F4641;
 inline constexpr u32 WeaponExtended = 0x31584557;
+// WFL1: the weapon fault accumulators (fouling, stress, wear, cleaning-cycle stage).
+inline constexpr u32 WeaponFouling = 0x314C4657;
 inline constexpr u32 EnvironmentSeason = 0x31414553;
 // NQ quest-graph runtime state: an opaque marshal blob owned by the xms_nq Lua
 // runtime (xms.save_data("xms.nq", ...)). Lives on the XMS per-module data
@@ -19,7 +21,7 @@ inline constexpr u32 EnvironmentSeason = 0x31414553;
 inline constexpr u32 XmsNqState = 0x584DFF01;
 
 inline constexpr std::array registered{
-    ActorAdrenaline, HelmetFilters, ArtefactOverrides, WeaponExtended, EnvironmentSeason, XmsNqState};
+    ActorAdrenaline, HelmetFilters, ArtefactOverrides, WeaponExtended, WeaponFouling, EnvironmentSeason, XmsNqState};
 
 consteval bool registered_ids_are_unique()
 {

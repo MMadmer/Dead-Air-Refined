@@ -43,6 +43,61 @@ static_assert((eWeaponConditionSidecarSaveMask & eWeaponConditionLegacySaveMask)
 static_assert(eWeaponConditionSidecarSaveMask == 0x06000000u);
 static_assert(eWeaponConditionLegacySaveMask == 0x78000000u);
 
+// ---- the fault rework: fouling -> deformation -> breakage ---------------------------------------
+// Fault ids (string id = bit + 1), never bits: a section's condition_avail is tested by id while
+// the fault mask stores id - 1. That asymmetry is the original x86 build's and every stock mask
+// was authored against it (CWeaponMagazined::AddConditionFault keeps it).
+inline constexpr u32 weapon_fault_bit(u32 id) { return 1u << (id - 1); }
+
+template <size_t N>
+constexpr u32 weapon_fault_mask(const u32 (&ids)[N])
+{
+    u32 mask = 0;
+    for (u32 id : ids)
+        mask |= weapon_fault_bit(id);
+    return mask;
+}
+
+// Fouling stage: the six "dirty" parts - mainspring, return spring, barrel, sear, firing pin, bolt.
+inline constexpr u32 kWeaponFoulingFaultIds[] = { 3, 5, 11, 16, 19, 22 };
+// Deformation stage (durability): worn receiver and mainspring, the deformed parts, split grip,
+// broken stock. The mounts and the selector (28..31) join the pool only on a weapon that has them.
+inline constexpr u32 kWeaponDeformFaultIds[] = { 1, 4, 6, 7, 8, 9, 12, 14, 17, 20, 23 };
+inline constexpr u32 kWeaponMountFaultIds[] = { 28, 29, 30, 31 };
+// Breakage stage: a deformed part that keeps being fired breaks into its counterpart.
+struct SWeaponFaultBreakage
+{
+    u32 deformedId;
+    u32 brokenId;
+};
+inline constexpr SWeaponFaultBreakage kWeaponFaultBreakages[] = {
+    { 1, 2 }, { 9, 10 }, { 12, 13 }, { 14, 15 }, { 17, 18 }, { 20, 21 } };
+
+inline constexpr u32 kWeaponFoulingFaultMask = weapon_fault_mask(kWeaponFoulingFaultIds);
+inline constexpr u32 kWeaponDeformFaultMask =
+    weapon_fault_mask(kWeaponDeformFaultIds) | weapon_fault_mask(kWeaponMountFaultIds);
+// Everything the original lists as a fault: bits 0-23 and the selector/mount bits 27-30. Bits
+// 24-26 are placeholders in the stock strings, 25-26 this build's chamber and magazine state.
+inline constexpr u32 kWeaponDisplayableFaultMask = 0x78FFFFFFu;
+static_assert((kWeaponDisplayableFaultMask & u32(eWeaponConditionSidecarSaveMask)) == 0);
+static_assert((kWeaponDeformFaultMask & u32(eWeaponConditionLegacySaveMask)) == u32(eWeaponConditionLegacySaveMask));
+
+// Deformed parts whose counterpart can still break: not broken yet, and allowed by the section.
+inline u32 weapon_breakable_deformations(u32 conditionType, u32 conditionAvailable)
+{
+    u32 mask = 0;
+    for (const SWeaponFaultBreakage& breakage : kWeaponFaultBreakages)
+    {
+        if ((conditionType & weapon_fault_bit(breakage.deformedId)) &&
+            !(conditionType & weapon_fault_bit(breakage.brokenId)) &&
+            (conditionAvailable & (1u << breakage.brokenId)))
+        {
+            mask |= weapon_fault_bit(breakage.deformedId);
+        }
+    }
+    return mask;
+}
+
 // WEX1 also accepts duplicated legacy bits from containers written before legacy ownership was restored.
 inline constexpr u32 weaponExtendedSaveChunkType = SaveExtensionChunkIds::WeaponExtended;
 inline constexpr u16 weaponExtendedSaveChunkVersion = 1;
@@ -55,9 +110,27 @@ struct SWeaponExtendedSaveState
     u32 extendedMask{};
 };
 
+// WFL1: the fault accumulators. A record is written only when something is non-zero, so a
+// fresh game adds nothing to the sidecar; wear travels as a 16-bit fraction of the way to the
+// next deformation, or a quickload would hand the progress back.
+inline constexpr u32 weaponFoulingSaveChunkType = SaveExtensionChunkIds::WeaponFouling;
+inline constexpr u16 weaponFoulingSaveChunkVersion = 1;
+
+struct SWeaponFoulingSaveState
+{
+    u16 objectId{u16(-1)};
+    u16 reserved{};
+    u32 sectionChecksum{};
+    u16 fouling{};
+    u16 stress{};
+    u16 wear{};
+    u16 foulingStage{};
+};
+
 struct SWeaponExtendedSaveCaptureState
 {
     xr_vector<SWeaponExtendedSaveState> records;
+    xr_vector<SWeaponFoulingSaveState> foulingRecords;
     u32 nextObjectId{};
     bool initialized{};
     bool completed{};
@@ -95,6 +168,7 @@ public:
     static bool DecodeExtendedSaveState(
         const xr_vector<u8>& payload, xr_vector<SWeaponExtendedSaveState>& state);
     static bool StageExtendedSaveState(const xr_vector<SWeaponExtendedSaveState>& state);
+    static bool StageFoulingSaveState(const xr_vector<SWeaponFoulingSaveState>& state);
     static void ClearExtendedSaveState();
     static void ForgetExtendedSaveState(const CSE_Abstract& serverObject);
 
@@ -189,6 +263,18 @@ public:
     {
         return (m_condition_type & condition_type) != 0;
     }
+
+    // ---- fault rework accumulators ----
+    u16 GetFouling() const { return m_fouling; }
+    u16 GetStress() const { return m_stress; }
+    u16 GetFoulingStage() const { return m_foulingStage; }
+    float GetWearProgress() const { return m_wearProgress; }
+    // 0..1 of the way to the next dirty fault: what the tooltip and the QA probes read.
+    float GetFoulingRatio() const;
+    // Rounds to the next dirty fault of this weapon, before the per-interval jitter.
+    virtual float FoulingInterval() const { return 0.f; }
+    // The bits a script cleared (a kit, the mechanic): the accumulators of that stage start over.
+    void OnConditionFaultsCleared(u32 clearedMask);
     bool IsAmmoSuitable(const shared_str& item_section) { return IsNecessaryItem(item_section); }
     LPCSTR GetAmmoName() const
     {
@@ -204,6 +290,21 @@ protected:
     // a misfire happens, you'll need to rearm weapon
     bool bMisfire;
     u32 m_condition_type;
+
+    // Fault rework accumulators, persisted in the WFL1 sidecar chunk and never in the frozen
+    // 0.98b streams: rounds since the last cleaning, shots fired with a breakable deformation,
+    // progress to the next deformation, dirty faults produced in this cleaning cycle, and the
+    // fouling interval in force (0 = not drawn yet).
+    u16 m_fouling{};
+    u16 m_stress{};
+    u16 m_foulingStage{};
+    float m_wearProgress{};
+    float m_foulingTarget{};
+
+    void PackFoulingState(SWeaponFoulingSaveState& record) const;
+    void ApplyFoulingState(const SWeaponFoulingSaveState& record);
+    void RestoreFoulingState(u16 objectId, u32 sectionChecksum, pcstr sectionName);
+    void ParkFoulingState();
 
     BOOL m_bAutoSpawnAmmo;
     virtual bool AllowBore();
@@ -444,6 +545,15 @@ protected:
     float misfireConditionCeiling{ 1.f };
     float conditionDecreasePerQueueShot; //увеличение изношености при выстреле очередью
     float conditionDecreasePerShot; //увеличение изношености при одиночном выстреле
+
+    // Fault rework tuning (fault_* keys: engine default, then [inventory], then the weapon section).
+    float faultFoulingRounds{ 50.f };
+    float faultFoulingRepeat{ 0.5f };
+    float faultDeformRounds{ 100.f };
+    float faultBreakRounds{ 250.f };
+    // (condition_shot_dec + 0.0001) * 1000, the wear scale every fault interval divides by. The
+    // single-shot rate on purpose: the burst rate would move the threshold inside a burst.
+    float ScaledDeterioration() const { return (_max(0.f, conditionDecreasePerShot) + 0.0001f) * 1000.f; }
 
 public:
     // Capped like GetConditionMisfireProbability does, so the HUD warning appears exactly

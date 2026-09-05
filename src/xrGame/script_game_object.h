@@ -916,6 +916,11 @@ public:
     LPCSTR GetAmmoName();
     void SetWeaponConditionType(u32 condition_type);
     u32 GetWeaponConditionType();
+    // Fault rework accumulators, read-only: a setter would let a script desync them from the mask.
+    u32 GetWeaponFouling();
+    u32 GetWeaponStress();
+    float GetWeaponFoulingRatio();
+    float GetWeaponWearProgress();
     bool IsWeaponAmmoInMagazine();
     bool WeaponIsScopeTexture();
     void SetHelmetFiltersElapsed(u16 time);

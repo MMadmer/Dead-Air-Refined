@@ -108,6 +108,7 @@ ID can be reused; ordinary online/offline transitions keep the record alive.
 | `HFT1` | 1 | Helmet filter: `u16 objectId`, `u16 elapsed`, `u32 sectionCRC`. |
 | `AFO1` | 1 | Artefact overrides: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u32 changedMask`, then 16 `f32` values. |
 | `WEX1` | 1 | Weapon extensions: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u32 extendedConditionMask`. |
+| `WFL1` | 1 | Weapon fault accumulators: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u16 fouling`, `u16 stress`, `u16 wear`, `u16 foulingStage`. |
 | `SEA1` | 1 | One finite `f32` environment season value; no record count. |
 | `0x584DFF01` | 1 | NQ quest-graph runtime state: opaque marshal blob owned by `xms_nq` (`xms.save_data("xms.nq", ...)`); no record count. Core pseudo-namespace `0xFF01` on the XMS per-module data channel `0x584D0000\|ns`; the range `0xFF00`–`0xFFFF` is reserved for engine-owned blobs and is never allocated to a module. |
 
@@ -122,7 +123,21 @@ stores the post-0.98b chamber-cycle and detached-magazine state bits. Its reader
 also accepts fire-mode and addon-mount bits duplicated by earlier Refined WEX1
 writers, then migrates them back to their original 0.98b field without erasing
 an authoritative legacy value. The weapon field written to `.scop` always keeps
-all original 0.98b bits and excludes only the two sidecar-owned bits.
+all original 0.98b bits and excludes only the two sidecar-owned bits. That exclusion covers
+the update stream as well as the spawn record: `UPDATE_Write` masks the same two bits, and
+the client keeps its own copy of them across an update packet, so neither reaches a `.scop`
+where the original game would list them as the placeholder faults 26 and 27.
+
+WFL1 stores the fault rework's accumulators: rounds since the last cleaning, shots fired with
+a breakable deformation, the progress to the next deformation as a 16-bit fraction, and the
+number of dirty faults produced in the current cleaning cycle. A record is written only when
+one of them is non-zero. The original 0.98b ignores the chunk and plays on with the fault
+mask alone; an older Refined build keeps it byte-for-byte and the counters simply freeze
+until the save is next written by a build that knows them; a save without the chunk starts
+every counter at zero, and a weapon that already carries dirty faults is treated as one
+cleaning cycle in. Records are bound to the ALife id and the section CRC like WEX1, and a
+weapon that goes offline keeps its counters in the same id-keyed store the chunk is loaded
+into, so an id that is unregistered for good is forgotten with the object.
 
 A bad container header, directory, binding, or payload CRC is never interpreted
 speculatively. A bad payload CRC drops only that chunk. Within a structurally

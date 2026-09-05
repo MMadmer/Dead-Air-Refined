@@ -553,7 +553,10 @@ void CSE_ALifeItemWeapon::UPDATE_Write(NET_Packet& tNetPacket)
     tNetPacket.w_u8(ammo_type);
     tNetPacket.w_u8(wpn_state);
     tNetPacket.w_u8(m_bZoom);
-    tNetPacket.w_u32(m_condition_type);
+    // The original 0.98b field only: the chamber and magazine state bits are this build's own
+    // and travel in the sidecar. Unmasked they reached the .scop update stream, and the original
+    // game listed them as the placeholder faults "26" and "27".
+    tNetPacket.w_u32(m_condition_type & ~weaponSidecarConditionSaveMask);
 }
 
 void CSE_ALifeItemWeapon::STATE_Read(NET_Packet& tNetPacket, u16 size)

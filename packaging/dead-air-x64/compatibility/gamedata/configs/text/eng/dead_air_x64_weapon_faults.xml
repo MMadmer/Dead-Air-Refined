@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Weapon fouling, shown under the fault list before a dirty fault appears: the rework counts
+	     rounds since the last cleaning, so the player can decide to clean instead of being surprised. -->
+	<string id="st_da_x64_fouling_light">
+		<text>\n%c[0,204,204,51] • %c[0,204,204,51] fouling: noticeable, cleaning due soon</text>
+	</string>
+	<string id="st_da_x64_fouling_heavy">
+		<text>\n%c[0,204,102,51] • %c[0,204,102,51] fouling: heavy, cleaning needed</text>
+	</string>
+</string_table>

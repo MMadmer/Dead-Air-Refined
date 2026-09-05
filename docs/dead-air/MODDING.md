@@ -511,6 +511,74 @@ misfire_condition_ceiling = 0.95   ; this one is meant to be unreliable even in 
 - The legacy `misfire_probability` formula keeps its own built-in 0.95 floor even when the
   ceiling is disabled.
 
+## Weapon faults: fouling, deformation, breakage
+
+The faults of the player's weapon (the `condition_avail` / `st_condition_type_N` list of the
+original) come from use and neglect, not from a per-shot lottery. The original rolled three
+independent chances on every shot, with no memory: the expected time to the first dirty fault
+of an AK-74 was ~195 rounds, but 14 % of magazines produced one within the first 30 rounds and
+a fault could land on a brand-new weapon. The rework keeps the original's expected values and
+replaces the distribution with three accumulators per weapon:
+
+- **Fouling** - rounds since the last cleaning. The first dirty fault (mainspring, return
+  spring, barrel, sear, firing pin or bolt - ids 3, 5, 11, 16, 19, 22) lands at a threshold
+  drawn once per cleaning cycle with +-15 % play; later ones at `fault_fouling_repeat` of the
+  interval. The tooltip announces the fouling from half of the interval on. A kit or the
+  mechanic clearing any dirty bit starts a fresh cycle.
+- **Deformation** - durability only. Above `misfire_condition_ceiling` (0.75) nothing bends.
+  Below it the progress advances at the original's `d2` rate, scaled by how far below the
+  ceiling the weapon is and by its fouling (a filthy gun wears up to twice as fast). The pool:
+  worn receiver and mainspring, the deformed parts, split grip, broken stock, and the
+  selector/sight-rail/muzzle-thread/handguard faults on a weapon that has more than one fire
+  mode / an attachable scope / silencer / launcher - the same gates the loot roll in
+  `items_condition.get_break` uses. The separate selector roll on every fire-mode switch
+  (44 % per switch at half condition) is gone.
+- **Breakage** - a deformed part that keeps being fired. Every shot with n breakable
+  deformations present advances the count by n (the original's per-part rate); the break
+  lands on the counterpart of one of them (9->10, 12->13, 14->15, 17->18, 20->21, 1->2), never
+  on a healthy part, at the original's expected `5 x d3` rounds.
+
+Keys, read as engine default -> `[inventory]` -> the weapon section (invalid or non-positive
+values fall back):
+
+```
+[inventory]
+fault_fouling_rounds = 50     ; x condition_coeff / ((condition_shot_dec + 0.0001) * 1000) rounds to the first dirty fault
+fault_fouling_repeat = 0.5    ; later dirty faults at this fraction of the interval
+fault_deform_rounds  = 100    ; the original d2 numerator (bias 20 is built in)
+fault_break_rounds   = 250    ; the original 5 x d3 numerator (bias 5 is built in)
+```
+
+`condition_coeff` keeps its original meaning - higher is more reliable - and the stock
+`[default_weapon_params]` sets it to 3 for every weapon; the reliability upgrades that lower
+`condition_shot_dec` stretch every interval as before. With the defaults: AK-74 195 rounds to
+the first dirty fault (then every ~97), PM 188, SPAS-12 100, SVD 136; a deformation at 50 %
+condition after ~640 / 620 / 360 / 470 rounds and never above 75 %; a breakage ~490 / 470 /
+255 / 345 rounds after a deformation at 50 %. NPC weapons are untouched: the loot roll of
+`items_condition.script` stays the only source of their faults.
+
+Repair data is not part of this: the kits, their masks and condition floors, and the
+mechanic's price are the stock ones. Two stock data gaps remain as they are and are only
+noted here - `wpn_ak74u` and `wpn_wincheaster1300` carry no `condition_avail` and therefore
+never fault, in the engine or in loot (an addon closes it with the AK-74 or shotgun mask), and
+the cracked gas tube (id 24) is repaired by the mechanic only, so the rework never produces it
+in play (loot still can).
+
+The accumulators live in the `WFL1` chunk of the `.scov` sidecar (`SAVE_COMPATIBILITY.md`);
+the original 0.98b ignores them and keeps the fault mask, an original save starts them at
+zero, with a weapon that already carries dirty faults treated as one cleaning cycle in.
+Read-only from Lua: `obj:get_weapon_fouling()` (rounds), `obj:get_weapon_fouling_ratio()`
+(0..1 of the interval), `obj:get_weapon_stress()`, `obj:get_weapon_wear_progress()`. No
+setters: a script cannot desync the accumulators from the mask; clearing bits through
+`set_weapon_condition_type` resets the matching accumulators. `wpn_fault_dbg 1` (session
+only, never saved) logs every shot's accumulators as `[wfault]`.
+
+The misfire weights of the fault bits in `CWeapon::CheckForMisfire` are the Dead Air 1.0
+values imported with the 1.0 mechanics (0.01 / 0.02 / 0.03 / 0.07 / 0.10 and 0.99 for the
+broken firing parts); the x86 0.98b build used 0.03 / 0.05 / 0.15 for the lesser faults. That
+difference is a 1.0 decision, not a porting defect, and durability never fed the misfire
+chance in either build: misfires come from the fault bits and the ammo's `misfire_chance`.
+
 ## Screen-space contact shadows (r__sss)
 
 A short depth-buffer ray march toward the sun in the near sun pass, giving contact shadows

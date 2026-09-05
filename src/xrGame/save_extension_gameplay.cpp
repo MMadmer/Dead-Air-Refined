@@ -23,6 +23,7 @@ constexpr u32 environmentSeasonChunkType = SaveExtensionChunkIds::EnvironmentSea
 constexpr u16 chunkVersion = 1;
 constexpr size_t countSize = sizeof(u32);
 constexpr size_t weaponRecordSize = 2 * sizeof(u16) + 2 * sizeof(u32);
+constexpr size_t weaponFoulingRecordSize = 6 * sizeof(u16) + sizeof(u32);
 constexpr size_t actorRecordSize = 2 * sizeof(u16) + sizeof(u32) + sizeof(float);
 constexpr size_t helmetRecordSize = 2 * sizeof(u16) + sizeof(u32);
 constexpr size_t artefactRecordSize = 2 * sizeof(u16) + 2 * sizeof(u32) +
@@ -174,6 +175,54 @@ bool encode_weapon_record(const SWeaponExtendedSaveState& record, u8*& cursor)
     write_value(cursor, record.reserved);
     write_value(cursor, record.sectionChecksum);
     write_value(cursor, record.extendedMask);
+    return true;
+}
+
+bool encode_fouling_record(const SWeaponFoulingSaveState& record, u8*& cursor)
+{
+    if (record.reserved || (!record.fouling && !record.stress && !record.wear && !record.foulingStage))
+        return false;
+
+    write_value(cursor, record.objectId);
+    write_value(cursor, record.reserved);
+    write_value(cursor, record.sectionChecksum);
+    write_value(cursor, record.fouling);
+    write_value(cursor, record.stress);
+    write_value(cursor, record.wear);
+    write_value(cursor, record.foulingStage);
+    return true;
+}
+
+bool decode_fouling_chunk(const xr_vector<u8>& payload, xr_vector<SWeaponFoulingSaveState>& records)
+{
+    u32 count = 0;
+    const u8* cursor = nullptr;
+    if (!decode_count(payload, weaponFoulingRecordSize, count, cursor))
+        return false;
+
+    records.clear();
+    records.reserve(count);
+    u32 skipped = 0;
+    for (u32 i = 0; i < count; ++i)
+    {
+        SWeaponFoulingSaveState record;
+        read_value(cursor, record.objectId);
+        read_value(cursor, record.reserved);
+        read_value(cursor, record.sectionChecksum);
+        read_value(cursor, record.fouling);
+        read_value(cursor, record.stress);
+        read_value(cursor, record.wear);
+        read_value(cursor, record.foulingStage);
+        if (record.objectId == u16(-1) || record.reserved ||
+            (!record.fouling && !record.stress && !record.wear && !record.foulingStage))
+        {
+            ++skipped;
+            continue;
+        }
+        records.push_back(record);
+    }
+    skipped += discard_duplicate_ids(records);
+    report_skipped_records("WFL1", skipped);
     return true;
 }
 
@@ -332,7 +381,7 @@ void report_invalid_chunk(pcstr name)
 void begin_capture(CaptureState& state)
 {
     state = {};
-    state.mutations.reserve(5);
+    state.mutations.reserve(6);
     CWeapon::BeginExtendedSaveCapture(state.weapon);
     CActor::BeginAdrenalineSaveCapture(state.actor);
     CHelmet::BeginFilterSaveCapture(state.helmet);
@@ -432,6 +481,28 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
         {
             const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
             const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
+            if (!continue_record_payload(state.weapon.foulingRecords, weaponFoulingRecordSize,
+                state.payload, state.encodeIndex, remaining, encode_fouling_record, state.failed))
+            {
+                return false;
+            }
+            if (state.failed)
+            {
+                state.completed = true;
+                return true;
+            }
+            add_mutation(state.mutations, weaponFoulingSaveChunkType,
+                std::move(state.payload), !state.weapon.foulingRecords.empty());
+            state.payload.clear();
+            state.encodeIndex = 0;
+            state.phase = 6;
+            continue;
+        }
+
+        if (state.phase == 6)
+        {
+            const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
+            const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
             if (!continue_record_payload(state.actor.records, actorRecordSize,
                 state.payload, state.encodeIndex, remaining, encode_actor_record, state.failed))
             {
@@ -446,11 +517,11 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
                 std::move(state.payload), !state.actor.records.empty());
             state.payload.clear();
             state.encodeIndex = 0;
-            state.phase = 6;
+            state.phase = 7;
             continue;
         }
 
-        if (state.phase == 6)
+        if (state.phase == 7)
         {
             const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
             const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
@@ -468,11 +539,11 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
                 std::move(state.payload), !state.helmet.records.empty());
             state.payload.clear();
             state.encodeIndex = 0;
-            state.phase = 7;
+            state.phase = 8;
             continue;
         }
 
-        if (state.phase == 7)
+        if (state.phase == 8)
         {
             const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
             const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
@@ -490,11 +561,11 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
                 std::move(state.payload), !state.artefact.records.empty());
             state.payload.clear();
             state.encodeIndex = 0;
-            state.phase = 8;
+            state.phase = 9;
             continue;
         }
 
-        if (state.phase == 8)
+        if (state.phase == 9)
         {
             const float season = g_pGamePersistent ? g_pGamePersistent->Environment().GetSeason() : 0.f;
             if (!std::isfinite(season))
@@ -510,7 +581,7 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
                 std::move(seasonPayload), season != 0.f);
             // XMS module manifest + per-module blobs ride the same capture
             XmsGame::CollectSaveMutations(state.mutations);
-            state.phase = 9;
+            state.phase = 10;
             state.completed = true;
         }
     }
@@ -585,6 +656,13 @@ void stage_chunks(const SaveExtensionContainer::ChunkList& chunks)
         {
             report_invalid_chunk("WEX1");
         }
+    }
+
+    if (const auto* chunk = supported_chunk(chunks, weaponFoulingSaveChunkType))
+    {
+        xr_vector<SWeaponFoulingSaveState> records;
+        if (!decode_fouling_chunk(chunk->payload, records) || !CWeapon::StageFoulingSaveState(records))
+            report_invalid_chunk("WFL1");
     }
 
     if (const auto* chunk = supported_chunk(chunks, environmentSeasonChunkType))

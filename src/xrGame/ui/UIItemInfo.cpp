@@ -43,12 +43,11 @@ xr_string BuildItemDescription(CInventoryItem& item)
         return description;
 
     description += StringTable().translate("st_condition_type").c_str();
-    const u32 condition_type = weapon->GetConditionType();
+    // Only what the original lists as a fault: the chamber and magazine state bits are this
+    // build's own and the stock strings for them are placeholders.
+    const u32 condition_type = weapon->GetConditionType() & kWeaponDisplayableFaultMask;
     if (!condition_type)
-    {
         description += StringTable().translate("st_condition_type_0").c_str();
-        return description;
-    }
 
     for (u32 condition_bits = condition_type; condition_bits; condition_bits &= condition_bits - 1)
     {
@@ -56,6 +55,15 @@ xr_string BuildItemDescription(CInventoryItem& item)
         string64 condition_type_id;
         xr_sprintf(condition_type_id, "st_condition_type_%u", bit + 1);
         description += StringTable().translate(condition_type_id).c_str();
+    }
+
+    // Fouling before it becomes a fault, so a cleaning is a decision and not a surprise.
+    const float fouling = weapon->GetFoulingRatio();
+    if (fouling >= 0.5f)
+    {
+        description += StringTable()
+                           .translate(fouling >= 0.85f ? "st_da_x64_fouling_heavy" : "st_da_x64_fouling_light")
+                           .c_str();
     }
     return description;
 }

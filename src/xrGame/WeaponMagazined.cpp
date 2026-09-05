@@ -22,6 +22,8 @@
 #include "script_game_object.h"
 #include "HudSound.h"
 
+#include <bit>
+
 CWeaponMagazined::CWeaponMagazined(ESoundTypes eSoundType) : CWeapon(), m_bStopedAfterQueueFired(false)
 {
     m_eSoundShow = ESoundTypes(SOUND_TYPE_ITEM_TAKING | eSoundType);
@@ -696,42 +698,188 @@ void CWeaponMagazined::state_Fire(float dt)
     }
 }
 
+namespace
+{
+// The fouling interval is drawn once per cleaning cycle, with this much play either way: a
+// threshold, not a lottery. The two biases are the additive terms of the stock d2 and d3
+// divisors; with them the expected rounds to a deformation and to a breakage stay stock.
+constexpr float kFaultFoulingJitter = 0.15f;
+constexpr float kFaultDeformBias = 20.f;
+constexpr float kFaultBreakBias = 5.f;
+constexpr u32 kFaultCandidateLimit = 16;
+}
+
+extern int g_wpn_fault_dbg;
+
+bool CWeaponMagazined::AddConditionFault(u32 conditionId)
+{
+    // The original's pairing, kept on purpose: condition_avail is tested by id, the fault mask
+    // stores id - 1. Every stock mask was authored against it.
+    if (!conditionId || !(m_condition_available & (1u << conditionId)))
+        return false;
+
+    SetConditionType(m_condition_type | weapon_fault_bit(conditionId));
+    return true;
+}
+
+bool CWeaponMagazined::FaultCandidate(u32 conditionId) const
+{
+    return (m_condition_available & (1u << conditionId)) && !(m_condition_type & weapon_fault_bit(conditionId));
+}
+
+bool CWeaponMagazined::FoulingPossible() const
+{
+    // A weapon whose section allows no dirty fault does not foul: nothing to count toward.
+    for (u32 id : kWeaponFoulingFaultIds)
+    {
+        if (m_condition_available & (1u << id))
+            return true;
+    }
+    return false;
+}
+
+float CWeaponMagazined::FoulingInterval() const
+{
+    const float base = faultFoulingRounds * m_condition_coeff / ScaledDeterioration();
+    return _max(1.f, base * (m_foulingStage ? faultFoulingRepeat : 1.f));
+}
+
+u32 CWeaponMagazined::PickFoulingFault() const
+{
+    u32 candidates[kFaultCandidateLimit];
+    u32 count = 0;
+    for (u32 id : kWeaponFoulingFaultIds)
+    {
+        if (FaultCandidate(id))
+            candidates[count++] = id;
+    }
+    return count ? candidates[::Random.randI(count)] : 0;
+}
+
+u32 CWeaponMagazined::PickDeformationFault() const
+{
+    u32 candidates[kFaultCandidateLimit];
+    u32 count = 0;
+    for (u32 id : kWeaponDeformFaultIds)
+    {
+        if (FaultCandidate(id))
+            candidates[count++] = id;
+    }
+    // The selector and the mounts only on a weapon that has them - the same gates the loot roll
+    // in items_condition.get_break applies.
+    const bool mounts[] = {
+        m_bHasDifferentFireModes,
+        m_eScopeStatus == ALife::eAddonAttachable,
+        m_eSilencerStatus == ALife::eAddonAttachable,
+        m_eGrenadeLauncherStatus == ALife::eAddonAttachable,
+    };
+    for (size_t i = 0; i < std::size(kWeaponMountFaultIds); ++i)
+    {
+        if (mounts[i] && FaultCandidate(kWeaponMountFaultIds[i]))
+            candidates[count++] = kWeaponMountFaultIds[i];
+    }
+    return count ? candidates[::Random.randI(count)] : 0;
+}
+
+u32 CWeaponMagazined::PickBreakageFault(u32 breakableMask) const
+{
+    u32 candidates[kFaultCandidateLimit];
+    u32 count = 0;
+    for (const SWeaponFaultBreakage& breakage : kWeaponFaultBreakages)
+    {
+        if (breakableMask & weapon_fault_bit(breakage.deformedId))
+            candidates[count++] = breakage.brokenId;
+    }
+    return count ? candidates[::Random.randI(count)] : 0;
+}
+
+// Faults come from use and neglect, not from a per-shot lottery. Three accumulators, one per
+// stage, all scaled by the section's condition_coeff (higher = more reliable; stock sets 3) and by
+// its per-shot wear, exactly as the three divisors of the original were - the expected values are
+// the original's, only the distribution changed: the first-magazine fault is gone.
+//   1. fouling    - rounds since the last cleaning, a threshold per cleaning cycle;
+//   2. deformation - durability only, and only below the reliability ceiling;
+//   3. breakage   - a deformed part that keeps being fired, into its own counterpart.
 void CWeaponMagazined::TryAddConditionFailure()
 {
     if (!ParentIsActor())
         return;
 
-    const float scaled_deterioration = (GetWeaponDeterioration() + 0.0001f) * 1000.f;
-    const int first_divisor = _max(1, int(m_condition_coeff * 50.f / scaled_deterioration));
-    const int second_divisor =
-        _max(1, int(m_condition_coeff * 100.f * _max(GetCondition(), 0.01f) / scaled_deterioration + 20.f));
-    const int third_divisor =
-        _max(1, int(m_condition_coeff * 50.f * _max(GetCondition(), 0.01f) / scaled_deterioration + 1.f));
+    const float condition = GetCondition();
+    const float scaled = ScaledDeterioration();
+    u32 faultId = 0;
 
-    u32 condition_id = 0;
-    if (::Random.randI(first_divisor) == 0)
+    if (FoulingPossible())
     {
-        static constexpr u32 failures[] = {1, 3, 5, 11, 16, 19};
-        condition_id = failures[::Random.randI(std::size(failures))];
+        if (m_foulingTarget <= 0.f)
+        {
+            m_foulingTarget =
+                FoulingInterval() * ::Random.randF(1.f - kFaultFoulingJitter, 1.f + kFaultFoulingJitter);
+        }
+        if (m_fouling < u16(-1))
+            ++m_fouling;
+        if (float(m_fouling) >= m_foulingTarget)
+        {
+            const u32 id = PickFoulingFault();
+            if (id && AddConditionFault(id))
+            {
+                faultId = id;
+                if (m_foulingStage < u16(-1))
+                    ++m_foulingStage;
+                m_fouling = 0;
+                m_foulingTarget = 0.f;
+            }
+            else
+            {
+                // Every dirty part is dirty already: the gun stays "heavy" until it is cleaned.
+                m_fouling = u16(_min(float(u16(-1)), m_foulingTarget));
+            }
+        }
     }
 
-    if (::Random.randI(second_divisor) == 0)
+    // Above the ceiling nothing bends. Below it the stock d2 rate, scaled by how far below the
+    // ceiling the weapon is and by its fouling: a filthy gun wears up to twice as fast.
+    const float ceiling = _max(misfireConditionCeiling, 0.01f);
+    const float gate = clampr((ceiling - condition) / ceiling, 0.f, 1.f);
+    if (gate > 0.f)
     {
-        static constexpr u32 failures[] = {4, 6, 9, 12, 14, 17, 20};
-        condition_id = failures[::Random.randI(std::size(failures))];
+        const float d2 = _max(1.f,
+            faultDeformRounds * m_condition_coeff * _max(condition, 0.01f) / scaled + kFaultDeformBias);
+        m_wearProgress += gate * (1.f + GetFoulingRatio()) / d2;
+        if (m_wearProgress >= 1.f)
+        {
+            const u32 id = PickDeformationFault();
+            if (id && AddConditionFault(id))
+                faultId = id;
+            m_wearProgress = 0.f;
+        }
     }
 
-    if (::Random.randI(third_divisor) == 0)
+    // n deformed parts advance the count n per shot - the stock per-part rate - and the break
+    // lands on one of them, never on a healthy part.
+    const u32 breakable = weapon_breakable_deformations(m_condition_type, m_condition_available);
+    if (breakable)
     {
-        static constexpr u32 prerequisites[] = {0x100, 0x800, 0x2000, 0x10000, 0x80000};
-        static constexpr u32 failures[] = {10, 13, 15, 18, 21};
-        const u32 index = ::Random.randI(std::size(failures));
-        if (m_condition_type & prerequisites[index])
-            condition_id = failures[index];
+        m_stress = u16(_min(u32(u16(-1)), u32(m_stress) + u32(std::popcount(breakable))));
+        const float t3 = _max(1.f,
+            faultBreakRounds * m_condition_coeff * _max(condition, 0.01f) / scaled + kFaultBreakBias);
+        if (float(m_stress) >= t3)
+        {
+            const u32 id = PickBreakageFault(breakable);
+            if (id && AddConditionFault(id))
+                faultId = id;
+            m_stress = 0;
+        }
     }
+    else
+        m_stress = 0;
 
-    if (condition_id && (m_condition_available & (1u << condition_id)))
-        m_condition_type |= 1u << (condition_id - 1);
+    if (g_wpn_fault_dbg)
+    {
+        Msg("~ [wfault] %s cond=%.3f scaled=%.4f foul=%u/%.0f stage=%u wear=%.4f stress=%u breakable=%08x mask=%08x fault=%u",
+            cNameSect_str(), condition, scaled, m_fouling, m_foulingTarget, m_foulingStage, m_wearProgress, m_stress,
+            breakable, m_condition_type, faultId);
+    }
 }
 
 void CWeaponMagazined::state_Misfire(float dt)
@@ -1432,9 +1580,9 @@ void CWeaponMagazined::OnFireModeChanged()
     if (m_sounds.FindSoundItem("sndFireMode", false))
         PlaySound("sndFireMode", get_LastFP());
 
-    const float condition = _max(GetCondition(), 0.2f);
-    if (::Random.randF(0.f, 0.9f) > condition)
-        SetConditionType(GetConditionType() | eWeaponConditionFireMode);
+    // The selector fault (id 28) used to be rolled here on every switch, 44 % per switch at half
+    // condition. It now comes from the deformation stage of TryAddConditionFailure like every
+    // other durability fault, on the same gate.
 }
 
 void CWeaponMagazined::OnH_A_Chield()

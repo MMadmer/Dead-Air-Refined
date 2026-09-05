@@ -34,6 +34,8 @@
 #include "alife_simulator.h"
 #include "alife_object_registry.h"
 
+#include <bit>
+
 #define WEAPON_REMOVE_TIME 60000
 #define ROTATION_TIME 0.25f
 
@@ -41,6 +43,9 @@ constexpr pcstr WPN_SCOPE = "wpn_scope";
 constexpr pcstr WPN_SILENCER = "wpn_silencer";
 constexpr pcstr WPN_GRENADE_LAUNCHER = "wpn_launcher";
 constexpr pcstr WPN_GRENADE_LAUNCHER_SOC = "wpn_grenade_launcher";
+
+// wpn_fault_dbg: the fault rework trace (one line per shot, restore/park/clear events).
+int g_wpn_fault_dbg = 0;
 
 namespace
 {
@@ -59,6 +64,10 @@ struct WeaponExtendedRuntimeState
 
 xr_flat_hash_map<u16, WeaponExtendedRuntimeState> liveWeaponExtendedStates;
 xr_flat_hash_map<u16, SWeaponExtendedSaveState> stagedWeaponExtendedStates;
+// WFL1: the fault accumulators of weapons that are offline or not spawned yet, keyed by ALife
+// id. Seeded from the sidecar at load, refilled by net_Destroy, drained by net_Spawn and
+// erased with the object, like the WEX1 records.
+xr_flat_hash_map<u16, SWeaponFoulingSaveState> weaponFoulingStates;
 CWeapon* scopeDofPublisher{};
 
 u32 weapon_section_checksum(pcstr section)
@@ -100,6 +109,16 @@ bool valid_weapon_extended_record(const SWeaponExtendedSaveState& record)
 {
     return record.objectId != u16(-1) && !record.reserved && record.extendedMask &&
         !(record.extendedMask & ~u32(eWeaponConditionExtendedSaveMask));
+}
+
+bool weapon_fouling_record_empty(const SWeaponFoulingSaveState& record)
+{
+    return !record.fouling && !record.stress && !record.wear && !record.foulingStage;
+}
+
+bool valid_weapon_fouling_record(const SWeaponFoulingSaveState& record)
+{
+    return record.objectId != u16(-1) && !record.reserved && !weapon_fouling_record_empty(record);
 }
 
 void write_weapon_extended_u16(u8*& cursor, const u16 value)
@@ -569,6 +588,20 @@ void CWeapon::Load(LPCSTR section)
         pSettings->read_if_exists<float>(section, "misfire_condition_ceiling", misfireCeilingDefault);
     clamp(misfireConditionCeiling, 0.0f, 1.0f);
 
+    // Fault rework tuning: how many rounds, scaled by condition_coeff and the per-shot wear, a
+    // weapon fires before its parts foul, deform and break. The engine defaults reproduce the
+    // stock expected values; [inventory] retunes the game, the weapon section one weapon.
+    const auto read_fault_key = [&](pcstr key, float fallback)
+    {
+        const float global = pSettings->read_if_exists<float>("inventory", key, fallback);
+        const float value = pSettings->read_if_exists<float>(section, key, global);
+        return (_valid(value) && value > 0.f) ? value : fallback;
+    };
+    faultFoulingRounds = read_fault_key("fault_fouling_rounds", 50.f);
+    faultFoulingRepeat = read_fault_key("fault_fouling_repeat", 0.5f);
+    faultDeformRounds = read_fault_key("fault_deform_rounds", 100.f);
+    faultBreakRounds = read_fault_key("fault_break_rounds", 250.f);
+
     conditionDecreasePerShot = pSettings->r_float(section, "condition_shot_dec");
     conditionDecreasePerQueueShot = pSettings->read_if_exists<float>(section, "condition_queue_shot_dec", conditionDecreasePerShot);
 
@@ -727,6 +760,10 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
     const u32 sectionChecksum = weapon_section_checksum(E->s_name.c_str());
     m_condition_type = E->m_condition_type;
     u32 legacyCompatibilityMask{};
+    // The mask as the original streams carried it, before the sidecar adds its two bits: the
+    // proof that .scop never holds them is this line staying free of bits 25 and 26.
+    if (g_wpn_fault_dbg && E->m_condition_type)
+        Msg("~ [wfault] spawn id=%u sect=%s legacy_mask=%08x", DC->ID, E->s_name.c_str(), E->m_condition_type);
 
     const auto staged = stagedWeaponExtendedStates.find(DC->ID);
     if (staged != stagedWeaponExtendedStates.end())
@@ -746,6 +783,9 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
         }
         stagedWeaponExtendedStates.erase(staged);
     }
+
+    // WFL1: the fault accumulators parked for this id come back on the same section guard.
+    RestoreFoulingState(DC->ID, sectionChecksum, E->s_name.c_str());
 
     E->m_condition_type = m_condition_type;
     CSE_ALifeItemWeapon* serverEntity = persistent_weapon_entity(DC->ID);
@@ -787,6 +827,8 @@ bool CWeapon::net_Spawn(CSE_Abstract* DC)
 void CWeapon::net_Destroy()
 {
     ResetScopeDofRadius();
+
+    ParkFoulingState();
 
     const auto state = liveWeaponExtendedStates.find(ID());
     if (state != liveWeaponExtendedStates.end() && state->second.weapon == this)
@@ -852,7 +894,12 @@ void CWeapon::net_Import(NET_Packet& P)
 
     u8 Zoom;
     P.r_u8(Zoom);
-    P.r_u32(m_condition_type);
+    // The update packet carries the original 0.98b field only; the chamber and magazine bits
+    // are this build's own, kept on the client and restored through the sidecar.
+    u32 importedConditionType{};
+    P.r_u32(importedConditionType);
+    m_condition_type = (importedConditionType & ~u32(eWeaponConditionSidecarSaveMask)) |
+        (m_condition_type & u32(eWeaponConditionSidecarSaveMask));
 
     if (H_Parent() && H_Parent()->Remote())
     {
@@ -1007,6 +1054,28 @@ bool CWeapon::ContinueExtendedSaveCapture(
 
             if (extendedMask)
                 state.records.push_back({ objectId, 0, sectionChecksum, extendedMask });
+
+            // WFL1 rides the same pass: the live weapon while it is online, the parked record
+            // otherwise. Same order as the WEX1 records, since it is the same walk.
+            SWeaponFoulingSaveState fouling;
+            if (live != liveWeaponExtendedStates.end() && live->second.weapon &&
+                live->second.serverEntity == serverEntity && live->second.sectionChecksum == sectionChecksum &&
+                live->second.weapon->ID() == objectId)
+            {
+                live->second.weapon->PackFoulingState(fouling);
+            }
+            else if (const auto parked = weaponFoulingStates.find(objectId);
+                     parked != weaponFoulingStates.end() && parked->second.sectionChecksum == sectionChecksum)
+            {
+                fouling = parked->second;
+            }
+            if (!weapon_fouling_record_empty(fouling))
+            {
+                fouling.objectId = objectId;
+                fouling.reserved = 0;
+                fouling.sectionChecksum = sectionChecksum;
+                state.foulingRecords.push_back(fouling);
+            }
         }
 
         if (!unlimitedBudget && ++batchObjects == 16)
@@ -1110,16 +1179,146 @@ bool CWeapon::StageExtendedSaveState(const xr_vector<SWeaponExtendedSaveState>& 
     return true;
 }
 
+bool CWeapon::StageFoulingSaveState(const xr_vector<SWeaponFoulingSaveState>& state)
+{
+    u16 previousId{};
+    for (size_t i = 0; i < state.size(); ++i)
+    {
+        if (!valid_weapon_fouling_record(state[i]) || (i && state[i].objectId <= previousId))
+        {
+            weaponFoulingStates.clear();
+            return false;
+        }
+        previousId = state[i].objectId;
+    }
+
+    weaponFoulingStates.clear();
+    weaponFoulingStates.reserve(state.size());
+    for (const SWeaponFoulingSaveState& record : state)
+        weaponFoulingStates.emplace(record.objectId, record);
+    return true;
+}
+
 void CWeapon::ClearExtendedSaveState()
 {
     liveWeaponExtendedStates.clear();
     stagedWeaponExtendedStates.clear();
+    weaponFoulingStates.clear();
 }
 
 void CWeapon::ForgetExtendedSaveState(const CSE_Abstract& serverObject)
 {
     liveWeaponExtendedStates.erase(serverObject.ID);
     stagedWeaponExtendedStates.erase(serverObject.ID);
+    weaponFoulingStates.erase(serverObject.ID);
+}
+
+// ---- fault rework accumulators -----------------------------------------------------------------
+float CWeapon::GetFoulingRatio() const
+{
+    if (!m_fouling)
+        return 0.f;
+    // Before the first shot after a load the interval is not drawn yet: the nominal one serves.
+    const float target = m_foulingTarget > 0.f ? m_foulingTarget : FoulingInterval();
+    return target > 0.f ? clampr(float(m_fouling) / target, 0.f, 1.f) : 0.f;
+}
+
+void CWeapon::OnConditionFaultsCleared(u32 clearedMask)
+{
+    // A mask wiped clean is the mechanic's full repair (set_weapon_condition_type(0)): the
+    // weapon comes back as new, whatever stages the cleared bits belonged to.
+    const bool fullRepair = !(m_condition_type & kWeaponDisplayableFaultMask);
+    if (fullRepair || (clearedMask & kWeaponFoulingFaultMask))
+    {
+        // Cleaned: a fresh cycle, at the full interval again.
+        m_fouling = 0;
+        m_foulingStage = 0;
+        m_foulingTarget = 0.f;
+    }
+    if (fullRepair || (clearedMask & kWeaponDeformFaultMask))
+    {
+        // A part was straightened or replaced: the progress toward the next deformation goes
+        // with it, and the stress too unless another deformed part is still in the gun.
+        m_wearProgress = 0.f;
+        if (fullRepair || !weapon_breakable_deformations(m_condition_type, ~0u))
+            m_stress = 0;
+    }
+    if (g_wpn_fault_dbg)
+        Msg("~ [wfault] cleared id=%u sect=%s bits=%08x foul=%u stage=%u stress=%u wear=%.4f", ID(), cNameSect_str(),
+            clearedMask, m_fouling, m_foulingStage, m_stress, m_wearProgress);
+}
+
+void CWeapon::PackFoulingState(SWeaponFoulingSaveState& record) const
+{
+    record.fouling = m_fouling;
+    record.stress = m_stress;
+    record.wear = u16(clampr(m_wearProgress, 0.f, 1.f) * 65535.f + 0.5f);
+    record.foulingStage = m_foulingStage;
+}
+
+void CWeapon::ApplyFoulingState(const SWeaponFoulingSaveState& record)
+{
+    m_fouling = record.fouling;
+    m_stress = record.stress;
+    m_wearProgress = float(record.wear) / 65535.f;
+    m_foulingStage = record.foulingStage;
+    m_foulingTarget = 0.f;
+}
+
+void CWeapon::RestoreFoulingState(u16 objectId, u32 sectionChecksum, pcstr sectionName)
+{
+    m_fouling = 0;
+    m_stress = 0;
+    m_foulingStage = 0;
+    m_wearProgress = 0.f;
+    m_foulingTarget = 0.f;
+
+    const auto parked = weaponFoulingStates.find(objectId);
+    if (parked != weaponFoulingStates.end())
+    {
+        if (parked->second.sectionChecksum == sectionChecksum)
+            ApplyFoulingState(parked->second);
+        else
+            Msg("! Ignoring mismatched weapon fouling state for '%s'[%u]", sectionName, objectId);
+        weaponFoulingStates.erase(parked);
+    }
+    else if (m_condition_type & kWeaponFoulingFaultMask)
+    {
+        // No record but dirty parts already - a looted rifle, an original 0.98b save: one
+        // cleaning cycle in, so the next dirty fault comes at the short interval.
+        m_foulingStage = u16(std::popcount(m_condition_type & kWeaponFoulingFaultMask));
+    }
+
+    if (g_wpn_fault_dbg && (m_fouling || m_stress || m_foulingStage || m_wearProgress > 0.f))
+        Msg("~ [wfault] restore id=%u sect=%s foul=%u stage=%u stress=%u wear=%.4f", objectId, sectionName,
+            m_fouling, m_foulingStage, m_stress, m_wearProgress);
+}
+
+void CWeapon::ParkFoulingState()
+{
+    // A weapon released for good was forgotten already (forget_object): parking it back would
+    // hand its counters to whoever reuses the id.
+    if (!persistent_weapon_entity(ID()))
+    {
+        weaponFoulingStates.erase(ID());
+        return;
+    }
+
+    SWeaponFoulingSaveState record;
+    PackFoulingState(record);
+    if (weapon_fouling_record_empty(record))
+    {
+        weaponFoulingStates.erase(ID());
+        return;
+    }
+
+    record.objectId = ID();
+    record.reserved = 0;
+    record.sectionChecksum = weapon_section_checksum(cNameSect_str());
+    weaponFoulingStates.insert_or_assign(ID(), record);
+    if (g_wpn_fault_dbg)
+        Msg("~ [wfault] park id=%u sect=%s foul=%u stage=%u stress=%u wear=%u", ID(), cNameSect_str(), record.fouling,
+            record.foulingStage, record.stress, record.wear);
 }
 
 void CWeapon::OnEvent(NET_Packet& P, u16 type)

@@ -487,8 +487,40 @@ LPCSTR CScriptGameObject::GetAmmoName()
 void CScriptGameObject::SetWeaponConditionType(u32 condition_type)
 {
     CWeapon* weapon = smart_cast<CWeapon*>(&object());
-    if (weapon)
-        weapon->SetConditionType(condition_type);
+    if (!weapon)
+        return;
+
+    // The one path that clears faults (the kits, the mechanic, the loot roll): the accumulators
+    // of a cleared stage start over here, not in SetConditionType, which the engine itself
+    // calls for the chamber and magazine bits on every reload.
+    const u32 cleared = weapon->GetConditionType() & ~condition_type;
+    weapon->SetConditionType(condition_type);
+    if (cleared)
+        weapon->OnConditionFaultsCleared(cleared);
+}
+
+u32 CScriptGameObject::GetWeaponFouling()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetFouling() : 0;
+}
+
+u32 CScriptGameObject::GetWeaponStress()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetStress() : 0;
+}
+
+float CScriptGameObject::GetWeaponFoulingRatio()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetFoulingRatio() : 0.f;
+}
+
+float CScriptGameObject::GetWeaponWearProgress()
+{
+    CWeapon* weapon = smart_cast<CWeapon*>(&object());
+    return weapon ? weapon->GetWearProgress() : 0.f;
 }
 
 u32 CScriptGameObject::GetWeaponConditionType()

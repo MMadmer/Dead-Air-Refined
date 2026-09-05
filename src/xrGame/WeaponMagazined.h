@@ -180,6 +180,14 @@ protected:
     virtual int ShotsFired() { return m_iShotNum; }
     virtual float GetWeaponDeterioration();
     void TryAddConditionFailure();
+    // The fault rework, the pieces of TryAddConditionFailure.
+    float FoulingInterval() const override;
+    bool FoulingPossible() const;
+    bool FaultCandidate(u32 conditionId) const;
+    u32 PickFoulingFault() const;
+    u32 PickDeformationFault() const;
+    u32 PickBreakageFault(u32 breakableMask) const;
+    bool AddConditionFault(u32 conditionId);
 
     virtual void FireBullet(const Fvector& pos, const Fvector& dir, float fire_disp, const CCartridge& cartridge,
         u16 parent_id, u16 weapon_id, bool send_hit);

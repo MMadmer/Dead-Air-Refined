@@ -557,21 +557,21 @@ public:
 };
 Fvector CCC_DemoRecordSetPos::p = {0, 0, 0};
 
-// The scene knobs are session tools: never written to user.ltx, an installation carries nothing
-// about the animation module in its options.
-class CCC_HudSceneFloat : public CCC_Float
+// Session tools: never written to user.ltx, so an installation carries nothing about the
+// diagnostics of the animation scenes or the weapon faults in its options.
+class CCC_SessionFloat : public CCC_Float
 {
 public:
     using CCC_Float::CCC_Float;
     void Save(IWriter*) override {}
 };
-class CCC_HudSceneInteger : public CCC_Integer
+class CCC_SessionInteger : public CCC_Integer
 {
 public:
     using CCC_Integer::CCC_Integer;
     void Save(IWriter*) override {}
 };
-class CCC_HudSceneVector3 : public CCC_Vector3
+class CCC_SessionVector3 : public CCC_Vector3
 {
 public:
     using CCC_Vector3::CCC_Vector3;
@@ -2752,13 +2752,20 @@ void CCC_RegisterCommands()
         extern Fvector g_hud_scene_item_pos_adj, g_hud_scene_item_rot_adj;
         extern float g_hud_scene_item_scale_adj, g_hud_scene_seat_in, g_hud_scene_seat_out;
         extern int g_hud_scene_dbg;
-        CMD4(CCC_HudSceneVector3, "hud_scene_item_pos", &g_hud_scene_item_pos_adj, Fvector().set(-2.f, -2.f, -2.f), Fvector().set(2.f, 2.f, 2.f));
-        CMD4(CCC_HudSceneVector3, "hud_scene_item_rot", &g_hud_scene_item_rot_adj, Fvector().set(-360.f, -360.f, -360.f), Fvector().set(360.f, 360.f, 360.f));
-        CMD4(CCC_HudSceneFloat, "hud_scene_item_scale", &g_hud_scene_item_scale_adj, 0.05f, 20.f);
-        CMD4(CCC_HudSceneFloat, "hud_scene_seat_in", &g_hud_scene_seat_in, 0.5f, 20.f);
-        CMD4(CCC_HudSceneFloat, "hud_scene_seat_out", &g_hud_scene_seat_out, 0.5f, 40.f);
-        CMD4(CCC_HudSceneInteger, "hud_scene_dbg", &g_hud_scene_dbg, 0, 1);
+        CMD4(CCC_SessionVector3, "hud_scene_item_pos", &g_hud_scene_item_pos_adj, Fvector().set(-2.f, -2.f, -2.f), Fvector().set(2.f, 2.f, 2.f));
+        CMD4(CCC_SessionVector3, "hud_scene_item_rot", &g_hud_scene_item_rot_adj, Fvector().set(-360.f, -360.f, -360.f), Fvector().set(360.f, 360.f, 360.f));
+        CMD4(CCC_SessionFloat, "hud_scene_item_scale", &g_hud_scene_item_scale_adj, 0.05f, 20.f);
+        CMD4(CCC_SessionFloat, "hud_scene_seat_in", &g_hud_scene_seat_in, 0.5f, 20.f);
+        CMD4(CCC_SessionFloat, "hud_scene_seat_out", &g_hud_scene_seat_out, 0.5f, 40.f);
+        CMD4(CCC_SessionInteger, "hud_scene_dbg", &g_hud_scene_dbg, 0, 1);
         CMD1(CCC_HudSceneItemDump, "hud_scene_item_dump");
+    }
+
+    // Weapon fault trace: one line per shot of the player's weapon with every accumulator, plus
+    // the restore/park/clear events. Definition in Weapon.cpp.
+    {
+        extern int g_wpn_fault_dbg;
+        CMD4(CCC_SessionInteger, "wpn_fault_dbg", &g_wpn_fault_dbg, 0, 1);
     }
 
     // Demo
