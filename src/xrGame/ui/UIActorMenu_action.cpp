@@ -80,14 +80,23 @@ bool CUIActorMenu::DropItemOnAnotherItem(EDDListType t_old, EDDListType t_new, C
         CUICellItem* _citem = new_owner->ItemsCount() == 1 ? new_owner->GetItemIdx(0) : nullptr;
         if (!_citem)
         {
+            // The target is the item under the cursor. The stock pick used the dragged icon's
+            // top-left corner instead, so a stack landed only when that corner - half a cell or
+            // more away from the pointer, a whole cell for the big icons - happened to sit on
+            // the other item; players reported merging "from the fourth or fifth try". The
+            // corner stays as the fallback for a drop whose pointer is over an empty cell.
             CUICellContainer* c = old_owner->GetContainer();
-            Ivector2 c_pos = c->PickCell(old_owner->GetDragItemPosition());
-            if (c->ValidCell(c_pos))
+            const auto pick = [&](const Fvector2& at) -> CUICellItem*
             {
+                const Ivector2 c_pos = c->PickCell(at);
+                if (!c->ValidCell(c_pos))
+                    return nullptr;
                 CUICell& ui_cell = c->GetCellAt(c_pos);
-                if (!ui_cell.Empty())
-                    _citem = ui_cell.m_item;
-            }
+                return ui_cell.Empty() ? nullptr : ui_cell.m_item;
+            };
+            _citem = pick(GetUICursor().GetCursorPosition());
+            if (!_citem)
+                _citem = pick(old_owner->GetDragItemPosition());
         }
 
         const PIItem _iitem = _citem ? static_cast<PIItem>(_citem->m_pData) : nullptr;

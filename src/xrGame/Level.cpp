@@ -574,13 +574,13 @@ void CLevel::OnFrame()
         else
             m_level_sound_manager->Update();
 
-        // defer LUA-GC-STEP
-        if (g_mt_config.test(mtLUA_GC))
-        {
-            Device.add_to_seq_parallel(fastdelegate::FastDelegate0<>(this, &CLevel::script_gc));
-        }
-        else
-            script_gc();
+        // The Lua GC step runs here, on the main thread, whatever mt_script_gc says. On the
+        // parallel sequence it ran on a worker while the main thread rendered, and every
+        // finalizer it fired - ini_file, sound_object, particles_object, script UI windows -
+        // destroyed a C++ object from that worker; a report (1.3.5, "viewing the inventory")
+        // died in exactly such a finalizer, ~CInifile over already-dead items. The step is
+        // small (r__lua_gcstep units per frame); the flag stays accepted so user.ltx parses.
+        script_gc();
     }
     if (pStatGraphR)
     {
