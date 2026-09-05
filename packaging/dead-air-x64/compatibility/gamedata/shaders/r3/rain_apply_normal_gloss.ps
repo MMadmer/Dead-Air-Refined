@@ -30,11 +30,18 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos
     const float4 patched = s_patched_normal.Load(int2(tc * pos_decompression_params2.xy), iSample);
 #endif
 
+    // The patch pass encodes the surface continuity in the normal's length (0.5 broken edge,
+    // 1 continuous plane): the wet gloss boost belongs to continuous surfaces only - on leaf
+    // cards, grass blades and crown silhouettes it drew a white outline. The darkening stays.
+    const float len = length(patched.xyz);
+    const float cont = saturate(len * 2.0 - 1.0);
+    const float3 n = patched.xyz / max(len, 1e-4);
+
     rain_apply_output output;
 #ifndef GBUFFER_OPTIMIZATION
-    output.normal = float4(patched.xyz, 1.0);
+    output.normal = float4(n, 1.0);
 #else
-    output.normal = float4(gbuf_pack_normal(patched.xyz), 0.0, 0.0);
+    output.normal = float4(gbuf_pack_normal(n), 0.0, 0.0);
 #endif
 
     // MRT1 blends rgb multiplicatively into albedo (the wet darkening) and ALPHA additively into
@@ -62,6 +69,6 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos
 #endif
     const float not_viewmodel = step(0.35, gbd.P.z);
 
-    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2) * not_viewmodel);
+    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2) * not_viewmodel * cont);
     return output;
 }

@@ -1020,6 +1020,19 @@ The fresnel exponent is the physical 5 (`da_puddle_refl.ps`). Every `r__puddles_
 is never written to `user.ltx`. The rain occlusion map covers exactly the wet radius
 (`r3_dynamic_wet_surfaces_far`), so ground under a roof stays dry out to the fade edge.
 
+The wet gloss belongs to continuous surfaces. The rain passes (`rain_patch_normal.ps`,
+`rain_apply_normal_gloss.ps`) darken every wet pixel and add gloss to it; the gloss feeds the
+hemisphere specular (`hmodel`: sky reflection x material Fresnel x gloss), whose Fresnel peaks
+where the surface turns edge-on to the eye. On a road that is the sheen reaching to the horizon.
+On foliage - leaf cards with spherised normals, grass blades, crown silhouettes against the sky -
+every card edge is such a place, and a dark rain drew a white outline around every bush and salted
+the grass with the splash-pop glints. The patch pass now measures the surface continuity from the
+depth Laplacian of the G-buffer two pixels out (a plane has a zero second difference at any grazing
+angle; a card edge or a silhouette does not), scales the ripple, run-off and pop normals by it and
+carries it to the apply pass in the length of the patched normal; the gloss boost is multiplied by
+it there. The darkening is untouched, so wet foliage still reads wet; a wet road, a wall, a trunk
+or a block of concrete keep their full sheen and their rings.
+
 Two fades that used to be cuts: a tree impostor thins out through its alpha test over the last
 4x span of its size measure before `r__veg_discard` and over the last 12 % of the weather's
 `far_plane` (the sets keep the fog saturating only for what stands below the horizon, so a crown

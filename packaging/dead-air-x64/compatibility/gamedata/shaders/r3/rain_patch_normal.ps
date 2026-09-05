@@ -74,6 +74,21 @@ float3 SplashPops(float2 uv, float t, float cell, float rate)
 #define ISAMPLE 0
 #endif
 
+// A G-buffer fetch at another screen position, in whichever layout this pass was compiled for.
+#ifdef GBUFFER_OPTIMIZATION
+#ifdef MSAA_OPTIMIZATION
+#define RAIN_LOAD_AT(o) gbuffer_load_data_offset(tc, (o), pos2d.xy, iSample)
+#else
+#define RAIN_LOAD_AT(o) gbuffer_load_data_offset(tc, (o), pos2d.xy)
+#endif
+#else
+#ifdef MSAA_OPTIMIZATION
+#define RAIN_LOAD_AT(o) gbuffer_load_data((o), iSample)
+#else
+#define RAIN_LOAD_AT(o) gbuffer_load_data((o), ISAMPLE)
+#endif
+#endif
+
 #ifdef GBUFFER_OPTIMIZATION
 #ifdef MSAA_OPTIMIZATION
 float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX) : SV_Target
@@ -129,6 +144,27 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     [branch]
     if (wetness <= 0.0)
         return float4(normal, 1.0);
+
+    // Surface continuity, from the depth Laplacian of the G-buffer two pixels out. A film of
+    // water is a mirror only on a continuous surface: leaf cards, grass blades and crown
+    // silhouettes break the depth at every edge, and there the wet gloss drew a white outline
+    // (the hemisphere Fresnel at grazing, scaled by the boosted gloss) while the splash pops
+    // salted the foliage with glints. A plane has a zero second difference at any grazing
+    // angle, so a wet road keeps its sheen to the horizon. Carried to the apply pass in the
+    // length of the patched normal (0.5 = broken, 1 = continuous); the perturbation below is
+    // scaled by it too, so rings and pops stay on ground and stone.
+    float cont = 1.0;
+    [branch]
+    if (position.z >= 0.35)
+    {
+        const float2 px = 2.0 / pos_decompression_params2.xy;
+        const float zl = RAIN_LOAD_AT(tc - float2(px.x, 0.0)).P.z;
+        const float zr = RAIN_LOAD_AT(tc + float2(px.x, 0.0)).P.z;
+        const float zu = RAIN_LOAD_AT(tc - float2(0.0, px.y)).P.z;
+        const float zd = RAIN_LOAD_AT(tc + float2(0.0, px.y)).P.z;
+        const float lap = abs(zl + zr - 2.0 * position.z) + abs(zu + zd - 2.0 * position.z);
+        cont = saturate(1.0 - lap / (0.03 + 0.012 * position.z));
+    }
 
     [branch]
     if (position.z < 0.35)
@@ -190,13 +226,14 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight + slope_flow.x;
         water.y = flowX.x * xWeight + flowZ.x * zWeight + pop.z;
         water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight + slope_flow.y;
-        water *= wetness;
+        water *= wetness * cont;
 
         normal = normalize(normal + mul((float3x3)m_V, water));
         wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
     }
 
-    // Store the final multiplier so the apply pass only performs bandwidth work.
+    // Store the final multiplier so the apply pass only performs bandwidth work; the normal's
+    // length carries the continuity.
     const float colorIntensity = max(1.0 - sqrt(wetness), 0.5);
-    return float4(normal, colorIntensity);
+    return float4(normal * (0.5 + 0.5 * cont), colorIntensity);
 }
