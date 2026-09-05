@@ -218,10 +218,25 @@ f_deffer 	main	( p_flat I 		)
 	}
 	else
 	{
-		// Wetness stays: it is wider than puddles, computed without a noise threshold,
-		// and draws no edges.
-		D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
-		G = max(G, PDL.damp * da_puddle_look.z);
+		// Default half (r__puddles_gbuf 0): the water keeps the ground's own normal. A flat
+		// normal under a directional sun lights a whole puddle as ONE highlight - dot(H,N) is
+		// the same across a plane - and at noon every puddle was a sheet of white whatever the
+		// gloss. On the bumpy normal the sun breaks into the sparkle a rain-rippled puddle
+		// shows. Darkening and the rim stay, the gloss at half; the reflection pass adds the
+		// fresnel-weighted mirror and a tight sun glint.
+		[branch] if (PDL.dbg_paint)
+		{
+			D.rgb = PDL.dbg_color;
+			G = 0.0f;
+		}
+		else
+		{
+			D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
+			G = max(G, PDL.damp * da_puddle_look.z);
+			D.rgb *= lerp(1.0f, saturate(da_puddle_look2.z), PDL.rim);
+			D.rgb *= lerp(1.0f, saturate(da_puddle_look.y), PDL.mask);
+			G = lerp(G, max(G, saturate(da_puddle_look.x) * 0.5f), PDL.mask);
+		}
 	}
 
 	// hemi, sun, material

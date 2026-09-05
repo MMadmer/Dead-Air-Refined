@@ -957,3 +957,35 @@ described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
 
 Do not add spawnable sections for the sake of a scene: a section the original game does not
 know ends up in saves. Every scene here is a hud section and an existing item.
+
+
+## Rain puddles, wet ground and the far fades
+
+Puddles are part of every quality tier now; what changes with the tier is how far they are drawn
+and what they reflect. The ladders live in `xrRender_sync_preset_derived()` (`xrRender_console.cpp`):
+
+| Preset | Puddles | Reflection (`r__puddles_refl`) | Puddle distance | Wet ground radius / rain map |
+| --- | --- | --- | --- | --- |
+| Minimum | mask in the G-buffer | none (0) | 15 m | 20 m / 256 |
+| Low | mask | none (0) | 20 m | 20 m / 256 |
+| Default | mask | sky only, no depth march (1) | 30 m | 25 m / 512 |
+| High | mask | world ray-march, sky on a miss (2) | 45 m | 35 m / 512 |
+| Extreme | mask | world ray-march, sky on a miss (2) | 60 m | 50 m / 1024 |
+
+The look constants are the same on every tier and are re-applied on every start, so a `user.ltx`
+from an earlier build cannot pin them: `r__puddles_size 0.6` (share of the ground under water
+at full wetness), `r__puddles_dark 0.65` (soil under water is darker than dry soil),
+`r__puddles_refl_power 1.0`, `r__puddles_facing 0.03` (Schlick F0; water is 0.02) and
+`r__puddles_sky 1.0` (a ray that finds no geometry reflects the sky in full) and `r__puddles_gbuf 0`
+(the water keeps the ground's normal in the G-buffer; the flat normal of the old default lit a
+whole puddle as one sun highlight at noon, the sun is a tight glint in the reflection pass now).
+The fresnel exponent is the physical 5 (`da_puddle_refl.ps`). Every `r__puddles_*` command is a session override and
+is never written to `user.ltx`. The rain occlusion map covers exactly the wet radius
+(`r3_dynamic_wet_surfaces_far`), so ground under a roof stays dry out to the fade edge.
+
+Two fades that used to be cuts: a tree impostor thins out through its alpha test over the last
+4x span of its size measure before `r__veg_discard` and over the last 12 % of the weather's
+`far_plane` (the sets keep the fog saturating only for what stands below the horizon, so a crown
+against the sky used to vanish in one frame), and detail objects keep a fade band of at least
+twelve metres whatever `r__grass_fade_start` says (`DetailManager.cpp`), so a bush or a sapling at
+the edge of the detail radius shrinks away instead of going in three visible steps.

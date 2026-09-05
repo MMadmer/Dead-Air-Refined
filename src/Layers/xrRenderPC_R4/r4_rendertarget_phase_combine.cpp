@@ -360,7 +360,8 @@ void CRenderTarget::phase_combine()
     // the previous pass left in the slot.
     // Skipped when nothing will read it this frame: water reflections off (Minimum preset)
     // and the puddle pass either off or dry. A stale copy is fine then - no shader samples it.
-    const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl &&
+    // Level 1 of the puddle reflection reads no scene (sky only); the grab is for the march.
+    const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl >= 2 &&
         ps_r__puddles_refl_power > 0.f && g_da_rain_wetness >= 0.01f;
     if (rt_SSR && (ps_r_water_reflection > 0 || puddles_read_grab))
     {

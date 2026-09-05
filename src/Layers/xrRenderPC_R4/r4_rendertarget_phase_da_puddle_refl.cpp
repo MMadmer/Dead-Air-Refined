@@ -46,8 +46,10 @@ void CRenderTarget::phase_da_puddle_refl()
 
     RCache.set_Element(s_puddle_refl->E[0]);
     RCache.set_Geometry(g_combine);
+    // y = the reflection level: 1 = sky only (no depth march), 2 = the world ray-march.
     // z = fresnel floor (r__puddles_facing), w = sky share on a ray miss.
-    RCache.set_c("da_puddle_refl", ps_r__puddles_refl_power, 1.f, ps_r__puddles_facing, ps_r__puddles_sky);
+    RCache.set_c("da_puddle_refl", ps_r__puddles_refl_power, float(ps_r__puddles_refl), ps_r__puddles_facing,
+        ps_r__puddles_sky);
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 }
 } // namespace xray::render::RENDER_NAMESPACE

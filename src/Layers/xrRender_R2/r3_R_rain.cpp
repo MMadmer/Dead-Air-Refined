@@ -86,9 +86,10 @@ void render_rain::calculate()
     // calculate view-frustum bounds in world space
     Fmatrix ex_project, ex_full, ex_full_inverse;
     {
-        // Match the wet-surface shader fade to avoid rendering unused rain casters.
-        constexpr float wetSurfaceFadeEnd = 20.f;
-        const float fRainFar = std::min(ps_r3_dyn_wet_surf_far, wetSurfaceFadeEnd);
+        // The occlusion map covers exactly the radius the wet-surface shader fades over: with
+        // the old 20 m cap the presets that fade at 25-50 m left the outer ring without
+        // occlusion data, and ground under a roof went wet there.
+        const float fRainFar = ps_r3_dyn_wet_surf_far;
         ex_project.build_projection(deg2rad(Device.fFOV /* * Device.fASPECT*/), Device.fASPECT, VIEWPORT_NEAR, fRainFar);
         ex_full.mul(ex_project, Device.mView);
 #if defined(USE_DX11)

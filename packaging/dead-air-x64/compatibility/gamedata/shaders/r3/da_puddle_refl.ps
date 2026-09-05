@@ -138,11 +138,19 @@ float4 main(vf I) : SV_Target
 	// когда физика и читаемость расходятся: смотришь на лужу сверху вниз — угол нормальный, отражения
 	// по формуле почти нет, и лужа под ногами исчезает. Пол кривой поднимает ТОЛЬКО этот случай;
 	// у горизонта отражение и так полное, там ручка ничего не меняет.
+	// Schlick: F0 is the knob (0.03 by default against water's 0.02), the exponent is the
+	// physical five. The former 2.5 with a 0.10 floor and a 1.5 power gave a fifth of the sky
+	// straight down and turned wet ground under a bright overcast into sheets of white.
 	const float f0 = saturate(da_puddle_refl.z);
-	const float fres = saturate(f0 + (1.0f - f0) * pow(saturate(1.0f + dot(view_w, water_n)), 2.5f));
+	const float fres = saturate(f0 + (1.0f - f0) * pow(saturate(1.0f + dot(view_w, water_n)), 5.0f));
 
-	// Отражение мира.
-	const float4 refl = da_puddle_march(pos_w, vreflect);
+	// Отражение мира. r__puddles_refl 1 = только небо (без марша по глубине), 2 = марш и небо
+	// там, где луч ничего не нашёл.
+	float4 refl;
+	[branch] if (da_puddle_refl.y < 1.5f)
+		refl = da_puddle_sky();
+	else
+		refl = da_puddle_march(pos_w, vreflect);
 
 	// Солнечный блик считаем сами: раньше его рисовал движок по глянцу из G-буфера, а глянец мы
 	// оттуда убрали — он и был одним из источников каймы.
@@ -154,7 +162,11 @@ float4 main(vf I) : SV_Target
 	// вернулись, потому что плоская нормаль там даёт объём, которого наложение поверх кадра не даёт.
 	// Здесь остаётся то единственное, чего G-буфер не умеет: посмотреть, что отражается.
 	const float k = saturate(mask * fres * da_puddle_refl.x * refl.w * saturate(da_puddle_look.x));
+	// The sun glint: a mirror shows the sun where the reflected ray meets it and nowhere else,
+	// so it is added here (pow 900) with the same fresnel, instead of coming from a flat normal
+	// in the G-buffer that lit whole puddles at once.
+	const float3 glint_c = L_sun_color.rgb * (glint * fres * mask * saturate(da_puddle_look.x));
 
 	// Премультиплицированный цвет: смешивание задано как (one, invsrcalpha).
-	return float4(refl.xyz * k, k);
+	return float4(refl.xyz * k + glint_c, k);
 }

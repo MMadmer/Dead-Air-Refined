@@ -338,22 +338,26 @@ float ps_r__grass_tint_base = 1.f;
 int ps_r__puddles = 1;
 float ps_r__puddles_buildup = 90.f; // seconds of rain to full wetness
 float ps_r__puddles_dry = 4.f; // drying takes this many times longer
-float ps_r__puddles_size = 0.80f; // surface share under water at full wetness
+// Puddle look. These are look constants, not quality tiers: the preset sync re-applies them
+// on every start, so a user.ltx line from an earlier build (size 0.8, dark 1.0, reflection
+// 1.5, fresnel floor 0.1, sky 0.15 - a bright overcast noon turned every puddle into a sheet
+// of white) cannot pin them; the console changes them for the session.
+float ps_r__puddles_size = 0.60f; // surface share under water at full wetness
 float ps_r__puddles_force = 0.f; // debug: hand-set wetness, accumulator bypassed
 float ps_r__puddles_gloss = 1.00f;
-float ps_r__puddles_dark = 1.00f; // approved in game: water reads by gloss, not darkening
+float ps_r__puddles_dark = 0.65f; // soil under water is darker than dry soil; the gloss alone read as snow under a bright sky
 float ps_r__puddles_damp = 0.10f; // wet-ground gloss, wider and weaker than puddles
 float ps_r__puddles_ripple = 1.f;
 int ps_r__puddles_debug = 0;
-int ps_r__puddles_dist = 20; // metres, puddles fade out on the last quarter
-int ps_r__puddles_gbuf = 1; // G-buffer half switch (normal/gloss/albedo)
+int ps_r__puddles_dist = 20; // metres, puddles fade out on the last quarter; rides the preset
+int ps_r__puddles_gbuf = 0; // 1 = flat water normal in the G-buffer: one sun highlight over a whole puddle at noon; 0 = ground normal, glint in the reflection pass
 float ps_r__puddles_edge = 0.3f; // edge hardness, tuned with the straight-up water normal
 float ps_r__puddles_rim = 0.72f; // dark soaked-soil rim around water
 float ps_r__puddles_rim_width = 0.22f;
-int ps_r__puddles_refl = 1; // world reflections in puddles (own fullscreen pass)
-float ps_r__puddles_refl_power = 1.5f; // tuned in game and approved
-float ps_r__puddles_facing = 0.10f; // fresnel floor so top-down puddles keep a reflection
-float ps_r__puddles_sky = 0.15f; // sky share when the ray-march found no geometry
+int ps_r__puddles_refl = 1; // 0 = none, 1 = sky only (no ray), 2 = world ray-march; rides the preset
+float ps_r__puddles_refl_power = 1.0f; // the reflection is what the fresnel says it is
+float ps_r__puddles_facing = 0.03f; // Schlick F0 of water is 0.02; the lift keeps a top-down puddle from going black
+float ps_r__puddles_sky = 1.0f; // a ray that finds no geometry sees the sky: full share, the fresnel does the rest
 // Steep parallax (POM) family, sibling's in-game tuned values. The stock numbers were
 // hardcoded in sload.h (25/5 samples, 0.013 depth, 8..12 m fade).
 float ps_r__parallax_start = 8.f; // metres: full-strength relief up to here
@@ -930,9 +934,13 @@ void xrRender_sync_preset_derived()
     // With a late fade start the remaining band is short, so on the top presets the fade
     // spends half its shrink on height alone - the footprint keeps covering the soil.
     static constexpr float grass_flat_by_preset[] = {0.f, 0.f, 0.f, 0.5f, 0.5f};
-    // Rain puddles ladder: 0 = off, 1 = G-buffer puddles (noise + normal/gloss on terrain
-    // pixels), 2 = plus the world-reflection pass (a fullscreen ray-march while wet).
-    static constexpr u32 puddles_by_preset[] = {0, 1, 1, 2, 2};
+    // Rain puddles ladder: 1 = G-buffer puddles (noise + normal/gloss on terrain pixels within
+    // the distance below - arithmetic only, so every tier has them), 2 = plus a sky reflection
+    // (the reflection pass without the depth march), 3 = the world ray-march while wet.
+    static constexpr u32 puddles_by_preset[] = {1, 1, 2, 3, 3};
+    // Puddle draw distance ladder, metres: the mask and the reflection cost per covered pixel,
+    // and the far pixels are the cheap ones, so the top tiers see water to the tree line.
+    static constexpr int puddles_dist_by_preset[] = {15, 20, 30, 45, 60};
     // Grass density ladder (lower = denser: cell grid is iCeil(2/density)+1 squared). The flat
     // 0.6 left even Extreme with a 25-cell grid; IX-Ray runs 121 cells there. Default keeps a
     // near-stock look, the top presets grow the field. Applies on level (re)load (cache_Alloc).
@@ -943,7 +951,10 @@ void xrRender_sync_preset_derived()
     // Wet-surface radius ladder, metres (r3_dynamic_wet_surfaces_far semantics). The pair of
     // console knobs existed but the shader hardcoded 5/20 - now that they are live, the far edge
     // rides the preset. Near stays at its 5 m default.
-    static constexpr float wet_far_by_preset[] = {20.f, 20.f, 20.f, 25.f, 30.f};
+    static constexpr float wet_far_by_preset[] = {20.f, 20.f, 25.f, 35.f, 50.f};
+    // The rain occlusion map covers that radius: its resolution rides along so a roof edge
+    // stays a roof edge at fifty metres. Applied at start (the surface is created then).
+    static constexpr int wet_sm_res_by_preset[] = {256, 256, 512, 512, 1024};
     // Alpha-ref ladder (donor rspec values with Default pinned to our historical 128): lower =
     // denser foliage silhouettes = more shaded pixels; Minimum/Low trim exactly there.
     static constexpr int aref_by_preset[] = {180, 160, 128, 110, 100};
@@ -996,9 +1007,18 @@ void xrRender_sync_preset_derived()
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
-    ps_r__puddles_refl = puddles_by_preset[ps_Preset] > 1;
+    ps_r__puddles_refl = int(puddles_by_preset[ps_Preset]) - 1;
+    ps_r__puddles_dist = puddles_dist_by_preset[ps_Preset];
+    // Look constants, see their definitions: re-applied so no earlier user.ltx pins them.
+    ps_r__puddles_size = 0.60f;
+    ps_r__puddles_dark = 0.65f;
+    ps_r__puddles_refl_power = 1.0f;
+    ps_r__puddles_facing = 0.03f;
+    ps_r__puddles_sky = 1.0f;
+    ps_r__puddles_gbuf = 0;
     ps_current_detail_density = detail_density_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
+    ps_r3_dyn_wet_surf_sm_res = wet_sm_res_by_preset[ps_Preset];
     ps_r__aref_quality = aref_by_preset[ps_Preset];
     ps_r__smaa = smaa_by_preset[ps_Preset];
     ps_r__taa = taa_by_preset[ps_Preset];
@@ -1616,24 +1636,26 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__foliage_gloss", &ps_r__foliage_gloss, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__foliage_vibrance", &ps_r__foliage_vibrance, 0.f, 3.f);
     CMD4(CCC_Float, "r__foliage_debleach", &ps_r__foliage_debleach, 0.f, 1.f);
-    CMD4(CCC_Integer, "r__puddles", &ps_r__puddles, 0, 1);
-    CMD4(CCC_Float, "r__puddles_buildup", &ps_r__puddles_buildup, 5.f, 600.f);
-    CMD4(CCC_Float, "r__puddles_dry", &ps_r__puddles_dry, 0.5f, 20.f);
-    CMD4(CCC_Float, "r__puddles_size", &ps_r__puddles_size, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_force", &ps_r__puddles_force, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_gloss", &ps_r__puddles_gloss, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_dark", &ps_r__puddles_dark, 0.2f, 1.f);
-    CMD4(CCC_Float, "r__puddles_damp", &ps_r__puddles_damp, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_ripple", &ps_r__puddles_ripple, 0.f, 4.f);
-    CMD4(CCC_Integer, "r__puddles_debug", &ps_r__puddles_debug, 0, 3);
-    CMD4(CCC_Integer, "r__puddles_dist", &ps_r__puddles_dist, 5, 200);
-    CMD4(CCC_Integer, "r__puddles_gbuf", &ps_r__puddles_gbuf, 0, 1);
-    CMD4(CCC_Float, "r__puddles_edge", &ps_r__puddles_edge, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_rim", &ps_r__puddles_rim, 0.f, 1.f);
-    CMD4(CCC_Float, "r__puddles_rim_width", &ps_r__puddles_rim_width, 0.01f, 1.f);
-    CMD4(CCC_Integer, "r__puddles_refl", &ps_r__puddles_refl, 0, 1);
-    CMD4(CCC_Float, "r__puddles_refl_power", &ps_r__puddles_refl_power, 0.f, 4.f);
-    CMD4(CCC_Float, "r__puddles_facing", &ps_r__puddles_facing, 0.f, 1.f);
+    // Session overrides: the preset decides what runs and the look constants are re-applied
+    // at start, so none of these is written to user.ltx (an older line there still parses).
+    CMD4(CCC_RuntimeInteger, "r__puddles", &ps_r__puddles, 0, 1);
+    CMD4(CCC_RuntimeFloat, "r__puddles_buildup", &ps_r__puddles_buildup, 5.f, 600.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_dry", &ps_r__puddles_dry, 0.5f, 20.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_size", &ps_r__puddles_size, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_force", &ps_r__puddles_force, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_gloss", &ps_r__puddles_gloss, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_dark", &ps_r__puddles_dark, 0.2f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_damp", &ps_r__puddles_damp, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_ripple", &ps_r__puddles_ripple, 0.f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__puddles_debug", &ps_r__puddles_debug, 0, 3);
+    CMD4(CCC_RuntimeInteger, "r__puddles_dist", &ps_r__puddles_dist, 5, 200);
+    CMD4(CCC_RuntimeInteger, "r__puddles_gbuf", &ps_r__puddles_gbuf, 0, 1);
+    CMD4(CCC_RuntimeFloat, "r__puddles_edge", &ps_r__puddles_edge, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_rim", &ps_r__puddles_rim, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_rim_width", &ps_r__puddles_rim_width, 0.01f, 1.f);
+    CMD4(CCC_RuntimeInteger, "r__puddles_refl", &ps_r__puddles_refl, 0, 2);
+    CMD4(CCC_RuntimeFloat, "r__puddles_refl_power", &ps_r__puddles_refl_power, 0.f, 4.f);
+    CMD4(CCC_RuntimeFloat, "r__puddles_facing", &ps_r__puddles_facing, 0.f, 1.f);
     CMD4(CCC_Float, "r__puddles_sky", &ps_r__puddles_sky, 0.f, 1.f);
     CMD4(CCC_Float, "r__parallax_start", &ps_r__parallax_start, 0.f, 300.f);
     CMD4(CCC_Float, "r__parallax_stop", &ps_r__parallax_stop, 0.f, 300.f);
