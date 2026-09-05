@@ -281,9 +281,11 @@ the models, animations, textures, sounds, and shaders it is built from come from
 their mod.
 
 To **Akinaro**, for the **[Stalker Two-K](https://www.moddb.com/mods/stalker-two-k)**
-texture set, used unchanged, and to **Cromm Cruac**, for the tree and foliage
-textures of **[Absolute Nature 4](http://absolute.crommcruac.com)**. Both sets are
-free, for S.T.A.L.K.E.R. games only, and stay that way here.
+texture set (one texture, the moss on the boulders, recoloured for Dead Air's
+autumn palette), and to **Cromm Cruac**, for the tree and foliage textures of
+**[Absolute Nature 4](http://absolute.crommcruac.com)** (two dead-branch textures
+recoloured from yellow-brown to Dead Air's grey-green). Both sets are free, for
+S.T.A.L.K.E.R. games only, and stay that way here.
 
 To **Feel_Fried** (FDDA), **themrdemonized** (Ledge Grabbing), **Mirrowel**
 (FDDA Enhanced Animations), **lizzardman** (Headgear Animations, FDDA Redone)
