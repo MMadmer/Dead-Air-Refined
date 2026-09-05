@@ -23,6 +23,32 @@ bool CEffectorFall::ProcessCam(SCamEffectorInfo& info)
     return TRUE;
 }
 
+CEffectorFallRoll::CEffectorFallRoll(float duration)
+    : CEffectorCam(eCEFallRoll, duration + 0.2f), m_time(0.f), m_duration(_max(duration, 0.1f))
+{
+    SetHudAffect(false);
+}
+
+bool CEffectorFallRoll::ProcessCam(SCamEffectorInfo& info)
+{
+    m_time += Device.fTimeDelta;
+    const float k = m_time / m_duration;
+    if (k >= 1.f)
+    {
+        fLifeTime = -1;
+        return TRUE;
+    }
+    // Progress with a soft start and stop: a tumble does not snap into rotation.
+    const float s = k - _sin(PI_MUL_2 * k) / PI_MUL_2;
+    Fmatrix M;
+    M.rotation(info.r, PI_MUL_2 * s);
+    M.transform_dir(info.d);
+    M.transform_dir(info.n);
+    info.d.normalize();
+    info.n.normalize();
+    return TRUE;
+}
+
 CEffectorDOF::CEffectorDOF(const Fvector4& dof) : CEffectorCam(eCEDOF, 100000)
 {
     GamePersistent().SetEffectorDOF(Fvector().set(dof.x, dof.y, dof.z));

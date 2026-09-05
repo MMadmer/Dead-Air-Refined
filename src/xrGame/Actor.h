@@ -488,6 +488,33 @@ protected:
     BOOL m_bJumpKeyPressed;
 
 public:
+    // Landing roll (see MODDING.md, "Landing roll"): jump held on touchdown turns a survivable
+    // fall into a forward tumble that takes part of the impact. Nothing here is saved.
+    struct SFallRoll
+    {
+        bool active{};
+        float time{};
+        float duration{0.9f};
+        float force_reduction{0.35f};
+        float speed_start{3.2f};
+        float speed_end{1.2f};
+        float yaw_sens{0.25f};
+        u16 item_id{u16(-1)};
+        u16 item_slot{NO_ACTIVE_SLOT};
+        u16 detector_id{u16(-1)};
+        int restore_frames{-1};
+    };
+    SFallRoll m_fall_roll;
+    bool IsFallRolling() const { return m_fall_roll.active; }
+    bool FallRollAllowsCommand(int cmd) const;
+    float FallRollHealthLost(float contact_speed) const;
+    void StartFallRoll();
+    void UpdateFallRoll(float dt);
+    void EndFallRoll();
+
+protected:
+
+public:
     float m_fWalkAccel;
     float m_fJumpSpeed;
     float m_fRunFactor;

@@ -45,6 +45,9 @@ public:
     virtual void reinit();
 
     virtual CWound* ConditionHit(SHit* pHDS);
+    // The health a hit of this power would take, through the outfit and the immunities, without
+    // dealing it. The landing roll asks before it commits: a roll into a lethal drop is no roll.
+    float PredictHealthLoss(float hit_power, ALife::EHitType hit_type, s16 element);
     virtual void UpdateCondition();
     void UpdateBoosters();
 

@@ -163,6 +163,12 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
     mstate_old = mstate_real;
     vControlAccel.set(0, 0, 0);
 
+    // A rolling player is crouched and moving forward and wants nothing else; the keys still
+    // land in mstate_wishful and take over the moment the roll ends.
+    UpdateFallRoll(dt);
+    if (m_fall_roll.active)
+        mstate_wf = mcCrouch | mcFwd;
+
     if (!(mstate_real & mcFall) &&
         (character_physics_support()->movement()->Environment() == CPHMovementControl::peInAir))
     {
@@ -396,6 +402,18 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
             }
         }
     }
+    if (m_fall_roll.active)
+    {
+        // The tumble carries the body forward and slows as it ends. The value is metres per
+        // second: the movement control takes a tenth of the acceleration's length as its
+        // velocity ceiling. The direction is the camera's yaw, which the player still turns.
+        const float k = clampr(m_fall_roll.time / m_fall_roll.duration, 0.f, 1.f);
+        const float speed = m_fall_roll.speed_start + (m_fall_roll.speed_end - m_fall_roll.speed_start) * k;
+        vControlAccel.set(0.f, 0.f, _max(speed, 0.f) * 10.f);
+        mstate_real |= mcFwd;
+        mstate_real &= ~(mcSprint | mcBack | mcLStrafe | mcRStrafe | mcLookout);
+    }
+
     // transform local dir to world dir
     Fmatrix mOrient;
     mOrient.rotateY(-r_model_yaw);

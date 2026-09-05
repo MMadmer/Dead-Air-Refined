@@ -489,6 +489,16 @@ CWound* CActorCondition::ConditionHit(SHit* pHDS)
     return inherited::ConditionHit(pHDS);
 }
 
+float CActorCondition::PredictHealthLoss(float hit_power, ALife::EHitType hit_type, s16 element)
+{
+    // Mirrors the default branch of CEntityCondition::ConditionHit: armour, then the immunity
+    // of the type, then the health share. HitOutfitEffect only reads the outfit.
+    bool add_wound = true;
+    float power = HitOutfitEffect(hit_power, hit_type, element, 0.f, add_wound);
+    power *= GetHitImmunity(hit_type);
+    return power * m_fHealthHitPart;
+}
+
 void CActorCondition::PowerHit(float power, bool apply_outfit)
 {
     m_fPower -= apply_outfit ? HitPowerEffect(power) : power;

@@ -74,6 +74,9 @@ void CActor::IR_OnKeyboardPress(int cmd)
     if (load_screen_renderer.IsActive())
         return;
 
+    if (m_fall_roll.active && !FallRollAllowsCommand(cmd))
+        return;
+
     bool quickSlot = false;
     switch (cmd)
     {
@@ -242,6 +245,8 @@ void CActor::IR_OnMouseWheel(float x, float y)
 {
     if (GamePersistent().GetHudTuner().is_active())
         return;
+    if (m_fall_roll.active)
+        return;
 
     if (inventory().Action((y > 0) ? (u16)kWPN_ZOOM_INC : (u16)kWPN_ZOOM_DEC, CMD_START))
         return;
@@ -300,6 +305,8 @@ void CActor::IR_OnKeyboardHold(int cmd)
         return;
 
     if (Remote() || !g_Alive())
+        return;
+    if (m_fall_roll.active && !FallRollAllowsCommand(cmd))
         return;
     if (m_input_external_handler && !m_input_external_handler->authorized(cmd))
         return;
@@ -362,6 +369,13 @@ void CActor::IR_OnKeyboardHold(int cmd)
 
 void CActor::OnAxisMove(float x, float y, float scaleX, float scaleY, bool invertX, bool invertY)
 {
+    // Mid-roll the view keeps its yaw at a quarter of the sensitivity - steering a tumble is
+    // hard - and no pitch at all: the turn belongs to the roll effector.
+    if (m_fall_roll.active)
+    {
+        scaleX *= m_fall_roll.yaw_sens;
+        y = 0.f;
+    }
     if (!fis_zero(x))
     {
         const float d = (invertX ? -1.f : 1.f) * x * scaleX;
@@ -399,6 +413,8 @@ void CActor::IR_OnMouseMove(int dx, int dy)
 
 void CActor::IR_OnControllerPress(int cmd, const ControllerAxisState& state)
 {
+    if (m_fall_roll.active && cmd != kLOOK_AROUND && !FallRollAllowsCommand(cmd))
+        return;
     switch (cmd)
     {
     case kLOOK_AROUND:
@@ -513,6 +529,8 @@ void CActor::IR_OnControllerRelease(int cmd, const ControllerAxisState& state)
 
 void CActor::IR_OnControllerHold(int cmd, const ControllerAxisState& state)
 {
+    if (m_fall_roll.active && cmd != kLOOK_AROUND && !FallRollAllowsCommand(cmd))
+        return;
     if (cmd == kLOOK_AROUND)
     {
         PIItem iitem = inventory().ActiveItem();

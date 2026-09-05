@@ -181,6 +181,8 @@ public:
     }
     void GetSmoothedVelocity(Fvector& v);
     float GetContactSpeed() { return fContactSpeed; }
+    float GetMinCrashSpeed() const { return fMinCrashSpeed; }
+    float GetMaxCrashSpeed() const { return fMaxCrashSpeed; }
     void GroundNormal(Fvector& norm);
     CPHSynchronize* GetSyncItem();
     void Freeze();

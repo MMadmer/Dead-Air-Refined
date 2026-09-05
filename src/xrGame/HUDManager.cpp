@@ -80,7 +80,10 @@ void CHUDManager::Render_First(u32 context_id)
     if (0 == O)
         return;
     CActor* A = smart_cast<CActor*>(O);
-    if (!A || !A->g_Alive() || A->active_cam() != eacFirstEye || (A->MovingState() & mcClimb))
+    // The legs mesh stays off for the landing roll: it would tumble through the view with the
+    // camera. The world shadow comes from the separate caster (render_shadow_caster) and keeps
+    // going - a shadow that is there beats a shadow that is right.
+    if (!A || !A->g_Alive() || A->active_cam() != eacFirstEye || (A->MovingState() & mcClimb) || A->IsFallRolling())
         return;
 
     // R1 keeps the actor hidden and renders only its shadow; newer renderers draw the first-person body.

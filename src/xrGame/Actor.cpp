@@ -257,6 +257,8 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 CActor::~CActor()
 {
     drop_shadow_caster();
+    m_fall_roll.active = false;
+    m_fall_roll.restore_frames = -1;
 
     actorAdrenalineTimes.erase(this);
     actorSprintGearFactors.erase(this);
@@ -409,6 +411,21 @@ void CActor::Load(LPCSTR section)
     m_fRunBackFactor = pSettings->r_float(section, "run_back_coef");
     m_fWalkBackFactor = pSettings->r_float(section, "walk_back_coef");
     m_fCrouchFactor = pSettings->r_float(section, "crouch_coef");
+
+    // Landing roll. The reduction is the share of the peak landing force a parkour roll takes
+    // off a stiff landing (0.35: force-plate studies put it at 0.43 from 0.75 m and the
+    // advantage narrows with height), applied as a scale on the impact speed - which raises the
+    // no-damage speed by 1/(1-r) and cuts the damage above it by r at once. Duration and the
+    // forward speed profile follow the measured roll: ~0.35 s of ground contact plus the rise,
+    // 2.6 m/s forward at the end of contact, some two metres covered.
+    m_fall_roll.force_reduction = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_force_reduction", 0.35f);
+    clamp(m_fall_roll.force_reduction, 0.f, 0.9f);
+    m_fall_roll.duration = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_time", 0.9f);
+    clamp(m_fall_roll.duration, 0.3f, 3.f);
+    m_fall_roll.speed_start = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_start", 3.2f);
+    m_fall_roll.speed_end = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_end", 1.2f);
+    m_fall_roll.yaw_sens = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_yaw_sensitivity", 0.25f);
+    clamp(m_fall_roll.yaw_sens, 0.f, 1.f);
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
     m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
@@ -1104,6 +1121,24 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
 
     if (Local() && g_Alive())
     {
+        // Landing roll: jump held on touchdown, damage real and survivable - the roll takes
+        // the hit (FallRollHealthLost) and the tumble begins. No damage or a lethal one: no roll.
+        {
+            CPHMovementControl* mc = character_physics_support()->movement();
+            if (!m_fall_roll.active && !fis_zero(mc->gcontact_HealthLost) && (mstate_wishful & mcJump) &&
+                !m_holder && Level().CurrentControlEntity() == this)
+            {
+                const float predicted =
+                    conditions().PredictHealthLoss(mc->gcontact_HealthLost, mc->CollisionDamageInfo()->HitType(), mc->ContactBone());
+                if (predicted < conditions().GetHealth())
+                {
+                    mc->gcontact_HealthLost = FallRollHealthLost(mc->GetContactSpeed());
+                    mc->gcontact_Power *= 1.f - m_fall_roll.force_reduction;
+                    StartFallRoll();
+                }
+            }
+        }
+
         if (character_physics_support()->movement()->gcontact_Was)
             Cameras().AddCamEffector(xr_new<CEffectorFall>(character_physics_support()->movement()->gcontact_Power));
 
@@ -1944,6 +1979,124 @@ void CActor::shedule_Update(u32 DT)
     Check_for_AutoPickUp();
 };
 #include "debug_renderer.h"
+// ---- landing roll -------------------------------------------------------------------------
+
+float CActor::FallRollHealthLost(float contact_speed) const
+{
+    const CPHMovementControl* mc = character_physics_support()->movement();
+    // The roll scales the impact speed by (1 - r): the no-damage speed rises to min/(1 - r), the
+    // damage above it falls by r - one number, both halves of the effect.
+    const float v = contact_speed * (1.f - m_fall_roll.force_reduction);
+    const float lo = mc->GetMinCrashSpeed();
+    const float hi = mc->GetMaxCrashSpeed();
+    if (v <= lo || hi <= lo)
+        return 0.f;
+    return (v - lo) / (hi - lo);
+}
+
+bool CActor::FallRollAllowsCommand(int cmd) const
+{
+    // Only what a tumbling player could still do: quit to the menu, the console, screenshots,
+    // saves. Movement, weapons, inventory and use wait for the roll to end.
+    switch (cmd)
+    {
+    case kQUIT:
+    case kCONSOLE:
+    case kSCREENSHOT:
+    case kQUICK_SAVE:
+    case kQUICK_LOAD:
+    case kPAUSE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void CActor::StartFallRoll()
+{
+    m_fall_roll.active = true;
+    m_fall_roll.time = 0.f;
+    m_fall_roll.restore_frames = -1;
+    m_fall_roll.item_id = u16(-1);
+    m_fall_roll.item_slot = NO_ACTIVE_SLOT;
+    m_fall_roll.detector_id = u16(-1);
+
+    // The hands empty at once, the way the climb does it: the item and the detector go to the
+    // ruck through the inventory's own events and come back when the roll ends.
+    NET_Packet P;
+    if (PIItem item = inventory().ActiveItem())
+    {
+        m_fall_roll.item_id = item->object().ID();
+        m_fall_roll.item_slot = inventory().GetActiveSlot();
+        u_EventGen(P, GEG_PLAYER_ITEM2RUCK, ID());
+        P.w_u16(m_fall_roll.item_id);
+        u_EventSend(P);
+    }
+    if (PIItem det = inventory().ItemFromSlot(DETECTOR_SLOT))
+    {
+        m_fall_roll.detector_id = det->object().ID();
+        u_EventGen(P, GEG_PLAYER_ITEM2RUCK, ID());
+        P.w_u16(m_fall_roll.detector_id);
+        u_EventSend(P);
+    }
+
+    Cameras().AddCamEffector(xr_new<CEffectorFallRoll>(m_fall_roll.duration));
+}
+
+void CActor::UpdateFallRoll(float dt)
+{
+    // The item is back in its slot; two updates later it is drawn - a slot change and an
+    // activation in one frame lose the draw, the climb waits the same two ticks.
+    if (m_fall_roll.restore_frames >= 0 && --m_fall_roll.restore_frames < 0)
+    {
+        if (m_fall_roll.item_slot != NO_ACTIVE_SLOT && g_Alive() && inventory().ItemFromSlot(m_fall_roll.item_slot))
+            inventory().Activate(m_fall_roll.item_slot);
+        m_fall_roll.item_slot = NO_ACTIVE_SLOT;
+    }
+    if (!m_fall_roll.active)
+        return;
+    m_fall_roll.time += dt;
+    if (m_fall_roll.time >= m_fall_roll.duration || !g_Alive())
+        EndFallRoll();
+}
+
+void CActor::EndFallRoll()
+{
+    if (!m_fall_roll.active)
+        return;
+    m_fall_roll.active = false;
+    if (!g_Alive())
+        return;
+
+    NET_Packet P;
+    if (m_fall_roll.detector_id != u16(-1))
+    {
+        if (Level().Objects.net_Find(m_fall_roll.detector_id) && !inventory().ItemFromSlot(DETECTOR_SLOT))
+        {
+            u_EventGen(P, GEG_PLAYER_ITEM2SLOT, ID());
+            P.w_u16(m_fall_roll.detector_id);
+            P.w_u16(DETECTOR_SLOT);
+            u_EventSend(P);
+        }
+        m_fall_roll.detector_id = u16(-1);
+    }
+    if (m_fall_roll.item_id != u16(-1))
+    {
+        if (Level().Objects.net_Find(m_fall_roll.item_id) && m_fall_roll.item_slot != NO_ACTIVE_SLOT &&
+            !inventory().ItemFromSlot(m_fall_roll.item_slot))
+        {
+            u_EventGen(P, GEG_PLAYER_ITEM2SLOT, ID());
+            P.w_u16(m_fall_roll.item_id);
+            P.w_u16(m_fall_roll.item_slot);
+            u_EventSend(P);
+            m_fall_roll.restore_frames = 2;
+        }
+        else
+            m_fall_roll.item_slot = NO_ACTIVE_SLOT;
+        m_fall_roll.item_id = u16(-1);
+    }
+}
+
 void CActor::renderable_RenderBody(u32 context_id, IRenderable* root)
 {
     VERIFY(_valid(XFORM()));

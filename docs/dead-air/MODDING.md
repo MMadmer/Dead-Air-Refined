@@ -1001,3 +1001,34 @@ geometry while airborne keeps half the material friction (`PHSimpleCharacter.cpp
 so the surface brakes a slide by its normal load - barely on a wall, more on a slope. Passable
 materials (bushes) keep the stock full-speed formula. Both are deliberate departures from the CoC
 and DA sources, requested for the mod.
+
+
+## Landing roll
+
+Landing with the jump key held turns a survivable fall into a forward roll that takes part of the
+impact - the Mirror's Edge landing, without animations. The engine decides at touchdown
+(`CActor::g_Physics`): the stock fall damage must be non-zero and, through the outfit and the
+immunities, less than the current health (`CActorCondition::PredictHealthLoss`); otherwise there
+is no roll and the stock damage or death stands.
+
+The damage with a roll is the stock formula evaluated at the landing speed scaled by
+`1 - fall_roll_force_reduction`: the no-damage speed rises to `fMinCrashSpeed / (1 - r)` and the
+damage above it falls by `r`. The default `r = 0.35` comes from force-plate work on parkour
+landings: the roll cut the peak vertical landing force by 43 % against a stiff two-foot landing
+from 0.75 m (Puddle and Maulder, J Sports Sci Med 2013; 90 % CI 34-51 %), trained landings cut it
+by 40-49 % at 0.44-0.88 m (Standing and Maulder, J Sports Sci Med 2015), and a kinematic study
+from 0.9-2.7 m found the roll's advantage in early deceleration narrowing with height (about 29 %
+at 1.8 m, parity at 2.7 m) while it still stretched the landing to 320-364 ms and turned the fall
+into 2.6 m/s of forward speed. The default sits at the conservative end for that reason; with the
+stock 12 m/s the roll's no-damage speed is 18.5 m/s.
+
+During the roll (`fall_roll_time`, 0.9 s) the view turns once forward about the camera's right
+axis (`CEffectorFallRoll`), pitch input is ignored and yaw runs at `fall_roll_yaw_sensitivity`
+(0.25), the body is crouched and carried forward from `fall_roll_speed_start` (3.2 m/s) down to
+`fall_roll_speed_end` (1.2 m/s) - about two metres, the length of a real roll - in the camera's
+yaw direction, the first-person legs are not drawn while the world shadow caster keeps going, and
+every command except quit, console, screenshot, quick save/load and pause waits. The active item
+and the detector go to the ruck at once through the inventory's own events and return to their
+slots when the roll ends, the item into the hands two updates later. Keys in `[actor]`:
+`fall_roll_force_reduction`, `fall_roll_time`, `fall_roll_speed_start`, `fall_roll_speed_end`,
+`fall_roll_yaw_sensitivity`. Nothing about the roll is saved.
