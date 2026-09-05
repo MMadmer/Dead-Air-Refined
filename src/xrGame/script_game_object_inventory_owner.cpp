@@ -2337,6 +2337,11 @@ float CScriptGameObject::GetAdditionalMaxWeight() const
 {
     CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&object());
     CBackpack* backpack = smart_cast<CBackpack*>(&object());
+    // Dead Air keeps its kits (class SCRPTART, an artefact) in the backpack slot with an
+    // additional_inventory_weight of their own; a script asking the slot for its bonus gets
+    // the artefact's, not an error.
+    if (const CArtefact* artefact = smart_cast<const CArtefact*>(&object()))
+        return artefact->AdditionalInventoryWeight();
     if (!outfit && !backpack)
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error,
@@ -2354,6 +2359,11 @@ float CScriptGameObject::GetAdditionalMaxWalkWeight() const
 {
     CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&object());
     CBackpack* backpack = smart_cast<CBackpack*>(&object());
+    // Dead Air keeps its kits (class SCRPTART, an artefact) in the backpack slot with an
+    // additional_inventory_weight of their own; a script asking the slot for its bonus gets
+    // the artefact's, not an error.
+    if (const CArtefact* artefact = smart_cast<const CArtefact*>(&object()))
+        return artefact->AdditionalInventoryWeight();
     if (!outfit && !backpack)
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error,
@@ -2371,6 +2381,11 @@ void CScriptGameObject::SetAdditionalMaxWeight(float add_max_weight)
 {
     CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&object());
     CBackpack* backpack = smart_cast<CBackpack*>(&object());
+    if (CArtefact* artefact = smart_cast<CArtefact*>(&object()))
+    {
+        artefact->SetAdditionalInventoryWeight(add_max_weight);
+        return;
+    }
     if (!outfit && !backpack)
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error,
@@ -2389,6 +2404,11 @@ void CScriptGameObject::SetAdditionalMaxWalkWeight(float add_max_walk_weight)
 {
     CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&object());
     CBackpack* backpack = smart_cast<CBackpack*>(&object());
+    if (CArtefact* artefact = smart_cast<CArtefact*>(&object()))
+    {
+        artefact->SetAdditionalInventoryWeight(add_max_walk_weight);
+        return;
+    }
     if (!outfit && !backpack)
     {
         GEnv.ScriptEngine->script_log(LuaMessageType::Error,

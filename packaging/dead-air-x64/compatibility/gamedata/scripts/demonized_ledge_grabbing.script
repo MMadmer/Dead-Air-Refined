@@ -648,6 +648,7 @@ function amIStuck()
 	return res.success
 end
 
+local staminaRefusedAt = nil
 function tryToClimb(fromStanding)
 	if climbActive then return end
 	if not savedClimbPos then return end
@@ -656,11 +657,16 @@ function tryToClimb(fromStanding)
 	-- animation, four thirds of the base in total. Without that much in the legs it does not
 	-- start - a climb that runs dry halfway is no climb. Checked here, before climbActive is
 	-- raised: a refusal below that line left the flag up and no climb ever started again.
+	-- Retried at most once a second: the jump hold calls in here every frame, and a refusal
+	-- costs the weight walk over the outfit, the kit and the belt each time.
+	if staminaRefusedAt and time_global() - staminaRefusedAt < 1000 then return end
 	local staminaNeeded = getStaminaDrain() * 4 / 3 + 0.02
 	if db.actor.power < staminaNeeded then
+		staminaRefusedAt = time_global()
 		dlog("climb refused: power %s below the %s the climb needs", db.actor.power, staminaNeeded)
 		return
 	end
+	staminaRefusedAt = nil
 
 	local animationSpeedModifier = getAnimationSpeedModifier()
 	local animationData = dup_table(demonized_ledge_grabbing_animation_data.data)

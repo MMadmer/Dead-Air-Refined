@@ -142,6 +142,7 @@ cannot point a shipped build at an arbitrary server.
 | Climb needs the stamina it will spend | Drain the power bar, hold jump at a ledge; refill, try again | Pass: with less power than the climb drains (four thirds of `getStaminaDrain()`, weight-dependent) the climb does not start and the log says why under `debug_log`; with enough it starts and the bar never runs dry mid-climb |
 | Landing roll sound | Any drop that triggers the roll | Pass: `actor\fall_roll` plays once, 2D, as the roll begins; the log shows no `Invalid ogg-comment version` for it and no missing-sound line |
 | Landing roll from the console | Rig, `time_factor 0.2`, `r__screenshot_every 1`, `fall_roll_test` | Pass: the frames show the view going down, over and back up in one forward turn with a small overshoot before it settles, the body ends crouched and moved ahead, and the log reads `- fall roll: sound 'actor/fall_roll' handle ok, 179548 bytes, 1.02 s, feedback yes` (a `none` handle or `feedback no` is the failure) |
+| Weight bonus of a kit in the backpack slot | Console open, hold jump at a ledge with `kit_hunt` (class SCRPTART) in the backpack slot, with and without enough stamina | Pass: no `cannot access class member GetAdditionalMaxWeight` line - `get_additional_max_weight` returns the artefact's `additional_inventory_weight` - and a stamina refusal is re-tried once a second, not every frame |
 
 ## Content coverage limits
 
