@@ -16,8 +16,9 @@
 //    trunk at that height and a branch card's base rides the trunk it grows from;
 //  * the authored per-vertex FLEXIBILITY (tc.z: ~0 trunk, ~1 tips) - the travel the models
 //    were made for, which is the crown motion the field liked: tips out past the trunk.
-// The leaf flutter rides the flexibility; motors (shot wakes, blasts, presses) are measured at
-// the VERTEX, so a bullet through a bush shakes the branches at the trace.
+// The leaf flutter rides the flexibility; motors (shot wakes, blasts, presses) follow the tree
+// rule of da_tree_motors_bend: a bush leans as one plant, a tree moves only the foliage a body
+// or a wake can reach, a blast bends it whole from the root.
 struct da_tree_bend_in
 {
     float3 pos;     // world position of the vertex, unbent
@@ -64,9 +65,8 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = da_flutter(wave.w * 2.3f * I.freq_k + dot(I.pos, (float3)wave * 3.7f));
     result += wdir * (dp2 * leaf_w * saturate(I.H * 1.5f) * I.frac * 1.2f);
-    // Motors at the vertex. The trunk is stiff (frac), the foliage is not.
-    float press_unused;
-    result += da_wind_motors_bend(float3(I.pos.x, I.root.y, I.pos.z), I.H, press_unused) * (0.8f * saturate(I.frac * 2.0f));
+    // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend).
+    result += da_tree_motors_bend(I.pos, I.root, I.H, I.tree_h, I.frac);
     // Progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
     // limit (~0.5 H, ~30 degrees) is an asymptote nothing visibly slams into. (An 8-degree
     // cap tried here left the trees leaning less in a storm than they used to.)

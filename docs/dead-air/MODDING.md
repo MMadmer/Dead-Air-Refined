@@ -788,15 +788,39 @@ headless QA rig uses the last two to grade a run without a window.
 ### Wind motors and tall vegetation
 
 The motors (`da_wind_motors.h`: a press under a walking actor or creature, the wake of a shot, the
-ring of a blast) displace a vertex by strength times a lever. For grass and bushes the lever is
-the vertex height above the root - the whole plant bends from its base. A tree is not a blade of
-grass: a stalker walking past the trunk used to swing crown cards twelve metres up by up to the
-0.5 H cap, and single cards shot out as spikes while people moved about. The lever stays the full
-height - a bush or a low spruce branch answers a step or a shot exactly as before - but a press
-fades out between 2.2 m and 3.2 m above the root (nothing a walker brushes past sits higher), and a
-shot's wake keeps its full lever up to three metres and fades to nothing by six (it shakes the
-leaves it passes, not the crown above). A blast keeps the full lever at every height, its front
-being meant to bend the whole tree. Grass and everything under 2.2 m see no change.
+ring of a blast) drive two different rules.
+
+Grass (the detail shaders, `da_wind_motors_bend`) keeps the original one: displacement = strength
+times the vertex height above the tuft root, measured at the root, so a tuft moves as a whole; the
+press footprint is boot-sized (sigma 0.3 m), the shot wake a hand's width (45 cm cut, 16 cm sigma)
+measured to the vertex height.
+
+Tree-shader geometry (`flora\leaf_wave`, `flora\trunk_wave` - crowns, trunks and Dead Air's
+bushes, which are tree models) takes `da_tree_motors_bend`. The grass rule did not carry over: a
+boot flattens a blade of grass but a shoulder does not fold a branch, and a crown card is metres
+wide where a tuft is a hand - a footprint narrower than the card tore it into spikes, and a lever of
+the card's height threw it out by metres (the "lens" a trunk showed when the actor stood against
+it). Two regimes, blended on the model height (`c_tree.x`, the tallest part sharing the root: one
+under 3 m, the other over 4.5 m):
+
+- A *bush* is one plant. A press and a blast are measured at the root with the canopy radius
+  (0.4 x height) taken off the distance: a body inside the bush leans the whole bush away from
+  itself (0.7 x height x flexibility, the usual 0.5 H cap) and every card moves together. A shot
+  through the canopy at card height shivers the whole bush (up to 0.8 x min(height, 1.2 m) x the
+  wake strength), softly in the vertical - the vertical width is 0.35 x the plant's height - so a
+  card a metre tall does not tear.
+- A *tree* has a stiff trunk, and a body reaches no higher than it stands. A press moves only the
+  flexible foliage - authored flexibility (`tc.z`) above 0.3, so trunks and thick branches stay
+  put - within 2.2 m above the presser's feet, fading out by 3.2 m, with a body-wide footprint
+  (full within 0.35 m of the body axis, sigma 0.45 m beyond) and a bounded travel of
+  0.22 x min(height, 2.2 m) x strength. A shot gives the low foliage a gentle wide shiver (sigma
+  0.45 m, 0.25 x min(height, 2.2 m), nothing above six metres). A blast bends the whole tree from
+  its root through the authored flexibility, one distance and one phase for every card, the way
+  the wind does.
+
+Bullets and bushes are a separate matter and unchanged: Dead Air's `materials\bush` has a shoot
+factor of zero and no density, so a bullet passes through untouched (no speed or damage loss) while
+the material pair still plays its hit sound and particles.
 
 ## First-person self-shadow
 

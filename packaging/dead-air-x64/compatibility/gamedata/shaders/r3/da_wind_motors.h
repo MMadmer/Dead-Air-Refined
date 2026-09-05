@@ -128,4 +128,129 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
     return bend;
 }
 
+// Motors on tree-shader geometry: crowns, trunks and the bushes (Dead Air's bushes are tree
+// models under flora\leaf_wave). The grass rule above - strength times height, measured at
+// the tuft root - does not carry over. A boot flattens a blade of grass, a shoulder does not
+// fold a branch, and a crown card is metres wide where a tuft is a hand: a footprint narrower
+// than the card tears it into spikes, and a lever of the crown's height throws it out by
+// metres. Two regimes, blended on the model height (c_tree.x - the height of the tallest part
+// sharing the root):
+//  * BUSH (under ~3 m): one plant. A press and a blast are measured at the root with the
+//    canopy radius taken off the distance, so a body inside the bush leans the whole bush
+//    away from itself and every card moves together; a shot through the canopy at card
+//    height shivers the whole bush, softly in the vertical, so a card a metre tall does not
+//    tear.
+//  * TREE (over ~4.5 m): the trunk is stiff and a body reaches no higher than it stands. A
+//    press moves only the flexible foliage (authored frac) within 2.2 m above the presser's
+//    feet, fading out by 3.2 m, with a body-wide footprint and a bounded travel; a shot gives
+//    the low foliage a gentle, wide shiver (nothing above six metres); a blast bends the
+//    whole tree from its root through the authored flexibility, the way the wind does.
+float2 da_tree_motors_bend(float3 pos, float3 root, float H, float tree_h, float frac)
+{
+    float2 bend = float2(0.0f, 0.0f);
+    const int count = int(da_wm_info.x);
+    const float bush_k = saturate((4.5f - tree_h) * (1.0f / 1.5f));
+    const float canopy = 0.4f * min(tree_h, 4.5f);
+    // Foliage keeps trunks and thick branches (frac under 0.3) out of a press or a wake;
+    // flex is the plain authored flexibility, what the wind and a blast bend by.
+    const float foliage = saturate((frac - 0.3f) * 2.5f);
+    const float flex = saturate(frac * 2.0f);
+    const float vy = root.y + H;
+    [loop]
+    for (int i = 0; i < count; ++i)
+    {
+        // Both ternary sides are evaluated in HLSL, so each index must stay in range on its own.
+        const int lo = min(i, 3);
+        const int hi = max(i - 4, 0);
+        const float4 P = (i < 4) ? da_wm_pos0[lo] : da_wm_pos1[hi];
+        const float4 A = (i < 4) ? da_wm_par0[lo] : da_wm_par1[hi];
+        [branch]
+        if (P.w <= 0.0f || abs(A.x) <= 0.001f)
+            continue;
+
+        const float2 d_root = root.xz - P.xz;
+        const float2 d_vert = pos.xz - P.xz;
+
+        [branch]
+        if (A.w > 0.5f)
+        {
+            // Shot trace. Bush: the root against the trace, canopy taken off, the plant's own
+            // height as the vertical width. Tree: the vertex against the trace, a wide soft
+            // wake (a card's corners are a metre apart) on the low foliage only.
+            const float2 ldir = float2(A.y, A.z);
+            float2 dr = d_root;
+            const float along_r = clamp(dot(dr, ldir), 0.0f, P.w);
+            dr -= ldir * along_r;
+            const float dist_r = max(length(dr) - canopy, 0.0f);
+            float2 dvt = d_vert;
+            const float along_v = clamp(dot(dvt, ldir), 0.0f, P.w);
+            dvt -= ldir * along_v;
+            const float dist_v = length(dvt);
+            [branch]
+            if (min(dist_r, dist_v) > 1.2f)
+                continue;
+            const float dy_r = P.y + (A.w - 1.0f) * along_r - vy;
+            const float dy_v = P.y + (A.w - 1.0f) * along_v - vy;
+            const float sig_yb = max(0.30f, 0.35f * tree_h);
+            const float tr = dist_r * (1.0f / 0.16f);
+            const float tyb = dy_r / sig_yb;
+            const float w_bush = exp(-tr * tr - tyb * tyb) * (0.8f * min(H, 1.2f));
+            const float tv = dist_v * (1.0f / 0.45f);
+            const float tyv = dy_v * (1.0f / 0.6f);
+            const float w_tree = exp(-tv * tv - tyv * tyv) * (0.25f * min(H, 2.2f)) * foliage * saturate((6.0f - H) * 0.5f);
+            const float2 off = lerp(dvt, dr, bush_k);
+            const float off_len = length(off);
+            const float2 radial = (off_len > 0.02f) ? (off / off_len) : float2(-ldir.y, ldir.x);
+            const float2 push = normalize(ldir * 0.75f + radial * 0.50f);
+            bend += push * (A.x * lerp(w_tree, w_bush, bush_k));
+            continue;
+        }
+
+        const bool is_blast = (A.w < -0.5f);
+        const float dist_r = length(d_root);
+        [branch]
+        if (is_blast)
+        {
+            // The whole tree from its root: one distance, one phase for every card of it. The
+            // shaping is the grass one (Kinney-Graham falloff, edge fade, one-time front with
+            // the per-root spring-back behind it), the travel the authored flexibility.
+            [branch]
+            if (dist_r > P.w + A.z * 2.0f || dist_r < 0.001f)
+                continue;
+            const float amp = A.x * min(1.1f, (0.25f * P.w) / max(dist_r, 0.5f)) * saturate((P.w - dist_r) / (0.30f * P.w));
+            const float t = (dist_r - A.y) / A.z;
+            float w = exp(-t * t);
+            [branch]
+            if (dist_r < A.y)
+            {
+                const float tau = (A.y - dist_r) * (1.0f / 22.0f);
+                w = exp(-tau * 3.5f) * cos(tau * 9.0f);
+            }
+            bend += (d_root / dist_r) * (w * amp * H * 0.8f * flex);
+            continue;
+        }
+
+        // Press. Bush: the root against the body, canopy taken off - a body in the bush leans
+        // the plant as one, the boot-sized footprint (A.z) only softens the edge. Tree: the
+        // vertex against the body - a shoulder's reach rather than a boot's, no higher than
+        // the body stands, foliage only, the travel bounded (0.22 x height up to 2.2 m).
+        const float dist_rb = max(dist_r - canopy, 0.0f);
+        const float dist_v = length(d_vert);
+        [branch]
+        if (dist_rb > P.w + A.z * 2.0f && dist_v > 1.6f)
+            continue;
+        const float tb = dist_rb / A.z;
+        const float w_bush = exp(-tb * tb) * (0.7f * H) * flex;
+        const float tv = max(dist_v - 0.35f, 0.0f) * (1.0f / 0.45f);
+        const float h_body = vy - P.y;
+        const float reach = saturate(3.2f - h_body) * saturate(h_body + 1.0f);
+        const float w_tree = exp(-tv * tv) * (0.22f * min(H, 2.2f)) * reach * foliage;
+        const float2 dir_b = (dist_r > 0.02f) ? (d_root / dist_r) : float2(1.0f, 0.0f);
+        // A soft centre: a card that straddles the body is not torn in two directions.
+        const float2 dir_v = d_vert / max(dist_v, 0.5f);
+        bend += lerp(dir_v * w_tree, dir_b * w_bush, bush_k) * A.x;
+    }
+    return bend;
+}
+
 #endif // DA_WIND_MOTORS_H
