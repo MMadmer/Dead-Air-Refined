@@ -14,6 +14,7 @@ namespace xray::render::RENDER_NAMESPACE
 {
 extern float r_ssaLOD_A;
 extern float r_ssaLOD_B;
+extern float r_ssaVEG_DISCARD;
 
 template <class T> IC bool cmp_first_l(const T &lhs, const T &rhs) { return (lhs.first < rhs.first); }
 template <class T> IC bool cmp_first_h(const T &lhs, const T &rhs) { return (lhs.first > rhs.first); }
@@ -73,14 +74,30 @@ void R_dsgraph_structure::render_lods(bool _setup_zb, bool _clear)
             // calculate alpha
             float ssaDiff = P.ssa - r_ssaLOD_B;
             float scale = ssaDiff / ssaRange;
-            int iA = iFloor((1 - scale) * 255.f);
-            u32 uA = u32(clampr(iA, 0, 255));
+            float lodAlpha = clampr(1.f - scale, 0.f, 1.f);
+            // The impostor used to hold full alpha down to the discard threshold and vanish
+            // there in one frame. It thins out over the last 4x span of the size measure
+            // instead, so a far tree leaves the way it arrived - through its alpha test.
+            const float fadeSpan = r_ssaVEG_DISCARD * 3.f;
+            if (fadeSpan > EPS_S)
+                lodAlpha *= clampr((P.ssa - r_ssaVEG_DISCARD) / fadeSpan, 0.f, 1.f);
 
             // calculate direction and shift
             FLOD* lodV = (FLOD*)P.pVisual;
             Fvector Ldir, shift;
-            Ldir.sub(lodV->vis.sphere.P, Device.vCameraPosition).normalize();
+            Ldir.sub(lodV->vis.sphere.P, Device.vCameraPosition);
+            const float dist = Ldir.magnitude();
+            Ldir.div(_max(dist, EPS_S));
             shift.mul(Ldir, -.5f * lodV->vis.sphere.R);
+
+            // The far plane clips whole trees in one frame, and the weather sets keep the fog
+            // saturating only for what stands below the horizon; a crown against the sky went
+            // out like a light. The last 12 % before the plane dissolve the impostor instead.
+            const float farPlane = g_pGamePersistent->Environment().CurrentEnv.far_plane;
+            if (farPlane > 1.f)
+                lodAlpha *= clampr((farPlane * 0.97f - dist) / (farPlane * 0.12f), 0.f, 1.f);
+            int iA = iFloor(lodAlpha * 255.f);
+            u32 uA = u32(clampr(iA, 0, 255));
 
             // gen geometry
             FLOD::_face* facets = lodV->facets;

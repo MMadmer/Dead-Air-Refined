@@ -328,8 +328,15 @@ void CDetailManager::UpdateVisibleM()
     float fade_limit = dm_fade;
     fade_limit = fade_limit * fade_limit;
     // Fade onset as a share of the draw radius (r__grass_fade_start); 0 keeps the stock
-    // shrink-from-one-metre. The capped 0.95 keeps fade_range from collapsing to zero.
-    float fade_start = 1.f + (dm_fade - 1.f) * ps_r__grass_fade_start;
+    // shrink-from-one-metre. Whatever the share, the band keeps at least twelve metres: the
+    // 0.95 of the high presets left four to five metres of an 80-100 m radius, and with the
+    // slot cadence of 15-30 frames a bush or a sapling shrank away in three or four visible
+    // steps - the "pop" players reported. Grass at twelve metres from the edge is a few
+    // pixels tall, so the longer band costs it nothing.
+    constexpr float fade_band_min = 12.f;
+    const float fade_share_cap = dm_fade > fade_band_min + 1.f ? 1.f - fade_band_min / (dm_fade - 1.f) : 0.f;
+    const float fade_share = std::min(ps_r__grass_fade_start, fade_share_cap);
+    float fade_start = 1.f + (dm_fade - 1.f) * fade_share;
     fade_start = fade_start * fade_start;
     float fade_range = fade_limit - fade_start;
     float r_ssaCHEAP = 16 * r_ssaDISCARD;
