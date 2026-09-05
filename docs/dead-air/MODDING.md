@@ -579,6 +579,32 @@ broken firing parts); the x86 0.98b build used 0.03 / 0.05 / 0.15 for the lesser
 difference is a 1.0 decision, not a porting defect, and durability never fed the misfire
 chance in either build: misfires come from the fault bits and the ammo's `misfire_chance`.
 
+## Colour grade and foliage saturation
+
+The final combine applies a restrained, camera-like grade to the tonemapped value
+(`da_grade()` in `shaders/r3/common_functions.h`, constants from `da_grade_params`):
+
+```
+r__grade_sat       0.9    ; saturation of everything
+r__grade_green     0.8    ; extra factor for green-dominant colour (greens end at 0.72)
+r__grade_olive     0.3    ; share of the green channel handed to red: foliage toward olive
+r__grade_contrast  1.05   ; contrast around linear middle grey
+r__foliage_vibrance 1.1   ; foliage albedo saturation (a plain lerp from luminance)
+r__lod_sat         1.4    ; impostor saturation, kept in step with the crowns
+```
+
+The grade is part of the look, not a quality tier: `xrRender_sync_preset_derived` re-applies
+these values on every start whatever the preset, and the console commands change them for the
+session only (they are never written to `user.ltx`). A zero `da_grade_params` constant - a
+shader that does not bind it - leaves the frame untouched, so archive shaders keep working.
+
+Why these numbers. The foliage multiplier 1.6 came from the sibling engine, tuned for the old
+dull textures; the HD set carries its own saturation and 1.6 on top read as plastic greens.
+The grade values follow the current photoreal practice rather than taste: a grade applied at
+20-60 % strength keeps highlight and texture detail, greens are what oversaturates first under
+outdoor contrast, hue-preserving tonemappers (AgX, ACES) desaturate brights and are then
+given a little contrast back to stay punchy.
+
 ## Screen-space contact shadows (r__sss)
 
 A short depth-buffer ray march toward the sun in the near sun pass, giving contact shadows

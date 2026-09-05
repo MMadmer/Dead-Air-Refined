@@ -245,6 +245,17 @@ float ps_r__fog_max = 0.95f;         // density ceiling: keeps hill silhouettes 
 float ps_r__tonemap_hue = 1.f;
 float ps_r__tonemap_desat = 8.f;
 float ps_r__tonemap_white = 1.7f;
+// Colour grade after the tonemap (da_grade in common_functions.h). A restrained,
+// camera-like grade rather than a look: overall saturation a notch down, greens a notch
+// further and pulled toward olive, a touch of contrast around middle grey. Numbers from the
+// current photoreal practice - a grade at 20-60 % strength that keeps highlight and texture
+// detail, greens being what oversaturates first; the AgX-style "punchy" adjustments raise
+// contrast a little after the desaturation. Part of the look: the preset sync re-applies
+// them on every start, the console changes them for the session.
+float ps_r__grade_sat = 0.9f;
+float ps_r__grade_green = 0.8f;
+float ps_r__grade_olive = 0.3f;
+float ps_r__grade_contrast = 1.05f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -389,9 +400,10 @@ float ps_r__mask_jitter = 0.005f;
 // combine as C.www*L.rgb*5 - additively WHITE - which lays a bleached film on conifer crowns
 // under direct sun; no tint fixes added white light. Sibling tuned it to zero in game.
 float ps_r__foliage_gloss = 0.f;
-// Foliage vibrance: 1 = texture saturation as is; above lifts muted colours without touching
-// already-bright ones. Was hardcoded 1.3 in the shader; sibling's tuned value.
-float ps_r__foliage_vibrance = 1.6f;
+// Foliage saturation multiplier (Vibrance() in the shader is a plain lerp from luminance):
+// 1 = the texture as is. The sibling's 1.6 was tuned for the old, dull foliage textures;
+// the HD set carries its own saturation and 1.6 on top read as plastic greens.
+float ps_r__foliage_vibrance = 1.1f;
 // Bleached branches: damp bright-AND-colourless in foliage albedo. Found with their light
 // probe: the whiteness survives with specular fully off, i.e. it lives in the albedo itself.
 float ps_r__foliage_debleach = 0.6f;
@@ -400,7 +412,8 @@ float ps_r__foliage_debleach = 0.6f;
 // untouched impostors read washed-out and pop at the swap line. Saturation and brightness
 // recover what the small bake texture ate; 1/1/1 = stock. Sibling's in-game tuned values.
 float ps_r__lod_hemi = 2.f;
-float ps_r__lod_sat = 2.f;
+// Impostor saturation follows the crown: 2.0 matched crowns at vibrance 1.6, 1.4 at 1.1.
+float ps_r__lod_sat = 1.4f;
 float ps_r__lod_bright = 1.f;
 float ps_r__ssaDONTSORT = 32.f; // RO
 float ps_r__ssaHZBvsTEX = 96.f; // RO
@@ -644,6 +657,18 @@ class CCC_RuntimeInteger final : public CCC_Integer
 public:
     CCC_RuntimeInteger(pcstr name, int* target, int minimum, int maximum)
         : CCC_Integer(name, target, minimum, maximum)
+    {
+    }
+
+    void Save(IWriter*) override {}
+};
+
+// Same for the look knobs: a session override, never a user.ltx line the look has to fight.
+class CCC_RuntimeFloat final : public CCC_Float
+{
+public:
+    CCC_RuntimeFloat(pcstr name, float* target, float minimum, float maximum)
+        : CCC_Float(name, target, minimum, maximum)
     {
     }
 
@@ -959,6 +984,15 @@ void xrRender_sync_preset_derived()
     ps_r__clouds_quality = clouds_by_preset[ps_Preset];
     ps_r__sss = sss_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
+    // The look is not a quality tier: the same grade and foliage saturation on every preset,
+    // re-applied here so a user.ltx line from an earlier build (the sibling's 1.6 / 2.0) or a
+    // session experiment never outlives the start.
+    ps_r__foliage_vibrance = 1.1f;
+    ps_r__lod_sat = 1.4f;
+    ps_r__grade_sat = 0.9f;
+    ps_r__grade_green = 0.8f;
+    ps_r__grade_olive = 0.3f;
+    ps_r__grade_contrast = 1.05f;
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
@@ -1374,6 +1408,10 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__tonemap_hue", &ps_r__tonemap_hue, 0.f, 1.f);
     CMD4(CCC_Float, "r__tonemap_desat", &ps_r__tonemap_desat, 1.f, 32.f);
     CMD4(CCC_Float, "r__tonemap_white", &ps_r__tonemap_white, 0.f, 8.f);
+    CMD4(CCC_RuntimeFloat, "r__grade_sat", &ps_r__grade_sat, 0.f, 2.f);
+    CMD4(CCC_RuntimeFloat, "r__grade_green", &ps_r__grade_green, 0.f, 2.f);
+    CMD4(CCC_RuntimeFloat, "r__grade_olive", &ps_r__grade_olive, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__grade_contrast", &ps_r__grade_contrast, 0.5f, 2.f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list
@@ -1573,10 +1611,10 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__grass_tint_scale", &ps_r__grass_tint_scale, 1.f, 64.f);
     CMD4(CCC_Float, "r__grass_tint_base", &ps_r__grass_tint_base, 0.f, 4.f);
     CMD4(CCC_Float, "r__lod_hemi", &ps_r__lod_hemi, 0.f, 2.f);
-    CMD4(CCC_Float, "r__lod_sat", &ps_r__lod_sat, 0.f, 3.f);
+    CMD4(CCC_RuntimeFloat, "r__lod_sat", &ps_r__lod_sat, 0.f, 3.f);
     CMD4(CCC_Float, "r__lod_bright", &ps_r__lod_bright, 0.2f, 2.f);
     CMD4(CCC_Float, "r__foliage_gloss", &ps_r__foliage_gloss, 0.f, 1.f);
-    CMD4(CCC_Float, "r__foliage_vibrance", &ps_r__foliage_vibrance, 0.f, 3.f);
+    CMD4(CCC_RuntimeFloat, "r__foliage_vibrance", &ps_r__foliage_vibrance, 0.f, 3.f);
     CMD4(CCC_Float, "r__foliage_debleach", &ps_r__foliage_debleach, 0.f, 1.f);
     CMD4(CCC_Integer, "r__puddles", &ps_r__puddles, 0, 1);
     CMD4(CCC_Float, "r__puddles_buildup", &ps_r__puddles_buildup, 5.f, 600.f);

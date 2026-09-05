@@ -94,6 +94,10 @@ extern ECORE_API float ps_r__fog_max;
 extern ECORE_API float ps_r__tonemap_hue;
 extern ECORE_API float ps_r__tonemap_desat;
 extern ECORE_API float ps_r__tonemap_white;
+extern ECORE_API float ps_r__grade_sat;
+extern ECORE_API float ps_r__grade_green;
+extern ECORE_API float ps_r__grade_olive;
+extern ECORE_API float ps_r__grade_contrast;
 extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;

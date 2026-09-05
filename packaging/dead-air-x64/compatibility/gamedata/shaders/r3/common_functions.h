@@ -19,6 +19,28 @@ float Contrast(float Input, float ContrastPower)
 // y = white point, z = luminance-tonemap share, w = late-desaturation power.
 uniform float4 da_tonemap_params;
 
+// Colour grade (da_grade_params, bound in r2.cpp), applied to the tonemapped value, so it sees
+// display-range colour and never touches the HDR bloom source. x = saturation, y = an extra
+// saturation factor for green-dominant colour, z = the pull of green toward olive (a share of
+// the green channel handed to red), w = contrast around linear middle grey. A zero constant
+// leaves the frame as it was.
+uniform float4 da_grade_params;
+
+float3 da_grade( float3 c )
+{
+	[branch] if ( da_grade_params.x < 0.001f ) return c;
+	const float3 LUM = float3(0.2126f, 0.7152f, 0.0722f);
+	// how green the colour is: green above both other channels, as a share of green
+	const float g = saturate((c.g - max(c.r, c.b)) / max(c.g, 1e-4f));
+	// olive: foliage under a real camera sits toward yellow, not at the texture's pure green
+	c.r = lerp(c.r, c.g, da_grade_params.z * g);
+	const float l = dot(c, LUM);
+	const float s = da_grade_params.x * lerp(1.0f, da_grade_params.y, g);
+	c = lerp(l.xxx, c, s);
+	// contrast around 0.18 linear, never below black
+	return max(0.0f, (c - 0.18f) * da_grade_params.w + 0.18f);
+}
+
 void tonemap( out float4 low, out float4 high, float3 rgb, float scale)
 {
 	rgb		=	rgb*scale;
@@ -47,6 +69,8 @@ void tonemap( out float4 low, out float4 high, float3 rgb, float scale)
 
 		tm = lerp(tm, hue, saturate(da_tonemap_params.z));
 	}
+
+	tm = da_grade(tm);
 
 	low		=	tm.xyzz;
 
