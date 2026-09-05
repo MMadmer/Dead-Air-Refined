@@ -652,6 +652,15 @@ function tryToClimb(fromStanding)
 	if climbActive then return end
 	if not savedClimbPos then return end
 	if not demonized_ledge_grabbing_animation_data then return end
+	-- The climb spends power all the way up: the per-tick drain is scaled by k^2 + 1 over the
+	-- animation, four thirds of the base in total. Without that much in the legs it does not
+	-- start - a climb that runs dry halfway is no climb. Checked here, before climbActive is
+	-- raised: a refusal below that line left the flag up and no climb ever started again.
+	local staminaNeeded = getStaminaDrain() * 4 / 3 + 0.02
+	if db.actor.power < staminaNeeded then
+		dlog("climb refused: power %s below the %s the climb needs", db.actor.power, staminaNeeded)
+		return
+	end
 
 	local animationSpeedModifier = getAnimationSpeedModifier()
 	local animationData = dup_table(demonized_ledge_grabbing_animation_data.data)
@@ -712,13 +721,6 @@ function tryToClimb(fromStanding)
 	local randomRotationCoeffZ = 1 + random_float(-0.15, 0.25) * settings.animationRandomization
 
 	local staminaDrain = getStaminaDrain()
-	-- The climb spends power all the way up: the per-tick drain is scaled by k^2 + 1 over the
-	-- animation, four thirds of the base in total. Without that much in the legs it does not
-	-- start - a climb that runs dry halfway is no climb.
-	if db.actor.power < staminaDrain * 4 / 3 + 0.02 then
-		dlog("climb refused: power %s below the %s the climb needs", db.actor.power, staminaDrain * 4 / 3)
-		return
-	end
 	local staminaDrainPerMs = staminaDrain / (animationEndTime * 1000 / animationSpeed)
 	local satietyDrain = getSatietyDrain()
 	local satietyDrainPerMs = satietyDrain / (animationEndTime * 1000 / animationSpeed)
