@@ -58,7 +58,12 @@ Each language block may also carry an optional `## Theme` / `## Тема` sectio
 holding one short line — the headline of the release. The dialogs print it in
 bold above the change list; a release without the section simply has no such
 line. Only the first non-empty line is read, a bullet list there is ignored,
-and anything longer than 256 bytes is dropped.
+and anything longer than 256 bytes is dropped. The section is a 1.4.0 feature
+and is off limits while 1.3.x clients are still updating: their parser treats
+any `## ` heading between the language heading and `## Changes` as the end of
+the block and shows no changes at all. The 1.4.0 release body had its theme
+sections removed by hand for exactly that reason. If a theme is ever published
+in the 1.x line, it must follow the change list, which both parsers accept.
 
 References:
 

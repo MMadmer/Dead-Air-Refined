@@ -476,17 +476,18 @@ The full binary contract and evolution rules are described in
 
 Release body template:
 
-`Theme` is optional: one short line naming what the release is about. The
-update dialog prints it in bold above the change list, and drops the line when
-the section is absent or empty. Keep it to a headline — a bullet list there is
-ignored.
+`Theme` (`## Theme` / `## Тема`, one short headline the update dialog prints
+in bold above the change list) exists in the client from 1.4.0 on, but **must
+not be used while 1.3.x installations are still updating**: their changelog
+parser stops at any `## ` heading other than `## Changes` that follows the
+language heading, so a theme placed before the changes leaves the 1.3.x update
+dialog with an empty change list (the 1.4.0 release shipped that way and had
+to be edited in place). Until that generation is gone, a release body carries
+no theme section at all - and if one is ever added, it goes AFTER the change
+list, never before it.
 
 ```markdown
 ## EN
-
-## Theme
-
-[One short line naming the release, or omit this section entirely]
 
 ## Changes
 
@@ -506,10 +507,6 @@ Setup downloads [N] GB of game content and needs [N] GB free on the target
 drive. Do not install both. Existing saves are preserved.
 ---
 ## RU
-
-## Тема
-
-[Одна короткая строка о том, чему посвящён релиз, либо раздел не указывать]
 
 ## Изменения
 
