@@ -34,7 +34,10 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
 
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;
-    float H = pos.y - base;
+    // Height above the root, never below it. Root and butt geometry sits under the pivot on
+    // many models (spruces above all); a negative height would turn the length-keeping drop
+    // below into a lift of twice the depth and float the tree on its mirrored roots.
+    float H = max(pos.y - base, 0.0f);
     float frac = I.tc.z * consts.x;
 
     const float3 root3 = float3(local_xform._14, local_xform._24, local_xform._34);

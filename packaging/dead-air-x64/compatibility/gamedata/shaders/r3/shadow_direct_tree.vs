@@ -39,7 +39,10 @@ v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID)
 
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;
-    float H = pos.y - base;
+    // Height above the root, never below it. Root and butt geometry sits under the pivot on
+    // many models (spruces above all); a negative height would turn the length-keeping drop
+    // below into a lift of twice the depth and float the tree on its mirrored roots.
+    float H = max(pos.y - base, 0.0f);
 #ifdef USE_AREF
     float frac = I.tc.z * consts.x;
 #else

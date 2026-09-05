@@ -125,6 +125,7 @@ cannot point a shipped build at an arbitrary server.
 | Self-lit detail shader of the animation module | Rig, the animation prefetch of the cigar and cigarette hud items | Pass, `models\selflight_det2` resolves from `shaders/r3/models_selflight_det2.s`; the six `! Shader ... not found in library` lines are gone |
 | Sun through clouds | Code path: `cloud_sun_visibility` (cloud map phase) now scales the sun disc and the screen glare in `dxLensFlareRender`, the sun shafts constant and the shafts pass gate | Pass for build and load; the flares already followed it, so the disc, the glare and the god rays fade with the deck they are seen through - visual sign-off at the keys |
 | Neutral colour base | Engine defaults `r__color_base_r/g/b` 0.5/0.5/0.5 (were 0.42/0.50/0.65), live and rig `user.ltx` set to the same | Pass, midday frame renders without the cold cast, `Options -> Video -> Colour correction` shows the sliders centred |
+| Trees stand on their roots | Rig, the user's `trees` save at the rookie village, six frames around, the three tree vertex shaders with the height clamped at the root | Pass, every trunk base sits on the ground and no bark geometry floats beside a trunk; before the clamp a vertex below the model pivot (roots and butt, spruces above all) got a negative height and the length-keeping drop lifted it by twice its depth, even in still air, which read as a levitating tree with its root flare mirrored upward |
 
 ## Content coverage limits
 
