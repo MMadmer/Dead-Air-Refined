@@ -413,17 +413,17 @@ void CActor::Load(LPCSTR section)
     m_fCrouchFactor = pSettings->r_float(section, "crouch_coef");
 
     // Landing roll. The reduction is the share of the peak landing force a parkour roll takes
-    // off a stiff landing (0.35: force-plate studies put it at 0.43 from 0.75 m and the
-    // advantage narrows with height), applied as a scale on the impact speed - which raises the
-    // no-damage speed by 1/(1-r) and cuts the damage above it by r at once. Duration and the
+    // off a stiff landing: 0.43, the force-plate result from 0.75 m (Puddle and Maulder 2013),
+    // applied as a scale on the impact speed - which raises the no-damage speed by 1/(1-r) and
+    // cuts the damage above it by r at once. Duration and the
     // forward speed profile follow the measured roll: ~0.35 s of ground contact plus the rise,
     // 2.6 m/s forward at the end of contact, some two metres covered.
-    m_fall_roll.force_reduction = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_force_reduction", 0.35f);
+    m_fall_roll.force_reduction = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_force_reduction", 0.43f);
     clamp(m_fall_roll.force_reduction, 0.f, 0.9f);
-    m_fall_roll.duration = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_time", 0.9f);
+    m_fall_roll.duration = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_time", 1.2f);
     clamp(m_fall_roll.duration, 0.3f, 3.f);
-    m_fall_roll.speed_start = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_start", 3.2f);
-    m_fall_roll.speed_end = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_end", 1.2f);
+    m_fall_roll.speed_start = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_start", 2.6f);
+    m_fall_roll.speed_end = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_end", 1.0f);
     m_fall_roll.yaw_sens = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_yaw_sensitivity", 0.25f);
     clamp(m_fall_roll.yaw_sens, 0.f, 1.f);
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
@@ -1099,6 +1099,24 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
         m_hit_slowmo = 0.f;
 
     accel.mul(1.f - m_hit_slowmo);
+
+    // The roll drives the body itself: a fixed speed in the camera's yaw direction, untouched
+    // by the hit slow-down the landing has just applied (that was the standstill and the
+    // "slow at low health" feel), by stamina, by the crouch factor or by the speed the player
+    // arrived with. Metres per second; the movement control takes a tenth of the vector's
+    // length as its velocity ceiling.
+    if (m_fall_roll.active && g_Alive())
+    {
+        const float k = clampr(m_fall_roll.time / m_fall_roll.duration, 0.f, 1.f);
+        const float speed = m_fall_roll.speed_start + (m_fall_roll.speed_end - m_fall_roll.speed_start) * k;
+        Fvector dir = cameras[eacFirstEye]->vDirection;
+        dir.y = 0.f;
+        if (dir.square_magnitude() > EPS_S)
+            dir.normalize();
+        else
+            dir.set(0.f, 0.f, 1.f);
+        accel.mul(dir, _max(speed, 0.f) * 10.f);
+    }
 
     if (g_Alive())
     {

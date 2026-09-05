@@ -17,7 +17,8 @@ carry the assets are described in [`CONTENT_BUNDLES.md`](CONTENT_BUNDLES.md).
   new hands.
 - **Parkour**: a jump into an obstacle with the jump key still held climbs onto it when the top
   is 1.4-2.5 m above the feet, flat, with headroom and in view. Release the key and the actor
-  only bumps. Stamina and satiety are spent by the load carried. "Parkour (hold jump)".
+  only bumps. Stamina and satiety are spent by the load carried, and the climb starts only
+  with the stamina it will spend (four thirds of the base drain). "Parkour (hold jump)".
 
 Nothing here spawns: every added config section is a hud section (hands seat, item model,
 cycle names). Saves stay loadable in the original game and in every non-graphics mod.

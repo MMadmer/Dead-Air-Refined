@@ -36,6 +36,12 @@ IC static void generate_orthonormal_basis1(const Fvector& dir, Fvector& updir, F
 
 void CActor::g_cl_ValidateMState(float dt, u32 mstate_wf)
 {
+    // The validation runs on the player's keys, and a key set without crouch stands the body
+    // back up every frame - which is why the roll's crouch never held. Mid-roll the wish is
+    // the roll's: crouched, no jump, no sprint. The stand-up at the end goes through the same
+    // box switch and camera lerp a released crouch key does.
+    if (m_fall_roll.active)
+        mstate_wf = (mstate_wf & ~(mcJump | mcSprint)) | mcCrouch;
     // Lookout
     if ((mstate_wf & mcLLookout) && (mstate_wf & mcRLookout))
     {
@@ -404,12 +410,9 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
     }
     if (m_fall_roll.active)
     {
-        // The tumble carries the body forward and slows as it ends. The value is metres per
-        // second: the movement control takes a tenth of the acceleration's length as its
-        // velocity ceiling. The direction is the camera's yaw, which the player still turns.
-        const float k = clampr(m_fall_roll.time / m_fall_roll.duration, 0.f, 1.f);
-        const float speed = m_fall_roll.speed_start + (m_fall_roll.speed_end - m_fall_roll.speed_start) * k;
-        vControlAccel.set(0.f, 0.f, _max(speed, 0.f) * 10.f);
+        // The state reads as a forward crouch walk for the animations; the speed itself is
+        // set in g_Physics, past the hit slow-down and the stamina checks that scale this
+        // vector.
         mstate_real |= mcFwd;
         mstate_real &= ~(mcSprint | mcBack | mcLStrafe | mcRStrafe | mcLookout);
     }

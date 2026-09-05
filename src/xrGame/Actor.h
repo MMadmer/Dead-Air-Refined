@@ -494,10 +494,10 @@ public:
     {
         bool active{};
         float time{};
-        float duration{0.9f};
-        float force_reduction{0.35f};
-        float speed_start{3.2f};
-        float speed_end{1.2f};
+        float duration{1.2f};
+        float force_reduction{0.43f};
+        float speed_start{2.6f};
+        float speed_end{1.0f};
         float yaw_sens{0.25f};
         u16 item_id{u16(-1)};
         u16 item_slot{NO_ACTIVE_SLOT};
