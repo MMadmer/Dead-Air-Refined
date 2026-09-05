@@ -8,10 +8,6 @@ param(
     # the full one carrying only the files that actually changed. Without it only the full
     # archive is produced (correct for the very first release, or after a version is pulled).
     [string]$PreviousFullArchive,
-    # Also publish the full archive under its historical "-Update.zip" name. Clients older
-    # than the rename look for exactly that asset and see no update without it, so keep this
-    # on for at least one release after switching.
-    [switch]$NoLegacyUpdateAlias,
     # Rebuild only the patch, from the payload tree an earlier run of this script already
     # produced ("$packageName-update-files"). Useful to cut a patch against a different base
     # without repeating the whole release build.
@@ -51,10 +47,11 @@ $artifactRoot = Join-Path $repositoryRoot "artifacts"
 $packageName = "Dead-Air-Refined-$PortVersion"
 $outputRoot = Join-Path $artifactRoot "$packageName-installer-files"
 $rawOutputRoot = Join-Path $artifactRoot "$packageName-update-files"
-# The complete payload. Named for what it is: a manual setup, the fallback every installation
-# can always take. The patch beside it is the bandwidth-saving path.
-$archivePath = Join-Path $artifactRoot "$packageName-Setup_Manual.zip"
-$legacyArchivePath = Join-Path $artifactRoot "$packageName-Update.zip"
+# The complete payload: the manual install and the fallback every installation can always take.
+# The name is the one every client since 1.0 looks for - renaming it would hide every later
+# release from the installations already in the field. The patch beside it is the
+# bandwidth-saving path.
+$archivePath = Join-Path $artifactRoot "$packageName-Update.zip"
 $patchArchivePath = Join-Path $artifactRoot "$packageName-Update_Patch.zip"
 $patchOutputRoot = Join-Path $artifactRoot "$packageName-patch-files"
 $runtimeRoot = Join-Path $repositoryRoot "bin\x64\Release"
@@ -284,11 +281,6 @@ function New-UpdateArchive {
     finally {
         Pop-Location
     }
-
-    if (-not $NoLegacyUpdateAlias) {
-        Assert-PathInside -Parent $artifactRoot -Child $legacyArchivePath
-        Copy-Item -LiteralPath $archivePath -Destination $legacyArchivePath -Force
-    }
 }
 
 function Get-ArchiveManifest {
@@ -436,8 +428,11 @@ if (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "xrEngine.exe"))) {
 $manifestFiles = Get-Content -LiteralPath $runtimeManifestPath |
     ForEach-Object Trim |
     Where-Object { $_ }
+# Build-time tools land in the same output directory as the runtime but never ship: the delta
+# cutter is consumed by dead_air_x64_content_bundles.ps1 on the release machine only.
+$buildOnlyTools = @("DarDelta.exe")
 $actualRuntimeFiles = Get-ChildItem -LiteralPath $runtimeRoot -File |
-    Where-Object Extension -In ".exe", ".dll" |
+    Where-Object { $_.Extension -in ".exe", ".dll" -and $_.Name -notin $buildOnlyTools } |
     Sort-Object Name |
     ForEach-Object Name
 $manifestDifference = Compare-Object $manifestFiles $actualRuntimeFiles
@@ -518,9 +513,6 @@ Copy-Item -LiteralPath $contentManifestStaged `
 $checksumFiles = @(Get-ChildItem -LiteralPath $outputRoot -File)
 if (-not $SkipArchive) {
     $checksumFiles += Get-Item -LiteralPath $archivePath
-    if (-not $NoLegacyUpdateAlias) {
-        $checksumFiles += Get-Item -LiteralPath $legacyArchivePath
-    }
     if ($patch) {
         $checksumFiles += Get-Item -LiteralPath $patch.Path
     }
@@ -540,7 +532,6 @@ $installerFiles = Get-ChildItem -LiteralPath $outputRoot -File
     InstallerSizeGB = [math]::Round(($installerFiles | Measure-Object Length -Sum).Sum / 1GB, 3)
     FullArchive = if ($SkipArchive) { $null } else { $archivePath }
     FullArchiveSizeMB = if ($SkipArchive) { $null } else { [math]::Round((Get-Item $archivePath).Length / 1MB, 1) }
-    LegacyAlias = if ($SkipArchive -or $NoLegacyUpdateAlias) { $null } else { $legacyArchivePath }
     PatchArchive = if ($patch) { $patch.Path } else { $null }
     PatchBaseVersion = if ($patch) { $patch.Base } else { $null }
     PatchFiles = if ($patch) { "$($patch.PackedFiles) of $($patch.TotalFiles)" } else { $null }

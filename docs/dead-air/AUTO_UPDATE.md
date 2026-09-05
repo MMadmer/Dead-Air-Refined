@@ -7,23 +7,31 @@ Version in `MAJOR.MINOR.PATCH` form. The release contains these assets:
 
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-Setup.exe` for the recommended guided
   installation;
-- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Setup_Manual.zip` — the complete runtime
+- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update.zip` — the complete runtime
   payload, for manual extraction and as the update every installation can
-  always take. It deliberately carries no content bundles;
+  always take. It deliberately carries no content bundles. The name is fixed
+  for the whole 1.x line: it is the one asset every client since 1.0 looks
+  for, and a release without it is invisible to every installation in the
+  field (a rename to `Setup_Manual.zip` was tried and reverted for exactly that
+  reason);
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update_Patch.zip` — optional. Carries only
   the files that differ from the previous release, so an up-to-date player
-  downloads a fraction of the full archive;
-- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update.zip` — optional compatibility
-  alias, byte-identical to `Setup_Manual.zip`. Clients built before the rename
-  look for this exact name and see no update at all without it, so a release
-  should keep publishing it until that generation is no longer in the field;
+  downloads a fraction of the full archive. Only a client that knows the patch
+  (1.4.0 and later) selects it; older clients take the full archive, and the
+  updater that applies a patch is the one already installed, so the first
+  release whose patch is ever used is the one after 1.4.0;
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-content-manifest.txt` — the content
   manifest of that version: the same file the payload installs as
   `.dead-air-x64\content-manifest.txt`. It is published on its own so a player
   or a tool can read which content bundles a version pins without installing
-  it. No client ever downloads it — the installed copy is the only one the game
-  and the updater trust, and no manifest path is ever accepted from outside the
-  installation.
+  it. The game downloads it for one purpose only: once the update archive is in
+  hand, `prefetch_content` (UpdateService.cpp) reads the target version's
+  manifest (GitHub digest checked, content-id recomputed), plans what the
+  installed content lacks - deltas included - and stages it into
+  `content-cache\` before the update is armed, so the restart is one rename and
+  not another download. Nothing is installed from it: the commit after the
+  restart works from the manifest the payload put under `.dead-air-x64\`, and
+  no manifest path is ever accepted from outside the installation.
 
 The game reads the public release list for
 `MMadmer/Dead-Air-Refined`. Drafts, prereleases, malformed tags and releases
@@ -209,7 +217,7 @@ Everything they know reaches the caller through the exit code and
 `content-cache\content-fetch-result.txt`: 0 done, 26 the work could not be
 completed, 27 the installation cannot be worked on at all.
 
-What a hand-extracted `Setup_Manual.zip` produces therefore depends on what it
+What a hand-extracted `Update.zip` produces therefore depends on what it
 is extracted over. The archive carries `.dead-air-x64\content-manifest.txt` and
 no bundles, so extracting it over an existing installation replaces the manifest
 and leaves the bundles alone: everything the new manifest still pins is already
@@ -288,10 +296,9 @@ default at all, and a manifest that is missing or declares no bundles is a hard
 failure rather than a Setup that installs no content. The declared bundle sizes
 plus a tenth become the installer's disk-space requirement, so the wizard cannot
 ask for 200 MB and then die an hour into a multi-gigabyte fetch. Pass
-`-PreviousFullArchive <path to the previous Setup_Manual.zip>` to cut the
-patch, `-NoLegacyUpdateAlias` once the `-Update.zip` alias is no longer needed,
-and `-PatchOnly` to re-cut a patch against a different base without rebuilding
-the release.
+`-PreviousFullArchive <path to the previous Update.zip>` to cut the patch, and
+`-PatchOnly` to re-cut a patch against a different base without rebuilding the
+release.
 
 `tools/package/dead_air_x64_content_bundles.ps1` builds the bundles and the
 content manifest. `-SourceRoot`, `-BundleCache`, `-OutputManifest`,
@@ -380,9 +387,9 @@ purpose.
    needs the previous bundle in `-BundleCache` to diff against; when it is not
    there the script says so and publishes the whole bundle instead.
 3. `build_dead_air_x64_installer.ps1`, with `-ContentManifest` from step 2 and
-   `-PreviousFullArchive` pointing at the previous `Setup_Manual.zip`. This
-   produces Setup, `Setup_Manual.zip`, the patch, the legacy alias and
-   `SHA256SUMS.txt`. `SHA256SUMS.txt` covers the distribution files only —
+   `-PreviousFullArchive` pointing at the previous `Update.zip`. This
+   produces Setup, `Update.zip`, the patch and `SHA256SUMS.txt`.
+   `SHA256SUMS.txt` covers the distribution files only —
    bundles are covered by the per-bundle SHA-256 in the content manifest and by
    the hash check step 5 runs before it uploads anything, and structurally
    cannot be in it.

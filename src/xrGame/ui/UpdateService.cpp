@@ -44,11 +44,10 @@ namespace
 constexpr std::wstring_view ReleasesUrl =
     L"https://api.github.com/repos/MMadmer/Dead-Air-Refined/releases?per_page=30";
 constexpr pcstr UpdateAssetPrefix = "Dead-Air-Refined-";
-// The complete payload, for a manual install or for a player who cannot take the patch.
-constexpr pcstr FullAssetSuffix = "-Setup_Manual.zip";
-// The name that suffix used to carry. Releases published before the rename still use it, and
-// a release may keep it as an alias so that clients older than this one keep updating.
-constexpr pcstr LegacyFullAssetSuffix = "-Update.zip";
+// The complete payload, for a manual install or for a player who cannot take the patch. The
+// name is the one every client since 1.0 has looked for; it is what keeps an installation on
+// any earlier 1.x build able to find the next release at all, so it is not renamed.
+constexpr pcstr FullAssetSuffix = "-Update.zip";
 // Only the files that differ from the previous release.
 constexpr pcstr PatchAssetSuffix = "-Update_Patch.zip";
 // The target version's content manifest, published alongside the installers. It is the one
@@ -900,10 +899,8 @@ std::optional<UpdateChoice> select_update(
             continue;
 
         // The full archive is what makes a release offerable at all: every installation can
-        // take it. Its legacy name still counts, so a release published either way works.
+        // take it.
         const ReleaseAsset* full = find_asset(release, FullAssetSuffix);
-        if (!full)
-            full = find_asset(release, LegacyFullAssetSuffix);
         if (!full)
             continue;
 

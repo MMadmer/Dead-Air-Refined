@@ -66,7 +66,7 @@ Download only one release asset. Most users need
 `Dead-Air-Refined-1.4.0-Setup.exe`; it supports both first-time installation
 and manual upgrades from an earlier Refined version, and it is the only asset
 that installs content on a machine that has none. Use
-`Dead-Air-Refined-1.4.0-Setup_Manual.zip` when you prefer to upgrade an
+`Dead-Air-Refined-1.4.0-Update.zip` when you prefer to upgrade an
 existing Refined installation by hand: extract it into the game root and
 replace the existing files. It carries the runtime and the content manifest but
 not the content itself, so it can upgrade an installation that already has its
@@ -124,7 +124,7 @@ capped far below what a content set weighs, and content is versioned and
 verified on its own, so an update replaces the runtime and leaves the content
 where it is.
 
-The installer remains the recommended option. The `Setup_Manual.zip` asset can
+The installer remains the recommended option. The `Update.zip` asset can
 also be extracted manually; the integrated updater uses the patch archive.
 
 ## Removal

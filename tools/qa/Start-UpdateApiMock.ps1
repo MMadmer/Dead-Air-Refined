@@ -77,12 +77,7 @@ $themeBlockEn## Changes
 
 if ($Scenario -in @("Patch", "Both", "FullOnly", "Legacy")) {
     $release = @{ tag = $minorVersion; assets = [Collections.Generic.List[object]]::new() }
-    if ($Scenario -eq "Legacy") {
-        $release.assets.Add((New-FakeAsset -Name "$prefix$minorVersion-Update.zip" -SizeKb 900))
-    }
-    else {
-        $release.assets.Add((New-FakeAsset -Name "$prefix$minorVersion-Setup_Manual.zip" -SizeKb 900))
-    }
+    $release.assets.Add((New-FakeAsset -Name "$prefix$minorVersion-Update.zip" -SizeKb 900))
     if ($Scenario -in @("Patch", "Both")) {
         $release.assets.Add((New-FakeAsset -Name "$prefix$minorVersion-Update_Patch.zip" -SizeKb 120))
     }
@@ -91,14 +86,14 @@ if ($Scenario -in @("Patch", "Both", "FullOnly", "Legacy")) {
 
 if ($Scenario -in @("Major", "Both")) {
     $release = @{ tag = $majorVersion; assets = [Collections.Generic.List[object]]::new() }
-    $release.assets.Add((New-FakeAsset -Name "$prefix$majorVersion-Setup_Manual.zip" -SizeKb 1500))
+    $release.assets.Add((New-FakeAsset -Name "$prefix$majorVersion-Update.zip" -SizeKb 1500))
     $releases.Add($release)
 }
 
 # The release the patch is cut against has to exist in the list: the client identifies the
 # base as the newest release below the offered one.
 $releases.Add(@{ tag = $InstalledVersion; assets = [Collections.Generic.List[object]]::new() })
-$releases[$releases.Count - 1].assets.Add((New-FakeAsset -Name "$prefix$InstalledVersion-Setup_Manual.zip" -SizeKb 880))
+$releases[$releases.Count - 1].assets.Add((New-FakeAsset -Name "$prefix$InstalledVersion-Update.zip" -SizeKb 880))
 
 $escapedBody = $body.Replace('\', '\\').Replace('"', '\"').Replace("`r", "").Replace("`n", '\n')
 $json = [Collections.Generic.List[string]]::new()

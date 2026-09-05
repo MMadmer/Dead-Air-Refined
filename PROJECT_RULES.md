@@ -402,18 +402,19 @@ The full binary contract and evolution rules are described in
 - A release contains alternative installation options and the user needs
   exactly one of them: `Dead-Air-Refined-VERSION-Setup.exe` is the recommended
   path and the only one that installs content on a machine that has none,
-  `Dead-Air-Refined-VERSION-Setup_Manual.zip` is the same runtime payload for a
+  `Dead-Air-Refined-VERSION-Update.zip` is the same runtime payload for a
   manual installation, and `Dead-Air-Refined-VERSION-Update_Patch.zip` carries
   only what changed since the previous version. None of them contains content
   bundles, so a manual archive upgrades an installation that already has its
   content and does not create one from nothing. All of them carry the content
   manifest, which is what lets an installation that was updated by hand say what
   it is missing and repair itself instead of landing in recovery.
-- Beyond those, a release carries the legacy `Update.zip` alias for as long as
-  pre-rename clients are still in the field, and the content manifest
-  `Dead-Air-Refined-VERSION-content-manifest.txt` as the published record of
-  which bundles that version pins. The patch is cut only when there is a
-  previous release to cut it against.
+- The full archive keeps the `Update.zip` name for the whole 1.x line: it is
+  the asset every client since 1.0 looks for, and a release without it is
+  invisible to every installation in the field. Beyond those, a release carries
+  the content manifest `Dead-Air-Refined-VERSION-content-manifest.txt` as the
+  published record of which bundles that version pins. The patch is cut only
+  when there is a previous release to cut it against.
 - The Update ZIP must contain an empty `appdata/savedgames`, and the manifest
   must not contain a single save file. The installer and uninstaller do not
   delete existing saves.
@@ -497,7 +498,7 @@ ignored.
 Choose one option:
 
 * **Setup** — recommended guided installation.
-* **Setup_Manual ZIP** — the complete payload for manual installation.
+* **Update ZIP** — the complete payload for manual installation.
 * **Update_Patch ZIP** — only what changed since the previous version; the
   in-game updater picks it automatically when it fits.
 
@@ -520,7 +521,7 @@ drive. Do not install both. Existing saves are preserved.
 Выберите один вариант:
 
 * **Setup** — рекомендуемая пошаговая установка.
-* **Setup_Manual ZIP** — полный архив для ручной установки.
+* **Update ZIP** — полный архив для ручной установки.
 * **Update_Patch ZIP** — только изменения относительно прошлой версии;
   встроенное обновление выбирает его само, когда он подходит.
 
