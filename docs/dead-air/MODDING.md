@@ -1031,6 +1031,9 @@ is the roll's own: it is applied in `g_Physics` past the hit slow-down, the stam
 crouch factor, so neither the speed the player arrived with nor low health changes it, the first-person legs are not drawn while the world shadow caster keeps going, and
 every command except quit, console, screenshot, quick save/load and pause waits. The active item
 and the detector go to the ruck at once through the inventory's own events and return to their
-slots when the roll ends, the item into the hands two updates later. Keys in `[actor]`:
-`fall_roll_force_reduction`, `fall_roll_time`, `fall_roll_speed_start`, `fall_roll_speed_end`,
-`fall_roll_yaw_sensitivity`. Nothing about the roll is saved.
+slots when the roll ends, the item into the hands two updates later. The roll plays its own
+sound once as it begins (`fall_roll_snd`, default `actor\fall_roll`, shipped in the content
+bundles as `sounds/actor/fall_roll.ogg`, mono, X-Ray ogg comment v3 with 1/10 m and full volume;
+2D like the heavy breath). Keys in `[actor]`: `fall_roll_force_reduction`, `fall_roll_time`,
+`fall_roll_speed_start`, `fall_roll_speed_end`, `fall_roll_yaw_sensitivity`, `fall_roll_snd`.
+Nothing about the roll is saved.

@@ -505,6 +505,7 @@ public:
         int restore_frames{-1};
     };
     SFallRoll m_fall_roll;
+    ref_sound m_fall_roll_snd;
     bool IsFallRolling() const { return m_fall_roll.active; }
     bool FallRollAllowsCommand(int cmd) const;
     float FallRollHealthLost(float contact_speed) const;

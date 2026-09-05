@@ -426,6 +426,10 @@ void CActor::Load(LPCSTR section)
     m_fall_roll.speed_end = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_end", 1.0f);
     m_fall_roll.yaw_sens = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_yaw_sensitivity", 0.25f);
     clamp(m_fall_roll.yaw_sens, 0.f, 1.f);
+    // The roll's own sound (fall_roll_snd, 2D like the heavy breath): the tumble of the body
+    // and the gear, played once as the roll begins.
+    m_fall_roll_snd.create(READ_IF_EXISTS(pSettings, r_string, section, "fall_roll_snd", "actor\\fall_roll"), st_Effect,
+        sg_SourceType);
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
     m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
@@ -2059,6 +2063,8 @@ void CActor::StartFallRoll()
     }
 
     Cameras().AddCamEffector(xr_new<CEffectorFallRoll>(m_fall_roll.duration));
+    if (m_fall_roll_snd._handle())
+        m_fall_roll_snd.play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
 }
 
 void CActor::UpdateFallRoll(float dt)
