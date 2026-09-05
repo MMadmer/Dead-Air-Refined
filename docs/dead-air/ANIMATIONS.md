@@ -18,7 +18,10 @@ carry the assets are described in [`CONTENT_BUNDLES.md`](CONTENT_BUNDLES.md).
 - **Parkour**: a jump into an obstacle with the jump key still held climbs onto it when the top
   is 1.4-2.5 m above the feet, flat, with headroom and in view. Release the key and the actor
   only bumps. Stamina and satiety are spent by the load carried, and the climb starts only
-  with the stamina it will spend (four thirds of the base drain). "Parkour (hold jump)".
+  with the stamina it will spend (four thirds of the base drain). The first-person body is not
+  drawn while the climb owns the camera (`CHUDManager::Render_First` skips it whenever the actor
+  has a script camera): the camera leaves the head and the legs would hang in the frame, the same
+  rule as the landing roll; the world shadow keeps going. "Parkour (hold jump)".
 
 Nothing here spawns: every added config section is a hud section (hands seat, item model,
 cycle names). Saves stay loadable in the original game and in every non-graphics mod.

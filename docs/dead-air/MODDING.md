@@ -791,10 +791,12 @@ The motors (`da_wind_motors.h`: a press under a walking actor or creature, the w
 ring of a blast) displace a vertex by strength times a lever. For grass and bushes the lever is
 the vertex height above the root - the whole plant bends from its base. A tree is not a blade of
 grass: a stalker walking past the trunk used to swing crown cards twelve metres up by up to the
-0.5 H cap, and single cards shot out as spikes while people moved about. A press now keeps a lever
-of at most 1.5 m and reaches nothing above three metres, a shot's wake a lever of one metre (it
-shakes the leaves it passes), and a blast keeps the full lever, its front being meant to bend the
-whole tree. Grass shorter than a metre sees no change.
+0.5 H cap, and single cards shot out as spikes while people moved about. The lever stays the full
+height - a bush or a low spruce branch answers a step or a shot exactly as before - but a press
+fades out between 2.2 m and 3.2 m above the root (nothing a walker brushes past sits higher), and a
+shot's wake keeps its full lever up to three metres and fades to nothing by six (it shakes the
+leaves it passes, not the crown above). A blast keeps the full lever at every height, its front
+being meant to bend the whole tree. Grass and everything under 2.2 m see no change.
 
 ## First-person self-shadow
 
