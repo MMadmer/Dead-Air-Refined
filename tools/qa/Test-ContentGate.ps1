@@ -12,9 +12,17 @@ $ErrorActionPreference = "Stop"
 $probe = Join-Path $PSScriptRoot "Run-ContentProbe.ps1"
 $db = Join-Path $Rig "database"
 $meta = Join-Path $Rig ".dead-air-x64"
-$sounds = Join-Path $db "xtra_dead_air_x64_content_sounds_00_b887de652883d512.xdb0"
 $latch = Join-Path $meta "content-incomplete.txt"
 $manifest = Join-Path $meta "content-manifest.txt"
+# The sounds bundle to mutilate is read from the installed manifest: its name carries the hash
+# of its bytes and changes with every content release, so a written-down name goes stale.
+$tab = [string][char]9
+$soundsRow = Get-Content -LiteralPath $manifest | Where-Object {
+    $_ -match ($tab + "xtra_dead_air_x64_content_sounds_00_[0-9a-f]{16}.xdb0" + $tab)
+} | Select-Object -First 1
+if (-not $soundsRow) { throw "the installed manifest declares no sounds_00 bundle" }
+$soundsName = ($soundsRow -split $tab | Where-Object { $_ -like "xtra_dead_air_x64_content_sounds_00_*" })[0]
+$sounds = Join-Path $db $soundsName
 $start = @("start server(all/single/alife/new)")
 
 $failures = [Collections.Generic.List[string]]::new()
