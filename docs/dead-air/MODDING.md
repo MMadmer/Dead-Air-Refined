@@ -989,3 +989,15 @@ Two fades that used to be cuts: a tree impostor thins out through its alpha test
 against the sky used to vanish in one frame), and detail objects keep a fade band of at least
 twelve metres whatever `r__grass_fade_start` says (`DetailManager.cpp`), so a bush or a sapling at
 the edge of the detail radius shrinks away instead of going in three visible steps.
+
+## Fall damage and sliding
+
+The character's collision damage (`fMinCrashSpeed` / `fMaxCrashSpeed`, `ph_collision_damage_factor`,
+the material's `bounce_damage_factor`) is computed from the velocity INTO the surface. The stock
+engine also counted the speed along the surface times the material friction, so a fall that
+brushed a wall was charged as a hit at the fall speed on every step of the slide, more than the
+landing itself; that term is gone (`PHSimpleCharacterInline.h`). A body contact with static
+geometry while airborne keeps half the material friction (`PHSimpleCharacter.cpp`, `InitContact`),
+so the surface brakes a slide by its normal load - barely on a wall, more on a slope. Passable
+materials (bushes) keep the stock full-speed formula. Both are deliberate departures from the CoC
+and DA sources, requested for the mod.

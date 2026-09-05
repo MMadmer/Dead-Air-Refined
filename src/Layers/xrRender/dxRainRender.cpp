@@ -226,6 +226,13 @@ void dxRainRender::Render(CEffect_Rain& owner)
             {
                 // Build matrix
                 float scale = P->time / particles_time;
+                // The splash model is 18 x 22 cm and is born at full size anywhere in the
+                // landing disc, the spot under the player's own feet included: seen from
+                // half a metre it read as a soft light blob by the boot. A crown that close
+                // is a few centimetres, so the scale follows the distance to the eye, nothing
+                // within 0.6 m and full size from three metres out.
+                const float eye_dist = P->bounds.P.distance_to(Device.vCameraPosition);
+                scale *= clampr((eye_dist - 0.6f) / 2.4f, 0.f, 1.f);
                 mScale.scale(scale, scale, scale);
                 mXform.mul_43(P->mXForm, mScale);
 

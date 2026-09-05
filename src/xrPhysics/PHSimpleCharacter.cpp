@@ -1715,6 +1715,12 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
         MulSprDmp(c->surface.soft_cfm, c->surface.soft_erp, spring_rate, soft_param);
         c->surface.mu *= (1.f + b_clamb_jump * 3.f) * m_friction_factor;
     }
+    // Airborne and touching static geometry with the body, not the foot: the contact keeps
+    // half the material friction. Under movement input the branch above zeroed it, so a
+    // fall pressed against a wall slid at free-fall speed; now the surface brakes the slide
+    // by its normal load - barely on a vertical wall, more on a slope, the way a slide does.
+    if (!b_on_ground && !object && g1 != m_wheel && g2 != m_wheel)
+        c->surface.mu = _max(c->surface.mu, tri_material->fPHFriction * 0.5f);
     UpdateStaticDamage(c, tri_material, bo1);
 }
 

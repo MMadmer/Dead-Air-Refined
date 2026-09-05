@@ -16,9 +16,13 @@ void CPHSimpleCharacter::UpdateStaticDamage(dContact* c, SGameMtl* tri_material,
     }
     else
     {
-        float vel_prg;
-        vel_prg = _max(plane_pgr * tri_material->fPHFriction, norm_prg);
-        mag = (vel_prg)*tri_material->fBounceDamageFactor;
+        // The impact is the velocity INTO the surface. The stock formula also took the speed
+        // ALONG it times the material friction, so a fall that brushed a wall counted as a
+        // hit at the fall speed on every step of the slide, and pressing against a wall on
+        // the way down cost more health than the drop itself - while the same contacts ran
+        // frictionless and slowed nothing. Sliding is friction (see InitContact), not damage;
+        // landing on a slope hurts by its normal component, as it should.
+        mag = norm_prg * tri_material->fBounceDamageFactor;
     }
     if (mag > m_collision_damage_info.m_contact_velocity)
     {
