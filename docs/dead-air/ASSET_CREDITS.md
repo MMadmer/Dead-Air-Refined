@@ -12,7 +12,7 @@ the sets are used unchanged.
 
 | Set | Author | Terms | Used for |
 | --- | --- | --- | --- |
-| **Stalker Two-K** | **Akinaro**, <https://www.moddb.com/mods/stalker-two-k> | Free, S.T.A.L.K.E.R. games only, author notified, credited, no money including donations; not to be modified without notifying the author and telling players about the edits; the author may withdraw the permission | Environment textures: `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood` (2737 files, unchanged) |
+| **Stalker Two-K** | **Akinaro**, <https://www.moddb.com/mods/stalker-two-k> | Free, S.T.A.L.K.E.R. games only, author notified, credited, no money including donations; not to be modified without notifying the author and telling players about the edits; the author may withdraw the permission | Environment textures: `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood` (2737 files; 2736 unchanged, `grnd/grnd_rocks_02.dds` recoloured by the Refined project on 05.09.2026: the moss patches desaturated to an autumn olive and darkened, the rock untouched - see the texture audit row in TEST_MATRIX.md) |
 | **Absolute Nature 4** | **Cromm Cruac** (Marcin Zemczak), <http://absolute.crommcruac.com> | Same four conditions, and modification is allowed | Tree and foliage textures in `textures/trees` (112 files; 55 of them upscaled 1024 -> 2048 by the DeadAir-x64 project) |
 | Bark upscale | DeadAir-x64 project (from the game's own textures) | Part of the port | Eight bark textures in `textures/trees` |
 | **FDDA 0.9b** (food, drink, drugs, harvest) | **Feel_Fried** | Public Domain | `enhanced_animations.script`, `take_item_anim.script`, `ciga_effects.script`, the `item_ea_*` hud sections, `meshes/dynamics/weapons/wpn_eat`, `meshes/anomaly_weapons/hud_hands_animation/zzzz_ea_*`, `textures/usable_items`, `sounds/interface/item_usage`, `anims/itemuse_anm_effects` |
@@ -30,7 +30,7 @@ ships their work:
 
 | Author | Contact | What to say |
 | --- | --- | --- |
-| Akinaro (Stalker Two-K) | **akinaro@onet.eu** (or any other channel) | That Dead Air: Refined includes Stalker Two-K unchanged, free, for S.T.A.L.K.E.R. only, with credit in the readme and the release notes |
+| Akinaro (Stalker Two-K) | **akinaro@onet.eu** (or any other channel) | That Dead Air: Refined includes Stalker Two-K free, for S.T.A.L.K.E.R. only, with credit in the readme and the release notes, and that one texture (`grnd_rocks_02`, the moss on the boulders) was recoloured for the mod's autumn palette; the release notes tell players the same |
 | Cromm Cruac (Absolute Nature 4) | **info@crommcruac.com** | That Dead Air: Refined includes the Absolute Nature 4 tree and foliage textures (55 upscaled), free, no donations, for S.T.A.L.K.E.R. only, with credit |
 
 The animation authors did not ask for a notification; the terms are attribution (MIT and
