@@ -40,7 +40,8 @@
       "configuration": "Debug",
       "targets": [
         "xr_3da",
-        "xrRenderPC_R4"
+        "xrRenderPC_R4",
+        "DarDelta"
       ]
     },
     {
@@ -49,7 +50,8 @@
       "configuration": "Mixed",
       "targets": [
         "xr_3da",
-        "xrRenderPC_R4"
+        "xrRenderPC_R4",
+        "DarDelta"
       ]
     },
     {
@@ -58,7 +60,8 @@
       "configuration": "Release",
       "targets": [
         "xr_3da",
-        "xrRenderPC_R4"
+        "xrRenderPC_R4",
+        "DarDelta"
       ]
     },
     {
@@ -67,7 +70,8 @@
       "configuration": "ReleaseMasterGold",
       "targets": [
         "xr_3da",
-        "xrRenderPC_R4"
+        "xrRenderPC_R4",
+        "DarDelta"
       ]
     }
   ]

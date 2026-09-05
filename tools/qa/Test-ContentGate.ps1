@@ -21,8 +21,12 @@ $soundsRow = Get-Content -LiteralPath $manifest | Where-Object {
     $_ -match ($tab + "xtra_dead_air_x64_content_sounds_00_[0-9a-f]{16}.xdb0" + $tab)
 } | Select-Object -First 1
 if (-not $soundsRow) { throw "the installed manifest declares no sounds_00 bundle" }
-$soundsName = ($soundsRow -split $tab | Where-Object { $_ -like "xtra_dead_air_x64_content_sounds_00_*" })[0]
+$soundsName = @($soundsRow -split $tab | Where-Object { $_ -like "xtra_dead_air_x64_content_sounds_00_*" })[0]
 $sounds = Join-Path $db $soundsName
+$soundsSize = @($soundsRow -split $tab)[1]
+# How many bundles the installed manifest declares: the healthy-install expectations quote it.
+$bundleCount = @(Get-Content -LiteralPath $manifest | Where-Object { $_ -match "^[0-9a-f]{64}" + $tab }).Count
+if ($bundleCount -lt 1) { throw "the installed manifest declares no bundles" }
 $start = @("start server(all/single/alife/new)")
 
 $failures = [Collections.Generic.List[string]]::new()
@@ -71,10 +75,10 @@ $noop = { }
 $clearLatch = { Remove-Item -LiteralPath $latch -Force -ErrorAction SilentlyContinue }
 
 Invoke-Case -Name "healthy install" -Arrange $noop -Cleanup $noop `
-    -Expect @("5 bundle(s) present") -Reject @("Cannot start a level", "skipped")
+    -Expect @("$bundleCount bundle(s) present") -Reject @("Cannot start a level", "skipped")
 
 Invoke-Case -Name "second launch uses the state cache" -Arrange $noop -Cleanup $noop `
-    -Expect @("5 bundle(s), 0 hashed") -Reject @("Cannot start a level")
+    -Expect @("$bundleCount bundle(s), 0 hashed") -Reject @("Cannot start a level")
 
 Invoke-Case -Name "missing bundle" `
     -Arrange { Move-Item -LiteralPath $sounds "$sounds.stash" -Force } `
@@ -88,7 +92,7 @@ Invoke-Case -Name "truncated bundle" `
         [IO.File]::WriteAllBytes($sounds, $bytes[0..($bytes.Length - 4097)])
     } `
     -Cleanup { Move-Item -LiteralPath "$sounds.stash" $sounds -Force; & $clearLatch } `
-    -Expect @("size does not match the manifest", "the manifest says 234705", "Cannot start a level") `
+    -Expect @("size does not match the manifest", "the manifest says $soundsSize", "Cannot start a level") `
     -RunSeconds 45
 
 Invoke-Case -Name "corrupt index, correct size" `
