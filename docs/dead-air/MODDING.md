@@ -1080,15 +1080,22 @@ impact - the Mirror's Edge landing, without animations. The engine decides at to
 immunities, less than the current health (`CActorCondition::PredictHealthLoss`); otherwise there
 is no roll and the stock damage or death stands.
 
-The damage with a roll is the stock formula evaluated at the landing speed scaled by
-`1 - fall_roll_force_reduction`: the no-damage speed rises to `fMinCrashSpeed / (1 - r)` and the
-damage above it falls by `r`. The default `r = 0.43` is the force-plate result: the roll cut the
-peak vertical landing force by 43 % against a stiff two-foot landing from 0.75 m (Puddle and
-Maulder, J Sports Sci Med 2013; 90 % CI 34-51 %); trained landings cut it by 40-49 % at
-0.44-0.88 m (Standing and Maulder, J Sports Sci Med 2015), and a kinematic study from 0.9-2.7 m
-found the roll's advantage in early deceleration narrowing with height (about 29 % at 1.8 m,
-parity at 2.7 m) while it still stretched the landing to 320-364 ms and turned the fall into
-2.6 m/s of forward speed. With the stock 12 m/s the roll's no-damage speed is 21 m/s.
+The damage with a roll has two knobs, one per effect. `fall_roll_threshold_raise` (0.375) is
+the share by which the no-damage landing speed grows: `ph_crash_speed_min x (1 + raise)`, Dead
+Air's 13 m/s becoming 17.9 m/s - a fall of some sixteen metres instead of nine. Above that the
+stock slope continues, cut by `fall_roll_damage_reduction` (0.43): the roll costs `(1 - r)` of
+what a stiff landing costs per extra metre per second, measured from the raised threshold. The
+lethal speed (`ph_crash_speed_max`, 30 m/s) is not moved, and a fall that would kill a stiff
+landing never starts a roll. The 0.43 is the force-plate result: the roll cut the peak vertical
+landing force by 43 % against a stiff two-foot landing from 0.75 m (Puddle and Maulder, J Sports
+Sci Med 2013; 90 % CI 34-51 %); trained landings cut it by 40-49 % at 0.44-0.88 m (Standing and
+Maulder, J Sports Sci Med 2015), and a kinematic study from 0.9-2.7 m found the roll's advantage
+in early deceleration narrowing with height (about 29 % at 1.8 m, parity at 2.7 m) while it still
+stretched the landing to 320-364 ms and turned the fall into 2.6 m/s of forward speed. The first
+build scaled the landing speed itself by `1 - r`, which raised the threshold to 22.8 m/s and made a
+jump from a roof free; the raise is now half that and separate from the reduction. In numbers, for
+the stock 13/30: at 20 m/s (a 20 m drop) a stiff landing loses 41 % of the crash range, the roll 7 %;
+at 25 m/s (32 m) 71 % against 24 %.
 
 During the roll (`fall_roll_time`, 1.2 s - the Mirror's Edge roll from touchdown to standing) the
 view turns once forward about the camera's right axis (`CEffectorFallRoll`) with the give of a
@@ -1106,7 +1113,7 @@ slots when the roll ends, the item into the hands two updates later. The roll pl
 sound once as it begins (`fall_roll_snd`, default `actor\fall_roll`, shipped in the content
 bundles as `sounds/actor/fall_roll.ogg`, mono, X-Ray ogg comment v3 with 1/10 m and full volume;
 2D like the heavy breath; the sound object is created on the first roll, not at actor load).
-Keys in `[actor]`: `fall_roll_force_reduction`, `fall_roll_time`, `fall_roll_speed_start`,
+Keys in `[actor]`: `fall_roll_damage_reduction`, `fall_roll_threshold_raise`, `fall_roll_time`, `fall_roll_speed_start`,
 `fall_roll_speed_end`, `fall_roll_yaw_sensitivity`, `fall_roll_snd`. The console command
 `fall_roll_test` starts the roll on the spot without a landing and logs one line about the sound
 (handle, bytes, length, whether an emitter plays) - the way to check the tumble on a rig that

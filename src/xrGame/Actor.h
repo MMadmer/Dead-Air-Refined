@@ -495,7 +495,8 @@ public:
         bool active{};
         float time{};
         float duration{1.2f};
-        float force_reduction{0.43f};
+        float damage_reduction{0.43f}; // share of the stock loss the roll takes off, above the threshold
+        float threshold_raise{0.375f}; // share by which the no-damage landing speed grows
         float speed_start{2.6f};
         float speed_end{1.0f};
         float yaw_sens{0.25f};

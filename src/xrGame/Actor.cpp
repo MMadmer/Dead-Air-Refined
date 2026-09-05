@@ -412,14 +412,19 @@ void CActor::Load(LPCSTR section)
     m_fWalkBackFactor = pSettings->r_float(section, "walk_back_coef");
     m_fCrouchFactor = pSettings->r_float(section, "crouch_coef");
 
-    // Landing roll. The reduction is the share of the peak landing force a parkour roll takes
-    // off a stiff landing: 0.43, the force-plate result from 0.75 m (Puddle and Maulder 2013),
-    // applied as a scale on the impact speed - which raises the no-damage speed by 1/(1-r) and
-    // cuts the damage above it by r at once. Duration and the
-    // forward speed profile follow the measured roll: ~0.35 s of ground contact plus the rise,
-    // 2.6 m/s forward at the end of contact, some two metres covered.
-    m_fall_roll.force_reduction = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_force_reduction", 0.43f);
-    clamp(m_fall_roll.force_reduction, 0.f, 0.9f);
+    // Landing roll: two numbers, two effects. The damage reduction is the share of the peak
+    // landing force a parkour roll takes off a stiff landing - 0.43, the force-plate result from
+    // 0.75 m (Puddle and Maulder 2013) - applied to the loss above the threshold. The threshold
+    // raise is the share by which the no-damage landing speed grows: 0.375 of ph_crash_speed_min
+    // (Dead Air's 13 m/s becomes 17.9, a fall of some sixteen metres instead of nine). Scaling the
+    // speed itself by (1 - 0.43) did both at once and made a roof jump free: the no-damage speed
+    // went to 22.8 m/s, a 26 m drop. Duration and the forward speed profile follow the measured
+    // roll: ~0.35 s of ground contact plus the rise, 2.6 m/s forward at the end of contact, some
+    // two metres covered.
+    m_fall_roll.damage_reduction = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_damage_reduction", 0.43f);
+    clamp(m_fall_roll.damage_reduction, 0.f, 0.95f);
+    m_fall_roll.threshold_raise = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_threshold_raise", 0.375f);
+    clamp(m_fall_roll.threshold_raise, 0.f, 2.f);
     m_fall_roll.duration = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_time", 1.2f);
     clamp(m_fall_roll.duration, 0.3f, 3.f);
     m_fall_roll.speed_start = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_speed_start", 2.6f);
@@ -1154,7 +1159,7 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
                 if (predicted < conditions().GetHealth())
                 {
                     mc->gcontact_HealthLost = FallRollHealthLost(mc->GetContactSpeed());
-                    mc->gcontact_Power *= 1.f - m_fall_roll.force_reduction;
+                    mc->gcontact_Power *= 1.f - m_fall_roll.damage_reduction;
                     StartFallRoll();
                 }
             }
@@ -2005,14 +2010,16 @@ void CActor::shedule_Update(u32 DT)
 float CActor::FallRollHealthLost(float contact_speed) const
 {
     const CPHMovementControl* mc = character_physics_support()->movement();
-    // The roll scales the impact speed by (1 - r): the no-damage speed rises to min/(1 - r), the
-    // damage above it falls by r - one number, both halves of the effect.
-    const float v = contact_speed * (1.f - m_fall_roll.force_reduction);
+    // The no-damage speed moves up by the raise; above it the stock slope continues, cut by the
+    // reduction - (1 - r) of what a stiff landing costs per extra metre per second. The lethal
+    // speed itself is not moved: a fall that kills a stiff landing never starts a roll (g_Physics
+    // checks the stock loss against the health first).
     const float lo = mc->GetMinCrashSpeed();
     const float hi = mc->GetMaxCrashSpeed();
-    if (v <= lo || hi <= lo)
+    const float lo_roll = lo * (1.f + m_fall_roll.threshold_raise);
+    if (contact_speed <= lo_roll || hi <= lo)
         return 0.f;
-    return (v - lo) / (hi - lo);
+    return (1.f - m_fall_roll.damage_reduction) * (contact_speed - lo_roll) / (hi - lo);
 }
 
 bool CActor::FallRollAllowsCommand(int cmd) const
