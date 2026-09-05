@@ -264,6 +264,12 @@ public:
     std::atomic<Task*> m_calc_task{};
     std::atomic_bool m_calc_running{};
     u32 m_calc_scheduled_frame{u32(-1)};
+    struct WindProbe
+    {
+        Fvector pos;
+        bool active;
+    };
+    xr_vector<WindProbe> m_wind_probes;
 
     void WaitForCalc();
     void DispatchMTCalc();

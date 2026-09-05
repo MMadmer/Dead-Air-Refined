@@ -1095,6 +1095,7 @@ void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
         windy = wind.square_magnitude() > 0.01f;
     }
 
+    const float smallParticleRelaxation = windy ? 1.f - expf(-dt * 20.f) : 0.f;
     // Step particle positions forward by dt, and age the particles.
     for_each_particle(effect, [&](Particle& particle)
     {
@@ -1103,8 +1104,12 @@ void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             // Relaxation rate from size: 1/s for a metre-wide puff, quicker for anything
             // smaller, capped so a spark is not snapped sideways in one frame.
             const float size = (particle.size.x + particle.size.y) * 0.5f;
-            const float rate = size > 0.05f ? (1.0f / size) : 20.f;
-            const float k = 1.f - expf(-dt * (rate < 20.f ? rate : 20.f));
+            float k = smallParticleRelaxation;
+            if (size > 0.05f)
+            {
+                const float rate = 1.f / size;
+                k = 1.f - expf(-dt * (rate < 20.f ? rate : 20.f));
+            }
             particle.vel.x += (wind.x - particle.vel.x) * k;
             particle.vel.z += (wind.z - particle.vel.z) * k;
         }

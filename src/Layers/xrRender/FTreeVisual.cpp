@@ -6,6 +6,7 @@
 #include "xrCore/FMesh.hpp"
 #include "FTreeVisual.h"
 #include "Common/OGF_GContainer_Vertices.hpp"
+#include "xrCore/Threading/ParallelFor.hpp"
 
 #include <mutex>
 
@@ -23,7 +24,11 @@ struct TreeWindShared
     float omega{};            // natural angular frequency (rad/s), from top
     float q{1.f};             // response, 1 = following the gust field exactly
     float qd{};
-    std::atomic<u32> frame{}; // frame the state was last integrated in (first caller wins)
+    float gust{};
+    float deviation{};
+    Fvector sampled_root{};
+    std::atomic<u32> frame{u32(-1)};
+    std::mutex update_lock;
     u32 refs{};
     bool settled{};           // the state has been set to its first target (no swing on load)
 };
@@ -231,29 +236,63 @@ FTreeVisual_setup& GetTreeVisualSetup()
     return setup;
 }
 
-float FTreeVisual::tree_height() const { return m_shared ? m_shared->top : 1.f; }
+Fvector4 FTreeVisual::tree_wind_row() const
+{
+    if (!m_shared)
+        return Fvector4{1.f, 0.f, 0.f, 0.f};
+    const auto& s = *m_shared;
+    // A quantized key can also join distinct nearby roots. Those visuals keep their own
+    // analytic field instead of borrowing the other root's shader sample.
+    const bool same_root = s.sampled_root.x == xform.c.x && s.sampled_root.z == xform.c.z;
+    return Fvector4{s.top, s.gust, s.deviation, same_root ? 1.f : 0.f};
+}
+
+bool FTreeVisual::NeedsWindUpdate() const
+{
+    return m_shared && m_shared->frame.load(std::memory_order_acquire) != Device.dwFrame;
+}
+
+void FTreeVisual::PrepareWind(const xr_vector<FTreeVisual*>& visuals)
+{
+    const auto integrate = [&visuals](const TaskRange<size_t>& range)
+    {
+        for (size_t i = range.begin(); i != range.end(); ++i)
+            visuals[i]->UpdateWindState();
+    };
+    // Workers touch only tree-local state and immutable frame inputs. Join before the
+    // draw code reads it; small lists stay inline to avoid scheduling overhead.
+    if (visuals.size() >= 256 && TaskScheduler && TaskScheduler->GetWorkersCount() > 1)
+        xr_parallel_for(TaskRange<size_t>(0, visuals.size(), 64), integrate);
+    else
+        integrate(TaskRange<size_t>(0, visuals.size(), 64));
+}
 
 void FTreeVisual::UpdateWindState() const
 {
     TreeWindShared* s = m_shared;
     if (!s)
         return;
-    // Once per frame per tree, whichever visual and pass gets here first (the main pass and
-    // the cascades run on different contexts; the exchange makes the first caller the
-    // integrator and the others readers).
     const u32 frame = Device.dwFrame;
-    if (s->frame.exchange(frame, std::memory_order_acq_rel) == frame)
+    if (s->frame.load(std::memory_order_acquire) == frame)
+        return;
+    // Publish completion after integration, not before it. Concurrent cascades may share
+    // this tree; only the first caller integrates, while readers acquire the finished state.
+    std::lock_guard lock(s->update_lock);
+    if (s->frame.load(std::memory_order_relaxed) == frame)
         return;
     if (!g_pGamePersistent || s->omega <= 0.f)
         return;
     const auto& env = g_pGamePersistent->Environment();
+    s->gust = env.SampleWindGust(xform.c.x, xform.c.z);
+    s->deviation = env.SampleWindDeviation(xform.c.x, xform.c.z);
+    s->sampled_root = xform.c;
 
     // The target is the gust field at THIS root - the tongue passing over it - lifted by a
     // gust event. The shader uses the state IN PLACE of the field's instantaneous value, so
     // the crown follows the tongues through its own inertia (lags one, overshoots a little
     // after it). Multiplying the field by a ringing copy of itself, as before, squared the
     // lull-to-tongue contrast and rocked every crown.
-    const float target = env.SampleWindField(xform.c.x, xform.c.z) * (1.f + 0.6f * env.eff_wind_gust_event);
+    const float target = (0.60f + 0.65f * s->gust) * (1.f + 0.6f * env.eff_wind_gust_event);
 
     if (!s->settled)
     {
@@ -290,16 +329,17 @@ void FTreeVisual::UpdateWindState() const
     extern ENGINE_API int ps_e_wind_dbg;
     if (ps_e_wind_dbg)
     {
-        static const FTreeVisual* watched = nullptr;
+        static std::mutex debug_lock;
+        std::lock_guard debug_guard(debug_lock);
+        static u64 watched = s->key;
         static float next = 0.f;
-        if (!watched)
-            watched = this;
-        if (watched == this && Device.fTimeGlobal >= next)
+        if (watched == s->key && Device.fTimeGlobal >= next)
         {
             next = Device.fTimeGlobal + 0.5f;
             Msg("* [wind-tree] target=%.3f q=%.3f qd=%.3f omega=%.2f top=%.1f", target, s->q, s->qd, s->omega, s->top);
         }
     }
+    s->frame.store(frame, std::memory_order_release);
 }
 
 Fvector4 FTreeVisual::wind_state_row(float s) const
@@ -353,7 +393,8 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 #endif
     const Fvector4 row = wind_state_row(s);
     cmd_list.tree.set_c_sun(row.x, row.y, row.z, row.w); // sun + crown wind state
-    cmd_list.tree.set_c_tree(tree_height(), 0.f, 0.f, 0.f); // tree height for the trunk bend
+    const Fvector4 tree = tree_wind_row();
+    cmd_list.tree.set_c_tree(tree.x, tree.y, tree.z, tree.w);
 }
 
 #ifdef USE_DX11
@@ -396,7 +437,7 @@ void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& 
     data.vectors[7].set(scale * c_bias.rgb.x, scale * c_bias.rgb.y, scale * c_bias.rgb.z,
         scale * c_bias.hemi);
     data.vectors[8] = wind_state_row(scale);
-    data.vectors[9].set(tree_height(), 0.f, 0.f, 0.f);
+    data.vectors[9] = tree_wind_row();
 }
 #endif
 

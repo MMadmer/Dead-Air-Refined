@@ -9,6 +9,7 @@
 #include "FTreeVisual.h"
 #include "SkeletonCustom.h"
 #include "FLOD.h"
+#include "xrCore/Threading/ParallelFor.hpp"
 
 extern ENGINE_API float psHUD_FOV;
 
@@ -280,6 +281,29 @@ bool cmp_ssa(const T &lhs, const T &rhs)
     return lhs.ssa > rhs.ssa;
 }
 
+template <typename PassList>
+void sort_pass_items(PassList& passes)
+{
+    const auto sort_range = [&passes](const TaskRange<size_t>& range)
+    {
+        for (size_t i = range.begin(); i != range.end(); ++i)
+        {
+            auto& items = passes[i]->second;
+            if (items.size() > 1)
+                std::sort(items.begin(), items.end(), [](const auto& a, const auto& b) { return a.ssa > b.ssa; });
+        }
+    };
+    size_t item_count = 0;
+    for (const auto& pass : passes)
+        item_count += pass->second.size();
+    // Each pass owns a separate item array. Sorting touches no visuals or render context;
+    // all sorts finish before any draw or list compaction begins.
+    if (passes.size() >= 4 && item_count >= 2048 && TaskScheduler && TaskScheduler->GetWorkersCount() > 1)
+        xr_parallel_for(TaskRange<size_t>(0, passes.size(), 1), sort_range);
+    else
+        sort_range(TaskRange<size_t>(0, passes.size(), 1));
+}
+
 // Sorting by SSA and changes minimizations
 // The old form short-circuited on SPass::equal() before comparing ssa. Two content-equal
 // passes with different ssa values then compared as equivalent while ordering differently
@@ -328,6 +352,20 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             map.get_any_p(nrmPasses);
             if (nrmPasses.size() > 1)
                 std::sort(nrmPasses.begin(), nrmPasses.end(), cmp_pass<mapNormal_T::value_type*>);
+            sort_pass_items(nrmPasses);
+
+            windVisuals.clear();
+            for (const auto& pass : nrmPasses)
+                for (const auto& item : pass->second)
+                    if (item.pVisual->Type == MT_TREE_ST || item.pVisual->Type == MT_TREE_PM)
+                    {
+                        auto* tree = static_cast<FTreeVisual*>(item.pVisual);
+                        if (tree->NeedsWindUpdate())
+                            windVisuals.push_back(tree);
+                    }
+            FTreeVisual::PrepareWind(windVisuals);
+            windVisuals.clear();
+
             for (const auto& it : nrmPasses)
             {
                 cmd_list.set_Pass(it->first);
@@ -336,8 +374,6 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
 
-                if (items.size() > 1)
-                    std::sort(items.begin(), items.end(), cmp_ssa<_NormalItem>);
 #ifdef USE_DX11
                 if (render_tree_batches(cmd_list, items) && items.empty())
                     continue;
@@ -378,6 +414,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             map.get_any_p(matPasses);
             if (matPasses.size() > 1)
                 std::sort(matPasses.begin(), matPasses.end(), cmp_pass<mapMatrix_T::value_type*>);
+            sort_pass_items(matPasses);
             for (const auto& it : matPasses)
             {
                 cmd_list.set_Pass(it->first);
@@ -385,8 +422,6 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapMatrixItems& items = it->second;
                 items.ssa = 0;
 
-                if (items.size() > 1)
-                    std::sort(items.begin(), items.end(), cmp_ssa<_MatrixItem>);
                 for (auto& item : items)
                 {
                     cmd_list.set_xform_world(item.Matrix);

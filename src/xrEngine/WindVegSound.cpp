@@ -5,6 +5,7 @@
 #include "IGame_Persistent.h"
 #include "IGame_Level.h"
 #include "xrMaterialSystem/GameMtlLib.h"
+#include <atomic>
 
 namespace
 {
@@ -238,13 +239,14 @@ void CEffect_WindVeg::OnFrame()
     static const bool dbg = !!strstr(Core.Params, "-wvdbg");
     for (u32 mi = 0; mi < CEnvironment::wind_motor_count; ++mi)
     {
-        const auto& m = env.wind_motors[mi];
+        auto& m = env.wind_motors[mi];
         if (!m.used || m.type != CEnvironment::EWindMotor::press || m.released != 0.f)
             continue;
+        const float vegetation = std::atomic_ref<float>(m.veg).load(std::memory_order_relaxed);
         if (dbg && m.speed > 0.1f)
-            Msg("* [wind-veg] press[%u]: veg=%.0f speed=%.2f dist=%.1f", mi, m.veg, m.speed,
+            Msg("* [wind-veg] press[%u]: veg=%.0f speed=%.2f dist=%.1f", mi, vegetation, m.speed,
                 m.pos.distance_to(cam));
-        if (m.veg <= 0.f || m.speed < 0.6f)
+        if (vegetation <= 0.f || m.speed < 0.6f)
             continue;
         if (Device.fTimeGlobal < m_press_cool[mi])
             continue;

@@ -36,6 +36,9 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 	{
 		const float3 to_sun = -da_sun_dir_real.xyz;
 		const float cos_t = dot(dir, to_sun);
+		// Phase depends on the ray, not the march sample: six HG lobes once per pixel.
+		const float3 phases = float3(da_cloud_phase(cos_t, 1.0f),
+			da_cloud_phase(cos_t, 0.5f), da_cloud_phase(cos_t, 0.25f));
 		const float sun_up = saturate(to_sun.y * 4.0f + 0.2f);
 		float3 sun, sky;
 		da_cloud_lights(sun_up, sun, sky);
@@ -68,13 +71,20 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 				const float t = t0 + (float(i) + jitter) * dt;
 				const float3 p = eye_position + dir * t;
 				const float hn = saturate((p.y - base_alt) / thickness);
+				// Both authored height profiles are exactly zero outside this interval.
+				[branch] if (hn <= 0.0f || hn >= 0.95f)
+					continue;
 				const float3 w = da_cloud_field(s_cloud_map, p.xz);
 				// The far deck thins: what is kilometres away is haze, not a wall of cloud.
 				const float d = da_cloud_density_vol(p, w, hn, false) * exp(-t * (1.0f / 12000.0f));
 				[branch] if (d <= 0.002f)
 					continue;
-				const float tau = da_cloud_sun_depth(s_cloud_map, p, to_sun, base_alt, thickness, ext);
-				const float3 lit = da_cloud_sun_scatter(tau, cos_t, d);
+				float3 lit = 0;
+				[branch] if (any(sun != 0.0f))
+				{
+					const float tau = da_cloud_sun_depth(s_cloud_map, p, to_sun, base_alt, thickness, ext);
+					lit = da_cloud_sun_scatter(tau, cos_t, d, phases);
+				}
 				// Sky light: dark base, bright top, a touch of the ground's bounce below.
 				const float3 amb = sky * (0.42f + 0.58f * hn);
 				const float3 c = amb + sun * lit * 1.15f + da_cloud_lightning(p, d);

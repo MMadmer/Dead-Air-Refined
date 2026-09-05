@@ -4,6 +4,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+class FTreeVisual;
 // feedback	for receiving visuals
 class R_feedback
 {
@@ -78,6 +79,7 @@ struct R_dsgraph_structure
 
     // Runtime structures
     xr_vector<R_dsgraph::mapNormal_T::value_type*> nrmPasses;
+    xr_vector<FTreeVisual*> windVisuals;
     xr_vector<R_dsgraph::mapMatrix_T::value_type*> matPasses;
     xr_vector<R_dsgraph::_LodItem> lstLODs;
     xr_vector<int> lstLODgroups;
@@ -171,6 +173,7 @@ struct R_dsgraph_structure
         val_feedback = nullptr;
 
         nrmPasses.clear();
+        windVisuals.clear();
         matPasses.clear();
 
         lstLODs.clear();

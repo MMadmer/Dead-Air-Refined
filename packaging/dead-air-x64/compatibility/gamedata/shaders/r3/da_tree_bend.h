@@ -29,7 +29,7 @@ struct da_tree_bend_in
     float freq_k;   // natural-frequency factor (c_sun.w)
 };
 
-float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
+float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flow)
 {
     const float hn = saturate(I.H / max(I.tree_h, 1.0f));
     // Waveform: a static downwind lean with harmonic oscillation around it, one phase per
@@ -39,7 +39,14 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
     const float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * I.freq_k + dot(I.root, (float3)wave));
     // Local flow from the travelling gust field at the root: a tongue leans this crown while
     // the next tree stands in a lull; the deviation channel turns the local heading.
-    const float3 flow = da_wind_field_eval(I.root.xz);
+    float3 flow;
+    // Native trees publish the shared field once per root and frame. Old constant layouts
+    // leave valid at zero, so tools and older producers retain the analytic path.
+    [branch] if (root_flow.z > 0.5f)
+        flow = float3(da_wind_field_amp(root_flow.x),
+            da_wind_field_lean(root_flow.x, da_wind_field.w), root_flow.y);
+    else
+        flow = da_wind_field_eval(I.root.xz);
     const float2 wdir = da_wind_local_dir(wind.xz, flow.z); // its length is the authored amplitude
 
     // The crown's response to the gust field: the oscillator state where the CPU keeps one,
@@ -68,6 +75,12 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
     [branch] if (bend_len > 0.001f)
         result *= bend_max * tanh(bend_len / bend_max) / bend_len;
     return result;
+}
+
+// Preserve the entry point and input layout used by existing shader addons.
+float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
+{
+    return da_tree_bend(I, wave, wind, float3(0, 0, 0));
 }
 
 #endif // DA_TREE_BEND_H

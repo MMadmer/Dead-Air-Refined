@@ -16,7 +16,7 @@
 #include "xrScriptEngine/script_space.hpp"
 
 #include <SDL.h>
-#include <unordered_map>
+#include "xrCommon/xr_hash_map.h"
 
 ENGINE_API CRenderDevice Device;
 ENGINE_API CLoadScreenRenderer load_screen_renderer;
@@ -304,43 +304,45 @@ void CRenderDevice::ProcessFrame()
     {
         ZoneScopedN("ProcessParallelSequence");
 
-        xr_vector<const void*> concurrentKeys;
-        std::unordered_map<const void*, size_t> groupIndices;
+        struct Group
+        {
+            size_t first;
+            size_t last;
+        };
+        xr_vector<Group> groups;
+        xr_flat_hash_map<const void*, size_t> groupIndices;
+        xr_vector<size_t> next(seqParallelProcessing.size(), size_t(-1));
         xr_vector<Task*> concurrentTasks;
-        concurrentKeys.reserve(seqParallelProcessing.size());
+        groups.reserve(seqParallelProcessing.size());
         groupIndices.reserve(seqParallelProcessing.size());
         concurrentTasks.reserve(seqParallelProcessing.size());
-        size_t concurrentBegin = 0;
-        bool concurrentBatchActive = false;
 
-        const auto flushConcurrentTasks =
-            [this, &concurrentKeys, &groupIndices, &concurrentTasks, &concurrentBegin,
-                &concurrentBatchActive](size_t concurrentEnd)
+        const auto runGroup = [this, &next](size_t first)
         {
-            if (!concurrentBatchActive)
+            ZoneScopedN("ConcurrentFrameGroup");
+            for (size_t index = first; index != size_t(-1); index = next[index])
+                seqParallelProcessing[index].callback();
+        };
+
+        const auto flushConcurrentTasks = [&]
+        {
+            if (groups.empty())
                 return;
 
-            for (const void* key : concurrentKeys)
-            {
-                concurrentTasks.push_back(&TaskScheduler->AddTask(
-                    [this, key, concurrentBegin, concurrentEnd]
-                    {
-                        ZoneScopedN("ConcurrentFrameGroup");
-                        for (size_t index = concurrentBegin; index < concurrentEnd; ++index)
-                        {
-                            const ParallelFrameTask& frameTask = seqParallelProcessing[index];
-                            if (frameTask.concurrencyKey == key)
-                                frameTask.callback();
-                        }
-                    }));
-            }
+            // Each group follows its own input-order chain. Scanning the entire batch per
+            // object made dispatch quadratic even when every callback was independent.
+            for (size_t i = 1; i < groups.size(); ++i)
+                concurrentTasks.push_back(&TaskScheduler->AddTask([&runGroup, first = groups[i].first]
+                {
+                    runGroup(first);
+                }));
+            runGroup(groups.front().first);
 
             for (Task* task : concurrentTasks)
                 TaskScheduler->Wait(*task);
-            concurrentKeys.clear();
+            groups.clear();
             groupIndices.clear();
             concurrentTasks.clear();
-            concurrentBatchActive = false;
         };
 
         for (size_t index = 0; index < seqParallelProcessing.size(); ++index)
@@ -348,23 +350,24 @@ void CRenderDevice::ProcessFrame()
             const ParallelFrameTask& frameTask = seqParallelProcessing[index];
             if (frameTask.concurrencyKey)
             {
-                if (!concurrentBatchActive)
+                const auto [it, inserted] = groupIndices.emplace(frameTask.concurrencyKey, groups.size());
+                if (inserted)
+                    groups.push_back({index, index});
+                else
                 {
-                    concurrentBegin = index;
-                    concurrentBatchActive = true;
+                    Group& group = groups[it->second];
+                    next[group.last] = index;
+                    group.last = index;
                 }
-
-                if (groupIndices.emplace(frameTask.concurrencyKey, concurrentKeys.size()).second)
-                    concurrentKeys.push_back(frameTask.concurrencyKey);
                 continue;
             }
 
             // Serial entries preserve the dependency barriers of the legacy queue.
-            flushConcurrentTasks(index);
+            flushConcurrentTasks();
             frameTask.callback();
         }
 
-        flushConcurrentTasks(seqParallelProcessing.size());
+        flushConcurrentTasks();
         seqParallelProcessing.clear();
         seqFrameMT.Process();
     });

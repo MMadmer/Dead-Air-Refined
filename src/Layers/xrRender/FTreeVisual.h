@@ -52,12 +52,15 @@ protected:
     // them drawn (see TreeWindShared in FTreeVisual.cpp).
     TreeWindShared* m_shared{};
     void UpdateWindState() const;
-    float tree_height() const;
+    Fvector4 tree_wind_row() const;
     // Row 8 of the per-instance data / c_sun of the scalar path: (sun scale, sun bias,
     // state, frequency factor for the sway phase).
     Fvector4 wind_state_row(float s) const;
 
 public:
+    bool NeedsWindUpdate() const;
+    static void PrepareWind(const xr_vector<FTreeVisual*>& visuals);
+
     // The vegetation-audio layer harvests tree world positions once per level load.
     const Fvector& root_position() const { return xform.c; }
 

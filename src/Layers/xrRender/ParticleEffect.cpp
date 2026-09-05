@@ -93,6 +93,11 @@ static float da_particle_wind(const Fvector& pos, Fvector& out)
     }
     const auto& env = g_pGamePersistent->Environment();
     const float exposure = env.WindExposure(pos);
+    if (exposure == 0.f)
+    {
+        out.set(0.f, 0.f, 0.f);
+        return 0.f;
+    }
     out = env.WindAt(pos, 1.5f);
     out.mul(exposure);
     return exposure;

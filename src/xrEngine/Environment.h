@@ -371,6 +371,7 @@ public:
     // Gust-field amplitude at a world XZ (0.60 lull .. 1.25 tongue) and the local heading
     // deviation (-1..1). Same maths as the vertex shaders: both compile da_wind_core.h.
     float SampleWindField(float x, float z) const;
+    float SampleWindGust(float x, float z) const;
     float SampleWindDeviation(float x, float z) const;
 
     // ---- The query surface every physical consumer uses. ---------------------------------

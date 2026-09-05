@@ -50,8 +50,8 @@ float4 tree_instance_sun(uint instance_id)
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 8];
 }
 
-// Row 9: x = the height of the model in metres (the trunk bend profile runs on it). The
-// scalar path passes the same in c_tree.
+// Row 9: x = tree height, yz = root gust/deviation, w = field valid. The scalar path
+// passes the same in c_tree; zero w keeps older producers on the analytic field.
 float4 tree_instance_tree(uint instance_id)
 {
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 9];

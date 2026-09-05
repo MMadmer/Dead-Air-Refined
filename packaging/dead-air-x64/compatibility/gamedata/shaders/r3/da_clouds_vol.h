@@ -178,21 +178,28 @@ float da_cloud_sun_depth(Texture2D map, float3 p, float3 to_sun, float base_alt,
 // Sun light reaching a sample: Beer-Lambert with three multiple-scattering octaves, the
 // phase softening with each octave, and a powder term that darkens the sun-facing edge of a
 // cloud (light has not had the chance to scatter back yet).
-float3 da_cloud_sun_scatter(float tau, float cos_t, float d_local)
+float3 da_cloud_sun_scatter(float tau, float cos_t, float d_local, float3 phases)
 {
     float3 acc = 0;
-    float a = 1.0f, b = 1.0f, c = 1.0f;
+    float a = 1.0f, b = 1.0f;
     [unroll]
     for (int o = 0; o < 3; ++o)
     {
-        acc += a * exp(-tau * b) * da_cloud_phase(cos_t, c);
-        a *= 0.5f; b *= 0.5f; c *= 0.5f;
+        acc += a * exp(-tau * b) * phases[o];
+        a *= 0.5f; b *= 0.5f;
     }
     // A wide fourth term without phase: light that has scattered many times and lights the
     // base and the shaded side from within - what keeps a cloud's underside grey, not black.
     acc += 0.14f * exp(-tau * 0.12f);
     const float powder = 1.0f - 0.55f * exp(-d_local * 6.0f) * saturate(cos_t * 0.5f + 0.5f);
     return acc * powder;
+}
+
+float3 da_cloud_sun_scatter(float tau, float cos_t, float d_local)
+{
+    const float3 phases = float3(da_cloud_phase(cos_t, 1.0f),
+        da_cloud_phase(cos_t, 0.5f), da_cloud_phase(cos_t, 0.25f));
+    return da_cloud_sun_scatter(tau, cos_t, d_local, phases);
 }
 
 #endif // DA_CLOUDS_VOL_H

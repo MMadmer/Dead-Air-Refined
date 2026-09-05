@@ -507,6 +507,7 @@ void CDetailManager::UpdateRenderState()
 {
     if (m_render_state_frame == Device.dwFrame)
         return;
+    WaitForCalc();
     m_render_state_frame = Device.dwFrame;
 
 #ifndef _EDITOR
@@ -632,8 +633,18 @@ void CDetailManager::DispatchMTCalc()
 
     m_calc_scheduled_frame = Device.dwFrame;
     const Fvector eye = Device.vCameraPosition;
+    auto* environment = g_pGamePersistent ? &g_pGamePersistent->Environment() : nullptr;
+    if (environment)
+    {
+        m_wind_probes.resize(CEnvironment::wind_motor_count);
+        for (u32 i = 0; i < CEnvironment::wind_motor_count; ++i)
+        {
+            const auto& motor = environment->wind_motors[i];
+            m_wind_probes[i] = {motor.pos, motor.used && motor.type == CEnvironment::EWindMotor::press};
+        }
+    }
 
-    m_calc_task.store(&TaskScheduler->AddTask([this, eye]
+    m_calc_task.store(&TaskScheduler->AddTask([this, eye, environment]
     {
         ZoneScoped;
 
@@ -650,32 +661,32 @@ void CDetailManager::DispatchMTCalc()
 
         // Feed the press wind-motors the one fact only this side knows: is there actual
         // grass in the detail cache under the pressing entity. The sound layer
-        // (WindVegSound) reads it for the walking-through-grass rustle - so pavement and
-        // bare dirt stay silent. Same task, cache coherent; a float write is benign.
+        // (WindVegSound) reads it for the walking-through-grass rustle. Positions are a
+        // main-thread snapshot; only the atomic result is shared with the sound reader.
         //
         // The first cut asked the SLOT ("does this 2x2 m cell hold any details at all") and
         // was wrong twice over, reported from the field as rustle while walking a bare road:
         // a cell that big straddles the verge, and details are not only grass - gravel and
         // dry litter are details too. So walk the actual tufts near the feet and judge each
         // by its own height: what a boot brushes through is TALL, ground clutter is flat.
-        if (g_pGamePersistent)
+        if (environment)
         {
-            auto& env = g_pGamePersistent->Environment();
-            for (auto& m : env.wind_motors)
+            for (u32 i = 0; i < m_wind_probes.size(); ++i)
             {
-                if (!m.used || m.type != CEnvironment::EWindMotor::press)
+                const auto& m = m_wind_probes[i];
+                if (!m.active)
                     continue;
 
-                m.veg = 0.f;
+                float vegetation = 0.f;
                 // Only the slots the search disc actually touches (it is smaller than a cell,
                 // so at most four), each clamped into the cache the same way as before.
                 const int lo_x = iFloor((m.pos.x - k_veg_probe_r) / dm_slot_size + .5f) - s_x;
                 const int hi_x = iFloor((m.pos.x + k_veg_probe_r) / dm_slot_size + .5f) - s_x;
                 const int lo_z = iFloor((m.pos.z - k_veg_probe_r) / dm_slot_size + .5f) - s_z;
                 const int hi_z = iFloor((m.pos.z + k_veg_probe_r) / dm_slot_size + .5f) - s_z;
-                for (int cz = lo_z; cz <= hi_z && m.veg == 0.f; ++cz)
+                for (int cz = lo_z; cz <= hi_z && vegetation == 0.f; ++cz)
                 {
-                    for (int cx = lo_x; cx <= hi_x && m.veg == 0.f; ++cx)
+                    for (int cx = lo_x; cx <= hi_x && vegetation == 0.f; ++cx)
                     {
                         if (abs(cx) >= int(dm_size) || abs(cz) >= int(dm_size))
                             continue;
@@ -701,15 +712,16 @@ void CDetailManager::DispatchMTCalc()
                                 const float dz = it->mRotY.c.z - m.pos.z;
                                 if (dx * dx + dz * dz <= k_veg_probe_r * k_veg_probe_r)
                                 {
-                                    m.veg = 1.f;
+                                    vegetation = 1.f;
                                     break;
                                 }
                             }
-                            if (m.veg > 0.f)
+                            if (vegetation > 0.f)
                                 break;
                         }
                     }
                 }
+                std::atomic_ref<float>(environment->wind_motors[i].veg).store(vegetation, std::memory_order_relaxed);
             }
         }
 

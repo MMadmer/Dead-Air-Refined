@@ -655,7 +655,12 @@ float wind_vnoise(float x)
 // leaning are one wind.
 float CEnvironment::SampleWindField(float x, float z) const
 {
-    return da_wind_field_amp(da_wind_field_gust(x, z, eff_wind_field_ofs.x, eff_wind_field_ofs.y));
+    return da_wind_field_amp(SampleWindGust(x, z));
+}
+
+float CEnvironment::SampleWindGust(float x, float z) const
+{
+    return da_wind_field_gust(x, z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
 }
 
 float CEnvironment::SampleWindDeviation(float x, float z) const
@@ -672,7 +677,7 @@ Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p) const
     // radially. The bend amplitudes are unit-less; 6 m/s per unit turns "grass flattened by a
     // grenade" into a push that sends a can rolling, which is what the eye expects to see.
     Fvector out{0.f, 0.f, 0.f};
-    for (u32 i = 0; i < wind_motor_count; ++i)
+    for (u32 i = 0; i < u32(wind_motor_active); ++i)
     {
         const Fmatrix& P = wind_motor_pos[i / 4];
         const Fmatrix& A = wind_motor_par[i / 4];
@@ -733,22 +738,40 @@ Fvector CEnvironment::WindAt(const Fvector& pos, float height_above_ground) cons
     return v;
 }
 
+namespace
+{
+bool wind_occluded(const Fvector& start, const Fvector& direction, float range)
+{
+    // Preserve RayPick's back-face rejection, but stop at the first blocker. RayTest
+    // cannot substitute here because it deliberately includes back faces.
+    static thread_local CDB::COLLIDER collider;
+    collider.ray_query(CDB::OPT_ONLYFIRST | CDB::OPT_CULL,
+        g_pGameLevel->ObjectSpace.GetStaticModel(), start, direction, range);
+    if (!collider.r_count())
+        return false;
+    if (collider.r_begin()->range < range)
+        return true;
+    // RayPick excludes the exact far endpoint. An endpoint hit must not hide a nearer one.
+    collide::rq_result hit;
+    return g_pGameLevel->ObjectSpace.RayPick(start, direction, range, collide::rqtStatic, hit, nullptr);
+}
+}
+
 float CEnvironment::WindExposure(const Fvector& pos) const
 {
     if (!g_pGameLevel)
         return 0.f;
-    collide::rq_result rq;
     Fvector start = pos;
     start.y += 0.8f; // clear the caller's own capsule and the ground
     static const Fvector up = {0.f, 1.f, 0.f};
     // Under a roof or indoors: no wind at all. The old test stopped here, which is why a wall
     // on the windward side never sheltered anyone.
-    if (g_pGameLevel->ObjectSpace.RayPick(start, up, 35.f, collide::rqtStatic, rq, nullptr))
+    if (wind_occluded(start, up, 35.f))
         return 0.f;
     // Upwind: the air arrives from the side the wind blows FROM.
     Fvector upwind;
     upwind.set(-_sin(eff_wind_dir), 0.f, -_cos(eff_wind_dir));
-    if (g_pGameLevel->ObjectSpace.RayPick(start, upwind, 12.f, collide::rqtStatic, rq, nullptr))
+    if (wind_occluded(start, upwind, 12.f))
         return 0.35f; // in the lee: the wind still swirls round, at a third
     return 1.f;
 }
@@ -994,11 +1017,10 @@ bool CEnvironment::wind_sheltered(const Fvector& pos) const
 {
     if (!g_pGameLevel)
         return true;
-    collide::rq_result rq;
     Fvector start = pos;
     start.y += 0.6f; // clear own capsule/ground
     static const Fvector up = {0.f, 1.f, 0.f};
-    return g_pGameLevel->ObjectSpace.RayPick(start, up, 35.f, collide::rqtStatic, rq, nullptr);
+    return wind_occluded(start, up, 35.f);
 }
 
 float CEnvironment::SampleWindMotors(const Fvector& p) const
@@ -1008,7 +1030,7 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
     // gate and the per-tuft spring-back behind a blast front so what is heard matches
     // what is seen.
     float total = 0.f;
-    for (u32 i = 0; i < wind_motor_count; ++i)
+    for (u32 i = 0; i < u32(wind_motor_active); ++i)
     {
         const Fmatrix& P = wind_motor_pos[i / 4];
         const Fmatrix& A = wind_motor_par[i / 4];

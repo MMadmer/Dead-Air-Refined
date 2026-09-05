@@ -61,7 +61,7 @@ v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID)
     bi.frac = frac;
     bi.q_state = local_c_sun.z;
     bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
-    float2 result = da_tree_bend(bi, wave, wind);
+    float2 result = da_tree_bend(bi, wave, wind, local_c_tree.yzw);
     const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
 
     float4 f_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);

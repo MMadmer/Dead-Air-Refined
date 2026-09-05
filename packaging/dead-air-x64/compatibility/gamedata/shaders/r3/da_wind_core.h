@@ -10,8 +10,8 @@
 // drifted within an hour of being written and left the audio a third quieter than the eye.
 //
 // Rules for editing: scalar floats only (no float2/float3 - the C++ side has none), no
-// intrinsics beyond the DA_* wrappers below, no statics. If it does not compile on both
-// sides, it does not go in here.
+// intrinsics beyond the DA_* wrappers below. The C++ lattice cache is immutable and uses
+// the same hash; the shader side keeps the analytic path.
 
 // No #include here on purpose, not even for C++: the shader cache walks every #include line of
 // a shader's dependency tree to hash it, cannot read <angle brackets>, and dies on the empty
@@ -59,6 +59,31 @@ DA_FUNC float da_wf_hash(float ix, float iz)
     return DA_FRAC(px * pz);
 }
 
+#ifdef __cplusplus
+DA_FUNC float da_wf_lattice_hash(float ix, float iz)
+{
+    // Only noise's integer lattice uses this table. Keep the analytic hash for arbitrary
+    // positions and for coordinates where the original float offset loses integer bits.
+    if (!(ix >= -4096.0f && ix <= 1048576.0f && iz >= -4096.0f && iz <= 1048576.0f))
+        return da_wf_hash(ix, iz);
+    struct Lattice
+    {
+        float values[64][64];
+        Lattice()
+        {
+            for (int x = 0; x < 64; ++x)
+                for (int z = 0; z < 64; ++z)
+                    values[x][z] = da_wf_hash(float(x), float(z));
+        }
+    };
+    static const Lattice lattice;
+    return lattice.values[static_cast<unsigned>(static_cast<int>(ix)) & 63u]
+                         [static_cast<unsigned>(static_cast<int>(iz)) & 63u];
+}
+#else
+#define da_wf_lattice_hash da_wf_hash
+#endif
+
 DA_FUNC float da_wf_noise(float px, float pz)
 {
     const float ix = DA_FLOOR(px);
@@ -67,10 +92,10 @@ DA_FUNC float da_wf_noise(float px, float pz)
     float fz = pz - iz;
     fx = fx * fx * (3.0f - 2.0f * fx);
     fz = fz * fz * (3.0f - 2.0f * fz);
-    const float a = da_wf_hash(ix, iz);
-    const float b = da_wf_hash(ix + 1.0f, iz);
-    const float c = da_wf_hash(ix, iz + 1.0f);
-    const float d = da_wf_hash(ix + 1.0f, iz + 1.0f);
+    const float a = da_wf_lattice_hash(ix, iz);
+    const float b = da_wf_lattice_hash(ix + 1.0f, iz);
+    const float c = da_wf_lattice_hash(ix, iz + 1.0f);
+    const float d = da_wf_lattice_hash(ix + 1.0f, iz + 1.0f);
     return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fz;
 }
 

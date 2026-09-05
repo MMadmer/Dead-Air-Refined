@@ -397,8 +397,14 @@ void CPHElement::ApplyWind()
     if (m_wind_stamp < 0.f || now - m_wind_stamp > 0.25f)
     {
         m_wind_stamp = now;
-        m_wind_ms = env.WindAt(pos, 0.5f);
-        m_wind_ms.mul(env.WindExposure(pos));
+        const float exposure = env.WindExposure(pos);
+        if (exposure > 0.f)
+        {
+            m_wind_ms = env.WindAt(pos, 0.5f);
+            m_wind_ms.mul(exposure);
+        }
+        else
+            m_wind_ms.set(0.f, 0.f, 0.f);
     }
     if (m_wind_ms.square_magnitude() < 0.25f)
         return;
