@@ -1033,6 +1033,25 @@ carries it to the apply pass in the length of the patched normal; the gloss boos
 it there. The darkening is untouched, so wet foliage still reads wet; a wet road, a wall, a trunk
 or a block of concrete keep their full sheen and their rings.
 
+The puddle reflection lands on the ground only. The reflection pass (`da_puddle_refl.ps`) used
+to recompute the puddle mask for every pixel from the reconstructed position alone, and from a
+few metres away a grass field or the underside of a crown reads as level as a floor - a blade or a
+leaf card whose XZ fell on a puddle got the sky reflection painted over it (white grass at a
+distance, a screen-door sky on a birch seen from below, a bush "covered by the puddle's water").
+The ground shader (`deffer_impl_flat.ps`) now raises a flag in the G-buffer for the pixels its
+puddle mask covers, and the reflection pass exits on every pixel without it. The flag rides in the
+packed hemi/material word (`gbuf_pack_hemi_mtl`): hemi keeps seven bits (steps of 1/127, an
+occlusion term never showed the eighth) and bit 13, the low FP16 mantissa bit, is the flag; in
+the unpacked G-buffer layout (`r3_gbuffer_opt off`) the sign of the material float carries it.
+`gbuffer_data.ground` exposes it to any pass; `common_iostructs.h` is now shipped by the mod for
+that one field.
+
+Ground wetness starts over with a level load. The accumulator (the `rain_params` binder in
+`r2.cpp`, buildup and drying in minutes) carried a storm's puddles and dark ground into a save
+made in clear weather. `CRender::level_Load` now asks the binder to resolve itself on the first
+frame after the load, when the restored weather is current: raining - the ground has been under
+it for a while (wetness 1), dry - dry (0). Nothing is saved; `.scop`/`.scoc`/`.scov` are unchanged.
+
 Two fades that used to be cuts: a tree impostor thins out through its alpha test over the last
 4x span of its size measure before `r__veg_discard` and over the last 12 % of the weather's
 `far_plane` (the sets keep the fog saturating only for what stands below the horizon, so a crown

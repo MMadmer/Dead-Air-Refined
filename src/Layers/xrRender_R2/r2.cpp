@@ -162,6 +162,13 @@ static class cl_da_sss : public R_constant_setup
 // output zeros.
 float g_da_rain_wetness = 0.f;
 
+// A level load (a save, a level change) starts the ground over: the accumulator otherwise
+// carried a storm's puddles into a save made in clear weather. Resolved on the first frame the
+// binder runs after the load, when the restored weather is current - raining: the ground has
+// been under it for a while (1); dry: dry (0).
+static bool g_da_rain_wetness_reset = false;
+void da_rain_wetness_on_level_load() { g_da_rain_wetness_reset = true; }
+
 static class cl_rain_params : public R_constant_setup
 {
     u32 marker{};
@@ -180,6 +187,12 @@ static class cl_rain_params : public R_constant_setup
             const float rain = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f;
             const float dbg = float(ps_r__puddles_debug);
             const float rain_for_wetness = ps_r__puddles ? rain : 0.f;
+
+            if (g_da_rain_wetness_reset)
+            {
+                g_da_rain_wetness_reset = false;
+                wetness = rain_for_wetness > 0.02f ? 1.f : 0.f;
+            }
 
             if (ps_r__puddles && ps_r__puddles_force > 0.f)
             {

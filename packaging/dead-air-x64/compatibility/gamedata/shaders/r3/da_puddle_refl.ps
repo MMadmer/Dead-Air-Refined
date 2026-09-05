@@ -99,6 +99,15 @@ float4 main(vf I) : SV_Target
 {
 	// Позиция и полусфера из G-буфера.
 	gbuffer_data gbd = gbuffer_load_data(I.tc0, I.hpos.xy);
+
+	// Only the static ground the G-buffer pass marked as puddle. The mask below is computed
+	// from the reconstructed position alone, and from afar a grass field or the underside of
+	// a crown reads as level as a floor: a blade or a leaf card whose XZ fell on a puddle got
+	// the reflection painted over it - white grass at a distance, a screen-door sky on a
+	// birch seen from below. This is also the cheap exit for every non-ground pixel.
+	[branch] if (gbd.ground < 0.5f)
+		return float4(0.0f, 0.0f, 0.0f, 0.0f);
+
 	const float3 pos_v = gbd.P;
 
 	// Мировое положение: матрица вида ортонормирована, обратная ей — транспонированная.

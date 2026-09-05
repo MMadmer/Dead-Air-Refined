@@ -20,12 +20,16 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// r2.cpp: the rain_params binder's ground wetness starts over with the level.
+extern void da_rain_wetness_on_level_load();
+
 void CRender::level_Load(IReader* fs)
 {
     ZoneScoped;
 
     R_ASSERT(g_pGameLevel);
     R_ASSERT(!b_loaded);
+    da_rain_wetness_on_level_load();
     Resources->BeginLevelTextureTracking();
 
     // Begin

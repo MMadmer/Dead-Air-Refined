@@ -245,6 +245,10 @@ f_deffer 	main	( p_flat I 		)
 		 	ms 	= L.w		;
 # endif
 
+  // Ground under the puddle mask: flagged in the G-buffer for the reflection pass, which
+  // then paints water only here and never on the grass or the leaves above a puddle.
+  da_gbuf_ground = (PDL.mask > 0.001f) ? 1u : 0u;
+
   // 2. Standart output
   float4     Ne = float4	(normalize(N), 									D.w*H_TERR			);
   O				= pack_gbuffer(

@@ -267,12 +267,19 @@ float3 gbuf_unpack_normal( float2 norm )
    return res;
 }
 
+// Raised by deffer_impl_flat for the pixels its puddle mask covers - rain puddles live on the
+// static ground only. The puddle reflection pass reads the flag back and leaves every other
+// pixel alone: a grass blade or a leaf card whose XZ falls on a puddle is not water, however
+// level the depth around it looks from afar.
+static uint da_gbuf_ground = 0u;
+
 float gbuf_pack_hemi_mtl( float hemi, float mtl )
 {
    uint packed_mtl = uint( ( mtl / 1.333333333 ) * 31.0 );
-//   uint packed = ( MUST_BE_SET + ( uint( hemi * 255.0 ) << 13 ) + ( ( packed_mtl & uint( 31 ) ) << 21 ) );
-	//	Clamp hemi max value
-	uint packed = ( MUST_BE_SET + ( uint( saturate(hemi) * 255.9 ) << 13 ) + ( ( packed_mtl & uint( 31 ) ) << 21 ) );
+	// hemi keeps seven bits (steps of 1/127 - an occlusion term never showed the eighth); bit 13,
+	// the low FP16 mantissa bit, carries the ground flag.
+	uint packed = ( MUST_BE_SET + ( uint( saturate(hemi) * 127.9 ) << 14 ) + ( ( packed_mtl & uint( 31 ) ) << 21 )
+		+ ( da_gbuf_ground != 0u ? USABLE_BIT_1 : 0u ) );
 
    if( ( packed & USABLE_BIT_13 ) == 0 )
       packed |= USABLE_BIT_14;
@@ -285,8 +292,12 @@ float gbuf_pack_hemi_mtl( float hemi, float mtl )
 
 float gbuf_unpack_hemi( float mtl_hemi )
 {
-//   return float( ( asuint( mtl_hemi ) >> 13 ) & uint(255) ) * (1.0/255.0);
-	return float( ( asuint( mtl_hemi ) >> 13 ) & uint(255) ) * (1.0/254.8);
+	return float( ( asuint( mtl_hemi ) >> 14 ) & uint(127) ) * (1.0/127.0);
+}
+
+float gbuf_unpack_ground( float mtl_hemi )
+{
+	return ( asuint( mtl_hemi ) & USABLE_BIT_1 ) != 0u ? 1.0 : 0.0;
 }
 
 float gbuf_unpack_mtl( float mtl_hemi )
@@ -305,7 +316,8 @@ f_deffer pack_gbuffer( float4 norm, float4 pos, float4 col, uint imask )
 	f_deffer res;
 
 #ifndef GBUFFER_OPTIMIZATION
-	res.position	= pos;
+	// This layout stores the material as a plain float: its sign carries the ground flag.
+	res.position	= float4( pos.xyz, da_gbuf_ground != 0u ? -abs( pos.w ) - 0.001 : pos.w );
 	res.Ne			= norm;
 	res.C			   = col;
 #else
@@ -355,6 +367,7 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, float2 pos2d, int iSample 
 
    // reconstruct hemi
    gbd.hemi = gbuf_unpack_hemi( P.w );
+   gbd.ground = gbuf_unpack_ground( P.w );
 
 #ifndef USE_MSAA
    float4	C	= s_diffuse.Sample( smp_nofilter, tc );
@@ -399,7 +412,9 @@ gbuffer_data gbuffer_load_data( float2 tc : TEXCOORD, uint iSample )
 #endif
 
 	gbd.P		= P.xyz;
-	gbd.mtl		= P.w;
+	// the sign of the material carries the ground flag in this layout (see pack_gbuffer)
+	gbd.mtl		= abs( P.w );
+	gbd.ground	= P.w < 0.0 ? 1.0 : 0.0;
 
 #ifndef USE_MSAA
 	float4 N	= s_normal.Sample( smp_nofilter, tc );
