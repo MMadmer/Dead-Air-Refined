@@ -506,10 +506,13 @@ public:
     };
     SFallRoll m_fall_roll;
     ref_sound m_fall_roll_snd;
+    shared_str m_fall_roll_snd_name;
     bool IsFallRolling() const { return m_fall_roll.active; }
     bool FallRollAllowsCommand(int cmd) const;
     float FallRollHealthLost(float contact_speed) const;
-    void StartFallRoll();
+    // debug = the fall_roll_test console command: the roll starts without a landing and the
+    // log gets one line about the sound, so the tumble can be checked on a rig that cannot jump.
+    void StartFallRoll(bool debug = false);
     void UpdateFallRoll(float dt);
     void EndFallRoll();
 

@@ -1787,6 +1787,20 @@ public:
 
 #endif // MASTER_GOLD
 
+// QA: start the landing roll on the spot, without a landing. Not saved, not a cheat that
+// matters - it only plays the tumble and its sound.
+class CCC_FallRollTest : public IConsole_Command
+{
+public:
+    CCC_FallRollTest(pcstr N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentControlEntity()) : nullptr;
+        if (actor && actor->g_Alive() && !actor->IsFallRolling())
+            actor->StartFallRoll(true);
+    }
+};
+
 class CCC_LuaGCMethod : public CCC_Token
 {
 public:
@@ -2808,6 +2822,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_LuaProfiler, CCC_LuaProfiler::COMMAND_LUA_PROFILER_SAVE);
 
     CMD1(CCC_LuaGCMethod, "lua_gc_method");
+    CMD1(CCC_FallRollTest, "fall_roll_test");
     CMD4(CCC_Integer, "lua_gcstep", &psLUA_GCSTEP, 1, 1000);
     CMD4(CCC_Integer, "lua_gc_timeout", &psLUA_GCTIMEOUT, 1000, 16000);
 

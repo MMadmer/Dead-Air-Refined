@@ -1022,7 +1022,9 @@ parity at 2.7 m) while it still stretched the landing to 320-364 ms and turned t
 2.6 m/s of forward speed. With the stock 12 m/s the roll's no-damage speed is 21 m/s.
 
 During the roll (`fall_roll_time`, 1.2 s - the Mirror's Edge roll from touchdown to standing) the
-view turns once forward about the camera's right axis (`CEffectorFallRoll`), pitch input is
+view turns once forward about the camera's right axis (`CEffectorFallRoll`) with the give of a
+neck and spine: the turn runs about nine degrees past the full circle by 78 % of the duration and
+eases back onto 360 degrees over the rest, both halves start-soft and stop-soft. Pitch input is
 ignored and yaw runs at `fall_roll_yaw_sensitivity` (0.25), the body crouches through the same
 box switch and camera lerp a crouch key uses and is carried forward from `fall_roll_speed_start`
 (2.6 m/s, the forward speed a measured roll leaves the ground with) down to `fall_roll_speed_end`
@@ -1034,6 +1036,10 @@ and the detector go to the ruck at once through the inventory's own events and r
 slots when the roll ends, the item into the hands two updates later. The roll plays its own
 sound once as it begins (`fall_roll_snd`, default `actor\fall_roll`, shipped in the content
 bundles as `sounds/actor/fall_roll.ogg`, mono, X-Ray ogg comment v3 with 1/10 m and full volume;
-2D like the heavy breath). Keys in `[actor]`: `fall_roll_force_reduction`, `fall_roll_time`,
-`fall_roll_speed_start`, `fall_roll_speed_end`, `fall_roll_yaw_sensitivity`, `fall_roll_snd`.
-Nothing about the roll is saved.
+2D like the heavy breath; the sound object is created on the first roll, not at actor load).
+Keys in `[actor]`: `fall_roll_force_reduction`, `fall_roll_time`, `fall_roll_speed_start`,
+`fall_roll_speed_end`, `fall_roll_yaw_sensitivity`, `fall_roll_snd`. The console command
+`fall_roll_test` starts the roll on the spot without a landing and logs one line about the sound
+(handle, bytes, length, whether an emitter plays) - the way to check the tumble on a rig that
+cannot jump, with `time_factor 0.2` and `r__screenshot_every 1` to catch its phases. Nothing about
+the roll is saved.

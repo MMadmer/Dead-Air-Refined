@@ -141,6 +141,7 @@ cannot point a shipped build at an arbitrary server.
 | Landing roll blocks the rest | During the roll press movement, weapon, inventory and use keys, scroll the wheel, then Esc | Pass: nothing but yaw moves until the roll ends, Esc opens the menu, console and screenshots work; keys still held when the roll ends take effect at once |
 | Climb needs the stamina it will spend | Drain the power bar, hold jump at a ledge; refill, try again | Pass: with less power than the climb drains (four thirds of `getStaminaDrain()`, weight-dependent) the climb does not start and the log says why under `debug_log`; with enough it starts and the bar never runs dry mid-climb |
 | Landing roll sound | Any drop that triggers the roll | Pass: `actor\fall_roll` plays once, 2D, as the roll begins; the log shows no `Invalid ogg-comment version` for it and no missing-sound line |
+| Landing roll from the console | Rig, `time_factor 0.2`, `r__screenshot_every 1`, `fall_roll_test` | Pass: the frames show the view going down, over and back up in one forward turn with a small overshoot before it settles, the body ends crouched and moved ahead, and the log reads `- fall roll: sound 'actor/fall_roll' handle ok, 179548 bytes, 1.02 s, feedback yes` (a `none` handle or `feedback no` is the failure) |
 
 ## Content coverage limits
 

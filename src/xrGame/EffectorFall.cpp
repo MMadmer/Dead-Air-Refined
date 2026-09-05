@@ -38,8 +38,18 @@ bool CEffectorFallRoll::ProcessCam(SCamEffectorInfo& info)
         fLifeTime = -1;
         return TRUE;
     }
-    // Progress with a soft start and stop: a tumble does not snap into rotation.
-    const float s = k - _sin(PI_MUL_2 * k) / PI_MUL_2;
+    // Two soft moves in one duration. The turn runs past the full circle by the overshoot and
+    // stops there at the peak time; the rest of the duration eases it back onto 360 degrees -
+    // the inertia of a body that does not stop dead at the end of a roll. Both halves use the
+    // same start-soft, stop-soft ramp, so the velocity never jumps.
+    constexpr float overshoot = 0.025f; // share of a turn past 360 degrees (about 9 degrees)
+    constexpr float peak_at = 0.78f; // share of the duration at which the overshoot peaks
+    const auto ramp = [](float x) { return x - _sin(PI_MUL_2 * x) / PI_MUL_2; };
+    float s;
+    if (k < peak_at)
+        s = (1.f + overshoot) * ramp(k / peak_at);
+    else
+        s = (1.f + overshoot) - overshoot * ramp((k - peak_at) / (1.f - peak_at));
     Fmatrix M;
     M.rotation(info.r, PI_MUL_2 * s);
     M.transform_dir(info.d);

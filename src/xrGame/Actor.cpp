@@ -427,9 +427,8 @@ void CActor::Load(LPCSTR section)
     m_fall_roll.yaw_sens = READ_IF_EXISTS(pSettings, r_float, section, "fall_roll_yaw_sensitivity", 0.25f);
     clamp(m_fall_roll.yaw_sens, 0.f, 1.f);
     // The roll's own sound (fall_roll_snd, 2D like the heavy breath): the tumble of the body
-    // and the gear, played once as the roll begins.
-    m_fall_roll_snd.create(READ_IF_EXISTS(pSettings, r_string, section, "fall_roll_snd", "actor\\fall_roll"), st_Effect,
-        sg_SourceType);
+    // and the gear, played once as the roll begins. Created on first use, see StartFallRoll.
+    m_fall_roll_snd_name = READ_IF_EXISTS(pSettings, r_string, section, "fall_roll_snd", "actor\\fall_roll");
     m_fClimbFactor = pSettings->r_float(section, "climb_coef");
     m_fSprintFactor = pSettings->r_float(section, "sprint_koef");
     m_fBreath = READ_IF_EXISTS(pSettings, r_float, section, "breath_koef", 0.2f);
@@ -2034,7 +2033,7 @@ bool CActor::FallRollAllowsCommand(int cmd) const
     }
 }
 
-void CActor::StartFallRoll()
+void CActor::StartFallRoll(bool debug)
 {
     m_fall_roll.active = true;
     m_fall_roll.time = 0.f;
@@ -2063,8 +2062,16 @@ void CActor::StartFallRoll()
     }
 
     Cameras().AddCamEffector(xr_new<CEffectorFallRoll>(m_fall_roll.duration));
+    // The sound is created here, not in Load: an actor section loaded before the content
+    // archives were mounted or without the sound system present kept a dead handle for good.
+    if (!m_fall_roll_snd._handle())
+        m_fall_roll_snd.create(m_fall_roll_snd_name.c_str(), st_Effect, sg_SourceType);
     if (m_fall_roll_snd._handle())
-        m_fall_roll_snd.play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
+        m_fall_roll_snd.play(this, sm_2D);
+    if (debug)
+        Msg("- fall roll: sound '%s' handle %s, %u bytes, %.2f s, feedback %s", m_fall_roll_snd_name.c_str(),
+            m_fall_roll_snd._handle() ? "ok" : "none", m_fall_roll_snd._handle() ? m_fall_roll_snd._handle()->bytes_total() : 0u,
+            m_fall_roll_snd._handle() ? m_fall_roll_snd._handle()->length_sec() : 0.f, m_fall_roll_snd._feedback() ? "yes" : "no");
 }
 
 void CActor::UpdateFallRoll(float dt)
