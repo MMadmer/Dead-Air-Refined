@@ -184,6 +184,30 @@
     <string id="st_content_exit">
         <text>Выйти из игры</text>
     </string>
+    <string id="st_content_activity_verify">
+        <text>Проверка установленного контента...</text>
+    </string>
+    <string id="st_content_activity_download">
+        <text>Загрузка контента...</text>
+    </string>
+    <string id="st_content_activity_install">
+        <text>Установка контента...</text>
+    </string>
+    <string id="st_content_activity_repaired">
+        <text>Контент восстановлен. Требуется перезапуск игры.</text>
+    </string>
+    <string id="st_content_fail_verify">
+        <text>Не удалось проверить контент: %s</text>
+    </string>
+    <string id="st_content_fail_space">
+        <text>Не хватает места на диске: нужно %llu МБ, доступно %llu МБ</text>
+    </string>
+    <string id="st_content_fail_download">
+        <text>Не удалось загрузить контент: %s</text>
+    </string>
+    <string id="st_content_fail_install">
+        <text>Не удалось установить контент: %s</text>
+    </string>
     <string id="ui_mm_content_incomplete">
         <text>Контент мода неполный: играть нельзя</text>
     </string>

@@ -10,6 +10,13 @@
 #include "xrUICore/ScrollView/UIScrollView.h"
 #include "xrUICore/Static/UIStatic.h"
 
+#include <algorithm>
+
+namespace
+{
+float mebibytes(u64 bytes) { return static_cast<float>(bytes) / (1024.f * 1024.f); }
+}
+
 CUIContentWnd::CUIContentWnd() : CUIDialogWnd(CUIContentWnd::GetDebugType()) { m_bWorkInPause = true; }
 
 bool CUIContentWnd::Init()
@@ -27,6 +34,7 @@ bool CUIContentWnd::Init()
     CUIXmlInit::InitStatic(xml, "main:problems_text", 0, m_problemsText);
     m_problemsText->SetWidth(m_problems->GetDesiredChildWidth());
     m_problems->AddWindow(m_problemsText, true);
+    m_progressText = UIHelper::CreateStatic(xml, "main:progress_text", this);
     m_progress = UIHelper::CreateProgressBar(xml, "main:progress", this);
     m_action = UIHelper::Create3tButton(xml, "main:action", this);
     m_exit = UIHelper::Create3tButton(xml, "main:exit", this);
@@ -78,25 +86,34 @@ void CUIContentWnd::Refresh()
     }
     m_message->SetText(StringTable().translate(message).c_str());
 
+    // The same progress line and bar as the update window, so a download reads the same
+    // wherever it runs. Before the first byte and after a failure the line carries the stage
+    // name or the reason instead, which is how a failed repair stays explained on screen.
     const bool repairing = snapshot.state == ContentService::State::Repairing;
     m_progress->Show(repairing);
+    m_progressText->Show(repairing || !snapshot.activity.empty());
     if (repairing && snapshot.repairTotal)
     {
-        m_progress->SetProgressPos(
-            100.0f * static_cast<float>(snapshot.repairDone) / static_cast<float>(snapshot.repairTotal));
+        string128 line{};
+        xr_sprintf(line, sizeof(line), StringTable().translate("st_update_progress").c_str(),
+            mebibytes(snapshot.repairDone), mebibytes(snapshot.repairTotal));
+        m_progressText->SetText(line);
+        m_progress->ForceSetProgressPos(std::clamp(
+            100.f * static_cast<float>(snapshot.repairDone) / static_cast<float>(snapshot.repairTotal), 0.f, 100.f));
     }
-    else if (repairing)
+    else
     {
-        m_progress->SetProgressPos(0.0f);
+        m_progressText->SetText(snapshot.activity.c_str());
+        m_progress->ForceSetProgressPos(0.f);
     }
 
+    // The text control takes its line breaks as the two-character sequence, not the control
+    // character: joined with a real newline the list came out as one run-on line.
     string4096 text{};
-    if (!snapshot.activity.empty())
-        xr_strcat(text, sizeof(text), snapshot.activity.c_str());
     for (const auto& problem : snapshot.problems)
     {
         if (text[0])
-            xr_strcat(text, sizeof(text), "\n");
+            xr_strcat(text, sizeof(text), "\\n");
         xr_strcat(text, sizeof(text), problem.c_str());
     }
     m_problemsText->SetText(text);

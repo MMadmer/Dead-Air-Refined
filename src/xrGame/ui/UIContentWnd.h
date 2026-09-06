@@ -41,6 +41,7 @@ private:
     CUIStatic* m_message{};
     CUIScrollView* m_problems{};
     CUIStatic* m_problemsText{};
+    CUIStatic* m_progressText{};
     CUIProgressBar* m_progress{};
     CUI3tButton* m_action{};
     CUI3tButton* m_exit{};

@@ -638,7 +638,16 @@ The dialog (`CUIContentWnd`, layout `gamedata/configs/ui/ui_content.xml`, shippe
 "play anyway". `CMainMenu::CheckContentDialog` sits above `CheckCrashReportDialog` in the
 `OnFrame` precedence chain, and `DrawContentNotice` keeps a persistent banner
 (`ui_mm_content_incomplete`) while play is blocked. Strings live in
-`configs/text/rus/dead_air_x64.xml` as `st_content_*`.
+`configs/text/rus/dead_air_x64.xml` as `st_content_*` - every word the window shows,
+including the repair stage names and the failure reasons the service produces. The
+service resolves those on the main thread in `StartRepair` before its worker starts:
+the table is cp1251 and the UI draws cp1251, while a Cyrillic literal in the UTF-8
+source reached the screen as mojibake in the first 1.4.0 runtime. The window shows the
+download the way the update window does - `st_update_progress` with the mebibyte
+count over the same bar - and lists the problems one per line; the text control breaks
+lines on the two-character `
+` sequence, not on a newline character, which is why the
+first runtime showed the list as one run-on line.
 
 **Repair always ends in a mandatory relaunch.** This is not a UX preference: the filesystem
 indexes archives once at startup, and `CLocatorAPI::unload_archive` is broken — it erases a

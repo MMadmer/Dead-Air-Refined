@@ -46,6 +46,14 @@ struct ServiceState
     u32 present{};
     u64 missingBytes{};
     xr_string activity;
+    // The window's wording for the repair stages, resolved from the string table on the main
+    // thread before the worker starts: the table is cp1251 and the UI draws cp1251, while a
+    // literal in this UTF-8 source reaches the screen as mojibake.
+    struct
+    {
+        xr_string verify, download, install, repaired;
+        xr_string failVerify, failSpace, failDownload, failInstall;
+    } texts;
     std::atomic<u64> repairDone{};
     std::atomic<u64> repairTotal{};
     // How many entries of `problems` came from the initial pass. A verify pass owns everything
@@ -231,6 +239,11 @@ void set_activity(ServiceState& instance, const xr_string& line)
 void repair_worker()
 {
     ServiceState& instance = service();
+    const auto texts = [&]
+    {
+        std::lock_guard guard(instance.dataMutex);
+        return instance.texts;
+    }();
 
     ContentPaths::Layout paths;
     ContentManifest::Manifest manifest;
@@ -256,7 +269,7 @@ void repair_worker()
     if (!ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::RepairCommit))
         Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
 
-    set_activity(instance, xr_string("Проверка установленного контента..."));
+    set_activity(instance, texts.verify);
     ContentResolver::Options options;
     options.verifyHashes = true;
     options.cancel = &instance.stopRequested;
@@ -265,7 +278,7 @@ void repair_worker()
     std::string error;
     if (!ContentResolver::Resolve(manifest, paths, options, plan, error))
     {
-        fail(format("не удалось проверить контент: %s", error.c_str()));
+        fail(format(texts.failVerify.c_str(), error.c_str()));
         return;
     }
 
@@ -273,7 +286,7 @@ void repair_worker()
     const u64 free = ContentResolver::FreeBytes(paths.root);
     if (free && free < required)
     {
-        fail(format("не хватает места на диске: нужно %llu МБ, доступно %llu МБ",
+        fail(format(texts.failSpace.c_str(),
             static_cast<unsigned long long>(required / (1024 * 1024)),
             static_cast<unsigned long long>(free / (1024 * 1024))));
         return;
@@ -284,7 +297,7 @@ void repair_worker()
 
     if (plan.bytesToFetch)
     {
-        set_activity(instance, xr_string("Загрузка контента..."));
+        set_activity(instance, texts.download);
 
         ContentDownload::Options download;
         download.repo = AssetsRepository;
@@ -300,19 +313,19 @@ void repair_worker()
         const ContentDownload::Result result = ContentDownload::Fetch(plan, paths, download);
         if (!result.ok)
         {
-            fail(format("не удалось загрузить контент: %s", result.error.c_str()));
+            fail(format(texts.failDownload.c_str(), result.error.c_str()));
             return;
         }
     }
 
-    set_activity(instance, xr_string("Установка контента..."));
+    set_activity(instance, texts.install);
 
     // Re-resolved after the download so the commit works from what is actually in the cache
     // now, rather than from a plan made before any of it arrived.
     ContentResolver::Plan ready;
     if (!ContentResolver::Resolve(manifest, paths, options, ready, error))
     {
-        fail(format("не удалось проверить контент: %s", error.c_str()));
+        fail(format(texts.failVerify.c_str(), error.c_str()));
         return;
     }
 
@@ -321,14 +334,14 @@ void repair_worker()
     const ContentCommit::Result committed = ContentCommit::Run(manifest, ready, paths, commit);
     if (!committed.ok)
     {
-        fail(format("не удалось установить контент: %s", committed.error.c_str()));
+        fail(format(texts.failInstall.c_str(), committed.error.c_str()));
         return;
     }
 
     ContentResolver::CollectCache(paths, manifest, ready, ContentCacheCapBytes);
 
     Msg("* [content] repair installed %u bundle(s), retired %u", committed.installed, committed.demoted);
-    set_activity(instance, xr_string("Контент восстановлен. Требуется перезапуск игры."));
+    set_activity(instance, texts.repaired);
     instance.state.store(ContentService::State::Repaired, std::memory_order_release);
 }
 
@@ -585,6 +598,19 @@ void ContentService::StartRepair()
         instance.worker.join();
     instance.stopRequested.store(false, std::memory_order_release);
 
+    {
+        // Main thread: the string table is not for a worker to read.
+        std::lock_guard guard(instance.dataMutex);
+        auto& texts = instance.texts;
+        texts.verify = StringTable().translate("st_content_activity_verify").c_str();
+        texts.download = StringTable().translate("st_content_activity_download").c_str();
+        texts.install = StringTable().translate("st_content_activity_install").c_str();
+        texts.repaired = StringTable().translate("st_content_activity_repaired").c_str();
+        texts.failVerify = StringTable().translate("st_content_fail_verify").c_str();
+        texts.failSpace = StringTable().translate("st_content_fail_space").c_str();
+        texts.failDownload = StringTable().translate("st_content_fail_download").c_str();
+        texts.failInstall = StringTable().translate("st_content_fail_install").c_str();
+    }
     instance.state.store(State::Repairing, std::memory_order_release);
     instance.worker = std::thread(repair_worker);
 }

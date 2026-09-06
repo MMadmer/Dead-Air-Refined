@@ -7,18 +7,24 @@
         <caption x="268" y="208" width="488" height="32">
             <text font="graffiti22" align="c" vert_align="c">st_content_caption</text>
         </caption>
-        <message x="274" y="246" width="476" height="86">
+        <message x="274" y="246" width="476" height="70">
             <text font="letterica16" align="c" vert_align="t" complex_mode="1"/>
         </message>
-        <problems x="274" y="340" width="476" height="130" always_show_scroll="1" vert_interval="4"
+        <problems x="274" y="318" width="476" height="130" always_show_scroll="1" vert_interval="4"
                   right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
         <problems_text x="0" y="0" width="448" height="16">
             <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
         </problems_text>
-        <progress x="274" y="482" width="476" height="12" horz="1" min="0" max="100">
-            <progress>
-                <texture>ui_patch_progress</texture>
+        <progress_text x="274" y="452" width="476" height="30">
+            <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
+        </progress_text>
+        <progress x="306" y="488" width="412" height="9" horz="1" min="0" max="100" pos="0">
+            <progress stretch="1">
+                <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
             </progress>
+            <background stretch="1">
+                <texture a="220">ui_inGame2_hint_wnd_bar</texture>
+            </background>
         </progress>
         <action x="274" y="520" width="230" height="30" stretch="1">
             <texture>ui_inGame2_Mp_bigbuttone</texture>
