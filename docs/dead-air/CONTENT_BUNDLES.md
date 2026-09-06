@@ -682,6 +682,27 @@ payload. Ordering is the whole point:
    without writing a result", and the progress file's timestamp to tell "slow" from "stalled".
    Cancel is a flag file the fetcher watches; whatever landed stays in the cache as resume
    state.
+
+   The mutex name reaches the wizard from the header and nowhere else: the installer build
+   reads `FetchMutexName` out of `ContentPaths.h` and passes it as `/DContentMutexName`, and
+   the script refuses to compile without it. The Setup first published for 1.4.0 carried a hand-typed spelling
+   (`DeadAirRefined-ContentFetch` against the fetcher's `Local\DeadAirRefined.ContentFetch`),
+   so its probe never found the mutex, and every fetch that outlived the ten-second start
+   grace was reported as "Загрузка контента прервалась" while the fetcher itself kept
+   downloading as an orphan. A retry then found the orphan's handles on the part files and
+   failed as "the content cache could not be written"; a retry after the orphan had finished
+   found the whole set in the cache and installed in seconds. That is why the wizard now
+   stops a fetcher left over from an earlier attempt - cancel flag, then up to sixty seconds
+   for the mutex to go - before it deletes anything, tells a stalled fetcher to stop instead
+   of abandoning it, and why the fetcher declines to start while another one holds the
+   mutex (exit 26, "another content download is still running"). Write failures carry the
+   Windows error code, so a part file held open by another process (32) and a full disk
+   (112) stop looking alike.
+
+   The fetcher links the static CRT, with the zlib and minizip pieces it uses compiled into
+   it, and the installer build fails if it imports `vcruntime` or `msvcp`: it runs out of
+   Setup's temporary directory, where the app-local runtime the game ships is not present,
+   and a fetcher that dies loading a DLL looks exactly like an interrupted download.
 5. Only then does the latch get written and the payload get installed. `CurStepChanged` at
    `ssPostInstall` runs `--content-commit`. An Inno install cannot be failed from there, so a
    failed commit is not a rolled-back install: the latch stays, the gate refuses what it

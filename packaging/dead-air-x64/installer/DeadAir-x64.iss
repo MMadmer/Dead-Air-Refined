@@ -35,6 +35,14 @@
   #ifndef ContentFetcherPath
     #error ContentFetcherPath must point to the built DeadAirContent.exe.
   #endif
+  ; The liveness probe opens the mutex the fetcher holds. Its name is read out of
+  ; src\xrContentSync\ContentPaths.h by the build script and passed in here rather than
+  ; retyped: the Setup first published for 1.4.0 carried a hand-copied spelling that did not
+  ; match, and every
+  ; download longer than the start grace was reported as interrupted.
+  #ifndef ContentMutexName
+    #error ContentMutexName must be the fetcher liveness mutex name from ContentPaths.h.
+  #endif
 #endif
 
 #define ProductName "Dead Air: Refined"
@@ -166,7 +174,7 @@ const
   SmCyCaption = 4;
   SmCxPaddedBorder = 92;
 #ifndef MaintenanceOnly
-  ContentMutexName = 'DeadAirRefined-ContentFetch';
+  ContentMutexName = '{#ContentMutexName}';
   ContentPollIntervalMs = 200;
   // The fetcher creates its mutex a moment after it starts. Without a grace window the first
   // poll would report a crash that has not happened.
@@ -175,6 +183,9 @@ const
   // stay quiet for well over two minutes, and killing a healthy slow download is worse than
   // waiting out a dead one.
   ContentHeartbeatTimeoutMs = 240000;
+  // How long a fetcher left over from an earlier attempt gets to stop before a new one is
+  // refused. Its workers check the cancel flag between one-megabyte reads.
+  ContentStaleStopMs = 60000;
   ContentProgressSteps = 1000;
 #endif
 
@@ -331,6 +342,33 @@ begin
     Result := (GetTickCount - ContentLastHeartbeatTick) > ContentHeartbeatTimeoutMs;
 end;
 
+// Stops a fetcher left over from an earlier attempt and waits for it to let go of the cache.
+// A wizard closed at an error page never told its fetcher to stop, and two fetchers on one
+// cache collide on the part files. True when no fetcher holds the mutex any more.
+function StopStaleContentFetcher(CacheDirectory: String): Boolean;
+var
+  Started: Cardinal;
+begin
+  Result := not ContentFetcherAlive;
+  if Result then
+    exit;
+
+  Log('A content fetcher from an earlier attempt is still running; asking it to stop.');
+  SaveStringToFile(AddBackslash(CacheDirectory) + 'content-fetch-cancel.txt', 'cancel', False);
+  Started := GetTickCount;
+  while (GetTickCount - Started) < ContentStaleStopMs do
+  begin
+    Sleep(ContentPollIntervalMs);
+    if not ContentFetcherAlive then
+    begin
+      Log('The earlier content fetcher has stopped.');
+      Result := True;
+      exit;
+    end;
+  end;
+  Log('The earlier content fetcher did not stop within the wait.');
+end;
+
 function ContentResultValue(Lines: TArrayOfString; Key: String): String;
 var
   Index: Integer;
@@ -379,6 +417,12 @@ begin
     'Здесь хранится загруженный контент Dead Air: Refined.' + Chr(13) + Chr(10) +
     'Папку можно удалить, когда игра не запущена - файлы будут загружены заново.' +
     Chr(13) + Chr(10), False);
+
+  if not StopStaleContentFetcher(CacheDirectory) then
+  begin
+    Result := 'Предыдущая загрузка контента ещё не остановилась. Подождите минуту и повторите попытку.';
+    exit;
+  end;
 
   ResultFile := AddBackslash(CacheDirectory) + 'content-fetch-result.txt';
   DeleteFile(ResultFile);
@@ -463,6 +507,9 @@ begin
         end;
         if ContentHeartbeatStalled(GameDirectory) then
         begin
+          // Still holding its mutex, so it is stuck rather than gone: tell it to stop, or the
+          // next attempt finds its handles on the part files.
+          SaveStringToFile(AddBackslash(CacheDirectory) + 'content-fetch-cancel.txt', 'cancel', False);
           Result := 'Загрузка контента не отвечает.';
           exit;
         end;

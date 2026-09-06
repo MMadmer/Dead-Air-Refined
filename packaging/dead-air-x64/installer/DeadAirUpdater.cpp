@@ -1011,6 +1011,16 @@ int content_fetch(const Arguments& arguments)
     // Held for the process lifetime. The wizard polls it to tell "still working" from "died
     // without writing a result", which a progress file alone cannot distinguish.
     const HANDLE liveness = CreateMutexW(nullptr, TRUE, ContentPaths::FetchMutexName);
+    if (liveness && GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        // A fetcher from an earlier attempt is still running. Two of them on one cache collide
+        // on the part files - the second finds the first's handles and fails with a write
+        // error that says nothing about the cause - so the second one declines instead.
+        CloseHandle(liveness);
+        write_content_result(session.paths, ContentExitFailed,
+            "another content download is still running - wait for it to finish, then try again");
+        return ContentExitFailed;
+    }
 
     std::error_code createError;
     std::filesystem::create_directories(session.paths.Cache(), createError);

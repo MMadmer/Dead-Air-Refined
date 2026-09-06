@@ -244,7 +244,13 @@ repair against. `Setup.exe` does the same fetch on its own progress
 page, first in `PrepareToInstall` and before anything in the installation is
 changed, so a failed fetch aborts the install with the installation untouched.
 A silent Setup fetches exactly like an interactive one — there is no page to
-skip, so content cannot become optional by accident.
+skip, so content cannot become optional by accident. The wizard tells a
+working fetcher from a dead one by opening the mutex
+`ContentPaths::FetchMutexName`; the build script reads that name out of the
+header and hands it to the installer as `/DContentMutexName`, because the
+Setup first published for 1.4.0 retyped it, never found the mutex, and
+reported every real download as interrupted ten seconds in. `CONTENT_BUNDLES.md` has the full
+account, including how a retry then collided with the orphaned fetcher.
 
 ## Archive manifest
 
@@ -303,7 +309,13 @@ plus a tenth become the installer's disk-space requirement, so the wizard cannot
 ask for 200 MB and then die an hour into a multi-gigabyte fetch. Pass
 `-PreviousFullArchive <path to the previous Update.zip>` to cut the patch, and
 `-PatchOnly` to re-cut a patch against a different base without rebuilding the
-release.
+release. `-ArtifactDirectory` sends the installer, the archives and the payload
+trees somewhere other than `artifacts\`, which is how a QA build against a
+synthetic manifest avoids overwriting a release build of the same version. The
+native-helpers step compiles the updater against the static CRT, with the zlib
+and minizip pieces it uses compiled into it — the fetcher runs out of Setup's
+temporary directory, where the app-local runtime is not present — and fails
+the build if the result imports `vcruntime` or `msvcp`.
 
 `tools/package/dead_air_x64_content_bundles.ps1` builds the bundles and the
 content manifest. `-SourceRoot`, `-BundleCache`, `-OutputManifest`,
@@ -362,7 +374,16 @@ QA scripts, all under `tools/qa`:
   leftover latch on an intact install that has to clear itself;
 - `Run-ContentProbe.ps1` is the single-boot probe those cases are built on. It
   appends console commands to `user.ltx`, which is also the path the play gate
-  has to survive.
+  has to survive;
+- `New-SyntheticContent.ps1` builds the small synthetic content set (four
+  bundles, about 21 MB) the flow and installer tests run against, through the
+  shipping bundle builder;
+- `Test-InstallerContentFetch.ps1` runs the real Setup silently over a skeleton
+  of an original installation against the mock throttled until the fetch
+  outlasts the wizard's ten-second start grace, then again with a fetcher left
+  running by an earlier attempt, and finally starts a second fetcher beside a
+  running one — the three ways the first 1.4.0 Setup failed in the field. It builds
+  its own Setup against the synthetic manifest into its work root.
 
 ## Release runbook
 
@@ -399,8 +420,13 @@ purpose.
    the hash check step 5 runs before it uploads anything, and structurally
    cannot be in it.
 4. QA: `Test-ContentFlow.ps1`, `Test-ContentGate.ps1`,
-   `Test-UpdatePatchFlow.ps1`, and a probe against the real host if the
-   downloader changed.
+   `Test-UpdatePatchFlow.ps1`, `Test-InstallerContentFetch.ps1`, a probe
+   against the real host if the downloader changed, and - for every release -
+   a silent `Setup.exe` over a pristine copy of the original game against the
+   real host, followed by a boot to a level. The Setup first published for
+   1.4.0 passed every mock-driven test and failed on the first real install: the synthetic set
+   downloads inside the wizard's start grace, and nothing else had ever crossed
+   the wizard's own poll loop.
 5. Ask for permission, then publish the **content** release first, with
    `publish_dead_air_x64_content.ps1 -Manifest <the manifest from step 2>
    -BundleCache <the cache step 2 packed into>`. It creates the

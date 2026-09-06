@@ -71,6 +71,18 @@ std::string narrow(const std::wstring& value)
     return result;
 }
 
+// "Could not be written" alone has already cost a field diagnosis: it covers a full disk, a part
+// file another process holds open and a directory that is not there alike, and only the OS
+// code tells them apart. Call it straight after the failing call, before anything else runs.
+std::string with_last_error(const char* message)
+{
+    const DWORD code = GetLastError();
+    std::string result(message);
+    if (code)
+        result += " (Windows error " + std::to_string(code) + ")";
+    return result;
+}
+
 // A single GET, with the request built and sent in two steps so a caller can attach a Range
 // header. UpdateService's equivalent sends inside its constructor, which is exactly why it
 // cannot be reused here.
@@ -341,7 +353,7 @@ bool fetch_one(const Asset& bundle, const ContentPaths::Layout& paths,
             offset ? OPEN_EXISTING : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (output == INVALID_HANDLE_VALUE)
         {
-            error = "the content cache could not be written";
+            error = with_last_error("the content cache could not be written");
             return false;
         }
         LARGE_INTEGER seek{};
@@ -452,7 +464,7 @@ bool fetch_one(const Asset& bundle, const ContentPaths::Layout& paths,
                 if (!WriteFile(output, buffer.data(), read, &written, nullptr) || written != read ||
                     !digest.Append(buffer.data(), read))
                 {
-                    error = "the content cache could not be written";
+                    error = with_last_error("the content cache could not be written");
                     broke = true;
                     break;
                 }

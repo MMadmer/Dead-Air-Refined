@@ -15,7 +15,11 @@ param(
     # The content manifest for this release, produced by dead_air_x64_content_bundles.ps1. It
     # ships inside the Setup payload and is the trust root every later check measures against,
     # so there is no default: content is never optional.
-    [Parameter(Mandatory)][string]$ContentManifest
+    [Parameter(Mandatory)][string]$ContentManifest,
+    # Where the installer, the archives and the payload trees land. A QA build against a
+    # synthetic content set points this elsewhere, so it can never overwrite the release
+    # build of the same version.
+    [string]$ArtifactDirectory
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +47,8 @@ if (-not $PatchOnly -and
     throw "PortVersion must match the version compiled into the game."
 }
 
-$artifactRoot = Join-Path $repositoryRoot "artifacts"
+$artifactRoot = if ($ArtifactDirectory) { [IO.Path]::GetFullPath($ArtifactDirectory) }
+    else { Join-Path $repositoryRoot "artifacts" }
 $packageName = "Dead-Air-Refined-$PortVersion"
 $outputRoot = Join-Path $artifactRoot "$packageName-installer-files"
 $rawOutputRoot = Join-Path $artifactRoot "$packageName-update-files"
@@ -79,10 +84,25 @@ $contentSyncSources = @(
     "ContentState.cpp"
 ) | ForEach-Object { Join-Path $contentSyncRoot $_ }
 $contentFetcherOutput = Join-Path $launcherOutputRoot "DeadAirContent.exe"
-$ioWin32Source = Join-Path $repositoryRoot "Externals\zlib\contrib\minizip\iowin32.c"
-$ioWin32Object = Join-Path $launcherOutputRoot "iowin32.obj"
+# The wizard's liveness probe must open the very mutex the fetcher creates. The name lives in
+# one place - ContentPaths.h - and is read from there, never retyped: the Setup first published
+# for 1.4.0 carried a hand-copied spelling that did not match and reported every real download
+# as interrupted ten seconds in.
+$contentPathsHeader = Join-Path $contentSyncRoot "ContentPaths.h"
+$contentMutexMatch = [regex]::Match([IO.File]::ReadAllText($contentPathsHeader),
+    '(?m)FetchMutexName\[\]\s*=\s*L"(?<name>(?:[^"\\]|\\.)+)"')
+if (-not $contentMutexMatch.Success) {
+    throw "FetchMutexName was not found in $contentPathsHeader."
+}
+$contentMutexName = $contentMutexMatch.Groups['name'].Value -replace '\\\\', '\'
 $zlibInclude = Join-Path $repositoryRoot "Externals\zlib"
-$zlibLibrary = Join-Path $repositoryRoot "build\lib\x64\Release\zlib.lib"
+# The pieces of zlib and minizip the updater actually uses - it only ever reads archives -
+# compiled here against the same static CRT as the rest of the executable. The engine's
+# zlib.lib is built against the dynamic CRT and cannot link into a static-CRT executable.
+$zlibSources = @(
+    "adler32.c", "crc32.c", "inflate.c", "inffast.c", "inftrees.c", "zutil.c",
+    "contrib\minizip\ioapi.c", "contrib\minizip\iowin32.c", "contrib\minizip\unzip.c"
+) | ForEach-Object { Join-Path $zlibInclude $_ }
 $maintenanceOutputRoot = Join-Path $launcherOutputRoot "maintenance"
 $maintenanceOutput = Join-Path $maintenanceOutputRoot "Dead-Air-Refined-Maintenance.exe"
 $compatibilityArchive = Join-Path $launcherOutputRoot "xtra_dead_air_x64.xdb0"
@@ -165,9 +185,18 @@ function Build-NativeHelpers {
         throw "The uninstaller launcher build failed."
     }
 
-    if (-not (Test-Path -LiteralPath $zlibLibrary -PathType Leaf)) {
-        throw "The x64 Release zlib library was not found: $zlibLibrary"
+    # Third-party C, so without /WX: its warnings are not ours to fix, and the file set is
+    # pinned by the submodule.
+    $zlibObjects = @()
+    $zlibCompile = ""
+    foreach ($source in $zlibSources) {
+        $object = Join-Path $launcherOutputRoot ("zlib_" + [IO.Path]::GetFileNameWithoutExtension($source) + ".obj")
+        $zlibObjects += $object
+        $zlibCompile +=
+            'cl.exe /nologo /c /O2 /MT /W3 /TC /DUNICODE /D_UNICODE /DZLIB_WINAPI /D_CRT_SECURE_NO_WARNINGS ' +
+            '/I"' + $zlibInclude + '" /Fo:"' + $object + '" "' + $source + '" && '
     }
+    $zlibLinkInputs = ($zlibObjects | ForEach-Object { '"' + $_ + '"' }) -join ' '
     $contentSyncObjects = @()
     $contentSyncCompile = ""
     $sourceInclude = Join-Path $repositoryRoot "src"
@@ -175,25 +204,35 @@ function Build-NativeHelpers {
         $object = Join-Path $launcherOutputRoot ([IO.Path]::GetFileNameWithoutExtension($source) + ".obj")
         $contentSyncObjects += $object
         $contentSyncCompile +=
-            'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MD /W4 /WX /DUNICODE /D_UNICODE ' +
+            'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MT /W4 /WX /DUNICODE /D_UNICODE ' +
             '/I"' + $sourceInclude + '" /Fo:"' + $object + '" "' + $source + '" && '
     }
     $contentSyncLinkInputs = ($contentSyncObjects | ForEach-Object { '"' + $_ + '"' }) -join ' '
 
     $command =
         'call "' + $developerPrompt + '" -arch=x64 -host_arch=x64 && ' +
-        'cl.exe /nologo /c /O2 /MD /W3 /WX /TC /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
-        '/I"' + $zlibInclude + '" /Fo:"' + $ioWin32Object + '" "' + $ioWin32Source + '" && ' +
+        $zlibCompile +
         $contentSyncCompile +
-        'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MD /W4 /WX /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
+        'cl.exe /nologo /c /O2 /EHsc /std:c++20 /utf-8 /MT /W4 /WX /DUNICODE /D_UNICODE /DZLIB_WINAPI ' +
         '/I"' + $zlibInclude + '" /I"' + $sourceInclude + '" ' +
         '/Fo:"' + $updaterObject + '" "' + $updaterSource + '" && ' +
         'link.exe /nologo /OUT:"' + $updaterOutput + '" /SUBSYSTEM:WINDOWS ' +
-        '"' + $updaterObject + '" "' + $ioWin32Object + '" ' + $contentSyncLinkInputs + ' "' + $zlibLibrary +
-        '" bcrypt.lib shell32.lib user32.lib winhttp.lib'
+        '"' + $updaterObject + '" ' + $zlibLinkInputs + ' ' + $contentSyncLinkInputs +
+        ' bcrypt.lib shell32.lib user32.lib winhttp.lib'
     & cmd.exe /d /s /c $command
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $updaterOutput)) {
         throw "The update helper build failed."
+    }
+
+    # Checked rather than assumed: the installer runs this executable out of its temporary
+    # directory, where the app-local CRT the game ships is not present, and one that needs it
+    # dies before it can write a result - which the wizard can only report as "interrupted".
+    $dependents = & cmd.exe /d /s /c ('call "' + $developerPrompt + '" -arch=x64 -host_arch=x64 >nul && ' +
+        'dumpbin.exe /nologo /dependents "' + $updaterOutput + '"')
+    $crtImports = @($dependents | Where-Object { $_ -match '(?i)\b(vcruntime|msvcp|concrt|vccorlib)[0-9_a-z]*\.dll' } |
+        ForEach-Object Trim)
+    if ($crtImports) {
+        throw "DeadAirUpdater.exe imports the dynamic CRT ($($crtImports -join ', ')); it must link the static one."
     }
 
     # The installer's content fetcher IS the updater - the mode comes from the command line. A
@@ -493,6 +532,7 @@ $compilerArguments = @(
     "/DContentBytes=$contentBytes",
     "/DContentManifestPath=$contentManifestStaged",
     "/DContentFetcherPath=$contentFetcherOutput",
+    "/DContentMutexName=$contentMutexName",
     $installerSource
 )
 & $innoCompiler @compilerArguments

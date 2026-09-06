@@ -295,6 +295,12 @@ The full binary contract and evolution rules are described in
   `bin/x64/Release`.
 - The main game installation receives only a confirmed candidate. Place test
   roots and temporary files separately and remove them after verification.
+- A constant shared between the installer script and the engine or updater
+  code - a mutex name, a file name, an exit code - is read out of the C++
+  header by the build script and passed to ISCC as a define. It is never
+  retyped in `.iss`: the Setup first published for 1.4.0 carried a hand-copied
+  mutex name that did not match, and every real install failed at the
+  ten-second mark.
 
 ## 8.1. Player bug report handling
 
@@ -322,6 +328,11 @@ The full binary contract and evolution rules are described in
 
 - Test the `xrEngine.exe` from the configured main game root, not a separate
   harness or a random binary copy.
+- A probe boots only a QA clone that nobody else launches. It rewrites that
+  installation's `user.ltx` and shares its `appdata`, log and shader cache, so a
+  person starting the same installation at that moment inherits the probe's
+  console commands and a second instance of the same game. The user's own
+  test copy is never a probe target.
 - Do not take over the computer, move the character, or automate input.
   Allowed: hidden launch, log reading, and stopping only the process we
   started.
@@ -442,7 +453,10 @@ The full binary contract and evolution rules are described in
   script refuses to compile without one, because a Setup that installs no
   content is exactly the optional-content build section 4 forbids.
 - Before publishing verify a clean HEAD, the binary version, the package
-  contents, hashes, install/update, and save-file preservation.
+  contents, hashes, install/update, and save-file preservation. Install means
+  `tools\qa\Test-InstallerContentFetch.ps1` and a silent `Setup.exe` over a
+  pristine copy of the original game against the real host, followed by a
+  boot to a level; a mock-driven pass alone is not an installer verdict.
 - After publishing verify the tag target, the release status, the names and
   SHA-256 of every asset, and the release list the updater actually reads:
   `repos/MMadmer/Dead-Air-Refined/releases?per_page=30`. The client picks the
