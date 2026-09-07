@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 12
+version = 13
 api     = 1
 
 ; ============================================================ triggers
@@ -273,23 +273,31 @@ since  = 1
 ; ============================================================ extra: items and money
 [nq.item.give]
 group  = items
-title  = Give item
-desc   = Gives the player items of the section. In dialog: handed over by the NPC with a notification. count is in items (ammo: boxes).
+title  = Give items
+desc   = Gives the player items: one section with a count, or a list of rows. In dialog: handed over by the NPC with a notification. count is in items (ammo: boxes).
 use    = extra
-params  = section, count
-section = item_section, required
+params  = section, count, items
+section = item_section
 count   = int, default=1, min=1
+items   = item_list
+rows    = section, count
+row.section = item_section, required
+row.count   = int, default=1, min=1
 impl   = core
 since  = 1
 
 [nq.item.take]
 group  = items
-title  = Take item
-desc   = Takes items of the section from the player. count = all takes everything. count is in items (ammo: boxes).
+title  = Take items
+desc   = Takes items from the player: one section with a count, or a list of rows. count = all takes every one. count is in items (ammo: boxes).
 use    = extra
-params  = section, count
-section = item_section, required
+params  = section, count, items
+section = item_section
 count   = count_or_all, default=1
+items   = item_list
+rows    = section, count
+row.section = item_section, required
+row.count   = count_or_all, default=1
 impl   = core
 since  = 1
 

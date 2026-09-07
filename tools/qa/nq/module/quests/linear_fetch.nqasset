@@ -39,7 +39,8 @@ return {
       on_enter = {
         { kind = "task.set_objective_visible", params = { task = "bring_bread", objective = "deliver", visible = true } },
         { kind = "item.take", params = { section = "bread", count = 2 } },
-        { kind = "item.give", params = { section = "medkit", count = 1 } },
+        -- the list spelling: one row per section, the same as item.take's one-line form above
+        { kind = "item.give", params = { items = { { section = "medkit", count = 1 } } } },
         { kind = "money.give", params = { amount = 500 } },
         -- the second objective closes here; the task itself is closed by auto_complete
         { kind = "task.objective_complete", params = { task = "bring_bread", objective = "deliver" } },

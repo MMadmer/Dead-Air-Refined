@@ -2754,6 +2754,69 @@ end
 z15_run()
 end
 
+-- ============================================================================ (z16) give/take rows
+-- item.give and item.take take the spawn list form: one section with a count, or `items`
+-- rows typed by the kind's own row schema - a take row may say "all", a give row may not.
+do
+local function z16_run()
+section("(z16) item.give / item.take walk their rows")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.add_item("vodka") mock.add_item("vodka") mock.add_item("vodka")
+mock.add_item("bread")
+mock.overrides["mod_a/gt.nqasset"] = [[return { nq = 1, id = "gt", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "step" } },
+	{ id = "step", kind = "flow.step", on_enter = {
+		{ kind = "item.give", params = { items = { { section = "medkit", count = 2 }, { section = "bandage" } } } },
+		{ kind = "item.take", params = { items = { { section = "vodka", count = "all" }, { section = "bread", count = 1 } } } },
+		{ kind = "item.give", params = { section = "antirad", count = 3 } },
+	}, out = { next = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+core = xms_nq
+local qs = core.quest_state("mod_a.gt")
+check(qs ~= nil and qs.status == "completed", "the quest ran to its end")
+check(mock.count_items("medkit") == 2, "a give row with a count gave that many (" .. mock.count_items("medkit") .. ")")
+check(mock.count_items("bandage") == 1, "a give row without a count gave one")
+check(mock.count_items("vodka") == 0, "a take row saying all took every one (" .. mock.count_items("vodka") .. ")")
+check(mock.count_items("bread") == 0, "a take row with a count took that many")
+check(mock.count_items("antirad") == 3, "the one-line spelling still works beside the list")
+if (failed > 0) then fail_dump() end
+
+section("(z16) the loader types give/take rows by the kind's row schema")
+local function act_codes(kind, params)
+	local q = xms_nq_load.load_asset("mod_x", "inline.nqasset",
+		"return { nq = 1, id = \"x\", nodes = {\n" ..
+		"{ id = \"s\", kind = \"trigger.start\", out = { next = \"e\" } },\n" ..
+		"{ id = \"e\", kind = \"flow.end\", on_enter = { { kind = \"" .. kind .. "\", params = " .. params .. " } } },\n} }")
+	local set = {}
+	for _, p in ipairs(q.problems) do set[p.code] = (set[p.code] or 0) + 1 end
+	return set
+end
+check(act_codes("item.give", '{ items = { { section = "bread", count = 2 }, { section = "medkit" } } }').E006 == nil, "a plain give list loads")
+check(act_codes("item.take", '{ items = { { section = "bread", count = "all" } } }').E006 == nil, "a take row may say all")
+check(act_codes("item.give", '{ items = { { section = "bread", count = "all" } } }').E006 == 1, "a give row may not say all")
+check(act_codes("item.take", '{ items = { { section = "bread", count = 0 } } }').E006 == 1, "a take row refuses a zero count")
+check(act_codes("item.give", '{ items = { { section = "bread", condition = 0.5 } } }').E006 == 1, "state on a give row is refused - it is not a spawn")
+check(act_codes("item.give", '{ items = { { section = "bread", cnt = 2 } } }').E006 == 1, "a misspelt row key is refused")
+check(act_codes("item.give", '{ items = { { item = { story = "s" } } } }').E006 == 1, "a concrete object cannot be given - give creates")
+check(act_codes("item.take", '{ items = { { section = "bread" }, { section = "bread", count = 2 } } }').E006 == 1, "a section listed twice is refused")
+-- the two spellings are exclusive, for every kind that has them
+check(act_codes("item.give", '{ section = "bread", items = { { section = "medkit" } } }').E022 == 1, "give: both spellings at once are refused")
+check(act_codes("item.take", '{ }').E022 == 1, "take: neither spelling is refused")
+check(act_codes("item.give", '{ count = 2, items = { { section = "medkit" } } }').E022 == 1, "give: a count beside the list belongs to no row")
+check(act_codes("item.spawn", '{ where = { place = { actor = true } }, items = { { section = "medkit" } }, condition = 0.5 }').E022 == 1, "spawn: state beside the list belongs to no row")
+check(act_codes("item.spawn", '{ where = { place = { actor = true } } }').E022 == 1, "spawn: neither spelling is refused")
+check(act_codes("item.give", '{ section = "bread", count = 2 }').E022 == nil and act_codes("item.give", '{ section = "bread", count = 2 }').E006 == nil, "the one-line spelling is clean")
+if (failed > 0) then fail_dump() end
+end
+z16_run()
+end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

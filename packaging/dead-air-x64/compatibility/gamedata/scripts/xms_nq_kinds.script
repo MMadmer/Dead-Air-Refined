@@ -1043,12 +1043,24 @@ K["objective.reach"] = {
 }
 
 -- ============================================================================ extra: items, money
+-- What an item action works on: its `items` rows, or the one-line spelling as a single row.
+-- The loader has already refused both spellings at once, so `items` simply wins here.
+local function item_rows(p)
+	if (type(p.items) == "table") then return p.items end
+	if (p.section) then return { { section = p.section, count = p.count } } end
+	return {}
+end
+
 K["item.give"] = {
-	run = function(ctx, p) give_item(ctx, p.section, p.count or 1) end,
+	run = function(ctx, p)
+		for _, r in ipairs(item_rows(p)) do give_item(ctx, r.section, r.count or 1) end
+	end,
 }
 
 K["item.take"] = {
-	run = function(ctx, p) take_item(ctx, p.section, p.count == nil and 1 or p.count) end,
+	run = function(ctx, p)
+		for _, r in ipairs(item_rows(p)) do take_item(ctx, r.section, r.count == nil and 1 or r.count) end
+	end,
 }
 
 -- The rows of an item.spawn. The one-line spelling IS one row, so the state written next to

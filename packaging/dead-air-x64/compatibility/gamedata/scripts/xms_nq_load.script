@@ -473,7 +473,7 @@ local ROW_STATE = { condition = true, ammo = true, ammo_kind = true,
 local ROW_KEYS  = { section = true, count = true, item = true }
 for k in pairs(ROW_STATE) do ROW_KEYS[k] = true end
 
-local function valid_item_list(v, state_ok)
+local function valid_item_list(v, state_ok, all_ok, objects_ok)
 	if (type(v) ~= "table" or #v == 0) then return false end
 	local seen = {}
 	for _, e in ipairs(v) do
@@ -488,11 +488,14 @@ local function valid_item_list(v, state_ok)
 		local has_item = e.item ~= nil
 		if (has_section == has_item) then return false end	-- exactly one per row
 		if (has_item) then
+			-- a concrete object is something that already exists: only a kind that asks the
+			-- player to BRING things can name one. give, take and spawn work on sections
+			if (objects_ok == false) then return false end
 			if not (valid_object_ref(e.item)) then return false end
 			if (e.count ~= nil) then return false end		-- a concrete object IS one
 			for k in pairs(ROW_STATE) do if (e[k] ~= nil) then return false end end
 		else
-			if (e.count ~= nil and not (is_int(e.count) and e.count >= 1)) then return false end
+			if (e.count ~= nil and not ((is_int(e.count) and e.count >= 1) or (all_ok and e.count == "all"))) then return false end
 			if (seen[e.section]) then return false end	-- one line per section, or the counts are ambiguous
 			seen[e.section] = true
 			if (e.condition ~= nil and (type(e.condition) ~= "number" or e.condition < 0 or e.condition > 1)) then return false end
@@ -501,8 +504,8 @@ local function valid_item_list(v, state_ok)
 			if (e.upgrades ~= nil and type(e.upgrades) ~= "string") then return false end
 			if (e.ref ~= nil) then
 				if (type(e.ref) ~= "string" or e.ref == "") then return false end
-				-- a ref names ONE object
-				if ((e.count or 1) > 1) then return false end
+				-- a ref names ONE object ("all" is not 1 either)
+				if (e.count ~= nil and e.count ~= 1) then return false end
 			end
 		end
 	end
@@ -602,11 +605,19 @@ local function canon_param(st, node, slot, p, v, kind)
 		return util.copy(v), true
 	elseif (t == "item_list") then
 		local state_ok = (kind == "item.spawn")
-		if not (valid_item_list(v, state_ok)) then
+		local all_ok = (kind == "item.take")
+		local sections_only = (kind == "item.spawn" or kind == "item.give" or kind == "item.take")
+		if not (valid_item_list(v, state_ok, all_ok, not sections_only)) then
 			if (state_ok) then
-				return nil, false, "must be a list of { section = ..., count = N } with no repeated section; a row may also carry condition, ammo, ammo_kind, upgrades and a ref (ref needs count 1)"
+				return nil, false, "must be a list of { section = ..., count = N } with no repeated section; a row may also carry condition, ammo, ammo_kind, upgrades and a ref (ref needs count 1) - sections only, no concrete objects"
 			end
-			return nil, false, "must be a list of { section = ..., count = N } with no repeated section"
+			if (all_ok) then
+				return nil, false, "must be a list of { section = ..., count = N | \"all\" } with no repeated section - sections only, no concrete objects"
+			end
+			if (sections_only) then
+				return nil, false, "must be a list of { section = ..., count = N } with no repeated section - sections only, no concrete objects"
+			end
+			return nil, false, "must be a list of { section = ..., count = N } or { item = { ref/story } } rows with no repeated section"
 		end
 		return util.copy(v), true
 	elseif (t == "loot_spawn") then
@@ -715,6 +726,111 @@ local function canon_params(st, node, slot, spec, raw_params)
 	return params
 end
 
+-- E022: parameters a kind declares individually but cannot accept together (or at all). The
+-- catalog has no way to say "either this set or that one", so the few kinds with alternative
+-- forms are checked here. The raw params decide which form the author meant - a canonical
+-- value is indistinguishable from a catalog default.
+local KIND_FORM = {}
+
+-- Shared by the three marker-capable objectives: the additive white spot is gone,
+-- the node points the bound task's/step's own marker instead.
+local function check_spot_form(st, nid, raw)
+	if (raw.map_spot ~= nil or raw.spot_text ~= nil) then
+		problem(st.problems, "E006", nid, "param:map_spot",
+			"map_spot/spot_text are gone - bind the marker with spot_task (and spot_objective for a step)")
+	end
+	if (raw.spot_objective ~= nil and raw.spot_task == nil) then
+		problem(st.problems, "E022", nid, "param:spot_objective", "spot_objective needs spot_task")
+	end
+	if (raw.spot_done ~= nil and raw.spot_task == nil) then
+		problem(st.problems, "E022", nid, "param:spot_done", "spot_done needs spot_task")
+	end
+end
+
+KIND_FORM["objective.fetch"] = function(st, nid, raw, params)
+	check_spot_form(st, nid, raw)
+	if (raw.item ~= nil) then
+		problem(st.problems, "E006", nid, "param:item", "the separate 'item' parameter is gone - use an items row { item = { ref = ... } }")
+	end
+	if (raw.section == nil and raw.items == nil) then
+		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs section or items")
+	elseif (raw.section ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, "param:items", "section is the one-line spelling of items - use one of them")
+	end
+	if (raw.count ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, "param:count", "count belongs to section - the items list carries its own counts")
+	end
+	if (raw.from ~= nil and raw.spawn ~= nil) then
+		problem(st.problems, "E022", nid, "param:from", "spawn already decides where the loot is - from would watch a second container")
+	end
+	if (raw.spawn ~= nil and type(params.items) == "table") then
+		for _, e in ipairs(params.items) do
+			if (type(e) == "table" and e.item ~= nil) then
+				problem(st.problems, "E022", nid, "param:spawn", "spawn creates its own instances - a concrete-object row cannot be combined with it")
+				break
+			end
+		end
+	end
+end
+
+KIND_FORM["objective.kill"] = function(st, nid, raw, params)
+	check_spot_form(st, nid, raw)
+end
+
+KIND_FORM["objective.reach"] = function(st, nid, raw, params)
+	check_spot_form(st, nid, raw)
+end
+
+KIND_FORM["objective.kill_count"] = function(st, nid, raw, params)
+	local used = {}
+	for _, name in ipairs({ "community", "squad", "section" }) do
+		if (params[name] ~= nil) then used[#used + 1] = name end
+	end
+	if (#used > 1) then
+		problem(st.problems, "E022", nid, "param:" .. used[1], "at most one filter is allowed, got %s", table.concat(used, ", "))
+	end
+end
+
+-- The item actions share the two spellings of "what" with objective.fetch: one section with a
+-- count, or a list of rows. Both at once is ambiguous and neither is nothing to do - the editor
+-- refuses both shapes and the game must agree, or a quest that passes here would run a kind
+-- with no rows.
+local function pslot(slot, name)
+	return (slot and (slot .. "/") or "") .. "param:" .. name
+end
+
+local function check_items_form(st, nid, raw, params, slot, kind)
+	if (raw.section == nil and raw.items == nil) then
+		problem(st.problems, "E022", nid, pslot(slot, "section"), "%s needs section or items", kind)
+	elseif (raw.section ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, pslot(slot, "items"), "section is the one-line spelling of items - use one of them")
+	end
+	if (raw.count ~= nil and raw.items ~= nil) then
+		problem(st.problems, "E022", nid, pslot(slot, "count"), "count belongs to section - the items list carries its own counts")
+	end
+end
+
+KIND_FORM["item.give"] = function(st, nid, raw, params, slot)
+	check_items_form(st, nid, raw, params, slot, "item.give")
+end
+
+KIND_FORM["item.take"] = function(st, nid, raw, params, slot)
+	check_items_form(st, nid, raw, params, slot, "item.take")
+end
+
+KIND_FORM["item.spawn"] = function(st, nid, raw, params, slot)
+	check_items_form(st, nid, raw, params, slot, "item.spawn")
+	-- the one-line spelling IS one row, so its state sits beside `section`; beside an
+	-- `items` list the same keys describe nothing - which row would they apply to?
+	if (raw.items ~= nil) then
+		for _, k in ipairs({ "condition", "ammo", "ammo_kind", "upgrades", "ref" }) do
+			if (raw[k] ~= nil) then
+				problem(st.problems, "E022", nid, pslot(slot, k), "item.spawn: the state belongs to the rows now - move '%s' into the row it applies to", k)
+			end
+		end
+	end
+end
+
 local function canon_action(st, node, slot, raw)
 	if (type(raw) ~= "table" or type(raw.kind) ~= "string") then
 		problem(st.problems, "E005", node, slot, "action must be { kind=, params= }")
@@ -732,6 +848,8 @@ local function canon_action(st, node, slot, raw)
 	end
 	local a = { kind = kname, spec = spec, slot = slot }
 	a.params = canon_params(st, node, slot, spec, raw.params)
+	local form = KIND_FORM[kname]
+	if (form) then form(st, node, type(raw.params) == "table" and raw.params or {}, a.params, slot) end
 	st.used_kinds[kname] = true
 	return a
 end
@@ -847,71 +965,6 @@ local function scan_refs(st, node, spec, params, tasks_hint)
 end
 
 -- ---------------------------------------------------------------------------- param combinations
--- E022: parameters a kind declares individually but cannot accept together (or at all). The
--- catalog has no way to say "either this set or that one", so the few kinds with alternative
--- forms are checked here. The raw params decide which form the author meant - a canonical
--- value is indistinguishable from a catalog default.
-local KIND_FORM = {}
-
--- Shared by the three marker-capable objectives: the additive white spot is gone,
--- the node points the bound task's/step's own marker instead.
-local function check_spot_form(st, nid, raw)
-	if (raw.map_spot ~= nil or raw.spot_text ~= nil) then
-		problem(st.problems, "E006", nid, "param:map_spot",
-			"map_spot/spot_text are gone - bind the marker with spot_task (and spot_objective for a step)")
-	end
-	if (raw.spot_objective ~= nil and raw.spot_task == nil) then
-		problem(st.problems, "E022", nid, "param:spot_objective", "spot_objective needs spot_task")
-	end
-	if (raw.spot_done ~= nil and raw.spot_task == nil) then
-		problem(st.problems, "E022", nid, "param:spot_done", "spot_done needs spot_task")
-	end
-end
-
-KIND_FORM["objective.fetch"] = function(st, nid, raw, params)
-	check_spot_form(st, nid, raw)
-	if (raw.item ~= nil) then
-		problem(st.problems, "E006", nid, "param:item", "the separate 'item' parameter is gone - use an items row { item = { ref = ... } }")
-	end
-	if (raw.section == nil and raw.items == nil) then
-		problem(st.problems, "E022", nid, "param:section", "objective.fetch needs section or items")
-	elseif (raw.section ~= nil and raw.items ~= nil) then
-		problem(st.problems, "E022", nid, "param:items", "section is the one-line spelling of items - use one of them")
-	end
-	if (raw.count ~= nil and raw.items ~= nil) then
-		problem(st.problems, "E022", nid, "param:count", "count belongs to section - the items list carries its own counts")
-	end
-	if (raw.from ~= nil and raw.spawn ~= nil) then
-		problem(st.problems, "E022", nid, "param:from", "spawn already decides where the loot is - from would watch a second container")
-	end
-	if (raw.spawn ~= nil and type(params.items) == "table") then
-		for _, e in ipairs(params.items) do
-			if (type(e) == "table" and e.item ~= nil) then
-				problem(st.problems, "E022", nid, "param:spawn", "spawn creates its own instances - a concrete-object row cannot be combined with it")
-				break
-			end
-		end
-	end
-end
-
-KIND_FORM["objective.kill"] = function(st, nid, raw, params)
-	check_spot_form(st, nid, raw)
-end
-
-KIND_FORM["objective.reach"] = function(st, nid, raw, params)
-	check_spot_form(st, nid, raw)
-end
-
-KIND_FORM["objective.kill_count"] = function(st, nid, raw, params)
-	local used = {}
-	for _, name in ipairs({ "community", "squad", "section" }) do
-		if (params[name] ~= nil) then used[#used + 1] = name end
-	end
-	if (#used > 1) then
-		problem(st.problems, "E022", nid, "param:" .. used[1], "at most one filter is allowed, got %s", table.concat(used, ", "))
-	end
-end
-
 -- ============================================================================ build a quest
 -- raw -> canonical quest definition with a problem list. `st` is the per-file scratch state.
 local function build_nodes(st, raw_nodes, q)
