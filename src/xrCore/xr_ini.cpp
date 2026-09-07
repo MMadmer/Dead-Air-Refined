@@ -491,6 +491,12 @@ void CInifile::insert_section(Sect* section)
 
 CInifile::Sect* CInifile::find_section(pcstr section) const
 {
+    // A script asking about a nil section is a question, not a fault: se_artefact.script
+    // passes the `hit_absorbation_sect` of a base artefact that does not exist (the
+    // af_*_1_af_aac containers have no af_*_1), and the hash of a null string took the
+    // whole game down where "no such section" was the honest answer.
+    if (!section)
+        return nullptr;
     const auto found = m_sectionIndex.find(section);
     return found != m_sectionIndex.end() ? found->second : nullptr;
 }

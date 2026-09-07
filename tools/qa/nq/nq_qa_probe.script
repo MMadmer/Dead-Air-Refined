@@ -715,6 +715,18 @@ local function build_p1()
 			tostring(qstatus("parallel_triggers")))
 	end)
 
+	-- A container whose base artefact does not exist (the game ships af_cobblestone_1_af_aac
+	-- with no af_cobblestone_1): se_artefact.script asks the engine about a nil section while
+	-- writing the spawn packet. Before the find_section guard that was an access violation;
+	-- now it is a script error in the log and a dud item. The check is that the game is still
+	-- here to report - the item itself cannot be whole, its base section is not in the game.
+	step("p1.orphan_container", function()
+		local made = give("af_cobblestone_1_af_aac", 1)
+		local have = count_items("af_cobblestone_1_af_aac")
+		info("orphan container: created=%d, in inventory=%d (a dud is expected, a crash is not)", made, have)
+		return check("p1.orphan_container", made == 1,
+			"an orphan artefact container no longer takes the game down (made=%d)", made)
+	end)
 	step("p1.final", function()
 		nq("state nq_qa.parallel_triggers")
 		nq("list")

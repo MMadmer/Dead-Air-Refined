@@ -188,6 +188,34 @@ function Update-QaRuntime {
     Get-ChildItem -LiteralPath $GameRoot -File -Filter '*.dll' | Where-Object { $manifest -notcontains $_.Name } |
         ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $qaRoot $_.Name) -Force }
     Write-Host "== runtime: $fromBuild of $($manifest.Count) file(s) from $BuildRoot, the rest from the install root"
+    Update-QaContentMeta
+}
+
+function Update-QaContentMeta {
+    # The content service reads .dead-air-x64\content-manifest.txt next to the executable; without
+    # it the main menu shows the repair notification and never starts the -start load, so the run
+    # hangs at the menu with nothing in the log but "Content notification shown". The manifest is
+    # COPIED, never linked: the service also writes its state and latch files into that directory,
+    # and a QA run must not be able to latch the player's install as incomplete.
+    $meta = Join-Path $GameRoot '.dead-air-x64'
+    $target = Join-Path $qaRoot '.dead-air-x64'
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    foreach ($file in @('content-manifest.txt', 'content-state.txt')) {
+        $source = Join-Path $meta $file
+        if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $target $file) -Force }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $target 'content-manifest.txt'))) {
+        Write-Warning "the install has no .dead-air-x64\content-manifest.txt - the engine will block at the menu"
+    }
+    # The incomplete latch makes the engine refuse the -start load until a verification pass has
+    # run, and nothing re-issues the start once it passes: the run sits at the main menu for good.
+    # In this root the latch can only be the leftover of an earlier QA launch (the database is a
+    # junction to the real, complete one), so it is cleared here rather than inherited.
+    $latch = Join-Path $target 'content-incomplete.txt'
+    if (Test-Path -LiteralPath $latch) {
+        Write-Host "== clearing a stale content latch left by an earlier QA run: $latch"
+        Remove-Item -LiteralPath $latch -Force
+    }
 }
 
 function Assert-QaGameDataShape {
@@ -480,8 +508,22 @@ function Test-PhaseLog {
         # session that had other modules installed references content this root does
         # not have and the engine dies before the probe says anything. Name that
         # instead of reporting a silent probe.
+        # A content block is a stop at the main menu, not a missing asset: the engine never even
+        # started the load, and the texture warning below it is the menu's own, present in every run.
+        $blocked = @($lines | Where-Object { $_ -match 'Content notification shown: ' }) | Select-Object -Last 1
+        $refused = @($lines | Where-Object { $_ -match 'Cannot start a level: ' }) | Select-Object -Last 1
         $missing = @($lines | Where-Object { $_ -match "Can't find model file|Can't find (texture|sound)" }) | Select-Object -Last 1
-        if ($missing) {
+        if ($refused -and $refused -match 'Cannot start a level: (.+)$') {
+            # The -start command is issued once; a content latch at launch makes the engine refuse
+            # it, and the verification that follows clears the latch without retrying the start.
+            $problems.Add(("the engine refused the -start load ({0}) - the QA root carried a content latch " +
+                "at launch; Update-QaContentMeta clears a stale one before the next run") -f $Matches[1].Trim())
+        }
+        elseif ($blocked -and $blocked -match 'Content notification shown: (.+)$') {
+            $problems.Add(("the content service blocked the main menu ({0}) - the QA root needs the install's " +
+                ".dead-air-x64\content-manifest.txt; Update-QaContentMeta copies it") -f $Matches[1].Trim())
+        }
+        elseif ($missing) {
             $problems.Add(("the save needs content the QA root does not carry ({0}) - it was written with another " +
                 "module installed. Pass -SaveName for a save made without third-party modules.") -f $missing.Trim())
         }
