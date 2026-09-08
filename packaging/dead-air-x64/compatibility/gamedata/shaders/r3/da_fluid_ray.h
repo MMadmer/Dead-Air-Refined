@@ -85,9 +85,11 @@ void DaSample(float weight, float3 O, inout float3 radiance, inout float trans)
 	float4 s = colorTex.SampleLevel(samLinearClamp, texcoords, 0);
 
 	//	The grid has walls, and a cloud that reaches one would otherwise be sliced off square.
-	//	Everything fades out over the last metre or so before every face of the box.
+	//	Everything fades out over the last two metres before every face of the box, smoothly
+	//	enough that the edge of the domain is not a shape you can point at.
 	const float3 eo = min(O, 1.0 - O);
-	s *= saturate(min(min(eo.x, eo.y), eo.z) * gridScaleFactor * 0.85);
+	const float ef = saturate(min(min(eo.x, eo.y), eo.z) * gridScaleFactor * 0.35);
+	s *= ef * ef * (3.0 - 2.0 * ef);
 
 	const float T = s.x / max(da_fr_b.w, 0.05);
 	const float burn = s.z;

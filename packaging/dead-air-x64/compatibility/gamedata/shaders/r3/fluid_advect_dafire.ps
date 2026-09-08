@@ -86,6 +86,16 @@ float4 main(p_fluidsim input) : SV_Target
 	f.x -= da_ff_burn.w * f.x;
 	f.w *= da_ff_misc2.x;
 
+	//	Nothing may pile up against the walls of the grid: what reaches them has left the
+	//	world as far as this simulation is concerned, so it drains instead of stacking into a
+	//	slab with a straight edge.
+	const float3 dw = min(input.cell0,
+		float3(textureWidth, textureHeight, textureDepth) - 1.0 - input.cell0);
+	const float wall = saturate(min(min(dw.x, dw.y), dw.z) * 0.1);
+	const float drain = lerp(0.88, 1.0, wall);
+	f.x *= drain;
+	f.w *= drain;
+
 	f.x = clamp(f.x, 0.0, 3.0);
 	f.y = clamp(f.y, 0.0, 4.0);
 	f.z = burn;

@@ -89,6 +89,7 @@ struct SDaFirePreset
     float bl_div_neg{0.18f};    // the inrush behind it, as a fraction of the first push
     float bl_div_neg_tau{0.42f};
     float bl_fade{0.8f};        // how long it takes to leave at the end, s
+    float bl_wind_floor{0.45f}; // how much wind reaches the gas still down at the charge
 
     // The preset [shader_fire_<name>]; nullptr for "off" (the effect draws nothing) or unknown.
     static const SDaFirePreset* find(const shared_str& name);

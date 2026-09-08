@@ -758,7 +758,7 @@ void dx113DFluidManager::SetDaFireConstants(const dx113DFluidData::DaFireParams&
     RCache.set_c(strMisc2, p.m_fSmokeFade, p.m_fVelDamp, p.m_fCouple, p.m_fPuff);
     RCache.set_c(strBlast, p.m_fBlastInject, p.m_fBlastRadius, p.m_fBlastSpeed, p.m_fBlastPilot);
     RCache.set_c(strMisc3, p.m_fSmokeLift, p.m_fGroundJet, p.m_fGroundDust, p.m_fRingEnv);
-    RCache.set_c(strMisc4, p.m_fBlastDiv, 0.f, 0.f, 0.f);
+    RCache.set_c(strMisc4, p.m_fBlastDiv, p.m_fWindFloor, 0.f, 0.f);
 }
 
 //	The field step. The first two passes are the plain semi-Lagrangian round trip the

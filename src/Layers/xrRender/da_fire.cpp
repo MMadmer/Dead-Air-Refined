@@ -103,6 +103,7 @@ void load_presets()
         p.bl_div_neg = rf("blast_divergence_neg", p.bl_div_neg);
         p.bl_div_neg_tau = std::max(0.01f, rf("blast_divergence_neg_tau", p.bl_div_neg_tau));
         p.bl_fade = std::max(0.05f, rf("blast_fade", p.bl_fade));
+        p.bl_wind_floor = clampr(rf("blast_wind_floor", p.bl_wind_floor), 0.f, 1.f);
         g_presets.push_back(p);
     }
 }
@@ -565,6 +566,7 @@ void CDaFireEffect::fluid_params()
         const float e1 = expf(-m_blast_t / P.bl_div_tau);
         const float e2 = expf(-m_blast_t / P.bl_div_neg_tau);
         f.m_fBlastDiv = (P.bl_div * e1 - P.bl_div * P.bl_div_neg * (1.f - e1) * e2) * h;
+        f.m_fWindFloor = P.bl_wind_floor;
     }
     else
     {
@@ -576,6 +578,7 @@ void CDaFireEffect::fluid_params()
         f.m_fGroundDust = 0.f;
         f.m_fRingEnv = 0.f;
         f.m_fBlastDiv = 0.f;
+        f.m_fWindFloor = 0.f;
     }
 
     f.m_fIgnition = P.fl_ignition;

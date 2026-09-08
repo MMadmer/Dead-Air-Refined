@@ -24,7 +24,8 @@ cbuffer DaFireSim
 							// z = its outward speed, w = the temperature it starts at (0 = not a blast)
 	float4	da_ff_misc3;	// x = the buoyancy soot keeps once the flame in it has gone out,
 							// y = the ground jet, z = the dust it tears up, w = how much of that run is left
-	float4	da_ff_misc4;	// x = the blast's own divergence this step, signed
+	float4	da_ff_misc4;	// x = the blast's own divergence this step, signed,
+							// y = how much wind reaches the gas that is still down at the source
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

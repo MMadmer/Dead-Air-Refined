@@ -70,8 +70,9 @@ float4 main(p_fluidsim input) : SV_Target
 	}
 
 	//	Wind. A parcel does not snap to the wind, it takes it up over a fraction of a second,
-	//	and the closer to the bed the more the fuel itself shelters it.
-	const float above = saturate((da_ff_src.y - input.cell0.y) / 10.0);
+	//	and the closer to the bed the more the fuel itself shelters it. A blast has no fuel bed
+	//	to hide behind, so even the smoke running along the ground drifts with it.
+	const float above = saturate(da_ff_misc4.y + (da_ff_src.y - input.cell0.y) / 10.0);
 	v.xyz += (da_ff_wind.xyz - v.xyz) * saturate(da_ff_wind.w * above * above);
 
 	v.xyz *= da_ff_misc2.y;
