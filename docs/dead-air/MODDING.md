@@ -1171,9 +1171,15 @@ described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
 - **Hand cycles for a new hands model**: add the model stem to `[da_hud_animations]`, or the
   scenes will stand still in that suit.
 - **Scripted scenes of your own**: `game.play_hud_motion(hand, section, "anm_xxx", mix, speed,
-  target_ms)` returns the length in ms (0 = nothing to play); `game.stop_hud_motion()` ends it;
-  `game.only_allow_movekeys(true/false)` gates the input; `level.set_cam_custom_position_direction`
-  owns the camera until `level.remove_cam_custom_position_direction()`.
+  target_ms[, start_ms])` returns the length in ms (0 = nothing to play); `game.stop_hud_motion()`
+  ends it; `game.only_allow_movekeys(true/false)` gates the input;
+  `level.set_cam_custom_position_direction` owns the camera until
+  `level.remove_cam_custom_position_direction()`. `start_ms` begins the cycle part way in, which
+  is how a reversed scene picks up at the pose the other one reached instead of snapping back.
+  `game.hold_hud_motion()` clears the scene clock so the scene stands until you stop it - for a
+  scene that lasts as long as a window, not a fixed length - and `game.scene_active()` says
+  whether one is standing, which is the only way a fresh session can tell that a held scene
+  outlived the script state that put it there.
 - **Intent hooks**: `_G.da_register_before_item_use(function(npc, item, flags) ... end)` sees
   every use before it happens (`flags.ret_value = false` cancels it); `_G.da_before_inventory`
   and `_G.da_before_wear` are single functions - wrap the existing one if you replace it. The

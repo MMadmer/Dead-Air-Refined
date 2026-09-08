@@ -163,7 +163,7 @@ public:
     // is what lets a one-hand scene take one hand while the weapon keeps the other, seated where
     // its own section puts it. pid 0 = both, 1 = left, 2 = right; script_anim bypasses the
     // ownership lock a running scene holds on a hand.
-    void play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim);
+    void play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim, float start_time = 0.f);
     // Seat of a half: 0 = right, 1 = left. Without its own item a half takes the other's seat;
     // with no item at all, the scene's.
     Fvector attach_pos(u8 part) const;
@@ -173,8 +173,9 @@ public:
     // item in the hand and no CHudItem behind it. Length in ms, 0 = nothing to play; target_ms
     // stretches the cycle to the scene length, 0 plays it as recorded.
     u32 scene_motion_length(pcstr section, pcstr anim, float speed);
-    u32 scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms = 0);
+    u32 scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms = 0, u32 start_ms = 0);
     void scene_stop();
+    void scene_hold();
     bool scene_active() const;
     void scene_item_tune(Fvector& pos, Fvector& rot, float& scale) const
     {

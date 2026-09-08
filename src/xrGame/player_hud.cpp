@@ -84,16 +84,21 @@ float CalcMotionSpeed(const shared_str& anim_name, const float anim_speed)
         return (anim_name == "anm_show" || anim_name == "anm_hide") ? 2.0f : 1.0f;
 }
 
-CBlend* PlayHudCycle(
-    IKinematicsAnimated& model, const u16 part, const MotionID motion, const BOOL mix_in, const float speed_scale)
+CBlend* PlayHudCycle(IKinematicsAnimated& model, const u16 part, const MotionID motion, const BOOL mix_in,
+    const float speed_scale, const float start_time = 0.f)
 {
     CMotionDef* const motion_def = model.LL_GetMotionDef(motion);
     if (!motion_def)
         Msg("! PlayHudCycle: dangling motion id slot=%u idx=%u, hands sect [%s]", u32(motion.slot),
             u32(motion.idx), current_player_hud_sect.c_str());
     R_ASSERT(motion_def);
-    return model.LL_PlayCycle(part, motion, mix_in, motion_def->Accrue(), motion_def->Falloff(),
+    CBlend* B = model.LL_PlayCycle(part, motion, mix_in, motion_def->Accrue(), motion_def->Falloff(),
         motion_def->Speed() * speed_scale, motion_def->StopAtEnd(), nullptr, nullptr);
+    // Start part way in. A scene that was interrupted half way through picks its opposite up
+    // at the matching pose instead of snapping the hands back to the first frame.
+    if (B && start_time > 0.f)
+        B->timeCurrent = (B->timeTotal > EPS_S) ? _min(start_time, B->timeTotal - EPS_S) : start_time;
+    return B;
 }
 
 const player_hud_motion* player_hud_motion_container::find_motion(const shared_str& name) const
@@ -1004,7 +1009,7 @@ void player_hud::update(const Fmatrix& cam_trans)
 // Right copy: partitions 0 and 2 (partition 1 is its hidden left arm). Left copy: 0, 1 and 2.
 // The ownership lock: while a scene holds a hand, an item's cycle skips that copy - with one
 // model the root partition went to whoever played last, and the weapon's idle overrode the scene.
-void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim)
+void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed, bool script_anim, float start_time)
 {
     switch (pid)
     {
@@ -1014,8 +1019,8 @@ void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed
             return;
         // Down without the scene flag: each half checks its own lock, otherwise a two-hand scene
         // would unlock a hand another scene owns.
-        play_blend(1, M, bMixIn, speed, false);
-        play_blend(2, M, bMixIn, speed, false);
+        play_blend(1, M, bMixIn, speed, false, start_time);
+        play_blend(2, M, bMixIn, speed, false, start_time);
         break;
     }
     case 1: // left
@@ -1026,7 +1031,7 @@ void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed
             return;
         const u16 pc = m_model_2->partitions().count();
         for (u16 i = 0; i < pc; ++i)
-            PlayHudCycle(*m_model_2, i, M, bMixIn, speed);
+            PlayHudCycle(*m_model_2, i, M, bMixIn, speed, start_time);
         m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
         break;
     }
@@ -1173,7 +1178,7 @@ void player_hud::scene_first_frame()
     }
 }
 
-u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms)
+u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, float speed, u32 target_ms, u32 start_ms)
 {
     if (!m_model || !section || !anim)
         return 0;
@@ -1267,7 +1272,7 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
 
             const u16 pc = m_scene_item_model->partitions().count();
             for (u16 pid = 0; pid < pc; ++pid)
-                PlayHudCycle(*m_scene_item_model, pid, mid, mix_in ? TRUE : FALSE, eff_speed);
+                PlayHudCycle(*m_scene_item_model, pid, mid, mix_in ? TRUE : FALSE, eff_speed, start_ms * 0.001f);
             m_scene_item_model->dcast_PKinematics()->CalculateBones_Invalidate();
         }
         else if (m_scene_item_model)
@@ -1289,10 +1294,12 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
             m_attached_items[1] ? m_attached_items[1]->m_sect_name.c_str() : "-");
 
     const CMotionDef* md = nullptr;
-    play_blend(part, M.mid, mix_in ? TRUE : FALSE, eff_speed, true);
+    play_blend(part, M.mid, mix_in ? TRUE : FALSE, eff_speed, true, start_ms * 0.001f);
     const u32 length = motion_length(M.mid, md, eff_speed, nullptr);
 
-    m_scene_end = length ? (Device.dwTimeGlobal + length) : 0;
+    // Started part way in, so what is left of it is that much shorter.
+    const u32 left = (length > start_ms) ? (length - start_ms) : 0;
+    m_scene_end = left ? (Device.dwTimeGlobal + left) : 0;
     m_scene_on = true;
 
     scene_first_frame();
@@ -1327,6 +1334,15 @@ void player_hud::scene_stop()
     m_scene_hand = u8(-1);
     m_scene_on = false;
     m_scene_end = 0;
+}
+
+// Keep the scene standing once its cycle is over. A looping cycle goes on looping by itself;
+// what ends a scene is this clock, and a scene that has to sit there for as long as a window is
+// open - the backpack held in the hands while the inventory is up - has no length to give.
+void player_hud::scene_hold()
+{
+    if (m_scene_on)
+        m_scene_end = 0;
 }
 
 bool player_hud::scene_active() const

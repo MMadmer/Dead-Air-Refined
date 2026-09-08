@@ -832,9 +832,14 @@ static Fvector2 scene_world2ui2(Fvector pos, bool hud) { return scene_world2ui3(
 // Hand scenes: hand 0 = right, 1 = left, 2 = both. Length in ms, 0 = nothing to play, so a
 // script never waits for an animation that does not exist. The sixth argument stretches the
 // cycle to the scene length.
+static u32 scene_play_hud_motion7(
+    u8 hand, pcstr item_name, pcstr anm_name, bool mix_in, float speed, u32 target_ms, u32 start_ms)
+{
+    return g_player_hud ? g_player_hud->scene_play(hand, item_name, anm_name, mix_in, speed, target_ms, start_ms) : 0;
+}
 static u32 scene_play_hud_motion6(u8 hand, pcstr item_name, pcstr anm_name, bool mix_in, float speed, u32 target_ms)
 {
-    return g_player_hud ? g_player_hud->scene_play(hand, item_name, anm_name, mix_in, speed, target_ms) : 0;
+    return scene_play_hud_motion7(hand, item_name, anm_name, mix_in, speed, target_ms, 0);
 }
 static u32 scene_play_hud_motion5(u8 hand, pcstr item_name, pcstr anm_name, bool mix_in, float speed)
 {
@@ -848,6 +853,18 @@ static void scene_stop_hud_motion()
 {
     if (g_player_hud)
         g_player_hud->scene_stop();
+}
+// Hold the scene after its cycle ends, for as long as whatever asked for it needs it.
+static void scene_hold_hud_motion()
+{
+    if (g_player_hud)
+        g_player_hud->scene_hold();
+}
+// Is a scene standing right now. A held scene has no length to run out, so the script that put
+// it up is the only one who knows - and after a save load it is not the same script.
+static bool scene_hud_active()
+{
+    return g_player_hud && g_player_hud->scene_active();
 }
 
 // XXX nitrocaster: one can export enum like class, without defining dummy type
@@ -1198,7 +1215,10 @@ void CLevel::script_register(lua_State* luaState)
         def("world2ui", &scene_world2ui3),
         def("play_hud_motion", &scene_play_hud_motion5),
         def("play_hud_motion", &scene_play_hud_motion6),
+        def("play_hud_motion", &scene_play_hud_motion7),
         def("get_motion_length", &scene_get_motion_length),
-        def("stop_hud_motion", &scene_stop_hud_motion)
+        def("stop_hud_motion", &scene_stop_hud_motion),
+        def("hold_hud_motion", &scene_hold_hud_motion),
+        def("scene_active", &scene_hud_active)
     ];
 }

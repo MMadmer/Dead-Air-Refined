@@ -142,6 +142,9 @@
     <string id="st_update_major_disable">
         <text>Больше не уведомлять о новых крупных версиях</text>
     </string>
+    <string id="ui_mm_instant_inventory">
+        <text>Игра: Мгновенный инвентарь</text>
+    </string>
     <string id="ui_mm_major_update_notice">
         <text>Уведомлять о крупных версиях</text>
     </string>

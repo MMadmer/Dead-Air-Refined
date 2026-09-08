@@ -24,6 +24,12 @@
 #include "ui/UITalkWnd.h"
 #include "xrUICore/MessageBox/UIMessageBox.h"
 
+// Show the inventory the moment the key is pressed rather than when the backpack scene has
+// finished playing. The scene still plays either way, only the waiting for it goes away. Read
+// by the backpack script; the engine keeps it so the options screen persists it in user.ltx
+// like every other switch. Off by default - the wait is the point of the scene.
+int g_dar_instant_inventory = 0;
+
 CUIGameSP::CUIGameSP() : m_game(NULL), m_game_objective(NULL)
 {
     TalkMenu = xr_new<CUITalkWnd>();
@@ -137,8 +143,10 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
         {
             // The backpack scene plays BEFORE the window opens: the script answers false, plays
             // and opens the menu itself through get_hud():ShowActorMenu(), which does not come
-            // back here. Asked on opening only - ShowActorMenu toggles, and asking on closing
-            // would keep the menu open for the length of a scene.
+            // back here. With dar_instant_inventory the script answers true instead and the
+            // window opens at once while the scene runs behind it. Asked on opening only -
+            // ShowActorMenu toggles, and asking on closing would keep the menu open for the
+            // length of a scene.
             bool allow = true;
             if (ActorMenu && !ActorMenu->IsShown())
             {

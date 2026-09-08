@@ -4,28 +4,58 @@
 -- лежат от набора Mirrowel (Creative Commons). Разбор материала - в
 -- configs/items/items/items_anm_da_backpack.ltx.
 --
--- Как работает. Движок зовёт da_before_inventory ДО открытия окна (UIGameSP.cpp, случай kINVENTORY).
--- Мы отвечаем отказом, играем сцену, а по её концу открываем окно сами через
--- get_hud():ShowActorMenu() - тот путь идёт мимо перехвата, поэтому по кругу не пойдёт.
+-- Рюкзак живёт в руках столько, сколько открыт инвентарь: доставание, дальше idle под открытым
+-- окном (сцену держит game.hold_hud_motion - иначе движок закрыл бы её по концу цикла), на
+-- закрытие - убирание. Три цикла берутся из того же раздела: anm_ea_show, anm_ea_idle, anm_ea_hide.
 --
--- Перехват стоит ТОЛЬКО на открытие: движок спрашивает нас, лишь когда меню закрыто. На закрытии
--- сцена означала бы "сыграй, чтобы закрыть окно", и меню не закрывалось бы, пока она идёт.
+-- Прерывания. Нажатие посреди доставания разворачивает сцену в убирание, нажатие посреди убирания
+-- разворачивает обратно, и оба раза цикл стартует НЕ с начала, а с зеркальной точки: сколько
+-- прошло доставание, столько убирание пропускает. Поэтому сколько по клавише ни стучи, руки идут
+-- непрерывно. Смещение умеет движок - седьмой аргумент game.play_hud_motion.
+--
+-- dar_instant_inventory: окно показывается сразу по нажатию, а сцена идёт за ним. На саму сцену
+-- опция не влияет - рюкзак так же достаётся, живёт и убирается.
+--
+-- Заслонки ввода тут нет намеренно. Прежняя game.only_allow_movekeys резала всё выше kCAM_1, а
+-- клавиша инвентаря как раз выше - с ней повторное нажатие до движка бы не дошло и развернуть
+-- сцену было бы нечем. Оружие и без заслонки не достать: hide_weapon ставит INV_STATE_BLOCK_ALL,
+-- а чужие анимации рук движок при активной сцене не кладёт (play_blend, m_scene_hand).
 
--- Длительность берётся у движка по самой анимации; это запасное значение.
-local ANIM_FALLBACK_MS = 1200
-local anim_ms = ANIM_FALLBACK_MS
--- Пауза после убирания оружия, считается по длине самого убирания - см. hide_ticks.
-local settle_target = 0
-local busy, wait_ticks = false, 0
+local ST_OFF, ST_SHOW, ST_OPEN, ST_HIDE = 0, 1, 2, 3
+
+local state = ST_OFF
+local sect = nil
+-- Момент старта текущего цикла и его длина: из них считается, насколько он прошёл.
+local clip_at, clip_len = 0, 0
+local playing = false
+-- Пока идёт уборка оружия, сцена ещё не началась; здесь лежит смещение, с которого её начать.
+local pending_start = 0
+local instant = false
+local menu_was_open = false
+-- Окно появляется не в том же кадре, в котором его попросили: до этого момента "меню закрыто"
+-- не значит, что игрок его закрыл.
+local menu_grace = 0
+
 -- Звук сцены. Модульная переменная, а не локальная - разбор у места запуска.
 scene_snd = nil
 
+local SECT_BASE = "da_backpack_hud"
+-- Слот 15, а не 14: в конфигах у рюкзаков стоит slot = 14, но движок держит base_slot = конфиг + 1.
+-- Разбор этой развилки - в da_wear_anims, там же список остальных слотов.
+local BACKPACK_SLOT = 15
+local ANIM_FALLBACK_MS = 1200
+local MENU_GRACE_MS = 400
+
 function on_game_start()
 	RegisterScriptCallback("actor_on_first_update", reset)
+	RegisterScriptCallback("actor_on_update", update)
 end
 
 function reset()
-	busy, wait_ticks = false, 0
+	-- Сцена держится до нашей команды, а загрузка сейва её не снимает: снимаем сами.
+	if state ~= ST_OFF or game.scene_active() then game.stop_hud_motion() end
+	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	scene_snd = nil
 end
 
 -- Not optional.
@@ -37,12 +67,6 @@ end
 --
 -- Приём тот же, что у надевания вещей (da_wear_anims): именной раздел, если он заведён, и общий
 -- запасной. Добавить новый рюкзак - значит дописать одну секцию в конфиг, скрипт трогать не надо.
---
--- Слот 15, а не 14: в конфигах у рюкзаков стоит slot = 14, но движок держит base_slot = конфиг + 1.
--- Разбор этой развилки - в da_wear_anims, там же список остальных слотов.
-local SECT_BASE = "da_backpack_hud"
-local BACKPACK_SLOT = 15
-
 local function scene_section()
 	local itm = db.actor and db.actor:item_in_slot(BACKPACK_SLOT)
 	if itm then
@@ -50,6 +74,35 @@ local function scene_section()
 		if system_ini():section_exist(s) then return s end
 	end
 	return SECT_BASE
+end
+
+local function clip_ms(anim)
+	local ms = sect and game.get_motion_length(sect, anim, 1.0) or 0
+	if not ms or ms <= 0 then ms = ANIM_FALLBACK_MS end
+	return ms
+end
+
+-- Сколько прошло текущего цикла, 0..1.
+local function progress()
+	if not playing or clip_len <= 0 then return 0 end
+	local p = (time_global() - clip_at) / clip_len
+	if p < 0 then return 0 end
+	if p > 1 then return 1 end
+	return p
+end
+
+-- from - доля цикла, которую надо пропустить. Длину берём из ответа движка: get_motion_length
+-- считает по тому же циклу, но при пустом разделе вернёт ноль, а сцена всё равно должна знать,
+-- когда ей заканчиваться.
+local function play_clip(anim, from)
+	local est = clip_ms(anim)
+	local start_ms = math.floor((from or 0) * est)
+	if start_ms >= est then start_ms = est - 1 end
+	if start_ms < 0 then start_ms = 0 end
+	local len = game.play_hud_motion(2, sect, anim, true, 1.0, 0, start_ms)
+	clip_len = (len and len > 0) and len or est
+	clip_at = time_global() - start_ms
+	playing = true
 end
 
 -- The holster length of the item in the hands, ms, from the engine (a knife, a rifle and a
@@ -75,78 +128,119 @@ local function weapon_away()
 	return now >= settle_until
 end
 
--- Возвращаем ЛОЖЬ, чтобы движок окно не открывал.
---
--- Пока сцена идёт, отказываем ТОЖЕ. Иначе повторное нажатие открыло бы меню посреди анимации, и
--- игрок увидел бы содержимое раньше, чем руки закончат - ровно то, ради чего перехват и делался.
-function before_open()
-	if not enabled() or not db.actor then return true end
-	if busy then return false end
-
-	busy = true
-	wait_ticks = 0
+local function start_show(from)
+	sect = scene_section()
+	pending_start = from or 0
+	playing = false
 	had_weapon = db.actor:active_slot() ~= 0
 	settle_until = time_global() + hide_ms() + 80
-
 	-- Сцена ДВУРУКАЯ: обе руки заняты сумкой, поэтому оружие убираем.
 	db.actor:hide_weapon()
-	-- [DA_PORT] Глушилка ввода снята: она резала МЫШЬ, и игрок терял взгляд на всю сцену.
-	-- Заслонка ниже блокирует только действия (всё выше kCAM_1: огонь, использование, смена
-	-- оружия), а движение и взгляд оставляет. level.enable_input() на выходе сохранён как
-	-- страховка: если ввод погасит кто-то другой, сцена его вернёт.
-	game.only_allow_movekeys(true)
-	CreateTimeEvent("da_backpack_anim", "start", 0.05, start_anim)
-	return false
+	state = ST_SHOW
 end
 
-function start_anim()
-	if not weapon_away() then return false end
-
-	-- Раздел выбираем ЗДЕСЬ, а не при перехвате: между нажатием и пуском сцены игрок ничего
-	-- сменить не успевает, зато так выбор стоит рядом с использованием и не разъедется.
-	local sect = scene_section()
-
-	-- Длительность спрашиваем у движка: поменяется цикл - расписание сойдётся само.
-	anim_ms = game.get_motion_length(sect, "anm_ea_show", 1.0)
-	if not anim_ms or anim_ms <= 0 then anim_ms = ANIM_FALLBACK_MS end
-
-	-- Звук молнии. Ссылку держим в переменной МОДУЛЯ, а не в локальной: sound_object живёт ровно
-	-- столько, сколько на него ссылаются, и локальная умерла бы вместе с этой функцией - звук
-	-- оборвался бы на первом же кадре. Тот же приём стоит в enhanced_animations.
-	local snd_name = system_ini():r_string_ex(sect, "snd")
-	if snd_name then
-		scene_snd = sound_object(snd_name)
-		scene_snd:play(db.actor, 0, sound_object.s2d)
-	end
-
-	game.play_hud_motion(2, sect, "anm_ea_show", false, 1.0, 0)
-	CreateTimeEvent("da_backpack_anim", "open", anim_ms / 1000, open_window)
-	return true
+local function start_hide(from)
+	sect = sect or scene_section()
+	play_clip("anm_ea_hide", from)
+	state = ST_HIDE
 end
 
-function open_window()
-	game.stop_hud_motion()
-	level.enable_input()
-	game.only_allow_movekeys(false)
-
+local function open_window()
 	local hud = get_hud()
 	if hud then hud:ShowActorMenu() end
-
-	-- Оружие возвращаем не сейчас, а после ЗАКРЫТИЯ окна: иначе оно появится поверх открытого
-	-- инвентаря и тут же спрячется снова. Готового события "окно закрылось" нет, поэтому следим за
-	-- приёмником ввода - пока меню открыто, level.main_input_receiver() не пуст. Полсекунды форы
-	-- нужны на само открытие: окно появляется не в том же кадре.
-	CreateTimeEvent("da_backpack_anim", "restore", 0.5, watch_close)
-	return true
+	menu_grace = time_global() + MENU_GRACE_MS
 end
 
-function watch_close()
-	if level.main_input_receiver() then return false end
-	-- unblock_all_slots здесь НЕ зовём: и он, и restore_weapon ведут к TryActivatePrevSlot, и слот
-	-- восстанавливался бы дважды. Наши hide_weapon и restore_weapon симметричны сами по себе.
-	db.actor:restore_weapon()
-	busy = false
-	return true
+local function finish()
+	game.stop_hud_motion()
+	-- Страховка: если ввод погасил кто-то другой, сцена его вернёт.
+	level.enable_input()
+	if db.actor then db.actor:restore_weapon() end
+	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	scene_snd = nil
+end
+
+function update()
+	if state == ST_OFF or not db.actor then return end
+
+	local menu = level.main_input_receiver() ~= nil
+	-- Окно увидено открытым - фора больше не нужна, дальше "закрыто" значит закрыто.
+	if menu then menu_was_open, menu_grace = true, 0 end
+	local closed = menu_was_open and (not menu) and time_global() > menu_grace
+
+	if state == ST_SHOW then
+		if not playing then
+			-- Закрылся, пока руки только убирают оружие: сумки в кадре не было, убирать нечего.
+			if closed then finish() return end
+			if not weapon_away() then return end
+			play_clip("anm_ea_show", pending_start)
+			-- Звук молнии. Ссылку держим в переменной МОДУЛЯ, а не в локальной: sound_object живёт
+			-- ровно столько, сколько на него ссылаются, и локальная умерла бы вместе с этой
+			-- функцией - звук оборвался бы на первом же кадре.
+			local snd_name = system_ini():r_string_ex(sect, "snd")
+			if snd_name and pending_start <= 0.05 then
+				scene_snd = sound_object(snd_name)
+				scene_snd:play(db.actor, 0, sound_object.s2d)
+			end
+			return
+		end
+		-- Игрок закрыл окно, пока руки ещё достают: разворачиваем с зеркальной точки.
+		if closed then
+			start_hide(1 - progress())
+			return
+		end
+		if progress() >= 1 then
+			if not menu then open_window() end
+			play_clip("anm_ea_idle", 0)
+			-- Иначе движок снял бы сцену по концу цикла и рюкзак пропал бы из рук.
+			game.hold_hud_motion()
+			state = ST_OPEN
+		end
+	elseif state == ST_OPEN then
+		if closed then start_hide(0) end
+	elseif state == ST_HIDE then
+		if progress() >= 1 then finish() end
+	end
+end
+
+-- Возвращаем движку, открывать ли окно самому.
+--
+-- Движок спрашивает нас ТОЛЬКО когда меню закрыто: на открытом окне клавиша идёт мимо, прямо в
+-- ShowActorMenu. С мгновенным инвентарём окно открываем сами в этом же кадре, без него - по концу
+-- доставания. Нажатие посреди сцены не открывает ничего: оно её разворачивает.
+function before_open()
+	if not enabled() or not db.actor then return true end
+
+	instant = get_console():get_bool("dar_instant_inventory")
+
+	if state == ST_SHOW then
+		-- Второе нажатие, пока руки достают: убираем с той же точки, окно не показываем.
+		if playing then start_hide(1 - progress()) else finish() end
+		return false
+	end
+
+	if state == ST_HIDE then
+		-- Передумал: достаём обратно с зеркальной точки.
+		local from = 1 - progress()
+		sect = sect or scene_section()
+		play_clip("anm_ea_show", from)
+		state = ST_SHOW
+		menu_was_open, menu_grace = false, 0
+		if instant then open_window() end
+		return false
+	end
+
+	if state == ST_OPEN then
+		-- Окно закрыл не игрок, а кто-то ещё, и мы этого кадра ещё не видели: рюкзак уже в руках,
+		-- открывать заново нечего - пусть движок просто покажет окно.
+		menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+		return true
+	end
+
+	start_show(0)
+	menu_was_open, menu_grace = false, 0
+	if instant then open_window() end
+	return false
 end
 
 -- Точка входа для движка: имя обязано лежать в НАСТОЯЩЕЙ глобальной области, иначе functor его не
