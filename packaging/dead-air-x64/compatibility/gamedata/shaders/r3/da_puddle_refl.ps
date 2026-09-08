@@ -15,6 +15,7 @@
 #include "common.h"
 #include "ogse_reflections.h"
 #include "da_puddles.h"
+#include "da_fog_common.h"	// the atmospheric haze, shared with the deferred combine
 
 // x — сила отражения (r__puddles_refl_power), y — включено ли (0/1), z — нижняя граница френеля
 // (r__puddles_facing), w — доля отражения НЕБА, когда луч-марш ничего не нашёл (r__puddles_sky).
@@ -174,6 +175,17 @@ float4 main(vf I) : SV_Target
 	// in the G-buffer that lit whole puddles at once.
 	const float3 glint_c = L_sun_color.rgb * (glint * fres * mask * saturate(da_puddle_look.x));
 
+	// Haze. This overlay is added ON TOP of a frame the combine has already fogged, so whatever
+	// it draws is unfogged by construction - a mirror and a sun glint stood over solid grey murk
+	// at any distance. Fading it with the same haze the scene converged with puts it back under
+	// the weather. The ramp is read straight from fog_params: this is a fullscreen pass and has
+	// no vertex fog to interpolate.
+	const float da_pdist = length(pos_w - eye_position);
+	float da_pfog = saturate(da_pdist * fog_params.w + fog_params.x);
+	[branch] if (da_fog.z > 0.001f)
+		da_pfog = da_fog_height(da_pfog, pos_w, eye_position, da_pdist);
+	const float da_pvis = 1.0f - da_fog_ceiling(da_pfog);
+
 	// Премультиплицированный цвет: смешивание задано как (one, invsrcalpha).
-	return float4(refl.xyz * k + glint_c, k);
+	return float4((refl.xyz * k + glint_c) * da_pvis, k * da_pvis);
 }

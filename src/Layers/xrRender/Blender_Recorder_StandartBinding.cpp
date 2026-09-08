@@ -142,6 +142,38 @@ static cl_VPtexgen binder_VPtexgen;
 
 // fog
 #ifndef _EDITOR
+// The haze ramp, in metres. ONE source for everybody.
+//
+// There are two ways a shader learns how far the fog reaches: fog_params, which the deferred
+// combine reads, and fog_plane, which every forward pass reads through calc_fogging - water,
+// fire, smoke. They used to compute their bounds differently: fog_params scaled the weather
+// distances by the haze knobs, fog_plane took them raw. At stock settings that is a factor of
+// 2/3, so the water kept half again as much visible range as the shore around it and stayed
+// legible in murk that had already swallowed everything else.
+static void fog_bounds(float& n, float& f)
+{
+    n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
+    f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
+
+    // Haze distance (r__fog_dist): 1.0 is exactly the weather values. Both bounds scale
+    // together, so the whole start-end shifts while the gradient shape and the differences
+    // between weathers survive. With the haze master at zero the weather distances stay
+    // untouched. The visibility-distance follow is a RATIO from 1.5 - the position the
+    // haze was tuned at - because a difference goes negative at the slider's low end.
+    float k = (ps_r__fog_dist > 0.f) ? (1.f + (ps_r__fog_dist - 1.f) * ps_r__fog) : 1.f;
+    constexpr float visReference = 1.5f;
+    if (ps_r__fog > 0.001f && ps_r__fog_follow_vis > 0.001f && psVisDistance > 0.01f)
+    {
+        const float ratio = psVisDistance / visReference;
+        k *= 1.f + (ratio - 1.f) * ps_r__fog_follow_vis;
+    }
+    if (_abs(k - 1.f) > 0.001f)
+    {
+        n *= k;
+        f *= k;
+    }
+}
+
 class cl_fog_plane : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -155,8 +187,9 @@ class cl_fog_plane : public R_constant_setup
         const float denom = -1.0f / _sqrt(_sqr(plane.x) + _sqr(plane.y) + _sqr(plane.z));
         plane.mul(denom);
 
-        const float A = g_pGamePersistent->Environment().CurrentEnv.fog_near;
-        const float B = 1 / (g_pGamePersistent->Environment().CurrentEnv.fog_far - A);
+        float A, far_d;
+        fog_bounds(A, far_d);
+        const float B = 1 / (far_d - A);
         Fvector4 result;
         result.set(-plane.x * B, -plane.y * B, -plane.z * B, 1 - (plane.w - A) * B);
         cmd_list.set_c(C, result);
@@ -169,26 +202,8 @@ class cl_fog_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        float n = g_pGamePersistent->Environment().CurrentEnv.fog_near;
-        float f = g_pGamePersistent->Environment().CurrentEnv.fog_far;
-
-        // Haze distance (r__fog_dist): 1.0 is exactly the weather values. Both bounds scale
-        // together, so the whole start-end shifts while the gradient shape and the differences
-        // between weathers survive. With the haze master at zero the weather distances stay
-        // untouched. The visibility-distance follow is a RATIO from 1.5 - the position the
-        // haze was tuned at - because a difference goes negative at the slider's low end.
-        float k = (ps_r__fog_dist > 0.f) ? (1.f + (ps_r__fog_dist - 1.f) * ps_r__fog) : 1.f;
-        constexpr float visReference = 1.5f;
-        if (ps_r__fog > 0.001f && ps_r__fog_follow_vis > 0.001f && psVisDistance > 0.01f)
-        {
-            const float ratio = psVisDistance / visReference;
-            k *= 1.f + (ratio - 1.f) * ps_r__fog_follow_vis;
-        }
-        if (_abs(k - 1.f) > 0.001f)
-        {
-            n *= k;
-            f *= k;
-        }
+        float n, f;
+        fog_bounds(n, f);
 
         const float r = 1 / (f - n);
         Fvector4 result;

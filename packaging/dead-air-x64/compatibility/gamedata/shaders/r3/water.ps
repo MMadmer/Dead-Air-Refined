@@ -30,6 +30,7 @@ uniform float4		various;
 float3	water_intensity;
 #endif	//	defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
 #include "settings_da_water.h"	// every water knob lives there
+#include "da_fog_common.h"	// the atmospheric haze, shared with the deferred combine
 #include "da_wind_field.h"	// the wind service: heading, speed, gust field
 #include "da_water_rings.h"	// impact rings, shared with the puddles
 
@@ -178,9 +179,10 @@ float4 main( vf I ) : SV_Target
 	float	power	= WATER_FRESNEL_F0 + (1.0h - WATER_FRESNEL_F0) * pow(1.0h - da_ndv, WATER_FRESNEL_POWER);
 	float	fresnel	= power;
 
-	// Floating debris accumulates here and is applied AFTER the fog - see the end of the
-	// function. Otherwise the water haze dims it with the underwater picture, and a leaf reads
-	// as lying on the bed instead of floating.
+	// Floating debris accumulates here and is applied at the end of the function, past the
+	// WATER-COLUMN haze: otherwise that haze dims it with the underwater picture and a leaf
+	// reads as lying on the bed instead of floating. The atmospheric haze still gets it - a
+	// leaf is a thing at a distance like any other.
 	float3	da_leaf_rgb	= 0.0h;
 	float	da_leaf_w	= 0.0h;
 
@@ -224,6 +226,32 @@ float4 main( vf I ) : SV_Target
 	// flattens, and the full base texture there was flattening the reflection.
 	float3	final              = lerp(c_reflection,base.rgb,base.a*0.6*(1.0h-0.6h*power));
 			final	*= I.c0*2;
+
+	// Atmospheric haze. I.fog is VISIBILITY off the fog plane - the same linear weather ramp
+	// the deferred scene starts from, now that both binders derive it from the same bounds.
+	// The height layer, the density ceiling and the sky colour come from the shared header, so
+	// the surface dissolves at the same distance and into the same colour as the shore around
+	// it. With the linear term alone a lake sat bright and sharp inside murk that had already
+	// swallowed everything else in the frame.
+	float  da_fogd   = saturate( 1.0h - I.fog );
+	float3 da_fogrgb = fog_color.rgb;
+	[branch] if ( da_fog_extras_on() )
+	{
+		da_fogd = da_fog_height( da_fogd, I.position_w.xyz, eye_position, da_water_dist );
+
+		[branch] if ( da_fog.x > 0.001h )
+		{
+			// The same two sky cubes the combine samples, under this shader's own names.
+			const float3 vd = da_fog_sky_dir( I.position_w.xyz, eye_position );
+			const float3 e0 = s_env0.SampleLevel( smp_base, vd, da_fog.y ).xyz;
+			const float3 e1 = s_env1.SampleLevel( smp_base, vd, da_fog.y ).xyz;
+			da_fogrgb = da_fog_mix_sky( da_fogrgb, lerp( e0, e1, L_ambient.w ) );
+		}
+	}
+	da_fogd = da_fog_ceiling( da_fogd );
+	// Water is blended over an already-fogged scene, so fading it out IS fogging it: what
+	// shows through is the shore behind, which the combine has painted the same colour.
+	const float da_fogv = (1.0h - da_fogd) * (1.0h - da_fogd);
 
 #ifdef	NEED_SOFT_WATER
 
@@ -328,21 +356,22 @@ float4 main( vf I ) : SV_Target
 	}
 #endif
 
-	final 		= lerp(fog_color, final, I.fog);
-	alpha		*= I.fog*I.fog;
-
-	// Debris last, past the fog: it lies ON the surface, the water column does not dim it.
+	// Debris goes on before the haze: it lies ON the surface, so the water column does not dim
+	// it, but the air between it and the camera does.
 	final		= lerp(final, da_leaf_rgb, da_leaf_w);
 	alpha		= max(alpha, da_leaf_w);
+
+	final 		= lerp(final, da_fogrgb, da_fogd);
+	alpha		*= da_fogv;
 
 	clip(alpha - WATER_ALPHA_CLIP);	// a zero threshold discards nothing
 	return  float4   (final, alpha )                ;
 
 #else	//	NEED_SOFT_WATER
 
-	final 		= lerp(fog_color, final, I.fog);
-	clip(I.fog * I.fog - WATER_ALPHA_CLIP);
-	return  float4   (final, I.fog*I.fog )      ;
+	final 		= lerp(final, da_fogrgb, da_fogd);
+	clip(da_fogv - WATER_ALPHA_CLIP);
+	return  float4   (final, da_fogv )      ;
 
 #endif	//	NEED_SOFT_WATER
 }
