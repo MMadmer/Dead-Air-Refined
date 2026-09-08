@@ -102,6 +102,7 @@ void load_presets()
         p.bl_div_tau = std::max(0.01f, rf("blast_divergence_tau", p.bl_div_tau));
         p.bl_div_neg = rf("blast_divergence_neg", p.bl_div_neg);
         p.bl_div_neg_tau = std::max(0.01f, rf("blast_divergence_neg_tau", p.bl_div_neg_tau));
+        p.bl_fade = std::max(0.05f, rf("blast_fade", p.bl_fade));
         g_presets.push_back(p);
     }
 }
@@ -951,8 +952,15 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     m_fluid_wanted = eligible && g_fluid_owner == this;
     //  Half a second of crossover: at the distance where the grid takes over, both are drawn
     //  and one fades into the other instead of the flame changing shape in a single frame.
-    m_fluid_fade = m_preset->blast ? (m_fluid_wanted ? 1.f : 0.f)
-                                   : clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
+    if (m_preset->blast)
+    {
+        //  A blast leaves rather than stops: over its last moments the whole volume thins out,
+        //  so what is left of the cloud goes instead of being switched off.
+        const float left = m_preset->bl_duration - m_blast_t;
+        m_fluid_fade = m_fluid_wanted ? clampr(left / m_preset->bl_fade, 0.f, 1.f) : 0.f;
+    }
+    else
+        m_fluid_fade = clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
 
     // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
     // across and lays a campfire almost flat in a breeze; a saturating law reads true for a

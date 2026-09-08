@@ -82,13 +82,16 @@ float3 da_fr_ramp(float t)
 void DaSample(float weight, float3 O, inout float3 radiance, inout float trans)
 {
 	const float3 texcoords = float3(O.x, 1.0 - O.y, O.z);
-	const float4 s = colorTex.SampleLevel(samLinearClamp, texcoords, 0);
+	float4 s = colorTex.SampleLevel(samLinearClamp, texcoords, 0);
+
+	//	The grid has walls, and a cloud that reaches one would otherwise be sliced off square.
+	//	Everything fades out over the last metre or so before every face of the box.
+	const float3 eo = min(O, 1.0 - O);
+	s *= saturate(min(min(eo.x, eo.y), eo.z) * gridScaleFactor * 0.85);
 
 	const float T = s.x / max(da_fr_b.w, 0.05);
 	const float burn = s.z;
-	//	Soot fades out toward the top of the box, where the plume is handed over to the
-	//	billboards that carry it the rest of the way.
-	const float smoke = s.w * saturate((1.0 - O.y) * 5.5) * da_fr_c.x;
+	const float smoke = s.w * da_fr_c.x;
 
 	//	Hot soot radiates, and it radiates as the fourth power of its temperature, which is
 	//	what leaves the dark gaps between the tongues: a little below a dull red there is
