@@ -98,24 +98,30 @@ void CPSLibrary::ResolveShaderFire()
     if (!FS.exist(path))
         return;
     CInifile ini(path, TRUE);
-    if (!ini.section_exist("shader_fire"))
-        return;
     u32 mapped = 0;
-    for (const auto& item : ini.r_section("shader_fire").Data)
+    u32 blasts = 0;
+    for (cpcstr table : {"shader_fire", "shader_blast"})
     {
-        if (!item.first.size() || !item.second.size())
+        if (!ini.section_exist(table))
             continue;
-        PS::CPEDef* def = FindPED(item.first.c_str());
-        if (!def)
+        for (const auto& item : ini.r_section(table).Data)
         {
-            Msg("! [fire] shader fire names an effect that is not in particles.xr: [%s]", item.first.c_str());
-            continue;
+            if (!item.first.size() || !item.second.size())
+                continue;
+            PS::CPEDef* def = FindPED(item.first.c_str());
+            if (!def)
+            {
+                Msg("! [fire] %s names an effect that is not in particles.xr: [%s]", table, item.first.c_str());
+                continue;
+            }
+            def->m_DaFire = item.second;
+            ++mapped;
+            if (0 == xr_strcmp(table, "shader_blast"))
+                ++blasts;
         }
-        def->m_DaFire = item.second;
-        ++mapped;
     }
     if (mapped)
-        Msg("* [fire] shader fire: %u effect(s) drawn as a flame volume", mapped);
+        Msg("* [fire] shader fire: %u effect(s) drawn as a volume, %u of them blasts", mapped, blasts);
 }
 
 // Per-particle overrides without rebuilding particles.xr. The whole game ships as one

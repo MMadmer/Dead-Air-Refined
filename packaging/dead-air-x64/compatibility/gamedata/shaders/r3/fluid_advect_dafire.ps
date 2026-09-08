@@ -58,7 +58,8 @@ float4 main(p_fluidsim input) : SV_Target
 	{
 		const float k = saturate(da_ff_misc2.z);
 		f.y += (target - f.y) * k;
-		f.x = max(f.x, 0.60 * saturate(target * 2.0));
+		const float pilot = (da_ff_blast.w > 0.0) ? da_ff_blast.w : 0.60;
+		f.x = max(f.x, pilot * saturate(target * 2.0));
 	}
 
 	// ---- Reaction. Hot enough and with fuel left, a cell burns: the fuel goes, the
@@ -73,6 +74,15 @@ float4 main(p_fluidsim input) : SV_Target
 		f.x += da_ff_burn.z * burn;
 		f.w += da_ff_burn2.y * burn;
 	}
+	//	And the dust it tears off that ground, which is what makes the ring visible.
+	if (da_ff_blast.w > 0.0 && da_ff_misc3.w > 0.0 && da_ff_misc3.z > 0.0 && IsNonEmptyCell(TOPCELL))
+	{
+		const float2 rxz = input.cell0.xz - da_ff_src.xz;
+		const float rl = length(rxz) / max(da_ff_blast.y * 3.0, 1.0);
+		if (rl < 1.0)
+			f.w = max(f.w, da_ff_misc3.w * (1.0 - rl * rl) * da_ff_misc3.z);
+	}
+
 	f.x -= da_ff_burn.w * f.x;
 	f.w *= da_ff_misc2.x;
 

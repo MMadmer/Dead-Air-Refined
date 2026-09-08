@@ -61,7 +61,23 @@ public:
         Fvector m_vFireLight{};
         float m_fCoreT{1.6f};
         float m_fSmokeGain{1.f};
+        float m_fHotAbsorb{};   // how much the soot that is still glowing swallows as well
+        Fvector m_vSunStep{};   // one step toward the sun, in the grid's texture space
+        Fvector m_vSunColor{};
+        float m_fShadow{};      // how hard the plume shades itself against the sun
+        float m_fSmokeLift{};   // buoyancy the soot keeps once the flame in it has gone out
+        float m_fGroundJet{};   // how hard a blast runs outward along the ground it sits on
+        float m_fGroundDust{};  // and how much dust it tears off it
+        float m_fRingEnv{};     // how much of that ground run is left
+        float m_fBlastDiv{};    // the divergence the blast makes this step, signed
+        float m_fEmisPow{3.f};  // how steeply emission climbs with temperature
         float m_fFade{1.f};     // crossover with the marched flame
+
+        //	A blast: the charge thrown into a sphere over the first moments instead of a bed
+        float m_fBlastInject{};
+        float m_fBlastRadius{};
+        float m_fBlastSpeed{};
+        float m_fBlastPilot{};  // and the temperature its charge starts at; 0 = not a blast
 
         int m_iIterations{16};
     };

@@ -393,10 +393,14 @@ void dx113DFluidRenderer::SetDaFireConstants(const dx113DFluidData::DaFireParams
     static shared_str strA("da_fr_a");
     static shared_str strB("da_fr_b");
     static shared_str strC("da_fr_c");
+    static shared_str strD("da_fr_d");
+    static shared_str strE("da_fr_e");
 
     RCache.set_c(strA, p.m_fEmission, p.m_fAbsorb, p.m_fAlbedo, p.m_fEmber);
     RCache.set_c(strB, p.m_vFireLight.x, p.m_vFireLight.y, p.m_vFireLight.z, p.m_fCoreT);
-    RCache.set_c(strC, p.m_fSmokeGain, 0.f, p.m_fTime, p.m_fFade);
+    RCache.set_c(strC, p.m_fSmokeGain, p.m_fHotAbsorb, p.m_fTime, p.m_fFade);
+    RCache.set_c(strD, p.m_vSunStep.x, p.m_vSunStep.y, p.m_vSunStep.z, p.m_fShadow);
+    RCache.set_c(strE, p.m_vSunColor.x, p.m_vSunColor.y, p.m_vSunColor.z, p.m_fEmisPow);
     (void)light;
 }
 

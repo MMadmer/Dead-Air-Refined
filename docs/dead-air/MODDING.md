@@ -736,6 +736,57 @@ fluid_emission  = 165    ; how hard the hot soot radiates
 fluid_ember     = 1.1    ; the glow the hot gas leaves on the wood under it
 ```
 
+#### The fluid blast
+
+The same grid runs explosions. `[shader_blast]` maps a particle effect to a `[shader_blast_<name>]`
+preset, and instead of a fuel bed that burns steadily, a sphere of fuel and heat is thrown into
+the grid over the first tenth of a second and the whole thing lives a couple of seconds. The
+ground under it is read as a grid of downward rays rather than a triangle sweep: a blast has no
+time to pay for the latter, and it is the surface it goes off on that shapes it anyway.
+
+What the charge gets at t = 0 is an outward push that grows with radius (a ball expanding
+uniformly moves fastest at its rim) plus a turbulent velocity of its own, because a clean sphere
+otherwise expands into a clean sphere and a real fireball breaks into lobes from the instability
+of its own surface. Most of the expansion is not that push, though: it is a divergence the
+reaction makes out of nothing, on its own clock - hard at the moment it goes off, decaying, then
+slightly negative as the air rushes back in behind it. That last part is what folds a fireball in
+on itself instead of leaving a ball that simply stops growing. Vorticity confinement is scheduled
+the same way: nothing while the charge is still expanding cleanly, hard through the moments the
+surface is breaking up, then down to a level that keeps the smoke churning without shredding it.
+
+A charge that goes off on the ground cannot expand downward, so what it would have spent going
+down it spends going outward along the surface, dragging the dust of that surface with it: that
+is the ring that runs away from the base. It outlives the charge by about half a second.
+
+Rendering differs from a flame in one thing that matters. A flame must not be hidden behind its
+own smoke, so only cooled soot absorbs there; a fireball is optically thick while it burns and
+what you see is its surface, so `fluid_absorb_hot` lets its glowing soot absorb as well and the
+ball gets a lit face and a dark limb out of it. `fluid_emission_pow` sets how steeply emission
+climbs with temperature - soot in the visible band goes as a very high power of it, so a blast
+uses a steeper curve than a campfire and its cooler skin falls away instead of glowing evenly.
+The brightness ceiling is on luminance rather than on each channel: clamping channels separately
+drags a hot amber core to white and throws its hue away.
+
+```ini
+[shader_blast]
+explosions\effects\expl_benzin_05  = barrel   ; the fuel fire of the barrel, the car and the heli
+explosions\effects\expl_benzin_veh = off      ; the second sprite fire it doubled up with
+
+[shader_blast_barrel]
+blast_radius     = 1.45   ; the sphere the charge is injected into, m
+blast_lift       = 0.85   ; its centre above the effect origin, m
+blast_duration   = 2.6    ; how long it lives, s
+blast_inject     = 0.15   ; how long the charge keeps going in, s
+blast_speed      = 10     ; outward speed of that gas, m/s
+blast_divergence = 34     ; the expansion the reaction makes, 1/s at the moment it goes off
+blast_ring       = 2.2    ; how hard it runs outward along the ground
+blast_dust       = 1.6    ; and how much dust that tears up
+```
+
+The flash, the shock distortion and the flying debris stay the sprites they were. A blast takes
+the one grid from any campfire the moment it goes off and hands it back when it is over; it costs
+about the same as a campfire while it is on screen.
+
 `r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
 both are session overrides like the other render controls. Only the nearest eligible fire is
 simulated - one grid is what the frame can afford, and it costs about 3 frames out of 60 with

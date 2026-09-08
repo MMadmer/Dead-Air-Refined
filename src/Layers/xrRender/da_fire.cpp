@@ -20,7 +20,8 @@ namespace
 xr_vector<SDaFirePreset> g_presets;
 bool g_presets_loaded = false;
 
-// Every [shader_fire_<name>] section of dead_air_x64_fire.ltx is a preset.
+// Every [shader_fire_<name>] and [shader_blast_<name>] section of dead_air_x64_fire.ltx is a
+// preset; the blast sections carry the same combustion keys and their own source.
 void load_presets()
 {
     g_presets_loaded = true;
@@ -30,14 +31,18 @@ void load_presets()
         return;
     CInifile ini(path, TRUE);
     constexpr cpcstr prefix = "shader_fire_";
+    constexpr cpcstr prefix_blast = "shader_blast_";
     const size_t prefix_len = xr_strlen(prefix);
+    const size_t prefix_blast_len = xr_strlen(prefix_blast);
     for (const CInifile::Sect* sect : ini.sections())
     {
         cpcstr n = sect->Name.c_str();
-        if (strncmp(n, prefix, prefix_len) != 0)
+        const bool is_blast = 0 == strncmp(n, prefix_blast, prefix_blast_len);
+        if (!is_blast && strncmp(n, prefix, prefix_len) != 0)
             continue;
         SDaFirePreset p;
-        p.name = n + prefix_len;
+        p.blast = is_blast;
+        p.name = n + (is_blast ? prefix_blast_len : prefix_len);
         const auto rf = [&](cpcstr key, float def) { return ini.line_exist(n, key) ? ini.r_float(n, key) : def; };
         p.base_height = rf("base_height", p.base_height);
         p.radius = std::max(0.05f, rf("radius", p.radius));
@@ -78,6 +83,25 @@ void load_presets()
         p.fl_ember = rf("fluid_ember", p.fl_ember);
         p.fl_core_t = std::max(0.1f, rf("fluid_core_t", p.fl_core_t));
         p.fl_smoke_gain = rf("fluid_smoke_gain", p.fl_smoke_gain);
+        p.fl_absorb_hot = clampr(rf("fluid_absorb_hot", p.fl_absorb_hot), 0.f, 1.f);
+        p.fl_shadow = rf("fluid_shadow", p.fl_shadow);
+        p.fl_shadow_step = std::max(0.1f, rf("fluid_shadow_step", p.fl_shadow_step));
+        p.fl_lift = rf("fluid_smoke_lift", p.fl_lift);
+        p.fl_emis_pow = std::max(0.5f, rf("fluid_emission_pow", p.fl_emis_pow));
+        p.bl_radius = std::max(0.1f, rf("blast_radius", p.bl_radius));
+        p.bl_lift = rf("blast_lift", p.bl_lift);
+        p.bl_duration = std::max(0.3f, rf("blast_duration", p.bl_duration));
+        p.bl_inject = std::max(0.01f, rf("blast_inject", p.bl_inject));
+        p.bl_speed = rf("blast_speed", p.bl_speed);
+        p.bl_cell = clampr(rf("blast_cell", p.bl_cell), 0.02f, 0.25f);
+        p.bl_ground = rf("blast_ground", p.bl_ground);
+        p.bl_pilot = std::max(0.05f, rf("blast_pilot", p.bl_pilot));
+        p.bl_ring = rf("blast_ring", p.bl_ring);
+        p.bl_dust = rf("blast_dust", p.bl_dust);
+        p.bl_div = rf("blast_divergence", p.bl_div);
+        p.bl_div_tau = std::max(0.01f, rf("blast_divergence_tau", p.bl_div_tau));
+        p.bl_div_neg = rf("blast_divergence_neg", p.bl_div_neg);
+        p.bl_div_neg_tau = std::max(0.01f, rf("blast_divergence_neg_tau", p.bl_div_neg_tau));
         g_presets.push_back(p);
     }
 }
@@ -210,16 +234,24 @@ void CDaFireEffect::fluid_create()
     if (W <= 0 || H <= 0 || D <= 0)
         return;
 
-    m_fluid_cell = m_preset->fl_cell;
+    const bool blast = m_preset->blast;
+    m_fluid_cell = blast ? m_preset->bl_cell : m_preset->fl_cell;
     const int maxDim = _max(W, _max(H, D));
     const Fvector O = origin();
-    const float srcY = O.y + m_preset->fl_base;
-    //  The floor of the box sits well below the fuel so the ground under the fire, and any
-    //  pit it stands in, are inside; everything left over is headroom for the plume.
-    m_fluid_centre.set(O.x, srcY - 0.6f + m_fluid_cell * float(H) * 0.5f, O.z);
+    const float srcY = O.y + (blast ? m_preset->bl_lift : m_preset->fl_base);
+    //  The floor of the box sits below the source so the ground under it - and the way the
+    //  fireball spreads along that ground - is inside; the rest is headroom for the plume.
+    const float below = blast ? (m_preset->bl_radius + 0.5f) : 0.6f;
+    m_fluid_centre.set(O.x, srcY - below + m_fluid_cell * float(H) * 0.5f, O.z);
 
-    if (!fluid_voxelize())
+    //  A blast has two seconds to live and cannot afford a triangle sweep of the level; the
+    //  ground under it is what shapes it, and that is a grid of downward rays.
+    if (blast ? !fluid_ground() : !fluid_voxelize())
+    {
+        if (blast)
+            Msg("! [fire] blast at %.1f %.1f %.1f found no ground under it", O.x, O.y, O.z);
         return;
+    }
 
     Fmatrix scale, translate, transform;
     const float s = m_fluid_cell * float(maxDim);
@@ -242,6 +274,10 @@ void CDaFireEffect::fluid_create()
     m_fluid_time = 0.f;
     m_fluid_acc = 0.f;
     fluid_params();
+    if (blast)
+        Msg("* [fire] blast [%s] %.2f m/cell, box %.1f x %.1f m, charge r=%.2f at %.1f %.1f %.1f",
+            m_preset->name.c_str(), m_fluid_cell, m_fluid_cell * float(W), m_fluid_cell * float(H),
+            m_preset->bl_radius, O.x, srcY, O.z);
 #endif
 }
 
@@ -401,6 +437,91 @@ bool CDaFireEffect::fluid_voxelize()
 #endif
 }
 
+// The ground under a blast, as occupancy: one downward ray every other column, and every cell
+// below the height it found is solid. A fireball is shaped by the surface it is born on far
+// more than by anything standing around it, and this costs a fraction of a triangle sweep.
+bool CDaFireEffect::fluid_ground()
+{
+#if defined(USE_DX11)
+    if (!g_pGameLevel)
+        return false;
+    const CDB::MODEL* model = g_pGameLevel->ObjectSpace.GetStaticModel();
+    if (!model)
+        return false;
+
+    const int W = FluidManager.GetTextureWidth();
+    const int H = FluidManager.GetTextureHeight();
+    const int D = FluidManager.GetTextureDepth();
+    const float cell = m_fluid_cell;
+    const Fvector C = m_fluid_centre;
+    const float top = C.y + cell * float(H) * 0.5f;
+    const float span = cell * float(H);
+
+    constexpr int step = 2;
+    const int nx = W / step + 1;
+    const int nz = D / step + 1;
+    xr_vector<float> height(size_t(nx) * size_t(nz), -flt_max);
+
+    CDB::COLLIDER xrc;
+    const Fvector down{0.f, -1.f, 0.f};
+    for (int zi = 0; zi < nz; ++zi)
+    {
+        for (int xi = 0; xi < nx; ++xi)
+        {
+            Fvector from;
+            from.set(C.x + cell * (float(xi * step) - float(W) * 0.5f), top,
+                C.z + cell * (float(zi * step) + 0.5f - float(D) * 0.5f));
+            xrc.r_clear();
+            xrc.ray_query(CDB::OPT_ONLYNEAREST, model, from, down, span);
+            if (xrc.r_count())
+                height[size_t(zi) * size_t(nx) + size_t(xi)] = top - xrc.r_begin()->range;
+        }
+    }
+    xrc.r_clear();
+
+    xr_vector<u8> vox(size_t(W) * size_t(H) * size_t(D), 0);
+    size_t marked = 0;
+    for (int z = 0; z < D; ++z)
+    {
+        const int zi = _min(z / step, nz - 1);
+        for (int x = 0; x < W; ++x)
+        {
+            const float h = height[size_t(zi) * size_t(nx) + size_t(_min(x / step, nx - 1))];
+            if (h == -flt_max)
+                continue;
+            //  Grid y runs downward: everything from the ground down is solid.
+            const int y0 = iCeil(float(H) * 0.5f - (h - C.y) / cell);
+            for (int y = _max(0, y0); y < H; ++y)
+            {
+                vox[size_t(z) * size_t(W) * size_t(H) + size_t(y) * size_t(W) + size_t(x)] = 255;
+                ++marked;
+            }
+        }
+    }
+    if (!marked)
+        return false;
+
+    D3D_TEXTURE3D_DESC desc{};
+    desc.Width = W;
+    desc.Height = H;
+    desc.Depth = D;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8_UNORM;
+    desc.Usage = D3D_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D_BIND_SHADER_RESOURCE;
+
+    D3D_SUBRESOURCE_DATA init{};
+    init.pSysMem = vox.data();
+    init.SysMemPitch = UINT(W);
+    init.SysMemSlicePitch = UINT(W * H);
+
+    _RELEASE(m_fluid_obst);
+    return SUCCEEDED(HW.pDevice->CreateTexture3D(&desc, &init, &m_fluid_obst));
+#else
+    return false;
+#endif
+}
+
 // Everything the passes read, converted from metres and seconds into cells and steps.
 void CDaFireEffect::fluid_params()
 {
@@ -419,11 +540,42 @@ void CDaFireEffect::fluid_params()
     dx113DFluidData::Settings settings = m_fluid->GetSettings();
     dx113DFluidData::DaFireParams& f = settings.m_DaFire;
 
-    f.m_vSource.set((O.x - C.x) / cell + float(W) * 0.5f,
-        float(H) * 0.5f - (O.y + P.fl_base - C.y) / cell,
+    const float srcY = O.y + (P.blast ? P.bl_lift : P.fl_base);
+    f.m_vSource.set((O.x - C.x) / cell + float(W) * 0.5f, float(H) * 0.5f - (srcY - C.y) / cell,
         (O.z - C.z) / cell + float(D) * 0.5f - 0.5f);
     f.m_fRadius = ((P.fl_radius > 0.f) ? P.fl_radius : P.radius * 1.15f) / cell;
     f.m_fBedRange = P.fl_bed / cell;
+
+    //  A blast throws its charge in over the first moments and then only burns what it has.
+    //  The envelope is squared so the first frames get most of it.
+    if (P.blast)
+    {
+        const float k = 1.f - clampr(m_blast_t / P.bl_inject, 0.f, 1.f);
+        f.m_fBlastInject = k * k;
+        f.m_fBlastRadius = P.bl_radius / cell;
+        f.m_fBlastSpeed = P.bl_speed * h / cell;
+        f.m_fBlastPilot = P.bl_pilot;
+        f.m_fGroundJet = P.bl_ring;
+        f.m_fGroundDust = P.bl_dust;
+        //  The ground run outlives the charge by a good half second: that is how long a real
+        //  ring keeps travelling before it runs out of the push that started it.
+        const float rk = 1.f - clampr(m_blast_t / (P.bl_inject * 4.f), 0.f, 1.f);
+        f.m_fRingEnv = rk * rk;
+        const float e1 = expf(-m_blast_t / P.bl_div_tau);
+        const float e2 = expf(-m_blast_t / P.bl_div_neg_tau);
+        f.m_fBlastDiv = (P.bl_div * e1 - P.bl_div * P.bl_div_neg * (1.f - e1) * e2) * h;
+    }
+    else
+    {
+        f.m_fBlastInject = 0.f;
+        f.m_fBlastRadius = 0.f;
+        f.m_fBlastSpeed = 0.f;
+        f.m_fBlastPilot = 0.f;
+        f.m_fGroundJet = 0.f;
+        f.m_fGroundDust = 0.f;
+        f.m_fRingEnv = 0.f;
+        f.m_fBlastDiv = 0.f;
+    }
 
     f.m_fIgnition = P.fl_ignition;
     f.m_fBurnPerT = P.fl_burn * h;
@@ -458,11 +610,34 @@ void CDaFireEffect::fluid_params()
     f.m_fCoreT = P.fl_core_t;
     f.m_fSmokeGain = P.fl_smoke_gain;
     f.m_fFade = m_fluid_fade;
+    f.m_fHotAbsorb = P.fl_absorb_hot;
+
+    //  One step toward the sun, in the grid's texture space: the box is an axis-aligned
+    //  scale, so a world direction is just divided by the box's size on each axis, and the
+    //  texture's y runs the other way from the world's.
+    const auto& env = g_pGamePersistent->Environment();
+    Fvector sun = env.CurrentEnv.sun_dir;
+    sun.invert();
+    sun.normalize_safe();
+    f.m_vSunStep.set(sun.x * P.fl_shadow_step / (cell * float(W)),
+        -sun.y * P.fl_shadow_step / (cell * float(H)), sun.z * P.fl_shadow_step / (cell * float(D)));
+    f.m_vSunColor.set(env.CurrentEnv.sun_color.x, env.CurrentEnv.sun_color.y, env.CurrentEnv.sun_color.z);
+    f.m_fShadow = P.fl_shadow;
+    f.m_fSmokeLift = P.fl_lift * h * h / cell;
+    f.m_fEmisPow = P.fl_emis_pow;
     //  The light the flame throws back into its own plume.
     f.m_vFireLight.set(1.f, 0.42f, 0.13f);
     f.m_vFireLight.mul(0.7f * P.intensity);
 
+    //  Confinement on a schedule for a blast: nothing while the charge is still expanding
+    //  cleanly, hard through the moments the fireball's surface is breaking into lobes, then
+    //  down to a level that keeps the smoke churning without shredding it.
     settings.m_fConfinementScale = P.fl_vort;
+    if (P.blast)
+    {
+        const float ramp = clampr((m_blast_t - 0.02f) / 0.05f, 0.f, 1.f);
+        settings.m_fConfinementScale = P.fl_vort * ramp * (0.4f + 0.6f * expf(-m_blast_t / 0.55f));
+    }
     m_fluid->SetSettings(settings);
 #endif
 }
@@ -548,6 +723,13 @@ void CDaFireEffect::Play()
     m_RT_Flags.set(flRT_DefferedStop, FALSE);
     m_RT_Flags.set(flRT_Playing, TRUE);
     m_dying = 0.f;
+    if (m_preset && m_preset->blast)
+    {
+        //  A blast starts the moment it is played and lives out its own clock.
+        m_blast_t = 0.f;
+        m_fluid_retry = 0.f;
+        fluid_destroy();
+    }
 }
 
 void CDaFireEffect::Stop(BOOL bDefferedStop)
@@ -702,6 +884,25 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     m_time += dt;
     if (m_dying > 0.f)
         m_dying += dt;
+    if (m_preset->blast)
+    {
+        if (m_blast_t < 0.f)
+        {
+            m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
+            return;
+        }
+        m_blast_t += dt;
+        if (m_blast_t > m_preset->bl_duration)
+        {
+            m_blast_t = -1.f;
+            m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
+            fluid_destroy();
+            vis.box.set(origin(), origin());
+            vis.box.grow(EPS_L);
+            vis.box.getsphere(vis.sphere.P, vis.sphere.R);
+            return;
+        }
+    }
 
     const auto& env = g_pGamePersistent->Environment();
     const Fvector base = flame_base();
@@ -737,15 +938,21 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     //  and a player standing on the boundary should not pay for that twice a second.
     const float lim = ps_r__fire_fluid_dist * (m_fluid ? 1.25f : 1.f);
     const bool eligible = ready && ps_r__fire_fluid && m_preset->fluid && m_dying <= 0.f && d2 < lim * lim;
-    if (eligible && d2 < g_fluid_claim_d2)
+    //  A blast outranks any campfire for the one grid the frame can afford, and it takes it
+    //  on the frame it goes off rather than waiting its turn.
+    const float rank = m_preset->blast ? d2 * 0.001f : d2;
+    if (eligible && rank < g_fluid_claim_d2)
     {
-        g_fluid_claim_d2 = d2;
+        g_fluid_claim_d2 = rank;
         g_fluid_claim = this;
     }
+    if (eligible && m_preset->blast && (!g_fluid_owner || !g_fluid_owner->m_preset->blast))
+        g_fluid_owner = this;
     m_fluid_wanted = eligible && g_fluid_owner == this;
     //  Half a second of crossover: at the distance where the grid takes over, both are drawn
     //  and one fades into the other instead of the flame changing shape in a single frame.
-    m_fluid_fade = clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
+    m_fluid_fade = m_preset->blast ? (m_fluid_wanted ? 1.f : 0.f)
+                                   : clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
 
     // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
     // across and lays a campfire almost flat in a breeze; a saturating law reads true for a
@@ -760,7 +967,8 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     // While the grid is running it carries the flame and the first couple of metres of the
     // plume itself, so the billboards start where the box ends instead of at the flame's tip.
     const Fvector tip = m_fluid ? fluid_plume_start() : flame_tip();
-    update_smoke(dt, tip);
+    if (!m_preset->blast)
+        update_smoke(dt, tip);
 
     if (m_dying > 1.5f && m_puffs.empty())
     {
@@ -768,8 +976,18 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
         return;
     }
 
-    // Bounds: the tilted flame envelope plus every puff. Kept in the effect's own space, as
-    // the base class does (world unless the parent transform is applied at render time).
+    // Bounds: for a blast, the grid box it lives in; otherwise the tilted flame envelope plus
+    // every puff. Kept in the effect's own space, as the base class does (world unless the
+    // parent transform is applied at render time).
+    if (m_preset->blast)
+    {
+        Fvector c = origin();
+        c.y += m_preset->bl_lift;
+        vis.box.set(c, c);
+        vis.box.grow(m_preset->bl_cell * 48.f);
+        vis.box.getsphere(vis.sphere.P, vis.sphere.R);
+        return;
+    }
     const float L = m_preset->height * 1.7f;
     Fbox box;
     box.set(base, base);
@@ -982,6 +1200,13 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
     else if (!m_fluid_wanted && m_fluid && m_fluid_fade <= 0.f)
         fluid_destroy();
     const float fade = m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f;
+    if (m_preset->blast)
+    {
+        //  Nothing to fall back to: a blast is the volume or it is nothing.
+        if (m_fluid)
+            fluid_render(cmd_list);
+        return;
+    }
     if (m_fluid && m_fluid_fade > 0.f)
         fluid_render(cmd_list);
     if (fade > 0.f && m_fluid_fade < 1.f)

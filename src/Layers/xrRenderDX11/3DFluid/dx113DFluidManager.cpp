@@ -746,6 +746,9 @@ void dx113DFluidManager::SetDaFireConstants(const dx113DFluidData::DaFireParams&
     static shared_str strWind("da_ff_wind");
     static shared_str strMisc("da_ff_misc");
     static shared_str strMisc2("da_ff_misc2");
+    static shared_str strBlast("da_ff_blast");
+    static shared_str strMisc3("da_ff_misc3");
+    static shared_str strMisc4("da_ff_misc4");
 
     RCache.set_c(strSrc, p.m_vSource.x, p.m_vSource.y, p.m_vSource.z, p.m_fRadius);
     RCache.set_c(strBurn, p.m_fIgnition, p.m_fBurnPerT, p.m_fTPerBurn, p.m_fCooling);
@@ -753,6 +756,9 @@ void dx113DFluidManager::SetDaFireConstants(const dx113DFluidData::DaFireParams&
     RCache.set_c(strWind, p.m_vWind.x, p.m_vWind.y, p.m_vWind.z, p.m_fWindRelax);
     RCache.set_c(strMisc, p.m_fBuoyancy, p.m_fInject, p.m_fTime, p.m_fBedRange);
     RCache.set_c(strMisc2, p.m_fSmokeFade, p.m_fVelDamp, p.m_fCouple, p.m_fPuff);
+    RCache.set_c(strBlast, p.m_fBlastInject, p.m_fBlastRadius, p.m_fBlastSpeed, p.m_fBlastPilot);
+    RCache.set_c(strMisc3, p.m_fSmokeLift, p.m_fGroundJet, p.m_fGroundDust, p.m_fRingEnv);
+    RCache.set_c(strMisc4, p.m_fBlastDiv, 0.f, 0.f, 0.f);
 }
 
 //	The field step. The first two passes are the plain semi-Lagrangian round trip the

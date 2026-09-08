@@ -61,6 +61,33 @@ struct SDaFirePreset
     float fl_ember{1.1f};       // the glow the hot gas leaves on the wood under it
     float fl_core_t{1.8f};      // the temperature that reads as a white core
     float fl_smoke_gain{1.f};
+    float fl_absorb_hot{0.f};   // how much of the absorption the still-glowing soot does too
+    float fl_shadow{2.5f};      // how hard the plume shades itself against the sun
+    float fl_shadow_step{1.2f}; // how far ahead it looks for that shade, m
+    float fl_lift{0.f};         // m/s2 the soot keeps once the flame in it has gone out
+    float fl_emis_pow{3.f};     // how steeply emission climbs with temperature
+
+    // A blast is the same simulation with a different source: instead of a fuel bed that
+    // burns steadily, a sphere of fuel and heat is thrown in over the first moments and the
+    // whole thing lives a couple of seconds. Lengths in metres, times in seconds.
+    bool blast{false};
+    float bl_radius{0.9f};      // the sphere the charge is injected into
+    float bl_lift{0.7f};        // its centre above the effect origin
+    float bl_duration{2.6f};    // how long the effect lives
+    float bl_inject{0.10f};     // how long fuel keeps being thrown in
+    float bl_speed{9.f};        // outward speed of the injected gas, m/s
+    float bl_cell{0.09f};       // one cell for a blast; the box is 64 x 96 x 64 of them
+    float bl_ground{1.f};       // 1 = read the ground under the blast, 0 = free air
+    float bl_pilot{1.3f};       // the temperature the charge starts at
+    float bl_ring{1.4f};        // how hard it runs outward along the ground
+    float bl_dust{1.2f};        // and how much dust that tears up
+    // The charge's own expansion, on its own clock. It rises at once, decays, then goes
+    // slightly negative: that last part is the air rushing back in, and it is what folds a
+    // fireball in on itself instead of leaving it a ball that simply stops growing.
+    float bl_div{34.f};         // 1/s at the moment it goes off
+    float bl_div_tau{0.15f};    // how fast that decays, s
+    float bl_div_neg{0.18f};    // the inrush behind it, as a fraction of the first push
+    float bl_div_neg_tau{0.42f};
 
     // The preset [shader_fire_<name>]; nullptr for "off" (the effect draws nothing) or unknown.
     static const SDaFirePreset* find(const shared_str& name);
@@ -103,6 +130,7 @@ class CDaFireEffect final : public CParticleEffect
     float m_fluid_time{};
     float m_fluid_acc{};        // real seconds waiting to be stepped
     float m_fluid_retry{};      // seconds before another attempt to build the grid
+    float m_blast_t{-1.f};      // seconds since the charge went off; < 0 = not a blast, or over
     Fvector m_fluid_centre{};   // the grid box's centre in the world
     float m_fluid_cell{};
 #if defined(USE_DX11)
@@ -113,6 +141,7 @@ class CDaFireEffect final : public CParticleEffect
     void fluid_render(CBackend& cmd_list);
     void fluid_params();
     bool fluid_voxelize();
+    bool fluid_ground();
     Fvector fluid_plume_start() const;
 
     Fvector origin() const;
@@ -136,7 +165,7 @@ public:
     void OnDeviceDestroy() override;
     void Play() override;
     void Stop(BOOL bDefferedStop = TRUE) override;
-    float GetTimeLimit() override { return -1.f; }
+    float GetTimeLimit() override { return m_preset && m_preset->blast ? m_preset->bl_duration : -1.f; }
     u32 ParticlesCount() override { return u32(m_puffs.size()); }
 };
 } // namespace xray::render::RENDER_NAMESPACE::PS

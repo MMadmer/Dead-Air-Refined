@@ -138,3 +138,58 @@ fluid_emission  = 80
 fluid_absorb    = 1.8
 fluid_ember     = 1.0
 fluid_core_t    = 1.7
+
+; Explosions. The same simulation with a different source: instead of a fuel bed that burns
+; steadily, a sphere of fuel and heat is thrown into the grid over the first hundredth of a
+; second and the whole thing lives a couple of seconds. Names listed here are drawn as a
+; fireball; the flash, the shock distortion and the flying debris stay the sprites they were.
+
+[shader_blast]
+explosions\effects\expl_benzin_05              = barrel
+explosions\effects\expl_benzin_veh             = off
+explosions\effects\expl_mushroom_glow00_barrel = off
+
+; blast_radius    the sphere the charge is injected into, m
+; blast_lift      its centre above the effect origin, m
+; blast_duration  how long the effect lives, s
+; blast_inject    how long the charge keeps going in, s
+; blast_speed     outward speed of the injected gas, m/s
+; blast_pilot     the temperature the charge starts at
+; blast_cell      one cell, m (0.09 = a 5.76 x 8.64 x 5.76 m box)
+
+[shader_blast_barrel]
+blast_radius     = 1.45
+blast_lift       = 0.85
+blast_duration   = 2.6
+blast_inject     = 0.15
+blast_speed      = 10
+blast_pilot      = 1.5
+blast_ring       = 2.2
+blast_divergence = 34
+blast_divergence_tau = 0.15
+blast_divergence_neg = 0.18
+blast_dust       = 1.6
+blast_cell       = 0.125
+
+fluid_ignition   = 0.08
+fluid_burn       = 8
+fluid_t_per_burn = 2.0
+fluid_fuel       = 2.4
+fluid_couple     = 40
+fluid_cooling    = 1.7
+fluid_smoke_per_burn = 1.6
+fluid_expansion  = 0.4
+fluid_buoyancy   = 22
+fluid_vorticity  = 1.8
+fluid_smoke_fade = 0.35
+fluid_vel_damp   = 0.18
+fluid_smoke_lift = 4.0
+fluid_shadow     = 3.0
+fluid_iterations = 12
+fluid_emission   = 130
+fluid_emission_pow = 4
+fluid_absorb     = 3.0
+fluid_absorb_hot = 0.55
+fluid_ember      = 0
+fluid_core_t     = 3.0
+fluid_smoke_gain = 1.4

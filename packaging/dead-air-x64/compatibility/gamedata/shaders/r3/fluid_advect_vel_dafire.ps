@@ -18,8 +18,10 @@ float4 main(p_fluidsim input) : SV_Target
 	//	only means the heat lifts the gas one step after it appears.
 	const float4 f = Texture_color.SampleLevel(samPointClamp, input.texcoords, 0);
 
-	//	Buoyancy. Grid y runs downward, so hot gas is pushed toward -y.
-	v.y -= da_ff_misc.x * f.x;
+	//	Buoyancy. Grid y runs downward, so hot gas is pushed toward -y. The soot keeps a lift
+	//	of its own after the flame in it has gone out, which is what carries an explosion's
+	//	cloud on up instead of leaving it hanging where it stopped burning.
+	v.y -= da_ff_misc.x * f.x + da_ff_misc3.x * f.w;
 
 	//	Gas leaves a burning surface along the normal of the solid under it. This is what
 	//	makes the flame roll up off the flank of a log instead of standing over it.
@@ -31,12 +33,56 @@ float4 main(p_fluidsim input) : SV_Target
 			v.xyz += (g / l) * (da_ff_misc.y * saturate(f.z * 6.0));
 	}
 
+	//	A blast pushes its own gas outward while the charge is going in. That impulse is what
+	//	makes the fireball a ball and not a plume; the expansion of the reaction takes over
+	//	from it a few hundredths of a second later.
+	if (da_ff_blast.x > 0.0 && da_ff_blast.z > 0.0)
+	{
+		const float3 rv = input.cell0 - da_ff_src.xyz;
+		const float rl = length(rv);
+		//	A ball expanding uniformly moves fastest at its rim, so the push grows with radius
+		//	rather than fading from the centre.
+		const float rn = rl / max(da_ff_blast.y, 0.5);
+		const float in_ball = saturate(1.15 - rn) * saturate(rn * 1.6);
+		if (rl > 0.5 && in_ball > 0.0)
+		{
+			v.xyz += (rv / rl) * (da_ff_blast.z * da_ff_blast.x * in_ball);
+			//	A clean sphere expands into a clean sphere. What breaks a real fireball into
+			//	lobes is the instability of its own surface, and on a grid this coarse the
+			//	cheapest honest stand-in is to hand the charge a turbulent velocity of its own.
+			float3 t;
+			t.x = da_ff_noise(input.cell0 * 0.29 + 3.13) - 0.5;
+			t.y = da_ff_noise(input.cell0 * 0.29 + 17.71) - 0.5;
+			t.z = da_ff_noise(input.cell0 * 0.29 + 41.37) - 0.5;
+			v.xyz += t * (da_ff_blast.z * da_ff_blast.x * saturate(rn * 2.0) * 3.2);
+		}
+	}
+
+	//	A charge that goes off on the ground cannot expand downward. What it would have spent
+	//	going down it spends going outward along the surface, and that is the ring that runs
+	//	away from the base of every explosion that happens on the ground.
+	if (da_ff_misc3.w > 0.0 && da_ff_misc3.y > 0.0 && IsNonEmptyCell(TOPCELL))
+	{
+		const float2 rxz = input.cell0.xz - da_ff_src.xz;
+		const float rl = length(rxz);
+		if (rl > 0.5 && rl < da_ff_blast.y * 3.5)
+			v.xz += (rxz / rl) * (da_ff_blast.z * da_ff_misc3.w * da_ff_misc3.y);
+	}
+
 	//	Wind. A parcel does not snap to the wind, it takes it up over a fraction of a second,
 	//	and the closer to the bed the more the fuel itself shelters it.
 	const float above = saturate((da_ff_src.y - input.cell0.y) / 10.0);
 	v.xyz += (da_ff_wind.xyz - v.xyz) * saturate(da_ff_wind.w * above * above);
 
 	v.xyz *= da_ff_misc2.y;
+	//	Semi-Lagrangian advection is stable at any speed but it smears badly once a parcel
+	//	crosses more than a cell or so in a step, and a blast's first frames are exactly that.
+	//	Clamping the speed costs a little of the initial punch and keeps the shape.
+	//	Semi-Lagrangian advection has no step limit of its own, but past a couple of cells a
+	//	step it smears; a blast's first frames sit right on that line.
+	const float sp = length(v.xyz);
+	if (sp > 3.0)
+		v.xyz *= 3.0 / sp;
 	v.w = 0.0;
 	return v;
 }

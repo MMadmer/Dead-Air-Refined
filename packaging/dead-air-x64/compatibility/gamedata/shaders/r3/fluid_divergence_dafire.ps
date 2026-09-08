@@ -28,6 +28,8 @@ float4 main(p_fluidsim input) : SV_Target
 	const float divergence = 0.5 *
 		((fieldR.x - fieldL.x) + (fieldT.y - fieldB.y) + (fieldU.z - fieldD.z));
 
-	const float burn = Texture_color_out.SampleLevel(samPointClamp, input.texcoords, 0).z;
-	return divergence - da_ff_burn2.z * burn;
+	const float4 fld = Texture_color_out.SampleLevel(samPointClamp, input.texcoords, 0);
+	//	A blast also expands on a clock of its own, wherever it is hot: hard at first, then
+	//	slightly negative as the air rushes back in behind it.
+	return divergence - da_ff_burn2.z * fld.z - da_ff_misc4.x * saturate(fld.x);
 }

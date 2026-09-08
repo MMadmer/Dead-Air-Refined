@@ -20,6 +20,11 @@ cbuffer DaFireSim
 	float4	da_ff_wind;		// xyz = the wind in cells per step, w = how fast a parcel takes it up
 	float4	da_ff_misc;		// x = buoyancy, y = injection speed, z = time in seconds, w = bed half-height in cells
 	float4	da_ff_misc2;	// x = smoke fade, y = velocity damping, z = coupling rate, w = puffing frequency
+	float4	da_ff_blast;	// x = how much of the charge is still going in, y = its radius in cells,
+							// z = its outward speed, w = the temperature it starts at (0 = not a blast)
+	float4	da_ff_misc3;	// x = the buoyancy soot keeps once the flame in it has gone out,
+							// y = the ground jet, z = the dust it tears up, w = how much of that run is left
+	float4	da_ff_misc4;	// x = the blast's own divergence this step, signed
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -84,10 +89,27 @@ float da_ff_on_surface(p_fluidsim input)
 	return 0.0;
 }
 
+//	A blast's charge: a sphere of fuel thrown in over the first moments, broken up so the
+//	fireball is lobed from the start rather than a clean ball that has to be roughened later.
+float da_ff_blast_target(p_fluidsim input)
+{
+	if (da_ff_blast.x <= 0.0)
+		return 0.0;
+	const float3 d = input.cell0 - da_ff_src.xyz;
+	const float r = length(d) / max(da_ff_blast.y, 0.5);
+	if (r >= 1.0)
+		return 0.0;
+	const float n = da_ff_fbm(input.cell0 * 0.13 + float3(3.7, 11.3, 7.9));
+	return da_ff_burn2.w * da_ff_blast.x * saturate(1.0 - r * r) * saturate(0.55 + 1.6 * (n - 0.5));
+}
+
 //	How much fuel this cell should hold: inside the disc, on a surface, near the bed, and
 //	broken up by a slow noise so the fire burns as separate tongues instead of one sheet.
 float da_ff_fuel_target(p_fluidsim input)
 {
+	if (da_ff_blast.w > 0.0)
+		return da_ff_blast_target(input);
+
 	const float3 d = input.cell0 - da_ff_src.xyz;
 	const float r = length(d.xz) / max(da_ff_src.w, 0.5);
 	if (r >= 1.0 || abs(d.y) > da_ff_misc.w)
