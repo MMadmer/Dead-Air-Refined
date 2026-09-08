@@ -645,7 +645,19 @@ thickness = 1200   ; deck thickness, metres (tiers 2-3 march through it)
 [wind_profiles]    ; weather cycle name (exact, or the longest substring match) -> base 0..1
 storm = 0.95
 clear = 0.14
+
+[particle_wind]    ; particle effect name (exact, or the longest substring match) -> wind share 0..1
+smoke = 1.0
+spark = 0.35
+flame = 0.0
 ```
+
+Particle effects take the wind only when a `[particle_wind]` rule names them: the drift
+replaces a particle's horizontal velocity, so a long-lived sprite that was never meant to
+travel - a campfire flame, a muzzle flash, a ring on water - would leave its source and sail
+off with the weather. An effect no key matches takes no wind at all; the longest matching key
+decides (`anomaly` at 0 beats `smoke` at 1 inside an anomaly's smoke), and an exact effect
+name wins over every substring. The share scales the wind the particles relax toward.
 
 The cloud deck is a world object: one coverage field, rendered once per frame into a 16 km
 map around the camera, is what the sky shows, what the sun passes shade the ground with and
@@ -795,6 +807,16 @@ times the vertex height above the tuft root, measured at the root, so a tuft mov
 press footprint is boot-sized (sigma 0.3 m), the shot wake a hand's width (45 cm cut, 16 cm sigma)
 measured to the vertex height.
 
+Wood is not a plant. Every multiple-use model compiles to the tree vertex format, and
+`flora\trunk_wave` dresses stumps, logs and snags as readily as the trunk under a crown; the
+`tc.z` "flexibility" the shaders read is the compiler's height fraction (0 at the bottom, ~1 at
+the top of any model), not an authored property. So the wind, the flutter and the motors are gated
+per root: a root that carries at least one alpha-tested `leaf_wave` visual is a plant and bends
+(trunk included); a `trunk_wave` visual with no foliage sibling is wood and stands still
+(`FTreeVisual::rigid`, `c_tree.w`; `-wvdbg` lists every level kind with its foliage count).
+`def_shaders\def_objects_lod` (vehicles, most props) never waved: it compiles to the static
+`tree_s` vertex program.
+
 Tree-shader geometry (`flora\leaf_wave`, `flora\trunk_wave` - crowns, trunks and Dead Air's
 bushes, which are tree models) takes `da_tree_motors_bend`. The grass rule did not carry over: a
 boot flattens a blade of grass but a shoulder does not fold a branch, and a crown card is metres
@@ -907,6 +929,11 @@ This prevents a missing/fast blend from outliving a short animation without chan
 deliberately slow authored transition. Later dynamic speed changes do not retime a blend
 that is already running.
 
+First-person rigs - the hands, the attached weapon and the scene items of the animation
+module - are exempt from `min_time`: their cycles are authored with their own timing (a shot
+cycle snaps in at once, as in the original), and the floor turned every shot into a crossfade
+shorter than itself, with the bolt barely moving. The curve still applies to them.
+
 `animation_blend_min_time` and `animation_blend_curve` are persistent console commands.
 The minimum applies when the next cycle starts or begins fading; the curve changes current
 pose reads immediately. Both are saved in `user.ltx`, so a saved user value overrides the
@@ -968,7 +995,7 @@ Notes:
 
 ## First-person animation scenes
 
-The animation module (FDDA item scenes, skinning, body search, backpack, wear, parkour) is
+The animation module (FDDA item scenes, skinning, pickup, backpack, wear, parkour) is
 described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
 
 - **A new item scene**: an `item_ea_<name>_hud` section (`hands_position`, `item_visual`,
@@ -988,9 +1015,9 @@ described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
   `game.only_allow_movekeys(true/false)` gates the input; `level.set_cam_custom_position_direction`
   owns the camera until `level.remove_cam_custom_position_direction()`.
 - **Intent hooks**: `_G.da_register_before_item_use(function(npc, item, flags) ... end)` sees
-  every use before it happens (`flags.ret_value = false` cancels it); `_G.da_before_inventory`,
-  `_G.da_before_body_search`, `_G.da_before_wear` are single functions - wrap the existing one
-  if you replace it.
+  every use before it happens (`flags.ret_value = false` cancels it); `_G.da_before_inventory`
+  and `_G.da_before_wear` are single functions - wrap the existing one if you replace it. The
+  body search and the containers have no hook: they open the stock windows at once.
 
 Do not add spawnable sections for the sake of a scene: a section the original game does not
 know ends up in saves. Every scene here is a hud section and an existing item.

@@ -403,7 +403,7 @@
         <cap_ao x="15" y="3" width="108" height="76">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_ssao_text</text>
         </cap_ao>
-		<radio_tab_ao_options x="147" y="0" width="108" height="101" radio="1">
+		<radio_tab_ao_options x="147" y="0" width="108" height="126" radio="1">
 			<options_item entry="r2_ssao_mode" group="mm_opt_video" depend="restart"/>
 			<button x="-8" y="0" width="37" height="28" id="disabled" stretch="1">
 				<text font="letterica16" vert_align="c" x="29" y="3" align="l">st_opt_off</text>
@@ -428,6 +428,13 @@
 			</button>
 			<button x="-8" y="75" width="37" height="28" id="hbao" stretch="1">
 				<text font="letterica16" vert_align="c" x="29" y="3" align="l">ui_mm_hbao</text>
+	            <text_color>
+	                <e r="170" g="170" b="170"/>
+	                <d r="70" g="70" b="70"/>
+	            </text_color>
+			</button>
+			<button x="-8" y="100" width="37" height="28" id="gtao" stretch="1">
+				<text font="letterica16" vert_align="c" x="29" y="3" align="l">ui_mm_gtao</text>
 	            <text_color>
 	                <e r="170" g="170" b="170"/>
 	                <d r="70" g="70" b="70"/>

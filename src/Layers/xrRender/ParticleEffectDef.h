@@ -82,6 +82,10 @@ public:
     // def
     float m_fTimeLimit; // time limit
     int m_MaxParticles; // max particle count
+    // Share of the world wind the particles take, 0..1. Not serialised: resolved by the library
+    // from the [particle_wind] rules (CPSLibrary::ResolveWindScales) after the archive and the
+    // loose overrides are read.
+    float m_WindScale{};
     Fvector m_VelocityScale; // velocity scale
     Fvector m_APDefaultRotation; // align to path
     // collision

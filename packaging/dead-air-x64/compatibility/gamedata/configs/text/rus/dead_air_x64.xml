@@ -211,4 +211,7 @@
     <string id="ui_mm_content_incomplete">
         <text>Контент мода неполный: играть нельзя</text>
     </string>
+    <string id="ui_mm_gtao">
+        <text>GTAO</text>
+    </string>
 </string_table>

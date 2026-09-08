@@ -26,6 +26,48 @@ z0 = 0.12
 altitude  = 1300
 thickness = 1200
 
+; Which particle effects drift in the wind, and how much of it they take (0..1). Keys are
+; effect-name substrings (case-insensitive): an exact effect name wins outright, otherwise the
+; LONGEST key found in the name decides, and an effect no key matches takes no wind at all.
+; Smoke, dust, steam and fog lean downwind; a flame sprite, a muzzle flash, a blood hit, a ring
+; on water, an anomaly or a vortex stay where their author put them - the drift replaces the
+; horizontal velocity, so a long-lived sprite given the wind would sail away from its source.
+[particle_wind]
+smoke     = 1.0
+dym       = 1.0
+dust      = 0.8
+steam     = 0.9
+fog       = 0.6
+mist      = 0.6
+gas       = 0.6
+snow      = 0.7
+leaves    = 0.7
+spark     = 0.35
+zone_smoke = 0.3
+; keep still whatever the name says elsewhere
+psi_storm = 0.0
+anomaly   = 0.0
+anomal    = 0.0
+zone      = 0.0
+artefact  = 0.0
+vortex    = 0.0
+weapons   = 0.0
+distort   = 0.0
+flame     = 0.0
+fire      = 0.0
+flash     = 0.0
+glow      = 0.0
+blood     = 0.0
+water     = 0.0
+trail     = 0.0
+shells    = 0.0
+teleport  = 0.0
+gravi     = 0.0
+electra   = 0.0
+studen    = 0.0
+zharka    = 0.0
+psi       = 0.0
+
 [wind_profiles]
 storm        = 0.95
 thunder      = 0.85

@@ -454,7 +454,10 @@ void CRenderTarget::phase_combine()
     // Camera TAA stacks on top of the spatial pass: SMAA removes staircases, this removes
     // the temporal shimmer. Needs the single-sampled G-buffer position (s_taa is only
     // created without MSAA) and skips menus - the paused background has no valid history.
-    if (ps_r__taa && s_taa && !_menu_pp)
+    // The history pair is checked as well: CRT::create leaves the surface empty on a
+    // format the device rejects, and the pass then simply does not run.
+    if (ps_r__taa && s_taa && !_menu_pp && rt_taa_history && rt_taa_history->pRT && rt_taa_resolve &&
+        rt_taa_resolve->pRT)
         phase_taa(m_previous);
 
     if (!_menu_pp)

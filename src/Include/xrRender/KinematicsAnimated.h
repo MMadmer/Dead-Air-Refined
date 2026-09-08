@@ -83,6 +83,9 @@ public:
     //void LL_FadeCycle(u16 partition, float falloff, u8 mask_channel = (1 << 0));
     virtual void LL_CloseCycle(u16 partition, u8 mask_channel = (1 << 0)) = 0;
     virtual void LL_SetChannelFactor(u16 channel, float factor) = 0;
+    // The global minimum blend time (animation_blend_min_time) smooths world rigs; a first-person
+    // rig is authored with its own timing (a shot cycle snaps in) and opts out through this.
+    virtual void LL_SetBlendMinTimeEnabled(bool enabled) = 0;
     //virtual CBlendInstance& LL_GetBlendInstance(u16 bone_id) = 0;
 
     // Main functionality

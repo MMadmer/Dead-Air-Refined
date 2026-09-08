@@ -35,6 +35,40 @@ float3 gtao_view_pos(float2 tc, float viewz)
     return float3((tc * 2.0 - 1.0) * pos_decompression_params.xy * viewz, viewz);
 }
 
+// Reference normal for the horizon search. The march runs over the DEPTH buffer, which is
+// flat per triangle; measuring it against the interpolated, normal-mapped shading normal
+// makes every facet of a smooth-shaded low-poly mesh (an NPC's arm, face, fingers)
+// occlude itself on the side where the shading normal tilts away from the facet - a
+// per-triangle gradient that reads as the wireframe showing through the skin. The facet's
+// own plane, taken from the depth neighbourhood, is what the march actually sees. Each
+// axis takes the neighbour closer in depth so a silhouette does not pull in the surface
+// behind it; the result is oriented by the shading normal and trusted only where the two
+// roughly agree - thin alpha-tested geometry (grass, leaves) has no usable depth slope and
+// keeps the shading normal it had.
+float3 gtao_reference_normal(float2 tc, float3 P, float3 Ns)
+{
+    float2 dx = float2(pos_decompression_params2.z, 0.0);
+    float2 dy = float2(0.0, pos_decompression_params2.w);
+
+    float zl = s_position.SampleLevel(smp_nofilter, tc - dx, 0).z;
+    float zr = s_position.SampleLevel(smp_nofilter, tc + dx, 0).z;
+    float zu = s_position.SampleLevel(smp_nofilter, tc - dy, 0).z;
+    float zd = s_position.SampleLevel(smp_nofilter, tc + dy, 0).z;
+
+    float3 ex = (abs(zl - P.z) < abs(zr - P.z)) ? (P - gtao_view_pos(tc - dx, zl)) : (gtao_view_pos(tc + dx, zr) - P);
+    float3 ey = (abs(zu - P.z) < abs(zd - P.z)) ? (P - gtao_view_pos(tc - dy, zu)) : (gtao_view_pos(tc + dy, zd) - P);
+
+    float3 Ng = cross(ex, ey);
+    float len = length(Ng);
+    if (len < 1e-8)
+        return Ns;
+    Ng /= len;
+    Ng = (dot(Ng, Ns) < 0.0) ? -Ng : Ng;
+
+    // 0.85 is ~32 degrees, more than the facet-to-vertex-normal spread of any game mesh.
+    return normalize(lerp(Ns, Ng, smoothstep(0.7, 0.85, dot(Ng, Ns))));
+}
+
 float gtao_compute(float3 view_position, float3 view_normal, float2 texcoord, float2 jitter)
 {
     const float GTAO_TAU = 6.2831854;
@@ -163,9 +197,10 @@ float2 main(float2 tc0 : TEXCOORD0, float4 hpos : SV_Position) : SV_Target
 
     // Don't render GTAO past 60 units - it becomes a noisy mess. The view
     // position is shifted along the normal to kill self-occlusion.
+    float3 Ref = gtao_reference_normal(tc0, Point, Normal);
     float occlusion = Point.z > 60.0
         ? 1.0
-        : gtao_compute(Point + Normal * 0.0035, Normal, tc0, jitter);
+        : gtao_compute(Point + Ref * 0.0035, Ref, tc0, jitter);
 
     // R16G16_FLOAT: x = view-z (filter guide), y = raw occlusion
     return float2(Point.z, occlusion);

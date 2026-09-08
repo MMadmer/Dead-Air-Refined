@@ -900,7 +900,11 @@ public:
 // whenever the renderer comes up: any way a value gets lost or overwritten mid-session
 // (a script, a console line, a stale options control) heals on the next start instead
 // of surviving as "weapon shadows stopped working" with a Maximum preset on screen.
-void xrRender_sync_preset_derived()
+// user_facing: the switches that also live in the options menu and user.ltx (shadow map size,
+// AO technique, grass density and radius). They follow the preset only when the player applies
+// a preset; on renderer start the player's own user.ltx values stay, or the options would show
+// a choice the next start silently undid.
+void xrRender_sync_preset_derived(bool user_facing)
 {
     // The shadow-map budget follows the preset: it caps how many local light faces
     // keep their shadows in one frame, the rest light unshadowed. Maximum keeps the
@@ -922,6 +926,9 @@ void xrRender_sync_preset_derived()
     // keep the reference look. Not full strength on purpose - the technique's stepping
     // noise shows at 1.0, and 0.6-0.7 reads as shadow, not as dirt.
     static constexpr float sss_by_preset[] = {0.f, 0.f, 0.f, 0.6f, 0.7f};
+    // Step count of that ray: the band where neighbouring pixels disagree on a hit is one
+    // step wide, so at 8 steps over 35 cm it is 4 cm of rough edge - Maximum halves it.
+    static constexpr float sss_steps_by_preset[] = {8.f, 8.f, 8.f, 8.f, 16.f};
     // Water screen-space reflections ladder (r3_water_refl semantics: 0 off, the march length
     // scales 64/110/160 with the tier). The two top presets take the sibling engine's tuned
     // default (high); Minimum stays on the plain cubemap. A shader-options change, so it
@@ -994,6 +1001,7 @@ void xrRender_sync_preset_derived()
     static constexpr int clouds_by_preset[] = {0, 1, 1, 2, 3};
     ps_r__clouds_quality = clouds_by_preset[ps_Preset];
     ps_r__sss = sss_by_preset[ps_Preset];
+    ps_r__sss_steps = sss_steps_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
     // The look is not a quality tier: the same grade and foliage saturation on every preset,
     // re-applied here so a user.ltx line from an earlier build (the sibling's 1.6 / 2.0) or a
@@ -1016,21 +1024,21 @@ void xrRender_sync_preset_derived()
     ps_r__puddles_facing = 0.03f;
     ps_r__puddles_sky = 1.0f;
     ps_r__puddles_gbuf = 0;
-    ps_current_detail_density = detail_density_by_preset[ps_Preset];
+    if (user_facing)
+        ps_current_detail_density = detail_density_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_sm_res = wet_sm_res_by_preset[ps_Preset];
     ps_r__aref_quality = aref_by_preset[ps_Preset];
     ps_r__smaa = smaa_by_preset[ps_Preset];
     ps_r__taa = taa_by_preset[ps_Preset];
-    ps_r2_smapsize = smapsize_by_preset[ps_Preset];
+    if (user_facing)
     {
+        ps_r2_smapsize = smapsize_by_preset[ps_Preset];
         string_path ssao_cmd;
         strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
         Console->Execute(ssao_cmd);
-    }
-    // Radius goes through the console command so dm_current_size/dm_fade recompute exactly the
-    // way a manual r__detail_radius change does.
-    {
+        // Radius goes through the console command so dm_current_size/dm_fade recompute exactly
+        // the way a manual r__detail_radius change does.
         string32 radius_cmd;
         xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius_by_preset[ps_Preset]);
         Console->Execute(radius_cmd);
@@ -1078,7 +1086,7 @@ public:
 
         // Applied after the preset file so the derived switches stay in charge
         // regardless of what the file carries.
-        xrRender_sync_preset_derived();
+        xrRender_sync_preset_derived(true);
     }
 };
 

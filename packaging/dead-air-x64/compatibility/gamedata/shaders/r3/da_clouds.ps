@@ -73,6 +73,16 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 		}
 	}
 
+	// The weather's fog: the deck takes the fog's colour, then thins into the sky the fog
+	// already coloured - in a fog bank there is no deck to see.
+	{
+		const float t_deck = max(da_cloud_params.y - eye_position.y, 100.0f) / max(dir.y, 0.02f);
+		const float fogf = da_cloud_fog(dir.y, t_deck);
+		col = lerp(col, (fog_color.rgb - da_lightning_fog.rgb) * (1.0f - T), fogf);
+		T = lerp(T, 1.0f, fogf);
+		col *= 1.0f - fogf;
+	}
+
 	// Debug views replace the sky: the transmittance as grey, or the raw colour.
 	const float scale = s_tonemap.Load(int3(0, 0, 0)).x;
 	[branch] if (da_cloud_debug.x > 0.5f)

@@ -51,6 +51,10 @@ aim_hud_offset_rot_16x9     = 0.0,0.0,0.0
 ; is what makes the screen text readable (engine: CWeapon::GetHudFov)
 hud_fov_factor              = 0.9
 hud_fov_zoom_factor         = 0.29
+; the framing the device was authored on (hud_fov 0.375 at fov 75), in degrees: the same on
+; every fov / hud_fov the player picks, and no near-wall pull - a narrow fov used to grow the
+; screen past the edges with its tabs out of reach (engine: CWeapon::GetHudFov)
+hud_fov_absolute            = 28.125
 
 ; Hud sway. Hip values are the Gunslinger original. The AIM pair is damped to a quarter
 ; of it: raised to the face the screen fills the view, so the rotation lag that reads as

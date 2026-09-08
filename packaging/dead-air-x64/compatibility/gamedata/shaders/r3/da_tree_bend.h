@@ -28,7 +28,16 @@ struct da_tree_bend_in
     float frac;     // authored flexibility (tc.z * consts.x)
     float q_state;  // crown oscillator state (c_sun.z); 0 = none, the field's value is used
     float freq_k;   // natural-frequency factor (c_sun.w)
+    float flex_gate; // foliage at the root (c_tree.w): 0 a stump, a log or a snag, 1 a tree or a bush
 };
+
+// c_tree.w / instance row 9 w: 0 = an older producer (analytic field, the full bend);
+// 1 + gate = own analytic field; 3 + gate = the shared root sample is valid. The gate says
+// whether the root carries foliage: flora\trunk_wave dresses stumps, logs and snags as
+// readily as the trunk under a crown, and only a plant - a root with leaf cards - moves. Wood
+// reads 0 and stands still in any wind, whatever the tree format's height channel says.
+float da_tree_row_valid(float w) { return w > 2.5f ? 1.0f : 0.0f; }
+float da_tree_row_gate(float w) { return w > 2.5f ? saturate(w - 3.0f) : (w > 0.5f ? saturate(w - 1.0f) : 1.0f); }
 
 float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flow)
 {
@@ -56,17 +65,19 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
     const float sway = I.H * (dp * resp + flow.y * 0.5f);
     // Trunk profile against authored flexibility, soft max: a card whose base is stiff rides
     // the trunk, a tip keeps its own travel.
+    // The whole sway is the plant's: the gate takes it out on wood. (The tc.z "flexibility" is
+    // the compiler's height fraction, not an authored property - it is ~1 on a stump's top.)
     const float trunk_w = hn * sqrt(hn) * 0.75f;
     const float dw = trunk_w - I.frac;
     const float w = 0.5f * (trunk_w + I.frac + sqrt(dw * dw + 0.0025f));
-    float2 result = wdir * (sway * w);
+    float2 result = wdir * (sway * w * I.flex_gate);
     // Leaf flutter: a finer, 2.3x faster wave on the outer foliage, per-vertex phase.
     const float axis_r = length(I.pos.xz - I.root.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
     const float dp2 = da_flutter(wave.w * 2.3f * I.freq_k + dot(I.pos, (float3)wave * 3.7f));
-    result += wdir * (dp2 * leaf_w * saturate(I.H * 1.5f) * I.frac * 1.2f);
-    // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend).
-    result += da_tree_motors_bend(I.pos, I.root, I.H, I.tree_h, I.frac);
+    result += wdir * (dp2 * leaf_w * saturate(I.H * 1.5f) * I.frac * 1.2f * I.flex_gate);
+    // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend); wood takes none.
+    result += da_tree_motors_bend(I.pos, I.root, I.H, I.tree_h, I.frac) * I.flex_gate;
     // Progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
     // limit (~0.5 H, ~30 degrees) is an asymptote nothing visibly slams into. (An 8-degree
     // cap tried here left the trees leaning less in a storm than they used to.)

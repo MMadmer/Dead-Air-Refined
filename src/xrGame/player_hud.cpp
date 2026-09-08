@@ -464,6 +464,8 @@ attachable_hud_item::attachable_hud_item(player_hud* parent, const shared_str& s
     R_ASSERT3(!m_visual_name.empty(), "Missing 'item_visual' from weapon hud section.", m_sect_name.c_str());
 
     m_model = smart_cast<IKinematics*>(GEnv.Render->model_Create(m_visual_name.c_str()));
+    if (IKinematicsAnimated* ka = m_model ? m_model->dcast_PKinematicsAnimated() : nullptr)
+        ka->LL_SetBlendMinTimeEnabled(false);
 
     m_attach_place_idx = pSettings->read_if_exists<u16>(m_sect_name, "attach_place_idx", 0);
 
@@ -643,6 +645,14 @@ void player_hud::load(const shared_str& player_hud_sect)
     m_model = smart_cast<IKinematicsAnimated*>(GEnv.Render->model_Create(model_name.c_str()));
     m_model_2 = smart_cast<IKinematicsAnimated*>(GEnv.Render->model_Create(model_name.c_str()));
     g_player_hud_model_loading = 0;
+    // First-person cycles carry their own blend timing (a shot snaps in at once by design); the
+    // world's minimum blend time stretched every shot cycle into a crossfade shorter than itself.
+    if (m_model)
+        m_model->LL_SetBlendMinTimeEnabled(false);
+    if (m_model_2)
+        m_model_2->LL_SetBlendMinTimeEnabled(false);
+    // A hands model change invalidates every cached scene motion id.
+    m_scene_motions.clear();
 
     // Same model, same bone and motion ids: a cycle found through one copy plays on the other.
     // The clavicle name differs between rigs (l_clavicle, bip01_l_clavicle) - both are tried,
@@ -1211,6 +1221,8 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
         pcstr visual = pSettings->r_string(sect, "item_visual");
         m_scene_item_visual = GEnv.Render->model_Create(visual);
         m_scene_item_model = smart_cast<IKinematicsAnimated*>(m_scene_item_visual);
+        if (m_scene_item_model)
+            m_scene_item_model->LL_SetBlendMinTimeEnabled(false);
         // A static model is the norm for things not drawn for a scene (a backpack that was
         // made to hang on the back): it is held still.
         if (m_scene_item_visual && !m_scene_item_model && g_hud_scene_dbg)

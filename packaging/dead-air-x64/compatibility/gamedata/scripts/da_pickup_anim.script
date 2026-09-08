@@ -1,0 +1,63 @@
+-- [DA_PORT] The pickup scene: the hands play the take motion after an item is picked up
+-- from the ground. The motion is FDDA 0.9b's take_anim_enhanced (Public Domain), the hud
+-- section is da_pickup_hud (items_anm_da_pickup.ltx).
+--
+-- The scene plays AFTER the pickup, not before: actor_on_item_take_from_ground is a
+-- notification, the item is already in the backpack. FDDA's actor_on_item_before_pickup does
+-- not exist in Dead Air (absent from the axr_main whitelist, callback_set drops unknown
+-- names), so playing before the pickup would need an engine hook like the item use one.
+--
+-- Searching a dead body and looting a container open the stock windows at once, as in the
+-- original game: no scene is attached to them.
+
+-- The scene length comes from the engine, by the cycle itself; this is the fallback.
+local ANIM_FALLBACK_MS = 1100
+local SECT = "da_pickup_hud"
+local busy, one_hand = false, false
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", reset)
+	RegisterScriptCallback("actor_on_item_take_from_ground", after_pickup)
+end
+
+-- A load in the middle of the scene keeps the persisted time events but loses the state
+-- they close: drop them, the input gate is lifted by enhanced_animations on the same frame.
+function reset()
+	busy, one_hand = false, false
+	RemoveTimeEvent("da_pickup_anim", "start")
+	RemoveTimeEvent("da_pickup_anim", "stop")
+end
+
+function after_pickup(obj)
+	if busy or not obj or not db.actor then return end
+
+	busy = true
+	-- A weapon in the hands: the left hand alone plays the scene and the weapon stays
+	-- (two hand halves, player_hud). Empty hands: both halves, the slots blocked for the
+	-- scene - hide_weapon and restore_weapon are symmetric, the block counters converge.
+	one_hand = db.actor:active_slot() ~= 0
+	if not one_hand then
+		db.actor:hide_weapon()
+	end
+	game.only_allow_movekeys(true)
+	CreateTimeEvent("da_pickup_anim", "start", 0.05, start_anim)
+end
+
+function start_anim()
+	local anim_ms = game.get_motion_length(SECT, "anm_ea_show", 1.0)
+	if not anim_ms or anim_ms <= 0 then anim_ms = ANIM_FALLBACK_MS end
+
+	game.play_hud_motion(one_hand and 1 or 2, SECT, "anm_ea_show", false, 1.0, 0)
+	CreateTimeEvent("da_pickup_anim", "stop", anim_ms / 1000, stop_anim)
+	return true
+end
+
+function stop_anim()
+	game.stop_hud_motion()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+	if not one_hand then db.actor:restore_weapon() end
+	one_hand = false
+	busy = false
+	return true
+end

@@ -72,8 +72,11 @@ public:
     // SMAA working targets (edge mask / blend weights), always single-sampled
     ref_rt rt_smaa_edges;
     ref_rt rt_smaa_blend;
-    // Camera-TAA history: the previous resolved LDR frame (same format as generic0)
+    // Camera-TAA history: the previous resolved LDR frame, 10-bit. rt_taa_resolve is the
+    // second target of the resolve pass (the history cannot be read and written at once)
+    // and is copied into rt_taa_history right after it - same format, so CopyResource works.
     ref_rt rt_taa_history;
+    ref_rt rt_taa_resolve;
     ref_rt rt_Bloom_1; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_Bloom_2; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_LUM_64; // 64bit, 64x64,	log-average in all components

@@ -53,7 +53,8 @@ v2p_bumped main(v_tree I, uint instance_id : SV_InstanceID)
     bi.frac = frac;
     bi.q_state = local_c_sun.z;
     bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
-    float2 result = da_tree_bend(bi, wave, wind, local_c_tree.yzw);
+    bi.flex_gate = da_tree_row_gate(local_c_tree.w);
+    float2 result = da_tree_bend(bi, wave, wind, float3(local_c_tree.yz, da_tree_row_valid(local_c_tree.w)));
 #ifdef USE_TREEWAVE
     result = 0;
 #endif

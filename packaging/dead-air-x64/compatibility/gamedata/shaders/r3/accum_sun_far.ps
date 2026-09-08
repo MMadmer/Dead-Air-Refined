@@ -5,11 +5,10 @@
 #define SM_MINMAX
 #endif
 
-// The ultra path (SUN_QUALITY>2 -> shadow_extreme_quality) is retired on purpose - see
-// accum_sun_near.ps: it bypasses shadow_hw and with it the whole PCF kernel machinery.
-//#if SUN_QUALITY>2
-//#define ULTRA_SHADOWS_ON
-//#endif //	SUN_QUALITY>2
+// Stock ladder, same as accum_sun_near.ps: ultra = 7x7 Gather kernel, extreme = PCSS.
+#if SUN_QUALITY>2
+#define ULTRA_SHADOWS_ON
+#endif //	SUN_QUALITY>2
 
 #ifdef ULTRA_SHADOWS_ON
 #define USE_ULTRA_SHADOWS

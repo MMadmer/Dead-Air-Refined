@@ -39,6 +39,7 @@ public:
     // effect
     void RemoveParticle(int effect_id, u32 p_id) override;
     void SetMaxParticles(int effect_id, u32 max_particles) override;
+    void SetWindScale(int effect_id, float scale) override;
     void SetCallback(int effect_id, OnBirthParticleCB b, OnDeadParticleCB d, void* owner, u32 param) override;
     void GetParticles(int effect_id, Particle*& particles, u32& cnt) override;
     u32 GetParticlesCount(int effect_id) override;

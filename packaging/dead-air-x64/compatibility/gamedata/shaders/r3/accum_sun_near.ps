@@ -5,13 +5,13 @@
 #define SM_MINMAX
 #endif
 
-// The ultra path (SUN_QUALITY>2 -> shadow_extreme_quality) is retired on purpose: it walks
-// its own fixed Gather grid, bypassing shadow_hw - so the rotated/scaled PCF kernel and the
-// cascade kernel floor would silently not apply exactly on the top sun-quality setting.
-// Extreme now takes the same shadow_hw road as high, with the full kernel machinery.
-//#if SUN_QUALITY>2
-//#define ULTRA_SHADOWS_ON
-//#endif //	SUN_QUALITY>2
+// Stock ladder: SUN_QUALITY 3 (ultra) takes the 7x7 Gather kernel, 4 (extreme) the PCSS
+// blocker search whose penumbra widens with the occluder distance (shadow.h, shadow_hw_hq).
+// The path was once retired for a per-cascade PCF kernel that shadow_hw no longer carries;
+// without it the top two tiers silently fell back to the plain 4-tap PCF of "high".
+#if SUN_QUALITY>2
+#define ULTRA_SHADOWS_ON
+#endif //	SUN_QUALITY>2
 
 #ifdef ULTRA_SHADOWS_ON
 #define USE_ULTRA_SHADOWS
@@ -87,7 +87,12 @@ float4 main ( v2p_volume I ) : SV_Target
 
 	// Contact shadows only where the shadow map still leaves light: pixels the map already
 	// shadows took the early-out above, so the ray march is never paid for them.
-	s *= da_screen_space_shadow( _P.xyz, Ldynamic_dir.xyz, I.hpos.xy );
+	// Faded out toward grazing sun: the interpolated vertex normal calls a pixel lit while
+	// the flat depth facet under it is already turned past the light, and the ray then dives
+	// behind its own surface on the first step - on a low-poly skinned model that is a dark
+	// line along every edge near the terminator. Below N.L = 0.3 the sun term is small anyway.
+	const float sss = da_screen_space_shadow( _P.xyz, Ldynamic_dir.xyz, I.hpos.xy );
+	s *= lerp( 1.0f, sss, saturate( dot( _N.xyz, -Ldynamic_dir.xyz ) / 0.3f ) );
 	[branch] if (s <= 0.0f)
 		return 0.0f;
 

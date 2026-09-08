@@ -347,6 +347,8 @@ public:
     xr_vector<VertexDeclarator> nDC, xDC;
     xr_vector<VertexStagingBuffer> nVB, xVB;
     xr_vector<IndexStagingBuffer> nIB, xIB;
+    // -wvdbg only: the level shader table's "blender/texture" names, index-aligned with Shaders.
+    xr_vector<shared_str> ShaderNames_dbg;
     xr_vector<dxRender_Visual*> Visuals;
     CPSLibrary PSLibrary;
 

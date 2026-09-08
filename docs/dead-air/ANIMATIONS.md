@@ -8,9 +8,12 @@ carry the assets are described in [`CONTENT_BUNDLES.md`](CONTENT_BUNDLES.md).
 
 - **Item scenes** (FDDA): food, drinks, medical items and cigarettes are used in the hands
   instead of vanishing from the inventory.
-- **Skinning** with a knife: a scene on the carcass, then the stock loot window. "Skinning
-  animations" in the same menu.
-- **Body search**: a scene before the search window opens.
+- **Skinning** with a knife: a scene on the carcass, then the stock loot window. The scene owns
+  the whole input (the pause key stays): the camera is turned onto the carcass and a walking or
+  turning player only fought it. Death during the scene cancels it and the window does not open.
+- **Pickup**: the hands play the take motion after an item is picked up from the ground (a
+  one-hand scene when a weapon is held). Searching a dead body and looting a container open the
+  stock windows at once, as in the original game.
 - **Backpack**: opening the inventory plays the bag scene first; the bag model is the one the
   player wears (`da_backpack_<section>_hud`, else the common one).
 - **Wear**: putting on an outfit or a helmet from the inventory plays the equip scene with the
@@ -35,9 +38,9 @@ cycle names). Saves stay loadable in the original game and in every non-graphics
 | Scenes | `player_hud::scene_play/scene_stop/scene_active/scene_motion_length` | A hand cycle from any hud section with an optional item model in the hand (`item_visual`, `item_position/orientation/scale`, `item_attached`, `item_root_lock`, `lh_lead_gun`) and no `CHudItem` behind it. The cycle can be stretched to the scene length. A scene also ends by time, so a script that forgets to stop it cannot leave the item in the hands. Sections whose cycle is missing from the hands model are logged and skipped, never asserted. |
 | Extra motion sets | `[da_hud_animations]` in `dead_air_x64_animations.ltx`, `SkeletonAnimated.cpp` | `model stem = omf path or dir\*.omf`: appended to the model's own motion sets when the hands load. Every Dead Air and DAR2 hands model is listed (43); the 3D PDA rig is not, its bones differ. |
 | Script camera | `da_script_cam.{h,cpp}`, `CActor::script_cam_*` | An effector that owns the camera outright (position and HPB angles, frame-time-aware smoothing, `AbsolutePositioning`). Removed by type; the removal callback clears the actor's handle. |
-| Input gate | `Level_input.cpp`, `game.only_allow_movekeys` | While a scene runs, only movement, look, pause, console, screenshot, quit and quick save/load presses pass. Releases always pass. |
+| Input gate | `Level_input.cpp`, `game.only_allow_movekeys` | While a scene runs, only movement, look, pause, console, screenshot, quit and quick save/load presses pass. Releases always pass. The skinning scene adds `level.disable_input()`: its camera is scripted, so movement and look are taken too. |
 | Ladder gate | `xrPhysics/ElevatorState.cpp`, `game.set_actor_allow_ladder` | A climb takes the actor off a ladder and keeps it off. |
-| Hooks | `_G.da_before_item_use(npc, item)` (CInventory::Eat), `_G.da_before_inventory()` (UIGameSP kINVENTORY), `_G.da_before_body_search(obj)` (ActorInput), `_G.da_before_wear(obj, slot)` (CUIActorMenu::ToSlot, outfit/helmet/backpack slots) | Each is asked BEFORE the stock action; a false answer cancels it and the script finishes the action itself when the scene is over. |
+| Hooks | `_G.da_before_item_use(npc, item)` (CInventory::Eat), `_G.da_before_inventory()` (UIGameSP kINVENTORY), `_G.da_before_wear(obj, slot)` (CUIActorMenu::ToSlot, outfit/helmet/backpack slots) | Each is asked BEFORE the stock action; a false answer cancels it and the script finishes the action itself when the scene is over. The body search has no hook: `CActor::ActorUse` opens the search window directly, as the original does. |
 | Lua exports | `game.play_hud_motion(hand, section, anm, mix, speed[, target_ms])`, `game.get_motion_length`, `game.stop_hud_motion`, `game.world2ui`, `game.only_movekeys_allowed`, `level.set_cam_custom_position_direction(pos, hpb[, smoothing[, hud[, hud_affect]]])`, `level.remove_cam_custom_position_direction`, `obj:iterate_belt`, `obj:get_actor_movement_state`, `obj:move_to_ruck`, `obj:move_to_slot`, `obj:unblock_all_slots`, `obj:change_power`, `obj:change_satiety`, `obj:get_additional_max_weight` / `get_additional_max_walk_weight` (outfits, backpacks and artefacts - Dead Air keeps its kits, class SCRPTART, in the backpack slot), `obj:set_actor_position(pos, skip_collision[, keep_speed])`, `CArtefact:AdditionalInventoryWeight` | The names the community's modded engines use, so Anomaly-born scripts port without renaming. |
 | Config overlay | `x_ray.cpp`, `dead_air_x64_animations.ltx` | Merged on top of `system.ltx` like the 3D PDA sections; `#include`s the `items\items\items_anm_*.ltx` hud sections. No DA file is overridden. |
 
@@ -55,7 +58,8 @@ tune the scene item seat in game and `hud_scene_item_dump` prints the config lin
 | `da_mod_compat` | The Anomaly helpers the addons capture at load (`normalize`, `clamp`, `IsMoveState`, `move_state`, `nextTick`, `GetEvent/SetEvent`, `SYS_GetParam`, `ui_options`, ...). Only names that do not exist yet. |
 | `enhanced_animations`, `take_item_anim`, `ciga_effects`, `fov_anim_manager`, `ea_callbacks`, `ea_prefetcher` | FDDA. No helper inventory item, no version window, no key toggle. |
 | `da_item_anims` | Answers "new" to the addons that ask which mode is active. The module is not optional: no option row, no key in `axr_options.ltx` or `user.ltx`. |
-| `da_body_search`, `da_backpack_anim`, `da_wear_anims` | The three hook-driven scenes. A two-hand scene starts only when the weapon is away: the active slot has emptied (the holster cycle has ended) and the holster length has passed, the holster length plus a margin being the cap. Frames are not a clock here: a time event, once due, is called every frame. |
+| `da_backpack_anim`, `da_wear_anims` | The two hook-driven scenes. A two-hand scene starts only when the weapon is away: the active slot has emptied (the holster cycle has ended) and the holster length has passed, the holster length plus a margin being the cap. Frames are not a clock here: a time event, once due, is called every frame. |
+| `da_pickup_anim` | The pickup scene, on `actor_on_item_take_from_ground` (the item is already in the backpack: a scene before the pickup would need an engine hook). Hud section `da_pickup_hud`. |
 | `demonized_ledge_grabbing` (+ `_animation_data`, `demonized_geometry_ray`, `demonized_randomizing_functions`) | Parkour. Rays only while the jump key is held and at most every 40 ms; a climb needs the key held 100 ms and the actor within 0.75 m of the wall. `probe_now()` runs one pass regardless of the key; `debug_log = true` explains a miss in the log. |
 
 `configs/items/items/`: the FDDA lists (`anims_list.ltx`, `ea_addon_*.ltx`, `anims_skip.ltx`,

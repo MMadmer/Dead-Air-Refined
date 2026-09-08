@@ -83,9 +83,11 @@ private:
     {
         shared_motions motions;
         BoneMotionsVec bone_motions;
+        bool tracks_refused{}; // a cycle of this set was refused for a missing bone track (said once)
     };
     using MotionsSlotVec = xr_vector<SMotionsSlot>;
     MotionsSlotVec m_Motions;
+    bool m_blend_min_time{true};
 
     CPartition* m_Partition{};
 
@@ -149,6 +151,7 @@ public:
     // Rejects ids that would index m_Motions or its motion defs out of bounds, with a log line
     // naming the caller; every entry point taking a MotionID from the game layer goes through it.
     bool motion_id_usable(MotionID motion_ID, pcstr caller);
+    bool motion_tracks_complete(u16 part, MotionID motion_ID);
 
     ICF CMotionDef* LL_GetMotionDef(MotionID id)
     {
@@ -159,7 +162,9 @@ public:
     ICF CMotion* LL_GetRootMotion(MotionID id) { return &m_Motions[id.slot].bone_motions[iRoot]->at(id.idx); }
     ICF CMotion* LL_GetMotion(MotionID id, u16 bone_id)
     {
-        return &m_Motions[id.slot].bone_motions[bone_id]->at(id.idx);
+        // A bone the motion set has no track for (a set made for another rig) is null here.
+        MotionVec* track = m_Motions[id.slot].bone_motions[bone_id];
+        return track ? &track->at(id.idx) : nullptr;
     }
     virtual IBlendDestroyCallback* GetBlendDestroyCallback();
     virtual void SetBlendDestroyCallback(IBlendDestroyCallback* cb);
@@ -175,6 +180,7 @@ public:
     void LL_FadeCycle(u16 partition, float falloff, u8 mask_channel = (1 << 0));
     void LL_CloseCycle(u16 partition, u8 mask_channel = (1 << 0));
     void LL_SetChannelFactor(u16 channel, float factor);
+    void LL_SetBlendMinTimeEnabled(bool enabled) override { m_blend_min_time = enabled; }
     CBlendInstance& LL_GetBlendInstance(u16 bone_id)
     {
         VERIFY(bone_id < LL_BoneCount());

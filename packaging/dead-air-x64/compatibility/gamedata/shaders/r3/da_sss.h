@@ -28,10 +28,13 @@ float2 da_sss_project( float3 pv )
 }
 
 // Per-pixel jitter of the ray start. Without it every pixel steps in lockstep and the
-// shadow shows the steps as bands; with it the bands scatter into noise.
+// shadow shows the steps as bands. Interleaved gradient noise (Jimenez 2014): no visible
+// period, the same value for a pixel on every frame. The previous
+// frac( dot( floor( pos ), ( 1/16, 1/4 ) ) * 4 ) had an integer y term, so frac() reduced
+// it to frac( x / 4 ) - four vertical stripes sliding over the geometry with every camera move.
 float da_sss_dither( float2 pos2d )
 {
-	return frac( dot( floor( pos2d ), float2( 0.0625f, 0.25f ) ) * 4.0f );
+	return frac( 52.9829189f * frac( dot( floor( pos2d ), float2( 0.06711056f, 0.00583715f ) ) ) );
 }
 
 // Returns a lighting factor: 1 = lit, 0 = fully shadowed.
@@ -48,7 +51,10 @@ float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
 	// The ray walks TOWARD the sun, so negate: Ldynamic_dir points AT the surface.
 	const float3 dir = -normalize( light_dir_view );
 
-	float3 rp = pv + dir * dstep * ( 0.5f + 0.5f * da_sss_dither( pos2d ) );
+	// Start offset in [0.5, 1) step: the first test lands 1.5..2 steps out, clear of the
+	// virtual-offset region where the ray still sits inside its own surface's bias.
+	const float start = 0.5f + 0.5f * da_sss_dither( pos2d );
+	float3 rp = pv + dir * dstep * start;
 
 	float occ = 0.0f;
 
@@ -73,12 +79,21 @@ float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
 		// Hit: the ray ended up behind a surface, but not deeper than its assumed thickness.
 		// The upper bound is mandatory - without it any object would be infinitely deep and
 		// drag its shadow across the whole scene.
-		[branch] if ( diff > 0.02f && diff < thick )
-		{
-			// Fade toward the ray end, otherwise the length limit shows as a hard step.
-			occ = saturate( 1.0f - (float)i / (float)steps );
+		// Two ramps instead of a step: behind by a couple of centimetres starts to count,
+		// one step deeper counts fully, and the thickness bound fades over its upper half.
+		// Neighbouring pixels start at different offsets (the dither), so a step function
+		// turns every sample near the boundary into full-contrast noise; the ramps turn the
+		// same ambiguity into a gradient.
+		const float hit = saturate( ( diff - 0.02f ) / dstep ) * saturate( ( thick - diff ) / ( 0.5f * thick ) );
+
+		// Fade toward the ray end, otherwise the length limit shows as a hard step. Measured
+		// along the ray (start offset included) rather than by step index, so the fade does
+		// not quantise into the bands the dither exists to hide.
+		const float fade = saturate( 1.0f - ( start + (float)i ) / (float)steps );
+		occ = max( occ, hit * fade );
+
+		[branch] if ( hit >= 1.0f )
 			break;
-		}
 	}
 
 	return saturate( 1.0f - occ * da_sss.x );

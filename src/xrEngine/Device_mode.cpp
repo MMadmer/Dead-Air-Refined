@@ -178,6 +178,9 @@ void CRenderDevice::UpdateWindowProps()
             mode.refresh_rate = psDeviceMode.RefreshRate;
             SDL_SetWindowDisplayMode(m_sdlWnd, &mode);
             SDL_SetWindowFullscreen(m_sdlWnd, SDL_WINDOW_FULLSCREEN);
+            // DXGI grants exclusive ownership of the output to the foreground window only; a
+            // window that lost the foreground during the mode switch would be refused it.
+            SDL_RaiseWindow(m_sdlWnd);
         }
     }
 

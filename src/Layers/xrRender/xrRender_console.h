@@ -377,6 +377,6 @@ extern void xrRender_initconsole();
 // Re-derive the preset-driven switches (shadow budget, light details, hud/actor shadow)
 // from ps_Preset. Called by CCC_Preset and on renderer creation, so the preset stays the
 // single source of truth for values that never serialize into user.ltx.
-extern void xrRender_sync_preset_derived();
+extern void xrRender_sync_preset_derived(bool user_facing);
 extern BOOL xrRender_test_hw();
 } // namespace xray::render::RENDER_NAMESPACE

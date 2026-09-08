@@ -87,6 +87,10 @@ void CParticlesObject::UpdateSpatial()
     if (GEnv.isDedicatedServer)
         return;
 
+    // An object whose effect is not in particles.xr has no visual (see Init) and nothing to
+    // place in the spatial database; it lives out its second and goes.
+    if (!renderable.visual)
+        return;
     // spatial	(+ workaround occasional bug inside particle-system)
     vis_data& vis = renderable.visual->getVisData();
     if (_valid(vis.sphere))
@@ -275,7 +279,7 @@ void CParticlesObject::UpdateParent(const Fmatrix& m, const Fvector& vel)
 
 Fvector& CParticlesObject::Position() const
 {
-    if (GEnv.isDedicatedServer)
+    if (GEnv.isDedicatedServer || !renderable.visual)
     {
         static Fvector _pos = Fvector().set(0, 0, 0);
         return _pos;
@@ -286,7 +290,7 @@ Fvector& CParticlesObject::Position() const
 
 float CParticlesObject::shedule_Scale() const
 {
-    if (GEnv.isDedicatedServer)
+    if (GEnv.isDedicatedServer || !renderable.visual)
         return 5.0f;
 
     return Device.vCameraPosition.distance_to(Position()) / 200.f;
@@ -306,7 +310,8 @@ void CParticlesObject::renderable_Render(u32 context_id, IRenderable* root)
     // CParticleManager::Update (garbage action list) and CModelPool::DeleteQueue (double free).
     ScopeLock lock{ &render_lock };
 
-    VERIFY(renderable.visual);
+    if (!renderable.visual)
+        return;
     const auto dt = Device.dwTimeGlobal - dwLastTime;
     if (dt)
     {

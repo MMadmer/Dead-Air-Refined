@@ -45,6 +45,10 @@ void CRender::level_Load(IReader* fs)
         R_ASSERT2(chunk, "Level doesn't builded correctly.");
         u32 count = chunk->r_u32();
         Shaders.resize(count);
+        const bool keep_names = !!strstr(Core.Params, "-wvdbg");
+        ShaderNames_dbg.clear();
+        if (keep_names)
+            ShaderNames_dbg.resize(count);
         for (u32 i = 0; i < count; i++) // skip first shader as "reserved" one
         {
             string512 n_sh, n_tlist;
@@ -52,6 +56,8 @@ void CRender::level_Load(IReader* fs)
             chunk->skip_stringZ();
             if (0 == n[0])
                 continue;
+            if (keep_names)
+                ShaderNames_dbg[i] = n;
             xr_strcpy(n_sh, n);
             pstr delim = strchr(n_sh, '/');
             *delim = 0;
@@ -130,15 +136,47 @@ void CRender::level_Load(IReader* fs)
     {
         auto& tree_out = g_pGamePersistent->Environment().wind_veg_trees;
         tree_out.clear();
+        u32 rigid = 0;
+        // -wvdbg: what the tree shader is bending, per level shader entry ("blender/texture"):
+        // count, height, and whether the root carries foliage. The answer to "the stump sways"
+        // starts with the blender a stump was built with.
+        struct tree_kind { u32 count{}; u32 foliage{}; float h_min{1e9f}, h_max{}; };
+        xr_map<shared_str, tree_kind> kinds;
+        const bool dump = !!strstr(Core.Params, "-wvdbg");
         for (dxRender_Visual* V : Visuals)
         {
             if (V && (V->Type == MT_TREE_ST || V->Type == MT_TREE_PM))
             {
                 const FTreeVisual* T = static_cast<FTreeVisual*>(V);
                 tree_out.push_back(T->root_position());
+                if (T->rigid())
+                    ++rigid;
+                if (dump)
+                {
+                    shared_str tex("?");
+                    for (u32 i = 0; i < Shaders.size() && i < ShaderNames_dbg.size(); ++i)
+                        if (Shaders[i]._get() == V->shader._get())
+                        {
+                            tex = ShaderNames_dbg[i];
+                            break;
+                        }
+                    tree_kind& k = kinds[tex];
+                    ++k.count;
+                    if (!T->rigid())
+                        ++k.foliage;
+                    const float h = V->vis.box.vMax.y - T->root_position().y;
+                    k.h_min = std::min(k.h_min, h);
+                    k.h_max = std::max(k.h_max, h);
+                }
             }
         }
-        Msg("* [wind-veg] %u tree positions published", u32(tree_out.size()));
+        // rigid = tree-shader visuals whose root carries no foliage (stumps, logs, snags, the
+        // trunk_wave odds and ends): the wind leaves them alone, which is worth a number in the
+        // log when someone says it does not.
+        Msg("* [wind-veg] %u tree positions published, %u rigid", u32(tree_out.size()), rigid);
+        for (const auto& [tex, k] : kinds)
+            Msg("* [wind-veg] tree kind [%s]: %u visual(s), %u with foliage at the root, height %.1f..%.1f m",
+                tex.c_str(), k.count, k.foliage, k.h_min, k.h_max);
     }
 
     // Headlamp projector warmup - see m_torch_spot_warm in r2.h. The texture name is the

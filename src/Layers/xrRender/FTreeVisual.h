@@ -63,6 +63,8 @@ public:
 
     // The vegetation-audio layer harvests tree world positions once per level load.
     const Fvector& root_position() const { return xform.c; }
+    // No foliage on this root - a stump, a log, a snag: the wind does not move it.
+    bool rigid() const;
 
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override; // LOD - Level Of Detail  [0.0f - min, 1.0f - max], Ignored
 #ifdef USE_DX11

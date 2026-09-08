@@ -41,7 +41,8 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_RT_smaa_edges    "$user$smaa_edges"   // --- SMAA pass 1 output (RG edge mask)
 #define     r2_RT_smaa_blend    "$user$smaa_blend"   // --- SMAA pass 2 output (blend weights)
 #define     r2_RT_gtao          "$user$gtao_0"      // GTAO: view-z + raw AO for the guided filter
-#define     r2_RT_taa_history   "$user$taa_history"  // camera-TAA history (previous resolved LDR frame)
+#define     r2_RT_taa_history   "$user$taa_history"  // camera-TAA history (previous resolved frame, 10-bit)
+#define     r2_RT_taa_resolve   "$user$taa_resolve"  // camera-TAA resolve MRT1: this frame's history before the copy
 
 #define     r2_RT_ssao_temp     "$user$ssao_temp"   // temporary rt for ssao calculation
 #define     r2_RT_half_depth    "$user$half_depth"  // temporary rt for ssao/hbao calculation

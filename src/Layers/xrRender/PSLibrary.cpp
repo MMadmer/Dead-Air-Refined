@@ -28,7 +28,63 @@ void CPSLibrary::OnCreate()
         FS.update_path(fn, _game_data_, "particles.xr");
         Load(fn);
         LoadLooseOverrides();
+        ResolveWindScales();
     }
+}
+
+// Which effects drift in the wind and how much. The rule table is data (the mechanism lives
+// here, the names in dead_air_x64_wind.ltx): an exact effect name wins, otherwise the LONGEST
+// substring key found in the name decides, and an effect no key matches takes no wind at all.
+// So "anomaly" (0) beats "smoke" (1) inside an anomaly's smoke, while a campfire's smoke drifts
+// and its flame stays over the logs.
+void CPSLibrary::ResolveWindScales()
+{
+    ZoneScoped;
+
+    xr_vector<std::pair<xr_string, float>> table;
+    string_path path;
+    FS.update_path(path, "$game_config$", "dead_air_x64_wind.ltx");
+    if (FS.exist(path))
+    {
+        CInifile ini(path, TRUE);
+        if (ini.section_exist("particle_wind"))
+            for (const auto& item : ini.r_section("particle_wind").Data)
+                if (item.first.size() && item.second.size())
+                {
+                    xr_string key(item.first.c_str());
+                    std::transform(key.begin(), key.end(), key.begin(), [](char c) { return char(tolower(c)); });
+                    table.emplace_back(std::move(key), clampr(float(atof(item.second.c_str())), 0.f, 1.f));
+                }
+    }
+    // Longest key first: the first substring hit is the longest one.
+    std::sort(table.begin(), table.end(), [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
+
+    u32 windy = 0;
+    for (PS::CPEDef* def : m_PEDs)
+    {
+        xr_string name(def->Name() ? def->Name() : "");
+        std::transform(name.begin(), name.end(), name.begin(), [](char c) { return char(tolower(c)); });
+        float scale = 0.f;
+        bool exact = false;
+        for (const auto& [key, value] : table)
+            if (key == name)
+            {
+                scale = value;
+                exact = true;
+                break;
+            }
+        if (!exact)
+            for (const auto& [key, value] : table)
+                if (name.find(key) != xr_string::npos)
+                {
+                    scale = value;
+                    break;
+                }
+        def->m_WindScale = scale;
+        if (scale > 0.f)
+            ++windy;
+    }
+    Msg("* [wind] particle wind: %u rule(s), %u of %u effect(s) drift", u32(table.size()), windy, u32(m_PEDs.size()));
 }
 
 // Per-particle overrides without rebuilding particles.xr. The whole game ships as one

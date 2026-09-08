@@ -116,12 +116,10 @@ float4 	main (v2p_volume  I) : SV_Target
 		Pv -= direction;
 	}
 
-	// Forward-scatter: shafts brighten toward the sun and thin away from it, per PIXEL this time
-	// (the 1.2.1 removal dropped a per-frame scalar of the same physical term - this is its
-	// better-shaped return). Ldynamic_dir is bound in view space, normalize(P) is the view ray;
-	// remap keeps the away-from-sun floor at 0.2 like the old member did.
-	float fScatter = 0.5f * dot(normalize(P), -Ldynamic_dir.xyz) + 0.5f;
-	res *= 0.80f * fScatter + 0.20f;
+	// No view-dependent scatter term here, on purpose. The stock -Ldynamic_dir.z saturation
+	// (0.2..1 by the camera-to-sun angle) and its per-pixel form both make the shafts several
+	// times denser facing the sun than facing away from it; players report that as broken.
+	// Dropped in 1.2.1, re-added by the audit port, dropped again - keep it dropped.
 
 	float4 sunColor = float4(1,1,1,1);
 	sunColor.xyz = normalize(Vibrance(L_hemi_color.rgb,1));

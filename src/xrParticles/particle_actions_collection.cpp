@@ -1072,8 +1072,12 @@ void PAMatchVelocity::Transform(const Fmatrix&) { ; }
 
 void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
 {
-    // The wind. Every effect drifts in it - smoke leans downwind, dust and sparks are carried,
-    // a blast ring shoves the smoke beside it - through the same service the grass reads.
+    // The wind. An effect that opted in (wind_scale > 0: smoke, dust, steam, fog - see
+    // [particle_wind] in dead_air_x64_wind.ltx) drifts in it - smoke leans downwind, dust is
+    // carried, a blast ring shoves the smoke beside it - through the same service the grass
+    // reads. Everything else keeps its authored motion: the relaxation below REPLACES the
+    // horizontal velocity, so a flame sprite, a muzzle flash or a ring on water given the
+    // wind would leave its source and sail off with the weather.
     // The wind at the effect is refreshed a few times a second (it is a world query with a
     // shelter test; per particle per frame would be absurd), and each particle relaxes
     // toward it with a rate set by its size: a big soft puff follows the air, a small hot
@@ -1081,7 +1085,7 @@ void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
     // is absent or the air is still.
     bool windy = false;
     pVector wind;
-    if (g_wind_sampler && effect->p_count > 0)
+    if (g_wind_sampler && effect->wind_scale > 0.f && effect->p_count > 0)
     {
         effect->wind_stamp += dt;
         if (effect->wind_stamp < 0.f || effect->wind_stamp > 0.33f)
@@ -1091,7 +1095,7 @@ void PAMove::Execute(ParticleEffect* effect, const float dt, float& tm_max)
             g_wind_sampler(effect->particles[0].pos, w);
             effect->wind.set(w);
         }
-        wind = effect->wind;
+        wind = effect->wind * effect->wind_scale;
         windy = wind.square_magnitude() > 0.01f;
     }
 

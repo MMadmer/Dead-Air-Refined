@@ -50,8 +50,9 @@ float4 tree_instance_sun(uint instance_id)
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 8];
 }
 
-// Row 9: x = tree height, yz = root gust/deviation, w = field valid. The scalar path
-// passes the same in c_tree; zero w keeps older producers on the analytic field.
+// Row 9: x = tree height, yz = root gust/deviation, w = validity and flexibility gate packed
+// (da_tree_row_valid / da_tree_row_gate in da_tree_bend.h). The scalar path passes the same
+// in c_tree; zero w keeps older producers on the analytic field with the full bend.
 float4 tree_instance_tree(uint instance_id)
 {
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 9];

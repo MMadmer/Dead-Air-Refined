@@ -9,6 +9,7 @@
 #include "ui/UIPdaWnd.h"
 #include "UITimeDilator.h"
 #include "player_hud.h"
+#include "PdaAnimatorItem.h"
 #include "xrScriptEngine/script_engine.hpp"
 
 extern ENGINE_API shared_str current_player_hud_sect;
@@ -181,6 +182,14 @@ bool call_toggle(pcstr fn_name)
     if (!GEnv.ScriptEngine->functor<bool>(fn_name, fn))
         return false;
     return fn();
+}
+
+// The presenter in the animation slot, if the item there is ours. Dead Air parks its own
+// short-lived animation items in the same slot (the quick knife strike, the mask cleaning):
+// treating any occupant as the presenter holstered and released them mid-play.
+static CPdaAnimatorItem* presenter_item(CActor* actor)
+{
+    return actor ? smart_cast<CPdaAnimatorItem*>(actor->inventory().ItemFromSlot(ANIMATION_SLOT)) : nullptr;
 }
 
 // The Lua bridge stays the transport (alife create / activate_slot / release live there),
@@ -493,7 +502,7 @@ void update()
         if (actor && !actor->g_Alive())
             actor = nullptr;
         const bool win = window_shown();
-        PIItem in_slot = actor ? actor->inventory().ItemFromSlot(ANIMATION_SLOT) : nullptr;
+        PIItem in_slot = presenter_item(actor);
         if (actor)
         {
             // window up, device not raised (missing, spawned-but-idle, or mid-holster) ->
@@ -523,7 +532,7 @@ void update()
     if (hands_swapped && !presenter)
     {
         CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
-        if (!actor || !actor->inventory().ItemFromSlot(ANIMATION_SLOT))
+        if (!presenter_item(actor))
             swap_hands_out();
     }
 
@@ -535,7 +544,7 @@ void update()
     if (presenter)
     {
         CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
-        if (actor && actor->inventory().ItemFromSlot(ANIMATION_SLOT))
+        if (presenter_item(actor))
             orphan_since = -1.f;
         else if (orphan_since < 0.f)
             orphan_since = now;

@@ -127,15 +127,13 @@ float4 main(vf I) : SV_Target
 
 	// Нормаль воды: строго вверх плюс рябь. Она живёт ЗДЕСЬ, а не в G-буфере — потому и не создаёт
 	// каймы: наложение смешивается с кадром по альфе, а альфа границ не подчёркивает.
-	float3 water_n = float3(0.0f, 1.0f, 0.0f);
-	[branch] if (P.ripple_amp > 0.0001f)
-	{
-		const float2 q = pos_w.xz * 12.0f + float2(sin(timers.x * 0.7f), cos(timers.x * 0.53f)) * 2.0f;
-		const float h0 = da_vnoise(q);
-		const float hx = da_vnoise(q + float2(0.35f, 0.0f));
-		const float hy = da_vnoise(q + float2(0.0f, 0.35f));
-		water_n = normalize(float3((h0 - hx) * P.ripple_amp * 6.0f, 1.0f, (h0 - hy) * P.ripple_amp * 6.0f));
-	}
+	// The SAME ripple gradient the G-buffer half computes (wind drift, rain run-off, impact
+	// rings), so the mirror wobbles coherently. The noise this pass used to build on its own
+	// (an unrelated hash at 6x the amplitude, swung on an ellipse by the timers) sent
+	// neighbouring rays 10-15 degrees apart: the march came back as per-pixel noise that read
+	// as "no reflection", and it never stood still. The x2 keeps a hard rain visible as a
+	// gentle wobble (~5 degrees); calm water tilts under one degree.
+	const float3 water_n = normalize(float3(P.ripple.x * 2.0f, 1.0f, P.ripple.y * 2.0f));
 
 	const float3 vreflect = reflect(view_w, water_n);
 

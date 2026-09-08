@@ -255,6 +255,7 @@ BOOL CParticleEffect::Compile(CPEDef* def)
         IReader F(m_Def->m_Actions.pointer(), m_Def->m_Actions.size());
         ParticleManager()->LoadActions(m_HandleActionList, F);
         ParticleManager()->SetMaxParticles(m_HandleEffect, m_Def->m_MaxParticles);
+        ParticleManager()->SetWindScale(m_HandleEffect, m_Def->m_WindScale);
         ParticleManager()->SetCallback(m_HandleEffect, OnEffectParticleBirth, OnEffectParticleDead, this, 0);
         // time limit
         if (m_Def->m_Flags.is(CPEDef::dfTimeLimit))

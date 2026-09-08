@@ -17,6 +17,10 @@ struct PARTICLES_API ParticleEffect
     // the effect's position a few times a second (PAMove). Not serialised - it is weather.
     pVector wind{};
     float wind_stamp{-1.f};
+    // How much of that wind the particles take (0 = none): smoke and dust drift, a flame
+    // sprite, a muzzle flash or a ring on water stay where they were authored. Set from the
+    // effect definition (see CPEDef::m_WindScale); an effect no rule names gets zero.
+    float wind_scale{};
 
     ParticleEffect(int mp);
 

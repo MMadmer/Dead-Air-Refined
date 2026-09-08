@@ -29,10 +29,21 @@ local function section()
     return nil
 end
 
+-- The item in the animation slot only when it is OURS. Dead Air parks its own short-lived
+-- animation items in the same slot (the quick knife strike of xr_actor, the mask cleaning of
+-- dinamic_hud); adopting whatever sits there holstered and released them mid-play.
+local function own_item()
+    local item = db.actor and db.actor:item_in_slot(13)
+    if item and item:section() == section() then
+        return item
+    end
+    return nil
+end
+
 function _G.da_pda3d_activate()
     -- toggled back mid-holster: the item still lives in the slot, so just re-raise it
     -- instead of finishing the drop - the key stays instantly responsive
-    if (state == 4 or state == 5) and db.actor and db.actor:item_in_slot(13) then
+    if (state == 4 or state == 5) and own_item() then
         db.actor:activate_slot(13)
         state = 2
         spawn_at = time_global()
@@ -40,7 +51,7 @@ function _G.da_pda3d_activate()
     end
     -- the player switched slots away by hand (weapon key with the device up): the item is
     -- hidden but still ours - raise it back instead of swallowing the press
-    if state == 3 and db.actor and db.actor:item_in_slot(13) and db.actor:active_slot() ~= 13 then
+    if state == 3 and own_item() and db.actor:active_slot() ~= 13 then
         db.actor:activate_slot(13)
         state = 2
         spawn_at = time_global()
@@ -56,12 +67,17 @@ function _G.da_pda3d_activate()
     last_slot = db.actor:active_slot() or 0
     -- an item already sitting in the slot (save restore, or a leftover from an interrupted
     -- teardown): raise IT - spawning a second one on top would wedge the slot
-    local left = db.actor:item_in_slot(13)
+    local left = own_item()
     if left then
         item_id = left:id()
         db.actor:activate_slot(13)
         state = 2
         spawn_at = time_global()
+        return true
+    end
+    -- someone else's animation item is in the slot (a knife strike in flight): not a
+    -- refusal, the engine asks again once it is gone
+    if db.actor:item_in_slot(13) then
         return true
     end
     alife():create(sect, db.actor:position(), db.actor:level_vertex_id(),
@@ -75,7 +91,7 @@ function _G.da_pda3d_deactivate()
     if state == 0 then
         -- a save made with the device up restores the item while this state machine is
         -- idle: adopt it, otherwise the PDA could never be put away after such a load
-        if db.actor and db.actor:item_in_slot(13) then
+        if own_item() then
             last_slot = 0
             state = 4
             spawn_at = time_global()
@@ -108,7 +124,7 @@ local function tick()
     end
 
     if state == 1 then
-        local anm = db.actor:item_in_slot(13)
+        local anm = own_item()
         if anm then
             item_id = anm:id()
             db.actor:activate_slot(13)
@@ -132,7 +148,7 @@ local function tick()
         spawn_at = time_global()
         holster_fallback_done = false
     elseif state == 5 then
-        local anm = db.actor:item_in_slot(13)
+        local anm = own_item()
         local expired = time_global() > spawn_at + 3000
         if not anm then
             -- gone already (external release); nothing left to do

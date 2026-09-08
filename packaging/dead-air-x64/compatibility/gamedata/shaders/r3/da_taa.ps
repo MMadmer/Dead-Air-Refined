@@ -9,6 +9,11 @@
 // m_previous comes from the mblur block of phase_combine: previous-frame view-projection
 // composed with the CURRENT inverse view, i.e. it maps current view-space positions into
 // previous-frame clip space directly.
+//
+// Two outputs: the frame the rest of the chain reads (RGBA8 rt_Generic) and the history
+// for the next frame (10-bit rt_taa_resolve). The history needs more than 8 bits: with
+// the 0.12 update gain an 8-bit target rounds away every correction under ~4/255, so the
+// softness picked up while the camera moved never converged back once it stopped.
 
 Texture2D s_taa_history;
 
@@ -20,7 +25,55 @@ uniform float4 screen_res;
 // (min > max) when no device is up.
 uniform float4 pda_taa_bbox;
 
-float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position) : SV_Target
+struct taa_out
+{
+    float4 frame : SV_Target0;
+    float4 history : SV_Target1;
+};
+
+taa_out taa_write(float3 c)
+{
+    taa_out O;
+    O.frame = float4(c, 1.0);
+    O.history = float4(c, 1.0);
+    return O;
+}
+
+// Catmull-Rom history fetch, 9 taps folded into 5 bilinear ones (Jimenez, "Filmic SMAA").
+// A plain bilinear fetch at the fractional reprojected offset is a 2x2 box filter applied to
+// the history EVERY frame, and under the feedback below a slow pan stacks several of them -
+// that is the softness on world geometry that reprojects perfectly. The cubic keeps most of
+// the detail per resample; at an integer offset (still camera) it degenerates to the exact
+// texel, so a converged history is never touched.
+float3 taa_history(float2 uv)
+{
+    float2 pos = uv * screen_res.xy;
+    float2 center = floor(pos - 0.5) + 0.5;
+    float2 f = pos - center;
+
+    float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    float2 w3 = f * f * (-0.5 + 0.5 * f);
+    float2 w12 = w1 + w2;
+
+    float2 tc0 = (center - 1.0) * screen_res.zw;
+    float2 tc3 = (center + 2.0) * screen_res.zw;
+    float2 tc12 = (center + w2 / w12) * screen_res.zw;
+
+    float3 c = s_taa_history.SampleLevel(smp_rtlinear, float2(tc12.x, tc0.y), 0).rgb * (w12.x * w0.y);
+    c += s_taa_history.SampleLevel(smp_rtlinear, float2(tc0.x, tc12.y), 0).rgb * (w0.x * w12.y);
+    c += s_taa_history.SampleLevel(smp_rtlinear, float2(tc12.x, tc12.y), 0).rgb * (w12.x * w12.y);
+    c += s_taa_history.SampleLevel(smp_rtlinear, float2(tc3.x, tc12.y), 0).rgb * (w3.x * w12.y);
+    c += s_taa_history.SampleLevel(smp_rtlinear, float2(tc12.x, tc3.y), 0).rgb * (w12.x * w3.y);
+
+    // The dropped corner taps carry a little (negative) weight; renormalise so a flat field
+    // stays flat.
+    float wsum = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+    return max(c / wsum, 0.0);
+}
+
+taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position)
 {
     gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy);
 
@@ -29,7 +82,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     [branch]
     if (tc.x >= pda_taa_bbox.x && tc.y >= pda_taa_bbox.y && tc.x <= pda_taa_bbox.z &&
         tc.y <= pda_taa_bbox.w)
-        return float4(current, 1.0);
+        return taa_write(current);
 
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
     // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
@@ -41,7 +94,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     // view; losing TAA on it for a moment is invisible.
     [branch]
     if (gbd.P.z < 0.65)
-        return float4(current, 1.0);
+        return taa_write(current);
 
     // Reproject the view-space position into the previous frame.
     float4 prev_clip = mul(m_taa_previous, float4(gbd.P, 1.0));
@@ -49,9 +102,9 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
 
     [branch]
     if (prev_uv.x < 0.0 || prev_uv.x > 1.0 || prev_uv.y < 0.0 || prev_uv.y > 1.0 || prev_clip.w <= 0.0)
-        return float4(current, 1.0);
+        return taa_write(current);
 
-    float3 history = s_taa_history.Sample(smp_rtlinear, prev_uv).rgb;
+    float3 history = taa_history(prev_uv);
 
     // Variance clipping (Karis / INSIDE): the history may show something no longer visible
     // (disocclusion, a moving NPC, a rain streak - none carry velocity here). A raw 3x3
@@ -60,6 +113,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     // actual distribution, so anything the current frame does not corroborate is pulled
     // back within a frame or two. Clipping toward the mean (uniform scale) instead of a
     // per-component clamp keeps the hue - corner-of-the-box clamping tints the ghost.
+    // The same box also bounds the cubic's ringing at hard edges.
     float3 m1 = current, m2 = current * current;
     [unroll]
     for (int dy = -1; dy <= 1; ++dy)
@@ -88,5 +142,5 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Pos
     float motion_px = length((prev_uv - tc) * screen_res.xy);
     float w = 0.88 * saturate(1.0 - motion_px / 24.0);
 
-    return float4(lerp(current, history, w), 1.0);
+    return taa_write(lerp(current, history, w));
 }

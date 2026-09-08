@@ -547,6 +547,10 @@ void CWeapon::Load(LPCSTR section)
         m_hud_fov_factor = READ_IF_EXISTS(pSettings, r_float, fov_sect, "hud_fov_factor", 1.0f);
         m_hud_fov_zoom_factor =
             READ_IF_EXISTS(pSettings, r_float, fov_sect, "hud_fov_zoom_factor", m_hud_fov_factor);
+        // An absolute hud fov in degrees: the item is framed the same on every fov / hud_fov
+        // setting and never yields to the near-wall pull. A device held at the face (the PDA)
+        // is authored for one framing; on a narrow fov the factor path grew it past the screen.
+        m_hud_fov_absolute = READ_IF_EXISTS(pSettings, r_float, fov_sect, "hud_fov_absolute", 0.0f);
     }
     m_nearwall_dist_min = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_min", 0.5f);
     m_nearwall_dist_max = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_dist_max", 1.0f);
@@ -2787,7 +2791,9 @@ void CWeapon::render_hud_mode() { RenderLight(); }
 
 float CWeapon::GetHudFov()
 {
-    if (ParentIsActor() && Level().CurrentViewEntity() == H_Parent())
+    if (m_hud_fov_absolute > 0.f)
+        m_nearwall_last_hud_fov = m_hud_fov_absolute / _max(Device.fFOV, 1.f);
+    else if (ParentIsActor() && Level().CurrentViewEntity() == H_Parent())
     {
         float distance = HUD().GetCurrentRayQuery().range;
         clamp(distance, m_nearwall_dist_min, m_nearwall_dist_max);

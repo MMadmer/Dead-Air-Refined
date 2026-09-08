@@ -485,7 +485,7 @@ void CRender::create()
 
     // The preset-derived switches never persist in user.ltx; re-derive them from the
     // replayed preset so a value lost mid-session cannot survive into the next one.
-    xrRender_sync_preset_derived();
+    xrRender_sync_preset_derived(false);
 
     m_skinning = -1;
     m_MSAASample = -1;
@@ -1029,7 +1029,14 @@ IRenderVisual* CRender::model_CreateParticles(LPCSTR name)
         return Models->CreatePE(SE);
 
     PS::CPGDef* SG = PSLibrary.FindPGD(name);
-    R_ASSERT3(SG, "Particle effect or group doesn't exist", name);
+    if (!SG)
+    {
+        // A name that is in neither table is mod data (or a texture path in a config); a group
+        // compiled from a null definition dereferences it at the first GetTimeLimit. The
+        // caller (CParticlesObject::Init) treats a null visual as "no effect".
+        Msg("! Particle effect or group [%s] does not exist in particles.xr", name);
+        return nullptr;
+    }
     return Models->CreatePG(SG);
 }
 void CRender::models_Prefetch() { Models->Prefetch(); }

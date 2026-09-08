@@ -37,6 +37,8 @@ public:
 
     // Loose per-particle overrides from gamedata/particles, applied after particles.xr.
     void LoadLooseOverrides();
+    // Wind share per effect from [particle_wind] in dead_air_x64_wind.ltx, applied last.
+    void ResolveWindScales();
 
 public:
     CPSLibrary() { ; }

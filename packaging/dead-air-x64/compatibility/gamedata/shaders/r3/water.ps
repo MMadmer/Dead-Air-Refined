@@ -62,19 +62,25 @@ float2 da_water_ripples( float2 wxz, float t )
 	return r0 + r1 * 0.7h;
 }
 
-// Wind waves as two more layers of the same normal map, sampled in a frame aligned with the
-// wind: stretched along it, short across it, advected downwind at a share of the wind speed.
-// The slope comes back rotated into world XZ.
+// Wind waves as two more layers of the same normal map, each sampled in its own frame:
+// layer 0 rides the wind (stretched along it, short across it), layer 1 sits WATER_WIND_ROT
+// off the wind so the two lattices never coincide. Both drift downwind at a crest speed that
+// grows with the wind, the shorter waves slower. Each slope comes back rotated into world XZ.
 float2 da_water_wind_waves( float2 wxz, float2 wdir, float wind_ms, float t )
 {
-	float2 along = float2( dot(wxz, wdir), dot(wxz, float2(-wdir.y, wdir.x)) );
-	float drift = t * (0.12h + 0.025h * wind_ms);
-	float2 uv0 = along * float2(0.07h, 0.19h) - float2(drift, 0.0h);
-	float2 uv1 = along * float2(0.16h, 0.43h) - float2(drift * 1.6h, t * 0.03h);
+	float rs, rc;
+	sincos( WATER_WIND_ROT, rs, rc );
+	float2 wdir1  = float2( wdir.x * rc - wdir.y * rs, wdir.x * rs + wdir.y * rc );
+	float2 along0 = float2( dot(wxz, wdir ), dot(wxz, float2(-wdir.y,  wdir.x )) );
+	float2 along1 = float2( dot(wxz, wdir1), dot(wxz, float2(-wdir1.y, wdir1.x)) );
+	float  drift  = t * (WATER_WIND_DRIFT * wind_ms);
+	float2 uv0 = along0 * WATER_WIND_TILE_0 - float2(drift, 0.0h);
+	float2 uv1 = along1 * WATER_WIND_TILE_1 - float2(drift * 1.7h, drift * 0.35h) + 0.37h;
 	float2 r0  = s_nmap.Sample( smp_base, uv0 ).xy - 0.5h;
 	float2 r1  = s_nmap.Sample( smp_base, uv1 ).xy - 0.5h;
-	float2 r   = r0 + r1 * 0.6h;
-	return float2( r.x * wdir.x - r.y * wdir.y, r.x * wdir.y + r.y * wdir.x );
+	float2 s0  = float2( r0.x * wdir.x  - r0.y * wdir.y,  r0.x * wdir.y  + r0.y * wdir.x  );
+	float2 s1  = float2( r1.x * wdir1.x - r1.y * wdir1.y, r1.x * wdir1.y + r1.y * wdir1.x );
+	return s0 + s1 * 0.6h;
 }
 
 float3 calc_moon_road(float3 color, float3 vreflect, float2 tc, float depth, float Nz)

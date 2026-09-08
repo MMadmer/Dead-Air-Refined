@@ -31,6 +31,12 @@ struct TreeWindShared
     std::mutex update_lock;
     u32 refs{};
     bool settled{};           // the state has been set to its first target (no swing on load)
+    // A foliage visual (an alpha-tested leaf_wave card) shares this root. The tree format is
+    // what every multiple-use model compiles to, and flora\trunk_wave dresses stumps, logs and
+    // snags as readily as the trunk under a crown: the wave, the trunk profile, the flutter
+    // and the motors all belong to a plant, and a plant has leaves. A trunk_wave visual with
+    // no leaf_wave sibling at its root is wood, and wood stands still.
+    bool foliage{};
 };
 
 static xr_map<u64, TreeWindShared*> g_tree_wind_shared;
@@ -43,7 +49,7 @@ static u64 tree_wind_key(const Fvector& root)
     return q(root.x) | (q(root.y) << 21) | (q(root.z) << 42);
 }
 
-static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top)
+static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top, bool foliage)
 {
     std::lock_guard lock(g_tree_wind_shared_lock);
     const u64 key = tree_wind_key(root);
@@ -55,6 +61,7 @@ static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top)
     }
     ++s->refs;
     s->top = std::max(s->top, top);
+    s->foliage |= foliage;
     // Natural frequency from the real height, f = 1.0 / sqrt(H) Hz: a 15 m crown swings at
     // ~0.26 Hz, a 3 m bush at ~0.6 (the field regression sits a little above; this leans
     // toward the slower sway the trees had before they knew their height).
@@ -146,7 +153,15 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
     // One wind state per tree, registered by the root; the tallest visual sets the height.
     // The box of a level visual is world-space, so the top is measured from the root - a
     // crown visual's own box starts at its lowest branch and said nothing about the tree.
-    m_shared = tree_wind_shared_acquire(xform.c, std::max(vis.box.vMax.y - xform.c.y, 1.f));
+    // Foliage is what the blender compiled as alpha-tested (uber_deffer names that pixel
+    // shader "_aref"): the leaf_wave cards of a crown or a bush, never a trunk_wave trunk.
+    bool foliage = false;
+    if (shader && shader->E[0] && !shader->E[0]->passes.empty())
+    {
+        const ref_ps& ps = shader->E[0]->passes[0]->ps;
+        foliage = ps && ps->cName.c_str() && strstr(ps->cName.c_str(), "_aref");
+    }
+    m_shared = tree_wind_shared_acquire(xform.c, std::max(vis.box.vMax.y - xform.c.y, 1.f), foliage);
 
     /*if (RImplementation.o.ffp && dcl_equal(vFormat, mu_model_decl_unpacked))
     {
@@ -236,15 +251,28 @@ FTreeVisual_setup& GetTreeVisualSetup()
     return setup;
 }
 
+// The shadow pass that keeps the crowns still: every local light's map, and the sun cascades
+// on the presets without r__tree_shadow_sway.
+static bool tree_shadow_frozen(const CBackend& cmd_list)
+{
+    const auto& o = RImplementation.get_context(cmd_list.context_id).o;
+    return o.phase == CRender::PHASE_SMAP && (o.smap_local || !ps_r__tree_shadow_sway);
+}
+
 Fvector4 FTreeVisual::tree_wind_row() const
 {
+    // w carries two things (decoded by da_tree_row_valid / da_tree_row_gate in the shaders):
+    // 1 + gate for a visual on its own analytic field, 3 + gate when the shared root sample
+    // is valid; 0 stays the older producers' "no state, full bend". The gate is the root's
+    // foliage: a stump or a log reads 0 and the wind passes it by.
     if (!m_shared)
-        return Fvector4{1.f, 0.f, 0.f, 0.f};
+        return Fvector4{1.f, 0.f, 0.f, 2.f};
+    const float gate = m_shared->foliage ? 1.f : 0.f;
     const auto& s = *m_shared;
     // A quantized key can also join distinct nearby roots. Those visuals keep their own
     // analytic field instead of borrowing the other root's shader sample.
     const bool same_root = s.sampled_root.x == xform.c.x && s.sampled_root.z == xform.c.z;
-    return Fvector4{s.top, s.gust, s.deviation, same_root ? 1.f : 0.f};
+    return Fvector4{s.top, s.gust, s.deviation, (same_root ? 3.f : 1.f) + gate};
 }
 
 bool FTreeVisual::NeedsWindUpdate() const
@@ -370,9 +398,12 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     // Crowns freeze in the SHADOW pass on the lower presets for the same reason the grass does
     // (see dx11DetailManager_VS.cpp): sub-texel smap motion turns into specular shimmer on
     // whatever the canopy shades. On High and Extreme (r__tree_shadow_sway) the shadow sways
-    // with the crown - the cost is the wind chain once more per cascade.
+    // with the crown in the SUN cascades - the cost is the wind chain once more per cascade.
+    // A local light freezes it on every preset: a lamp or the player's own headlamp stands a
+    // metre or two from a bush, and the shadow it throws magnifies every centimetre of the
+    // sway into a metre of shadow sweeping the ground and the walls.
 #if RENDER != R_R1
-    if (!ps_r__tree_shadow_sway && RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    if (tree_shadow_frozen(cmd_list))
     {
         // set_wind takes a mutable ref; the value itself never changes.
         static Fvector4 wind_zero{};
@@ -409,7 +440,7 @@ void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
     // take the frozen wind. Without this the batched trees swayed in the cascades while the
     // scalar-path trees stood still, and the mismatch showed as a crown's shadow sliding
     // across the ground it stands on.
-    if (!ps_r__tree_shadow_sway && RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP)
+    if (tree_shadow_frozen(cmd_list))
     {
         static Fvector4 wind_zero{};
         cmd_list.tree.set_wind(wind_zero);
@@ -468,6 +499,8 @@ void FTreeVisual::Copy(dxRender_Visual* pSrc)
     PCOPY(c_scale);
     PCOPY(c_bias);
 }
+
+bool FTreeVisual::rigid() const { return !m_shared || !m_shared->foliage; }
 
 //-----------------------------------------------------------------------------------
 // Stripified Tree

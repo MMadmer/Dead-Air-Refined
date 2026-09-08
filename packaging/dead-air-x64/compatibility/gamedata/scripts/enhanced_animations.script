@@ -48,6 +48,7 @@ end
 function on_game_start()
 	da_register_before_item_use(da_on_before_item_use)
 	RegisterScriptCallback("on_game_load", on_game_load)
+	RegisterScriptCallback("actor_on_before_death", actor_on_before_death)
 end
 
 function on_game_load()
@@ -104,6 +105,11 @@ function monster_on_actor_use(obj)
 	-- Knife wear is charged by the loot window itself (ui_mutant_loot), not here.
 	used_monster = obj
 	game.only_allow_movekeys(true)
+	-- The camera is turned onto the carcass (recalc_actor_campos) and stays there: the
+	-- look-at keeps steering back until the view reaches the point, so a player who walks
+	-- or turns during the scene only fights it. The item scenes keep movement; this one
+	-- takes the whole input (pause stays), enable_input in ea_restore_actor lifts it.
+	level.disable_input()
 	anim_prepare()
 	recalc_actor_campos()
 end
@@ -291,7 +297,7 @@ end
 
 -- The item is consumed mid-scene, at the bite.
 function eat_my_obj()
-	if obj_m then
+	if obj_m and db.actor and db.actor:alive() then
 		db.actor:eat(obj_m)
 	end
 	return true
@@ -312,6 +318,12 @@ end
 function stop_my_monster_anim()
 	game.stop_hud_motion()
 	ea_restore_actor()
+	-- No carcass (a load in the middle of the scene brought the persisted event back with
+	-- nothing behind it) or a dead actor: the scene is over, the window does not open.
+	if not used_monster or not (db.actor and db.actor:alive()) then
+		used_monster = nil
+		return true
+	end
 	if used_monster:id() == 65535 or (not take_item_anim) then
 		used_monster = nil
 		return true
@@ -332,6 +344,43 @@ end
 function def_use_end()
 	game.only_allow_movekeys(false)
 	return true
+end
+
+-- Every deferred call of the two scenes; dropped when a scene is cut short.
+local function remove_scene_events()
+	RemoveTimeEvent("ea_object_eater", "eat_my_obj")
+	RemoveTimeEvent("ea_slot_returner", "call_my_slot_back")
+	RemoveTimeEvent("ea_anim_stoper", "stop_my_item_anim")
+	RemoveTimeEvent("ea_anim_stoper", "stop_my_monster_anim")
+	RemoveTimeEvent("ea_blood_fx", "blood_fx")
+	RemoveTimeEvent("ea_blood_fx2", "blood_fx2")
+	RemoveTimeEvent("ea_blood_fx3", "blood_fx3")
+	RemoveTimeEvent("ea_blood_fx4", "blood_fx4")
+end
+
+-- A scene cut short: nothing of it runs later - no bite, no loot window, no slot juggling
+-- on a corpse. The engine-side state (input, slots, hands) is released at once.
+function cancel_scene()
+	if not (used_item or used_monster) then return end
+	remove_scene_events()
+	UnregisterScriptCallback("actor_on_update", actor_on_update)
+	game.stop_hud_motion()
+	if monster_usage_snd then monster_usage_snd:stop() end
+	if item_usage_snd then item_usage_snd:stop() end
+	ea_restore_actor()
+	used_item = nil
+	used_monster = nil
+	obj_m = nil
+	det_active = nil
+	anim_section = nil
+	anim_exist_tm = nil
+	failure_timer = 0
+end
+
+-- Death during a scene: the scene is cancelled here; the loot window of a skinning cut
+-- short would otherwise open over the death screen from the persisted time event.
+function actor_on_before_death(whoID, flags)
+	cancel_scene()
 end
 -- Time Events >--
 
@@ -362,6 +411,9 @@ end
 -- owned camera) but loses the deferred calls that would lift it. Lifted unconditionally on the
 -- first frame: harmless without a scene, a rescue with one.
 function actor_on_first_update()
+	-- The time events survive a save (ProcessEventQueueState) while the scene they close
+	-- does not: without this a persisted stop_my_monster_anim fired into a nil carcass.
+	remove_scene_events()
 	used_item = nil
 	used_monster = nil
 	obj_m = nil

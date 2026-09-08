@@ -49,15 +49,25 @@ ITEM_INFO::~ITEM_INFO()
         CParticlesObject::Destroy(pParticle);
 }
 
-bool CCustomDetector::CheckCompatibilityInt(CHudItem* itm, u16* slot_to_activate)
+// The part of the compatibility rule that does not depend on the moment: a one-handed item
+// from a slot the detector may share. Reused once the show cycle is over (see OnAnimationEnd).
+static bool fits_beside_detector(CHudItem* itm)
 {
     if (!itm)
         return true;
 
     CInventoryItem& iitm = itm->item();
     const u32 slot = iitm.BaseSlot();
-    bool bres = (slot == INV_SLOT_2 || slot == INV_SLOT_3 || slot == KNIFE_SLOT || slot == BOLT_SLOT ||
+    return (slot == INV_SLOT_2 || slot == INV_SLOT_3 || slot == KNIFE_SLOT || slot == BOLT_SLOT ||
         slot == SIDEARM_SLOT || slot == ANIMATION_SLOT) && iitm.IsSingleHanded();
+}
+
+bool CCustomDetector::CheckCompatibilityInt(CHudItem* itm, u16* slot_to_activate)
+{
+    if (!itm)
+        return true;
+
+    bool bres = fits_beside_detector(itm);
     if (!bres && slot_to_activate)
     {
         *slot_to_activate = NO_ACTIVE_SLOT;
@@ -165,6 +175,12 @@ void CCustomDetector::OnStateSwitch(u32 S, u32 oldState)
     {
     case eShowing:
     {
+        // A detector in the hands works, whichever path raised it. Only ToggleDetector set the
+        // flag; a script show (switch_state(eShowing), the item scenes bringing a glowstick
+        // back) left it clear, so IsWorking() stayed false: active_detector() answered nil and
+        // UpdateDeviceEffects put the light out every frame.
+        if (!m_bWorking)
+            TurnDetectorInternal(true);
         if (config.lightStateControlled && !config.lightEnableFromIdle)
             enableLight();
         g_player_hud->attach_item(this);
@@ -224,7 +240,19 @@ void CCustomDetector::OnAnimationEnd(u32 state)
             if (!wasActive && m_sounds.FindSoundItem("sndSwitch", false))
                 m_sounds.PlaySound("sndSwitch", Fvector().set(0.f, 0.f, 0.f), this, true, false);
         }
-        SwitchState(eIdle);
+        // A two-handed weapon drawn while this show cycle was still playing found
+        // HideDetector in a non-idle state and left both in the hands (the weapon's draw
+        // passes allow_activation before the detector is attached). Judge the pair again
+        // now, from the state machine itself: GetState() still reads eShowing here, so
+        // HideDetector would return early.
+        attachable_hud_item* right = g_player_hud->attached_item(0);
+        if (right && right->m_parent_hud_item != this && !fits_beside_detector(right->m_parent_hud_item))
+        {
+            m_bFastAnimMode = true;
+            SwitchState(eHiding);
+        }
+        else
+            SwitchState(eIdle);
         if (IsUsingCondition() && m_fDecayRate > 0.f)
             ChangeCondition(-m_fDecayRate);
     }

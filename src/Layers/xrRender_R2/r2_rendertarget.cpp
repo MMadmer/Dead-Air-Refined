@@ -346,10 +346,16 @@ CRenderTarget::CRenderTarget()
         // writes the already-resolved LDR frame.
         rt_smaa_edges.create(r2_RT_smaa_edges, w, h, D3DFMT_A8R8G8B8, 1);
         rt_smaa_blend.create(r2_RT_smaa_blend, w, h, D3DFMT_A8R8G8B8, 1);
-        // Camera-TAA history: same format as generic0 so CopyResource works both ways.
-        // The pre-pass reads the deferred position as a plain 2D surface, so not under MSAA.
+        // Camera-TAA history pair, 10-bit: with the 0.12 update gain of the resolve an 8-bit
+        // history rounds away every correction under ~4/255 and never converges back to the
+        // sharp frame once the camera stops. The resolve writes rt_taa_resolve as its second
+        // target next to the RGBA8 frame and the copy into rt_taa_history is format-exact.
+        // The pass reads the deferred position as a plain 2D surface, so not under MSAA.
         if (!RImplementation.o.msaa)
-            rt_taa_history.create(r2_RT_taa_history, w, h, D3DFMT_A8R8G8B8, 1);
+        {
+            rt_taa_history.create(r2_RT_taa_history, w, h, D3DFMT_A2B10G10R10, 1);
+            rt_taa_resolve.create(r2_RT_taa_resolve, w, h, D3DFMT_A2B10G10R10, 1);
+        }
 #endif
 
         if (!options.msaa)

@@ -107,6 +107,18 @@ float da_cloud_density2d(float2 xz)
     return da_cloud_erode(da_cloud_coverage(xz), da_cloud_detail(xz));
 }
 
+// ---- The weather's fog on the deck ----------------------------------------------------------
+// X-Ray fog is a linear ramp on distance (fog_params: x = -near/(far-near), w = 1/(far-near)),
+// and the deck sits kilometres up: on its own the ramp would erase it in every weather. Fog is
+// a ground layer, so the path that counts is the layer's thickness over the sine of the
+// elevation, and no longer than the way to the deck. With 160 m a foggy cycle (fog to 150 m)
+// closes the sky, a rainy one (350 m) veils the deck, a clear one (1 km) only hazes the horizon.
+float da_cloud_fog(float dir_y, float t_deck)
+{
+    const float path = min(160.0f / max(dir_y, 0.02f), t_deck);
+    return saturate(path * fog_params.w + fog_params.x);
+}
+
 // ---- The map --------------------------------------------------------------------------------
 float2 da_cloud_map_uv(float2 xz) { return (xz - da_cloud_map.xy) * da_cloud_map.w + 0.5f; }
 

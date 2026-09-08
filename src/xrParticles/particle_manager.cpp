@@ -216,6 +216,12 @@ void CParticleManager::SetMaxParticles(int effect_id, u32 max_particles)
     pe->Resize(max_particles);
 }
 
+void CParticleManager::SetWindScale(int effect_id, float scale)
+{
+    ParticleEffect* pe = GetEffectPtr(effect_id);
+    pe->wind_scale = scale;
+}
+
 void CParticleManager::SetCallback(int effect_id, OnBirthParticleCB b, OnDeadParticleCB d, void* owner, u32 param)
 {
     ParticleEffect* pe = GetEffectPtr(effect_id);

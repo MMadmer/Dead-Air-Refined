@@ -1,0 +1,17 @@
+; [DA_PORT] The pickup scene (da_pickup_anim.script): the hands play the take motion after an
+; item is picked up from the ground. Hands only, no item model: the FDDA Redone pack that has
+; a picked item in the hand is Proprietary on ModDB, so the motion is FDDA 0.9b's
+; take_anim_enhanced (Public Domain) - the same cycle FDDA plays on a pickup.
+;
+; No item_visual on purpose. FDDA's bag models are rigged for Anomaly's hands; our hands are
+; CoC's and the grip bone sits elsewhere, so an item would ride beside the hand.
+
+; The seat pulls the hands 0.1 back: the cycle was authored for a lower camera.
+[da_pickup_hud]
+hands_position                           = 0, 0.00, -0.1
+hands_position_16x9                      = 0, 0.00, -0.1
+; Cycles of the same set that could replace this one, should a different take be wanted:
+;   harv_loot_hands           - the bag lift after the skinning
+;   bint_hands_eat            - a bandage, ends with the hands at the chest
+;   idle_b_backpack           - the bag idle
+anm_ea_show                              = take_anim_enhanced

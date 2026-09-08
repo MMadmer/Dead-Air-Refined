@@ -759,6 +759,13 @@ void CRenderDevice::OnWindowActivate(SDL_Window* window, bool activated)
         return;
     }
 
+    // A focus-lost notice that arrives while the window still holds the input focus is the mode
+    // switch talking (SDL's exclusive fullscreen and DXGI's own transition each raise one, the
+    // focus-gained that follows may sit in a later batch): honouring it drops the exclusive
+    // state and minimises the game in the middle of applying its own settings.
+    if (!activated && window == m_sdlWnd && (SDL_GetWindowFlags(m_sdlWnd) & SDL_WINDOW_INPUT_FOCUS))
+        return;
+
     if (!GEnv.isDedicatedServer && activated)
         pInput->GrabInput(true);
     else

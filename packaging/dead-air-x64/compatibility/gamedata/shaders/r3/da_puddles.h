@@ -103,6 +103,7 @@ struct da_puddle_result
 	float  mask_bin;	// она же «по пикселям»: 0 или 1, для нормали и глянца (см. ниже)
 	float  rim;		// тёмная кайма промокшей земли ВОКРУГ воды, 0..1
 	float  ripple_amp;	// сила ряби, посчитанная по дождю и дальности; рябь применяет наложение
+	float2 ripple;	// the ripple gradient in world XZ (drift, rain, impact rings); water normal = (x, 1, y)
 	float  damp;	// общая мокрота (шире луж), 0..1
 	float3 dbg_color;	// цвет для отладочных режимов; применяется вызывающим
 	bool   dbg_paint;	// красить ли dbg_color
@@ -118,6 +119,7 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	R.mask_bin = 0.0f;
 	R.rim = 0.0f;
 	R.ripple_amp = 0.0f;
+	R.ripple = 0.0f;
 	R.damp = 0.0f;
 	R.dbg_color = 0.0f;
 	R.dbg_paint = false;
@@ -261,7 +263,9 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	const float2 wind_u = da_puddle_wind.xy / max(wind_len, 0.001f);
 	// Нижняя граница волнения ЖИВАЯ: в настоящий штиль без дождя вода почти зеркало (0.12),
 	// ветер поднимает волнение сам. Старый жёсткий floor 0.35 делал стоячую лужу вечно неспокойной.
-	const float rain_now = max(saturate(rain_params.x * 1.5f), 0.12f + 0.5f * wind_k);
+	// A puddle is sheltered water: a breeze barely stirs it (quadratic in the wind), only a
+	// gale ripples it. The linear 0.5 term kept every puddle churning in ordinary weather.
+	const float rain_now = max(saturate(rain_params.x * 1.5f), 0.12f + 0.25f * wind_k * wind_k);
 	const float near_f = saturate(1.0f - pos_v.z / 40.0f);
 	float2 ripple = 0.0f;
 	[branch] if (rain_now * near_f > 0.01f)
@@ -303,6 +307,9 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// тот же градиент нормали. Амплитуда приходит с CPU уже с краевым фейдом — кольцо гаснет
 	// до нуля раньше, чем умирает, скачка нет по построению.
 	ripple += da_water_rings(pos_w);
+	// Published for the reflection pass: its mirror must wobble with THIS gradient, not with a
+	// noise of its own, or the two halves of one puddle disagree about where the water tilts.
+	R.ripple = ripple;
 
 	// Нормаль воды: плоская геометрическая нормаль поверхности плюс рябь. Именно она делает лужу
 	// лужей — освещение начинает считать поверхность ровной.

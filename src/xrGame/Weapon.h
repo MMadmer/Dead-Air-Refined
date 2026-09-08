@@ -682,6 +682,7 @@ public:
     // items without the keys render bit-exactly as before.
     float m_hud_fov_factor;
     float m_hud_fov_zoom_factor;
+    float m_hud_fov_absolute{}; // degrees, 0 = the factor path
     float m_nearwall_dist_max;
     float m_nearwall_dist_min;
     float m_nearwall_last_hud_fov;

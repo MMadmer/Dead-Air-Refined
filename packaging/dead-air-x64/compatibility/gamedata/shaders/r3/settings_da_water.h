@@ -77,9 +77,17 @@
 // Wind on open water: two more normal-map layers stretched along the wind and advected with
 // it, and the base waves calm down when the air is still.
 #define WATER_WIND_WAVES       1
-#define WATER_WIND_AMP         0.50   // normal perturbation at a full gale
+#define WATER_WIND_AMP         0.22   // normal perturbation at a full gale (0.50 smeared the SSR mirror)
 #define WATER_WIND_CALM        0.55   // share of the base waves left in still air
 #define WATER_WIND_FADE        90.0   // metres, past this a wind wave is subpixel
+// The two wind layers: map tiles per metre along / across the wind. Metre-scale cells with a
+// mild stretch; the second layer sits WATER_WIND_ROT off the wind so the two lattices never
+// line up. The first version tiled the map every 14 x 5 m along the wind and slid both
+// layers the same way at ~3 m/s - a repeating texture racing over the whole marsh.
+#define WATER_WIND_TILE_0      float2(0.45, 0.75)
+#define WATER_WIND_TILE_1      float2(1.10, 1.60)
+#define WATER_WIND_ROT         0.47   // radians (~27 deg) between the two layers
+#define WATER_WIND_DRIFT       0.03   // tiles/s per m/s of wind: ~0.35 m/s crest speed in a 5 m/s breeze
 
 // ---- Screen-space refraction --------------------------------------------------------------
 #define WATER_REFRACT          1

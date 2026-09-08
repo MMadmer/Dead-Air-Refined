@@ -150,6 +150,20 @@ local function patch_mutant_loot_ui()
 	ui_patched = true
 end
 
+-- A weather fx does not replace a playing one: the engine refuses the second and the surge (or
+-- the psi storm, or a story fx) then runs under a clear sky at 10x time. Until 1.4.0 the fix
+-- lived in full copies of surge_manager and psi_storm_manager, which also overrode the
+-- Revolution II versions of both (its zombie spawns, its skip_surge, its blowout option);
+-- the wrapper below is the same fix at the one point every caller passes, and each mode keeps
+-- its own managers. Assigned through _G: `level` is the engine's global table.
+local native_set_weather_fx = level.set_weather_fx
+function _G.level.set_weather_fx(name)
+	if level.is_wfx_playing() then
+		level.stop_weather_fx()
+	end
+	return native_set_weather_fx(name)
+end
+
 function on_game_start()
 	seed_actor_first_update_time()
 	patch_se_obj_storage()

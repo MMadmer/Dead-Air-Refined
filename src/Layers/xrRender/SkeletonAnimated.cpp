@@ -289,6 +289,43 @@ void CKinematicsAnimated::LL_CloseCycle(u16 part, u8 mask_channel /*= (1<<0)*/)
 // far out of bounds; the garbage then explodes inside shared_motions::motion_def - the top
 // crash signature of the combat reports. The same hole exists upstream, so refuse the id
 // loudly here instead of dereferencing garbage.
+// A motion set attached to a rig it was not made for (a mod's hands model, a foreign omf in
+// [player_hud_extra_omf]) resolves its cycle names, but the bones the omf never heard of carry
+// no track: the blend then dereferences a null track at the first bone calculation. Such a
+// cycle is refused here, once per motion set, instead of crashing the frame.
+bool CKinematicsAnimated::motion_tracks_complete(u16 part, MotionID motion_ID)
+{
+    if (!motion_id_usable(motion_ID, "LL_PlayCycle"))
+        return false;
+    SMotionsSlot& slot = m_Motions[motion_ID.slot];
+    const auto has_track = [&](u32 bone) {
+        return bone < slot.bone_motions.size() && slot.bone_motions[bone] &&
+            motion_ID.idx < slot.bone_motions[bone]->size();
+    };
+    const CPartDef& P = (*m_Partition)[part];
+    u32 missing = has_track(LL_GetBoneRoot()) ? u32(-1) : u32(LL_GetBoneRoot());
+    for (u32 i = 0; missing == u32(-1) && i < P.bones.size(); ++i)
+        if (!has_track(P.bones[i]))
+            missing = P.bones[i];
+    if (missing == u32(-1))
+        return true;
+    if (!slot.tracks_refused)
+    {
+        slot.tracks_refused = true;
+        pcstr motion_name = "?";
+        for (const auto& [name, idx] : *slot.motions.motion_map())
+            if (idx == motion_ID.idx)
+            {
+                motion_name = name.c_str();
+                break;
+            }
+        Msg("! MODEL: cycle [%s] of motion set [%s] has no track for bone [%s] - the set belongs to another rig, "
+            "its cycles are not played",
+            motion_name, slot.motions.id().c_str(), missing < bones->size() ? (*bones)[missing]->name.c_str() : "?");
+    }
+    return false;
+}
+
 bool CKinematicsAnimated::motion_id_usable(MotionID motion_ID, pcstr caller)
 {
     if (motion_ID.valid() && motion_ID.slot < m_Motions.size() &&
@@ -398,8 +435,10 @@ CBlend* CKinematicsAnimated::LL_PlayCycle(u16 part, MotionID motion_ID, BOOL bMi
         return nullptr;
     if (!m_Partition->part(part).Name)
         return nullptr;
+    if (!motion_tracks_complete(part, motion_ID))
+        return nullptr;
 
-    float effective_minimum_time = AnimationBlend::g_min_time;
+    float effective_minimum_time = m_blend_min_time ? AnimationBlend::g_min_time : 0.f;
     const float absolute_speed = _abs(Speed);
     if (effective_minimum_time > 0.f && noloop && absolute_speed > EPS_S)
     {
@@ -973,7 +1012,10 @@ void CKinematicsAnimated::LL_BuldBoneMatrixDequatize(const CBoneData* bd, u8 cha
         CKey* D = &keys.keys[channel][b_count];
         // keys.blend_factors[channel][b_count]	=  B->blendAmount;
         keys.blends[channel][b_count] = B;
-        CMotion& M = *LL_GetMotion(B->motionID, SelfID);
+        CMotion* motion = LL_GetMotion(B->motionID, SelfID);
+        if (!motion)
+            continue;
+        CMotion& M = *motion;
         Dequantize(*D, *B, M);
 
         if (channels.rule(channel).extern_ == animation::add)
