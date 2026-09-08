@@ -802,11 +802,15 @@ fire the player is standing at. It costs about the same as a campfire while it i
 
 The march itself runs at roughly half resolution and is filtered back up, which is what the
 stock volume does too. Filtering a bright volume across a silhouette drags it half a texel over
-whatever stands in front - a lit rim around a gun the smoke never reached, a blade of grass
-painted over instead of covering the flame behind it - so the composite asks the full-resolution
-ray data instead of trusting the filtered value: where the scene covers a pixel nothing is
-composited there at all, and where a neighbour is covered the ray is marched again at full
-resolution rather than guessed at.
+whatever stands in front, and that is where a lit rim around everything inside the volume's own
+outline comes from - a gun the smoke never reached, a blade of grass painted over instead of
+covering the flame behind it. The stock edge detector does not catch it.
+
+So the composite does not trust the filtered value. The full-resolution ray data knows exactly
+how far this pixel's ray travels, and the four low-resolution texels are weighted by how nearly
+their ray agrees with it: a texel that marched past the edge disagrees and drops out. Where none
+of them agrees the ray is simply marched again here. Marching every pixel at full resolution
+fixes it too and costs a third of the frame rate.
 
 `r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
 both are session overrides like the other render controls. Only the nearest eligible fire is

@@ -17,6 +17,7 @@
 Texture2D	sceneDepthTex;
 Texture3D	colorTex;
 Texture2D	rayDataTex;
+Texture2D	rayDataTexSmall;
 Texture2D	rayCastTex;
 Texture2D	edgeTex;
 Texture2D	jitterTex;
@@ -48,7 +49,8 @@ cbuffer DaFireRender
 	float4	da_fr_c;	// x = smoke gain, y = how much glowing soot absorbs, z = time, w = crossover
 	float4	da_fr_d;	// xyz = one step toward the sun in grid space, w = how hard the plume shades itself
 	float4	da_fr_e;	// rgb = the sun on the plume, w = how steeply emission climbs with temperature
-	float4	da_fr_f;	// x = how many cells before a face of the box everything fades out
+	float4	da_fr_f;	// x = how many cells before a face of the box everything fades out,
+						// yz = the size of the target the ray was actually marched into
 }
 
 struct VS_INPUT

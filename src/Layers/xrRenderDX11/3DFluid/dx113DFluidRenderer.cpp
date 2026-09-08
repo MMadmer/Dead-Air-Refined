@@ -402,7 +402,7 @@ void dx113DFluidRenderer::SetDaFireConstants(const dx113DFluidData::DaFireParams
     RCache.set_c(strC, p.m_fSmokeGain, p.m_fHotAbsorb, p.m_fTime, p.m_fFade);
     RCache.set_c(strD, p.m_vSunStep.x, p.m_vSunStep.y, p.m_vSunStep.z, p.m_fShadow);
     RCache.set_c(strE, p.m_vSunColor.x, p.m_vSunColor.y, p.m_vSunColor.z, p.m_fEmisPow);
-    RCache.set_c(strF, p.m_fEdgeFade, 0.f, 0.f, 0.f);
+    RCache.set_c(strF, p.m_fEdgeFade, float(m_iRenderTextureWidth), float(m_iRenderTextureHeight), 0.f);
     (void)light;
 }
 

@@ -1,35 +1,52 @@
 #include "da_fluid_ray.h"
 
-// The full-resolution pass. The march itself ran at roughly half resolution, so most of this
-// is a filtered lookup of that result - but a filtered lookup drags the fireball half a texel
-// over whatever stands in front of it, which is where the bright rim around a gun the smoke
-// never reached comes from, and where a blade of grass ends up painted over instead of
-// covering the flame behind it.
+// The full-resolution pass. The march itself ran at roughly half resolution, and simply
+// filtering that back up is what puts a lit rim around everything whose silhouette falls
+// inside the volume: the low-resolution texel straddling an edge marched a ray that ran past
+// the object, and half of it lands on the object.
 //
-// The ray data is full resolution, so it can answer both. Where it says the scene covers this
-// pixel there is nothing to composite at all, whatever the filtered value claims; and where a
-// neighbour is covered but this pixel is not, we are on the silhouette of something and the
-// ray is marched again here at full resolution rather than guessed at.
+// So the four low-resolution texels are weighted by how nearly their ray agrees with the ray
+// of this pixel, which the full-resolution ray data knows exactly. A texel that marched past
+// the edge disagrees and drops out. Where none of them agrees - a thin blade of grass, a
+// gunsight - there is nothing worth filtering and the ray is marched again here instead.
+// Marching everything at full resolution would also work and costs a third of the frame rate.
 
 float4 main(PS_INPUT_RAYCAST input) : SV_Target
 {
 	const float2 uv = float2(input.pos.x / RTWidth, input.pos.y / RTHeight);
 
 	const float4 rd = rayDataTex.SampleLevel(samPointClamp, uv, 0);
+	//	The scene covers this pixel: there is nothing to composite, whatever was marched.
 	if (rd.x < 0)
 		return 0;
-
-	const float2 px = float2(1.0 / RTWidth, 1.0 / RTHeight);
-	float nearest = 0.0;
-	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv + float2( px.x, 0), 0).x);
-	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv - float2( px.x, 0), 0).x);
-	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv + float2(0,  px.y), 0).x);
-	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv - float2(0,  px.y), 0).x);
-
-	const float edge = edgeTex.Sample(samLinearClamp, uv).r;
-	const float4 tex = rayCastTex.Sample(samLinearClamp, uv);
-
-	if ((edge > 0 || nearest < 0) && tex.a > 0)
+	//	The near plane cut the box open here; that case is small and worth marching properly.
+	if (rd.y < 0)
 		return DaRaycast(input);
-	return tex;
+
+	const float2 small = max(da_fr_f.yz, 1.0);
+	const float2 sp = 1.0 / small;
+	const float2 st = uv * small - 0.5;
+	const float2 fr = frac(st);
+	const float2 base = (floor(st) + 0.5) * sp;
+
+	float4 acc = 0;
+	float wsum = 0;
+	float best = 1e9;
+	[unroll]
+	for (int i = 0; i < 4; ++i)
+	{
+		const float2 o = float2(float(i & 1), float((i >> 1) & 1));
+		const float2 suv = base + o * sp;
+		const float bl = ((i & 1) ? fr.x : 1.0 - fr.x) * (((i >> 1) & 1) ? fr.y : 1.0 - fr.y);
+		const float d = abs(rayDataTexSmall.SampleLevel(samPointClamp, suv, 0).w - rd.w);
+		best = min(best, d);
+		const float w = bl / (0.02 + d);
+		acc += rayCastTex.SampleLevel(samPointClamp, suv, 0) * w;
+		wsum += w;
+	}
+
+	//	Nothing nearby marched a ray like this one, so nothing nearby is worth reusing.
+	if (best > 0.35 || wsum <= 0.0)
+		return DaRaycast(input);
+	return acc / wsum;
 }

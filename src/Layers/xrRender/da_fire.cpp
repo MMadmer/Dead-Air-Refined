@@ -252,11 +252,7 @@ void CDaFireEffect::fluid_create()
     //  A blast has two seconds to live and cannot afford a triangle sweep of the level; the
     //  ground under it is what shapes it, and that is a grid of downward rays.
     if (blast ? !fluid_ground() : !fluid_voxelize())
-    {
-        if (blast)
-            Msg("! [fire] blast at %.1f %.1f %.1f found no ground under it", O.x, O.y, O.z);
         return;
-    }
 
     Fmatrix scale, translate, transform;
     const float s = m_fluid_cell * float(maxDim);
@@ -503,8 +499,9 @@ bool CDaFireEffect::fluid_ground()
             }
         }
     }
-    if (!marked)
-        return false;
+    //  No ground inside the box is a perfectly good answer - a charge can go off on a roof,
+    //  over a drop, or in mid air. The volume is then simply all air, and the fireball is a
+    //  free one. What must not happen is the effect being cancelled for it.
 
     D3D_TEXTURE3D_DESC desc{};
     desc.Width = W;
