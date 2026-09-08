@@ -1,0 +1,42 @@
+#include "da_fluid.h"
+
+// The campfire's velocity step: advect, then the three forces that shape a real flame -
+// buoyancy from the heat, the gas the burning surface pushes out along its own normal, and
+// the wind, which a parcel only takes up gradually and which the fuel bed shelters.
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//	Pixel
+float4 main(p_fluidsim input) : SV_Target
+{
+	if (IsNonEmptyCell(input.texcoords.xyz))
+		return 0;
+
+	const float3 npos = GetAdvectedPosTexCoords(input);
+	float4 v = Texture_velocity0.SampleLevel(samLinear, npos, 0);
+
+	//	The field is one step behind here (it is swapped in after the whole update), which
+	//	only means the heat lifts the gas one step after it appears.
+	const float4 f = Texture_color.SampleLevel(samPointClamp, input.texcoords, 0);
+
+	//	Buoyancy. Grid y runs downward, so hot gas is pushed toward -y.
+	v.y -= da_ff_misc.x * f.x;
+
+	//	Gas leaves a burning surface along the normal of the solid under it. This is what
+	//	makes the flame roll up off the flank of a log instead of standing over it.
+	if (f.z > 0.0)
+	{
+		const float3 g = da_ff_surface_normal(input);
+		const float l = length(g);
+		if (l > 0.02)
+			v.xyz += (g / l) * (da_ff_misc.y * saturate(f.z * 6.0));
+	}
+
+	//	Wind. A parcel does not snap to the wind, it takes it up over a fraction of a second,
+	//	and the closer to the bed the more the fuel itself shelters it.
+	const float above = saturate((da_ff_src.y - input.cell0.y) / 10.0);
+	v.xyz += (da_ff_wind.xyz - v.xyz) * saturate(da_ff_wind.w * above * above);
+
+	v.xyz *= da_ff_misc2.y;
+	v.w = 0.0;
+	return v;
+}

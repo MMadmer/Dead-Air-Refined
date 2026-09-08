@@ -418,6 +418,59 @@ void CBlender_fluid_raydata::Compile(CBlender_Compile& C)
     C.r_End();
 }
 
+void CBlender_fluid_dafire::Compile(CBlender_Compile& C)
+{
+    IBlender::Compile(C);
+
+    switch (C.iElement)
+    {
+    case 0: // DaFireAdvect: advection, the burning surface's fuel and the reaction
+        C.r_Pass("fluid_grid", "fluid_array", "fluid_advect_dafire", false, FALSE, FALSE, FALSE);
+        break;
+    case 1: // DaFireAdvectVel: advection, buoyancy, the surface jet and the wind
+        C.r_Pass("fluid_grid", "fluid_array", "fluid_advect_vel_dafire", false, FALSE, FALSE, FALSE);
+        break;
+    case 2: // DaFireDivergence: divergence less the volume the reaction makes
+        C.r_Pass("fluid_grid", "fluid_array", "fluid_divergence_dafire", false, FALSE, FALSE, FALSE);
+        break;
+    }
+
+    C.r_CullMode(D3DCULL_NONE);
+
+    BindConstants(C);
+    SetupSamplers(C);
+    SetupTextures(C);
+
+    //	Constants must be bound before r_End()
+    C.r_End();
+}
+
+void CBlender_fluid_dafire_ray::Compile(CBlender_Compile& C)
+{
+    IBlender::Compile(C);
+
+    switch (C.iElement)
+    {
+    case 0: // QuadRaycastDaFire, into the small target
+        C.r_Pass("fluid_raycast_quad", "null", "fluid_raycast_dafire", false, FALSE, FALSE, FALSE);
+        C.r_CullMode(D3DCULL_CCW);
+        break;
+    case 1: // QuadRaycastCopyDaFire: premultiplied, so the emission is not eaten by the soot
+        C.r_Pass("fluid_raycast_quad", "null", "fluid_raycastcopy_dafire", false, FALSE, FALSE, TRUE, D3DBLEND_ONE,
+            D3DBLEND_INVSRCALPHA);
+        C.r_ColorWriteEnable(true, true, true, false);
+        C.r_CullMode(D3DCULL_CCW);
+        break;
+    }
+
+    BindConstants(C);
+    SetupSamplers(C);
+    SetupTextures(C);
+
+    //	Constants must be bound before r_End()
+    C.r_End();
+}
+
 void CBlender_fluid_raycast::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);

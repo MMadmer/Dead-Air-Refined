@@ -829,7 +829,8 @@ void CRender::create()
 
     //	TODO: OGL: Implement FluidManager.
 #if defined(USE_DX11)
-    FluidManager.Initialize(70, 70, 70);
+    //	Taller than it is wide: a campfire needs a metre of flame and a couple more of plume.
+    FluidManager.Initialize(64, 96, 64);
     //	FluidManager.Initialize( 100, 100, 100 );
     FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
 #endif

@@ -10,6 +10,7 @@ namespace
 const xr_token simulation_type_token[] = {
     {"Fog", dx113DFluidData::ST_FOG},
     {"Fire", dx113DFluidData::ST_FIRE},
+    {"DaFire", dx113DFluidData::ST_DA_FIRE},
     {0, 0}
 };
 
@@ -23,7 +24,8 @@ const xr_token emitter_type_token[] = {
 DXGI_FORMAT dx113DFluidData::m_VPRenderTargetFormats[VP_NUM_TARGETS] = {
     DXGI_FORMAT_R16G16B16A16_FLOAT, // VP_VELOCITY0
     DXGI_FORMAT_R16_FLOAT, // VP_PRESSURE
-    DXGI_FORMAT_R16_FLOAT // VP_COLOR
+    //	(temperature, fuel, burn, soot) for the campfire; the stock volumes use x alone.
+    DXGI_FORMAT_R16G16B16A16_FLOAT // VP_COLOR
 };
 
 dx113DFluidData::dx113DFluidData()
@@ -111,6 +113,14 @@ void dx113DFluidData::Load(IReader* data)
     }
 
     ParseProfile(Profile);
+}
+
+void dx113DFluidData::InitProcedural(const Fmatrix& transform, const Settings& settings)
+{
+    m_Transform = transform;
+    m_Settings = settings;
+    m_Obstacles.clear();
+    m_Emitters.clear();
 }
 
 void dx113DFluidData::ParseProfile(const xr_string& Profile)

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "dx113DFluidRenderer.h"
+#include "dx113DFluidData.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
-class dx113DFluidData;
 class dx113DFluidGrid;
 class dx113DFluidObstacles;
 class dx113DFluidEmitters;
@@ -77,6 +77,13 @@ private:
         SS_Jacobi,
         SS_Project,
 
+        //	The campfire's own passes: the field step carries combustion, the velocity step
+        //	carries buoyancy, the surface jet and the wind, and the divergence step carries
+        //	the volume the reaction makes out of the wood.
+        SS_DaFireAdvect,
+        SS_DaFireAdvectVel,
+        SS_DaFireDivergence,
+
         SS_NumShaders
     };
 
@@ -102,14 +109,24 @@ private:
     void ApplyVorticityConfinement(float timestep);
     void ApplyExternalForces(const dx113DFluidData& FluidData, float timestep);
     void ComputeVelocityDivergence(float timestep);
-    void ComputePressure(float timestep);
+    void ComputePressure(float timestep, int iterations);
     void ProjectVelocity(float timestep);
     void UpdateObstacles(const dx113DFluidData& FluidData, float timestep);
+
+    //	Campfire
+    void SetDaFireConstants(const dx113DFluidData::DaFireParams& p) const;
+    void AdvectDaFire(float timestep, const dx113DFluidData::DaFireParams& p);
+    void AdvectVelocityDaFire(float timestep, const dx113DFluidData::DaFireParams& p);
+    void ComputeVelocityDivergenceDaFire(const dx113DFluidData::DaFireParams& p);
 
 private:
     bool m_bInited;
 
     DXGI_FORMAT RenderTargetFormats[NUM_RENDER_TARGETS];
+    //	The obstacle texture we own, kept by hand: the campfire lends its own voxelised level
+    //	to that slot for the length of an update, and asking the texture object to hand its
+    //	surface back would send it looking for a file of that name on disk.
+    ID3DTexture3D* m_pOwnObstacles{};
     ID3DRenderTargetView* pRenderTargetViews[NUM_RENDER_TARGETS];
     ref_texture pRTTextures[NUM_RENDER_TARGETS];
     static LPCSTR m_pEngineTextureNames[NUM_RENDER_TARGETS];

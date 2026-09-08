@@ -697,6 +697,52 @@ Both shaders read the G-buffer depth themselves, so the flame fades into the bar
 the smoke into walls; both are sorted with the other transparent effects and cut at
 `r__particle_dist` like any sprite.
 
+#### The fluid campfire
+
+Close up, on the two top presets, the nearest such fire is not marched on a quad at all: it is
+simulated. `CDaFireEffect` builds a 64x96x64 grid (3.5 cm cells, a 2.24 x 3.36 x 2.24 m box)
+over the fire on the engine's 3D fluid subsystem, and the field the grid carries is
+temperature, fuel, burn and soot rather than the stock single density. Fuel is not a blob in
+mid-air: the level around the fire is voxelised once into the grid, and only a cell that rests
+on a solid one - inside the fire's disc and near its bed - is given fuel and a pilot flame. So
+the flame's base follows whatever the fire actually stands on, cell by cell, whether that is
+the logs, the ground between them or a rooftop, and gas leaves each burning surface along that
+surface's own normal, which is what rolls the flame up off the flank of a log instead of
+standing it over the pile.
+
+Each step advects the field (MacCormack), burns what is hot enough and has fuel left, adds the
+buoyancy of the heat, the jet off the burning surface and the wind (a parcel takes the wind up
+over a fraction of a second, and the closer to the bed the more the fuel shelters it), applies
+vorticity confinement, and projects the velocity through a Jacobi pressure solve whose right
+hand side carries the volume the reaction makes out of the wood. The simulation runs at a fixed
+60 Hz whatever the frame rate, and at most two steps are spent catching up.
+
+The volume is drawn by its own ray-cast: hot soot radiates as the fourth power of its
+temperature through a four-band ramp (dull red tips, orange body, yellow, a white-yellow core),
+only the soot that has cooled absorbs - so a flame is never hidden behind its own smoke - and
+where a ray ends on the wood the gas a step back from it lights the embers there. Beyond
+`r__fire_fluid_dist` the fire falls back to the marched flame, and the two cross over in half a
+second rather than swapping in a frame.
+
+```ini
+[shader_fire_campfire]
+fluid_base      = 0.12   ; the fuel disc's centre above the effect origin, m
+fluid_radius    = 0.42   ; its radius, m (0 = radius * 1.15)
+fluid_bed       = 0.35   ; how far above and below it a surface still counts as fuel, m
+fluid_cooling   = 3.2    ; 1/s - this is the knob that sets how tall the flame stands
+fluid_burn      = 4.5    ; burn per degree over the ignition point, 1/s
+fluid_buoyancy  = 18     ; m/s2 on gas at the core temperature
+fluid_emission  = 165    ; how hard the hot soot radiates
+fluid_ember     = 1.1    ; the glow the hot gas leaves on the wood under it
+```
+
+`r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
+both are session overrides like the other render controls. Only the nearest eligible fire is
+simulated - one grid is what the frame can afford, and it costs about 3 frames out of 60 with
+the fire filling the screen. The log line the fire prints when it builds its grid gives the
+number of cells the flame can take hold on and how far the fuel bed reaches above the effect's
+origin, which is what `fluid_radius` and `fluid_bed` should be sized against.
+
 The cloud deck is a world object: one coverage field, rendered once per frame into a 16 km
 map around the camera, is what the sky shows, what the sun passes shade the ground with and
 what the sun shafts read. Coverage comes from the weather's `clouds_color` alpha - mapped,

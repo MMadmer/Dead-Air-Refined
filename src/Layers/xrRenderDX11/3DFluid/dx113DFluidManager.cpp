@@ -52,11 +52,12 @@ dx113DFluidManager::dx113DFluidManager()
     // RenderTargetFormats [RENDER_TARGET_VELOCITY0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     RenderTargetFormats[RENDER_TARGET_VELOCITY1] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     // RenderTargetFormats [RENDER_TARGET_PRESSURE] = DXGI_FORMAT_R16_FLOAT;
-    RenderTargetFormats[RENDER_TARGET_COLOR] = DXGI_FORMAT_R16_FLOAT;
+    //	(temperature, fuel, burn, soot) for the campfire; the stock volumes use x alone.
+    RenderTargetFormats[RENDER_TARGET_COLOR] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     RenderTargetFormats[RENDER_TARGET_OBSTACLES] = DXGI_FORMAT_R8_UNORM;
     RenderTargetFormats[RENDER_TARGET_OBSTVELOCITY] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     // RENDER_TARGET_TEMPSCALAR: for AdvectBFECC and for Jacobi (for pressure projection)
-    RenderTargetFormats[RENDER_TARGET_TEMPSCALAR] = DXGI_FORMAT_R16_FLOAT;
+    RenderTargetFormats[RENDER_TARGET_TEMPSCALAR] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     // RENDER_TARGET_TEMPVECTOR: for Advect2, Divergence, and Vorticity
     RenderTargetFormats[RENDER_TARGET_TEMPVECTOR] = DXGI_FORMAT_R16G16B16A16_FLOAT;
 }
@@ -172,6 +173,14 @@ void dx113DFluidManager::InitShaders()
         for (size_t i = 0; i < 5; ++i)
             m_SimulationTechnique[SS_Vorticity + i] = shader->E[i];
     }
+
+    {
+        CBlender_fluid_dafire Blender;
+        ref_shader shader;
+        shader.create(&Blender, "null");
+        for (size_t i = 0; i < 3; ++i)
+            m_SimulationTechnique[SS_DaFireAdvect + i] = shader->E[i];
+    }
 }
 
 void dx113DFluidManager::DestroyShaders()
@@ -208,11 +217,20 @@ void dx113DFluidManager::CreateRTTextureAndViews(size_t rtIndex, D3D_TEXTURE3D_D
 
     pRTTextures[rtIndex]->surface_set(pRT);
 
+    if (rtIndex == RENDER_TARGET_OBSTACLES)
+    {
+        _RELEASE(m_pOwnObstacles);
+        m_pOwnObstacles = pRT;
+        m_pOwnObstacles->AddRef();
+    }
+
     // CTexture owns ID3DxxTexture3D interface
     pRT->Release();
 }
 void dx113DFluidManager::DestroyRTTextureAndViews(size_t rtIndex)
 {
+    if (rtIndex == RENDER_TARGET_OBSTACLES)
+        _RELEASE(m_pOwnObstacles);
     // pRTTextures[rtIndex]->surface_set(0);
     pRTTextures[rtIndex] = nullptr;
     _RELEASE(pRenderTargetViews[rtIndex]);
@@ -232,6 +250,7 @@ void dx113DFluidManager::Update(dx113DFluidData& FluidData, float timestep)
 
     const dx113DFluidData::Settings& VolumeSettings = FluidData.GetSettings();
     const bool bSimulateFire = (VolumeSettings.m_SimulationType == dx113DFluidData::ST_FIRE);
+    const bool bDaFire = (VolumeSettings.m_SimulationType == dx113DFluidData::ST_DA_FIRE);
 
     AttachFluidData(FluidData);
 
@@ -266,7 +285,21 @@ void dx113DFluidManager::Update(dx113DFluidData& FluidData, float timestep)
     }
     */
 
-    UpdateObstacles(FluidData, timestep);
+    //	The campfire's obstacles are the level itself: the effect voxelised the wood, the
+    //	ground and whatever else stands in the box once, so nothing is rasterised per frame.
+    //	The manager's own obstacle texture is put back before we leave.
+    bool bObstaclesLent = false;
+    if (bDaFire)
+    {
+        if (ID3DTexture3D* pStatic = FluidData.GetStaticObstacles())
+        {
+            pRTTextures[RENDER_TARGET_OBSTACLES]->surface_set(pStatic);
+            bObstaclesLent = true;
+        }
+        RCache.ClearRT(pRenderTargetViews[RENDER_TARGET_OBSTVELOCITY], {});
+    }
+    else
+        UpdateObstacles(FluidData, timestep);
 
     // Set vorticity confinment and decay parameters
     if (m_bUseBFECC)
@@ -291,24 +324,41 @@ void dx113DFluidManager::Update(dx113DFluidData& FluidData, float timestep)
     m_fConfinementScale = VolumeSettings.m_fConfinementScale;
     m_fDecay = VolumeSettings.m_fDecay;
 
-    if (m_bUseBFECC)
-        AdvectColorBFECC(timestep, bSimulateFire);
+    if (bDaFire)
+    {
+        const dx113DFluidData::DaFireParams& fire = VolumeSettings.m_DaFire;
+
+        AdvectDaFire(timestep, fire);
+        AdvectVelocityDaFire(timestep, fire);
+        ApplyVorticityConfinement(timestep);
+        ComputeVelocityDivergenceDaFire(fire);
+        ComputePressure(timestep, fire.m_iIterations);
+        ProjectVelocity(timestep);
+    }
     else
-        AdvectColor(timestep, bSimulateFire);
+    {
+        if (m_bUseBFECC)
+            AdvectColorBFECC(timestep, bSimulateFire);
+        else
+            AdvectColor(timestep, bSimulateFire);
 
-    AdvectVelocity(timestep, VolumeSettings.m_fGravityBuoyancy);
+        AdvectVelocity(timestep, VolumeSettings.m_fGravityBuoyancy);
 
-    ApplyVorticityConfinement(timestep);
+        ApplyVorticityConfinement(timestep);
 
-    ApplyExternalForces(FluidData, timestep);
+        ApplyExternalForces(FluidData, timestep);
 
-    ComputeVelocityDivergence(timestep);
+        ComputeVelocityDivergence(timestep);
 
-    ComputePressure(timestep);
+        ComputePressure(timestep, m_nIterations);
 
-    ProjectVelocity(timestep);
+        ProjectVelocity(timestep);
+    }
 
     DetachAndSwapFluidData(FluidData);
+
+    if (bObstaclesLent)
+        pRTTextures[RENDER_TARGET_OBSTACLES]->surface_set(m_pOwnObstacles);
 
     //  Restore render state
     CRenderTarget* pTarget = RImplementation.Target;
@@ -598,7 +648,7 @@ void dx113DFluidManager::ComputeVelocityDivergence(float /*timestep*/)
     // pRenderTargetShaderViews[RENDER_TARGET_TEMPVECTOR] );
 }
 
-void dx113DFluidManager::ComputePressure(float /*timestep*/)
+void dx113DFluidManager::ComputePressure(float /*timestep*/, int iterations)
 {
     PIX_EVENT(ComputePressure);
 
@@ -641,7 +691,7 @@ void dx113DFluidManager::ComputePressure(float /*timestep*/)
     VERIFY(_it!=_end);
     */
 
-    for (int iteration = 0; iteration < m_nIterations / 2.0; iteration++)
+    for (int iteration = 0; iteration < iterations / 2; iteration++)
     {
         // pShaderResourceVariables[RENDER_TARGET_PRESSURE]->SetResource(
         // pRenderTargetShaderViews[RENDER_TARGET_PRESSURE] );
@@ -686,6 +736,96 @@ void dx113DFluidManager::ProjectVelocity(float /*timestep*/)
     // m_pD3DDevice->OMSetRenderTargets(0, NULL, NULL);
     // pShaderResourceVariables[RENDER_TARGET_VELOCITY0]->SetResource( pRenderTargetShaderViews[RENDER_TARGET_VELOCITY0]
     // );
+}
+
+void dx113DFluidManager::SetDaFireConstants(const dx113DFluidData::DaFireParams& p) const
+{
+    static shared_str strSrc("da_ff_src");
+    static shared_str strBurn("da_ff_burn");
+    static shared_str strBurn2("da_ff_burn2");
+    static shared_str strWind("da_ff_wind");
+    static shared_str strMisc("da_ff_misc");
+    static shared_str strMisc2("da_ff_misc2");
+
+    RCache.set_c(strSrc, p.m_vSource.x, p.m_vSource.y, p.m_vSource.z, p.m_fRadius);
+    RCache.set_c(strBurn, p.m_fIgnition, p.m_fBurnPerT, p.m_fTPerBurn, p.m_fCooling);
+    RCache.set_c(strBurn2, p.m_fFuelPerBurn, p.m_fSmokePerBurn, p.m_fExpansion, p.m_fFuelTarget);
+    RCache.set_c(strWind, p.m_vWind.x, p.m_vWind.y, p.m_vWind.z, p.m_fWindRelax);
+    RCache.set_c(strMisc, p.m_fBuoyancy, p.m_fInject, p.m_fTime, p.m_fBedRange);
+    RCache.set_c(strMisc2, p.m_fSmokeFade, p.m_fVelDamp, p.m_fCouple, p.m_fPuff);
+}
+
+//	The field step. The first two passes are the plain semi-Lagrangian round trip the
+//	MacCormack correction needs; the third one advects, feeds the surface's fuel in and burns.
+void dx113DFluidManager::AdvectDaFire(float timestep, const dx113DFluidData::DaFireParams& p)
+{
+    static shared_str strModulate("modulate");
+    static shared_str strTimeStep("timestep");
+    static shared_str strForward("forward");
+
+    PIX_EVENT(AdvectDaFire);
+
+    RCache.ClearRT(pRenderTargetViews[RENDER_TARGET_TEMPVECTOR], {});
+    RCache.ClearRT(pRenderTargetViews[RENDER_TARGET_TEMPSCALAR], {});
+
+    RCache.set_RT(pRenderTargetViews[RENDER_TARGET_TEMPVECTOR]);
+    RCache.set_Element(m_SimulationTechnique[SS_Advect]);
+    RCache.set_c(strTimeStep, timestep);
+    RCache.set_c(strModulate, 1.0f);
+    RCache.set_c(strForward, 1.0f);
+    m_pGrid->DrawSlices();
+
+    RCache.set_RT(pRenderTargetViews[RENDER_TARGET_TEMPSCALAR]);
+    ref_selement AdvectElement = m_SimulationTechnique[SS_Advect];
+    RCache.set_Element(AdvectElement);
+    {
+        //  Feed the forward result back in as the source of the backward pass.
+        static shared_str strColorName(m_pEngineTextureNames[RENDER_TARGET_COLOR_IN]);
+        STextureList* _T = &*(AdvectElement->passes[0]->T);
+        const u32 dwTextureStage = _T->find_texture_stage(strColorName);
+        pRTTextures[RENDER_TARGET_TEMPVECTOR]->bind(RCache, dwTextureStage);
+    }
+    RCache.set_c(strTimeStep, timestep);
+    RCache.set_c(strModulate, 1.0f);
+    RCache.set_c(strForward, -1.0f);
+    m_pGrid->DrawSlices();
+
+    RCache.set_RT(pRenderTargetViews[RENDER_TARGET_COLOR]);
+    RCache.set_Element(m_SimulationTechnique[SS_DaFireAdvect]);
+    SetDaFireConstants(p);
+    RCache.set_c(strTimeStep, timestep);
+    RCache.set_c(strModulate, m_fDecay);
+    RCache.set_c(strForward, 1.0f);
+    m_pGrid->DrawSlices();
+}
+
+void dx113DFluidManager::AdvectVelocityDaFire(float timestep, const dx113DFluidData::DaFireParams& p)
+{
+    static shared_str strModulate("modulate");
+    static shared_str strTimeStep("timestep");
+    static shared_str strForward("forward");
+
+    PIX_EVENT(AdvectVelocityDaFire);
+
+    RCache.set_RT(pRenderTargetViews[RENDER_TARGET_VELOCITY1]);
+    RCache.set_Element(m_SimulationTechnique[SS_DaFireAdvectVel]);
+    SetDaFireConstants(p);
+    RCache.set_c(strTimeStep, timestep);
+    RCache.set_c(strModulate, 1.0f);
+    RCache.set_c(strForward, 1.0f);
+    m_pGrid->DrawSlices();
+}
+
+void dx113DFluidManager::ComputeVelocityDivergenceDaFire(const dx113DFluidData::DaFireParams& p)
+{
+    PIX_EVENT(ComputeVelocityDivergenceDaFire);
+
+    RCache.ClearRT(pRenderTargetViews[RENDER_TARGET_TEMPVECTOR], {});
+
+    RCache.set_RT(pRenderTargetViews[RENDER_TARGET_TEMPVECTOR]);
+    RCache.set_Element(m_SimulationTechnique[SS_DaFireDivergence]);
+    SetDaFireConstants(p);
+    m_pGrid->DrawSlices();
 }
 
 void dx113DFluidManager::RenderFluid(dx113DFluidData& FluidData)

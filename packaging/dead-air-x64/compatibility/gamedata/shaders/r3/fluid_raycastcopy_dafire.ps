@@ -1,0 +1,18 @@
+#include "da_fluid_ray.h"
+
+// The full-resolution pass: everything but the pixels the edge detector flagged comes
+// straight out of the small ray-cast target, the flagged ones are marched again so the
+// flame does not alias against the wood it sits on.
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//	Pixel
+float4 main(PS_INPUT_RAYCAST input) : SV_Target
+{
+	const float2 uv = float2(input.pos.x / RTWidth, input.pos.y / RTHeight);
+	const float edge = edgeTex.Sample(samLinearClamp, uv).r;
+	const float4 tex = rayCastTex.Sample(samLinearClamp, uv);
+
+	if (edge > 0 && tex.a > 0)
+		return DaRaycast(input);
+	return tex;
+}

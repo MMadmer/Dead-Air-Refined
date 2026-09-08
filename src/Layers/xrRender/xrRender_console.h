@@ -132,6 +132,10 @@ extern ECORE_API int ps_r__aref_quality;
 extern ECORE_API int ps_r__smaa;
 extern ECORE_API int ps_r__taa;
 extern ECORE_API int ps_r__grass_shadow_fade;
+// The fluid campfire (CDaFireEffect over the 3D fluid grid): on/off, and the distance within
+// which a fire is simulated rather than drawn as the procedural flame.
+extern ECORE_API int ps_r__fire_fluid;
+extern ECORE_API float ps_r__fire_fluid_dist;
 extern ECORE_API float ps_r__grass_tint;
 extern ECORE_API float ps_r__grass_tint_scale;
 extern ECORE_API float ps_r__grass_tint_base;

@@ -96,6 +96,14 @@ void dx113DFluidRenderer::InitShaders()
         for (size_t i = 0; i < 5; ++i)
             m_RendererTechnique[RS_QuadEdgeDetect + i] = shader->E[i];
     }
+
+    {
+        CBlender_fluid_dafire_ray Blender;
+        ref_shader shader;
+        shader.create(&Blender, "null");
+        for (size_t i = 0; i < 2; ++i)
+            m_RendererTechnique[RS_QuadRaycastDaFire + i] = shader->E[i];
+    }
 }
 
 void dx113DFluidRenderer::DestroyShaders()
@@ -262,7 +270,7 @@ void dx113DFluidRenderer::CreateHHGGTexture()
 void dx113DFluidRenderer::SetScreenSize(int width, int height) { CreateRayDataResources(width, height); }
 void dx113DFluidRenderer::CalculateRenderTextureSize(int screenWidth, int screenHeight)
 {
-    int maxProjectedSide = int(3.0 * _sqrt(3.0) * m_fMaxDim);
+    int maxProjectedSide = _max(int(3.0 * _sqrt(3.0) * m_fMaxDim), _max(screenWidth, screenHeight) / 2);
     int maxScreenDim = _max(screenWidth, screenHeight);
 
     float screenAspectRatio = ((float)screenWidth) / screenHeight;
@@ -312,6 +320,7 @@ void dx113DFluidRenderer::Draw(const dx113DFluidData& FluidData)
     CRenderTarget* pTarget = RImplementation.Target;
     const dx113DFluidData::Settings& VolumeSettings = FluidData.GetSettings();
     const bool bRenderFire = (VolumeSettings.m_SimulationType == dx113DFluidData::ST_FIRE);
+    const bool bRenderDaFire = (VolumeSettings.m_SimulationType == dx113DFluidData::ST_DA_FIRE);
 
     FogLighting LightData;
 
@@ -342,12 +351,16 @@ void dx113DFluidRenderer::Draw(const dx113DFluidData& FluidData)
 
     RImplementation.rmNormal(RCache);
 
-    if (bRenderFire)
+    if (bRenderDaFire)
+        RCache.set_Element(m_RendererTechnique[RS_QuadRaycastDaFire]);
+    else if (bRenderFire)
         RCache.set_Element(m_RendererTechnique[RS_QuadRaycastFire]);
     else
         RCache.set_Element(m_RendererTechnique[RS_QuadRaycastFog]);
 
     PrepareCBuffer(FluidData, m_iRenderTextureWidth, m_iRenderTextureHeight);
+    if (bRenderDaFire)
+        SetDaFireConstants(VolumeSettings.m_DaFire, LightData);
     DrawScreenQuad();
 
     // Render to the back buffer sampling from the raycast texture that we just created
@@ -355,7 +368,9 @@ void dx113DFluidRenderer::Draw(const dx113DFluidData& FluidData)
     //  smoke aliasing artifacts at scene edges
     pTarget->u_setrt(RCache, pTarget->rt_Generic_0_r, nullptr, nullptr, pTarget->rt_MSAADepth->pZRT[RCache.context_id]); // LDR RT
 
-    if (bRenderFire)
+    if (bRenderDaFire)
+        RCache.set_Element(m_RendererTechnique[RS_QuadRaycastCopyDaFire]);
+    else if (bRenderFire)
         RCache.set_Element(m_RendererTechnique[RS_QuadRaycastCopyFire]);
     else
         RCache.set_Element(m_RendererTechnique[RS_QuadRaycastCopyFog]);
@@ -365,8 +380,24 @@ void dx113DFluidRenderer::Draw(const dx113DFluidData& FluidData)
     PrepareCBuffer(FluidData, Device.dwWidth, Device.dwHeight);
     RCache.set_c(strDiffuseLight, LightData.m_vLightIntencity.x, LightData.m_vLightIntencity.y,
         LightData.m_vLightIntencity.z, 1.0f);
+    if (bRenderDaFire)
+        SetDaFireConstants(VolumeSettings.m_DaFire, LightData);
 
     DrawScreenQuad();
+}
+
+//	The look of the campfire's volume: how hard the hot soot radiates, how much the plume
+//	swallows, and the light the fire throws back into its own smoke.
+void dx113DFluidRenderer::SetDaFireConstants(const dx113DFluidData::DaFireParams& p, const FogLighting& light)
+{
+    static shared_str strA("da_fr_a");
+    static shared_str strB("da_fr_b");
+    static shared_str strC("da_fr_c");
+
+    RCache.set_c(strA, p.m_fEmission, p.m_fAbsorb, p.m_fAlbedo, p.m_fEmber);
+    RCache.set_c(strB, p.m_vFireLight.x, p.m_vFireLight.y, p.m_vFireLight.z, p.m_fCoreT);
+    RCache.set_c(strC, p.m_fSmokeGain, 0.f, p.m_fTime, p.m_fFade);
+    (void)light;
 }
 
 void dx113DFluidRenderer::ComputeRayData(const dx113DFluidData &FluidData)

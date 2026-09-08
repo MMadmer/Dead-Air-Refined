@@ -318,6 +318,8 @@ int ps_r__taa = 0;
 // Fade band width before that cut-off, metres; 0 = hard edge (stock). Blades lie down over
 // the band so their shadows shorten into nothing instead of popping at a moving circle.
 int ps_r__grass_shadow_fade = 10;
+int ps_r__fire_fluid = 0;
+float ps_r__fire_fluid_dist = 25.f;
 // World-position brightness variation of grass, 0 = off. Distant grass reads as one flat
 // fill; noise keyed to the WORLD position of each tuft (stable under camera motion) breaks
 // it into a ground-like pattern. Brightness only - true colour matching needs a terrain
@@ -918,6 +920,9 @@ void xrRender_sync_preset_derived(bool user_facing)
     // The player's own world shadow starts at Medium: it is one more full-body caster in
     // every shadow map, which the two lowest presets should not pay for.
     static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
+    // The fluid campfire: the two top presets simulate the nearest fires on the 3D grid.
+    static constexpr int fire_fluid_by_preset[] = {0, 0, 0, 1, 1};
+    ps_r__fire_fluid = fire_fluid_by_preset[ps_Preset];
     // Screen-space contact shadows join at High: an 8-step depth ray per lit pixel of the
     // near sun pass. Slightly stronger on Maximum; below High the two lowest-cost presets
     // keep the reference look. Not full strength on purpose - the technique's stepping
@@ -1625,6 +1630,8 @@ void xrRender_initconsole()
     CMD1(CCC_RdocCapture, "rdoc_capture");
 #endif
     CMD4(CCC_Integer, "r__grass_shadow_fade", &ps_r__grass_shadow_fade, 0, 50);
+    CMD4(CCC_Integer, "r__fire_fluid", &ps_r__fire_fluid, 0, 1);
+    CMD4(CCC_Float, "r__fire_fluid_dist", &ps_r__fire_fluid_dist, 5.f, 100.f);
     CMD4(CCC_Float, "r__grass_tint", &ps_r__grass_tint, 0.f, 1.f);
     CMD4(CCC_Float, "r__grass_tint_scale", &ps_r__grass_tint_scale, 1.f, 64.f);
     CMD4(CCC_Float, "r__grass_tint_base", &ps_r__grass_tint_base, 0.f, 4.f);

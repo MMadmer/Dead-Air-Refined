@@ -5,6 +5,11 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/Environment.h"
+#include "xrCDB/xrCDB.h"
+#if defined(USE_DX11)
+#include "Layers/xrRenderDX11/3DFluid/dx113DFluidData.h"
+#include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
+#endif
 
 #include <algorithm>
 
@@ -46,6 +51,33 @@ void load_presets()
         p.smoke_size = std::max(0.05f, rf("smoke_size", p.smoke_size));
         p.smoke_grey = clampr(rf("smoke_grey", p.smoke_grey), 0.f, 1.f);
         p.heat_kw = std::max(5.f, rf("heat_kw", p.heat_kw));
+        p.fluid = ini.line_exist(n, "fluid") ? ini.r_bool(n, "fluid") : p.fluid;
+        p.fl_base = rf("fluid_base", p.fl_base);
+        p.fl_bed = std::max(0.05f, rf("fluid_bed", p.fl_bed));
+        p.fl_radius = rf("fluid_radius", p.fl_radius);
+        p.fl_cell = clampr(rf("fluid_cell", p.fl_cell), 0.015f, 0.12f);
+        p.fl_ignition = rf("fluid_ignition", p.fl_ignition);
+        p.fl_burn = rf("fluid_burn", p.fl_burn);
+        p.fl_fuel_per_burn = std::max(0.01f, rf("fluid_fuel_per_burn", p.fl_fuel_per_burn));
+        p.fl_t_per_burn = rf("fluid_t_per_burn", p.fl_t_per_burn);
+        p.fl_smoke_per_burn = rf("fluid_smoke_per_burn", p.fl_smoke_per_burn);
+        p.fl_cooling = rf("fluid_cooling", p.fl_cooling);
+        p.fl_fuel = rf("fluid_fuel", p.fl_fuel);
+        p.fl_couple = rf("fluid_couple", p.fl_couple);
+        p.fl_expansion = rf("fluid_expansion", p.fl_expansion);
+        p.fl_buoyancy = rf("fluid_buoyancy", p.fl_buoyancy);
+        p.fl_inject = rf("fluid_inject", p.fl_inject);
+        p.fl_wind_relax = rf("fluid_wind_relax", p.fl_wind_relax);
+        p.fl_vort = rf("fluid_vorticity", p.fl_vort);
+        p.fl_smoke_fade = rf("fluid_smoke_fade", p.fl_smoke_fade);
+        p.fl_vel_damp = rf("fluid_vel_damp", p.fl_vel_damp);
+        p.fl_iterations = int(clampr(rf("fluid_iterations", float(p.fl_iterations)), 2.f, 48.f));
+        p.fl_emission = rf("fluid_emission", p.fl_emission);
+        p.fl_absorb = rf("fluid_absorb", p.fl_absorb);
+        p.fl_albedo = rf("fluid_albedo", p.fl_albedo);
+        p.fl_ember = rf("fluid_ember", p.fl_ember);
+        p.fl_core_t = std::max(0.1f, rf("fluid_core_t", p.fl_core_t));
+        p.fl_smoke_gain = rf("fluid_smoke_gain", p.fl_smoke_gain);
         g_presets.push_back(p);
     }
 }
@@ -68,6 +100,43 @@ VertexElement smoke_decl[] =
     {0, 24, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1},
     D3DDECL_END()
 };
+
+// Only the fire nearest the camera runs on the grid; the rest fall back to the marched
+// flame. The winner of one frame is the owner of the next, which costs a frame at a fire's
+// first appearance and saves an ordering problem between effects.
+CDaFireEffect* g_fluid_owner = nullptr;
+CDaFireEffect* g_fluid_claim = nullptr;
+float g_fluid_claim_d2 = flt_max;
+u32 g_fluid_frame = u32(-1);
+
+float axis_of(const Fvector& v, int a) { return a == 0 ? v.x : (a == 1 ? v.y : v.z); }
+
+// Sutherland-Hodgman against one axis-aligned plane, so a terrain triangle metres across is
+// cut down to the piece that is actually inside the box before it is sampled.
+void clip_axis(xr_vector<Fvector>& poly, xr_vector<Fvector>& tmp, int axis, float value, bool keepGreater)
+{
+    tmp.clear();
+    const size_t n = poly.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        const Fvector& A = poly[i];
+        const Fvector& B = poly[(i + 1) % n];
+        const float da = keepGreater ? axis_of(A, axis) - value : value - axis_of(A, axis);
+        const float db = keepGreater ? axis_of(B, axis) - value : value - axis_of(B, axis);
+        if (da >= 0.f)
+            tmp.push_back(A);
+        if ((da >= 0.f) != (db >= 0.f))
+        {
+            Fvector P;
+            P.lerp(A, B, da / (da - db));
+            tmp.push_back(P);
+        }
+    }
+    poly.swap(tmp);
+}
+
+// The simulation runs at a fixed rate; every rate and length in a preset is converted with it.
+constexpr float g_fluid_step = 1.f / 60.f;
 
 constexpr float g_gravity = 9.81f;
 // Wood burns at about 0.025 kg/m2s; the AGA tilt correlation measures the wind against the
@@ -107,9 +176,343 @@ const SDaFirePreset* SDaFirePreset::find(const shared_str& name)
     return nullptr;
 }
 
+CDaFireEffect::CDaFireEffect() = default;
+
 CDaFireEffect::~CDaFireEffect()
 {
+    if (g_fluid_owner == this)
+        g_fluid_owner = nullptr;
+    if (g_fluid_claim == this)
+        g_fluid_claim = nullptr;
+    fluid_destroy();
     CDaFireEffect::OnDeviceDestroy();
+}
+
+// The grid box: the fire's own metre-scale piece of the world, wide enough for the flame and
+// tall enough for the first couple of metres of plume. The transform's scale has to be uniform
+// and equal to one cell times the largest grid dimension - the renderer folds the grid's own
+// aspect ratio in afterwards.
+void CDaFireEffect::fluid_create()
+{
+#if defined(USE_DX11)
+    if (m_fluid || !m_preset)
+        return;
+    //  Building it is expensive; if it cannot be built yet, wait rather than try every frame.
+    if (m_fluid_retry > 0.f)
+    {
+        m_fluid_retry -= Device.fTimeDelta;
+        return;
+    }
+    m_fluid_retry = 2.f;
+    const int W = FluidManager.GetTextureWidth();
+    const int H = FluidManager.GetTextureHeight();
+    const int D = FluidManager.GetTextureDepth();
+    if (W <= 0 || H <= 0 || D <= 0)
+        return;
+
+    m_fluid_cell = m_preset->fl_cell;
+    const int maxDim = _max(W, _max(H, D));
+    const Fvector O = origin();
+    const float srcY = O.y + m_preset->fl_base;
+    //  The floor of the box sits well below the fuel so the ground under the fire, and any
+    //  pit it stands in, are inside; everything left over is headroom for the plume.
+    m_fluid_centre.set(O.x, srcY - 0.6f + m_fluid_cell * float(H) * 0.5f, O.z);
+
+    if (!fluid_voxelize())
+        return;
+
+    Fmatrix scale, translate, transform;
+    const float s = m_fluid_cell * float(maxDim);
+    scale.scale(s, s, s);
+    translate.translate(m_fluid_centre);
+    transform.mul(translate, scale);
+
+    dx113DFluidData::Settings settings;
+    settings.m_SimulationType = dx113DFluidData::ST_DA_FIRE;
+    settings.m_fHemi = 0.35f;
+    settings.m_fConfinementScale = m_preset->fl_vort;
+    //  Every channel fades on its own terms inside the shader, so nothing is scaled here.
+    settings.m_fDecay = 1.f;
+    settings.m_fGravityBuoyancy = 0.f;
+
+    m_fluid = std::make_unique<dx113DFluidData>();
+    m_fluid->InitProcedural(transform, settings);
+    m_fluid->SetStaticObstacles(m_fluid_obst);
+    m_fluid_retry = 0.f;
+    m_fluid_time = 0.f;
+    m_fluid_acc = 0.f;
+    fluid_params();
+#endif
+}
+
+// The level itself, turned into the occupancy volume the simulation treats as solid. The wood,
+// the ground and anything else standing in the box are all just cells here, which is what lets
+// the flame's base follow whatever it is actually burning on.
+bool CDaFireEffect::fluid_voxelize()
+{
+#if defined(USE_DX11)
+    if (!g_pGameLevel)
+        return false;
+    const CDB::MODEL* model = g_pGameLevel->ObjectSpace.GetStaticModel();
+    if (!model)
+        return false;
+
+    const int W = FluidManager.GetTextureWidth();
+    const int H = FluidManager.GetTextureHeight();
+    const int D = FluidManager.GetTextureDepth();
+    const float cell = m_fluid_cell;
+    const Fvector C = m_fluid_centre;
+    Fvector half;
+    half.set(cell * float(W) * 0.5f, cell * float(H) * 0.5f, cell * float(D) * 0.5f);
+
+    xr_vector<u8> vox(size_t(W) * size_t(H) * size_t(D), 0);
+
+    CDB::COLLIDER xrc;
+    xrc.r_clear();
+    xrc.box_query(CDB::OPT_FULL_TEST, model, C, half);
+    const size_t hits = xrc.r_count();
+    if (!hits)
+        return false;
+
+    const CDB::TRI* tris = model->get_tris();
+    const Fvector* verts = model->get_verts();
+    const CDB::RESULT* rb = xrc.r_begin();
+
+    xr_vector<Fvector> poly, tmp;
+    poly.reserve(16);
+    tmp.reserve(16);
+
+    Fvector lo, hi;
+    lo.sub(C, half);
+    hi.add(C, half);
+
+    size_t marked = 0;
+    for (size_t t = 0; t < hits; ++t)
+    {
+        const CDB::TRI& tri = tris[rb[t].id];
+        poly.clear();
+        poly.push_back(verts[tri.verts[0]]);
+        poly.push_back(verts[tri.verts[1]]);
+        poly.push_back(verts[tri.verts[2]]);
+        for (int a = 0; a < 3 && poly.size() >= 3; ++a)
+        {
+            clip_axis(poly, tmp, a, axis_of(lo, a), true);
+            if (poly.size() >= 3)
+                clip_axis(poly, tmp, a, axis_of(hi, a), false);
+        }
+        if (poly.size() < 3)
+            continue;
+
+        //  Fan the clipped polygon and splat each piece a little denser than one sample per
+        //  cell, so nothing thin slips between two samples.
+        for (size_t f = 2; f < poly.size(); ++f)
+        {
+            const Fvector& a = poly[0];
+            const Fvector& b = poly[f - 1];
+            const Fvector& c = poly[f];
+            const float e = _max(a.distance_to(b), _max(a.distance_to(c), b.distance_to(c)));
+            const int n = clampr(iCeil(e / (cell * 0.4f)), 1, 320);
+            const float inv = 1.f / float(n);
+            for (int i = 0; i <= n; ++i)
+            {
+                for (int j = 0; j <= n - i; ++j)
+                {
+                    const float u = float(i) * inv;
+                    const float v = float(j) * inv;
+                    Fvector p;
+                    p.x = a.x + (b.x - a.x) * u + (c.x - a.x) * v;
+                    p.y = a.y + (b.y - a.y) * u + (c.y - a.y) * v;
+                    p.z = a.z + (b.z - a.z) * u + (c.z - a.z) * v;
+                    //  Grid y runs downward, and the depth slices are sampled half a texel in.
+                    const int cx = iFloor((p.x - C.x) / cell + float(W) * 0.5f);
+                    const int cy = iFloor(float(H) * 0.5f - (p.y - C.y) / cell);
+                    const int cz = iFloor((p.z - C.z) / cell + float(D) * 0.5f - 0.5f);
+                    if (cx < 0 || cx >= W || cy < 0 || cy >= H || cz < 0 || cz >= D)
+                        continue;
+                    u8& b8 = vox[size_t(cz) * size_t(W) * size_t(H) + size_t(cy) * size_t(W) + size_t(cx)];
+                    if (!b8)
+                    {
+                        b8 = 255;
+                        ++marked;
+                    }
+                }
+            }
+        }
+    }
+    xrc.r_clear();
+
+    if (!marked)
+        return false;
+
+    D3D_TEXTURE3D_DESC desc{};
+    desc.Width = W;
+    desc.Height = H;
+    desc.Depth = D;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R8_UNORM;
+    desc.Usage = D3D_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D_BIND_SHADER_RESOURCE;
+
+    D3D_SUBRESOURCE_DATA init{};
+    init.pSysMem = vox.data();
+    init.SysMemPitch = UINT(W);
+    init.SysMemSlicePitch = UINT(W * H);
+
+    _RELEASE(m_fluid_obst);
+    if (FAILED(HW.pDevice->CreateTexture3D(&desc, &init, &m_fluid_obst)))
+        return false;
+    //  How much of the bed the flame can actually take hold on: an empty cell with a solid one
+    //  within two below it, inside the disc and the bed's height. A pile of sticks at this
+    //  resolution can leave almost none, and then there is nowhere for a flame to stand.
+    {
+        const float rad = ((m_preset->fl_radius > 0.f) ? m_preset->fl_radius : m_preset->radius * 1.15f) / cell;
+        const float bed = m_preset->fl_bed / cell;
+        const Fvector O = origin();
+        const float sx = (O.x - C.x) / cell + float(W) * 0.5f;
+        const float sy = float(H) * 0.5f - (O.y + m_preset->fl_base - C.y) / cell;
+        const float sz = (O.z - C.z) / cell + float(D) * 0.5f - 0.5f;
+        const auto solid = [&](int x, int y, int z) {
+            return x >= 0 && x < W && y >= 0 && y < H && z >= 0 && z < D &&
+                vox[size_t(z) * size_t(W) * size_t(H) + size_t(y) * size_t(W) + size_t(x)] != 0;
+        };
+        int anchors = 0;
+        int topY = H;
+        for (int z = 0; z < D; ++z)
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x)
+                {
+                    const float dx = float(x) - sx, dz = float(z) - sz, dy = float(y) - sy;
+                    if (dx * dx + dz * dz > rad * rad || _abs(dy) > bed || solid(x, y, z))
+                        continue;
+                    if (solid(x, y + 1, z) || solid(x, y + 2, z))
+                    {
+                        ++anchors;
+                        if (y < topY)
+                            topY = y;
+                    }
+                }
+        const float topWorld = (topY < H) ? (C.y + cell * (float(H) * 0.5f - float(topY))) : O.y;
+        Msg("* [fire] fluid campfire at %.1f %.1f %.1f: %u solid cell(s), %d anchor(s), fuel bed up to %+.2f m",
+            O.x, O.y, O.z, u32(marked), anchors, topWorld - O.y);
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
+// Everything the passes read, converted from metres and seconds into cells and steps.
+void CDaFireEffect::fluid_params()
+{
+#if defined(USE_DX11)
+    if (!m_fluid || !m_preset)
+        return;
+    const SDaFirePreset& P = *m_preset;
+    const int W = FluidManager.GetTextureWidth();
+    const int H = FluidManager.GetTextureHeight();
+    const int D = FluidManager.GetTextureDepth();
+    const float cell = m_fluid_cell;
+    const float h = g_fluid_step;
+    const Fvector C = m_fluid_centre;
+    const Fvector O = origin();
+
+    dx113DFluidData::Settings settings = m_fluid->GetSettings();
+    dx113DFluidData::DaFireParams& f = settings.m_DaFire;
+
+    f.m_vSource.set((O.x - C.x) / cell + float(W) * 0.5f,
+        float(H) * 0.5f - (O.y + P.fl_base - C.y) / cell,
+        (O.z - C.z) / cell + float(D) * 0.5f - 0.5f);
+    f.m_fRadius = ((P.fl_radius > 0.f) ? P.fl_radius : P.radius * 1.15f) / cell;
+    f.m_fBedRange = P.fl_bed / cell;
+
+    f.m_fIgnition = P.fl_ignition;
+    f.m_fBurnPerT = P.fl_burn * h;
+    f.m_fTPerBurn = P.fl_t_per_burn;
+    f.m_fCooling = P.fl_cooling * h;
+    f.m_fFuelPerBurn = P.fl_fuel_per_burn;
+    f.m_fSmokePerBurn = P.fl_smoke_per_burn;
+    f.m_fExpansion = P.fl_expansion;
+    f.m_fFuelTarget = P.fl_fuel;
+    f.m_fCouple = P.fl_couple * h;
+
+    //  The wind, on the grid's axes: world up is -y here. A velocity of one means one cell
+    //  per step, so metres per second turn into cells with the step and the cell size.
+    const float toCells = h / cell;
+    f.m_vWind.set(m_wind.x * toCells, -m_wind.y * toCells, m_wind.z * toCells);
+    f.m_fWindRelax = P.fl_wind_relax * h;
+
+    //  An acceleration in m/s2 moves a cell-per-step velocity by a*h*h/cell.
+    f.m_fBuoyancy = P.fl_buoyancy * h * h / cell;
+    f.m_fInject = P.fl_inject * toCells;
+    f.m_fTime = m_fluid_time;
+    f.m_fSmokeFade = std::max(0.f, 1.f - P.fl_smoke_fade * h);
+    f.m_fVelDamp = std::max(0.f, 1.f - P.fl_vel_damp * h);
+    //  Cetegen: a pool fire puffs at about 1.5/sqrt(D) Hz.
+    f.m_fPuff = 1.5f / _sqrt(_max(0.2f, 2.f * P.radius));
+    f.m_iIterations = P.fl_iterations;
+
+    f.m_fEmission = P.fl_emission * P.intensity;
+    f.m_fAbsorb = P.fl_absorb;
+    f.m_fAlbedo = P.fl_albedo;
+    f.m_fEmber = P.fl_ember;
+    f.m_fCoreT = P.fl_core_t;
+    f.m_fSmokeGain = P.fl_smoke_gain;
+    f.m_fFade = m_fluid_fade;
+    //  The light the flame throws back into its own plume.
+    f.m_vFireLight.set(1.f, 0.42f, 0.13f);
+    f.m_vFireLight.mul(0.7f * P.intensity);
+
+    settings.m_fConfinementScale = P.fl_vort;
+    m_fluid->SetSettings(settings);
+#endif
+}
+
+// Where the billboard plume takes over from the grid: the top of the box, carried downwind by
+// however far the wind would have pushed it on the way up.
+Fvector CDaFireEffect::fluid_plume_start() const
+{
+    Fvector p = m_fluid_centre;
+#if defined(USE_DX11)
+    const float top = m_fluid_cell * float(FluidManager.GetTextureHeight()) * 0.5f;
+    const float rise = 2.6f;
+    p.y += top - 0.12f;
+    p.x += m_wind.x * (top / rise);
+    p.z += m_wind.z * (top / rise);
+#endif
+    return p;
+}
+
+void CDaFireEffect::fluid_destroy()
+{
+#if defined(USE_DX11)
+    m_fluid.reset();
+    _RELEASE(m_fluid_obst);
+#endif
+}
+
+void CDaFireEffect::fluid_render(CBackend& cmd_list)
+{
+#if defined(USE_DX11)
+    if (!m_fluid)
+        return;
+    (void)cmd_list;
+
+    //  A fixed step keeps the flame the same shape whatever the frame rate; two steps is the
+    //  most we will spend catching up, the rest of the backlog is simply dropped.
+    m_fluid_acc += std::min(Device.fTimeDelta, 0.1f);
+    int steps = 0;
+    while (m_fluid_acc >= g_fluid_step && steps < 2)
+    {
+        m_fluid_acc -= g_fluid_step;
+        m_fluid_time += g_fluid_step;
+        ++steps;
+        fluid_params();
+        FluidManager.Update(*m_fluid, 1.f);
+    }
+    if (!steps)
+        fluid_params();
+    FluidManager.RenderFluid(*m_fluid);
+#endif
 }
 
 BOOL CDaFireEffect::Compile(CPEDef* def)
@@ -316,6 +719,34 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     if (uh > 0.05f)
         m_wdir.set(m_wind.x / uh, m_wind.z / uh);
 
+    // Near enough, on a preset that runs it, and the nearest such fire in the scene: only one
+    // grid is worth the passes. The grid itself is built or dropped on the render thread.
+    const float d2 = Device.vCameraPosition.distance_to_sqr(origin());
+    if (Device.dwFrame != g_fluid_frame)
+    {
+        g_fluid_frame = Device.dwFrame;
+        g_fluid_owner = g_fluid_claim;
+        g_fluid_claim = nullptr;
+        g_fluid_claim_d2 = flt_max;
+    }
+    //  Never while the level is still coming up: the frames the engine pumps through the
+    //  loading screen are not worth a fluid step, and building the grid needs the level's
+    //  collision model to be there in the first place.
+    const bool ready = g_pGameLevel && g_pGameLevel->bReady && !Device.dwPrecacheFrame;
+    //  A quarter of the range of hysteresis: building the grid means voxelising the level,
+    //  and a player standing on the boundary should not pay for that twice a second.
+    const float lim = ps_r__fire_fluid_dist * (m_fluid ? 1.25f : 1.f);
+    const bool eligible = ready && ps_r__fire_fluid && m_preset->fluid && m_dying <= 0.f && d2 < lim * lim;
+    if (eligible && d2 < g_fluid_claim_d2)
+    {
+        g_fluid_claim_d2 = d2;
+        g_fluid_claim = this;
+    }
+    m_fluid_wanted = eligible && g_fluid_owner == this;
+    //  Half a second of crossover: at the distance where the grid takes over, both are drawn
+    //  and one fades into the other instead of the flame changing shape in a single frame.
+    m_fluid_fade = clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
+
     // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
     // across and lays a campfire almost flat in a breeze; a saturating law reads true for a
     // fire this size: 18 degrees at 2 m/s, 30 at 4, 45 at 8, 50 at most. The filter (a quarter
@@ -326,7 +757,9 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     m_tilt += (tilt - m_tilt) * k;
     m_gust += (env.eff_wind_gust - m_gust) * k;
 
-    const Fvector tip = flame_tip();
+    // While the grid is running it carries the flame and the first couple of metres of the
+    // plume itself, so the billboards start where the box ends instead of at the flame's tip.
+    const Fvector tip = m_fluid ? fluid_plume_start() : flame_tip();
     update_smoke(dt, tip);
 
     if (m_dying > 1.5f && m_puffs.empty())
@@ -544,9 +977,15 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
         if (Device.vCameraPosition.distance_to_sqr(origin()) > lim * lim)
             return;
     }
+    if (m_fluid_wanted && !m_fluid)
+        fluid_create();
+    else if (!m_fluid_wanted && m_fluid && m_fluid_fade <= 0.f)
+        fluid_destroy();
     const float fade = m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f;
-    if (fade > 0.f)
-        render_flame(cmd_list, fade);
+    if (m_fluid && m_fluid_fade > 0.f)
+        fluid_render(cmd_list);
+    if (fade > 0.f && m_fluid_fade < 1.f)
+        render_flame(cmd_list, fade * (1.f - m_fluid_fade));
     render_smoke(cmd_list);
 }
 } // namespace xray::render::RENDER_NAMESPACE::PS

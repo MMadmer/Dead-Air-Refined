@@ -1,0 +1,84 @@
+#include "da_fluid.h"
+
+#define Texture_phi_n Texture_color
+#define Texture_phi_n_hat Texture_tempscalar
+
+// The campfire's field step: MacCormack advection of (temperature, fuel, burn, smoke), then
+// the fuel the burning surface gives off, then the reaction. Combustion lives inside the
+// advection pass on purpose - it is the only place the whole field is already in registers.
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//	Pixel
+float4 main(p_fluidsim input) : SV_Target
+{
+	if (IsNonEmptyCell(input.texcoords.xyz))
+		return 0;
+
+	// ---- MacCormack: advect forward, correct by the error the round trip left behind, and
+	// clamp to the eight nodes around the back-traced point so the correction can never
+	// overshoot into a new extremum.
+	const float3 npos = input.cell0 - timestep * forward *
+		Texture_velocity0.SampleLevel(samPointClamp, input.texcoords, 0).xyz;
+	const float3 nposTC = float3(npos.x / textureWidth, npos.y / textureHeight, (npos.z + 0.5) / textureDepth);
+
+	const float3 nposTexel = floor(npos + 0.5);
+	const float3 nposTexelTC = float3(nposTexel.x / textureWidth, nposTexel.y / textureHeight,
+		(nposTexel.z + 0.5) / textureDepth);
+	const float3 ht = float3(0.5 / textureWidth, 0.5 / textureHeight, 0.5 / textureDepth);
+
+	float4 nodeValues[8];
+	nodeValues[0] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3(-ht.x, -ht.y, -ht.z), 0);
+	nodeValues[1] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3(-ht.x, -ht.y,  ht.z), 0);
+	nodeValues[2] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3(-ht.x,  ht.y, -ht.z), 0);
+	nodeValues[3] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3(-ht.x,  ht.y,  ht.z), 0);
+	nodeValues[4] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3( ht.x, -ht.y, -ht.z), 0);
+	nodeValues[5] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3( ht.x, -ht.y,  ht.z), 0);
+	nodeValues[6] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3( ht.x,  ht.y, -ht.z), 0);
+	nodeValues[7] = Texture_phi_n.SampleLevel(samPointClamp, nposTexelTC + float3( ht.x,  ht.y,  ht.z), 0);
+
+	float4 phiMin = min(min(min(nodeValues[0], nodeValues[1]), nodeValues[2]), nodeValues[3]);
+	phiMin = min(min(min(min(phiMin, nodeValues[4]), nodeValues[5]), nodeValues[6]), nodeValues[7]);
+	float4 phiMax = max(max(max(nodeValues[0], nodeValues[1]), nodeValues[2]), nodeValues[3]);
+	phiMax = max(max(max(max(phiMax, nodeValues[4]), nodeValues[5]), nodeValues[6]), nodeValues[7]);
+
+	float4 f = Texture_phi_n.SampleLevel(samLinear, nposTC, 0)
+		+ 0.5 * (Texture_phi_n.SampleLevel(samPointClamp, input.texcoords, 0)
+		       - Texture_phi_n_hat.SampleLevel(samPointClamp, input.texcoords, 0));
+	f = max(min(f, phiMax), phiMin);
+	f *= modulate;
+
+	// ---- The burning surface hands fuel to the gas right above it, and keeps a pilot flame
+	// there so the fire never goes out on its own. This is what pins the flame to the wood:
+	// no cell that is not resting on something ever gets fuel of its own.
+	//	The pilot has to be a real flame temperature, not a spark just over the ignition point:
+	//	the gas above a bed only stays there for a fraction of a second, and a reaction that
+	//	needs a second to run away is carried off before it ever gets hot.
+	const float target = da_ff_fuel_target(input);
+	if (target > 0.0)
+	{
+		const float k = saturate(da_ff_misc2.z);
+		f.y += (target - f.y) * k;
+		f.x = max(f.x, 0.60 * saturate(target * 2.0));
+	}
+
+	// ---- Reaction. Hot enough and with fuel left, a cell burns: the fuel goes, the
+	// temperature and the soot come. Then everything radiates its heat away, which is what
+	// sets how tall the flame gets before it turns into smoke.
+	float burn = 0.0;
+	if (f.x >= da_ff_burn.x && f.y > 0.0)
+	{
+		burn = da_ff_burn.y * (saturate(f.x) - da_ff_burn.x);
+		burn = min(burn, f.y / max(da_ff_burn2.x, 0.001));
+		f.y -= da_ff_burn2.x * burn;
+		f.x += da_ff_burn.z * burn;
+		f.w += da_ff_burn2.y * burn;
+	}
+	f.x -= da_ff_burn.w * f.x;
+	f.w *= da_ff_misc2.x;
+
+	f.x = clamp(f.x, 0.0, 3.0);
+	f.y = clamp(f.y, 0.0, 4.0);
+	f.z = burn;
+	f.w = clamp(f.w, 0.0, 4.0);
+	return f;
+}

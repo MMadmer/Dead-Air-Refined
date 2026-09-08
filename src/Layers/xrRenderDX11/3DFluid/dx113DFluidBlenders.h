@@ -65,6 +65,26 @@ public:
     virtual void Compile(CBlender_Compile& C);
 };
 
+//	The campfire's simulation passes and its own ray-cast. Separate blenders because a shader
+//	only carries six elements and the stock ray-cast already uses five of them.
+class CBlender_fluid_dafire : public IBlender
+{
+public:
+    virtual LPCSTR getComment() { return "INTERNAL: 3dfluid campfire"; }
+    virtual BOOL canBeDetailed() { return FALSE; }
+    virtual BOOL canBeLMAPped() { return FALSE; }
+    virtual void Compile(CBlender_Compile& C);
+};
+
+class CBlender_fluid_dafire_ray : public IBlender
+{
+public:
+    virtual LPCSTR getComment() { return "INTERNAL: 3dfluid campfire raycast"; }
+    virtual BOOL canBeDetailed() { return FALSE; }
+    virtual BOOL canBeLMAPped() { return FALSE; }
+    virtual void Compile(CBlender_Compile& C);
+};
+
 class CBlender_fluid_raycast : public IBlender
 {
 public:

@@ -1,8 +1,9 @@
 #pragma once
 
+#include "dx113DFluidData.h"
+
 namespace xray::render::RENDER_NAMESPACE
 {
-class dx113DFluidData;
 
 class dx113DFluidRenderer
 {
@@ -42,6 +43,9 @@ private:
         RS_QuadRaycastFire,
         RS_QuadRaycastCopyFire,
 
+        RS_QuadRaycastDaFire,
+        RS_QuadRaycastCopyDaFire,
+
         RS_NumShaders
     };
 
@@ -72,6 +76,7 @@ private:
     void DrawBox();
 
     void CalculateLighting(const dx113DFluidData& FluidData, FogLighting& LightData);
+    void SetDaFireConstants(const dx113DFluidData::DaFireParams& p, const FogLighting& light);
 
 private:
     bool m_bInited;
