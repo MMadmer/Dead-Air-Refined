@@ -44,9 +44,6 @@ struct R_dsgraph_structure
         bool precise_portals{ false };
         bool is_main_pass{ false };
         bool mt_calculate{ false };
-        // A local light's shadow map (the sun cascades leave it false): swaying foliage is
-        // frozen there - see FTreeVisual::Render.
-        bool smap_local{ false };
         // A dynamic-object list collected ahead of time. When set, build_subspace_dynamic filters it
         // with the view frustum instead of querying the spatial database - the database takes one
         // lock for every query, and the shadow-map passes of one frame would otherwise queue up on

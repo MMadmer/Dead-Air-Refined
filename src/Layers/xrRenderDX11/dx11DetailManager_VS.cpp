@@ -34,15 +34,6 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);
 
-    // Grass stands still in the SHADOW pass while swaying on screen: a blade moving a fraction of a
-    // texel flips whole shadowed pixels between lit and unlit every frame, which reads as colour
-    // noise on specular surfaces (barrels, cars). Matte surfaces hide it; the map cannot.
-    const bool smap_phase =
-        RImplementation.get_context(cmd_list.context_id).o.phase == CRender::PHASE_SMAP;
-    static const Fvector4 wind_zero{};
-    const Fvector4& wind1 = smap_phase ? wind_zero : m_wind_dir1;
-    const Fvector4& wind2 = smap_phase ? wind_zero : m_wind_dir2;
-
     // Wave0
     float scale = 1.f / float(quant);
     Fvector4 wave;
@@ -57,7 +48,8 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir1); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	1, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), wind1, 1, 0, collectStats, frustum);
+    // The shadow passes take the same wind as the screen: a blade's shadow follows the blade.
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir1, 1, 0, collectStats, frustum);
 
     // Wave1
     // wave.set				(1.f/3.f,		1.f/7.f,	1.f/5.f,	Device.fTimeGlobal*swing_current.speed);
@@ -66,7 +58,7 @@ void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, cons
     // RCache.set_c			(&*hwc_wind,	dir2); //
     // wind-dir
     // hw_Render_dump			(&*hwc_array,	2, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), wind2, 2, 0, collectStats, frustum);
+    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 2, 0, collectStats, frustum);
 
     // Still
     consts.set(scale, scale, scale, 1.f);

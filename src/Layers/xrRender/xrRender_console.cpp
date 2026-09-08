@@ -189,9 +189,6 @@ int ps_r__light_dyn_shared = 1;
 // actor's body and the item's world model already cast. Maximum preset only (see CCC_Preset).
 int ps_r__hud_shadow = 0;
 int ps_r__actor_shadow = 0;
-// Trees sway in the sun cascades too (their shadows move with the crowns). Below High the
-// shadow pass keeps the frozen wind: the deformation runs once more per cascade there.
-int ps_r__tree_shadow_sway = 0;
 // Cloud deck tier (da_clouds.h): 0/1 flat deck, 2 volumetric 6 steps, 3 volumetric 12 steps.
 int ps_r__clouds_quality = 1;
 int ps_r__clouds_debug = 0; // 0 off, 1 the deck transmittance, 2 its raw colour, 3 the reprojection offset
@@ -990,12 +987,6 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r__light_details = light_details_by_preset[ps_Preset];
     ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
-    // Swaying tree shadows: the full wind chain in every cascade the tree lands in. Measured
-    // on the rig (foliage save, 1440p, Extreme): sun pass 8.2-8.8 ms with it, 8.2-9.4 ms
-    // without - the cascades are pixel-bound and the vertex work vanishes in the noise. So
-    // every preset but Minimum has it; Minimum keeps the frozen shadow for the oldest cards.
-    static constexpr int tree_shadow_sway_by_preset[] = {0, 1, 1, 1, 1};
-    ps_r__tree_shadow_sway = tree_shadow_sway_by_preset[ps_Preset];
     // Cloud deck: the flat deck everywhere (it is a few noise reads per sky pixel), the
     // volumetric slab on the two top presets - 6 steps on High, 12 on Extreme.
     static constexpr int clouds_by_preset[] = {0, 1, 1, 2, 3};
@@ -1414,7 +1405,6 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__light_dyn_shared", &ps_r__light_dyn_shared, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__actor_shadow", &ps_r__actor_shadow, 0, 1);
-    CMD4(CCC_RuntimeInteger, "r__tree_shadow_sway", &ps_r__tree_shadow_sway, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__clouds_quality", &ps_r__clouds_quality_override, -1, 3);
     CMD4(CCC_Float, "r__clouds_cover", &ps_r__clouds_cover, -1.f, 1.f);
     CMD4(CCC_Float, "r__hud_shadow_normal_offset", &ps_r__hud_shadow_normal_offset, 0.f, 0.3f);

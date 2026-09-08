@@ -260,7 +260,6 @@ void CRender::render_lights(light_Package& LP)
                 L->svis[data.batch_id].begin();
 
                 dsgraph.o.phase = PHASE_SMAP;
-                dsgraph.o.smap_local = true;
                 dsgraph.r_pmask(true, RImplementation.o.Tshadows);
                 dsgraph.o.sector_id = L->spatial.sector_id;
                 dsgraph.o.view_pos = L->position;

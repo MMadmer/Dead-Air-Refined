@@ -251,14 +251,6 @@ FTreeVisual_setup& GetTreeVisualSetup()
     return setup;
 }
 
-// The shadow pass that keeps the crowns still: every local light's map, and the sun cascades
-// on the presets without r__tree_shadow_sway.
-static bool tree_shadow_frozen(const CBackend& cmd_list)
-{
-    const auto& o = RImplementation.get_context(cmd_list.context_id).o;
-    return o.phase == CRender::PHASE_SMAP && (o.smap_local || !ps_r__tree_shadow_sway);
-}
-
 Fvector4 FTreeVisual::tree_wind_row() const
 {
     // w carries two things (decoded by da_tree_row_valid / da_tree_row_gate in the shaders):
@@ -395,23 +387,8 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_m_xform(xform); // matrix
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0); // consts/scale
     cmd_list.tree.set_wave(tvs.wave); // wave
-    // Crowns freeze in the SHADOW pass on the lower presets for the same reason the grass does
-    // (see dx11DetailManager_VS.cpp): sub-texel smap motion turns into specular shimmer on
-    // whatever the canopy shades. On High and Extreme (r__tree_shadow_sway) the shadow sways
-    // with the crown in the SUN cascades - the cost is the wind chain once more per cascade.
-    // A local light freezes it on every preset: a lamp or the player's own headlamp stands a
-    // metre or two from a bush, and the shadow it throws magnifies every centimetre of the
-    // sway into a metre of shadow sweeping the ground and the walls.
-#if RENDER != R_R1
-    if (tree_shadow_frozen(cmd_list))
-    {
-        // set_wind takes a mutable ref; the value itself never changes.
-        static Fvector4 wind_zero{};
-        cmd_list.tree.set_wind(wind_zero);
-    }
-    else
-#endif
-        cmd_list.tree.set_wind(tvs.wind); // wind
+    // The shadow passes take the same wind: a crown's shadow is the crown's, not a stiff copy.
+    cmd_list.tree.set_wind(tvs.wind); // wind
 #if RENDER != R_R1
     s *= 1.3333f;
     cmd_list.tree.set_c_scale(s * c_scale.rgb.x, s * c_scale.rgb.y, s * c_scale.rgb.z, s * c_scale.hemi); // scale
@@ -436,17 +413,7 @@ void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
     FTreeVisual_setup& tvs = GetTreeVisualSetup();
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0);
     cmd_list.tree.set_wave(tvs.wave);
-    // Same rule as the scalar path in Render(): instanced batches drawn into a shadow map
-    // take the frozen wind. Without this the batched trees swayed in the cascades while the
-    // scalar-path trees stood still, and the mismatch showed as a crown's shadow sliding
-    // across the ground it stands on.
-    if (tree_shadow_frozen(cmd_list))
-    {
-        static Fvector4 wind_zero{};
-        cmd_list.tree.set_wind(wind_zero);
-    }
-    else
-        cmd_list.tree.set_wind(tvs.wind);
+    cmd_list.tree.set_wind(tvs.wind);
 }
 
 void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& data) const

@@ -725,8 +725,8 @@ result reprojected by direction, so the cost stays at a few milliseconds on Maxi
 march buffer (colour and transmittance) as PNGs next to the screenshots, `r__clouds_debug 1`
 shows the deck's transmittance in place of the sky, `2` its raw colour, `3` the temporal
 reprojection's offset; `r__clouds_temporal 0..0.95` is the share of the previous frame the
-march keeps (it fades out on its own while the view turns). Tree shadows follow the sway on every preset but Minimum
-(`r__tree_shadow_sway`); the sway itself costs nothing extra in the shadow pass.
+march keeps (it fades out on its own while the view turns). Tree and grass shadows follow the sway in every
+shadow pass, the sun cascades and the local lights alike; the sway costs nothing measurable there.
 
 Trees bend as one body. The sway is the crown's: height times the waveform (a static
 downwind lean with harmonic oscillation around it, one phase per tree) times the tree's

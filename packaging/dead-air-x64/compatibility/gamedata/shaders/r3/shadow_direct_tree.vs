@@ -3,11 +3,9 @@
 #include "da_wind_field.h"
 #include "da_tree_bend.h"
 
-// The tree's shadow caster. The SAME deformation as deffer_tree_flat.vs, so on the presets
-// that let crowns sway in the cascades (r__tree_shadow_sway) the shadow is the crown's shadow
-// and not a stiff copy standing beside it. On the lower presets the wind constant arrives
-// as zero here and the whole chain collapses to the motors (a blast still shakes a bush's
-// shadow - a transient, not the per-frame shimmer the freeze exists to prevent).
+// The tree's shadow caster. The SAME deformation as deffer_tree_flat.vs, in every shadow pass
+// (the sun cascades and the local lights): the shadow is the crown's shadow and not a stiff
+// copy standing beside it.
 uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
 uniform float4 consts;

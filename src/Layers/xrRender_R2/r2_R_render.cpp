@@ -146,7 +146,6 @@ void CRender::Render()
         if (last_sector_id != IRender_Sector::INVALID_SECTOR_ID)
         {
             dsgraph.o.phase = PHASE_SMAP;
-            dsgraph.o.smap_local = false;
             dsgraph.r_pmask(true, false); // enable priority "0"
             dsgraph.set_Recorder(nullptr);
             dsgraph.o.use_hom = true;
