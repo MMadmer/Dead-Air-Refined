@@ -104,7 +104,7 @@ float da_ff_fuel_target(p_fluidsim input)
 	const float puff = 0.82 + 0.18 * sin(6.2832 * da_ff_misc2.w * da_ff_misc.z);
 	//	Contrast around the mean, not a threshold on it: the bed keeps the same amount of fuel
 	//	overall but spends it in patches with dark gaps, which is what tongues are.
-	return da_ff_burn2.w * band * saturate(1.0 - r * r) * saturate(0.85 + 2.6 * (n - 0.5)) * puff;
+	return da_ff_burn2.w * band * saturate(1.0 - r * r) * saturate(0.92 + 2.0 * (n - 0.5)) * puff;
 }
 
 #endif // DA_FLUID_H
