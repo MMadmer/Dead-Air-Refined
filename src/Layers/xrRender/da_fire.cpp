@@ -1,0 +1,552 @@
+#include "stdafx.h"
+
+#include "da_fire.h"
+#include "ParticleEffectDef.h"
+#include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/IGame_Level.h"
+#include "xrEngine/Environment.h"
+
+#include <algorithm>
+
+namespace xray::render::RENDER_NAMESPACE::PS
+{
+namespace
+{
+xr_vector<SDaFirePreset> g_presets;
+bool g_presets_loaded = false;
+
+// Every [shader_fire_<name>] section of dead_air_x64_fire.ltx is a preset.
+void load_presets()
+{
+    g_presets_loaded = true;
+    string_path path;
+    FS.update_path(path, "$game_config$", "dead_air_x64_fire.ltx");
+    if (!FS.exist(path))
+        return;
+    CInifile ini(path, TRUE);
+    constexpr cpcstr prefix = "shader_fire_";
+    const size_t prefix_len = xr_strlen(prefix);
+    for (const CInifile::Sect* sect : ini.sections())
+    {
+        cpcstr n = sect->Name.c_str();
+        if (strncmp(n, prefix, prefix_len) != 0)
+            continue;
+        SDaFirePreset p;
+        p.name = n + prefix_len;
+        const auto rf = [&](cpcstr key, float def) { return ini.line_exist(n, key) ? ini.r_float(n, key) : def; };
+        p.base_height = rf("base_height", p.base_height);
+        p.radius = std::max(0.05f, rf("radius", p.radius));
+        p.height = std::max(0.1f, rf("height", p.height));
+        p.intensity = rf("intensity", p.intensity);
+        p.lean = rf("lean", p.lean);
+        p.smoke = ini.line_exist(n, "smoke") ? ini.r_bool(n, "smoke") : p.smoke;
+        p.smoke_rate = rf("smoke_rate", p.smoke_rate);
+        p.smoke_life = std::max(1.f, rf("smoke_life", p.smoke_life));
+        p.smoke_alpha = clampr(rf("smoke_alpha", p.smoke_alpha), 0.f, 1.f);
+        p.smoke_size = std::max(0.05f, rf("smoke_size", p.smoke_size));
+        p.smoke_grey = clampr(rf("smoke_grey", p.smoke_grey), 0.f, 1.f);
+        p.heat_kw = std::max(5.f, rf("heat_kw", p.heat_kw));
+        g_presets.push_back(p);
+    }
+}
+
+// Smoke billboards carry the puff's noise seed, age, the fire's light on it and its radius
+// beside the usual position, colour and corner.
+struct SSmokeVertex
+{
+    Fvector p;
+    u32 c;
+    Fvector2 t;
+    Fvector4 e;
+};
+
+VertexElement smoke_decl[] =
+{
+    {0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+    {0, 12, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0},
+    {0, 16, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+    {0, 24, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1},
+    D3DDECL_END()
+};
+
+constexpr float g_gravity = 9.81f;
+// Wood burns at about 0.025 kg/m2s; the AGA tilt correlation measures the wind against the
+// characteristic velocity u_c = (g m'' D / rho_air)^(1/3), ~0.5 m/s for a campfire.
+constexpr float g_burn_rate = 0.025f;
+constexpr float g_rho_air = 1.2f;
+
+// A puff's quad in the QuadIB corner order (bottom-left, top-left, bottom-right, top-right).
+void fill_quad(SSmokeVertex*& pv, const Fvector& c, const Fvector& right, const Fvector& top, u32 clr,
+    const Fvector4& extra)
+{
+    Fvector a, b;
+    a.sub(top, right);
+    b.add(top, right);
+    Fvector p;
+    p.sub(c, b);
+    pv->p = p; pv->c = clr; pv->t.set(0.f, 1.f); pv->e = extra; ++pv;
+    p.add(c, a);
+    pv->p = p; pv->c = clr; pv->t.set(0.f, 0.f); pv->e = extra; ++pv;
+    p.sub(c, a);
+    pv->p = p; pv->c = clr; pv->t.set(1.f, 1.f); pv->e = extra; ++pv;
+    p.add(c, b);
+    pv->p = p; pv->c = clr; pv->t.set(1.f, 0.f); pv->e = extra; ++pv;
+}
+} // namespace
+
+const SDaFirePreset* SDaFirePreset::find(const shared_str& name)
+{
+    if (!g_presets_loaded)
+        load_presets();
+    if (!name.size() || 0 == xr_strcmp(name.c_str(), "off"))
+        return nullptr;
+    for (const SDaFirePreset& p : g_presets)
+        if (0 == xr_strcmp(p.name.c_str(), name.c_str()))
+            return &p;
+    Msg("! [fire] shader fire preset [%s] is not in dead_air_x64_fire.ltx, the effect draws nothing", name.c_str());
+    return nullptr;
+}
+
+CDaFireEffect::~CDaFireEffect()
+{
+    CDaFireEffect::OnDeviceDestroy();
+}
+
+BOOL CDaFireEffect::Compile(CPEDef* def)
+{
+    m_Def = def;
+    m_preset = def ? SDaFirePreset::find(def->m_DaFire) : nullptr;
+    m_seed = ::Random.randF(0.f, 64.f);
+    m_puffs.reserve(64);
+    // No actions, no particles: the PAPI effect behind the base class stays empty.
+    RefreshShader();
+    return TRUE;
+}
+
+void CDaFireEffect::OnDeviceCreate()
+{
+    // The "off" preset keeps a shader too: the graph refuses a visual without one.
+    geom.create(FVF::F_LIT, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+    shader.create("da_fire");
+    m_smoke_geom.create(smoke_decl, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+    m_smoke_shader.create("da_smoke");
+}
+
+void CDaFireEffect::OnDeviceDestroy()
+{
+    geom.destroy();
+    shader.destroy();
+    m_smoke_geom.destroy();
+    m_smoke_shader.destroy();
+}
+
+void CDaFireEffect::Play()
+{
+    m_RT_Flags.set(flRT_DefferedStop, FALSE);
+    m_RT_Flags.set(flRT_Playing, TRUE);
+    m_dying = 0.f;
+}
+
+void CDaFireEffect::Stop(BOOL bDefferedStop)
+{
+    if (bDefferedStop && m_preset)
+    {
+        // The flame dies down over a second and the plume drifts off before the effect ends.
+        m_RT_Flags.set(flRT_DefferedStop, TRUE);
+        if (m_dying <= 0.f)
+            m_dying = 0.001f;
+    }
+    else
+    {
+        m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
+        m_puffs.clear();
+    }
+}
+
+Fvector CDaFireEffect::origin() const
+{
+    return m_RT_Flags.is(flRT_XFORM) ? m_XFORM.c : m_InitialPosition;
+}
+
+Fvector CDaFireEffect::flame_base() const
+{
+    Fvector b = origin();
+    b.y += m_preset->base_height;
+    return b;
+}
+
+float CDaFireEffect::wind_speed() const
+{
+    return _sqrt(m_wind.x * m_wind.x + m_wind.z * m_wind.z);
+}
+
+// Thomas: the flame length along its axis shrinks as u*^-0.21 in wind.
+float CDaFireEffect::flame_length() const
+{
+    const float d = 2.f * m_preset->radius;
+    const float uc = powf(g_gravity * g_burn_rate * d / g_rho_air, 1.f / 3.f);
+    const float ustar = std::max(1.f, wind_speed() / uc);
+    return m_preset->height * powf(ustar, -0.21f);
+}
+
+Fvector CDaFireEffect::flame_tip() const
+{
+    // The tip of the tilted axis: the smoke leaves from there.
+    const float L = flame_length();
+    Fvector axis{m_wdir.x * m_tilt, 1.f, m_wdir.y * m_tilt};
+    axis.normalize_safe();
+    Fvector tip = flame_base();
+    tip.mad(axis, L * 1.05f);
+    return tip;
+}
+
+void CDaFireEffect::update_smoke(float dt, const Fvector& tip)
+{
+    const auto& env = g_pGamePersistent->Environment();
+    const SDaFirePreset& P = *m_preset;
+    const float uh = wind_speed();
+    const Fvector O = origin();
+
+    // Birth at the flame tip. A cooler fire (strong wind cools it) lifts its smoke slower.
+    if (m_dying <= 0.f && P.smoke)
+    {
+        m_puff_acc += P.smoke_rate * dt;
+        const float w0 = clampr(1.5f * powf(2.f / std::max(uh, 0.7f), 1.f / 3.f), 0.8f, 3.f);
+        while (m_puff_acc >= 1.f && m_puffs.size() < 160)
+        {
+            m_puff_acc -= 1.f;
+            SPuff s;
+            const float ang = ::Random.randF(0.f, PI_MUL_2);
+            const float rr = ::Random.randF(0.f, P.radius * 0.6f);
+            s.pos.set(tip.x + _cos(ang) * rr, tip.y + ::Random.randF(-0.1f, 0.1f), tip.z + _sin(ang) * rr);
+            s.vel.set(m_wind.x * 0.5f, w0 * ::Random.randF(0.85f, 1.15f), m_wind.z * 0.5f);
+            s.age = 0.f;
+            s.life = P.smoke_life * ::Random.randF(0.75f, 1.25f);
+            s.r0 = P.smoke_size * ::Random.randF(0.8f, 1.2f);
+            s.seed = ::Random.randF(0.f, 32.f);
+            s.rot = ang;
+            s.spin = ::Random.randF(-0.35f, 0.35f);
+            s.ou_x = s.ou_z = 0.f;
+            m_puffs.push_back(s);
+        }
+    }
+    else
+        m_puff_acc = 0.f;
+
+    // Briggs' bent-over plume in a few lines: the parcel rises with a buoyancy that decays as
+    // (1 + t/0.25)^-1/3 (the x^2/3 trajectory), horizontally it IS the air - the wind of the
+    // service at the parcel's own height (the log profile makes smoke aloft run ahead of the
+    // flame) plus an Ornstein-Uhlenbeck wander for the turbulence the field does not carry.
+    const float qc = 0.7f * P.heat_kw;
+    const float ou_tau = 10.f;
+    const float ou_sigma = 0.1f * std::max(uh, 0.3f);
+    const float ou_k = expf(-dt / ou_tau);
+    const float ou_noise = ou_sigma * _sqrt(1.f - ou_k * ou_k);
+    for (size_t i = 0; i < m_puffs.size();)
+    {
+        SPuff& s = m_puffs[i];
+        s.age += dt;
+        if (s.age >= s.life)
+        {
+            s = m_puffs.back();
+            m_puffs.pop_back();
+            continue;
+        }
+        const float zr = std::max(s.pos.y - tip.y, 0.f);
+        const float w_vert = 1.1f * powf(qc / std::max(zr, 0.5f), 1.f / 3.f);
+        const float w0 = clampr(1.5f * powf(2.f / std::max(uh, 0.7f), 1.f / 3.f), 0.8f, 3.f);
+        const float w_bent = w0 * powf(1.f + s.age / 0.25f, -1.f / 3.f);
+        const float bent = clampr(uh / w_vert, 0.f, 1.f);
+        float w = 0.6f * w_vert + (w_bent - 0.6f * w_vert) * bent;
+        // A dying fire's plume cools out: no more lift after the flame is gone.
+        if (m_dying > 0.f)
+            w *= std::max(0.f, 1.f - m_dying * 0.5f);
+        const float above = std::max(s.pos.y - O.y, 0.3f);
+        Fvector air = env.WindAt(s.pos, above);
+        air.mul(m_wind_exposure);
+        s.ou_x = s.ou_x * ou_k + ::Random.randF(-1.f, 1.f) * ou_noise * 1.7f;
+        s.ou_z = s.ou_z * ou_k + ::Random.randF(-1.f, 1.f) * ou_noise * 1.7f;
+        const Fvector target{air.x + s.ou_x, w, air.z + s.ou_z};
+        // Smoke has no inertia of its own; the short relaxation only hides the sampling steps.
+        const float k = 1.f - expf(-dt / 0.35f);
+        s.vel.x += (target.x - s.vel.x) * k;
+        s.vel.y += (target.y - s.vel.y) * k;
+        s.vel.z += (target.z - s.vel.z) * k;
+        s.pos.mad(s.vel, dt);
+        s.rot += s.spin * dt;
+        ++i;
+    }
+}
+
+void CDaFireEffect::OnFrame(u32 frame_dt)
+{
+    ZoneScoped;
+
+    if (!m_RT_Flags.is(flRT_Playing))
+        return;
+    if (!m_preset)
+    {
+        // "off": nothing to run, nothing to wait for.
+        if (m_RT_Flags.is(flRT_DefferedStop))
+            m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
+        vis.box.set(origin(), origin());
+        vis.box.grow(EPS_L);
+        vis.box.getsphere(vis.sphere.P, vis.sphere.R);
+        return;
+    }
+    const float dt = std::min(float(frame_dt) * 0.001f, 0.1f);
+    m_time += dt;
+    if (m_dying > 0.f)
+        m_dying += dt;
+
+    const auto& env = g_pGamePersistent->Environment();
+    const Fvector base = flame_base();
+
+    // The wind at the flame, refreshed a few times a second: a world query with a shelter test.
+    m_wind_stamp += dt;
+    if (m_wind_stamp > 0.25f)
+    {
+        m_wind_stamp = 0.f;
+        m_wind_exposure = env.WindExposure(base);
+        m_wind = env.WindAt(base, 0.75f);
+        m_wind.mul(m_wind_exposure);
+    }
+    const float uh = wind_speed();
+    if (uh > 0.05f)
+        m_wdir.set(m_wind.x / uh, m_wind.z / uh);
+
+    // Tilt: AGA, cos(theta) = u*^-1/2 past u* = 1, blended in over u* 0.7..1.5, capped at 76
+    // degrees; the filter (a quarter of a second) lags a gust so the flame tears downwind
+    // before it settles.
+    const float d = 2.f * m_preset->radius;
+    const float uc = powf(g_gravity * g_burn_rate * d / g_rho_air, 1.f / 3.f);
+    const float ustar = uh / uc * m_preset->lean;
+    float theta = ustar > 1.f ? acosf(1.f / _sqrt(ustar)) : 0.f;
+    theta *= clampr((ustar - 0.7f) / 0.8f, 0.f, 1.f);
+    theta = std::min(theta, deg2rad(76.f));
+    const float tilt = tanf(theta);
+    const float k = 1.f - expf(-dt / 0.25f);
+    m_tilt += (tilt - m_tilt) * k;
+    m_gust += (env.eff_wind_gust - m_gust) * k;
+
+    const Fvector tip = flame_tip();
+    update_smoke(dt, tip);
+
+    if (m_dying > 1.5f && m_puffs.empty())
+    {
+        m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
+        return;
+    }
+
+    // Bounds: the tilted flame envelope plus every puff. Kept in the effect's own space, as
+    // the base class does (world unless the parent transform is applied at render time).
+    const float L = m_preset->height * 1.7f;
+    Fbox box;
+    box.set(base, base);
+    box.grow(m_preset->radius * 2.f);
+    box.modify(tip);
+    Fvector top = tip;
+    top.y += L * 0.6f;
+    box.modify(top);
+    box.grow(m_preset->radius);
+    for (const SPuff& s : m_puffs)
+    {
+        const float r = s.r0 + 0.5f * std::max(s.pos.y - tip.y, 0.f) + 0.3f;
+        Fvector lo, hi;
+        lo.sub(s.pos, Fvector{r, r, r});
+        hi.add(s.pos, Fvector{r, r, r});
+        box.modify(lo);
+        box.modify(hi);
+    }
+    if (m_RT_Flags.is(flRT_XFORM))
+    {
+        Fmatrix inv;
+        inv.invert(m_XFORM);
+        Fvector c, mn, mx;
+        box.getcenter(c);
+        inv.transform_tiny(c);
+        Fvector half;
+        box.getradius(half);
+        const float rr = half.magnitude();
+        mn.sub(c, Fvector{rr, rr, rr});
+        mx.add(c, Fvector{rr, rr, rr});
+        box.set(mn, mx);
+    }
+    vis.box.set(box);
+    vis.box.getsphere(vis.sphere.P, vis.sphere.R);
+}
+
+void CDaFireEffect::render_flame(CBackend& cmd_list, float fade)
+{
+    const SDaFirePreset& P = *m_preset;
+    const Fvector base = flame_base();
+    const float L = flame_length();
+    const float uh = wind_speed();
+    const float d = 2.f * P.radius;
+
+    // The rasterization vehicle: a camera-facing quad over the volume's bounding sphere. Its
+    // depth means nothing (the shader marches from the eye and reads the scene depth itself),
+    // so when the eye is inside the sphere the quad simply fills the view.
+    Fvector axis{m_wdir.x * m_tilt, 1.f, m_wdir.y * m_tilt};
+    axis.normalize_safe();
+    Fvector centre = base;
+    centre.mad(axis, L * 0.75f);
+    const float drag = 1.5f * powf(std::max(uh * uh / (g_gravity * d), 0.01f), 0.07f);
+    const float sr = _sqrt(_sqr(L * 1.2f) + _sqr(P.radius * drag * 2.f)) + 0.15f;
+    const Fvector& eye = Device.vCameraPosition;
+    const float dist = eye.distance_to(centre);
+    Fvector qc;
+    float half;
+    if (dist > sr * 1.5f)
+    {
+        qc = centre;
+        half = sr / _sqrt(1.f - _sqr(sr / dist)) * 1.04f;
+    }
+    else
+    {
+        qc.mad(eye, Device.vCameraDirection, 0.3f);
+        half = 0.3f * tanf(deg2rad(Device.fFOV) * 0.5f) * std::max(Device.fASPECT, 1.f / Device.fASPECT) * 1.6f;
+    }
+    Fvector right, top;
+    right.mul(Device.vCameraRight, half);
+    top.mul(Device.vCameraTop, half);
+
+    u32 offset;
+    FVF::LIT* pv = static_cast<FVF::LIT*>(RImplementation.Vertex.Lock(4, geom->vb_stride, offset));
+    Fvector a, b, p;
+    a.sub(top, right);
+    b.add(top, right);
+    p.sub(qc, b);
+    pv->set(p.x, p.y, p.z, 0xffffffff, 0.f, 1.f); ++pv;
+    p.add(qc, a);
+    pv->set(p.x, p.y, p.z, 0xffffffff, 0.f, 0.f); ++pv;
+    p.sub(qc, a);
+    pv->set(p.x, p.y, p.z, 0xffffffff, 1.f, 1.f); ++pv;
+    p.add(qc, b);
+    pv->set(p.x, p.y, p.z, 0xffffffff, 1.f, 0.f); ++pv;
+    RImplementation.Vertex.Unlock(4, geom->vb_stride);
+
+    // Puffing: 1.5/sqrt(D) Hz in calm air, up to four times that in wind.
+    const float fpuff = 1.5f / _sqrt(d) * std::min(4.f, 1.f + uh);
+    cmd_list.set_c("da_fire_a", base.x, base.y, base.z, m_time);
+    cmd_list.set_c("da_fire_b", P.radius, L, P.intensity * fade, m_seed);
+    cmd_list.set_c("da_fire_c", m_wdir.x * m_tilt, m_wdir.y * m_tilt, uh, m_gust);
+    cmd_list.set_c("da_fire_d", fpuff, drag, sr, P.height);
+    cmd_list.set_c("da_fire_e", centre.x, centre.y, centre.z, m_wind_exposure);
+
+    cmd_list.set_xform_world(Fidentity);
+    cmd_list.set_Geometry(geom);
+    cmd_list.set_CullMode(CULL_NONE);
+    cmd_list.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
+    cmd_list.set_CullMode(CULL_CCW);
+}
+
+void CDaFireEffect::render_smoke(CBackend& cmd_list)
+{
+    if (m_puffs.empty() || !m_smoke_shader)
+        return;
+    const SDaFirePreset& P = *m_preset;
+    const auto& env = g_pGamePersistent->Environment();
+    const Fvector tip = flame_tip();
+    const Fvector& eye = Device.vCameraPosition;
+    const float uh = wind_speed();
+    const float bent = clampr(uh / 3.f, 0.f, 1.f);
+
+    // Back to front within the plume; the graph already sorted the plume against the rest.
+    xr_vector<std::pair<float, u32>> order;
+    order.reserve(m_puffs.size());
+    for (u32 i = 0; i < u32(m_puffs.size()); ++i)
+        order.emplace_back(eye.distance_to_sqr(m_puffs[i].pos), i);
+    std::sort(order.begin(), order.end(), [](const auto& l, const auto& r) { return l.first > r.first; });
+
+    // Sky light on the albedo: a well-burning fire smokes light grey, a resinous one dark.
+    const float albedo = 0.62f - 0.34f * P.smoke_grey;
+    const Fvector4& hemi = env.CurrentEnv.hemi_color;
+    const Fvector3& amb = env.CurrentEnv.ambient;
+    const Fvector3 sky{(hemi.x * 0.55f + amb.x) * albedo, (hemi.y * 0.55f + amb.y) * albedo, (hemi.z * 0.55f + amb.z) * albedo};
+    const Fvector3& sun = env.CurrentEnv.sun_color;
+    Fvector to_sun = env.CurrentEnv.sun_dir;
+    to_sun.invert();
+    to_sun.normalize_safe();
+    const float sun_r = to_sun.dotproduct(Device.vCameraRight);
+    const float sun_u = to_sun.dotproduct(Device.vCameraTop);
+    const float sun_f = -to_sun.dotproduct(Device.vCameraDirection);
+
+    const u32 count = u32(order.size());
+    u32 offset;
+    SSmokeVertex* pv = static_cast<SSmokeVertex*>(RImplementation.Vertex.Lock(count * 4, m_smoke_geom->vb_stride, offset));
+    for (const auto& [dsq, idx] : order)
+    {
+        const SPuff& s = m_puffs[idx];
+        const float agen = s.age / s.life;
+        const float zr = std::max(s.pos.y - tip.y, 0.f);
+        // Radius: self-entrainment (0.12 z calm, 0.6 z bent over) plus ambient dispersion.
+        Fvector rel;
+        rel.sub(s.pos, tip);
+        const float x_down = std::max(rel.x * m_wdir.x + rel.z * m_wdir.y, 0.f);
+        const float r = s.r0 + (0.12f + 0.48f * bent) * zr + 0.08f * x_down;
+        // Opacity: dilution as the puff grows, a fade-in over the first 0.3 s, the tail fade.
+        float alpha = P.smoke_alpha * powf(s.r0 / r, 1.2f);
+        alpha *= clampr(s.age / 0.3f, 0.f, 1.f);
+        const float tail = clampr((agen - 0.7f) / 0.3f, 0.f, 1.f);
+        alpha *= 1.f - tail * tail * (3.f - 2.f * tail);
+        // A puff at the eye would blank the view: fade out inside a metre.
+        alpha *= clampr((_sqrt(dsq) - 0.4f) / 0.8f, 0.f, 1.f);
+        if (alpha < 0.002f)
+        {
+            SSmokeVertex* pend = pv + 4;
+            for (; pv != pend; ++pv)
+            {
+                pv->p = s.pos; pv->c = 0; pv->t.set(0.f, 0.f); pv->e.set(0.f, 0.f, 0.f, 0.f);
+            }
+            continue;
+        }
+        // Thin hot smoke reads blue-white; thick grey. The fire lights the plume base.
+        const float thin = 1.f - clampr(alpha / 0.2f, 0.f, 1.f);
+        Fvector3 col = sky;
+        col.x += (0.62f * 0.7f - col.x) * thin * 0.5f;
+        col.y += (0.66f * 0.7f - col.y) * thin * 0.5f;
+        col.z += (0.75f * 0.7f - col.z) * thin * 0.5f;
+        const float dtip = s.pos.distance_to(tip);
+        const float glow = P.intensity * (m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f) * 0.9f / (1.f + dtip * dtip * 0.6f);
+        const u32 clr = color_rgba_f(clampr(col.x, 0.f, 1.f), clampr(col.y, 0.f, 1.f), clampr(col.z, 0.f, 1.f), alpha);
+        const float sa = _sin(s.rot), ca = _cos(s.rot);
+        Fvector right, top;
+        right.set(Device.vCameraRight); right.mul(r);
+        top.set(Device.vCameraTop); top.mul(r);
+        Fvector rr, tt;
+        rr.mul(right, ca); rr.mad(top, sa);
+        tt.mul(top, ca); tt.mad(right, -sa);
+        Fvector4 extra;
+        extra.set(s.seed, agen, glow, r);
+        fill_quad(pv, s.pos, rr, tt, clr, extra);
+    }
+    RImplementation.Vertex.Unlock(count * 4, m_smoke_geom->vb_stride);
+
+    cmd_list.set_Element(m_smoke_shader->E[0]);
+    cmd_list.set_c("da_smoke_sun", sun_r, sun_u, sun_f, 1.f);
+    cmd_list.set_c("da_smoke_suncol", sun.x * albedo * 0.8f, sun.y * albedo * 0.8f, sun.z * albedo * 0.8f, m_time);
+    cmd_list.set_xform_world(Fidentity);
+    cmd_list.set_Geometry(m_smoke_geom);
+    cmd_list.set_CullMode(CULL_NONE);
+    cmd_list.Render(D3DPT_TRIANGLELIST, offset, 0, count * 4, 0, count * 2);
+    cmd_list.set_CullMode(CULL_CCW);
+}
+
+void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
+{
+    if (!m_preset || !m_RT_Flags.is(flRT_Playing))
+        return;
+    // The same distance cut as the sprite effects (r__particle_dist).
+    if (ps_r__particle_dist > 0)
+    {
+        const float lim = float(ps_r__particle_dist);
+        if (Device.vCameraPosition.distance_to_sqr(origin()) > lim * lim)
+            return;
+    }
+    const float fade = m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f;
+    if (fade > 0.f)
+        render_flame(cmd_list, fade);
+    render_smoke(cmd_list);
+}
+} // namespace xray::render::RENDER_NAMESPACE::PS

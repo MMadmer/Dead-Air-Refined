@@ -131,6 +131,7 @@ target_sources(xrRender_GL PRIVATE
     ../xrRender/occRasterizer.cpp
     ../xrRender/occRasterizer.h
     ../xrRender/ParticleEffect.cpp
+    ../xrRender/da_fire.cpp
     ../xrRender/ParticleEffectDef.cpp
     ../xrRender/ParticleEffectDef.h
     ../xrRender/ParticleEffect.h

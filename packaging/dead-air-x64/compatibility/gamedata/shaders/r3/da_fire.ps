@@ -1,0 +1,209 @@
+#include "common.h"
+
+// The shader fire: a flame volume marched along the view ray, premultiplied radiance out
+// (ONE, INVSRCALPHA). The shape follows the fire literature as far as a game can afford it:
+//  * the axis leans by the AGA tilt and the flame shortens by Thomas' u*^-0.21, both computed
+//    on the CPU and handed over as the tilt vector and the length;
+//  * the envelope is McCaffrey's: continuous below 0.55 L, present half the time at L, gone by
+//    1.6 L, its radius tapering to a quarter at the top; the wind drags the base downwind into
+//    an ellipse;
+//  * a puffing wave at 1.5/sqrt(D) Hz (Cetegen) travels up the axis and raises the threshold
+//    once per period, which pinches a tongue off the tip;
+//  * the density is domain-warped fBm from the cloud deck's Perlin volume, advected up the axis
+//    at 2 + 0.5 u m/s, warped harder toward the tip and in wind;
+//  * the colour is a blackbody weighted by T^4: the dense core, pushed to ~2600 K, clips to
+//    white-yellow in the tonemapper, the sheath stays a dull red; the flame absorbs its own
+//    light (denser toward the sooty top), which keeps the structure readable instead of a
+//    saturated blob and lets the tip darken what it covers.
+// The march is clipped to the flame's own tilted cylinder and height slab, so the steps stay
+// a few centimetres long whatever the bounding quad covers.
+
+uniform float4 da_fire_a; // xyz = flame base (world), w = time, s
+uniform float4 da_fire_b; // x = fuel bed radius, y = flame length along the axis, z = intensity x fade, w = seed
+uniform float4 da_fire_c; // xy = tan(tilt) x heading (world XZ), z = wind speed at the flame, m/s, w = gust 0..1
+uniform float4 da_fire_d; // x = puffing frequency, Hz, y = base drag (the ellipse along the wind), z = bounding sphere radius, w = calm height
+uniform float4 da_fire_e; // xyz = bounding sphere centre, w = wind exposure
+
+Texture3D s_cloud_shape; // R = Perlin fBm, 4 cells per tile (tools/graphics/gen_cloud_noise.py)
+
+struct v2p
+{
+	float3 wpos		: TEXCOORD0;
+	float4 tctexgen	: TEXCOORD1;
+	float4 hpos		: SV_Position;
+};
+
+// Three octaves of the Perlin volume, in tile units.
+float da_fire_fbm(float3 p)
+{
+	float n  = s_cloud_shape.SampleLevel(smp_linear, p, 0).r * 0.58;
+	n       += s_cloud_shape.SampleLevel(smp_linear, p * 2.03 + 0.37, 0).r * 0.29;
+	n       += s_cloud_shape.SampleLevel(smp_linear, p * 4.11 + 0.71, 0).r * 0.13;
+	return n;
+}
+
+// Blackbody in linear RGB between 1000 and 2600 K (the Planckian fit of Charity's table),
+// weighted by T^4 against 1800 K.
+float3 da_fire_blackbody(float tk)
+{
+	const float t  = saturate((tk - 1000.0) / 1650.0);
+	const float3 c = lerp(float3(1.00, 0.06, 0.00), float3(1.00, 0.40, 0.09), t);
+	const float w  = tk / 1800.0;
+	return c * (w * w * w * w);
+}
+
+// The ray against a slab along the axis: h(t) in [h0, h1].
+void da_fire_slab(float oa, float da, float h0, float h1, inout float t0, inout float t1)
+{
+	if (abs(da) < 1e-4)
+	{
+		if (oa < h0 || oa > h1)
+			t1 = -1.0;
+		return;
+	}
+	float ta = (h0 - oa) / da;
+	float tb = (h1 - oa) / da;
+	t0 = max(t0, min(ta, tb));
+	t1 = min(t1, max(ta, tb));
+}
+
+float4 main (v2p I) : SV_Target
+{
+	const float3 base  = da_fire_a.xyz;
+	const float  time  = da_fire_a.w;
+	const float  R     = da_fire_b.x;
+	const float  L     = da_fire_b.y;
+	const float  inten = da_fire_b.z;
+	const float  seed  = da_fire_b.w;
+	const float2 lean  = da_fire_c.xy;
+	const float  uh    = da_fire_c.z;
+	const float  gust  = da_fire_c.w;
+	const float  fpuff = da_fire_d.x;
+	const float  drag  = da_fire_d.y;
+	const float  L0    = da_fire_d.w;
+
+	const float3 ro = eye_position;
+	const float3 rd = normalize(I.wpos - ro);
+
+	// The flame frame: the tilted axis, the downwind direction across it, the crosswind one.
+	const float3 axis = normalize(float3(lean.x, 1.0, lean.y));
+	const float2 wdir = (dot(lean, lean) > 1e-6) ? normalize(lean) : float2(0.0, 1.0);
+	const float3 wd3  = float3(wdir.x, 0.0, wdir.y);
+	const float3 e_w  = normalize(wd3 - axis * dot(axis, wd3));
+	const float3 e_p  = float3(-wdir.y, 0.0, wdir.x);
+
+	// The ray against the flame's cylinder (its radius the long axis of the dragged base) and
+	// its height slab; the scene depth from the G-buffer closes the far end.
+	const float3 oc = ro - base;
+	const float  oa = dot(oc, axis);
+	const float  da = dot(rd, axis);
+	const float3 ar = rd - axis * da;
+	const float3 br = oc - axis * oa;
+	const float  Rc = R * drag * 1.75 + 0.03;
+	float t0 = 0.0;
+	float t1 = 100000.0;
+	const float aa = dot(ar, ar);
+	if (aa > 1e-6)
+	{
+		const float bb = dot(ar, br);
+		const float cc = dot(br, br) - Rc * Rc;
+		const float disc = bb * bb - aa * cc;
+		if (disc <= 0.0)
+			discard;
+		const float sq = sqrt(disc);
+		t0 = max(t0, (-bb - sq) / aa);
+		t1 = min(t1, (-bb + sq) / aa);
+	}
+	else if (dot(br, br) > Rc * Rc)
+		discard;
+	da_fire_slab(oa, da, -0.05 * L, 1.65 * L, t0, t1);
+
+	const float2 tcp = I.tctexgen.xy / I.tctexgen.w;
+#ifdef GBUFFER_OPTIMIZATION
+	gbuffer_data gbd = gbuffer_load_data(tcp, I.hpos);
+#else
+	gbuffer_data gbd = gbuffer_load_data(tcp);
+#endif
+	const float zs   = gbd.P.z;
+	const float fwd  = dot(m_V[2].xyz, rd);
+	const float t_scene = (zs > 0.02) ? zs / max(fwd, 0.001) : 100000.0;
+	t1 = min(t1, t_scene);
+	if (t1 <= t0)
+		discard;
+
+	// Lateral warp grows with the wind (u* = u / 0.5 m/s for a wood fire); the noise rides up
+	// the axis at about 0.6 of the gas speed.
+	const float amp     = 0.12 * (1.0 + 0.35 * min(uh * 2.0, 8.0));
+	const float vscroll = 2.0 + 0.5 * uh;
+	const float3 seedv  = float3(seed * 0.113, seed * 0.071, seed * 0.037);
+	const float tile    = 1.2 / 4.0; // 1.2 noise cycles per unit (a tongue about R wide), the volume has 4 cells per tile
+	// The whole fire breathes with the puffing and a slower wander.
+	const float breath  = 0.85 + 0.15 * sin(6.2832 * fpuff * time + seed) + 0.1 * sin(2.3 * time + seed * 1.7);
+
+	// The march: jittered steps a few centimetres long between the cylinder and the scene.
+	const int   N   = 28;
+	const float dt  = (t1 - t0) / N;
+	const float jit = frac(52.9829189 * frac(dot(I.hpos.xy, float2(0.06711056, 0.00583715))));
+	float  t        = t0 + dt * jit;
+	float3 radiance = 0.0;
+	float  trans    = 1.0;
+
+	[loop]
+	for (int i = 0; i < N; ++i, t += dt)
+	{
+		const float3 p = ro + rd * t;
+		const float3 q = p - base;
+		const float  h = dot(q, axis);
+		const float hn = h / L;
+		if (hn < -0.05 || hn > 1.65)
+			continue;
+		const float3 rad = q - axis * h;
+		const float rw = dot(rad, e_w) / (R * drag);
+		const float rp = dot(rad, e_p) / R;
+		const float r2 = rw * rw + rp * rp;
+
+		// Shape: the taper and the intermittency envelope; the base fills the fuel bed.
+		const float w     = lerp(1.0, 0.22, pow(saturate(hn), 0.8));
+		const float env   = 1.0 - smoothstep(0.55, 1.6, hn);
+		const float shape = env * exp(-1.3 * r2 / (w * w));
+		if (shape < 0.02)
+			continue;
+
+		// Noise space: radius in R (the drag undone), height in 2R - a tongue twice as tall as
+		// wide - rising up the axis; one low-frequency tap warps it, the tip and the wind harder.
+		float3 np = float3(rw * drag, rp, (h - vscroll * time) / (2.0 * R)) * tile + seedv;
+		const float2 wv = s_cloud_shape.SampleLevel(smp_linear, np * 0.5 + float3(0.0, 0.0, 0.07 * time), 0).rg;
+		np.xy += (wv - 0.5) * (amp * 3.0 + 0.5 * hn) * tile;
+		const float n = da_fire_fbm(np);
+		// Ridged turbulence: sheets and filaments, not blobs.
+		const float ridge = 1.0 - abs(2.0 * n - 1.0);
+		const float tex   = lerp(n, ridge, 0.65);
+
+		// Erosion: the base a solid body, the upper half torn into tongues; the puffing wave
+		// (one vortex per flame length travelling up) pinches them off, a gust tears the top.
+		const float puff  = 0.5 + 0.5 * sin(6.2832 * (fpuff * time - hn) + seed);
+		const float erode = (0.35 + 1.3 * hn + 0.45 * gust * hn) * (0.75 + 0.5 * puff);
+		const float dens  = saturate((shape * 1.1 - (1.0 - tex) * erode) * 3.5);
+		if (dens <= 0.002)
+			continue;
+
+		// Temperature: the dense core hot, cooling upward; the flame absorbs its own light,
+		// more toward the sooty top. The thin sheath is boosted a little (dens^0.7): a real
+		// flame's edge is nearly transparent, a readable one glows.
+		const float  heat  = dens * (1.0 - 0.45 * saturate(hn)) * (0.75 + 0.25 * tex);
+		const float  tk    = 1300.0 + 1350.0 * heat;
+		// The eye adapts to the fire: the densest core reads white-yellow, not orange.
+		const float3 emis  = (da_fire_blackbody(tk) + float3(1.0, 0.9, 0.7) * (dens * dens * dens * 0.8)) * inten * 2.0 * breath;
+		const float  sigma = dens * (1.2 + 3.0 * saturate(hn - 0.4));
+		// The last centimetres before a surface fade instead of cutting.
+		const float  soft  = saturate((t_scene - t) * 8.0);
+		radiance += emis * pow(dens, 0.7) * dt * trans * soft;
+		trans    *= exp(-sigma * dt * soft);
+	}
+
+	const float alpha = 1.0 - trans;
+	// The fog on the fire's own light, from the flame base.
+	float fogk = saturate(calc_fogging(float4(base, 1.0)));
+	fogk *= fogk;
+	return float4(radiance * fogk, alpha * fogk);
+}

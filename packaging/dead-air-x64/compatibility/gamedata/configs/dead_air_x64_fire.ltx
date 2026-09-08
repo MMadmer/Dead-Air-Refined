@@ -1,0 +1,70 @@
+; Dead Air: Refined x64 - the shader fire.
+;
+; A campfire's flame is not a sprite flipbook any more: the effect names listed in [shader_fire]
+; are drawn as a flame volume marched in a pixel shader (da_fire.ps) with a smoke plume that the
+; engine simulates and the wind service drives (CDaFireEffect). The flame leans downwind by the
+; AGA correlation, shortens in wind (Thomas), puffs at 1.5/sqrt(D) Hz and tears off tongues in
+; gusts; the smoke rises as a bent-over buoyant plume (Briggs' two-thirds law), takes the wind of
+; its own height and spreads with distance.
+;
+; Value = a preset section [shader_fire_<name>] below, or "off" for an effect that should draw
+; nothing (the glow sprites the shader flame makes redundant). Every other effect keeps its
+; sprites; the sparks, the heat haze and the air drawn into the fire stay as they are.
+
+[shader_fire]
+explosions\effects\campfire_flame               = campfire
+explosions\effects\campfire_glow                = off
+explosions\effects\campfire_big_flame           = campfire_big
+explosions\effects\campfire_glow_04             = off
+explosions\effects\campfire_06_flame            = campfire
+explosions\effects\campfire_06_glow             = off
+explosions\effects\campfire_flame_bed_fireplace = fireplace
+
+; base_height  metres above the effect origin where the flame starts (the fuel bed)
+; radius       fuel bed radius, m
+; height       calm mean flame height, m
+; intensity    emission gain
+; lean         wind tilt gain, 1 = the AGA correlation
+; smoke        1 = a plume, 0 = none
+; smoke_rate   puffs per second
+; smoke_life   seconds a puff lives, +-25%
+; smoke_alpha  opacity of a fresh puff
+; smoke_size   radius of a fresh puff, m
+; smoke_grey   0 = light grey (a well-burning fire), 1 = dark resinous soot
+; heat_kw      convective heat release, drives the plume rise
+
+[shader_fire_campfire]
+base_height = 0.55
+radius      = 0.32
+height      = 0.75
+intensity   = 1.0
+lean        = 1.0
+smoke       = 1
+smoke_rate  = 14
+smoke_life  = 16
+smoke_alpha = 0.45
+smoke_size  = 0.22
+smoke_grey  = 0.35
+heat_kw     = 100
+
+[shader_fire_campfire_big]
+base_height = 0.4
+radius      = 0.6
+height      = 1.9
+intensity   = 1.1
+lean        = 1.0
+smoke       = 1
+smoke_rate  = 18
+smoke_life  = 20
+smoke_alpha = 0.32
+smoke_size  = 0.35
+smoke_grey  = 0.55
+heat_kw     = 300
+
+[shader_fire_fireplace]
+base_height = 0.15
+radius      = 0.22
+height      = 0.7
+intensity   = 0.9
+lean        = 0.3
+smoke       = 0

@@ -86,6 +86,10 @@ public:
     // from the [particle_wind] rules (CPSLibrary::ResolveWindScales) after the archive and the
     // loose overrides are read.
     float m_WindScale{};
+    // The shader-fire preset this effect is drawn with instead of its sprites (empty = a
+    // sprite effect, "off" = draws nothing). Not serialised: resolved by the library from
+    // [shader_fire] (CPSLibrary::ResolveShaderFire).
+    shared_str m_DaFire;
     Fvector m_VelocityScale; // velocity scale
     Fvector m_APDefaultRotation; // align to path
     // collision

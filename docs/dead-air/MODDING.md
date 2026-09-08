@@ -659,6 +659,41 @@ off with the weather. An effect no key matches takes no wind at all; the longest
 decides (`anomaly` at 0 beats `smoke` at 1 inside an anomaly's smoke), and an exact effect
 name wins over every substring. The share scales the wind the particles relax toward.
 
+### Shader fire
+
+A campfire's flame is not a sprite flipbook: the effect names listed in `[shader_fire]` of
+`dead_air_x64_fire.ltx` are drawn by `CDaFireEffect` (`da_fire.ps`) as a flame volume marched
+along the view ray on a camera-facing quad, with a smoke plume the engine simulates and
+`da_smoke.ps` draws as eroded, lit billboards. The stand-in takes the effect's slot with the
+effect's interface, so the campfire object, the group it plays and every script around it are
+untouched; the sparks, the heat haze and the air drawn into the fire stay the sprites they were.
+
+```ini
+[shader_fire]        ; particle effect name -> preset section, or "off" to draw nothing
+explosions\effects\campfire_flame = campfire
+explosions\effects\campfire_glow  = off        ; the glow sprite the shader flame replaces
+
+[shader_fire_campfire]
+base_height = 0.55   ; metres above the effect origin where the flame starts
+radius      = 0.32   ; fuel bed radius, m
+height      = 0.75   ; calm mean flame height, m
+smoke_rate  = 14     ; puffs per second; smoke = 0 for none
+heat_kw     = 100    ; convective heat release, drives the plume rise
+```
+
+The flame follows the fire literature as far as a game can afford: the axis leans by the AGA
+tilt (`cos θ = u*^-1/2`, `u*` the wind over ~0.5 m/s for a wood fire) and the flame shortens by
+Thomas' `u*^-0.21`; the envelope is McCaffrey's (continuous below 0.55 L, gone by 1.6 L); a
+puffing wave at `1.5/√D` Hz pinches tongues off the tip; the wind drags the base into an
+ellipse. The smoke is a bent-over buoyant plume (Briggs): a parcel's lift decays as it cools,
+horizontally it is the air of its own height (the service's log profile makes smoke aloft run
+ahead of the flame) plus an Ornstein-Uhlenbeck wander, its radius grows by entrainment and
+dispersion, and its opacity by dilution. The noise volumes are the cloud deck's.
+
+Both shaders read the G-buffer depth themselves, so the flame fades into the barrel rim and
+the smoke into walls; both are sorted with the other transparent effects and cut at
+`r__particle_dist` like any sprite.
+
 The cloud deck is a world object: one coverage field, rendered once per frame into a 16 km
 map around the camera, is what the sky shows, what the sun passes shade the ground with and
 what the sun shafts read. Coverage comes from the weather's `clouds_color` alpha - mapped,

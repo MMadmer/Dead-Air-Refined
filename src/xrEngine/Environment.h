@@ -297,7 +297,7 @@ public:
     // (wind_velocity = the ceiling, wind_direction = the mean heading); this service adds the
     // real-life variability inside one weather: minute-scale trends, tens-of-seconds waves and
     // short discrete gusts, plus a bounded direction wander. Scalar math once per frame.
-    float eff_wind_dir{};        // radians; weather heading + bounded wander
+    float eff_wind_dir{};        // radians, (sin, 0, cos) space; weather heading + bounded wander
     // Heading of the wind ALOFT (radians): the synoptic drift only, low-passed over minutes,
     // veered by the Ekman turn. A cloud deck at 1.5 km sits far above the surface layer
     // and must not see the ground's second-scale wander - the cloud shadow projection and

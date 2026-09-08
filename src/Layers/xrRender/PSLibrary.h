@@ -39,6 +39,7 @@ public:
     void LoadLooseOverrides();
     // Wind share per effect from [particle_wind] in dead_air_x64_wind.ltx, applied last.
     void ResolveWindScales();
+    void ResolveShaderFire();
 
 public:
     CPSLibrary() { ; }

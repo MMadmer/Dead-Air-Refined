@@ -29,6 +29,7 @@ void CPSLibrary::OnCreate()
         Load(fn);
         LoadLooseOverrides();
         ResolveWindScales();
+        ResolveShaderFire();
     }
 }
 
@@ -85,6 +86,36 @@ void CPSLibrary::ResolveWindScales()
             ++windy;
     }
     Msg("* [wind] particle wind: %u rule(s), %u of %u effect(s) drift", u32(table.size()), windy, u32(m_PEDs.size()));
+}
+
+// Which effects are drawn as a shader fire (CDaFireEffect) instead of their sprites: the
+// [shader_fire] table of dead_air_x64_fire.ltx names an effect and its preset ("off" for an
+// effect that should vanish, such as the glow sprite the shader flame replaces).
+void CPSLibrary::ResolveShaderFire()
+{
+    string_path path;
+    FS.update_path(path, "$game_config$", "dead_air_x64_fire.ltx");
+    if (!FS.exist(path))
+        return;
+    CInifile ini(path, TRUE);
+    if (!ini.section_exist("shader_fire"))
+        return;
+    u32 mapped = 0;
+    for (const auto& item : ini.r_section("shader_fire").Data)
+    {
+        if (!item.first.size() || !item.second.size())
+            continue;
+        PS::CPEDef* def = FindPED(item.first.c_str());
+        if (!def)
+        {
+            Msg("! [fire] shader fire names an effect that is not in particles.xr: [%s]", item.first.c_str());
+            continue;
+        }
+        def->m_DaFire = item.second;
+        ++mapped;
+    }
+    if (mapped)
+        Msg("* [fire] shader fire: %u effect(s) drawn as a flame volume", mapped);
 }
 
 // Per-particle overrides without rebuilding particles.xr. The whole game ships as one

@@ -72,7 +72,7 @@ public:
 
     virtual void UpdateParent(const Fmatrix& m, const Fvector& velocity, BOOL bXFORM);
 
-    BOOL Compile(CPEDef* def);
+    virtual BOOL Compile(CPEDef* def);
 
     CPEDef* GetDefinition() const { return m_Def; }
     int GetHandleEffect() const { return m_HandleEffect; }

@@ -537,8 +537,12 @@ void CCustomZone::UpdateWorkload(u32 dt)
 
     if (Level().CurrentEntity())
     {
-        Fvector P = Device.vCameraPosition;
-        P.y -= 0.9f;
+        // The reference point used to ride the camera, so a crouch dropped it half a metre
+        // and, beside a zone whose centre sits above the ground (a campfire), out of the
+        // post-process radius: the warm screen effect went off on a crouch and came back on
+        // standing up. The point is the entity's body centre now, the same whatever the stance.
+        Fvector P = Level().CurrentEntity()->Position();
+        P.y += 0.8f;
         float radius = 1.0f;
         CalcDistanceTo(P, m_fDistanceToCurEntity, radius);
 

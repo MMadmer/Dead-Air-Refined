@@ -84,6 +84,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/FProgressive.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/FSkinned.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/FTreeVisual.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_fire.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/FVisual.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/HOM.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/light.cpp"

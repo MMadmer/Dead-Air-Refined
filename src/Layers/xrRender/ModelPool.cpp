@@ -16,6 +16,7 @@
 #include "FLOD.h"
 #include "FTreeVisual.h"
 #include "ParticleGroup.h"
+#include "da_fire.h"
 #include "ParticleEffect.h"
 #else
 #include "FMesh.h"
@@ -470,7 +471,16 @@ void CModelPool::ClearPool(BOOL b_complete)
 dxRender_Visual* CModelPool::CreatePE(PS::CPEDef* source)
 {
     ScopeLock lock{ &ParticleCreateLock };
-    PS::CParticleEffect* V = (PS::CParticleEffect*)Instance_Create(MT_PARTICLE_EFFECT);
+    PS::CParticleEffect* V;
+    // An effect [shader_fire] names is drawn as a shader flame with a smoke plume, in the same
+    // slot, with the same interface, so groups and objects never know the difference.
+    if (source && source->m_DaFire.size())
+    {
+        V = xr_new<PS::CDaFireEffect>();
+        V->Type = MT_PARTICLE_EFFECT;
+    }
+    else
+        V = (PS::CParticleEffect*)Instance_Create(MT_PARTICLE_EFFECT);
     V->Compile(source);
     return V;
 }

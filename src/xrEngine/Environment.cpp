@@ -1290,11 +1290,15 @@ void CEnvironment::wind_tick(float delta)
     const float wander_amp = deg2rad(35.f - 22.f * base);
     const float wander = (wind_vnoise(t * (1.f / 30.f) + 41.7f) * 2.f - 1.f) * wander_amp +
         (wind_vnoise(t * (1.f / 8.f) + 53.9f) * 2.f - 1.f) * deg2rad(8.f);
-    eff_wind_dir = CurrentEnv.wind_direction + drift + wander;
+    // The engine's heading convention (Fvector::setHP, the stock rain and the sun's cloud
+    // scroll) points a heading h along (-sin h, 0, cos h); every consumer of this service
+    // builds its vector as (sin, 0, cos), so the authored heading is negated here once and
+    // the weather blows the way its author saw it blow in the rain.
+    eff_wind_dir = -CurrentEnv.wind_direction + drift + wander;
     // Aloft: the authored heading plus the slow synoptic drift, then the Ekman veer - in the
     // northern hemisphere the wind turns clockwise with height, about 25 degrees by the cloud
     // deck. None of the surface wander or jitter reaches it.
-    eff_wind_dir_aloft = CurrentEnv.wind_direction + drift + deg2rad(25.f);
+    eff_wind_dir_aloft = -CurrentEnv.wind_direction + drift + deg2rad(25.f);
 
     // Spatial gust field scroll (the Ghost of Tsushima scheme: constant heading, magnitude
     // varied place-to-place by travelling noise). Gust fronts ride downwind at a speed that
