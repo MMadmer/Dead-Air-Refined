@@ -676,16 +676,19 @@ explosions\effects\campfire_glow  = off        ; the glow sprite the shader flam
 [shader_fire_campfire]
 base_height = 0.45   ; metres above the effect origin where the flame starts (inside the barrel)
 radius      = 0.32   ; fuel bed radius, m
-height      = 1.0    ; calm mean flame height, m
+height      = 0.8    ; calm mean flame height, m
 smoke_rate  = 14     ; puffs per second; smoke = 0 for none
 heat_kw     = 100    ; convective heat release, drives the plume rise
 ```
 
-The flame follows the fire literature as far as a game can afford: the axis leans by the AGA
-tilt (`cos θ = u*^-1/2`, `u*` the wind over ~0.5 m/s for a wood fire) and the flame shortens by
-Thomas' `u*^-0.21`; the envelope is McCaffrey's (continuous below 0.55 L, gone by 1.6 L); a
-puffing wave at `1.5/√D` Hz pinches tongues off the tip; the wind drags the base into an
-ellipse. The smoke is a bent-over buoyant plume (Briggs): a parcel's lift decays as it cools,
+The flame is a handful of tongues rooted across the fuel bed, each a tapering column whose
+surface the advected noise pushes in and out (more the higher it climbs, so a tongue is a
+clean cone at its root and a ragged, breaking tip), with its own height and width breathing
+with the puffing wave at `1.5/√D` Hz, wandering more the higher it climbs and leaning in
+toward the axis; inside the surface the colour runs from the red edge to the white core by
+depth, and the fuel bed below is the same thing lying flat. The axis leans by a saturating
+law (18° at 2 m/s, 30° at 4, 45° at 8): the pool-fire correlations of the literature (AGA,
+Thomas) lay a fire this size flat in a breeze and were tried and dropped. The smoke is a bent-over buoyant plume (Briggs): a parcel's lift decays as it cools,
 horizontally it is the air of its own height (the service's log profile makes smoke aloft run
 ahead of the flame) plus an Ornstein-Uhlenbeck wander, its radius grows by entrainment and
 dispersion, and its opacity by dilution. The noise volumes are the cloud deck's.

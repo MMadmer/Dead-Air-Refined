@@ -42,14 +42,15 @@ float da_fire_fbm(float3 p)
 	return n;
 }
 
-// Blackbody in linear RGB between 1000 and 2600 K (the Planckian fit of Charity's table),
-// weighted by T^4 against 1800 K.
-float3 da_fire_blackbody(float tk)
+// The flame's colour by depth inside it: a dull red edge, orange just inside, yellow, and a
+// white-yellow core. Not a blackbody: the eye adapts to the fire and a camera clips, and that
+// is the look every reference shows.
+float3 da_fire_ramp(float t)
 {
-	const float t  = saturate((tk - 1000.0) / 1650.0);
-	const float3 c = lerp(float3(1.00, 0.06, 0.00), float3(1.00, 0.40, 0.09), t);
-	const float w  = tk / 1800.0;
-	return c * (w * w * w * w);
+	float3 c = lerp(float3(0.85, 0.10, 0.02), float3(1.00, 0.42, 0.05), smoothstep(0.0, 0.4, t));
+	c = lerp(c, float3(1.00, 0.82, 0.30), smoothstep(0.35, 0.8, t));
+	c = lerp(c, float3(1.00, 0.97, 0.80), smoothstep(0.75, 1.0, t));
+	return c;
 }
 
 // The ray against a slab along the axis: h(t) in [h0, h1].
@@ -163,56 +164,54 @@ float4 main (v2p I) : SV_Target
 		if (dot(xy, xy) > 3.2 * R * R)
 			continue;
 
-		// Shape. A campfire is not one column: it is a low bright mass on the fuel bed and a
-		// handful of tongues rooted across the bed, each with its own height and width that
-		// breathe with the puffing, each wandering more the higher it climbs and all of them
-		// leaning in toward the axis as they rise, the way real flames merge upward.
-		float shape = 0.85 * exp(-1.6 * dot(xy, xy) / (R * R)) * (1.0 - smoothstep(0.15, 0.5, hn));
-		[unroll]
-		for (int k = 0; k < 6; ++k)
-		{
-			const float ak   = float(k) * 2.399 + seed;
-			const float2 root = float2(cos(ak), sin(ak)) * R * (0.25 + 0.35 * frac(sin(ak * 7.13) * 43758.5));
-			const float ph   = time * (1.1 + 0.23 * float(k)) + float(k) * 2.1;
-			const float pk   = 0.5 + 0.5 * sin(6.2832 * fpuff * time * (0.85 + 0.08 * float(k)) + float(k) * 1.3 + seed);
-			const float hk   = L * (0.7 + 0.5 * pk);
-			const float2 sway = float2(sin(ph + hn * 5.0), cos(ph * 0.8 + hn * 4.0)) * R * (0.12 + 0.5 * saturate(hn));
-			const float2 c   = root * (1.0 - 0.6 * saturate(hn)) + sway;
-			const float wk   = R * (0.34 + 0.08 * sin(ph * 2.3)) * lerp(1.0, 0.35, saturate(h / hk));
-			const float2 d   = xy - c;
-			const float envk = 1.0 - smoothstep(0.5, 1.05, h / hk);
-			shape = max(shape, envk * exp(-1.4 * dot(d, d) / (wk * wk)));
-		}
-		shape *= 1.0 - smoothstep(1.3, 1.8, hn);
-		if (shape < 0.02)
-			continue;
-
-		// Noise space: radius in R, height in 3R - a tongue three times as tall as wide -
-		// rising up the axis; one low-frequency tap warps it, the tip and the wind harder.
+		// Noise space: radius in R, height in 3R (a tongue three times as tall as wide), rising
+		// up the axis; one low-frequency tap warps it, the tip and the wind harder.
 		float3 np = float3(xy / R, (h - vscroll * time) / (3.0 * R)) * tile + seedv;
 		const float2 wv = s_cloud_shape.SampleLevel(smp_linear, np * 0.5 + float3(0.0, 0.0, 0.07 * time), 0).rg;
 		np.xy += (wv - 0.5) * (amp * 3.0 + 0.5 * hn) * tile;
-		const float n = da_fire_fbm(np);
-		// Ridged turbulence: sheets and filaments, not blobs.
-		const float ridge = 1.0 - abs(2.0 * n - 1.0);
-		const float tex   = lerp(n, ridge, 0.65);
+		const float n = da_fire_fbm(np) - 0.5;
+		const float puff = 0.5 + 0.5 * sin(6.2832 * (fpuff * time - hn) + seed);
 
-		// Erosion: the base a solid body, the tongues torn into sheets above it; the puffing
-		// wave (one vortex per flame length travelling up) pinches them off, a gust tears more.
-		const float puff  = 0.5 + 0.5 * sin(6.2832 * (fpuff * time - hn) + seed);
-		const float erode = (0.45 + 1.1 * hn + 0.4 * gust * hn) * (0.8 + 0.4 * puff);
-		const float dens  = saturate((shape * 1.15 - (1.0 - tex) * erode) * 5.5);
+		// A campfire is a handful of tongues rooted across the fuel bed, each a tapering column
+		// whose surface the noise pushes in and out - more the higher it climbs, so a tongue
+		// is a clean cone at its root and a ragged, breaking tip - with its own height and
+		// width breathing with the puffing, wandering more the higher it climbs and leaning in
+		// toward the axis. Inside the surface the colour runs from the red edge to the white
+		// core by depth. The fuel bed below is the same thing lying flat: the brightest part.
+		float flame = 0.0;
+		float inner = 0.0;
+		[unroll]
+		for (int k = 0; k < 7; ++k)
+		{
+			const float ak   = float(k) * 2.399 + seed;
+			const float2 root = float2(cos(ak), sin(ak)) * R * (0.15 + 0.45 * frac(sin(ak * 7.13) * 43758.5));
+			const float ph   = time * (1.1 + 0.23 * float(k)) + float(k) * 2.1;
+			const float pk   = 0.5 + 0.5 * sin(6.2832 * fpuff * time * (0.85 + 0.08 * float(k)) + float(k) * 1.3 + seed);
+			const float hk   = L * (0.6 + 0.6 * pk);
+			const float hr   = saturate(h / hk);
+			const float2 sway = float2(sin(ph + hr * 5.0), cos(ph * 0.8 + hr * 4.0)) * R * (0.08 + 0.4 * hr);
+			const float2 c   = root * (1.0 - 0.6 * hr) + sway;
+			const float wk   = R * (0.40 - 0.28 * hr);
+			const float dk   = length(xy - c) / wk - 1.0 + n * (0.5 + 1.6 * hr) + 0.3 * puff * hr
+			                 + 2.5 * saturate((h - 0.9 * hk) / (0.2 * hk));
+			flame = max(flame, 1.0 - smoothstep(0.0, 0.35, dk));
+			inner = max(inner, saturate(-dk / 0.7));
+		}
+		const float rr = dot(xy, xy) / (R * R);
+		// The bed: inside the rim, eroded by the noise so it is embers and roots, not a disc.
+		const float db = rr * 1.4 - 1.0 + n * 1.2 + 4.0 * saturate(hn / 0.2 - 0.15);
+		const float bed = 1.0 - smoothstep(0.0, 0.35, db);
+		float dens = max(flame, bed);
+		dens *= 1.0 - smoothstep(1.35, 1.8, hn);
 		if (dens <= 0.002)
 			continue;
 
-		// Temperature: the dense core hot, cooling upward; the flame absorbs its own light,
-		// more toward the sooty top. The thin sheath is boosted a little (dens^0.7): a real
-		// flame's edge is nearly transparent, a readable one glows.
-		const float  heat  = dens * (1.0 - 0.45 * saturate(hn)) * (0.75 + 0.25 * tex);
-		const float  tk    = 1300.0 + 1350.0 * heat;
-		// The eye adapts to the fire: the densest core reads white-yellow, not orange.
-		const float3 emis  = (da_fire_blackbody(tk) + float3(1.0, 0.9, 0.7) * (dens * dens * dens * 0.5)) * inten * 1.5 * breath;
-		const float  sigma = dens * (1.2 + 3.0 * saturate(hn - 0.4));
+		// Colour by depth, the bed white-yellow throughout; the emission is additive and strong
+		// (a sheet seen edge-on adds up to a bright stripe), the flame barely absorbs and the
+		// bed does.
+		const float  depth = max(inner, bed * saturate(-db / 0.6 + 0.35)) * (1.0 - 0.35 * saturate(hn - 0.2));
+		const float3 emis  = da_fire_ramp(depth) * (0.6 + 1.4 * depth) * inten * 6.0 * breath;
+		const float  sigma = 0.5 * dens + 2.5 * bed;
 		// The last centimetres before a surface fade instead of cutting.
 		const float  soft  = saturate((t_scene - t) * 8.0);
 		radiance += emis * dens * dt * trans * soft;

@@ -185,8 +185,9 @@ float CDaFireEffect::flame_length() const
 {
     const float d = 2.f * m_preset->radius;
     const float uc = powf(g_gravity * g_burn_rate * d / g_rho_air, 1.f / 3.f);
-    const float ustar = std::max(1.f, wind_speed() / uc);
-    return m_preset->height * powf(ustar, -0.21f);
+    // Thomas gives u*^-0.21; for a fire this size the plain saturating cut reads truer.
+    (void)uc;
+    return m_preset->height * (1.f - 0.3f * clampr(wind_speed() / 8.f, 0.f, 1.f));
 }
 
 Fvector CDaFireEffect::flame_tip() const
@@ -315,16 +316,12 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     if (uh > 0.05f)
         m_wdir.set(m_wind.x / uh, m_wind.z / uh);
 
-    // Tilt: AGA, cos(theta) = u*^-1/2 past u* = 1, blended in over u* 0.7..1.5, capped at 76
-    // degrees; the filter (a quarter of a second) lags a gust so the flame tears downwind
-    // before it settles.
-    const float d = 2.f * m_preset->radius;
-    const float uc = powf(g_gravity * g_burn_rate * d / g_rho_air, 1.f / 3.f);
-    const float ustar = uh / uc * m_preset->lean;
-    float theta = ustar > 1.f ? acosf(1.f / _sqrt(ustar)) : 0.f;
-    theta *= clampr((ustar - 0.7f) / 0.8f, 0.f, 1.f);
-    theta = std::min(theta, deg2rad(76.f));
-    const float tilt = tanf(theta);
+    // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
+    // across and lays a campfire almost flat in a breeze; a saturating law reads true for a
+    // fire this size: 18 degrees at 2 m/s, 30 at 4, 45 at 8, 50 at most. The filter (a quarter
+    // of a second) lags a gust so the flame tears downwind before it settles.
+    const float theta = deg2rad(50.f) * (1.f - expf(-uh / 4.5f)) * m_preset->lean;
+    const float tilt = tanf(std::min(theta, deg2rad(60.f)));
     const float k = 1.f - expf(-dt / 0.25f);
     m_tilt += (tilt - m_tilt) * k;
     m_gust += (env.eff_wind_gust - m_gust) * k;
@@ -391,7 +388,8 @@ void CDaFireEffect::render_flame(CBackend& cmd_list, float fade)
     axis.normalize_safe();
     Fvector centre = base;
     centre.mad(axis, L * 0.75f);
-    const float drag = 1.5f * powf(std::max(uh * uh / (g_gravity * d), 0.01f), 0.07f);
+    // The base stretches downwind a little; the pool-fire drag law would double it.
+    const float drag = 1.f + 0.15f * clampr(uh / 6.f, 0.f, 1.f);
     const float sr = _sqrt(_sqr(L * 1.2f) + _sqr(P.radius * drag * 2.f)) + 0.15f;
     const Fvector& eye = Device.vCameraPosition;
     const float dist = eye.distance_to(centre);
@@ -484,7 +482,7 @@ void CDaFireEffect::render_smoke(CBackend& cmd_list)
         Fvector rel;
         rel.sub(s.pos, tip);
         const float x_down = std::max(rel.x * m_wdir.x + rel.z * m_wdir.y, 0.f);
-        const float r = s.r0 + (0.12f + 0.48f * bent) * zr + 0.08f * x_down;
+        const float r = s.r0 + (0.12f + 0.10f * bent) * zr + 0.05f * x_down;
         // Opacity: dilution as the puff grows, a fade-in over the first 0.3 s, the tail fade.
         float alpha = P.smoke_alpha * powf(s.r0 / r, 1.2f);
         alpha *= clampr(s.age / 0.3f, 0.f, 1.f);
@@ -501,14 +499,16 @@ void CDaFireEffect::render_smoke(CBackend& cmd_list)
             }
             continue;
         }
-        // Thin hot smoke reads blue-white; thick grey. The fire lights the plume base.
-        const float thin = 1.f - clampr(alpha / 0.2f, 0.f, 1.f);
+        // Wood smoke is blue-grey, not the colour of the autumn sky it sits under: the sky
+        // light's luminance tinted cool, cooler still the thinner the puff.
+        const float lum = sky.x * 0.3f + sky.y * 0.59f + sky.z * 0.11f;
+        const float thin = 0.45f + 0.35f * (1.f - clampr(alpha / 0.2f, 0.f, 1.f));
         Fvector3 col = sky;
-        col.x += (0.62f * 0.7f - col.x) * thin * 0.5f;
-        col.y += (0.66f * 0.7f - col.y) * thin * 0.5f;
-        col.z += (0.75f * 0.7f - col.z) * thin * 0.5f;
+        col.x += (lum * 0.92f - col.x) * thin;
+        col.y += (lum * 0.98f - col.y) * thin;
+        col.z += (lum * 1.12f - col.z) * thin;
         const float dtip = s.pos.distance_to(tip);
-        const float glow = P.intensity * (m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f) * 0.9f / (1.f + dtip * dtip * 0.6f);
+        const float glow = P.intensity * (m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f) * 0.4f / (1.f + dtip * dtip * 0.6f);
         const u32 clr = color_rgba_f(clampr(col.x, 0.f, 1.f), clampr(col.y, 0.f, 1.f), clampr(col.z, 0.f, 1.f), alpha);
         const float sa = _sin(s.rot), ca = _cos(s.rot);
         Fvector right, top;

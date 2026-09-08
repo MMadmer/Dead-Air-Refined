@@ -35,14 +35,18 @@ float4 main (v2p I) : SV_Target
 	const float agen = I.e.y;
 	const float glow = I.e.z;
 
-	// One tap gives three Worley octaves: 1.6 cycles per metre on the coarsest, drifting up.
+	// Two taps of the Worley volume in world space, one coarse and one fine, so a puff is a
+	// ragged wisp from its first frame and never a disc; drifting up slowly with time.
 	const float3 nq = I.wpos * 0.8 + float3(0.0, -0.1 * da_smoke_suncol.w, 0.0) + seed * 0.173;
 	const float3 nt = s_cloud_detail.SampleLevel(smp_linear, nq, 0).rgb;
-	const float  n  = nt.r * 0.6 + nt.g * 0.3 + nt.b * 0.1;
+	const float3 nf = s_cloud_detail.SampleLevel(smp_linear, nq * 2.7 + 0.31, 0).rgb;
+	const float  n  = saturate((nt.r * 0.5 + nt.g * 0.3 + nf.r * 0.2) * 1.15 - 0.05);
 
-	// Erosion: the threshold climbs over the puff's life, so it frays before it fades.
-	const float e = lerp(-0.15, 0.85, agen);
-	float a = smoothstep(e, e + 0.25, m * (0.5 + 0.7 * n)) * I.c.a;
+	// Erosion from birth (a puff is never a full disc), climbing over its life so it frays
+	// before it fades; the disc mask is soft toward the rim.
+	const float mm = pow(m, 1.4);
+	const float e  = lerp(0.3, 0.95, agen);
+	float a = smoothstep(e, e + 0.3, mm * (0.35 + 1.0 * n)) * I.c.a;
 
 	// Soft against the scene, 0.4 m.
 	const float2 tcProj = I.tctexgen.xy / I.tctexgen.w;
@@ -59,13 +63,13 @@ float4 main (v2p I) : SV_Target
 	// Lighting on a fake sphere normal.
 	const float3 N    = normalize(float3(uv2, sqrt(m)));
 	const float3 Ls   = da_smoke_sun.xyz;
-	const float  wrap = saturate((dot(N, Ls) + 0.5) / 1.5);
+	const float  wrap = 0.55 + 0.45 * saturate((dot(N, Ls) + 0.5) / 1.5);
 	const float  g    = 0.6;
 	const float  cosv = -Ls.z; // the light's travel against the way to the eye
 	const float  hg   = (1.0 - g * g) / (12.566 * pow(max(1.0 + g * g - 2.0 * g * cosv, 0.05), 1.5));
-	float3 col = I.c.rgb + da_smoke_suncol.rgb * (wrap + 0.42 * hg);
+	float3 col = I.c.rgb + da_smoke_suncol.rgb * (wrap + 0.3 * hg);
 	// The fire under the plume base.
-	col += float3(1.0, 0.45, 0.12) * glow * saturate(0.4 - 0.8 * N.y) * (0.4 + 0.6 * n);
+	col += float3(1.0, 0.5, 0.18) * glow * saturate(0.4 - 0.8 * N.y) * (0.4 + 0.6 * n);
 
 	a *= I.fog * I.fog;
 	return float4(col, a);
