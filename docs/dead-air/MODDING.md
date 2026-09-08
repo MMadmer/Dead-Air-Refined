@@ -674,9 +674,9 @@ explosions\effects\campfire_flame = campfire
 explosions\effects\campfire_glow  = off        ; the glow sprite the shader flame replaces
 
 [shader_fire_campfire]
-base_height = 0.55   ; metres above the effect origin where the flame starts
+base_height = 0.45   ; metres above the effect origin where the flame starts (inside the barrel)
 radius      = 0.32   ; fuel bed radius, m
-height      = 0.75   ; calm mean flame height, m
+height      = 1.0    ; calm mean flame height, m
 smoke_rate  = 14     ; puffs per second; smoke = 0 for none
 heat_kw     = 100    ; convective heat release, drives the plume rise
 ```
