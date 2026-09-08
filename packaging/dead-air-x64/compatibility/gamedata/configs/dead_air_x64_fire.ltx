@@ -144,10 +144,23 @@ fluid_core_t    = 1.7
 ; second and the whole thing lives a couple of seconds. Names listed here are drawn as a
 ; fireball; the flash, the shock distortion and the flying debris stay the sprites they were.
 
+; [shader_blast] maps a single effect. Use it only for one that nothing but an explosion ever
+; plays: the sprites inside an explosion group are also played on their own elsewhere in the
+; world, and hooking one of those sets off a fireball where nothing exploded.
 [shader_blast]
-explosions\effects\expl_benzin_05              = barrel
-explosions\effects\expl_benzin_veh             = off
-explosions\effects\expl_mushroom_glow00_barrel = off
+
+; [shader_blast_group] is the safe form: the whole group gets a fireball of its own, and the
+; sprites listed in [shader_blast_mute] are silenced inside those groups alone. The flash, the
+; shock distortion and the flying debris are not listed, so they still play.
+[shader_blast_group]
+explosions\explosion_barrel = barrel
+explosions\expl_mushroom_01 = barrel
+explosions\expl_vehichels   = barrel
+
+[shader_blast_mute]
+explosions\effects\expl_benzin_05              = 1
+explosions\effects\expl_benzin_veh             = 1
+explosions\effects\expl_mushroom_glow00_barrel = 1
 
 ; blast_radius    the sphere the charge is injected into, m
 ; blast_lift      its centre above the effect origin, m
@@ -163,6 +176,9 @@ blast_lift       = 0.85
 blast_duration   = 2.6
 blast_fade       = 0.9
 blast_wind_floor = 0.4
+fluid_edge_fade  = 11
+fluid_drain_band = 10
+fluid_drain      = 0.88
 blast_inject     = 0.20
 blast_speed      = 10
 blast_pilot      = 1.5

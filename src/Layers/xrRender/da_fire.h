@@ -66,6 +66,9 @@ struct SDaFirePreset
     float fl_shadow_step{1.2f}; // how far ahead it looks for that shade, m
     float fl_lift{0.f};         // m/s2 the soot keeps once the flame in it has gone out
     float fl_emis_pow{3.f};     // how steeply emission climbs with temperature
+    float fl_edge_fade{8.f};    // cells before a face of the box over which everything fades out
+    float fl_drain_band{1.f};   // cells at the walls where the field drains rather than piles up
+    float fl_drain{1.f};        // what is left of it there after a step
 
     // A blast is the same simulation with a different source: instead of a fuel bed that
     // burns steadily, a sphere of fuel and heat is thrown in over the first moments and the

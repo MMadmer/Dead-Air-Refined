@@ -91,8 +91,8 @@ float4 main(p_fluidsim input) : SV_Target
 	//	slab with a straight edge.
 	const float3 dw = min(input.cell0,
 		float3(textureWidth, textureHeight, textureDepth) - 1.0 - input.cell0);
-	const float wall = saturate(min(min(dw.x, dw.y), dw.z) * 0.1);
-	const float drain = lerp(0.88, 1.0, wall);
+	const float wall = saturate(min(min(dw.x, dw.y), dw.z) / max(da_ff_misc4.z, 1.0));
+	const float drain = lerp(da_ff_misc4.w, 1.0, wall);
 	f.x *= drain;
 	f.w *= drain;
 

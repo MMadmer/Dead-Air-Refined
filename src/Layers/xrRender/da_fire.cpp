@@ -88,6 +88,9 @@ void load_presets()
         p.fl_shadow_step = std::max(0.1f, rf("fluid_shadow_step", p.fl_shadow_step));
         p.fl_lift = rf("fluid_smoke_lift", p.fl_lift);
         p.fl_emis_pow = std::max(0.5f, rf("fluid_emission_pow", p.fl_emis_pow));
+        p.fl_edge_fade = std::max(1.f, rf("fluid_edge_fade", p.fl_edge_fade));
+        p.fl_drain_band = std::max(1.f, rf("fluid_drain_band", p.fl_drain_band));
+        p.fl_drain = clampr(rf("fluid_drain", p.fl_drain), 0.5f, 1.f);
         p.bl_radius = std::max(0.1f, rf("blast_radius", p.bl_radius));
         p.bl_lift = rf("blast_lift", p.bl_lift);
         p.bl_duration = std::max(0.3f, rf("blast_duration", p.bl_duration));
@@ -277,9 +280,9 @@ void CDaFireEffect::fluid_create()
     m_fluid_acc = 0.f;
     fluid_params();
     if (blast)
-        Msg("* [fire] blast [%s] %.2f m/cell, box %.1f x %.1f m, charge r=%.2f at %.1f %.1f %.1f",
-            m_preset->name.c_str(), m_fluid_cell, m_fluid_cell * float(W), m_fluid_cell * float(H),
-            m_preset->bl_radius, O.x, srcY, O.z);
+        Msg("* [fire] blast [%s] from [%s], %.2f m/cell, box %.1f x %.1f m at %.1f %.1f %.1f",
+            m_preset->name.c_str(), (m_Def && m_Def->Name()) ? m_Def->Name() : "?", m_fluid_cell,
+            m_fluid_cell * float(W), m_fluid_cell * float(H), O.x, srcY, O.z);
 #endif
 }
 
@@ -629,6 +632,9 @@ void CDaFireEffect::fluid_params()
     f.m_fShadow = P.fl_shadow;
     f.m_fSmokeLift = P.fl_lift * h * h / cell;
     f.m_fEmisPow = P.fl_emis_pow;
+    f.m_fEdgeFade = P.fl_edge_fade;
+    f.m_fDrainBand = P.fl_drain_band;
+    f.m_fDrainRate = P.fl_drain;
     //  The light the flame throws back into its own plume.
     f.m_vFireLight.set(1.f, 0.42f, 0.13f);
     f.m_vFireLight.mul(0.7f * P.intensity);
@@ -942,16 +948,16 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     //  and a player standing on the boundary should not pay for that twice a second.
     const float lim = ps_r__fire_fluid_dist * (m_fluid ? 1.25f : 1.f);
     const bool eligible = ready && ps_r__fire_fluid && m_preset->fluid && m_dying <= 0.f && d2 < lim * lim;
-    //  A blast outranks any campfire for the one grid the frame can afford, and it takes it
-    //  on the frame it goes off rather than waiting its turn.
-    const float rank = m_preset->blast ? d2 * 0.001f : d2;
+    //  A blast outranks a campfire for the one grid the frame can afford, but by a factor
+    //  rather than absolutely: something going off across the camp has no business taking the
+    //  grid from the fire the player is standing at. It does take it on the frame it goes off
+    //  rather than waiting its turn.
+    const float rank = m_preset->blast ? d2 * 0.2f : d2;
     if (eligible && rank < g_fluid_claim_d2)
     {
         g_fluid_claim_d2 = rank;
         g_fluid_claim = this;
     }
-    if (eligible && m_preset->blast && (!g_fluid_owner || !g_fluid_owner->m_preset->blast))
-        g_fluid_owner = this;
     m_fluid_wanted = eligible && g_fluid_owner == this;
     //  Half a second of crossover: at the distance where the grid takes over, both are drawn
     //  and one fades into the other instead of the flame changing shape in a single frame.

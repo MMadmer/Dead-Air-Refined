@@ -120,8 +120,72 @@ void CPSLibrary::ResolveShaderFire()
                 ++blasts;
         }
     }
-    if (mapped)
-        Msg("* [fire] shader fire: %u effect(s) drawn as a volume, %u of them blasts", mapped, blasts);
+
+    // An explosion is a group, not one of the sprites in it, and the difference matters: the
+    // same sprite gets played on its own elsewhere in the world - an anomaly in Escape plays
+    // two of the barrel's - so hooking one would set off a fireball where nothing exploded.
+    // A child of our own is added to the group instead, and the sprites it makes redundant
+    // are silenced inside that group alone.
+    u32 groups = 0;
+    bool appended = false;
+    if (ini.section_exist("shader_blast_group"))
+    {
+        xr_vector<shared_str> mute;
+        if (ini.section_exist("shader_blast_mute"))
+            for (const auto& m : ini.r_section("shader_blast_mute").Data)
+                if (m.first.size())
+                    mute.push_back(m.first);
+
+        xr_vector<std::pair<shared_str, PS::CPEDef*>> made;
+        for (const auto& item : ini.r_section("shader_blast_group").Data)
+        {
+            if (!item.first.size() || !item.second.size())
+                continue;
+            PS::CPGDef* grp = FindPGD(item.first.c_str());
+            if (!grp)
+            {
+                Msg("! [fire] shader_blast_group names a group that is not in particles.xr: [%s]",
+                    item.first.c_str());
+                continue;
+            }
+
+            PS::CPEDef* eff = nullptr;
+            for (const auto& m : made)
+                if (0 == xr_strcmp(m.first.c_str(), item.second.c_str()))
+                    eff = m.second;
+            if (!eff)
+            {
+                string_path ename;
+                xr_sprintf(ename, "da_blast\\%s", item.second.c_str());
+                eff = xr_new<PS::CPEDef>();
+                eff->SetName(ename);
+                eff->m_DaFire = item.second;
+                m_PEDs.push_back(eff);
+                made.emplace_back(item.second, eff);
+                appended = true;
+            }
+
+            for (PS::CPGDef::SEffect* se : grp->m_Effects)
+                for (const shared_str& m : mute)
+                    if (0 == xr_strcmp(se->m_EffectName.c_str(), m.c_str()))
+                        se->m_Flags.set(PS::CPGDef::SEffect::flEnabled, FALSE);
+
+            PS::CPGDef::SEffect* add = xr_new<PS::CPGDef::SEffect>();
+            add->m_Flags.set(PS::CPGDef::SEffect::flEnabled, TRUE);
+            add->m_EffectName = eff->Name();
+            add->m_Time0 = 0.f;
+            add->m_Time1 = 4.f;
+            grp->m_Effects.push_back(add);
+            grp->m_fTimeLimit = _max(grp->m_fTimeLimit, add->m_Time1);
+            ++groups;
+        }
+        if (appended)
+            std::sort(m_PEDs.begin(), m_PEDs.end(), ped_sort_pred);
+    }
+
+    if (mapped || groups)
+        Msg("* [fire] shader fire: %u effect(s) drawn as a volume, %u of them blasts; %u explosion group(s)",
+            mapped, blasts, groups);
 }
 
 // Per-particle overrides without rebuilding particles.xr. The whole game ships as one

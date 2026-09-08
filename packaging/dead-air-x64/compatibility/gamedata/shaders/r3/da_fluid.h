@@ -25,7 +25,8 @@ cbuffer DaFireSim
 	float4	da_ff_misc3;	// x = the buoyancy soot keeps once the flame in it has gone out,
 							// y = the ground jet, z = the dust it tears up, w = how much of that run is left
 	float4	da_ff_misc4;	// x = the blast's own divergence this step, signed,
-							// y = how much wind reaches the gas that is still down at the source
+							// y = how much wind reaches the gas that is still down at the source,
+							// z = the band at the walls the field drains in, w = how fast it drains there
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

@@ -48,6 +48,7 @@ cbuffer DaFireRender
 	float4	da_fr_c;	// x = smoke gain, y = how much glowing soot absorbs, z = time, w = crossover
 	float4	da_fr_d;	// xyz = one step toward the sun in grid space, w = how hard the plume shades itself
 	float4	da_fr_e;	// rgb = the sun on the plume, w = how steeply emission climbs with temperature
+	float4	da_fr_f;	// x = how many cells before a face of the box everything fades out
 }
 
 struct VS_INPUT
@@ -85,10 +86,11 @@ void DaSample(float weight, float3 O, inout float3 radiance, inout float trans)
 	float4 s = colorTex.SampleLevel(samLinearClamp, texcoords, 0);
 
 	//	The grid has walls, and a cloud that reaches one would otherwise be sliced off square.
-	//	Everything fades out over the last two metres before every face of the box, smoothly
-	//	enough that the edge of the domain is not a shape you can point at.
-	const float3 eo = min(O, 1.0 - O);
-	const float ef = saturate(min(min(eo.x, eo.y), eo.z) * gridScaleFactor * 0.35);
+	//	Everything fades out over the last few cells before every face. In cells, not metres:
+	//	a campfire's box is two metres across and a blast's is ten, and a fade wide enough for
+	//	the second would swallow the first whole.
+	const float3 eo = min(O, 1.0 - O) * gridDim.xyz;
+	const float ef = saturate(min(min(eo.x, eo.y), eo.z) / max(da_fr_f.x, 1.0));
 	s *= ef * ef * (3.0 - 2.0 * ef);
 
 	const float T = s.x / max(da_fr_b.w, 0.05);

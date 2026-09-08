@@ -72,6 +72,9 @@ public:
         float m_fBlastDiv{};    // the divergence the blast makes this step, signed
         float m_fEmisPow{3.f};  // how steeply emission climbs with temperature
         float m_fWindFloor{};   // how much wind reaches the gas still down at the source
+        float m_fEdgeFade{10.f};// cells before a face of the box over which everything fades out
+        float m_fDrainBand{1.f};// cells at the walls where the field drains rather than piles up
+        float m_fDrainRate{1.f};
         float m_fFade{1.f};     // crossover with the marched flame
 
         //	A blast: the charge thrown into a sphere over the first moments instead of a bed

@@ -767,10 +767,22 @@ uses a steeper curve than a campfire and its cooler skin falls away instead of g
 The brightness ceiling is on luminance rather than on each channel: clamping channels separately
 drags a hot amber core to white and throws its hue away.
 
+An explosion is hooked as a group, not as one of the sprites inside it, and the difference is
+not academic: the same sprite gets played on its own elsewhere in the world - an anomaly in
+Escape plays two of the barrel's - so hooking one sets off a fireball where nothing exploded,
+and that fireball takes the grid away from whatever campfire the player is standing at. The
+group gets a child of ours added to it instead, and the sprites that child makes redundant are
+silenced inside that group alone.
+
 ```ini
-[shader_blast]
-explosions\effects\expl_benzin_05  = barrel   ; the fuel fire of the barrel, the car and the heli
-explosions\effects\expl_benzin_veh = off      ; the second sprite fire it doubled up with
+[shader_blast_group]
+explosions\explosion_barrel = barrel
+explosions\expl_mushroom_01 = barrel   ; the helicopter
+explosions\expl_vehichels   = barrel   ; and the cars
+
+[shader_blast_mute]                    ; silenced inside those groups only
+explosions\effects\expl_benzin_05              = 1
+explosions\effects\expl_mushroom_glow00_barrel = 1
 
 [shader_blast_barrel]
 blast_radius     = 1.45   ; the sphere the charge is injected into, m
@@ -783,9 +795,10 @@ blast_ring       = 2.2    ; how hard it runs outward along the ground
 blast_dust       = 1.6    ; and how much dust that tears up
 ```
 
-The flash, the shock distortion and the flying debris stay the sprites they were. A blast takes
-the one grid from any campfire the moment it goes off and hands it back when it is over; it costs
-about the same as a campfire while it is on screen.
+The flash, the shock distortion and the flying debris are not in the mute list, so they still
+play. A blast outranks a campfire for the one grid the frame can afford, but by a factor rather
+than absolutely: something going off across the camp has no business taking the grid from the
+fire the player is standing at. It costs about the same as a campfire while it is on screen.
 
 `r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
 both are session overrides like the other render controls. Only the nearest eligible fire is
