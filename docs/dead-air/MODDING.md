@@ -800,6 +800,14 @@ play. A blast outranks a campfire for the one grid the frame can afford, but by 
 than absolutely: something going off across the camp has no business taking the grid from the
 fire the player is standing at. It costs about the same as a campfire while it is on screen.
 
+The march itself runs at roughly half resolution and is filtered back up, which is what the
+stock volume does too. Filtering a bright volume across a silhouette drags it half a texel over
+whatever stands in front - a lit rim around a gun the smoke never reached, a blade of grass
+painted over instead of covering the flame behind it - so the composite asks the full-resolution
+ray data instead of trusting the filtered value: where the scene covers a pixel nothing is
+composited there at all, and where a neighbour is covered the ray is marched again at full
+resolution rather than guessed at.
+
 `r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
 both are session overrides like the other render controls. Only the nearest eligible fire is
 simulated - one grid is what the frame can afford, and it costs about 3 frames out of 60 with

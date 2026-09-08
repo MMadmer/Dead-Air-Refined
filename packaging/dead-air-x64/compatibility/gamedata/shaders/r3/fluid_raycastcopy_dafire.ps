@@ -1,18 +1,35 @@
 #include "da_fluid_ray.h"
 
-// The full-resolution pass: everything but the pixels the edge detector flagged comes
-// straight out of the small ray-cast target, the flagged ones are marched again so the
-// flame does not alias against the wood it sits on.
+// The full-resolution pass. The march itself ran at roughly half resolution, so most of this
+// is a filtered lookup of that result - but a filtered lookup drags the fireball half a texel
+// over whatever stands in front of it, which is where the bright rim around a gun the smoke
+// never reached comes from, and where a blade of grass ends up painted over instead of
+// covering the flame behind it.
+//
+// The ray data is full resolution, so it can answer both. Where it says the scene covers this
+// pixel there is nothing to composite at all, whatever the filtered value claims; and where a
+// neighbour is covered but this pixel is not, we are on the silhouette of something and the
+// ray is marched again here at full resolution rather than guessed at.
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//	Pixel
 float4 main(PS_INPUT_RAYCAST input) : SV_Target
 {
 	const float2 uv = float2(input.pos.x / RTWidth, input.pos.y / RTHeight);
+
+	const float4 rd = rayDataTex.SampleLevel(samPointClamp, uv, 0);
+	if (rd.x < 0)
+		return 0;
+
+	const float2 px = float2(1.0 / RTWidth, 1.0 / RTHeight);
+	float nearest = 0.0;
+	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv + float2( px.x, 0), 0).x);
+	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv - float2( px.x, 0), 0).x);
+	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv + float2(0,  px.y), 0).x);
+	nearest = min(nearest, rayDataTex.SampleLevel(samPointClamp, uv - float2(0,  px.y), 0).x);
+
 	const float edge = edgeTex.Sample(samLinearClamp, uv).r;
 	const float4 tex = rayCastTex.Sample(samLinearClamp, uv);
 
-	if (edge > 0 && tex.a > 0)
+	if ((edge > 0 || nearest < 0) && tex.a > 0)
 		return DaRaycast(input);
 	return tex;
 }
