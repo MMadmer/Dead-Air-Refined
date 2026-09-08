@@ -719,6 +719,9 @@ void CDaFireEffect::OnDeviceCreate()
 
 void CDaFireEffect::OnDeviceDestroy()
 {
+    //  The grid belongs to the device: its textures came from it and its size came from the
+    //  fluid manager, and neither of those survives a renderer being torn down and remade.
+    fluid_destroy();
     geom.destroy();
     shader.destroy();
     m_smoke_geom.destroy();

@@ -223,6 +223,8 @@ void dx113DFluidManager::CreateRTTextureAndViews(size_t rtIndex, D3D_TEXTURE3D_D
         m_pOwnObstacles = pRT;
         m_pOwnObstacles->AddRef();
     }
+    if (rtIndex == RENDER_TARGET_COLOR)
+        m_pColorSurface = pRT;
 
     // CTexture owns ID3DxxTexture3D interface
     pRT->Release();
@@ -231,6 +233,8 @@ void dx113DFluidManager::DestroyRTTextureAndViews(size_t rtIndex)
 {
     if (rtIndex == RENDER_TARGET_OBSTACLES)
         _RELEASE(m_pOwnObstacles);
+    if (rtIndex == RENDER_TARGET_COLOR)
+        m_pColorSurface = nullptr;
     // pRTTextures[rtIndex]->surface_set(0);
     pRTTextures[rtIndex] = nullptr;
     _RELEASE(pRenderTargetViews[rtIndex]);
@@ -387,11 +391,18 @@ void dx113DFluidManager::DetachAndSwapFluidData(dx113DFluidData& FluidData)
 {
     PIX_EVENT(DetachAndSwapFluidData);
 
-    ID3DTexture3D* pTTarg = (ID3DTexture3D*)pRTTextures[RENDER_TARGET_COLOR]->surface_get();
+    ID3DTexture3D* pTTarg = m_pColorSurface;
     ID3DTexture3D* pTSrc = FluidData.GetTexture(dx113DFluidData::VP_COLOR);
+    if (!pTTarg || !pTSrc)
+    {
+        //  A volume built against a renderer that has since been torn down and made again.
+        //  Nothing to swap; let it go rather than take the frame down with it.
+        _RELEASE(pTSrc);
+        return;
+    }
     FluidData.SetTexture(dx113DFluidData::VP_COLOR, pTTarg);
     pRTTextures[RENDER_TARGET_COLOR]->surface_set(pTSrc);
-    _RELEASE(pTTarg);
+    m_pColorSurface = pTSrc;
     _RELEASE(pTSrc);
 
     ID3DRenderTargetView* pV = FluidData.GetView(dx113DFluidData::VP_COLOR);

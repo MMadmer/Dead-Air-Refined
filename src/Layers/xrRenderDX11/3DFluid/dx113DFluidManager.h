@@ -127,6 +127,9 @@ private:
     //	to that slot for the length of an update, and asking the texture object to hand its
     //	surface back would send it looking for a file of that name on disk.
     ID3DTexture3D* m_pOwnObstacles{};
+    //	And the colour surface it currently holds: this one is swapped with the volume's every
+    //	frame, so it cannot be a fixed pointer - it is simply tracked through the swap.
+    ID3DTexture3D* m_pColorSurface{};
     ID3DRenderTargetView* pRenderTargetViews[NUM_RENDER_TARGETS];
     ref_texture pRTTextures[NUM_RENDER_TARGETS];
     static LPCSTR m_pEngineTextureNames[NUM_RENDER_TARGETS];
