@@ -133,7 +133,17 @@ void DaSample(float weight, float3 O, inout float3 radiance, inout float trans)
 //////////////////////////////////////////////////////////////////////////////////////////
 float4 DaRaycast(PS_INPUT_RAYCAST input)
 {
-	float4 rayData = rayDataTex.Sample(samLinearClamp, float2(input.pos.x / RTWidth, input.pos.y / RTHeight));
+	//	POINT, not linear. This texture holds a ray's entry point in grid space and its length,
+	//	with sentinel values for "the scene covers this" and "the near plane cut the front face
+	//	off" - none of it is a quantity you may average. Filtering it blended a real entry point
+	//	with its neighbour across the volume's silhouette and handed back an entry point that is
+	//	on neither ray, with a length belonging to a third: a march that starts in the middle of
+	//	the fire and comes out as a bright dash. At half resolution those blends line up into a
+	//	column, which is the dashed line of firelight that stood in the air beside a campfire -
+	//	vertical, because that is the shape of the silhouette it straddles, and there from some
+	//	angles and not others because it depends on where the edge falls between texel centres.
+	//	The full-resolution composite already samples this same texture with a point sampler.
+	float4 rayData = rayDataTex.SampleLevel(samPointClamp, float2(input.pos.x / RTWidth, input.pos.y / RTHeight), 0);
 
 	//	The scene occludes the whole ray.
 	if (rayData.x < 0)
