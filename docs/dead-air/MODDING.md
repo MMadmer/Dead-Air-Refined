@@ -1309,11 +1309,19 @@ dozen steps while a half-metre ring lives for a minute.
 
 The wave speed is water's, and water is dispersive - the speed of a wave is a function of its
 length - so the field is three wave equations, one per octave of ring wavelength (0.3, 0.6 and
-1.2 m: `CEnvironment::water_ripple_lambda`), each at three quarters of the deep-water phase speed
-of its wavelength (0.5, 0.7 and 1.0 m/s), scaled in the shader by the local depth through
+1.2 m: `CEnvironment::water_ripple_lambda`), each at 0.85 of the deep-water phase speed of its
+wavelength (0.6, 0.8 and 1.2 m/s - a band has one number for both the crests and the packet, and
+the crests are what the eye follows), scaled in the shader by the local depth through
 `sqrt(tanh(k h))` so a ring slows into the shallows and a puddle's crawls. A source is shared out
-between the bands by its own spectrum (`exp(-k^2 a^2 / 4)` for a crater of radius `a`): a bullet's
-14 cm dimple goes mostly to the two longer bands, a blast's 70 cm one entirely to the longest. A
+between the bands by the energy of each octave in two dimensions - modes in proportion to `k^2`
+times the cavity's own power spectrum `exp(-k^2 a^2 / 2)` - so a bullet's 8 cm cavity (six
+centimetres per metre of the slot's reach, growing faster past a blast's two metres) goes about
+70/25/5 into the bands and a blast's half metre entirely to the longest. That `k^2` is the whole
+difference between a pond's three crisp crests a hand apart and a gentle swell: sharing by
+amplitude instead put nine tenths of a bullet into the long waves, whose slope per metre of height
+is a quarter of a short wave's, and the rings all but vanished. The depth dug is twice what one
+band dug alone for the same reason, and each band's dimple is capped at a slope of 0.6 so a blast
+cannot fold the surface. A
 ring is then what a ring is on a pond - a train whose long waves lead and whose short ones trail,
 spreading as it goes - and its front runs at a constant speed, which is also what a real ring does:
 the "fast start" of a splash is the collapsing cavity throwing its rim out, and that is modelled as

@@ -92,11 +92,17 @@ uniform float4x4 da_water_wakep1;
 uniform float4 da_water_wakei;
 
 #define DA_RIP_EDGE_DAMP	0.92f	// damping at the very rim of the absorbing band
-//	The dimple an impact digs: this deep per metre of crater radius, between the two limits. A
-//	bullet's 14 cm crater is 4 cm deep and steep, a blast's 70 cm one a quarter of a metre.
-#define DA_RIP_HIT_DEPTH	0.30f
-#define DA_RIP_HIT_MIN		0.03f
-#define DA_RIP_HIT_MAX		0.25f
+//	The dimple an impact digs: this deep per metre of crater radius, between the two limits,
+//	shared out over the three bands. A bullet's 14 cm crater is 8 cm deep before the split, a
+//	blast's 70 cm one a third of a metre. Twice what one band used to dig alone, on purpose:
+//	split three ways and mostly into the longer waves - whose slope per metre of height is a
+//	quarter of a short wave's - the same depth read as nothing. What the eye sees is slope.
+#define DA_RIP_HIT_DEPTH	0.60f
+#define DA_RIP_HIT_MIN		0.06f
+#define DA_RIP_HIT_MAX		0.35f
+//	The steepest a band's dimple may be, as depth times wavenumber: past this the surface
+//	folds its normal over, and a blast's third of a metre in a metre-wide trough would.
+#define DA_RIP_SLOPE_MAX	0.60f
 //	Metres per second the crater's rim runs out at while the dimple is being fed. A splash is
 //	not a still dimple: the collapsing cavity throws its rim outward at a metre or two a second
 //	for the first tenth of a second, and that is what makes a real ring start fast and only
@@ -144,11 +150,17 @@ float2 da_rip_tap(float2 uv, float2 wxz, float2 centre, bool has_field, bool wet
 	return s_water_ripple_prev.SampleLevel(smp_nofilter, uv, 0).rg;
 }
 
-//	This band's share of a source whose crater is a Gaussian of radius a: its spectrum at the
-//	band's wavenumber, normalised over the three bands so the depth is spent exactly once.
+//	This band's share of a source whose crater is a Gaussian of radius a. The ENERGY of an
+//	octave, not the amplitude at one wavenumber: in two dimensions an octave holds modes in
+//	proportion to k^2, times the crater's own power spectrum exp(-k^2 a^2 / 2), normalised over
+//	the three bands so the depth is spent exactly once. That k^2 is what the first version
+//	dropped - it shared by amplitude, put nine tenths of a bullet into the two long bands and
+//	drew a gentle swell where a pond shows three crisp crests a hand apart. A bullet's 8 cm
+//	cavity goes 70/25/5 into the bands, a boot's 10 cm 55/35/10, a blast's half metre all long.
 float da_rip_share(float a)
 {
-	const float3 w = exp(-da_ripple_bands.xyz * da_ripple_bands.xyz * (a * a * 0.25f));
+	const float3 k2 = da_ripple_bands.xyz * da_ripple_bands.xyz;
+	const float3 w = k2 * exp(-k2 * (a * a * 0.5f));
 	const float mine = (da_ripple_band.z < 0.5f) ? w.x : ((da_ripple_band.z < 1.5f) ? w.y : w.z);
 	return mine / max(w.x + w.y + w.z, 1e-6f);
 }
@@ -235,19 +247,23 @@ float4 main(v2p I) : SV_Target
 		if (share <= 0.001f)
 			continue;
 		//	The dimple is this band's own size - it is what sets the wavelength of the ring it
-		//	starts - and its rim runs out while it is fed.
-		const float rad = max(da_ripple_band.y, 2.0f * texel_m) + DA_RIP_RIM_SPEED * age;
-		const float depth_d = clamp(DA_RIP_HIT_DEPTH * RA.w, DA_RIP_HIT_MIN, DA_RIP_HIT_MAX) * share;
-		const float2 dr = wxz - RP.xz;
+		//	starts - and it is dug as a ring whose radius runs out at the rim speed while it is
+		//	fed, so the wave is born already moving.
+		const float rad = max(da_ripple_band.y, 2.0f * texel_m);
+		const float depth_d = min(clamp(DA_RIP_HIT_DEPTH * RA.w, DA_RIP_HIT_MIN, DA_RIP_HIT_MAX) * share,
+			DA_RIP_SLOPE_MAX / da_ripple_band.x);
+		const float rr = length(wxz - RP.xz) - DA_RIP_RIM_SPEED * age;
 		//	young ramps from 1 to 0 across the window, so its integral is half of it: the 2 puts
 		//	the total dug depth back at exactly depth_d.
 		const float hit_rate = 2.0f * da_ripple_sim2.x / max(da_ripple_sim2.y, 0.001f);
-		inject -= RA.x * young * exp(-dot(dr, dr) / (rad * rad)) * depth_d * hit_rate;
+		inject -= RA.x * young * exp(-rr * rr / (rad * rad)) * depth_d * hit_rate;
 	}
 
 	//	Wakes. Continuous while the source keeps wading, so this pushes and releases at a couple
 	//	of hertz: a steady bump would just sit there as a dome and radiate nothing. A wader's
-	//	push is a half-metre affair, so the two shorter bands split it.
+	//	push is a half-metre affair, so it goes to the two shorter bands - to each at nearly its
+	//	full strength, not halved: the bands part within a second and what is left under the
+	//	feet is one of them, and halving it was walking with no rings at all.
 	[branch]
 	if (da_ripple_band.z < 1.5f)
 	{
@@ -267,7 +283,7 @@ float4 main(v2p I) : SV_Target
 			const float2 dw = wxz - WP.xz;
 			const float wake_rate = da_ripple_sim2.x / max(da_ripple_sim2.z, 0.001f);
 			inject += WA.x * exp(-dot(dw, dw) / (rad * rad)) * sin(WA.y * (6.2831853f * DA_RIP_WAKE_HZ)) *
-				(0.5f * DA_RIP_WAKE_AMP * wake_rate);
+				(0.7f * DA_RIP_WAKE_AMP * wake_rate);
 		}
 	}
 

@@ -652,14 +652,15 @@ public:
     Fvector4 water_ripple_win{};
     // The ripple field is three wave equations, one per octave of ring wavelength, because
     // water is dispersive and a single speed cannot be: a bullet's ring is a train whose long
-    // waves run ahead of its short ones and spread as it goes. Each band moves at three
-    // quarters of the deep-water phase speed of its wavelength - between the crests' speed and
-    // the packet's, the two a non-dispersive band has to serve with one number - and the sim
-    // scales that by the local depth. Independent of the grid: a ring is as fast as water
-    // makes it, not as fast as the texel lets it be.
+    // waves run ahead of its short ones and spread as it goes. Each band moves at 0.85 of the
+    // deep-water phase speed of its wavelength: a non-dispersive band has one number to serve
+    // both the crests (the phase speed, what the eye follows) and the packet (half of it, how
+    // far the ring has reached), and the eye wins - three quarters read as syrup. The sim
+    // scales it by the local depth. Independent of the grid: a ring is as fast as water makes
+    // it, not as fast as the texel lets it be.
     static constexpr int water_ripple_bands = 3;
     static constexpr float water_ripple_lambda[water_ripple_bands] = {0.30f, 0.60f, 1.20f};
-    static float water_ripple_band_speed(int band) { return 0.75f * _sqrt(9.81f * water_ripple_lambda[band] / PI_MUL_2); }
+    static float water_ripple_band_speed(int band) { return 0.85f * _sqrt(9.81f * water_ripple_lambda[band] / PI_MUL_2); }
     // The fastest band's speed: what the analytic envelope runs a ring's front at while the
     // field carries the ring, so it stays one front across the window's edge.
     float water_ripple_speed{1.0f};

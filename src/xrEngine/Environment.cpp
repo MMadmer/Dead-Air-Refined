@@ -1203,14 +1203,17 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
     // edge; born outside it the ring has no wave in the field at all, so the analytic one is
     // drawn everywhere, window included - otherwise a ring watched from the bank vanishes the
     // moment the player walks far enough for the window to swallow it. The slot's radius is
-    // how far the ring is meant to run, not how big the splash was: the dimple is a tenth of
-    // it - 14 cm for a bullet, half a metre and up for a blast.
+    // how far the ring is meant to run, not how big the splash was: the dimple is the CAVITY
+    // the hit opens, six centimetres per metre of reach - 8 cm for a bullet, 10 for a boot -
+    // growing faster past the two metres only a blast reaches, to half a metre and up. The
+    // cavity's size is what decides the ring's wavelengths, and a bullet's rings are three
+    // crisp crests a hand apart, not a swell: that is a cavity of centimetres.
     slot->crater = 0.f;
     if (kind == EWaterHit::ring && water_ripple_win.z > 0.f)
     {
         const float half = water_ripple_win.z * 0.5f - water_ripple_edge;
         if (_abs(pos.x - water_ripple_win.x) < half && _abs(pos.z - water_ripple_win.y) < half)
-            slot->crater = clampr(0.10f * radius, 0.05f, 1.0f);
+            slot->crater = clampr(0.06f * radius + 0.08f * std::max(radius - 2.f, 0.f), 0.04f, 1.0f);
     }
 
     if (ps_e_wind_dbg)
