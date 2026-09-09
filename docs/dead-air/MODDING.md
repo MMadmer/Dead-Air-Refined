@@ -1189,6 +1189,83 @@ Do not add spawnable sections for the sake of a scene: a section the original ga
 know ends up in saves. Every scene here is a hud section and an existing item.
 
 
+## Open water
+
+Water is solved, not authored. The engine measures the level's water bodies once at load, works
+out what sea the current wind has raised over the one the player is standing at, and hands the
+shader physical quantities; nothing about the look is a number somebody eyeballed against a
+screenshot, and there is no per-weather water colour to get wrong.
+
+### What the engine solves
+
+At level load `measure_water_body()` (`Level_load.cpp`) sweeps the static collision for the liquid
+game material, bins the triangles into a 32x32 grid, flood-fills that into connected sheets, and
+keeps the eight largest with their own footprint and their own measured depth (one downward ray
+per occupied cell, from a real liquid centroid rather than a cell centre, so dry bank does not
+drag the mean to nothing). One box around every puddle on the map would hand a two-metre pool the
+fetch and the depth of a lake, and fetch is most of what decides how big the waves are.
+
+Every frame, next to the wind service, `CEnvironment::water_tick()` picks the body nearest the
+camera and solves the fetch-limited relations:
+
+```
+U    = 3 s low-pass of the 10 m wind      // a sea has inertia; a gust does not resize it
+C_D  = 0.001 * (1.1 + 0.035 * U)
+u*   = U * sqrt(C_D)
+X    = the body's footprint projected on the wind heading, clamped to [5, 500] m
+Hs   = 0.0413 * u* * sqrt(X / 9.81)       // significant wave height
+lam  = 0.0898 * (X * u*)^(2/3) / 9.81^(1/3)
+mss  = 0.003 + 5.12e-3 * U                // Cox & Munk 1954, mean square slope
+```
+
+`qa_water_state` prints all of it - the bodies, the sea, every wave row and the optical profile.
+
+### Waves
+
+Eight rows of `(heading, wavenumber, amplitude, phase)`, wavelengths geometric down from the peak
+with ratio 0.75, re-seeded only when the wind has genuinely moved (20 % in speed or 15 degrees in
+heading) with the phase carried across so the surface does not jump.
+
+The amplitudes come from the **slope** budget, not from the wave height: the surface is drawn as a
+normal and never as geometry, and `mss` is the slope variance of the whole real surface. The
+explicit waves take half of it, the detail normal map takes `WATER_DETAIL_SHARE`, and what is left
+is the width of the specular lobe. Bands shorter than 10 cm are not generated at all - no pixel
+of this surface can resolve them at any distance, so all they can add is aliasing, and dropping
+them hands their share of the budget to the bands that survive.
+
+Nothing displaces geometry. At Zone fetch and Zone wind every wave is 0.5-6 cm high and 7-60 cm
+long, which is smaller than a vertex and smaller than a texel. For the same reason there are no
+whitecaps: fetch-limited steepness never folds the Jacobian, and Monahan's coverage is 0.09 % at
+5 m/s over the open ocean.
+
+### Optics
+
+`dead_air_x64_water.ltx` carries the profiles: `sigma_t` is the per-channel extinction in 1/m and
+`body_r` is what the water column glows, both linear sRGB; `scum` is the floating film. Six ship -
+`clear`, `pond`, `swamp`, `bog`, `muddy`, `algae` - and `[water_levels]` maps each level to a pair
+of them, because a level may carry two water materials at once. Which of the two a surface reads
+is fixed in its own `.s` script (`water_soft` = the first, `water_green` = the second): the lua
+shader API has no way to hand a material its own constant.
+
+A level not listed there takes the `default` line, and a missing file or a missing key each falls
+back one step without failing the load.
+
+To retune a water body, edit its profile. Numbers to start from: red is half gone at 2 m and dead
+at 8 in anything, blue survives tens of metres in clear water and dies in 20 cm in a peat bog, and
+past about `a_CDOM(440) = 0.5` the blue coefficient exceeds the red and the water goes brown
+rather than blue.
+
+### Quality
+
+`r__water_waves` is the wave-row budget, on the preset ladder at 2 / 4 / 6 / 8 / 8, session-only
+from the console. Everything else about the model is unconditional: the depth fix, the optics, the
+Fresnel and the sea state cost nothing and there is no tier where being wrong is cheaper.
+
+`settings_da_water.h` holds what is genuinely a look and has no physical value to derive it from -
+the detail layer's share, the rain and impact ripple amplitudes, the foam colour, the debris
+window, the refraction strength, and the SSR hand-over distances. It is compile-time on purpose:
+wiping `appdata/shaders_cache_oxr` applies a change without an engine rebuild.
+
 ## Rain puddles, wet ground and the far fades
 
 Puddles are part of every quality tier now; what changes with the tier is how far they are drawn
