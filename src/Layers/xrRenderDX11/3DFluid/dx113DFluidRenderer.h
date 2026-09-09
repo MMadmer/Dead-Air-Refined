@@ -23,6 +23,8 @@ public:
 
     void Initialize(int gridWidth, int gridHeight, int gridDepth);
     void Destroy();
+    //  Level change: the jitter and HHGG surfaces again, same CTextures.
+    void RebindResources();
 
     void SetScreenSize(int width, int height);
 

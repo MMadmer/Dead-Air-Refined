@@ -126,6 +126,62 @@ void dx113DFluidManager::Initialize(int width, int height, int depth)
     // renderer = new VolumeRenderer( m_pD3DDevice );
 }
 
+//  Give the named $user$ textures new surfaces after a level change, without touching
+//  anything else.
+//
+//  A level change unloads every texture the resource manager holds, so the 3D surfaces behind
+//  the fluid's own $user$ textures go with them: the simulation keeps stepping and the grid is
+//  still voxelised - the log even says so - while the march reads and writes nowhere, and a
+//  campfire renders as empty air.
+//
+//  Tearing the subsystem down and standing it up again fixed that and introduced something
+//  worse. Destroy() drops the manager's references to those CTexture objects, and the compiled
+//  fluid shaders hold pointers to exactly those objects in their pass texture lists; whether
+//  the registry hands the same ones back, or evicts them first and builds new ones, depends on
+//  when the deferred unload happens to run. About half of all level loads on some levels
+//  crashed rebuilding the shaders against that.
+//
+//  So the identity of nothing changes here. The CTexture objects stay, the shaders stay, and
+//  only the D3D surfaces and views underneath are made again.
+void dx113DFluidManager::RebindResources()
+{
+    if (!m_bInited)
+        return;
+
+    for (size_t rtIndex = 0; rtIndex < NUM_RENDER_TARGETS; rtIndex++)
+    {
+        if (rtIndex == RENDER_TARGET_OBSTACLES)
+            _RELEASE(m_pOwnObstacles);
+        if (rtIndex == RENDER_TARGET_COLOR)
+            m_pColorSurface = nullptr;
+        _RELEASE(pRenderTargetViews[rtIndex]);
+        //  Only if the subsystem never got one: an existing texture is deliberately kept.
+        if (!pRTTextures[rtIndex])
+            PrepareTexture(rtIndex);
+    }
+
+    D3D_TEXTURE3D_DESC desc;
+    desc.BindFlags = D3D_BIND_SHADER_RESOURCE | D3D_BIND_RENDER_TARGET;
+    desc.CPUAccessFlags = 0;
+    desc.MipLevels = 1;
+    desc.MiscFlags = 0;
+    desc.Usage = D3D_USAGE_DEFAULT;
+    desc.Width = m_iTextureWidth;
+    desc.Height = m_iTextureHeight;
+    desc.Depth = m_iTextureDepth;
+
+    for (size_t rtIndex = 0; rtIndex < NUM_OWN_RENDER_TARGETS; rtIndex++)
+    {
+        desc.Format = RenderTargetFormats[rtIndex];
+        CreateRTTextureAndViews(rtIndex, desc);
+    }
+
+    Reset();
+
+    if (m_pRenderer)
+        m_pRenderer->RebindResources();
+}
+
 void dx113DFluidManager::Destroy()
 {
     if (!m_bInited)

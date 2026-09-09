@@ -34,6 +34,8 @@ public:
     //		Manager setup
     void Initialize(int width, int height, int depth);
     void Destroy();
+    //  Level change: new surfaces for the same textures. See the note on the definition.
+    void RebindResources();
     void SetScreenSize(int width, int height)
     {
         if (m_bInited)

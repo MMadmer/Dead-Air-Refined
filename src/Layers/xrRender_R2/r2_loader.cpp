@@ -181,16 +181,17 @@ void CRender::level_Load(IReader* fs)
     }
 
 #if defined(USE_DX11)
-    //  The fluid subsystem grabs its named $user$ textures, its 3D surfaces and its raycast
-    //  targets once, when the device is created. A level change tears the resource manager's
-    //  texture table down and rebuilds it, and what the fluid is holding does not come back
-    //  attached: the simulation still steps and the grid is still voxelised - the log even says
-    //  so - but the march reads and writes nowhere, and a campfire renders as empty air. It has
-    //  nothing to fall back on either, because by the time the volume is running the crossover
-    //  has already faded the marched flame out. So it is stood up again, exactly as create()
-    //  does it. Nothing owns a volume at this point: level_Unload detached them all.
-    FluidManager.Destroy();
-    FluidManager.Initialize(64, 96, 64);
+    //  A level change unloads every texture the resource manager holds, and the fluid's own
+    //  named $user$ textures go with them: the simulation keeps stepping and the grid is still
+    //  voxelised - the log even says so - while the march reads and writes nowhere, and a
+    //  campfire renders as empty air. It has nothing to fall back on either, because by then
+    //  the crossover has already faded the marched flame out.
+    //
+    //  Only the surfaces are made again. Standing the whole subsystem up instead - which is
+    //  what this did first - dropped the manager's references to those textures and rebuilt the
+    //  fluid shaders against whatever the registry handed back, and crashed the load outright
+    //  about half the time on levels where the deferred unload had already run.
+    FluidManager.RebindResources();
     FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
 #endif
 

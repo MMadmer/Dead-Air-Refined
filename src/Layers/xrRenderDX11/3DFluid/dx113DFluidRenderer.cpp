@@ -61,6 +61,16 @@ void dx113DFluidRenderer::Initialize(int gridWidth, int gridHeight, int gridDept
     m_bInited = true;
 }
 
+void dx113DFluidRenderer::RebindResources()
+{
+    if (!m_bInited)
+        return;
+    //  Both fetch the same named CTexture the shaders already point at and hand it a new
+    //  surface, so nothing the compiled passes hold can go stale.
+    CreateJitterTexture();
+    CreateHHGGTexture();
+}
+
 void dx113DFluidRenderer::Destroy()
 {
     if (!m_bInited)
