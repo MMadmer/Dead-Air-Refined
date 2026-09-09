@@ -177,14 +177,28 @@ float4 DaRaycast(PS_INPUT_RAYCAST input)
 	//	Where the ray ran into something inside the box, that something is the wood the fire
 	//	stands on. The gas a step back from it is what is heating it, so the embers glow with
 	//	the heat that is actually there instead of a painted-on mask.
+	//
+	//	This is the one term that reads the field at a single point - the end of the ray -
+	//	instead of integrating along it, so it is the one term with nothing to average an odd
+	//	sample away. It was also the one term without the fade every face of the box gets, which
+	//	let it keep full strength right up to the boundary: a ray grazing the box lit its edge,
+	//	and the box has a vertical corner, so a dashed line of firelight stood in the air beside
+	//	the fire - there from the angles that graze that corner, gone from the rest.
 	if (da_fr_a.w > 0.0 && trans > 0.02)
 	{
 		const float3 E = O - stepVec * 1.5;
 		if (all(E > 0.001) && all(E < 0.999))
 		{
-			const float4 se = colorTex.SampleLevel(samLinearClamp, float3(E.x, 1.0 - E.y, E.z), 0);
-			const float Te = se.x / max(da_fr_b.w, 0.05);
-			radiance += trans * da_fr_ramp(Te * 0.85) * saturate(Te * 1.6) * saturate(Te * 1.6) * da_fr_a.w;
+			const float3 eo = min(E, 1.0 - E) * gridDim.xyz;
+			const float ee = saturate(min(min(eo.x, eo.y), eo.z) / max(da_fr_f.x, 1.0));
+			const float efade = ee * ee * (3.0 - 2.0 * ee);
+			[branch] if (efade > 0.001)
+			{
+				const float4 se = colorTex.SampleLevel(samLinearClamp, float3(E.x, 1.0 - E.y, E.z), 0);
+				const float Te = se.x / max(da_fr_b.w, 0.05);
+				radiance += trans * da_fr_ramp(Te * 0.85) * saturate(Te * 1.6) * saturate(Te * 1.6)
+					* da_fr_a.w * efade;
+			}
 		}
 	}
 
