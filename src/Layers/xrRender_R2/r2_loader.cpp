@@ -16,6 +16,7 @@
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidVolume.h"
+#include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -178,6 +179,20 @@ void CRender::level_Load(IReader* fs)
             Msg("* [wind-veg] tree kind [%s]: %u visual(s), %u with foliage at the root, height %.1f..%.1f m",
                 tex.c_str(), k.count, k.foliage, k.h_min, k.h_max);
     }
+
+#if defined(USE_DX11)
+    //  The fluid subsystem grabs its named $user$ textures, its 3D surfaces and its raycast
+    //  targets once, when the device is created. A level change tears the resource manager's
+    //  texture table down and rebuilds it, and what the fluid is holding does not come back
+    //  attached: the simulation still steps and the grid is still voxelised - the log even says
+    //  so - but the march reads and writes nowhere, and a campfire renders as empty air. It has
+    //  nothing to fall back on either, because by the time the volume is running the crossover
+    //  has already faded the marched flame out. So it is stood up again, exactly as create()
+    //  does it. Nothing owns a volume at this point: level_Unload detached them all.
+    FluidManager.Destroy();
+    FluidManager.Initialize(64, 96, 64);
+    FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
+#endif
 
     // Headlamp projector warmup - see m_torch_spot_warm in r2.h. The texture name is the
     // TorchType 2 branch of xr_actor.script, i.e. exactly what the beam really uses.
