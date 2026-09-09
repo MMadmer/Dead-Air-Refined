@@ -26,9 +26,6 @@ namespace
 // rain, and how many the bank may hold. The slots belong to bullets, blasts and bodies as
 // well; the bulk of the rain's contribution to the water surface is the ripple field's own
 // rate-driven seeding, not this.
-constexpr float ring_per_mmh = 0.25f;
-constexpr float ring_bank_max = 4.f;
-constexpr float ring_distance = 30.f;
 } // namespace
 
 //////////////////////////////////////////////////////////////////////
@@ -48,7 +45,6 @@ CEffect_Rain::CEffect_Rain()
     cover_ray = 0;
     for (bool& open : cover_open)
         open = true;
-    ring_credit = 0.f;
 
     snd_Ambient.create("ambient" DELIMITER "rain", st_Effect, sg_Undefined);
 
@@ -77,7 +73,6 @@ void CEffect_Rain::InvalidateState()
     cover_ray = 0;
     for (bool& open : cover_open)
         open = true;
-    ring_credit = 0.f;
 
     for (Item& item : items)
         item.invalidate();
@@ -347,9 +342,6 @@ void CEffect_Rain::OnFrame()
     {
         CoverTick(Device.fTimeDelta);
         HemiTick(Device.fTimeDelta);
-        // Ring allowance for landed drops, earned at the rain rate and capped so a lull does
-        // not bank a burst.
-        ring_credit = std::min(ring_credit + env.RainRateMmh() * ring_per_mmh * Device.fTimeDelta, ring_bank_max);
     }
 
     switch (state)
@@ -438,18 +430,16 @@ void CEffect_Rain::Splash(const Fvector& pos, const Fvector& n, s32 mtl)
 
     if (tier >= 2)
     {
-        // Water takes a ring, not a crown: a drop on a pond spreads a circular wave, while the
-        // twelve-triangle cone is what water does when it is a few millimetres deep over dirt.
+        // Water takes a ring, not a crown: the twelve-triangle cone is what water does when it
+        // is a few millimetres deep over dirt. The ring itself is NOT fed from here. It used to
+        // go through Environment::water_hit, and there are eight of those slots for the whole
+        // level: a shower filled them several times a second, and every bullet's ring was
+        // evicted mid-life to make room for a drop - a wave that simply vanished. Rain on open
+        // water rings through the ripple field's own rate-driven seeding and the rain layer of
+        // the surface normal; rain on a puddle rings through the puddle shader's drop atlas.
+        // Both are driven by the rate in mm/h and neither costs a slot.
         if (SurfaceIsWater(pos, mtl))
-        {
-            if (ring_credit >= 1.f && pos.distance_to_sqr(Device.vCameraPosition) < ring_distance * ring_distance)
-            {
-                ring_credit -= 1.f;
-                g_pGamePersistent->Environment().water_hit(
-                    pos, ::Random.randF(0.28f, 0.55f), CEnvironment::EWaterHit::ring);
-            }
             return;
-        }
         // A crown needs ground under it. On a wall or a steep roof pitch the drop runs off; the
         // stock code stood one up regardless, and world-up, wherever the ray happened to graze.
         if (n.y < da_rain::crown_min_ny)

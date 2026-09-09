@@ -133,8 +133,10 @@ float2 da_wf_ripple_slope(float2 wxz)
 	//	The sim damps hard over its outer texels, so the field is already near zero at the rim;
 	//	this last fade only guarantees there is no step at the boundary when something large is
 	//	still ringing as it crosses out of the window.
+	//	Matched to the sim's own absorbing band, so the surface lets go of the field over the
+	//	same metres the field is letting go of the wave.
 	const float2 d = min(uv, 1.0f - uv);
-	return grad * saturate(min(d.x, d.y) * 12.0f);
+	return grad * saturate(min(d.x, d.y) * 6.0f);
 }
 
 #endif	// DA_WATER_FIELD_H

@@ -145,9 +145,6 @@ private:
     u32 cover_ray;
     bool cover_open[da_rain::cover_rays];
 
-    // Allowance for feeding landed drops into the eight shared water-impact slots.
-    float ring_credit;
-
     // Utilities
     void p_create();
     void p_destroy();

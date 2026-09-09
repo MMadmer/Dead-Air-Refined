@@ -1174,9 +1174,17 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
             break;
         }
     if (!slot)
+    {
+        // A full pool. The victim is the ring the eye can see LEAST of, not the oldest by the
+        // clock - and if even that one is still plainly visible, the new ring is dropped rather
+        // than snapping a live one out of the water. Eight rings on screen at once is already a
+        // firefight; a ninth nobody will miss, a wave vanishing mid-spread everybody will.
         for (auto& h : water_hits)
-            if (h.kind == EWaterHit::ring && (!slot || h.birth < slot->birth))
+            if (h.kind == EWaterHit::ring && (!slot || h.amp < slot->amp))
                 slot = &h;
+        if (slot && slot->amp > 0.30f)
+            slot = nullptr;
+    }
     if (!slot && kind == EWaterHit::drain)
         for (auto& h : water_hits)
             if (!slot || h.birth < slot->birth)
@@ -1189,6 +1197,7 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
     slot->pos = pos;
     slot->radius = radius;
     slot->birth = Device.fTimeGlobal;
+    slot->amp = 1.f;
 
     if (ps_e_wind_dbg)
         Msg("* [water] %s r=%.1f at (%.0f, %.0f, %.0f)", kind == EWaterHit::drain ? "drain" : "ring",
@@ -1986,6 +1995,8 @@ void CEnvironment::UpdateEffectiveWind()
             if (amp < 0.02f)
                 h.used = false;
         }
+
+        h.amp = amp;
 
         // Packed compactly, like the wind motors: the puddle shader walks exactly the live
         // count, not the highest used slot.

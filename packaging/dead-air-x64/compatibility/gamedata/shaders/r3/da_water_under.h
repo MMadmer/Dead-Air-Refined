@@ -54,12 +54,6 @@ uniform float4 da_water_qual;
 #define DA_UW_FOG_GAIN		0.85
 
 //	Caustics. Cells are 40-50 cm on a real bed, which is a tile of a bit over two per metre.
-#define DA_UW_CAUSTIC_TILE	2.2
-#define DA_UW_CAUSTIC_RATIO	1.31	// second layer's relative scale - the standard pairing
-#define DA_UW_CAUSTIC_FOCUS	3.0	// metres below the surface where the net has washed out
-#define DA_UW_CAUSTIC_AMP	0.85	// peak +-modulation of the diffuse sun term
-#define DA_UW_CAUSTIC_MED	0.55	// the pattern's median: where the net's edge sits
-#define DA_UW_CAUSTIC_DISP	0.012	// per-channel offset in cell units - the dispersion
 
 // ---- the medium ---------------------------------------------------------------------------
 
@@ -125,23 +119,84 @@ float3 da_uw_vignette(float3 c, float2 uv, float amt)
 
 // ---- caustics -------------------------------------------------------------------------------
 
-//	Three plane waves 120 degrees apart. A caustic is the FOLD of a wavy lens, so the net is the
-//	ridge line of each family - the max of the three - and not their peaks: peaks would give
-//	isolated dots on a hex lattice, ridges give the triangular mesh of lines a pool bottom
-//	actually carries. Three sines, no hashes, and it tiles for free.
-float da_uw_cell(float2 q)
-{
-	const float w0 = sin(6.2831853f * q.x);
-	const float w1 = sin(6.2831853f * (-0.5f * q.x + 0.8660254f * q.y));
-	const float w2 = sin(6.2831853f * (-0.5f * q.x - 0.8660254f * q.y));
-	return max(max(1.0f - abs(w0), 1.0f - abs(w1)), 1.0f - abs(w2));
-}
+//	A caustic is not a pattern, it is what a wavy lens does to the light going through it. The
+//	water surface IS that lens, and the engine already solves its shape every frame - the wave
+//	rows the surface draws and the ripple field the impacts live in. So the caustic on the bed
+//	is derived from exactly those, through the thin-lens relation, and nothing else:
+//
+//	    intensity = 1 / | 1 + (1 - 1/n) * d * laplacian(h) |
+//
+//	where d is how far under the surface the bed is. A crest (negative curvature) converges the
+//	light and brightens the bed beneath it, a trough spreads it. That buys, for free, the three
+//	things a painted pattern can never have: the net moves at the phase speed of the very waves
+//	the eye sees on the surface, its cell size is the wave size, and in a flat calm there is no
+//	net at all - just as there is none on a real pond bed on a still day. A ring from a footstep
+//	or a bullet casts a bright arc that runs out with it.
+//
+//	The first version here was three sines at 120 degrees - a hexagonal lattice, drifting along
+//	the wind at close to a metre a second and swinging with its heading. Snowflakes on the move.
 
-//	Two of them at 1.3x relative scale drifting apart, multiplied: the beat between the two
-//	lattices is what stops the pattern reading as wallpaper.
-float da_uw_net(float2 q, float2 dr0, float2 dr1)
+#define DA_UW_CAUSTIC_AMP	1.0f	// trim on the modulation; 1 is the thin-lens value
+#define DA_UW_CAUSTIC_LIMIT	0.30f	// the fold: 1/this is the brightest a line can go
+
+//	Laplacian of the surface height at a world XZ, in 1/m. The waves come straight out of the
+//	rows the surface shader draws, with the same shoaling and the same clock, so the two agree
+//	to the texel; the height convention there is h = A * sin(phase), so d2h/dx2 along the wave
+//	is -A k^2 sin(phase). The ripple field is added as a five-tap stencil.
+//
+//	Turbidity blurs a caustic - scattering spreads the focused bundle before it reaches the
+//	bed - and it takes the short waves first, so every term is damped by exp(-k * d * turb):
+//	silt water keeps only the long slow swell of the net, peat water keeps nearly all of it.
+float da_uw_curvature(float2 wxz, float depth, float turb)
 {
-	return da_uw_cell(q + dr0) * da_uw_cell(q * DA_UW_CAUSTIC_RATIO + dr1);
+	float lap = 0.0f;
+
+	const float t = da_wind_state.w;
+	const int n = (int)da_water_body.w;
+	[loop]
+	for (int i = 0; i < n; ++i)
+	{
+		const int lo = min(i, 3);
+		const int hi = max(i - 4, 0);
+		const float4 W = (i < 4) ? da_water_wave0[lo] : da_water_wave1[hi];
+		[branch]
+		if (W.z <= 0.00001f)
+			continue;
+
+		float sn, cs;
+		sincos(W.x, sn, cs);
+		const float2 dir = float2(cs, sn);
+		const float shoal = da_w_shoal(W.y, depth);
+		const float amp = W.z * shoal;
+		const float omega = sqrt(DA_W_G * W.y * shoal);
+		const float phase = W.y * dot(wxz, dir) - omega * t + W.w;
+
+		lap -= amp * W.y * W.y * sin(phase) * exp(-W.y * depth * turb);
+	}
+
+	//	The ripple field: rings and wakes. Its texel is coarse against the wave rows, so its
+	//	curvature is the honest finite difference and nothing sharper.
+	[branch]
+	if (da_water_rip.z > 0.0f)
+	{
+		const float2 uv = da_wf_ripple_uv(wxz);
+		[branch]
+		if (uv.x > 0.0f && uv.x < 1.0f && uv.y > 0.0f && uv.y < 1.0f)
+		{
+			const float e = da_water_rip.w;
+			const float tm = da_water_rip.z * e;
+			const float h0 = s_water_ripple.SampleLevel(smp_linear, uv, 0).r;
+			const float hx1 = s_water_ripple.SampleLevel(smp_linear, uv + float2(e, 0.0f), 0).r;
+			const float hx0 = s_water_ripple.SampleLevel(smp_linear, uv - float2(e, 0.0f), 0).r;
+			const float hz1 = s_water_ripple.SampleLevel(smp_linear, uv + float2(0.0f, e), 0).r;
+			const float hz0 = s_water_ripple.SampleLevel(smp_linear, uv - float2(0.0f, e), 0).r;
+			const float2 d = min(uv, 1.0f - uv);
+			const float rim = saturate(min(d.x, d.y) * 6.0f);
+			//	The field's own wavelength is about a quarter metre, k ~ 25.
+			lap += (hx1 + hx0 + hz1 + hz0 - 4.0f * h0) / (tm * tm) * rim * exp(-25.0f * depth * turb);
+		}
+	}
+	return lap;
 }
 
 //	The multiplier for the sun's diffuse term at a pixel under the water. Takes VIEW space,
@@ -169,48 +224,33 @@ float3 da_uw_caustics(float3 pos_v)
 	if (wf.y < 0.5f || depth <= 0.0f)
 		return 1.0f;
 
-	//	The net is carried by the light, so it is constant ALONG the sun ray: trace the pixel
-	//	back up to the surface plane and use where it crossed. That is the physically right
-	//	parameterisation and it is also what keeps the pattern from smearing straight down every
-	//	vertical face, which a flat XZ projection does.
+	//	The lens the light went through is the surface above the SUN ray, not above the pixel:
+	//	trace the pixel back up to the surface plane along the light and read the surface there.
+	//	That is the physically right parameterisation and it is also what keeps the pattern from
+	//	smearing straight down every vertical face, which a flat XZ projection does.
 	const float3 Lup = -L_sun_dir_w;
-	const float2 hit = pos_w.xz + Lup.xz * (depth / max(Lup.y, 0.25f));
-	const float2 q = hit * DA_UW_CAUSTIC_TILE;
+	const float cosl = max(Lup.y, 0.25f);
+	const float2 hit = pos_w.xz + Lup.xz * (depth / cosl);
 
-	//	Sharp just under the surface, washed out by a couple of metres: the wave lens has a focal
-	//	length. The amplitude carries the water's own extinction on top, per channel - so a deep
-	//	bed loses the red of the net first and then the net itself, because no light gets there.
-	const float focus = saturate(1.0f - depth * (1.0f / DA_UW_CAUSTIC_FOCUS));
-	const float3 amp = (DA_UW_CAUSTIC_AMP * focus) * da_w_transmit(depth);
+	//	How much the water diffuses the bundle on the way down. The column's reflectance is the
+	//	one number in the profile that says how much it SCATTERS rather than absorbs: silt water
+	//	glows and blurs, peat water swallows and keeps the lines crisp.
+	const float turb = saturate(dot(DA_W_IOP2.xyz, float3(0.30f, 0.59f, 0.11f)) * 12.0f) * 1.5f;
 
-	//	Drift DOWNWIND, on the wind service's own clock - the same clock the waves upstairs run
-	//	on, so the net travels with the swell that casts it instead of on a private diagonal.
-	//	The two layers differ slightly in rate and heading; that mismatch is what makes the
-	//	pattern evolve rather than slide.
-	const float t = da_wind_state.w;
-	const float2 wd = da_wind_state.xy;
-	const float2 wa = float2(-wd.y, wd.x);
-	const float2 dr0 = -(wd * 0.77f) * t;
-	const float2 dr1 = -(wd * 0.55f + wa * 0.18f) * t;
+	const float lap = da_uw_curvature(hit, depth, turb);
 
-	//	Per-channel offset along the refraction azimuth. The cheapest realism in the whole water
-	//	rework: one mad per channel buys the coloured fringe every real caustic has.
-	float2 disp = Lup.xz;
-	const float dlen = length(disp);
-	disp = (dlen > 1e-4f) ? disp * (DA_UW_CAUSTIC_DISP / dlen) : float2(DA_UW_CAUSTIC_DISP, 0.0f);
+	//	The path through the water is longer than the depth when the sun is low.
+	const float d = depth / cosl;
 
-	float3 net;
-	net.r = da_uw_net(q + disp, dr0, dr1);
-	net.g = da_uw_net(q, dr0, dr1);
-	net.b = da_uw_net(q - disp, dr0, dr1);
+	//	Thin lens per channel. The three refractive indices of water at the red, green and blue
+	//	primaries differ in the third decimal, and that difference is the coloured fringe every
+	//	real caustic line carries - here it costs three divides instead of one.
+	const float3 bend = float3(0.2487f, 0.2498f, 0.2554f) * d * lap;
+	const float3 focus = 1.0f / max(abs(1.0f + bend), DA_UW_CAUSTIC_LIMIT);
 
-	//	Focus rides the WIDTH of the threshold rather than a pow: a narrow band is a thin bright
-	//	net, a wide one is soft blotches, and both stay centred on the pattern's median so the
-	//	modulation averages to about one. A caustic moves light, it does not add it - miss that
-	//	and switching caustics on visibly darkens or brightens the whole bed.
-	const float w = lerp(0.34f, 0.09f, focus);
-	const float3 c = smoothstep(DA_UW_CAUSTIC_MED - w, DA_UW_CAUSTIC_MED + w, net);
-	return 1.0f + (c * 2.0f - 1.0f) * amp;
+	//	A caustic moves light, it does not add it: the mean of this over the bed is one, so
+	//	switching it on neither darkens nor brightens the water as a whole.
+	return lerp(1.0f, focus, DA_UW_CAUSTIC_AMP);
 }
 
 #endif // DA_WATER_UNDER_H

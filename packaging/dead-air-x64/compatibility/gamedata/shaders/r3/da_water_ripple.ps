@@ -57,8 +57,14 @@ uniform float4x4 da_water_wakep0;
 uniform float4x4 da_water_wakep1;
 uniform float4 da_water_wakei;
 
-#define DA_RIP_EDGE_TEXELS	16.0f	// width of the boundary damping ramp
-#define DA_RIP_EDGE_DAMP	0.80f	// damping at the very rim
+//	The absorbing rim. Wide and gentle on purpose: a wave takes about a second and a half to
+//	cross it at the field's speed, and by the far side it is down to a couple of percent, which
+//	is enough that nothing comes back - while an eye watching a ring run out from a bullet sees
+//	it fade over the last few metres rather than stop dead at an invisible line. The first
+//	version was sixteen texels at 0.80, which took a ring out in a fifth of a second: a hard
+//	edge two metres inside a window the player cannot see.
+#define DA_RIP_EDGE_TEXELS	48.0f	// width of the boundary damping ramp
+#define DA_RIP_EDGE_DAMP	0.92f	// damping at the very rim
 #define DA_RIP_HIT_AMP		0.045f	// metres of dimple a full-strength impact slot digs
 #define DA_RIP_WAKE_AMP		0.015f	// metres a full-strength wader pushes
 #define DA_RIP_WAKE_HZ		1.7f	// a wader is a repeating push, not a standing bump

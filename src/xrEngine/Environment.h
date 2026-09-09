@@ -476,6 +476,7 @@ public:
         Fvector pos{};
         float radius{};
         float birth{};
+        float amp{}; // the envelope as last packed: what the eye can still see of it
         EWaterHit kind{};
         bool used{};
     };
