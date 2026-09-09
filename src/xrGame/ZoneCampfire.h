@@ -33,5 +33,9 @@ public:
     void turn_on_script();
     void turn_off_script();
     bool is_on();
+    //  Whether lighting this one would take right now. Exported so the NPC scheme that sends a
+    //  stalker to light a fire can ask before it sends him, instead of him fiddling with a fire
+    //  that will refuse.
+    bool can_turn_on() const;
     virtual void shedule_Update(u32 dt);
 };

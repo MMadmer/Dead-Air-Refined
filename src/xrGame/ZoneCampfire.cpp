@@ -76,8 +76,7 @@ void CZoneCampfire::turn_on_script()
         //  against the douse below, and the fire blinks on and off for the whole storm. The
         //  game's own match path already refuses in the rain (campfire_manager); this is the
         //  same rule for everyone else who lights one.
-        if (g_dar_rain_douses_fires && GamePersistent().Environment().CurrentEnv.rain_density >= 0.20f &&
-            SkyAbove())
+        if (!can_turn_on())
             return;
 
         m_turn_time = Device.dwTimeGlobal + OVL_TIME;
@@ -168,6 +167,15 @@ bool CZoneCampfire::SkyAbove() const
     const Fvector up{ 0.f, 1.f, 0.f };
     float range = 20.f;
     return !g_pGameLevel->ObjectSpace.RayTest(p, up, range, collide::rqtStatic, nullptr, nullptr);
+}
+
+bool CZoneCampfire::can_turn_on() const
+{
+    if (!g_dar_rain_douses_fires)
+        return true;
+    if (GamePersistent().Environment().CurrentEnv.rain_density < 0.20f)
+        return true;
+    return !SkyAbove();
 }
 
 void CZoneCampfire::UpdateRainDouse(u32 dt)

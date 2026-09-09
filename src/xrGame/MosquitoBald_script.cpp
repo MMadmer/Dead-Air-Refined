@@ -19,5 +19,6 @@ void CMosquitoBald::script_register(lua_State* luaState)
             .def("turn_on", &CZoneCampfire::turn_on_script)
             .def("turn_off", &CZoneCampfire::turn_off_script)
             .def("is_on", &CZoneCampfire::is_on)
+        .def("can_turn_on", &CZoneCampfire::can_turn_on)
     ];
 }

@@ -1,0 +1,73 @@
+-- [DA] Не гонять сталкера к костру, который всё равно не разожжётся.
+--
+-- Движок отказывает в розжиге костра, стоящего под дождём без крыши (CZoneCampfire::can_turn_on).
+-- Схема axr_turn_on_campfire об этом не знает: она выбирает ближайший потушенный костёр, ведёт к
+-- нему НПС, тот десять секунд возится с анимацией, розжиг молча не проходит, через пять секунд
+-- костёр снова ближайший потушенный - и так всю грозу.
+--
+-- Выбор происходит в ОДНОМ цикле по campfire_manager.campfires. Поэтому вместо копии всей схемы
+-- в наш overlay - подмена одного метода: на время вызова прячем из таблицы костры, которые сейчас
+-- не зажечь, и возвращаем обратно сразу после. Вся бухгалтерия схемы (already_selected, vid, pos,
+-- state) остаётся её собственной.
+
+local original = nil
+
+local function can_light(obj)
+	if not obj then return true end
+	local cf = obj:get_campfire()
+	if not cf then return true end
+	return cf:can_turn_on()
+end
+
+local function find_valid_target(self)
+	-- Костёр мог стать негодным уже после выбора: снимаем заявку, иначе НПС дойдёт до него всё
+	-- равно - ветка удержания в схеме проверяет только "существует и потушен".
+	local sel = self.st and self.st.selected_id
+	if sel then
+		local o = level.object_by_id(sel)
+		if o and not can_light(o) then
+			if axr_turn_on_campfire.already_selected then
+				axr_turn_on_campfire.already_selected[sel] = nil
+			end
+			self.st.selected_id = nil
+		end
+	end
+
+	local all = campfire_manager and campfire_manager.campfires
+	local hidden = nil
+	if all then
+		for id, o in pairs(all) do
+			if not can_light(o) then
+				hidden = hidden or {}
+				hidden[id] = o
+			end
+		end
+		if hidden then
+			for id, _ in pairs(hidden) do all[id] = nil end
+		end
+	end
+
+	local res = original(self)
+
+	if hidden then
+		for id, o in pairs(hidden) do all[id] = o end
+	end
+	return res
+end
+
+function on_game_start()
+	-- Чтение отсутствующего члена у luabind-класса БРОСАЕТ, поэтому через pcall - тем же приёмом,
+	-- что и подмена в dead_air_x64_report_fixes.
+	local function member(class, name)
+		local ok, value = pcall(function() return class[name] end)
+		return ok and value or nil
+	end
+
+	local cls = axr_turn_on_campfire and axr_turn_on_campfire.eva_turn_on_campfire
+	local fn = cls and member(cls, "find_valid_target")
+	if not fn or original then
+		return
+	end
+	original = fn
+	cls.find_valid_target = find_valid_target
+end
