@@ -72,9 +72,10 @@ public:
     // Ripple simulation ping-pong ("$user$water_ripple0/1"): R = height now, G = height one
     // step back, over a window of CEnvironment::water_ripple_window metres snapped to whole
     // texels around the camera (da_water_rip). Empty below the tier that runs the field.
-    // [band][half]: half 0 is the current step, the name every reader binds; half 1 the step
-    // before it, the sim's own input. One band per octave of ring wavelength (see the phase).
-    ref_rt rt_WaterRipple[3][2];
+    // The ripple field's state, (height, velocity) - the name every reader binds - and the two
+    // complex scratch buffers its spectral solver ping-pongs through (see the phase).
+    ref_rt rt_WaterRipple;
+    ref_rt rt_WaterRippleFFT[2];
     ref_rt rt_SunShaftsMask;
     ref_rt rt_SunShaftsMaskSmoothed;
     ref_rt rt_SunShaftsPass0;
@@ -214,7 +215,9 @@ private:
     ref_shader s_taa;
     ref_shader s_sunshafts;
     ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
-    ref_shader s_water_ripple[3]; // one step of one band of the ripple field; created on first use by its phase
+    ref_shader s_water_ripple; // the ripple field's real-space step; created on first use by its phase
+    ref_shader s_water_ripple_fft; // its FFT pass (element 0 reads scratch a, 1 reads b)
+    ref_shader s_water_ripple_prop; // its Fourier-space step
     // The cloud deck field, rendered once per frame over a square of the deck plane around the
     // camera; the sun passes, the shafts and the visible deck all read it instead of evaluating
     // the field's noise per pixel.

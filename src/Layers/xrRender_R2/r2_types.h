@@ -92,6 +92,7 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 // "$user$water_ripple0" and "$user$water_ripple1" and a pass can bind either by name.
 #define r2_RT_water_field "$user$water_field"
 #define r2_RT_water_ripple "$user$water_ripple"
+#define r2_RT_water_ripple_fft "$user$water_ripple_fft"
 // The puddle fill map: how deep rain would stand at this texel, R16F, 0..1 of
 // CEnvironment::puddle_fill_depth. Baked in the same sweep as the field above and uploaded
 // beside it (r4_water_field.cpp), so it is no more a render target than the field is. Mapped by

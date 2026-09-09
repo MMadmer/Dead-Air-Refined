@@ -87,7 +87,9 @@ TextureFormatPairs TextureFormatList[] = {
     // D3DFMT_R16F DXGI_FORMAT_R16_FLOAT
     {D3DFMT_G16R16F, DXGI_FORMAT_R16G16_FLOAT}, {D3DFMT_A16B16G16R16F, DXGI_FORMAT_R16G16B16A16_FLOAT},
     {D3DFMT_R32F, DXGI_FORMAT_R32_FLOAT}, {D3DFMT_R16F, DXGI_FORMAT_R16_FLOAT},
-    //{ D3DFMT_G32R32F,		DXGI_FORMAT_R32G32_FLOAT},
+    // Two 32-bit floats: the ripple field's spectral solver keeps its complex scratch and its
+    // (height, velocity) state in this - half precision is noise after a few hundred FFT steps.
+    {D3DFMT_G32R32F, DXGI_FORMAT_R32G32_FLOAT},
     {D3DFMT_A32B32G32R32F, DXGI_FORMAT_R32G32B32A32_FLOAT},
     // D3DFMT_CxV8U8 Not available
     // D3DDECLTYPE_FLOAT1 DXGI_FORMAT_R32_FLOAT

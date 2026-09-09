@@ -26,8 +26,6 @@ function normal (shader, t_base, t_second, t_detail)
 	-- reads it through da_wf_ripple_slope). The G-buffer half binds the same name to the same
 	-- texture in uber_deffer.cpp, for the same bit-for-bit reason as the fill map above.
 	shader:dx10texture	("s_water_ripple", "$user$water_ripple0")
-	shader:dx10texture	("s_water_ripple1", "$user$water_ripple1")
-	shader:dx10texture	("s_water_ripple2", "$user$water_ripple2")
 
 	shader:dx10sampler	("smp_nofilter")
 	shader:dx10sampler	("smp_rtlinear")

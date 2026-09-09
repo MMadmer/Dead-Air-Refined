@@ -33,9 +33,11 @@ local function on_update()
 		cmd("qa_water_ring 2.4")
 		printf(string.format("DA_WATER_T %d ring2", time_global()))
 		shot("da_rip_1_rings")            -- two fronts, one behind the other
+		cmd("r__water_ripple_stats")
 		t0 = now stage = 4
 	elseif stage == 4 and now - t0 > 2000 then
 		shot("da_rip_2_spread")           -- the same fronts, further out
+		cmd("r__water_ripple_stats")
 		t0 = now stage = 5
 	elseif stage == 5 and now - t0 > 1000 then
 		cmd("qa_water_goto -0.45 0.10")   -- same spot, looking further out

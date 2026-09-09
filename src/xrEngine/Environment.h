@@ -621,49 +621,46 @@ public:
 
     // ---- Ripple field ------------------------------------------------------------------------
     // Continuous disturbance of the water surface by something moving through it: a wading
-    // actor, an NPC, a mutant. Fed into the ripple field, which is why it is a rate and a
-    // radius rather than a one-shot ring like water_hit.
+    // actor, an NPC, a mutant. One slot per moving FOOT, keyed by the source's id so the two
+    // feet of one walker never fight over a slot: the sim treats each as a pressure footprint
+    // of the leg's radius travelling at the foot's velocity, and holds the Bernoulli trough
+    // that speed sets (da_water_ripple.ps). Fed every frame, which is why it is a refresh and
+    // not a one-shot ring like water_hit.
     static constexpr int water_wake_count = 8;
-    void water_wake(const Fvector& pos, float radius, float strength);
+    void water_wake(const Fvector& pos, float radius, float strength, const Fvector2& vel, u32 id);
 
     struct SWaterWake
     {
         Fvector pos{};
         float radius{};
         float strength{};
+        Fvector2 vel{}; // the foot's own velocity through the water, world XZ, m/s
         float birth{};
         float touched{}; // last refresh; a wake that stops being fed fades instead of snapping
+        u32 id{};
         bool used{};
     };
     SWaterWake water_wakes[water_wake_count];
     Fmatrix water_wake_pos[2]; // rows: (x, y, z, radius), pre-transpose in the binder
-    Fmatrix water_wake_par[2]; // rows: (enveloped strength, age in seconds, 0, 0)
+    Fmatrix water_wake_par[2]; // rows: (enveloped strength, foot velocity x, foot velocity z, 0)
     float water_wake_active{};
 
     // The ripple simulation window: (centre x, centre z, size in metres, 1/texels). The centre
     // is the camera SNAPPED to whole texels - resampling the field every frame smears it - and
     // it is solved here so the sim pass and any CPU consumer agree on it exactly. The window is
-    // a fixed 64 m and the preset buys texels into it, so a ring reaches the same distance on
-    // every tier and only its size follows the grid.
-    static constexpr float water_ripple_window = 64.f;
+    // a fixed 32 m and the preset buys texels into it - 3 cm at the top, which is what a pistol's
+    // ring needs to be three crisp crests a hand apart - so a ring reaches the same distance on
+    // every tier and only its finest wavelength follows the grid.
+    static constexpr float water_ripple_window = 32.f;
     // The absorbing band inside the window's rim, metres: the sim damps a wave out over it,
     // every reader lets go of the field over it, and a ring born inside it is not the field's.
     static constexpr float water_ripple_edge = 4.f;
     Fvector4 water_ripple_win{};
-    // The ripple field is three wave equations, one per octave of ring wavelength, because
-    // water is dispersive and a single speed cannot be: a bullet's ring is a train whose long
-    // waves run ahead of its short ones and spread as it goes. Each band moves at 0.85 of the
-    // deep-water phase speed of its wavelength: a non-dispersive band has one number to serve
-    // both the crests (the phase speed, what the eye follows) and the packet (half of it, how
-    // far the ring has reached), and the eye wins - three quarters read as syrup. The sim
-    // scales it by the local depth. Independent of the grid: a ring is as fast as water makes
-    // it, not as fast as the texel lets it be.
-    static constexpr int water_ripple_bands = 3;
-    static constexpr float water_ripple_lambda[water_ripple_bands] = {0.30f, 0.60f, 1.20f};
-    static float water_ripple_band_speed(int band) { return 0.85f * _sqrt(9.81f * water_ripple_lambda[band] / PI_MUL_2); }
-    // The fastest band's speed: what the analytic envelope runs a ring's front at while the
-    // field carries the ring, so it stays one front across the window's edge.
-    float water_ripple_speed{1.0f};
+    // The speed the analytic envelope runs a ring's front at while the field carries the ring.
+    // The field itself is spectral - every wavelength at its own speed (the renderer's
+    // da_ripple_propagate.cs) - so this is the one number a ring past the window's edge is
+    // continued with: the group speed of the half-metre waves that lead a pistol's train.
+    float water_ripple_speed{0.6f};
 
     // ---- Rain and the camera in water --------------------------------------------------------
     // The rain rate the whole rain system is parameterised on, mm/h. Solved where the sea state

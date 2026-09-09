@@ -971,10 +971,11 @@ void xrRender_sync_preset_derived(bool user_facing)
     // a cos and a tanh per water pixel, and the tail rows are the short steep ones - dropping
     // them costs texture, not silhouette, because none of this displaces geometry anyway.
     static constexpr int water_waves_by_preset[] = {2, 4, 6, 8, 8};
-    // The ripple field: a pixel-shader wave-equation step over a 64 m window around the camera,
-    // on every tier - a ring is part of the water, not a feature to buy - with the preset only
-    // deciding how fine the grid is: 25 cm texels on the two bottom tiers, 12.5 in the middle,
-    // 6 on the top. Takes effect on renderer restart - the pair is created at the size named.
+    // The ripple field: a spectral (FFT) water solver over a 32 m window around the camera, on
+    // every tier - a ring is part of the water, not a feature to buy - with the preset only
+    // deciding how fine the grid is: 12.5 cm texels on the two bottom tiers, 6 in the middle,
+    // 3 on the top. Powers of two, the transform needs them. Takes effect on renderer restart -
+    // the targets are created at the size named.
     static constexpr int water_ripple_by_preset[] = {256, 256, 512, 512, 1024};
     // What the camera below a water surface gets: 1 tint, 2 +fog, 3 +warp, 4 full. Even the
     // cheapest tier has to have SOMETHING - the stock behaviour is a hole in the world.
@@ -1175,6 +1176,16 @@ class CCC_CloudMapDump final : public IConsole_Command
 public:
     CCC_CloudMapDump(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
     void Execute(pcstr) override { da_dump_cloud_map(); }
+};
+
+// What the ripple field holds, read back and logged (r4_rendertarget_phase_water_ripple.cpp):
+// the QA rig's way to tell an empty field from a faint one.
+void da_water_ripple_stats();
+class CCC_WaterRippleStats final : public IConsole_Command
+{
+public:
+    CCC_WaterRippleStats(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override { da_water_ripple_stats(); }
 };
 
 class CCC_gpu_stats : public IConsole_Command
@@ -1844,6 +1855,7 @@ void xrRender_initconsole()
     CMD1(CCC_memory_stats, "render_memory_stats");
     CMD1(CCC_gpu_stats, "r__gpu_stats");
     CMD1(CCC_CloudMapDump, "r__cloud_map_dump");
+    CMD1(CCC_WaterRippleStats, "r__water_ripple_stats");
     CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 3);
     CMD4(CCC_Float, "r__clouds_temporal", &ps_r__clouds_temporal, 0.f, 0.95f);
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);

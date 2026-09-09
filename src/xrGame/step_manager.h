@@ -25,6 +25,11 @@ class CStepManager
 
     u32 m_time_anim_started;
 
+    // Each foot's last position and its smoothed velocity through the water, for the wake feed.
+    Fvector m_wake_foot[MAX_LEGS_COUNT]{};
+    Fvector2 m_wake_vel[MAX_LEGS_COUNT]{};
+    u32 m_wake_time{};
+
 public:
     CStepManager();
     virtual ~CStepManager();
@@ -44,8 +49,8 @@ protected:
     Fvector get_foot_position(ELegType leg_type);
     virtual bool is_on_ground() { return true; }
 private:
-    // Feeds CEnvironment::water_wake from both feet while the body is wading. dist_sqr is the
-    // squared distance to the camera, so a distant NPC cannot burn one of the eight slots.
+    // Feeds CEnvironment::water_wake from every foot that is moving through water. dist_sqr is
+    // the squared distance to the camera, so a distant NPC cannot burn one of the eight slots.
     void UpdateWaterWake(float dist_sqr);
     void reload_foot_bones();
     void load_foot_bones(CInifile::Sect& data);

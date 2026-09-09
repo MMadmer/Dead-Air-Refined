@@ -204,7 +204,7 @@ float4 main( vf I ) : SV_Target
 	if ( rip_near > 0.01f )
 	{
 		// The simulated ripple field where it runs, the analytic eight-slot rings where it does
-		// not: past its 64 m window, and for the rings it never saw born. The sim damps its own
+		// not: past its 32 m window, and for the rings it never saw born. The sim damps its own
 		// outer metres hard to keep echoes off the invisible window wall, so the hand-over is a
 		// crossfade over that same band rather than a second wall beside it.
 		float wfield = 0.0f;
@@ -341,11 +341,21 @@ float4 main( vf I ) : SV_Target
 #ifdef USE_SOFT_WATER
 	{
 		const float3 Nv = mul( (float3x3)m_V, Nw );
+		// Snell at near-normal incidence: the refracted ray bends by (1 - 1/n) of the surface's
+		// tilt, so the bed point behind this pixel moves by that share of the path the light
+		// crosses, and the projection puts that on the screen at this distance. Physical, and
+		// about four times what the old look constant gave: a 15 cm ripple moving the bed under
+		// it a couple of centimetres is most of what makes a ring visible on a shallow clear
+		// pool, and at a quarter of that the field was there and could not be seen.
 		// Coming out of the dense side the bend is far stronger - the whole sky above is squeezed
-		// into Snell's 97 degree cone - so one unit of slope buys more offset from below. The
-		// flipped normal already carries the sign; only the amount changes.
-		const float amount = under ? WATER_REFRACT_UNDER : saturate( da_w_path * 2.0f );
-		const float2 off = Nv.xy * ( WATER_REFRACT_STRENGTH * amount / max( dist, 1.0f ) );
+		// into Snell's 97 degree cone - and there is no bed to measure a path to, so that side
+		// keeps its own fixed amount. The flipped normal already carries the sign.
+		float2 off;
+		[branch]
+		if ( under )
+			off = Nv.xy * ( WATER_REFRACT_STRENGTH * WATER_REFRACT_UNDER / max( dist, 1.0f ) );
+		else
+			off = Nv.xy * ( 0.2497f * da_w_path * float2( m_P._11, m_P._22 ) / ( 2.0f * max( I.tctexgen.z, 0.5f ) ) );
 		const float2 uv = PosTc + off;
 		// A refracted tap that lands on something IN FRONT of the surface is a piece of dry
 		// shore being smeared across the water; fall back to the straight tap there.

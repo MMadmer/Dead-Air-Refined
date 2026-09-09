@@ -35,8 +35,6 @@ function normal                (shader, t_base, t_second, t_detail)
 	-- gates expect.
 	shader:dx10texture	("s_water_field",	"$user$water_field")
 	shader:dx10texture	("s_water_ripple",	"$user$water_ripple0")
-	shader:dx10texture	("s_water_ripple1",	"$user$water_ripple1")
-	shader:dx10texture	("s_water_ripple2",	"$user$water_ripple2")
 
 	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR (frame copy before water)
 

@@ -31,10 +31,10 @@
 #define WATER_RING_AMP		1.30	// impact rings: bullets, blasts, feet, bodies
 #define WATER_RIPPLE_FADE	35.0	// metres; past this a ripple is subpixel
 
-// The simulated ripple field. It hands back a world-XZ slope already, so the gain is a trim and
-// not a conversion - leave it at one unless the sim's own amplitude is being re-scaled. The
-// hand-over to the analytic rings at the window's edge is not a knob: it happens over the sim's
-// own absorbing band, DA_WF_RIM_M in da_water_field.h.
+// The simulated ripple field. Its reader (da_wf_ripple_slope) already carries the gain that
+// makes a physical ripple readable and the limiter that keeps a steep one from folding, so this
+// is a trim on top of that and stays at one. The hand-over to the analytic rings at the window's
+// edge is not a knob either: it happens over the sim's own absorbing band, DA_WF_RIM_M.
 #define WATER_FIELD_RIPPLE_AMP	1.00	// trim on the field's slope
 
 // ---- Fetch shelter --------------------------------------------------------------------------
@@ -70,6 +70,8 @@
 #define WATER_LEAVES_STRENGTH	1.0
 
 // ---- Screen-space refraction ---------------------------------------------------------------
-#define WATER_REFRACT_STRENGTH	0.030	// screen share per unit of surface slope
+// Under water only: from above the bend is Snell's own, from the path through the water and
+// the projection, with no constant left in it (water.ps).
+#define WATER_REFRACT_STRENGTH	0.030	// screen share per unit of surface slope, seen from below
 
 #endif	// SETTINGS_DA_WATER_H

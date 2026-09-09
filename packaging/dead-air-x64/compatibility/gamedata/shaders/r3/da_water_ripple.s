@@ -11,11 +11,10 @@ function normal (shader, t_base, t_second, t_detail)
 			-- The step REPLACES the state; there is nothing to blend with.
 			: blend	(false, blend.one, blend.zero)
 
-	-- The previous step of THIS band. The pass writes into $user$water_ripple0 and copies the
-	-- result back into this half, so this name is always "one step ago" and never the target
-	-- being written. da_water_ripple_b1.s and _b2.s are this script for the two other bands
-	-- (0.6 and 1.2 m rings): a texture is bound by name here, so the band cannot be a constant.
-	shader:dx10texture	("s_water_ripple_prev",	"$user$water_ripple0p")
+	-- The state one step ago: height and vertical velocity. This pass writes into the Fourier
+	-- solver's scratch buffer and the solver's last pass is copied back into this name, so it
+	-- is never the target being written.
+	shader:dx10texture	("s_water_ripple_prev",	"$user$water_ripple0")
 	-- The baked field: its coverage channel is what makes a bank reflect.
 	shader:dx10texture	("s_water_field",	"$user$water_field")
 

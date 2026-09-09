@@ -25,10 +25,9 @@ struct SDaWaterActorCfg
     float sprint_depth{0.45f}; // no sprinting deeper than this
     float jump_depth{0.80f}; // no jumping deeper than this
 
-    // ---- Continuous disturbance under a moving foot (CEnvironment::water_wake). ----
-    float wake_radius{0.5f};
-    float wake_strength{1.f};
-    float wake_speed_ref{2.5f}; // speed at which the wake reaches full strength
+    // ---- The pressure footprint of a moving leg (CEnvironment::water_wake). ----
+    float wake_radius{0.10f}; // metres, the leg's own: the sim digs its Bernoulli trough here
+    float wake_strength{1.f}; // scale on that trough
 
     // ---- The discrete splash a footstep throws. ----
     float step_splash_depth{0.05f};
@@ -85,7 +84,6 @@ inline const SDaWaterActorCfg& da_water_actor_cfg()
                 cfg.jump_depth = rf("jump_depth", cfg.jump_depth);
                 cfg.wake_radius = rf("wake_radius", cfg.wake_radius);
                 cfg.wake_strength = rf("wake_strength", cfg.wake_strength);
-                cfg.wake_speed_ref = rf("wake_speed_ref", cfg.wake_speed_ref);
                 cfg.step_splash_depth = rf("step_splash_depth", cfg.step_splash_depth);
                 cfg.ps_step = rs("ps_step", cfg.ps_step);
                 cfg.entry_speed_min = rf("entry_speed_min", cfg.entry_speed_min);

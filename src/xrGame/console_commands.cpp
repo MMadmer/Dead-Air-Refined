@@ -65,6 +65,8 @@
 #include "xrAICore/Navigation/game_graph.h"
 #include "LevelGraphDebugRender.hpp"
 #include "CharacterPhysicsSupport.h"
+#include "PHMovementControl.h"
+#include "Include/xrRender/Kinematics.h"
 #endif // DEBUG
 
 string_path g_last_saved_game;
@@ -2684,12 +2686,10 @@ public:
         }
         else
             Msg("* [qa] field: not baked on this level");
-        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f, bands %.2f/%.2f/%.2f m at "
-            "%.2f/%.2f/%.2f m/s%s",
+        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f, spectral at depth %.2f m, "
+            "analytic front %.2f m/s%s",
             env.water_ripple_win.z, env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
-            CEnvironment::water_ripple_lambda[0], CEnvironment::water_ripple_lambda[1], CEnvironment::water_ripple_lambda[2],
-            CEnvironment::water_ripple_band_speed(0), CEnvironment::water_ripple_band_speed(1),
-            CEnvironment::water_ripple_band_speed(2), env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
+            env.water_body.x, env.water_ripple_speed, env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
         Msg("* [qa] under water: %.2f m below a surface at %.2f", env.eye_under_depth, env.eye_under_surface);
         Msg("* [qa] rain: %.1f mm/h, extinction %.2f 1/km", env.rain_rate_mmh, env.rain_ext_km);
         Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,
@@ -2709,6 +2709,32 @@ public:
                 "fetch_max %.0f m, wave_damp %.2f",
                 slot ? 'B' : 'A', pr.sigma_t.x, pr.sigma_t.y, pr.sigma_t.z, pr.body_r.x, pr.body_r.y,
                 pr.body_r.z, pr.scum, pr.fetch_max, pr.wave_damp);
+        }
+        for (const auto& w : env.water_wakes)
+            if (w.used)
+                Msg("* [qa] wake %u: at (%.1f, %.2f, %.1f), r %.2f m, strength %.2f, foot velocity (%.2f, %.2f) m/s, fed %.2f s ago",
+                    w.id, w.pos.x, w.pos.y, w.pos.z, w.radius, w.strength, w.vel.x, w.vel.y, Device.fTimeGlobal - w.touched);
+        // The wading source itself: where the engine thinks the feet are, against the body.
+        if (CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr)
+        {
+            const Fvector p = actor->Position();
+            Fvector vel{};
+            if (CCharacterPhysicsSupport* cps = actor->character_physics_support(); cps && cps->movement())
+                vel = cps->movement()->GetVelocity();
+            Msg("* [qa] actor at (%.2f, %.2f, %.2f), velocity (%.2f, %.2f, %.2f) m/s", p.x, p.y, p.z, vel.x, vel.y, vel.z);
+            if (IKinematics* K = smart_cast<IKinematics*>(actor->Visual()))
+                for (pcstr name : {"bip01_l_foot", "bip01_r_foot"})
+                {
+                    const u16 id = K->LL_BoneID(name);
+                    if (id == BI_NONE)
+                    {
+                        Msg("* [qa]   bone %s: none", name);
+                        continue;
+                    }
+                    Fmatrix g;
+                    g.mul_43(actor->XFORM(), K->LL_GetBoneInstance(id).mTransform);
+                    Msg("* [qa]   %s at (%.2f, %.2f, %.2f)", name, g.c.x, g.c.y, g.c.z);
+                }
         }
     }
 };

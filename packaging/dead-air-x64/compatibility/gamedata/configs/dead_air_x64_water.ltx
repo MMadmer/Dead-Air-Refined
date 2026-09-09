@@ -197,10 +197,12 @@ wade_speed_min          = 0.40  ; movement scale at wade_full and past it
 sprint_depth            = 0.45  ; no sprinting deeper than this
 jump_depth              = 0.80  ; no jumping deeper than this
 
-; --- the continuous disturbance under a moving foot (fed into the ripple field) ---
-wake_radius             = 0.5
-wake_strength           = 1.0
-wake_speed_ref          = 2.5   ; speed (m/s) at which the wake reaches full strength
+; --- the pressure footprint of a moving leg (fed into the ripple field every frame, per foot) ---
+; The sim digs the Bernoulli trough the foot's own speed sets (v^2 / 2g, five centimetres at a
+; metre a second) inside this radius and lets it travel with the foot: the bow wave, the V of
+; the wake and the ring a foot leaves when it stops all come out of the solver from that.
+wake_radius             = 0.10  ; metres, the leg's own
+wake_strength           = 1.0   ; scale on the trough
 
 ; --- the discrete splash a footstep throws, where the material pair cannot throw one itself ---
 step_splash_depth       = 0.05

@@ -1204,16 +1204,19 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
     // drawn everywhere, window included - otherwise a ring watched from the bank vanishes the
     // moment the player walks far enough for the window to swallow it. The slot's radius is
     // how far the ring is meant to run, not how big the splash was: the dimple is the CAVITY
-    // the hit opens, six centimetres per metre of reach - 8 cm for a bullet, 10 for a boot -
-    // growing faster past the two metres only a blast reaches, to half a metre and up. The
-    // cavity's size is what decides the ring's wavelengths, and a bullet's rings are three
-    // crisp crests a hand apart, not a swell: that is a cavity of centimetres.
+    // the hit opens, four and a half centimetres per metre of reach - 6 cm for a bullet, 7 for
+    // a boot - growing faster past the two metres only a blast reaches, to half a metre and
+    // up. The cavity's radius is what decides the ring's wavelengths - a Gaussian trough of
+    // radius a puts exp(-k^2 a^2 / 4) into wavenumber k, so at 11 cm the hand-wide crests that
+    // make a pistol's ring readable got a twentieth of the amplitude the invisible half-metre
+    // swell did - and a bullet's rings ARE those crests: a narrow, deep cavity, which is what
+    // a round at seven hundred metres a second opens.
     slot->crater = 0.f;
     if (kind == EWaterHit::ring && water_ripple_win.z > 0.f)
     {
         const float half = water_ripple_win.z * 0.5f - water_ripple_edge;
         if (_abs(pos.x - water_ripple_win.x) < half && _abs(pos.z - water_ripple_win.y) < half)
-            slot->crater = clampr(0.06f * radius + 0.08f * std::max(radius - 2.f, 0.f), 0.04f, 1.0f);
+            slot->crater = clampr(0.045f * radius + 0.08f * std::max(radius - 2.f, 0.f), 0.04f, 1.0f);
     }
 
     if (ps_e_wind_dbg)
@@ -1393,16 +1396,17 @@ float CEnvironment::puddle_fill_at(const Fvector& p) const
 // A continuous wake: something is moving through the water here. Unlike water_hit this is fed
 // every frame for as long as the source keeps wading, so a repeat call REFRESHES the slot it
 // already owns instead of consuming a new one.
-void CEnvironment::water_wake(const Fvector& pos, float radius, float strength)
+void CEnvironment::water_wake(const Fvector& pos, float radius, float strength, const Fvector2& vel, u32 id)
 {
     const float now = Device.fTimeGlobal;
-    const float reach = std::max(radius, 0.25f);
 
-    // Same source, same slot: the emitter moves with the walker rather than leaving a trail of
-    // eight dying spots behind it.
+    // Same source, same slot: the footprint moves with the foot rather than leaving a trail of
+    // eight dying spots behind it. By id and not by distance - a walker's two feet pass within
+    // a hand of each other every stride, and a slot that jumped between them was a source
+    // flickering at the frame rate.
     SWaterWake* slot = nullptr;
     for (auto& w : water_wakes)
-        if (w.used && w.pos.distance_to_sqr(pos) < reach * reach)
+        if (w.used && w.id == id)
         {
             slot = &w;
             break;
@@ -1429,8 +1433,10 @@ void CEnvironment::water_wake(const Fvector& pos, float radius, float strength)
         slot->birth = now;
     }
     slot->pos = pos;
-    slot->radius = reach;
+    slot->radius = std::max(radius, 0.02f);
     slot->strength = strength;
+    slot->vel = vel;
+    slot->id = id;
     slot->touched = now;
 }
 
@@ -1666,9 +1672,7 @@ void CEnvironment::water_tick(float delta)
         const float texel = water_ripple_window / float(rip_texels);
         water_ripple_win.set(floorf(eye.x / texel + 0.5f) * texel, floorf(eye.z / texel + 0.5f) * texel,
             water_ripple_window, 1.f / float(rip_texels));
-        // The speed the analytic envelope runs a ring's front at while the field carries the
-        // ring: the fastest band's, so the front stays one front across the window's edge.
-        water_ripple_speed = water_ripple_band_speed(water_ripple_bands - 1);
+        water_ripple_speed = 0.6f;
     }
     else
     {
@@ -2079,7 +2083,7 @@ void CEnvironment::UpdateEffectiveWind()
     // ---- Wading wakes: simulate and pack for the ripple field. -----------------------------
     // A wake is fed for as long as its source keeps moving through the water, so the envelope
     // here is a RELEASE and not a lifetime: while the source refreshes the slot the wake sits
-    // at full strength, and once it stops it fades to zero over a third of a second. Computed
+    // at full strength, and once it stops it fades to zero in a fraction of a second. Computed
     // on the CPU for the same reason the impact slots are - a slot always dies at zero.
     u32 wk_highest = 0;
     for (u32 i = 0; i < u32(water_wake_count); ++i)
@@ -2088,9 +2092,11 @@ void CEnvironment::UpdateEffectiveWind()
         if (!w.used)
             continue;
 
-        constexpr float wake_release = 0.35f;
+        // A foot lifting out of the water lets its trough go in a tenth of a second; the hold
+        // before the fade only bridges a frame or two the feed may skip.
+        constexpr float wake_release = 0.15f;
         const float idle = now - w.touched;
-        const float fade = 1.f - clampr((idle - 0.10f) / wake_release, 0.f, 1.f);
+        const float fade = 1.f - clampr((idle - 0.05f) / wake_release, 0.f, 1.f);
         if (fade <= 0.f)
         {
             w.used = false;
@@ -2104,8 +2110,8 @@ void CEnvironment::UpdateEffectiveWind()
         float* arow = &A.m[row % 4][0];
         prow[0] = w.pos.x; prow[1] = w.pos.y; prow[2] = w.pos.z; prow[3] = w.radius;
         arow[0] = w.strength * fade;
-        arow[1] = now - w.birth;
-        arow[2] = 0.f;
+        arow[1] = w.vel.x;
+        arow[2] = w.vel.y;
         arow[3] = 0.f;
     }
     for (u32 row = wk_highest; row < u32(water_wake_count); ++row)

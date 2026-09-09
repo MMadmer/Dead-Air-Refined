@@ -21,11 +21,17 @@ extern float psHUDStepSoundVolume;
 
 namespace
 {
-// How the wake fades as a foot approaches the bank. There is less water to displace in the
-// shallows, so the disturbance is smaller and tighter there instead of stopping dead at the
-// waterline - which is what the baked field's channel A (metres to the nearest bank) is for.
-constexpr float wake_bank_range = 2.f; // full strength this far out
-constexpr float wake_bank_min = 0.35f; // what is left of it right on the waterline
+// The wake's strength with the leg's immersion: a leg in ankle-deep water displaces a fraction
+// of what a shin-deep one does. Immersion is measured from the SOLE, which on these skeletons
+// sits about a decimetre under the foot bone - the bone itself rides above the surface for
+// most of a stride through shin-deep water, and measuring there fed the wake only in the
+// instants a bone dipped under, at stance speed. Full strength at this immersion.
+constexpr float wake_sole_below_bone = 0.10f;
+constexpr float wake_depth_full = 0.30f;
+// A foot slower than this through the water is standing on the bed; faster than this in one
+// frame it was teleported, and the jump is not a stride.
+constexpr float wake_speed_min = 0.15f;
+constexpr float wake_jump_max = 1.5f;
 } // namespace
 
 CStepManager::CStepManager() {}
@@ -318,30 +324,45 @@ void CStepManager::UpdateWaterWake(float dist_sqr)
     if (!env.water_field_valid())
         return;
 
-    CCharacterPhysicsSupport* cps = m_object->character_physics_support();
-    if (!cps || !cps->movement())
-        return;
-
-    // The wake is a rate: it grows with how hard the body is pushing the water, and a body
-    // that has stopped stops feeding its slot and lets it fade.
+    // Each foot's OWN velocity through the water, by finite difference on its bone: the planted
+    // foot pushes nothing, the one swinging through shin-deep water is what makes the wake, and
+    // the trough the sim holds goes as the square of that speed. Smoothed over a twentieth of
+    // a second against the animation's frame steps - no longer, or the swing is over before
+    // the estimate has caught up with it.
+    const u32 now = Device.dwTimeGlobal;
+    if (now == m_wake_time)
+        return; // the same millisecond: nothing to difference
+    const float dt = m_wake_time ? float(now - m_wake_time) * 0.001f : 0.f;
+    m_wake_time = now;
+    const float k = 1.f - expf(-dt * 20.f);
     const auto& acfg = da_water_actor_cfg();
-    const float k = clampr(cps->movement()->GetXZVelocityActual() / _max(acfg.wake_speed_ref, EPS_S), 0.f, 1.f);
-    if (k < 0.05f)
-        return;
-
     for (u32 i = 0; i < m_legs_count; ++i)
     {
         const Fvector foot = get_foot_position(ELegType(i));
-        float surface, bed;
-        if (!env.water_at(foot, surface, bed) || surface <= foot.y)
+        Fvector2 v{};
+        if (dt > 0.f && dt < 0.5f)
+        {
+            const float dx = foot.x - m_wake_foot[i].x;
+            const float dz = foot.z - m_wake_foot[i].z;
+            if (dx * dx + dz * dz < wake_jump_max * wake_jump_max)
+                v.set(dx / dt, dz / dt);
+        }
+        m_wake_foot[i] = foot;
+        m_wake_vel[i].x += (v.x - m_wake_vel[i].x) * k;
+        m_wake_vel[i].y += (v.y - m_wake_vel[i].y) * k;
+        if (m_wake_vel[i].square_magnitude() < wake_speed_min * wake_speed_min)
             continue;
+
+        float surface, bed;
+        if (!env.water_at(foot, surface, bed))
+            continue;
+        const float immersion = surface - (foot.y - wake_sole_below_bone);
+        if (immersion <= 0.02f)
+            continue; // the foot is out of the water, swinging over it
         Fvector at = foot;
         at.y = surface;
-        // water_shore_dist is defined on every texel of the field, water or bank, and the foot
-        // is inside it here (water_at just succeeded), so this cannot be the -FLT_MAX miss.
-        const float bank = wake_bank_min +
-            (1.f - wake_bank_min) * clampr(env.water_shore_dist(foot) / wake_bank_range, 0.f, 1.f);
-        env.water_wake(at, acfg.wake_radius * bank, acfg.wake_strength * k * bank);
+        const float wet = clampr(immersion / wake_depth_full, 0.f, 1.f);
+        env.water_wake(at, acfg.wake_radius, acfg.wake_strength * wet, m_wake_vel[i], (u32(m_object->ID()) << 2) | i);
     }
 }
 

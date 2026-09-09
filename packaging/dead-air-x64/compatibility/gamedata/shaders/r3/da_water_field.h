@@ -13,22 +13,19 @@
 //		A = metres to the nearest bank, clamped to 32
 //	Nothing writes it per frame, so a read is a texture fetch and never a march.
 //
-//	The ripple field is the interactive half: a 64 m window around the camera, snapped to whole
-//	texels, holding the height of the wave equations the sim pass steps (da_water_ripple.ps) -
-//	THREE of them, one per octave of ring wavelength (0.3, 0.6, 1.2 m), because water is
-//	dispersive and one speed cannot be. R = height now, G = height one step back, both in
-//	METRES of surface displacement; a reader sums the three. It runs on every tier; the preset
-//	only sets how many texels the 64 m are cut into.
+//	The ripple field is the interactive half: a 32 m window around the camera, snapped to whole
+//	texels, holding the surface the spectral solver steps (da_water_ripple.ps and the
+//	da_ripple_*.cs passes: Tessendorf's eWave, every wavelength at its own speed). R = height
+//	in METRES of surface displacement, G = its vertical velocity in m/s. It runs on every tier;
+//	the preset only sets how many texels the 32 m are cut into.
 //
 //	Include AFTER common.h - the samplers come from there, as they do for da_clouds.h. Any .s
-//	script whose shader includes this file has to bind the four textures:
-//		shader:dx10texture ("s_water_field",   "$user$water_field")
-//		shader:dx10texture ("s_water_ripple",  "$user$water_ripple0")
-//		shader:dx10texture ("s_water_ripple1", "$user$water_ripple1")
-//		shader:dx10texture ("s_water_ripple2", "$user$water_ripple2")
-//	Those are ALWAYS the current step - the sim owns each pair and hands the finished state
-//	back into that name every step, precisely so a reader can bind one name and be right (a
-//	ping-pong that alternated the name would strobe the field at the step rate).
+//	script whose shader includes this file has to bind the two textures:
+//		shader:dx10texture ("s_water_field",  "$user$water_field")
+//		shader:dx10texture ("s_water_ripple", "$user$water_ripple0")
+//	That is ALWAYS the finished step - the solver's last pass is copied back into the name,
+//	precisely so a reader can bind one name and be right (a ping-pong that alternated the name
+//	would strobe the field at the step rate).
 
 //	xy = the level AABB's min corner (world X, Z), zw = 1/extent, so
 //	uv = (wp.xz - da_water_map.xy) * da_water_map.zw. All zero when the level has no field.
@@ -44,10 +41,19 @@ uniform float4 da_water_rip;
 //	the three agree by construction. The CPU twin is CEnvironment::water_ripple_edge.
 #define DA_WF_RIM_M	4.0f
 
+//	What a reader tilts its normal by, per unit of the field's real slope, and where that stops.
+//	The field is physical - a pistol's ring is a centimetre high two metres out - and the eye
+//	reads such a ring off the reflection of a structured world: a sky with a gradient, a
+//	treeline, sun glitter. The game reflects a blurred cube and lights a bright bed through the
+//	water, and against that a centimetre reads as nothing (it did: the rig showed the field a
+//	perfect train and the frame nothing at all). Interaction ripples get their normals amplified
+//	in every engine that draws them for the same reason; the limiter keeps a crest that would
+//	fold the normal over as a crest, since the foam it would really break into is not drawn.
+#define DA_WF_SLOPE_GAIN	3.5f
+#define DA_WF_SLOPE_LIMIT	1.5f
+
 Texture2D s_water_field;
-Texture2D s_water_ripple;	// the 0.3 m band
-Texture2D s_water_ripple1;	// 0.6 m
-Texture2D s_water_ripple2;	// 1.2 m
+Texture2D s_water_ripple;
 
 //	---- The baked field -----------------------------------------------------------------------
 
@@ -120,12 +126,12 @@ float2 da_wf_ripple_uv(float2 wxz)
 	return (wxz - da_water_rip.xy) / max(da_water_rip.z, 0.001f) + 0.5f;
 }
 
-float2 da_wf_ripple_grad(Texture2D band, float2 uv, float e)
+float2 da_wf_ripple_grad(Texture2D field, float2 uv, float e)
 {
-	const float hx1 = band.SampleLevel(smp_rtlinear, uv + float2(e, 0.0f), 0).r;
-	const float hx0 = band.SampleLevel(smp_rtlinear, uv - float2(e, 0.0f), 0).r;
-	const float hz1 = band.SampleLevel(smp_rtlinear, uv + float2(0.0f, e), 0).r;
-	const float hz0 = band.SampleLevel(smp_rtlinear, uv - float2(0.0f, e), 0).r;
+	const float hx1 = field.SampleLevel(smp_rtlinear, uv + float2(e, 0.0f), 0).r;
+	const float hx0 = field.SampleLevel(smp_rtlinear, uv - float2(e, 0.0f), 0).r;
+	const float hz1 = field.SampleLevel(smp_rtlinear, uv + float2(0.0f, e), 0).r;
+	const float hz0 = field.SampleLevel(smp_rtlinear, uv - float2(0.0f, e), 0).r;
 	return float2(hx1 - hx0, hz1 - hz0);
 }
 
@@ -143,9 +149,9 @@ float2 da_wf_ripple_slope(float2 wxz)
 		return 0.0f;
 
 	const float e = da_water_rip.w;	// one texel, in uv
-	//	Central differences over two texels, in metres, the three bands summed.
-	const float2 grad = (da_wf_ripple_grad(s_water_ripple, uv, e) + da_wf_ripple_grad(s_water_ripple1, uv, e) +
-		da_wf_ripple_grad(s_water_ripple2, uv, e)) / (2.0f * e * da_water_rip.z);
+	//	Central difference over two texels, in metres; then the reader's gain and its limiter.
+	float2 grad = da_wf_ripple_grad(s_water_ripple, uv, e) * (DA_WF_SLOPE_GAIN / (2.0f * e * da_water_rip.z));
+	grad /= 1.0f + length(grad) * (1.0f / DA_WF_SLOPE_LIMIT);
 
 	//	The sim damps hard over its outer metres, so the field is already near zero at the rim;
 	//	this last fade only guarantees there is no step at the boundary when something large is

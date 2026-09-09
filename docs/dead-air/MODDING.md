@@ -1300,36 +1300,62 @@ was before.
 
 ### The ripple field
 
-An RG16F ping-pong pair over a 64 m window centred on the camera, on every preset - the preset
-buys texels into the window, not the window itself: 256 on Minimum and Low (25 cm texels), 512 on
-Default and High (12.5 cm), 1024 on Ultra (6 cm) - stepped by `phase_water_ripple` at a fixed
-1/60 s with an accumulator: R is the height now, G the height one step back, and the pass solves
-the wave equation on them with a viscosity term on the velocity, so grid-scale noise dies in a
-dozen steps while a half-metre ring lives for a minute.
+A 32 m window centred on the camera, on every preset - the preset buys texels into the window,
+not the window itself: 256 on Minimum and Low (12.5 cm texels), 512 on Default and High (6 cm),
+1024 on Ultra (3 cm) - stepped by `phase_water_ripple` at a fixed 1/30 s with an accumulator.
+The state is one RG32F texture, `$user$water_ripple0`: R the height in metres, G its vertical
+velocity.
 
-The wave speed is water's, and water is dispersive - the speed of a wave is a function of its
-length - so the field is three wave equations, one per octave of ring wavelength (0.3, 0.6 and
-1.2 m: `CEnvironment::water_ripple_lambda`), each at 0.85 of the deep-water phase speed of its
-wavelength (0.6, 0.8 and 1.2 m/s - a band has one number for both the crests and the packet, and
-the crests are what the eye follows), scaled in the shader by the local depth through
-`sqrt(tanh(k h))` so a ring slows into the shallows and a puddle's crawls. A source is shared out
-between the bands by the energy of each octave in two dimensions - modes in proportion to `k^2`
-times the cavity's own power spectrum `exp(-k^2 a^2 / 2)` - so a bullet's 8 cm cavity (six
-centimetres per metre of the slot's reach, growing faster past a blast's two metres) goes about
-70/25/5 into the bands and a blast's half metre entirely to the longest. That `k^2` is the whole
-difference between a pond's three crisp crests a hand apart and a gentle swell: sharing by
-amplitude instead put nine tenths of a bullet into the long waves, whose slope per metre of height
-is a quarter of a short wave's, and the rings all but vanished. The depth dug is twice what one
-band dug alone for the same reason, and each band's dimple is capped at a slope of 0.6 so a blast
-cannot fold the surface. A
-ring is then what a ring is on a pond - a train whose long waves lead and whose short ones trail,
-spreading as it goes - and its front runs at a constant speed, which is also what a real ring does:
-the "fast start" of a splash is the collapsing cavity throwing its rim out, and that is modelled as
-the dimple's radius growing at 1.5 m/s while it is fed. The first version ran one equation at
-3.75 m/s to keep the Courant number at a pretty 0.25, and a ring crossed the whole window in four
-seconds and was absorbed at the rim - which the player read, correctly, as rings that vanish after
-a few seconds; the second tied its one speed to the texel, which made Ultra's rings the slowest of
-all and every ring a single crest moving as a block.
+The solver is spectral - Tessendorf's eWave. `da_water_ripple.ps` does what has to happen in
+real space (the window shift, the losses at the rim and on dry ground, the sources) and packs
+height and velocity as one complex texture; two FFT passes (`da_ripple_fft.h`, a radix-2
+Stockham in compute, one thread group per line) take it to Fourier space; `da_ripple_propagate.cs`
+advances every wavenumber by the exact solution of its own harmonic oscillator,
+`omega^2 = (g k + sigma k^3 / rho) tanh(k D)` - gravity, surface tension and the body's mean
+depth, the full dispersion relation of water - with a loss `exp(-(gamma0 + nu k^2) dt)` that
+takes the short waves first; two more passes bring it back, and the result is copied into the
+state under the one name every reader binds. There is no Courant number and no wavelength the
+grid runs at the wrong speed: every wave the grid can hold moves at exactly its own speed, so a
+bullet's ring is what it is on a pond - a train whose long waves run out ahead of its short
+ones, spreading as it goes, three crisp crests a hand apart behind a faint swell.
+
+That is the fourth solver this field has had, and the first three are why it is spectral. A
+leapfrog stencil has one speed for everything it carries: pinned at a pretty Courant number it
+ran rings at 3.75 m/s and they crossed the window in four seconds; tied to the texel it made
+Ultra's rings the slowest; split into three octave bands it drew three crests moving as blocks,
+and the energy shared between them by amplitude instead of by octave went nine tenths into the
+gentle long waves. The references that settled it were a pistol and a rifle fired into a pond.
+
+An impact is a cavity: four and a half centimetres of radius per metre of the slot's reach (6 to
+7 cm for a bullet or a boot, growing faster past the two metres only a blast reaches), dug one and
+a half times as deep as it is wide between 5 and 35 cm, as a ring whose radius runs out at 1.5 m/s
+while it is fed - the collapsing cavity throwing its rim out, which is why a real splash's ring
+starts fast and only then settles to the speed of its waves. The cavity's size is all that decides
+which wavelengths the ring is made of; the solver does the rest. The front of a ring past the
+window's edge is continued by the analytic layer at `water_ripple_speed`, the group speed of the
+waves that lead a pistol's train.
+
+A wading foot is a travelling pressure footprint, not a source of height. `CStepManager` feeds
+each foot's own velocity through the water (finite-differenced on its bone, smoothed over a tenth
+of a second: the planted foot pushes nothing, the swinging one does) into one wake slot per foot,
+keyed by the source's id so a walker's two feet never fight over a slot, with a strength that is
+the leg's immersion measured from the SOLE - a decimetre under the foot bone on these skeletons.
+That last detail is not a nicety: in shin-deep water the foot bone rides above the surface for
+most of a stride, and a feed gated on the bone touched the water only in the instants a bone
+dipped under, at stance speed, which the rig showed as a 3 mm dent behind a walker doing 2.7 m/s.
+`qa_water_state` prints the slots and the feet as the engine sees them. The sim relaxes the
+surface inside the leg's radius (`wake_radius` in `[water_actor]`, 10 cm) onto the trough Bernoulli
+sets for that speed - the mean pressure coefficient round a cylinder is -1, so the water over the
+leg stands `v^2 / 2g` below the pond, 5 cm at a metre a second, capped there - and its vertical
+velocity onto the trough's own rate of change as it travels, a kinematic condition on both state
+fields the way an obstruction is in eWave (relaxing the height alone does not hold a trough on an
+oscillator: the solver answers every pull with velocity, and the rig showed a 3 mm dent carrying a
+fifth of a metre a second). Everything else comes out of the solver: the bow wave, the V of the wake
+behind, and the ring a foot leaves when it stops and the trough springs back. On a grid coarser
+than the leg the trough is spread over the texel and made shallower by the same ratio, so it moves
+the same water on every preset. The version before pushed a half-metre bump up and down at a
+made-up 1.7 Hz; a bump that wide holds nothing at the wavelength that frequency radiates, so it
+breathed and made no wave, which is what "no rings under my feet" was.
 
 The wave rows the surface sums are bands times headings, not one sinusoid per band. The bands
 that fit between the peak and the 10 cm floor are few at a short fetch - one or two over a marsh -
@@ -1342,29 +1368,25 @@ Four things about it are not preferences, and each is a way this feature is usua
 * the step is **fixed**, or the ripple speed tracks the frame rate;
 * the window snaps to **whole texels** as the camera moves, or every frame resamples the field
   into mush;
-* the Laplacian taps are masked by the field's coverage channel, so a wave **reflects off a bank**
-  for free;
+* dry ground is in the field too, with a puddle's losses: a wave that runs up a bank dies there
+  in a second instead of reflecting, which is what a beach does;
 * the damping ramps over the outer 4 m of the window (`water_ripple_edge`, the same metres on
-  every grid), or every wave echoes off the invisible rim.
+  every grid), or every wave echoes off the invisible rim - and the spectral domain is periodic,
+  so without it a ring leaving one side would come back in from the other.
 
 Sources are injected inside the same pass from constants: the eight impact slots
 (`Environment::water_hit` - bullets, blasts, footsteps, bodies), the wake slots
-(`Environment::water_wake`, fed every frame by anything wading), and rain at a rate derived from
-mm/h on the top tier. Every source is a **depth in metres spread over a number of steps**, not a
-per-step amount: feeding a one-shot impulse once per step drives the whole field into its clamp
-inside a tenth of a second. An impact's dimple is a tenth of the slot's ring radius (14 cm for a
-bullet, half a metre and up for a blast), dug proportionally deep: the slot's radius says how far
-the ring is meant to run, not how big the splash was.
+(`Environment::water_wake`, one per moving foot, refreshed every frame), and rain at a rate
+derived from mm/h on the top tier. An impact is a **depth in metres spread over a number of
+steps**, not a per-step amount: feeding a one-shot impulse once per step drives the whole field
+into its clamp inside a tenth of a second. A wake is a **target the surface is relaxed onto**,
+over a fixed settling time, which is what a pressure source is. The slot's radius says how far a
+ring is meant to run, not how big the splash was: the cavity is derived from it.
 
 The field runs over the whole window, dry ground included: a rain puddle is water too, and its
 rings live in the same field as the lake's (`da_puddles.h` reads it through `da_wf_ripple_slope`,
-bound in `uber_deffer.cpp` and `da_puddle_refl.s`). Every reader binds the three bands as
-`s_water_ripple`, `s_water_ripple1`, `s_water_ripple2` (`$user$water_ripple0..2`) and sums them;
-the sim's three `.s` scripts differ only in which band's previous half (`$user$water_ripple<b>p`)
-they read, because a texture is bound by name at compile time. The baked coverage only says where the banks
-are, and a tap across one mirrors the centre in both directions, so a puddle's ring does not leak
-into the lake beside it. Rain is seeded only onto the water body; a puddle's drops are already
-rings of their own, at a scale the grid cannot carry.
+bound in `uber_deffer.cpp` and `da_puddle_refl.s`). Rain is seeded only onto the water body; a
+puddle's drops are already rings of their own, at a scale the grid cannot carry.
 
 The eight analytic rings in `da_water_rings.h` cover only what the field cannot, and decide that
 per ring. A slot records whether the field saw the ring born (`SWaterHit::crater`, the par row's

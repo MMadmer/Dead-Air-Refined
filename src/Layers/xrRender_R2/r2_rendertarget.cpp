@@ -311,20 +311,19 @@ CRenderTarget::CRenderTarget()
         const u32 ripple_dim = (ps_r__water_ripple > 0) ? u32(ps_r__water_ripple) : 0u;
         if (ripple_dim)
         {
-            // Three bands - one wave equation per octave of ring wavelength, see the phase - a
-            // pair each: "$user$water_ripple<b>" is the current step, the name every reader
-            // binds, "$user$water_ripple<b>p" the step before it, the sim's own input.
-            for (u32 b = 0; b < 3; ++b)
-                for (u32 i = 0; i < 2; ++i)
-                {
-                    string32 temp;
-                    xr_sprintf(temp, "%s%u%s", r2_RT_water_ripple, b, i ? "p" : "");
-                    rt_WaterRipple[b][i].create(temp, ripple_dim, ripple_dim, D3DFMT_G16R16F, 1);
-                    // A fresh target holds whatever the allocator left in it, and these are
-                    // float16: one texel that decodes to a NaN spreads over the whole field. The
-                    // sim primes them as well; this covers the frames before it runs.
-                    RCache.ClearRT(rt_WaterRipple[b][i], {});
-                }
+            // The state every reader binds, (height, velocity), and the two complex scratch
+            // buffers the spectral solver ping-pongs through (da_ripple_fft.h). All three 32-bit:
+            // an FFT in half precision is noise after a few hundred steps, and the readers filter
+            // this format fine on feature level 11. The scratch pair is written by compute.
+            rt_WaterRipple.create(r2_RT_water_ripple "0", ripple_dim, ripple_dim, D3DFMT_G32R32F, 1);
+            rt_WaterRippleFFT[0].create(r2_RT_water_ripple_fft "a", ripple_dim, ripple_dim, D3DFMT_G32R32F, 1, { CRT::CreateUAV });
+            rt_WaterRippleFFT[1].create(r2_RT_water_ripple_fft "b", ripple_dim, ripple_dim, D3DFMT_G32R32F, 1, { CRT::CreateUAV });
+            // A fresh target holds whatever the allocator left in it: one texel that decodes to
+            // a NaN spreads over the whole field within a step of the solver. The sim primes
+            // them as well; this covers the frames before it runs.
+            RCache.ClearRT(rt_WaterRipple, {});
+            RCache.ClearRT(rt_WaterRippleFFT[0], {});
+            RCache.ClearRT(rt_WaterRippleFFT[1], {});
         }
         // What the CPU solves the ripple window against must be the size that was actually
         // created, not the one the preset currently wishes for: r__water_ripple is a live

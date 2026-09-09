@@ -260,8 +260,6 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -292,8 +290,6 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -323,8 +319,6 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -355,8 +349,6 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -510,8 +502,6 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -542,8 +532,6 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -573,8 +561,6 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
@@ -605,8 +591,6 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
         C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
-        C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
-        C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
         C.r_dx11Texture("s_water_nmap", "water\\water_normal");
         C.r_dx11Sampler("smp_linear");
 
