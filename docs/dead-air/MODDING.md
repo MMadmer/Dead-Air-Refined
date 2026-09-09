@@ -1307,12 +1307,21 @@ Default and High (12.5 cm), 1024 on Ultra (6 cm) - stepped by `phase_water_rippl
 the wave equation on them with a viscosity term on the velocity, so grid-scale noise dies in a
 dozen steps while a half-metre ring lives for a minute.
 
-The wave speed is not a free constant. The field is not dispersive, so it carries one speed per
-grid: the phase speed of a deep-water wave five texels long, taken three quarters of the way to
-its group speed - half a metre a second on the 6 cm grid, a metre on the 25 cm one
-(`CEnvironment::water_ripple_speed`). The first version ran at 3.75 m/s to keep the Courant number
-at a pretty 0.25, and a ring crossed the whole window in four seconds and was absorbed at the rim -
-which the player read, correctly, as rings that vanish after a few seconds.
+The wave speed is water's, and water is dispersive - the speed of a wave is a function of its
+length - so the field is three wave equations, one per octave of ring wavelength (0.3, 0.6 and
+1.2 m: `CEnvironment::water_ripple_lambda`), each at three quarters of the deep-water phase speed
+of its wavelength (0.5, 0.7 and 1.0 m/s), scaled in the shader by the local depth through
+`sqrt(tanh(k h))` so a ring slows into the shallows and a puddle's crawls. A source is shared out
+between the bands by its own spectrum (`exp(-k^2 a^2 / 4)` for a crater of radius `a`): a bullet's
+14 cm dimple goes mostly to the two longer bands, a blast's 70 cm one entirely to the longest. A
+ring is then what a ring is on a pond - a train whose long waves lead and whose short ones trail,
+spreading as it goes - and its front runs at a constant speed, which is also what a real ring does:
+the "fast start" of a splash is the collapsing cavity throwing its rim out, and that is modelled as
+the dimple's radius growing at 1.5 m/s while it is fed. The first version ran one equation at
+3.75 m/s to keep the Courant number at a pretty 0.25, and a ring crossed the whole window in four
+seconds and was absorbed at the rim - which the player read, correctly, as rings that vanish after
+a few seconds; the second tied its one speed to the texel, which made Ultra's rings the slowest of
+all and every ring a single crest moving as a block.
 
 The wave rows the surface sums are bands times headings, not one sinusoid per band. The bands
 that fit between the peak and the 10 cm floor are few at a short fetch - one or two over a marsh -
@@ -1341,7 +1350,10 @@ the ring is meant to run, not how big the splash was.
 
 The field runs over the whole window, dry ground included: a rain puddle is water too, and its
 rings live in the same field as the lake's (`da_puddles.h` reads it through `da_wf_ripple_slope`,
-bound in `uber_deffer.cpp` and `da_puddle_refl.s`). The baked coverage only says where the banks
+bound in `uber_deffer.cpp` and `da_puddle_refl.s`). Every reader binds the three bands as
+`s_water_ripple`, `s_water_ripple1`, `s_water_ripple2` (`$user$water_ripple0..2`) and sums them;
+the sim's three `.s` scripts differ only in which band's previous half (`$user$water_ripple<b>p`)
+they read, because a texture is bound by name at compile time. The baked coverage only says where the banks
 are, and a tap across one mirrors the centre in both directions, so a puddle's ring does not leak
 into the lake beside it. Rain is seeded only onto the water body; a puddle's drops are already
 rings of their own, at a scale the grid cannot carry.

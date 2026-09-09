@@ -311,23 +311,25 @@ CRenderTarget::CRenderTarget()
         const u32 ripple_dim = (ps_r__water_ripple > 0) ? u32(ps_r__water_ripple) : 0u;
         if (ripple_dim)
         {
-            for (u32 i = 0; i < 2; ++i)
-            {
-                string32 temp;
-                xr_sprintf(temp, "%s%u", r2_RT_water_ripple, i);
-                rt_WaterRipple[i].create(temp, ripple_dim, ripple_dim, D3DFMT_G16R16F, 1);
-            }
-            // A fresh pair holds whatever the allocator left in it, and these are float16: one
-            // texel that decodes to a NaN spreads over the whole field. The sim primes them as
-            // well, but only on a level that has water - this covers the frames before that.
-            RCache.ClearRT(rt_WaterRipple[0], {});
-            RCache.ClearRT(rt_WaterRipple[1], {});
+            // Three bands - one wave equation per octave of ring wavelength, see the phase - a
+            // pair each: "$user$water_ripple<b>" is the current step, the name every reader
+            // binds, "$user$water_ripple<b>p" the step before it, the sim's own input.
+            for (u32 b = 0; b < 3; ++b)
+                for (u32 i = 0; i < 2; ++i)
+                {
+                    string32 temp;
+                    xr_sprintf(temp, "%s%u%s", r2_RT_water_ripple, b, i ? "p" : "");
+                    rt_WaterRipple[b][i].create(temp, ripple_dim, ripple_dim, D3DFMT_G16R16F, 1);
+                    // A fresh target holds whatever the allocator left in it, and these are
+                    // float16: one texel that decodes to a NaN spreads over the whole field. The
+                    // sim primes them as well; this covers the frames before it runs.
+                    RCache.ClearRT(rt_WaterRipple[b][i], {});
+                }
         }
         // What the CPU solves the ripple window against must be the size that was actually
         // created, not the one the preset currently wishes for: r__water_ripple is a live
         // console var and these targets are sized exactly once.
         ps_r__water_ripple_active = int(ripple_dim);
-        m_water_ripple_cur = 0;
 #endif
         if (!options.gbuffer_opt)
             rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F, SampleCount);

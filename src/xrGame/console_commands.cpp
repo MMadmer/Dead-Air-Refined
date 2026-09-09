@@ -2684,9 +2684,12 @@ public:
         }
         else
             Msg("* [qa] field: not baked on this level");
-        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f, ring speed %.2f m/s%s",
+        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f, bands %.2f/%.2f/%.2f m at "
+            "%.2f/%.2f/%.2f m/s%s",
             env.water_ripple_win.z, env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
-            env.water_ripple_speed, env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
+            CEnvironment::water_ripple_lambda[0], CEnvironment::water_ripple_lambda[1], CEnvironment::water_ripple_lambda[2],
+            CEnvironment::water_ripple_band_speed(0), CEnvironment::water_ripple_band_speed(1),
+            CEnvironment::water_ripple_band_speed(2), env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
         Msg("* [qa] under water: %.2f m below a surface at %.2f", env.eye_under_depth, env.eye_under_surface);
         Msg("* [qa] rain: %.1f mm/h, extinction %.2f 1/km", env.rain_rate_mmh, env.rain_ext_km);
         Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,

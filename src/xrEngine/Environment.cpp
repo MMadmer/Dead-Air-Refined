@@ -1663,13 +1663,9 @@ void CEnvironment::water_tick(float delta)
         const float texel = water_ripple_window / float(rip_texels);
         water_ripple_win.set(floorf(eye.x / texel + 0.5f) * texel, floorf(eye.z / texel + 0.5f) * texel,
             water_ripple_window, 1.f / float(rip_texels));
-        // The one speed every ring runs at, shared with the sim pass and the analytic envelope
-        // so a ring crossing the window's edge keeps its front. The field is not dispersive
-        // and needs one number for a band: the phase speed of a deep-water wave five texels
-        // long, taken three quarters of the way toward its group speed - half a metre a second
-        // on the 6 cm grid, a metre on the 25 cm one. Which is also why a coarser tier draws a
-        // bigger, faster ring: it genuinely cannot carry a smaller one.
-        water_ripple_speed = 0.75f * _sqrt(9.81f * 5.f * texel / PI_MUL_2);
+        // The speed the analytic envelope runs a ring's front at while the field carries the
+        // ring: the fastest band's, so the front stays one front across the window's edge.
+        water_ripple_speed = water_ripple_band_speed(water_ripple_bands - 1);
     }
     else
     {

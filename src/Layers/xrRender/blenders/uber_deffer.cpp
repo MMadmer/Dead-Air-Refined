@@ -214,6 +214,8 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     // The ripple field, for the rings a puddle carries (da_puddles.h reads it through
     // da_wf_ripple_slope). Same silent-skip contract, same twin in da_puddle_refl.s.
     C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+    C.r_dx11Texture("s_water_ripple1", r2_RT_water_ripple "1");
+    C.r_dx11Texture("s_water_ripple2", r2_RT_water_ripple "2");
     C.r_dx11Sampler("smp_rtlinear");
     if (lmap)
     {

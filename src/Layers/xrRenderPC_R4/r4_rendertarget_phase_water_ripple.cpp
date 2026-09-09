@@ -3,7 +3,7 @@
 #include "xrEngine/Environment.h"
 
 // Declared before the render namespace opens, or the externs would name
-// xray::render::*::symbols that nothing defines. All three live in the engine (xr_ioc_cmd.cpp).
+// xray::render::*::symbols that nothing defines. Both live in the engine (xr_ioc_cmd.cpp).
 // The resolution read here is the one the targets were ACTUALLY created at, published by
 // r2_rendertarget.cpp - r__water_ripple itself is a live console var, and taking it here would
 // have the sim solve its Laplacian against a texel count the targets do not have.
@@ -20,7 +20,7 @@ static float g_ripple_prev_x = 0.f; // the window centre the field currently hol
 static float g_ripple_prev_z = 0.f;
 static ID3DTexture2D* g_ripple_primed = nullptr; // the surface the clear below was applied to
 
-// Everything above belongs to ONE level. The target pair is not recreated between levels, so
+// Everything above belongs to ONE level. The target pairs are not recreated between levels, so
 // the prime test below - keyed on the surface, which does not change - would never fire again
 // and level 2 would start with level 1's heights still ringing in it. That is this repo's
 // second-load bug class, and file-scope sim state is exactly how it happens.
@@ -43,18 +43,22 @@ void da_water_ripple_reset()
 //   * the STEP is fixed and fed by an accumulator. A step tied to the frame time makes the
 //     ripple speed track the frame rate, which is the single most common way this feature is
 //     built wrong;
-//   * r2 is solved from the wave SPEED the environment chose for this grid's texel, never
-//     pinned at a pretty Courant number. The first version pinned 0.25, which at 12.5 cm and
-//     60 Hz is 3.75 m/s - a ring crossed the whole window in four seconds and was absorbed at
-//     the rim, which is exactly the "rings vanish after a few seconds" the player saw;
-//   * the pair does not ping-pong its NAMES. Each step writes half 0 and is copied back into
-//     half 1, so "$user$water_ripple0" is always the current state and every consumer can bind
-//     one fixed name. A true ping-pong puts the current step under a different name on
-//     alternate steps, and a consumer that binds statically then strobes at the step rate. The
-//     copy is 128-256 KB and buys that outright.
+//   * the field is THREE wave equations, one per octave of ring wavelength (0.3, 0.6, 1.2 m),
+//     because water is dispersive and one speed cannot be: a bullet's ring is a train whose
+//     long waves run ahead of its short ones. Each band's speed is three quarters of the
+//     deep-water phase speed of its wavelength (Environment.h), and the shader scales it by the
+//     local depth, so a ring slows into the shallows and a puddle's crawls. The first version
+//     ran one equation at 3.75 m/s - a Courant number chosen for its looks - and a ring crossed
+//     the whole window in four seconds; the second tied the one speed to the texel, which made
+//     Ultra's rings the slowest and every ring a single crest moving as a block;
+//   * the pairs do not ping-pong their NAMES. Each step writes half 0 of a band and is copied
+//     back into half 1, so "$user$water_ripple<b>" is always the current state and every
+//     consumer can bind fixed names. A true ping-pong puts the current step under a different
+//     name on alternate steps, and a consumer that binds statically then strobes at the step
+//     rate. The copies are a few hundred KB and buy that outright.
 void CRenderTarget::phase_water_ripple()
 {
-    if (ps_r__water_ripple_active <= 0 || !rt_WaterRipple[0] || !rt_WaterRipple[1])
+    if (ps_r__water_ripple_active <= 0 || !rt_WaterRipple[0][0] || !rt_WaterRipple[0][1])
         return;
     // Not gated on the level having a water body: a rain puddle is water too, and its rings
     // live in this field. A level with no bake is one sheet of open water with no banks in it.
@@ -67,26 +71,33 @@ void CRenderTarget::phase_water_ripple()
         return;
 
     // Created on first use rather than in the render target's constructor, the way rt_ui is:
-    // the constructor is shared ground and this pass is the only thing that wants the shader.
-    if (!s_water_ripple)
-        s_water_ripple.create("da_water_ripple");
-    if (!s_water_ripple)
-        return;
+    // the constructor is shared ground and this pass is the only thing that wants the shaders.
+    // Three scripts that differ only in which previous half they read - a texture is bound by
+    // NAME at compile time, so the band cannot be a constant.
+    static constexpr pcstr band_shader[3] = {"da_water_ripple", "da_water_ripple_b1", "da_water_ripple_b2"};
+    for (int b = 0; b < 3; ++b)
+    {
+        if (!s_water_ripple[b])
+            s_water_ripple[b].create(band_shader[b]);
+        if (!s_water_ripple[b])
+            return;
+    }
 
     PIX_EVENT(DA_phase_water_ripple);
 
     const float texels = float(ps_r__water_ripple_active);
     const float texel_m = win / texels;
 
-    // A fresh pair holds whatever the allocator left in it, and these are float16 targets: one
-    // garbage texel reading as a NaN spreads over the whole field within a few dozen steps.
+    // A fresh target holds whatever the allocator left in it, and these are float16 targets:
+    // one garbage texel reading as a NaN spreads over the whole field within a few dozen steps.
     // Keyed on the surface the pair currently owns rather than on a flag, because a device
     // reset rebuilds the targets and a flag would not notice.
-    if (g_ripple_primed != rt_WaterRipple[0]->pSurface)
+    if (g_ripple_primed != rt_WaterRipple[0][0]->pSurface)
     {
-        RCache.ClearRT(rt_WaterRipple[0], {});
-        RCache.ClearRT(rt_WaterRipple[1], {});
-        g_ripple_primed = rt_WaterRipple[0]->pSurface;
+        for (auto& band : rt_WaterRipple)
+            for (auto& half : band)
+                RCache.ClearRT(half, {});
+        g_ripple_primed = rt_WaterRipple[0][0]->pSurface;
         g_ripple_prev_x = env.water_ripple_win.x;
         g_ripple_prev_z = env.water_ripple_win.y;
         g_ripple_acc = 0.f;
@@ -108,21 +119,30 @@ void CRenderTarget::phase_water_ripple()
     if (steps <= 0)
         return;
 
-    // The speed is the environment's, solved from this grid's texel (Environment.cpp), so the
-    // analytic envelope runs its ring fronts at the same metres per second and a ring keeps
-    // one front across the window's edge. Leapfrog is stable in 2D up to r2 = 0.5; at these
-    // speeds the Courant number is well under 0.25 on every tier, and the min is a rail.
-    const float wave_c = env.water_ripple_speed;
-    const float courant = wave_c * dt / texel_m;
-    const float r2 = std::min(courant * courant, 0.25f);
-    // Losses. Open water keeps a ring for a minute (0.9995 a step is a 33 s e-fold); the
-    // wavelength-blind part is deliberately this small because the field's own viscosity term
-    // does the rest in proportion to k^2, which takes the grid-scale noise out in a dozen steps
-    // and leaves a half-metre ring alone. Dry ground is a rain puddle: centimetres deep over a
-    // bed that takes the energy out in a second.
-    constexpr float damping_wet = 0.9995f;
+    // Losses. Open water keeps a ring for a minute; the wavelength-blind part is deliberately
+    // small because the field's own viscosity term does the rest in proportion to k^2, which
+    // takes the grid-scale noise out in a dozen steps and leaves a half-metre ring alone. The
+    // short band still goes first, as it does on a pond - a surface film damps by k^2 too. Dry
+    // ground is a rain puddle: centimetres deep over a bed that takes the energy out in a second.
+    constexpr float damping_wet[3] = {0.998f, 0.9993f, 0.9997f};
     constexpr float damping_land = 0.985f;
     constexpr float viscosity = 0.002f; // texel^2 per step; stable to 1/8
+
+    // Per band: the wavenumber the sources are shared out by, the deep-water speed at full
+    // depth as a Courant number squared (the shader scales it down with the local depth, so
+    // this is the ceiling the CFL test sees), and the radius of the dimple that starts a ring
+    // of this band's wavelength - a Gaussian trough rings at about 2.2 times its radius.
+    float band_k[3], band_r2[3], band_dimple[3];
+    for (int b = 0; b < 3; ++b)
+    {
+        const float lambda = CEnvironment::water_ripple_lambda[b];
+        band_k[b] = PI_MUL_2 / lambda;
+        const float courant = CEnvironment::water_ripple_band_speed(b) * dt / texel_m;
+        // Leapfrog is stable in 2D up to r2 = 0.5; the min is a rail, never reached on any grid.
+        band_r2[b] = std::min(courant * courant, 0.25f);
+        band_dimple[b] = lambda / 2.2f;
+    }
+    const float front_speed = CEnvironment::water_ripple_band_speed(2);
 
     // Rain into the field is the top tier's line in the ladder, and rain_quality is the knob
     // that carries "Extreme" without a second one having to agree with it.
@@ -153,8 +173,8 @@ void CRenderTarget::phase_water_ripple()
     }
 
     auto* ctx = HW.get_context(RCache.context_id);
-    const float rt_w = float(rt_WaterRipple[0]->dwWidth);
-    const float rt_h = float(rt_WaterRipple[0]->dwHeight);
+    const float rt_w = float(rt_WaterRipple[0][0]->dwWidth);
+    const float rt_h = float(rt_WaterRipple[0][0]->dwHeight);
 
     for (int s = 0; s < steps; ++s)
     {
@@ -164,40 +184,46 @@ void CRenderTarget::phase_water_ripple()
         const float shift_u = (s == 0) ? (env.water_ripple_win.x - g_ripple_prev_x) / win : 0.f;
         const float shift_v = (s == 0) ? (env.water_ripple_win.y - g_ripple_prev_z) / win : 0.f;
 
-        u_setrt(RCache, rt_WaterRipple[0], nullptr, nullptr, (ID3DDepthStencilView*)nullptr);
-        // u_setrt binds the target but leaves the viewport alone, and the field is not screen
-        // sized: without this the quad rasterizes at screen size and only a corner of it lands.
-        RCache.SetViewport({ 0.f, 0.f, rt_w, rt_h, 0.f, 1.f });
-        RCache.set_Stencil(FALSE);
-        RCache.set_Z(FALSE);
-        RCache.set_CullMode(CULL_NONE);
-        RCache.set_ColorWriteEnable();
+        for (int b = 0; b < 3; ++b)
+        {
+            u_setrt(RCache, rt_WaterRipple[b][0], nullptr, nullptr, (ID3DDepthStencilView*)nullptr);
+            // u_setrt binds the target but leaves the viewport alone, and the field is not screen
+            // sized: without this the quad rasterizes at screen size and only a corner of it lands.
+            RCache.SetViewport({ 0.f, 0.f, rt_w, rt_h, 0.f, 1.f });
+            RCache.set_Stencil(FALSE);
+            RCache.set_Z(FALSE);
+            RCache.set_CullMode(CULL_NONE);
+            RCache.set_ColorWriteEnable();
 
-        // FVF::TL and the same quad as our other fullscreen passes: a vertex layout that does
-        // not match the vertex shader is dropped by DirectX without a single message.
-        u32 Offset = 0;
-        FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, Offset);
-        pv->set(-1.f, 1.f, 0.f, 1.f, 0u, 0.f, 0.f); pv++;
-        pv->set(-1.f, -1.f, 0.f, 0.f, 0u, 0.f, 0.f); pv++;
-        pv->set(1.f, 1.f, 1.f, 1.f, 0u, 0.f, 0.f); pv++;
-        pv->set(1.f, -1.f, 1.f, 0.f, 0u, 0.f, 0.f); pv++;
-        RImplementation.Vertex.Unlock(4, g_combine->vb_stride);
+            // FVF::TL and the same quad as our other fullscreen passes: a vertex layout that does
+            // not match the vertex shader is dropped by DirectX without a single message.
+            u32 Offset = 0;
+            FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, Offset);
+            pv->set(-1.f, 1.f, 0.f, 1.f, 0u, 0.f, 0.f); pv++;
+            pv->set(-1.f, -1.f, 0.f, 0.f, 0u, 0.f, 0.f); pv++;
+            pv->set(1.f, 1.f, 1.f, 1.f, 0u, 0.f, 0.f); pv++;
+            pv->set(1.f, -1.f, 1.f, 0.f, 0u, 0.f, 0.f); pv++;
+            RImplementation.Vertex.Unlock(4, g_combine->vb_stride);
 
-        RCache.set_Element(s_water_ripple->E[0]);
-        RCache.set_Geometry(g_combine);
-        RCache.set_c("da_ripple_sim", r2, damping_wet, texels, float(g_ripple_step));
-        RCache.set_c("da_ripple_src", shift_u, shift_v, rain_p, rain_amp);
-        // Every source in the sim is a depth in metres; these say how many steps that depth is
-        // spread over. Feeding it once per step instead drives the field into its clamp.
-        RCache.set_c("da_ripple_sim2", dt, 0.12f, 0.15f, wave_c);
-        RCache.set_c("da_ripple_sim3", damping_land, viscosity, env.water_ripple_edge, texel_m);
-        RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+            RCache.set_Element(s_water_ripple[b]->E[0]);
+            RCache.set_Geometry(g_combine);
+            RCache.set_c("da_ripple_sim", band_r2[b], damping_wet[b], texels, float(g_ripple_step));
+            RCache.set_c("da_ripple_src", shift_u, shift_v, rain_p, rain_amp);
+            // Every source in the sim is a depth in metres; these say how many steps that depth
+            // is spread over. Feeding it once per step instead drives the field into its clamp.
+            // w is the clock the slots' ring radius runs on: the fastest band's speed.
+            RCache.set_c("da_ripple_sim2", dt, 0.10f, 0.15f, front_speed);
+            RCache.set_c("da_ripple_sim3", damping_land, viscosity, env.water_ripple_edge, texel_m);
+            RCache.set_c("da_ripple_band", band_k[b], band_dimple[b], float(b), 0.f);
+            RCache.set_c("da_ripple_bands", band_k[0], band_k[1], band_k[2], 0.f);
+            RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+
+            // Hand the state that was just written to whoever reads it next - the following step,
+            // or the surface shader this frame. See the note above the function for why this is a
+            // copy and not a swap of the two halves.
+            ctx->CopyResource(rt_WaterRipple[b][1]->pSurface, rt_WaterRipple[b][0]->pSurface);
+        }
         ++g_ripple_step;
-
-        // Hand the state that was just written to whoever reads it next - the following step,
-        // or the surface shader this frame. See the note above the function for why this is a
-        // copy and not a swap of the two halves.
-        ctx->CopyResource(rt_WaterRipple[1]->pSurface, rt_WaterRipple[0]->pSurface);
     }
 
     // Only now: if no step ran this frame the field still holds the OLD window, and moving the

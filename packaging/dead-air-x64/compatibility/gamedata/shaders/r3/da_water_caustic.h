@@ -49,6 +49,17 @@
 //	either way of the mean, a real pond's is a half.
 #define DA_WC_DETAIL	2.5f
 
+//	Five-tap stencil over one band of the ripple field, in texel units.
+float da_wc_ripple_lap(Texture2D band, float2 uv, float e)
+{
+	const float h0 = band.SampleLevel(smp_rtlinear, uv, 0).r;
+	const float hx1 = band.SampleLevel(smp_rtlinear, uv + float2(e, 0.0f), 0).r;
+	const float hx0 = band.SampleLevel(smp_rtlinear, uv - float2(e, 0.0f), 0).r;
+	const float hz1 = band.SampleLevel(smp_rtlinear, uv + float2(0.0f, e), 0).r;
+	const float hz0 = band.SampleLevel(smp_rtlinear, uv - float2(0.0f, e), 0).r;
+	return hx1 + hx0 + hz1 + hz0 - 4.0f * h0;
+}
+
 //	Laplacian of the surface height at a world XZ, in 1/m: the wave rows straight out of the
 //	table the surface draws (h = A * sin(phase), so d2h/dx2 along the wave is -A k^2 sin), the
 //	divergence of the detail layer's slope at the amplitude water.ps gives it, and a five-tap
@@ -104,14 +115,10 @@ float da_wc_curvature(Texture2D nmap, SamplerState smp, float2 wxz, float depth,
 		{
 			const float e = da_water_rip.w;
 			const float tm = da_water_rip.z * e;
-			const float h0 = s_water_ripple.SampleLevel(smp_rtlinear, uv, 0).r;
-			const float hx1 = s_water_ripple.SampleLevel(smp_rtlinear, uv + float2(e, 0.0f), 0).r;
-			const float hx0 = s_water_ripple.SampleLevel(smp_rtlinear, uv - float2(e, 0.0f), 0).r;
-			const float hz1 = s_water_ripple.SampleLevel(smp_rtlinear, uv + float2(0.0f, e), 0).r;
-			const float hz0 = s_water_ripple.SampleLevel(smp_rtlinear, uv - float2(0.0f, e), 0).r;
 			const float2 d = min(uv, 1.0f - uv) * da_water_rip.z;
 			const float rim = saturate(min(d.x, d.y) * (1.0f / DA_WF_RIM_M));
-			lap += (hx1 + hx0 + hz1 + hz0 - 4.0f * h0) / (tm * tm) * rim;
+			lap += (da_wc_ripple_lap(s_water_ripple, uv, e) + da_wc_ripple_lap(s_water_ripple1, uv, e) +
+				da_wc_ripple_lap(s_water_ripple2, uv, e)) / (tm * tm) * rim;
 		}
 	}
 	return lap;

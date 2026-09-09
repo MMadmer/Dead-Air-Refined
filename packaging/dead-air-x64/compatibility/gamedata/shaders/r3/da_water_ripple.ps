@@ -2,7 +2,7 @@
 #include "da_water_field.h"
 #include "da_water_rings.h"
 
-//	---- The ripple field: one fixed step of the wave equation ----------------------------------
+//	---- The ripple field: one fixed step of one band of the wave equation ---------------------
 //
 //	A 64 m window around the camera, snapped to whole texels, holding the surface height of
 //	everything that has disturbed the water: bullets, blasts, feet, bodies, waders and - on the
@@ -10,15 +10,25 @@
 //	analytic ring path (da_water_rings.h) covers only what the field cannot: rings born outside
 //	the window, and the stretch of a ring past its edge.
 //
-//		h' = 2h - h_prev + r2 * lap(h) + nu * lap(h - h_prev)
+//	Water is dispersive - the speed of a wave is a function of its length - and one wave
+//	equation has one speed, so the field is THREE of them, one per octave of ring wavelength
+//	(0.3, 0.6, 1.2 m; da_ripple_band says which one this pass is). Every source is shared out
+//	between the bands by its own spectrum: a Gaussian crater of radius a has its energy at
+//	exp(-k^2 a^2 / 4) per wavenumber, so a bullet's 14 cm dimple goes mostly to the two longer
+//	bands and a blast's 70 cm one entirely to the longest. The bands then run at their own
+//	speeds and a ring becomes what a ring is on a pond: a train whose long waves lead and
+//	whose short ones trail, spreading as it goes.
+//
+//		h' = 2h - h_prev + r2(h_local) * lap(h) + nu * lap(h - h_prev)
 //		h' *= damping
 //
 //	Plain leapfrog on a height map - no advection, no pressure - with a viscosity on the
 //	VELOCITY. That term damps a wave in proportion to k^2, which is what real viscosity does:
 //	it takes the grid-scale checkerboard out in a dozen steps and leaves a half-metre ring
 //	alone for a minute, so the global damping can be the slow, wavelength-blind loss it should
-//	be. The first version had a 3 s global damping and no viscosity, and a ring was gone in
-//	seconds whatever it did.
+//	be. r2 is the band's deep-water speed scaled by the finite-depth dispersion relation,
+//	sqrt(tanh(k h)) on the speed, so a ring slows as it runs into the shallows and a puddle's
+//	ring crawls.
 //
 //	The field runs over the WHOLE window, dry ground included. A rain puddle is water too and
 //	its rings live in this field; the baked coverage only says where the banks are, and a tap
@@ -32,39 +42,45 @@
 //	  * the window is snapped to whole texels and the previous state is resampled at a WHOLE
 //	    texel offset, so nothing is ever filtered on the way in (a window that slides
 //	    continuously smears the field into mush - the open defect in OpenMW's version);
-//	  * the wave speed is the phase speed of the band the grid resolves, solved on the CPU
-//	    from the texel size, never whatever keeps the Courant number pretty - the first
-//	    version ran at 3.75 m/s, which is why a ring crossed the window in four seconds and was
-//	    absorbed at the rim, exactly the "rings vanish after a few seconds" the player saw;
+//	  * the speeds are water's, from the wavelength of each band, never whatever keeps the
+//	    Courant number pretty or whatever the texel resolves - the first version ran at 3.75
+//	    m/s and a ring crossed the window in four seconds, the second tied the speed to the
+//	    grid and Ultra's rings were the slowest;
 //	  * the damping ramps over a fixed number of METRES at the rim, or every wave echoes off
 //	    the invisible window edge and comes back as a square.
 //
-//	The previous state is read from "$user$water_ripple1" (s_water_ripple_prev) and the new one
-//	is written into "$user$water_ripple0", which the pass then copies back into the pair's other
-//	half. That copy is what lets every CONSUMER bind one fixed texture name: a true ping-pong
-//	would put the current step in a different name on alternate frames and strobe the surface.
+//	The previous state is read from "$user$water_ripple<b>p" (s_water_ripple_prev, bound by the
+//	band's own .s script) and the new one is written into "$user$water_ripple<b>", which the
+//	pass then copies back into the pair's other half. That copy is what lets every CONSUMER
+//	bind fixed texture names: a true ping-pong would put the current step in a different name
+//	on alternate frames and strobe the surface.
 
 Texture2D s_water_ripple_prev;
 
-//	x = r2 (the leapfrog coefficient the engine solved from the wave speed and this tier's
-//	texel size), y = damping per step on open water, z = texels across the window, w = the step
-//	counter - the clock the rain hash runs on, and the only thing that makes two consecutive
-//	steps differ.
+//	x = r2 at full depth (the leapfrog coefficient the engine solved from this band's speed and
+//	this tier's texel size), y = damping per step on open water, z = texels across the window,
+//	w = the step counter - the clock the rain hash runs on, and the only thing that makes two
+//	consecutive steps differ.
 uniform float4 da_ripple_sim;
 //	xy = how far the window moved since the last step, in uv (a whole number of texels by
 //	construction), z = the chance a texel is hit by a drop this step, w = how deep that drop's
 //	crater is, in metres. zw are zero unless rain is running into the field.
 uniform float4 da_ripple_src;
 //	x = the fixed step in seconds, y = how long an impact's dimple is fed for, z = the same for a
-//	wader's push, w = the wave speed in m/s - the clock a slot's ring radius runs on. Every
-//	source below is a DEPTH in metres, not a rate, so it has to be spread over the steps that
-//	make it up - without that the dimple is dug once per step and a single bullet drives the
-//	whole field into its clamp in a tenth of a second.
+//	wader's push, w = the fastest band's speed in m/s - the clock a slot's ring radius runs on.
+//	Every source below is a DEPTH in metres, not a rate, so it has to be spread over the steps
+//	that make it up - without that the dimple is dug once per step and a single bullet drives
+//	the whole field into its clamp in a tenth of a second.
 uniform float4 da_ripple_sim2;
 //	x = damping per step on dry ground (a puddle is centimetres deep and its bed takes the
 //	energy out fast), y = the viscosity in texel^2 per step, z = the absorbing rim in metres,
 //	w = metres per texel.
 uniform float4 da_ripple_sim3;
+//	This band: x = its wavenumber, y = the radius of the dimple that starts a ring of its
+//	wavelength, z = its index (0 is the shortest).
+uniform float4 da_ripple_band;
+//	xyz = the wavenumbers of the three bands, for sharing a source out between them.
+uniform float4 da_ripple_bands;
 
 //	Wading wakes: pos rows are (xyz, radius), par rows (enveloped strength, age in seconds).
 //	Pre-transposed on the CPU like the wind motors and the impact slots; info.x is the live
@@ -81,8 +97,16 @@ uniform float4 da_water_wakei;
 #define DA_RIP_HIT_DEPTH	0.30f
 #define DA_RIP_HIT_MIN		0.03f
 #define DA_RIP_HIT_MAX		0.25f
+//	Metres per second the crater's rim runs out at while the dimple is being fed. A splash is
+//	not a still dimple: the collapsing cavity throws its rim outward at a metre or two a second
+//	for the first tenth of a second, and that is what makes a real ring start fast and only
+//	then settle to the speed of its waves. Without it the ring sat in its crater for a quarter
+//	of a second before it moved at all.
+#define DA_RIP_RIM_SPEED	1.5f
 #define DA_RIP_WAKE_AMP		0.015f	// metres a full-strength wader pushes
 #define DA_RIP_WAKE_HZ		1.7f	// a wader is a repeating push, not a standing bump
+//	The water a rain puddle is assumed to hold, for the speed its rings run at.
+#define DA_RIP_LAND_DEPTH	0.05f
 //	Metres. A stable field is centimetres, so this is a rail and not a range: if a frame ever
 //	pins against it something upstream is wrong, and clamping keeps that from spreading through
 //	the stencil into the whole window.
@@ -120,6 +144,15 @@ float2 da_rip_tap(float2 uv, float2 wxz, float2 centre, bool has_field, bool wet
 	return s_water_ripple_prev.SampleLevel(smp_nofilter, uv, 0).rg;
 }
 
+//	This band's share of a source whose crater is a Gaussian of radius a: its spectrum at the
+//	band's wavenumber, normalised over the three bands so the depth is spent exactly once.
+float da_rip_share(float a)
+{
+	const float3 w = exp(-da_ripple_bands.xyz * da_ripple_bands.xyz * (a * a * 0.25f));
+	const float mine = (da_ripple_band.z < 0.5f) ? w.x : ((da_ripple_band.z < 1.5f) ? w.y : w.z);
+	return mine / max(w.x + w.y + w.z, 1e-6f);
+}
+
 float4 main(v2p I) : SV_Target
 {
 	const float texels = da_ripple_sim.z;
@@ -131,8 +164,12 @@ float4 main(v2p I) : SV_Target
 	//	rings still work, they just have nothing to reflect off. On a baked level a texel is
 	//	either the water body or the ground beside it (a puddle), and both carry the field.
 	const bool has_field = da_water_map2.w > 0.5f;
-	const bool wet = !has_field || da_wf_here(wxz);
-	const float surf = (has_field && wet) ? da_wf_surface(wxz) : 0.0f;
+	const float4 wf = has_field ? da_wf_sample(wxz) : float4(0.0f, 1.0f, -1.0f, 0.0f);
+	const bool wet = wf.y > 0.5f;
+	const float surf = wet ? wf.x : 0.0f;
+	//	How much water there is under this texel, for the speed of its waves. A puddle on the
+	//	ground gets a puddle's few centimetres; a level with no bake is one deep sheet.
+	const float depth = has_field ? (wet ? max(wf.x - wf.z, 0.02f) : DA_RIP_LAND_DEPTH) : 4.0f;
 
 	//	The previous state, read at the offset the window moved. Both centres are snapped, so
 	//	this lands exactly on a texel and the point sample is a copy, not a resample.
@@ -154,8 +191,11 @@ float4 main(v2p I) : SV_Target
 	const float2 t2 = da_rip_tap(uv_s + float2(0.0f, e), wxz + float2(0.0f, texel_m), state, has_field, wet);
 	const float2 t3 = da_rip_tap(uv_s - float2(0.0f, e), wxz - float2(0.0f, texel_m), state, has_field, wet);
 
+	//	The finite-depth dispersion relation, c^2 = (g/k) tanh(k h), as a factor on the band's
+	//	deep-water coefficient: one at depth, falling to nothing at the waterline.
+	const float r2 = da_ripple_sim.x * tanh(da_ripple_band.x * depth);
 	const float2 lap2 = t0 + t1 + t2 + t3 - 4.0f * state;	// (lap h, lap h_prev)
-	float hn = 2.0f * h - h_prev + da_ripple_sim.x * lap2.x + da_ripple_sim3.y * (lap2.x - lap2.y);
+	float hn = 2.0f * h - h_prev + r2 * lap2.x + da_ripple_sim3.y * (lap2.x - lap2.y);
 
 	//	Losses: the slow wavelength-blind one, the puddle bed's, and the window's rim - which
 	//	is not a wall in the world, so anything that reaches it is absorbed, not reflected.
@@ -179,7 +219,7 @@ float4 main(v2p I) : SV_Target
 		[branch]
 		if (RP.w <= 0.0f || RA.z > 0.5f || RA.x <= 0.001f || RA.w <= 0.0f)	// empty, a drain, or not the field's
 			continue;
-		//	Age from the ring radius, which the CPU runs on this very speed.
+		//	Age from the ring radius, which the CPU runs on the fastest band's speed.
 		const float age = RA.y / max(da_ripple_sim2.w, 0.01f);
 		const float young = saturate(1.0f - age / max(da_ripple_sim2.y, 0.001f));
 		[branch]
@@ -190,43 +230,54 @@ float4 main(v2p I) : SV_Target
 		[branch]
 		if (has_field && wet && abs(RP.y - surf) > 0.75f)
 			continue;
-		const float rad = max(RA.w, 2.0f * texel_m);
-		const float depth = clamp(DA_RIP_HIT_DEPTH * RA.w, DA_RIP_HIT_MIN, DA_RIP_HIT_MAX);
+		const float share = da_rip_share(RA.w);
+		[branch]
+		if (share <= 0.001f)
+			continue;
+		//	The dimple is this band's own size - it is what sets the wavelength of the ring it
+		//	starts - and its rim runs out while it is fed.
+		const float rad = max(da_ripple_band.y, 2.0f * texel_m) + DA_RIP_RIM_SPEED * age;
+		const float depth_d = clamp(DA_RIP_HIT_DEPTH * RA.w, DA_RIP_HIT_MIN, DA_RIP_HIT_MAX) * share;
 		const float2 dr = wxz - RP.xz;
 		//	young ramps from 1 to 0 across the window, so its integral is half of it: the 2 puts
-		//	the total dug depth back at exactly depth.
+		//	the total dug depth back at exactly depth_d.
 		const float hit_rate = 2.0f * da_ripple_sim2.x / max(da_ripple_sim2.y, 0.001f);
-		inject -= RA.x * young * exp(-dot(dr, dr) / (rad * rad)) * depth * hit_rate;
+		inject -= RA.x * young * exp(-dot(dr, dr) / (rad * rad)) * depth_d * hit_rate;
 	}
 
 	//	Wakes. Continuous while the source keeps wading, so this pushes and releases at a couple
-	//	of hertz: a steady bump would just sit there as a dome and radiate nothing.
-	const int wk_count = int(da_water_wakei.x);
-	[loop]
-	for (int wi = 0; wi < wk_count; ++wi)
+	//	of hertz: a steady bump would just sit there as a dome and radiate nothing. A wader's
+	//	push is a half-metre affair, so the two shorter bands split it.
+	[branch]
+	if (da_ripple_band.z < 1.5f)
 	{
-		const float4 WP = (wi < 4) ? da_water_wake0[min(wi, 3)] : da_water_wake1[max(wi - 4, 0)];
-		const float4 WA = (wi < 4) ? da_water_wakep0[min(wi, 3)] : da_water_wakep1[max(wi - 4, 0)];
-		[branch]
-		if (WP.w <= 0.0f || WA.x <= 0.001f)
-			continue;
-		[branch]
-		if (has_field && wet && abs(WP.y - surf) > 0.75f)
-			continue;
-		const float rad = max(WP.w, 2.0f * texel_m);
-		const float2 dw = wxz - WP.xz;
-		const float wake_rate = da_ripple_sim2.x / max(da_ripple_sim2.z, 0.001f);
-		inject += WA.x * exp(-dot(dw, dw) / (rad * rad)) * sin(WA.y * (6.2831853f * DA_RIP_WAKE_HZ)) *
-			DA_RIP_WAKE_AMP * wake_rate;
+		const int wk_count = int(da_water_wakei.x);
+		[loop]
+		for (int wi = 0; wi < wk_count; ++wi)
+		{
+			const float4 WP = (wi < 4) ? da_water_wake0[min(wi, 3)] : da_water_wake1[max(wi - 4, 0)];
+			const float4 WA = (wi < 4) ? da_water_wakep0[min(wi, 3)] : da_water_wakep1[max(wi - 4, 0)];
+			[branch]
+			if (WP.w <= 0.0f || WA.x <= 0.001f)
+				continue;
+			[branch]
+			if (has_field && wet && abs(WP.y - surf) > 0.75f)
+				continue;
+			const float rad = max(WP.w, 2.0f * texel_m);
+			const float2 dw = wxz - WP.xz;
+			const float wake_rate = da_ripple_sim2.x / max(da_ripple_sim2.z, 0.001f);
+			inject += WA.x * exp(-dot(dw, dw) / (rad * rad)) * sin(WA.y * (6.2831853f * DA_RIP_WAKE_HZ)) *
+				(0.5f * DA_RIP_WAKE_AMP * wake_rate);
+		}
 	}
 
-	//	Rain, on the water body only. Poisson in the only sense that matters here - every texel
-	//	rolls independently every step against a rate the engine derived from mm/h. The 3x3
-	//	neighbourhood is not decoration: a one-texel spike is the worst thing you can hand this
-	//	stencil, which turns it into a checkerboard, while a drop that also lifts its neighbours
-	//	is a crater and radiates a ring.
+	//	Rain, on the water body only and in the shortest band only - a drop's ring is small.
+	//	Poisson in the only sense that matters here: every texel rolls independently every step
+	//	against a rate the engine derived from mm/h. The 3x3 neighbourhood is not decoration: a
+	//	one-texel spike is the worst thing you can hand this stencil, which turns it into a
+	//	checkerboard, while a drop that also lifts its neighbours is a crater and radiates a ring.
 	[branch]
-	if (da_ripple_src.z > 0.0f && has_field && wet)
+	if (da_ripple_src.z > 0.0f && has_field && wet && da_ripple_band.z < 0.5f)
 	{
 		const uint step = uint(da_ripple_sim.w);
 		const int2 id = int2(floor(wxz / texel_m));
