@@ -1202,7 +1202,10 @@ void CEnvironment::wind_tick(float delta)
     // says "rain and clouds"), and the wind implied by precipitation as the floor under both.
 
     const float base_cfg = powf(clampr(CurrentEnv.wind_velocity / 400.f, 0.f, 1.f), 0.8f);
-    const float base_implied = 0.10f + 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
+    // Rain implies wind; nothing else does. This used to carry an unconditional +0.10 floor,
+    // which is what made "dead calm" impossible: no weather, no console, nothing could put the
+    // ceiling below it.
+    const float base_implied = 0.58f * clampr(CurrentEnv.rain_density, 0.f, 1.f);
     // The profile switches as a step on the cycle boundary - low-pass it so a new weather
     // swells the wind over ~half a minute instead of snapping the whole world at once.
     const float profile = weather_wind_profile();
@@ -1210,7 +1213,26 @@ void CEnvironment::wind_tick(float delta)
         wind_profile_smooth = std::max(profile, 0.f); // first frame: no swell-in from zero
     wind_profile_smooth +=
         (std::max(profile, 0.f) - wind_profile_smooth) * (1.f - expf(-delta / 12.f));
-    const float base = eff_wind_force >= 0.f ? eff_wind_force : std::max({base_cfg, wind_profile_smooth, base_implied});
+    // Who decides how hard it blows.
+    //
+    // The authored curve cannot: DA's own configs put wind_velocity 350 on a CLEAR noon and 400
+    // on a storm, so read at face value a clear day blows nine tenths as hard as a gale - and
+    // taking the strongest of the three voices meant the authored number always won. That is
+    // what "in dead calm the trees still sway" was, at the source.
+    //
+    // The cycle NAME knows what weather this is, and the profile table says what that weather
+    // does (dead_air_x64_wind.ltx). So the profile sets the MAGNITUDE and the authored curve
+    // only shapes it: a time key that says "windier" still reads as windier within the day, it
+    // just cannot promote a clear sky to Beaufort 6. A cycle the table has no key for - a
+    // weather effect, most likely - has no profile, and there the authored value is meant
+    // literally and is all we have.
+    float base;
+    if (eff_wind_force >= 0.f)
+        base = eff_wind_force;
+    else if (profile >= 0.f)
+        base = std::max(wind_profile_smooth * (0.70f + 0.60f * base_cfg), base_implied);
+    else
+        base = std::max(base_cfg, base_implied);
     eff_wind_base = base;
 
     // Three time scales, deliberately incommensurable so the pattern never visibly loops:

@@ -223,13 +223,13 @@ struct FTreeVisual_setup
         wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
         // The authored per-weather amplitude is tiny (DA weathers sit at ~0.05 rad, an
-        // imperceptible 3 degrees), so the service envelope has to overshoot hard - but from
-        // the authored look in calm air: a clear day stays near x1 (the first curve made even
-        // clear weather "sway pretty hard"), a storm gust reaches ~x4. Field-test driven
-        // three times: too weak at (0.55 + 0.80*var), trunk-slide territory at
-        // (0.80 + 4.50*norm); the shader also hard-caps the total bend at 0.38*H now, so
-        // storm weathers that author amplitude 0.10 cannot fold a crown over.
-        wind.mul(desc.m_fTreeAmplitude * (0.50f + 3.20f * env.eff_wind_norm));
+        // imperceptible 3 degrees), so the service envelope has to overshoot hard. What it must
+        // NOT do is overshoot at the bottom: the curve used to start at half strength, so a
+        // tree kept swaying at literally zero wind and a calm morning ran at 85 per cent of
+        // nominal. It starts near nothing now and climbs faster, which leaves a storm where it
+        // was and makes calm actually calm. The shader caps the total bend at 0.50*H, so storm
+        // weathers that author amplitude 0.10 still cannot fold a crown over.
+        wind.mul(desc.m_fTreeAmplitude * (0.04f + 3.60f * env.eff_wind_norm));
 
         scale = 1.f / float(FTreeVisual_quant);
 

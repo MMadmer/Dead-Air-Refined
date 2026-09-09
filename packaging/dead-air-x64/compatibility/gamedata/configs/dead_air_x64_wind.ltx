@@ -1,12 +1,16 @@
 ; Dead Air x64: per-weather wind strength profiles.
 ;
-; DA weather cycles do not author wind_velocity (1028 of ~1100 entries are zero), so the
+; DA weather cycles barely author wind_velocity (1028 of ~1100 entries are zero), so the
 ; engine's wind service maps the CYCLE NAME to a base strength here. Matching: an exact
 ; cycle-name key wins, otherwise the LONGEST substring key found in the name wins (so
-; "veryfoggy" beats "foggy", "af3_day_storm" can be overridden exactly). Values are the
-; weather's nominal wind in 0..1 (1 = full gale); the service layers its own minute-scale
-; trends, waves, discrete gusts and the travelling gust field on top, and an authored
-; wind_velocity or rain still raises the ceiling if it says more.
+; "veryfoggy" beats "foggy", "af3_day_storm" can be overridden exactly).
+;
+; These values are the MAGNITUDE, not a floor. Where a key matches, the authored wind_velocity
+; curve only shapes the day around this number (+-30 per cent) instead of replacing it - the
+; handful of entries that do author a value are not calibrated against each other at all
+; (af3_day_clear says 350 at noon, af3_day_storm says 400), and taken literally a clear day
+; blew nine tenths as hard as a gale. A cycle no key matches - a weather effect - keeps its
+; authored value literally. Rain still raises the ceiling under both.
 ;
 ; Substring defaults below cover the whole AF3 set (af3_<light>_<sky>) plus the default_*
 ; and special cycles. Add exact names to fine-tune a single cycle.
@@ -68,16 +72,30 @@ studen    = 0.0
 zharka    = 0.0
 psi       = 0.0
 
+;
+; The ladder below is Beaufort. Roughly, m/s at 10 m over open ground = value * 11, times the
+; service's own variability (0.55..1.4 around it), so the mean and the gust range are both
+; given. What each step is supposed to LOOK like is the whole point of the calibration:
+;
+;   0.02  ~0.1 m/s   B0  nothing moves
+;   0.05  ~0.3 m/s   B0-1  smoke rises almost straight; leaf tips only
+;   0.10  ~0.7 m/s   B1  leaves barely stir, twigs still
+;   0.28  ~2.0 m/s   B2  leaves rustle, wind felt on the face
+;   0.45  ~3.6 m/s   B3  leaves and small twigs in constant motion
+;   0.62  ~5.4 m/s   B4  small branches move, dust lifts
+;   0.85  ~8.2 m/s   B5  small trees in leaf begin to sway
+;   1.00  ~10 m/s, gusting 14  B5-6  large branches in motion
 [wind_profiles]
-storm        = 0.95
+storm        = 1.00
 thunder      = 0.85
-rain         = 0.65
-veryfoggy    = 0.12
-foggy        = 0.20
-cloudy       = 0.48
-partly       = 0.30
-clear        = 0.14
-night        = 0.10
-indoor       = 0.05
-stancia      = 0.55
+rain         = 0.62
+cloudy       = 0.45
+partly       = 0.28
+foggy        = 0.12
+clear        = 0.10
+night        = 0.08
+; Dense fog forms in near-still air - it does not survive a breeze.
+veryfoggy    = 0.05
+indoor       = 0.02
+stancia      = 0.45
 map          = 0.00

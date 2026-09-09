@@ -521,13 +521,16 @@ void CDetailManager::UpdateRenderState()
     const auto& env = g_pGamePersistent->Environment();
     const float gust_smooth = env.eff_wind_gust_smooth;
     const float wind_dir = env.eff_wind_dir;
-    // Floor keeps a calm morning breathing; above it the effective-wind service supplies the
-    // real-life variability (minute trends, waves, discrete gusts) inside the weather envelope.
-    // The slope is deliberately steep: a field test showed a storm through three multiplied
-    // moderating layers reads as near-calm - the envelope has to overshoot to survive them.
-    // (Floor eased after the next test: calm weather still swayed too much.)
-    const float wind_norm = 0.28f + 1.25f * env.eff_wind_norm;
-    const float whip = 0.70f + 0.80f * env.eff_wind_norm;
+    // The effective-wind service supplies the real-life variability (minute trends, waves,
+    // discrete gusts) inside the weather envelope; the slope here is deliberately steep,
+    // because a storm read as near-calm through three multiplied moderating layers.
+    //
+    // The floors are the part that had to go. At 0.28 and 0.70 a meadow in a literal dead calm
+    // still ran at a third of its storm amplitude with the oscillator turning at three quarters
+    // speed - the whole range from nothing to a gale bought a 35 per cent change, and tall marsh
+    // reed, whose tip travels with its real height, looked stormy in every weather.
+    const float wind_norm = 0.03f + 1.50f * env.eff_wind_norm;
+    const float whip = 0.30f + 1.20f * env.eff_wind_norm;
 #else
     constexpr float gust_smooth = 0.3f;
     constexpr float wind_dir = 0.f;
