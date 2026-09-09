@@ -66,6 +66,14 @@ public:
     //	Igor: for volumetric lights
     ref_rt rt_Generic_2; // 32bit		(r,g,b,a)				// post-process, intermidiate results, etc.
     ref_rt rt_SSR; // scene grab taken right before the forward pass, sampled by the water SSLR
+    // The baked, level-wide water map is deliberately NOT here. Nothing in the frame renders
+    // into it, so it is not a render target: it is a CPU bake uploaded as a plain immutable
+    // texture under "$user$water_field" by r4_water_field.cpp.
+    // Ripple simulation ping-pong ("$user$water_ripple0/1"): R = height now, G = height one
+    // step back, over a window of CEnvironment::water_ripple_window metres snapped to whole
+    // texels around the camera (da_water_rip). Empty below the tier that runs the field.
+    ref_rt rt_WaterRipple[2];
+    u32 m_water_ripple_cur{}; // which half of the pair holds the current step
     ref_rt rt_SunShaftsMask;
     ref_rt rt_SunShaftsMaskSmoothed;
     ref_rt rt_SunShaftsPass0;
@@ -205,6 +213,7 @@ private:
     ref_shader s_taa;
     ref_shader s_sunshafts;
     ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
+    ref_shader s_water_ripple; // one step of the ripple field; created on first use by its phase
     // The cloud deck field, rendered once per frame over a square of the deck plane around the
     // camera; the sun passes, the shafts and the visible deck all read it instead of evaluating
     // the field's noise per pixel.
@@ -366,6 +375,7 @@ public:
     void phase_taa(const Fmatrix& reproject);
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
+    void phase_water_ripple(); // fixed steps of the interaction ripple field
     void phase_cloud_map();
     void dump_cloud_map();
     void phase_clouds_march();

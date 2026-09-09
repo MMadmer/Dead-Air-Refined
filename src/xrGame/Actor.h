@@ -506,6 +506,18 @@ public:
         int restore_frames{-1};
     };
     SFallRoll m_fall_roll;
+
+public:
+    // The actor in water (DESIGN2 section 4). The depth itself belongs to the movement
+    // control; what lives here is the one-shot entry splash and the visor-droplet
+    // accumulator that replaces the once-a-second Lua poll of r2_lenswater_val.
+    void UpdateWaterFx();
+
+protected:
+    float m_water_drops{};
+    float m_water_drops_pushed{};
+
+public:
     ref_sound m_fall_roll_snd;
     shared_str m_fall_roll_snd_name;
     bool IsFallRolling() const { return m_fall_roll.active; }

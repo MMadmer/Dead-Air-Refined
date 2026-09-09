@@ -2550,126 +2550,100 @@ public:
 };
 
 
-// qa_water_goto [pitch]: the nearest liquid-material vertex of the level, and the actor moved
-// to the shore beside it, facing the water and looking down at it - the water probes (rings on
-// open water) start from here on any level that has a lake or a river. The optional pitch, in
-// radians, frames the surface the same way run after run: a shallow one is the grazing angle
-// where every depth-driven term is hardest.
+// qa_water_goto [pitch] [wade]: the actor stood IN the level's water, looking at it.
+//
+// The old version walked the collision for a liquid vertex and put the actor a metre and a half
+// short of it, which is a shot of the bank about as often as it is a shot of the water - the
+// marsh is a lattice of reed islands and the nearest liquid triangle is usually across one. The
+// baked field answers the question directly: find a texel that has water over a bed the actor can
+// stand on, at least `wade` deep, and put the feet on that bed.
 class CCC_QaWaterGoto : public IConsole_Command
 {
 public:
     CCC_QaWaterGoto(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
     void Execute(pcstr args) override
     {
-        float pitch = 0.5f;
-        if (args && xr_strlen(args))
-            sscanf(args, "%f", &pitch);
-        pitch = clampr(pitch, -1.5f, 1.5f);
         CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
         if (!actor)
         {
             Msg("! [qa] qa_water_goto: no actor");
             return;
         }
-        const Fvector from = actor->Position();
-        auto& space = Level().ObjectSpace;
-        const CDB::TRI* tris = space.GetStaticTris();
-        const Fvector* verts = space.GetStaticVerts();
-        const u32 count = space.GetStaticModel()->get_tris_count();
-        // The densest cluster of liquid triangles (a lake is tessellated finely; the largest
-        // single triangle once picked a flooded room), under open sky. O(n^2) over the liquid
-        // centroids - a QA command, run once.
-        xr_vector<Fvector> centers;
-        xr_vector<u32> owners;
-        for (u32 i = 0; i < count; ++i)
+        float pitch = 0.5f;
+        float wade = 0.12f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f %f", &pitch, &wade);
+        pitch = clampr(pitch, -1.5f, 1.5f);
+        wade = clampr(wade, 0.02f, 3.f);
+
+        const CEnvironment& env = GamePersistent().Environment();
+        if (!env.water_field_valid())
         {
-            const CDB::TRI& t = tris[i];
-            const SGameMtl* m = GMLib.GetMaterialByIdx(u16(t.material));
-            if (!m || !m->Flags.test(SGameMtl::flLiquid))
-                continue;
-            Fvector c;
-            c.add(verts[t.verts[0]], verts[t.verts[1]]);
-            c.add(verts[t.verts[2]]);
-            c.div(3.f);
-            centers.push_back(c);
-            owners.push_back(i);
-        }
-        const CDB::TRI* best_tri = nullptr;
-        u32 best_n = 0;
-        Fvector best_c{};
-        for (size_t a = 0; a < centers.size(); ++a)
-        {
-            u32 n = 0;
-            for (size_t b = 0; b < centers.size(); ++b)
-                if (centers[a].distance_to_sqr(centers[b]) < 15.f * 15.f)
-                    ++n;
-            if (n <= best_n)
-                continue;
-            Fvector c = centers[a];
-            c.y += 0.5f;
-            collide::rq_result sky;
-            if (space.RayPick(c, Fvector{0.f, 1.f, 0.f}, 80.f, collide::rqtStatic, sky, nullptr))
-                continue;
-            best_n = n;
-            best_tri = &tris[owners[a]];
-            best_c = centers[a];
-        }
-        if (!best_tri)
-        {
-            Msg("! [qa] qa_water_goto: no open-air liquid material on this level");
+            Msg("! [qa] qa_water_goto: this level has no water field");
             return;
         }
-        // Diagnostics: can the static ray query see this water from above and from below?
+
+        // Rings outward from where the actor is, so the frame stays near whatever was being
+        // looked at, and the first hit is the closest water rather than the biggest.
+        const Fvector from = actor->Position();
+        Fvector wet{};
+        float wet_depth = 0.f;
+        bool found = false;
+        for (float r = 2.f; r <= 400.f && !found; r *= 1.35f)
         {
-            collide::rq_result d, u;
-            Fvector above = best_c;
-            above.y += 3.f;
-            Fvector below = best_c;
-            below.y -= 1.f;
-            const bool hd = space.RayPick(above, Fvector{0.f, -1.f, 0.f}, 6.f, collide::rqtStatic, d, nullptr);
-            const bool hu = space.RayPick(below, Fvector{0.f, 1.f, 0.f}, 6.f, collide::rqtStatic, u, nullptr);
-            const auto liquid = [&](bool hit, const collide::rq_result& r) {
-                if (!hit)
-                    return -1;
-                const SGameMtl* m = GMLib.GetMaterialByIdx(u16(tris[r.element].material));
-                return (m && m->Flags.test(SGameMtl::flLiquid)) ? 1 : 0;
-            };
-            Msg("* [qa] water cluster: %u tris within 15 m; ray from above liquid=%d (range %.2f), from below liquid=%d (range %.2f)",
-                best_n, liquid(hd, d), hd ? d.range : 0.f, liquid(hu, u), hu ? u.range : 0.f);
-        }
-        float best = flt_max;
-        Fvector v_best{};
-        for (int k = 0; k < 3; ++k)
-        {
-            const float d = verts[best_tri->verts[k]].distance_to_sqr(from);
-            if (d < best)
+            for (int a = 0; a < 32 && !found; ++a)
             {
-                best = d;
-                v_best = verts[best_tri->verts[k]];
+                const float ang = PI_MUL_2 * float(a) / 32.f;
+                Fvector p = from;
+                p.x += _cos(ang) * r;
+                p.z += _sin(ang) * r;
+                float surface, bed;
+                if (!env.water_at(p, surface, bed))
+                    continue;
+                const float d = surface - bed;
+                if (d < wade)
+                    continue;
+                wet.set(p.x, bed, p.z);
+                wet_depth = d;
+                found = true;
             }
         }
-        Fvector to = v_best;
-        to.sub(from);
-        to.y = 0.f;
-        const float dist = to.magnitude();
-        if (dist > 0.01f)
-            to.div(dist);
-        else
-            to.set(0.f, 0.f, 1.f);
-        // 1.5 m short of the shore vertex, on the ground there.
-        Fvector pos;
-        pos.mad(v_best, to, -1.5f);
-        pos.y = v_best.y + 3.f;
-        collide::rq_result rq;
-        if (space.RayPick(pos, Fvector{0.f, -1.f, 0.f}, 6.f, collide::rqtStatic, rq, nullptr))
-            pos.y -= rq.range - 0.1f;
-        else
-            pos.y = v_best.y + 0.2f;
+        if (!found)
+        {
+            Msg("! [qa] qa_water_goto: no water at least %.2f m deep anywhere near the actor", wade);
+            return;
+        }
+
+        // Face whichever way has the most water in front, so a downward camera frames the
+        // surface and not the bank two metres away.
+        float best_open = -1.f;
+        float best_yaw = 0.f;
+        for (int a = 0; a < 16; ++a)
+        {
+            const float yaw = PI_MUL_2 * float(a) / 16.f;
+            float open = 0.f;
+            for (float d = 2.f; d <= 24.f; d += 2.f)
+            {
+                Fvector q = wet;
+                q.x += _sin(yaw) * d;
+                q.z += _cos(yaw) * d;
+                float su, bd;
+                if (env.water_at(q, su, bd))
+                    open = d;
+                else
+                    break;
+            }
+            if (open > best_open)
+            {
+                best_open = open;
+                best_yaw = yaw;
+            }
+        }
+
         // MoveActor takes angles: x = -torso pitch, y = -yaw, with forward = (sin yaw, cos yaw).
-        const float yaw = atan2f(to.x, to.z);
-        actor->MoveActor(pos, Fvector{pitch, -yaw, 0.f});
-        Msg("* [qa] water at (%.1f, %.1f, %.1f), %.0f m away; actor at (%.1f, %.1f, %.1f) yaw=%.0f",
-            v_best.x, v_best.y, v_best.z, _sqrt(best), pos.x, pos.y, pos.z, rad2deg(yaw));
+        actor->MoveActor(wet, Fvector{ pitch, -best_yaw, 0.f });
+        Msg("* [qa] standing in %.2f m of water at (%.1f, %.1f, %.1f), %.0f m of it ahead, yaw %.0f",
+            wet_depth, wet.x, wet.y, wet.z, best_open, rad2deg(best_yaw));
     }
 };
 
@@ -2696,6 +2670,25 @@ public:
                 0.5f * (b.extent.vMin.x + b.extent.vMax.x), b.extent.vMin.y,
                 0.5f * (b.extent.vMin.z + b.extent.vMax.z), b.depth);
         }
+        // The baked field and the ripple window are the two things part 2 hangs off, and
+        // neither is visible in a screenshot: a dead field looks exactly like calm water.
+        if (env.water_field_valid())
+        {
+            const Fvector p = Device.vCameraPosition;
+            const float surf = env.water_surface_at(p);
+            Msg("* [qa] field: %dx%d over %.0f x %.0f m; under the camera surface %s, shore %.1f m",
+                CEnvironment::water_field_dim, CEnvironment::water_field_dim,
+                env.water_field_bounds.vMax.x - env.water_field_bounds.vMin.x,
+                env.water_field_bounds.vMax.z - env.water_field_bounds.vMin.z,
+                surf > -flt_max * 0.5f ? "yes" : "no", env.water_shore_dist(p));
+        }
+        else
+            Msg("* [qa] field: not baked on this level");
+        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f%s", env.water_ripple_win.z,
+            env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
+            env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
+        Msg("* [qa] under water: %.2f m below a surface at %.2f", env.eye_under_depth, env.eye_under_surface);
+        Msg("* [qa] rain: %.1f mm/h, extinction %.2f 1/km", env.rain_rate_mmh, env.rain_ext_km);
         Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,
             env.water_sea.y, env.water_sea.z, env.water_sea.w, env.WindSpeedMs());
         Msg("* [qa] here: depth %.2f m, fetch %.0f m, %d wave row(s)", env.water_body.x, env.water_body.y,
@@ -2713,6 +2706,185 @@ public:
                 slot ? 'B' : 'A', pr.sigma_t.x, pr.sigma_t.y, pr.sigma_t.z, pr.body_r.x, pr.body_r.y,
                 pr.body_r.z, pr.scum);
         }
+    }
+};
+
+// qa_water_dive [metres]: the actor put UNDER the nearest water surface deep enough that the
+// camera is below it. Nothing else in the game can get the camera under water on purpose, so
+// without this the underwater path, the surface seen from below and the caustics have no repro.
+class CCC_QaWaterDive : public IConsole_Command
+{
+public:
+    CCC_QaWaterDive(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
+        if (!actor)
+        {
+            Msg("! [qa] qa_water_dive: no actor");
+            return;
+        }
+        float below = 1.2f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &below);
+
+        const CEnvironment& env = GamePersistent().Environment();
+        if (!env.water_field_valid())
+        {
+            Msg("! [qa] qa_water_dive: this level has no water field");
+            return;
+        }
+
+        // Walk out from the actor over the level's water bodies and take the deepest spot found:
+        // the shore the other probes aim for is exactly where the camera cannot get under. Open
+        // sky wins over depth, because the deepest water on a level is usually a flooded cellar
+        // and a frame shot in the dark says nothing about how the medium looks.
+        Fvector best = actor->Position();
+        float best_depth = -1.f;
+        bool best_open = false;
+        for (int i = 0; i < env.water_body_count; ++i)
+        {
+            const Fbox& e = env.water_bodies[i].extent;
+            for (int gz = 0; gz < 12; ++gz)
+                for (int gx = 0; gx < 12; ++gx)
+                {
+                    Fvector p;
+                    p.x = e.vMin.x + (e.vMax.x - e.vMin.x) * (gx + 0.5f) / 12.f;
+                    p.z = e.vMin.z + (e.vMax.z - e.vMin.z) * (gz + 0.5f) / 12.f;
+                    p.y = e.vMax.y;
+                    float surface, bed;
+                    if (!env.water_at(p, surface, bed))
+                        continue;
+                    const float d = surface - bed;
+                    if (d < 2.0f)
+                        continue; // a standing camera cannot submerge in less
+                    Fvector probe{ p.x, surface + 0.5f, p.z };
+                    const bool open = !env.wind_sheltered(probe);
+                    if ((open && !best_open) || (open == best_open && d > best_depth))
+                    {
+                        best_depth = d;
+                        best_open = open;
+                        best.set(p.x, surface, p.z);
+                    }
+                }
+        }
+        if (best_depth <= 0.f)
+        {
+            Msg("! [qa] qa_water_dive: no water on this level is 2 m deep, so a standing camera "
+                "cannot get under any of it");
+            return;
+        }
+
+        // The camera rides about 1.7 m over the feet, so the feet have to go that far under the
+        // surface plus whatever submersion was asked for - and they cannot go through the bed.
+        // Below about two metres of water there is nowhere for a standing camera to be both
+        // under the surface and above the bottom, so say so rather than quietly framing a shot
+        // from inside the terrain, which looks like an underwater bug and is not one.
+        constexpr float eye_height = 1.7f;
+        const float want = eye_height + below;
+        const float room = best_depth - eye_height;
+        const float drop = (want > best_depth) ? best_depth : want;
+        best.y -= drop;
+        actor->MoveActor(best, Fvector{ 0.f, 0.f, 0.f });
+        if (room <= 0.05f)
+            Msg("! [qa] dived at (%.1f, %.1f, %.1f), but %.2f m of water cannot submerge a %.1f m "
+                "camera: the frame is from inside the bed, not from in the water",
+                best.x, best.y, best.z, best_depth, eye_height);
+        else
+            Msg("* [qa] dived at (%.1f, %.1f, %.1f), water %.2f m deep, camera %.2f m under",
+                best.x, best.y, best.z, best_depth, _min(below, room));
+    }
+};
+
+// qa_water_ring [radius]: one impact ring at the actor's feet. Feeds whatever ripple path is
+// live - the eight analytic slots below the tier that runs the field, the simulation above it.
+class CCC_QaWaterRing : public IConsole_Command
+{
+public:
+    CCC_QaWaterRing(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
+        if (!actor)
+            return;
+        float radius = 1.6f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &radius);
+
+        CEnvironment& env = GamePersistent().Environment();
+        Fvector p = actor->Position();
+        const float surface = env.water_surface_at(p);
+        if (surface <= -flt_max * 0.5f)
+        {
+            Msg("! [qa] qa_water_ring: no water under the actor");
+            return;
+        }
+        p.y = surface;
+        env.water_hit(p, radius, CEnvironment::EWaterHit::ring);
+        Msg("* [qa] ring r=%.2f at (%.1f, %.1f, %.1f)", radius, p.x, p.y, p.z);
+    }
+};
+
+// qa_rain_shelter [radius]: the actor moved to the nearest spot with a roof over it, using the
+// same sky ray the rain spawner uses to decide a drop may exist. "Does it still rain indoors" has
+// no repro otherwise - there is no other way to be sure the camera ended up under something.
+class CCC_QaRainShelter : public IConsole_Command
+{
+public:
+    CCC_QaRainShelter(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
+        if (!actor)
+        {
+            Msg("! [qa] qa_rain_shelter: no actor");
+            return;
+        }
+        float reach = 60.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &reach);
+
+        const CEnvironment& env = GamePersistent().Environment();
+        const Fvector from = actor->Position();
+        auto& space = Level().ObjectSpace;
+
+        // Rings outward from where the actor stands, so the answer is the CLOSEST shelter and the
+        // frame still shows the world the player was just looking at.
+        Fvector best{};
+        float best_d = -1.f;
+        for (float r = 2.f; r <= reach && best_d < 0.f; r += 2.f)
+        {
+            for (int a = 0; a < 24; ++a)
+            {
+                const float ang = PI_MUL_2 * float(a) / 24.f;
+                Fvector p = from;
+                p.x += _cos(ang) * r;
+                p.z += _sin(ang) * r;
+
+                // Find the ground there before asking what is over it.
+                Fvector top = p;
+                top.y += 20.f;
+                collide::rq_result ground;
+                if (!space.RayPick(top, Fvector{ 0.f, -1.f, 0.f }, 60.f, collide::rqtStatic, ground, nullptr))
+                    continue;
+                p.y = top.y - ground.range + 0.1f;
+
+                if (env.wind_sheltered(p))
+                {
+                    best = p;
+                    best_d = r;
+                    break;
+                }
+            }
+        }
+
+        if (best_d < 0.f)
+        {
+            Msg("! [qa] qa_rain_shelter: nothing with a roof within %.0f m", reach);
+            return;
+        }
+        actor->MoveActor(best, Fvector{ 0.15f, 0.f, 0.f });
+        Msg("* [qa] shelter %.0f m away at (%.1f, %.1f, %.1f)", best_d, best.x, best.y, best.z);
     }
 };
 
@@ -3277,6 +3449,9 @@ void CCC_RegisterCommands()
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
     CMD1(CCC_QaWaterGoto, "qa_water_goto");
     CMD1(CCC_QaWaterState, "qa_water_state");
+    CMD1(CCC_QaWaterDive, "qa_water_dive");
+    CMD1(CCC_QaWaterRing, "qa_water_ring");
+    CMD1(CCC_QaRainShelter, "qa_rain_shelter");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

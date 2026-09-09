@@ -20,6 +20,7 @@
 #include "CaptureBoneCallback.h"
 #include "Level.h"
 #include "PhysicsShellHolder.h"
+#include "da_water_actor.h"
 #include "xrCore/xr_token.h"
 #ifdef DEBUG
 #include "PHDebug.h"
@@ -86,6 +87,9 @@ CPHMovementControl::CPHMovementControl(IGameObject* parent)
     in_dead_area_count = 0;
     bNonInteractiveMode = false;
     block_damage_step_end = u64(-1);
+    m_water_depth = 0.f;
+    m_water_surface = 0.f;
+    m_water_entry = 0.f;
 }
 
 CPHMovementControl::~CPHMovementControl(void)
@@ -100,7 +104,13 @@ static ALife::EHitType DefineCollisionHitType(u16 material_idx)
 {
     if (IsGameTypeSingle())
     {
-        if (GMLib.GetMaterialByIdx(material_idx)->Flags.test(SGameMtl::flInjurious))
+        // The library check also covers GAMEMTL_NONE_IDX, which the caller can hand us.
+        const SGameMtl* mtl = GMLib.GetMaterialByIdx(material_idx);
+        // A liquid is injurious per second, not per landing. The feet now report the water
+        // they are standing in (PHSimpleCharacterInline.h), so without this a hard landing in
+        // a pond would arrive as a radiation hit; the dose keeps coming through the
+        // injurious-material tick either way.
+        if (mtl && mtl->Flags.test(SGameMtl::flInjurious) && !mtl->Flags.test(SGameMtl::flLiquid))
             return ALife::eHitTypeRadiation;
         return ALife::eHitTypeStrike;
     }
@@ -169,6 +179,9 @@ void CPHMovementControl::Calculate(
     Fvector previous_position;
     previous_position.set(vPosition);
     m_character->IPosition(vPosition);
+    // Before anything reads it this frame: the landing damage below and the wade state in the
+    // game layer must not disagree about how deep the feet are.
+    UpdateWaterState();
     if (bExernalImpulse)
     {
         vAccel.add(vExternalImpulse);
@@ -227,6 +240,46 @@ void CPHMovementControl::Calculate(
     bSleep = false;
     m_character->Reinit();
 }
+void CPHMovementControl::UpdateWaterState()
+{
+    const float was = m_water_depth;
+    m_water_depth = 0.f;
+    m_water_surface = 0.f;
+
+    if (!g_pGamePersistent)
+        return;
+    const CEnvironment& env = g_pGamePersistent->Environment();
+    if (!env.water_field_valid())
+        return;
+
+    float surface, bed;
+    if (!env.water_at(vPosition, surface, bed))
+        return;
+    // vPosition is the character's ground point, so the column standing on top of it is the
+    // depth. The bed is deliberately unused: a bridge or a rock above the pond puts the feet
+    // over the surface and the difference goes negative, which is exactly "not in the water".
+    if (surface <= vPosition.y)
+        return;
+
+    const float depth = surface - vPosition.y;
+    // The bake keeps the HIGHEST liquid triangle over a texel and cannot tell a pond from a
+    // raised tank, a pipe or a flooded upper floor. Several metres of "water" standing over the
+    // feet is one of those, not something we are wading in - and left unbounded it means
+    // permanent mcWade, no sprint, no jump, no fall damage and a permanent dose on dry ground.
+    // Genuinely deeper water is out of scope anyway: swimming is deliberately not built, so
+    // over-the-head water is level geometry the actor is not meant to be standing in.
+    if (depth > da_water_actor_cfg().wade_full * 2.f)
+        return;
+
+    m_water_surface = surface;
+    m_water_depth = depth;
+
+    // Breaking the surface. vVelocity still holds the previous frame's value here, which is
+    // the speed the body actually arrived with rather than what the contact left of it.
+    if (was <= 0.f && vVelocity.y < 0.f)
+        m_water_entry = -vVelocity.y;
+}
+
 void CPHMovementControl::UpdateCollisionDamage()
 {
     // reset old
@@ -254,6 +307,20 @@ void CPHMovementControl::UpdateCollisionDamage()
         gcontact_HealthLost = ((fContactSpeed - fMinCrashSpeed)) / (fMaxCrashSpeed - fMinCrashSpeed);
         VERIFY(m_character);
         m_character->SetHitType(DefineCollisionHitType(m_character->LastMaterialIDX()));
+
+        // Landing in water: the column under the feet takes the fall. Knee-deep and past it it
+        // costs nothing at all; from the ankle to there it tapers, so a puddle stays a hard
+        // floor. gcontact_Power is left alone on purpose - the impact happened and the camera
+        // should still feel it, it just did not hurt. Zeroing the loss also keeps the landing
+        // roll out of it (CActor::g_Physics triggers on a non-zero loss), which is right: you
+        // do not tuck and roll into a pond.
+        const SDaWaterActorCfg& wcfg = da_water_actor_cfg();
+        if (m_water_depth > wcfg.ankle)
+        {
+            const float k =
+                clampr((m_water_depth - wcfg.ankle) / _max(wcfg.fall_safe_depth - wcfg.ankle, EPS_S), 0.f, 1.f);
+            gcontact_HealthLost *= 1.f - k;
+        }
     }
 
     // const ICollisionDamageInfo* di=m_character->CollisionDamageInfo();

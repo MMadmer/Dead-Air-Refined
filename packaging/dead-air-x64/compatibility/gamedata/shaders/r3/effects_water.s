@@ -17,6 +17,10 @@ function normal                (shader, t_base, t_second, t_detail)
 			:zb			(true,false)
 			:distort	(true)
 			:fog		(true)
+			-- Two-sided. A water surface has to exist when the camera is under it, and it is one
+			-- polygon either way, so nothing is drawn twice. The lua API exports no cull enum -
+			-- 1 is D3DCULL_NONE.
+			:dx10cullmode	(1)
 
 	shader:dx10texture	("s_base",		tex_base)
 	shader:dx10texture	("s_nmap",		tex_nmap)
@@ -25,6 +29,13 @@ function normal                (shader, t_base, t_second, t_detail)
 	shader:dx10texture	("s_position",	"$user$position")
 
 	shader:dx10texture	("s_leaves",	tex_leaves)
+	-- The baked water field (depth, bed, metres to the nearest bank) and the ripple sim's window.
+	-- Both are $user$ targets: on a level with no water, or on a tier that runs no ripple sim,
+	-- they resolve to a name with no surface and sample as zero, which is what the shader's own
+	-- gates expect.
+	shader:dx10texture	("s_water_field",	"$user$water_field")
+	shader:dx10texture	("s_water_ripple",	"$user$water_ripple0")
+
 	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR (frame copy before water)
 
 	shader:dx10sampler	("smp_base")

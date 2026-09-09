@@ -1,0 +1,88 @@
+#include "common.h"
+#include "da_fog_common.h"
+
+// Rain streaks.
+//
+// The stock pair returned the streak texture times the vertex colour and nothing else - no
+// light, no fog, no depth fade. So the sheet stayed exactly the same grey through noon, dusk
+// and a fogbank alike, and every streak that crossed a silhouette clipped against it with a
+// hard edge, which is the one thing that gives a camera-volume particle away.
+//
+// A falling drop is not a surface with a normal, it is a small lens: what it sends to the eye
+// is the sky it gathers over its whole length, plus a sharp forward lobe when the sun stands
+// behind it. That lobe is why rain read against a low sun blazes and rain with the sun at your
+// back does not. It is the sun/sky half of the shading below, and it is the one thing here that
+// rides the ladder: da_rain2.z carries r__rain_quality, and the 'High: + streak lighting' rung
+// of DESIGN2 section 7 is this branch. Everything else - the haze and the soft fade - stays
+// unconditional, because a streak clipping against a silhouette is a defect at any preset.
+//
+// da_rain2 itself is declared by da_fog_common.h: rain extinction is part of the haze now, and
+// one owner for the constant is what keeps the streaks and the world agreeing about it.
+
+struct v2p_rain
+{
+	float2 Tex0     : TEXCOORD0;
+	float4 Color    : COLOR;
+	float3 wpos     : TEXCOORD1;
+	float4 tctexgen : TEXCOORD2;
+	float4 HPos     : SV_Position;
+	float  fog      : FOG;
+};
+
+//	Must be less than view near
+#define DEPTH_EPSILON 0.1h
+//	Metres over which a streak dissolves into whatever it crosses.
+#define RAIN_SOFT 0.30
+
+float4 main (v2p_rain I) : SV_Target
+{
+	float4 t = s_base.Sample(smp_base, I.Tex0);
+	float  a = t.a * I.Color.a;
+
+	const float3 V    = I.wpos - eye_position;
+	const float  dist = length(V);
+	const float3 Vn   = V / max(dist, 0.001);
+
+	// Below the High rung this is the stock streak - the texture times the vertex colour - and
+	// that is the 'base' column of the ladder, not a degraded one.
+	float3 col = t.rgb * I.Color.rgb;
+
+	// This pass writes an LDR target AFTER the tonemap, so the scene's light terms - which are
+	// HDR - may only MODULATE the streak, never scale it, or a sunlit sheet clips to white.
+	// x/(1+x) folds any brightness into 0..1 and the authored drop colour stays underneath.
+	[branch] if (da_rain2.z >= 2.5)
+	{
+		const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
+		const float3 sunc = L_sun_color / (1.0 + L_sun_color);
+		const float  fwd  = pow(saturate(dot(Vn, -L_sun_dir_w)), 8.0);
+		col *= 0.55 + 0.30 * skyc + 0.95 * sunc * fwd;
+	}
+
+	// The same haze as every other pass, height layer, rain extinction and ceiling included. A
+	// streak does not converge to the fog colour the way a surface does: it is a thin bright
+	// thing in front of the murk, so most of what the fog does to it is take it away.
+	//
+	// The curtain hiding its own far side used to be a second explicit exp(-sigma*dist) here.
+	// It is not gone, it MOVED: da_fog_rain applies the same coefficient to every fogged pass,
+	// and keeping the local copy as well would have extinguished the streaks twice.
+	float fogd = saturate(1.0 - I.fog);
+	[branch] if (da_fog_extras_on())
+		fogd = da_fog_height(fogd, I.wpos, eye_position, dist);
+	fogd = da_fog_ceiling(fogd);
+	col = lerp(col, fog_color.rgb, fogd * 0.6);
+	a  *= 1.0 - fogd;
+
+	// Soft against the scene, the same way every other particle in this renderer is.
+	const float2 tcProj = I.tctexgen.xy / I.tctexgen.w;
+#ifdef GBUFFER_OPTIMIZATION
+	gbuffer_data gbd = gbuffer_load_data(tcProj, I.HPos);
+#else
+	gbuffer_data gbd = gbuffer_load_data(tcProj);
+#endif
+	float spaceDepth = gbd.P.z - I.tctexgen.z - DEPTH_EPSILON;
+	if (spaceDepth < -2.0 * DEPTH_EPSILON)
+		spaceDepth = 100000.0; // the skybox writes no position
+	a *= saturate(spaceDepth / RAIN_SOFT);
+
+	return float4(col, a);
+}

@@ -7,7 +7,10 @@
 #include "material_manager.h"
 #include "xrEngine/profiler.h"
 #include "IKLimbsController.h"
+#include "CharacterPhysicsSupport.h"
+#include "PHMovementControl.h"
 #include "da_water_impact.h"
+#include "da_water_actor.h"
 
 #ifdef DEBUG
 BOOL debug_step_info = FALSE;
@@ -15,6 +18,15 @@ BOOL debug_step_info_load = FALSE;
 #endif
 
 extern float psHUDStepSoundVolume;
+
+namespace
+{
+// How the wake fades as a foot approaches the bank. There is less water to displace in the
+// shallows, so the disturbance is smaller and tighter there instead of stopping dead at the
+// waterline - which is what the baked field's channel A (metres to the nearest bank) is for.
+constexpr float wake_bank_range = 2.f; // full strength this far out
+constexpr float wake_bank_min = 0.35f; // what is left of it right on the waterline
+} // namespace
 
 CStepManager::CStepManager() {}
 CStepManager::~CStepManager() {}
@@ -165,6 +177,12 @@ void CStepManager::update(bool b_hud_view)
     float dist_sqr = m_object->Position().distance_to_sqr(Device.vCameraPosition);
     bool b_play = dist_sqr < 400.0f; // 20m
 
+    // Continuous wake: a foot pushing through water disturbs it for as long as it keeps
+    // moving, so this is fed EVERY frame - water_wake refreshes the slot the emitter already
+    // owns rather than taking a new one - and not once per step event like the ring below.
+    // It runs only while a stepping animation is playing, which is what "moving" means here.
+    UpdateWaterWake(dist_sqr);
+
     // получить параметры шага
     SStepParam& step = m_step_info.params;
     u32 cur_time = Device.dwTimeGlobal;
@@ -238,7 +256,25 @@ void CStepManager::update(bool b_hud_view)
                     Fvector surface;
                     if (da_water_surface(foot, mtl_pair->GetMtl0(), 1.f, surface) ||
                         da_water_surface(foot, mtl_pair->GetMtl1(), 1.f, surface))
+                    {
                         g_pGamePersistent->Environment().water_hit(surface, wcfg.ring_radius_step, CEnvironment::EWaterHit::ring);
+
+                        // ...and the splash that goes with it, but only where the material
+                        // pair could not throw one itself. A step that landed on the water
+                        // material plays the pair's own hit_fx through CollideParticles above;
+                        // a step on a submerged bed reports the bed's pair, which knows nothing
+                        // about the water standing over it.
+                        const auto liquid = [](int idx) {
+                            if (idx < 0 || idx >= int(GMLib.CountMaterial()))
+                                return false;
+                            const SGameMtl* m = GMLib.GetMaterialByIdx(u16(idx));
+                            return m && m->Flags.test(SGameMtl::flLiquid);
+                        };
+                        const auto& acfg = da_water_actor_cfg();
+                        if (b_play && !liquid(mtl_pair->GetMtl0()) && !liquid(mtl_pair->GetMtl1()) &&
+                            surface.y - foot.y > acfg.step_splash_depth)
+                            da_water_splash(surface, acfg.ps_step);
+                    }
                 }
             }
 
@@ -266,6 +302,47 @@ void CStepManager::update(bool b_hud_view)
         }
     }
     STOP_PROFILE
+}
+
+void CStepManager::UpdateWaterWake(float dist_sqr)
+{
+    const auto& wcfg = da_water_impact_cfg();
+    if (!wcfg.enabled || !g_pGamePersistent)
+        return;
+    if (dist_sqr >= wcfg.ring_distance * wcfg.ring_distance)
+        return;
+
+    auto& env = g_pGamePersistent->Environment();
+    // The baked field only: this runs per frame per body, so it has to stay a table lookup.
+    // A level without a field simply makes no wakes, which is the behaviour before this work.
+    if (!env.water_field_valid())
+        return;
+
+    CCharacterPhysicsSupport* cps = m_object->character_physics_support();
+    if (!cps || !cps->movement())
+        return;
+
+    // The wake is a rate: it grows with how hard the body is pushing the water, and a body
+    // that has stopped stops feeding its slot and lets it fade.
+    const auto& acfg = da_water_actor_cfg();
+    const float k = clampr(cps->movement()->GetXZVelocityActual() / _max(acfg.wake_speed_ref, EPS_S), 0.f, 1.f);
+    if (k < 0.05f)
+        return;
+
+    for (u32 i = 0; i < m_legs_count; ++i)
+    {
+        const Fvector foot = get_foot_position(ELegType(i));
+        float surface, bed;
+        if (!env.water_at(foot, surface, bed) || surface <= foot.y)
+            continue;
+        Fvector at = foot;
+        at.y = surface;
+        // water_shore_dist is defined on every texel of the field, water or bank, and the foot
+        // is inside it here (water_at just succeeded), so this cannot be the -FLT_MAX miss.
+        const float bank = wake_bank_min +
+            (1.f - wake_bank_min) * clampr(env.water_shore_dist(foot) / wake_bank_range, 0.f, 1.f);
+        env.water_wake(at, acfg.wake_radius * bank, acfg.wake_strength * k * bank);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -33,6 +33,29 @@ uniform float4 da_water_iopb;
 uniform float4 da_water_iop2;
 uniform float4 da_water_iop2b;
 
+//	Where the EYE is: x = metres it is below the surface, y = that surface's world Y, z reserved,
+//	w = 1 while it is submerged. All four are zero above water. Bound by cl_da_underwater.
+//
+//	It describes the camera rather than the water, so it does not obviously belong here - but it
+//	has to have exactly one owner. The surface (water.ps) and the full-screen medium
+//	(da_water_under.h) both decide which side of the interface they are on from it, and while
+//	they each kept a private copy they were free to decide it differently. They did: one flipped
+//	on a hard boolean at first contact and the other ramped over the first 20 cm, so for that
+//	whole band the two halves of the transition disagreed about which side you were on.
+uniform float4 da_underwater;
+
+//	Metres of submersion the whole underwater stack ramps in over. Breaking the surface has to be
+//	a transition and not a cut: there is a TAA pass downstream and a hard switch ghosts across it.
+#define DA_UW_RAMP	0.20
+
+//	0 above the surface, 1 once the eye is DA_UW_RAMP under it. The full-screen effects multiply
+//	by it; the surface, which cannot blend two structurally different shading paths, flips at its
+//	MIDPOINT - so both halves change sides at the same depth instead of 20 cm apart.
+float da_uw_amount()
+{
+	return da_underwater.w * saturate(da_underwater.x * (1.0f / DA_UW_RAMP));
+}
+
 #ifdef DA_WATER_SLOT_B
 #	define DA_W_IOP	da_water_iopb
 #	define DA_W_IOP2	da_water_iop2b

@@ -1,19 +1,18 @@
 #include "common.h"
 #include "lmodel.h"
 #include "shadow.h"
+#include "da_wetness.h"
 
-Texture3D s_water;
 Texture2D s_waterFall;
 float4 RainDensity;
 float4 RainFallof; // x = wet radius near, y = far (r3_dynamic_wet_surfaces_near/far)
+// World +X and +Z expressed in VIEW space (set by draw_rain alongside Ldynamic_dir, which is
+// world -Y in view space). The engine has been binding both all along; nothing read them.
+float4 WorldX;
+float4 WorldZ;
 // Wind service state (same binder as the puddle shader): w = accumulated rain travel phase,
 // used to slide the run-off pattern DOWNHILL on sloped ground.
 float4 da_puddle_wind;
-
-float2 SampleSplashNormal(float2 tc, float time)
-{
-    return (s_water.SampleBias(smp_base, float3(tc, time), -3.0).wz - 0.5) * 6.0;
-}
 
 float2 SampleFlowNormal(float2 tc)
 {
@@ -23,28 +22,6 @@ float2 SampleFlowNormal(float2 tc)
 float rain_hash(float2 p)
 {
     return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
-
-float2 rain_hash2(float n)
-{
-    return frac(sin(float2(n * 12.9898, n * 78.233)) * 43758.5453);
-}
-
-// Splash rings with randomised placement. The volume texture animates a ring per tile, so a
-// plain worldPos.xz lookup reborn every ring in the SAME spot each cycle - the repetition the
-// eye catches on puddles. Two half-period layers, each shifted by a per-cycle hash offset and
-// weighted to zero at its own reseed moment, so rings appear in fresh places with no popping.
-float2 SplashRingsRandom(float2 base_uv, float t)
-{
-    const float tA = t;
-    const float tB = t + 0.5;
-    const float wA = 1.0 - abs(frac(tA) * 2.0 - 1.0);
-    const float wB = 1.0 - wA;
-    const float2 offA = rain_hash2(floor(tA)) * 7.31;
-    const float2 offB = rain_hash2(floor(tB)) * 5.17;
-    const float2 sA = SampleSplashNormal(base_uv + offA, tA);
-    const float2 sB = SampleSplashNormal(base_uv + offB, tB);
-    return sA * wA + sB * wB;
 }
 
 // Small sparse splash pops: for a fraction of grid cells, a short-lived steep normal spike at a
@@ -68,6 +45,114 @@ float3 SplashPops(float2 uv, float t, float cell, float rate)
     // Tilt direction from the hash so pops do not all lean the same way.
     const float ang = seed * 40.0;
     return float3(cos(ang), sin(ang), 0.0) * spike * 2.5;
+}
+
+// ---- Rivulets ------------------------------------------------------------------------------
+//
+// Water on a wall does not sheet, it finds channels and runs in them; the sheet-flow term this
+// replaces slid one continuous pattern down the slope, which is what a film does on glass and
+// not what rain does on brick. Channels are picked by a 1-D hash ACROSS the steepest descent,
+// so they stay put on the wall while the water inside them runs; heavier rain wakes more of
+// them, which is the one thing about rivulets everybody can see.
+//
+// u = metres across the slope, v = metres down it. Returns the (across, down) surface gradient.
+float2 Rivulets(float u, float v, float t, float rain)
+{
+    const float cu = u * 5.5;                       // ~18 cm channel pitch
+    const float ci = floor(cu);
+    const float cf = cu - ci - 0.5;
+    const float2 h = da_wet_hash2(float2(ci, 3.0));
+    // Not every channel carries water; rain intensity decides how many do.
+    [branch]
+    if (h.x > saturate(0.15 + rain * 0.85))
+        return float2(0.0, 0.0);
+
+    const float cw = 0.12 + 0.28 * h.y;             // half-width of this channel
+    const float chan = saturate(1.0 - abs(cf) / cw);
+    [branch]
+    if (chan <= 0.0)
+        return float2(0.0, 0.0);
+
+    // A bead of water is a half-cylinder: its normal tilts away from the channel centre in
+    // proportion to how far off centre we are.
+    const float bead = chan * chan;
+    const float g_across = -(cf / max(cw, 1e-3)) * bead;
+    // The wave train running down the channel, phase-offset per channel so neighbouring
+    // rivulets do not pulse together. Half a wave per ring cycle - a whole number per clock
+    // wrap, so the phase does not jump when it comes round. The rain intensity is already in
+    // how many channels ran at all; putting it in the speed too made a shower look sped up.
+    const float s = v * 1.8 - t * 0.5 + h.y;
+    const float g_down = cos(s * 6.28318) * bead * 0.35;
+    return float2(g_across, g_down);
+}
+
+// ---- The fill map --------------------------------------------------------------------------
+//
+// Where does standing water go? Into depressions. The rain occlusion pass already renders the
+// world orthographically from straight above at a few centimetres per texel, and that depth
+// buffer IS a height field - so the depression depth can be read out of a map the frame already
+// pays for, instead of being invented by value noise that puts blobs on flat ground.
+//
+// Planchon-Darboux relaxes h = max(z, min(neighbours) + eps) to convergence, which wants a
+// persistent target and a few dozen passes. Its converged answer is exactly this: the water
+// level at a cell is the LOWEST barrier the cell has to climb to escape. So walk a few straight
+// rays outward, take the highest ground each ray crosses as that ray's barrier, and keep the
+// lowest barrier of the lot. Straight escapes only, so a depression that drains round a corner
+// comes out slightly over-filled - a centimetre at puddle scale, against a whole render target
+// and thirty passes.
+//
+// Heights are differences of SMAP depths, never of the G-buffer depth against the smap: the
+// occlusion transform carries a depth bias worth a third of a metre, and it cancels in a
+// difference and does not cancel in a comparison.
+#define DA_FILL_DIRS 8
+#define DA_FILL_CAP  0.10   // metres. Deeper than this is a pond, and ponds are level geometry.
+
+float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
+{
+    const float d0 = s_smap.SampleLevel(smp_nofilter, uv0, 0).x;
+
+    // Never step less than a texel and a half: below that the ray reads its own footprint and
+    // every surface looks like the bottom of a bowl.
+    const float uv_per_m = 0.5 * (length(duv_x) + length(duv_z));
+    const float m_per_texel = 1.0 / max(SMAP_size * uv_per_m, 1e-4);
+    const float r0 = max(0.25, m_per_texel * 1.5);
+    float radii[3];
+    radii[0] = r0;
+    radii[1] = r0 * 2.6;
+    radii[2] = r0 * 6.4;
+
+    float escape = DA_FILL_CAP;
+    [loop]
+    for (int i = 0; i < DA_FILL_DIRS; ++i)
+    {
+        const float ang = float(i) * 0.78539816;   // eight rays, 45 degrees apart
+        const float2 step_uv = duv_x * cos(ang) + duv_z * sin(ang);
+        float barrier = 0.0;
+        [unroll]
+        for (int k = 0; k < 3; ++k)
+        {
+            const float2 uv = uv0 + step_uv * radii[k];
+            // Outside the occlusion window nothing is holding the water in. Treating the edge
+            // as a wall would ring the camera with a moat that travels with it.
+            [branch]
+            if (uv.x < 0.001 || uv.x > 0.999 || uv.y < 0.001 || uv.y > 0.999)
+            {
+                barrier = 0.0;
+                break;
+            }
+            const float h = (s_smap.SampleLevel(smp_nofilter, uv, 0).x - d0) * inv_dz;
+            barrier = max(barrier, h);
+            [branch]
+            if (barrier >= DA_FILL_CAP)
+                break;
+        }
+        escape = min(escape, barrier);
+        // One open ray is enough: the water leaves that way and there is nothing to fill.
+        [branch]
+        if (escape <= 0.0)
+            break;
+    }
+    return max(escape, 0.0);
 }
 
 #ifndef ISAMPLE
@@ -120,7 +205,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     const float4 position = float4(gbd.P, 1.0);
     float3 normal = normalize(gbd.N);
     // The viewmodel KEEPS its rain normals (water streaks on the barrel are a feature) - only
-    // the new gloss boost is masked for it, in the apply pass.
+    // the new gloss boost is masked for it, below.
     // The engine has been binding RainFallof all along; the hardcoded 5/20 kept the console pair
     // r3_dynamic_wet_surfaces_near/far permanently dead.
     const float distanceFade = 1.0 - smoothstep(RainFallof.x, RainFallof.y, position.z);
@@ -132,10 +217,12 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         distanceFade * distanceFade * RainDensity.x * saturate(upwardFacing * 10.0 + 5.5) *
         saturate(gbd.hemi * 10.0);
 
-    // Reject pixels that cannot receive rain before the expensive shadow lookup.
+    // Reject pixels that cannot receive rain before the expensive shadow lookup. The normal is
+    // returned at HALF length: this pass carries the final additive gloss in the normal's
+    // length now (0.5 = none, 1 = full), and a unit-length dry pixel used to mean "full gloss".
     [branch]
     if (rainCoverage <= 0.0)
-        return float4(normal, 1.0);
+        return float4(normal * 0.5, 1.0);
 
     const float4 shadowPosition = mul(m_shadow, position);
     const float3 worldPosition = mul(m_sunmask, position);
@@ -143,16 +230,22 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     float wetness = shadow_rain(shadowPosition, worldPosition.xz - worldNormal.xz) * rainCoverage;
     [branch]
     if (wetness <= 0.0)
-        return float4(normal, 1.0);
+        return float4(normal * 0.5, 1.0);
+
+    // Porosity from the material id the G-buffer already carries. It drives the darkening AND,
+    // for free, the drying rate: a non-porous surface has no porous term to hold, so it keeps
+    // only the film and is dry a minute after the shower while soil beside it stays dark for
+    // six. Before this, one global scalar darkened painted metal exactly like earth.
+    const float porosity = da_porosity(gbd.mtl);
+    const float wet_level = da_wet_level(porosity);
 
     // Surface continuity, from the depth Laplacian of the G-buffer two pixels out. A film of
     // water is a mirror only on a continuous surface: leaf cards, grass blades and crown
     // silhouettes break the depth at every edge, and there the wet gloss drew a white outline
     // (the hemisphere Fresnel at grazing, scaled by the boosted gloss) while the splash pops
     // salted the foliage with glints. A plane has a zero second difference at any grazing
-    // angle, so a wet road keeps its sheen to the horizon. Carried to the apply pass in the
-    // length of the patched normal (0.5 = broken, 1 = continuous); the perturbation below is
-    // scaled by it too, so rings and pops stay on ground and stone.
+    // angle, so a wet road keeps its sheen to the horizon. The perturbation below is scaled by
+    // it too, so rings and pops stay on ground and stone.
     float cont = 1.0;
     [branch]
     if (position.z >= 0.35)
@@ -166,6 +259,12 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         cont = saturate(1.0 - lap / (0.03 + 0.012 * position.z));
     }
 
+    // World axes in view space, so world-space patterns can be built without a matrix per tap.
+    const float3 vX = WorldX.xyz;
+    const float3 vZ = WorldZ.xyz;
+    const float3 vUp = -Ldynamic_dir.xyz;
+
+    float puddle = 0.0;
     [branch]
     if (position.z < 0.35)
     {
@@ -176,14 +275,20 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         // sit where they landed. Everything is also much smaller and gentler here: a rifle
         // collects specks, not the ground-scale ripple rings.
         const float3 vp = gbd.P;
-        const float t = timers.x * 3.0;
+        // Two pops per ring cycle, off the wrapped clock rather than off timers - see the note
+        // on da_wet_params.w. The rate is a whole number of cycles per wrap so floor()/frac()
+        // do not jump when the clock comes round.
+        const float t = da_wet_params.w * 2.0;
 
-        // Fine-scale rings, randomised the same way as the world ones.
-        const float2 rings = SplashRingsRandom(vp.xy * 3.0, t);
+        // Fine-scale rings, from the same analytic ring field the world uses - the lattice is
+        // just three times finer, because a drop on a barrel is the same drop.
+        // The x4 turns the water-surface gradient the ring field returns into the much stronger
+        // normal perturbation this pass has always used; a gun is not a mirror pond.
+        const float2 rings = da_rain_rings(vp.xy * 3.0, da_wetness.w, da_wet_params.y) * 4.0;
         // Thin run-off streaks crawling down the view - view-Y is "down the screen", which is
         // where water runs on whatever you hold, at any camera pitch.
         // (view-space Y points UP, so the pattern must march toward negative Y to run down)
-        const float2 run = SampleFlowNormal(float2(vp.x * 4.0, vp.y * 2.0 + timers.x * 0.35));
+        const float2 run = SampleFlowNormal(float2(vp.x * 4.0, vp.y * 2.0 + da_wet_params.w * 0.25));
         // Frequent tiny pops: droplets striking the weapon. Small cells, short life.
         const float3 pop = SplashPops(vp.xy, t, 0.14, 0.45);
 
@@ -191,7 +296,6 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         // old full-strength world perturbation is what deformed the whole model.
         float3 water_v = float3(rings * 0.30 + run * 0.35, 0.0) + pop * 0.5;
         normal = normalize(normal + water_v * wetness);
-        wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
         // Weaker darkening too: soaked-black gloves centimetres from the eye read as dirt.
         wetness *= 0.6;
     }
@@ -199,25 +303,68 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     {
         // ---- World branch. ----------------------------------------------------------------
         const float upwardWeight = max(0.0, upwardFacing);
+
+        // Standing water, placed by the fill map rather than by noise. The slope and sky gates
+        // that guarded the noise mask stay exactly as they were - they are not redundant with
+        // the fill, they answer different questions (can water sit here at all, does rain
+        // reach here) - and the whole term is off below the tier that pays for it.
+        const float slope_gate = saturate((upwardFacing - 0.62) * 2.2);
+        const float sky_gate = saturate((gbd.hemi - 0.30) * 2.2);
+        [branch]
+        if (da_wet_params.x > 0.5 && da_wetness.z > 0.01 && slope_gate * sky_gate > 0.0 && gbd.ground < 0.5)
+        {
+            // The occlusion transform maps VIEW space, so world offsets travel through it as
+            // view-space axes. One transform each, then everything is a 2-D step in the map.
+            // No perspective divide anywhere below: the rain "light" is an ORTHOGRAPHIC
+            // projection by construction (r3_R_rain.cpp), so w is exactly one.
+            const float4 sX = mul(m_shadow, float4(position.xyz + vX, 1.0));
+            const float4 sZ = mul(m_shadow, float4(position.xyz + vZ, 1.0));
+            const float4 sU = mul(m_shadow, float4(position.xyz + vUp, 1.0));
+            const float2 duv_x = sX.xy - shadowPosition.xy;
+            const float2 duv_z = sZ.xy - shadowPosition.xy;
+            const float dz_up = sU.z - shadowPosition.z;
+            const float inv_dz = 1.0 / (dz_up + (dz_up >= 0.0 ? 1e-9 : -1e-9));
+
+            const float fill = FillDepth(shadowPosition.xy, duv_x, duv_z, inv_dz);
+            // Three centimetres of standing water is a puddle you can see; below that it is a
+            // wet patch and the film already draws it.
+            puddle = saturate(fill / 0.03) * slope_gate * sky_gate * saturate(da_wetness.z);
+        }
+
+        // Same scaling reason as the viewmodel: the ring field returns a water-surface slope,
+        // this pass wants a normal perturbation.
+        const float2 splash = da_rain_rings(worldPosition.xz, da_wetness.w, da_wet_params.y) * 8.0;
+
+        // Ground pops where rings are born - a fleck of water kicked up by the drop.
+        const float3 pop = SplashPops(worldPosition.xz, da_wet_params.w * 2.0, 0.5, 0.35);
+
+        // Rivulets on anything steep enough for water to run rather than stand. Below that the
+        // stock cross-axis flow keeps the gentle slopes moving.
+        // n x (n x up) is the steepest descent on the surface - the projection of world -Y onto
+        // the tangent plane. The epsilon keeps the frame finite on a perfectly level pixel,
+        // where the steepness gate below is zero anyway.
+        const float3 up_w = float3(0.0, 1.0, 0.0);
+        const float3 across_w = normalize(cross(worldNormal, up_w) + float3(1e-4, 0.0, 0.0));
+        const float3 down_w = normalize(cross(worldNormal, across_w));
+        const float steep = saturate((0.80 - upwardWeight) * 2.0);
+        float2 riv = float2(0.0, 0.0);
+        [branch]
+        if (steep > 0.0)
+            riv = Rivulets(dot(worldPosition, across_w), dot(worldPosition, down_w),
+                da_wet_params.w, da_wetness.w) * (steep * 0.9);
+
         const float angleFactor = 0.05 * ceil(10.0 * (1.0 - upwardWeight));
         const float flowTime = worldPosition.y * 0.5 + timers.x * angleFactor;
-
-        const float2 splash = SplashRingsRandom(worldPosition.xz, timers.x * 3.0);
         const float2 flowX = SampleFlowNormal(float2(worldPosition.z * 0.5, flowTime));
         const float2 flowZ = SampleFlowNormal(float2(worldPosition.x * 0.5, flowTime));
         const float xWeight = abs(worldNormal.x);
         const float zWeight = abs(worldNormal.z);
 
-        // Ground pops where rings are born - a fleck of water kicked up by the drop.
-        const float3 pop = SplashPops(worldPosition.xz, timers.x * 3.0, 0.5, 0.35);
-
-        // Downhill sheet flow on sloped GROUND. The stock flowX/flowZ pair only wakes up on
-        // steep surfaces (angleFactor quantises to zero near horizontal), so a wet sloped road
-        // showed rings but no run - "the water does not flow downhill". The horizontal part of
-        // the world normal IS the downhill direction with slope for length; the pattern slides
-        // along it with the accumulated rain-travel phase from the wind service.
+        // Downhill sheet flow on GENTLE slopes, where a rivulet would not form. The stock
+        // flowX/flowZ pair only wakes up on steep surfaces (angleFactor quantises to zero near
+        // horizontal), so a wet sloped road showed rings but no run at all.
         const float2 downhill = worldNormal.xz;
-        const float slope_k = saturate(length(downhill) * 4.0) * upwardWeight;
+        const float slope_k = saturate(length(downhill) * 4.0) * upwardWeight * (1.0 - steep);
         const float2 flow_uv = worldPosition.xz * 0.7
             - normalize(downhill + float2(1e-4, 0.0)) * (da_puddle_wind.w * 0.020);
         const float2 slope_flow = SampleFlowNormal(flow_uv) * (slope_k * 1.4);
@@ -227,13 +374,47 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         water.y = flowX.x * xWeight + flowZ.x * zWeight + pop.z;
         water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight + slope_flow.y;
         water *= wetness * cont;
+        // Rivulets are already gated by steepness and carry their own shape; they ride on the
+        // surface frame, not on the world axes.
+        const float3 riv_w = across_w * riv.x + down_w * riv.y;
+        water += riv_w * (wetness * cont);
 
         normal = normalize(normal + mul((float3x3)m_V, water));
-        wetness *= dot(gbd.C, float3(0.33, 0.33, 0.33));
+
+        // In standing water the surface goes level - but only 85% of the way there. A flat
+        // normal under a directional sun gives one dot(N,H) across the whole puddle and paints
+        // it as a single sheet of white at noon; that is measured, and it is the same trap
+        // deffer_impl_flat.ps records for the G-buffer half. What sells a puddle is the rings
+        // ON a level surface, so they go on at full strength over the flattened normal.
+        [branch]
+        if (puddle > 0.0)
+        {
+            const float3 water_n = normalize(vUp + vX * splash.x + vZ * splash.y);
+            normal = normalize(lerp(normal, water_n, puddle * 0.85));
+        }
     }
 
-    // Store the final multiplier so the apply pass only performs bandwidth work; the normal's
-    // length carries the continuity.
-    const float colorIntensity = max(1.0 - sqrt(wetness), 0.5);
-    return float4(normal * (0.5 + 0.5 * cont), colorIntensity);
+    // ---- Darkening -------------------------------------------------------------------------
+    // Saunderson, at this pixel's own albedo and this pixel's own porosity, instead of one
+    // curve for the whole world. Standing water saturates whatever it stands on, so the puddle
+    // term bypasses porosity - a puddle on painted concrete is still a puddle.
+    const float wet_dark = max(wet_level * wetness, puddle);
+    const float colorIntensity = da_wet_darken_k(gbd.C, wet_dark);
+
+    // ---- Gloss -----------------------------------------------------------------------------
+    // The shine is the FILM and the standing water, never the porous term: water taken up
+    // inside a stone does not reflect anything. Gated on continuity and off the viewmodel -
+    // the 256px rain smap cannot resolve hands, and a mirror-bright rifle centimetres from the
+    // camera reads as a smeared screen. Both gates are applied HERE so the apply pass carries
+    // a finished number and needs no G-buffer load of its own.
+    // max(), not a sum: standing water is glossier than a film, it is not a film plus a puddle.
+    // The film's 0.30 ceiling is the one this pass has always had; the puddle earns more.
+    const float not_viewmodel = step(0.35, position.z);
+    const float gloss_add = max(da_wetness.x * wetness * 0.30, puddle * 0.60) * cont * not_viewmodel;
+
+    // The normal's length carries the finished gloss (0.5 none, 1 full); alpha carries the
+    // finished albedo multiplier. Two independent numbers, neither recovered by inverting the
+    // other - the old pass reconstructed wetness from the darkening term, which stops working
+    // the moment the darkening depends on the albedo.
+    return float4(normal * (0.5 + 0.5 * gloss_add), colorIntensity);
 }

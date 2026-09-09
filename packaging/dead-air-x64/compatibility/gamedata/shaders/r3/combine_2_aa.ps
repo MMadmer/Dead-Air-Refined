@@ -5,6 +5,9 @@ uniform float4		screen_res;
 #define EPSDEPTH	0.001h
 
 #include "common.h"
+// Kept ahead of the rest for symmetry with combine_2_naa.ps, where a post-stack header
+// #defines a bare "px" and poisons that name in everything included after it.
+#include "da_water_under.h"
 #include "mblur.h"
 
 uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
@@ -104,6 +107,20 @@ float4 main ( v_aa_AA I ) : SV_Target
 	float2	center 	= I.Tex0;
 #endif
 
+	// ---- underwater: the frame seen through the medium -----------------------------------
+	// Carried here as well as in combine_2_naa on purpose. The post stack lives in the non-AA
+	// file alone, and that asymmetry has already cost this project once - r2_lenswater silently
+	// dies the moment r2_aa is on. Same constants, same ramp, same tiers.
+	const float uw = da_uw_amount();
+	const int uw_tier = da_uw_tier();
+	[branch] if ( uw > 0.0h && uw_tier >= 3 )
+		center += da_uw_warp( center, uw );
+
+	// dc.xyz is the view-space position, so its length is the path the light actually took -
+	// not dc.z, which is only the view-axis depth. Sky and anything else with no g-buffer
+	// position reads zero and is left alone.
+	const float uw_dist = length( dc.xyz );
+
   // Smoothed color
   // (a-c)*w + c = a*w + c(1-w)
 
@@ -118,9 +135,23 @@ float4 main ( v_aa_AA I ) : SV_Target
 	float4	s3 	=  s_image.Sample( smp_rtlinear, offset + I.Tex4*w);
 
 	float3 	final	=  mblur( center, dc, (s0+s1+s2+s3)/4.h );
+	float4	bloom	=  s_bloom.Sample( smp_rtlinear, I.Tex0);
+
+	// Beer-Lambert over the scene and over the bloom both: the bloom pyramid was built before
+	// this pass, so an untinted one lets a bright bank shine through ten metres of pond.
+	[branch] if ( uw > 0.0h )
+	{
+		if ( uw_tier >= 4 )
+			final = da_uw_chroma( center, final, uw );
+		final = da_uw_medium( final, uw_dist, uw, uw_tier );
+		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
+	}
 
 //	return combine_bloom(final,tex2D	(s_bloom, I.tc0));
-	float4	out_c	= combine_bloom( final, s_bloom.Sample( smp_rtlinear, I.Tex0));
+	float4	out_c	= combine_bloom( final, bloom );
+
+	[branch] if ( uw > 0.0h && uw_tier >= 4 )
+		out_c.rgb = da_uw_vignette( out_c.rgb, I.Tex0, uw );
 
 	// Gamma/brightness/contrast in the shader when the hardware ramp is dead (windowed) -
 	// same curve CGammaControl::GenLUT builds; identity at 1/1/1.

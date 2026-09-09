@@ -12,6 +12,7 @@
 #include "xrPhysics/PHCommander.h"
 #include "xrPhysics/MathUtils.h"
 #include "da_water_impact.h"
+#include "da_water_actor.h"
 #include "xrPhysics/IPHWorld.h"
 
 #include "xrPhysics/PHReqComparer.h"
@@ -242,6 +243,27 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
                         g_pGamePersistent->Environment().water_hit(surface,
                             wcfg.ring_radius_object_min + (wcfg.ring_radius_object_max - wcfg.ring_radius_object_min) * k,
                             CEnvironment::EWaterHit::ring);
+                        // Something broke the surface: the ring is the disturbance, this is
+                        // the water it threw. Deferred through the commander like every other
+                        // particle here - this runs inside the contact callback - and through
+                        // the liquid comparer, so one landing's burst of contacts yields one
+                        // splash. The contact is copied and moved onto the surface: the real
+                        // one is against the bed, which in a deep pond is metres down.
+                        const auto& acfg = da_water_actor_cfg();
+                        dContactGeom sc = *c;
+                        sc.pos[0] = surface.x;
+                        sc.pos[1] = surface.y;
+                        sc.pos[2] = surface.z;
+                        sc.normal[0] = 0.f;
+                        sc.normal[1] = 1.f;
+                        sc.normal[2] = 0.f;
+                        // The name is owned by the static config, so the raw pointer the call
+                        // keeps outlives it - the same contract the material pairs rely on.
+                        LPCSTR splash = (k > 0.5f ? acfg.ps_entry_big : acfg.ps_entry).c_str();
+                        CPHFindLiquidParticlesComparer find(surface);
+                        if (!Level().ph_commander().has_call(&find, &find))
+                            Level().ph_commander().add_call(xr_new<CPHLiquidParticlesCondition>(),
+                                xr_new<CPHLiquidParticlesPlayCall>(sc, false, splash));
                     }
                 }
             }

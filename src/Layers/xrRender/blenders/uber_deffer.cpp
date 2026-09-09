@@ -204,6 +204,14 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
         VERIFY(xr_strlen(texDetailBumpX) > 2);
     }
     C.r_dx11Sampler("smp_base");
+    // The baked puddle fill map (Level_load.cpp), which is what places puddles for the G-buffer
+    // half of da_puddles.h. Bound unconditionally: both calls look the name up in the compiled
+    // shader's constant table and return silently when it is not there, so this reaches exactly
+    // the deferred shaders that include the header and nothing else. It MUST stay identical to
+    // the binding in da_puddle_refl.s - the two passes compute the same mask and a puddle whose
+    // halves disagree lays its reflection outside the water.
+    C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
+    C.r_dx11Sampler("smp_rtlinear");
     if (lmap)
     {
         // C.r_Sampler("s_hemi", C.L_textures[2], false, D3DTADDRESS_CLAMP, D3DTEXF_LINEAR, D3DTEXF_NONE,

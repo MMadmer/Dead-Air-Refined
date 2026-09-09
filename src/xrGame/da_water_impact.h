@@ -30,7 +30,9 @@ struct SDaWaterImpactCfg
     float ring_object_threshold{1.5f};
     float ring_object_velocity{12.f};
     float ring_distance{45.f};
-    shared_str ps_fountain{"amik\hit_fx\hit_water_splash_00"};
+    // Escaped: "\h" is not an escape sequence, and the unescaped spelling collapsed to
+    // "amikhit_fxhit_water_splash_00" - a name that is in no particle set.
+    shared_str ps_fountain{"amik\\hit_fx\\hit_water_splash_00"};
     shared_str ps_hit_big{"hit_fx\\effects\\hit_water_hit_big"};
     shared_str ps_distort_big{"hit_fx\\effects\\hit_water_hit_distort_big"};
     shared_str ps_hit{"hit_fx\\effects\\hit_water_hit"};

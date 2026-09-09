@@ -68,6 +68,9 @@
 #include "location_manager.h"
 #include "player_hud.h"
 #include "da_script_cam.h"
+#include "da_water_actor.h"
+#include "PHMovementControl.h"
+#include "xrEngine/xr_ioconsole.h"
 #include "ai/monsters/basemonster/base_monster.h"
 
 #include "Include/xrRender/UIRender.h"
@@ -1424,6 +1427,56 @@ void CActor::ConsumeAdrenalineSaveState(u16 objectId)
     actorAdrenalineTimes[this] = record.remaining;
 }
 
+// The actor breaking the surface, and the visor drying off afterwards. Both hang off the one
+// water depth the movement control keeps, so they cannot disagree with the wade state or with
+// the landing damage that reads the same number.
+void CActor::UpdateWaterFx()
+{
+    if (!g_pGamePersistent || !character_physics_support() || !character_physics_support()->movement())
+        return;
+
+    auto& env = g_pGamePersistent->Environment();
+    CPHMovementControl* mc = character_physics_support()->movement();
+    const SDaWaterActorCfg& cfg = da_water_actor_cfg();
+
+    // The surface was broken this frame: one ring sized by the speed the body arrived with,
+    // and the splash that goes with it. The movement control hands the speed over once, so a
+    // long wade never re-fires it.
+    if (const float entry = mc->ConsumeWaterEntry(); entry > cfg.entry_speed_min)
+    {
+        const float k =
+            clampr((entry - cfg.entry_speed_min) / _max(cfg.entry_speed_max - cfg.entry_speed_min, EPS_S), 0.f, 1.f);
+        Fvector at = Position();
+        at.y = mc->WaterSurface();
+        env.water_hit(at, cfg.entry_radius_min + (cfg.entry_radius_max - cfg.entry_radius_min) * k,
+            CEnvironment::EWaterHit::ring);
+        da_water_splash(at, k > 0.5f ? cfg.ps_entry_big : cfg.ps_entry);
+    }
+
+    // Screen droplets. The visor wets while the head is under and dries once it is out; the
+    // renderer reads the level through r2_lenswater_val, the same float the rain driver pushes,
+    // because ps_r2_lenswater_value lives in the renderer DLL and there is no other way across.
+    // Pushing only when the value has actually moved keeps a dry game off the console entirely.
+    // It is the eye that gets wet, so only the entity the eye belongs to may write it.
+    if (Level().CurrentViewEntity() != this)
+        return;
+
+    const float head_y = Position().y + CameraHeight();
+    const bool submerged = mc->WaterDepth() > 0.f && mc->WaterSurface() > head_y;
+    m_water_drops += (submerged ? cfg.drops_rise : -cfg.drops_fall) * Device.fTimeDelta;
+    clamp(m_water_drops, 0.f, 1.f);
+
+    if (Console &&
+        (_abs(m_water_drops - m_water_drops_pushed) > cfg.drops_step ||
+            (fis_zero(m_water_drops) && !fis_zero(m_water_drops_pushed))))
+    {
+        m_water_drops_pushed = m_water_drops;
+        string64 cmd;
+        xr_sprintf(cmd, sizeof(cmd), "r2_lenswater_val %.2f", m_water_drops);
+        Console->Execute(cmd);
+    }
+}
+
 void CActor::UpdateCL()
 {
     // Trampling: the actor's feet press the grass around them, and the wind-motor system
@@ -1464,6 +1517,8 @@ void CActor::UpdateCL()
             }
         }
     }
+
+    UpdateWaterFx();
 
     if (g_Alive() && Level().CurrentViewEntity() == this)
     {

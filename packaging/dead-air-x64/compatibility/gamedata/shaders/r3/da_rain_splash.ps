@@ -1,0 +1,46 @@
+#include "common.h"
+#include "da_fog_common.h"
+
+// Splash crowns.
+//
+// Splashes used to share the streaks' blender, so a crown lying in the mud was shaded exactly
+// like a drop in the air: unlit, unfogged, the same grey at any hour. They are not the same
+// thing. A crown is a thin sheet of water standing in the open for a few tens of milliseconds
+// - it takes the sky over it, a little of the sun by the sun's own elevation, and the haze the
+// rest of the world is under. What it must NOT take is a soft depth fade: its base is flush
+// with the ground it stands on, and the fade would eat exactly the part that touches.
+
+struct v2p_splash
+{
+	float2 Tex0  : TEXCOORD0;
+	float4 Color : COLOR;
+	float3 wpos  : TEXCOORD1;
+	float4 HPos  : SV_Position;
+	float  fog   : FOG;
+};
+
+float4 main (v2p_splash I) : SV_Target
+{
+	float4 t = s_base.Sample(smp_base, I.Tex0);
+	float  a = t.a * I.Color.a;
+
+	const float dist = distance(I.wpos, eye_position);
+
+	// Both light terms are HDR and this pass writes an LDR target after the tonemap, so they
+	// fold through x/(1+x) and modulate rather than scale - the same rule the streaks follow.
+	const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
+	const float3 sunc = L_sun_color / (1.0 + L_sun_color);
+	const float  sun_up = saturate(-L_sun_dir_w.y);
+	float3 col = t.rgb * I.Color.rgb * (0.50 + 0.35 * skyc + 0.35 * sunc * sun_up);
+
+	// A crown IS a surface, so unlike a streak it converges to the haze rather than dissolving
+	// out of it.
+	float fogd = saturate(1.0 - I.fog);
+	[branch] if (da_fog_extras_on())
+		fogd = da_fog_height(fogd, I.wpos, eye_position, dist);
+	fogd = da_fog_ceiling(fogd);
+	col = lerp(col, fog_color.rgb, fogd);
+	a  *= 1.0 - fogd;
+
+	return float4(col, a);
+}

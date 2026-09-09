@@ -8,7 +8,9 @@
 //      became metres wide seen edge-on. There are now two explicit quantities: the path the
 //      light actually travelled through the water (drives absorption), and how deep the water
 //      is at this spot (drives foam, debris, wave calming) - a property of the place, not of
-//      where it is looked at from.
+//      where it is looked at from. The second one, and the distance to the nearest bank with
+//      it, are read out of the baked water field now instead of being guessed off the view
+//      ray; the guess survives only as the fallback for the tiers that have no field.
 //
 //   2. COLOUR was a lerp between two authored tints scaled by a weather key that is 0.0 in 180
 //      weather sections and 0.1 in 729 more, which is why water went black in a quarter of the
@@ -64,9 +66,15 @@ Texture2D	s_leaves;
 #include "da_water_common.h"		// the model: sea state, waves, statistics, optics
 #include "da_fog_common.h"			// the atmospheric haze, shared with the deferred combine
 #include "da_water_rings.h"			// impact rings, shared with the puddles
+#include "da_water_field.h"		// the baked field: depth, bank distance, the ripple sim
 
 // x = rain density 0..1.
 uniform float4 rain_params;
+
+// da_underwater and the DA_UW_RAMP submersion ramp come from da_water_common.h, which the
+// deferred underwater pass reads through the same header. One owner, one ramp: this file used
+// to declare its own copy and flip sides on a raw .w test, which put the surface on the far
+// side of the interface for the whole 20 cm the full-screen medium was still fading in.
 
 // Rain on open water. Two more layers of the animated normal map at incommensurate scales:
 // layered samples interfere aperiodically, which is how the industry does rain, where a
@@ -103,13 +111,37 @@ float4 main( vf I ) : SV_Target
 	const float  cosv = max( dot( V, eye_direction ), 0.05f );
 	const float  dz = max( gbd.P.z - I.tctexgen.z, 0.0f );
 	const float  da_w_path = dz / cosv;					// metres of water the light crossed
-	// The vertical drop over that path IS the water's depth here - but only while the ray is
-	// steep enough to reach the bottom under this pixel rather than the far bank. Looking flat
-	// across a pond it reads near zero everywhere, so it hands over to the body's mean depth
-	// as the sight line flattens. A true per-point depth needs the top-down water field, which
-	// is the next stage's job.
+
+	// The eye is under THIS surface when it is submerged at all and the sight line has to rise
+	// to reach the patch. That second half matters on a level carrying two water bodies at
+	// different heights: standing in the river must not turn the pond on the hill inside out.
+	//
+	// The half-way point of the SAME ramp the full-screen medium fades in over, not first
+	// contact. The two sides of this interface are structurally different shading paths - a
+	// flipped normal, the exact Fresnel from below, the column instead of the sky - and there is
+	// nothing sensible to cross-fade between them, so the honest fix is to put the one cut this
+	// pass can afford exactly where the other half is at 50%. Both halves then change sides
+	// together instead of disagreeing for the whole band.
+	const float  uw_amt = da_uw_amount();
+	const bool   under = ( uw_amt > 0.5f ) && ( V.y > 0.0f );
+
+	// da_water_map2.w is the bake's own flag - the whole constant is zero on a level with no
+	// water in it, and on the tiers where the bake never ran.
+	const bool   wfield_on = ( da_water_map2.w > 0.5f );
+
+	// How deep the water is HERE, and how far the nearest bank is: both properties of the place,
+	// both straight out of the field. The old view-ray estimate stays as the fallback - the
+	// vertical drop over the path IS the depth, but only while the ray is steep enough to reach
+	// the bottom under this pixel rather than the far bank, so it hands over to the body's mean
+	// depth as the sight line flattens. It also covers the texel-sized misses a nearest-neighbour
+	// lookup makes right at a bank, which is why the field's answer is tested and not trusted.
+	const float  d_field = wfield_on ? da_wf_depth( Pw.xz ) : 0.0f;
 	const float  vconf = saturate( -V.y * 3.0f );
-	const float  da_w_depth = lerp( da_water_body.x, -V.y * da_w_path, vconf );
+	const float  da_w_depth = ( d_field > 0.001f ) ? d_field
+	                        : lerp( da_water_body.x, -V.y * da_w_path, vconf );
+	// Without a field there is nothing view-independent to measure a bank with, so the old
+	// stand-in stays there: the path through the water does at least go to zero at a waterline.
+	const float  shore = wfield_on ? da_wf_shore( Pw.xz ) : da_w_path;
 
 	// ---- the surface ---------------------------------------------------------------------
 	const float  t = da_wind_state.w;
@@ -117,15 +149,37 @@ float4 main( vf I ) : SV_Target
 	const float  wind_ms = da_wind_state.z;
 	const float2 wind_dir = da_wind_local_dir( da_wind_state.xy, gustf.z );
 
+	// Fetch shelter. Wind waves need a run-up, so for the first several metres downwind of a
+	// bank the water is genuinely flat - the most recognisable thing about a sheltered pond.
+	// One tap upwind answers it. The bank distance is unsigned, so that tap's own depth is what
+	// says which side of the bank it landed on: water there means the fetch is at least the tap
+	// distance, land there puts the bank that much nearer. Both readings pass through zero on
+	// the waterline itself, so the ramp is continuous and no bank draws a seam across the water.
+	float shelter = 1.0f;
+	[branch]
+	if ( wfield_on )
+	{
+		const float2 Q = Pw.xz - wind_dir * WATER_FETCH_LEN;
+		const float  qs = da_wf_shore( Q );
+		const float  qsig = ( da_wf_depth( Q ) > 0.001f ) ? qs : -qs;
+		shelter = saturate( ( WATER_FETCH_LEN + qsig ) / WATER_FETCH_LEN );
+	}
+
 	float mss_explicit = 0.0f;
 	float2 slope = da_w_waves( Pw.xz, da_w_depth, t, mss_explicit );
+	// The shelter is an amplitude and slope variance goes as amplitude squared, so the budget
+	// below keeps adding up to what this patch of water actually carries.
+	slope *= shelter;
+	mss_explicit *= shelter * shelter;
 
 	// Cox and Munk give the slope variance of the WHOLE surface, capillaries included. That is
 	// a budget the three layers below divide: the explicit waves took their half on the CPU,
 	// the detail map takes a fixed share here, and whatever is left - everything too small to
 	// be a normal at all - becomes the width of the specular lobe.
 	const float scum = saturate( DA_W_IOP2.w );
-	const float mss_total = da_w_mss( wind_ms, scum, gustf.x );
+	// The shelter goes in as a wind and not as a factor on the result: with no fetch there are no
+	// capillaries either, and what is left is Cox-Munk's own calm-water floor.
+	const float mss_total = da_w_mss( wind_ms * shelter, scum, gustf.x );
 
 	// Sub-wave detail. Faded out with distance because past a point one texel of it spans more
 	// than a wave and it turns into crawling noise - the aliasing the old shader hid by damping
@@ -143,18 +197,45 @@ float4 main( vf I ) : SV_Target
 	[branch]
 	if ( rip_near > 0.01f )
 	{
+		// The simulated ripple field where it runs, the analytic eight-slot rings where it does
+		// not - which is outside its 32 m window as much as below the tier that has one. The sim
+		// damps its own outer texels hard to keep echoes off the invisible window wall, so the
+		// hand-over is a crossfade over that same band rather than a second wall beside it.
+		float wfield = 0.0f;
+		[branch]
+		if ( da_water_rip.z > 0.0001f )
+		{
+			const float2 rd = abs( Pw.xz - da_water_rip.xy );
+			wfield = saturate( ( da_water_rip.z * 0.5f - max( rd.x, rd.y ) ) * ( 1.0f / WATER_RIPPLE_EDGE ) );
+		}
+
+		// The sim only seeds rain into the field on the top rung of the ladder (da_rain2.z is
+		// r__rain_quality). Where it does, the analytic layer steps aside inside the window on
+		// the very same weight the rings hand over on - otherwise the top preset is the one that
+		// draws every drop twice. Below that rung nothing changes: the analytic layer is all
+		// there is, and it is really wind chop on the normal map rather than a drop each.
 		const float rain = saturate( rain_params.x );
+		const float rain_w = ( da_rain2.z >= 3.5f ) ? ( 1.0f - wfield ) : 1.0f;
 		[branch]
-		if ( rain > 0.004f )
-			slope += da_w_rain( Pw.xz, t * WATER_RIPPLE_SPEED ) * ( WATER_RIPPLE_AMP * rain * rip_near );
+		if ( rain > 0.004f && rain_w > 0.001f )
+			slope += da_w_rain( Pw.xz, t * WATER_RIPPLE_SPEED )
+			       * ( WATER_RIPPLE_AMP * rain * rip_near * rain_w );
+
 		[branch]
-		if ( da_wh_info.x > 0.5f )
-			slope += da_water_rings( Pw ) * ( WATER_RING_AMP * rip_near );
+		if ( wfield > 0.001f )
+			slope += da_wf_ripple_slope( Pw.xz ) * ( WATER_FIELD_RIPPLE_AMP * rip_near * wfield );
+		[branch]
+		if ( da_wh_info.x > 0.5f && wfield < 0.999f )
+			slope += da_water_rings( Pw ) * ( WATER_RING_AMP * rip_near * ( 1.0f - wfield ) );
 	}
 
 	// Water is a horizontal plane by construction, so the world normal comes straight out of
 	// the world slope. No tangent frame, no dependence on how the level was unwrapped.
-	const float3 Nw = normalize( float3( -slope.x, 1.0f, -slope.y ) );
+	float3 Nw = normalize( float3( -slope.x, 1.0f, -slope.y ) );
+	// The pass is two-sided now, and from below the same interface faces the other way. Flipping
+	// it here is what lets every term downstream stay written exactly once.
+	if ( under )
+		Nw = -Nw;
 
 	// A quarter of the budget is kept back whatever the layers above claimed, so the glint can
 	// never collapse to a mirror line on a surface that is visibly moving.
@@ -162,56 +243,87 @@ float4 main( vf I ) : SV_Target
 
 	// ---- fresnel -------------------------------------------------------------------------
 	const float ndv = saturate( dot( Nw, -V ) );
-	// The flat-surface Fresnel knows nothing about the slopes it is averaging over, so a choppy
-	// far shore would go full mirror. Bruneton's rough-surface mean brings it back.
-	const float F = lerp( da_w_fresnel_up( ndv ), da_w_fresnel_rough( ndv, mss_total ), saturate( dist / 12.0f ) );
+	// Seen from below this is the dense side of the boundary, and Schlick cannot describe that
+	// side at all: it is wrong by 37x near the critical angle and never reaches one, so it can
+	// never draw Snell's window. The exact unpolarised Fresnel does, and total internal
+	// reflection past 48.607 degrees falls out of it for free.
+	// From above the flat-surface Fresnel knows nothing about the slopes it is averaging over, so
+	// a choppy far shore would go full mirror. Bruneton's rough-surface mean brings it back.
+	const float F = under ? da_w_fresnel_down( ndv )
+	              : lerp( da_w_fresnel_up( ndv ), da_w_fresnel_rough( ndv, mss_total ), saturate( dist / 12.0f ) );
+
+	// c0 is the light that actually reaches this patch of water - baked lighting, hemisphere by
+	// sky openness, sun by sun access. Using it rather than a global irradiance is what keeps
+	// water in shadow dark and water in the open bright. Both the column and the mirror the
+	// underside shows are lit by it, so it is solved before either.
+	const float3 irradiance = I.c0.rgb;
 
 	// ---- reflection ----------------------------------------------------------------------
 	const float3 vreflect = reflect( V, Nw );
-	// A rough surface does not mirror a razor-sharp sky. The stock shader sampled the sky cubes
-	// at mip 0 always, which is why a squall-blown pond reflected crisp cloud edges.
-	const float  env_mip = saturate( sqrt( mss_total ) / 0.35f ) * 4.0f;
-	float3 env;
-	{
-		const float3 d = normalize( vreflect );
-		const float3 e0 = s_env0.SampleLevel( smp_base, d, env_mip ).xyz;
-		const float3 e1 = s_env1.SampleLevel( smp_base, d, env_mip ).xyz;
-		env = lerp( e0, e1, L_ambient.w );
-	}
-
-	float3 reflection = env;
-#ifdef USE_REFLECTIONS
-	// A ray that leaves the surface going DOWN is not a reflection - it is refraction, and the
-	// march would find the lake bed and mirror it into the sky. That reject is the one the stock
-	// march never had.
+	float3 reflection;
 	[branch]
-	if ( vreflect.y > 0.02f && dist < WATER_SSR_END )
+	if ( under )
 	{
-		const float4 refl = calc_reflections( float4( Pw, 1.0f ), vreflect );
-		// The march's own screen-edge confidence, faded out with distance instead of the hard
-		// hand-over that used to fight the distance damping.
-		const float w = saturate( refl.w + saturate( ( dist - WATER_SSR_START ) /
-			max( WATER_SSR_END - WATER_SSR_START, 0.001f ) ) );
-		reflection = lerp( refl.xyz, env, w );
-	}
+		// The mirror in the ceiling carries the underwater world, and past the critical angle -
+		// which is where nearly all of it comes from - the way back down is long enough that what
+		// returns is the water column itself. That is the floor here; the march only refines it
+		// where there is real geometry close enough to still be on screen.
+		reflection = DA_W_IOP2.xyz * irradiance * 0.54f;
+#ifdef USE_REFLECTIONS
+		// Mirrored in a ceiling the ray goes DOWN, so the rejection is the other way round too.
+		[branch]
+		if ( vreflect.y < -0.02f && dist < WATER_SSR_END )
+		{
+			const float4 refl = calc_reflections( float4( Pw, 1.0f ), vreflect );
+			reflection = lerp( refl.xyz, reflection, saturate( refl.w ) );
+		}
 #endif
-	// The sun and moon on the water. GGX at the Cox-Munk roughness, not a fixed exponent: the
-	// stock pow(dot, 280) is a permanent 0.8 m/s breeze, which is why the glitter never changed
-	// with the weather. Scaled by this patch's own sun access, so a pool under a bridge does not
-	// sparkle in full sun.
+	}
+	else
 	{
+		// A rough surface does not mirror a razor-sharp sky. The stock shader sampled the sky
+		// cubes at mip 0 always, which is why a squall-blown pond reflected crisp cloud edges.
+		const float  env_mip = saturate( sqrt( mss_total ) / 0.35f ) * 4.0f;
+		float3 env;
+		{
+			const float3 d = normalize( vreflect );
+			const float3 e0 = s_env0.SampleLevel( smp_base, d, env_mip ).xyz;
+			const float3 e1 = s_env1.SampleLevel( smp_base, d, env_mip ).xyz;
+			env = lerp( e0, e1, L_ambient.w );
+		}
+
+		reflection = env;
+#ifdef USE_REFLECTIONS
+		// A ray that leaves the surface going DOWN is not a reflection - it is refraction, and
+		// the march would find the lake bed and mirror it into the sky. That reject is the one
+		// the stock march never had.
+		[branch]
+		if ( vreflect.y > 0.02f && dist < WATER_SSR_END )
+		{
+			const float4 refl = calc_reflections( float4( Pw, 1.0f ), vreflect );
+			// The march's own screen-edge confidence, faded out with distance instead of the hard
+			// hand-over that used to fight the distance damping.
+			const float w = saturate( refl.w + saturate( ( dist - WATER_SSR_START ) /
+				max( WATER_SSR_END - WATER_SSR_START, 0.001f ) ) );
+			reflection = lerp( refl.xyz, env, w );
+		}
+#endif
+		// The sun and moon on the water. GGX at the Cox-Munk roughness, not a fixed exponent: the
+		// stock pow(dot, 280) is a permanent 0.8 m/s breeze, which is why the glitter never
+		// changed with the weather. Scaled by this patch's own sun access, so a pool under a
+		// bridge does not sparkle in full sun. There is no glint on the underside: the sun is
+		// behind the interface there, and the lobe returns zero of its own accord.
 		const float3 L = -L_sun_dir_w;
 		const float spec = da_w_specular( Nw, -V, L, mss );
 		reflection += L_sun_color * ( spec * WATER_SUN_STRENGTH * saturate( I.position_w.w ) );
 	}
 
 	// ---- the water column ----------------------------------------------------------------
-	// c0 is the light that actually reaches this patch of water - baked lighting, hemisphere by
-	// sky openness, sun by sun access. Using it rather than a global irradiance is what keeps
-	// water in shadow dark and water in the open bright.
-	const float3 irradiance = I.c0.rgb;
-	const float3 T = da_w_transmit( da_w_path );
-	float3 body = da_w_inscatter( irradiance, T );
+	// There is water between this surface and whatever stands behind it only while the eye is
+	// above it. From below that stretch is air - the water is all on the near side instead, and
+	// it is paid for once at the end.
+	const float3 T = under ? (float3)1.0f : da_w_transmit( da_w_path );
+	const float3 body = under ? (float3)0.0f : da_w_inscatter( irradiance, T );
 
 	// Whatever is behind the water, bent. The offset comes from the surface slope in SCREEN
 	// space and shrinks with distance and with how little water there is: a boot-deep film
@@ -221,8 +333,11 @@ float4 main( vf I ) : SV_Target
 #ifdef USE_SOFT_WATER
 	{
 		const float3 Nv = mul( (float3x3)m_V, Nw );
-		const float2 off = Nv.xy * ( WATER_REFRACT_STRENGTH * saturate( da_w_path * 2.0f ) /
-			max( dist, 1.0f ) );
+		// Coming out of the dense side the bend is far stronger - the whole sky above is squeezed
+		// into Snell's 97 degree cone - so one unit of slope buys more offset from below. The
+		// flipped normal already carries the sign; only the amount changes.
+		const float amount = under ? WATER_REFRACT_UNDER : saturate( da_w_path * 2.0f );
+		const float2 off = Nv.xy * ( WATER_REFRACT_STRENGTH * amount / max( dist, 1.0f ) );
 		const float2 uv = PosTc + off;
 		// A refracted tap that lands on something IN FRONT of the surface is a piece of dry
 		// shore being smeared across the water; fall back to the straight tap there.
@@ -241,16 +356,19 @@ float4 main( vf I ) : SV_Target
 	{
 		const float4 base = s_base.Sample( smp_base, I.tbase );
 		film_rgb = base.rgb * irradiance;
-		film_w = saturate( base.a * scum * saturate( da_w_path * 3.0f ) );
+		film_w = saturate( base.a * scum * saturate( da_w_depth * 6.0f ) );
 	}
 
-	// Shoreline foam. The band is as wide as the waves run up the bank - about twice the
-	// significant wave height - so it grows with the wind instead of sitting at a fixed 25 cm,
-	// and it is broken up by the surface slope so it never reads as a painted outline.
+	// Shoreline foam. A shoreline is a fixed number of METRES from the bank, so the band rides on
+	// the field's bank distance and keeps its width whichever way the camera looks; on the path
+	// through the water it stretched and shrank with the sight line. Its width is still the
+	// run-up, about twice the significant wave height, so it grows with the wind instead of
+	// sitting at a fixed 25 cm, and it is broken up by the surface slope so it never reads as a
+	// painted outline.
 	float foam = 0.0f;
 	{
 		const float band_w = clamp( 2.0f * da_water_sea.x + 0.10f, 0.12f, 0.90f );
-		float b = 1.0f - saturate( da_w_path / band_w );
+		float b = 1.0f - saturate( shore / band_w );
 		b = b * b;
 		const float n = saturate( 0.55f + 2.2f * ( slope.x + slope.y ) );
 		foam = saturate( b * n * WATER_FOAM_STRENGTH ) * saturate( da_w_path * 20.0f );
@@ -261,8 +379,8 @@ float4 main( vf I ) : SV_Target
 	float  leaf_w = 0.0f;
 	{
 		const float4 lv = s_leaves.Sample( smp_base, I.tbase );
-		float k = smoothstep( WATER_LEAVES_NEAR, WATER_LEAVES_NEAR * 3.0f, da_w_path );
-		k *= smoothstep( WATER_LEAVES_FAR, WATER_LEAVES_FAR * 0.6f, da_w_path );
+		float k = smoothstep( WATER_LEAVES_NEAR, WATER_LEAVES_NEAR * 3.0f, da_w_depth );
+		k *= smoothstep( WATER_LEAVES_FAR, WATER_LEAVES_FAR * 0.6f, da_w_depth );
 		leaf_rgb = lv.rgb * irradiance;
 		leaf_w = saturate( lv.a * k * WATER_LEAVES_STRENGTH );
 	}
@@ -278,29 +396,42 @@ float4 main( vf I ) : SV_Target
 	final = lerp( final, leaf_rgb, leaf_w );
 
 	// ---- atmosphere ------------------------------------------------------------------------
-	// I.fog is visibility off the fog plane; the height layer, the density ceiling and the sky
-	// colour come from the shared header, so the surface dissolves at the same distance and into
-	// the same colour as the shore around it.
-	float  fogd = saturate( 1.0f - I.fog );
-	float3 fogrgb = fog_color.rgb;
 	[branch]
-	if ( da_fog_extras_on() )
+	if ( under )
 	{
-		fogd = da_fog_height( fogd, Pw, eye_position, dist );
-		[branch]
-		if ( da_fog.x > 0.001f )
-		{
-			const float3 vd = da_fog_sky_dir( Pw, eye_position );
-			const float3 e0 = s_env0.SampleLevel( smp_base, vd, da_fog.y ).xyz;
-			const float3 e1 = s_env1.SampleLevel( smp_base, vd, da_fog.y ).xyz;
-			fogrgb = da_fog_mix_sky( fogrgb, lerp( e0, e1, L_ambient.w ) );
-		}
+		// The deferred underwater pass runs before the forward one, so it never saw this surface.
+		// The water between the eye and the ceiling is paid for here instead, with the same
+		// Beer-Lambert law and the same coefficients the combine uses on everything else -
+		// without it the ceiling would be the one thing under water that never goes murky.
+		const float3 Te = da_w_transmit( dist );
+		final = final * Te + da_w_inscatter( irradiance, Te );
 	}
-	fogd = da_fog_ceiling( fogd );
-	// The surface carries its own background now, so there is nothing behind it to fog separately
-	// - fogging the finished radiance is the whole of it, and it lands on the same colour the
-	// combine painted the shore with.
-	final = lerp( final, fogrgb, fogd );
+	else
+	{
+		// I.fog is visibility off the fog plane; the height layer, the density ceiling and the
+		// sky colour come from the shared header, so the surface dissolves at the same distance
+		// and into the same colour as the shore around it.
+		float  fogd = saturate( 1.0f - I.fog );
+		float3 fogrgb = fog_color.rgb;
+		[branch]
+		if ( da_fog_extras_on() )
+		{
+			fogd = da_fog_height( fogd, Pw, eye_position, dist );
+			[branch]
+			if ( da_fog.x > 0.001f )
+			{
+				const float3 vd = da_fog_sky_dir( Pw, eye_position );
+				const float3 e0 = s_env0.SampleLevel( smp_base, vd, da_fog.y ).xyz;
+				const float3 e1 = s_env1.SampleLevel( smp_base, vd, da_fog.y ).xyz;
+				fogrgb = da_fog_mix_sky( fogrgb, lerp( e0, e1, L_ambient.w ) );
+			}
+		}
+		fogd = da_fog_ceiling( fogd );
+		// The surface carries its own background now, so there is nothing behind it to fog
+		// separately - fogging the finished radiance is the whole of it, and it lands on the
+		// same colour the combine painted the shore with.
+		final = lerp( final, fogrgb, fogd );
+	}
 
 	return float4( final, 1.0f );
 }

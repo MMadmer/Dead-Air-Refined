@@ -21,6 +21,8 @@
 // Declared BEFORE the render namespace opens: a block-scope extern inside it binds to the
 // enclosing namespace and dies at link. These live in the engine (xr_ioc_cmd.cpp).
 extern ENGINE_API float ps_gamma, ps_brightness, ps_contrast;
+extern ENGINE_API int ps_r__puddle_fill;
+extern ENGINE_API int ps_r__rain_quality;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -147,20 +149,38 @@ static class cl_da_sss : public R_constant_setup
     }
 } binder_da_sss;
 
-// Rain state for surface response: x = rain right now (water ripples scale by it),
-// y = accumulated ground wetness, z = puddle share at full wetness, w = debug mode.
-//
-// The accumulator runs ONCE PER FRAME (frame marker), not per binding: the binder is called
-// per pass and per object, and without the marker wetness would grow at a rate depending on
-// how much geometry is in frame. Rain strength sets the SPEED of soaking, not its ceiling:
-// DA weather rains at 0.1-0.3 most of the time, and an intensity-capped accumulator would
-// never form a puddle - in life a drizzle wets the ground SLOWER, not less. The 0.25 floor
-// keeps the faintest drizzle from taking days: it fills in four buildup periods.
-// Accumulated ground wetness for this frame, published by the rain_params binder below.
-// The puddle reflection pass reads it to skip itself entirely while the ground is dry -
-// the fullscreen pass otherwise pays a G-buffer load plus the mask math per pixel just to
-// output zeros.
+// Standing water for this frame. The puddle reflection pass reads it to skip itself entirely
+// while there are no puddles - the fullscreen pass otherwise pays a G-buffer load plus the mask
+// math per pixel just to output zeros. Deliberately the PUDDLE clock and not the film's: the
+// overlay only ever paints inside the puddle mask, so damp ground is no reason to run it.
 float g_da_rain_wetness = 0.f;
+
+// Where the water is, split three ways (da_wetness in the shaders). One accumulator for all of
+// it is why the world went from bone dry to soaked and back on a single ninety-second ramp,
+// with the puddles, the darkening and the sheen all rising and falling in lockstep.
+//
+//   film    - the sheet lying on top. Appears in seconds, gone about a minute after the rain.
+//   porous  - what the material took up. Slow both ways; the old accumulator's own constants.
+//   puddle  - standing water. Fills at the RAIN RATE (a drizzle barely puddles at all, which
+//             is the point of separating it) and drains over about ten minutes.
+//
+// Every constant is a ratio of the two shipped knobs, so r__puddles_buildup 90 with
+// r__puddles_dry 4 lands exactly on 5 s / 60 s, 90 s / 6 min and 180 s / 10 min, and moving
+// either knob still moves all three together the way a player would expect.
+//
+// rain_params keeps its old shape for the shaders that already read it - x = raw rain right
+// now, y = the accumulator, z = puddle share, w = debug mode - and y is now specifically the
+// standing water, which is the only one of the three the puddle mask ever meant.
+struct da_wet_state
+{
+    float film{};
+    float porous{};
+    float puddle{};
+    float rain{};             // raw rain density this frame
+    Fvector4 rain_params{};   // the legacy constant, assembled once and handed out
+    u32 marker{};
+};
+static da_wet_state g_da_wet;
 
 // A level load (a save, a level change) starts the ground over: the accumulator otherwise
 // carried a storm's puddles into a save made in clear weather. Resolved on the first frame the
@@ -169,64 +189,132 @@ float g_da_rain_wetness = 0.f;
 static bool g_da_rain_wetness_reset = false;
 void da_rain_wetness_on_level_load() { g_da_rain_wetness_reset = true; }
 
+// The three clocks, in seconds, expressed as ratios of the two shipped knobs so that neither
+// stops meaning what its name says.
+static constexpr float da_wet_film_rise = 1.f / 18.f;   //   5 s at buildup 90
+static constexpr float da_wet_film_fall = 1.f / 6.f;    //  60 s at buildup 90 * dry 4
+static constexpr float da_wet_pool_fill = 2.f;          // 180 s of FULL rain fills a puddle
+static constexpr float da_wet_pool_drain = 5.f / 3.f;   // 600 s at buildup 90 * dry 4
+
+// ONE integration per frame, from whichever binder happens to run first. Both of the binders
+// below call this before reading the state: they are called per pass AND per object, and the
+// frame marker is the only thing between that and wetness growing at a rate proportional to
+// how much geometry is on screen. Splitting the state across two binders without a shared
+// tick would have published one of them a frame stale, which is the same class of bug.
+static void da_wet_tick()
+{
+    if (g_da_wet.marker == Device.dwFrame)
+        return;
+    g_da_wet.marker = Device.dwFrame;
+
+    // The raw rain density stays raw regardless of the puddle master: the water shader scales
+    // its own rain ripples by it, and the Minimum preset turning puddles off must not also
+    // becalm the lakes.
+    g_da_wet.rain = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f;
+    const float rain_for_wetness = ps_r__puddles ? g_da_wet.rain : 0.f;
+
+    if (g_da_rain_wetness_reset)
+    {
+        g_da_rain_wetness_reset = false;
+        const float soaked = rain_for_wetness > 0.02f ? 1.f : 0.f;
+        g_da_wet.film = soaked;
+        g_da_wet.porous = soaked;
+        g_da_wet.puddle = soaked;
+    }
+
+    if (ps_r__puddles && ps_r__puddles_force > 0.f)
+    {
+        // Hand-set wetness for checking looks - no minutes of waiting for buildup.
+        g_da_wet.film = ps_r__puddles_force;
+        g_da_wet.porous = ps_r__puddles_force;
+        g_da_wet.puddle = ps_r__puddles_force;
+    }
+    else
+    {
+        const float dt = Device.fTimeDelta;
+        const float buildup = _max(ps_r__puddles_buildup, EPS_S);
+        const float dry = buildup * _max(ps_r__puddles_dry, EPS_S);
+        if (rain_for_wetness > 0.02f)
+        {
+            // The 0.25 floor belongs to the film and to the soaking, not to the pool: a
+            // drizzle wets the ground slower but it still wets it, while a drizzle genuinely
+            // does not fill a puddle. That distinction is the whole reason the pool is its
+            // own number.
+            const float speed = 0.25f + 0.75f * rain_for_wetness;
+            g_da_wet.film += dt * speed / (buildup * da_wet_film_rise);
+            g_da_wet.porous += dt * speed / buildup;
+            g_da_wet.puddle += dt * rain_for_wetness / (buildup * da_wet_pool_fill);
+        }
+        else
+        {
+            // Each dries on its own clock. The film goes first and the pool last, which is why
+            // the ground stops shining long before the puddles are gone.
+            g_da_wet.film -= dt / (dry * da_wet_film_fall);
+            g_da_wet.porous -= dt / dry;
+            g_da_wet.puddle -= dt / (dry * da_wet_pool_drain);
+        }
+        clamp(g_da_wet.film, 0.f, 1.f);
+        clamp(g_da_wet.porous, 0.f, 1.f);
+        clamp(g_da_wet.puddle, 0.f, 1.f);
+    }
+
+    g_da_rain_wetness = g_da_wet.puddle;
+    g_da_wet.rain_params.set(g_da_wet.rain, g_da_wet.puddle, ps_r__puddles_size,
+        float(ps_r__puddles_debug));
+
+    // Published for gameplay: bullet/blast hits evaluate the same puddle mask the shader draws
+    // (Environment::SamplePuddleMask), and that mask still reads rain_params.y - so gameplay
+    // gets the standing water, which is the only kind it ever asked about.
+    if (g_pGamePersistent)
+    {
+        g_pGamePersistent->Environment().eff_puddle_wet = g_da_wet.puddle;
+        g_pGamePersistent->Environment().eff_puddle_size = ps_r__puddles_size;
+    }
+}
+
 static class cl_rain_params : public R_constant_setup
 {
-    u32 marker{};
-    float wetness{};
-    Fvector4 result{};
-
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        if (marker != Device.dwFrame)
-        {
-            marker = Device.dwFrame;
-
-            // x stays the RAW rain density regardless of the puddle master: the water
-            // shader scales its rain ripples by it, and the Minimum preset turning
-            // puddles off must not also becalm the lakes.
-            const float rain = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f;
-            const float dbg = float(ps_r__puddles_debug);
-            const float rain_for_wetness = ps_r__puddles ? rain : 0.f;
-
-            if (g_da_rain_wetness_reset)
-            {
-                g_da_rain_wetness_reset = false;
-                wetness = rain_for_wetness > 0.02f ? 1.f : 0.f;
-            }
-
-            if (ps_r__puddles && ps_r__puddles_force > 0.f)
-            {
-                // Hand-set wetness for checking looks - no minutes of waiting for buildup.
-                wetness = ps_r__puddles_force;
-            }
-            else
-            {
-                const float dt = Device.fTimeDelta;
-                if (rain_for_wetness > 0.02f)
-                {
-                    const float speed = (0.25f + 0.75f * rain_for_wetness) / _max(ps_r__puddles_buildup, EPS_S);
-                    wetness += dt * speed;
-                }
-                else
-                {
-                    // Dries the same way, only as many times slower as the knob says.
-                    wetness -= dt / _max(ps_r__puddles_buildup * ps_r__puddles_dry, EPS_S);
-                }
-                clamp(wetness, 0.f, 1.f);
-            }
-            g_da_rain_wetness = wetness;
-            result.set(rain, wetness, ps_r__puddles_size, dbg);
-            // Published for gameplay: bullet/blast hits evaluate the same puddle mask the
-            // shader draws (Environment::SamplePuddleMask).
-            if (g_pGamePersistent)
-            {
-                g_pGamePersistent->Environment().eff_puddle_wet = wetness;
-                g_pGamePersistent->Environment().eff_puddle_size = ps_r__puddles_size;
-            }
-        }
-        cmd_list.set_c(C, result);
+        da_wet_tick();
+        cmd_list.set_c(C, g_da_wet.rain_params);
     }
 } binder_rain_params;
+
+// The split wetness itself: x = film, y = porous saturation, z = standing water, w = rain
+// falling right now.
+static class cl_da_wetness : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        da_wet_tick();
+        cmd_list.set_c(C, g_da_wet.film, g_da_wet.porous, g_da_wet.puddle, g_da_wet.rain);
+    }
+} binder_da_wetness;
+
+// The life of one raindrop ring: the front runs at ~0.35 m/s and the packet is dead by 0.25 m.
+// MUST match DA_RING_RADIUS / the cycle comment in shaders/r3/da_wetness.h - the shader counts
+// in these cycles and never sees the seconds.
+static constexpr float da_ring_cycle = 0.71f;
+static constexpr float da_ring_wrap = 2048.f;
+
+// Wet-surface controls: x = fill-map placement (r__puddle_fill), y = rain ring layers
+// (r__rain_quality), z = ripple amplitude (r__puddles_ripple), w = the ring clock in cycles.
+// Both new knobs ride the preset ladder; neither is a console opt-in.
+//
+// The clock is wrapped HERE and not left to the shader's frac(): fTimeGlobal grows without
+// bound and a float loses a mantissa bit per doubling, so after a few hours of session the
+// ring phase would quantise and the rain would step instead of running. Wrapping at a whole
+// number of cycles means the wrap itself changes nothing anyone can see.
+static class cl_da_wet_params : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const float clock = fmodf(Device.fTimeGlobal / da_ring_cycle, da_ring_wrap);
+        cmd_list.set_c(C, float(ps_r__puddle_fill), float(ps_r__rain_quality), ps_r__puddles_ripple,
+            clock);
+    }
+} binder_da_wet_params;
 
 // Puddle look: gloss, darkening factor, wet-ground gloss, ripple strength.
 static class cl_da_puddle_look : public R_constant_setup
@@ -808,6 +896,8 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_puddle_look", &binder_da_puddle_look);
     Resources->RegisterConstantSetup("da_puddle_look2", &binder_da_puddle_look2);
     Resources->RegisterConstantSetup("da_puddle_look3", &binder_da_puddle_look3);
+    Resources->RegisterConstantSetup("da_wetness", &binder_da_wetness);
+    Resources->RegisterConstantSetup("da_wet_params", &binder_da_wet_params);
     Resources->RegisterConstantSetup("pos_decompression_params", &binder_pos_decompress_params);
     Resources->RegisterConstantSetup("pos_decompression_params2", &binder_pos_decompress_params2);
     Resources->RegisterConstantSetup("m_AlphaRef", &binder_alpha_ref);

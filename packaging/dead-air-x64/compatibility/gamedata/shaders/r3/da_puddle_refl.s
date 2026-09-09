@@ -16,6 +16,12 @@ function normal (shader, t_base, t_second, t_detail)
 	shader:dx10texture	("s_image",    "$user$ssr")
 	-- G-буфер: из него берутся глубина и полусферическая освещённость.
 	shader:dx10texture	("s_position", "$user$position")
+	-- The baked puddle fill map: how deep rain would stand at this texel, from the level load's
+	-- own sweep over the terrain heights. Bound here so that this pass and the terrain G-buffer
+	-- pass (uber_deffer.cpp binds the same name to the same texture) place puddles from the SAME
+	-- data: the two are required to agree bit for bit, and a mask that differs between them
+	-- paints the reflection outside the water.
+	shader:dx10texture	("s_puddle_fill", "$user$puddle_fill")
 
 	shader:dx10sampler	("smp_nofilter")
 	shader:dx10sampler	("smp_rtlinear")

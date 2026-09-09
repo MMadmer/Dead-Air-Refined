@@ -1109,6 +1109,16 @@ static float da_cpu_vnoise(float px, float py)
     return (a * (1.f - fx) + b * fx) * (1.f - fy) + (c * (1.f - fx) + d * fx) * fy;
 }
 
+// The fill-map rung of the preset ladder (r__puddle_fill), the same number the shader reads out
+// of da_wet_params.x. Declared here rather than pulled from the render DLL: this file is the
+// CPU half of the mask and has to branch on exactly what the pixel shader branched on.
+extern ENGINE_API int ps_r__puddle_fill;
+
+// How far the value noise is allowed to move the fill map's level - the width of the edge it
+// shapes, in the noise's own 0..1 domain. DA_PUDDLE_FILL_EDGE in da_puddles.h is the same
+// number; the two masks are one mask.
+static constexpr float da_puddle_fill_edge = .30f;
+
 float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
 {
     const float wet = eff_puddle_wet;
@@ -1121,8 +1131,22 @@ float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
     // under a roof, and neither does the shader draw water there.
     if (wind_sheltered(pos))
         return 0.f;
-    const float n = da_cpu_vnoise(pos.x * 0.33f, pos.z * 0.33f) * 0.62f +
+    float n = da_cpu_vnoise(pos.x * 0.33f, pos.z * 0.33f) * 0.62f +
         da_cpu_vnoise(pos.x * 1.10f, pos.z * 1.10f) * 0.38f;
+
+    // The baked fill map decides WHERE, the noise only shapes the edge - the same two lines the
+    // shader runs, on the same data, behind the same rung of the ladder. Off the map (or on a
+    // level with no bake) the noise stays the placement, which is also what the shader does, so
+    // the footprint test is spelled out here rather than hidden behind a zero the map could
+    // legitimately hold.
+    if (ps_r__puddle_fill > 0 && !puddle_fill.empty())
+    {
+        const float u = (pos.x - water_field_bounds.vMin.x) * water_field_inv_extent.x;
+        const float v = (pos.z - water_field_bounds.vMin.z) * water_field_inv_extent.y;
+        if (u >= 0.f && u <= 1.f && v >= 0.f && v <= 1.f)
+            n = clampr(puddle_fill_at(pos) + (n - .5f) * da_puddle_fill_edge, 0.f, 1.f);
+    }
+
     const float thr =
         0.86f + (0.30f - 0.86f) * clampr(eff_puddle_size, 0.f, 1.f) + (1.f - wet) * 0.15f;
     float s = clampr((n - thr) / 0.10f, 0.f, 1.f);
@@ -1174,6 +1198,9 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
 // The preset's wave-row budget (xrRender_console.cpp), defined next to the other shared render
 // knobs in xr_ioc_cmd.cpp.
 extern ENGINE_API int ps_r__water_waves;
+// Ripple-field resolution the preset picked, in texels (0 = no field, the analytic rings only).
+// The window solved below has to agree with the target the renderer created at that size.
+extern ENGINE_API int ps_r__water_ripple;
 // "This level holds water", published for the render DLL, which cannot see CEnvironment. Written
 // only here so the two can never disagree about it.
 extern ENGINE_API bool g_da_level_has_water;
@@ -1201,6 +1228,184 @@ void CEnvironment::reset_water_body()
     water_wave_count = 0.f;
     ZeroMemory(water_wave, sizeof(water_wave));
     water_body.set(water_mean_depth, 120.f, 0.f, 0.f);
+    // The baked field describes the SAME level, so it is stale the moment the bodies are.
+    // Both level load and level unload already go through here; the bake therefore has to run
+    // after this call, which is where it sits (measure_water_body, Level_load.cpp).
+    reset_water_field();
+    // Nothing is wading on a level that is not loaded yet.
+    for (auto& w : water_wakes)
+        w.used = false;
+    ZeroMemory(water_wake_pos, sizeof(water_wake_pos));
+    ZeroMemory(water_wake_par, sizeof(water_wake_par));
+    water_wake_active = 0.f;
+    water_ripple_win.set(0.f, 0.f, 0.f, 0.f);
+}
+
+// ---- The baked water field ----------------------------------------------------------------
+void CEnvironment::set_water_field(xr_vector<SWaterTexel>&& texels, xr_vector<float>&& fill, const Fbox& world_bounds)
+{
+    constexpr size_t need = size_t(water_field_dim) * size_t(water_field_dim);
+    if (texels.size() != need || !world_bounds.is_valid())
+    {
+        reset_water_field();
+        return;
+    }
+
+    water_field = std::move(texels);
+    // Kept exactly as long as the field, whatever the bake handed over: everything downstream -
+    // the upload, the CPU replica - indexes the two with one index and one bounds test.
+    puddle_fill = std::move(fill);
+    if (puddle_fill.size() != need)
+        puddle_fill.assign(need, 0.f);
+    water_field_bounds = world_bounds;
+
+    const float ex = std::max(world_bounds.vMax.x - world_bounds.vMin.x, EPS_S);
+    const float ez = std::max(world_bounds.vMax.z - world_bounds.vMin.z, EPS_S);
+    water_field_inv_extent.set(1.f / ex, 1.f / ez);
+    water_field_texel = ex / float(water_field_dim);
+}
+
+void CEnvironment::reset_water_field()
+{
+    water_field.clear();
+    water_field.shrink_to_fit(); // 16 MB has no business surviving into the next level
+    puddle_fill.clear();
+    puddle_fill.shrink_to_fit();
+    water_field_bounds.invalidate();
+    water_field_inv_extent.set(0.f, 0.f);
+    water_field_texel = 1.f;
+    eye_under_depth = 0.f;
+    eye_under_surface = 0.f;
+}
+
+// Texel of the baked field a world point falls in, or -1 when there is no field or the point
+// is outside its footprint. Nearest texel, no filtering: gameplay wants a yes/no answer and
+// the bake is already a rasterisation.
+static int da_water_field_texel(const CEnvironment& env, const Fvector& p)
+{
+    if (env.water_field.empty())
+        return -1;
+    const float u = (p.x - env.water_field_bounds.vMin.x) * env.water_field_inv_extent.x;
+    const float v = (p.z - env.water_field_bounds.vMin.z) * env.water_field_inv_extent.y;
+    if (u < 0.f || u >= 1.f || v < 0.f || v >= 1.f)
+        return -1;
+    constexpr int dim = CEnvironment::water_field_dim;
+    const int x = clampr(int(u * float(dim)), 0, dim - 1);
+    const int z = clampr(int(v * float(dim)), 0, dim - 1);
+    return z * dim + x;
+}
+
+float CEnvironment::water_surface_at(const Fvector& p) const
+{
+    const int at = da_water_field_texel(*this, p);
+    if (at < 0 || !water_field[at].mask)
+        return -flt_max;
+    return water_field[at].surface;
+}
+
+float CEnvironment::water_bed_at(const Fvector& p) const
+{
+    const int at = da_water_field_texel(*this, p);
+    if (at < 0 || !water_field[at].mask)
+        return -flt_max;
+    return water_field[at].bed;
+}
+
+float CEnvironment::water_shore_dist(const Fvector& p) const
+{
+    const int at = da_water_field_texel(*this, p);
+    // The distance transform is defined everywhere the field is, water or bank, so this one
+    // does not gate on the mask - "how far to the nearest bank" is the question a wader asks
+    // from the dry side too.
+    if (at < 0)
+        return -flt_max;
+    return water_field[at].shore;
+}
+
+bool CEnvironment::water_at(const Fvector& p, float& surface, float& bed) const
+{
+    const int at = da_water_field_texel(*this, p);
+    if (at < 0 || !water_field[at].mask)
+        return false;
+    surface = water_field[at].surface;
+    bed = water_field[at].bed;
+    return true;
+}
+
+// The fill map, read the way the shader reads it: bilinear over the same footprint, clamped at
+// the edges, zero outside. Point-sampling the field is right for a rasterised coverage mask and
+// wrong here - the fill is a smooth scalar and the two halves of a puddle have to agree.
+//
+// The one drift left against the GPU is that the upload rounds each texel to fp16 before the
+// hardware interpolates, so the two answers differ by well under a millimetre of depth.
+float CEnvironment::puddle_fill_at(const Fvector& p) const
+{
+    if (puddle_fill.empty())
+        return 0.f;
+
+    const float u = (p.x - water_field_bounds.vMin.x) * water_field_inv_extent.x;
+    const float v = (p.z - water_field_bounds.vMin.z) * water_field_inv_extent.y;
+    if (u < 0.f || u > 1.f || v < 0.f || v > 1.f)
+        return 0.f;
+
+    constexpr int dim = water_field_dim;
+    const float fx = u * float(dim) - .5f;
+    const float fz = v * float(dim) - .5f;
+    const int bx = iFloor(fx), bz = iFloor(fz);
+    const float tx = fx - float(bx), tz = fz - float(bz);
+
+    const int x0 = clampr(bx, 0, dim - 1), x1 = clampr(bx + 1, 0, dim - 1);
+    const int z0 = clampr(bz, 0, dim - 1), z1 = clampr(bz + 1, 0, dim - 1);
+
+    const float top = puddle_fill[size_t(z0) * dim + size_t(x0)] * (1.f - tx) +
+        puddle_fill[size_t(z0) * dim + size_t(x1)] * tx;
+    const float bot = puddle_fill[size_t(z1) * dim + size_t(x0)] * (1.f - tx) +
+        puddle_fill[size_t(z1) * dim + size_t(x1)] * tx;
+    return top + (bot - top) * tz;
+}
+
+// A continuous wake: something is moving through the water here. Unlike water_hit this is fed
+// every frame for as long as the source keeps wading, so a repeat call REFRESHES the slot it
+// already owns instead of consuming a new one.
+void CEnvironment::water_wake(const Fvector& pos, float radius, float strength)
+{
+    const float now = Device.fTimeGlobal;
+    const float reach = std::max(radius, 0.25f);
+
+    // Same source, same slot: the emitter moves with the walker rather than leaving a trail of
+    // eight dying spots behind it.
+    SWaterWake* slot = nullptr;
+    for (auto& w : water_wakes)
+        if (w.used && w.pos.distance_to_sqr(pos) < reach * reach)
+        {
+            slot = &w;
+            break;
+        }
+    if (!slot)
+        for (auto& w : water_wakes)
+            if (!w.used)
+            {
+                slot = &w;
+                break;
+            }
+    // Full pool: the faintest wake gives way, so the actor's own bow wave never loses its slot
+    // to a distant mutant's.
+    if (!slot)
+        for (auto& w : water_wakes)
+            if (!slot || w.strength < slot->strength)
+                slot = &w;
+    if (!slot)
+        return;
+
+    if (!slot->used)
+    {
+        slot->used = true;
+        slot->birth = now;
+    }
+    slot->pos = pos;
+    slot->radius = reach;
+    slot->strength = strength;
+    slot->touched = now;
 }
 
 // Shortest signed distance between two headings, radians.
@@ -1368,6 +1573,45 @@ void CEnvironment::water_tick(float delta)
 
     water_sea.set(hs, lam, mss, U);
     water_body.set(water_mean_depth, X, 0.f, water_wave_count);
+
+    // ---- Rain rate: the one number the whole rain system is parameterised on. ---------------
+    // DA weathers author a 0..1 density, which says nothing physical. R = 25*density^1.5 puts a
+    // full-density storm at 25 mm/h (heavy rain) and a drizzle at a fraction of a millimetre,
+    // which is what the drop size distribution, the splash rate, the puddle fill rate and the
+    // extinction below all want as their input.
+    const float rain_d = clampr(CurrentEnv.rain_density, 0.f, 1.f);
+    rain_rate_mmh = 25.f * powf(rain_d, 1.5f);
+    rain_ext_km = rain_rate_mmh > 0.f ? 0.312f * powf(rain_rate_mmh, 0.67f) : 0.f;
+
+    // ---- Camera against the baked field. ----------------------------------------------------
+    // Nothing else knows whether the eye is under water: the surface is a forward pass and the
+    // combine has no other way to ask. Levels with no field simply never go under.
+    const Fvector& eye = Device.vCameraPosition;
+    const float surf = water_surface_at(eye);
+    if (surf > -flt_max && eye.y < surf)
+    {
+        eye_under_depth = surf - eye.y;
+        eye_under_surface = surf;
+    }
+    else
+    {
+        eye_under_depth = 0.f;
+        eye_under_surface = 0.f;
+    }
+
+    // ---- The ripple window. -----------------------------------------------------------------
+    // Snapped to whole texels: a window that slides continuously resamples the field every
+    // frame and smears it into mush (the known defect in OpenMW's version). Solved here so the
+    // sim pass and every CPU consumer land on the same texel grid.
+    const int rip_texels = ps_r__water_ripple;
+    if (rip_texels > 0)
+    {
+        const float texel = water_ripple_window / float(rip_texels);
+        water_ripple_win.set(floorf(eye.x / texel + 0.5f) * texel, floorf(eye.z / texel + 0.5f) * texel,
+            water_ripple_window, 1.f / float(rip_texels));
+    }
+    else
+        water_ripple_win.set(0.f, 0.f, 0.f, 0.f);
 }
 
 void CEnvironment::wind_reseed(float seed)
@@ -1765,6 +2009,45 @@ void CEnvironment::UpdateEffectiveWind()
         water_hit_par[row / 4].m[row % 4][0] = 0.f;
     }
     water_hit_active = float(wh_highest);
+
+    // ---- Wading wakes: simulate and pack for the ripple field. -----------------------------
+    // A wake is fed for as long as its source keeps moving through the water, so the envelope
+    // here is a RELEASE and not a lifetime: while the source refreshes the slot the wake sits
+    // at full strength, and once it stops it fades to zero over a third of a second. Computed
+    // on the CPU for the same reason the impact slots are - a slot always dies at zero.
+    u32 wk_highest = 0;
+    for (u32 i = 0; i < u32(water_wake_count); ++i)
+    {
+        SWaterWake& w = water_wakes[i];
+        if (!w.used)
+            continue;
+
+        constexpr float wake_release = 0.35f;
+        const float idle = now - w.touched;
+        const float fade = 1.f - clampr((idle - 0.10f) / wake_release, 0.f, 1.f);
+        if (fade <= 0.f)
+        {
+            w.used = false;
+            continue;
+        }
+
+        const u32 row = wk_highest++;
+        Fmatrix& P = water_wake_pos[row / 4];
+        Fmatrix& A = water_wake_par[row / 4];
+        float* prow = &P.m[row % 4][0];
+        float* arow = &A.m[row % 4][0];
+        prow[0] = w.pos.x; prow[1] = w.pos.y; prow[2] = w.pos.z; prow[3] = w.radius;
+        arow[0] = w.strength * fade;
+        arow[1] = now - w.birth;
+        arow[2] = 0.f;
+        arow[3] = 0.f;
+    }
+    for (u32 row = wk_highest; row < u32(water_wake_count); ++row)
+    {
+        water_wake_pos[row / 4].m[row % 4][3] = 0.f;
+        water_wake_par[row / 4].m[row % 4][0] = 0.f;
+    }
+    water_wake_active = float(wk_highest);
 
     // ---- The water model: the sea this wind has raised. -------------------------------------
     water_tick(delta);

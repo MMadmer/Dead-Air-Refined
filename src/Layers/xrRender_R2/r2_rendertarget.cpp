@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "xrEngine/Environment.h"
 #include "Layers/xrRender/ResourceManager.h"
 #include "Layers/xrRender/blenders/blender_light_occq.h"
 #include "Layers/xrRender/blenders/blender_light_mask.h"
@@ -22,9 +23,25 @@
 #    include "Layers/xrRender/blenders/blender_gtao.h"
 #endif
 
+// Ripple-field resolution the preset picked (0 = the analytic ring path only): the target pair
+// is created at that size, so a preset change takes effect on renderer restart like the rest of
+// the create-time ladder. Defined in xr_ioc_cmd.cpp - both DLLs read it.
+extern ENGINE_API int ps_r__water_ripple;
+// The size the pair was ACTUALLY created at, 0 when none was. Everything that has to agree with
+// the targets - the CPU's ripple window, the sim's own texel count - reads this one and not the
+// wish above, which a live preset change moves out from under them.
+extern ENGINE_API int ps_r__water_ripple_active;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 IReader* open_shader(pcstr shader);
+
+#if RENDER == R_R4
+// r4_water_field.cpp: the baked field is a plain texture, not a target, so its lifetime is
+// managed there and only bracketed here.
+extern void da_water_field_create_placeholder();
+extern void da_water_field_release();
+#endif
 
 void CRenderTarget::u_stencil_optimize(CBackend& cmd_list, eStencilOptimizeMode eSOM)
 {
@@ -281,6 +298,36 @@ CRenderTarget::CRenderTarget()
         // ALWAYS single-sampled: with MSAA off the lit frame is CopyResource'd into it, with
         // MSAA on it is ResolveSubresource'd - both require a non-MSAA destination.
         rt_SSR.create(r2_RT_SSR, w, h, D3DFMT_A8R8G8B8, 1);
+        // The baked water map is the answer to "is there water at this XZ, at what height, over
+        // what bed, how far is the bank" that the surface, the underwater pass, the caustics and
+        // the ripple boundaries all need. It is NOT a render target - nothing draws into it - so
+        // it is uploaded as a plain texture by r4_water_field.cpp. All that happens here is the
+        // placeholder that makes the name resolve before any level has been baked.
+        da_water_field_create_placeholder();
+        // The ripple field rides the preset (0 = the analytic ring path only, so no target at
+        // all). RG16F: the wave equation carries the current and the previous step and nothing
+        // else, and both are signed heights in METRES of surface displacement - 8 bits would
+        // quantise the field into terraces after a few dozen steps.
+        const u32 ripple_dim = (ps_r__water_ripple > 0) ? u32(ps_r__water_ripple) : 0u;
+        if (ripple_dim)
+        {
+            for (u32 i = 0; i < 2; ++i)
+            {
+                string32 temp;
+                xr_sprintf(temp, "%s%u", r2_RT_water_ripple, i);
+                rt_WaterRipple[i].create(temp, ripple_dim, ripple_dim, D3DFMT_G16R16F, 1);
+            }
+            // A fresh pair holds whatever the allocator left in it, and these are float16: one
+            // texel that decodes to a NaN spreads over the whole field. The sim primes them as
+            // well, but only on a level that has water - this covers the frames before that.
+            RCache.ClearRT(rt_WaterRipple[0], {});
+            RCache.ClearRT(rt_WaterRipple[1], {});
+        }
+        // What the CPU solves the ripple window against must be the size that was actually
+        // created, not the one the preset currently wishes for: r__water_ripple is a live
+        // console var and these targets are sized exactly once.
+        ps_r__water_ripple_active = int(ripple_dim);
+        m_water_ripple_cur = 0;
 #endif
         if (!options.gbuffer_opt)
             rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F, SampleCount);
@@ -836,6 +883,8 @@ CRenderTarget::~CRenderTarget()
 #if RENDER == R_R4
     for (auto& tex : cloud_readback)
         _RELEASE(tex);
+    da_water_field_release();
+    ps_r__water_ripple_active = 0;
 #endif
 #if defined(USE_DX11)
     _RELEASE(t_ss_async);

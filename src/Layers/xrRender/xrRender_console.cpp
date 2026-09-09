@@ -32,6 +32,24 @@
 // engine cannot see a variable that belongs to the render DLL. It lives in xr_ioc_cmd.cpp with
 // ps_r__WallmarksOnSkeleton, which is shared the same way.
 extern ENGINE_API int ps_r__water_waves;
+// The rest of the water ladder, shared the same way and for the same reason: the ripple window
+// and the rain rate are solved in CEnvironment, the targets and the shaders live here.
+extern ENGINE_API int ps_r__water_ripple;
+extern ENGINE_API int ps_r__water_underwater;
+extern ENGINE_API int ps_r__water_caustics;
+extern ENGINE_API int ps_r__puddle_fill;
+extern ENGINE_API int ps_r__rain_quality;
+// The rain LOOK knobs, defined with their comments in xr_ioc_cmd.cpp. They are session
+// overrides now, but a user.ltx from an earlier build still carries them and still executes
+// before the renderer comes up, so the preset sync re-applies the authored values below.
+extern ENGINE_API float ps_r__rain_len;
+extern ENGINE_API float ps_r__rain_width;
+extern ENGINE_API float ps_r__rain_bright;
+extern ENGINE_API float ps_r__rain_splash_bright;
+extern ENGINE_API float ps_r__rain_radius;
+extern ENGINE_API float ps_r__rain_splash;
+extern ENGINE_API float ps_r__rain_splash_time;
+extern ENGINE_API int ps_r__rain_drops;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -544,7 +562,12 @@ int ps_r2_vignette = 0;
 BOOL ps_r2_filmgrain = FALSE;
 int ps_r2_reflections = 0;
 int ps_r2_lensdirt = 0;
-int ps_r2_lenswater = 0;
+// Droplets on the visor. It is a user-facing checkbox (configs\ui\ui_mm_opt*.xml,
+// check_lenswater), so the preset only moves it when the player applies a preset - but the
+// stock default of 0 meant USE_LENS_WATER was not even compiled and every driver of it, the
+// actor's surfacing accumulator included, wrote into a dead float. The default is the Default
+// preset's rung.
+int ps_r2_lenswater = 1;
 float ps_r2_aberration = 0.f;
 float ps_r2_vibrance = 0.f;
 float ps_r2_lensdirt_value = 0.f;
@@ -908,9 +931,9 @@ public:
 // (a script, a console line, a stale options control) heals on the next start instead
 // of surviving as "weapon shadows stopped working" with a Maximum preset on screen.
 // user_facing: the switches that also live in the options menu and user.ltx (shadow map size,
-// AO technique, grass density and radius). They follow the preset only when the player applies
-// a preset; on renderer start the player's own user.ltx values stay, or the options would show
-// a choice the next start silently undid.
+// AO technique, grass density and radius, visor droplets). They follow the preset only when the
+// player applies a preset; on renderer start the player's own user.ltx values stay, or the
+// options would show a choice the next start silently undid.
 void xrRender_sync_preset_derived(bool user_facing)
 {
     // The shadow-map budget follows the preset: it caps how many local light faces
@@ -948,6 +971,28 @@ void xrRender_sync_preset_derived(bool user_facing)
     // a cos and a tanh per water pixel, and the tail rows are the short steep ones - dropping
     // them costs texture, not silhouette, because none of this displaces geometry anyway.
     static constexpr int water_waves_by_preset[] = {2, 4, 6, 8, 8};
+    // The ripple field: a pixel-shader wave-equation step over a 32 m window around the camera.
+    // The two lowest tiers keep the eight analytic ring slots and never create the target, so
+    // this one only takes effect on renderer restart - the pair is created at the size named.
+    static constexpr int water_ripple_by_preset[] = {0, 0, 128, 256, 256};
+    // What the camera below a water surface gets: 1 tint, 2 +fog, 3 +warp, 4 full. Even the
+    // cheapest tier has to have SOMETHING - the stock behaviour is a hole in the world.
+    static constexpr int water_underwater_by_preset[] = {1, 2, 3, 3, 4};
+    // Sun caustics under the field, from High: an extra pattern fetch per lit pixel of the sun
+    // pass, which is exactly the kind of per-pixel cost the two bottom tiers must not pay.
+    static constexpr int water_caustics_by_preset[] = {0, 0, 0, 1, 1};
+    // Puddle placement: 0 = the value-noise mask, 1 = the fill map the rain occlusion pass
+    // produces. The fill costs a few dozen iterations on an existing tile, once per rain tick,
+    // so it starts at Default rather than at the top.
+    static constexpr int puddle_fill_by_preset[] = {0, 0, 1, 1, 1};
+    // Rain: 1 base, 2 oriented splashes, 3 +streak lighting, 4 full. Everything that costs
+    // nothing (the cover test, the splash lifetime, the drop size distribution) is unconditional
+    // and is not on this ladder at all.
+    static constexpr int rain_quality_by_preset[] = {1, 1, 2, 3, 4};
+    // Visor droplets: a post effect in the combine, so it joins at Default with the rest of the
+    // post stack. User-facing (there is a checkbox for it), hence the user_facing block below.
+    // It is also a shader option (USE_LENS_WATER), so like the checkbox it lands on vid restart.
+    static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.
@@ -1012,6 +1057,11 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r__sss_steps = sss_steps_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
     ps_r__water_waves = water_waves_by_preset[ps_Preset];
+    ps_r__water_ripple = water_ripple_by_preset[ps_Preset];
+    ps_r__water_underwater = water_underwater_by_preset[ps_Preset];
+    ps_r__water_caustics = water_caustics_by_preset[ps_Preset];
+    ps_r__puddle_fill = puddle_fill_by_preset[ps_Preset];
+    ps_r__rain_quality = rain_quality_by_preset[ps_Preset];
     // The look is not a quality tier: the same grade and foliage saturation on every preset,
     // re-applied here so a user.ltx line from an earlier build (the sibling's 1.6 / 2.0) or a
     // session experiment never outlives the start.
@@ -1033,6 +1083,21 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r__puddles_facing = 0.03f;
     ps_r__puddles_sky = 1.0f;
     ps_r__puddles_gbuf = 0;
+    // Rain look constants, defined in xr_ioc_cmd.cpp - the same treatment as the grade and
+    // puddle look above. They are not a tier (a preset must not decide what rain looks like,
+    // only how much of it there is, and that column is r__rain_quality), but an old user.ltx
+    // still carries the pre-Runtime lines and executes before the renderer starts.
+    ps_r__rain_len = 2.0f;
+    ps_r__rain_width = 0.20f;
+    ps_r__rain_bright = 2.2f;
+    ps_r__rain_splash_bright = 0.9f;
+    ps_r__rain_radius = 14.0f;
+    ps_r__rain_splash = 1.0f;
+    ps_r__rain_splash_time = 0.10f;
+    // The drop BUDGET is a quality column, but it rides the ladder exactly once, downstream:
+    // dxRainRender scales this base by the r__rain_quality tier factor. A second table here
+    // would apply the ladder twice, so what this heals is only a stale pinned count.
+    ps_r__rain_drops = 6000;
     if (user_facing)
         ps_current_detail_density = detail_density_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
@@ -1042,6 +1107,7 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r__taa = taa_by_preset[ps_Preset];
     if (user_facing)
     {
+        ps_r2_lenswater = lenswater_by_preset[ps_Preset];
         ps_r2_smapsize = smapsize_by_preset[ps_Preset];
         string_path ssao_cmd;
         strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
@@ -1613,7 +1679,10 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_aberration", &ps_r2_aberration, 0.f, 1.f);
     CMD4(CCC_Float, "r2_vibrance_val", &ps_r2_vibrance, -1.f, 1.f);
     CMD4(CCC_Float, "r2_lensdirt_val", &ps_r2_lensdirt_value, 0.f, 1.f);
-    CMD4(CCC_Float, "r2_lenswater_val", &ps_r2_lenswater_value, 0.f, 1.f);
+    // Session override: the droplet AMOUNT is pushed every tick by the engine and by the HUD
+    // script, so a config save must never catch a mid-surface value and pin it into user.ltx.
+    // The master r2_lenswater above stays persisted - it is the options checkbox.
+    CMD4(CCC_RuntimeFloat, "r2_lenswater_val", &ps_r2_lenswater_value, 0.f, 1.f);
     CMD4(CCC_Float, "r2_lumasharpen", &ps_r2_lumasharpen, 0.f, 1.f);
     CMD4(CCC_Float, "r2_tmp_x", &ps_r2_temp.x, -1.f, 1.f);
     CMD4(CCC_Float, "r2_tmp_y", &ps_r2_temp.y, -1.f, 1.f);
@@ -1657,6 +1726,13 @@ void xrRender_initconsole()
     // Session overrides: the preset decides what runs and the look constants are re-applied
     // at start, so none of these is written to user.ltx (an older line there still parses).
     CMD4(CCC_RuntimeInteger, "r__water_waves", &ps_r__water_waves, 0, 8);
+    // Session overrides of the water ladder. r__water_ripple only takes effect on the next
+    // renderer start (the target pair is created at that size); the rest are live.
+    CMD4(CCC_RuntimeInteger, "r__water_ripple", &ps_r__water_ripple, 0, 512);
+    CMD4(CCC_RuntimeInteger, "r__water_underwater", &ps_r__water_underwater, 1, 4);
+    CMD4(CCC_RuntimeInteger, "r__water_caustics", &ps_r__water_caustics, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__puddle_fill", &ps_r__puddle_fill, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__rain_quality", &ps_r__rain_quality, 1, 4);
     CMD4(CCC_RuntimeInteger, "r__puddles", &ps_r__puddles, 0, 1);
     CMD4(CCC_RuntimeFloat, "r__puddles_buildup", &ps_r__puddles_buildup, 5.f, 600.f);
     CMD4(CCC_RuntimeFloat, "r__puddles_dry", &ps_r__puddles_dry, 0.5f, 20.f);

@@ -182,7 +182,9 @@ float4 main(vf I) : SV_Target
 	// no vertex fog to interpolate.
 	const float da_pdist = length(pos_w - eye_position);
 	float da_pfog = saturate(da_pdist * fog_params.w + fog_params.x);
-	[branch] if (da_fog.z > 0.001f)
+	// The shared gate, not da_fog.z alone: the height layer is no longer the only extra term
+	// in there - rain extinction rides the same function and would be skipped by a narrower test.
+	[branch] if (da_fog_extras_on())
 		da_pfog = da_fog_height(da_pfog, pos_w, eye_position, da_pdist);
 	const float da_pvis = 1.0f - da_fog_ceiling(da_pfog);
 

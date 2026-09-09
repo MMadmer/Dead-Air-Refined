@@ -44,6 +44,10 @@ enum EMoveCommand
     mcSprint = (1ul << 12ul),
     mcLLookout = (1ul << 13ul),
     mcRLookout = (1ul << 14ul),
+    // Water over ankle height under the feet. Not an input: the movement control owns the
+    // depth and sets this from the baked water field, so it never appears in mstate_wishful.
+    // Bit 15 is the last one the network packing keeps (Actor_Network.cpp masks to 0xffff).
+    mcWade = (1ul << 15ul),
     mcAnyMove = (mcFwd | mcBack | mcLStrafe | mcRStrafe),
     mcAnyAction = (mcAnyMove | mcJump | mcFall | mcLanding | mcLanding2), // mcTurn|
     mcAnyState = (mcCrouch | mcAccel | mcClimb | mcSprint),

@@ -393,17 +393,43 @@ void CActorCondition::AffectDamage_InjuriousMaterialAndMonstersInfluence()
 }
 
 #include "CharacterPhysicsSupport.h"
+#include "PHMovementControl.h"
+#include "da_water_actor.h"
 float CActorCondition::GetInjuriousMaterialDamage()
 {
-    u16 mat_injurios = m_object->character_physics_support()->movement()->injurious_material_idx();
-
-    if (mat_injurios != GAMEMTL_NONE_IDX)
-    {
-        const SGameMtl* mtl = GMLib.GetMaterialByIdx(mat_injurios);
-        return mtl ? mtl->fInjuriousSpeed : 0.0f;
-    }
-    else
+    CPHMovementControl* mc = m_object->character_physics_support()->movement();
+    const u16 mat_injurios = mc->injurious_material_idx();
+    if (mat_injurios == GAMEMTL_NONE_IDX)
         return 0.0f;
+
+    const SGameMtl* mtl = GMLib.GetMaterialByIdx(mat_injurios);
+    if (!mtl)
+        return 0.0f;
+
+    float dose = mtl->fInjuriousSpeed;
+
+    // Standing in radioactive water is not a switch. The dose follows how much of you is in it
+    // and how hard you are stirring it up - ankle-deep and neck-deep used to cost the same.
+    // Only liquids are scaled: an acid floor has no depth to speak of and keeps the material's
+    // own rate, and so does a level that ships without a baked water field.
+    //
+    // flLiquid and not the material name, and NOT materials\water_radiation despite what the
+    // design says. Checked against the shipped gamemtl.xr: materials\water (id 11) is the one
+    // that doses you - Passable|Liquid|Injurious, fInjuriousSpeed 0.40 - while
+    // materials\water_radiation (id 96) carries neither flLiquid nor flInjurious and an
+    // injurious speed of 0, so it has never delivered a single point of radiation and there is
+    // nothing there to scale. flLiquid is also exactly what the field bake rasterises
+    // (Level_load.cpp), so the gate and the depth it reads can never disagree.
+    if (mtl->Flags.test(SGameMtl::flLiquid) && g_pGamePersistent &&
+        g_pGamePersistent->Environment().water_field_valid())
+    {
+        const SDaWaterActorCfg& cfg = da_water_actor_cfg();
+        float k = cfg.rad_depth_floor +
+            (1.f - cfg.rad_depth_floor) * clampr(mc->WaterDepth() / _max(cfg.rad_depth_ref, EPS_S), 0.f, 1.f);
+        k += cfg.rad_move_bonus * clampr(mc->GetXZVelocityActual() / _max(cfg.rad_move_speed, EPS_S), 0.f, 1.f);
+        dose *= k;
+    }
+    return dose;
 }
 
 void CActorCondition::SetZoneDanger(float danger, ALife::EInfluenceType type)

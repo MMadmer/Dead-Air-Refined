@@ -97,6 +97,7 @@ public:
 private:
     void TraceBorder(const Fvector& previous_position);
     void CheckEnvironment(const Fvector& V);
+    void UpdateWaterState();
 
     CharacterType eCharacterType;
     CPHCharacter* m_character;
@@ -138,6 +139,13 @@ private:
     float fActualVelocity;
     float fContactSpeed;
     float fLastUpdateTime;
+
+    // Water standing over the feet, refreshed once per Calculate from the baked field so that
+    // everything downstream in the same frame - the landing damage here, the wade state and the
+    // dose in the game layer - reads one number instead of querying separately.
+    float m_water_depth;
+    float m_water_surface;
+    float m_water_entry; // downward speed the frame the surface was broken; consumed once
 
 public:
     Fvector vExternalImpulse;
@@ -204,6 +212,17 @@ public:
     void InterpolateBox(u32 id, float k);
     EEnvironment Environment() { return eEnvironment; }
     EEnvironment OldEnvironment() { return eOldEnvironment; }
+    // Metres of water over the feet, 0 when dry or when the level carries no baked field.
+    float WaterDepth() const { return m_water_depth; }
+    float WaterSurface() const { return m_water_surface; }
+    // The speed the surface was broken at, handed over exactly once so the splash and the ring
+    // fire on the frame of the entry and never again.
+    float ConsumeWaterEntry()
+    {
+        const float v = m_water_entry;
+        m_water_entry = 0.f;
+        return v;
+    }
     const Fbox& Box() { return aabb; }
     u32 BoxID() const { return m_dwCurBox; }
     const Fbox* Boxes() { return boxes; }

@@ -161,10 +161,14 @@ IC void CPHSimpleCharacter::foot_material_update(u16 contact_material_idx, u16 f
 
     if (contact_material->Flags.test(SGameMtl::flPassable))
     {
+        // Injurious no longer steals the step material. materials\water is Passable AND
+        // Injurious, so the "else" that used to be here routed it into injuriousMaterialIDX
+        // only - which is why material\actor\step\n_water_* and the pair's own splash
+        // particles ship and are unreachable. The two slots are independent: the dose still
+        // rides injuriousMaterialIDX, the feet now report what they are actually standing in.
         if (contact_material->Flags.test(SGameMtl::flInjurious))
             injuriousMaterialIDX = contact_material_idx;
-        else
-            *p_lastMaterialIDX = contact_material_idx;
+        *p_lastMaterialIDX = contact_material_idx;
     }
     else
         *p_lastMaterialIDX = foot_material_idx;

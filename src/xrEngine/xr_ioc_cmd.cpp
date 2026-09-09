@@ -578,7 +578,11 @@ ENGINE_API int ps_r__rain_drops = 6000;
 ENGINE_API float ps_r__rain_radius = 14.0f;
 // Ground splash share per landed drop (stock refused every second hit) and splash life.
 ENGINE_API float ps_r__rain_splash = 1.0f;
-ENGINE_API float ps_r__rain_splash_time = 0.30f;
+// Crown lifetime. Rain.cpp clamps this into the physical crown envelope [0.06, 0.18] s, so the
+// registered range below is that envelope and nothing wider: a real crown peaks at 3 ms and is
+// gone by 100 ms, and the old 0.30 default sat at the top of the envelope pretending to be a
+// third of a second.
+ENGINE_API float ps_r__rain_splash_time = 0.10f;
 
 // QA diagnostic: log one average-FPS line every N seconds (0 = off). See device.cpp.
 ENGINE_API int ps_r__fps_log = 0;
@@ -851,6 +855,25 @@ ENGINE_API bool g_da_level_has_water = false;
 // preset (xrRender_console.cpp) and is read back by the wave solver in Environment.cpp, so it
 // has to live where both the render DLL and the engine can reach it.
 ENGINE_API int ps_r__water_waves = 8;
+// The rest of the water ladder. All of these are read on BOTH sides of the DLL boundary - the
+// render targets and the shaders on one, the field solver and the rain service on the other -
+// so they live here with the wave count rather than in xrRender_console.cpp.
+// Ripple field resolution in texels; 0 means the field is not created at all and the surface
+// falls back to the eight analytic ring slots. Read at renderer create.
+ENGINE_API int ps_r__water_ripple = 128;
+// What the renderer ACTUALLY created, published back by r2_rendertarget once the pair exists
+// (0 when there is none). The wish above changes live on every preset sync while the targets
+// are sized once, so the sea-state solver and the sim pass must read this and not the wish -
+// otherwise the Laplacian taps land at half a texel and the field stops propagating.
+ENGINE_API int ps_r__water_ripple_active = 0;
+// What the camera under a water surface gets: 1 tint, 2 +fog, 3 +warp, 4 full.
+ENGINE_API int ps_r__water_underwater = 3;
+// Sun caustics under the water field, as a modulation of the sun term in the accum passes.
+ENGINE_API int ps_r__water_caustics = 0;
+// 1 = puddles are placed from the rain occlusion pass's fill map instead of value noise.
+ENGINE_API int ps_r__puddle_fill = 1;
+// Rain ladder: 1 base, 2 oriented splashes, 3 +streak lighting, 4 full.
+ENGINE_API int ps_r__rain_quality = 2;
 
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;
@@ -917,6 +940,31 @@ public:
     }
 
     // rs_fps_limit is the persisted variable; saving this alias too would fight with it.
+    void Save(IWriter*) override {}
+};
+
+// Session overrides, the engine-side twins of xrRender_console.cpp's pair: the value is
+// never written to user.ltx, so the authored default (or the preset) is the single source
+// of truth and a knob tweaked mid-session dies with the session.
+class CCC_RuntimeInteger final : public CCC_Integer
+{
+public:
+    CCC_RuntimeInteger(pcstr name, int* target, int minimum, int maximum)
+        : CCC_Integer(name, target, minimum, maximum)
+    {
+    }
+
+    void Save(IWriter*) override {}
+};
+
+class CCC_RuntimeFloat final : public CCC_Float
+{
+public:
+    CCC_RuntimeFloat(pcstr name, float* target, float minimum, float maximum)
+        : CCC_Float(name, target, minimum, maximum)
+    {
+    }
+
     void Save(IWriter*) override {}
 };
 
@@ -994,14 +1042,21 @@ void CCC_Register()
     CMD2(CCC_Gamma, "rs_c_gamma", &ps_gamma);
     CMD2(CCC_Gamma, "rs_c_brightness", &ps_brightness);
     CMD2(CCC_Gamma, "rs_c_contrast", &ps_contrast);
-    CMD4(CCC_Float, "r__rain_len", &ps_r__rain_len, 0.2f, 8.f);
-    CMD4(CCC_Float, "r__rain_width", &ps_r__rain_width, 0.02f, 0.5f);
-    CMD4(CCC_Float, "r__rain_bright", &ps_r__rain_bright, 0.5f, 6.f);
-    CMD4(CCC_Float, "r__rain_splash_bright", &ps_r__rain_splash_bright, 0.1f, 4.f);
-    CMD4(CCC_Integer, "r__rain_drops", &ps_r__rain_drops, 500, 20000);
-    CMD4(CCC_Float, "r__rain_radius", &ps_r__rain_radius, 5.f, 40.f);
-    CMD4(CCC_Float, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
-    CMD4(CCC_Float, "r__rain_splash_time", &ps_r__rain_splash_time, 0.1f, 1.5f);
+    // The rain knobs are session overrides, not user.ltx lines. What rain LOOKS like (streak
+    // size, brightness, splash share and lifetime, the drop volume's radius) is a look constant
+    // re-applied by the preset sync, and the one genuine quality column - the drop budget -
+    // rides the ladder once, downstream: dxRainRender scales this base by the r__rain_quality
+    // tier. A pinned line here defeated both, and stale ones are out there (r__rain_splash_time
+    // 0.3 ships in appdata\user.ltx).
+    CMD4(CCC_RuntimeFloat, "r__rain_len", &ps_r__rain_len, 0.2f, 8.f);
+    CMD4(CCC_RuntimeFloat, "r__rain_width", &ps_r__rain_width, 0.02f, 0.5f);
+    CMD4(CCC_RuntimeFloat, "r__rain_bright", &ps_r__rain_bright, 0.5f, 6.f);
+    CMD4(CCC_RuntimeFloat, "r__rain_splash_bright", &ps_r__rain_splash_bright, 0.1f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__rain_drops", &ps_r__rain_drops, 500, 20000);
+    CMD4(CCC_RuntimeFloat, "r__rain_radius", &ps_r__rain_radius, 5.f, 40.f);
+    CMD4(CCC_RuntimeFloat, "r__rain_splash", &ps_r__rain_splash, 0.f, 1.f);
+    // Range = the crown envelope Rain.cpp clamps to, so no value in it is a no-op.
+    CMD4(CCC_RuntimeFloat, "r__rain_splash_time", &ps_r__rain_splash_time, 0.06f, 0.20f);
     CMD4(CCC_Integer, "r__fps_log", &ps_r__fps_log, 0, 60);
     {
         extern int ps_e_wind_dbg;

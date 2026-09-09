@@ -13,6 +13,12 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if RENDER == R_R4
+// r4_water_field.cpp: hands the level's baked water map to the GPU when the bake changes, which
+// is once per level - not once per frame.
+extern void da_water_field_update();
+#endif
+
 namespace
 {
 // Lights demoted by the shadow budget keep lighting the scene unshadowed for this frame
@@ -439,6 +445,15 @@ void CRender::Render()
     }
 
     r_rain.sync();
+
+    // The water field and the ripple sim come first: the sun accumulation reads the field for
+    // its caustics and the forward water surface reads both, so both have to hold this frame's
+    // state before either of those runs. The field call is a handful of compares once the
+    // level's bake has landed.
+#if RENDER == R_R4
+    da_water_field_update();
+    Target->phase_water_ripple();
+#endif
 
     // The cloud deck field for this frame: the sun passes below shade the ground with it, the
     // shafts march through it, and the deck itself is drawn from it in combine.

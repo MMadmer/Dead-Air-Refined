@@ -17,6 +17,8 @@
 #include "ActorEffector.h"
 #include "static_cast_checked.hpp"
 #include "player_hud.h"
+#include "PHMovementControl.h"
+#include "da_water_actor.h"
 
 #ifdef DEBUG
 #include "PHDebug.h"
@@ -187,6 +189,16 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
         }
     }
 
+    // Wading. The depth comes from the movement control, which took it off the baked water
+    // field this frame; mcWade is a report, not a wish, so it is written straight into
+    // mstate_real and never masked out of mstate_wishful below.
+    const SDaWaterActorCfg& wcfg = da_water_actor_cfg();
+    const float water_depth = character_physics_support()->movement()->WaterDepth();
+    if (water_depth > wcfg.ankle)
+        mstate_real |= mcWade;
+    else
+        mstate_real &= ~mcWade;
+
     if (!CanMove())
     {
         if (mstate_wf & mcAnyMove)
@@ -347,6 +359,16 @@ void CActor::g_cl_CheckControls(u32 mstate_wf, Fvector& vControlAccel, float& Ju
                     scale *= m_fCrouchFactor;
                 if (mstate_real & mcClimb)
                     scale *= m_fClimbFactor;
+
+                // Drag rises with the column you are pushing through: linear from the ankle to
+                // wade_full, flat past it. Deep water is meant to be slow, not a wall - the
+                // barrier is the level geometry, and this must not become a second one.
+                if (mstate_real & mcWade)
+                {
+                    const float wade =
+                        clampr((water_depth - wcfg.ankle) / _max(wcfg.wade_full - wcfg.ankle, EPS_S), 0.f, 1.f);
+                    scale *= 1.f - (1.f - wcfg.wade_speed_min) * wade;
+                }
 
                 CBackpack* backpack = GetBackpack();
                 if (backpack)
@@ -634,6 +656,10 @@ bool CActor::CanSprint()
     bool can_Sprint = CanAccelerate() && !conditions().IsCantSprint() && Game().PlayerCanSprint(this) && CanRun() &&
         !(mstate_real & mcLStrafe || mstate_real & mcRStrafe) && InventoryAllowSprint();
 
+    // Nobody sprints through half a metre of water.
+    if (character_physics_support()->movement()->WaterDepth() > da_water_actor_cfg().sprint_depth)
+        return false;
+
     return can_Sprint && (m_block_sprint_counter <= 0);
 }
 
@@ -641,6 +667,10 @@ bool CActor::CanJump()
 {
     bool can_Jump = !character_physics_support()->movement()->PHCapture() && ((mstate_real & mcJump) == 0) &&
         (m_fJumpTime <= 0.f) && !m_bJumpKeyPressed && !IsZoomAimingMode();
+
+    // ...and nobody jumps out of it either, once it is up past the thighs.
+    if (character_physics_support()->movement()->WaterDepth() > da_water_actor_cfg().jump_depth)
+        return false;
 
     return can_Jump;
 }

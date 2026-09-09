@@ -19,6 +19,7 @@
 
 #include "shadow.h"
 #include "da_sss.h"	// screen-space contact shadows, r__sss (off by default)
+#include "da_water_under.h"
 
 #ifdef USE_SUNFILTER
 #ifdef MSAA_OPTIMIZATION
@@ -102,6 +103,12 @@ float4 main ( v2p_volume I ) : SV_Target
 			m 	= _P.w;
 # endif
 	float4	light	= plight_infinity ( m, _P, _N, Ldynamic_dir );
+
+	// Caustics ride the SUN term rather than a decal: they vanish in shadow and warm at
+	// sunset for free, because the light they modulate does. Diffuse only - light.w is the
+	// specular lobe, and a caustic net moves light onto a surface, it does not sharpen a
+	// highlight. Costs nothing off a water level: the first test inside is a constant.
+	light.rgb *= da_uw_caustics( _P.xyz );
 
 	return 		blend( Ldynamic_color * light * s/*float4( 1.f, 0.2f, 0.2f, 1.f)*/, I.tc );
 }

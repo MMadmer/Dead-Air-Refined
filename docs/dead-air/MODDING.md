@@ -1255,6 +1255,86 @@ at 8 in anything, blue survives tens of metres in clear water and dies in 20 cm 
 past about `a_CDOM(440) = 0.5` the blue coefficient exceeds the red and the water goes brown
 rather than blue.
 
+### The water field
+
+Every water feature past the surface itself needs the same answer - is there water at this world
+XZ, at what height, over what bed, and how far is the nearest bank - and water surfaces are static
+level geometry, so the answer is baked once at load rather than solved per frame.
+
+`measure_water_body()` in `Level_load.cpp` rasterises the liquid collision triangles into a
+1024x1024 grid over the level's bounds, takes the bed from `CDetailManager`'s 2 m slot grid, and
+runs a chamfer distance transform for the shore distance. It is uploaded as `$user$water_field`,
+an immutable RGBA16F texture: **R** water surface world Y, **G** coverage, **B** bed world Y,
+**A** metres to the nearest bank, clamped at 32.
+
+Shaders read it through `da_water_field.h` (`da_wf_depth`, `da_wf_shore`, `da_wf_here`), mapped by
+the `da_water_map` constant. Gameplay reads the same numbers off the CPU copy through
+`CEnvironment::water_at` / `water_surface_at` / `water_shore_dist` - O(1) table lookups, safe every
+frame per actor. `qa_water_state` prints what got baked.
+
+The same sweep bakes the **puddle fill map** (`$user$puddle_fill`, R16F): a Planchon-Darboux fill
+over the same terrain heights, so a puddle lands where water would actually pool instead of where
+a noise function happened to cross a threshold. The noise still shapes the edge; the fill decides
+the place. `r__puddle_fill` is its ladder column, and with it off the placement is exactly what it
+was before.
+
+### The ripple field
+
+A 256x256 (128 on Default) RG16F ping-pong pair over a 32 m window centred on the camera, stepped
+by `phase_water_ripple` at a fixed 1/60 s with an accumulator: R is the height now, G the height
+one step back, and the pass solves the plain wave equation on them.
+
+Four things about it are not preferences, and each is a way this feature is usually built wrong:
+
+* the step is **fixed**, or the ripple speed tracks the frame rate;
+* the window snaps to **whole texels** as the camera moves, or every frame resamples the field
+  into mush;
+* the Laplacian taps are masked by the field's coverage channel, so a wave **reflects off a bank**
+  for free;
+* the damping ramps hard over the outer 16 texels, or every wave echoes off the invisible rim.
+
+Sources are injected inside the same pass from constants: the eight impact slots
+(`Environment::water_hit` - bullets, blasts, footsteps, bodies), the wake slots
+(`Environment::water_wake`, fed every frame by anything wading), and rain at a rate derived from
+mm/h on the top tier. Every source is a **depth in metres spread over a number of steps**, not a
+per-step amount: feeding a one-shot impulse once per step drives the whole field into its clamp
+inside a tenth of a second.
+
+Below the tier where the field runs, the eight analytic rings in `da_water_rings.h` remain, and
+the surface crossfades between the two on `da_water_rip.z`.
+
+### Underwater
+
+`da_water_under.h` carries the medium; `combine_2_naa.ps` **and** `combine_2_aa.ps` apply it, in
+both files deliberately - only the non-AA one carries the post stack, and that asymmetry has
+already cost this project one silently dead feature. The tier ladder is `r__water_underwater`:
+1 tint, 2 adds the distance fog, 3 adds the warp, 4 adds the vignette and the edge separation.
+It ramps over the first 20 cm of submersion, and `water.ps` crosses over on the same ramp, so the
+surface and the medium change sides together.
+
+Seen from below the surface uses the **exact** Fresnel with total internal reflection past
+48.607 degrees, which is what makes Snell's window: outside it the surface mirrors the bed, inside
+it the sky refracts through. That needs the water pass two-sided, which is `dx10CullMode` in the
+three `.s` scripts.
+
+Caustics are a modulation of the sun's own term in `accum_sun_near.ps` / `accum_sun_far.ps` rather
+than a decal, which is why they vanish in shadow and warm at sunset. `r__water_caustics`.
+
+**There is deliberately no swimming and no drowning.** Deep water in this game is level-design
+geometry - a barrier - and making it swimmable lets the player cross what a map means as a wall.
+Wading is implemented in full.
+
+### Rain
+
+Everything is parameterised on one number, the rain rate `R` in mm/h, solved from the weather's
+`rain_density` (`CEnvironment::RainRateMmh`). Drop count, streak length, splash rate, puddle fill
+and the extinction folded into the fog all come off it, so they cannot disagree with each other.
+`rain_density` itself is untouched as the authored input and as what `level.get_rain_volume()`
+means to the dozen scripts that read it.
+
+`r__rain_quality` is the ladder: oriented splashes from 2, streak lighting from 3, rain into the
+ripple field at 4.
+
 ### Quality
 
 `r__water_waves` is the wave-row budget, on the preset ladder at 2 / 4 / 6 / 8 / 8, session-only

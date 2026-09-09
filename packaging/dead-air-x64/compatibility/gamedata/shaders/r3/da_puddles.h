@@ -17,6 +17,33 @@
 // по которым лежит базовая текстура. Это дороже по арифметике и беднее на вид, зато не тянет за
 // собой ни ассетов, ни правок блендера. Если вид не устроит — текстуры добавляются сюда же.
 
+// ---- The fill map: the one texture this file does ask for ----------------------------------
+//
+// Value noise puts puddles in a pattern; it cannot put them where water actually goes. The
+// answer is a Planchon-Darboux fill - flood every dip to the brim, then let it back down to the
+// lowest sill it can escape over, and what is left standing IS the puddle. DESIGN2 section 6
+// asks for that to replace the noise as the placement.
+//
+// It is computed ONCE, on the CPU, at level load, beside the water field and out of the same
+// detail-slot heights (Level_load.cpp, bake_puddle_fill), and published as its own small texture
+// (r4_water_field.cpp, "$user$puddle_fill"). Not out of the rain occlusion pass, which is where
+// this started: rt_smap_rain is a depth-stencil target sampled through a comparison sampler, and
+// the deferred terrain shader is built by a C++ blender with a fixed sampler set - the plumbing
+// does not exist and a per-frame iterative fill over a shadow map would not be free either.
+//
+// Baking it also answers the constraint that decides everything here: this file runs TWICE, once
+// in the terrain G-buffer shader and once in the reflection overlay, and the two are required to
+// compute the same mask bit for bit or a puddle lays its mirror outside its own water. A map
+// written once per level and read unchanged by both cannot drift between them by construction.
+//
+// C++ SIDE, landed: the texture is bound by uber_deffer.cpp for the G-buffer half and by
+// da_puddle_refl.s for the reflection half, both to the same name; the mapping needs no constant
+// of its own because the map shares the water field's footprint exactly, so da_water_map (bound
+// for every shader already) addresses it and da_water_map2.w says whether it exists at all.
+#include "da_water_field.h"
+
+Texture2D s_puddle_fill;
+
 uniform float4 rain_params;
 
 // [DA_PORT] Вид воды, правится в игре консолью: x — зеркальность лужи (r__puddles_gloss),
@@ -40,6 +67,10 @@ uniform float4 da_puddle_wind;
 // общем с открытой водой (water.ps) — кольцо есть кольцо на любой воде. Здесь остаётся только
 // осушение: лужу взрыв выплёскивает, озеро — нет.
 #include "da_water_rings.h"
+
+// The split wetness, the Saunderson darkening and the analytic rain rings, shared verbatim with
+// the fullscreen wet-surface pass so the two never drift apart.
+#include "da_wetness.h"
 
 float da_hash21(float2 p)
 {
@@ -86,6 +117,40 @@ float da_vnoise(float2 p)
 	return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
 }
 
+// Where water actually stands. ONE bilinear tap of the baked map - the nine-tap single-step
+// approximation this replaces was trying to do the fill in the shader, and a fill is not a local
+// question: a dip drains over the lowest sill anywhere on its rim, which nine taps at a fixed
+// radius cannot see. The bake iterates until it does (Level_load.cpp).
+//
+// Bilinear and not point: the fill is a smooth scalar, and point-sampling it would print the
+// map's 1024-texel lattice on the ground as square puddles. The coverage mask in the same
+// footprint IS point-sampled, and for the opposite reason - see da_water_field.h.
+//
+// The map shares the water field's footprint exactly, so its mapping is da_water_map and its
+// "does this level have one" flag is da_water_map2.w. No constant of its own, and nothing to
+// keep in step with a second binder.
+//
+// Returns x = the stored depth, 0..1 of DA_PUDDLE_FILL_MAX; y = whether there is an answer here
+// at all, so the caller can fall back to the noise where there is not. No rim fade: the bake
+// seeds the map's own border as an outlet, so it is already zero where it ends.
+#define DA_PUDDLE_FILL_MAX	0.25f	// metres of standing water that read as full (CEnvironment::puddle_fill_depth)
+// How far the value noise may move that level, in the noise's own 0..1 domain. This is the whole
+// of what the noise does now: the map says WHERE the water is, the noise gives the edge its
+// shape so a puddle is not a contour line of a 1.4 m lattice. Mirrored on the CPU as
+// da_puddle_fill_edge (Environment.cpp) - the two masks are one mask.
+#define DA_PUDDLE_FILL_EDGE	0.30f
+
+float2 da_puddle_fill_level(float2 wp)
+{
+	[branch] if (da_water_map2.w < 0.5f)
+		return float2(0.0f, 0.0f);
+
+	const float2 uv = da_wf_uv(wp);
+	[branch] if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
+		return float2(0.0f, 0.0f);
+
+	return float2(saturate(s_puddle_fill.SampleLevel(smp_rtlinear, uv, 0).x), 1.0f);
+}
 
 // [DA_PORT] ⚠️ БЕЗ inout. Функция ничего не меняет на месте — она возвращает структуру, а вызывающий
 // сам раскладывает поля. Причина не в стиле: предыдущая версия отдавала цвет, глянец и нормаль через
@@ -124,7 +189,12 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	R.dbg_color = 0.0f;
 	R.dbg_paint = false;
 
+	// rain_params.y is now specifically the STANDING WATER accumulator - the mask, the rim and
+	// the threshold ladder below are unchanged and still read it, so the fp32 replica of this
+	// mask in Environment.cpp still agrees with the picture. What used to be one number for
+	// everything is split in da_wetness; damp takes the film and the porous term instead.
 	const float wet = rain_params.y;
+	const float damp_w = saturate(da_wetness.x * 0.6f + da_wetness.y);
 	const bool dbg      = rain_params.w > 0.5f;	// r__puddles_debug 1 — три величины по каналам
 	const bool dbg_fill = rain_params.w > 1.5f;	// 2 — заливка чёрным/белым
 	const bool dbg_hard = rain_params.w > 2.5f;	// 3 — вода абсолютно тёмного цвета (проба)
@@ -132,7 +202,9 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// Сухо — выходим ДО мировой позиции и производных: в сухую погоду это чистая экономия на
 	// каждом пикселе земли. Условие равномерное (константа на весь вызов), поэтому обычный if
 	// без [branch]: производные ниже остаются в равномерном потоке и компилятор не ругается.
-	if (wet < 0.01f && !dbg)
+	// Both clocks have to be dry: three seconds into a shower the ground is already dark while
+	// there is not a puddle anywhere yet, and the old single test threw that away.
+	if (wet < 0.01f && damp_w < 0.01f && !dbg)
 		return R;
 
 	// Мировое положение точки.
@@ -171,19 +243,45 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 
 	// Общая мокрота: шире луж и слабее их. Держать слабой — когда блестит всё, солнце отражается одним
 	// пятном на пол-экрана, и земля читается ледяной, а не мокрой.
-	const float damp = wet * slope * sky;
+	//
+	// Damp is the FILM plus the porous saturation (computed above, next to the early-out), not
+	// the puddle accumulator: bare soil goes dark within seconds of the first drops and stays
+	// dark for minutes after the shower, while standing water needs the whole storm to gather
+	// and the best part of ten minutes to drain. Terrain is soil, so its porosity is one - no
+	// per-material lookup is possible here anyway, because the reflection pass would read a
+	// different one and the two halves of a puddle are required to agree bit for bit.
+	const float damp = damp_w * slope * sky;
 	R.damp = damp;
 
 	// Рисунок луж по МИРОВЫМ координатам: развёртка ландшафта растянута на сотни метров, по ней пятна
 	// выходили размером с локацию. Два масштаба — разливы метра по три и рваная кромка около метра.
 	const float2 wp = pos_w.xz;
-	const float n = da_vnoise(wp * 0.33f) * 0.62f + da_vnoise(wp * 1.10f) * 0.38f;
+	float n = da_vnoise(wp * 0.33f) * 0.62f + da_vnoise(wp * 1.10f) * 0.38f;
 
 	// Порог: влажность двигает его сама, поэтому лужи растут по мере дождя, а не появляются готовыми.
 	// Нулевой размер — это ступень «Низкое»: остаётся только влажная земля, самих луж нет. Проверяем
 	// явно, а не через порог: при size=0 порог 0.86 всё равно оставлял бы редкие пятна на пиках шума.
 	[branch] if (rain_params.z < 0.005f)
 		return R;
+
+	// The fill map, where the ladder bought it and where the map has something to say. This is
+	// the difference between blobs on flat ground and water in the dips it would really run to.
+	//
+	// The map sets the LEVEL and the noise keeps its job as the EDGE: the perturbation is a
+	// third of the threshold band, so the contour of a puddle follows the fill isoline while
+	// wandering by roughly the width of one noise feature. Without it the edge would trace the
+	// bake's lattice and every puddle would have the same soft rectangular shoulder.
+	//
+	// fill.y is 0 where there is no answer - a level with no bake, or a point off its footprint -
+	// and the lerp then leaves the noise placement exactly as it was, which is also what the
+	// whole branch does when the rung is off (Minimum and Low). da_wet_params.x is
+	// r__puddle_fill, straight off the preset ladder. Below the size early-out so the tap is
+	// never spent on a rung that draws no puddle at all.
+	[branch] if (da_wet_params.x > 0.5f)
+	{
+		const float2 fill = da_puddle_fill_level(wp);
+		n = lerp(n, saturate(fill.x + (n - 0.5f) * DA_PUDDLE_FILL_EDGE), fill.y);
+	}
 
 	const float thr = lerp(0.86f, 0.30f, saturate(rain_params.z)) + (1.0f - wet) * 0.15f;
 
@@ -250,7 +348,13 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	[branch] if (puddles < 0.004f)
 		return R;
 
-	// Рябь от капель.
+	// Рябь от ВЕТРА.
+	//
+	// ⚠️ The rain half of this used to live here too, and it was the same animated noise: two
+	// octaves advected downhill and downwind. That is wind chop by construction - a continuous
+	// travelling field with no ring in it anywhere - and it is why rain on a puddle never read
+	// as rain. The drops are a separate, analytic term now (da_rain_rings, below); what stays
+	// here is the wind, which this field always actually depicted.
 	//
 	// ⚠️ Было суммой синусов: ripple.x = sin(x+t) + sin(y*1.31-t*1.13) и так же по y. Сумма синусов —
 	// это параллельные волновые фронты, то есть ПОЛОСЫ, и они ещё и ползут вместе со временем. На
@@ -265,10 +369,14 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// ветер поднимает волнение сам. Старый жёсткий floor 0.35 делал стоячую лужу вечно неспокойной.
 	// A puddle is sheltered water: a breeze barely stirs it (quadratic in the wind), only a
 	// gale ripples it. The linear 0.5 term kept every puddle churning in ordinary weather.
-	const float rain_now = max(saturate(rain_params.x * 1.5f), 0.12f + 0.25f * wind_k * wind_k);
-	const float near_f = saturate(1.0f - pos_v.z / 40.0f);
+	// No rain term in it any more - the drops are rings, not chop.
+	const float chop_now = 0.12f + 0.25f * wind_k * wind_k;
+	// The ripple field used to stop dead at 40 m while the top presets draw puddles out to 60,
+	// so the far end of the puddle field was a band of frictionless glass reflecting perfectly.
+	// It fades with the same distance the puddles themselves do.
+	const float near_f = saturate(1.0f - pos_v.z / max(da_puddle_look2.x, 1.0f));
 	float2 ripple = 0.0f;
-	[branch] if (rain_now * near_f > 0.01f)
+	[branch] if (chop_now * near_f > 0.01f)
 	{
 		// ⚠️ История: (1) сдвиг по синусам времени — узор ездил по эллипсу туда-обратно;
 		// (2) двухслойный flowmap-кроссфейд — на слабом дрейфе глаз читал переливание слоёв
@@ -298,9 +406,17 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 		const float h2 = da_vnoise_p(q2);
 		const float2 g2 = float2(da_vnoise_p(q2 + float2(0.45f, 0.0f)) - h2,
 		                         da_vnoise_p(q2 + float2(0.0f, 0.45f)) - h2);
-		ripple = (g1 * 0.62f + g2 * 0.38f) * (0.18f * rain_now * near_f * da_puddle_look.w);
+		ripple = (g1 * 0.62f + g2 * 0.38f) * (0.18f * chop_now * near_f * da_puddle_look.w);
 	}
-	R.ripple_amp = 0.18f * rain_now * near_f * da_puddle_look.w;
+
+	// ---- Rain, as rings ------------------------------------------------------------------
+	// The actual drops: expanding gravity-capillary packets, front 0.35 m/s, dead by 0.25 m,
+	// one lattice cell per ring and a layer more for every quarter of rain intensity. Analytic
+	// (da_wetness.h) because a deferred-geometry shader cannot be given a sampler, and the
+	// same call runs in the reflection pass, so both halves tilt the water identically.
+	const float2 rain_ripple = da_rain_rings(wp, da_wetness.w, da_wet_params.y) * near_f;
+	ripple += rain_ripple;
+	R.ripple_amp = 0.18f * chop_now * near_f * da_puddle_look.w + length(rain_ripple);
 
 	// ---- Кольца от попаданий: «блинчик» — расходящийся волновой пакет за фронтом. Гребень на
 	// фронте, за ним затухающий шлейф колец (λ = 0.30 м); всё складывается с дождевой рябью в
@@ -365,6 +481,24 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	// отдельной ручкой, чтобы видеть его вклад отдельно от потемнения.
 
 	return R;
+}
+
+// The albedo wet ground should have, for the caller that owns the G-buffer write.
+//
+// The three flat lerps it replaces (0.88 for damp, r__puddles_rim for the rim, r__puddles_dark
+// for the water) darken bright gravel exactly as hard as black asphalt. Saunderson does not:
+// one curve, no authored parameters, half off a dark albedo and a fifth off a bright one -
+// which is the entire observable difference between wet stone and wet tar.
+//
+// The knobs stay knobs and stay SEPARATE. r__puddles_dark becomes how far the water goes
+// towards the wet curve, the rim keeps its own multiplier, and nothing here lightens anything:
+// the note at the foot of this file is four attempts lost to a lightening term and a darkening
+// term sharing one control and cancelling each other out.
+float3 da_puddle_albedo(float3 D, da_puddle_result P)
+{
+	D = lerp(D, da_saunderson(D), saturate(P.damp) * 0.55f);
+	D *= lerp(1.0f, saturate(da_puddle_look2.z), P.rim);
+	return lerp(D, da_saunderson(D), saturate(P.mask) * saturate(1.0f - da_puddle_look.y));
 }
 
 #endif // DA_PUDDLES_H

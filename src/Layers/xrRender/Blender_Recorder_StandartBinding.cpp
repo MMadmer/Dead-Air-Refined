@@ -21,6 +21,12 @@ extern ENGINE_API Fvector4 g_pda_taa_bbox;
 
 extern ENGINE_API float psHUD_FOV;
 
+// The water and rain quality ladders (same rule again; defined in xr_ioc_cmd.cpp because the
+// solvers that read them live in CEnvironment, while the presets that write them live here).
+extern ENGINE_API int ps_r__water_underwater;
+extern ENGINE_API int ps_r__water_caustics;
+extern ENGINE_API int ps_r__rain_quality;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // matrices
@@ -791,6 +797,132 @@ static class cl_da_water_wave1 : public R_constant_setup
     }
 } binder_da_water_wave1;
 
+// The baked water field (DESIGN2.md section 1). map carries the XZ mapping a shader needs to
+// address it - uv = (wp.xz - map.xy) * map.zw - and map2 the scale and the "this level has a
+// field at all" flag. An invalid field publishes zeros rather than the sentinel corners of an
+// invalidated box, so a shader that forgets to test map2.w reads the origin and not 1e30.
+static class cl_da_water_map : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        if (!env.water_field_valid())
+        {
+            cmd_list.set_c(C, 0.f, 0.f, 0.f, 0.f);
+            return;
+        }
+        cmd_list.set_c(C, env.water_field_bounds.vMin.x, env.water_field_bounds.vMin.z,
+            env.water_field_inv_extent.x, env.water_field_inv_extent.y);
+    }
+} binder_da_water_map;
+static class cl_da_water_map2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        if (!env.water_field_valid())
+        {
+            cmd_list.set_c(C, 0.f, 0.f, 0.f, 0.f);
+            return;
+        }
+        cmd_list.set_c(C, env.water_field_texel, env.water_field_bounds.vMin.y,
+            env.water_field_bounds.vMax.y, 1.f);
+    }
+} binder_da_water_map2;
+
+// The camera below a water surface: how deep, the surface it is below, and the flag the
+// combine and the surface shader branch on.
+static class cl_da_underwater : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, env.eye_under_depth, env.eye_under_surface, 0.f,
+            env.eye_under_depth > 0.f ? 1.f : 0.f);
+    }
+} binder_da_underwater;
+
+// The water quality ladder as a CONSTANT and not a shader option: r__water_underwater and
+// r__water_caustics are CCC_RuntimeInteger and change live, and a shader-cache key would not
+// follow them. x = the underwater tier 1..4, y = 1 while caustics are on for this preset.
+static class cl_da_water_qual : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, float(ps_r__water_underwater), ps_r__water_caustics ? 1.f : 0.f, 0.f, 0.f);
+    }
+} binder_da_water_qual;
+
+// The ripple simulation window, solved in CEnvironment so the sim pass and every CPU consumer
+// land on the same texel grid: (centre x, centre z, window metres, 1/texels).
+static class cl_da_water_rip : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& w = g_pGamePersistent->Environment().water_ripple_win;
+        cmd_list.set_c(C, w.x, w.y, w.z, w.w);
+    }
+} binder_da_water_rip;
+
+// Wading wakes, the continuous sources of the ripple field. Same packing and the same PRE-
+// transpose requirement as the wind motors and the impact slots.
+static class cl_da_water_wake0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wake_pos[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wake0;
+static class cl_da_water_wake1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wake_pos[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wake1;
+static class cl_da_water_wakep0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wake_par[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wakep0;
+static class cl_da_water_wakep1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wake_par[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wakep1;
+static class cl_da_water_wakei : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_pGamePersistent->Environment().water_wake_active, 0.f, 0.f, 0.f);
+    }
+} binder_da_water_wakei;
+
+// Rain as a physical rate: mm/h and the extinction it adds to the fog, 1/km. Both solved in
+// water_tick from the weather's rain_density - a 0..1 dial says nothing about drop counts.
+// z carries the rain tier so the streak shader can ride the ladder the C++ half already reads;
+// a constant and not a shader option, because r__rain_quality is CCC_RuntimeInteger.
+static class cl_da_rain2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, env.rain_rate_mmh, env.rain_ext_km, float(ps_r__rain_quality), 0.f);
+    }
+} binder_da_rain2;
+
 // 3D PDA screen state (model_pda_screen.ps): published by the game once per frame.
 static class cl_pda_affects : public R_constant_setup
 {
@@ -998,6 +1130,17 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_water_iop2b", &binder_da_water_iop2b);
     r_Constant("da_water_wave0", &binder_da_water_wave0);
     r_Constant("da_water_wave1", &binder_da_water_wave1);
+    r_Constant("da_water_map", &binder_da_water_map);
+    r_Constant("da_water_map2", &binder_da_water_map2);
+    r_Constant("da_underwater", &binder_da_underwater);
+    r_Constant("da_water_qual", &binder_da_water_qual);
+    r_Constant("da_water_rip", &binder_da_water_rip);
+    r_Constant("da_water_wake0", &binder_da_water_wake0);
+    r_Constant("da_water_wake1", &binder_da_water_wake1);
+    r_Constant("da_water_wakep0", &binder_da_water_wakep0);
+    r_Constant("da_water_wakep1", &binder_da_water_wakep1);
+    r_Constant("da_water_wakei", &binder_da_water_wakei);
+    r_Constant("da_rain2", &binder_da_rain2);
     r_Constant("m_affects", &binder_pda_affects);
     r_Constant("pda_screen_rect", &binder_pda_screen_rect);
     r_Constant("pda_taa_bbox", &binder_pda_taa_bbox);

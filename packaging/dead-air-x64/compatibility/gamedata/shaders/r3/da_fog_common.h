@@ -23,12 +23,40 @@ uniform float4 da_fog;      // x sky share, y sky mip, z height density, w heigh
 uniform float4 da_fog2;     // x density ceiling, y layer base altitude, z horizon flattening
 uniform float4 da_sky_tint; // rgb the weather's own sky colour
 
+// The rain, as the weather constant the engine already solves it into (binder_da_rain2):
+// x = rain rate R in mm/h, y = extinction sigma_ext = 0.312*R^0.67 per KILOMETRE,
+// z = the rain quality tier, w reserved. Declared here rather than per-shader because rain
+// extinction belongs to the haze: it is what makes a downpour close the distance in.
+uniform float4 da_rain2;
+
+// Rain is extinction like any other. Falling water is a suspension of drops with a real
+// scattering cross-section, so a 25 mm/h storm removes ~2.7 per km - a third of the far end of
+// a 150 m view. This is where the fix for the crown-tears-against-the-sky band lives too: the
+// horizon stops being a hard plane once the murk in front of it grows with the weather.
+//
+// Added as a SECOND independent opacity over the linear ramp, exactly the way the height layer
+// is, so fog_near/fog_far keep meaning what they say and dry weather is bit-identical.
+float da_fog_rain(float linear_fog, float dist)
+{
+	[branch] if (da_rain2.y <= 0.001h)
+		return linear_fog;
+
+	// The published sigma is per kilometre; the path is in metres.
+	const float rainf = 1.0h - exp(-da_rain2.y * 0.001h * max(dist, 0.0h));
+	return saturate(linear_fog + rainf * (1.0h - linear_fog));
+}
+
 // Height fog, added to a linear factor as a SECOND independent opacity rather than replacing
 // it - fog_near/fog_far keep working. Density falls off exponentially with altitude and the
 // integral along the view ray is taken analytically; a near-horizontal ray is the degenerate
 // case, where the division by the vertical component is unstable, so its limit is a branch.
 float da_fog_height(float linear_fog, float3 wp, float3 cam, float dist)
 {
+	// Folded in here and not at each call site: every fogged pass in the tree already runs
+	// through this one function, so the water, the scene, the sky and the streaks cannot end up
+	// disagreeing about how far you can see in a storm.
+	linear_fog = da_fog_rain(linear_fog, dist);
+
 	[branch] if (da_fog.z <= 0.001h)
 		return linear_fog;
 
@@ -79,10 +107,12 @@ float3 da_fog_mix_sky(float3 base_rgb, float3 sky_sample)
 	return lerp(base_rgb, sky, saturate(da_fog.x));
 }
 
-// True when either extra term is worth the branch. Both callers gate on this.
+// True when any extra term is worth the branch. Every caller gates on this, which is why the
+// rain has to be in it: without the third test a level with no height layer and no sky share
+// would skip da_fog_height entirely and the storm would take nothing off the distance.
 bool da_fog_extras_on()
 {
-	return da_fog.x > 0.001h || da_fog.z > 0.001h;
+	return da_fog.x > 0.001h || da_fog.z > 0.001h || da_rain2.y > 0.001h;
 }
 
 #endif

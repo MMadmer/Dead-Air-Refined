@@ -44,6 +44,9 @@ protected:
     Fvector get_foot_position(ELegType leg_type);
     virtual bool is_on_ground() { return true; }
 private:
+    // Feeds CEnvironment::water_wake from both feet while the body is wading. dist_sqr is the
+    // squared distance to the camera, so a distant NPC cannot burn one of the eight slots.
+    void UpdateWaterWake(float dist_sqr);
     void reload_foot_bones();
     void load_foot_bones(CInifile::Sect& data);
 

@@ -555,6 +555,96 @@ public:
     // Optical profiles for the current level (dead_air_x64_water.ltx), read on level load.
     void load_water_profiles();
 
+    // ---- The baked water field --------------------------------------------------------------
+    // Water surfaces are static level geometry, so "is there water at this XZ, at what height,
+    // over what bed, how far is the bank" never changes: it is baked once at level load and read
+    // by everything on both sides of the fence. See DESIGN2.md section 1.
+
+    // A texel of the level-wide water map. shore is metres to the nearest bank (clamped by the
+    // bake), mask is the coverage: 0 means no liquid triangle covers this texel.
+    struct SWaterTexel
+    {
+        float surface{};
+        float bed{};
+        float shore{};
+        u8 mask{};
+    };
+    static constexpr int water_field_dim = 1024;
+
+    // Metres of standing water the fill map's 1.0 means. The bake clamps to this and the shader
+    // (DA_PUDDLE_FILL_MAX in da_puddles.h) decodes with it - three places, one number.
+    static constexpr float puddle_fill_depth = .25f;
+
+    // Called once per level by the bake in Level_load.cpp. Takes ownership of both arrays
+    // (water_field_dim * water_field_dim entries each, row-major, z-major outer). world_bounds
+    // is the XZ footprint the bake rasterised into and is expected to be SQUARE - the metres per
+    // texel published to the shaders is a single number.
+    //
+    // One call for both maps on purpose: the renderer keys its upload on the field's identity,
+    // so a fill handed over separately would eventually be a level behind the field beside it.
+    void set_water_field(xr_vector<SWaterTexel>&& texels, xr_vector<float>&& fill, const Fbox& world_bounds);
+    void reset_water_field();
+
+    bool water_field_valid() const { return !water_field.empty(); }
+    // -FLT_MAX when there is no water at this XZ. All of these are a clamp and one index, so
+    // gameplay code may call them every frame.
+    float water_surface_at(const Fvector& p) const;
+    float water_bed_at(const Fvector& p) const;
+    float water_shore_dist(const Fvector& p) const;
+    bool water_at(const Fvector& p, float& surface, float& bed) const;
+    // How deep rain would stand here, 0..1 of puddle_fill_depth. Bilinear and clamped, the same
+    // read the shader's linear sampler does, so gameplay and the picture place puddles alike.
+    float puddle_fill_at(const Fvector& p) const;
+
+    xr_vector<SWaterTexel> water_field;
+    // Where rain pools, baked in the same sweep from the same heights (Level_load.cpp): one
+    // entry per field texel, same indexing, always either empty or exactly as long as the field.
+    xr_vector<float> puddle_fill;
+    Fbox water_field_bounds;
+    // Derived once in set_water_field so a query is a multiply rather than a divide:
+    // (1/extent.x, 1/extent.z) and the metres one texel spans.
+    Fvector2 water_field_inv_extent{};
+    float water_field_texel{1.f};
+
+    // ---- Ripple field ------------------------------------------------------------------------
+    // Continuous disturbance of the water surface by something moving through it: a wading
+    // actor, an NPC, a mutant. Fed into the ripple field, which is why it is a rate and a
+    // radius rather than a one-shot ring like water_hit.
+    static constexpr int water_wake_count = 8;
+    void water_wake(const Fvector& pos, float radius, float strength);
+
+    struct SWaterWake
+    {
+        Fvector pos{};
+        float radius{};
+        float strength{};
+        float birth{};
+        float touched{}; // last refresh; a wake that stops being fed fades instead of snapping
+        bool used{};
+    };
+    SWaterWake water_wakes[water_wake_count];
+    Fmatrix water_wake_pos[2]; // rows: (x, y, z, radius), pre-transpose in the binder
+    Fmatrix water_wake_par[2]; // rows: (enveloped strength, age in seconds, 0, 0)
+    float water_wake_active{};
+
+    // The ripple simulation window: (centre x, centre z, size in metres, 1/texels). The centre
+    // is the camera SNAPPED to whole texels - resampling the field every frame smears it - and
+    // it is solved here so the sim pass and any CPU consumer agree on it exactly.
+    static constexpr float water_ripple_window = 32.f;
+    Fvector4 water_ripple_win{};
+
+    // ---- Rain and the camera in water --------------------------------------------------------
+    // The rain rate the whole rain system is parameterised on, mm/h. Solved where the sea state
+    // is: R = 25 * density^1.5, so a full-density storm is heavy rain. The companion is the
+    // extinction it adds to the fog, 0.312 * R^0.67 in 1/km.
+    float rain_rate_mmh{};
+    float rain_ext_km{};
+    float RainRateMmh() const { return rain_rate_mmh; }
+
+    // Camera below a water surface: metres below, and the surface Y it is below.
+    float eye_under_depth{};
+    float eye_under_surface{};
+
     // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a
     // roof, where the physical wind push on bodies and projectiles must die. One static-only
     // ray up; callers gate their frequency.

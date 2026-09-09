@@ -30,11 +30,19 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos
     const float4 patched = s_patched_normal.Load(int2(tc * pos_decompression_params2.xy), iSample);
 #endif
 
-    // The patch pass encodes the surface continuity in the normal's length (0.5 broken edge,
-    // 1 continuous plane): the wet gloss boost belongs to continuous surfaces only - on leaf
-    // cards, grass blades and crown silhouettes it drew a white outline. The darkening stays.
+    // Two finished numbers arrive from the patch pass, and neither is recovered by inverting
+    // the other. The normal's length carries the additive gloss (0.5 = none, 1 = full); alpha
+    // carries the multiplicative albedo darkening.
+    //
+    // This pass used to reconstruct wetness from the darkening term as (1-a)^2, which only
+    // works while the darkening is one fixed curve for the whole world. It is not any more:
+    // the Saunderson darkening depends on the pixel's own albedo and its own porosity, so the
+    // inverse has no single solution. The patch pass therefore applies the continuity gate and
+    // the viewmodel gate itself and hands the answer over finished - which also means this
+    // pass no longer loads the G-buffer at all, and stops reading an s_diffuse its blender
+    // never bound.
     const float len = length(patched.xyz);
-    const float cont = saturate(len * 2.0 - 1.0);
+    const float gloss_add = saturate(len * 2.0 - 1.0);
     const float3 n = patched.xyz / max(len, 1e-4);
 
     rain_apply_output output;
@@ -44,31 +52,9 @@ rain_apply_output main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos
     output.normal = float4(gbuf_pack_normal(n), 0.0, 0.0);
 #endif
 
-    // MRT1 blends rgb multiplicatively into albedo (the wet darkening) and ALPHA additively into
-    // the G-buffer gloss - which used to receive a hard 0. Recover wetness from the stored
-    // darkening term (c = max(1-sqrt(w), 0.5) => w = (1-c)^2) and boost the gloss with it, so wet
-    // concrete/asphalt/metal actually shine. The hemi gate upstream keeps interiors dry.
-    const float wet_back = (1.0 - patched.a) * (1.0 - patched.a);
-
-    // The viewmodel keeps its rain normals and darkening (streaks on the barrel are a feature)
-    // but NOT the gloss boost: the 256px rain smap cannot resolve hands, and a mirror-bright
-    // rifle centimetres from the camera reads as a smeared screen. HUD geometry lives closer
-    // than ~35 cm of view depth.
-#ifdef GBUFFER_OPTIMIZATION
-#ifdef MSAA_OPTIMIZATION
-    const gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, iSample);
-#else
-    const gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy, ISAMPLE);
-#endif
-#else
-#ifdef MSAA_OPTIMIZATION
-    const gbuffer_data gbd = gbuffer_load_data(tc, iSample);
-#else
-    const gbuffer_data gbd = gbuffer_load_data(tc, ISAMPLE);
-#endif
-#endif
-    const float not_viewmodel = step(0.35, gbd.P.z);
-
-    output.gloss = float4(patched.aaa, saturate(wet_back * 1.2) * not_viewmodel * cont);
+    // MRT1 blends rgb multiplicatively into albedo (the wet darkening) and ALPHA additively
+    // into the G-buffer gloss - which used to receive a hard 0 - so wet concrete, asphalt and
+    // metal actually shine. The hemi gate upstream keeps interiors dry.
+    output.gloss = float4(patched.aaa, gloss_add);
     return output;
 }

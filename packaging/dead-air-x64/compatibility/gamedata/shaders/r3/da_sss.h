@@ -68,7 +68,15 @@ float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
 			break;
 
 		// Scene depth at that screen point - the raw value the position buffer carries in .z.
+		// With MSAA the position target is a Texture2DMS, which has no SampleLevel at all: the
+		// march has to Load sample zero instead. Without this the whole sun accumulator fails to
+		// COMPILE the moment a player turns MSAA on with contact shadows enabled, which lands as
+		// a hard fault in the middle of a level load.
+#ifdef USE_MSAA
+		const float scene_z = s_position.Load( int3( uv * pos_decompression_params2.xy, 0 ), 0 ).z;
+#else
 		const float scene_z = s_position.SampleLevel( smp_nofilter, uv, 0 ).z;
+#endif
 
 		// The sky casts no shadow.
 		[branch] if ( scene_z < 0.05f )

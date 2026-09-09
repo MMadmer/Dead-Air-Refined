@@ -26,6 +26,16 @@ namespace xray::render::RENDER_NAMESPACE
 const float tweak_rain_COP_initial_offs = 1200.f;
 const float tweak_rain_ortho_xform_initial_offs = 1000.f; //. ?
 
+// The occlusion map used to be rebuilt only while the CAMERA was moving, so a door that opened
+// or a truck that drove off left the ground under it wet (or dry) for as long as the player
+// stood still - and on the first frames after a load, with a motionless camera, the wet-surface
+// shader sampled a map that had never been rendered this session at all. Movement still forces
+// a rebuild every frame; a stationary camera now gets one on a slow cadence, which is what the
+// world changing underneath it actually needs. It matters more since the map also places the
+// puddles: a stale height field is a stale puddle.
+const u32 rain_smap_refresh_frames = 15;
+static u32 rain_smap_frame = 0;
+
 //	Defined in r2_R_sun.cpp
 Fvector3 wform(Fmatrix const& m, Fvector3 const& v);
 
@@ -53,10 +63,13 @@ void render_rain::init()
 {
     rain_factor = GetCurrentWetness() + GetCurrentSnowFactor();
 
+    const bool camera_moved = !Device.vCameraPositionSaved.similar(Device.vCameraPosition, EPS_L) ||
+        !Device.vCameraDirectionSaved.similar(Device.vCameraDirection, EPS_L);
+    const bool stale = Device.dwFrame < rain_smap_frame || Device.dwFrame - rain_smap_frame >= rain_smap_refresh_frames;
+
     o.active  = ps_r2_ls_flags.test(R3FLAG_DYN_WET_SURF);
     o.active &= rain_factor >= EPS_L;
-    o.active &= !Device.vCameraPositionSaved.similar(Device.vCameraPosition, EPS_L) ||
-        !Device.vCameraDirectionSaved.similar(Device.vCameraDirection, EPS_L);
+    o.active &= camera_moved || stale;
 
     if (!o.active)
         return;
@@ -109,7 +122,13 @@ void render_rain::calculate()
             const float a = tanf(deg2rad(Device.fFOV) / 2);
             const float c = tanf(deg2rad(Device.fFOV * Device.fASPECT) / 2);
             const float b_2 = H * H * (1.0f + a * a + c * c);
-            fBoundingSphereRadius = b_2 / (2.0f * H);
+            // Never smaller than the radius the wet-surface shader fades over. The frustum
+            // sphere shrinks with the FOV, so looking through a scope used to shrink the
+            // occlusion map to half the wet radius and leave the outer ring without cover data
+            // - the same defect the far clamp above fixed for the far plane, one level down.
+            // It also keeps metres-per-texel constant while aiming, which the puddle placement
+            // now depends on.
+            fBoundingSphereRadius = _max(b_2 / (2.0f * H), H);
         }
     }
 
@@ -317,6 +336,7 @@ void render_rain::render()
                 dsgraph.cmd_list.set_xform_view(Fidentity);
                 dsgraph.cmd_list.set_xform_project(RainLight.X.D[0].combine);
                 dsgraph.render_graph(0);
+                rain_smap_frame = Device.dwFrame;
             }
         }
     }

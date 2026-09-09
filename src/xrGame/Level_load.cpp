@@ -44,6 +44,427 @@ bool is_liquid(const CDB::TRI& tri)
     return mtl && mtl->Flags.test(SGameMtl::flLiquid);
 }
 
+// ---- The baked water field -------------------------------------------------------------------
+// Metres of channel A, the clamp DESIGN2 puts on the distance to the nearest bank. It doubles as
+// the distance transform's infinity: the chamfer sweep only ever grows away from its seeds, so
+// everything that really is nearer than the clamp still comes out exact.
+constexpr float water_shore_max = 32.f;
+
+// ---- The puddle fill map ----------------------------------------------------------------------
+// Baked in the same sweep, from the same detail-slot heights the bed comes from: how deep rain
+// would stand at this texel once it has run downhill. Deeper than the cap reads as full - past a
+// couple of hand-widths it is a pond and belongs to the water field, not to the puddle system.
+// The cap lives on CEnvironment because three places decode with it: this bake, the CPU replica
+// of the mask, and DA_PUDDLE_FILL_MAX in da_puddles.h.
+constexpr float puddle_fill_max = CEnvironment::puddle_fill_depth;
+// The rise the relaxation gives a dammed cell over its lowest way out. A millimetre is small
+// enough to leave the depth exact to the quantisation of the source heights and large enough
+// that a flat basin still slopes towards its outlet instead of sitting at one value.
+constexpr float puddle_fill_eps = .001f;
+// Two-directional sweeps. A full relaxation over a 1024 grid is thousands of them; forty settle
+// every basin small enough to hold a puddle, and the cap is what keeps this a load-time cost
+// rather than a stall.
+constexpr int puddle_fill_passes = 40;
+// Ground the detail grid never described. Neighbours drain into it, so a place the bake knows
+// nothing about grows no puddle rather than a guessed one.
+constexpr float puddle_no_ground = -1000.f;
+// Starting head of a cell the flood has not reached down to yet.
+constexpr float puddle_flooded = 1e30f;
+
+// level.details read straight out of the VFS for its slot heightmap. CDetailManager holds the
+// same file open already, but it lives behind the render DLL and the game layer has no route to
+// it, so the bake parses the two fields it needs itself. The layout, the quantisation and the
+// slot pitch below are DetailFormat.h's DetailHeader/DetailSlot - keep them in step.
+struct detail_heightmap
+{
+    static constexpr u32 expect_version = 3; // DETAIL_VERSION
+    static constexpr u32 slot_bytes = 16; // sizeof(DetailSlot)
+    static constexpr float slot_size = 2.f; // DETAIL_SLOT_SIZE
+
+    IReader* file{};
+    const u8* slots{};
+    u32 slot_count{};
+    int size_x{}, size_z{}, offs_x{}, offs_z{};
+
+    void open()
+    {
+        if (!FS.exist("$level$", "level.details"))
+            return;
+
+        string_path fn;
+        FS.update_path(fn, "$level$", "level.details");
+        file = FS.r_open(fn);
+        if (!file)
+            return;
+
+        bool ok = false;
+        if (IReader* head = file->open_chunk(0))
+        {
+            // version, object count, offs_x, offs_z, size_x, size_z
+            if (head->length() >= 6 * sizeof(u32) && head->r_u32() == expect_version)
+            {
+                head->r_u32();
+                offs_x = head->r_s32();
+                offs_z = head->r_s32();
+                size_x = head->r_s32();
+                size_z = head->r_s32();
+                ok = size_x > 0 && size_z > 0;
+            }
+            head->close();
+        }
+        if (!ok)
+            return;
+
+        // The slot pointer outlives the sub-reader but not the file, exactly as
+        // CDetailManager::Load keeps dtSlots past its own close().
+        if (IReader* body = file->open_chunk(2))
+        {
+            slots = static_cast<const u8*>(body->pointer());
+            slot_count = u32(body->length() / slot_bytes);
+            body->close();
+        }
+    }
+
+    void close()
+    {
+        if (file)
+            FS.r_close(file);
+        file = nullptr;
+        slots = nullptr;
+    }
+
+    // Terrain base Y at a world XZ. A slot the compiler never wrote decodes to the -200 m floor
+    // of the quantisation, and that zero is the only tell that the grid has no ground here.
+    bool base_at(float wx, float wz, float& y) const
+    {
+        if (!slots)
+            return false;
+
+        const int dx = iFloor(wx / slot_size) + offs_x;
+        const int dz = iFloor(wz / slot_size) + offs_z;
+        if (dx < 0 || dz < 0 || dx >= size_x || dz >= size_z)
+            return false;
+
+        const u32 at = u32(dz) * u32(size_x) + u32(dx);
+        if (at >= slot_count)
+            return false;
+
+        // First dword of DetailSlot: y_base is its low 12 bits, 1 unit = 20 cm from -200 m.
+        // Assembled byte by byte because the chunk is not guaranteed to be dword-aligned.
+        const u8* p = slots + size_t(at) * slot_bytes;
+        const u32 packed = u32(p[0]) | (u32(p[1]) << 8) | (u32(p[2]) << 16) | (u32(p[3]) << 24);
+        const u32 y_base = packed & 0xfffu;
+        if (!y_base)
+            return false;
+
+        y = float(y_base) * .2f - 200.f;
+        return true;
+    }
+};
+
+// Depth of whichever measured body a point falls in. Backwards, so the smallest containing body
+// wins: the array is sorted biggest first, and a puddle sitting inside a lake's bounding box
+// should answer with its own depth rather than the lake's.
+float water_body_depth_at(const CEnvironment& env, float wx, float wz)
+{
+    for (int i = env.water_body_count - 1; i >= 0; --i)
+    {
+        const Fbox& e = env.water_bodies[i].extent;
+        if (wx >= e.vMin.x && wx <= e.vMax.x && wz >= e.vMin.z && wz <= e.vMax.z)
+            return env.water_bodies[i].depth;
+    }
+    return water_depth_unknown;
+}
+
+// Where rain would stand once it has run downhill - a Planchon-Darboux fill over the terrain
+// heights the bed came from, run on the same grid so the two maps cannot disagree about ground.
+//
+// Every cell starts flooded to infinity except the ones water can leave through: the map border,
+// the texels a water body already covers, and the ones the detail grid never described. The
+// relaxation then lets each flooded cell back down to the lowest sill on any way out of it -
+//     w[i] = max( terrain[i], min over the 4 neighbours of ( w[n] + eps ) )
+// - and what is left standing above the terrain is the depth of the puddle that basin holds.
+//
+// The sweep direction alternates because one direction only carries a sill downstream of itself:
+// a basin drained from the far corner would need as many passes as it is wide. Alternating
+// carries a lowered cell both ways, which is what turns thousands of sweeps into tens.
+void bake_puddle_fill(
+    const xr_vector<CEnvironment::SWaterTexel>& field, const xr_vector<float>& terrain, xr_vector<float>& fill)
+{
+    constexpr int dim = CEnvironment::water_field_dim;
+    constexpr size_t texels = size_t(dim) * size_t(dim);
+
+    xr_vector<float> head;
+    head.resize(texels);
+    for (int z = 0; z < dim; ++z)
+        for (int x = 0; x < dim; ++x)
+        {
+            const size_t at = size_t(z) * dim + size_t(x);
+            const bool outlet =
+                x == 0 || z == 0 || x == dim - 1 || z == dim - 1 || field[at].mask || terrain[at] <= puddle_no_ground;
+            head[at] = outlet ? terrain[at] : puddle_flooded;
+        }
+
+    for (int pass = 0; pass < puddle_fill_passes; ++pass)
+    {
+        bool changed = false;
+        const bool forward = (pass & 1) == 0;
+        for (int zi = 1; zi < dim - 1; ++zi)
+        {
+            const int z = forward ? zi : dim - 1 - zi;
+            for (int xi = 1; xi < dim - 1; ++xi)
+            {
+                const int x = forward ? xi : dim - 1 - xi;
+                const size_t at = size_t(z) * dim + size_t(x);
+                const float ground = terrain[at];
+                // An outlet sits on its own ground, and so does a cell the flood already
+                // finished draining. Neither can move again.
+                if (head[at] <= ground)
+                    continue;
+
+                const float out =
+                    _max(ground, _min(_min(head[at - 1], head[at + 1]), _min(head[at - dim], head[at + dim])) +
+                        puddle_fill_eps);
+                if (out < head[at])
+                {
+                    head[at] = out;
+                    changed = true;
+                }
+            }
+        }
+        if (!changed)
+            break;
+    }
+
+    fill.resize(texels);
+    for (size_t at = 0; at < texels; ++at)
+    {
+        // A lake is not a puddle - the water field owns those texels. Neither is a cell the
+        // relaxation never reached, nor one with no ground under it: unknown reads as dry, so
+        // the failure mode is a missing puddle and never a puddle-coloured hillside.
+        const float ground = terrain[at];
+        const bool known = !field[at].mask && ground > puddle_no_ground && head[at] < puddle_flooded;
+        const float depth = known ? _max(head[at] - ground, 0.f) : 0.f;
+        fill[at] = _min(depth, puddle_fill_max) * (1.f / puddle_fill_max);
+    }
+}
+
+// Bakes the level-wide water map: surface height, coverage, bed height and distance to the
+// nearest bank, one texel every metre or so over the level's own bounding box. Everything from
+// wave attenuation to the wade state reads this instead of asking the collision again, so it is
+// worth a few dozen milliseconds once per level. Runs after measure_water_body has published the
+// bodies, whose measured depth is the fallback where the detail grid has no ground.
+void bake_water_field(CObjectSpace& space)
+{
+    CEnvironment& env = g_pGamePersistent->Environment();
+
+    CDB::MODEL* model = space.GetStaticModel();
+    const CDB::TRI* tris = space.GetStaticTris();
+    const Fvector* verts = space.GetStaticVerts();
+    if (!model || !tris || !verts)
+        return;
+    const u32 count = model->get_tris_count();
+    if (!count)
+        return;
+
+    Fbox bounds = space.GetBoundingVolume();
+    if (!bounds.is_valid())
+        return;
+
+    // Squared about its centre, because the field publishes a single metres-per-texel to the
+    // shaders: a rectangular footprint would leave the two axes disagreeing about the scale.
+    const float mid_x = .5f * (bounds.vMin.x + bounds.vMax.x);
+    const float mid_z = .5f * (bounds.vMin.z + bounds.vMax.z);
+    const float half = .5f * _max(_max(bounds.vMax.x - bounds.vMin.x, bounds.vMax.z - bounds.vMin.z), EPS_S);
+    bounds.vMin.x = mid_x - half;
+    bounds.vMax.x = mid_x + half;
+    bounds.vMin.z = mid_z - half;
+    bounds.vMax.z = mid_z + half;
+
+    constexpr int dim = CEnvironment::water_field_dim;
+    const float texel = (half * 2.f) / float(dim);
+    const float inv_texel = 1.f / texel;
+
+    xr_vector<CEnvironment::SWaterTexel> field;
+    field.resize(size_t(dim) * size_t(dim));
+
+    // Texel-index space: subtracting the half texel puts index i exactly on the centre of texel
+    // i, so the coverage test is a plain point-in-triangle at integer coordinates.
+    const auto to_ix = [&](float wx) { return (wx - bounds.vMin.x) * inv_texel - .5f; };
+    const auto to_iz = [&](float wz) { return (wz - bounds.vMin.z) * inv_texel - .5f; };
+
+    bool any = false;
+
+    // Every liquid triangle, unstrided - the body measurement can afford to skip one because it
+    // only wants an extent and a mean, but a triangle skipped here is a hole in the map.
+    for (u32 i = 0; i < count; ++i)
+    {
+        const CDB::TRI& tri = tris[i];
+        if (!is_liquid(tri))
+            continue;
+
+        const Fvector& va = verts[tri.verts[0]];
+        const Fvector& vb = verts[tri.verts[1]];
+        const Fvector& vc = verts[tri.verts[2]];
+
+        const float ax = to_ix(va.x), az = to_iz(va.z);
+        const float bx = to_ix(vb.x), bz = to_iz(vb.z);
+        const float cx = to_ix(vc.x), cz = to_iz(vc.z);
+
+        const float area2 = (bx - ax) * (cz - az) - (cx - ax) * (bz - az);
+        // Nothing to rasterise from a triangle stood on edge; a water sheet always brings
+        // horizontal ones as well.
+        if (_abs(area2) < EPS_S)
+            continue;
+        const float inv_area = 1.f / area2;
+
+        int x0 = iCeil(_min(_min(ax, bx), cx)), x1 = iFloor(_max(_max(ax, bx), cx));
+        int z0 = iCeil(_min(_min(az, bz), cz)), z1 = iFloor(_max(_max(az, bz), cz));
+        clamp(x0, 0, dim - 1);
+        clamp(x1, 0, dim - 1);
+        clamp(z0, 0, dim - 1);
+        clamp(z1, 0, dim - 1);
+
+        bool stamped = false;
+        for (int z = z0; z <= z1; ++z)
+        {
+            const float pz = float(z);
+            for (int x = x0; x <= x1; ++x)
+            {
+                const float px = float(x);
+                const float wa = (cx - bx) * (pz - bz) - (px - bx) * (cz - bz);
+                const float wb = (ax - cx) * (pz - cz) - (px - cx) * (az - cz);
+                const float wc = (bx - ax) * (pz - az) - (px - ax) * (bz - az);
+                if (wa * area2 < 0.f || wb * area2 < 0.f || wc * area2 < 0.f)
+                    continue;
+
+                const float y = (wa * va.y + wb * vb.y + wc * vc.y) * inv_area;
+                CEnvironment::SWaterTexel& t = field[size_t(z) * dim + size_t(x)];
+                if (!t.mask || y > t.surface)
+                    t.surface = y;
+                t.mask = 1;
+                stamped = true;
+                any = true;
+            }
+        }
+
+        // A triangle narrower than a texel can miss every centre. Stamp the one its centroid
+        // falls in so a thin stream still reads as water instead of as a chain of holes.
+        if (!stamped)
+        {
+            const int mx = iFloor((ax + bx + cx) / 3.f + .5f);
+            const int mz = iFloor((az + bz + cz) / 3.f + .5f);
+            if (mx >= 0 && mx < dim && mz >= 0 && mz < dim)
+            {
+                const float y = _max(_max(va.y, vb.y), vc.y);
+                CEnvironment::SWaterTexel& t = field[size_t(mz) * dim + size_t(mx)];
+                if (!t.mask || y > t.surface)
+                    t.surface = y;
+                t.mask = 1;
+                any = true;
+            }
+        }
+    }
+
+    if (!any)
+        return;
+
+    // Bed, from the detail grid's 2 m heightmap where it reaches and from the containing body's
+    // measured depth where it does not. Ground that decodes above the water is a bank caught
+    // inside a water texel - it is clamped to the surface (zero depth) rather than rejected,
+    // because falling back to the body depth there would dig a hole in the shallows.
+    detail_heightmap details;
+    details.open();
+
+    // Terrain height everywhere, not only under water: the puddle fill needs the whole grid, and
+    // reading it here means both maps stand on the same heights and the file is opened once.
+    xr_vector<float> terrain;
+    terrain.assign(size_t(dim) * size_t(dim), puddle_no_ground);
+
+    for (int z = 0; z < dim; ++z)
+    {
+        const float wz = bounds.vMin.z + (float(z) + .5f) * texel;
+        for (int x = 0; x < dim; ++x)
+        {
+            const size_t at = size_t(z) * dim + size_t(x);
+            const float wx = bounds.vMin.x + (float(x) + .5f) * texel;
+
+            float base;
+            const bool grounded = details.base_at(wx, wz, base);
+            if (grounded)
+                terrain[at] = base;
+
+            CEnvironment::SWaterTexel& t = field[at];
+            if (!t.mask)
+                continue;
+
+            if (grounded)
+                t.bed = _min(base, t.surface);
+            else
+                t.bed = t.surface - water_body_depth_at(env, wx, wz);
+        }
+    }
+    details.close();
+
+    // Distance to the nearest bank, defined on both sides of it: seed zero on every texel that
+    // touches the other class, then a two-pass chamfer sweep with 1 and sqrt(2) weights in
+    // metres. Off-grid neighbours count as the same class, so water running off the edge of the
+    // level does not grow a bank there.
+    const float step_1 = texel;
+    const float step_2 = texel * 1.41421356f;
+    const auto wet_at = [&](int x, int z) { return field[size_t(z) * dim + size_t(x)].mask != 0; };
+    for (int z = 0; z < dim; ++z)
+        for (int x = 0; x < dim; ++x)
+        {
+            const bool wet = wet_at(x, z);
+            const bool edge = (x > 0 && wet_at(x - 1, z) != wet) || (x < dim - 1 && wet_at(x + 1, z) != wet) ||
+                (z > 0 && wet_at(x, z - 1) != wet) || (z < dim - 1 && wet_at(x, z + 1) != wet);
+            field[size_t(z) * dim + size_t(x)].shore = edge ? 0.f : water_shore_max;
+        }
+
+    for (int z = 0; z < dim; ++z)
+        for (int x = 0; x < dim; ++x)
+        {
+            float d = field[size_t(z) * dim + size_t(x)].shore;
+            if (x > 0)
+                d = _min(d, field[size_t(z) * dim + size_t(x - 1)].shore + step_1);
+            if (z > 0)
+            {
+                d = _min(d, field[size_t(z - 1) * dim + size_t(x)].shore + step_1);
+                if (x > 0)
+                    d = _min(d, field[size_t(z - 1) * dim + size_t(x - 1)].shore + step_2);
+                if (x < dim - 1)
+                    d = _min(d, field[size_t(z - 1) * dim + size_t(x + 1)].shore + step_2);
+            }
+            field[size_t(z) * dim + size_t(x)].shore = d;
+        }
+
+    for (int z = dim - 1; z >= 0; --z)
+        for (int x = dim - 1; x >= 0; --x)
+        {
+            float d = field[size_t(z) * dim + size_t(x)].shore;
+            if (x < dim - 1)
+                d = _min(d, field[size_t(z) * dim + size_t(x + 1)].shore + step_1);
+            if (z < dim - 1)
+            {
+                d = _min(d, field[size_t(z + 1) * dim + size_t(x)].shore + step_1);
+                if (x < dim - 1)
+                    d = _min(d, field[size_t(z + 1) * dim + size_t(x + 1)].shore + step_2);
+                if (x > 0)
+                    d = _min(d, field[size_t(z + 1) * dim + size_t(x - 1)].shore + step_2);
+            }
+            field[size_t(z) * dim + size_t(x)].shore = d;
+        }
+
+    // The puddle fill, from the heights gathered above. One bake and one hand-over for both maps:
+    // the renderer keys its upload on the field's identity, so a fill with a lifetime of its own
+    // would sooner or later be a level behind the field it is read beside.
+    xr_vector<float> fill;
+    bake_puddle_fill(field, terrain, fill);
+
+    env.set_water_field(std::move(field), std::move(fill), bounds);
+}
+
 // Measures the level's water body once, from the static collision - the same liquid-material
 // sweep qa_water_goto walks. The extent gives the sea-state solver its fetch, the mean depth
 // gives the waves their shallow-water attenuation and the optics their path length. A level
@@ -361,6 +782,11 @@ bool CLevel::Load_GameSpecific_After()
     // Here and not earlier: the collision model is loaded and Load_GameSpecific_CFORM has already
     // remapped the game-material ids onto its triangles, so flLiquid means what it says.
     measure_water_body(ObjectSpace);
+    // Unconditionally, and not only where the sweep above found water. The field's water
+    // channels come out empty on a dry level - which is correct, and every consumer gates on
+    // coverage rather than on the map existing - but the puddle fill it bakes alongside them is
+    // terrain concavity, and that is worth having on the levels that are nothing but terrain.
+    bake_water_field(ObjectSpace);
 
     return TRUE;
 }

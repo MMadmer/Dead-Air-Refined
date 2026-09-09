@@ -81,6 +81,22 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define     r2_sunmask          "sunmask"
 // The cloud deck field rendered once per frame (phase_cloud_map); the sun passes read it
 // through s_lmap, the visible deck through s_cloud_map.
+// The baked, level-wide water map (R = surface world Y, G = coverage, B = bed world Y,
+// A = metres to the nearest bank) and the ripple simulation's ping-pong pair (R = height now,
+// G = height one step back), a window of CEnvironment::water_ripple_window metres around the
+// camera. Mapped by da_water_map / da_water_map2 and da_water_rip.
+// Only the ripple pair is a render target. The field is a CPU bake uploaded once per level as
+// a plain immutable texture (r4_water_field.cpp), so it lives under the same $user$ namespace
+// but never appears in the render target list.
+// The pair is named like rt_Base: the index is appended, so the ping-pong halves are
+// "$user$water_ripple0" and "$user$water_ripple1" and a pass can bind either by name.
+#define r2_RT_water_field "$user$water_field"
+#define r2_RT_water_ripple "$user$water_ripple"
+// The puddle fill map: how deep rain would stand at this texel, R16F, 0..1 of
+// CEnvironment::puddle_fill_depth. Baked in the same sweep as the field above and uploaded
+// beside it (r4_water_field.cpp), so it is no more a render target than the field is. Mapped by
+// da_water_map, read by da_puddles.h in both halves of a puddle.
+#define r2_RT_puddle_fill "$user$puddle_fill"
 #define r2_RT_cloud_map "$user$cloud_map"
 #define r2_RT_depth_copy "$user$depth_copy"
 #define r2_RT_clouds0 "$user$clouds0"

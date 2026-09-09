@@ -200,16 +200,13 @@ f_deffer 	main	( p_flat I 		)
 		}
 		else
 		{
-			// General wetness: wider than puddles and weaker.
-			D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
+			// Damp ground, the soaked rim and the water itself, all three in one call: the
+			// Saunderson curve (da_puddles.h / da_wetness.h) instead of three flat multiplies.
+			// A single factor darkened wet gravel exactly as hard as wet tar; the curve takes
+			// half off a dark albedo and a fifth off a bright one, which IS the difference.
+			// Gloss is deliberately left alone - it does not depend on the albedo.
+			D.rgb = da_puddle_albedo(D.rgb, PDL);
 			G = max(G, PDL.damp * da_puddle_look.z);
-
-			// Dark rim of soaked soil around the water.
-			D.rgb *= lerp(1.0f, saturate(da_puddle_look2.z), PDL.rim);
-
-			// The water itself: darker and glossier. max(), not replace - water cannot be
-			// more matte than what it stands on.
-			D.rgb *= lerp(1.0f, saturate(da_puddle_look.y), PDL.mask);
 			// Gloss by the SOFT mask: it is a scalar, intermediate values are meaningful -
 			// a step here drew its OWN line wherever strong light hit (full glint on one
 			// side of a pixel, none on the other, visible at campfires).
@@ -231,10 +228,10 @@ f_deffer 	main	( p_flat I 		)
 		}
 		else
 		{
-			D.rgb *= lerp(1.0f, 0.88f, PDL.damp);
+			// The same one call as the branch above - the two halves have to darken
+			// identically or the r__puddles_gbuf switch would also change the colour.
+			D.rgb = da_puddle_albedo(D.rgb, PDL);
 			G = max(G, PDL.damp * da_puddle_look.z);
-			D.rgb *= lerp(1.0f, saturate(da_puddle_look2.z), PDL.rim);
-			D.rgb *= lerp(1.0f, saturate(da_puddle_look.y), PDL.mask);
 			G = lerp(G, max(G, saturate(da_puddle_look.x) * 0.5f), PDL.mask);
 		}
 	}

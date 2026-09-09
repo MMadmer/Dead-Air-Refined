@@ -150,3 +150,54 @@ jupiter_underground    = bog, muddy
 labx8                  = bog, muddy
 
 ; fake_start is the new-game stub and carries no water; it needs no entry.
+
+; ============================================================================================
+; The actor in water (engine: PHMovementControl, Actor_Movement.cpp, step_manager.cpp,
+; ActorCondition.cpp, physics_game.cpp; DESIGN2 section 4). Depths are metres of water
+; standing over the FEET, read off the baked water field - so they are real depths, not
+; guesses from a material flag. A level with no baked field reports no depth and everything
+; here quietly falls back to the behaviour before the rework.
+;
+; Deliberately absent: swimming and drowning. Deep water in this game is level-design
+; geometry - a barrier - and making it swimmable would let the player walk through what the
+; map means as a wall. Wading is the whole of it.
+; ============================================================================================
+
+[water_actor]
+; --- wading ---
+ankle                   = 0.12  ; the wade state, the step splash and the dose all start here
+wade_full               = 1.30  ; depth at which the slow-down bottoms out
+wade_speed_min          = 0.40  ; movement scale at wade_full and past it
+sprint_depth            = 0.45  ; no sprinting deeper than this
+jump_depth              = 0.80  ; no jumping deeper than this
+
+; --- the continuous disturbance under a moving foot (fed into the ripple field) ---
+wake_radius             = 0.5
+wake_strength           = 1.0
+wake_speed_ref          = 2.5   ; speed (m/s) at which the wake reaches full strength
+
+; --- the discrete splash a footstep throws, where the material pair cannot throw one itself ---
+step_splash_depth       = 0.05
+ps_step                 = hit_fx\hit_water_00
+
+; --- breaking the surface: a jump into a pond, a body dropped into one ---
+entry_speed_min         = 2.5   ; downward speed (m/s) below which nothing is spawned
+entry_speed_max         = 11.0  ; downward speed of the largest entry
+entry_radius_min        = 1.0
+entry_radius_max        = 3.2
+ps_entry                = hit_fx\effects\hit_water_splash_01
+ps_entry_big            = hit_fx\effects\hit_water_splash_02
+
+; --- landing damage: water this deep takes the whole fall, from the ankle to it it tapers ---
+fall_safe_depth         = 0.55
+
+; --- the dose an injurious liquid delivers: a depth and a motion, not a binary tick ---
+rad_depth_ref           = 1.0   ; depth at which the material's own rate is reached
+rad_depth_floor         = 0.20  ; share of that rate when barely in it
+rad_move_bonus          = 0.50  ; extra share at rad_move_speed - stirring it up costs more
+rad_move_speed          = 3.0
+
+; --- screen droplets once the head comes back out (r2_lenswater_val -> visor_drops) ---
+drops_rise              = 2.5   ; per second while the head is under
+drops_fall              = 0.25  ; per second once it is out
+drops_step              = 0.05  ; how far the value must move before the console is touched

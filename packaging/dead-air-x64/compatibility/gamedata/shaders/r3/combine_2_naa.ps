@@ -15,6 +15,10 @@ uniform float4		da_gamma;
 #define EPSDEPTH	0.001h
 
 #include "common.h"
+// Ahead of the post stack on purpose: lumasharpen.h #defines a bare "px", which poisons
+// every declaration of that name in anything included after it - and the wind core under
+// the water optics has one.
+#include "da_water_under.h"
 #include "sweetfx.h"
 #include "blur.h"
 #include "mblur.h"
@@ -93,10 +97,39 @@ c2_out main( v2p_aa_AA I )
 	float2	center 	= I.Tex0;
 #endif
 
+	// ---- underwater: the frame seen through the medium -----------------------------------
+	// The warp goes on the sampling coordinate itself rather than on the finished image, so
+	// bloom, dof and the dirt overlay all follow the same displacement instead of sliding
+	// against it. Ramped over the first DA_UW_RAMP of submersion - a hard switch here ghosts
+	// across the TAA pass downstream.
+	const float uw = da_uw_amount();
+	const int uw_tier = da_uw_tier();
+	[branch] if ( uw > 0.0h && uw_tier >= 3 )
+		center += da_uw_warp( center, uw );
+
+	// Distance the sight line actually travelled, not its view-axis depth: those differ by a
+	// fifth at the screen edge and the tint would band visibly across the frame. Sky, and
+	// anything else with no g-buffer position, reads zero and is left alone - the surface seen
+	// from below is water.ps's own branch and must not be tinted twice.
+	const float2 uw_ray = I.Tex0 * pos_decompression_params2.xy * pos_decompression_params.zw
+		- pos_decompression_params.xy;
+	const float uw_dist = depth * length( float3( uw_ray, 1.0h ) );
+
 	float3 sceneColor = s_image.Sample(smp_rtlinear, center).rgb;
 	float3 img = sceneColor;
 	float4 bloom	= s_bloom.Sample( smp_rtlinear, center);
 
+	// Beer-Lambert over the scene and over the bloom both. The bloom pyramid was built before
+	// this pass, so leaving it alone would let a bright bank shine through ten metres of pond
+	// at full strength.
+	[branch] if ( uw > 0.0h )
+	{
+		if ( uw_tier >= 4 )
+			img = da_uw_chroma( center, img, uw );
+		img = da_uw_medium( img, uw_dist, uw, uw_tier );
+		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
+		sceneColor = img;
+	}
 
 	if (aberration.x != 0)
 		img = ChromaticAberrationBase( img, center, aberration );
@@ -166,6 +199,11 @@ c2_out main( v2p_aa_AA I )
 			final = visor_reflect(center, final, visorDepth);
 		}
 	#endif
+
+	// The vignette and the edge chroma close the stack at the top tier: a diving mask, not a
+	// post-process look, so both ride the same submersion ramp.
+	[branch] if ( uw > 0.0h && uw_tier >= 4 )
+		final.rgb = da_uw_vignette( final.rgb, I.Tex0, uw );
 
 	// Gamma / brightness / contrast in the shader, same curve the engine builds for the
 	// hardware ramp (CGammaControl::GenLUT) - so the sliders match what they produced on the

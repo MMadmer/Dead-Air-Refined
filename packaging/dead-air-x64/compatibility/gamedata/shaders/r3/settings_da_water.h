@@ -31,6 +31,27 @@
 #define WATER_RING_AMP		1.30	// impact rings: bullets, blasts, feet, bodies
 #define WATER_RIPPLE_FADE	35.0	// metres; past this a ripple is subpixel
 
+// The simulated ripple field, where the tier runs one. It hands back a world-XZ slope already,
+// so the gain is a trim and not a conversion - leave it at one unless the sim's own amplitude
+// is being re-scaled. The reader already fades its own rim over a twelfth of the 32 m window, so
+// the crossfade back to the analytic rings is set to the same 2.67 m and the two hand over with
+// no gap between them.
+#define WATER_FIELD_RIPPLE_AMP	1.00	// trim on the field's slope
+#define WATER_RIPPLE_EDGE	2.67	// metres of crossfade at the window wall
+
+// ---- Fetch shelter --------------------------------------------------------------------------
+// How far open water has to run UPWIND before the wind sea is at full height. At this fetch and
+// this wind the waves are decimetres long and build inside a few metres, so ten is the whole
+// ramp: past it the pond is as rough as the wind allows, and hard against the upwind bank it is
+// glass. This is also the distance the shader steps upwind to take its one field sample.
+#define WATER_FETCH_LEN		10.0	// metres
+
+// ---- Seen from below ------------------------------------------------------------------------
+// Refraction is much stronger out of the dense side - the whole sky compresses into Snell's 97
+// degree cone - so the screen offset per unit of surface slope is scaled up under water. It is
+// a fixed amount rather than a depth ramp: from below there is no "how much water is left".
+#define WATER_REFRACT_UNDER	3.0
+
 // ---- Reflections ---------------------------------------------------------------------------
 #define WATER_SSR_START		30.0	// metres: up to here the march is trusted outright
 #define WATER_SSR_END		45.0	// metres: past this the sky cube alone, no ray at all
