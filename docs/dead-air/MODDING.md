@@ -921,10 +921,12 @@ footsteps of the actor, stalkers and monsters (`step_manager.cpp`) and physics b
 footsteps). Whether a spot is water, and where the ring goes, is one function
 (`da_water_surface`): a liquid material, the rain puddle mask, or a liquid surface straight
 above the spot - the water mesh is passable, so a foot on the lake floor and a body that sank
-report the bottom's material, and the ring is placed on the surface above them. One ring per spot per quarter second, so a body sliding in makes one. A ring is a wave
-packet: the front runs at ~0.9 m/s (a blast's bore at 4.5), the longest crest (~30 cm) leads,
-shorter ones trail and die out behind it, nothing runs ahead of the front, and the crest thins
-as the circle grows, fading out before it reaches its rim. The knobs are the `ring_*` lines
+report the bottom's material, and the ring is placed on the surface above them. One ring per spot per quarter second, so a body sliding in makes one. A ring the field saw
+born is the field's from its first step (see The ripple field); the analytic packet that covers
+the rest runs at the field's own speed - or at ~0.9 m/s, a blast's bore at 4.5, with no field -
+with the longest crest (~30 cm) leading, shorter ones trailing and dying out behind it, nothing
+running ahead of the front, and it thins as about 1/r until it is too faint to see: it has no
+rim and no lifetime. The knobs are the `ring_*` lines
 of `[water_impact]` in `dead_air_x64_water.ltx`. The cost is the
 same loop the puddles already ran: a quiet world walks nothing, a busy one at most eight
 rows per water pixel - no preset gate is warranted. Scripts can drive the actor's input
@@ -933,6 +935,14 @@ key), `level.release_action(id)`, `level.action_id("fwd")` (the binding names of
 `qa_water_goto` (console) puts the actor on the nearest shore of the level facing the water,
 looking down at it, and `wind_dbg 1` logs every ring (`[water] ring`) and every body impact
 near the camera (`[water] body contact`, with whether the spot counted as water).
+
+The stock hit set lays flat sprites on the water too - `hit_water_hit` / `_big`, a white ring
+texture growing to metres, and the `hit_water_hit_distort` discs - and each of those is an
+expanding ring with a lifetime, which is exactly what the ripple field replaced. They are listed
+in `suppress_effects` of `[water_impact]` and skipped wherever they would play: as a child of a
+material pair's group, as a group child's own child, or played by name from the game. The
+mechanism is the engine's (`da_particle_suppress.h`, consulted by `ParticleGroup.cpp` and by the
+game's own splash calls); the names are data, and the sprays around them are not in the list.
 
 Scripts read and drive the service through the environment object:
 

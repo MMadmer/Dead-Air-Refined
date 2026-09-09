@@ -24,6 +24,12 @@ ps_fountain             = amik\hit_fx\hit_water_splash_00
 ps_hit_big              = hit_fx\effects\hit_water_hit_big
 ps_distort_big          = hit_fx\effects\hit_water_hit_distort_big
 ps_hit                  = hit_fx\effects\hit_water_hit
+; Flat sprites the stock hit set lays ON the water: the white ring texture of hit_water_hit
+; (pfx_water_wave, grows to metres) and the distortion discs. Each is an expanding ring with a
+; lifetime - exactly what the ripple field is now - so they are skipped wherever they would
+; play (a bullet's material pair, a step, a blast). The sprays around them are not listed and
+; play as before. Comma-separated effect names; the skip itself is the engine's.
+suppress_effects        = hit_fx\effects\hit_water_hit_distort, hit_fx\effects\hit_water_hit_distort_big, amik\hit_fx\hit_water_hit_distort, hit_fx\effects\hit_water_hit, hit_fx\effects\hit_water_hit_big
 
 ; rings from feet and bodies (step_manager.cpp, physics_game.cpp). A liquid material (open
 ; water: a lake, a river) counts as water for every response in this section, as does a

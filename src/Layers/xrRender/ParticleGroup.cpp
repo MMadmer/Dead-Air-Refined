@@ -9,6 +9,7 @@
 #include "ParticleGroup.h"
 #include "PSLibrary.h"
 #include "ParticleEffect.h"
+#include "xrEngine/da_particle_suppress.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -195,6 +196,8 @@ void CParticleGroup::SItem::Clear()
 }
 void CParticleGroup::SItem::StartRelatedChild(CParticleEffect* emitter, LPCSTR eff_name, PAPI::Particle& m)
 {
+    if (da_particle_suppressed(eff_name))
+        return;
     CParticleEffect* C = static_cast<CParticleEffect*>(RImplementation.model_CreatePE(eff_name));
 
     C->SetHudMode(emitter->GetHudMode());
@@ -227,6 +230,8 @@ void CParticleGroup::SItem::StopRelatedChild(u32 idx)
 }
 void CParticleGroup::SItem::StartFreeChild(CParticleEffect* emitter, LPCSTR nm, PAPI::Particle& m)
 {
+    if (da_particle_suppressed(nm))
+        return;
     CParticleEffect* C = static_cast<CParticleEffect*>(RImplementation.model_CreatePE(nm));
     C->SetHudMode(emitter->GetHudMode());
     if (!C->IsLooped())
@@ -559,6 +564,10 @@ BOOL CParticleGroup::Compile(CPGDef* def)
         items.resize(m_Def->m_Effects.size());
         for (CPGDef::EffectVec::const_iterator e_it = m_Def->m_Effects.begin(); e_it != m_Def->m_Effects.end(); ++e_it)
         {
+            // A child the data suppresses stays an empty item: every reader of _effect already
+            // tolerates the null, the callbacks are only ever registered on a real effect.
+            if (da_particle_suppressed((*e_it)->m_EffectName.c_str()))
+                continue;
             CParticleEffect* eff = (CParticleEffect*)RImplementation.model_CreatePE((*e_it)->m_EffectName.c_str());
             eff->SetBirthDeadCB(OnGroupParticleBirth, OnGroupParticleDead, this, u32(e_it - m_Def->m_Effects.begin()));
             items[e_it - def->m_Effects.begin()].Set(eff);

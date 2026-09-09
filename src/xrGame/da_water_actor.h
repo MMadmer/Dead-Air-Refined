@@ -14,6 +14,7 @@
 #include "xrEngine/Environment.h"
 #include "GamePersistent.h"
 #include "ParticlesObject.h"
+#include "xrEngine/da_particle_suppress.h"
 
 struct SDaWaterActorCfg
 {
@@ -132,7 +133,7 @@ inline void da_water_splash(const Fvector& pos, const shared_str& ps_name)
     last_pos = pos;
     last_time = now;
 
-    if (!ps_name.size())
+    if (!ps_name.size() || da_particle_suppressed(ps_name.c_str()))
         return;
     // A name that is not in particles.xr yields a null visual, which CParticlesObject already
     // survives with a log line - but the object itself must still be checked before use.

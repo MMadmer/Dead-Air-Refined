@@ -6,6 +6,7 @@
 #include "thunderbolt.h"
 #include "WindVegSound.h"
 #include "Rain.h"
+#include "da_particle_suppress.h"
 
 #include "IGame_Level.h"
 #include "Common/object_broker.h"
@@ -975,8 +976,17 @@ void CEnvironment::load_water_profiles()
     string_path path;
     FS.update_path(path, "$game_config$", "dead_air_x64_water.ltx");
     if (!FS.exist(path))
+    {
+        da_particle_suppress_set(nullptr);
         return;
+    }
     CInifile ini(path, TRUE);
+
+    // The flat sprite rings of the stock water hit set yield to the ripple field: the names
+    // are data, the skip is the particle system's (da_particle_suppress.h). Registered here
+    // because this runs at level load, before the first hit plays anything.
+    da_particle_suppress_set(ini.line_exist("water_impact", "suppress_effects")
+        ? ini.r_string("water_impact", "suppress_effects") : nullptr);
 
     pcstr names = nullptr;
     if (ini.section_exist("water_levels"))

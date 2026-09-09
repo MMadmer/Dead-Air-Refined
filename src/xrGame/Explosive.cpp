@@ -36,6 +36,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCDB/xr_collide_defs.h"
 #include "da_water_impact.h"
+#include "xrEngine/da_particle_suppress.h"
 
 #include "Include/xrRender/Kinematics.h"
 #define EFFECTOR_RADIUS 30.f
@@ -423,7 +424,7 @@ void CExplosive::Explode()
                             CEnvironment::EWaterHit::drain);
 
                     const auto play = [&](const shared_str& name) {
-                        if (!name.size())
+                        if (!name.size() || da_particle_suppressed(name.c_str()))
                             return;
                         CParticlesObject* ps = CParticlesObject::Create(name.c_str(), TRUE);
                         Fmatrix xf;

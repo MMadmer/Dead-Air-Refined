@@ -46,6 +46,14 @@ target_sources_grouped(
 
 target_sources_grouped(
     TARGET xrEngine
+    NAME "Engine\\Particles"
+    FILES
+    da_particle_suppress.cpp
+    da_particle_suppress.h
+)
+
+target_sources_grouped(
+    TARGET xrEngine
     NAME "Engine\\Core"
     FILES
     Engine.cpp
