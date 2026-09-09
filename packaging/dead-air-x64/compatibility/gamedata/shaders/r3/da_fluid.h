@@ -27,6 +27,8 @@ cbuffer DaFireSim
 	float4	da_ff_misc4;	// x = the blast's own divergence this step, signed,
 							// y = how much wind reaches the gas that is still down at the source,
 							// z = the band at the walls the field drains in, w = how fast it drains there
+	float4	da_ff_misc5;	// x = soot laid on the bed with no fuel and no heat: a fire that
+							// has been put out steams. Zero while it burns.
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -105,13 +107,12 @@ float da_ff_blast_target(p_fluidsim input)
 	return da_ff_burn2.w * da_ff_blast.x * saturate(1.0 - r * r) * saturate(0.55 + 1.6 * (n - 0.5));
 }
 
-//	How much fuel this cell should hold: inside the disc, on a surface, near the bed, and
-//	broken up by a slow noise so the fire burns as separate tongues instead of one sheet.
-float da_ff_fuel_target(p_fluidsim input)
+//	WHERE the bed is, 0..1, saying nothing about how much of anything goes there: inside the
+//	disc, on a surface, near the bed height, and broken up by a slow noise so the fire burns as
+//	separate tongues instead of one sheet. The flame reads this scaled by its fuel; a fire that
+//	has been put out reads the same shape to know where to lay its smoke.
+float da_ff_bed_shape(p_fluidsim input)
 {
-	if (da_ff_blast.w > 0.0)
-		return da_ff_blast_target(input);
-
 	const float3 d = input.cell0 - da_ff_src.xyz;
 	const float r = length(d.xz) / max(da_ff_src.w, 0.5);
 	if (r >= 1.0 || abs(d.y) > da_ff_misc.w)
@@ -128,7 +129,15 @@ float da_ff_fuel_target(p_fluidsim input)
 	const float puff = 0.82 + 0.18 * sin(6.2832 * da_ff_misc2.w * da_ff_misc.z);
 	//	Contrast around the mean, not a threshold on it: the bed keeps the same amount of fuel
 	//	overall but spends it in patches with dark gaps, which is what tongues are.
-	return da_ff_burn2.w * band * saturate(1.0 - r * r) * saturate(0.92 + 2.0 * (n - 0.5)) * puff;
+	return band * saturate(1.0 - r * r) * saturate(0.92 + 2.0 * (n - 0.5)) * puff;
+}
+
+//	How much fuel this cell should hold.
+float da_ff_fuel_target(p_fluidsim input)
+{
+	if (da_ff_blast.w > 0.0)
+		return da_ff_blast_target(input);
+	return da_ff_burn2.w * da_ff_bed_shape(input);
 }
 
 #endif // DA_FLUID_H

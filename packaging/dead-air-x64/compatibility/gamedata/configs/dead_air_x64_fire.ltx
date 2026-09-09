@@ -91,6 +91,15 @@ fluid_emission  = 140
 fluid_absorb    = 2.0
 fluid_ember     = 1.1
 fluid_core_t    = 2.4
+; Going out. The bed stops feeding the flame over fluid_douse seconds - it is not switched
+; off, so whatever is already burning above it rises, cools and goes out on its own - and then
+; the soaked wood steams for fluid_smoulder seconds, hardest just after and a thin wisp by the
+; end. fluid_smoulder_soot is how much soot the bed lays down while it does, and
+; fluid_smoulder_rate the share of the live smoke rate the billboard plume keeps.
+fluid_douse          = 1.2
+fluid_smoulder       = 10.0
+fluid_smoulder_soot  = 1.3
+fluid_smoulder_rate  = 0.8
 
 [shader_fire_campfire_big]
 base_height = 0.4

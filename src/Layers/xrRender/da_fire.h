@@ -66,6 +66,13 @@ struct SDaFirePreset
     float fl_shadow_step{1.2f}; // how far ahead it looks for that shade, m
     float fl_lift{0.f};         // m/s2 the soot keeps once the flame in it has gone out
     float fl_emis_pow{3.f};     // how steeply emission climbs with temperature
+    //  Going out. A fire is never switched off - the bed stops feeding the flame over
+    //  fl_douse seconds and what is already in the air burns itself out, then the soaked bed
+    //  steams for fl_smoulder seconds. Both are seconds; the soot is per step at the bed.
+    float fl_douse{1.2f};
+    float fl_smoulder{10.f};
+    float fl_smoulder_soot{0.5f};
+    float fl_smoulder_rate{0.45f}; // share of the live puff rate the steaming bed emits
     float fl_edge_fade{8.f};    // cells before a face of the box over which everything fades out
     float fl_drain_band{1.f};   // cells at the walls where the field drains rather than piles up
     float fl_drain{1.f};        // what is left of it there after a step
@@ -152,6 +159,10 @@ class CDaFireEffect final : public CParticleEffect
     Fvector origin() const;
     Fvector flame_base() const;
     float flame_length() const;
+    //  Going out: what is left of the bed's output, and how hard the soaked bed is steaming.
+    float douse_k() const;
+    float smoulder_k() const;
+    float dying_end() const;
     float wind_speed() const;
     Fvector flame_tip() const;
     void update_smoke(float dt, const Fvector& tip);

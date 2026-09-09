@@ -84,6 +84,13 @@ float4 main(p_fluidsim input) : SV_Target
 	}
 
 	f.x -= da_ff_burn.w * f.x;
+
+	//	Smouldering. A fire that has been put out goes on steaming: soot straight onto the cells
+	//	that sit on the bed, with no fuel and no heat behind it - there is nothing burning any
+	//	more. Same shape the flame stood on, so the smoke comes off exactly where the fire was.
+	if (da_ff_misc5.x > 0.0 && da_ff_blast.w <= 0.0)
+		f.w = max(f.w, da_ff_misc5.x * da_ff_bed_shape(input));
+
 	f.w *= da_ff_misc2.x;
 
 	//	Nothing may pile up against the walls of the grid: what reaches them has left the

@@ -75,6 +75,9 @@ public:
         float m_fEdgeFade{10.f};// cells before a face of the box over which everything fades out
         float m_fDrainBand{1.f};// cells at the walls where the field drains rather than piles up
         float m_fDrainRate{1.f};
+        //  Soot laid straight on the bed with no fuel and no heat behind it: a fire that has
+        //  been put out steams for a while. Zero while it burns.
+        float m_fSmoulder{};
         float m_fFade{1.f};     // crossover with the marched flame
 
         //	A blast: the charge thrown into a sphere over the first moments instead of a bed

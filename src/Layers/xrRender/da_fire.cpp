@@ -87,6 +87,10 @@ void load_presets()
         p.fl_shadow = rf("fluid_shadow", p.fl_shadow);
         p.fl_shadow_step = std::max(0.1f, rf("fluid_shadow_step", p.fl_shadow_step));
         p.fl_lift = rf("fluid_smoke_lift", p.fl_lift);
+        p.fl_douse = rf("fluid_douse", p.fl_douse);
+        p.fl_smoulder = rf("fluid_smoulder", p.fl_smoulder);
+        p.fl_smoulder_soot = rf("fluid_smoulder_soot", p.fl_smoulder_soot);
+        p.fl_smoulder_rate = rf("fluid_smoulder_rate", p.fl_smoulder_rate);
         p.fl_emis_pow = std::max(0.5f, rf("fluid_emission_pow", p.fl_emis_pow));
         p.fl_edge_fade = std::max(1.f, rf("fluid_edge_fade", p.fl_edge_fade));
         p.fl_drain_band = std::max(1.f, rf("fluid_drain_band", p.fl_drain_band));
@@ -588,8 +592,13 @@ void CDaFireEffect::fluid_params()
     f.m_fFuelPerBurn = P.fl_fuel_per_burn;
     f.m_fSmokePerBurn = P.fl_smoke_per_burn;
     f.m_fExpansion = P.fl_expansion;
-    f.m_fFuelTarget = P.fl_fuel;
+    //  The one line the whole going-out sequence hangs on: the fuel top-up and the pilot that
+    //  keeps the bed alight are the same branch in the shader, so taking this to zero stops
+    //  both. Nothing else in the simulation needs to know the fire is going out.
+    f.m_fFuelTarget = P.fl_fuel * douse_k();
     f.m_fCouple = P.fl_couple * h;
+    //  Soot at the bed with no fuel and no heat behind it - the steaming afterwards.
+    f.m_fSmoulder = P.fl_smoulder_soot * smoulder_k();
 
     //  The wind, on the grid's axes: world up is -y here. A velocity of one means one cell
     //  per step, so metres per second turn into cells with the step and the cell size.
@@ -742,6 +751,40 @@ void CDaFireEffect::Play()
     }
 }
 
+//  Going out, in the two shapes the rest of the file wants it in.
+//
+//  A fire is not switched off. The bed stops feeding the flame over fl_douse seconds - what is
+//  already burning above it keeps burning, rises and cools out on its own, because every
+//  dissipation term in the simulation runs whether anything is being injected or not. Then the
+//  soaked bed steams: soot with no fuel and no heat behind it, thick at first and a thin wisp
+//  by the end of fl_smoulder.
+float CDaFireEffect::douse_k() const
+{
+    if (m_dying <= 0.f || !m_preset)
+        return 1.f;
+    return clampr(1.f - m_dying / std::max(m_preset->fl_douse, 0.05f), 0.f, 1.f);
+}
+
+float CDaFireEffect::smoulder_k() const
+{
+    if (m_dying <= 0.f || !m_preset)
+        return 0.f;
+    const float T = std::max(m_preset->fl_smoulder, 0.1f);
+    if (m_dying >= T)
+        return 0.f;
+    //  Up in under a second, then straight down over the rest: wet wood smokes hardest just
+    //  after it goes out and then thins the whole way, rather than dropping to nothing in the
+    //  first three seconds and leaving eight of nothing after it.
+    const float rise = clampr(m_dying / 0.7f, 0.f, 1.f);
+    const float left = clampr(1.f - m_dying / T, 0.f, 1.f);
+    return rise * left;
+}
+
+float CDaFireEffect::dying_end() const
+{
+    return m_preset ? std::max(m_preset->fl_smoulder, 1.5f) : 1.5f;
+}
+
 void CDaFireEffect::Stop(BOOL bDefferedStop)
 {
     if (bDefferedStop && m_preset)
@@ -804,17 +847,25 @@ void CDaFireEffect::update_smoke(float dt, const Fvector& tip)
     const Fvector O = origin();
 
     // Birth at the flame tip. A cooler fire (strong wind cools it) lifts its smoke slower.
-    if (m_dying <= 0.f && P.smoke)
+    //
+    // Once the fire is out there is no tip to be born at: the puffs come off the bed itself,
+    // slower and wider, and only as long as it steams. That is the whole of the smoke tail -
+    // the parcels then travel on exactly the same Briggs update as the live plume's.
+    const float sm = smoulder_k();
+    const bool alive = m_dying <= 0.f;
+    if (P.smoke && (alive || sm > 0.f))
     {
-        m_puff_acc += P.smoke_rate * dt;
-        const float w0 = clampr(1.5f * powf(2.f / std::max(uh, 0.7f), 1.f / 3.f), 0.8f, 3.f);
+        const Fvector src = alive ? tip : flame_base();
+        m_puff_acc += P.smoke_rate * (alive ? 1.f : P.fl_smoulder_rate * sm) * dt;
+        const float lift = clampr(1.5f * powf(2.f / std::max(uh, 0.7f), 1.f / 3.f), 0.8f, 3.f);
+        const float w0 = alive ? lift : lift * 0.3f;
         while (m_puff_acc >= 1.f && m_puffs.size() < 160)
         {
             m_puff_acc -= 1.f;
             SPuff s;
             const float ang = ::Random.randF(0.f, PI_MUL_2);
-            const float rr = ::Random.randF(0.f, P.radius * 0.6f);
-            s.pos.set(tip.x + _cos(ang) * rr, tip.y + ::Random.randF(-0.1f, 0.1f), tip.z + _sin(ang) * rr);
+            const float rr = ::Random.randF(0.f, P.radius * (alive ? 0.6f : 0.9f));
+            s.pos.set(src.x + _cos(ang) * rr, src.y + ::Random.randF(-0.1f, 0.1f), src.z + _sin(ang) * rr);
             s.vel.set(m_wind.x * 0.5f, w0 * ::Random.randF(0.85f, 1.15f), m_wind.z * 0.5f);
             s.age = 0.f;
             s.life = P.smoke_life * ::Random.randF(0.75f, 1.25f);
@@ -854,9 +905,11 @@ void CDaFireEffect::update_smoke(float dt, const Fvector& tip)
         const float w_bent = w0 * powf(1.f + s.age / 0.25f, -1.f / 3.f);
         const float bent = clampr(uh / w_vert, 0.f, 1.f);
         float w = 0.6f * w_vert + (w_bent - 0.6f * w_vert) * bent;
-        // A dying fire's plume cools out: no more lift after the flame is gone.
+        // A dying fire's plume cools out with the flame under it. What the soaked bed steams
+        // out afterwards still rises, just barely - a floor rather than nothing, or the tail
+        // would hang in the air where it was born.
         if (m_dying > 0.f)
-            w *= std::max(0.f, 1.f - m_dying * 0.5f);
+            w *= std::max(0.22f, 1.f - m_dying * 0.5f);
         const float above = std::max(s.pos.y - O.y, 0.3f);
         Fvector air = env.WindAt(s.pos, above);
         air.mul(m_wind_exposure);
@@ -947,12 +1000,15 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     //  A quarter of the range of hysteresis: building the grid means voxelising the level,
     //  and a player standing on the boundary should not pay for that twice a second.
     const float lim = ps_r__fire_fluid_dist * (m_fluid ? 1.25f : 1.f);
-    const bool eligible = ready && ps_r__fire_fluid && m_preset->fluid && m_dying <= 0.f && d2 < lim * lim;
+    //  A fire that is going out keeps the grid it already has - that is where the flame it
+    //  still has to burn out lives - but it never claims a new one.
+    const bool eligible =
+        ready && ps_r__fire_fluid && m_preset->fluid && d2 < lim * lim && (m_dying <= 0.f || m_fluid);
     //  A blast outranks a campfire for the one grid the frame can afford, but by a factor
     //  rather than absolutely: something going off across the camp has no business taking the
     //  grid from the fire the player is standing at. It does take it on the frame it goes off
     //  rather than waiting its turn.
-    const float rank = m_preset->blast ? d2 * 0.2f : d2;
+    const float rank = m_preset->blast ? d2 * 0.2f : (m_dying > 0.f ? d2 * 4.f : d2);
     if (eligible && rank < g_fluid_claim_d2)
     {
         g_fluid_claim_d2 = rank;
@@ -987,7 +1043,7 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     if (!m_preset->blast)
         update_smoke(dt, tip);
 
-    if (m_dying > 1.5f && m_puffs.empty())
+    if (m_dying > dying_end() && m_puffs.empty())
     {
         m_RT_Flags.set(flRT_Playing | flRT_DefferedStop, FALSE);
         return;
@@ -1045,7 +1101,11 @@ void CDaFireEffect::render_flame(CBackend& cmd_list, float fade)
 {
     const SDaFirePreset& P = *m_preset;
     const Fvector base = flame_base();
-    const float L = flame_length();
+    //  Going out, the flame has to sink into the bed rather than just dim: the march writes
+    //  opacity whether it glows or not, so an emission-only fade leaves a flame-shaped hole
+    //  in front of whatever is behind it. The fluid path has a simulation to burn itself out
+    //  in; this one does it with its own length.
+    const float L = flame_length() * (0.15f + 0.85f * douse_k());
     const float uh = wind_speed();
     const float d = 2.f * P.radius;
 
@@ -1216,7 +1276,11 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
         fluid_create();
     else if (!m_fluid_wanted && m_fluid && m_fluid_fade <= 0.f)
         fluid_destroy();
-    const float fade = m_dying > 0.f ? std::max(0.f, 1.f - m_dying) : 1.f;
+    //  The marched flame has no simulation to burn itself out in, so it does it by hand, on
+    //  the same ramp the bed's fuel follows. render_flame takes it on the emission AND on the
+    //  flame's length: emission alone would leave a flame-shaped hole, because the march
+    //  writes opacity whether it glows or not.
+    const float fade = douse_k();
     if (m_preset->blast)
     {
         //  Nothing to fall back to: a blast is the volume or it is nothing.
