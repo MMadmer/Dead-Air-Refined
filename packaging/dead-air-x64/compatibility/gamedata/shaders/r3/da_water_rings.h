@@ -2,10 +2,11 @@
 #define DA_WATER_RINGS_H
 
 // Water impact spots (Environment::water_hit), packed like the wind motors, pre-transposed:
-// a pos row = (xyz, radius), a par row = (amplitude, ring-front radius, 0 ring / 1 drain, 0),
-// info.x = the live count - a quiet world walks nothing. The envelopes are computed on the
-// CPU, so every spot dies at zero amplitude by construction. Shared by the rain puddles
-// (da_puddles.h) and open water (water.ps): a ring is a ring on any water.
+// a pos row = (xyz, radius), a par row = (amplitude, ring-front radius, 0 ring / 1 drain,
+// crater radius the ripple field dug - zero when the field never saw the ring born), info.x =
+// the live count - a quiet world walks nothing. The envelopes are computed on the CPU, so
+// every spot dies at zero amplitude by construction. Shared by the rain puddles (da_puddles.h)
+// and open water (water.ps): a ring is a ring on any water.
 uniform float4x4 da_wh_pos0;
 uniform float4x4 da_wh_pos1;
 uniform float4x4 da_wh_par0;
@@ -19,7 +20,13 @@ uniform float4 da_wh_info;
 // negative distance), which drew the front as a hard thin line. The surface window is
 // tight because every emitter now places its ring ON the surface it hit. Drains are the
 // puddles' own business.
-float2 da_water_rings(float3 pos_w)
+//
+// wfield is how much of the ripple field is under this point (1 inside its window, 0 past
+// its rim). A ring the field carries is drawn here only for the rest of the window's weight -
+// past the edge, where the sim absorbed it - while a ring born outside the window has no wave
+// in the field at all and is drawn everywhere, window included. Without that second case a
+// ring watched from the bank vanished the moment the window walked over it.
+float2 da_water_rings(float3 pos_w, float wfield)
 {
 	float2 ripple = 0.0f;
 	const int wh_count = int(da_wh_info.x);
@@ -33,6 +40,10 @@ float2 da_water_rings(float3 pos_w)
 		[branch]
 		if (RP.w <= 0.0f || RA.z > 0.5f || RA.x <= 0.001f)
 			continue;
+		const float w = (RA.w > 0.0f) ? (1.0f - wfield) : 1.0f;
+		[branch]
+		if (w <= 0.001f)
+			continue;
 		float2 rd = pos_w.xz - RP.xz;
 		const float rwd = length(rd);
 		[branch]
@@ -45,7 +56,7 @@ float2 da_water_rings(float3 pos_w)
 		// Chirp: 30 cm at the front, shorter behind (the slow short waves lag the front).
 		const float k = 20.9f + 14.0f * back;
 		const float wave = sin(behind * k) * exp(-back * 1.9f) * lead * RA.x;
-		ripple += (rd / rwd) * (wave * 0.16f);
+		ripple += (rd / rwd) * (wave * 0.16f * w);
 	}
 	return ripple;
 }

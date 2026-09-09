@@ -15,7 +15,6 @@
 #endif
 
 #include "shadow.h"
-#include "da_water_under.h"
 
 uniform float3	view_shadow_proj;	// kept for the constant table; superseded by the distance fade
 // x = unused (historical), y = full-light distance in metres from the camera (r__sun_shadow_fade).
@@ -125,12 +124,6 @@ float4 main ( v2p_volume I ) : SV_Target
 			m 	= _P.w;
 # endif
 	float4	light	= plight_infinity ( m, _P, _N, Ldynamic_dir );
-
-	// Caustics ride the SUN term rather than a decal: they vanish in shadow and warm at
-	// sunset for free, because the light they modulate does. Diffuse only - light.w is the
-	// specular lobe, and a caustic net moves light onto a surface, it does not sharpen a
-	// highlight. Costs nothing off a water level: the first test inside is a constant.
-	light.rgb *= da_uw_caustics( _P.xyz );
 
 	return 		blend( Ldynamic_color * light * s/*float4( 1.f, 0.2f, 0.2f, 1.f)*/, I.tc );
 }

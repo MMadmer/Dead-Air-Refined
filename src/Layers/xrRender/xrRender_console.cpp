@@ -971,16 +971,18 @@ void xrRender_sync_preset_derived(bool user_facing)
     // a cos and a tanh per water pixel, and the tail rows are the short steep ones - dropping
     // them costs texture, not silhouette, because none of this displaces geometry anyway.
     static constexpr int water_waves_by_preset[] = {2, 4, 6, 8, 8};
-    // The ripple field: a pixel-shader wave-equation step over a 32 m window around the camera.
-    // The two lowest tiers keep the eight analytic ring slots and never create the target, so
-    // this one only takes effect on renderer restart - the pair is created at the size named.
-    static constexpr int water_ripple_by_preset[] = {0, 0, 128, 256, 256};
+    // The ripple field: a pixel-shader wave-equation step over a 64 m window around the camera,
+    // on every tier - a ring is part of the water, not a feature to buy - with the preset only
+    // deciding how fine the grid is: 25 cm texels on the two bottom tiers, 12.5 in the middle,
+    // 6 on the top. Takes effect on renderer restart - the pair is created at the size named.
+    static constexpr int water_ripple_by_preset[] = {256, 256, 512, 512, 1024};
     // What the camera below a water surface gets: 1 tint, 2 +fog, 3 +warp, 4 full. Even the
     // cheapest tier has to have SOMETHING - the stock behaviour is a hole in the world.
     static constexpr int water_underwater_by_preset[] = {1, 2, 3, 3, 4};
-    // Sun caustics under the field, from High: an extra pattern fetch per lit pixel of the sun
-    // pass, which is exactly the kind of per-pixel cost the two bottom tiers must not pay.
-    static constexpr int water_caustics_by_preset[] = {0, 0, 0, 1, 1};
+    // Sun caustics under the field, from Default: the surface's own three layers re-read per
+    // lit pixel of the sun pass under water, which is exactly the kind of per-pixel cost the
+    // two bottom tiers must not pay.
+    static constexpr int water_caustics_by_preset[] = {0, 0, 1, 1, 1};
     // Puddle placement: 0 = the value-noise mask, 1 = the fill map the rain occlusion pass
     // produces. The fill costs a few dozen iterations on an existing tile, once per rain tick,
     // so it starts at Default rather than at the top.
@@ -1728,7 +1730,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__water_waves", &ps_r__water_waves, 0, 8);
     // Session overrides of the water ladder. r__water_ripple only takes effect on the next
     // renderer start (the target pair is created at that size); the rest are live.
-    CMD4(CCC_RuntimeInteger, "r__water_ripple", &ps_r__water_ripple, 0, 512);
+    CMD4(CCC_RuntimeInteger, "r__water_ripple", &ps_r__water_ripple, 0, 1024);
     CMD4(CCC_RuntimeInteger, "r__water_underwater", &ps_r__water_underwater, 1, 4);
     CMD4(CCC_RuntimeInteger, "r__water_caustics", &ps_r__water_caustics, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__puddle_fill", &ps_r__puddle_fill, 0, 1);

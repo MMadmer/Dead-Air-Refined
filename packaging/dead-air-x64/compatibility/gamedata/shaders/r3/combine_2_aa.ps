@@ -143,6 +143,9 @@ float4 main ( v_aa_AA I ) : SV_Target
 	{
 		if ( uw_tier >= 4 )
 			final = da_uw_chroma( center, final, uw );
+		// The sun's net on the bed, before the column takes its toll of it - what water.ps
+		// does to the refracted background while the eye is still above the surface.
+		final *= lerp( 1.0f, da_uw_caustics_scene( dc.xyz ), uw );
 		final = da_uw_medium( final, uw_dist, uw, uw_tier );
 		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
 	}

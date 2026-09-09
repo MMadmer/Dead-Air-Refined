@@ -49,6 +49,14 @@ ring_distance           = 45    ; metres from the camera past which feet and bod
 ;   scum    - floating film coverage 0..1: duckweed, algae, peat foam. Damps the capillary
 ;             ripple the way an oil slick does (Cox & Munk's own "slick" fit), so a scummed
 ;             pool loses its glitter and goes matte.
+;   fetch_max - how much open water the wind really gets to work over, metres (5..500). The
+;             engine measures the fetch off the water body's footprint, and a marsh's footprint
+;             is a lattice of reed islands: half a kilometre by the box, tens of metres by the
+;             water. The fetch is most of what sets the wave length, so this is the key that
+;             takes the slow swell off standing water.
+;   wave_damp - 0..1, a factor on the slope variance of everything the wind raises: waves,
+;             the detail ripple and the glitter alike. Vegetation and a dead backwater take
+;             the energy out of a sea the fetch would still allow.
 ;
 ; The numbers are pure water plus CDOM at S = 0.017, tripton and particle scattering. Retune
 ; them freely - nothing in the engine hardcodes a profile name, the mapping below is the only
@@ -60,24 +68,32 @@ ring_distance           = 45    ; metres from the camera past which feet and bod
 sigma_t = 0.35, 0.09, 0.15
 body_r  = 0.004, 0.013, 0.012
 scum    = 0.00
+fetch_max = 500
+wave_damp = 1.00
 
 ; The default Zone pond: mildly turbid standing water, blue already dying at a metre.
 [water_profile_pond]
 sigma_t = 0.30, 0.24, 0.87
 body_r  = 0.018, 0.029, 0.012
 scum    = 0.05
+fetch_max = 300
+wave_damp = 0.85
 
 ; Peat-stained marsh. CDOM eats blue outright, which is exactly why bog water reads brown.
 [water_profile_swamp]
 sigma_t = 0.44, 1.05, 5.24
 body_r  = 0.014, 0.010, 0.003
 scum    = 0.35
+fetch_max = 40
+wave_damp = 0.35
 
 ; A black pool: nothing comes back out of it, and the surface is all you ever see.
 [water_profile_bog]
 sigma_t = 0.81, 2.81, 15.3
 body_r  = 0.005, 0.002, 0.001
 scum    = 0.55
+fetch_max = 20
+wave_damp = 0.20
 
 ; Silt-laden flood water. High extinction AND high reflectance - it is bright and opaque at
 ; once, the way a churned-up puddle is.
@@ -85,12 +101,16 @@ scum    = 0.55
 sigma_t = 0.53, 0.77, 2.31
 body_r  = 0.065, 0.059, 0.024
 scum    = 0.10
+fetch_max = 300
+wave_damp = 0.90
 
 ; Green standing pool: the algae both absorb outside their band and scatter back inside it.
 [water_profile_algae]
 sigma_t = 0.37, 0.44, 1.55
 body_r  = 0.036, 0.041, 0.015
 scum    = 0.50
+fetch_max = 60
+wave_damp = 0.45
 
 ; ============================================================================================
 ; Which profile each level's water reads. A level may carry two water materials at once (the

@@ -67,6 +67,7 @@ Texture2D	s_leaves;
 #include "da_fog_common.h"			// the atmospheric haze, shared with the deferred combine
 #include "da_water_rings.h"			// impact rings, shared with the puddles
 #include "da_water_field.h"		// the baked field: depth, bank distance, the ripple sim
+#include "da_water_caustic.h"		// the sun through this surface, onto what is behind it
 
 // x = rain density 0..1.
 uniform float4 rain_params;
@@ -167,10 +168,15 @@ float4 main( vf I ) : SV_Target
 
 	float mss_explicit = 0.0f;
 	float2 slope = da_w_waves( Pw.xz, da_w_depth, t, mss_explicit );
+	// The profile's damping. The rows were seeded on the CPU against slot A's, so a surface
+	// reading slot B rescales them to its own (the bog beside the swamp is stiller still), and
+	// the whole slope budget below carries it.
+	const float damp = da_w_damp( DA_W_IOP.w );
+	const float row_k = sqrt( damp / da_w_damp( da_water_iop.w ) );
 	// The shelter is an amplitude and slope variance goes as amplitude squared, so the budget
 	// below keeps adding up to what this patch of water actually carries.
-	slope *= shelter;
-	mss_explicit *= shelter * shelter;
+	slope *= shelter * row_k;
+	mss_explicit *= shelter * shelter * row_k * row_k;
 
 	// Cox and Munk give the slope variance of the WHOLE surface, capillaries included. That is
 	// a budget the three layers below divide: the explicit waves took their half on the CPU,
@@ -179,7 +185,7 @@ float4 main( vf I ) : SV_Target
 	const float scum = saturate( DA_W_IOP2.w );
 	// The shelter goes in as a wind and not as a factor on the result: with no fetch there are no
 	// capillaries either, and what is left is Cox-Munk's own calm-water floor.
-	const float mss_total = da_w_mss( wind_ms * shelter, scum, gustf.x );
+	const float mss_total = da_w_mss( wind_ms * shelter, scum, gustf.x ) * damp;
 
 	// Sub-wave detail. Faded out with distance because past a point one texel of it spans more
 	// than a wave and it turns into crawling noise - the aliasing the old shader hid by damping
@@ -198,15 +204,15 @@ float4 main( vf I ) : SV_Target
 	if ( rip_near > 0.01f )
 	{
 		// The simulated ripple field where it runs, the analytic eight-slot rings where it does
-		// not - which is outside its 32 m window as much as below the tier that has one. The sim
-		// damps its own outer texels hard to keep echoes off the invisible window wall, so the
-		// hand-over is a crossfade over that same band rather than a second wall beside it.
+		// not: past its 64 m window, and for the rings it never saw born. The sim damps its own
+		// outer metres hard to keep echoes off the invisible window wall, so the hand-over is a
+		// crossfade over that same band rather than a second wall beside it.
 		float wfield = 0.0f;
 		[branch]
 		if ( da_water_rip.z > 0.0001f )
 		{
 			const float2 rd = abs( Pw.xz - da_water_rip.xy );
-			wfield = saturate( ( da_water_rip.z * 0.5f - max( rd.x, rd.y ) ) * ( 1.0f / WATER_RIPPLE_EDGE ) );
+			wfield = saturate( ( da_water_rip.z * 0.5f - max( rd.x, rd.y ) ) * ( 1.0f / DA_WF_RIM_M ) );
 		}
 
 		// The sim only seeds rain into the field on the top rung of the ladder (da_rain2.z is
@@ -224,9 +230,11 @@ float4 main( vf I ) : SV_Target
 		[branch]
 		if ( wfield > 0.001f )
 			slope += da_wf_ripple_slope( Pw.xz ) * ( WATER_FIELD_RIPPLE_AMP * rip_near * wfield );
+		// The rings weight themselves: one the field carries only past the window's edge, one
+		// born outside the window everywhere.
 		[branch]
-		if ( da_wh_info.x > 0.5f && wfield < 0.999f )
-			slope += da_water_rings( Pw ) * ( WATER_RING_AMP * rip_near * ( 1.0f - wfield ) );
+		if ( da_wh_info.x > 0.5f )
+			slope += da_water_rings( Pw, wfield ) * ( WATER_RING_AMP * rip_near );
 	}
 
 	// Water is a horizontal plane by construction, so the world normal comes straight out of
@@ -345,6 +353,30 @@ float4 main( vf I ) : SV_Target
 	}
 #endif
 
+	// ---- caustics --------------------------------------------------------------------------
+	// The sun focused by this very surface onto whatever is behind it - on the refracted
+	// background, not in the sun pass; da_water_caustic.h says why. The contrast is the direct
+	// sun's share of the light on this patch of water (c0 is hemi plus sun by access, so a pond
+	// under a canopy or an overcast sky throws no net), faded with the detail layer's own
+	// distance, past which its cells are smaller than a pixel.
+	[branch]
+	if ( da_water_qual.y > 0.5f && !under && da_w_path > 0.02f && det_near > 0.01f )
+	{
+		const float3 lum3 = float3( 0.30f, 0.59f, 0.11f );
+		const float  sun_up = saturate( -L_sun_dir_w.y * 4.0f );
+		const float  sun_share = saturate( dot( L_sun_color.rgb, lum3 ) * saturate( I.position_w.w ) * sun_up
+		                                 / max( dot( irradiance, lum3 ), 1e-3f ) );
+		[branch]
+		if ( sun_share > 0.01f )
+		{
+			// The bed point behind this pixel, and the water standing over it.
+			const float3 bed_w = Pw + V * da_w_path;
+			const float  bed_d = max( -V.y * da_w_path, 0.02f );
+			const float3 focus = da_wc_focus( s_nmap, smp_base, bed_w, bed_d, wind_ms, wind_dir, mss_total );
+			Br *= lerp( 1.0f, focus, sun_share * det_near );
+		}
+	}
+
 	// ---- what floats on it ---------------------------------------------------------------
 	// The authored surface texture is a FILM - scum, algae, duckweed - not the colour of the
 	// water. It only appears where the water body says there is any, so a clear pond shows none
@@ -367,11 +399,15 @@ float4 main( vf I ) : SV_Target
 	// painted outline.
 	float foam = 0.0f;
 	{
-		const float band_w = clamp( 2.0f * da_water_sea.x + 0.10f, 0.12f, 0.90f );
+		// Run-up needs waves. Hs already carries the profile's damping, so a dead calm and a
+		// reed-choked backwater both keep only a faint scum line at the bank.
+		const float hs = da_water_sea.x;
+		const float band_w = clamp( 2.0f * hs + 0.06f, 0.06f, 0.90f );
 		float b = 1.0f - saturate( shore / band_w );
 		b = b * b;
 		const float n = saturate( 0.55f + 2.2f * ( slope.x + slope.y ) );
-		foam = saturate( b * n * WATER_FOAM_STRENGTH ) * saturate( da_w_path * 20.0f );
+		const float run = 0.15f + 0.85f * saturate( hs * ( 1.0f / 0.01f ) );
+		foam = saturate( b * n * WATER_FOAM_STRENGTH * run ) * saturate( da_w_path * 20.0f );
 	}
 
 	// Floating debris, in the depth window where a bank actually collects it.

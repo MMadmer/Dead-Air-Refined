@@ -13,9 +13,10 @@
 //		A = metres to the nearest bank, clamped to 32
 //	Nothing writes it per frame, so a read is a texture fetch and never a march.
 //
-//	The ripple field is the interactive half: a 32 m window around the camera, snapped to whole
+//	The ripple field is the interactive half: a 64 m window around the camera, snapped to whole
 //	texels, holding the height of the wave equation the sim pass steps (da_water_ripple.ps).
-//	R = height now, G = height one step back, both in METRES of surface displacement.
+//	R = height now, G = height one step back, both in METRES of surface displacement. It runs
+//	on every tier; the preset only sets how many texels the 64 m are cut into.
 //
 //	Include AFTER common.h - the samplers come from there, as they do for da_clouds.h. Any .s
 //	script whose shader includes this file has to bind the two textures:
@@ -33,6 +34,11 @@ uniform float4 da_water_map2;
 //	xy = the ripple window's centre (world XZ, snapped), z = its size in metres, w = one texel
 //	in uv (1/texels). All zero when the tier runs no field at all.
 uniform float4 da_water_rip;
+
+//	The absorbing band inside the window's rim, metres. The sim damps a wave out over it, every
+//	reader lets go of the field over the same band, and the analytic rings fade in over it - so
+//	the three agree by construction. The CPU twin is CEnvironment::water_ripple_edge.
+#define DA_WF_RIM_M	4.0f
 
 Texture2D s_water_field;
 Texture2D s_water_ripple;
@@ -130,13 +136,12 @@ float2 da_wf_ripple_slope(float2 wxz)
 	//	Central difference over two texels, in metres.
 	const float2 grad = float2(hx1 - hx0, hz1 - hz0) / (2.0f * e * da_water_rip.z);
 
-	//	The sim damps hard over its outer texels, so the field is already near zero at the rim;
+	//	The sim damps hard over its outer metres, so the field is already near zero at the rim;
 	//	this last fade only guarantees there is no step at the boundary when something large is
-	//	still ringing as it crosses out of the window.
-	//	Matched to the sim's own absorbing band, so the surface lets go of the field over the
-	//	same metres the field is letting go of the wave.
-	const float2 d = min(uv, 1.0f - uv);
-	return grad * saturate(min(d.x, d.y) * 6.0f);
+	//	still ringing as it crosses out of the window. Same metres as the sim's own absorbing
+	//	band, so the surface lets go of the field over the stretch the field lets go of the wave.
+	const float2 d = min(uv, 1.0f - uv) * da_water_rip.z;
+	return grad * saturate(min(d.x, d.y) * (1.0f / DA_WF_RIM_M));
 }
 
 #endif	// DA_WATER_FIELD_H

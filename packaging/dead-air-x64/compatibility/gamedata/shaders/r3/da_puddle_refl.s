@@ -22,6 +22,10 @@ function normal (shader, t_base, t_second, t_detail)
 	-- data: the two are required to agree bit for bit, and a mask that differs between them
 	-- paints the reflection outside the water.
 	shader:dx10texture	("s_puddle_fill", "$user$puddle_fill")
+	-- The ripple field: a puddle's rings live in the same field as the lake's (da_puddles.h
+	-- reads it through da_wf_ripple_slope). The G-buffer half binds the same name to the same
+	-- texture in uber_deffer.cpp, for the same bit-for-bit reason as the fill map above.
+	shader:dx10texture	("s_water_ripple", "$user$water_ripple0")
 
 	shader:dx10sampler	("smp_nofilter")
 	shader:dx10sampler	("smp_rtlinear")

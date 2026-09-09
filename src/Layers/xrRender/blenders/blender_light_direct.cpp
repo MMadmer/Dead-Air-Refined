@@ -208,11 +208,6 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        // The caustic net in accum_sun_near/far samples the baked water field to learn where the
-        // water is and how deep the pixel sits under it. A t-slot that no pass names keeps whatever
-        // the previous draw left in it, so every sun element compiling those shaders has to bind it.
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
         C.r_dx11Texture("s_smap_minmax", r2_RT_smap_depth_minmax);
 
@@ -255,8 +250,6 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
 
         C.r_dx11Sampler("smp_nofilter");
@@ -311,8 +304,6 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
         C.r_dx11Texture("s_smap_minmax", r2_RT_smap_depth_minmax);
 
@@ -483,11 +474,6 @@ void CBlender_accum_direct_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        // The caustic net in accum_sun_near/far samples the baked water field to learn where the
-        // water is and how deep the pixel sits under it. A t-slot that no pass names keeps whatever
-        // the previous draw left in it, so every sun element compiling those shaders has to bind it.
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
 
         C.r_dx11Sampler("smp_nofilter");
@@ -529,8 +515,6 @@ void CBlender_accum_direct_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
 
         C.r_dx11Sampler("smp_nofilter");
@@ -585,8 +569,6 @@ void CBlender_accum_direct_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_material", r2_material);
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
-        C.r_dx11Texture("s_water_field", r2_RT_water_field);
-        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
         C.r_dx11Texture("s_smap_minmax", r2_RT_smap_depth_minmax);
 

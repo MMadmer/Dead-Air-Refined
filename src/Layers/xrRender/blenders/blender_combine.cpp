@@ -255,6 +255,13 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -278,6 +285,13 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -300,6 +314,13 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -323,6 +344,13 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -469,6 +497,13 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -492,6 +527,13 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -514,6 +556,13 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
@@ -537,6 +586,13 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
         C.r_dx11Texture("s_rainscroll", "shaders" DELIMITER "s_rainscroll");
         C.r_dx11Texture("s_rainstreak", "shaders" DELIMITER "s_rainstreak");
+        // The medium pass puts the sun's caustic on the bed while the eye is under water: the
+        // field for the depth under the surface, the ripple pair and the surface's own detail
+        // map for the lens (da_water_under.h). Silent no-ops for a shader without them.
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_nmap", "water\\water_normal");
+        C.r_dx11Sampler("smp_linear");
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");

@@ -477,11 +477,15 @@ public:
         float radius{};
         float birth{};
         float amp{}; // the envelope as last packed: what the eye can still see of it
+        // Radius of the dimple the ripple field digs for it. Zero when the field never saw the
+        // ring born - outside its window, or no field at all - which tells the analytic path
+        // to draw the ring everywhere instead of only past the window's edge.
+        float crater{};
         EWaterHit kind{};
         bool used{};
     };
     SWaterHit water_hits[water_hit_count];
-    // rows: pos = (xyz, radius), par = (amplitude/strength, ring radius, kind 0|1, 0)
+    // rows: pos = (xyz, radius), par = (amplitude/strength, ring radius, kind 0|1, crater radius)
     Fmatrix water_hit_pos[2];
     Fmatrix water_hit_par[2];
     float water_hit_active{};
@@ -511,6 +515,14 @@ public:
         Fvector3 sigma_t{ 0.30f, 0.24f, 0.87f };    // extinction 1/m, linear sRGB
         Fvector3 body_r { 0.018f, 0.029f, 0.012f }; // irradiance reflectance of the water column
         float    scum{};                            // floating film coverage 0..1
+        // How much open water the wind really gets to work over, metres. The solver's own
+        // fetch is the footprint of the whole body, and a marsh is a footprint of reed islands:
+        // half a kilometre by the box, tens of metres by the water.
+        float    fetch_max{500.f};
+        // Factor on the slope variance of everything the wind raises - waves, detail and
+        // roughness alike. Vegetation and a still backwater take the energy out of a sea the
+        // fetch alone would allow.
+        float    wave_damp{1.f};
     };
 
     // Two slots, because a level may carry two water materials at once (a clear stream and a
@@ -630,9 +642,17 @@ public:
 
     // The ripple simulation window: (centre x, centre z, size in metres, 1/texels). The centre
     // is the camera SNAPPED to whole texels - resampling the field every frame smears it - and
-    // it is solved here so the sim pass and any CPU consumer agree on it exactly.
-    static constexpr float water_ripple_window = 32.f;
+    // it is solved here so the sim pass and any CPU consumer agree on it exactly. The window is
+    // a fixed 64 m and the preset buys texels into it, so a ring reaches the same distance on
+    // every tier and only its size follows the grid.
+    static constexpr float water_ripple_window = 64.f;
+    // The absorbing band inside the window's rim, metres: the sim damps a wave out over it,
+    // every reader lets go of the field over it, and a ring born inside it is not the field's.
+    static constexpr float water_ripple_edge = 4.f;
     Fvector4 water_ripple_win{};
+    // Metres per second every ring runs at, the sim's and the analytic envelope's alike: the
+    // field is not dispersive, so one speed per grid, solved from its texel in water_tick.
+    float water_ripple_speed{0.9f};
 
     // ---- Rain and the camera in water --------------------------------------------------------
     // The rain rate the whole rain system is parameterised on, mm/h. Solved where the sea state

@@ -31,13 +31,11 @@
 #define WATER_RING_AMP		1.30	// impact rings: bullets, blasts, feet, bodies
 #define WATER_RIPPLE_FADE	35.0	// metres; past this a ripple is subpixel
 
-// The simulated ripple field, where the tier runs one. It hands back a world-XZ slope already,
-// so the gain is a trim and not a conversion - leave it at one unless the sim's own amplitude
-// is being re-scaled. The reader already fades its own rim over a twelfth of the 32 m window, so
-// the crossfade back to the analytic rings is set to the same 2.67 m and the two hand over with
-// no gap between them.
+// The simulated ripple field. It hands back a world-XZ slope already, so the gain is a trim and
+// not a conversion - leave it at one unless the sim's own amplitude is being re-scaled. The
+// hand-over to the analytic rings at the window's edge is not a knob: it happens over the sim's
+// own absorbing band, DA_WF_RIM_M in da_water_field.h.
 #define WATER_FIELD_RIPPLE_AMP	1.00	// trim on the field's slope
-#define WATER_RIPPLE_EDGE	2.67	// metres of crossfade at the window wall
 
 // ---- Fetch shelter --------------------------------------------------------------------------
 // How far open water has to run UPWIND before the wind sea is at full height. At this fetch and

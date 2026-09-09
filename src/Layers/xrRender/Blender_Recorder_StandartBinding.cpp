@@ -739,7 +739,7 @@ static class cl_da_water_body : public R_constant_setup
 
 // Two optical profiles live at once because a level may carry a clear stream and a green pool
 // side by side; a surface picks its slot at compile time in its own .s script, so both are
-// always bound. iop = extinction sigma_t per channel in 1/m (w reserved for the phase term),
+// always bound. iop = extinction sigma_t per channel in 1/m plus the profile's wave damping in w,
 // iop2 = the irradiance reflectance of the water column plus the floating scum coverage.
 // The 'b' pair is slot B.
 static class cl_da_water_iop : public R_constant_setup
@@ -747,7 +747,7 @@ static class cl_da_water_iop : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& p = g_pGamePersistent->Environment().water_profile[0];
-        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, 0.f);
+        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, p.wave_damp);
     }
 } binder_da_water_iop;
 static class cl_da_water_iop2 : public R_constant_setup
@@ -763,7 +763,7 @@ static class cl_da_water_iopb : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& p = g_pGamePersistent->Environment().water_profile[1];
-        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, 0.f);
+        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, p.wave_damp);
     }
 } binder_da_water_iopb;
 static class cl_da_water_iop2b : public R_constant_setup

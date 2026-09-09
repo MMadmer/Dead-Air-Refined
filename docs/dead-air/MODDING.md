@@ -1241,7 +1241,11 @@ whitecaps: fetch-limited steepness never folds the Jacobian, and Monahan's cover
 ### Optics
 
 `dead_air_x64_water.ltx` carries the profiles: `sigma_t` is the per-channel extinction in 1/m and
-`body_r` is what the water column glows, both linear sRGB; `scum` is the floating film. Six ship -
+`body_r` is what the water column glows, both linear sRGB; `scum` is the floating film; `fetch_max`
+caps the fetch the wind gets over that water - the solver measures it off the body's footprint,
+and a marsh's footprint is a lattice of reed islands, half a kilometre by the box and tens of
+metres by the water, while the fetch is most of what sets the wave length - and `wave_damp` scales
+the slope variance of everything the wind raises, waves, detail ripple and glitter alike. Six ship -
 `clear`, `pond`, `swamp`, `bog`, `muddy`, `algae` - and `[water_levels]` maps each level to a pair
 of them, because a level may carry two water materials at once. Which of the two a surface reads
 is fixed in its own `.s` script (`water_soft` = the first, `water_green` = the second): the lua
@@ -1254,6 +1258,12 @@ To retune a water body, edit its profile. Numbers to start from: red is half gon
 at 8 in anything, blue survives tens of metres in clear water and dies in 20 cm in a peat bog, and
 past about `a_CDOM(440) = 0.5` the blue coefficient exceeds the red and the water goes brown
 rather than blue.
+
+Below half a metre a second of wind the surface is a mirror. Cox-Munk's 0.003 intercept is the
+ocean's residual swell, which a pond does not have, so both the CPU budget (`water_mss`) and the
+shader (`da_w_mss`) take the threshold off the wind and fade the law in over the next metre a
+second - with the gust field applied before the threshold, which is what draws cat's paws in a
+light air: the lulls go glassy, the tongues ripple.
 
 ### The water field
 
@@ -1280,9 +1290,25 @@ was before.
 
 ### The ripple field
 
-A 256x256 (128 on Default) RG16F ping-pong pair over a 32 m window centred on the camera, stepped
-by `phase_water_ripple` at a fixed 1/60 s with an accumulator: R is the height now, G the height
-one step back, and the pass solves the plain wave equation on them.
+An RG16F ping-pong pair over a 64 m window centred on the camera, on every preset - the preset
+buys texels into the window, not the window itself: 256 on Minimum and Low (25 cm texels), 512 on
+Default and High (12.5 cm), 1024 on Ultra (6 cm) - stepped by `phase_water_ripple` at a fixed
+1/60 s with an accumulator: R is the height now, G the height one step back, and the pass solves
+the wave equation on them with a viscosity term on the velocity, so grid-scale noise dies in a
+dozen steps while a half-metre ring lives for a minute.
+
+The wave speed is not a free constant. The field is not dispersive, so it carries one speed per
+grid: the phase speed of a deep-water wave five texels long, taken three quarters of the way to
+its group speed - half a metre a second on the 6 cm grid, a metre on the 25 cm one
+(`CEnvironment::water_ripple_speed`). The first version ran at 3.75 m/s to keep the Courant number
+at a pretty 0.25, and a ring crossed the whole window in four seconds and was absorbed at the rim -
+which the player read, correctly, as rings that vanish after a few seconds.
+
+The wave rows the surface sums are bands times headings, not one sinusoid per band. The bands
+that fit between the peak and the 10 cm floor are few at a short fetch - one or two over a marsh -
+and one sinusoid per band is corduroy: parallel crests marching in step. The surplus rows re-draw
+the same band at other headings across the wind, which is what a young sea's wide directional
+spread is, so the eight rows are eight crossing trains whatever the fetch.
 
 Four things about it are not preferences, and each is a way this feature is usually built wrong:
 
@@ -1291,17 +1317,33 @@ Four things about it are not preferences, and each is a way this feature is usua
   into mush;
 * the Laplacian taps are masked by the field's coverage channel, so a wave **reflects off a bank**
   for free;
-* the damping ramps hard over the outer 16 texels, or every wave echoes off the invisible rim.
+* the damping ramps over the outer 4 m of the window (`water_ripple_edge`, the same metres on
+  every grid), or every wave echoes off the invisible rim.
 
 Sources are injected inside the same pass from constants: the eight impact slots
 (`Environment::water_hit` - bullets, blasts, footsteps, bodies), the wake slots
 (`Environment::water_wake`, fed every frame by anything wading), and rain at a rate derived from
 mm/h on the top tier. Every source is a **depth in metres spread over a number of steps**, not a
 per-step amount: feeding a one-shot impulse once per step drives the whole field into its clamp
-inside a tenth of a second.
+inside a tenth of a second. An impact's dimple is a tenth of the slot's ring radius (14 cm for a
+bullet, half a metre and up for a blast), dug proportionally deep: the slot's radius says how far
+the ring is meant to run, not how big the splash was.
 
-Below the tier where the field runs, the eight analytic rings in `da_water_rings.h` remain, and
-the surface crossfades between the two on `da_water_rip.z`.
+The field runs over the whole window, dry ground included: a rain puddle is water too, and its
+rings live in the same field as the lake's (`da_puddles.h` reads it through `da_wf_ripple_slope`,
+bound in `uber_deffer.cpp` and `da_puddle_refl.s`). The baked coverage only says where the banks
+are, and a tap across one mirrors the centre in both directions, so a puddle's ring does not leak
+into the lake beside it. Rain is seeded only onto the water body; a puddle's drops are already
+rings of their own, at a scale the grid cannot carry.
+
+The eight analytic rings in `da_water_rings.h` cover only what the field cannot, and decide that
+per ring. A slot records whether the field saw the ring born (`SWaterHit::crater`, the par row's
+`w`): a ring the field carries is drawn analytically only past the window's edge, over the same
+4 m the sim absorbs it in and at the same speed, so the front stays one front; a ring born outside
+the window has no wave in the field at all and is drawn everywhere, window included - without that
+a ring watched from the bank vanished the moment the window walked over it. The analytic envelope
+has no lifetime either: it thins as about 1/r and the slot is freed when it is too faint to see,
+tens of metres out.
 
 ### Underwater
 
@@ -1317,8 +1359,23 @@ Seen from below the surface uses the **exact** Fresnel with total internal refle
 it the sky refracts through. That needs the water pass two-sided, which is `dx10CullMode` in the
 three `.s` scripts.
 
-Caustics are a modulation of the sun's own term in `accum_sun_near.ps` / `accum_sun_far.ps` rather
-than a decal, which is why they vanish in shadow and warm at sunset. `r__water_caustics`.
+Caustics are not a pattern of their own. The bed is lit through the thin-lens relation
+`1 / |1 + (1 - 1/n) d lap(h)|` with the Laplacian of the very surface `water.ps` draws - the wave
+rows, the detail normal map at the surface's own amplitude law, and the ripple field
+(`da_water_caustic.h`) - so the net moves at the speed of the waves the eye sees, its cells are
+the detail layer's ten to thirty centimetres, a calm has no net, and a ring casts an arc.
+Turbidity is not a blur by wavelength but a contrast, `exp(-b d)` with the scattering share of the
+profile's extinction.
+
+Where it is applied is the part that was learned the hard way. The obvious home is the sun
+accumulator - modulate the sun's term and the net vanishes in shadow for free - and two versions
+lived there without ever lighting a bed: the level compiler bakes the terrain's sun occlusion
+with the water surface as an occluder, so a bed under water has no dynamic sun in the deferred
+lighting to modulate, only the plants standing in it have. `water.ps` therefore applies the lens
+to its own refracted background, weighted by the direct sun's share of the light on that patch
+(hemi plus sun by the surface's baked access - a pond under a canopy throws no net), and the
+medium pass in `combine_2_*.ps` does the same to the frame while the eye is under the surface.
+`r__water_caustics`, from Default.
 
 **There is deliberately no swimming and no drowning.** Deep water in this game is level-design
 geometry - a barrier - and making it swimmable lets the player cross what a map means as a wall.

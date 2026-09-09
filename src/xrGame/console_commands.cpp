@@ -2684,9 +2684,9 @@ public:
         }
         else
             Msg("* [qa] field: not baked on this level");
-        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f%s", env.water_ripple_win.z,
-            env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
-            env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
+        Msg("* [qa] ripple: window %.0f m at (%.1f, %.1f), 1/texels %.5f, ring speed %.2f m/s%s",
+            env.water_ripple_win.z, env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
+            env.water_ripple_speed, env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
         Msg("* [qa] under water: %.2f m below a surface at %.2f", env.eye_under_depth, env.eye_under_surface);
         Msg("* [qa] rain: %.1f mm/h, extinction %.2f 1/km", env.rain_rate_mmh, env.rain_ext_km);
         Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,
@@ -2702,9 +2702,10 @@ public:
         for (int slot = 0; slot < 2; ++slot)
         {
             const auto& pr = env.water_profile[slot];
-            Msg("* [qa] profile %c: sigma_t (%.2f, %.2f, %.2f) 1/m, body (%.3f, %.3f, %.3f), scum %.2f",
+            Msg("* [qa] profile %c: sigma_t (%.2f, %.2f, %.2f) 1/m, body (%.3f, %.3f, %.3f), scum %.2f, "
+                "fetch_max %.0f m, wave_damp %.2f",
                 slot ? 'B' : 'A', pr.sigma_t.x, pr.sigma_t.y, pr.sigma_t.z, pr.body_r.x, pr.body_r.y,
-                pr.body_r.z, pr.scum);
+                pr.body_r.z, pr.scum, pr.fetch_max, pr.wave_damp);
         }
     }
 };

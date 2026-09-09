@@ -942,18 +942,19 @@ void CEnvironment::load_water_profiles()
     ZoneScoped;
 
     // The shipped table: extinction 1/m and the column's irradiance reflectance, both linear
-    // sRGB, plus the floating film. These are what the engine believes when the file is absent.
+    // sRGB, the floating film, then the fetch the water really offers and the damping it puts
+    // on the sea. These are what the engine believes when the file is absent.
     static const struct
     {
         pcstr name;
         SWaterProfile profile;
     } builtin[] = {
-        {"clear", {{0.35f, 0.09f, 0.15f}, {0.004f, 0.013f, 0.012f}, 0.00f}},
-        {"pond",  {{0.30f, 0.24f, 0.87f}, {0.018f, 0.029f, 0.012f}, 0.05f}},
-        {"swamp", {{0.44f, 1.05f, 5.24f}, {0.014f, 0.010f, 0.003f}, 0.35f}},
-        {"bog",   {{0.81f, 2.81f, 15.3f}, {0.005f, 0.002f, 0.001f}, 0.55f}},
-        {"muddy", {{0.53f, 0.77f, 2.31f}, {0.065f, 0.059f, 0.024f}, 0.10f}},
-        {"algae", {{0.37f, 0.44f, 1.55f}, {0.036f, 0.041f, 0.015f}, 0.50f}},
+        {"clear", {{0.35f, 0.09f, 0.15f}, {0.004f, 0.013f, 0.012f}, 0.00f, 500.f, 1.00f}},
+        {"pond",  {{0.30f, 0.24f, 0.87f}, {0.018f, 0.029f, 0.012f}, 0.05f, 300.f, 0.85f}},
+        {"swamp", {{0.44f, 1.05f, 5.24f}, {0.014f, 0.010f, 0.003f}, 0.35f,  40.f, 0.35f}},
+        {"bog",   {{0.81f, 2.81f, 15.3f}, {0.005f, 0.002f, 0.001f}, 0.55f,  20.f, 0.20f}},
+        {"muddy", {{0.53f, 0.77f, 2.31f}, {0.065f, 0.059f, 0.024f}, 0.10f, 300.f, 0.90f}},
+        {"algae", {{0.37f, 0.44f, 1.55f}, {0.036f, 0.041f, 0.015f}, 0.50f,  60.f, 0.45f}},
     };
     const auto by_name = [](pcstr name, SWaterProfile& out)
     {
@@ -1019,6 +1020,10 @@ void CEnvironment::load_water_profiles()
         }
         if (ini.line_exist(section, "scum"))
             p.scum = clampr(ini.r_float(section, "scum"), 0.f, 1.f);
+        if (ini.line_exist(section, "fetch_max"))
+            p.fetch_max = clampr(ini.r_float(section, "fetch_max"), 5.f, 500.f);
+        if (ini.line_exist(section, "wave_damp"))
+            p.wave_damp = clampr(ini.r_float(section, "wave_damp"), 0.f, 1.f);
     }
 }
 

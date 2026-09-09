@@ -1198,6 +1198,20 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
     slot->radius = radius;
     slot->birth = Device.fTimeGlobal;
     slot->amp = 1.f;
+    // Whether the ripple field sees this ring born. Inside its window the sim digs the dimple
+    // and carries the wave from there, and the analytic ring is only drawn past the window's
+    // edge; born outside it the ring has no wave in the field at all, so the analytic one is
+    // drawn everywhere, window included - otherwise a ring watched from the bank vanishes the
+    // moment the player walks far enough for the window to swallow it. The slot's radius is
+    // how far the ring is meant to run, not how big the splash was: the dimple is a tenth of
+    // it - 14 cm for a bullet, half a metre and up for a blast.
+    slot->crater = 0.f;
+    if (kind == EWaterHit::ring && water_ripple_win.z > 0.f)
+    {
+        const float half = water_ripple_win.z * 0.5f - water_ripple_edge;
+        if (_abs(pos.x - water_ripple_win.x) < half && _abs(pos.z - water_ripple_win.y) < half)
+            slot->crater = clampr(0.10f * radius, 0.05f, 1.0f);
+    }
 
     if (ps_e_wind_dbg)
         Msg("* [water] %s r=%.1f at (%.0f, %.0f, %.0f)", kind == EWaterHit::drain ? "drain" : "ring",
@@ -1209,7 +1223,7 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
 extern ENGINE_API int ps_r__water_waves;
 // Ripple-field resolution the preset picked, in texels (0 = no field, the analytic rings only).
 // The window solved below has to agree with the target the renderer created at that size.
-extern ENGINE_API int ps_r__water_ripple;
+extern ENGINE_API int ps_r__water_ripple_active;
 // "This level holds water", published for the render DLL, which cannot see CEnvironment. Written
 // only here so the two can never disagree about it.
 extern ENGINE_API bool g_da_level_has_water;
@@ -1426,6 +1440,17 @@ static float da_wrap_pi(float a)
     return a - PI;
 }
 
+// Cox & Munk 1954 below their own data. The clean fit's 0.003 intercept is the ocean's residual
+// swell, and a pond has none: under about half a metre a second the wind raises no capillary at
+// all and the water is a mirror, so the threshold comes off the wind and the law fades in over
+// the next metre a second instead of starting from the intercept. da_w_mss in
+// da_water_common.h is the same law per pixel and must stay so.
+static float water_mss(float U)
+{
+    const float u = std::max(U - 0.5f, 0.f);
+    return 1e-4f + (0.003f + 5.12e-3f * u) * std::min(u, 1.f);
+}
+
 // The sea the wind has raised, and the eight waves seeded from it. Solved once per frame on the
 // REAL frame dt, not the wind service's fixed tick: the low-pass below is the sea's own inertia
 // and has nothing to do with the noise clock.
@@ -1474,7 +1499,12 @@ void CEnvironment::water_tick(float delta)
         water_mean_depth = water_bodies[best].depth;
         fetch = (e.vMax.x - e.vMin.x) * _abs(dx) + (e.vMax.z - e.vMin.z) * _abs(dz);
     }
-    const float X = clampr(fetch, 5.f, 500.f);
+    // The body's box is the fetch a lake would have; the profile says what the water in it
+    // really offers. A marsh is a lattice of reed islands - half a kilometre by the box, tens
+    // of metres by the water - and that difference is a slow swell against no swell at all.
+    const SWaterProfile& wprof = water_profile[0];
+    const float X = clampr(fetch, 5.f, std::max(wprof.fetch_max, 5.f));
+    const float damp = clampr(wprof.wave_damp, 0.f, 1.f);
 
     // Fetch-limited growth (Hasselmann/JONSWAP). Every term is a product of the friction
     // velocity, so dead calm gives zero rather than a division by one: U = 0 -> ust = 0 -> Hs
@@ -1482,11 +1512,13 @@ void CEnvironment::water_tick(float delta)
     constexpr float cbrt_g = 2.140703f; // cbrt(9.81)
     const float cd = 0.001f * (1.1f + 0.035f * U);
     const float ust = U * _sqrt(cd);
-    const float hs = std::max(0.0413f * ust * _sqrt(X / 9.81f), 0.0005f);
+    const float hs = std::max(0.0413f * ust * _sqrt(X / 9.81f), 0.0005f) * damp;
     const float lam = std::max(0.0898f * powf(X * ust, 2.f / 3.f) / cbrt_g, 0.06f);
-    // Cox & Munk 1954, clean surface: the mean square slope of everything too small to be a
-    // wave. The shader re-derives it per pixel against the local gust tongue and the scum.
-    const float mss = 0.003f + 5.12e-3f * U;
+    // Cox & Munk for everything too small to be a wave, through the calm threshold
+    // (water_mss), then the profile's damping on the whole budget: vegetation and a still
+    // backwater take slope out of waves, detail and roughness alike. The shader re-derives
+    // the same law per pixel against the local gust tongue and the scum.
+    const float mss = water_mss(U) * damp;
 
     // ---- The wave table. -------------------------------------------------------------------
     // The shader reads a heading as dir = (cos theta, sin theta) in world XZ, while the service
@@ -1538,31 +1570,43 @@ void CEnvironment::water_tick(float delta)
         while (n_waves > 0 && lam * powf(0.75f, float(n_waves - 1)) < lam_min)
             --n_waves;
 
-        float amp[8], wnum[8];
-        const float kA = n_waves ? _sqrt(2.f * (0.5f * mss / float(n_waves))) : 0.f;
-        for (int i = 0; i < n_waves; ++i)
-        {
-            wnum[i] = PI_MUL_2 / (lam * powf(0.75f, float(i)));
-            amp[i] = kA / wnum[i];
-        }
-        // Every band carries the same slope amplitude by construction (A_i = kA / k_i), so the
+        // The bands that fit above the floor, and the rows the preset allows. A young sea at a
+        // short fetch has one or two bands at most, and one sinusoid per band is corduroy - long
+        // parallel crests marching in step, which no real chop has ever looked like. The rows
+        // are therefore bands TIMES headings: the surplus rows re-draw the same band at other
+        // headings across the wind, which is what a young sea's wide directional spread IS, so
+        // eight rows are always eight crossing trains whatever the fetch.
+        const int n_bands = n_waves;
+        const int n_rows = n_bands ? clampr(ps_r__water_waves, 1, 8) : 0;
+
+        float wnum[8];
+        for (int b = 0; b < n_bands; ++b)
+            wnum[b] = PI_MUL_2 / (lam * powf(0.75f, float(b)));
+        // Equal variance per ROW: var = target / n_rows and A = sqrt(2 var) / k.
+        const float kA = n_rows ? _sqrt(2.f * (0.5f * mss / float(n_rows))) : 0.f;
+        // Every row carries the same slope amplitude by construction (A = kA / k), so the
         // steepness sum is just n*kA. The cap is a safety net rather than a shaping term: at
         // these slope budgets it does not bind below a full gale, but without it a summed sine
         // surface folds its normals over and turns inside out.
-        const float steep = kA * float(n_waves);
+        const float steep = kA * float(n_rows);
         const float cap = steep > 0.8f ? 0.8f / steep : 1.f;
+        // Where the copies of a band sit across the wind, in units of the band's own spread:
+        // the first pair a full spread either side, the rest filling in between, so the crests
+        // cross at every angle the spread allows instead of at one.
+        static constexpr float across[8] = {1.f, -1.f, 0.45f, -0.45f, 0.8f, -0.8f, 0.2f, -0.2f};
 
         ZeroMemory(water_wave, sizeof(water_wave));
-        for (int i = 0; i < n_waves; ++i)
+        for (int r = 0; r < n_rows; ++r)
         {
-            // Spread around the wind, widening sharply for the short waves - they genuinely ride
-            // far off the mean heading, and a narrow spread sums into parallel corduroy instead
-            // of a sea. Alternating sides so the train is never lopsided.
-            const float spread = (0.35f + 0.10f * float(i)) * ((i & 1) ? -1.f : 1.f);
-            float* row = &water_wave[i / 4].m[i % 4][0];
+            // Interleaved, so the first rows already cover every band; widening sharply for the
+            // short bands, which genuinely ride far off the mean heading.
+            const int b = r % n_bands;
+            const int j = r / n_bands;
+            const float spread = (0.35f + 0.10f * float(b)) * across[j];
+            float* row = &water_wave[r / 4].m[r % 4][0];
             row[0] = heading + spread;
-            row[1] = wnum[i];
-            row[2] = amp[i] * cap;
+            row[1] = wnum[b];
+            row[2] = (kA / wnum[b]) * cap;
 
             // Carry the phase across the re-seed. The shader evaluates
             // k*dot(dir,xz) - omega*t + phi against an absolute clock, so a new omega on an old
@@ -1571,13 +1615,13 @@ void CEnvironment::water_tick(float delta)
             // that (-omega*t + phi) is unchanged makes the temporal term continuous by
             // construction; only the spatial k*x shift is left, and that reads as the sea
             // changing rather than as a cut.
-            const float omega = _sqrt(9.81f * wnum[i]);
-            const float phi0 = float(i) * 2.399963f; // golden angle: the crests never line up
-            const float carry = water_seed_omega[i] > 0.f ? (omega - water_seed_omega[i]) * eff_wind_time : 0.f;
+            const float omega = _sqrt(9.81f * wnum[b]);
+            const float phi0 = float(r) * 2.399963f; // golden angle: the crests never line up
+            const float carry = water_seed_omega[r] > 0.f ? (omega - water_seed_omega[r]) * eff_wind_time : 0.f;
             row[3] = da_wrap_pi(phi0 + carry);
-            water_seed_omega[i] = omega;
+            water_seed_omega[r] = omega;
         }
-        water_wave_count = float(n_waves);
+        water_wave_count = float(n_rows);
     }
 
     water_sea.set(hs, lam, mss, U);
@@ -1612,15 +1656,26 @@ void CEnvironment::water_tick(float delta)
     // Snapped to whole texels: a window that slides continuously resamples the field every
     // frame and smears it into mush (the known defect in OpenMW's version). Solved here so the
     // sim pass and every CPU consumer land on the same texel grid.
-    const int rip_texels = ps_r__water_ripple;
+    // Against the size the target pair was actually created at, not the preset's wish.
+    const int rip_texels = ps_r__water_ripple_active;
     if (rip_texels > 0)
     {
         const float texel = water_ripple_window / float(rip_texels);
         water_ripple_win.set(floorf(eye.x / texel + 0.5f) * texel, floorf(eye.z / texel + 0.5f) * texel,
             water_ripple_window, 1.f / float(rip_texels));
+        // The one speed every ring runs at, shared with the sim pass and the analytic envelope
+        // so a ring crossing the window's edge keeps its front. The field is not dispersive
+        // and needs one number for a band: the phase speed of a deep-water wave five texels
+        // long, taken three quarters of the way toward its group speed - half a metre a second
+        // on the 6 cm grid, a metre on the 25 cm one. Which is also why a coarser tier draws a
+        // bigger, faster ring: it genuinely cannot carry a smaller one.
+        water_ripple_speed = 0.75f * _sqrt(9.81f * 5.f * texel / PI_MUL_2);
     }
     else
+    {
         water_ripple_win.set(0.f, 0.f, 0.f, 0.f);
+        water_ripple_speed = 0.9f;
+    }
 }
 
 void CEnvironment::wind_reseed(float seed)
@@ -1964,18 +2019,19 @@ void CEnvironment::UpdateEffectiveWind()
         float amp = 0.f, ring_r = 0.f;
         if (h.used && h.kind == EWaterHit::ring)
         {
-            // A ring on water: the front runs at the group speed of a small gravity-capillary
-            // packet (~0.9 m/s; a blast's is a bore, 4.5), the crest thins as the circle grows
-            // (energy spread over the circumference, ~1/sqrt(r)) and decays in time; the edge
-            // fade takes it to zero before the front reaches its rim, so a ring never snaps.
+            // A ring on water lives until it is too faint to see, not for a number of seconds:
+            // the crest thins as the circle grows - energy over the circumference and the
+            // packet stretching as it disperses, together about 1/r - and viscosity takes a
+            // minute to matter at these wavelengths. The slot's radius no longer ends it; it
+            // sizes the splash. A ring the field carries runs at the field's own speed, so the
+            // two fronts stay one front where the window ends; a blast the field never saw is
+            // a bore and runs at 4.5.
             const float age = now - h.birth;
             const bool big = h.radius > 2.5f;
-            const float speed = big ? 4.5f : 0.9f;
+            const float speed = h.crater > 0.f ? water_ripple_speed : (big ? 4.5f : 0.9f);
             ring_r = speed * age;
-            const float edge = clampr((h.radius - ring_r) / (0.35f * h.radius), 0.f, 1.f);
-            const float spread = big ? 1.f : 1.f / _sqrt(1.f + ring_r * 1.5f);
-            amp = expf(-age * (big ? 1.1f : 0.9f)) * spread * edge;
-            if (ring_r >= h.radius || amp < 0.02f)
+            amp = expf(-age / 60.f) / (1.f + ring_r * 1.5f);
+            if (amp < 0.02f)
                 h.used = false;
         }
         else if (h.used)
@@ -2012,7 +2068,7 @@ void CEnvironment::UpdateEffectiveWind()
         arow[0] = amp;
         arow[1] = ring_r;
         arow[2] = (h.kind == EWaterHit::drain) ? 1.f : 0.f;
-        arow[3] = 0.f;
+        arow[3] = h.crater;
     }
     for (u32 row = wh_highest; row < water_hit_count; ++row)
     {

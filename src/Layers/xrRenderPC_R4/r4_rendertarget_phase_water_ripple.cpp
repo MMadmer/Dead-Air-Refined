@@ -9,7 +9,6 @@
 // have the sim solve its Laplacian against a texel count the targets do not have.
 extern ENGINE_API int ps_r__water_ripple_active;
 extern ENGINE_API int ps_r__rain_quality;
-extern ENGINE_API bool g_da_level_has_water;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -44,9 +43,10 @@ void da_water_ripple_reset()
 //   * the STEP is fixed and fed by an accumulator. A step tied to the frame time makes the
 //     ripple speed track the frame rate, which is the single most common way this feature is
 //     built wrong;
-//   * r2 is solved from a fixed wave SPEED rather than pinned at the design's 0.25. That
-//     number is what (c*dt/dx)^2 comes to at 256 texels over 32 m; pinning the ratio instead
-//     would run the ripples at twice the metres per second on the 128-texel tier;
+//   * r2 is solved from the wave SPEED the environment chose for this grid's texel, never
+//     pinned at a pretty Courant number. The first version pinned 0.25, which at 12.5 cm and
+//     60 Hz is 3.75 m/s - a ring crossed the whole window in four seconds and was absorbed at
+//     the rim, which is exactly the "rings vanish after a few seconds" the player saw;
 //   * the pair does not ping-pong its NAMES. Each step writes half 0 and is copied back into
 //     half 1, so "$user$water_ripple0" is always the current state and every consumer can bind
 //     one fixed name. A true ping-pong puts the current step under a different name on
@@ -56,7 +56,9 @@ void CRenderTarget::phase_water_ripple()
 {
     if (ps_r__water_ripple_active <= 0 || !rt_WaterRipple[0] || !rt_WaterRipple[1])
         return;
-    if (!g_da_level_has_water || !g_pGamePersistent)
+    // Not gated on the level having a water body: a rain puddle is water too, and its rings
+    // live in this field. A level with no bake is one sheet of open water with no banks in it.
+    if (!g_pGamePersistent)
         return;
 
     const auto& env = g_pGamePersistent->Environment();
@@ -106,13 +108,21 @@ void CRenderTarget::phase_water_ripple()
     if (steps <= 0)
         return;
 
-    // FTCS is stable in 2D up to r2 = 0.5; 3.75 m/s is where the design's 0.25 lands at the top
-    // tier, and the min is what keeps the coarse tier from being asked for more than it can
-    // carry if the window or the step ever change.
-    constexpr float wave_c = 3.75f;
+    // The speed is the environment's, solved from this grid's texel (Environment.cpp), so the
+    // analytic envelope runs its ring fronts at the same metres per second and a ring keeps
+    // one front across the window's edge. Leapfrog is stable in 2D up to r2 = 0.5; at these
+    // speeds the Courant number is well under 0.25 on every tier, and the min is a rail.
+    const float wave_c = env.water_ripple_speed;
     const float courant = wave_c * dt / texel_m;
     const float r2 = std::min(courant * courant, 0.25f);
-    constexpr float damping = 0.995f; // ~3 s to fade a ring at 60 steps a second
+    // Losses. Open water keeps a ring for a minute (0.9995 a step is a 33 s e-fold); the
+    // wavelength-blind part is deliberately this small because the field's own viscosity term
+    // does the rest in proportion to k^2, which takes the grid-scale noise out in a dozen steps
+    // and leaves a half-metre ring alone. Dry ground is a rain puddle: centimetres deep over a
+    // bed that takes the energy out in a second.
+    constexpr float damping_wet = 0.9995f;
+    constexpr float damping_land = 0.985f;
+    constexpr float viscosity = 0.002f; // texel^2 per step; stable to 1/8
 
     // Rain into the field is the top tier's line in the ladder, and rain_quality is the knob
     // that carries "Extreme" without a second one having to agree with it.
@@ -124,7 +134,7 @@ void CRenderTarget::phase_water_ripple()
         {
             // Marshall-Palmer: N(D) = N0*exp(-lambda*D) with N0 = 8000 /m3/mm and lambda in
             // 1/mm, so the drop count is N0/lambda and the flux is that times the fall speed.
-            // Counted over D > 3 mm on purpose: a texel here is 8-25 cm and the crater of a
+            // Counted over D > 3 mm on purpose: a texel here is 6-25 cm and the crater of a
             // 1 mm drop is half a centimetre, so the small stuff cannot be resolved as a ring
             // at all and stays where it already is - the rain-ripple normal map in
             // settings_da_water.h. What is left is the drops that genuinely leave a ring.
@@ -175,11 +185,12 @@ void CRenderTarget::phase_water_ripple()
 
         RCache.set_Element(s_water_ripple->E[0]);
         RCache.set_Geometry(g_combine);
-        RCache.set_c("da_ripple_sim", r2, damping, texels, float(g_ripple_step));
+        RCache.set_c("da_ripple_sim", r2, damping_wet, texels, float(g_ripple_step));
         RCache.set_c("da_ripple_src", shift_u, shift_v, rain_p, rain_amp);
         // Every source in the sim is a depth in metres; these say how many steps that depth is
         // spread over. Feeding it once per step instead drives the field into its clamp.
-        RCache.set_c("da_ripple_sim2", dt, 0.12f, 0.15f, 0.f);
+        RCache.set_c("da_ripple_sim2", dt, 0.12f, 0.15f, wave_c);
+        RCache.set_c("da_ripple_sim3", damping_land, viscosity, env.water_ripple_edge, texel_m);
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
         ++g_ripple_step;
 

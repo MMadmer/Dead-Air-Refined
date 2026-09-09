@@ -126,6 +126,9 @@ c2_out main( v2p_aa_AA I )
 	{
 		if ( uw_tier >= 4 )
 			img = da_uw_chroma( center, img, uw );
+		// The sun's net on the bed, before the column takes its toll of it - what water.ps
+		// does to the refracted background while the eye is still above the surface.
+		img *= lerp( 1.0f, da_uw_caustics_scene( float3( uw_ray, 1.0f ) * depth ), uw );
 		img = da_uw_medium( img, uw_dist, uw, uw_tier );
 		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
 		sceneColor = img;

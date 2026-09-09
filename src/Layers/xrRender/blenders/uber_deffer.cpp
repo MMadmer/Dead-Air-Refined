@@ -211,6 +211,9 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     // the binding in da_puddle_refl.s - the two passes compute the same mask and a puddle whose
     // halves disagree lays its reflection outside the water.
     C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
+    // The ripple field, for the rings a puddle carries (da_puddles.h reads it through
+    // da_wf_ripple_slope). Same silent-skip contract, same twin in da_puddle_refl.s.
+    C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
     C.r_dx11Sampler("smp_rtlinear");
     if (lmap)
     {

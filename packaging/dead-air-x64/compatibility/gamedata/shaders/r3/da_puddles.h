@@ -418,11 +418,21 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	ripple += rain_ripple;
 	R.ripple_amp = 0.18f * chop_now * near_f * da_puddle_look.w + length(rain_ripple);
 
-	// ---- Кольца от попаданий: «блинчик» — расходящийся волновой пакет за фронтом. Гребень на
-	// фронте, за ним затухающий шлейф колец (λ = 0.30 м); всё складывается с дождевой рябью в
-	// тот же градиент нормали. Амплитуда приходит с CPU уже с краевым фейдом — кольцо гаснет
-	// до нуля раньше, чем умирает, скачка нет по построению.
-	ripple += da_water_rings(pos_w);
+	// ---- Кольца от попаданий -------------------------------------------------------------
+	// Лужа — тоже вода, и её кольца живут в том же симулируемом поле ряби, что и кольца на
+	// озере: внутри окна поля градиент берётся из него, за окном — и для колец, рождённых за
+	// окном, — из аналитических восьми слотов. Та же передача, что и в water.ps, на тех же
+	// метрах. Сим гасит края своего окна сам, поэтому стыка нет по построению.
+	float wfield = 0.0f;
+	[branch] if (da_water_rip.z > 0.0001f)
+	{
+		const float2 rd = abs(wp - da_water_rip.xy);
+		wfield = saturate((da_water_rip.z * 0.5f - max(rd.x, rd.y)) * (1.0f / DA_WF_RIM_M));
+	}
+	[branch] if (wfield > 0.001f)
+		ripple += da_wf_ripple_slope(wp) * (near_f * wfield);
+	[branch] if (da_wh_info.x > 0.5f)
+		ripple += da_water_rings(pos_w, wfield);
 	// Published for the reflection pass: its mirror must wobble with THIS gradient, not with a
 	// noise of its own, or the two halves of one puddle disagree about where the water tilts.
 	R.ripple = ripple;
