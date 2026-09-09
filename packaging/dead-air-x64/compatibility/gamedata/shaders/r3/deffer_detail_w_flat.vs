@@ -56,13 +56,18 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 	// swung blades as far upwind as downwind and ricocheted off its peaks. Real grass under
 	// wind holds a downwind lean proportional to the wind and oscillates around it: light air
 	// = shallow lean with wide swings almost back upright, steady strong wind = deep lean
-	// with only an elastic spring around it. The phase stays PER-VERTEX here (unlike trees):
-	// it is what makes waves visibly travel across a meadow.
+	// with only an elastic spring around it.
+	//
+	// The phase comes from the instance ROOT, not the vertex. The wave still travels across a
+	// meadow - that comes from the roots being metres apart - but it no longer travels across
+	// ONE clump: the field runs a cycle every 19..44 m depending on the axis, which is nothing
+	// on a hand-high tuft and about 39 degrees across a two-metre stand of marsh reed. That
+	// spread is what made tall grass writhe instead of lean. Same fix the trees got.
 	float 	dp;
 	{
 		const float wind_k = saturate(da_wind_field.z);
 		const float sway_mean = 0.42f + 0.38f * wind_k;
-		dp = sway_mean + (1.0f - sway_mean) * da_sway(dot(pos, wave));
+		dp = sway_mean + (1.0f - sway_mean) * da_sway(dot(float4(m0.w, m1.w, m2.w, 1.0f), wave));
 	}
 	// Height above the root measured along the instance basis, not world Y minus base: with
 	// ground-tilted instances the old form picked up cos(tilt) and cross terms, weakening and

@@ -71,10 +71,22 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
     const float dw = trunk_w - I.frac;
     const float w = 0.5f * (trunk_w + I.frac + sqrt(dw * dw + 0.0025f));
     float2 result = wdir * (sway * w * I.flex_gate);
-    // Leaf flutter: a finer, 2.3x faster wave on the outer foliage, per-vertex phase.
+    // Leaf flutter: a finer, 2.3x faster wave on the outer foliage.
+    //
+    // Its phase used to be sampled straight off a world-space field at the VERTEX. That field
+    // runs one cycle per 11.4 m, which is a fine ripple across a fifteen-metre crown and a
+    // quarter of a cycle across a two-metre bush - one side leaning while the other springs
+    // back. On a bush, where the flutter is as strong as the sway itself, that read as a wave
+    // sliding left to right through the plant while it bent like a sheet.
+    //
+    // The phase now comes from the ROOT, so every plant still gets its own, and the per-vertex
+    // part is scaled by the plant's own size: a crown flutters leaf by leaf, a shrub flutters
+    // as one thing.
     const float axis_r = length(I.pos.xz - I.root.xz);
     const float leaf_w = saturate((axis_r - 0.3f) * 1.1f);
-    const float dp2 = da_flutter(wave.w * 2.3f * I.freq_k + dot(I.pos, (float3)wave * 3.7f));
+    const float leaf_k = saturate(I.tree_h * 0.12f); // 0 on a shrub, 1 from about 8 m up
+    const float dp2 = da_flutter(wave.w * 2.3f * I.freq_k + dot(I.root, (float3)wave * 3.7f)
+        + dot(I.pos - I.root, (float3)wave * 3.7f) * leaf_k);
     result += wdir * (dp2 * leaf_w * saturate(I.H * 1.5f) * I.frac * 1.2f * I.flex_gate);
     // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend); wood takes none.
     result += da_tree_motors_bend(I.pos, I.root, I.H, I.tree_h, I.frac) * I.flex_gate;
