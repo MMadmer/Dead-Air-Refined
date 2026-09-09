@@ -11,11 +11,17 @@ protected:
     ref_sound m_disabled_sound;
     bool m_turned_on{ true };
     u32 m_turn_time{};
+    //  How long it has been raining on this fire without a break, seconds. Rain does not put a
+    //  fire out the instant the first drops land.
+    float m_rain_soak{};
 
     virtual void PlayIdleParticles(bool bIdleLight = true);
     virtual void StopIdleParticles(bool bIdleLight = true);
     virtual bool AlwaysTheCrow();
     virtual void UpdateWorkload(u32 dt);
+    //  Nothing solid between the fire and the sky.
+    bool SkyAbove() const;
+    void UpdateRainDouse(u32 dt);
 
 public:
     CZoneCampfire();

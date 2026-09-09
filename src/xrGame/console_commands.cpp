@@ -77,6 +77,8 @@ extern float air_resistance_epsilon;
 extern int g_dar_major_update_notice;
 // UIGameSP.cpp - open the inventory without waiting out the backpack scene.
 extern int g_dar_instant_inventory;
+// ZoneCampfire.cpp - rain puts campfires out.
+extern int g_dar_rain_douses_fires;
 
 extern void show_smart_cast_stats();
 extern void clear_smart_cast_stats();
@@ -2690,6 +2692,7 @@ void CCC_RegisterCommands()
     // Updates within the installed major line are not gated on anything.
     CMD4(CCC_Integer, "dar_major_update_notice", &g_dar_major_update_notice, 0, 1);
     CMD4(CCC_Integer, "dar_instant_inventory", &g_dar_instant_inventory, 0, 1);
+    CMD4(CCC_Integer, "dar_rain_douses_fires", &g_dar_rain_douses_fires, 0, 1);
 
     // alife
 #ifdef DEBUG

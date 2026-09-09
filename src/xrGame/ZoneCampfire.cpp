@@ -2,7 +2,12 @@
 #include "ZoneCampfire.h"
 #include "ParticlesObject.h"
 #include "GamePersistent.h"
+#include "Level.h"
 #include "xrEngine/LightAnimLibrary.h"
+
+//  Rain puts campfires out. Off restores the pre-1.4.1 behaviour, where a fire in the open
+//  burned through a thunderstorm.
+int g_dar_rain_douses_fires = 1;
 /*
 CZoneCampfire* g_zone = NULL;
 void turn_zone()
@@ -66,8 +71,18 @@ void CZoneCampfire::turn_on_script()
 {
     if (GEnv.Render->GenerationIsR2OrHigher())
     {
+        //  Nobody lights a fire in the open in the rain. Without this a stalker's own "light
+        //  the camp fire" scheme relights it every half minute straight through a downpour,
+        //  against the douse below, and the fire blinks on and off for the whole storm. The
+        //  game's own match path already refuses in the rain (campfire_manager); this is the
+        //  same rule for everyone else who lights one.
+        if (g_dar_rain_douses_fires && GamePersistent().Environment().CurrentEnv.rain_density >= 0.20f &&
+            SkyAbove())
+            return;
+
         m_turn_time = Device.dwTimeGlobal + OVL_TIME;
         m_turned_on = true;
+        m_rain_soak = 0.f;
         GoEnabledState();
     }
 }
@@ -115,8 +130,74 @@ void CZoneCampfire::PlayIdleParticles(bool bIdleLight)
 
 void CZoneCampfire::StopIdleParticles(bool bIdleLight)
 {
-    if (m_turn_time == 0 || m_turn_time - Device.dwTimeGlobal < (OVL_TIME - 500))
-        inherited::StopIdleParticles(bIdleLight);
+    if (m_turn_time != 0 && m_turn_time - Device.dwTimeGlobal >= (OVL_TIME - 500))
+        return;
+
+    m_idle_sound.stop();
+    if (m_pIdleParticles)
+    {
+        //  A campfire is not switched off, it goes out. The bed stops feeding the flame over
+        //  about a second, whatever is already burning above it burns itself out, and the
+        //  soaked wood steams for ten seconds after that - all of it inside the effect (see
+        //  CDaFireEffect::douse_k / smoulder_k). None of it can happen if the effect is torn
+        //  down under the flame, which is what the base class does: a hard stop and an
+        //  immediate destroy, so the fire vanished between two frames.
+        //
+        //  So it gets a deferred stop and is handed to the auto-remove clock with room for the
+        //  whole sequence, and we let go of it. This is the one place every extinguish passes
+        //  through - rain, a script, a smart terrain - so all of them look the same.
+        m_pIdleParticles->Stop(TRUE);
+        m_pIdleParticles->PSI_SetLifeTime(26.f);
+        m_pIdleParticles->SetAutoRemove(true);
+        m_pIdleParticles = nullptr;
+    }
+
+    if (bIdleLight)
+        StopIdleLight();
+}
+
+//  Is there anything over this fire. Straight up through the static geometry: a roof, a
+//  canopy, a bridge deck. Twenty metres tells a shelter from open sky, and the test only runs
+//  when the soaking clock has already run out, so it costs one ray per fire per downpour.
+bool CZoneCampfire::SkyAbove() const
+{
+    if (!g_pGameLevel)
+        return false;
+    Fvector p = Position();
+    p.y += 0.5f;
+    const Fvector up{ 0.f, 1.f, 0.f };
+    float range = 20.f;
+    return !g_pGameLevel->ObjectSpace.RayTest(p, up, range, collide::rqtStatic, nullptr, nullptr);
+}
+
+void CZoneCampfire::UpdateRainDouse(u32 dt)
+{
+    if (!m_turned_on || !g_dar_rain_douses_fires)
+        return;
+
+    //  Light drizzle and up. Below this the sky is merely damp and a fire shrugs it off.
+    const float density = GamePersistent().Environment().CurrentEnv.rain_density;
+    if (density < 0.20f)
+    {
+        m_rain_soak = 0.f;
+        return;
+    }
+
+    //  A fire does not die with the first drops: it hisses, steams and fights for a few
+    //  seconds while the top of the bed soaks through. Heavier rain wins sooner.
+    m_rain_soak += float(dt) * 0.001f;
+    if (m_rain_soak < 9.f - 4.f * density)
+        return;
+
+    //  Under a roof it can rain all day.
+    if (!SkyAbove())
+    {
+        m_rain_soak = 0.f;
+        return;
+    }
+
+    m_rain_soak = 0.f;
+    turn_off_script();
 }
 
 bool CZoneCampfire::AlwaysTheCrow()
@@ -130,6 +211,7 @@ bool CZoneCampfire::AlwaysTheCrow()
 void CZoneCampfire::UpdateWorkload(u32 dt)
 {
     inherited::UpdateWorkload(dt);
+    UpdateRainDouse(dt);
     if (m_turn_time > Device.dwTimeGlobal)
     {
         float k = float(m_turn_time - Device.dwTimeGlobal) / float(OVL_TIME);
