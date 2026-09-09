@@ -6,6 +6,11 @@
 
 #define STENCIL_CULL 0
 
+// Declared before the render namespace opens, or the extern would name a
+// xray::render::*::g_da_level_has_water that nothing defines. The variable lives in the engine
+// (xr_ioc_cmd.cpp) and is set by the level's water-body sweep in xrGame.
+extern ENGINE_API bool g_da_level_has_water;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // Accumulated ground wetness, published by the rain_params binder (r2.cpp). Gates the
@@ -358,12 +363,17 @@ void CRenderTarget::phase_combine()
     // rt_Generic_0 - a render target cannot be sampled while it is bound, so the shader reads
     // a copy taken just before the water goes in. Without this, s_image keeps whatever texture
     // the previous pass left in the slot.
-    // Skipped when nothing will read it this frame: water reflections off (Minimum preset)
-    // and the puddle pass either off or dry. A stale copy is fine then - no shader samples it.
-    // Level 1 of the puddle reflection reads no scene (sky only); the grab is for the march.
+    // Water needs it whatever the reflection knob says: the surface composites its own
+    // background, so s_image is the REFRACTED scene behind the water and not only the mirror.
+    // Gated on the level actually having liquid collision - most of the Zone has none, and that
+    // is where the saving is.
+    // Skipped when nothing else will read it this frame either: water reflections off (Minimum
+    // preset) and the puddle pass either off or dry. A stale copy is fine then - no shader
+    // samples it. Level 1 of the puddle reflection reads no scene (sky only); the grab is for
+    // the march.
     const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl >= 2 &&
         ps_r__puddles_refl_power > 0.f && g_da_rain_wetness >= 0.01f;
-    if (rt_SSR && (ps_r_water_reflection > 0 || puddles_read_grab))
+    if (rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab))
     {
         PIX_EVENT(scene_grab_for_SSLR);
         // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a

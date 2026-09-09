@@ -81,6 +81,7 @@ CEnvironment::CEnvironment()
     fTimeFactor = 12.f;
 
     wind_blast_direction.set(1.f, 0.f, 0.f);
+    reset_water_body(); // no level yet, so no water known and an empty wave table
 
     // fill clouds hemi verts & faces
     const Fvector* verts;
@@ -1170,6 +1171,205 @@ void CEnvironment::water_hit(const Fvector& pos, float radius, EWaterHit kind)
             radius, pos.x, pos.y, pos.z);
 }
 
+// The preset's wave-row budget (xrRender_console.cpp), defined next to the other shared render
+// knobs in xr_ioc_cmd.cpp.
+extern ENGINE_API int ps_r__water_waves;
+// "This level holds water", published for the render DLL, which cannot see CEnvironment. Written
+// only here so the two can never disagree about it.
+extern ENGINE_API bool g_da_level_has_water;
+
+void CEnvironment::set_water_bodies(const SWaterBody* bodies, int count)
+{
+    water_body_count = clampr(count, 0, water_body_max);
+    for (int i = 0; i < water_body_count; ++i)
+    {
+        water_bodies[i] = bodies[i];
+        water_bodies[i].depth = clampr(bodies[i].depth, 0.05f, 40.f);
+    }
+    // The fetch and the depth these carry are inputs of the wave table, so whatever the old
+    // level seeded is stale: force the next solve to re-seed rather than wait for the wind.
+    water_seed_wind = -1.f;
+    g_da_level_has_water = water_body_count > 0;
+}
+
+void CEnvironment::reset_water_body()
+{
+    water_body_count = 0;
+    g_da_level_has_water = false;
+    water_mean_depth = 1.5f;
+    water_seed_wind = -1.f;
+    water_wave_count = 0.f;
+    ZeroMemory(water_wave, sizeof(water_wave));
+    water_body.set(water_mean_depth, 120.f, 0.f, 0.f);
+}
+
+// Shortest signed distance between two headings, radians.
+static float da_wrap_pi(float a)
+{
+    a = fmodf(a + PI, PI_MUL_2);
+    if (a < 0.f)
+        a += PI_MUL_2;
+    return a - PI;
+}
+
+// The sea the wind has raised, and the eight waves seeded from it. Solved once per frame on the
+// REAL frame dt, not the wind service's fixed tick: the low-pass below is the sea's own inertia
+// and has nothing to do with the noise clock.
+void CEnvironment::water_tick(float delta)
+{
+    // A sea has inertia; a gust does not resize it. Three seconds of low-pass over the 10 m
+    // wind is exactly what separates "the wind has picked up" from "a gust went through".
+    // Frozen wind (screenshots) must not let the sea keep growing under a still frame.
+    const float step = eff_wind_freeze ? 0.f : delta;
+    const float u10 = std::max(WindSpeedMs(), 0.f);
+    if (water_wind_lp < 0.f)
+        water_wind_lp = u10; // first frame: no swell-in from zero
+    else
+        water_wind_lp += (u10 - water_wind_lp) * (1.f - expf(-step / 3.f));
+    const float U = std::max(water_wind_lp, 0.f);
+
+    // Fetch: the run of open water the wind gets to work over, taken from the water body the
+    // camera is standing at and projected onto the current heading - a pond that is long
+    // east-west genuinely gets choppier in an easterly. Picking the NEAREST body rather than
+    // one box around every puddle on the level matters: a map-wide box hands a two-metre pool
+    // the fetch of a lake, and fetch is most of what sets the wave size.
+    const float dx = _sin(eff_wind_dir);
+    const float dz = _cos(eff_wind_dir);
+    float fetch = 120.f;
+    if (water_body_count > 0)
+    {
+        const Fvector& cam = Device.vCameraPosition;
+        int best = 0;
+        float best_d = flt_max;
+        for (int i = 0; i < water_body_count; ++i)
+        {
+            Fvector near_pt;
+            water_bodies[i].extent.getcenter(near_pt);
+            near_pt.x = clampr(cam.x, water_bodies[i].extent.vMin.x, water_bodies[i].extent.vMax.x);
+            near_pt.z = clampr(cam.z, water_bodies[i].extent.vMin.z, water_bodies[i].extent.vMax.z);
+            const float ddx = cam.x - near_pt.x;
+            const float ddz = cam.z - near_pt.z;
+            const float d = ddx * ddx + ddz * ddz;
+            if (d < best_d)
+            {
+                best_d = d;
+                best = i;
+            }
+        }
+        const Fbox& e = water_bodies[best].extent;
+        water_mean_depth = water_bodies[best].depth;
+        fetch = (e.vMax.x - e.vMin.x) * _abs(dx) + (e.vMax.z - e.vMin.z) * _abs(dz);
+    }
+    const float X = clampr(fetch, 5.f, 500.f);
+
+    // Fetch-limited growth (Hasselmann/JONSWAP). Every term is a product of the friction
+    // velocity, so dead calm gives zero rather than a division by one: U = 0 -> ust = 0 -> Hs
+    // and lambda collapse to zero, and the floors below keep both finite and positive.
+    constexpr float cbrt_g = 2.140703f; // cbrt(9.81)
+    const float cd = 0.001f * (1.1f + 0.035f * U);
+    const float ust = U * _sqrt(cd);
+    const float hs = std::max(0.0413f * ust * _sqrt(X / 9.81f), 0.0005f);
+    const float lam = std::max(0.0898f * powf(X * ust, 2.f / 3.f) / cbrt_g, 0.06f);
+    // Cox & Munk 1954, clean surface: the mean square slope of everything too small to be a
+    // wave. The shader re-derives it per pixel against the local gust tongue and the scum.
+    const float mss = 0.003f + 5.12e-3f * U;
+
+    // ---- The wave table. -------------------------------------------------------------------
+    // The shader reads a heading as dir = (cos theta, sin theta) in world XZ, while the service
+    // publishes the wind as da_wind_state.xy = (sin, cos) of eff_wind_dir. Same vector, quarter
+    // turn between the two conventions - hence the pi/2 minus, and not a negation.
+    const float heading = PI_DIV_2 - eff_wind_dir;
+    // Re-seeded only when the sea has actually moved. It is a handful of sqrts, but a re-seed
+    // every frame would also walk the phases, which the eye reads as the whole surface twitching.
+    // The thresholds are deliberately coarse. A re-seed moves every wavenumber, and the shader
+    // runs its phase off an absolute clock, so even a one per cent change lands as a jump of
+    // whole cycles once that clock is minutes old. The carry-over below cancels the temporal
+    // part of it, but the spatial k*x term still shifts, and doing that on every gust would
+    // make the surface crawl. A re-seed should be a change in the weather, not a gust.
+    const bool moved = water_seed_wind < 0.f ||
+        _abs(U - water_seed_wind) > 0.20f * std::max(water_seed_wind, 1.0f) ||
+        _abs(da_wrap_pi(heading - water_seed_dir)) > deg2rad(15.f);
+
+    if (moved)
+    {
+        water_seed_wind = U;
+        water_seed_dir = heading;
+
+        // The amplitudes come out of the SLOPE budget, not out of the wave height. This surface
+        // is drawn as a normal and never as geometry, and the Cox-Munk mss above is the slope
+        // variance of the whole real surface - so the explicit waves may take only a share of
+        // it and what is left is the width of the specular lobe.
+        //
+        // Distributing the wave HEIGHT across the bands instead, with a steepness cap on top,
+        // is the obvious thing to write and it is wrong: eight bands then sum to several times
+        // the real slope variance, the shader's roughness budget (mss - explicit - detail) goes
+        // negative, and the sun collapses to a mirror line on a visibly choppy pond.
+        //
+        // Equal variance per band is the Phillips equilibrium result - a k^-3 slope spectrum is
+        // flat per octave - so var_i = target/n and A_i = sqrt(2*var_i)/k_i. Hs stays what the
+        // fetch relations said and is published for the one thing that wants a HEIGHT: the
+        // width of the shoreline foam band.
+        // How many rows the preset lets the surface evaluate. The slope budget is spread over
+        // the rows that survive rather than the tail being simply dropped, so a lower tier is a
+        // coarser sea and not a calmer one.
+        //
+        // The band set also stops where the waves stop being renderable. At a light breeze the
+        // peak is already only 6-9 cm long and eight geometric bands run down to 8 mm - a
+        // wavelength no pixel of this surface can resolve at any distance, so all it can add is
+        // aliasing. Everything below the floor belongs in the Cox-Munk roughness instead, which
+        // is exactly where it goes: fewer bands means each surviving one carries more of the
+        // slope budget, and what is never spent stays in the specular lobe.
+        constexpr float lam_min = 0.10f;
+        int n_waves = clampr(ps_r__water_waves, 1, 8);
+        while (n_waves > 0 && lam * powf(0.75f, float(n_waves - 1)) < lam_min)
+            --n_waves;
+
+        float amp[8], wnum[8];
+        const float kA = n_waves ? _sqrt(2.f * (0.5f * mss / float(n_waves))) : 0.f;
+        for (int i = 0; i < n_waves; ++i)
+        {
+            wnum[i] = PI_MUL_2 / (lam * powf(0.75f, float(i)));
+            amp[i] = kA / wnum[i];
+        }
+        // Every band carries the same slope amplitude by construction (A_i = kA / k_i), so the
+        // steepness sum is just n*kA. The cap is a safety net rather than a shaping term: at
+        // these slope budgets it does not bind below a full gale, but without it a summed sine
+        // surface folds its normals over and turns inside out.
+        const float steep = kA * float(n_waves);
+        const float cap = steep > 0.8f ? 0.8f / steep : 1.f;
+
+        ZeroMemory(water_wave, sizeof(water_wave));
+        for (int i = 0; i < n_waves; ++i)
+        {
+            // Spread around the wind, widening sharply for the short waves - they genuinely ride
+            // far off the mean heading, and a narrow spread sums into parallel corduroy instead
+            // of a sea. Alternating sides so the train is never lopsided.
+            const float spread = (0.35f + 0.10f * float(i)) * ((i & 1) ? -1.f : 1.f);
+            float* row = &water_wave[i / 4].m[i % 4][0];
+            row[0] = heading + spread;
+            row[1] = wnum[i];
+            row[2] = amp[i] * cap;
+
+            // Carry the phase across the re-seed. The shader evaluates
+            // k*dot(dir,xz) - omega*t + phi against an absolute clock, so a new omega on an old
+            // t moves the crest by (d_omega * t) radians - tens of whole cycles once the level
+            // has been up a few minutes, which reads as the surface flashing. Choosing phi so
+            // that (-omega*t + phi) is unchanged makes the temporal term continuous by
+            // construction; only the spatial k*x shift is left, and that reads as the sea
+            // changing rather than as a cut.
+            const float omega = _sqrt(9.81f * wnum[i]);
+            const float phi0 = float(i) * 2.399963f; // golden angle: the crests never line up
+            const float carry = water_seed_omega[i] > 0.f ? (omega - water_seed_omega[i]) * eff_wind_time : 0.f;
+            row[3] = da_wrap_pi(phi0 + carry);
+            water_seed_omega[i] = omega;
+        }
+        water_wave_count = float(n_waves);
+    }
+
+    water_sea.set(hs, lam, mss, U);
+    water_body.set(water_mean_depth, X, 0.f, water_wave_count);
+}
+
 void CEnvironment::wind_reseed(float seed)
 {
     eff_wind_seed = seed < 0.f ? ::Random.randF(0.f, 4096.f) : seed;
@@ -1565,6 +1765,9 @@ void CEnvironment::UpdateEffectiveWind()
         water_hit_par[row / 4].m[row % 4][0] = 0.f;
     }
     water_hit_active = float(wh_highest);
+
+    // ---- The water model: the sea this wind has raised. -------------------------------------
+    water_tick(delta);
 
     // ---- Self-test blast ring (wind_dbg 2/3): a blast motor spawns 18 m ahead of the camera
     // every 5 s - a realistic grenade-throw distance, so the test verifies the ring's

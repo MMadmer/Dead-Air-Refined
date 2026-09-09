@@ -25,6 +25,14 @@
 #   endif // MASTER_GOLD
 #endif // (RENDER == R_R3) || (RENDER == R_R4)
 
+// How many of the eight wave rows the water shader evaluates - a quality tier, set from the
+// preset ladder below and overridable for the session from the console. Declared here rather
+// than defined with its neighbours (and outside the render namespace, or the extern would name
+// a symbol nothing defines): the wave solver that clamps to it lives in CEnvironment, and the
+// engine cannot see a variable that belongs to the render DLL. It lives in xr_ioc_cmd.cpp with
+// ps_r__WallmarksOnSkeleton, which is shared the same way.
+extern ENGINE_API int ps_r__water_waves;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 u32 ps_Preset = 2;
@@ -936,6 +944,10 @@ void xrRender_sync_preset_derived(bool user_facing)
     // default (high); Minimum stays on the plain cubemap. A shader-options change, so it
     // applies on renderer (re)start like the token itself.
     static constexpr u32 water_refl_by_preset[] = {0, 1, 2, 3, 3};
+    // Wave rows the water surface evaluates, of the eight the engine solves. Each row is a sin,
+    // a cos and a tanh per water pixel, and the tail rows are the short steep ones - dropping
+    // them costs texture, not silhouette, because none of this displaces geometry anyway.
+    static constexpr int water_waves_by_preset[] = {2, 4, 6, 8, 8};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.
@@ -999,6 +1011,7 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r__sss = sss_by_preset[ps_Preset];
     ps_r__sss_steps = sss_steps_by_preset[ps_Preset];
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
+    ps_r__water_waves = water_waves_by_preset[ps_Preset];
     // The look is not a quality tier: the same grade and foliage saturation on every preset,
     // re-applied here so a user.ltx line from an earlier build (the sibling's 1.6 / 2.0) or a
     // session experiment never outlives the start.
@@ -1643,6 +1656,7 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__foliage_debleach", &ps_r__foliage_debleach, 0.f, 1.f);
     // Session overrides: the preset decides what runs and the look constants are re-applied
     // at start, so none of these is written to user.ltx (an older line there still parses).
+    CMD4(CCC_RuntimeInteger, "r__water_waves", &ps_r__water_waves, 0, 8);
     CMD4(CCC_RuntimeInteger, "r__puddles", &ps_r__puddles, 0, 1);
     CMD4(CCC_RuntimeFloat, "r__puddles_buildup", &ps_r__puddles_buildup, 5.f, 600.f);
     CMD4(CCC_RuntimeFloat, "r__puddles_dry", &ps_r__puddles_dry, 0.5f, 20.f);

@@ -1,104 +1,84 @@
+// [DA] Water surface.
+//
+// Rewritten as an interface between two media instead of a tint laid over a finished frame.
+// The three things that were structurally wrong before, and what replaced them:
+//
+//   1. DEPTH was a view-space z difference - depth along the view axis, not through the water.
+//      Every depth-driven effect therefore changed with the viewing angle: a 25 cm foam band
+//      became metres wide seen edge-on. There are now two explicit quantities: the path the
+//      light actually travelled through the water (drives absorption), and how deep the water
+//      is at this spot (drives foam, debris, wave calming) - a property of the place, not of
+//      where it is looked at from.
+//
+//   2. COLOUR was a lerp between two authored tints scaled by a weather key that is 0.0 in 180
+//      weather sections and 0.1 in 729 more, which is why water went black in a quarter of the
+//      shipped weathers. It is now Beer-Lambert absorption down the real path plus the light
+//      the water column scatters back, from per-water-body coefficients. Red is half gone at
+//      2 m and dead at 8: that single fact is why clear water is blue and peat water is brown,
+//      and no pair of authored tints can reproduce it.
+//
+//   3. WAVES were normal-map samples at fixed amplitudes summed into a TANGENT-space normal, so
+//      the wind direction on water depended on the level author's UV layout. They are now a sum
+//      of waves seeded on the CPU from the actual wind and the actual fetch of this water body,
+//      accumulated as a world-XZ slope, cut down by the local depth so the last metre before a
+//      bank goes glassy while the middle of the pond is still ruffled.
+//
+// COMPOSITING. The surface writes the finished interface OPAQUELY and supplies its own
+// background: s_image (rt_SSR) is a copy of the frame as it stood just before the forward pass,
+// so the shader can sample what is behind it and bend that sample properly.
+//
+//     out = B_refracted * T * (1-F)  +  InScatter * (1-F)  +  Reflection * F
+//
+// The obvious alternative - stay translucent and add only the DIFFERENCE the refraction makes -
+// is exact on paper and wrong in practice: the hardware weights the background by (1-alpha),
+// so every correction the shader adds comes back divided by alpha, and in clear shallow water
+// alpha is the Fresnel term. A 2 cm refraction offset arrives multiplied by thirteen. Writing
+// the interface outright is the only form with no amplification in it.
+//
+// What that costs: wallmarks are the one thing drawn into the forward pass before water
+// (priority 1 against water's 2), so a bullet hole on a lake bed is not in the refracted
+// background. Everything else in the forward pass - particles, flares, distortion - sorts after
+// water and is unaffected.
+//
+// The screen-warp pass (waterd, l_special) is switched off in the .s scripts along with this:
+// it was a second, uncoordinated refraction stacked on the same pixels.
+
 #include "common.h"
 #include "ogse_reflections.h"
 
 struct   vf
 {
-	float2	tbase	: TEXCOORD0;	// base
-	float4	tnorm0	: TEXCOORD1;	// nm0
-	float4	position_w	: TEXCOORD2;	// nm1
-	float3	M1		: TEXCOORD3;
-	float3	M2		: TEXCOORD4;
-	float3	M3		: TEXCOORD5;
-	float3	v2point	: TEXCOORD6;
-//#ifdef	USE_SOFT_WATER
-//#ifdef	NEED_SOFT_WATER
-	float4	tctexgen: TEXCOORD7;
-//#endif	//	USE_SOFT_WATER
-//#endif	//	NEED_SOFT_WATER
-	float4	c0		: COLOR0;
-	float	fog		: FOG;
-	float4	hpos	: SV_Position;
+	float2	tbase		: TEXCOORD0;
+	float4	position_w	: TEXCOORD1;	// xyz world, w = sun access
+	float4	v2point_w	: TEXCOORD2;	// xyz eye->point in world, w = sky openness
+	float4	tctexgen	: TEXCOORD3;	// screen texgen, z = view depth of the surface
+	float4	c0			: COLOR0;
+	float	fog			: FOG;
+	float4	hpos		: SV_Position;
 };
 
 Texture2D	s_nmap;
 Texture2D	s_leaves;
-Texture2D	jitter0;
 
-uniform float4		various;
+#include "settings_da_water.h"		// the look knobs that are genuinely looks
+#include "da_water_common.h"		// the model: sea state, waves, statistics, optics
+#include "da_fog_common.h"			// the atmospheric haze, shared with the deferred combine
+#include "da_water_rings.h"			// impact rings, shared with the puddles
 
-#if defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
-float3	water_intensity;
-#endif	//	defined(USE_SOFT_WATER) && defined(NEED_SOFT_WATER)
-#include "settings_da_water.h"	// every water knob lives there
-#include "da_fog_common.h"	// the atmospheric haze, shared with the deferred combine
-#include "da_wind_field.h"	// the wind service: heading, speed, gust field
-#include "da_water_rings.h"	// impact rings, shared with the puddles
-
-// Rain strength rides the same constant the future puddle work uses: x = rain density.
+// x = rain density 0..1.
 uniform float4 rain_params;
 
-// Sky in the reflection. calc_envmap squashes the vertical (vreflect.y*2-1), so the reflected
-// sky diverges from the real one. Same sample, squash behind a switch.
-float3 da_water_sky( float3 vreflect )
+// Rain on open water. Two more layers of the animated normal map at incommensurate scales:
+// layered samples interfere aperiodically, which is how the industry does rain, where a
+// sin(x)*cos(y) is separable and draws an axis-aligned grid of little squares.
+float2 da_w_rain(float2 wxz, float t)
 {
-	float3 d = normalize(vreflect);
-#if !WATER_SKY_MAP_FIX
-	d.y = d.y * 2.0h - 1.0h;
-#endif
-	float3 env0 = s_env0.SampleLevel( smp_base, d, 0 ).xyz;
-	float3 env1 = s_env1.SampleLevel( smp_base, d, 0 ).xyz;
-	return lerp( env0, env1, L_ambient.w );
+	const float2 uv0 = wxz * WATER_RIPPLE_SCALE         + float2( 0.37f,  0.93f) * t;
+	const float2 uv1 = wxz * (WATER_RIPPLE_SCALE * 1.7f) - float2( 0.81f, -0.59f) * t;
+	const float2 r0 = s_nmap.Sample( smp_base, uv0 ).xy - 0.5f;
+	const float2 r1 = s_nmap.Sample( smp_base, uv1 ).xy - 0.5f;
+	return r0 + r1 * 0.7f;
 }
-
-// Rain ripples as a SECOND LAYER OF THE SAME NORMAL MAP, not a formula. sin(x)*cos(y) is
-// separable and gives an axis-aligned grid of bumps ("little squares"); layered map samples
-// at incommensurate scales interfere aperiodically, which is how the industry does rain
-// (Lagarde "Water drop 2b"). s_nmap is already bound and already sampled twice for waves.
-float2 da_water_ripples( float2 wxz, float t )
-{
-	float2 uv0 = wxz * WATER_RIPPLE_SCALE          + float2( 0.37h,  0.93h) * t;
-	float2 uv1 = wxz * (WATER_RIPPLE_SCALE * 1.7h) - float2( 0.81h, -0.59h) * t;
-	float2 r0  = s_nmap.Sample( smp_base, uv0 ).xy - 0.5h;
-	float2 r1  = s_nmap.Sample( smp_base, uv1 ).xy - 0.5h;
-	return r0 + r1 * 0.7h;
-}
-
-// Wind waves as two more layers of the same normal map, each sampled in its own frame:
-// layer 0 rides the wind (stretched along it, short across it), layer 1 sits WATER_WIND_ROT
-// off the wind so the two lattices never coincide. Both drift downwind at a crest speed that
-// grows with the wind, the shorter waves slower. Each slope comes back rotated into world XZ.
-float2 da_water_wind_waves( float2 wxz, float2 wdir, float wind_ms, float t )
-{
-	float rs, rc;
-	sincos( WATER_WIND_ROT, rs, rc );
-	float2 wdir1  = float2( wdir.x * rc - wdir.y * rs, wdir.x * rs + wdir.y * rc );
-	float2 along0 = float2( dot(wxz, wdir ), dot(wxz, float2(-wdir.y,  wdir.x )) );
-	float2 along1 = float2( dot(wxz, wdir1), dot(wxz, float2(-wdir1.y, wdir1.x)) );
-	float  drift  = t * (WATER_WIND_DRIFT * wind_ms);
-	float2 uv0 = along0 * WATER_WIND_TILE_0 - float2(drift, 0.0h);
-	float2 uv1 = along1 * WATER_WIND_TILE_1 - float2(drift * 1.7h, drift * 0.35h) + 0.37h;
-	float2 r0  = s_nmap.Sample( smp_base, uv0 ).xy - 0.5h;
-	float2 r1  = s_nmap.Sample( smp_base, uv1 ).xy - 0.5h;
-	float2 s0  = float2( r0.x * wdir.x  - r0.y * wdir.y,  r0.x * wdir.y  + r0.y * wdir.x  );
-	float2 s1  = float2( r1.x * wdir1.x - r1.y * wdir1.y, r1.x * wdir1.y + r1.y * wdir1.x );
-	return s0 + s1 * 0.6h;
-}
-
-float3 calc_moon_road(float3 color, float3 vreflect, float2 tc, float depth, float Nz)
-{
-	float cut = 4;
-	float r = 0.0015*jitter0.Sample(smp_linear,tc).x;											// randomize borders of road
-	//float r = 0.0015;											// randomize borders of road
-	float f = dot(normalize(vreflect.xz), -normalize(L_sun_dir_w.xz));
-	f = step(lerp(0.998+r /*+ 0.2*ogse_c_screen.w*2.2*/, 1, depth*0.01), f);		// road appearance factor
-	f *= step(cut, depth);															// cut road in near 10 m
-	f *= saturate((depth-cut)*0.5);													// fade in road in 2 m
-	f *= step(Nz, 0);																// remove road from pixels with normals with positive z for better look
-	f *= 1 - saturate(abs(L_sun_dir_w.y*2));										// road fading out with sun height
-	f *= various.x;															// weather control
-	return lerp(color, L_sun_color*2, f);
-}
-
 
 #ifdef GBUFFER_OPTIMIZATION
 float4 main( vf I, float4 pos2d : SV_Position ) : SV_Target
@@ -106,272 +86,221 @@ float4 main( vf I, float4 pos2d : SV_Position ) : SV_Target
 float4 main( vf I ) : SV_Target
 #endif
 {
-	float4	base= s_base.Sample( smp_base, I.tbase);
-	float3	n0	= s_nmap.Sample( smp_base, I.tnorm0.xy);
-	float3	n1	= s_nmap.Sample( smp_base, I.tnorm0.zw);
-	// Distant water calms down: see WATER_FAR_* in settings_da_water.h. v2point is not yet
-	// normalized here - it runs from the camera to the point, its length IS metres.
-	float	da_water_dist	= length(I.v2point);
-	float	da_water_far	= saturate((da_water_dist - WATER_FAR_START) / max(WATER_FAR_END - WATER_FAR_START, 0.001h));
-	float	da_water_amp	= WATER_WAVE_AMP * lerp(1.0h, WATER_FAR_AMP, da_water_far);
-	// Still air leaves a mirror; the base waves only grow with the wind.
-	float	da_wind_ms	= da_wind_state.z;
-	float	da_wind_k	= smoothstep(0.8h, 9.0h, da_wind_ms);
-			da_water_amp	*= lerp(WATER_WIND_CALM, 1.0h, da_wind_k);
-
-	float3	Navg	= (n0 + n1 - 1) * float3(da_water_amp, da_water_amp, 1.0h);
-
-#if WATER_WIND_WAVES
-	{
-		float da_wind_near = saturate(1.0h - da_water_dist / WATER_WIND_FADE);
-		[branch] if (da_wind_k * da_wind_near > 0.001h)
-		{
-			// Gust tongues of the service's field darken the water in patches - the cat's
-			// paws a squall drags across a lake.
-			float3 wf = da_wind_field_eval(I.position_w.xz);
-			Navg.xy += da_water_wind_waves(I.position_w.xz, da_wind_state.xy, da_wind_ms, da_wind_state.w)
-			         * (WATER_WIND_AMP * da_wind_k * da_wind_near * wf.x);
-		}
-	}
-#endif
-
-#if WATER_RAIN_RIPPLES
-	// Fade with distance: past WATER_RIPPLE_FADE a ripple is subpixel and turns to noise.
-	{
-		// Rain strength lives in .x - result.set(rain, wetness, puddles_size, dbg).
-		float da_rain = saturate(rain_params.x);
-		float da_near = saturate(1.0h - da_water_dist / WATER_RIPPLE_FADE);
-		[branch] if (da_rain * da_near > 0.001h)
-			Navg.xy += da_water_ripples(I.position_w.xz, timers.x * WATER_RIPPLE_SPEED)
-			         * (WATER_RIPPLE_AMP * da_rain * da_near);
-	}
-#endif
-
-	// Impact rings (Environment::water_hit): the rings the puddles show - bullets, blasts,
-	// feet and bodies - on open water too. A quiet world walks nothing.
-	[branch] if (da_wh_info.x > 0.5h && da_water_dist < WATER_RIPPLE_FADE)
-		Navg.xy += da_water_rings(I.position_w.xyz) * WATER_RING_AMP;
-
-	float3	Nw	= mul (float3x3(I.M1, I.M2, I.M3), Navg);
-			Nw	= normalize (Nw);
-	float3	v2point	= normalize (I.v2point);
-
-	float2 PosTc = I.tctexgen.xy/I.tctexgen.z;
+	const float2 PosTc = I.tctexgen.xy / I.tctexgen.z;
 #ifdef GBUFFER_OPTIMIZATION
-	gbuffer_data gbd = gbuffer_load_data( PosTc, pos2d );
+	const gbuffer_data gbd = gbuffer_load_data( PosTc, pos2d );
 #else
-	gbuffer_data gbd = gbuffer_load_data( PosTc );
+	const gbuffer_data gbd = gbuffer_load_data( PosTc );
 #endif
 
-	float3 N = mul(m_V, Nw);
-	float4 _P = 	float4( gbd.P, gbd.mtl );
-	float 	ms	= xmaterial;
+	// ---- geometry of the sight line ------------------------------------------------------
+	const float3 Pw = I.position_w.xyz;
+	const float  dist = length( I.v2point_w.xyz );
+	const float3 V = I.v2point_w.xyz / max( dist, 0.0001f );	// eye -> surface, world
+	// How much of the view ray's length one metre of view-axis depth is worth. Both the surface
+	// and the bed sit on this same ray, so the difference of their view depths divided by this
+	// IS the distance between them - no matrix, no reconstruction.
+	const float  cosv = max( dot( V, eye_direction ), 0.05f );
+	const float  dz = max( gbd.P.z - I.tctexgen.z, 0.0f );
+	const float  da_w_path = dz / cosv;					// metres of water the light crossed
+	// The vertical drop over that path IS the water's depth here - but only while the ray is
+	// steep enough to reach the bottom under this pixel rather than the far bank. Looking flat
+	// across a pond it reads near zero everywhere, so it hands over to the body's mean depth
+	// as the sight line flattens. A true per-point depth needs the top-down water field, which
+	// is the next stage's job.
+	const float  vconf = saturate( -V.y * 3.0f );
+	const float  da_w_depth = lerp( da_water_body.x, -V.y * da_w_path, vconf );
 
-	float3 vreflect = reflect(normalize(v2point), normalize(Nw.xyz));
-	float3 env = da_water_sky(vreflect);
+	// ---- the surface ---------------------------------------------------------------------
+	const float  t = da_wind_state.w;
+	const float3 gustf = da_wind_field_eval( Pw.xz );
+	const float  wind_ms = da_wind_state.z;
+	const float2 wind_dir = da_wind_local_dir( da_wind_state.xy, gustf.z );
 
-	//env = Vibrance(env,0.75);
+	float mss_explicit = 0.0f;
+	float2 slope = da_w_waves( Pw.xz, da_w_depth, t, mss_explicit );
 
-	// Schlick Fresnel with water's real IOR. Was pow(dot(vreflect,v2point), 9): same curve
-	// shape (0 head-on, 1 grazing), eyeballed threshold. Schlick puts the transparent-to-mirror
-	// transition where it belongs.
-	float	da_ndv	= saturate( dot(Nw, -v2point) );
-	float	power	= WATER_FRESNEL_F0 + (1.0h - WATER_FRESNEL_F0) * pow(1.0h - da_ndv, WATER_FRESNEL_POWER);
-	float	fresnel	= power;
+	// Cox and Munk give the slope variance of the WHOLE surface, capillaries included. That is
+	// a budget the three layers below divide: the explicit waves took their half on the CPU,
+	// the detail map takes a fixed share here, and whatever is left - everything too small to
+	// be a normal at all - becomes the width of the specular lobe.
+	const float scum = saturate( DA_W_IOP2.w );
+	const float mss_total = da_w_mss( wind_ms, scum, gustf.x );
 
-	// Floating debris accumulates here and is applied at the end of the function, past the
-	// WATER-COLUMN haze: otherwise that haze dims it with the underwater picture and a leaf
-	// reads as lying on the bed instead of floating. The atmospheric haze still gets it - a
-	// leaf is a thing at a distance like any other.
-	float3	da_leaf_rgb	= 0.0h;
-	float	da_leaf_w	= 0.0h;
+	// Sub-wave detail. Faded out with distance because past a point one texel of it spans more
+	// than a wave and it turns into crawling noise - the aliasing the old shader hid by damping
+	// ALL waves with distance, which also flattened the sea it was trying to show.
+	const float det_near = saturate( 1.0f - dist / WATER_DETAIL_FADE );
+	const float mss_detail = WATER_DETAIL_SHARE * mss_total * det_near;
+	[branch]
+	if ( det_near > 0.01f )
+		slope += da_w_detail( s_nmap, smp_base, Pw.xz, wind_dir, t, wind_ms )
+		       * ( WATER_DETAIL_GAIN * sqrt( mss_detail ) );
 
+	// Rain, and the rings every impact leaves. Both are shallow-water business: they ride on
+	// top of the wind sea and fade out where a ripple would be smaller than a pixel.
+	const float rip_near = saturate( 1.0f - dist / WATER_RIPPLE_FADE );
+	[branch]
+	if ( rip_near > 0.01f )
+	{
+		const float rain = saturate( rain_params.x );
+		[branch]
+		if ( rain > 0.004f )
+			slope += da_w_rain( Pw.xz, t * WATER_RIPPLE_SPEED ) * ( WATER_RIPPLE_AMP * rain * rip_near );
+		[branch]
+		if ( da_wh_info.x > 0.5f )
+			slope += da_water_rings( Pw ) * ( WATER_RING_AMP * rip_near );
+	}
 
+	// Water is a horizontal plane by construction, so the world normal comes straight out of
+	// the world slope. No tangent frame, no dependence on how the level was unwrapped.
+	const float3 Nw = normalize( float3( -slope.x, 1.0f, -slope.y ) );
+
+	// A quarter of the budget is kept back whatever the layers above claimed, so the glint can
+	// never collapse to a mirror line on a surface that is visibly moving.
+	const float mss = max( mss_total - mss_explicit - mss_detail, 0.25f * mss_total );
+
+	// ---- fresnel -------------------------------------------------------------------------
+	const float ndv = saturate( dot( Nw, -V ) );
+	// The flat-surface Fresnel knows nothing about the slopes it is averaging over, so a choppy
+	// far shore would go full mirror. Bruneton's rough-surface mean brings it back.
+	const float F = lerp( da_w_fresnel_up( ndv ), da_w_fresnel_rough( ndv, mss_total ), saturate( dist / 12.0f ) );
+
+	// ---- reflection ----------------------------------------------------------------------
+	const float3 vreflect = reflect( V, Nw );
+	// A rough surface does not mirror a razor-sharp sky. The stock shader sampled the sky cubes
+	// at mip 0 always, which is why a squall-blown pond reflected crisp cloud edges.
+	const float  env_mip = saturate( sqrt( mss_total ) / 0.35f ) * 4.0f;
+	float3 env;
+	{
+		const float3 d = normalize( vreflect );
+		const float3 e0 = s_env0.SampleLevel( smp_base, d, env_mip ).xyz;
+		const float3 e1 = s_env1.SampleLevel( smp_base, d, env_mip ).xyz;
+		env = lerp( e0, e1, L_ambient.w );
+	}
+
+	float3 reflection = env;
 #ifdef USE_REFLECTIONS
-	// Real screen-space reflections: get_reflection() samples the scene copy (rt_SSR, bound to
-	// s_image by effects_water.s). refl.w is the screen-edge fade - near the centre the marched
-	// scene wins, toward the borders it falls back to the sky cubemap.
-	// Distant water reflects with the cubemap alone - a real branch, so the march does not run
-	// at all on far pixels.
-	float	da_ssr_fade	= saturate((da_water_dist - WATER_SSR_START) / max(WATER_SSR_END - WATER_SSR_START, 0.001h));
-	float3 c_reflection;
-
-	if (da_ssr_fade >= 0.999h)
+	// A ray that leaves the surface going DOWN is not a reflection - it is refraction, and the
+	// march would find the lake bed and mirror it into the sky. That reject is the one the stock
+	// march never had.
+	[branch]
+	if ( vreflect.y > 0.02f && dist < WATER_SSR_END )
 	{
-		c_reflection = env;
-	}
-	else
-	{
-		float4 refl = calc_reflections(I.position_w, vreflect);
-		c_reflection = lerp(refl.xyz, env.xyz, refl.www);
-		c_reflection = lerp(c_reflection,env,0.18);
-		c_reflection = lerp(c_reflection, env, da_ssr_fade);	// smooth hand-over to the cubemap
-	}	// was 0.75 (SSR diluted to 25%), now ~82% SSR
-#else
-	float3	c_reflection       = env;
-#endif
-
-	// Firefly ceiling - see WATER_REFL_CLAMP in settings_da_water.h.
-#ifdef WATER_REFL_CLAMP
-	{
-		float da_refl_lum = dot(c_reflection, float3(0.299h, 0.587h, 0.114h));
-		if (da_refl_lum > WATER_REFL_CLAMP)
-			c_reflection *= WATER_REFL_CLAMP / max(da_refl_lum, 0.0001h);
+		const float4 refl = calc_reflections( float4( Pw, 1.0f ), vreflect );
+		// The march's own screen-edge confidence, faded out with distance instead of the hard
+		// hand-over that used to fight the distance damping.
+		const float w = saturate( refl.w + saturate( ( dist - WATER_SSR_START ) /
+			max( WATER_SSR_END - WATER_SSR_START, 0.001f ) ) );
+		reflection = lerp( refl.xyz, env, w );
 	}
 #endif
-
-	c_reflection *= 0.95;	// was 0.5 - the reflection was being halved on top of everything else
-
-	// Let the surface texture fade at grazing angles: real water turns mirror-like as the view
-	// flattens, and the full base texture there was flattening the reflection.
-	float3	final              = lerp(c_reflection,base.rgb,base.a*0.6*(1.0h-0.6h*power));
-			final	*= I.c0*2;
-
-	// Atmospheric haze. I.fog is VISIBILITY off the fog plane - the same linear weather ramp
-	// the deferred scene starts from, now that both binders derive it from the same bounds.
-	// The height layer, the density ceiling and the sky colour come from the shared header, so
-	// the surface dissolves at the same distance and into the same colour as the shore around
-	// it. With the linear term alone a lake sat bright and sharp inside murk that had already
-	// swallowed everything else in the frame.
-	float  da_fogd   = saturate( 1.0h - I.fog );
-	float3 da_fogrgb = fog_color.rgb;
-	[branch] if ( da_fog_extras_on() )
+	// The sun and moon on the water. GGX at the Cox-Munk roughness, not a fixed exponent: the
+	// stock pow(dot, 280) is a permanent 0.8 m/s breeze, which is why the glitter never changed
+	// with the weather. Scaled by this patch's own sun access, so a pool under a bridge does not
+	// sparkle in full sun.
 	{
-		da_fogd = da_fog_height( da_fogd, I.position_w.xyz, eye_position, da_water_dist );
+		const float3 L = -L_sun_dir_w;
+		const float spec = da_w_specular( Nw, -V, L, mss );
+		reflection += L_sun_color * ( spec * WATER_SUN_STRENGTH * saturate( I.position_w.w ) );
+	}
 
-		[branch] if ( da_fog.x > 0.001h )
+	// ---- the water column ----------------------------------------------------------------
+	// c0 is the light that actually reaches this patch of water - baked lighting, hemisphere by
+	// sky openness, sun by sun access. Using it rather than a global irradiance is what keeps
+	// water in shadow dark and water in the open bright.
+	const float3 irradiance = I.c0.rgb;
+	const float3 T = da_w_transmit( da_w_path );
+	float3 body = da_w_inscatter( irradiance, T );
+
+	// Whatever is behind the water, bent. The offset comes from the surface slope in SCREEN
+	// space and shrinks with distance and with how little water there is: a boot-deep film
+	// cannot displace the ground under it by half a metre.
+	float3 Bs = s_image.SampleLevel( smp_rtlinear, PosTc, 0 ).xyz;
+	float3 Br = Bs;
+#ifdef USE_SOFT_WATER
+	{
+		const float3 Nv = mul( (float3x3)m_V, Nw );
+		const float2 off = Nv.xy * ( WATER_REFRACT_STRENGTH * saturate( da_w_path * 2.0f ) /
+			max( dist, 1.0f ) );
+		const float2 uv = PosTc + off;
+		// A refracted tap that lands on something IN FRONT of the surface is a piece of dry
+		// shore being smeared across the water; fall back to the straight tap there.
+		Br = ( get_depth_fast( uv ) > I.tctexgen.z ) ? s_image.SampleLevel( smp_rtlinear, uv, 0 ).xyz : Bs;
+	}
+#endif
+
+	// ---- what floats on it ---------------------------------------------------------------
+	// The authored surface texture is a FILM - scum, algae, duckweed - not the colour of the
+	// water. It only appears where the water body says there is any, so a clear pond shows none
+	// of it and a bog is covered.
+	float3 film_rgb = 0.0f;
+	float  film_w = 0.0f;
+	[branch]
+	if ( scum > 0.004f )
+	{
+		const float4 base = s_base.Sample( smp_base, I.tbase );
+		film_rgb = base.rgb * irradiance;
+		film_w = saturate( base.a * scum * saturate( da_w_path * 3.0f ) );
+	}
+
+	// Shoreline foam. The band is as wide as the waves run up the bank - about twice the
+	// significant wave height - so it grows with the wind instead of sitting at a fixed 25 cm,
+	// and it is broken up by the surface slope so it never reads as a painted outline.
+	float foam = 0.0f;
+	{
+		const float band_w = clamp( 2.0f * da_water_sea.x + 0.10f, 0.12f, 0.90f );
+		float b = 1.0f - saturate( da_w_path / band_w );
+		b = b * b;
+		const float n = saturate( 0.55f + 2.2f * ( slope.x + slope.y ) );
+		foam = saturate( b * n * WATER_FOAM_STRENGTH ) * saturate( da_w_path * 20.0f );
+	}
+
+	// Floating debris, in the depth window where a bank actually collects it.
+	float3 leaf_rgb = 0.0f;
+	float  leaf_w = 0.0f;
+	{
+		const float4 lv = s_leaves.Sample( smp_base, I.tbase );
+		float k = smoothstep( WATER_LEAVES_NEAR, WATER_LEAVES_NEAR * 3.0f, da_w_path );
+		k *= smoothstep( WATER_LEAVES_FAR, WATER_LEAVES_FAR * 0.6f, da_w_path );
+		leaf_rgb = lv.rgb * irradiance;
+		leaf_w = saturate( lv.a * k * WATER_LEAVES_STRENGTH );
+	}
+
+	// ---- composite -------------------------------------------------------------------------
+	const float thru = 1.0f - F;
+	float3 final = Br * T * thru + body * thru + reflection * F;
+
+	// Things that lie ON the surface go over the finished interface: the water column must not
+	// dim a leaf that is floating on top of it.
+	final = lerp( final, WATER_FOAM_COLOR * irradiance, foam );
+	final = lerp( final, film_rgb, film_w );
+	final = lerp( final, leaf_rgb, leaf_w );
+
+	// ---- atmosphere ------------------------------------------------------------------------
+	// I.fog is visibility off the fog plane; the height layer, the density ceiling and the sky
+	// colour come from the shared header, so the surface dissolves at the same distance and into
+	// the same colour as the shore around it.
+	float  fogd = saturate( 1.0f - I.fog );
+	float3 fogrgb = fog_color.rgb;
+	[branch]
+	if ( da_fog_extras_on() )
+	{
+		fogd = da_fog_height( fogd, Pw, eye_position, dist );
+		[branch]
+		if ( da_fog.x > 0.001f )
 		{
-			// The same two sky cubes the combine samples, under this shader's own names.
-			const float3 vd = da_fog_sky_dir( I.position_w.xyz, eye_position );
+			const float3 vd = da_fog_sky_dir( Pw, eye_position );
 			const float3 e0 = s_env0.SampleLevel( smp_base, vd, da_fog.y ).xyz;
 			const float3 e1 = s_env1.SampleLevel( smp_base, vd, da_fog.y ).xyz;
-			da_fogrgb = da_fog_mix_sky( da_fogrgb, lerp( e0, e1, L_ambient.w ) );
+			fogrgb = da_fog_mix_sky( fogrgb, lerp( e0, e1, L_ambient.w ) );
 		}
 	}
-	da_fogd = da_fog_ceiling( da_fogd );
-	// Water is blended over an already-fogged scene, so fading it out IS fogging it: what
-	// shows through is the shore behind, which the combine has painted the same colour.
-	const float da_fogv = (1.0h - da_fogd) * (1.0h - da_fogd);
+	fogd = da_fog_ceiling( fogd );
+	// The surface carries its own background now, so there is nothing behind it to fog separately
+	// - fogging the finished radiance is the whole of it, and it lands on the same colour the
+	// combine painted the shore with.
+	final = lerp( final, fogrgb, fogd );
 
-#ifdef	NEED_SOFT_WATER
-
-	float	alpha	= 0.25h+0.25h*power;                        // 1=full env, 0=no env
-
-#ifdef	USE_SOFT_WATER
-	//	Igor: additional depth test
-	float waterDepth = _P.z-I.tctexgen.z;
-
-	//	water fog
-	// transparency: this fog is what makes the surface go milky with depth. -4.0 saturates
-	// after ~0.5 m and hides the bottom; -1.3 keeps the bed visible several metres out and lets
-	// the tint, not the fog, darken the deep parts. More negative = murkier.
-	float  fog_exp_intens = -1.3h;
-	float fog	= 1-exp(fog_exp_intens*waterDepth);
-
-	// Coloured absorption instead of the flat grey. saturate() on the depth term because
-	// waterDepth goes negative on geometry poking through the surface.
-	float  depth_mix = 1.0h - exp(-saturate(waterDepth) * WATER_TINT_FALLOFF * 4.0h);
-	float3 Fc  	= lerp(WATER_TINT_SHALLOW, WATER_TINT_DEEP, depth_mix) * water_intensity.r;
-	// Reflection visibility used to ride on `alpha` (0.25..0.5), so looking down left 75% flat
-	// grey. Give the surface colour its own weight: transparency and reflection strength become
-	// independent. Clear water is a weak mirror from above and a strong one edge-on - that IS
-	// the Fresnel curve.
-	float	refl_amount = saturate(0.28h + 0.72h*power);
-	final 		= lerp (Fc, final, refl_amount);
-
-	alpha 		= min(alpha, saturate(waterDepth));
-
-	alpha 		= max (fog, alpha);
-
-	alpha 		*= 0.80h;	// slightly more see-through overall
-
-
-#ifdef USE_REFLECTIONS
-	final = calc_moon_road(final, vreflect, I.tbase.xy, _P.z, Nw.z);
-#endif
-
-	// Sun glint. L_sun_dir_w points the way the light travels, so the direction TO the sun is
-	// its negation; v2point runs eye-to-surface, so the eye vector is likewise negated.
-	// Weighted by the same grazing term as the reflection - water only glints seen flat.
-	// Scaled by the baked vertex hemi (I.c0): the glint is added AFTER the c0 multiply above,
-	// so without this a shaded pool under a bridge still sparkled in full sun.
-	{
-		float3 sun_h = normalize(-v2point - L_sun_dir_w);
-		float  glint = pow(saturate(dot(Nw, sun_h)), WATER_SUN_POWER);
-		float  sky_vis = saturate(dot(I.c0.rgb, float3(0.66h, 0.66h, 0.66h)));
-		final += L_sun_color * (glint * WATER_SUN_STRENGTH * saturate(0.25h + power) * sky_vis);
-	}
-
-	// Shoreline foam. The band rides the same depth difference the water fog uses, broken up by
-	// the two scrolling normal maps already sampled above - an animated pattern for free, which
-	// is what keeps the foam from reading as a painted-on outline.
-	{
-		float  foam_band = 1.0h - saturate(waterDepth / WATER_FOAM_WIDTH);
-			   foam_band = foam_band * foam_band;			// keep it hugging the shore
-		float  foam_noise = saturate((n0.x + n1.y) * 0.9h);
-		float  foam = saturate(foam_band * foam_noise * WATER_FOAM_STRENGTH);
-			   foam *= saturate(waterDepth * 12.0h);		// no foam where the surface is not wet yet
-		final  = lerp(final, WATER_FOAM_COLOR * water_intensity.r, foam);
-		alpha  = max(alpha, foam);
-	}
-
-	// Floating debris: leaves and twigs on the surface. The layer was in the shader from the
-	// start but sat BEFORE the foam - and our foam is procedural and drawn here, so it painted
-	// the debris over. It now goes last, over everything, applied after the fog below.
-	{
-		float4	leaves	= s_leaves.Sample( smp_base, I.tbase);
-				leaves.rgb *= water_intensity.r;
-		// Depth WITHOUT the view-cosine multiplier. `waterDepth * cos` is depth ALONG THE RAY:
-		// at grazing angles the cosine goes to zero and the "depth" with it, so debris vanished
-		// exactly where most water is visible. The window asks "is it shallow HERE" - a property
-		// of the place, not of where it is looked at from.
-		float	calc_depth = saturate(waterDepth);
-		float	fLeavesFactor = smoothstep(WATER_LEAVES_NEAR, WATER_LEAVES_NEAR * 3.0h, calc_depth);
-				fLeavesFactor *= smoothstep(WATER_LEAVES_FAR, WATER_LEAVES_FAR * 0.6h, calc_depth);
-				fLeavesFactor *= WATER_LEAVES_STRENGTH;
-		da_leaf_rgb	= leaves.rgb;
-		da_leaf_w	= saturate(leaves.a * fLeavesFactor);
-	}
-
-#endif	//	USE_SOFT_WATER
-
-	//	Fogging
-#if WATER_REFRACT
-	// Refraction. Water blends OVER the already-drawn scene, so the background cannot be
-	// replaced - only a difference can be added: the frame copy sampled with a wave-slope
-	// offset minus the same copy without it. Zero slope = exactly zero difference.
-	// The offset comes from the VIEW-space normal (N above): its xy is the on-screen wave
-	// slope, where world xz would depend on where the camera looks. Divided by distance:
-	// near waves are large and the shift shows, far water would otherwise boil.
-	{
-		float da_ref_near = saturate(1.0h - da_water_dist / WATER_REFRACT_FADE);
-		[branch] if (da_ref_near > 0.001h)
-		{
-			float2 da_off = N.xy * (WATER_REFRACT_STRENGTH * da_ref_near / max(da_water_dist, 1.0h));
-			float3 da_bg0 = s_image.SampleLevel( smp_rtlinear, PosTc, 0 ).xyz;
-			float3 da_bg1 = s_image.SampleLevel( smp_rtlinear, PosTc + da_off, 0 ).xyz;
-			// Weight falls with opacity: through murky depth there is nothing to refract.
-			final += (da_bg1 - da_bg0) * (WATER_REFRACT_WEIGHT * saturate(1.0h - alpha));
-		}
-	}
-#endif
-
-	// Debris goes on before the haze: it lies ON the surface, so the water column does not dim
-	// it, but the air between it and the camera does.
-	final		= lerp(final, da_leaf_rgb, da_leaf_w);
-	alpha		= max(alpha, da_leaf_w);
-
-	final 		= lerp(final, da_fogrgb, da_fogd);
-	alpha		*= da_fogv;
-
-	clip(alpha - WATER_ALPHA_CLIP);	// a zero threshold discards nothing
-	return  float4   (final, alpha )                ;
-
-#else	//	NEED_SOFT_WATER
-
-	final 		= lerp(final, da_fogrgb, da_fogd);
-	clip(da_fogv - WATER_ALPHA_CLIP);
-	return  float4   (final, da_fogv )      ;
-
-#endif	//	NEED_SOFT_WATER
+	return float4( final, 1.0f );
 }

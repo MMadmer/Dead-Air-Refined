@@ -196,6 +196,8 @@ CLevel::~CLevel()
     {
         StopSaveDemo();
     }
+    if (g_pGamePersistent)
+        g_pGamePersistent->Environment().reset_water_body();
     deinit_compression();
 }
 

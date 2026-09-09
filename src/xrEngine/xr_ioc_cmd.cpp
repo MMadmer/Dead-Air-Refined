@@ -844,6 +844,13 @@ ENGINE_API Fvector4 g_pda_screen_rect = {0.f, 0.f, 1.f, 1.f};
 // device screen is a forward pass with no depth in the G-buffer, so reprojection under it
 // follows the BACKGROUND and smears the display. Empty when min > max.
 ENGINE_API Fvector4 g_pda_taa_bbox = {1.f, 1.f, 0.f, 0.f};
+// Does the level being played hold any liquid collision at all? Measured once at load
+// (Level_load.cpp) and read by the render DLL, which skips its per-frame scene grab without it.
+ENGINE_API bool g_da_level_has_water = false;
+// How many of the eight wave rows the water shader is allowed to evaluate. Rides the quality
+// preset (xrRender_console.cpp) and is read back by the wave solver in Environment.cpp, so it
+// has to live where both the render DLL and the engine can reach it.
+ENGINE_API int ps_r__water_waves = 8;
 
 extern int ps_fps_limit;
 extern int ps_fps_limit_in_menu;

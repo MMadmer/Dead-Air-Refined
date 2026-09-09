@@ -1,6 +1,7 @@
--- Standing water (studen): the water_green pixel shader instead of water_soft - the same water
--- shader with the green profile switched in (murkier, yellower, depth colour takes over sooner).
--- Flowing water (effects_water.s) stays on water_soft.
+-- Standing water (studen). Reads the engine's SECOND optical profile through water_green.ps -
+-- the same shader as flowing water, differing only in which of the two per-level profiles it
+-- samples, because the lua shader API has no way to hand a material its own constant.
+-- Flowing water (effects_water.s) reads the first profile through water_soft.
 local tex_base                = "water\\water_water"
 local tex_nmap                = "water\\water_normal"
 local tex_dist                = "water\\water_dudv"
@@ -32,13 +33,17 @@ function normal                (shader, t_base, t_second, t_detail)
 	shader:dx10sampler	("smp_rtlinear")
 end
 
+-- The screen-warp element is kept so the shader still has all five, but it no longer marks the
+-- surface as distorting: the water shader now refracts its own background per pixel with the
+-- real surface slope, and the warp pass was a second, uncoordinated refraction over the same
+-- pixels. Turning it off here also drops a whole pass over every water surface.
 function l_special        (shader, t_base, t_second, t_detail)
 	shader	:begin                ("waterd_soft","waterd_soft")
 			:sorting        (2, true)
 			:blend                (true,blend.srcalpha,blend.invsrcalpha)
 			:zb                (true,false)
 			:fog                (false)
-			:distort        (true)
+			:distort        (false)
 
 	shader: dx10color_write_enable( true, true, true, false)
 

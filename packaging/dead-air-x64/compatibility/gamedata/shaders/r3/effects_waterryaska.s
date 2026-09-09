@@ -1,17 +1,21 @@
+-- [DA] Duckweed-covered standing water. Reads the engine's SECOND optical profile (see
+-- water_green.ps), so a level can carry a clear stream and a green pool at once.
+--
+-- The archive's version of this script never bound s_image, while the shader it selects reads
+-- s_image for both the reflection march and the refracted background - so on the two levels that
+-- use this material the surface was sampling whatever texture the previous draw had left in the
+-- slot. A texture the .s script does not name is never bound: r_dx11Texture returns silently.
 local tex_base                = "water\\water_water"
 local tex_nmap                = "water\\water_normal"
 local tex_dist                = "water\\water_dudv"
-local tex_env0                = "$user$sky0"         -- "sky\\sky_8_cube"
-local tex_env1                = "$user$sky1"         -- "sky\\sky_8_cube"
+local tex_env0                = "$user$sky0"
+local tex_env1                = "$user$sky1"
 
---local tex_leaves              = "decal\\decal_listja"
--- Real leaves instead of foam. The s_leaves slot is read by water.ps and lays debris OVER the
--- procedural foam; the stock binding was water foam, i.e. the layer painted foam over foam and
--- contributed nothing. Both leaf decals ship in the game archives - no new asset.
-local tex_leaves              = "decal\\decal_listja_vetki"
+-- The duckweed mat itself, as the archive authored it.
+local tex_leaves              = "water\\water_foam"
 
 function normal                (shader, t_base, t_second, t_detail)
-	shader	:begin		("water_soft","water_soft")
+	shader	:begin		("water_soft","water_green")
     		:sorting	(2, false)
 			:blend		(true,blend.srcalpha,blend.invsrcalpha)
 			:zb			(true,false)
@@ -25,7 +29,7 @@ function normal                (shader, t_base, t_second, t_detail)
 	shader:dx10texture	("s_position",	"$user$position")
 
 	shader:dx10texture	("s_leaves",	tex_leaves)
-	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR (frame copy before water)
+	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR
 
 	shader:dx10sampler	("smp_base")
 	shader:dx10sampler	("smp_nofilter")

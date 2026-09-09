@@ -880,6 +880,7 @@ void CEnvironment::mods_load()
     }
 
     load_level_specific_ambients();
+    load_water_profiles();
 }
 
 void CEnvironment::mods_unload() { Modifiers.clear(); }
@@ -930,6 +931,95 @@ void CEnvironment::load_level_specific_ambients()
     }
 
     xr_delete(level_ambients);
+}
+
+// What this level's water is made of (dead_air_x64_water.ltx). Level names are DATA, never
+// code: the file maps a level to two profile names and the profiles carry the coefficients.
+// A missing file, an unlisted level or a missing key each falls back one step; nothing in here
+// can fail a level load.
+void CEnvironment::load_water_profiles()
+{
+    ZoneScoped;
+
+    // The shipped table: extinction 1/m and the column's irradiance reflectance, both linear
+    // sRGB, plus the floating film. These are what the engine believes when the file is absent.
+    static const struct
+    {
+        pcstr name;
+        SWaterProfile profile;
+    } builtin[] = {
+        {"clear", {{0.35f, 0.09f, 0.15f}, {0.004f, 0.013f, 0.012f}, 0.00f}},
+        {"pond",  {{0.30f, 0.24f, 0.87f}, {0.018f, 0.029f, 0.012f}, 0.05f}},
+        {"swamp", {{0.44f, 1.05f, 5.24f}, {0.014f, 0.010f, 0.003f}, 0.35f}},
+        {"bog",   {{0.81f, 2.81f, 15.3f}, {0.005f, 0.002f, 0.001f}, 0.55f}},
+        {"muddy", {{0.53f, 0.77f, 2.31f}, {0.065f, 0.059f, 0.024f}, 0.10f}},
+        {"algae", {{0.37f, 0.44f, 1.55f}, {0.036f, 0.041f, 0.015f}, 0.50f}},
+    };
+    const auto by_name = [](pcstr name, SWaterProfile& out)
+    {
+        for (const auto& b : builtin)
+            if (!xr_strcmp(b.name, name))
+            {
+                out = b.profile;
+                return;
+            }
+    };
+
+    // The pair the shipped 'default' line names, so every level has something sane before a
+    // single key is read.
+    pcstr fallback[2] = {"pond", "algae"};
+    for (int slot = 0; slot < 2; ++slot)
+        by_name(fallback[slot], water_profile[slot]);
+
+    string_path path;
+    FS.update_path(path, "$game_config$", "dead_air_x64_water.ltx");
+    if (!FS.exist(path))
+        return;
+    CInifile ini(path, TRUE);
+
+    pcstr names = nullptr;
+    if (ini.section_exist("water_levels"))
+    {
+        const shared_str level_name = g_pGameLevel->name();
+        if (level_name.size() && ini.line_exist("water_levels", level_name.c_str()))
+            names = ini.r_string("water_levels", level_name.c_str());
+        else if (ini.line_exist("water_levels", "default"))
+            names = ini.r_string("water_levels", "default");
+    }
+
+    for (int slot = 0; slot < 2; ++slot)
+    {
+        string64 name;
+        if (names && slot < _GetItemCount(names))
+            _GetItem(names, slot, name);
+        else
+            xr_strcpy(name, fallback[slot]);
+
+        // A section in the file wins key by key over the built-in of the same name, which in
+        // turn wins over the fallback the slot already holds.
+        by_name(name, water_profile[slot]);
+
+        string128 section;
+        strconcat(sizeof(section), section, "water_profile_", name);
+        if (!ini.section_exist(section))
+            continue;
+
+        SWaterProfile& p = water_profile[slot];
+        if (ini.line_exist(section, "sigma_t"))
+        {
+            // A negative coefficient would make exp(-sigma * path) grow without bound, so the
+            // file is not trusted to be physical.
+            const Fvector3 v = ini.r_fvector3(section, "sigma_t");
+            p.sigma_t.set(std::max(v.x, 0.f), std::max(v.y, 0.f), std::max(v.z, 0.f));
+        }
+        if (ini.line_exist(section, "body_r"))
+        {
+            const Fvector3 v = ini.r_fvector3(section, "body_r");
+            p.body_r.set(clampr(v.x, 0.f, 1.f), clampr(v.y, 0.f, 1.f), clampr(v.z, 0.f, 1.f));
+        }
+        if (ini.line_exist(section, "scum"))
+            p.scum = clampr(ini.r_float(section, "scum"), 0.f, 1.f);
+    }
 }
 
 CEnvDescriptor* CEnvironment::create_descriptor(shared_str const& identifier,

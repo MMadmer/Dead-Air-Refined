@@ -3,6 +3,7 @@
 #include "Include/xrRender/FactoryPtr.h"
 #include "Include/xrRender/EnvironmentRender.h"
 #include "xrCore/_vector3d.h"
+#include "xrCore/_fbox.h"
 #include "xrCore/_quaternion.h"
 #include "xrCommon/xr_vector.h"
 #include "xrCommon/xr_map.h"
@@ -495,6 +496,64 @@ public:
     // same slope curve, same threshold; the hemi "open sky" term is stood in by the shelter
     // ray. ground_ny = Y of the surface normal at the point.
     float SamplePuddleMask(const Fvector& pos, float ground_ny);
+
+    // ---- The water model: sea state, waves, optics ----------------------------------------
+    // Solved on the CPU next to the wind service, one source of truth again: the surface
+    // shader must not invent physics the engine already knows. The Zone has no ocean - fetch
+    // 5..500 m against 0..12 m/s of wind puts every wave that will ever be drawn at a few
+    // centimetres high, so none of this displaces geometry; it is slope, roughness and optics.
+
+    // What one water material does to light, all linear sRGB. Colour is not authored anywhere:
+    // it falls out of Beer-Lambert against sigma_t and of what the column scatters back.
+    struct SWaterProfile
+    {
+        Fvector3 sigma_t{ 0.30f, 0.24f, 0.87f };    // extinction 1/m, linear sRGB
+        Fvector3 body_r { 0.018f, 0.029f, 0.012f }; // irradiance reflectance of the water column
+        float    scum{};                            // floating film coverage 0..1
+    };
+
+    // Two slots, because a level may carry two water materials at once (a clear stream and a
+    // green standing pool); which one a surface reads is decided by its own .s script.
+    SWaterProfile water_profile[2];   // slot A = the level's primary water material, slot B = the second
+    // Eight wave ROWS, packed like the wind motors and the impact slots: row i =
+    // (theta, k, A, phi) - heading in world XZ radians, wavenumber 1/m, amplitude m, phase
+    // offset. Stored upright here; the binder transposes its own copy.
+    Fmatrix       water_wave[2];
+    float         water_wave_count{}; // how many rows carry an amplitude (0..8)
+    Fvector4      water_sea{};        // x = Hs (m), y = lambda_p (m), z = Cox-Munk mss, w = filtered U10 (m/s)
+    Fvector4      water_body{};       // x = mean depth (m), y = fetch used (m), z = 0 reserved, w = water_wave_count
+
+    // One connected sheet of water: its footprint and how deep it measured. Levels carry
+    // several of these - a stream at one edge, a flooded pit at the other - and a single
+    // map-wide box would hand every pond the same 500 m fetch and the same depth, which is
+    // most of what decides how big the waves are. The solver picks the one nearest the camera.
+    struct SWaterBody
+    {
+        Fbox extent;
+        float depth{1.5f};
+    };
+    static constexpr int water_body_max = 8;
+
+    // Measured once at load from the liquid collision and pushed in by the game layer.
+    void set_water_bodies(const SWaterBody* bodies, int count);
+    void reset_water_body();
+    bool water_present() const { return water_body_count > 0; }
+
+    SWaterBody water_bodies[water_body_max];
+    int water_body_count{};
+    float water_mean_depth{1.5f};
+    // 3 s low-pass of the 10 m wind (-1 = never sampled, the first frame snaps), and the state
+    // the wave table was last seeded from. A re-seed moves every wavenumber, and the shader's
+    // phase runs off an absolute clock, so the previous angular frequencies are kept to carry
+    // the phase across - without that a re-seed jumps the whole surface by whole cycles.
+    float water_wind_lp{-1.f};
+    float water_seed_wind{-1.f};
+    float water_seed_dir{};
+    float water_seed_omega[8]{};
+
+    void water_tick(float delta);
+    // Optical profiles for the current level (dead_air_x64_water.ltx), read on level load.
+    void load_water_profiles();
 
     // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a
     // roof, where the physical wind push on bodies and projectiles must die. One static-only

@@ -709,6 +709,88 @@ static class cl_da_wh_info : public R_constant_setup
     }
 } binder_da_wh_info;
 
+// The water surface (da_water_common.h). sea = the state the wind and the level's fetch solve
+// to each frame: significant wave height, peak wavelength, Cox-Munk mean square slope and the
+// filtered 10 m wind - gusts must not resize a sea, so w is not the raw WindSpeedMs(). body =
+// the water body itself: mean depth, the fetch that state was solved with, and the live wave
+// row count the shader loops to.
+static class cl_da_water_sea : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, env.water_sea.x, env.water_sea.y, env.water_sea.z, env.water_sea.w);
+    }
+} binder_da_water_sea;
+static class cl_da_water_body : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& env = g_pGamePersistent->Environment();
+        cmd_list.set_c(C, env.water_body.x, env.water_body.y, env.water_body.z, env.water_body.w);
+    }
+} binder_da_water_body;
+
+// Two optical profiles live at once because a level may carry a clear stream and a green pool
+// side by side; a surface picks its slot at compile time in its own .s script, so both are
+// always bound. iop = extinction sigma_t per channel in 1/m (w reserved for the phase term),
+// iop2 = the irradiance reflectance of the water column plus the floating scum coverage.
+// The 'b' pair is slot B.
+static class cl_da_water_iop : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& p = g_pGamePersistent->Environment().water_profile[0];
+        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, 0.f);
+    }
+} binder_da_water_iop;
+static class cl_da_water_iop2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& p = g_pGamePersistent->Environment().water_profile[0];
+        cmd_list.set_c(C, p.body_r.x, p.body_r.y, p.body_r.z, p.scum);
+    }
+} binder_da_water_iop2;
+static class cl_da_water_iopb : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& p = g_pGamePersistent->Environment().water_profile[1];
+        cmd_list.set_c(C, p.sigma_t.x, p.sigma_t.y, p.sigma_t.z, 0.f);
+    }
+} binder_da_water_iopb;
+static class cl_da_water_iop2b : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const auto& p = g_pGamePersistent->Environment().water_profile[1];
+        cmd_list.set_c(C, p.body_r.x, p.body_r.y, p.body_r.z, p.scum);
+    }
+} binder_da_water_iop2b;
+
+// Eight waves as two matrices, one wave per ROW - (theta, k, A, phi). Same PRE-transpose as
+// the wind motors and the impact slots above, or the shader reads a column and gets the
+// headings of four different waves instead of one whole wave.
+static class cl_da_water_wave0 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wave[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wave0;
+static class cl_da_water_wave1 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(g_pGamePersistent->Environment().water_wave[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_water_wave1;
+
 // 3D PDA screen state (model_pda_screen.ps): published by the game once per frame.
 static class cl_pda_affects : public R_constant_setup
 {
@@ -908,6 +990,14 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_wh_par0", &binder_da_wh_par0);
     r_Constant("da_wh_par1", &binder_da_wh_par1);
     r_Constant("da_wh_info", &binder_da_wh_info);
+    r_Constant("da_water_sea", &binder_da_water_sea);
+    r_Constant("da_water_body", &binder_da_water_body);
+    r_Constant("da_water_iop", &binder_da_water_iop);
+    r_Constant("da_water_iop2", &binder_da_water_iop2);
+    r_Constant("da_water_iopb", &binder_da_water_iopb);
+    r_Constant("da_water_iop2b", &binder_da_water_iop2b);
+    r_Constant("da_water_wave0", &binder_da_water_wave0);
+    r_Constant("da_water_wave1", &binder_da_water_wave1);
     r_Constant("m_affects", &binder_pda_affects);
     r_Constant("pda_screen_rect", &binder_pda_screen_rect);
     r_Constant("pda_taa_bbox", &binder_pda_taa_bbox);

@@ -2550,15 +2550,21 @@ public:
 };
 
 
-// qa_water_goto: the nearest liquid-material vertex of the level, and the actor moved to the
-// shore beside it, facing the water and looking down at it - the water probes (rings on open
-// water) start from here on any level that has a lake or a river.
+// qa_water_goto [pitch]: the nearest liquid-material vertex of the level, and the actor moved
+// to the shore beside it, facing the water and looking down at it - the water probes (rings on
+// open water) start from here on any level that has a lake or a river. The optional pitch, in
+// radians, frames the surface the same way run after run: a shallow one is the grazing angle
+// where every depth-driven term is hardest.
 class CCC_QaWaterGoto : public IConsole_Command
 {
 public:
     CCC_QaWaterGoto(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
-    void Execute(pcstr) override
+    void Execute(pcstr args) override
     {
+        float pitch = 0.5f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &pitch);
+        pitch = clampr(pitch, -1.5f, 1.5f);
         CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
         if (!actor)
         {
@@ -2661,9 +2667,52 @@ public:
             pos.y = v_best.y + 0.2f;
         // MoveActor takes angles: x = -torso pitch, y = -yaw, with forward = (sin yaw, cos yaw).
         const float yaw = atan2f(to.x, to.z);
-        actor->MoveActor(pos, Fvector{0.5f, -yaw, 0.f});
+        actor->MoveActor(pos, Fvector{pitch, -yaw, 0.f});
         Msg("* [qa] water at (%.1f, %.1f, %.1f), %.0f m away; actor at (%.1f, %.1f, %.1f) yaw=%.0f",
             v_best.x, v_best.y, v_best.z, _sqrt(best), pos.x, pos.y, pos.z, rad2deg(yaw));
+    }
+};
+
+// qa_water_state: what the water model currently believes. The surface is driven entirely by
+// solved quantities - the bodies measured off the level's liquid collision, the sea state the
+// wind raises over them, the optical profile the level's LTX picked - and none of it is visible
+// from a screenshot, so a run that looks wrong cannot otherwise be told from a run that IS wrong.
+class CCC_QaWaterState : public IConsole_Command
+{
+public:
+    CCC_QaWaterState(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        const CEnvironment& env = g_pGamePersistent->Environment();
+
+        Msg("* [qa] water: %d body(s) measured on this level", env.water_body_count);
+        for (int i = 0; i < env.water_body_count; ++i)
+        {
+            const auto& b = env.water_bodies[i];
+            Msg("* [qa]   body %d: %.0f x %.0f m at (%.0f, %.0f, %.0f), depth %.2f m", i,
+                b.extent.vMax.x - b.extent.vMin.x, b.extent.vMax.z - b.extent.vMin.z,
+                0.5f * (b.extent.vMin.x + b.extent.vMax.x), b.extent.vMin.y,
+                0.5f * (b.extent.vMin.z + b.extent.vMax.z), b.depth);
+        }
+        Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,
+            env.water_sea.y, env.water_sea.z, env.water_sea.w, env.WindSpeedMs());
+        Msg("* [qa] here: depth %.2f m, fetch %.0f m, %d wave row(s)", env.water_body.x, env.water_body.y,
+            int(env.water_body.w));
+        for (int i = 0; i < int(env.water_body.w); ++i)
+        {
+            const float* row = &env.water_wave[i / 4].m[i % 4][0];
+            Msg("* [qa]   wave %d: heading %.0f deg, %.3f m long, amp %.4f m, slope %.4f", i,
+                rad2deg(row[0]), PI_MUL_2 / _max(row[1], EPS_S), row[2], row[1] * row[2]);
+        }
+        for (int slot = 0; slot < 2; ++slot)
+        {
+            const auto& pr = env.water_profile[slot];
+            Msg("* [qa] profile %c: sigma_t (%.2f, %.2f, %.2f) 1/m, body (%.3f, %.3f, %.3f), scum %.2f",
+                slot ? 'B' : 'A', pr.sigma_t.x, pr.sigma_t.y, pr.sigma_t.z, pr.body_r.x, pr.body_r.y,
+                pr.body_r.z, pr.scum);
+        }
     }
 };
 
@@ -3227,6 +3276,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start_legacy, 0, 1);
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
     CMD1(CCC_QaWaterGoto, "qa_water_goto");
+    CMD1(CCC_QaWaterState, "qa_water_state");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

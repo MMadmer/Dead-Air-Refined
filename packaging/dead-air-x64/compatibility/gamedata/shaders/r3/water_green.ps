@@ -1,10 +1,12 @@
-// [DA_PORT] Стоячая вода: студень и ряска.
+// [DA] The second water material on a level.
 //
-// Полный близнец water_soft.ps, отличается одним дефайном: он включает в water.ps зелёный профиль
-// (мутнее, желтее, глубина набирается быстрее). Отдельный файл нужен потому, что оттенок задаётся
-// константами времени компиляции, а не параметром — двух разных вод одним собранным шейдером не
-// сделать. На эту пару смотрят effects_waterstuden.s и effects_waterryaska.s; проточная вода
-// (effects_water.s) осталась на water_soft.
+// Identical to water_soft except for the profile slot it reads. The lua shader API has no way to
+// hand a per-material constant to a shader, so which of the engine's two optical profiles a
+// surface uses has to be a compile-time choice - and that is the whole of the difference now.
+// Before the rework this file carried a hardcoded green tint, which is why standing water was
+// green on every level and in every weather whether or not anything green was in it.
+//
+// Read by effects_waterstuden.s (studen) and effects_waterryaska.s (duckweed).
 #define	NEED_SOFT_WATER
-#define	DA_WATER_GREEN
+#define	DA_WATER_SLOT_B
 #include "water.ps"

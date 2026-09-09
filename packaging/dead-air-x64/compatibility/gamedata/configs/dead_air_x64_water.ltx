@@ -34,3 +34,119 @@ ring_radius_object_max  = 2.4   ; ...and at ring_object_velocity
 ring_object_threshold   = 1.5   ; impact measure (speed x sqrt(mass)) below which a body makes no ring
 ring_object_velocity    = 12.0  ; impact measure of the largest ring
 ring_distance           = 45    ; metres from the camera past which feet and bodies skip the ring
+
+; ============================================================================================
+; Optical profiles of the water itself (engine: CEnvironment's water solver, shader:
+; da_water_common.h). These are inherent optical properties, not a tint: the shader runs
+; Beer-Lambert over the path the light actually crossed, so the colour SHIFTS with depth
+; instead of just darkening, and the same profile reads clear in the shallows and opaque in
+; the middle of the pond without anyone authoring either.
+;
+;   sigma_t - beam extinction per metre, linear sRGB. Red goes first in every natural water;
+;             what separates a lake from a bog is how fast green and blue follow it.
+;   body_r  - irradiance reflectance of the water column: what the body glows back with when
+;             the sky lights it. This is the colour people think of as "the water's colour".
+;   scum    - floating film coverage 0..1: duckweed, algae, peat foam. Damps the capillary
+;             ripple the way an oil slick does (Cox & Munk's own "slick" fit), so a scummed
+;             pool loses its glitter and goes matte.
+;
+; The numbers are pure water plus CDOM at S = 0.017, tripton and particle scattering. Retune
+; them freely - nothing in the engine hardcodes a profile name, the mapping below is the only
+; place names are bound.
+; ============================================================================================
+
+; A mountain lake or a running stream: red is gone by a couple of metres, green and blue carry.
+[water_profile_clear]
+sigma_t = 0.35, 0.09, 0.15
+body_r  = 0.004, 0.013, 0.012
+scum    = 0.00
+
+; The default Zone pond: mildly turbid standing water, blue already dying at a metre.
+[water_profile_pond]
+sigma_t = 0.30, 0.24, 0.87
+body_r  = 0.018, 0.029, 0.012
+scum    = 0.05
+
+; Peat-stained marsh. CDOM eats blue outright, which is exactly why bog water reads brown.
+[water_profile_swamp]
+sigma_t = 0.44, 1.05, 5.24
+body_r  = 0.014, 0.010, 0.003
+scum    = 0.35
+
+; A black pool: nothing comes back out of it, and the surface is all you ever see.
+[water_profile_bog]
+sigma_t = 0.81, 2.81, 15.3
+body_r  = 0.005, 0.002, 0.001
+scum    = 0.55
+
+; Silt-laden flood water. High extinction AND high reflectance - it is bright and opaque at
+; once, the way a churned-up puddle is.
+[water_profile_muddy]
+sigma_t = 0.53, 0.77, 2.31
+body_r  = 0.065, 0.059, 0.024
+scum    = 0.10
+
+; Green standing pool: the algae both absorb outside their band and scatter back inside it.
+[water_profile_algae]
+sigma_t = 0.37, 0.44, 1.55
+body_r  = 0.036, 0.041, 0.015
+scum    = 0.50
+
+; ============================================================================================
+; Which profile each level's water reads. A level may carry two water materials at once (the
+; engine keeps two profile slots and the surface's own .s script picks the slot at compile
+; time), so every entry is a PAIR:
+;
+;   <level name> = <slot A profile>, <slot B profile>
+;
+; Slot A is what effects\water reads - the level's main body of water, the one that moves or at
+; least drains. Slot B is what effects\waterstuden and effects\waterryaska read, and both of
+; those materials mean the same thing in the level data: water that just sits there, with a lid
+; of duckweed on it ("ryaska" IS duckweed). So slot B should always be the stiller, greener,
+; deader of the pair - it is never the clearer one. Names are the suffix of the sections above,
+; so "swamp" means [water_profile_swamp]. An unlisted level falls back to "default" below.
+;
+; Binding is data, not code: the engine never looks for a level by name, it only reads this
+; table. An entry for a level with no liquid collision is simply never used - the water body
+; is measured from the level's own geometry first - so adding levels here is free.
+; ============================================================================================
+
+[water_levels]
+default                = pond, algae               ; the safe middle, and what the engine falls back to on its own
+
+k00_marsh              = swamp, bog                ; the Great Swamp is peat water end to end, and its deep pools go black
+l01_escape             = pond, algae               ; Cordon's stream; the flooded pit by the ATP has been still for years
+l02_garbage            = muddy, algae              ; rain sitting in silt between the scrap heaps
+l03_agroprom           = swamp, algae              ; the reed-choked river along the south edge
+k01_darkscape          = pond, algae               ; the ford across the stream, and the roadside hollows behind it
+l04_darkvalley         = muddy, bog                ; flooded concrete pits at the factory, no outflow from any of them
+l05_bar                = muddy, algae              ; standing rainwater in the yards
+l06_rostok             = muddy, bog                ; Wild Territory: whatever collects between the workshops
+new_military           = pond, swamp               ; Army Warehouses: the stream by the farmstead, boggy hollows behind it
+l08_yantar             = algae, swamp              ; the Yantar lake is a duckweed lid over dead water - that IS the level
+l09_deadcity           = muddy, algae              ; flooded streets and cellars
+l10_limansk            = pond, algae               ; the river under the bridge still runs; its backwaters do not
+l10_radar              = pond, algae               ; only what the burnt ground manages to hold
+l10_red_forest         = clear, swamp              ; the stream comes off the hills clean; the flats below it stagnate
+l11_hospital           = muddy, bog                ; flooded basements, no daylight in them
+l11_pripyat            = muddy, algae              ; city flooding, everything in it churned up
+l12_stancia            = pond, algae               ; the cooling channels
+l12_stancia_2          = pond, algae               ; same water, other side of the plant
+l13_generators         = pond, swamp               ; hard standing with a marsh at its edge
+zaton                  = swamp, algae              ; a backwater is what is left of a river: shallow, still, green
+jupiter                = swamp, algae              ; the marshes west of the plant
+pripyat                = muddy, algae              ; flooded pits and basements
+k02_trucks_cemetery    = muddy, algae              ; rain collecting between the trucks
+
+; The undergrounds: stagnant, lightless, nothing living in it and nothing coming back out.
+l03u_agr_underground   = bog, muddy                ; the flooded tunnels
+l04u_labx18            = bog, muddy
+l08u_brainlab          = bog, muddy
+l10u_bunker            = bog, muddy
+l12u_sarcofag          = bog, muddy
+l12u_control_monolith  = bog, muddy
+l13u_warlab            = bog, muddy
+jupiter_underground    = bog, muddy
+labx8                  = bog, muddy
+
+; fake_start is the new-game stub and carries no water; it needs no entry.
