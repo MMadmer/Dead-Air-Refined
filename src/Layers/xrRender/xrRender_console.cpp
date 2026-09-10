@@ -35,6 +35,7 @@ extern ENGINE_API int ps_r__water_waves;
 // The rest of the water ladder, shared the same way and for the same reason: the ripple window
 // and the rain rate are solved in CEnvironment, the targets and the shaders live here.
 extern ENGINE_API int ps_r__water_ripple;
+extern ENGINE_API int ps_r__visor_drops;
 extern ENGINE_API int ps_r__water_underwater;
 extern ENGINE_API int ps_r__water_caustics;
 extern ENGINE_API int ps_r__puddle_fill;
@@ -996,6 +997,11 @@ void xrRender_sync_preset_derived(bool user_facing)
     // post stack. User-facing (there is a checkbox for it), hence the user_facing block below.
     // It is also a shader option (USE_LENS_WATER), so like the checkbox it lands on vid restart.
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
+    // How wide the visor's drop field is. The height follows the screen's aspect, so this is
+    // the resolution of the glass itself: at 512 across a 22 cm visor a texel is 0.4 mm and the
+    // 2 mm drops that pin to it are five texels across, which is the smallest a drop can be and
+    // still read as round. One small pass at 30 Hz, so the ladder is short. Create-time.
+    static constexpr int visor_drops_by_preset[] = {256, 256, 512, 512, 1024};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.
@@ -1061,6 +1067,7 @@ void xrRender_sync_preset_derived(bool user_facing)
     ps_r_water_reflection = water_refl_by_preset[ps_Preset];
     ps_r__water_waves = water_waves_by_preset[ps_Preset];
     ps_r__water_ripple = water_ripple_by_preset[ps_Preset];
+    ps_r__visor_drops = visor_drops_by_preset[ps_Preset];
     ps_r__water_underwater = water_underwater_by_preset[ps_Preset];
     ps_r__water_caustics = water_caustics_by_preset[ps_Preset];
     ps_r__puddle_fill = puddle_fill_by_preset[ps_Preset];
@@ -1186,6 +1193,17 @@ class CCC_WaterRippleStats final : public IConsole_Command
 public:
     CCC_WaterRippleStats(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
     void Execute(pcstr) override { da_water_ripple_stats(); }
+};
+
+// The same for the water on the visor (r4_rendertarget_phase_visor_drops.cpp), plus the
+// thickness dumped as a picture: this effect has twice been shipped by people who could not
+// tell an empty field from one too faint to see.
+void da_visor_drops_stats();
+class CCC_VisorDropsStats final : public IConsole_Command
+{
+public:
+    CCC_VisorDropsStats(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override { da_visor_drops_stats(); }
 };
 
 class CCC_gpu_stats : public IConsole_Command
@@ -1742,6 +1760,7 @@ void xrRender_initconsole()
     // Session overrides of the water ladder. r__water_ripple only takes effect on the next
     // renderer start (the target pair is created at that size); the rest are live.
     CMD4(CCC_RuntimeInteger, "r__water_ripple", &ps_r__water_ripple, 0, 1024);
+    CMD4(CCC_RuntimeInteger, "r__visor_drops", &ps_r__visor_drops, 0, 1024);
     CMD4(CCC_RuntimeInteger, "r__water_underwater", &ps_r__water_underwater, 1, 4);
     CMD4(CCC_RuntimeInteger, "r__water_caustics", &ps_r__water_caustics, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__puddle_fill", &ps_r__puddle_fill, 0, 1);
@@ -1856,6 +1875,7 @@ void xrRender_initconsole()
     CMD1(CCC_gpu_stats, "r__gpu_stats");
     CMD1(CCC_CloudMapDump, "r__cloud_map_dump");
     CMD1(CCC_WaterRippleStats, "r__water_ripple_stats");
+    CMD1(CCC_VisorDropsStats, "r__visor_drops_stats");
     CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 3);
     CMD4(CCC_Float, "r__clouds_temporal", &ps_r__clouds_temporal, 0.f, 0.95f);
     CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);

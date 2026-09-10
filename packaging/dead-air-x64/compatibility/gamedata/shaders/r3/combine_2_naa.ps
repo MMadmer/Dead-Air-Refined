@@ -25,7 +25,10 @@ uniform float4		da_gamma;
 #include "dof.h"
 #include "grain.h"
 #include "visor.h"
-#include "visordrops.h"
+// visordrops.h is the base game's: a fixed lattice of cells with a hash threshold, no clock and
+// no memory. What replaces it keeps a field of the water itself (da_visor_drops.ps) and this
+// header is the optics of looking through it.
+#include "da_visor.h"
 #include "lumasharpen.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -188,9 +191,7 @@ c2_out main( v2p_aa_AA I )
 	float4 final = combine_bloom		(img,bloom);
 
 	#ifdef USE_LENS_WATER
-		float3 sundir_w = L_sun_dir_w;
-		float4 sunpos = screen_sunpos_diff(sundir_w, screen_sunpos(sundir_w), false);
-		final = visor_drops(center, s_image.Sample(smp_rtlinear, center), final, sunpos.xyz, L_sun_dir_e.xyz, lenswater);
+		final.rgb = da_visor_water(s_image, center, final.rgb);
 
 		if (lensdirt.x > 0.9)
 		{

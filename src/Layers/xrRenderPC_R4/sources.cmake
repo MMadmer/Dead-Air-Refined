@@ -22,6 +22,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11GpuTimers.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_cloud_map.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_clouds.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_visor_drops.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_water_ripple.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_water_field.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRenderDX11/dx11HW.cpp"

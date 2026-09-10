@@ -13,6 +13,9 @@ using namespace DirectX;
 // r4_rendertarget_phase_water_ripple.cpp. A replaced bake means a different level, and the sim's
 // accumulator, step clock and priming flag all belong to the old one.
 extern void da_water_ripple_reset();
+// The visor keeps a field of its own with the same second-load hazard: it is not recreated
+// between levels either, and a mask still streaming with the last level's rain is the same bug.
+extern void da_visor_drops_reset();
 
 namespace
 {
@@ -199,6 +202,7 @@ void da_water_field_update()
     {
         publish_placeholder();
         da_water_ripple_reset();
+        da_visor_drops_reset();
         return;
     }
 
@@ -236,5 +240,6 @@ void da_water_field_update()
     // and the ripple pair is not recreated between levels: without this the new level starts
     // with the old one's heights still ringing in it.
     da_water_ripple_reset();
+    da_visor_drops_reset();
 }
 } // namespace xray::render::RENDER_NAMESPACE

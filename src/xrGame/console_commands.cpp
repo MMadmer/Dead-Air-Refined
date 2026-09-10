@@ -2826,6 +2826,57 @@ public:
     }
 };
 
+// visor_wipe: a hand across the visor. The mask-cleaning animation calls this when the hand
+// comes up, and the renderer's drop field turns it into a sweep that takes the better part of a
+// second, collects the water ahead of the hand and leaves a smeared film behind it. Shipped
+// rather than QA: it is how the game asks for a wipe.
+class CCC_VisorWipe : public IConsole_Command
+{
+public:
+    CCC_VisorWipe(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (g_pGamePersistent)
+            GamePersistent().Environment().visor_wipe();
+    }
+};
+
+// qa_visor_wet [0..1]: pin the rate the visor is being wetted at, or -1 to hand it back to the
+// drivers. The stand wears no mask and no driver pushes anything there, so without this the
+// field is correctly empty and the probe photographs clean glass.
+class CCC_QaVisorWet : public IConsole_Command
+{
+public:
+    CCC_QaVisorWet(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        float v = -1.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &v);
+        GamePersistent().Environment().visor.qa_wet = (v < 0.f) ? -1.f : clampr(v, 0.f, 1.f);
+        Msg("* [qa] visor wetting rate %s", (v < 0.f) ? "back to the drivers" : "pinned");
+    }
+};
+
+// qa_visor_state: what the visor effect is being driven with, which no screenshot shows.
+class CCC_QaVisorState : public IConsole_Command
+{
+public:
+    CCC_QaVisorState(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        const CEnvironment& env = GamePersistent().Environment();
+        Msg("* [qa] visor: wipe phase %.2f, direction %d, sweep %.2f s", env.visor_wipe_phase(),
+            env.visor.wipe_dir, env.visor.wipe_len);
+        Msg("* [qa] visor: rain %.1f mm/h at the eye, the wetting rate itself is r2_lenswater_val",
+            env.rain_rate_mmh);
+    }
+};
+
 // qa_water_ring [radius]: one impact ring at the actor's feet. Feeds whatever ripple path is
 // live - the eight analytic slots below the tier that runs the field, the simulation above it.
 class CCC_QaWaterRing : public IConsole_Command
@@ -3482,6 +3533,9 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaWaterDive, "qa_water_dive");
     CMD1(CCC_QaWaterRing, "qa_water_ring");
     CMD1(CCC_QaRainShelter, "qa_rain_shelter");
+    CMD1(CCC_VisorWipe, "visor_wipe");
+    CMD1(CCC_QaVisorState, "qa_visor_state");
+    CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

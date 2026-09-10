@@ -861,6 +861,8 @@ ENGINE_API int ps_r__water_waves = 8;
 // Ripple field resolution in texels; 0 means the field is not created at all and the surface
 // falls back to the eight analytic ring slots. Read at renderer create.
 ENGINE_API int ps_r__water_ripple = 512;
+ENGINE_API int ps_r__visor_drops = 512;
+ENGINE_API int ps_r__visor_drops_active = 0;
 // What the renderer ACTUALLY created, published back by r2_rendertarget once the pair exists
 // (0 when there is none). The wish above changes live on every preset sync while the targets
 // are sized once, so the sea-state solver and the sim pass must read this and not the wish -

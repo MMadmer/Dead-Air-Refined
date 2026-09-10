@@ -31,6 +31,12 @@ extern ENGINE_API int ps_r__water_ripple;
 // the targets - the CPU's ripple window, the sim's own texel count - reads this one and not the
 // wish above, which a live preset change moves out from under them.
 extern ENGINE_API int ps_r__water_ripple_active;
+// The visor's drop field, and the width it was actually created at. Same contract as the ripple
+// pair above: the ladder is read once, here, and everything that has to agree with the target
+// reads back what was made rather than what the console currently wishes for.
+extern ENGINE_API int ps_r__visor_drops;
+extern ENGINE_API int ps_r__visor_drops_active;
+extern ECORE_API int ps_r2_lenswater;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -329,6 +335,26 @@ CRenderTarget::CRenderTarget()
         // created, not the one the preset currently wishes for: r__water_ripple is a live
         // console var and these targets are sized exactly once.
         ps_r__water_ripple_active = int(ripple_dim);
+
+        // The visor's drop field. Off with the effect itself (r2_lenswater is the options
+        // checkbox and the preset's own ladder) - a mask nobody is wearing must not cost a
+        // pass. The target is the SCREEN's aspect at a lower resolution, so one texel is
+        // square in screen space and a drop on the glass is round without the shader having to
+        // divide anything by an aspect it would have to be told. RGBA16F: thickness in
+        // millimetres and a velocity in millimetres a second, both signed and both wanted to
+        // better than a percent - the field is integrated for minutes at a time.
+        const u32 visor_w = (ps_r2_lenswater && ps_r__visor_drops > 0) ? u32(ps_r__visor_drops) : 0u;
+        if (visor_w)
+        {
+            const u32 visor_h = std::max(8u, (visor_w * h + w / 2) / w) & ~3u;
+            rt_VisorDrops.create(r2_RT_visor_drops "0", visor_w, visor_h, D3DFMT_A16B16G16R16F, 1);
+            rt_VisorDropsTmp.create(r2_RT_visor_drops "n", visor_w, visor_h, D3DFMT_A16B16G16R16F, 1);
+            RCache.ClearRT(rt_VisorDrops, {});
+            RCache.ClearRT(rt_VisorDropsTmp, {});
+            ps_r__visor_drops_active = int(visor_w);
+        }
+        else
+            ps_r__visor_drops_active = 0;
 #endif
         if (!options.gbuffer_opt)
             rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F, SampleCount);

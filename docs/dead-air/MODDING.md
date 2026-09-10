@@ -1444,6 +1444,78 @@ means to the dozen scripts that read it.
 `r__rain_quality` is the ladder: oriented splashes from 2, streak lighting from 3, rain into the
 ripple field at 4.
 
+### The visor
+
+The water standing on the actor's mask is a field with a memory, exactly as the ripple field is:
+one RGBA16F target at the screen's own aspect (`$user$visor_drops0`, 256 to 1024 across on the
+preset ladder, `r__visor_drops`), stepped at a fixed 1/30 s by `phase_visor_drops` and read by the
+combine. R is the water's thickness in millimetres, G the film a trail or a wipe left behind, BA
+its velocity in millimetres a second. The effect rides `r2_lenswater` - the options checkbox and
+the ladder that already existed - and costs nothing when it is off, target included.
+
+What the solver does is what a drop on a pane does, and each of the four is a thing the lattice
+this replaces could not express:
+
+* **it stays where it lands.** Contact angle hysteresis holds it: the advancing edge wants a
+  steeper angle than the receding one and the difference is a force along the contact line, so
+  the criterion for sliding is a SIZE, not a wait. The Bond number crosses one at a radius of the
+  capillary length times the root of the critical Bond number - `sqrt(gamma / rho g)` is 2.728 mm
+  and Bo_c is 0.15 to 0.35 on glass, giving 1.1 to 1.6 mm, which is exactly where pipetted drops
+  begin to run on a tilted slide. A cap that wide is about that tall, so the threshold is read
+  here as a thickness (`DA_VD_PIN`), divided by the share of gravity the plate feels;
+* **it grows and swallows its neighbours.** Rain keeps arriving and two drops that touch are one
+  drop. In a field that is addition, which is the whole reason this is a field;
+* **once it runs it leaves a track, and the next drop follows it.** A sliding drop cannot take all
+  its water: it leaves microns behind, that film is already wet, and wet glass pins worse - so the
+  next drop veers into it. Rain on a window runs in a few channels for this reason and it is two
+  lines here, a threshold lowered by the film and a direction biased toward the wetter side;
+* **it moves in jerks.** Nothing implements stick-slip. A drop that runs thins, falls back under
+  the threshold, stops, is fed until it is over it again, and goes.
+
+Gravity is the world's, resolved into the plane of the glass. The visor turns with the head so the
+drops are still in screen space, but which way is down on it is not: look up at the sky, the plate
+goes horizontal, the in-plane component goes to zero and the drops stop running and just sit -
+which is what they do.
+
+Arrivals are a lottery per 4 mm cell per step at a rate from `r2_lenswater_val`, read as a RATE
+and not as a level. That one word is most of the old effect's problem: the driver walks that value
+by 0.03 once a second, and a level that steps is a picture that steps, while a rate that steps is
+a field that does not. A drop hits the visor at terminal velocity with a Weber number over a
+thousand, an order past the splashing threshold, so it does not settle into a neat cap - it throws
+three satellites.
+
+`da_visor.h` is the optics. A drop two centimetres from the eye is a lens, and that decides
+everything: it **inverts** (a cap reaches 45 degrees of tilt at its rim and a ray bent that far
+crosses the axis - every photograph of rain on a window has the world upside down inside the
+drops, and no amount of pinching the UV toward the drop centre can produce it, because a magnifier
+does not cross the axis); its **rim goes dark**, because past the critical angle of 48.61 degrees
+nothing leaves the water at all - the transmission near it is `saturate(7.68 * (|N.z| - 0.6612))`,
+two constants for the ring every real drop carries; it is **brighter than what it covers**, since
+it gathers about 165 degrees of the world - the sky included - into the solid angle it hides; and
+it is **badly out of focus**, because the blur circle of something at the visor subtends
+`D_pupil / distance` while the drop subtends `d_drop / distance`, the distance cancels, and a drop
+is resolvable only when it is wider than the pupil. Ordinary drops are not, which is why a rainy
+visor photographs as soft bright blobs with structure only in the big merged runners. The physical
+blur is about a seventh of the screen height; a third of that is taken, because the honest figure
+erases the effect.
+
+A **wipe is a sweep, not a switch**. `visor_wipe` starts it (the game calls it when the cleaning
+item reaches the hands, `dead_air_x64_visor.script`), and over the better part of a second the
+hand crosses the glass: the water just ahead of the edge is shoved along and piles into a bead
+that rides in front of it and runs off the far side, what the edge has passed keeps six per cent
+of its water as a smeared film streaked along the way the hand went, and what it has not reached
+is untouched. It never clears to zero - a wiped visor is not clean glass, and the couple of per
+cent left is exactly what makes it read as wiped.
+
+`r__visor_drops_stats` prints what the field holds and dumps the thickness as a PGM under
+`appdata`: a screenshot cannot tell an empty field from a faint one, and this effect has now been
+built twice by people who could not tell them apart.
+
+**The one trap.** The old block lived in `combine_2_naa.ps` alone, so it died the moment MSAA was
+on - the same asymmetry that had already cost this project once, noted in `combine_2_aa.ps` and
+then repeated one effect later. The new call is in both, and the blender binds the field into all
+four elements. Whoever adds the next post effect puts it in BOTH.
+
 ### Quality
 
 `r__water_waves` is the wave-row budget, on the preset ladder at 2 / 4 / 6 / 8 / 8, session-only

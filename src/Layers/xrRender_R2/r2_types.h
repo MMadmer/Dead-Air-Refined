@@ -93,6 +93,13 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define r2_RT_water_field "$user$water_field"
 #define r2_RT_water_ripple "$user$water_ripple"
 #define r2_RT_water_ripple_fft "$user$water_ripple_fft"
+
+// The water standing on the actor's visor: one RGBA16F map of the glass in front of the eye,
+// at the screen's own aspect so a drop is round, stepped by phase_visor_drops. R = the water's
+// thickness in millimetres, G = the film left behind by a trail or a wipe, BA = the velocity of
+// the water at this texel in millimetres per second. "0" is the finished step every reader
+// binds; the scratch is what the step is written into before it is copied there.
+#define r2_RT_visor_drops "$user$visor_drops"
 // The puddle fill map: how deep rain would stand at this texel, R16F, 0..1 of
 // CEnvironment::puddle_fill_depth. Baked in the same sweep as the field above and uploaded
 // beside it (r4_water_field.cpp), so it is no more a render target than the field is. Mapped by

@@ -1393,6 +1393,27 @@ float CEnvironment::puddle_fill_at(const Fvector& p) const
     return top + (bot - top) * tz;
 }
 
+// A hand across the visor. One sweep at a time: the animation that triggers this is a second
+// long and the player can hold the key down through all of it, and restarting the sweep every
+// frame would park the hand at the left edge and clean nothing.
+void CEnvironment::visor_wipe()
+{
+    if (visor.wipe_start >= 0.f && Device.fTimeGlobal - visor.wipe_start < visor.wipe_len)
+        return;
+    visor.wipe_start = Device.fTimeGlobal;
+    visor.wipe_dir = -visor.wipe_dir;
+}
+
+// 0 while the hand has not started, 1 once it is off the far edge. The renderer turns this into
+// a position and a direction; keeping the mapping there is what lets the sweep be a shape - it
+// eases in and out, as an arm does - without the engine having to agree about the shape.
+float CEnvironment::visor_wipe_phase() const
+{
+    if (visor.wipe_start < 0.f)
+        return 1.f;
+    return clampr((Device.fTimeGlobal - visor.wipe_start) / _max(visor.wipe_len, 0.01f), 0.f, 1.f);
+}
+
 // A continuous wake: something is moving through the water here. Unlike water_hit this is fed
 // every frame for as long as the source keeps wading, so a repeat call REFRESHES the slot it
 // already owns instead of consuming a new one.

@@ -1453,11 +1453,14 @@ void CActor::UpdateWaterFx()
         da_water_splash(at, k > 0.5f ? cfg.ps_entry_big : cfg.ps_entry);
     }
 
-    // Screen droplets. The visor wets while the head is under and dries once it is out; the
-    // renderer reads the level through r2_lenswater_val, the same float the rain driver pushes,
-    // because ps_r2_lenswater_value lives in the renderer DLL and there is no other way across.
-    // Pushing only when the value has actually moved keeps a dry game off the console entirely.
-    // It is the eye that gets wet, so only the entity the eye belongs to may write it.
+    // The visor. It wets while the head is under and drips for a while once it is out, and the
+    // renderer's drop field takes this as a WETTING RATE - the water arrives as drops that then
+    // run and merge, rather than as a level that steps.
+    //
+    // Handed over in the environment rather than through r2_lenswater_val, which the rain
+    // drivers own: a head surfacing and a downpour are two different sources and the moment they
+    // share one float they overwrite each other. It is the eye that gets wet, so only the entity
+    // the eye belongs to may write it.
     if (Level().CurrentViewEntity() != this)
         return;
 
@@ -1465,16 +1468,7 @@ void CActor::UpdateWaterFx()
     const bool submerged = mc->WaterDepth() > 0.f && mc->WaterSurface() > head_y;
     m_water_drops += (submerged ? cfg.drops_rise : -cfg.drops_fall) * Device.fTimeDelta;
     clamp(m_water_drops, 0.f, 1.f);
-
-    if (Console &&
-        (_abs(m_water_drops - m_water_drops_pushed) > cfg.drops_step ||
-            (fis_zero(m_water_drops) && !fis_zero(m_water_drops_pushed))))
-    {
-        m_water_drops_pushed = m_water_drops;
-        string64 cmd;
-        xr_sprintf(cmd, sizeof(cmd), "r2_lenswater_val %.2f", m_water_drops);
-        Console->Execute(cmd);
-    }
+    env.visor.dunk = m_water_drops;
 }
 
 void CActor::UpdateCL()

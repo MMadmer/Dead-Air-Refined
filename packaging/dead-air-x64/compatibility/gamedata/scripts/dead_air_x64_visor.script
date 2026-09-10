@@ -1,0 +1,71 @@
+-- The visor in the rain: what the engine cannot work out for itself.
+--
+-- The drop field is solved in the renderer (phase_visor_drops) and it needs two things from the
+-- game. Neither is a look knob; both are facts only the script layer holds.
+--
+--   1. HOW HARD THE GLASS IS BEING WETTED, as a rate. The base driver walks r2_lenswater_val by
+--      three hundredths once a second toward a level, which is why the old effect arrived in
+--      slabs: a level that steps is a picture that steps. The field reads the same console value
+--      as a RATE instead, so what it needs is the honest one - level.get_rain_volume(), which
+--      already has the shelter test and the sky openness in it - pushed every tick rather than
+--      a slow ramp pushed once a second. The base driver keeps writing its own value; this one
+--      runs every frame and is simply the last word.
+--
+--   2. WHEN A HAND GOES ACROSS IT. The base driver zeroes its accumulator the instant the
+--      cleaning animation starts, which is what deleted every drop in one frame. The field
+--      cannot be told "you are clean now" - a wipe is a sweep that takes the better part of a
+--      second, collects the water ahead of the hand and leaves a smeared film behind it - so it
+--      is told when the sweep BEGINS, and it does the rest. The moment is the cleaning item
+--      reaching the hands, which is exactly when the animation plays.
+
+local wipe_section = "animation_clean_mask" -- the item the cleaning animation rides on
+local wipe_slot = 13
+
+local was_wiping = false
+local pushed = -1
+
+local function mask_worn()
+    -- Same test the base driver makes: a mask HUD is up, or the mask HUD is switched off
+    -- entirely, in which case the drops are unconditional.
+    if not dinamic_hud then
+        return true
+    end
+    local opt = true
+    if axr_main and axr_main.config then
+        opt = axr_main.config:r_value("mm_options", "enable_mask_hud", 1, false)
+    end
+    if opt == false then
+        return true
+    end
+    return dinamic_hud.ishud() and true or false
+end
+
+local function update()
+    if not db.actor then
+        return
+    end
+
+    -- The wetting rate.
+    local rate = 0
+    if mask_worn() and level.rain_factor() ~= 0 then
+        rate = level.get_rain_volume() or 0
+        if rate < 0 then rate = 0 elseif rate > 1 then rate = 1 end
+    end
+    -- Only when it has actually moved: this runs every frame and the console is not free.
+    if math.abs(rate - pushed) > 0.01 or (rate == 0 and pushed ~= 0) then
+        pushed = rate
+        get_console():execute(string.format("r2_lenswater_val %.3f", rate))
+    end
+
+    -- The hand.
+    local item = db.actor:item_in_slot(wipe_slot)
+    local wiping = item and item:section() == wipe_section or false
+    if wiping and not was_wiping then
+        get_console():execute("visor_wipe")
+    end
+    was_wiping = wiping
+end
+
+function on_game_start()
+    RegisterScriptCallback("actor_on_update", update)
+end

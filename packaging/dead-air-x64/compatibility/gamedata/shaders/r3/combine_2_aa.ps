@@ -8,6 +8,7 @@ uniform float4		screen_res;
 // Kept ahead of the rest for symmetry with combine_2_naa.ps, where a post-stack header
 // #defines a bare "px" and poisons that name in everything included after it.
 #include "da_water_under.h"
+#include "da_visor.h"
 #include "mblur.h"
 
 uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
@@ -152,6 +153,14 @@ float4 main ( v_aa_AA I ) : SV_Target
 
 //	return combine_bloom(final,tex2D	(s_bloom, I.tc0));
 	float4	out_c	= combine_bloom( final, bloom );
+
+	// The water on the visor. Carried here as well as in combine_2_naa, and this is the second
+	// time that has had to be said in this file: the post stack lived in the non-AA one alone,
+	// and r2_lenswater died silently the moment r2_aa was on. Whoever adds the next post effect
+	// puts it in BOTH.
+	#ifdef USE_LENS_WATER
+		out_c.rgb = da_visor_water(s_image, center, out_c.rgb);
+	#endif
 
 	[branch] if ( uw > 0.0h && uw_tier >= 4 )
 		out_c.rgb = da_uw_vignette( out_c.rgb, I.Tex0, uw );

@@ -662,6 +662,35 @@ public:
     // continued with: the group speed of the half-metre waves that lead a pistol's train.
     float water_ripple_speed{0.6f};
 
+    // ---- The water standing on the actor's visor ---------------------------------------------
+    // The field itself lives in a render target and is stepped by the renderer
+    // (phase_visor_drops), which reads how hard the glass is being wetted straight off
+    // r2_lenswater_val - the one number the drivers have always pushed. What the engine owns is
+    // the thing that value cannot express: a hand going across the glass.
+    //
+    // A wipe is a SWEEP and not a switch. The hand takes the better part of a second to cross
+    // the visor, and what it leaves behind is a smeared film rather than clean glass, so the
+    // renderer needs to know where the hand is at this instant - hence a start time and a
+    // duration here rather than a "wiped" flag.
+    struct SVisor
+    {
+        // The glass coming out of the water: its own wetting rate, because a head that surfaces
+        // is not rain and the two must not overwrite each other on one console float.
+        float dunk{};
+        // A rig override for the wetting rate, negative when off: the QA stand wears no mask, so
+        // the drivers push nothing and the field stays empty however hard it is raining.
+        float qa_wet{-1.f};
+        float wipe_start{-1.f}; // fTimeGlobal the sweep began at, negative when none is running
+        float wipe_len{0.75f}; // seconds the hand takes to cross
+        int wipe_dir{1}; // which way it goes, alternating, so two wipes do not smear the same way
+    };
+    SVisor visor;
+    // Start a hand across the visor. Called from the game when the mask-cleaning animation
+    // begins; a second call while one is running is ignored rather than restarting the sweep.
+    void visor_wipe();
+    // Where the hand is now, 0 before the sweep and 1 once it is over, and which way it travels.
+    float visor_wipe_phase() const;
+
     // ---- Rain and the camera in water --------------------------------------------------------
     // The rain rate the whole rain system is parameterised on, mm/h. Solved where the sea state
     // is: R = 25 * density^1.5, so a full-density storm is heavy rain. The companion is the

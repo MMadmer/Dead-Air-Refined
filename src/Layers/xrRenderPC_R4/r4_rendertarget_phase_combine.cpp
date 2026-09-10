@@ -596,6 +596,21 @@ void CRenderTarget::phase_combine()
             ps_r2_lensdirt_value);
         RCache.set_c("lenswater", ps_r2_lenswater_value, ps_r2_lenswater_value, ps_r2_lenswater_value,
             ps_r2_lenswater_value);
+        // The water standing on the visor: whether there is a field at all, how much glass one
+        // of its texels covers, and one texel in uv - everything da_visor.h needs to turn a
+        // thickness into a slope in real millimetres rather than in texels of whatever grid the
+        // preset happened to buy.
+        if (rt_VisorDrops)
+        {
+            constexpr float visor_width_m = 0.22f;
+            const float w = float(rt_VisorDrops->dwWidth), h = float(rt_VisorDrops->dwHeight);
+            RCache.set_c("da_visor", 1.f, visor_width_m * 1000.f / w, 1.f / w, 1.f / h);
+            // The projection's scales, so a refracted DIRECTION can be turned back into a place
+            // on the screen: that is what makes a drop invert the world instead of magnifying it.
+            RCache.set_c("da_visor2", Device.mProject._11, Device.mProject._22, 1.f, 0.f);
+        }
+        else
+            RCache.set_c("da_visor", 0.f, 1.f, 1.f, 1.f);
         RCache.set_c("lumasharpen", ps_r2_lumasharpen, 0.f, 0.f, 0.f);
         RCache.set_c("temp", ps_r2_temp);
         Fvector3 dof;

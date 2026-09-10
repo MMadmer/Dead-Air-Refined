@@ -76,6 +76,8 @@ public:
     // complex scratch buffers its spectral solver ping-pongs through (see the phase).
     ref_rt rt_WaterRipple;
     ref_rt rt_WaterRippleFFT[2];
+    ref_rt rt_VisorDrops; // the water on the visor: the finished step, under the name readers bind
+    ref_rt rt_VisorDropsTmp; // what a step is written into before it is copied to the one above
     ref_rt rt_SunShaftsMask;
     ref_rt rt_SunShaftsMaskSmoothed;
     ref_rt rt_SunShaftsPass0;
@@ -218,6 +220,7 @@ private:
     ref_shader s_water_ripple; // the ripple field's real-space step; created on first use by its phase
     ref_shader s_water_ripple_fft; // its FFT pass (element 0 reads scratch a, 1 reads b)
     ref_shader s_water_ripple_prop; // its Fourier-space step
+    ref_shader s_visor_drops; // the visor drop field's step; created on first use by its phase
     // The cloud deck field, rendered once per frame over a square of the deck plane around the
     // camera; the sun passes, the shafts and the visible deck all read it instead of evaluating
     // the field's noise per pixel.
@@ -380,6 +383,7 @@ public:
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
     void phase_water_ripple(); // fixed steps of the interaction ripple field
+    void phase_visor_drops(); // fixed steps of the water standing on the actor's visor
     void phase_cloud_map();
     void dump_cloud_map();
     void phase_clouds_march();
