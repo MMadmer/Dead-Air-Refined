@@ -70,16 +70,22 @@ constexpr float crown_min_ny = 0.35f;
 constexpr int cover_rays = 5;
 // The shelter test is a question about what is OVERHEAD, and it is answered by rays that stay
 // overhead. Its axis leans with the wind like the drops do, but never past this; the four rays
-// round it sit this far off it; and they reach this far. A roof, a porch, a canopy are all within
-// a few metres above the head. At the old thirty metres with the axis at the drops' own slant and
+// round it sit this far off it; and they reach this far. At the old thirty metres with the axis
+// at the drops' own slant and
 // the ring thirty-five degrees round it, the lowest ray left the eye ten degrees above the
 // horizon and the rest not much higher, and on open marsh in a storm every one of the five found
 // a fence, a tree or a rise in the ground within range: the cover went to zero in ten seconds,
 // and with it the rain's own sound, the radiation the scripts take from it, and the water on the
 // visor - which dried while it poured.
+//
+// The range is what a roof may BE, not what may be nearby, and the angles are what keep the two
+// apart: the axis is within thirty degrees of straight up and so reaches seventeen metres of
+// height, which clears a hangar or a factory bay; the ring is at most fifty-five degrees off
+// vertical, so it passes eleven metres up by the time it is sixteen out, and a fence or a hedge
+// across the yard goes under it. At twelve metres a tall roof read as open sky.
 constexpr float cover_slant = deg2rad(30.f);
 constexpr float cover_spread = 0.47f; // tan of ~25 degrees, as the off-axis mad below uses it
-constexpr float cover_range = 12.f;
+constexpr float cover_range = 20.f;
 } // namespace da_rain
 
 class ENGINE_API CEffect_Rain
