@@ -2956,6 +2956,80 @@ public:
             g_da_block_all_except_movement ? 1 : 0, g_bDisableAllInput ? 1 : 0, actor->IsTalking() ? 1 : 0);
         Msg("* [qa] hands: pda3d presenter %d, ui focused %d",
             da_pda3d::presenter_active() ? 1 : 0, da_pda3d::ui_focused() ? 1 : 0);
+
+        // The rig, and what the items in it can actually play. An item's cycles live in the
+        // HANDS model when it is not monolithic, and the hands are replaced by an outfit and by
+        // the 3D PDA - an item left holding ids from the previous rig is how a player's crash
+        // report ended. Zero cycles here means the item has nothing to play on this rig.
+        if (g_player_hud)
+        {
+            IKinematicsAnimated* rig = g_player_hud->hands_model();
+            Msg("* [qa] hands: rig [%s], %u motion slot(s)", g_player_hud->section_name().c_str(),
+                rig ? u32(rig->LL_MotionsSlotCount()) : 0u);
+            for (u16 i = 0; i < 2; ++i)
+            {
+                const attachable_hud_item* it = g_player_hud->attached_item(i);
+                if (!it)
+                    continue;
+                Msg("* [qa] hands: place %u item [%s] %s, %u cycle(s) bound", u32(i),
+                    it->m_sect_name.c_str(), it->m_monolithic ? "own visual" : "on the hands rig",
+                    u32(it->m_hand_motions.m_anims.size()));
+            }
+        }
+    }
+};
+
+// qa_hands_rig <hud section>: load another hands rig under whatever is in the hands, which is
+// what an outfit change and the 3D PDA both do. The rigs do not carry the same motion sets, and
+// an item left holding ids from the previous one crashed the game between two frames of the
+// swap; this is the one call that mechanism needs, without a PDA, an outfit or a save.
+class CCC_QaHandsRig : public IConsole_Command
+{
+public:
+    CCC_QaHandsRig(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_player_hud)
+            return;
+        if (!args || !xr_strlen(args))
+        {
+            Msg("* [qa] hands rig [%s]", g_player_hud->section_name().c_str());
+            return;
+        }
+        const shared_str sect(args);
+        if (!pSettings->section_exist(sect))
+        {
+            Msg("! [qa] no hud section [%s]", args);
+            return;
+        }
+        g_player_hud->load(sect);
+        Msg("* [qa] hands rig -> [%s]", args);
+    }
+};
+
+// qa_hud_motion <hud section> <alias>: how long that item's cycle is on the rig that is loaded
+// now, through the same pooled hud item the game uses. The pool is keyed by section and outlives
+// a rig change, so this is also the shortest way to ask whether an item still has its cycles
+// after one - zero cycles and a length of zero is an item bound to a rig that is gone.
+class CCC_QaHudMotion : public IConsole_Command
+{
+public:
+    CCC_QaHudMotion(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        string256 sect, alias;
+        if (!g_player_hud || !args || sscanf(args, "%s %s", sect, alias) != 2)
+            return;
+        if (!pSettings->section_exist(sect))
+        {
+            Msg("! [qa] no hud section [%s]", sect);
+            return;
+        }
+        const CMotionDef* md = nullptr;
+        // anim alias first, hud section second - the order player_hud takes them in.
+        const u32 ms = g_player_hud->motion_length(shared_str(alias), shared_str(sect), md);
+        Msg("* [qa] hud motion [%s] of [%s] on rig [%s]: %u ms, def %s", alias, sect,
+            g_player_hud->section_name().c_str(), ms, md ? "yes" : "none");
     }
 };
 
@@ -3662,6 +3736,8 @@ void CCC_RegisterCommands()
     CMD1(CCC_VisorWipe, "visor_wipe");
     CMD1(CCC_QaHandsState, "qa_hands_state");
     CMD1(CCC_QaVisorState, "qa_visor_state");
+    CMD1(CCC_QaHandsRig, "qa_hands_rig");
+    CMD1(CCC_QaHudMotion, "qa_hud_motion");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD1(CCC_VisorRate, "visor_rate");
     CMD1(CCC_QaVisorBlob, "qa_visor_blob");

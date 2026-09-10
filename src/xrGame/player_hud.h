@@ -32,7 +32,9 @@ struct player_hud_motion_container
 
     // lenient: a cycle missing from the hands model is logged and skipped instead of asserting -
     // scene sections come from an addon whose motion sets may not be attached to every rig.
-    void load(IKinematicsAnimated* model, const shared_str& sect, bool lenient = false);
+    // missing, when given, COUNTS those instead of naming each: rebinding a whole item against
+    // another rig loses its entire set at once, and the log does not need every line of it.
+    void load(IKinematicsAnimated* model, const shared_str& sect, bool lenient = false, u32* missing = nullptr);
 };
 
 struct hud_item_measures
@@ -98,6 +100,9 @@ struct attachable_hud_item
     ~attachable_hud_item();
 
     void reload_measures();
+    // The hands model has been replaced. A non-monolithic item's cycles live in the HANDS rig,
+    // so every id this one holds indexes a model that no longer exists - see player_hud::load.
+    void rebind_hand_motions(IKinematicsAnimated* hands_model);
 
     void update(bool bForce);
     void update_hud_additional(Fmatrix& trans) const;
@@ -138,6 +143,9 @@ public:
     bool render_item_ui_query() const;
     u32 anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel);
     const shared_str& section_name() const { return m_sect_name; }
+    // The rig every non-monolithic item's cycles are bound against. Read-only, for the state
+    // dump: when the hands hold nothing playable, the first question is which rig is loaded.
+    IKinematicsAnimated* hands_model() const { return m_model; }
     attachable_hud_item* create_hud_item(const shared_str& sect);
 
     void attach_item(CHudItem* item);

@@ -1969,3 +1969,46 @@ and pending flag of the items in them, the input globals, and the 3D PDA's own t
 hands stay empty the one thing nobody could see was WHICH gate was holding; now it is one line.
 `tools\qa\water\hands.lua` is the acceptance probe - it claims the hands the way a scene does,
 never starts one, and asserts that everything comes back.
+
+
+## A motion id belongs to a rig
+
+A player's crash report from 1.4.0 (access violation in `xrGame.dll`, `l01_escape`) ends on one
+line of log and then the stack:
+
+```
+* [pda3d] hands swap in: [actor_hud_cs1] -> [pda3d_actor_hud]
+! MODEL: LL_GetMotionDef rejected motion id [slot 64, idx 2]: visual has 44 slot(s)
+```
+
+**A MotionID is an index into ONE model.** It is a motion-slot number and an index inside that
+slot, resolved by name once and kept; the model it was resolved against is not part of it. So the
+moment the hands model is replaced - an outfit with its own `player_hud_section`, the 3D PDA with
+its own rig - every id anything is still holding means something else, or nothing at all. The
+ordinary rig here carries 80 motion slots (its own plus the addon OMFs `fill_player_hud_extra_omf`
+appends), the PDA's carries 44, and slot 64 is past the end of it.
+
+The guard on `LL_GetMotionDef` names the caller and refuses the read, which is the log line above.
+What it returns is null, and **`player_hud::motion_length` read `md->flags` under a `VERIFY`** -
+nothing at all in a release build. That read of address 0xC is the faulting instruction the report
+carries (`xrGame.dll +0x36bb45`, confirmed against the shipped binary: `mov ... [rax+0Ch]` at
++0x45 of the function). It returns zero now, which is what every caller already reads as "no
+animation".
+
+**Two caches hold ids across a rig change, and each needs the same treatment.** The scene motion
+cache (`m_scene_motions`, what `level.get_motion_length` and the hud scenes read) is cleared on a
+hands reload - that fix went in with the 1.4.1 report batch and is what this player's crash needed.
+The other is the **item pool**: `player_hud::create_hud_item` keeps one `attachable_hud_item` per
+hud section for the life of the hud, and a non-monolithic item's cycles live in the HANDS model, so
+its `m_hand_motions` are ids into whatever rig was loaded when the pool first met it. Nothing
+cleared those. They are rebound now, against the model that is actually loaded, every time the rig
+changes; cycles the new rig does not carry simply go, and come back with the old rig. An item asked
+to play one it no longer has says so and plays nothing, where it used to assert.
+
+**Diagnostics.** `qa_hands_state` now ends with the rig: its section, how many motion slots it has,
+and for each attached item how many cycles it currently has bound - zero there is an item bound to
+a rig that is gone. `qa_hands_rig <section>` loads another rig under whatever is in the hands, which
+is the whole mechanism without a PDA, an outfit or a save; `qa_hud_motion <section> <alias>` asks
+the pooled item for a cycle length on the rig loaded now. `tools\qa\water\hud_rig.lua` is the
+acceptance probe: a weapon drawn, the rig swapped to the PDA's and back three times over, with
+draws and holsters on the far side of each swap.

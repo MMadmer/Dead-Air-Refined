@@ -107,8 +107,9 @@ const player_hud_motion* player_hud_motion_container::find_motion(const shared_s
     return it != m_anims.end() ? &it->second : nullptr;
 }
 
-void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect, bool lenient)
+void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect, bool lenient, u32* missing)
 {
+    m_anims.clear();
     const CInifile::Sect& _sect = pSettings->r_section(sect);
 
     for (const auto& [name, anm] : _sect.Data)
@@ -157,8 +158,11 @@ void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_
             }
             if (pm.m_animations.empty() && lenient)
             {
-                Msg("! [hud-scene] motion [%s] of [%s] is not in the hands model, skipped",
-                    pm.m_base_name.c_str(), sect.c_str());
+                if (missing)
+                    ++*missing;
+                else
+                    Msg("! [hud-scene] motion [%s] of [%s] is not in the hands model, skipped",
+                        pm.m_base_name.c_str(), sect.c_str());
                 continue;
             }
             R_ASSERT2(!pm.m_animations.empty(), make_string("motion not found [%s]", pm.m_base_name.c_str()).c_str());
@@ -484,6 +488,25 @@ attachable_hud_item::attachable_hud_item(player_hud* parent, const shared_str& s
     reload_measures();
 }
 
+// A non-monolithic item plays cycles that belong to the HANDS model, and it binds their ids
+// once, when the pool creates it. The pool outlives the hands: an outfit with its own
+// player_hud_section and the 3D PDA's own rig both replace the model mid-game, and a set trimmed
+// to fewer motion slots than the one the ids came from turns every one of them into an
+// out-of-bounds index. Rebound here against the model that is actually loaded; cycles the new
+// rig does not have simply go, and come back when the old rig does.
+void attachable_hud_item::rebind_hand_motions(IKinematicsAnimated* hands_model)
+{
+    // A monolithic item carries its own visual and its own motions; the hands are not involved.
+    if (m_monolithic || !hands_model)
+        return;
+
+    u32 missing = 0;
+    m_hand_motions.load(hands_model, m_sect_name, true, &missing);
+    if (missing)
+        Msg("* [hud] item [%s]: %u cycle(s) are not in the hands model now, %u left",
+            m_sect_name.c_str(), missing, u32(m_hand_motions.m_anims.size()));
+}
+
 void attachable_hud_item::reload_measures()
 {
     if (m_monolithic)
@@ -499,10 +522,18 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
     xr_sprintf(anim_name_r, "%s%s", anm_name_b.c_str(), m_attach_place_idx == 1 && is_16x9 ? "_16x9" : "");
 
     const player_hud_motion* anm = m_hand_motions.find_motion(anim_name_r);
-    R_ASSERT2(anm, make_string("model [%s] has no motion alias defined [%s]", m_sect_name.c_str(), anim_name_r).c_str());
-    R_ASSERT2(anm->m_animations.size(), make_string("model [%s] has no motion defined in motion_alias [%s]",
-                                            m_visual_name.c_str(), anim_name_r)
-                                            .c_str());
+    // Not an assert any more. The cycles of a non-monolithic item live in the hands rig, and the
+    // rig changes: an outfit brings its own, the 3D PDA brings its own. An item still attached
+    // while a rig that does not carry its animations is loaded has nothing to play - it says so
+    // and plays nothing, where it used to take the game down between two frames of a swap.
+    if (!anm || anm->m_animations.empty())
+    {
+        Msg("! [hud] item [%s] has no cycle [%s] in the hands model - nothing played",
+            m_sect_name.c_str(), anim_name_r);
+        md = nullptr;
+        rnd_idx = 0;
+        return 0;
+    }
 
     // Draw and holster animations run at their configured speed. Scaling them by the item's
     // control inertion made heavy weapons slow to raise and, with that, slow to fire; the
@@ -656,8 +687,13 @@ void player_hud::load(const shared_str& player_hud_sect)
         m_model->LL_SetBlendMinTimeEnabled(false);
     if (m_model_2)
         m_model_2->LL_SetBlendMinTimeEnabled(false);
-    // A hands model change invalidates every cached scene motion id.
+    // A hands model change invalidates every cached motion id bound against the hands: the
+    // scene cycles, and every item the pool is holding. The pool is keyed by section and lives
+    // as long as the hud does, so without this an item met after the swap plays ids that index
+    // the model that has just been deleted.
     m_scene_motions.clear();
+    for (auto& [name, item] : m_pool)
+        item->rebind_hand_motions(m_model);
 
     // Same model, same bone and motion ids: a cycle found through one copy plays on the other.
     // The clavicle name differs between rigs (l_clavicle, bip01_l_clavicle) - both are tried,
@@ -856,8 +892,13 @@ u32 player_hud::motion_length(const shared_str& anim_name, const shared_str& hud
 u32 player_hud::motion_length(const MotionID& M, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel) const
 {
     IKinematicsAnimated* model = itemModel ? itemModel : m_model;
-    md = model->LL_GetMotionDef(M);
-    VERIFY(md);
+    md = model ? model->LL_GetMotionDef(M) : nullptr;
+    // An id the model will not have. VERIFY is nothing in a release build, so this read of a
+    // null definition was the crash a player sent in: an item that is not in the hands asks
+    // for the length of its own animation through the HANDS rig, and the rig had just been
+    // replaced under it. A length of zero is what every caller already reads as "no animation".
+    if (!md)
+        return 0;
     if (md->flags & esmStopAtEnd)
     {
         CMotion* motion = model->LL_GetRootMotion(M);
