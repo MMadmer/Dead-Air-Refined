@@ -72,17 +72,18 @@ void CRenderTarget::phase_visor_drops()
         g_visor_acc = 0.f;
     }
 
-    //	Twice the ripple field's rate, and for a reason that is not "smoother". A drop running at
-    //	twenty centimetres a second crosses a 22 cm visor in about a second, which at 30 Hz is
-    //	seven millimetres of travel per step - several times its own width, so it would arrive
-    //	ahead of where it was rather than slide, and both the eye and the trail would see a
-    //	dotted line. At 60 Hz it moves about its own width.
-    constexpr float dt = 1.f / 60.f;
+    // Six times the frame, and the number is not a taste: the transport is a flux and a flux may
+    // not move water more than one cell in a step. A drop runs at ten centimetres a second and a
+    // cell of the glass is four tenths of a millimetre, so the step has to be a few milliseconds
+    // or the drop is asked to cross several cells at once and the scheme stops conserving mass -
+    // which it does by quietly making more water, until the glass is half covered and nothing has
+    // moved. The pass is small; this is the cheap half of the trade.
+    constexpr float dt = 1.f / 360.f;
     g_visor_acc += Device.fTimeDelta;
     int steps = int(g_visor_acc / dt);
-    if (steps >= 4)
+    if (steps >= 12)
     {
-        steps = 4;
+        steps = 12;
         g_visor_acc = 0.f;
     }
     else
@@ -220,7 +221,7 @@ void da_visor_drops_stats()
     {
         double sum = 0.0, film = 0.0;
         float max_h = 0.f, max_v = 0.f, max_film = 0.f;
-        u32 wet = 0, nans = 0;
+        u32 wet = 0, nans = 0, running = 0;
         for (u32 y = 0; y < desc.Height; ++y)
         {
             const u16* row = reinterpret_cast<const u16*>(static_cast<const u8*>(mapped.pData) + y * mapped.RowPitch);
@@ -241,25 +242,47 @@ void da_visor_drops_stats()
                 film += f;
                 max_h = std::max(max_h, h);
                 max_film = std::max(max_film, f);
-                max_v = std::max(max_v, _sqrt(vx * vx + vy * vy));
+                const float sp = _sqrt(vx * vx + vy * vy);
+                if (sp > 20.f)
+                    ++running; // 20 mm/s: below that a drop has not left its own texel in a second
+                max_v = std::max(max_v, sp);
             }
         }
-        // The thickness as a picture: black is dry glass, white is a millimetre of water.
-        string_path path;
-        string64 dump;
-        xr_sprintf(dump, "visor_drops_%u.pgm", g_visor_step);
-        FS.update_path(path, "$app_data_root$", dump);
-        if (IWriter* W = FS.w_open(path))
+        // The field as pictures: thickness, where black is dry glass and white a millimetre of
+        // water, and beside it the film, at a twentieth of that scale because a trail is thin.
+        // Two channels because the two questions are different - "where are the drops" and
+        // "where have they been" - and a trail is invisible against a drop on one image.
+        for (int ch = 0; ch < 3; ++ch)
         {
+            string_path path;
+            string64 dump;
+            xr_sprintf(dump, (ch == 2) ? "visor_speed_%u.pgm" : (ch ? "visor_film_%u.pgm" : "visor_drops_%u.pgm"),
+                g_visor_step);
+            FS.update_path(path, "$app_data_root$", dump);
+            IWriter* W = FS.w_open(path);
+            if (!W)
+                continue;
             string64 head;
             xr_sprintf(head, "P5\n%u %u\n255\n", desc.Width, desc.Height);
             W->w(head, u32(xr_strlen(head)));
+            const float scale = (ch == 2) ? (255.f / 300.f) : (ch ? (255.f / 0.05f) : 255.f);
             xr_vector<u8> line(desc.Width);
             for (u32 y = 0; y < desc.Height; ++y)
             {
                 const u16* row = reinterpret_cast<const u16*>(static_cast<const u8*>(mapped.pData) + y * mapped.RowPitch);
                 for (u32 x = 0; x < desc.Width; ++x)
-                    line[x] = u8(clampr(da_half_to_float(row[x * 4]) * 255.f, 0.f, 255.f));
+                {
+                    float val;
+                    if (ch == 2)
+                    {
+                        const float vx = da_half_to_float(row[x * 4 + 2]);
+                        const float vy = da_half_to_float(row[x * 4 + 3]);
+                        val = _sqrt(vx * vx + vy * vy);
+                    }
+                    else
+                        val = da_half_to_float(row[x * 4 + ch]);
+                    line[x] = u8(clampr(val * scale, 0.f, 255.f));
+                }
                 W->w(line.data(), desc.Width);
             }
             FS.w_close(W);
@@ -267,9 +290,9 @@ void da_visor_drops_stats()
         ctx->Unmap(staging, 0);
         const double texels = double(desc.Width) * double(desc.Height);
         Msg("* [visor] %ux%u, step %u, %u nan; %.1f%% of the glass wet, mean %.4f mm, film mean %.4f max %.4f mm, "
-            "deepest %.3f mm, fastest %.0f mm/s",
+            "deepest %.3f mm, fastest %.0f mm/s, %.2f%% of it running",
             desc.Width, desc.Height, g_visor_step, nans, 100.0 * double(wet) / texels, sum / texels, film / texels,
-            max_film, max_h, max_v);
+            max_film, max_h, max_v, 100.0 * double(running) / texels);
     }
     else
         Msg("* [visor] map failed");

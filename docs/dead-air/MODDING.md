@@ -1447,8 +1447,8 @@ ripple field at 4.
 ### The visor
 
 The water standing on the actor's mask is a field with a memory, exactly as the ripple field is:
-one RGBA16F target at the screen's own aspect (`$user$visor_drops0`, 256 to 1024 across on the
-preset ladder, `r__visor_drops`), stepped at a fixed 1/30 s by `phase_visor_drops` and read by the
+one RGBA16F target at the screen's own aspect (`$user$visor_drops0`, 256 to 512 across on the
+preset ladder, `r__visor_drops`), stepped at a fixed 1/360 s by `phase_visor_drops` and read by the
 combine. R is the water's thickness in millimetres, G the film a trail or a wipe left behind, BA
 its velocity in millimetres a second. The effect rides `r2_lenswater` - the options checkbox and
 the ladder that already existed - and costs nothing when it is off, target included.
@@ -1471,6 +1471,29 @@ this replaces could not express:
   lines here, a threshold lowered by the film and a direction biased toward the wetter side;
 * **it moves in jerks.** Nothing implements stick-slip. A drop that runs thins, falls back under
   the threshold, stops, is fed until it is over it again, and goes.
+
+**How the water moves is the whole feature, and it took three attempts.** The natural thing to
+write in a pixel shader is a backward trace - what is standing here now is what was one step
+upstream - which is what the ripple field does and is stable and cheap. It is also not
+conservative, and on a field of discrete drops that fails in two stages. First, dry glass ahead of
+a drop holds no velocity, so it traces back to itself, finds nothing and stays dry: no drop can
+move onto glass that is not already wet, and every drop sits where it landed however heavy it
+gets. Then, when the velocity is made to reach past the water so the glass ahead knows what is
+coming, the leading edge gains without the trailing edge losing - a semi-Lagrangian trace
+preserves the value it samples, not the mass - and where the velocity has divergence, which here
+is everywhere, water is quietly created. The rig showed it as the glass filling to half covered
+while the pattern never shifted by a single texel.
+
+So the transport is a **flux**: each cell gives a share of what it holds to the neighbour its own
+velocity points at and takes the shares its neighbours send it, momentum riding along with the
+mass so that a fast drop swallowing a slow one comes out at the weighted speed of the two. What
+one gives is exactly what another gets. The price is the Courant condition - water may not cross
+more than one cell per step - and that is why the step is 1/360 s and why the grid stops at 512
+across: a finer grid needs a proportionally shorter step to carry the same drop at the same speed.
+The Courant number itself is 0.95 rather than something comfortable, because an upwind flux's
+numerical diffusion goes as `CFL (1 - CFL)` and vanishes at both ends; at 0.8 a drop spread to
+twice its width in a second of running and arrived at the bottom of the glass as a streak with no
+head at all.
 
 Gravity is the world's, resolved into the plane of the glass. The visor turns with the head so the
 drops are still in screen space, but which way is down on it is not: look up at the sky, the plate
@@ -1507,9 +1530,15 @@ of its water as a smeared film streaked along the way the hand went, and what it
 is untouched. It never clears to zero - a wiped visor is not clean glass, and the couple of per
 cent left is exactly what makes it read as wiped.
 
-`r__visor_drops_stats` prints what the field holds and dumps the thickness as a PGM under
-`appdata`: a screenshot cannot tell an empty field from a faint one, and this effect has now been
-built twice by people who could not tell them apart.
+`r__visor_drops_stats` prints what the field holds - how much of the glass is wet, the mean and
+deepest thickness, the film, the fastest water and **what share of it is actually running** - and
+dumps three pictures under `appdata`: the thickness, the film and the speed. That last one is not
+a nicety. Everything this feature is about is motion, a screenshot of a rainy visor looks much the
+same whether the water is running or nailed down, and the rig cannot film the screen either: a
+JPEG per frame costs half a megabyte and drops it to about one frame a second, which is slower
+than the drops. Dumping the field costs a few hundred microseconds, so `visor_motion.lua` takes
+five a second across a wipe and the strip can be stepped through and measured. Every wrong version
+of the transport above was found that way and none of them was visible in a still.
 
 **The one trap.** The old block lived in `combine_2_naa.ps` alone, so it died the moment MSAA was
 on - the same asymmetry that had already cost this project once, noted in `combine_2_aa.ps` and

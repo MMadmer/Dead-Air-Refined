@@ -64,12 +64,21 @@ uniform float4 da_visor2;
 //	one where it starts to.
 #define DA_VS_ON		0.035f
 #define DA_VS_FULL		0.160f
-//	The disc the drop's image is gathered over, in uv. See the note at the top: the physical
-//	figure is around 0.14 of the screen's height and this is a third of it.
-#define DA_VS_BLUR		0.045f
-//	How much the film bends and scatters, against a drop.
-#define DA_VS_FILM_BEND	0.60f
-#define DA_VS_FILM_HAZE	0.30f
+//	The disc the drop's image is gathered over, in uv. The physical figure is around 0.14 of the
+//	screen's height; a fifth of it is taken, because at a third every drop is the same
+//	fifty-pixel smudge whatever its size and the field's own range of sizes stops reaching the
+//	eye at all.
+#define DA_VS_BLUR		0.020f
+//	How fast the drop hands over to the sky as its sight line leaves the frame. A drop bends the
+//	view by up to the critical angle, which is a thousand pixels and more, so a good share of
+//	every drop looks at something the frame does not contain. Wrapping that back into the frame
+//	is what made drops against a bright sky read as dark blots: the fold landed on the ground.
+#define DA_VS_OFFSCREEN	5.0f
+//	How much the film bends and scatters. It is microns thick, so on the physics it should do
+//	almost nothing - but it is the whole visible difference between wiped glass and clean glass,
+//	and a wipe that leaves nothing behind is the delete this feature was rebuilt to stop being.
+#define DA_VS_FILM_BEND	3.20f
+#define DA_VS_FILM_HAZE	0.55f
 
 float4 da_visor_read(float2 uv)
 {
@@ -133,21 +142,27 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 	const float trans = saturate(DA_VS_TIR_K * (abs(N.z) - DA_VS_TIR_COS));
 	const float tir = (dot(R, R) < 1e-6f || R.z <= 0.01f) ? 1.0f : (1.0f - trans);
 
+	//	The sky, near the top of the frame: what a drop is mostly looking at. It has 165 degrees
+	//	of view and the frame has seventy, so most of what it gathers is not in the picture at all.
+	const float3 sky = img.SampleLevel(smp_rtlinear, float2(uv.x, 0.06f), 0).rgb;
+
 	float3 drop;
 	{
 		//	Back to a screen position. The far scene is what matters, so the direction alone
 		//	decides where to look - a drop this close to the eye has no parallax worth the name.
 		const float2 rndc = float2(R.x / max(R.z, 1e-4f) * da_visor2.x, R.y / max(R.z, 1e-4f) * da_visor2.y);
-		float2 ruv = float2(rndc.x * 0.5f + 0.5f, 0.5f - rndc.y * 0.5f);
-		//	A sight line bent off the edge of the frame has nothing to show; fold it back rather
-		//	than clamping, which would smear one edge texel across every steep drop rim.
-		ruv = abs(frac(ruv * 0.5f) * 2.0f - 1.0f);
+		const float2 ruv = float2(rndc.x * 0.5f + 0.5f, 0.5f - rndc.y * 0.5f);
+		//	How far the sight line went outside the frame, and what it sees when it does: the sky,
+		//	not a mirrored copy of the floor.
+		const float2 lo = -min(ruv, 0.0f), hi = max(ruv - 1.0f, 0.0f);
+		const float outside = saturate(max(max(lo.x, lo.y), max(hi.x, hi.y)) * DA_VS_OFFSCREEN);
 
 		//	Bigger drops hold their image better; the small ones are pure blur. The thickness is
 		//	the only size this pass has, and it is the right one - a cap's height goes with its
 		//	radius.
 		const float big = saturate(h * 1.2f);
-		drop = da_visor_gather(img, ruv, DA_VS_BLUR * (1.0f - 0.55f * big));
+		drop = da_visor_gather(img, saturate(ruv), DA_VS_BLUR * (1.0f - 0.55f * big));
+		drop = lerp(drop, sky, outside);
 
 		//	Fresnel at the same interface, and the sun on the drop's own curve. The glint is a
 		//	specular lobe of a very small roughness: a drop is smooth.
@@ -157,10 +172,7 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		const float3 H = normalize(L - vdir);
 		const float spec = pow(saturate(dot(N, -H)), 220.0f);
 		//	The drop is brighter than what it covers because it gathers a hemisphere into the
-		//	solid angle it hides. With no sky probe in this pass, the frame's own top edge is the
-		//	stand-in - it is where the sky is - and the lift is scaled by how much of it a drop of
-		//	this size can actually gather.
-		const float3 sky = img.SampleLevel(smp_rtlinear, float2(uv.x, 0.06f), 0).rgb;
+		//	solid angle it hides.
 		drop = lerp(drop, max(drop, sky), DA_VS_LIFT);
 		//	Past the critical angle the sight line never leaves the water, and the rim goes dark;
 		//	the Fresnel sliver on top of it is the sky reflected off the drop's own curve.
@@ -177,11 +189,16 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 	[branch]
 	if (film > 0.0005f)
 	{
-		const float2 foff = slope * (DA_VS_FILM_BEND * 0.004f);
-		const float3 through = da_visor_gather(img, uv + foff, 0.0015f);
-		const float haze = saturate(film / 0.06f) * DA_VS_FILM_HAZE;
+		//	The film's own shape, not the drop's: the streaks a hand leaves are ridges a couple of
+		//	millimetres apart and they are all the smear has to show for itself.
+		const float2 fg = float2(-(tx1.y - tx0.y), (ty1.y - ty0.y)) * inv2mm;
+		const float2 foff = fg * (DA_VS_FILM_BEND * 0.004f);
+		const float3 through = da_visor_gather(img, saturate(uv + foff), 0.004f);
+		const float haze = saturate(film / 0.05f) * DA_VS_FILM_HAZE;
 		const float lum = dot(through, float3(0.30f, 0.59f, 0.11f));
-		wiped = lerp(through, lerp(through, (float3)lum, 0.35f) + 0.02f, haze);
+		//	Wet glass scatters forward: the blacks lift and the colour goes toward the sky it is
+		//	scattering, which is what a smeared visor looks like against a bright sky.
+		wiped = lerp(through, lerp(lerp(through, (float3)lum, 0.45f), sky, 0.20f) + 0.015f, haze);
 	}
 
 	const float cov = smoothstep(DA_VS_ON, DA_VS_FULL, h) * saturate(da_visor2.z);

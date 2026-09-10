@@ -997,11 +997,13 @@ void xrRender_sync_preset_derived(bool user_facing)
     // post stack. User-facing (there is a checkbox for it), hence the user_facing block below.
     // It is also a shader option (USE_LENS_WATER), so like the checkbox it lands on vid restart.
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
-    // How wide the visor's drop field is. The height follows the screen's aspect, so this is
-    // the resolution of the glass itself: at 512 across a 22 cm visor a texel is 0.4 mm and the
-    // 2 mm drops that pin to it are five texels across, which is the smallest a drop can be and
-    // still read as round. One small pass at 30 Hz, so the ladder is short. Create-time.
-    static constexpr int visor_drops_by_preset[] = {256, 256, 512, 512, 1024};
+    // How wide the visor's drop field is. The height follows the screen's aspect, so this is the
+    // resolution of the glass itself: at 512 across a 22 cm visor a cell is 0.43 mm and a 1 mm
+    // drop is five cells, which is the smallest that still reads as round. It does not go higher,
+    // and that is a physical limit rather than a budget - the transport is a flux bound by the
+    // Courant condition, so a finer grid needs a proportionally shorter step to carry the same
+    // drop at the same speed, and the step is already a sixth of a frame. Create-time.
+    static constexpr int visor_drops_by_preset[] = {256, 256, 384, 512, 512};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.

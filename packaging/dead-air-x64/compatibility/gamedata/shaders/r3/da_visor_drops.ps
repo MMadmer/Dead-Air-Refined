@@ -19,7 +19,7 @@
 //     advancing edge wants a steeper angle than the receding one, and the difference is a force
 //     per unit of contact line. Furmidge's relation says it lets go when
 //         rho g V sin(a) = k w gamma (cos th_r - cos th_a)
-//     so the criterion is a SIZE: below a critical thickness the drop is pinned however long you
+//     so the criterion is a SIZE: below a critical weight the drop is pinned however long you
 //     wait, above it the drop runs. That threshold is why a windscreen in light rain holds a
 //     field of motionless beads, and it is the single thing no lattice of cells can express.
 //
@@ -29,17 +29,33 @@
 //   * ONCE IT RUNS IT LEAVES A TRACK, AND THE NEXT DROP FOLLOWS IT. A sliding drop cannot take
 //     all its water with it - it leaves a film microns thick behind it, and that film is already
 //     wet, so the next drop to reach it is pinned less hard and veers into it. That is why rain
-//     on a window runs in a few channels instead of everywhere, and it is one line here: the
-//     velocity is biased toward the wetter side.
+//     on a window runs in a few channels instead of everywhere.
 //
 //   * IT MOVES IN JERKS. A drop that runs thins, drops back under the critical size, stops, is
 //     fed by the rain until it is over it again, and goes. Nothing here implements stick-slip;
 //     it is what the threshold and the trail do together.
 //
-// Inertia is deliberately absent from the physics and present only as a state: a drop on glass
-// is capillary and viscous, its Reynolds number is tiny, and it reaches its terminal speed in
-// milliseconds. The stored velocity is there so that a drop already moving keeps moving through
-// a thin patch - the hysteresis again - and so the hand has something to push.
+// HOW THE WATER MOVES is the part that had to be got right three times, and it is worth writing
+// down because it is not obvious and it is invisible in a screenshot.
+//
+// The natural thing to write in a pixel shader is a backward trace: what is standing here now is
+// what was one step upstream, so read the state there and take it. It is what the ripple field
+// does, and it is stable and cheap. It is also NOT CONSERVATIVE, and on a field of discrete drops
+// that is fatal in two stages. First, a texel of dry glass ahead of a drop holds no velocity, so
+// it traces back to itself, finds nothing and stays dry - no drop can ever move onto glass that
+// is not already wet, and every drop sits exactly where it landed however heavy it gets. Then,
+// when the velocity is made to reach past the water so the glass ahead knows what is coming, the
+// leading edge starts gaining without the trailing edge losing: a semi-Lagrangian trace preserves
+// the value it samples, not the mass, and where the velocity has divergence - which here is
+// everywhere, since it is zero on a pinned drop and high on a running one - water is quietly
+// created. The rig showed it as the glass filling to half covered while the pattern never shifted
+// by a single texel.
+//
+// So the transport is a FLUX. Each cell gives a share of what it holds to the neighbour its own
+// velocity points at, and takes the shares its neighbours send it; what one gives is exactly what
+// another gets, so nothing is created and nothing is lost. The price is the Courant condition -
+// water may not cross more than one cell in a step - and it is paid by stepping at 360 Hz rather
+// than by pretending it does not exist.
 
 #include "common.h"
 
@@ -53,69 +69,83 @@ uniform float4 da_visor_sim;
 uniform float4 da_visor_grav;
 // x = 1 while a hand is going across, y = how far across it is 0..1, z = which way it travels.
 uniform float4 da_visor_wipe;
-// xy = one texel in uv, zw = the target's size in texels. Explicit rather than a screen-space
-// derivative: this pass is not always rasterised at the target's own size and a derivative that
-// is right by accident is a thing that breaks later.
+// xy = one texel in uv, zw = the target's size in texels.
 uniform float4 da_visor_dim;
 
-//	The thickness at which a drop stops being pinned, millimetres. The criterion is a Bond
-//	number - the drop's weight against the retention of its own contact line - and it crosses one
-//	at a radius of the capillary length times the root of the critical Bond number:
-//	sqrt(gamma / rho g) = 2.728 mm, Bo_c between 0.15 and 0.35 on glass, so 1.1 to 1.6 mm. That
-//	agrees with the measurements: five to fifteen microlitres pipetted onto a glass slide, which
-//	is a radius of 1.1 to 1.5 mm, is where drops begin to run. A cap that wide is about that
-//	tall, so the threshold reads directly as a thickness. Divided by the share of gravity the
-//	plate feels, so a visor tipped back toward the sky holds drops it would drop when level.
-//	Nearer the bottom of the band than the top because a cap on a visor is not a hemisphere: the
-//	advancing angle on PMMA is about 76 degrees, so a drop of the critical radius stands
-//	r*tan(theta/2) tall, which is four fifths of it.
-#define DA_VD_PIN		0.95f
-//	Once it is moving it stays moving below that - the receding angle is not the advancing one.
-#define DA_VD_PIN_GO	0.55f
-//	Terminal speed per millimetre of thickness above the threshold, mm/s. A big drop on a pane
-//	runs at ten to thirty centimetres a second and a marginal one crawls, and it reaches that
-//	speed within a few millimetres of travel - which is instantly, at this step.
-#define DA_VD_SPEED		150.0f
-//	How fast the water gets to that speed and back, 1/s. Capillary flow, so: quickly.
-#define DA_VD_DRAG		12.0f
-//	What a moving drop leaves behind, as a share of the water that left the texel, and the
-//	ceiling on the film that builds up from it. The real trail is single-digit microns - far
-//	under one texel of anything - so this is the number that has to be a look rather than a
-//	measurement: what it has to do is be visible and be followed.
-#define DA_VD_TRAIL		0.130f
-#define DA_VD_FILM_MAX	0.06f
+//	The thickness at which a drop stops being pinned, millimetres, measured over the disc below
+//	and not under one pixel. The criterion is a Bond number - the drop's weight against the
+//	retention of its own contact line - and it crosses one at a radius of the capillary length
+//	times the root of the critical Bond number: sqrt(gamma / rho g) = 2.728 mm, Bo_c between 0.15
+//	and 0.35 on glass, so 1.1 to 1.6 mm. That agrees with the measurements - five to fifteen
+//	microlitres pipetted onto a glass slide is a radius of 1.1 to 1.5 mm, and that is where drops
+//	begin to run. Divided by the share of gravity the plate feels, so a visor tipped back toward
+//	the sky holds drops it would let go of when level.
+#define DA_VD_PIN		0.30f
+//	Once it is moving it needs only this share of that - the receding angle is not the advancing
+//	one, and the difference is the whole of contact angle hysteresis. It has to be a big
+//	difference or a running drop stalls the moment it thins, which it does at once: it is leaving
+//	water behind and spreading as it goes.
+#define DA_VD_PIN_GO	0.35f
+//	The radius the weight is measured over, millimetres: a drop's own footprint. Two drops that
+//	merged into a wide low patch weigh what a tall one weighs and have to run like it, and the
+//	thickness under one pixel cannot tell the difference.
+#define DA_VD_WEIGH_MM	1.60f
+//	Terminal speed per millimetre of weighed thickness over the threshold, mm/s. A drop on a pane
+//	runs at ten to thirty centimetres a second - a 22 cm visor in one to two seconds - and reaches
+//	that speed within a few millimetres of travel, which at this step is instantly.
+#define DA_VD_SPEED		420.0f
+//	The Courant number: the share of a cell water may cross in one step. Past one the flux would
+//	have to send more water than a cell holds and the scheme stops conserving; just under one is
+//	also where an upwind flux stops SMEARING, because its numerical diffusion goes as
+//	CFL (1 - CFL) and vanishes at both ends. At 0.8 a drop spread to twice its width in a second
+//	of running and arrived at the bottom of the glass as a streak with no head; at 0.95 the same
+//	drop keeps its shape.
+#define DA_VD_CFL		0.95f
+//	How fast the water gets to its speed and back, 1/s. Capillary flow, so: quickly.
+#define DA_VD_DRAG		25.0f
+//	What a moving drop leaves behind, as a share of the water that crossed out of the cell, and
+//	the ceiling on the film that builds from it. The real trail is single-digit microns - far
+//	under one texel of anything - so the number is a look and not a measurement, but it is bounded
+//	from above by something real: a running drop crosses its own width many times over, and at a
+//	seventh of what leaves each cell it had paid out nine tenths of itself within a third of a
+//	second. It arrived at the bottom of the glass as a stain with no drop at the end of it, which
+//	is not what a trail is.
+#define DA_VD_TRAIL		0.020f
+#define DA_VD_FILM_MAX	0.060f
 //	How hard water veers toward the wet side. Pure gravity gives parallel tracks; this is what
 //	makes a window run in a few channels.
 #define DA_VD_FOLLOW	0.55f
-//	Drying, mm/s. A drop is minutes; the film a few tens of seconds - a micron-thick trail goes
-//	in seconds under moving air and in a minute in still air, and the visor is somewhere between.
+//	Drying, mm/s. A drop is minutes; the film a few tens of seconds - a micron-thick trail goes in
+//	seconds under moving air and in a minute in still air, and a visor is somewhere between.
 #define DA_VD_DRY		0.006f
-#define DA_VD_DRY_FILM	0.004f
-//	Drops per square metre per second at full rate. Marshall-Palmer at 25 mm/h gives a few
-//	thousand drops per cubic metre and a fall speed of several metres a second, so a plate facing
-//	the horizon catches thousands per square metre per second - and it has to, because the whole
-//	behaviour downstream depends on drops MEETING each other. At a hundred a second over the
-//	visor the glass reaches a fifth covered and holds there, which is where merged drops start to
-//	pass the sliding threshold and run. A third of this produced a pretty field of beads that
-//	never once moved; three times it flooded the glass into an opaque sheet within ten seconds.
-#define DA_VD_FLUX		1500.0f
-//	The cell the spawn lottery is drawn on, in millimetres. One drop per cell per step at most,
-//	so the cell has to be bigger than the drops or they would land on top of each other.
+#define DA_VD_DRY_FILM	0.008f
+//	Drops per square metre per second at full rate. Marshall-Palmer at 25 mm/h gives a few thousand
+//	drops per cubic metre and a fall speed of several metres a second, so a plate facing the
+//	horizon catches thousands per square metre per second - and it has to, because everything
+//	downstream depends on drops MEETING each other. Measured on the rig with a conservative
+//	transport: at 1500 the glass settles at a seventh covered, the weighed thickness reaches 0.13
+//	at its ninety-ninth percentile against a threshold of 0.3, and almost nothing ever runs - a
+//	field of beads, which is what the player saw. The earlier readings that said otherwise were
+//	taken while the transport was still quietly creating water.
+#define DA_VD_FLUX		3000.0f
+//	The cell the spawn lottery is drawn on, in millimetres: bigger than the drops, or two of them
+//	land in the same place.
 #define DA_VD_CELL_MM	4.0f
 //	Radius of an arriving drop, millimetres: the small ones are most of them.
-#define DA_VD_RAD_MIN	0.35f
+#define DA_VD_RAD_MIN	0.40f
 #define DA_VD_RAD_MAX	1.85f
-//	The ceiling. Whatever the shape regime, a drop on a pane stays about a millimetre tall -
-//	past that it stops being taller and starts being longer, and it is already running.
+//	The ceiling. Whatever the shape regime, a drop on a pane stays about a millimetre tall - past
+//	that it stops being taller and starts being longer, and it is already running.
 #define DA_VD_CLAMP		1.80f
 
-//	The hand: how wide the wiping edge is and how far its push reaches ahead of it, in millimetres,
-//	how much water it takes with it, and how much of what is left it smears into a film.
-#define DA_VD_WIPE_W	9.0f
-#define DA_VD_WIPE_PUSH	26.0f
-#define DA_VD_WIPE_KEEP	0.06f
-#define DA_VD_WIPE_SMEAR 0.30f
-#define DA_VD_WIPE_SPEED 900.0f
+//	The hand. It does not delete water - it COLLECTS it: the edge drives everything it touches
+//	forward faster than it is itself travelling, so the water piles into a bead that rides ahead of
+//	it and runs off the far side. Only what the bead could not take is left behind, and it is left
+//	as a smeared film and not as clean glass.
+#define DA_VD_WIPE_W	11.0f
+#define DA_VD_WIPE_PUSH	30.0f
+#define DA_VD_WIPE_KEEP	0.10f
+#define DA_VD_WIPE_SMEAR 0.85f
 
 float da_vd_hash(int2 p, uint n)
 {
@@ -126,9 +156,9 @@ float da_vd_hash(int2 p, uint n)
 	return float(h & 0x00ffffffu) * (1.0f / 16777216.0f);
 }
 
-//	A smooth field of how rough the glass is here: where the plate holds a drop harder than
-//	average and where it lets one go early. Two millimetres across, so it is per drop and not per
-//	texel - a per-texel threshold is noise, and noise makes a field crawl instead of run.
+//	A smooth field of how rough the glass is here: where the plate holds a drop harder than average
+//	and where it lets one go early. Two millimetres across, so it is per drop and not per texel - a
+//	per-texel threshold is noise, and noise makes a field crawl instead of run.
 float da_vd_pinning(float2 mm)
 {
 	const float2 c = mm * (1.0f / 2.2f);
@@ -145,101 +175,121 @@ struct v2p
 	float2	tc0		: TEXCOORD0;
 };
 
-//	The state at a point of the glass, in texel coordinates. Bilinear: the field is advected and
-//	a point sample would move the water in whole texels.
+//	Point-sampled: this is a finite-volume scheme, and a texel is a cell with a mass in it rather
+//	than a sample of a smooth function. Interpolating between cells would move water no flux ever
+//	sent, which is exactly the leak the transport is written this way to close.
 float4 da_vd_read(float2 uv)
 {
-	return s_visor_prev.SampleLevel(smp_rtlinear, uv, 0);
+	return s_visor_prev.SampleLevel(smp_nofilter, uv, 0);
+}
+
+//	What a cell sends its neighbours this step, as a share of what it holds: one component per
+//	axis, in the direction of its own velocity. The Courant number is the budget for the STEP and
+//	not for each axis - water running straight down the glass, which is nearly all of it, would
+//	otherwise be held to half the speed the scheme can actually carry.
+float2 da_vd_outflow(float2 v, float k)
+{
+	const float2 f = abs(v) * k;
+	const float sum = f.x + f.y;
+	return (sum > DA_VD_CFL) ? (f * (DA_VD_CFL / sum)) : f;
 }
 
 float4 main(v2p I) : SV_Target
 {
 	const float dt = da_visor_sim.x;
 	const float texel_mm = da_visor_sim.y;
-	const uint step = uint(da_visor_sim.z);
+	//	Not "step": that is an HLSL intrinsic, and a local of the same name hides it for the rest
+	//	of the function - which the border guard below needs.
+	const uint step_n = uint(da_visor_sim.z);
 	const float wet = da_visor_sim.w;
 	const float2 gdir = da_visor_grav.xy;
 	const float gshare = da_visor_grav.z;
-	const float aspect = da_visor_grav.w;
 
-	//	Where this texel is on the glass, in millimetres, and how uv and millimetres relate. The
-	//	target carries the screen's aspect, so a texel is square in both and one number does for
-	//	each axis - which is the whole reason it is not a square target.
+	//	The target carries the screen's aspect, so a texel is square in millimetres and one number
+	//	does for each axis - which is the whole reason it is not a square target.
 	const float2 texel_uv = da_visor_dim.xy;
 	const float2 uv_per_mm = texel_uv / texel_mm;
 	const float2 mm_here = I.tc0 / max(uv_per_mm, 1e-6f);
+	//	Millimetres a second, turned into a share of a cell per step.
+	const float k_flux = dt / texel_mm;
+	//	The fastest the Courant condition allows, in millimetres a second.
+	const float v_max = DA_VD_CFL / max(k_flux, 1e-6f);
 
-	//	---- advection ---------------------------------------------------------------------------
-	//	Backward trace. The velocity that matters is the one at the SOURCE, so the trace is taken
-	//	twice: once with the speed here to find roughly where the water came from, once with the
-	//	speed there. One extra tap, and without it a drop's leading edge outruns its tail.
-	float4 here = da_vd_read(I.tc0);
-	float2 back = I.tc0 - here.zw * (dt * uv_per_mm);
-	float4 src = da_vd_read(back);
-	back = I.tc0 - src.zw * (dt * uv_per_mm);
-	float4 st = da_vd_read(back);
+	//	---- transport: a flux, so that mass is conserved --------------------------------------------
+	//	Each of the five cells is asked what it sends where, from the velocity it was holding. What
+	//	this cell keeps plus what its neighbours send it is what it now has. Momentum rides along
+	//	with the mass, so a drop keeps its speed as it crosses cells and a slow drop swallowed by a
+	//	fast one comes out at the weighted speed of the two - which is coalescence.
+	const float4 c = da_vd_read(I.tc0);
+	const float4 xm = da_vd_read(I.tc0 - float2(texel_uv.x, 0.0f));
+	const float4 xp = da_vd_read(I.tc0 + float2(texel_uv.x, 0.0f));
+	const float4 ym = da_vd_read(I.tc0 - float2(0.0f, texel_uv.y));
+	const float4 yp = da_vd_read(I.tc0 + float2(0.0f, texel_uv.y));
 
-	float h = st.x;
+	const float2 fc = da_vd_outflow(c.zw, k_flux);
+	const float2 fxm = da_vd_outflow(xm.zw, k_flux);
+	const float2 fxp = da_vd_outflow(xp.zw, k_flux);
+	const float2 fym = da_vd_outflow(ym.zw, k_flux);
+	const float2 fyp = da_vd_outflow(yp.zw, k_flux);
+
+	//	Only a neighbour whose velocity points AT this cell sends it anything - and only if it is a
+	//	neighbour at all. A sample off the edge of the target comes back clamped, which is this cell
+	//	reading itself: on the top row, where the water above would be flowing down into it, that is
+	//	a cell receiving a share of its own water every step and the row slowly filling with water
+	//	nothing ever sent. Water that runs off the bottom is simply gone, which is correct - it has
+	//	left the glass.
+	const float2 lo = step(0.0f, I.tc0 - texel_uv);
+	const float2 hi = step(I.tc0 + texel_uv, 1.0f);
+	const float in_xm = (xm.z > 0.0f) ? fxm.x * lo.x : 0.0f;
+	const float in_xp = (xp.z < 0.0f) ? fxp.x * hi.x : 0.0f;
+	const float in_ym = (ym.w > 0.0f) ? fym.y * lo.y : 0.0f;
+	const float in_yp = (yp.w < 0.0f) ? fyp.y * hi.y : 0.0f;
+
+	const float keep = 1.0f - fc.x - fc.y;
+	float h = c.x * keep + xm.x * in_xm + xp.x * in_xp + ym.x * in_ym + yp.x * in_yp;
+	const float2 mom = c.x * c.zw * keep + xm.x * xm.zw * in_xm + xp.x * xp.zw * in_xp +
+		ym.x * ym.zw * in_ym + yp.x * yp.zw * in_yp;
+	float2 v = (h > 1e-5f) ? (mom / h) : (float2)0.0f;
 	//	The film is what was LEFT BEHIND, so it belongs to the glass and not to the water: it is
-	//	read from this texel and never advected. Carrying it along with the drop was the whole
-	//	reason the first version left no tracks at all.
-	float film = here.y;
-	float2 v = st.zw;
+	//	read from this cell and never carried with the flux.
+	float film = c.y;
 
-	//	Bilinear resampling is a blur, and a drop advected through a few dozen of them is a smear.
-	//	A touch of unsharp against the four neighbours puts back what the interpolation took, and
-	//	only where the water is actually moving - on the pinned drops, which are most of them,
-	//	nothing is resampled and nothing needs correcting.
-	const float speed = length(v);
-	[branch]
-	if (speed > 1.0f)
+	//	---- the trail --------------------------------------------------------------------------------
+	//	The water that moved on did not take all of itself: a sliding drop leaves microns behind, and
+	//	that film is what the next drop follows.
+	film = min(film + max(c.x - h, 0.0f) * DA_VD_TRAIL, DA_VD_FILM_MAX);
+
+	//	---- the footprint ----------------------------------------------------------------------------
+	//	Eight taps on a ring of the critical radius. The sliding criterion is a WEIGHT, so what has to
+	//	be weighed is the water within a drop's own footprint and not the millimetre under this one
+	//	pixel: a wide merged patch and a tall single drop then read alike, which is the point.
+	float h_weigh = h;
 	{
-		const float e = texel_uv.y;
-		const float n0 = da_vd_read(back + float2(texel_uv.x, 0.0f)).x;
-		const float n1 = da_vd_read(back - float2(texel_uv.x, 0.0f)).x;
-		const float n2 = da_vd_read(back + float2(0.0f, e)).x;
-		const float n3 = da_vd_read(back - float2(0.0f, e)).x;
-		//	Clamped here and not only at the end: everything below reads this thickness, and an
-		//	overshoot of half again would have the pinning test think a drop is twice the size the
-		//	field can even hold and run it at twice its speed.
-		h = clamp(h + (h - 0.25f * (n0 + n1 + n2 + n3)) * 0.55f, 0.0f, DA_VD_CLAMP);
+		const float2 r1 = uv_per_mm * DA_VD_WEIGH_MM;
+		const float2 d1 = r1 * 0.7071f;
+		float ring = da_vd_read(I.tc0 + float2(r1.x, 0.0f)).x;
+		ring += da_vd_read(I.tc0 - float2(r1.x, 0.0f)).x;
+		ring += da_vd_read(I.tc0 + float2(0.0f, r1.y)).x;
+		ring += da_vd_read(I.tc0 - float2(0.0f, r1.y)).x;
+		ring += da_vd_read(I.tc0 + d1).x;
+		ring += da_vd_read(I.tc0 - d1).x;
+		ring += da_vd_read(I.tc0 + float2(d1.x, -d1.y)).x;
+		ring += da_vd_read(I.tc0 - float2(d1.x, -d1.y)).x;
+		h_weigh = 0.5f * h + 0.5f * (ring * 0.125f);
 	}
 
-	//	---- the trail -----------------------------------------------------------------------------
-	//	The water that moved on did not take all of itself: a sliding drop leaves microns behind,
-	//	and that film is what the next drop follows.
-	//
-	//	Laid along the PATH and not at the endpoints. A drop running at twenty centimetres a
-	//	second covers several millimetres in one step - more than its own width - so it does not
-	//	slide from texel to texel, it lands ahead of where it was. Asking "did this texel hold
-	//	water last step" then answers no for every texel between the two, and the track comes out
-	//	as a dotted line or, as it did, as nothing. Asking "did a drop CROSS me during this step"
-	//	is four taps back along the trace.
-	{
-		float crossed = max(here.x, h);
-		[unroll]
-		for (int t = 1; t < 4; ++t)
-		{
-			const float2 p = lerp(I.tc0, back, float(t) * 0.25f);
-			crossed = max(crossed, da_vd_read(p).x);
-		}
-		//	Only where the water has actually gone: a drop sitting still lays nothing.
-		const float moved = saturate(length(I.tc0 - back) / max(texel_uv.x, 1e-6f) - 0.5f);
-		film = min(film + crossed * DA_VD_TRAIL * moved, DA_VD_FILM_MAX);
-	}
-
-	//	---- pinning and the pull --------------------------------------------------------------
-	//	The threshold is a size, scaled by how much of gravity the plate feels and by how rough
-	//	the glass is here; a drop already moving needs less, which is the hysteresis itself. Wet
+	//	---- pinning and the pull -----------------------------------------------------------------------
+	//	The threshold is a weight, scaled by how much of gravity the plate feels and by how rough the
+	//	glass is here; a drop already moving needs less of it, which is the hysteresis itself. Wet
 	//	glass holds worse than dry, so a track keeps its channel open.
 	const float rough = 0.75f + 0.5f * da_vd_pinning(mm_here);
 	const float wetter = 1.0f - saturate(film / DA_VD_FILM_MAX) * 0.35f;
-	const float moving = saturate(speed * 0.05f);
-	const float pin = lerp(DA_VD_PIN, DA_VD_PIN_GO, moving) * rough * wetter /
+	const float moving = saturate(length(v) * 0.08f);
+	const float pin = lerp(1.0f, DA_VD_PIN_GO, moving) * DA_VD_PIN * rough * wetter /
 		max(gshare, 0.05f);
 
-	//	Which way it goes: down the glass, veered toward whichever side is wetter. The bias is
-	//	taken across gravity, so a track pulls a drop sideways into it and never speeds it up.
+	//	Which way it goes: down the glass, veered toward whichever side is wetter. The bias is taken
+	//	across gravity, so a track pulls a drop sideways into it and never speeds it up.
 	float2 dir = gdir;
 	[branch]
 	if (h > 0.02f)
@@ -253,82 +303,75 @@ float4 main(v2p I) : SV_Target
 		dir = normalize(gdir + perp * ((wr - wl) * (DA_VD_FOLLOW / max(DA_VD_FILM_MAX, 1e-4f))));
 	}
 
-	//	Terminal speed grows with how far over the threshold the drop is: a marginal drop crawls,
-	//	a fat one runs. Below the threshold the target is zero and the drag parks it.
-	const float over = max(h - pin, 0.0f);
-	const float2 target = dir * (over * DA_VD_SPEED * gshare);
+	//	Terminal speed grows with how far over the threshold the drop is: a marginal drop crawls, a
+	//	fat one runs. Below the threshold the target is zero and the drag parks it.
+	const float over = max(h_weigh - pin, 0.0f);
+	const float2 target = dir * (min(over * DA_VD_SPEED, v_max) * gshare);
 	v += (target - v) * saturate(DA_VD_DRAG * dt);
 
-	//	---- the hand ---------------------------------------------------------------------------
-	//	A sweep, not a switch. The edge crosses the glass over the better part of a second: what
-	//	it has passed is cleared and smeared, what is just ahead of it is shoved along and piles
-	//	up in front of the edge, and what it has not reached yet is untouched.
+	//	---- the hand ----------------------------------------------------------------------------------
+	//	A sweep, not a switch. The edge crosses the glass over the better part of a second: what it
+	//	touches is driven forward as fast as the scheme can carry water, so it piles into a bead in
+	//	front of the hand, and what the bead could not take is smeared behind it.
 	[branch]
 	if (da_visor_wipe.x > 0.5f)
 	{
-		//	The hand travels across the glass, so along the visor's own x, easing in and out the
-		//	way an arm does. -0.15..1.15 so it starts and ends off the plate.
-		const float p = da_visor_wipe.y;
-		const float eased = p * p * (3.0f - 2.0f * p);
+		//	The hand travels across the glass, so along the visor's own x, easing in and out the way
+		//	an arm does. -0.15..1.15, so it starts and ends off the plate.
+		const float ph = da_visor_wipe.y;
+		const float eased = ph * ph * (3.0f - 2.0f * ph);
 		const float lane = lerp(-0.15f, 1.15f, (da_visor_wipe.z > 0.0f) ? eased : (1.0f - eased));
 		const float2 travel = float2((da_visor_wipe.z > 0.0f) ? 1.0f : -1.0f, 0.0f);
 		//	Distance from the edge, in millimetres, signed so that positive is ahead of it.
 		const float d_mm = (I.tc0.x - lane) / max(uv_per_mm.x, 1e-6f) * travel.x;
 
-		//	Behind the edge: the water is gone and what is left is a smeared film, streaked
-		//	across the direction of travel the way a squeegee leaves one.
 		[branch]
-		if (d_mm < 0.0f && d_mm > -DA_VD_WIPE_W * 3.0f)
+		if (d_mm > -DA_VD_WIPE_W && d_mm < DA_VD_WIPE_PUSH)
 		{
-			//	Streaks run ALONG the way the hand went, so they vary across it: a couple of
-			//	incommensurate waves a few millimetres apart, which is the spacing a squeegee
-			//	leaves. A hash of the coordinate here instead would be per-pixel noise.
+			const float k = (d_mm < 0.0f) ? 1.0f : (1.0f - d_mm / DA_VD_WIPE_PUSH);
+			v = lerp(v, travel * v_max, saturate(k * k * 0.95f));
+		}
+		//	Behind it: whatever the bead could not take is smeared. Streaks run ALONG the way the hand
+		//	went, so they vary across it - a couple of incommensurate waves a few millimetres apart,
+		//	which is the spacing a squeegee leaves. A hash of the coordinate would be pixel noise.
+		else if (d_mm <= -DA_VD_WIPE_W && d_mm > -DA_VD_WIPE_W - 14.0f)
+		{
 			const float across = mm_here.y;
 			const float streak = 0.55f + 0.45f * saturate(0.5f + 0.35f * sin(across * 1.9f) +
 				0.30f * sin(across * 0.73f + 2.1f) + 0.20f * sin(across * 4.3f + 0.7f));
 			const float taken = h * (1.0f - DA_VD_WIPE_KEEP);
 			h -= taken;
-			film = min(film + taken * DA_VD_WIPE_SMEAR * streak, DA_VD_FILM_MAX * 2.2f);
+			film = min(film + taken * DA_VD_WIPE_SMEAR * streak, DA_VD_FILM_MAX * 3.0f);
 			v *= 0.15f;
-		}
-		//	Just ahead of it: shoved. The water piles into a bead that rides in front of the hand
-		//	and runs off the far edge, which is what a wipe actually looks like.
-		else if (d_mm >= 0.0f && d_mm < DA_VD_WIPE_PUSH)
-		{
-			const float k = 1.0f - d_mm / DA_VD_WIPE_PUSH;
-			v = lerp(v, travel * DA_VD_WIPE_SPEED, saturate(k * k * 0.6f));
 		}
 	}
 
-	//	---- what arrives -----------------------------------------------------------------------
-	//	Rain. One lottery per cell per step, and the cell is bigger than the drops so two of them
-	//	do not land in the same place. The 3x3 of cells around this texel is what can reach it.
+	//	---- what arrives -------------------------------------------------------------------------------
+	//	Rain. One lottery per cell per step, and the cell is bigger than the drops so two of them do
+	//	not land in the same place. The 3x3 of cells around this texel is what can reach it.
 	[branch]
 	if (wet > 0.002f)
 	{
 		const float cell_uv = DA_VD_CELL_MM * uv_per_mm.x;
-		//	Drops per cell per step, from the flux over the cell's own area.
 		const float p_cell = DA_VD_FLUX * wet * (DA_VD_CELL_MM * DA_VD_CELL_MM * 1e-6f) * dt;
-		const int2 c0 = int2(floor(I.tc0 / float2(cell_uv, cell_uv * 1.0f)));
+		const int2 c0 = int2(floor(I.tc0 / cell_uv));
 		[unroll]
 		for (int j = -1; j <= 1; ++j)
 		{
 			[unroll]
 			for (int i = -1; i <= 1; ++i)
 			{
-				const int2 c = c0 + int2(i, j);
-				const float r0 = da_vd_hash(c, step);
+				const int2 cc = c0 + int2(i, j);
 				[branch]
-				if (r0 >= p_cell)
+				if (da_vd_hash(cc, step_n) >= p_cell)
 					continue;
-				//	Where in the cell, and how big. The size distribution is skewed to the small
-				//	ones - a cube of a uniform is close enough to a rain spectrum at this scale,
-				//	and the eye only ever judges "mostly small, a few fat ones".
-				const float rx = da_vd_hash(c, step ^ 0x9e3779b9u);
-				const float ry = da_vd_hash(c, step ^ 0x85ebca6bu);
-				const float rr = da_vd_hash(c, step ^ 0xc2b2ae35u);
+				//	Where in the cell, and how big. The size distribution is skewed to the small ones -
+				//	a cube of a uniform is close enough to a rain spectrum at this scale.
+				const float rx = da_vd_hash(cc, step_n ^ 0x9e3779b9u);
+				const float ry = da_vd_hash(cc, step_n ^ 0x85ebca6bu);
+				const float rr = da_vd_hash(cc, step_n ^ 0xc2b2ae35u);
 				const float rad = lerp(DA_VD_RAD_MIN, DA_VD_RAD_MAX, rr * rr * rr);
-				const float2 at = (float2(c) + float2(rx, ry)) * cell_uv;
+				const float2 at = (float2(cc) + float2(rx, ry)) * cell_uv;
 				const float2 dmm = (I.tc0 - at) / max(uv_per_mm, 1e-6f);
 				const float q = dot(dmm, dmm) / max(rad * rad, 1e-4f);
 				[branch]
@@ -336,46 +379,20 @@ float4 main(v2p I) : SV_Target
 					continue;
 				//	A spherical cap: the peak of an arriving drop is about half its radius.
 				h += exp(-q) * rad * 0.5f;
-				//	It arrived at six metres a second and more. A two millimetre drop hitting
-				//	glass at terminal velocity is a Weber number over a thousand, an order past
-				//	the splashing threshold, so it does not settle into a neat cap - it throws
-				//	satellites. Three of them, from the same hash, at a couple of radii out.
-				[unroll]
-				for (int k = 0; k < 3; ++k)
-				{
-					const float sa = da_vd_hash(c, step ^ (0x27d4eb2fu + uint(k) * 0x165667b1u));
-					const float sd = da_vd_hash(c, step ^ (0x1b873593u + uint(k) * 0x85ebca77u));
-					float ss, sc;
-					sincos(sa * 6.2831853f, ss, sc);
-					const float2 sat = at + float2(sc, ss) * (rad * (1.6f + 1.8f * sd) * uv_per_mm.x);
-					const float2 sdm = (I.tc0 - sat) / max(uv_per_mm, 1e-6f);
-					const float srad = rad * 0.28f;
-					const float sq = dot(sdm, sdm) / max(srad * srad, 1e-4f);
-					[flatten]
-					if (sq < 4.0f)
-						h += exp(-sq) * srad * 0.5f;
-				}
 			}
 		}
 	}
 
-	//	---- drying ------------------------------------------------------------------------------
+	//	---- drying --------------------------------------------------------------------------------------
 	h = max(h - DA_VD_DRY * dt, 0.0f);
 	film = max(film - DA_VD_DRY_FILM * dt, 0.0f);
-	//	Water that has run off the bottom of the plate is gone, and so is anything the trace
-	//	dragged in from outside it.
-	[branch]
-	if (back.x < 0.0f || back.x > 1.0f || back.y < 0.0f || back.y > 1.0f)
-	{
-		h = 0.0f;
-		film = 0.0f;
-		v = 0.0f;
-	}
 
 	h = min(h, DA_VD_CLAMP);
-	film = min(film, DA_VD_FILM_MAX * 2.2f);
-	//	A texel with no water in it has no velocity either, or the field keeps a ghost of every
-	//	drop that ever crossed it and the next one to arrive is thrown sideways by it.
+	film = min(film, DA_VD_FILM_MAX * 3.0f);
+	//	Glass with no water in it holds no velocity, or the field keeps a ghost of every drop that ever
+	//	crossed it and the next one to arrive is thrown sideways by it. The flux needs no velocity on
+	//	a dry cell: a cell that has nothing sends nothing, and one that is about to receive does not
+	//	have to know anything - the sender decides.
 	v *= saturate(h * 20.0f);
-	return float4(h, film, clamp(v, -2000.0f, 2000.0f));
+	return float4(h, film, clamp(v, -4000.0f, 4000.0f));
 }
