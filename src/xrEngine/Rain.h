@@ -135,6 +135,12 @@ private:
     // make a night storm as radioactive as noon, which is a gameplay change nobody asked for.
     // The indoor half of the correction still lands, because cover multiplies it.
     float rain_volume;
+    // What actually arrives at the head: density x sky cover, and nothing else. For anything that
+    // is physically wetted by the rain - the visor - rather than tuned against the old export.
+    // rain_volume dies at night by design, and a visor in a night storm was drying while it
+    // poured; the drops came back for the length of a lightning flash, which lit the hemi, and
+    // went again. Kept every frame the rain runs, not only while the ambient bed has feedback.
+    float rain_exposure;
 
     // Sky cover at the eye: how much of the sky the rain can actually arrive from. Measured by
     // a round-robin of static rays, one per frame (see CoverTick).
@@ -179,6 +185,7 @@ public:
     ~CEffect_Rain();
 
     float GetVolume() { return rain_volume; }
+    float GetExposure() const { return rain_exposure; }
     void Render();
     void OnFrame();
     void InvalidateState();

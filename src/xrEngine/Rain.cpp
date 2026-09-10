@@ -37,6 +37,7 @@ CEffect_Rain::CEffect_Rain()
     state = stIdle;
     rain_volume = 0.f;
     rain_volume_snd = 0.f;
+    rain_exposure = 0.f;
     hemi_factor = 0.f;
 
     // Open sky until the probe says otherwise: a level that starts in the rain must not have
@@ -56,6 +57,7 @@ CEffect_Rain::~CEffect_Rain()
     snd_Ambient.destroy();
     rain_volume = 0.f;
     rain_volume_snd = 0.f;
+    rain_exposure = 0.f;
 
     // Cleanup
     p_destroy();
@@ -66,6 +68,7 @@ void CEffect_Rain::InvalidateState()
     state = stIdle;
     rain_volume = 0.f;
     rain_volume_snd = 0.f;
+    rain_exposure = 0.f;
     hemi_factor = 0.f;
     snd_Ambient.stop();
 
@@ -361,10 +364,15 @@ void CEffect_Rain::OnFrame()
             snd_Ambient.stop();
             rain_volume = 0.f;
             rain_volume_snd = 0.f;
+            rain_exposure = 0.f;
             return;
         }
         break;
     }
+
+    // The rain at the head, for what the rain physically wets. Not gated on the sound: a bed
+    // that has lost its feedback must not leave the visor dry.
+    rain_exposure = clampr(factor * cover_factor, 0.f, 1.f);
 
     // ambient sound
     if (snd_Ambient._feedback())

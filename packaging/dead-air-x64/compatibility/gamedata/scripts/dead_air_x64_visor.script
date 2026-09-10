@@ -6,8 +6,8 @@
 --   1. HOW HARD THE GLASS IS BEING WETTED, as a rate. The base driver walks r2_lenswater_val by
 --      three hundredths once a second toward a level, which is why the old effect arrived in
 --      slabs: a level that steps is a picture that steps. The field reads the same console value
---      as a RATE instead, so what it needs is the honest one - level.get_rain_volume(), which
---      already has the shelter test and the sky openness in it - pushed every tick rather than
+--      as a RATE instead, so what it needs is the honest one - level.get_rain_exposure(), the
+--      rain density times the real sky cover at the head, pushed every tick rather than
 --      a slow ramp pushed once a second. It goes down its own channel, visor_rate: the base
 --      driver keeps writing r2_lenswater_val once a second, and in anything but heavy rain what
 --      it writes is zero - sharing the float put the rain on and off at one hertz, which the
@@ -58,8 +58,13 @@ local function update()
 
     -- The wetting rate.
     local rate = 0
+    -- get_rain_exposure and NOT get_rain_volume. The volume is a sound level with the old
+    -- lighting hemi folded in on purpose - shipped scripts turn it into radiation and campfire
+    -- dousing and were tuned against a number that dies at night - so read as a wetting rate it
+    -- dried the visor in every night storm and brought the drops back for the length of a
+    -- lightning flash. The exposure is density times sky cover and nothing else.
     if mask_worn() and level.rain_factor() ~= 0 then
-        rate = level.get_rain_volume() or 0
+        rate = level.get_rain_exposure() or 0
         if rate < 0 then rate = 0 elseif rate > 1 then rate = 1 end
     end
     -- Only when it has actually moved, and in any case once a second: the channel is ours, but a

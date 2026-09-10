@@ -201,6 +201,11 @@ float low_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
 
 float rain_factor() { return (g_pGamePersistent->Environment().CurrentEnv.rain_density); }
 float get_rain_volume() { return g_pGamePersistent->Environment().GetRainVolume(); }
+// The rain arriving at the head - density times sky cover - with none of the daylight term
+// get_rain_volume carries. That one is a sound level tuned for scripts that turn it into
+// radiation and campfire dousing, and it dies at night on purpose; a thing the rain physically
+// wets wants this one.
+float get_rain_exposure() { return g_pGamePersistent->Environment().GetRainExposure(); }
 float get_season_k() { return g_pGamePersistent->Environment().GetSeason(); }
 void set_season_k(float value) { g_pGamePersistent->Environment().SetSeason(value); }
 float snow_factor() { return g_pGamePersistent->Environment().GetSnowFactor(); }
@@ -1034,6 +1039,7 @@ void CLevel::script_register(lua_State* luaState)
         def("vertex_in_direction", vertex_in_direction),
         def("rain_factor", rain_factor),
         def("get_rain_volume", get_rain_volume),
+        def("get_rain_exposure", get_rain_exposure),
         def("snow_factor", snow_factor),
         def("patrol_path_exists", patrol_path_exists),
         def("vertex_position", vertex_position),

@@ -128,6 +128,8 @@ CEnvironment::~CEnvironment()
 
 float CEnvironment::GetRainVolume() { return eff_Rain ? eff_Rain->GetVolume() : 0.f; }
 
+float CEnvironment::GetRainExposure() const { return eff_Rain ? eff_Rain->GetExposure() : 0.f; }
+
 float CEnvironment::GetWetness() const { return GetCurrentWetness(); }
 
 float CEnvironment::GetSnowFactor() const { return GetCurrentSnowFactor(); }

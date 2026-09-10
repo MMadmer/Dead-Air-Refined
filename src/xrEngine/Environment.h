@@ -794,6 +794,8 @@ public:
     void SetWeather(shared_str name, bool forced = false);
     shared_str GetWeather() { return CurrentWeatherName; }
     float GetRainVolume();
+    // The rain arriving at the head: density x sky cover, no daylight term. See Rain.h.
+    float GetRainExposure() const;
     float GetWetness() const;
     float GetSnowFactor() const;
     float GetSeason() const;

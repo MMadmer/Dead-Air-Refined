@@ -1605,6 +1605,17 @@ steady rain is COVERED. Dried at one rate whatever the weather, a small bead las
 and the glass lost its water everywhere, all the time, and the hand had no point. The film keeps
 a slow fade in the rain, standing in for the fresh drops that bury a smear.
 
+**The wetting rate is `level.get_rain_exposure()`, not `level.get_rain_volume()`.** The volume
+is a sound level with the old lighting hemi folded in, on purpose: shipped scripts turn it into
+radiation and campfire dousing and were tuned against a number that dies at night. Read as the
+rate the visor is wetted at, it dried the visor in every night storm - the drops came back for
+the length of a lightning flash, which lit the hemi, and went again, and the player watched the
+glass go dry while it poured. The exposure is the rain density times the real sky cover at the
+head and nothing else, kept every frame the rain runs rather than only while the ambient bed has
+feedback. On the rig in the same overcast rain at ten in the morning, on open marsh: volume
+0.53 against exposure 0.82 - the hemi already takes a third off in daylight, and
+by the engine's own comment on `rain_volume` it falls away in the dark.
+
 **The wetting rate has its own channel.** `visor_rate` is what `dead_air_x64_visor.script`
 pushes; `r2_lenswater_val`, the console float every older mask driver writes, is read only until
 the mod's own driver has spoken. Not both and not the max of both: the base driver re-asserts its
