@@ -1816,3 +1816,63 @@ Keys in `[actor]`: `fall_roll_damage_reduction`, `fall_roll_threshold_raise`, `f
 (handle, bytes, length, whether an emitter plays) - the way to check the tumble on a rig that
 cannot jump, with `time_factor 0.2` and `r__screenshot_every 1` to catch its phases. Nothing about
 the roll is saved.
+
+
+## An artefact in a container answers for itself
+
+Handing in an artefact meant unpacking it first, and almost every artefact is radioactive: the
+player had to stand in the radiation of their own quest item for as long as the dialogue took,
+every time. The check said no because of a naming detail, not because of a rule anybody wrote.
+
+**A container does not hold an artefact - it BECOMES it.** Putting one in destroys both objects
+and creates a single new object whose section is the two names joined: `af_medusa` in a `lead_box`
+is one item of section `af_medusa_lead_box`, of the artefact class, with the container's `antirad`
+folded into its radiation so it shields (`itms_manager.container_add`, and `bind_artefact.script`
+for the shielding). Nothing is nested, so there was nothing to look inside: the object was in the
+rucksack all along and its section was simply a different string, which every possession test in
+the game compared against and rejected.
+
+So the fix is a NAME RULE, and it goes where names are resolved:
+
+* **The engine** answers `db.actor:object("af_medusa")` with the container standing in for it
+  (`da_artefact_container.cpp`, from `CScriptGameObject::GetObjectByName`). That one seam covers
+  every `:object(section)` test there is - `xr_conditions.actor_has_item`, `dialogs.actor_has_item`,
+  the eighteen hand-written `zat_b29` checks, the Jupiter tolls, the DoctorX random fetch, and any
+  mod we have never seen - without touching one of them. It is the LOOKUP that changed, nothing
+  else: `iterate_inventory` is untouched, so the rucksack radiation sweep still sees exactly what
+  it saw before and a containerised artefact still does not irradiate anybody.
+* **The game side** (`dead_air_x64_af_container.script`) covers the two things a lookup cannot.
+  The counters - `actor_has_item_count`, DAR2's `dar2_have_item`, our own `count_items` - walk the
+  inventory and compare sections themselves, so they are wrapped. And the taking: a quest that
+  takes the artefact must not walk off with the container, so the removal funnels
+  (`dialogs.relocate_item_section_from_actor`, `xr_effects.remove_item`, our `remove_items`) empty
+  it instead - the artefact goes to whoever asked for it, the container comes back empty. That
+  mirrors `itms_manager.container_remove` exactly, stat for stat, minus its animation, because
+  this runs inside a dialogue rather than from the player's own menu click.
+
+**Loose first, always.** Every path counts the bare artefacts before it reaches into a bag: a
+player carrying one of each hands over the one in their hand. The loose ones also go through the
+original function untouched, which is what keeps its every side effect - the news line, the trade
+events - exactly as it was; only the shortfall is taken out of a container.
+
+**The rucksack only.** A container on the belt is being worn and its artefact is working there;
+the engine scans `m_ruck` and the script asks `is_on_belt`.
+
+**No container's name is written in either half.** `dead_air_x64_af_container.ltx` says where the
+installed container mod keeps its own registry - file and section, both data - and both halves
+read it. A mod that adds a fifth container type has to register it there to work at all, so it
+arrives free; `[artefact_containers_extra]` and the script's `register()` are for one that keeps
+its list somewhere unreadable. `quest_visible = false` turns the whole rule off.
+
+The one thing this cannot reach is code that destroys an item straight from a lookup -
+`alife():release(alife_object(db.actor:object(sec):id()), true)` - which would eat the container
+rather than empty it. Every section used that way in the shipped trees was checked against the
+container tables: DAR2 uses the idiom for craft parts and armour plates (`af_surge`, `af_kevlar`,
+`af_camelbak`), none of which has a container variant, and the engine only ever stands in when
+`<artefact>_<container>` is a real section - so the case does not arise today. A mod that hands in
+artefacts that way would lose an empty container, not a quest.
+
+`tools\qa\water\af_container.lua` is the acceptance probe: it spawns a filled container on the
+rig, asks the real check, runs the real removal, and measures the inventory against what the save
+started with - seventeen assertions covering the stand-in, the counters, the emptying, the
+hand-over and the loose-first order.

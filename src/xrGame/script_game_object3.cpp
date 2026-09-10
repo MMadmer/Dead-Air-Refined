@@ -19,6 +19,7 @@
 #include "stalker_planner.h"
 #include "Weapon.h"
 #include "Inventory.h"
+#include "da_artefact_container.h"
 #include "CustomZone.h"
 #include "patrol_path_manager.h"
 #include "object_handler_planner.h"
@@ -954,6 +955,13 @@ CScriptGameObject* CScriptGameObject::GetObjectByName(LPCSTR caObjectName) const
     if (l_tpInventoryOwner)
     {
         CInventoryItem* l_tpInventoryItem = l_tpInventoryOwner->inventory().GetItemFromInventory(caObjectName);
+        // Nothing of that name loose - so ask whether one is standing in a container in the
+        // rucksack. An artefact put into a container is not held by it, it IS it: the two
+        // objects become one whose section is the two names joined, which is why a quest could
+        // not see an artefact that was plainly in the bag. See da_artefact_container.h. The
+        // loose one always wins, because it is what the exact lookup above just tried.
+        if (!l_tpInventoryItem)
+            l_tpInventoryItem = da_af_container::find_in_ruck(l_tpInventoryOwner->inventory(), caObjectName);
         CGameObject* l_tpGameObject = smart_cast<CGameObject*>(l_tpInventoryItem);
         if (!l_tpGameObject)
             return (0);

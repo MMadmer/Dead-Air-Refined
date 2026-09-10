@@ -1,0 +1,335 @@
+-- An artefact inside a container, for the code that COUNTS them and the code that TAKES them.
+--
+-- Putting an artefact into a container destroys both objects and creates one new object whose
+-- section is the two names joined: af_medusa in a lead_box is a single item of section
+-- "af_medusa_lead_box". That is the whole mechanic - there is no box with something inside it -
+-- and it is why a quest asking for "af_medusa" came up empty while the artefact was plainly in
+-- the rucksack, so the only way to hand one in was to unpack it by hand and stand in its
+-- radiation until the dialogue was over.
+--
+-- The engine answers the question (da_artefact_container.h): db.actor:object("af_medusa") now
+-- finds the container standing in for it, which covers every `:object(section)` test in the
+-- game, the addons and any mod we have never seen. Two things it cannot cover, and they are
+-- what this file is for:
+--
+--   * THE COUNTERS. actor_has_item_count and the like walk the inventory and compare section
+--     strings themselves, so they see "af_medusa_lead_box" and move on. Wrapped below.
+--   * THE TAKING. A quest that takes "af_medusa" must not walk off with the container: it has
+--     to be emptied and handed back. That cannot happen in the engine - a container is emptied
+--     by destroying the filled object and creating two, which is game-side work.
+--
+-- LOOSE FIRST, ALWAYS. A container is opened only when there is no bare artefact left to give:
+-- the player who is carrying one of each hands over the one in their hand, not the one they
+-- packed away. Every path below counts the loose ones first and only then reaches into a bag.
+--
+-- THE RUCKSACK ONLY. A container on the belt is being worn and its artefact is working there.
+--
+-- No container's name is written here either. The sections come from the same data the engine
+-- reads, which says where the installed container mod keeps its own list - see
+-- dead_air_x64_af_container.ltx. Table fields are assigned directly and need no _G.: the
+-- namespace rule is about bare globals, and xr_conditions/dialogs/xr_effects are tables.
+
+local CFG = "dead_air_x64_af_container.ltx"
+local SECTION = "artefact_containers"
+
+-- ---------------------------------------------------------------------------------------------
+-- which sections are containers
+-- ---------------------------------------------------------------------------------------------
+local containers = nil
+
+local function read_keys(ini, section, into)
+	if not (ini and ini:section_exist(section)) then
+		return
+	end
+	for i = 0, ini:line_count(section) - 1 do
+		local ok, key = ini:r_line(section, i, "", "")
+		if (ok and key ~= "") then
+			into[#into + 1] = key
+		end
+	end
+end
+
+local function container_sections()
+	if containers then
+		return containers
+	end
+	containers = {}
+	local ok, err = pcall(function()
+		local ini = ini_file(CFG)
+		if not (ini and ini:section_exist(SECTION)) then
+			return
+		end
+		if not ini:r_bool_ex(SECTION, "quest_visible", false) then
+			return
+		end
+		local file = ini:r_string_ex(SECTION, "source_file")
+		local from = ini:r_string_ex(SECTION, "source_section")
+		if (file and from) then
+			read_keys(ini_file(file), from, containers)
+		end
+		read_keys(ini, "artefact_containers_extra", containers)
+	end)
+	if not (ok) then
+		printf("! dead_air_x64: artefact container list unreadable: %s", tostring(err))
+		containers = {}
+	end
+	return containers
+end
+
+-- public: a mod whose containers are registered nowhere readable can add its own
+function register(section)
+	if (type(section) == "string" and section ~= "") then
+		local list = container_sections()
+		for _, have in ipairs(list) do
+			if (have == section) then return end
+		end
+		list[#list + 1] = section
+	end
+end
+
+-- The artefact a filled container holds, and the empty container it would leave behind, or nil.
+function split(section)
+	if not (section) then return nil end
+	for _, container in ipairs(container_sections()) do
+		local tail = "_" .. container
+		if (section:sub(-#tail) == tail) then
+			local base = section:sub(1, #section - #tail)
+			if (base ~= "" and system_ini():section_exist(base)) then
+				return base, container
+			end
+		end
+	end
+	return nil
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- what the actor is carrying
+-- ---------------------------------------------------------------------------------------------
+local function each_item(fn)
+	local a = db.actor
+	if not (a) then return end
+	pcall(function()
+		a:iterate_inventory(function(_, item)
+			if (item) then fn(item) end
+			return false
+		end, a)
+	end)
+end
+
+function count_loose(section)
+	local n = 0
+	each_item(function(item)
+		if (item:section() == section) then n = n + 1 end
+	end)
+	return n
+end
+
+-- Filled containers holding `section`, rucksack only, as game objects. Asked the other way
+-- round - what would this artefact's section look like in each container - because that is a
+-- handful of string compares against an inventory that is read every time a task title redraws,
+-- where taking every item apart would not be.
+function containers_holding(section)
+	local found = {}
+	if not (section and db.actor) then return found end
+	local ini = system_ini()
+	local wanted = {}
+	for _, container in ipairs(container_sections()) do
+		local composed = section .. "_" .. container
+		if (ini:section_exist(composed)) then wanted[composed] = true end
+	end
+	if not (next(wanted)) then return found end
+	each_item(function(item)
+		if (wanted[item:section()] and not db.actor:is_on_belt(item)) then
+			found[#found + 1] = item
+		end
+	end)
+	return found
+end
+
+function count_all(section)
+	return count_loose(section) + #containers_holding(section)
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- emptying one
+-- ---------------------------------------------------------------------------------------------
+-- The artefact goes to `receiver_id` - or nowhere at all, when the quest destroys it rather than
+-- taking it - and the container comes back to the player, empty. Mirrors the mod's own
+-- itms_manager.container_remove: same stat carry-over, same weight correction, minus its
+-- animation, because this runs inside a dialogue and not from the player's own menu click.
+local function empty_one(con, receiver_id)
+	local se_con = alife_object(con:id())
+	if not (se_con) then return false end
+
+	local base, empty = split(con:section())
+	if not (base and empty) then return false end
+
+	local ini = system_ini()
+	local antirad = ini:r_float_ex(con:section(), "antirad") or 0
+	local weight = ini:r_float_ex(con:section(), "inv_weight") or 0
+	-- The mod's own rule: a container that does not shield does not weigh anything of its own.
+	if (antirad == 0) then weight = 0 end
+
+	local a = db.actor
+	local sim = alife()
+	local ok = pcall(function()
+		if (receiver_id) then
+			local art = sim:create(base, a:position(), a:level_vertex_id(), a:game_vertex_id(), receiver_id)
+			-- generate=false or se_artefact re-rolls every stat on write and the artefact that
+			-- comes out of the bag is not the one that went in.
+			art.generate = false
+			art.condition = con:condition()
+			art.offline_condition = con:condition()
+			art.weight = (se_con.weight or 0) - weight
+			art.health_restore_speed = se_con.health_restore_speed
+			art.radiation_restore_speed = se_con.radiation_restore_speed
+			art.satiety_restore_speed = se_con.satiety_restore_speed
+			art.power_restore_speed = se_con.power_restore_speed
+			art.bleeding_restore_speed = se_con.bleeding_restore_speed
+			art.additional_inventory_weight = se_con.additional_inventory_weight
+			art.burn_immunity = se_con.burn_immunity
+			art.strike_immunity = se_con.strike_immunity
+			art.shock_immunity = se_con.shock_immunity
+			art.wound_immunity = se_con.wound_immunity
+			art.radiation_immunity = se_con.radiation_immunity
+			art.telepatic_immunity = se_con.telepatic_immunity
+			art.chemical_burn_immunity = se_con.chemical_burn_immunity
+			art.explosion_immunity = se_con.explosion_immunity
+			art.fire_wound_immunity = se_con.fire_wound_immunity
+		end
+		-- The container itself is never the payment: it goes back to the player, empty.
+		sim:create(empty, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id())
+		sim:release(se_con)
+	end)
+	return ok
+end
+
+-- Empty up to `want` containers of `section`; returns how many were emptied.
+function take_from_containers(section, want, receiver_id)
+	if not (want and want > 0) then return 0 end
+	local found = containers_holding(section)
+	local taken = 0
+	for _, con in ipairs(found) do
+		if (taken >= want) then break end
+		if (empty_one(con, receiver_id)) then taken = taken + 1 end
+	end
+	return taken
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- the wrappers
+-- ---------------------------------------------------------------------------------------------
+-- What has already been wrapped. Per function and not one flag for the lot, because install()
+-- runs more than once on purpose: the mod's framework calls on_game_start for every script it
+-- finds, in the order the filesystem lists them, and the engine calls it again for the scripts
+-- named in script.ltx - so the first call can land before the module we mean to wrap has been
+-- loaded at all, and a single "done" flag would make that silence permanent. Whatever was not
+-- there yet is picked up on the next call, and the last one is after the actor exists, by which
+-- time everything is.
+local wrapped = {}
+
+-- Another mod's namespace, or nil when it is not installed. Through _G and behind a pcall: a
+-- bare mention of a script that is not there is a global read, and this engine's globals are not
+-- guaranteed to answer one quietly.
+local function module(name)
+	local ok, m = pcall(function() return _G[name] end)
+	return (ok and type(m) == "table") and m or nil
+end
+
+-- How many a caller is asking for, in the shapes these functions accept.
+local function wanted_count(amount, section)
+	if (amount == "all") then return count_all(section), true end
+	local n = tonumber(amount)
+	return (n and n > 0) and n or 1, false
+end
+
+-- Replace one function of another module, once.
+local function wrap(module_name, fn_name, make)
+	local key = module_name .. "." .. fn_name
+	if (wrapped[key]) then return end
+	local m = module(module_name)
+	if not (m and type(m[fn_name]) == "function") then return end
+	wrapped[key] = true
+	m[fn_name] = make(m[fn_name], m)
+end
+
+local function install()
+	-- COUNTERS. Each keeps its original as the first word: whatever the base mod, the addon or
+	-- another compat layer already answers yes to still answers yes, and the containers are only
+	-- ever an addition.
+	wrap("xr_conditions", "actor_has_item_count", function(original)
+		return function(actor, npc, p, ...)
+			if (original(actor, npc, p, ...)) then return true end
+			local section, need = p and p[1], tonumber(p and p[2])
+			if not (section and need) then return false end
+			return count_all(section) >= need
+		end
+	end)
+
+	wrap("dar2_general", "dar2_have_item", function(original)
+		return function(section, needed, ...)
+			if (original(section, needed, ...)) then return true end
+			return count_all(section) >= (tonumber(needed) or 1)
+		end
+	end)
+
+	wrap("xms_nq_util", "count_items", function(original)
+		return function(section, ...)
+			return original(section, ...) + #containers_holding(section)
+		end
+	end)
+
+	-- TAKING. The loose ones go first and go through the original function untouched - which is
+	-- also what keeps its every side effect (news, asserts, the trade events) exactly as it was.
+	-- Only what the loose ones could not cover is taken out of a bag.
+	wrap("dialogs", "relocate_item_section_from_actor", function(original, dlg)
+		return function(first_speaker, second_speaker, section, amount, ...)
+			local need, all = wanted_count(amount, section)
+			local loose = count_loose(section)
+			if (loose >= need and not all) then
+				return original(first_speaker, second_speaker, section, amount, ...)
+			end
+			-- The original only ever with a count it can meet: its own amount==1 branch asks the
+			-- engine for the section, and the engine answers with a container when nothing loose
+			-- is left - which would hand the container over. Never let it reach that branch
+			-- empty-handed.
+			if (loose > 0) then
+				original(first_speaker, second_speaker, section, loose, ...)
+			end
+			local npc = dlg.who_is_npc and dlg.who_is_npc(first_speaker, second_speaker)
+			take_from_containers(section, need - loose, npc and npc:id())
+		end
+	end)
+
+	wrap("xr_effects", "remove_item", function(original)
+		return function(actor, npc, p, ...)
+			local section = p and p[1]
+			if not (section) then return original(actor, npc, p, ...) end
+			local need = tonumber(p[2]) or 1
+			local loose = count_loose(section)
+			if (loose > 0) then
+				original(actor, npc, {section, math.min(loose, need)}, ...)
+			end
+			local taken = take_from_containers(section, need - loose, nil)
+			local news = module("news_manager")
+			if (taken > 0 and news and news.relocate_item) then
+				news.relocate_item(db.actor, "out", section, taken)
+			end
+		end
+	end)
+
+	wrap("xms_nq_util", "remove_items", function(original)
+		return function(section, count, ...)
+			local need, all = wanted_count(count, section)
+			local removed = original(section, count, ...)
+			if (removed >= need and not all) then return removed end
+			return removed + take_from_containers(section, need - removed, nil)
+		end
+	end)
+end
+
+function on_game_start()
+	install()
+	-- And again once the game is actually running: see the note on `wrapped`.
+	RegisterScriptCallback("actor_on_first_update", install)
+end

@@ -1,0 +1,28 @@
+; An artefact inside a container, for the code that asks whether you HAVE one.
+;
+; Putting an artefact into a container does not park it inside anything: both objects are
+; destroyed and one new object is created whose section is the two names joined - af_medusa in a
+; lead_box is a single item of section "af_medusa_lead_box". So a quest that asks for "af_medusa"
+; comes up empty while the artefact is plainly in the rucksack, and the player has to unpack it
+; by hand and stand in its radiation to hand it in. With this on, the composed section answers
+; for the artefact it holds: mechanism in code (da_artefact_container.h,
+; dead_air_x64_af_container.script), names here.
+;
+; The rucksack only. A container on the belt is being worn and its artefact is doing its work
+; there; a quest reaches into the bag, not onto the belt.
+
+[artefact_containers]
+; Does a containerised artefact answer a quest's "do you have one" at all.
+quest_visible   = true
+
+; WHERE THE INSTALLED CONTAINER MOD KEEPS ITS OWN LIST of container sections - one section per
+; line, which is how these registries are written. Both names are data because both belong to
+; somebody else's mod: nothing of it is written in our code. A mod that adds a container type
+; has to register it here to work at all, so it is covered by existing.
+source_file     = plugins\itms_manager.ltx
+source_section  = art_containers
+
+; Containers that registry does not cover, one section per line. This is the escape hatch for a
+; mod that keeps its list somewhere else entirely; the section named must be the EMPTY container,
+; the one whose name the filled section ends with.
+[artefact_containers_extra]
