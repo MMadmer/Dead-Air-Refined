@@ -194,10 +194,11 @@ uniform float4 da_visor_dim;
 //	rain: a photograph of a rainy window carries a few tenths of a millimetre of water averaged
 //	over the glass, and once surface tension pulls that into beads a millimetre tall it covers a
 //	third of the plate. Spread thin it covered a third at a tenth of the water, which is how the
-//	field looked wet while holding almost nothing - and why every shape on it was a smear. Taken
-//	down by a quarter from there at the player's request: at the full figure the glass closed
-//	over too fast to see past in a downpour, and a visor is a thing you look THROUGH.
-#define DA_VD_FLUX		22500.0f
+//	field looked wet while holding almost nothing - and why every shape on it was a smear. Halved
+//	from there at the player's request: at the full figure the glass closed over too fast to see
+//	past in a downpour, and a visor is a thing you look THROUGH. It is the one number here that is
+//	a preference rather than a measurement - everything downstream is per drop.
+#define DA_VD_FLUX		15000.0f
 //	The cell the spawn lottery is drawn on, in millimetres: bigger than the drops, or two of them
 //	land in the same place.
 #define DA_VD_CELL_MM	4.0f
