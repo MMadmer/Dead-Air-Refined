@@ -68,7 +68,18 @@ constexpr float crown_min_ny = 0.35f;
 
 // Sky-cover probe: rays, their reach, and the share of the weight the fall axis itself carries.
 constexpr int cover_rays = 5;
-constexpr float cover_range = 30.f;
+// The shelter test is a question about what is OVERHEAD, and it is answered by rays that stay
+// overhead. Its axis leans with the wind like the drops do, but never past this; the four rays
+// round it sit this far off it; and they reach this far. A roof, a porch, a canopy are all within
+// a few metres above the head. At the old thirty metres with the axis at the drops' own slant and
+// the ring thirty-five degrees round it, the lowest ray left the eye ten degrees above the
+// horizon and the rest not much higher, and on open marsh in a storm every one of the five found
+// a fence, a tree or a rise in the ground within range: the cover went to zero in ten seconds,
+// and with it the rain's own sound, the radiation the scripts take from it, and the water on the
+// visor - which dried while it poured.
+constexpr float cover_slant = deg2rad(30.f);
+constexpr float cover_spread = 0.47f; // tan of ~25 degrees, as the off-axis mad below uses it
+constexpr float cover_range = 12.f;
 } // namespace da_rain
 
 class ENGINE_API CEffect_Rain
@@ -186,6 +197,7 @@ public:
 
     float GetVolume() { return rain_volume; }
     float GetExposure() const { return rain_exposure; }
+    float GetCover() const { return cover_factor; }
     void Render();
     void OnFrame();
     void InvalidateState();

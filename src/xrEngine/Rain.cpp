@@ -258,9 +258,9 @@ void CEffect_Rain::CoverTick(float dt)
     const auto& env = g_pGamePersistent->Environment();
     const float wind_ms = env.eff_wind_norm * 11.f * (0.55f + 0.45f * env.eff_wind_gust);
     float slant = atanf(wind_ms / da_rain::fall_ms);
-    clamp(slant, 0.f, da_rain::max_slant);
+    clamp(slant, 0.f, da_rain::cover_slant);
     const float sl = _sin(slant), cl = _cos(slant);
-    // The fall axis reversed: where the drops come FROM.
+    // The fall axis reversed: where the drops come FROM, leaned less than the drops are.
     Fvector sky;
     sky.set(-_sin(env.eff_wind_dir) * sl, cl, -_cos(env.eff_wind_dir) * sl);
 
@@ -280,7 +280,7 @@ void CEffect_Rain::CoverTick(float dt)
         off.set(0.f, 0.f, 0.f);
         off.mad(a, _cos(ang));
         off.mad(b, _sin(ang));
-        dir.mad(sky, off, 0.70f); // ~35 degrees off the axis
+        dir.mad(sky, off, da_rain::cover_spread);
         dir.normalize_safe(sky);
     }
 

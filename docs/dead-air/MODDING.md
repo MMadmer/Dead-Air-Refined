@@ -1599,6 +1599,13 @@ millimetre everywhere, more water than had fallen on it, with a quarter of the g
 same storm now holds thirty per cent wet at a twentieth of a millimetre, tracks laid over by
 thirty degrees.
 
+**A wipe leaves a smear, and the smear is the film.** The water the hand leaves as water - a
+tenth of every bead - is regrouped by surface tension into beads too small to draw within a
+second, so what the player sees after the hand is the film alone, and it has to show: the haze
+ramps from three hundredths to fifteen, which keeps a running drop's trail at a whisper and puts
+a hand's smear at a quarter. Under that, the residue vanished a second after the hand and the
+wipe read as a delete again.
+
 **Nothing on the glass dries while it rains.** The air over a plate in the rain is saturated;
 water leaves a visor by running off, by being wiped, or not at all, which is why a window in
 steady rain is COVERED. Dried at one rate whatever the weather, a small bead lasted twenty seconds
@@ -1615,6 +1622,22 @@ head and nothing else, kept every frame the rain runs rather than only while the
 feedback. On the rig in the same overcast rain at ten in the morning, on open marsh: volume
 0.53 against exposure 0.82 - the hemi already takes a third off in daylight, and
 by the engine's own comment on `rain_volume` it falls away in the dark.
+
+**The sky cover in that exposure is a question about what is overhead.** The shelter test casts
+five static rays from the eye, the axis leaned with the wind and four round it. It used to lean
+the axis as far as the drops themselves lean, forty-five degrees, spread the ring thirty-five
+degrees round that and reach thirty metres: the lowest ray left the eye ten degrees above the
+horizon, and on open marsh in a storm every one of the five found a fence, a tree or a rise in
+the ground within range. The cover went to zero in ten seconds - and with it the rain's own
+sound, the radiation the shipped scripts take from the rain, and the water on the visor, which
+dried while it poured and came back for a moment whenever the smoothing let a ray through. The
+axis now leans no more than thirty degrees, the ring sits twenty-five round it, and the rays
+reach twelve metres: a roof, a porch or a canopy is within a few metres above the head, and a
+fence across the yard is not shelter. `qa_visor_state` prints the exposure as density times
+cover, so the next time the glass is dry in the rain the answer is one line. On the rig in the
+same storm the exposure holds at 1.0 where it had gone to nothing. `visor_live.lua`
+is the probe: the visor driven the way the game drives it, with nothing pinned, reported every two
+seconds for two minutes, and `live_timeline.py` lays the log out as a table.
 
 **The wetting rate has its own channel.** `visor_rate` is what `dead_air_x64_visor.script`
 pushes; `r2_lenswater_val`, the console float every older mask driver writes, is read only until

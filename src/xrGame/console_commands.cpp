@@ -2914,8 +2914,9 @@ public:
         Msg("* [qa] visor: wipe phase %.2f, direction %d, sweep %.2f s", env.visor_wipe_phase(),
             env.visor.wipe_dir, env.visor.wipe_len);
         Msg("* [qa] visor: rain %.1f mm/h at the eye, visor_rate %.3f (negative = not driven yet), "
-            "lens %.1f mm",
-            env.rain_rate_mmh, env.visor.rate, env.visor.qa_blob);
+            "exposure %.3f = density %.3f x cover %.3f, lens %.1f mm",
+            env.rain_rate_mmh, env.visor.rate, env.GetRainExposure(), env.CurrentEnv.rain_density,
+            env.GetRainCover(), env.visor.qa_blob);
     }
 };
 

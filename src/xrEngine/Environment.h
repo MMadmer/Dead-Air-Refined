@@ -796,6 +796,7 @@ public:
     float GetRainVolume();
     // The rain arriving at the head: density x sky cover, no daylight term. See Rain.h.
     float GetRainExposure() const;
+    float GetRainCover() const; // the sky cover at the eye the exposure carries, 1 in the open
     float GetWetness() const;
     float GetSnowFactor() const;
     float GetSeason() const;

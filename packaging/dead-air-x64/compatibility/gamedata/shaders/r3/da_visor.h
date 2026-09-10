@@ -96,11 +96,15 @@ uniform float4 da_visor2;
 //	nothing - but it is the whole visible difference between wiped glass and clean glass, and a
 //	wipe that leaves nothing behind is the delete this feature was rebuilt to stop being. Not
 //	louder than the drops: at three times this the tracks were broad dark bands.
-#define DA_VS_FILM_BEND	1.60f
-#define DA_VS_FILM_HAZE	0.12f
-//	The film thickness at which the haze is all there, millimetres. A smear is a couple of tenths
-//	and a trail a few hundredths, so the haze ramps over the whole of that; saturated at a
-//	twentieth, every smear was a flat patch with a hard edge, the colour of nothing in the scene.
+#define DA_VS_FILM_BEND	2.20f
+#define DA_VS_FILM_HAZE	0.26f
+//	The film thickness the haze starts at and the one it is all there at, millimetres. A trail is
+//	a few hundredths and a hand's smear a couple of tenths, and the two must not read alike: the
+//	trail is a whisper behind a running drop, the smear is what the player has to SEE after the
+//	hand goes across, or the wipe reads as a delete. The water the hand leaves as water is
+//	regrouped by surface tension into beads too small to draw within a second, so the smear is
+//	the film and nothing else - it had better show.
+#define DA_VS_FILM_ON	0.03f
 #define DA_VS_FILM_FULL	0.15f
 
 float4 da_visor_read(float2 uv)
@@ -260,7 +264,7 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		const float2 fg = float2(-(tx1.y - tx0.y), (ty1.y - ty0.y)) * inv2mm;
 		const float2 foff = fg * (DA_VS_FILM_BEND * 0.004f);
 		const float3 through = da_visor_gather(img, saturate(uv + foff), 0.004f);
-		const float haze = saturate(film / DA_VS_FILM_FULL) * DA_VS_FILM_HAZE;
+		const float haze = smoothstep(DA_VS_FILM_ON, DA_VS_FILM_FULL, film) * DA_VS_FILM_HAZE;
 		const float lum = dot(through, float3(0.30f, 0.59f, 0.11f));
 		//	Wet glass scatters forward: the blacks lift a little and the colour goes toward the sky
 		//	it is scattering, which is what a smeared visor looks like against a bright sky. Against
