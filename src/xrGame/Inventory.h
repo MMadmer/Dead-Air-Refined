@@ -129,6 +129,13 @@ public:
     // previous slot back.
     void UnblockAllSlots();
     bool IsSlotBlocked(PIItem const iitem) const;
+    // How many owners are holding this slot down. A blocked slot is a refcount with several
+    // owners - a ladder, a car, the death effector, a bloodsucker, a script scene - and when the
+    // hands stay empty this is the first number worth seeing (qa_hands_state).
+    u8 BlockedCount(u16 slot_id) const
+    {
+        return (slot_id < m_blocked_slots.size()) ? m_blocked_slots[slot_id] : u8(0);
+    }
 
     TIItemContainer m_all;
     TIItemContainer m_ruck, m_belt;

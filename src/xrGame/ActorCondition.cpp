@@ -998,4 +998,11 @@ void CActorDeathEffector::Stop()
     m_death_sound.destroy();
     enable_input();
     show_indicators();
+    // What the constructor took. It blocks every slot so that a dying man cannot draw a weapon
+    // through his own death animation, and then gave it back nowhere: input and the indicators
+    // were restored here and the slots were not. A death this effector is stopped rather than
+    // completed - which is what every revive is, and this game has several - left the player
+    // alive, walking, and unable to draw anything at all for the rest of the session, since the
+    // count is per actor and only a fresh actor clears it.
+    Actor()->SetWeaponHideState(INV_STATE_BLOCK_ALL, false);
 }

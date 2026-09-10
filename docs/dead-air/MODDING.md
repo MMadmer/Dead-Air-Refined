@@ -1876,3 +1876,77 @@ artefacts that way would lose an empty container, not a quest.
 rig, asks the real check, runs the real removal, and measures the inventory against what the save
 started with - seventeen assertions covering the stand-in, the counters, the emptying, the
 hand-over and the loose-first order.
+
+
+## Hands that never come back
+
+Sometimes, after using an item, the player could no longer draw anything at all - no weapon, no
+bolt, and sometimes not even the PDA - for the rest of the session. Sometimes the item's use
+animation played twice, the new one and then the old one right after it. The two are the same
+bug, and it took a player's exact account to find it: *"took epinephrine, no animation played,
+pressed 2 for the rifle, and instead of the rifle the epinephrine animation played - and then
+nothing could be drawn."*
+
+**There are two independent gates, and the two symptoms are one each.** A slot is blocked by a
+REFCOUNT (`CInventory::m_blocked_slots`), raised through `hide_weapon()` and lowered through
+`restore_weapon()`; the 3D PDA carries `ignore_slots_blocked`, so when only this one is stuck the
+PDA still opens and nothing else does. The other is `g_da_block_all_except_movement`, the scene
+input gate: it swallows every key at or above `kCAM_1`, which includes the PDA's, so when that
+one is stuck even the PDA is gone. An extra `restore_weapon()` is silently clamped at zero; an
+extra `hide_weapon()` is permanent, and the count lives on the actor, so only a fresh actor clears
+it.
+
+**The root cause is that this feature is installed twice.** DAR2 ships its own item-use
+animations (`dar2_animations_enhanced`), and this project ported a second, better set. In the
+addon's copy the two halves are the wrong way round - its scene ENDS with
+
+```lua
+db.actor:hide_weapon() --Возможность менять оружие
+```
+
+(the comment reads "the ability to change weapon", so the author had hide and restore swapped),
+while the `restore_weapon` it owns sits at the START, where the count is already zero and the call
+is thrown away. One frame later that scene asks for its slot back, the engine refuses because the
+slot it just blocked is blocked, and the player is standing there with empty hands.
+
+It reached the player through OUR scene rather than instead of it. The module consumes the item
+mid-scene through the ordinary use, so that `actor_on_item_use` fires - which is exactly what the
+addon listens on. A second scene started inside the first, span while our block was up, and ran to
+its own end, and its end blocks. That is also the double animation the player saw. **One feature,
+one owner:** while the module has a scene for an item, the addon's copy stays out of it; when the
+module is off in Options, or has no scene for that item, the addon works as it always did.
+
+Three more holes on the same path, each able to strand the hands on its own:
+
+* **A hard Lua error in the waiter.** Between `anim_prepare()` and the scene actually starting,
+  the module holds the hands and the input while nothing is yet scheduled to give them back -
+  every release lives in a time event that only exists once the scene has STARTED. The waiter
+  built its animation name by concatenating a section that can be nil (an entry with a sound and
+  no `anm`; or a scene whose section was cleared under it, since a level change does not restart
+  the Lua machine but does clear the scene). A hard error in one handler ends the whole callback
+  list for that frame, so every other module's update stops too. Guarded, and the waiter is now
+  unregistered on the first frame of a new level.
+* **A watchdog.** The release no longer depends on the scene reaching its end: once a frame, if
+  the module is holding anything and no scene of its own is running, it gives it back. It can only
+  release what it took, so a ladder's block and a bloodsucker's are none of its business.
+* **`unblock_all_slots()` was the wrong instrument.** It sets every counter to zero, including
+  other owners' - a ladder, a car, the death effector. The scene now uses `restore_weapon()`,
+  which takes back exactly the one it raised, through the same event queue that raised it.
+
+And two engine bugs found along the way, both independent of the module:
+
+* **`CActorDeathEffector` blocked every slot in its constructor and never unblocked.** `Stop()`
+  restored the input and the indicators and not the slots. A death that is stopped rather than
+  completed - which is what every revive is - left the player alive and unable to draw anything.
+* **The scene input gate had no reset anywhere.** It is a plain global with the lifetime of the
+  PROCESS: nothing in the engine cleared it on load, on a level change or on actor spawn, so a
+  scene cut short before its own release left the player able to walk and look and nothing else,
+  and reloading the save did not help because the save never held it. It is cleared on actor
+  spawn now.
+
+**`qa_hands_state`** prints every gate between a key press and an item in the hands, in the order
+the game consults them: the per-slot block counts, the active/next/previous slot, the hud state
+and pending flag of the items in them, the input globals, and the 3D PDA's own two flags. When the
+hands stay empty the one thing nobody could see was WHICH gate was holding; now it is one line.
+`tools\qa\water\hands.lua` is the acceptance probe - it claims the hands the way a scene does,
+never starts one, and asserts that everything comes back.

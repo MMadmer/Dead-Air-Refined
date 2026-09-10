@@ -564,6 +564,13 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
         // session flag - the remembered hands, the interference ramp, the boot window.
         // Nothing from the previous life may leak into this one.
         da_pda3d::reset();
+        // The scene input gate belongs to a scene, and a scene does not survive this. It is a
+        // plain global with the lifetime of the PROCESS - nothing in the engine ever cleared it -
+        // so a script scene that was cut short before its own release left the player able to
+        // walk and look and do nothing else, and reloading the save did not help because the
+        // save never held it. Whatever set it is long gone by here.
+        extern bool g_da_block_all_except_movement;
+        g_da_block_all_except_movement = false;
     }
 
     VERIFY(m_pActorEffector == NULL);

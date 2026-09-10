@@ -19,6 +19,9 @@
 #include "Hit.h"
 #include "PHDestroyable.h"
 #include "Actor.h"
+#include "Inventory.h"
+#include "HudItem.h"
+#include "da_pda3d.h"
 #include "Actor_Flags.h"
 #include "Bolt.h"
 #include "CustomZone.h"
@@ -2901,6 +2904,60 @@ public:
     }
 };
 
+// qa_hands_state: why nothing can be drawn. Every gate between a key press and an item in the
+// hands, in the order the game consults them, because when the hands stay empty the one thing
+// nobody can see is WHICH of them is holding. A blocked slot is a refcount with several owners -
+// a ladder, a car, the death effector, a bloodsucker, a script scene - so the count matters as
+// much as the fact.
+class CCC_QaHandsState : public IConsole_Command
+{
+public:
+    CCC_QaHandsState(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr /*args*/) override
+    {
+        CActor* actor = Actor();
+        if (!actor)
+        {
+            Msg("* [qa] hands: no actor");
+            return;
+        }
+
+        CInventory& inv = actor->inventory();
+        string512 blocked;
+        xr_strcpy(blocked, sizeof(blocked), "");
+        for (u16 i = inv.FirstSlot(); i <= inv.LastSlot(); ++i)
+        {
+            string32 one;
+            xr_sprintf(one, sizeof(one), "%s%d", (i == inv.FirstSlot()) ? "" : " ", inv.BlockedCount(i));
+            xr_strcat(blocked, sizeof(blocked), one);
+        }
+        Msg("* [qa] hands: slots active %d, next %d, prev %d", inv.GetActiveSlot(), inv.GetNextActiveSlot(),
+            inv.GetPrevActiveSlot());
+        Msg("* [qa] hands: blocked per slot [%d..%d] = %s", inv.FirstSlot(), inv.LastSlot(), blocked);
+
+        // A hud item wedged out of eIdle stalls CInventory::Update every frame, and nothing
+        // anywhere says so: the slot switch simply never completes.
+        for (int which = 0; which < 2; ++which)
+        {
+            const u16 slot = which ? inv.GetNextActiveSlot() : inv.GetActiveSlot();
+            PIItem item = (slot == NO_ACTIVE_SLOT) ? nullptr : inv.ItemFromSlot(slot);
+            CHudItem* hud = item ? item->cast_hud_item() : nullptr;
+            if (!hud)
+                continue;
+            Msg("* [qa] hands: %s item [%s] state %d, next %d, pending %d, hidden %d",
+                which ? "next" : "active", item->object().cNameSect().c_str(), hud->GetState(),
+                hud->GetNextState(), hud->IsPending() ? 1 : 0, hud->IsHidden() ? 1 : 0);
+        }
+
+        extern bool g_da_block_all_except_movement;
+        extern bool g_bDisableAllInput;
+        Msg("* [qa] hands: input - movement only %d, all input disabled %d, talking %d",
+            g_da_block_all_except_movement ? 1 : 0, g_bDisableAllInput ? 1 : 0, actor->IsTalking() ? 1 : 0);
+        Msg("* [qa] hands: pda3d presenter %d, ui focused %d",
+            da_pda3d::presenter_active() ? 1 : 0, da_pda3d::ui_focused() ? 1 : 0);
+    }
+};
+
 // qa_visor_state: what the visor effect is being driven with, which no screenshot shows.
 class CCC_QaVisorState : public IConsole_Command
 {
@@ -3577,6 +3634,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaWaterRing, "qa_water_ring");
     CMD1(CCC_QaRainShelter, "qa_rain_shelter");
     CMD1(CCC_VisorWipe, "visor_wipe");
+    CMD1(CCC_QaHandsState, "qa_hands_state");
     CMD1(CCC_QaVisorState, "qa_visor_state");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD1(CCC_VisorRate, "visor_rate");

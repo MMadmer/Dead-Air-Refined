@@ -25,6 +25,13 @@ used_item = nil
 fake_monster = nil
 ea_flag = nil
 local tmr = nil
+-- What the scene took from the player and has to give back. Kept as a record rather than read
+-- back from the engine, because these are not the scene's alone: the ladder, a car, the death
+-- effector and a bloodsucker's grab all block the same slots, and the input gate is a plain
+-- global. A scene releases exactly what it took, and the watchdog below releases exactly what a
+-- scene that died on its way could not.
+local held = { slots = false, movekeys = false, input = false }
+local watchdog_armed = false
 
 -- Stacked items ([vodka_2]:vodka) inherit their base's cost and grid cell as separate
 -- sections; the animation entries are keyed by the base name, so the numeric tail is cut.
@@ -65,11 +72,13 @@ end
 function activate()
 	ini_eff = ini_file("items\\items\\animations_settings.ltx")
 	RegisterScriptCallback("actor_on_first_update", actor_on_first_update)
+	arm_watchdog()
 end
 
 --< Animations engine
 function anim_prepare()
 	game.only_allow_movekeys(true)
+	held.movekeys = true
 	hide_det()
 	active_slot = db.actor:active_slot()
 	anim_exist_tm = nil
@@ -77,6 +86,7 @@ function anim_prepare()
 	-- slot: the switch goes through a net event and does not always finish here. restore_weapon
 	-- in ea_restore_actor is its symmetric half.
 	db.actor:hide_weapon()
+	held.slots = true
 	RegisterScriptCallback("actor_on_update", actor_on_update)
 end
 
@@ -110,6 +120,7 @@ function monster_on_actor_use(obj)
 	-- or turns during the scene only fights it. The item scenes keep movement; this one
 	-- takes the whole input (pause stays), enable_input in ea_restore_actor lifts it.
 	level.disable_input()
+	held.input = true
 	anim_prepare()
 	recalc_actor_campos()
 end
@@ -179,10 +190,49 @@ function actor_on_update()
 		return
 	end
 	failure_timer = 0
+	-- No animation to play. An entry with a sound and no `anm` reaches here (da_has_anim asks
+	-- only for the sound), and so does a scene whose section was cleared under it - a level
+	-- change keeps this callback alive while clearing what it was waiting to play. Concatenating
+	-- that nil is a hard Lua error, and a hard error in one handler ends the whole callback list
+	-- for that frame: every other module's update stops running, which is how a scene that could
+	-- not start took the player's hands with it and never gave them back.
+	if not (anim_section) then
+		printf("![da_anims] no animation section for [%s]; the scene is dropped", tostring(used_item))
+		UnregisterScriptCallback("actor_on_update", actor_on_update)
+		used_item = nil
+		obj_m = nil
+		ea_restore_actor()
+		return
+	end
 	anim_section_hud = anim_section .. "_hud"
 	anim_section = nil
 	start_anim(anim_section_hud)
 	anim_manager_item(anim_section_hud)
+end
+-- THE WATCHDOG. Between anim_prepare and start_anim the scene holds the player's hands and his
+-- input while nothing is yet scheduled to give them back: every release lives in a time event
+-- that anim_manager_item creates when the scene actually STARTS. Anything that ends the wait
+-- without starting - the actor dying, a level change, a script error inside the waiter, a use
+-- that the engine refused after the scene had already claimed the hands - leaves the player able
+-- to walk and look and do nothing else, for good. That was the bug: hands that never come back,
+-- sometimes without even the PDA, because the input gate swallows its key too.
+--
+-- So the release does not depend on the scene reaching its end. Once a frame, if this module is
+-- holding anything and no scene of its own is running, it gives it back. It can only ever
+-- release what it took (see `held`), so a ladder's block and a bloodsucker's are none of its
+-- business.
+function ea_watchdog()
+	if (used_item or used_monster) then return end
+	if not (held.slots or held.movekeys or held.input) then return end
+	if not (db.actor and db.actor:alive()) then return end
+	printf("![da_anims] the scene never started; hands and input given back")
+	ea_restore_actor()
+end
+
+function arm_watchdog()
+	if (watchdog_armed) then return end
+	watchdog_armed = true
+	RegisterScriptCallback("actor_on_update", ea_watchdog)
 end
 -- Animations engine >--
 
@@ -190,6 +240,14 @@ end
 -- use_weapon is called by the base game itself (also on a plain pickup), so the extra input
 -- gate is armed only while the module is on: otherwise a missing pair call leaves the player
 -- without actions for seconds and no animation to show for it.
+-- The base mod plays its own hand animation for every item use (actor_on_item_use ->
+-- use_item_obj -> use_item). While a scene of ours is running, the scene IS the animation.
+local originalUI = actor_effects.use_item
+function actor_effects.use_item(name)
+	if (used_item and enable_item_anims) then return end
+	originalUI(name)
+end
+
 local originalUW = actor_effects.use_weapon
 function actor_effects.use_weapon(f)
 	if not enable_animations then
@@ -296,6 +354,13 @@ function blood_fx()
 end
 
 -- The item is consumed mid-scene, at the bite.
+--
+-- This goes through the engine's ordinary use, which is the point - the item's real effect, its
+-- condition, its uses left, every callback that watches item use. It also means the base mod's
+-- OWN use animation fires for it, on top of the scene already playing: the player saw the new
+-- animation and then, right after, the old one, which is nobody's intent. The base animation is
+-- suppressed for the length of the scene rather than for this one call, because the use lands a
+-- frame or two later, through the callback queue.
 function eat_my_obj()
 	if obj_m and db.actor and db.actor:alive() then
 		db.actor:eat(obj_m)
@@ -394,12 +459,26 @@ function mask_hud_switcher()
 end
 
 function ea_restore_actor()
-	-- hide_weapon blocks ALL slots (INV_STATE_BLOCK_ALL); the block is lifted here, and the
-	-- engine brings the previous slot back with it.
-	db.actor:unblock_all_slots()
+	-- restore_weapon, not unblock_all_slots. A blocked slot is a COUNTER with more than one
+	-- owner - a ladder, a car, the death effector and a bloodsucker's grab all raise the same
+	-- one - and unblock_all_slots sets every counter to zero, which hands the weapon back to a
+	-- player who is halfway up a ladder and, worse, makes the ladder's own release a no-op that
+	-- leaves the count negative-by-intent, i.e. stuck the next time. restore_weapon takes back
+	-- exactly the one this scene raised, through the same event queue that raised it, so the two
+	-- cannot cross even when a scene is cut short before its block has landed.
+	if held.slots then
+		held.slots = false
+		db.actor:restore_weapon()
+	end
 	fov_anim_manager.restore_fov()
-	level.enable_input()
-	game.only_allow_movekeys(false)
+	if held.input then
+		held.input = false
+		level.enable_input()
+	end
+	if held.movekeys then
+		held.movekeys = false
+		game.only_allow_movekeys(false)
+	end
 end
 
 function hide_det()
@@ -414,6 +493,10 @@ function actor_on_first_update()
 	-- The time events survive a save (ProcessEventQueueState) while the scene they close
 	-- does not: without this a persisted stop_my_monster_anim fired into a nil carcass.
 	remove_scene_events()
+	-- And the waiter, which nothing else takes down. A level change does NOT restart the Lua
+	-- machine, so a scene interrupted by one leaves this callback armed on the new level with
+	-- everything it was waiting for already cleared.
+	UnregisterScriptCallback("actor_on_update", actor_on_update)
 	used_item = nil
 	used_monster = nil
 	obj_m = nil
