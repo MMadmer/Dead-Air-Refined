@@ -148,14 +148,21 @@ void CRenderTarget::phase_visor_drops()
     // Gravity first, then the drag on top of it, both as a share of one gravity.
     constexpr float air_ref = 6.5f; // m/s at which the push matches the weight
     const float air_mag = g_visor_air.magnitude();
-    const float air_k = std::min(air_mag * air_mag / (air_ref * air_ref), 1.2f);
+    // Capped well under the weight. A drop on a plate in the open wind would feel far more - the
+    // drag on a millimetre bead at fifteen metres a second is tens of times its weight - but a
+    // visor is not in the open wind: the head and the helmet shade it and the air over the glass
+    // is a boundary layer, not the gale. And the field can only carry so much: with the cap above
+    // the weight, a storm halved the pinning threshold, every bead ran, and the glass in a storm
+    // was bare. At this cap a storm lays the tracks over by thirty degrees and takes the biggest
+    // beads early, and the rest stand.
+    const float air_k = std::min(air_mag * air_mag / (air_ref * air_ref), 0.6f);
     const float px = -right.y + ((air_mag > 1e-3f) ? (g_visor_air.x / air_mag) * air_k : 0.f);
     const float py = -up.y + ((air_mag > 1e-3f) ? (g_visor_air.y / air_mag) * air_k : 0.f);
     // Screen up is +y in the world and the target's v runs downward, so the field's own y is the
     // negative of the screen's.
     // Capped: a gale may lay the tracks over, but it must not drive them at twice the speed
     // gravity does - past the cap the water is asked to cross more cells than the flux can send.
-    const float g_len = std::min(_sqrt(px * px + py * py), 1.45f);
+    const float g_len = std::min(_sqrt(px * px + py * py), 1.2f);
     const float gux = (g_len > 1e-4f) ? px / g_len : 0.f;
     const float guy = (g_len > 1e-4f) ? -py / g_len : 1.f;
 

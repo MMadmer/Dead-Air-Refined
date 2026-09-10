@@ -91,7 +91,7 @@ uniform float4 da_visor_dim;
 //	it has to sit UNDER the bead height with capillarity on: a bead now stands at that height
 //	and no taller, and if the threshold matches it nothing short of a wide merged pancake ever
 //	runs - one run in a hundred cells of water, and a glass with no tracks on it.
-#define DA_VD_PIN		0.45f
+#define DA_VD_PIN		0.40f
 //	Once it is moving it needs only this share of that - the receding angle is not the advancing
 //	one, and the difference is the whole of contact angle hysteresis. Big enough that a running
 //	drop does not stall the moment it thins, and no bigger: at a third of the static threshold
@@ -258,15 +258,20 @@ float4 da_vd_read(float2 uv)
 	return s_visor_prev.SampleLevel(smp_nofilter, uv, 0);
 }
 
-//	What a cell sends its neighbours this step, as a share of what it holds: one component per
-//	axis, in the direction of its own velocity. The Courant number is the budget for the STEP and
-//	not for each axis - water running straight down the glass, which is nearly all of it, would
-//	otherwise be held to half the speed the scheme can actually carry.
+//	What a cell sends this step, as shares of what it holds: fx along x and fy along y, each in
+//	the direction of its own velocity and each held under the Courant number on its own. What
+//	actually leaves is fx (1 - fy) to the x neighbour, fy (1 - fx) to the y neighbour, fx fy to
+//	the CORNER between them, and (1 - fx)(1 - fy) stays - corner transport upwind. The corner
+//	share is the whole point. Sent along the axes only, a drop running diagonally leaks a share
+//	sideways at every cell it crosses, and the leak compounds: after a hundred cells the drop is
+//	a triangle ten cells wide with the drop's own water spread over it a few microns deep. That
+//	is what the storm did to the glass - the wind lays every track over, so every track ran
+//	diagonally, and every one became a cone that widened as it fell, thinned past seeing, and
+//	ran off, until the glass held nothing visible however hard it rained. With the corner share
+//	a diagonal run is carried exactly at the Courant limit and the leak is gone.
 float2 da_vd_outflow(float2 v, float k)
 {
-	const float2 f = abs(v) * k;
-	const float sum = f.x + f.y;
-	return (sum > DA_VD_CFL) ? (f * (DA_VD_CFL / sum)) : f;
+	return min(abs(v) * k, DA_VD_CFL);
 }
 
 float4 main(v2p I) : SV_Target
@@ -291,7 +296,7 @@ float4 main(v2p I) : SV_Target
 	const float v_max = DA_VD_CFL / max(k_flux, 1e-6f);
 
 	//	---- transport: a flux, so that mass is conserved --------------------------------------------
-	//	Each of the five cells is asked what it sends where, from the velocity it was holding. What
+	//	Each of the nine cells is asked what it sends where, from the velocity it was holding. What
 	//	this cell keeps plus what its neighbours send it is what it now has. Momentum rides along
 	//	with the mass, so a drop keeps its speed as it crosses cells and a slow drop swallowed by a
 	//	fast one comes out at the weighted speed of the two - which is coalescence.
@@ -300,40 +305,52 @@ float4 main(v2p I) : SV_Target
 	const float4 xp = da_vd_read(I.tc0 + float2(texel_uv.x, 0.0f));
 	const float4 ym = da_vd_read(I.tc0 - float2(0.0f, texel_uv.y));
 	const float4 yp = da_vd_read(I.tc0 + float2(0.0f, texel_uv.y));
+	//	The corners: they send their corner share, and they carry the curvature stencil's ring.
+	const float4 dmm = da_vd_read(I.tc0 - texel_uv);
+	const float4 dpp = da_vd_read(I.tc0 + texel_uv);
+	const float4 dpm = da_vd_read(I.tc0 + float2(texel_uv.x, -texel_uv.y));
+	const float4 dmp = da_vd_read(I.tc0 + float2(-texel_uv.x, texel_uv.y));
 
 	//	The second ring, for the curvature: the Laplacian at each neighbour needs the cells past it.
 	const float xmm = da_vd_read(I.tc0 - float2(2.0f * texel_uv.x, 0.0f)).x;
 	const float xpp = da_vd_read(I.tc0 + float2(2.0f * texel_uv.x, 0.0f)).x;
 	const float ymm = da_vd_read(I.tc0 - float2(0.0f, 2.0f * texel_uv.y)).x;
 	const float ypp = da_vd_read(I.tc0 + float2(0.0f, 2.0f * texel_uv.y)).x;
-	const float xmym = da_vd_read(I.tc0 - texel_uv).x;
-	const float xpyp = da_vd_read(I.tc0 + texel_uv).x;
-	const float xpym = da_vd_read(I.tc0 + float2(texel_uv.x, -texel_uv.y)).x;
-	const float xmyp = da_vd_read(I.tc0 + float2(-texel_uv.x, texel_uv.y)).x;
 
 	const float2 fc = da_vd_outflow(c.zw, k_flux);
 	const float2 fxm = da_vd_outflow(xm.zw, k_flux);
 	const float2 fxp = da_vd_outflow(xp.zw, k_flux);
 	const float2 fym = da_vd_outflow(ym.zw, k_flux);
 	const float2 fyp = da_vd_outflow(yp.zw, k_flux);
+	const float2 fmm = da_vd_outflow(dmm.zw, k_flux);
+	const float2 fpp = da_vd_outflow(dpp.zw, k_flux);
+	const float2 fpm = da_vd_outflow(dpm.zw, k_flux);
+	const float2 fmp = da_vd_outflow(dmp.zw, k_flux);
 
-	//	Only a neighbour whose velocity points AT this cell sends it anything - and only if it is a
-	//	neighbour at all. A sample off the edge of the target comes back clamped, which is this cell
-	//	reading itself: on the top row, where the water above would be flowing down into it, that is
-	//	a cell receiving a share of its own water every step and the row slowly filling with water
-	//	nothing ever sent. Water that runs off the bottom is simply gone, which is correct - it has
-	//	left the glass.
+	//	Only a neighbour whose velocity points AT this cell sends it anything - an edge neighbour
+	//	its axis share if the one component points here, a corner its corner share if both do -
+	//	and only if it is a neighbour at all. A sample off the edge of the target comes back
+	//	clamped, which is this cell reading itself: on the top row, where the water above would be
+	//	flowing down into it, that is a cell receiving a share of its own water every step and the
+	//	row slowly filling with water nothing ever sent. Water that runs off the bottom is simply
+	//	gone, which is correct - it has left the glass.
 	const float2 lo = step(0.0f, I.tc0 - texel_uv);
 	const float2 hi = step(I.tc0 + texel_uv, 1.0f);
-	const float in_xm = (xm.z > 0.0f) ? fxm.x * lo.x : 0.0f;
-	const float in_xp = (xp.z < 0.0f) ? fxp.x * hi.x : 0.0f;
-	const float in_ym = (ym.w > 0.0f) ? fym.y * lo.y : 0.0f;
-	const float in_yp = (yp.w < 0.0f) ? fyp.y * hi.y : 0.0f;
+	const float in_xm = (xm.z > 0.0f) ? fxm.x * (1.0f - fxm.y) * lo.x : 0.0f;
+	const float in_xp = (xp.z < 0.0f) ? fxp.x * (1.0f - fxp.y) * hi.x : 0.0f;
+	const float in_ym = (ym.w > 0.0f) ? fym.y * (1.0f - fym.x) * lo.y : 0.0f;
+	const float in_yp = (yp.w < 0.0f) ? fyp.y * (1.0f - fyp.x) * hi.y : 0.0f;
+	const float in_mm = (dmm.z > 0.0f && dmm.w > 0.0f) ? fmm.x * fmm.y * lo.x * lo.y : 0.0f;
+	const float in_pp = (dpp.z < 0.0f && dpp.w < 0.0f) ? fpp.x * fpp.y * hi.x * hi.y : 0.0f;
+	const float in_pm = (dpm.z < 0.0f && dpm.w > 0.0f) ? fpm.x * fpm.y * hi.x * lo.y : 0.0f;
+	const float in_mp = (dmp.z > 0.0f && dmp.w < 0.0f) ? fmp.x * fmp.y * lo.x * hi.y : 0.0f;
 
-	const float keep = 1.0f - fc.x - fc.y;
-	float h = c.x * keep + xm.x * in_xm + xp.x * in_xp + ym.x * in_ym + yp.x * in_yp;
+	const float keep = (1.0f - fc.x) * (1.0f - fc.y);
+	float h = c.x * keep + xm.x * in_xm + xp.x * in_xp + ym.x * in_ym + yp.x * in_yp +
+		dmm.x * in_mm + dpp.x * in_pp + dpm.x * in_pm + dmp.x * in_mp;
 	const float2 mom = c.x * c.zw * keep + xm.x * xm.zw * in_xm + xp.x * xp.zw * in_xp +
-		ym.x * ym.zw * in_ym + yp.x * yp.zw * in_yp;
+		ym.x * ym.zw * in_ym + yp.x * yp.zw * in_yp + dmm.x * dmm.zw * in_mm +
+		dpp.x * dpp.zw * in_pp + dpm.x * dpm.zw * in_pm + dmp.x * dmp.zw * in_mp;
 	float2 v = (h > 1e-5f) ? (mom / h) : (float2)0.0f;
 	//	The film is what was LEFT BEHIND, so it belongs to the glass and not to the water: it is
 	//	read from this cell and never carried with the flux.
@@ -427,6 +444,13 @@ float4 main(v2p I) : SV_Target
 	}
 	v += (target - v) * saturate(DA_VD_DRAG * dt);
 
+	//	What each edge neighbour still holds after the flux, and which faces are real: both the
+	//	spread and the capillary flow below scale what a sender gives by the first and close the
+	//	border faces with the second.
+	const float4 keep_nb = float4((1.0f - fxm.x) * (1.0f - fxm.y), (1.0f - fxp.x) * (1.0f - fxp.y),
+		(1.0f - fym.x) * (1.0f - fym.y), (1.0f - fyp.x) * (1.0f - fyp.y));
+	const float4 guard = float4(lo.x, hi.x, lo.y, hi.y);
+
 	//	---- and back down: what stands above the bead height spreads ----------------------------
 	//	Conservative, like the flux: what a cell sheds its real neighbours receive, and a cell on
 	//	the edge sheds only to the neighbours it has. Not under the rig's lens, which is held.
@@ -435,10 +459,15 @@ float4 main(v2p I) : SV_Target
 		const float2 dl = (I.tc0 - 0.5f) / max(uv_per_mm, 1e-6f);
 		const float held = lens * step(dot(dl, dl), (da_visor_wipe.w + 1.0f) * (da_visor_wipe.w + 1.0f));
 		const float shed = DA_VD_SPREAD * (1.0f - held);
-		const float ex_c = max(c.x - DA_VD_BEAD_H, 0.0f);
-		const float got = max(xm.x - DA_VD_BEAD_H, 0.0f) * lo.x + max(xp.x - DA_VD_BEAD_H, 0.0f) * hi.x +
-			max(ym.x - DA_VD_BEAD_H, 0.0f) * lo.y + max(yp.x - DA_VD_BEAD_H, 0.0f) * hi.y;
-		h += (got - ex_c * (lo.x + hi.x + lo.y + hi.y)) * shed;
+		//	Every amount is scaled by what its SENDER still holds after the flux - the sender's own
+		//	keep, which both sides can work out from the sender's velocity, so the two sides of a
+		//	face still agree. Without it a cell that had just sent nine tenths of itself down the
+		//	glass shed a surplus it no longer had, went under, was clamped to nothing, and the clamp
+		//	minted the difference: in a storm, with a quarter of the glass running, that flooded the
+		//	visor to half a millimetre everywhere - more water than had fallen on it.
+		const float ex_c = max(c.x - DA_VD_BEAD_H, 0.0f) * keep;
+		const float4 ex_nb = max(float4(xm.x, xp.x, ym.x, yp.x) - DA_VD_BEAD_H, 0.0f) * keep_nb;
+		h += (dot(ex_nb, guard) - ex_c * dot(guard, 1.0f)) * shed;
 	}
 
 	//	---- capillarity: the surface flows toward the same curvature everywhere ------------------
@@ -459,13 +488,15 @@ float4 main(v2p I) : SV_Target
 		const float t4 = texel_mm * texel_mm * texel_mm * texel_mm;
 		const float k4 = min(DA_VD_CAPILLARY * dt / max(t4, 1e-9f), 0.022f) * (1.0f - held);
 		const float lc = xm.x + xp.x + ym.x + yp.x - 4.0f * c.x;
-		const float lxm = xmm + c.x + xmym + xmyp - 4.0f * xm.x;
-		const float lxp = xpp + c.x + xpym + xpyp - 4.0f * xp.x;
-		const float lym = ymm + c.x + xmym + xpym - 4.0f * ym.x;
-		const float lyp = ypp + c.x + xmyp + xpyp - 4.0f * yp.x;
+		const float lxm = xmm + c.x + dmm.x + dmp.x - 4.0f * xm.x;
+		const float lxp = xpp + c.x + dpm.x + dpp.x - 4.0f * xp.x;
+		const float lym = ymm + c.x + dmm.x + dpm.x - 4.0f * ym.x;
+		const float lyp = ypp + c.x + dmp.x + dpp.x - 4.0f * yp.x;
 		const float4 mob = saturate(min(c.x, float4(xm.x, xp.x, ym.x, yp.x)) * (1.0f / DA_VD_MOBILE_MM));
-		const float flow = mob.x * (lxm - lc) * lo.x + mob.y * (lxp - lc) * hi.x +
-			mob.z * (lym - lc) * lo.y + mob.w * (lyp - lc) * hi.y;
+		//	The same keep as the spread, on whichever side of each face is the one losing water.
+		const float4 dlap = float4(lxm, lxp, lym, lyp) - lc;
+		const float4 keep_loser = lerp(keep_nb, (float4)keep, step(0.0f, dlap));
+		const float flow = dot(mob * dlap * keep_loser * guard, 1.0f);
 		h -= k4 * flow;
 	}
 	//	A cell that ran at the Courant limit AND shed its surplus could go under; the trail below
@@ -583,5 +614,19 @@ float4 main(v2p I) : SV_Target
 	//	a dry cell: a cell that has nothing sends nothing, and one that is about to receive does not
 	//	have to know anything - the sender decides.
 	v *= saturate(h * 20.0f);
+	//	A cell that has gone non-finite is emptied rather than kept. It should not happen - every
+	//	term above is bounded - but a NaN here is not one bad cell, it is every cell within reach
+	//	of it a few steps later and then the whole glass, and max() and clamp() on most hardware
+	//	quietly turn a NaN thickness into zero while leaving a NaN velocity at the clamp, which
+	//	flushes every new drop off the glass the step it lands: a visor that is empty and stays
+	//	empty however hard it rains. A comparison a NaN fails is the whole guard.
+	const bool finite = (h < 1e6f) && (abs(v.x) + abs(v.y) < 1e6f) && (film < 1e6f);
+	[flatten]
+	if (!finite)
+	{
+		h = 0.0f;
+		film = 0.0f;
+		v = (float2)0.0f;
+	}
 	return float4(h, film, clamp(v, -4000.0f, 4000.0f));
 }

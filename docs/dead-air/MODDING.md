@@ -1583,6 +1583,22 @@ critical radius run almost at once and take their water off the bottom with them
 the rig in a downpour at the end of this: a quarter of the glass wet and holding, round beads
 across all of it, and about one per cent of the water running in narrow channels at 90 mm/s.
 
+**The flux carries the corners.** A cell sends fx (1 - fy) along x, fy (1 - fx) along y and
+fx fy to the corner between them - corner transport upwind - and not fx along x and fy along y.
+Sent along the axes only, a drop running diagonally leaks a share sideways at every cell it
+crosses and the leak compounds: a hundred cells on, the drop is a triangle ten cells wide with its
+own water spread over it microns deep. A storm lays every track over, so in a storm every track
+ran diagonally, every one became a cone that widened as it fell and thinned past seeing, and the
+glass held nothing visible however hard it rained. With the corner share a diagonal run is carried
+exactly at the Courant limit. And everything that moves water AFTER the flux - the surplus spread,
+the capillary flow - is scaled by what its sender still holds, the sender's own keep, which both
+sides of a face can work out from the sender's velocity: without that a cell that had just sent
+nine tenths of itself down the glass shed a surplus it no longer had, went under, was clamped, and
+the clamp minted the difference. On the rig in a storm that flooded the visor to half a
+millimetre everywhere, more water than had fallen on it, with a quarter of the glass running; the
+same storm now holds thirty per cent wet at a twentieth of a millimetre, tracks laid over by
+thirty degrees.
+
 **Nothing on the glass dries while it rains.** The air over a plate in the rain is saturated;
 water leaves a visor by running off, by being wiped, or not at all, which is why a window in
 steady rain is COVERED. Dried at one rate whatever the weather, a small bead lasted twenty seconds
