@@ -60,15 +60,20 @@ uniform float4 da_visor2;
 //	Not a look knob - it is why drops are bright - but the amount is one, since the pass has no
 //	sky probe to integrate and takes the frame's own upper half as a stand-in.
 #define DA_VS_LIFT		0.45f
-//	The thickness at which a drop is opaque enough to have its own optics, millimetres, and the
-//	one where it starts to.
-#define DA_VS_ON		0.035f
-#define DA_VS_FULL		0.160f
-//	The disc the drop's image is gathered over, in uv. The physical figure is around 0.14 of the
-//	screen's height; a fifth of it is taken, because at a third every drop is the same
-//	fifty-pixel smudge whatever its size and the field's own range of sizes stops reaching the
-//	eye at all.
-#define DA_VS_BLUR		0.020f
+//	The thickness at which water starts having a drop's optics and the one where it has all of
+//	them, millimetres. A bead stands about a millimetre tall, a trail is microns, and between them
+//	is a smear - so the window has to sit high enough that a smear reads as wet glass and not as a
+//	drop. At a sixth of this the field's streaks and its beads were the same flat white shape.
+#define DA_VS_ON		0.060f
+#define DA_VS_FULL		0.320f
+//	The disc the drop's image is gathered over, in uv.
+//
+//	The physical figure is about 0.14 of the screen's height - nobody can focus at two centimetres,
+//	and a drop narrower than the pupil is not resolvable at all. Taken honestly it erases the
+//	effect: every bead becomes the same fifty-pixel smudge and the whole field reads as fog. What
+//	is here is a twentieth of it, which is a photograph's answer rather than an eye's - the drops
+//	keep their edges and their sizes, and the blur only softens what is seen THROUGH them.
+#define DA_VS_BLUR		0.007f
 //	How fast the drop hands over to the sky as its sight line leaves the frame. A drop bends the
 //	view by up to the critical angle, which is a thousand pixels and more, so a good share of
 //	every drop looks at something the frame does not contain. Wrapping that back into the frame
@@ -77,8 +82,12 @@ uniform float4 da_visor2;
 //	How much the film bends and scatters. It is microns thick, so on the physics it should do
 //	almost nothing - but it is the whole visible difference between wiped glass and clean glass,
 //	and a wipe that leaves nothing behind is the delete this feature was rebuilt to stop being.
-#define DA_VS_FILM_BEND	3.20f
-#define DA_VS_FILM_HAZE	0.40f
+//	A trail is microns thick. It has to be visible - a wipe that leaves nothing behind is the
+//	delete this feature was rebuilt to stop being - but it must not be LOUDER than the drops: at
+//	three times this the tracks read as broad dark bands and the beads sitting on the glass
+//	disappeared behind them.
+#define DA_VS_FILM_BEND	1.10f
+#define DA_VS_FILM_HAZE	0.18f
 
 float4 da_visor_read(float2 uv)
 {

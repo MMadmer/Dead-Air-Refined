@@ -998,12 +998,16 @@ void xrRender_sync_preset_derived(bool user_facing)
     // It is also a shader option (USE_LENS_WATER), so like the checkbox it lands on vid restart.
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
     // How wide the visor's drop field is. The height follows the screen's aspect, so this is the
-    // resolution of the glass itself: at 512 across a 22 cm visor a cell is 0.43 mm and a 1 mm
-    // drop is five cells, which is the smallest that still reads as round. It does not go higher,
-    // and that is a physical limit rather than a budget - the transport is a flux bound by the
+    // resolution of the glass ITSELF, and it is what decides whether a drop can be a drop: across
+    // a 22 cm visor a cell is 0.43 mm at 512 and 0.21 at 1024, so the one-millimetre beads that
+    // cover a rainy window are two cells wide on the first and five on the second. Two cells is a
+    // blob with no rim and no roundness, and no amount of shading recovers it.
+    //
+    // The step follows the grid rather than the ladder: the transport is a flux bound by the
     // Courant condition, so a finer grid needs a proportionally shorter step to carry the same
-    // drop at the same speed, and the step is already a sixth of a frame. Create-time.
-    static constexpr int visor_drops_by_preset[] = {256, 256, 384, 512, 512};
+    // drop at the same speed. phase_visor_drops derives it, and the water runs at the same
+    // millimetres a second on every tier. Create-time.
+    static constexpr int visor_drops_by_preset[] = {256, 384, 512, 768, 1024};
     // Grass distance-fade rework: the extra far-grass fill has a measured frame cost
     // (+69% grass pixels at 0.95 in the sibling engine), so the start point climbs with
     // the preset. Minimum keeps the stock fade-from-one-metre.

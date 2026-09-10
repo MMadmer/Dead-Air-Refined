@@ -1465,6 +1465,16 @@ this replaces could not express:
   here as a thickness (`DA_VD_PIN`), divided by the share of gravity the plate feels;
 * **it grows and swallows its neighbours.** Rain keeps arriving and two drops that touch are one
   drop. In a field that is addition, which is the whole reason this is a field;
+* **it beads.** Water on a plate does not spread, it DEWETS: thin water drains into thick, which
+  is why a window in the rain is a field of round beads and a few narrow channels rather than an
+  even sheet, and why every bead has a rim. Without it the field only transports and diffuses, so
+  drops land as beads and immediately relax into wide flat smears - which is exactly what "they
+  look like they have already been wiped" was. It is a VELOCITY here, pointing up the thickness
+  gradient and carried by the same conservative flux as gravity, read over two cells so that a
+  checkerboard cannot drive it, and braked as the water it climbs into reaches the height a drop
+  can actually stand at. The first attempt moved mass directly between neighbours, which is
+  anti-diffusion, and the mode anti-diffusion grows fastest is that same checkerboard: every drop
+  filled with crawling speckle inside a second;
 * **once it runs it leaves a track, and the next drop follows it.** A sliding drop cannot take all
   its water: it leaves microns behind, that film is already wet, and wet glass pins worse - so the
   next drop veers into it. Rain on a window runs in a few channels for this reason and it is two
@@ -1546,6 +1556,17 @@ that rides in front of it and runs off the far side, what the edge has passed ke
 of its water as a smeared film streaked along the way the hand went, and what it has not reached
 is untouched. It never clears to zero - a wiped visor is not clean glass, and the couple of per
 cent left is exactly what makes it read as wiped.
+
+**The look is set by four numbers and they trade against each other**, all in
+`da_visor_drops.ps`. `DA_VD_FLUX` is how much rain arrives. `DA_VD_PIN` is how readily a bead lets
+go - and it, not the rain, is what decides how WET the glass gets, because water leaves a visor by
+running off far faster than it leaves by drying, so the equilibrium is set by how easily it runs.
+`DA_VD_BEAD_H` is the height surface tension pulls to, and for a given amount of water it decides
+how much of the glass is covered: the same water in beads half as tall wets twice the area.
+`DA_VD_RAD_MAX` is the biggest arriving drop, and drops that arrive near the critical radius run
+almost at once and take their water off the bottom with them. Measured on the rig in a downpour at
+the end of this: a fifth of the glass wet and holding, beads across all of it, and about one per
+cent of the water running in narrow channels at 80 mm/s.
 
 `r__visor_drops_stats` prints what the field holds - how much of the glass is wet, the mean and
 deepest thickness, the film, the fastest water and **what share of it is actually running** - and

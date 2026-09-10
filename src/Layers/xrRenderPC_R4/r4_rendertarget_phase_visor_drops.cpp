@@ -80,30 +80,28 @@ void CRenderTarget::phase_visor_drops()
         g_visor_acc = 0.f;
     }
 
-    // Six times the frame, and the number is not a taste: the transport is a flux and a flux may
-    // not move water more than one cell in a step. A drop runs at ten centimetres a second and a
-    // cell of the glass is four tenths of a millimetre, so the step has to be a few milliseconds
-    // or the drop is asked to cross several cells at once and the scheme stops conserving mass -
-    // which it does by quietly making more water, until the glass is half covered and nothing has
-    // moved. The pass is small; this is the cheap half of the trade.
-    constexpr float dt = 1.f / 360.f;
+    // How much of the glass one cell is, and from it the step. The transport is a flux and a flux
+    // may not move water more than one cell in a step, so the step is the Courant condition solved
+    // for the speed the water has to reach: a drop runs at about ten centimetres a second, a cell
+    // is a fifth of a millimetre at the top tier, and the step falls out at a couple of
+    // milliseconds. Derived rather than fixed so that every preset runs the water at the SAME
+    // speed - a coarser grid simply needs fewer steps to do it.
+    constexpr float visor_width_m = 0.22f;
+    const float texel_mm = visor_width_m * 1000.f / float(rt_VisorDrops->dwWidth);
+    constexpr float courant = 0.95f; // has to match DA_VD_CFL in the shader
+    constexpr float speed_target = 95.f; // mm/s, the fastest water the field has to carry
+    const float dt = std::min(courant * texel_mm / speed_target, 1.f / 120.f);
     g_visor_acc += Device.fTimeDelta;
     int steps = int(g_visor_acc / dt);
-    if (steps >= 12)
+    if (steps >= 16)
     {
-        steps = 12;
+        steps = 16;
         g_visor_acc = 0.f;
     }
     else
         g_visor_acc -= float(steps) * dt;
     if (steps <= 0)
         return;
-
-    // How much of the glass one texel is. The visor is a plate about this wide across the
-    // screen's horizontal - the drops have to be a believable SIZE against it, and a millimetre
-    // is a millimetre only once something says how many of them the screen spans.
-    constexpr float visor_width_m = 0.22f;
-    const float texel_mm = visor_width_m * 1000.f / float(rt_VisorDrops->dwWidth);
 
     // What pulls the water, in the plane of the glass. Two things do, and only using one of them
     // was why every track ran dead vertically whatever the weather.

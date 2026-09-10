@@ -31,6 +31,7 @@ local wipe_len = 0.55
 
 local was_wiping = false
 local pushed = -1
+local pushed_at = 0
 
 local function mask_worn()
     -- Same test the base driver makes: a mask HUD is up, or the mask HUD is switched off
@@ -59,9 +60,15 @@ local function update()
         rate = level.get_rain_volume() or 0
         if rate < 0 then rate = 0 elseif rate > 1 then rate = 1 end
     end
-    -- Only when it has actually moved: this runs every frame and the console is not free.
-    if math.abs(rate - pushed) > 0.01 or (rate == 0 and pushed ~= 0) then
+    -- Only when it has actually moved, and in any case twice a second. The console value is not
+    -- ours alone: the base driver writes it, and so does anything that clears the HUD - alt-tab
+    -- out of the game and back and it can come back a zero we never asked for. Pushing only on
+    -- change then leaves the field with no rain for as long as the weather holds steady, which is
+    -- how the drops went away for the rest of a session after a screenshot tool stole focus.
+    local now = time_global()
+    if math.abs(rate - pushed) > 0.01 or (now - pushed_at) > 500 then
         pushed = rate
+        pushed_at = now
         get_console():execute(string.format("r2_lenswater_val %.3f", rate))
     end
 
