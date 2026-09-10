@@ -67,7 +67,8 @@ uniform float4 da_visor_sim;
 // xy = which way is down IN THE PLANE OF THE GLASS, unit; z = how much of gravity the plate
 // feels, 0 when the visor is horizontal and 1 when it faces the horizon; w = the target's aspect.
 uniform float4 da_visor_grav;
-// x = 1 while a hand is going across, y = how far across it is 0..1, z = which way it travels.
+// x = 1 while a hand is going across, y = how far across it is 0..1, z = which way it travels,
+// w = the radius in mm of a lens the rig holds at the centre of the glass, 0 for none.
 uniform float4 da_visor_wipe;
 // xy = one texel in uv, zw = the target's size in texels.
 uniform float4 da_visor_dim;
@@ -86,8 +87,11 @@ uniform float4 da_visor_dim;
 //	second dwarfs the first - so the equilibrium is set by how readily a drop lets go, not by how
 //	hard it is raining. At a third of a millimetre a lone bead the size of a grain of rice was
 //	already running, everything drained as fast as it arrived, and the glass held a twentieth of
-//	what a photograph of a rainy window holds however much rain was thrown at it.
-#define DA_VD_PIN		0.55f
+//	what a photograph of a rainy window holds however much rain was thrown at it. Against that,
+//	it has to sit UNDER the bead height with capillarity on: a bead now stands at that height
+//	and no taller, and if the threshold matches it nothing short of a wide merged pancake ever
+//	runs - one run in a hundred cells of water, and a glass with no tracks on it.
+#define DA_VD_PIN		0.45f
 //	Once it is moving it needs only this share of that - the receding angle is not the advancing
 //	one, and the difference is the whole of contact angle hysteresis. Big enough that a running
 //	drop does not stall the moment it thins, and no bigger: at a third of the static threshold
@@ -125,8 +129,12 @@ uniform float4 da_visor_dim;
 //	the whole plate into evenly spaced parallel stripes. A window has a few irregular channels and
 //	a lot of beads, not corduroy.
 #define DA_VD_FOLLOW	0.12f
-//	SURFACE TENSION, as millimetres a second per unit of surface slope, and the height it stops
-//	pulling at.
+//	SURFACE TENSION, as millimetres a second per unit of surface slope: the speed the water on a
+//	flank relaxes to, the same way it relaxes to its running speed under gravity. It was added to
+//	the velocity every step instead, which made it an acceleration - one balanced only by the
+//	drag, at a speed that came out at slope times 1500 mm/s, saturating the Courant limit for any
+//	slope at all and depending on the step length. Every drop assembled itself at full speed and
+//	overshot: the momentum outlived the brake by forty milliseconds and kept flowing.
 //
 //	Water on a plate does not spread - it DEWETS. Thin water drains into thick, which is why a
 //	window in the rain is a field of round beads and a few narrow channels rather than an even
@@ -146,15 +154,37 @@ uniform float4 da_visor_dim;
 //	It stops at a height rather than running away into a spike, and that height is a real number:
 //	a drop on a plate stands about a millimetre tall whatever its volume, because that is where
 //	its own weight balances the curvature its contact angle allows. Past it the pull is off.
-#define DA_VD_TENSION	45.0f
-//	The height surface tension pulls to. It is also, for a given amount of water on the glass, the
-//	thing that decides how much of the glass is COVERED: the same water in beads half as tall
-//	wets twice the area. Half a millimetre is what a small bead stands at on a plate that is not
-//	freshly waxed, and it is what makes the plate read as rained-on rather than as a few beads on
-//	bare glass.
+#define DA_VD_TENSION	25.0f
+//	The height surface tension pulls to, and above which the water SPREADS again. It is also, for
+//	a given amount of water on the glass, the thing that decides how much of the glass is
+//	COVERED: the same water in beads half as tall wets twice the area. Half a millimetre is what a
+//	small bead stands at on a plate that is not freshly waxed, and it is what makes the plate read
+//	as rained-on rather than as a few beads on bare glass.
 #define DA_VD_BEAD_H	0.55f
-//	Drying, mm/s. A drop is minutes; the film a few tens of seconds - a micron-thick trail goes in
-//	seconds under moving air and in a minute in still air, and a visor is somewhere between.
+//	How fast what stands above that height spreads to its neighbours, as a share per step. A
+//	pull that only ever climbs has no way back down: once a cell overshot the height, nothing
+//	took the surplus off it, and on a fine grid every bead became a crater - the flank kept
+//	receiving from the cells behind it after the brake had stopped it sending on, and stood
+//	taller than the middle. A quarter is the explicit limit for four neighbours; this is under it.
+#define DA_VD_SPREAD	0.10f
+//	CAPILLARITY: the flow the surface's own curvature drives, mm^4/s. The pressure under a water
+//	surface is its curvature times the surface tension, so water flows from where the surface is
+//	convex to where it is concave, and the shape that flow leaves alone is the one with the same
+//	curvature everywhere: a spherical cap. It is what makes a drop ROUND - a finger sticking out
+//	of a bead is a ridge of high curvature and is drawn back in; a plateau with a cell-wide edge
+//	is a cap within a tenth of a second - and without it the climb above, which is a scalar and
+//	knows nothing of shape, grew the beads as staircases along the grid's own axes. The mobility
+//	is the water's, so it goes to zero on dry glass: the flow rounds and smooths a drop but cannot
+//	spread it onto glass it does not already wet. Physically the coefficient is gamma h^3 / 3 mu,
+//	which for a half-millimetre of water is of the order of ten mm^4/s; a thousandth of that is
+//	taken, because the real figure rounds a two-millimetre bead in a millisecond and would have
+//	to be stepped a thousand times finer to be stable. What is here rounds a millimetre in a
+//	fifth of a second and two in a few, which is the timescale a player can see.
+#define DA_VD_CAPILLARY	0.0032f
+//	The thickness at which glass counts as wet for the mobility, millimetres.
+#define DA_VD_MOBILE_MM	0.08f
+//	Drying, mm/s, in DRY AIR: a drop is minutes, the film a few seconds. Neither happens while it
+//	rains - the air over a plate in the rain is saturated - and that is applied below, not here.
 #define DA_VD_DRY		0.006f
 #define DA_VD_DRY_FILM	0.020f
 //	Drops per square metre per second at full rate. Marshall-Palmer at 25 mm/h gives a few thousand
@@ -271,6 +301,16 @@ float4 main(v2p I) : SV_Target
 	const float4 ym = da_vd_read(I.tc0 - float2(0.0f, texel_uv.y));
 	const float4 yp = da_vd_read(I.tc0 + float2(0.0f, texel_uv.y));
 
+	//	The second ring, for the curvature: the Laplacian at each neighbour needs the cells past it.
+	const float xmm = da_vd_read(I.tc0 - float2(2.0f * texel_uv.x, 0.0f)).x;
+	const float xpp = da_vd_read(I.tc0 + float2(2.0f * texel_uv.x, 0.0f)).x;
+	const float ymm = da_vd_read(I.tc0 - float2(0.0f, 2.0f * texel_uv.y)).x;
+	const float ypp = da_vd_read(I.tc0 + float2(0.0f, 2.0f * texel_uv.y)).x;
+	const float xmym = da_vd_read(I.tc0 - texel_uv).x;
+	const float xpyp = da_vd_read(I.tc0 + texel_uv).x;
+	const float xpym = da_vd_read(I.tc0 + float2(texel_uv.x, -texel_uv.y)).x;
+	const float xmyp = da_vd_read(I.tc0 + float2(-texel_uv.x, texel_uv.y)).x;
+
 	const float2 fc = da_vd_outflow(c.zw, k_flux);
 	const float2 fxm = da_vd_outflow(xm.zw, k_flux);
 	const float2 fxp = da_vd_outflow(xp.zw, k_flux);
@@ -351,22 +391,28 @@ float4 main(v2p I) : SV_Target
 	//	Terminal speed grows with how far over the threshold the drop is: a marginal drop crawls, a
 	//	fat one runs. Below the threshold the target is zero and the drag parks it.
 	const float over = max(h_weigh - pin, 0.0f);
-	const float2 target = dir * (min(over * DA_VD_SPEED, v_max) * gshare);
-	v += (target - v) * saturate(DA_VD_DRAG * dt);
+	float2 target = dir * (min(over * DA_VD_SPEED, v_max) * gshare);
 
 	//	---- surface tension: water climbs into the thick -----------------------------------------
-	//	Read over two cells, so the checkerboard cannot drive it; braked as the water it is climbing
-	//	into approaches the height a drop can actually stand at; and off entirely where there is no
-	//	water to move. What comes out of it is the whole difference between a field of beads with
-	//	rims and a field of flat smears.
+	//	The slope is read over a baseline of HALF A MILLIMETRE each way, in millimetres and not in
+	//	cells, and each end is the mean of two cells. Both matter. A pull up the gradient is an
+	//	anti-diffusion, and the mode an anti-diffusion grows fastest is the shortest one the stencil
+	//	can see: read over two cells it is blind to the checkerboard but drives the four-cell
+	//	ripple, and how fast goes as one over the cell size squared - on a finer grid it went from
+	//	invisible to a dotted lattice down every track. A baseline fixed in millimetres also makes
+	//	the strength of the pull a property of the water rather than of the preset's grid: read
+	//	over cells, halving the cell doubled the pull, and the beads on the top tier stood twice as
+	//	narrow as on the one below. Braked as the water it is climbing into approaches the height
+	//	a drop can stand at, and off entirely where there is no water to move.
 	[branch]
 	if (h > 0.008f)
 	{
-		const float2 e2 = texel_uv * 2.0f;
-		const float hx1 = da_vd_read(I.tc0 + float2(e2.x, 0.0f)).x;
-		const float hx0 = da_vd_read(I.tc0 - float2(e2.x, 0.0f)).x;
-		const float hy1 = da_vd_read(I.tc0 + float2(0.0f, e2.y)).x;
-		const float hy0 = da_vd_read(I.tc0 - float2(0.0f, e2.y)).x;
+		const float b = max(floor(0.5f / texel_mm + 0.5f), 1.0f);
+		const float2 eb = texel_uv * b, eb1 = texel_uv * (b + 1.0f);
+		const float hx1 = 0.5f * (da_vd_read(I.tc0 + float2(eb.x, 0.0f)).x + da_vd_read(I.tc0 + float2(eb1.x, 0.0f)).x);
+		const float hx0 = 0.5f * (da_vd_read(I.tc0 - float2(eb.x, 0.0f)).x + da_vd_read(I.tc0 - float2(eb1.x, 0.0f)).x);
+		const float hy1 = 0.5f * (da_vd_read(I.tc0 + float2(0.0f, eb.y)).x + da_vd_read(I.tc0 + float2(0.0f, eb1.y)).x);
+		const float hy0 = 0.5f * (da_vd_read(I.tc0 - float2(0.0f, eb.y)).x + da_vd_read(I.tc0 - float2(0.0f, eb1.y)).x);
 		//	Braked on what is already standing right here and next door, not two cells away: the
 		//	pull has to stop as the water it is climbing into reaches the height a drop can stand
 		//	at, and the cell it would climb into is the neighbour, not the one past it. Braked on
@@ -375,10 +421,56 @@ float4 main(v2p I) : SV_Target
 		//	with it.
 		const float here_tall = max(max(max(c.x, xm.x), max(xp.x, ym.x)), yp.x);
 		const float brake = saturate((DA_VD_BEAD_H - max(here_tall, h)) / DA_VD_BEAD_H);
-		//	Slope of the surface over four cells, dimensionless.
-		const float2 slope = float2(hx1 - hx0, hy1 - hy0) / (4.0f * texel_mm);
-		v += slope * (DA_VD_TENSION * brake * saturate(h * 40.0f));
+		//	Slope of the surface across the baseline, dimensionless.
+		const float2 slope = float2(hx1 - hx0, hy1 - hy0) / ((2.0f * b + 1.0f) * texel_mm);
+		target += slope * (DA_VD_TENSION * brake * saturate(h * 40.0f));
 	}
+	v += (target - v) * saturate(DA_VD_DRAG * dt);
+
+	//	---- and back down: what stands above the bead height spreads ----------------------------
+	//	Conservative, like the flux: what a cell sheds its real neighbours receive, and a cell on
+	//	the edge sheds only to the neighbours it has. Not under the rig's lens, which is held.
+	{
+		const float lens = (da_visor_wipe.w > 0.0f) ? 1.0f : 0.0f;
+		const float2 dl = (I.tc0 - 0.5f) / max(uv_per_mm, 1e-6f);
+		const float held = lens * step(dot(dl, dl), (da_visor_wipe.w + 1.0f) * (da_visor_wipe.w + 1.0f));
+		const float shed = DA_VD_SPREAD * (1.0f - held);
+		const float ex_c = max(c.x - DA_VD_BEAD_H, 0.0f);
+		const float got = max(xm.x - DA_VD_BEAD_H, 0.0f) * lo.x + max(xp.x - DA_VD_BEAD_H, 0.0f) * hi.x +
+			max(ym.x - DA_VD_BEAD_H, 0.0f) * lo.y + max(yp.x - DA_VD_BEAD_H, 0.0f) * hi.y;
+		h += (got - ex_c * (lo.x + hi.x + lo.y + hi.y)) * shed;
+	}
+
+	//	---- capillarity: the surface flows toward the same curvature everywhere ------------------
+	//	The Laplacian of the thickness here and at each neighbour, the flow across each face as
+	//	the difference of the two times the mobility of that face - the drier of its two cells, so
+	//	dry glass takes nothing - and the sum of the four is what this cell loses. Antisymmetric
+	//	across every face, so conservative, and the border faces are closed. The coefficient is
+	//	turned into a share per step from the cell size and the step, and held under the explicit
+	//	limit for a biharmonic stencil. That limit is a THIRTY-SECOND, not a sixteenth: the
+	//	five-point Laplacian's eigenvalues reach -8, the biharmonic's their square, and the step
+	//	is stable only while the share times sixty-four stays under two. At 0.04 the checkerboard
+	//	grew, went negative, was clamped to zero, and the clamp minted water until half the glass
+	//	was a millimetre deep.
+	{
+		const float lens = (da_visor_wipe.w > 0.0f) ? 1.0f : 0.0f;
+		const float2 dl = (I.tc0 - 0.5f) / max(uv_per_mm, 1e-6f);
+		const float held = lens * step(dot(dl, dl), (da_visor_wipe.w + 1.0f) * (da_visor_wipe.w + 1.0f));
+		const float t4 = texel_mm * texel_mm * texel_mm * texel_mm;
+		const float k4 = min(DA_VD_CAPILLARY * dt / max(t4, 1e-9f), 0.022f) * (1.0f - held);
+		const float lc = xm.x + xp.x + ym.x + yp.x - 4.0f * c.x;
+		const float lxm = xmm + c.x + xmym + xmyp - 4.0f * xm.x;
+		const float lxp = xpp + c.x + xpym + xpyp - 4.0f * xp.x;
+		const float lym = ymm + c.x + xmym + xpym - 4.0f * ym.x;
+		const float lyp = ypp + c.x + xmyp + xpyp - 4.0f * yp.x;
+		const float4 mob = saturate(min(c.x, float4(xm.x, xp.x, ym.x, yp.x)) * (1.0f / DA_VD_MOBILE_MM));
+		const float flow = mob.x * (lxm - lc) * lo.x + mob.y * (lxp - lc) * hi.x +
+			mob.z * (lym - lc) * lo.y + mob.w * (lyp - lc) * hi.y;
+		h -= k4 * flow;
+	}
+	//	A cell that ran at the Courant limit AND shed its surplus could go under; the trail below
+	//	measures what left by the difference, so it must not.
+	h = max(h, 0.0f);
 
 	//	---- the hand ----------------------------------------------------------------------------------
 	//	A sweep, not a switch. The edge crosses the glass over the better part of a second: what it
@@ -454,9 +546,35 @@ float4 main(v2p I) : SV_Target
 		}
 	}
 
+	//	A lens for the rig: a spherical cap of this radius, meeting the glass at forty-five
+	//	degrees, held at the centre so the optics can be checked on something bigger than a bead.
+	//	Held still - the water in it is not allowed to move, or the field tears something that
+	//	tall into fingers within a second and there is no lens to look at.
+	[branch]
+	if (da_visor_wipe.w > 0.0f)
+	{
+		const float rad = da_visor_wipe.w;
+		const float2 dmm = (I.tc0 - 0.5f) / max(uv_per_mm, 1e-6f);
+		const float r2 = dot(dmm, dmm);
+		[branch]
+		if (r2 < rad * rad)
+		{
+			const float rs = rad * 1.4142f;
+			h = max(h, sqrt(max(rs * rs - r2, 0.0f)) - (rs - rad * 0.4142f));
+			v = (float2)0.0f;
+		}
+	}
+
 	//	---- drying --------------------------------------------------------------------------------------
-	h = max(h - DA_VD_DRY * dt, 0.0f);
-	film = max(film - DA_VD_DRY_FILM * dt, 0.0f);
+	//	Not while it rains. The air over a plate in the rain is saturated and nothing on it dries;
+	//	the water goes by running off, by being wiped, or not at all - which is why a window in
+	//	steady rain is COVERED. Dried at one rate whatever the weather, a small bead lasted twenty
+	//	seconds and the glass lost its water everywhere, all the time, and the hand had no point.
+	//	The film keeps a slow fade in the rain: a smear is buried by fresh drops in reality, and
+	//	this stands in for that.
+	const float dry_k = 1.0f - saturate(wet * 4.0f);
+	h = max(h - DA_VD_DRY * dt * dry_k, 0.0f);
+	film = max(film - DA_VD_DRY_FILM * dt * (0.25f + 0.75f * dry_k), 0.0f);
 
 	h = min(h, DA_VD_CLAMP);
 	film = min(film, DA_VD_FILM_MAX * 3.0f);

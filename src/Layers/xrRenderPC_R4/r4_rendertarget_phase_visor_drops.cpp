@@ -86,16 +86,18 @@ void CRenderTarget::phase_visor_drops()
     // is a fifth of a millimetre at the top tier, and the step falls out at a couple of
     // milliseconds. Derived rather than fixed so that every preset runs the water at the SAME
     // speed - a coarser grid simply needs fewer steps to do it.
-    constexpr float visor_width_m = 0.22f;
     const float texel_mm = visor_width_m * 1000.f / float(rt_VisorDrops->dwWidth);
     constexpr float courant = 0.95f; // has to match DA_VD_CFL in the shader
     constexpr float speed_target = 95.f; // mm/s, the fastest water the field has to carry
     const float dt = std::min(courant * texel_mm / speed_target, 1.f / 120.f);
     g_visor_acc += Device.fTimeDelta;
     int steps = int(g_visor_acc / dt);
-    if (steps >= 16)
+    // Capped so a hitch cannot queue a second of steps; under the cap the water simply runs slow
+    // for that frame. At the top tier a cell is a ninth of a millimetre and the step just over a
+    // millisecond, so a 60 Hz frame is fourteen of them, and the cap is a little above that.
+    if (steps >= 24)
     {
-        steps = 16;
+        steps = 24;
         g_visor_acc = 0.f;
     }
     else
@@ -157,12 +159,16 @@ void CRenderTarget::phase_visor_drops()
     const float gux = (g_len > 1e-4f) ? px / g_len : 0.f;
     const float guy = (g_len > 1e-4f) ? -py / g_len : 1.f;
 
-    // The wetting rate, and the hand. Two sources, and the wetter wins: r2_lenswater_val is the
-    // rain drivers' (shelter and the mask are already in it), env.visor.dunk is the actor's own
-    // head coming out of the water.
+    // The wetting rate, and the hand. visor_rate is this mod's own driver (shelter and the mask
+    // are already in it); r2_lenswater_val, the console float every older mask driver writes, is
+    // taken only until the mod's own has spoken. Not both, and not the max of both: the base
+    // driver keeps writing its own ramp once a second, and in anything but heavy rain that ramp
+    // is zero, so sharing the float put the rain on and off at one hertz. env.visor.dunk is the
+    // actor's own head coming out of the water, and the wetter of the two wins.
+    const float driven = (env.visor.rate >= 0.f) ? env.visor.rate : ps_r2_lenswater_value;
     const float wet = (env.visor.qa_wet >= 0.f)
         ? clampr(env.visor.qa_wet, 0.f, 1.f)
-        : clampr(std::max(ps_r2_lenswater_value, env.visor.dunk), 0.f, 1.f);
+        : clampr(std::max(driven, env.visor.dunk), 0.f, 1.f);
     const float wipe = env.visor_wipe_phase();
     const float wipe_dir = float(env.visor.wipe_dir);
 
@@ -195,7 +201,7 @@ void CRenderTarget::phase_visor_drops()
         RCache.set_c("da_visor_grav", gux, guy, g_len, rt_w / rt_h);
         // A sweep only exists while it is running; once it is over the hand is gone and the
         // shader must not keep scrubbing the far edge.
-        RCache.set_c("da_visor_wipe", (wipe < 1.f) ? 1.f : 0.f, wipe, wipe_dir, 0.f);
+        RCache.set_c("da_visor_wipe", (wipe < 1.f) ? 1.f : 0.f, wipe, wipe_dir, env.visor.qa_blob);
         RCache.set_c("da_visor_dim", 1.f / rt_w, 1.f / rt_h, rt_w, rt_h);
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 

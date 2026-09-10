@@ -8,8 +8,10 @@
 --      slabs: a level that steps is a picture that steps. The field reads the same console value
 --      as a RATE instead, so what it needs is the honest one - level.get_rain_volume(), which
 --      already has the shelter test and the sky openness in it - pushed every tick rather than
---      a slow ramp pushed once a second. The base driver keeps writing its own value; this one
---      runs every frame and is simply the last word.
+--      a slow ramp pushed once a second. It goes down its own channel, visor_rate: the base
+--      driver keeps writing r2_lenswater_val once a second, and in anything but heavy rain what
+--      it writes is zero - sharing the float put the rain on and off at one hertz, which the
+--      player saw as the drops stopping for a while and starting again.
 --
 --   2. WHEN A HAND GOES ACROSS IT. The base driver zeroes its accumulator the instant the
 --      cleaning animation starts, which is what deleted every drop in one frame. The field
@@ -60,16 +62,13 @@ local function update()
         rate = level.get_rain_volume() or 0
         if rate < 0 then rate = 0 elseif rate > 1 then rate = 1 end
     end
-    -- Only when it has actually moved, and in any case twice a second. The console value is not
-    -- ours alone: the base driver writes it, and so does anything that clears the HUD - alt-tab
-    -- out of the game and back and it can come back a zero we never asked for. Pushing only on
-    -- change then leaves the field with no rain for as long as the weather holds steady, which is
-    -- how the drops went away for the rest of a session after a screenshot tool stole focus.
+    -- Only when it has actually moved, and in any case once a second: the channel is ours, but a
+    -- value that is only ever pushed on change is one lost load screen away from being stale.
     local now = time_global()
-    if math.abs(rate - pushed) > 0.01 or (now - pushed_at) > 500 then
+    if math.abs(rate - pushed) > 0.01 or (now - pushed_at) > 1000 then
         pushed = rate
         pushed_at = now
-        get_console():execute(string.format("r2_lenswater_val %.3f", rate))
+        get_console():execute(string.format("visor_rate %.3f", rate))
     end
 
     -- The hand: only once the cleaning item is the ACTIVE one, which is when its own animation

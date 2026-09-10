@@ -680,6 +680,11 @@ public:
         // A rig override for the wetting rate, negative when off: the QA stand wears no mask, so
         // the drivers push nothing and the field stays empty however hard it is raining.
         float qa_wet{-1.f};
+        // The wetting rate this mod's own driver pushes (visor_rate), negative until it has. The
+        // console float the older drivers write is a fallback, not a partner: they keep writing.
+        float rate{-1.f};
+        // A rig lens: the radius in mm of a cap held at the centre of the glass, 0 for none.
+        float qa_blob{};
         float wipe_start{-1.f}; // fTimeGlobal the sweep begins at, negative when none is running
         float wipe_len{0.55f}; // seconds the hand takes to cross
         // Which way the hand travels. NOT alternating: it follows an animation, and that

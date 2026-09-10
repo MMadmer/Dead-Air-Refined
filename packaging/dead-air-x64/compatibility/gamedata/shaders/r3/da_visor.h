@@ -2,36 +2,36 @@
 #define DA_VISOR_H
 
 //	The water standing on the actor's visor, drawn. The field it reads is solved elsewhere
-//	(da_visor_drops.ps, one fixed step per 1/30 s into $user$visor_drops0); this is the optics of
-//	looking through it.
+//	(da_visor_drops.ps, a fixed step into $user$visor_drops0); this is the optics of looking
+//	through it - from the INSIDE of the glass, which decides more than it seems to.
 //
-//	A drop on a plate two centimetres from the eye is a LENS, and that one fact decides most of
-//	what is below:
+//	A drop on a plate two centimetres from the eye is a LENS, and everything below follows from
+//	tracing the sight line out through it:
 //
-//	  * it INVERTS. Trace the sight line backwards and it leaves the drop through a curved
-//	    water-air interface; a spherical cap of radius r and height r/2 reaches forty-five degrees
-//	    of tilt at its rim, and a ray bent that far crosses the axis. Every photograph of rain on
-//	    a window shows the world upside down inside the drops, and no amount of "pinch the UV
-//	    toward the drop centre" - which is what the effect this replaces did - can produce it,
-//	    because a pinch is a magnifier and a magnifier does not cross the axis.
-//	  * its RIM GOES DARK. That same interface is water on the inside and air on the outside, so
-//	    past the critical angle - 48.6 degrees, which the rim of a real drop reaches - there is no
-//	    refracted ray at all. HLSL's refract returns zero there, and the dark ring every drop
-//	    carries is that zero.
-//	  * it is BRIGHTER than what it covers. Garg and Nayar measured a raindrop's field of view at
-//	    about 165 degrees and its transmission at 94 per cent: the drop gathers a whole
-//	    hemisphere - the sky included - into the solid angle it hides. That is why a drop on a
-//	    window reads as a bright bead against a dark street and not as a dark blob, and it is the
-//	    other half of what the effect this replaces got wrong.
-//	  * it CATCHES THE SUN. A drop is a tiny curved mirror as well as a lens, and the pinpoint
-//	    glint is most of what makes a wet visor read as wet rather than as a dirty texture.
-//	  * it is OUT OF FOCUS, and badly. The blur circle of something at the visor subtends
-//	    D_pupil / distance, and the drop subtends d_drop / distance - the distance cancels, so a
-//	    drop is resolvable only when it is WIDER THAN THE PUPIL, four millimetres or so. Ordinary
-//	    visor drops are one to three, which is why a rainy visor in a photograph is a field of
-//	    soft bright blobs and only the big merged runners have any structure at all. The physical
-//	    blur is about a seventh of the screen's height; a third of that is taken here, because
-//	    the honest number erases the effect the player asked to see.
+//	  * it INVERTS. The line leaves the drop through a curved water-air surface and bends away
+//	    from the normal as it goes into the thinner medium, so at the drop's bottom rim, where the
+//	    surface tilts down, the line is thrown UP, and at the top rim it is thrown down. The
+//	    bottom of every drop looks at the sky and the top at the ground: an upside-down world in
+//	    each, which is what every photograph of rain on a window shows, and the contrast between
+//	    those two halves is most of what makes a drop read as a volume rather than a stain.
+//	  * how far it bends is bounded by the CONTACT ANGLE. Water meets glass at forty-odd degrees
+//	    at most, and a line leaving through a face tilted that far is turned by about twenty. The
+//	    field's own cells are steeper than that - a bead a few cells wide has edges a cell wide -
+//	    so the surface the eye is given is the field smoothed over a bead's footprint with its
+//	    slope capped at the contact angle. Read raw, every bead was rim: past the critical angle
+//	    everywhere but its middle pixel, and so a flat dark blot with no image in it at all.
+//	  * its RIM IS DARK, and thin. The exit surface reflects part of the sight line back into the
+//	    mask - Fresnel, rising steeply toward the critical angle at the contact line - and what it
+//	    reflects is the inside of a helmet, which is dark. It is a line and not a band, so it is
+//	    taken from the field's own steep edge, one texel wide, and not from the smoothed surface.
+//	  * there is no highlight to MIRROR. From inside, nothing bright is on this side of the glass
+//	    to be reflected in the drop's curve. What a photograph from inside shows as a bright arc
+//	    is the refracted sky, brightest where the drop bends the view toward the sun behind the
+//	    cloud - so the sun is looked for along the REFRACTED line, not in a specular lobe.
+//	  * it is BRIGHTER than what it covers, a little. Garg and Nayar: a drop gathers about 165
+//	    degrees of the world into the solid angle it hides, most of it sky.
+//	  * it is OUT OF FOCUS - the eye cannot focus at two centimetres - but taken honestly that
+//	    erases the effect; a small blur softens what is seen through the drop and no more.
 //
 //	The film - what a trail or a hand leaves behind - is not a lens. It is a few microns of water
 //	with a shape, so it bends the sight line a little and scatters a little, and that is all: a
@@ -46,52 +46,81 @@ uniform float4 da_visor;
 //	into a screen position; z = how strong the whole thing is, w = spare.
 uniform float4 da_visor2;
 
-//	Water against air, from the inside: the ratio the exit refraction uses, and the reflectance
-//	at normal incidence that goes with it.
+//	Water against air, from the inside: the ratio the exit refraction uses.
 #define DA_VS_ETA		1.333f
-#define DA_VS_F0		0.0204f
-//	Total internal reflection, as a straight line. Past the critical angle - asin(1/1.333) =
-//	48.61 degrees, so the surface tilted that far from the eye - nothing gets out. cos of it is
-//	0.6612, and You et al. (2016) note that the transmission near it linearises to 7.68 times
-//	the excess, which is two constants and a saturate for the dark ring every drop carries.
-#define DA_VS_TIR_COS	0.6612f
-#define DA_VS_TIR_K		7.68f
-//	What a drop gathers that the pixel behind it does not: a whole hemisphere, most of it sky.
-//	Not a look knob - it is why drops are bright - but the amount is one, since the pass has no
-//	sky probe to integrate and takes the frame's own upper half as a stand-in.
-#define DA_VS_LIFT		0.45f
-//	The thickness at which water starts having a drop's optics and the one where it has all of
-//	them, millimetres. A bead stands about a millimetre tall, a trail is microns, and between them
-//	is a smear - so the window has to sit high enough that a smear reads as wet glass and not as a
-//	drop. At a sixth of this the field's streaks and its beads were the same flat white shape.
-#define DA_VS_ON		0.060f
-#define DA_VS_FULL		0.320f
-//	The disc the drop's image is gathered over, in uv.
-//
-//	The physical figure is about 0.14 of the screen's height - nobody can focus at two centimetres,
-//	and a drop narrower than the pupil is not resolvable at all. Taken honestly it erases the
-//	effect: every bead becomes the same fifty-pixel smudge and the whole field reads as fog. What
-//	is here is a twentieth of it, which is a photograph's answer rather than an eye's - the drops
-//	keep their edges and their sizes, and the blur only softens what is seen THROUGH them.
-#define DA_VS_BLUR		0.007f
-//	How fast the drop hands over to the sky as its sight line leaves the frame. A drop bends the
-//	view by up to the critical angle, which is a thousand pixels and more, so a good share of
-//	every drop looks at something the frame does not contain. Wrapping that back into the frame
-//	is what made drops against a bright sky read as dark blots: the fold landed on the ground.
-#define DA_VS_OFFSCREEN	5.0f
-//	How much the film bends and scatters. It is microns thick, so on the physics it should do
-//	almost nothing - but it is the whole visible difference between wiped glass and clean glass,
-//	and a wipe that leaves nothing behind is the delete this feature was rebuilt to stop being.
-//	A trail is microns thick. It has to be visible - a wipe that leaves nothing behind is the
-//	delete this feature was rebuilt to stop being - but it must not be LOUDER than the drops: at
-//	three times this the tracks read as broad dark bands and the beads sitting on the glass
-//	disappeared behind them.
-#define DA_VS_FILM_BEND	1.10f
-#define DA_VS_FILM_HAZE	0.18f
+//	The steepest the water's surface is allowed to be, as a slope: tan of the contact angle.
+//	Forty-six degrees - dirty glass, the advancing edge - and just under the critical angle for a
+//	sight line square to the glass, so a drop looked at straight on has no dead ring, only the
+//	thin Fresnel line at its contact line. Toward the edges of the screen the sight line itself
+//	tilts and the far side of a drop can still go past it, which is real.
+#define DA_VS_SLOPE_MAX	1.035f
+//	The footprint the eye's surface is read over: a ring of eight at this radius and a cross of
+//	four at half of it, millimetres. About a small bead: enough to turn the field's cell-wide
+//	edges into a cap and its corners into curves, not enough to merge neighbours that do not
+//	touch. Round, because a square stencil at this size drew the grid's own axes into every drop.
+#define DA_VS_SMOOTH_MM	0.60f
+//	The contact line, where water meets glass: how dark it is drawn, and the thickness under
+//	which glass counts as dry. It is not a Fresnel term. The meniscus at a contact line is far
+//	under a texel and steeper than anything the field holds, and every photograph of a drop has
+//	the thin dark line whatever the drop's angle - so it is found as the EDGE OF THE WET MASK, the
+//	line where water becomes glass, and drawn as one - and only within the band where the
+//	SMOOTHED coverage is itself crossing, so that a running track thin enough to flicker across
+//	the mask threshold inside is not hatched with false edges. Found as a step in thickness, it
+//	fired on every ripple inside a track and dotted it; as the bare mask edge, it hatched it.
+#define DA_VS_RIM		0.45f
+#define DA_VS_WET_MM	0.03f
+//	What the inside of the mask is, as a share of the sky: what the reflected part of the sight
+//	line sees. Not black - the glass lights the face a little.
+#define DA_VS_INTERIOR	0.18f
+//	The gather of a hemisphere: how far the drop is lifted toward the sky it mostly looks at.
+//	Weighted by the surface's own slope, because it is the CURVED water that gathers - a flat
+//	channel or a sheet looks at what is behind it and nothing else. Applied flat, every track
+//	across the sky was painted the colour of the top of the frame, a light stripe with no inside.
+#define DA_VS_LIFT		0.35f
+//	The thickness of the SMOOTHED surface at which water starts having a drop's optics and the
+//	one where it has all of them, millimetres. Under the first it is film. The smoothing carries
+//	a bead's height a fraction of a millimetre past its edge, so the window sits high enough that
+//	the beads do not all grow by that much.
+#define DA_VS_ON		0.040f
+#define DA_VS_FULL		0.180f
+//	The disc the drop's image is gathered over, in uv. The physical figure is about 0.14 of the
+//	screen's height; a twentieth of it is taken, so the drops keep their edges and their sizes
+//	and the blur only softens what is seen through them.
+#define DA_VS_BLUR		0.006f
+//	The sun along the refracted line: a broad lobe for the glow of it behind cloud and a narrow
+//	one for the glint of it in the clear, both scaled by the sun's own colour, which the weather
+//	turns down under an overcast.
+#define DA_VS_SUN_SOFT	8.0f
+#define DA_VS_SUN_HARD	220.0f
+//	How much the film bends and scatters. Microns thick, so on the physics it should do almost
+//	nothing - but it is the whole visible difference between wiped glass and clean glass, and a
+//	wipe that leaves nothing behind is the delete this feature was rebuilt to stop being. Not
+//	louder than the drops: at three times this the tracks were broad dark bands.
+#define DA_VS_FILM_BEND	1.60f
+#define DA_VS_FILM_HAZE	0.12f
+//	The film thickness at which the haze is all there, millimetres. A smear is a couple of tenths
+//	and a trail a few hundredths, so the haze ramps over the whole of that; saturated at a
+//	twentieth, every smear was a flat patch with a hard edge, the colour of nothing in the scene.
+#define DA_VS_FILM_FULL	0.15f
 
 float4 da_visor_read(float2 uv)
 {
 	return s_visor.SampleLevel(smp_rtlinear, uv, 0);
+}
+
+//	Reflectance of the water-air surface for a sight line inside the water meeting it at this
+//	cosine, unpolarised and exact. It has to be: this is the rim, and Schlick is fitted to the
+//	air side - it does not rise to one at the critical angle.
+float da_vs_fresnel(float ci)
+{
+	const float st2 = DA_VS_ETA * DA_VS_ETA * (1.0f - ci * ci);
+	[flatten]
+	if (st2 >= 1.0f)
+		return 1.0f;
+	const float ct = sqrt(1.0f - st2);
+	const float rs = (DA_VS_ETA * ci - ct) / (DA_VS_ETA * ci + ct);
+	const float rp = (DA_VS_ETA * ct - ci) / (DA_VS_ETA * ct + ci);
+	return 0.5f * (rs * rs + rp * rp);
 }
 
 //	The scene as the drop gathers it: a small disc rather than a point, because the eye cannot
@@ -118,83 +147,111 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		return scene;
 
 	const float4 st = da_visor_read(uv);
-	const float h = st.x;
-	const float film = st.y;
 	[branch]
-	if (h + film < 0.004f)
+	if (st.x + st.y < 0.004f)
 		return scene;
 
-	//	The surface: the drop's own thickness plus half of the film, differenced over two texels
-	//	and divided by the millimetres they span, so the gradient is a real slope and not a
-	//	number that changes with the preset's grid.
 	const float2 e = da_visor.zw;
-	const float inv2mm = 1.0f / (2.0f * da_visor.y);
-	const float4 tx1 = da_visor_read(uv + float2(e.x, 0.0f));
-	const float4 tx0 = da_visor_read(uv - float2(e.x, 0.0f));
-	const float4 ty1 = da_visor_read(uv + float2(0.0f, e.y));
-	const float4 ty0 = da_visor_read(uv - float2(0.0f, e.y));
-	const float sx1 = tx1.x + tx1.y * 0.5f, sx0 = tx0.x + tx0.y * 0.5f;
-	const float sy1 = ty1.x + ty1.y * 0.5f, sy0 = ty0.x + ty0.y * 0.5f;
-	//	uv.y runs down the screen and the eye's y runs up it, hence the sign on the second.
-	const float2 slope = float2(-(sx1 - sx0) * inv2mm, (sy1 - sy0) * inv2mm);
+	const float mm = da_visor.y;
 
-	//	The sight line through this pixel, in eye space, and the drop's normal facing back along
-	//	it. The glass is the screen plane, so the flat normal is exactly -z.
+	//	The surface the eye is given: the field over a bead's footprint, thirteen taps on two rings,
+	//	and its slope from the same taps - each ring's directional sum is the gradient of the field
+	//	smoothed over that ring, exactly for a plane. +x is right; y is flipped because uv.y runs
+	//	down the screen and the eye's y runs up it.
+	const float2 d2 = e * (DA_VS_SMOOTH_MM / mm);
+	const float2 d1 = d2 * 0.5f;
+	float hsum = 3.0f * st.x;
+	float2 g1 = (float2)0.0f, g2 = (float2)0.0f;
+	{
+		const float a = da_visor_read(uv + float2(d1.x, 0.0f)).x, b = da_visor_read(uv - float2(d1.x, 0.0f)).x;
+		const float c = da_visor_read(uv + float2(0.0f, d1.y)).x, f = da_visor_read(uv - float2(0.0f, d1.y)).x;
+		hsum += 2.0f * (a + b + c + f);
+		g1 = float2(a - b, c - f) * (1.0f / DA_VS_SMOOTH_MM);
+	}
+	[unroll]
+	for (int i = 0; i < 8; ++i)
+	{
+		const float ang = float(i) * 0.7854f;
+		const float2 dir = float2(cos(ang), sin(ang));
+		const float hk = da_visor_read(uv + dir * d2).x;
+		hsum += hk;
+		g2 += dir * hk;
+	}
+	g2 *= 2.0f / (8.0f * DA_VS_SMOOTH_MM);
+	const float h_s = hsum * (1.0f / 19.0f);
+	float2 slope = 0.5f * (g1 + g2);
+	slope.y = -slope.y;
+	//	Capped at the contact angle: the field's cells are steeper than water ever is.
+	const float sl = length(slope);
+	slope *= (sl > DA_VS_SLOPE_MAX) ? (DA_VS_SLOPE_MAX / sl) : 1.0f;
+	const float curved = saturate(sl * 2.5f);
+	//	How much of a drop's optics this pixel gets, and the band round the drop's edge where its
+	//	contact line can be.
+	const float cov = smoothstep(DA_VS_ON, DA_VS_FULL, h_s) * saturate(da_visor2.z);
+	const float band = saturate((1.0f - abs(2.0f * cov - 1.0f)) * 2.5f);
+
+	//	The sight line through this pixel, in eye space, and the surface's normal on the water
+	//	side - facing back at the eye, which is the side refract wants it on. For a surface that
+	//	bulges away from the eye that is (dh/dx, dh/dy, -1). With the xy of it flipped, the bottom
+	//	of every drop looked at the ground: a magnifier, not a lens.
 	const float2 ndc = float2(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
 	const float3 vdir = normalize(float3(ndc.x / max(da_visor2.x, 1e-4f), ndc.y / max(da_visor2.y, 1e-4f), 1.0f));
 	const float3 N = normalize(float3(slope.x, slope.y, -1.0f));
 
-	//	Out of the water and into the air, and how much of the light makes it: the straight line
-	//	through the critical angle. The drop's rim tilts past it and goes dark - that ring is not
-	//	a drawn outline, it is the light that never left the water.
-	const float3 R = refract(vdir, N, DA_VS_ETA);
-	const float trans = saturate(DA_VS_TIR_K * (abs(N.z) - DA_VS_TIR_COS));
-	const float tir = (dot(R, R) < 1e-6f || R.z <= 0.01f) ? 1.0f : (1.0f - trans);
+	//	Out of the water into the air. Past the critical angle the line never leaves, and what it
+	//	sees is the inside of the mask.
+	float3 R = refract(vdir, N, DA_VS_ETA);
+	float F = da_vs_fresnel(saturate(-dot(vdir, N)));
+	[flatten]
+	if (dot(R, R) < 1e-6f || R.z <= 0.01f)
+	{
+		R = vdir;
+		F = 1.0f;
+	}
 
-	//	The sky, near the top of the frame: what a drop is mostly looking at. It has 165 degrees
-	//	of view and the frame has seventy, so most of what it gathers is not in the picture at all.
+	//	The contact line: a step in the field with dry glass on one side of it. A texel and a half
+	//	each way, so it is a line and not the grid. The same four taps carry the film's shape.
+	const float2 e1 = e * 1.5f;
+	const float4 tx1 = da_visor_read(uv + float2(e1.x, 0.0f));
+	const float4 tx0 = da_visor_read(uv - float2(e1.x, 0.0f));
+	const float4 ty1 = da_visor_read(uv + float2(0.0f, e1.y));
+	const float4 ty0 = da_visor_read(uv - float2(0.0f, e1.y));
+	const float inv2mm = 1.0f / (3.0f * mm);
+	{
+		const float4 wm = saturate(float4(tx1.x, tx0.x, ty1.x, ty0.x) * (1.0f / DA_VS_WET_MM));
+		const float edge = max(abs(wm.x - wm.y), abs(wm.z - wm.w));
+		F = max(F, edge * band * DA_VS_RIM);
+	}
+
+	//	The sky, near the top of the frame: what a drop is mostly looking at, and what lights the
+	//	inside of the mask.
 	const float3 sky = img.SampleLevel(smp_rtlinear, float2(uv.x, 0.06f), 0).rgb;
 
 	float3 drop;
 	{
-		//	Back to a screen position. The far scene is what matters, so the direction alone
-		//	decides where to look - a drop this close to the eye has no parallax worth the name.
+		//	Back to a screen position: the direction alone decides where to look, since a drop this
+		//	close to the eye has no parallax worth the name. Off the frame it looks at the frame's
+		//	edge, which is the best guess there is - beyond the top row is more of that sky, beyond
+		//	the bottom row more of that ground. Handed to the top row whichever way it left, a
+		//	drop's top half showed sky where it should have shown ground.
 		const float2 rndc = float2(R.x / max(R.z, 1e-4f) * da_visor2.x, R.y / max(R.z, 1e-4f) * da_visor2.y);
-		const float2 ruv = float2(rndc.x * 0.5f + 0.5f, 0.5f - rndc.y * 0.5f);
-		//	How far the sight line went outside the frame, and what it sees when it does: the sky,
-		//	not a mirrored copy of the floor.
-		const float2 lo = -min(ruv, 0.0f), hi = max(ruv - 1.0f, 0.0f);
-		const float outside = saturate(max(max(lo.x, lo.y), max(hi.x, hi.y)) * DA_VS_OFFSCREEN);
-
-		//	Bigger drops hold their image better; the small ones are pure blur. The thickness is
-		//	the only size this pass has, and it is the right one - a cap's height goes with its
-		//	radius.
-		const float big = saturate(h * 1.2f);
-		drop = da_visor_gather(img, saturate(ruv), DA_VS_BLUR * (1.0f - 0.55f * big));
-		drop = lerp(drop, sky, outside);
-
-		//	Fresnel at the same interface, and the sun on the drop's own curve. The glint is a
-		//	specular lobe of a very small roughness: a drop is smooth.
-		const float ct = saturate(-dot(vdir, N));
-		const float f = DA_VS_F0 + (1.0f - DA_VS_F0) * pow(1.0f - ct, 5.0f);
+		const float2 ruv = saturate(float2(rndc.x * 0.5f + 0.5f, 0.5f - rndc.y * 0.5f));
+		//	Bigger drops hold their image better; the small ones are pure blur.
+		const float big = saturate(h_s * 2.5f);
+		drop = da_visor_gather(img, ruv, DA_VS_BLUR * (1.0f - 0.5f * big));
+		drop = lerp(drop, max(drop, sky), DA_VS_LIFT * curved);
+		//	The sun, along the refracted line.
 		const float3 L = -normalize(L_sun_dir_e.xyz);
-		const float3 H = normalize(L - vdir);
-		const float spec = pow(saturate(dot(N, -H)), 220.0f);
-		//	The drop is brighter than what it covers because it gathers a hemisphere into the
-		//	solid angle it hides.
-		drop = lerp(drop, max(drop, sky), DA_VS_LIFT);
-		//	Past the critical angle the sight line never leaves the water, and the rim goes dark;
-		//	the Fresnel sliver on top of it is the sky reflected off the drop's own curve.
-		//	Not to black: what is trapped inside is the drop's own interior, lit by everything
-		//	else that got in, and a real drop's dark ring is a grey one.
-		drop = lerp(drop * 0.65f, drop, saturate(1.0f - tir));
-		drop = lerp(drop, sky, f * 0.5f);
-		drop += L_sun_color.rgb * (spec * 2.2f * saturate(1.0f - tir));
+		const float s = saturate(dot(R, L));
+		drop += L_sun_color.rgb * (pow(s, DA_VS_SUN_SOFT) * 0.35f + pow(s, DA_VS_SUN_HARD) * 2.0f);
+		//	What the surface throws back is the inside of the mask.
+		drop = lerp(drop, sky * DA_VS_INTERIOR, F);
 	}
 
 	//	The film. Not a lens - a few microns with a shape - so it bends the sight line by a
 	//	fraction of what a drop does and hazes what it lets through.
 	float3 wiped = scene;
+	const float film = st.y;
 	[branch]
 	if (film > 0.0005f)
 	{
@@ -203,14 +260,15 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		const float2 fg = float2(-(tx1.y - tx0.y), (ty1.y - ty0.y)) * inv2mm;
 		const float2 foff = fg * (DA_VS_FILM_BEND * 0.004f);
 		const float3 through = da_visor_gather(img, saturate(uv + foff), 0.004f);
-		const float haze = saturate(film / 0.05f) * DA_VS_FILM_HAZE;
+		const float haze = saturate(film / DA_VS_FILM_FULL) * DA_VS_FILM_HAZE;
 		const float lum = dot(through, float3(0.30f, 0.59f, 0.11f));
-		//	Wet glass scatters forward: the blacks lift and the colour goes toward the sky it is
-		//	scattering, which is what a smeared visor looks like against a bright sky.
-		wiped = lerp(through, lerp(lerp(through, (float3)lum, 0.45f), sky, 0.20f) + 0.015f, haze);
+		//	Wet glass scatters forward: the blacks lift a little and the colour goes toward the sky
+		//	it is scattering, which is what a smeared visor looks like against a bright sky. Against
+		//	the sky itself it is nearly nothing, which is right - what shows a smear there is the
+		//	bend of its ridges, not a tint.
+		wiped = lerp(through, lerp(lerp(through, (float3)lum, 0.45f), sky, 0.20f) + 0.006f, haze);
 	}
 
-	const float cov = smoothstep(DA_VS_ON, DA_VS_FULL, h) * saturate(da_visor2.z);
 	return lerp(wiped, drop, cov);
 }
 

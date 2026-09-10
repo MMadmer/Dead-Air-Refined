@@ -2847,6 +2847,41 @@ public:
     }
 };
 
+// visor_rate <0..1>: how hard the visor is being wetted, from the mod's own driver. Its own
+// channel, because the console float the older drivers write is fought over - one of them
+// re-asserts its ramp once a second, and in light rain that ramp is zero.
+class CCC_VisorRate : public IConsole_Command
+{
+public:
+    CCC_VisorRate(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        float v = -1.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &v);
+        GamePersistent().Environment().visor.rate = (v < 0.f) ? -1.f : clampr(v, 0.f, 1.f);
+    }
+};
+
+// qa_visor_blob <radius mm>: hold a cap of water at the centre of the visor, 0 to let it go. The
+// optics of a drop cannot be judged on a bead nine pixels wide.
+class CCC_QaVisorBlob : public IConsole_Command
+{
+public:
+    CCC_QaVisorBlob(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        float r = 0.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &r);
+        GamePersistent().Environment().visor.qa_blob = clampr(r, 0.f, 40.f);
+    }
+};
+
 // qa_visor_wet [0..1]: pin the rate the visor is being wetted at, or -1 to hand it back to the
 // drivers. The stand wears no mask and no driver pushes anything there, so without this the
 // field is correctly empty and the probe photographs clean glass.
@@ -2878,8 +2913,9 @@ public:
         const CEnvironment& env = GamePersistent().Environment();
         Msg("* [qa] visor: wipe phase %.2f, direction %d, sweep %.2f s", env.visor_wipe_phase(),
             env.visor.wipe_dir, env.visor.wipe_len);
-        Msg("* [qa] visor: rain %.1f mm/h at the eye, the wetting rate itself is r2_lenswater_val",
-            env.rain_rate_mmh);
+        Msg("* [qa] visor: rain %.1f mm/h at the eye, visor_rate %.3f (negative = not driven yet), "
+            "lens %.1f mm",
+            env.rain_rate_mmh, env.visor.rate, env.visor.qa_blob);
     }
 };
 
@@ -3542,6 +3578,8 @@ void CCC_RegisterCommands()
     CMD1(CCC_VisorWipe, "visor_wipe");
     CMD1(CCC_QaVisorState, "qa_visor_state");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
+    CMD1(CCC_VisorRate, "visor_rate");
+    CMD1(CCC_QaVisorBlob, "qa_visor_blob");
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

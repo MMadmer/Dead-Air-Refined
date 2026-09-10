@@ -602,7 +602,6 @@ void CRenderTarget::phase_combine()
         // preset happened to buy.
         if (rt_VisorDrops)
         {
-            constexpr float visor_width_m = 0.22f;
             const float w = float(rt_VisorDrops->dwWidth), h = float(rt_VisorDrops->dwHeight);
             RCache.set_c("da_visor", 1.f, visor_width_m * 1000.f / w, 1.f / w, 1.f / h);
             // The projection's scales, so a refracted DIRECTION can be turned back into a place

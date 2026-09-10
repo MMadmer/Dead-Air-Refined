@@ -1469,12 +1469,26 @@ this replaces could not express:
   is why a window in the rain is a field of round beads and a few narrow channels rather than an
   even sheet, and why every bead has a rim. Without it the field only transports and diffuses, so
   drops land as beads and immediately relax into wide flat smears - which is exactly what "they
-  look like they have already been wiped" was. It is a VELOCITY here, pointing up the thickness
-  gradient and carried by the same conservative flux as gravity, read over two cells so that a
-  checkerboard cannot drive it, and braked as the water it climbs into reaches the height a drop
-  can actually stand at. The first attempt moved mass directly between neighbours, which is
-  anti-diffusion, and the mode anti-diffusion grows fastest is that same checkerboard: every drop
-  filled with crawling speckle inside a second;
+  look like they have already been wiped" was. It is two terms, and it took both. The DEWETTING
+  is a target velocity up the thickness gradient, the speed the water on a flank relaxes to the
+  way it relaxes to its running speed under gravity, carried by the same conservative flux, read
+  over a baseline of half a millimetre each way so that it is blind to anything grid-sized, and
+  braked as the water it climbs into reaches the height a bead stands at - above which the
+  surplus spreads back to its neighbours. The CAPILLARITY is the flow the surface's own Laplace
+  pressure drives, from where it is convex to where it is concave: a fourth-order term whose
+  equilibrium is the spherical cap, and the only thing in the field that knows what ROUND is.
+  Its mobility is the water's and goes to zero on dry glass, so it rounds and smooths a bead but
+  cannot spread it. Three wrong versions preceded these. Mass moved directly between neighbours
+  is anti-diffusion, and the mode it grows fastest is the checkerboard - every drop filled with
+  crawling speckle inside a second. A pull ADDED to the velocity every step is an acceleration
+  balanced only by drag, at slope times 1500 mm/s, saturating the Courant limit for any slope and
+  overshooting the brake by its own momentum: every bead a crater, its flank standing taller than
+  its middle. And a dewetting pull without capillarity grows beads as staircases along the grid's
+  axes, because a scalar climb knows nothing of shape. The capillary step has a hard ceiling too:
+  the five-point Laplacian's eigenvalues reach -8, the biharmonic's their square, and an explicit
+  step is stable only under a THIRTY-SECOND per step - at a twenty-fifth the checkerboard grew,
+  went negative, was clamped, and the clamp minted water until half the glass was a millimetre
+  deep;
 * **once it runs it leaves a track, and the next drop follows it.** A sliding drop cannot take all
   its water: it leaves microns behind, that film is already wet, and wet glass pins worse - so the
   next drop veers into it. Rain on a window runs in a few channels for this reason and it is two
@@ -1560,13 +1574,48 @@ cent left is exactly what makes it read as wiped.
 **The look is set by four numbers and they trade against each other**, all in
 `da_visor_drops.ps`. `DA_VD_FLUX` is how much rain arrives. `DA_VD_PIN` is how readily a bead lets
 go - and it, not the rain, is what decides how WET the glass gets, because water leaves a visor by
-running off far faster than it leaves by drying, so the equilibrium is set by how easily it runs.
-`DA_VD_BEAD_H` is the height surface tension pulls to, and for a given amount of water it decides
-how much of the glass is covered: the same water in beads half as tall wets twice the area.
-`DA_VD_RAD_MAX` is the biggest arriving drop, and drops that arrive near the critical radius run
-almost at once and take their water off the bottom with them. Measured on the rig in a downpour at
-the end of this: a fifth of the glass wet and holding, beads across all of it, and about one per
-cent of the water running in narrow channels at 80 mm/s.
+running off far faster than it leaves by drying, so the equilibrium is set by how easily it runs;
+it has to sit UNDER `DA_VD_BEAD_H`, or nothing short of a wide merged pancake ever runs and the
+glass has no tracks. `DA_VD_BEAD_H` is the height the water pulls to, and for a given amount of
+water it decides how much of the glass is covered: the same water in beads half as tall wets
+twice the area. `DA_VD_RAD_MAX` is the biggest arriving drop, and drops that arrive near the
+critical radius run almost at once and take their water off the bottom with them. Measured on
+the rig in a downpour at the end of this: a quarter of the glass wet and holding, round beads
+across all of it, and about one per cent of the water running in narrow channels at 90 mm/s.
+
+**Nothing on the glass dries while it rains.** The air over a plate in the rain is saturated;
+water leaves a visor by running off, by being wiped, or not at all, which is why a window in
+steady rain is COVERED. Dried at one rate whatever the weather, a small bead lasted twenty seconds
+and the glass lost its water everywhere, all the time, and the hand had no point. The film keeps
+a slow fade in the rain, standing in for the fresh drops that bury a smear.
+
+**The wetting rate has its own channel.** `visor_rate` is what `dead_air_x64_visor.script`
+pushes; `r2_lenswater_val`, the console float every older mask driver writes, is read only until
+the mod's own driver has spoken. Not both and not the max of both: the base driver re-asserts its
+own ramp once a second, and in anything but heavy rain that ramp is zero, so sharing the float put
+the rain on and off at one hertz - which the player saw as the drops stopping for a while and
+starting again.
+
+**What the screen spans is 12 cm of visor**, not the visor's width: the eye is a few centimetres
+behind the glass and the field of view cuts a window out of it, and the window is what the screen
+shows edge to edge. That is one constant, `visor_width_m` in `r4_rendertarget.h`, and it sets the
+cell size, from it the step, and the scale of every optical term: at 12 cm a millimetre of glass
+is sixteen pixels of a 1080p screen, where a two-millimetre bead stops being a dot and starts
+having an inside. At 22 cm it was nine, and every drop was a dot with a dark ring.
+
+**The optics were wrong in the sign that matters.** The normal `refract` wants is the one on the
+water side, facing back at the eye, and for a surface that bulges away from the eye that is
+(dh/dx, dh/dy, -1). With its xy flipped, the bottom of every drop looked at the ground: a
+magnifier, not a lens, and nothing in a screenshot of a uniform sky could show it. `qa_visor_blob
+<mm>` holds a spherical cap of that radius at the centre of the glass, still, so the inversion can
+be read off one screenshot at the horizon. The surface the eye is given is not the field's own
+cells - a bead a few cells wide has edges a cell wide, and read raw every bead was rim, past the
+critical angle everywhere but its middle pixel - but the field over thirteen taps on two rings
+about a bead across, its slope capped at the contact angle. The rim is the edge of the wet mask,
+a line and not a band, and not a Fresnel term at all; from inside, what the surface reflects is the
+inside of the mask, so the reflected share is dark, and there is no highlight to mirror - the
+bright arc a photograph from inside shows is the refracted sky, so the sun is looked for along the
+refracted line and not in a specular lobe.
 
 `r__visor_drops_stats` prints what the field holds - how much of the glass is wet, the mean and
 deepest thickness, the film, the fastest water and **what share of it is actually running** - and

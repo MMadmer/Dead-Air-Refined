@@ -999,9 +999,9 @@ void xrRender_sync_preset_derived(bool user_facing)
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
     // How wide the visor's drop field is. The height follows the screen's aspect, so this is the
     // resolution of the glass ITSELF, and it is what decides whether a drop can be a drop: across
-    // a 22 cm visor a cell is 0.43 mm at 512 and 0.21 at 1024, so the one-millimetre beads that
-    // cover a rainy window are two cells wide on the first and five on the second. Two cells is a
-    // blob with no rim and no roundness, and no amount of shading recovers it.
+    // the 12 cm of visor the screen spans a cell is 0.23 mm at 512 and 0.12 at 1024, so the
+    // one-millimetre beads that cover a rainy window are four cells wide on the first and eight
+    // on the second. Two cells is a blob with no rim and no roundness, and no shading recovers it.
     //
     // The step follows the grid rather than the ladder: the transport is a flux bound by the
     // Courant condition, so a finer grid needs a proportionally shorter step to carry the same

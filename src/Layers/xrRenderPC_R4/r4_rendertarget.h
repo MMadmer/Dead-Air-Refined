@@ -76,6 +76,13 @@ public:
     // complex scratch buffers its spectral solver ping-pongs through (see the phase).
     ref_rt rt_WaterRipple;
     ref_rt rt_WaterRippleFFT[2];
+    // How much of the visor the screen spans, metres. Not the visor's width: the eye is a few
+    // centimetres behind the glass and the game's field of view cuts a window out of it, and that
+    // window is what the screen shows edge to edge. Twelve centimetres puts a millimetre of glass
+    // at sixteen pixels of a 1080p screen, which is where a two-millimetre bead stops being a dot
+    // and starts having an inside - the scale every photograph of rain on a window is taken at.
+    // Shared by the step (cell size, and from it the step length) and the optics (slope per mm).
+    static constexpr float visor_width_m = 0.12f;
     ref_rt rt_VisorDrops; // the water on the visor: the finished step, under the name readers bind
     ref_rt rt_VisorDropsTmp; // what a step is written into before it is copied to the one above
     ref_rt rt_SunShaftsMask;
