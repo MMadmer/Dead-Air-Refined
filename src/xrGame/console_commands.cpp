@@ -2,6 +2,7 @@
 #include "xrEngine/XR_IOConsole.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xrMaterialSystem/GameMtlLib.h"
+#include "xrEngine/Rain.h"
 #include "xrEngine/xr_ioc_cmd.h"
 #include "xrEngine/CustomHUD.h"
 #include "xrEngine/FDemoRecord.h"
@@ -2974,6 +2975,31 @@ public:
             "exposure %.3f = density %.3f x cover %.3f, lens %.1f mm",
             env.rain_rate_mmh, env.visor.rate, env.GetRainExposure(), env.CurrentEnv.rain_density,
             env.GetRainCover(), env.visor.qa_blob);
+        // The cover, ray by ray: open, or blocked this far up by this material. When the visor
+        // dries in the open this is the line that says what the rain thinks is overhead.
+        if (const CEffect_Rain* rain = env.eff_Rain)
+        {
+            string1024 rays;
+            rays[0] = 0;
+            for (int i = 0; i < da_rain::cover_rays; ++i)
+            {
+                const CEffect_Rain::CoverRay r = rain->GetCoverRay(i);
+                string256 one;
+                if (r.open)
+                    xr_sprintf(one, " %d:open", i);
+                else
+                {
+                    const SGameMtl* m = (r.mtl >= 0 && r.mtl < s32(GMLib.CountMaterial()))
+                        ? GMLib.GetMaterialByIdx(u16(r.mtl))
+                        : nullptr;
+                    xr_sprintf(one, " %d:%.1fm[%s]", i, r.range, m ? m->m_Name.c_str() : "?");
+                }
+                xr_strcat(rays, one);
+            }
+            Msg("* [qa] visor: cover rays lean %.0f deg toward heading %.0f deg (wind %.2f gust %.2f):%s",
+                rad2deg(rain->GetCoverLean()), rad2deg(rain->GetCoverHeading()), env.eff_wind_norm,
+                env.eff_wind_gust, rays);
+        }
     }
 };
 

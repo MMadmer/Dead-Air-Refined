@@ -44,6 +44,12 @@ CEffect_Rain::CEffect_Rain()
     // its first second silent while the rays come in.
     cover_factor = 1.f;
     cover_ray = 0;
+    cover_lean = 0.f;
+    cover_heading = 0.f;
+    for (float& r : cover_range)
+        r = -1.f;
+    for (s32& m : cover_mtl)
+        m = -1;
     for (bool& open : cover_open)
         open = true;
 
@@ -74,6 +80,12 @@ void CEffect_Rain::InvalidateState()
 
     cover_factor = 1.f;
     cover_ray = 0;
+    cover_lean = 0.f;
+    cover_heading = 0.f;
+    for (float& r : cover_range)
+        r = -1.f;
+    for (s32& m : cover_mtl)
+        m = -1;
     for (bool& open : cover_open)
         open = true;
 
@@ -162,40 +174,101 @@ bool CEffect_Rain::RayPick(const Fvector& s, const Fvector& d, float& range, col
     return RayPickEx(s, d, range, tgt, n, mtl);
 }
 
+// What the rain goes through. A tree crown, a bush, an occluder, a kill volume, an invisible
+// wall: every one of them is PASSABLE in the game's own material terms - a bullet does not stop
+// there - and neither does a drop. Water is passable too and stays a landing, because a drop
+// that reaches it rings it. No material is named here; the flag is the game's, so a mod's own
+// foliage answers the same way as the stock poplar whose crown is a "bush".
+static bool da_rain_passes(s32 mtl)
+{
+    if (mtl < 0 || mtl >= s32(GMLib.CountMaterial()))
+        return false;
+    const SGameMtl* m = GMLib.GetMaterialByIdx(u16(mtl));
+    return m && m->Flags.test(SGameMtl::flPassable) && !m->Flags.test(SGameMtl::flLiquid);
+}
+
 // The query the drop always ran, keeping what it always threw away. There is no second ray
-// here: the collider filled the normal's triangle and the material in on the way past.
+// here: the collider filled the normal's triangle and the material in on the way past - except
+// through foliage, where the ray carries on from the far side, because what stopped it was not
+// a surface the water lands on. A player standing next to a poplar in a storm watched the
+// visor dry and the rain in the air vanish whenever the wind leaned the sky probe into its
+// crown: five rays, all "sheltered", by a "bush" sixteen metres up.
 bool CEffect_Rain::RayPickEx(
     const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt, Fvector& normal, s32& material)
 {
     ZoneScoped;
-
+#ifdef _EDITOR
     normal.set(0.f, 1.f, 0.f);
     material = -1;
-
-#ifdef _EDITOR
     Tools->RayPick(s, d, range);
     return true;
 #else
-    collide::rq_result RQ;
-    IGameObject* E = g_pGameLevel->CurrentViewEntity();
-    if (!g_pGameLevel->ObjectSpace.RayPick(s, d, range, tgt, RQ, E))
-        return false;
-    range = RQ.range;
+    return RayPickThrough(s, d, range, tgt, normal, material, g_pGameLevel->CurrentViewEntity());
+#endif
+}
 
-    // A dynamic object reports a bone, not a triangle, and has no cheap normal - a crown on an
-    // NPC's shoulder keeps the world-up default.
-    if (!RQ.O)
-    {
-        const CDB::TRI* T = g_pGameLevel->ObjectSpace.GetStaticTris() + RQ.element;
-        const Fvector* V = g_pGameLevel->ObjectSpace.GetStaticVerts();
-        normal.mknormal(V[T->verts[0]], V[T->verts[1]], V[T->verts[2]]);
-        // Winding is the level compiler's business, not ours: the face the ray met is the one
-        // turned toward it.
-        if (normal.dotproduct(d) > 0.f)
-            normal.invert();
-        material = s32(T->material);
-    }
+bool CEffect_Rain::SkyOpen(const Fvector& from, const Fvector& dir, float range)
+{
+#ifdef _EDITOR
     return true;
+#else
+    if (!g_pGameLevel)
+        return true;
+    Fvector n;
+    s32 mtl = -1;
+    return !RayPickThrough(from, dir, range, collide::rqtStatic, n, mtl, nullptr);
+#endif
+}
+
+bool CEffect_Rain::RayPickThrough(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt,
+    Fvector& normal, s32& material, IGameObject* ignore)
+{
+    normal.set(0.f, 1.f, 0.f);
+    material = -1;
+#ifdef _EDITOR
+    return false;
+#else
+    IGameObject* E = ignore;
+    Fvector from = s;
+    float left = range, gone = 0.f;
+    // A crown is one hull and a copse is several; past this many the column counts as open.
+    for (int pass = 0; pass < 4; ++pass)
+    {
+        collide::rq_result RQ;
+        if (!g_pGameLevel->ObjectSpace.RayPick(from, d, left, tgt, RQ, E))
+            return false;
+
+        // A dynamic object reports a bone, not a triangle, and has no cheap normal - a crown on
+        // an NPC's shoulder keeps the world-up default.
+        if (!RQ.O)
+        {
+            const CDB::TRI* T = g_pGameLevel->ObjectSpace.GetStaticTris() + RQ.element;
+            const Fvector* V = g_pGameLevel->ObjectSpace.GetStaticVerts();
+            normal.mknormal(V[T->verts[0]], V[T->verts[1]], V[T->verts[2]]);
+            // Winding is the level compiler's business, not ours: the face the ray met is the one
+            // turned toward it.
+            if (normal.dotproduct(d) > 0.f)
+                normal.invert();
+            material = s32(T->material);
+
+            if (da_rain_passes(material))
+            {
+                // Carry on from just past the face the water does not land on.
+                const float step = RQ.range + 0.05f;
+                gone += step;
+                left -= step;
+                if (left <= 0.f)
+                    return false;
+                from.mad(from, d, step);
+                normal.set(0.f, 1.f, 0.f);
+                material = -1;
+                continue;
+            }
+        }
+        range = gone + RQ.range;
+        return true;
+    }
+    return false;
 #endif
 }
 
@@ -284,9 +357,17 @@ void CEffect_Rain::CoverTick(float dt)
         dir.normalize_safe(sky);
     }
 
-    collide::rq_result RQ;
-    cover_open[idx] =
-        !g_pGameLevel->ObjectSpace.RayPick(start, dir, da_rain::cover_range, collide::rqtStatic, RQ, nullptr);
+    // The drop's own query, so the visor and the sheet agree on what a roof is: foliage is not
+    // one, and the ray goes on through it.
+    float reach = da_rain::cover_range;
+    Fvector n;
+    s32 mtl = -1;
+    const bool blocked = RayPickEx(start, dir, reach, collide::rqtStatic, n, mtl);
+    cover_open[idx] = !blocked;
+    cover_range[idx] = blocked ? reach : -1.f;
+    cover_mtl[idx] = blocked ? mtl : -1;
+    cover_lean = slant;
+    cover_heading = env.eff_wind_dir;
     cover_ray++;
 
     // The axis itself counts double - that is the direction the water actually arrives from.

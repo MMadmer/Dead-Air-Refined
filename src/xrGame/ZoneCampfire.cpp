@@ -4,6 +4,7 @@
 #include "GamePersistent.h"
 #include "Level.h"
 #include "xrEngine/LightAnimLibrary.h"
+#include "xrEngine/Rain.h"
 
 //  Rain puts campfires out. Off restores the pre-1.4.1 behaviour, where a fire in the open
 //  burned through a thunderstorm.
@@ -155,9 +156,11 @@ void CZoneCampfire::StopIdleParticles(bool bIdleLight)
         StopIdleLight();
 }
 
-//  Is there anything over this fire. Straight up through the static geometry: a roof, a
-//  canopy, a bridge deck. Twenty metres tells a shelter from open sky, and the test only runs
-//  when the soaking clock has already run out, so it costs one ray per fire per downpour.
+//  Is there anything over this fire. Straight up through the static geometry: a roof, an
+//  awning, a bridge deck. Twenty metres tells a shelter from open sky, and the test only runs
+//  when the soaking clock has already run out, so it costs one ray per fire per downpour. The
+//  ray is the rain's own, so a tree crown is not a roof here either: the rain falls through it
+//  on screen, and a fire under it goes out like any other.
 bool CZoneCampfire::SkyAbove() const
 {
     if (!g_pGameLevel)
@@ -165,8 +168,7 @@ bool CZoneCampfire::SkyAbove() const
     Fvector p = Position();
     p.y += 0.5f;
     const Fvector up{ 0.f, 1.f, 0.f };
-    float range = 20.f;
-    return !g_pGameLevel->ObjectSpace.RayTest(p, up, range, collide::rqtStatic, nullptr, nullptr);
+    return CEffect_Rain::SkyOpen(p, up, 20.f);
 }
 
 bool CZoneCampfire::can_turn_on() const

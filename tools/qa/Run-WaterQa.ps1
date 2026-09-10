@@ -15,6 +15,9 @@ param(
     [string]$Rig = "D:\Games\Dead Air\_qa\lightdiag",
     [string]$Out = "D:\Games\Dead Air\_work\water-rework-20260909\shots",
     [int]$Seconds = 120,
+    # Console commands issued BEFORE the save loads - a pinned wind seed (`wind_seed 1833.7`), a
+    # renderer knob. Whatever must already be in force at the level's first tick goes here.
+    [string[]]$PreCommands = @(),
     # A stale shader cache keeps the old shader after a source change, which reads as "my edit did
     # nothing". Off only when timing a warm start on purpose.
     [switch]$KeepShaderCache
@@ -43,7 +46,7 @@ if (-not $KeepShaderCache) {
 
 & (Join-Path $PSScriptRoot "Run-ContentProbe.ps1") -Rig $Rig -Label $Name -RunSeconds $Seconds `
     -TimeoutSeconds ($Seconds + 140) -WaitFor "DA_WATER_PROBE_DONE" `
-    -Commands @("start server($Save/single/alife/load) client(localhost)") | Out-Null
+    -Commands ($PreCommands + @("start server($Save/single/alife/load) client(localhost)")) | Out-Null
 
 $dest = Join-Path $Out $Name
 New-Item -ItemType Directory -Force -Path $dest | Out-Null

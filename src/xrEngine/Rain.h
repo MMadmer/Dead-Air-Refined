@@ -88,6 +88,8 @@ constexpr float cover_spread = 0.47f; // tan of ~25 degrees, as the off-axis mad
 constexpr float cover_range = 20.f;
 } // namespace da_rain
 
+class IGameObject;
+
 class ENGINE_API CEffect_Rain
 {
     friend class xray::render::render_r4::dxRainRender;
@@ -167,6 +169,12 @@ private:
     float hemi_factor;
     u32 cover_ray;
     bool cover_open[da_rain::cover_rays];
+    // What a blocked ray met - how far up, and which game material - and the axis the probe was
+    // cast along, kept for qa_visor_state: a cover that flickers is diagnosed here or nowhere.
+    float cover_range[da_rain::cover_rays];
+    s32 cover_mtl[da_rain::cover_rays];
+    float cover_lean;
+    float cover_heading;
 
     // Utilities
     void p_create();
@@ -201,9 +209,27 @@ public:
     CEffect_Rain();
     ~CEffect_Rain();
 
+    // The rain's own ray: through everything the water goes through (foliage, occluders, kill
+    // volumes - every passable material but water) to the first surface it lands on. Anything
+    // that asks "is this spot under a roof" must ask it this way, or a tree crown is a roof.
+    static bool RayPickThrough(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt,
+        Fvector& normal, s32& material, IGameObject* ignore);
+    // True when nothing the rain lands on lies within range along dir - open sky, as the rain
+    // sees it.
+    static bool SkyOpen(const Fvector& from, const Fvector& dir, float range);
+
     float GetVolume() { return rain_volume; }
     float GetExposure() const { return rain_exposure; }
     float GetCover() const { return cover_factor; }
+    struct CoverRay
+    {
+        bool open;
+        float range;
+        s32 mtl;
+    };
+    CoverRay GetCoverRay(int i) const { return {cover_open[i], cover_range[i], cover_mtl[i]}; }
+    float GetCoverLean() const { return cover_lean; }
+    float GetCoverHeading() const { return cover_heading; }
     void Render();
     void OnFrame();
     void InvalidateState();

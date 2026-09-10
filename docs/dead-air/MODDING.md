@@ -1632,12 +1632,31 @@ the ground within range. The cover went to zero in ten seconds - and with it the
 sound, the radiation the shipped scripts take from the rain, and the water on the visor, which
 dried while it poured and came back for a moment whenever the smoothing let a ray through. The
 axis now leans no more than thirty degrees, the ring sits twenty-five round it, and the rays
-reach twelve metres: a roof, a porch or a canopy is within a few metres above the head, and a
-fence across the yard is not shelter. `qa_visor_state` prints the exposure as density times
+reach twenty metres: a roof, a porch or an awning is within that above the head - a hangar roof
+too - and a fence across the yard is not shelter. `qa_visor_state` prints the exposure as density times
 cover, so the next time the glass is dry in the rain the answer is one line. On the rig in the
 same storm the exposure holds at 1.0 where it had gone to nothing. `visor_live.lua`
 is the probe: the visor driven the way the game drives it, with nothing pinned, reported every two
 seconds for two minutes, and `live_timeline.py` lays the log out as a table.
+
+**A tree crown is not a roof.** A player standing next to a poplar in a storm watched the visor
+dry for twenty seconds at a time and fill again for three, in step with the wind. The sky probe
+leans up to thirty degrees toward where the rain comes from and the ring twenty-five more, and
+whenever the wind's heading put the crown inside that cone all five rays met it sixteen to twenty
+metres up - `materialsush`, the game material every stock crown carries - and the cover went
+to zero. The rain in the air went with it: a drop's birth ray met the same crown and the drop
+died on it, which is why the player's video showed no rain under the tree either. The rain's ray
+(`CEffect_Rain::RayPickThrough`) now carries on through every PASSABLE material but water -
+foliage, occluders, kill volumes, invisible walls: what a bullet does not stop, a drop does not
+stop at - to the first surface the water lands on, and the cover probe, the drop's birth and the
+campfire's own roof test (`CZoneCampfire::SkyAbove`) all ask it that way. No material is named:
+the flag is the game's, so a mod's foliage answers the same as the stock poplar. `visor_scene.lua`
+is the probe: a player's own save copied to the rig, nothing pinned, reported every second with
+every ray's hit (`qa_visor_state` prints the lean, the heading and what each ray met), and
+`-PreCommands "wind_seed N"` replays the exact wind of a report - the seed is in the log as
+`[wind] seed`, and a random one may never show the failure, since it depends on the heading.
+Seed 1833.7 on that save: before, cover 0 for 27 of 45 seconds and five rays into a bush at 16-20
+m; after, 1.0 throughout and 17-20 % of the glass wet.
 
 **The wetting rate has its own channel.** `visor_rate` is what `dead_air_x64_visor.script`
 pushes; `r2_lenswater_val`, the console float every older mask driver writes, is read only until
