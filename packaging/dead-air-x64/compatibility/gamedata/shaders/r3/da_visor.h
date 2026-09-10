@@ -78,7 +78,7 @@ uniform float4 da_visor2;
 //	almost nothing - but it is the whole visible difference between wiped glass and clean glass,
 //	and a wipe that leaves nothing behind is the delete this feature was rebuilt to stop being.
 #define DA_VS_FILM_BEND	3.20f
-#define DA_VS_FILM_HAZE	0.55f
+#define DA_VS_FILM_HAZE	0.40f
 
 float4 da_visor_read(float2 uv)
 {

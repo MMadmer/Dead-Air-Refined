@@ -13,6 +13,12 @@ namespace xray::render::RENDER_NAMESPACE
 static float g_visor_acc = 0.f; // fixed-step accumulator
 static u32 g_visor_step = 0; // steps since the target was primed; the spawn hash's clock
 static ID3DTexture2D* g_visor_primed = nullptr; // the surface the clear below was applied to
+// Where the eye was last frame, so the air the visor is travelling through can be worked out.
+// Differenced here rather than asked of the game: the camera is what the glass is attached to,
+// and the renderer already has it.
+static Fvector g_visor_prev_eye{};
+static bool g_visor_have_eye = false;
+static Fvector2 g_visor_air{}; // the apparent wind in the plane of the glass, smoothed, m/s
 
 // The visor is the actor's, and the actor is a level's. Nothing recreates the target between
 // levels, so the prime test below - keyed on the surface - would never fire again and the next
@@ -22,6 +28,8 @@ void da_visor_drops_reset()
     g_visor_acc = 0.f;
     g_visor_step = 0;
     g_visor_primed = nullptr;
+    g_visor_have_eye = false;
+    g_visor_air.set(0.f, 0.f);
 }
 
 // One or more fixed steps of the water standing on the actor's visor.
@@ -97,18 +105,59 @@ void CRenderTarget::phase_visor_drops()
     constexpr float visor_width_m = 0.22f;
     const float texel_mm = visor_width_m * 1000.f / float(rt_VisorDrops->dwWidth);
 
-    // Gravity in the plane of the glass. The visor faces the way the eye does, so the world's
-    // down resolved onto the screen's right and up axes IS the direction water runs on it, and
-    // the length of that resolved vector is how much of gravity the plate actually feels.
+    // What pulls the water, in the plane of the glass. Two things do, and only using one of them
+    // was why every track ran dead vertically whatever the weather.
+    //
+    // GRAVITY. The visor faces the way the eye does, so the world's down resolved onto the
+    // screen's right and up axes IS the direction water runs on it, and the length of that
+    // resolved vector is how much of gravity the plate actually feels - none of it when the plate
+    // is horizontal.
+    //
+    // THE AIR. A drop standing on the glass is in the airflow, and the drag on it is not small: a
+    // two-millimetre drop in five metres a second of relative wind feels about as much push as it
+    // does weight. Only the component ALONG the glass counts - air arriving square on presses the
+    // drop against the plate and moves it nowhere - so walking straight ahead with the head level
+    // changes nothing, while a crosswind lays the tracks over and looking down while running
+    // drives them up the visor. That relative wind is the weather's minus the eye's own travel,
+    // which is why a sprint through still air slants them too. Drag goes as the square of it, so
+    // five metres a second is where it matches gravity.
     const Fvector& right = Device.vCameraRight;
     const Fvector& up = Device.vCameraTop;
-    const float gx = -right.y; // dot(down, right), down = (0,-1,0)
-    const float gy = -up.y;
+
+    Fvector eye_vel{};
+    if (g_visor_have_eye && Device.fTimeDelta > 1e-4f)
+    {
+        eye_vel.sub(Device.vCameraPosition, g_visor_prev_eye);
+        eye_vel.mul(1.f / Device.fTimeDelta);
+    }
+    g_visor_prev_eye = Device.vCameraPosition;
+    g_visor_have_eye = true;
+
+    Fvector air;
+    air.set(_sin(env.eff_wind_dir), 0.f, _cos(env.eff_wind_dir));
+    air.mul(env.WindSpeedMs());
+    air.sub(eye_vel);
+    // In the plane, and smoothed: the camera difference is one frame of a head that bobs, and the
+    // unsmoothed value makes every track wobble.
+    Fvector2 air2;
+    air2.set(air.dotproduct(right), air.dotproduct(up));
+    const float lerp_k = 1.f - expf(-Device.fTimeDelta * 3.f);
+    g_visor_air.x += (air2.x - g_visor_air.x) * lerp_k;
+    g_visor_air.y += (air2.y - g_visor_air.y) * lerp_k;
+
+    // Gravity first, then the drag on top of it, both as a share of one gravity.
+    constexpr float air_ref = 6.5f; // m/s at which the push matches the weight
+    const float air_mag = g_visor_air.magnitude();
+    const float air_k = std::min(air_mag * air_mag / (air_ref * air_ref), 1.2f);
+    const float px = -right.y + ((air_mag > 1e-3f) ? (g_visor_air.x / air_mag) * air_k : 0.f);
+    const float py = -up.y + ((air_mag > 1e-3f) ? (g_visor_air.y / air_mag) * air_k : 0.f);
     // Screen up is +y in the world and the target's v runs downward, so the field's own y is the
     // negative of the screen's.
-    const float g_len = _sqrt(gx * gx + gy * gy);
-    const float gux = (g_len > 1e-4f) ? gx / g_len : 0.f;
-    const float guy = (g_len > 1e-4f) ? -gy / g_len : 1.f;
+    // Capped: a gale may lay the tracks over, but it must not drive them at twice the speed
+    // gravity does - past the cap the water is asked to cross more cells than the flux can send.
+    const float g_len = std::min(_sqrt(px * px + py * py), 1.45f);
+    const float gux = (g_len > 1e-4f) ? px / g_len : 0.f;
+    const float guy = (g_len > 1e-4f) ? -py / g_len : 1.f;
 
     // The wetting rate, and the hand. Two sources, and the wetter wins: r2_lenswater_val is the
     // rain drivers' (shelter and the mask are already in it), env.visor.dunk is the actor's own

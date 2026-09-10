@@ -15,11 +15,19 @@
 --      cleaning animation starts, which is what deleted every drop in one frame. The field
 --      cannot be told "you are clean now" - a wipe is a sweep that takes the better part of a
 --      second, collects the water ahead of the hand and leaves a smeared film behind it - so it
---      is told when the sweep BEGINS, and it does the rest. The moment is the cleaning item
---      reaching the hands, which is exactly when the animation plays.
+--      is told when the sweep BEGINS, and it does the rest. Which is not when the player asks:
+--      the cleaning item has to become the item in the hands first, and whatever was there has
+--      to be put away before that.
 
 local wipe_section = "animation_clean_mask" -- the item the cleaning animation rides on
 local wipe_slot = 13
+-- When the hand actually reaches the glass, and how long the sweep takes, in seconds. Both belong
+-- to the animation and so both live here rather than in the engine. The trigger below is the
+-- moment the cleaning item becomes the ACTIVE item, not the moment it is created: the game has to
+-- put away whatever was in the hands first, and firing on creation wiped the visor while the
+-- player was still watching a rifle being holstered.
+local wipe_delay = 0.35
+local wipe_len = 0.55
 
 local was_wiping = false
 local pushed = -1
@@ -57,11 +65,15 @@ local function update()
         get_console():execute(string.format("r2_lenswater_val %.3f", rate))
     end
 
-    -- The hand.
-    local item = db.actor:item_in_slot(wipe_slot)
-    local wiping = item and item:section() == wipe_section or false
+    -- The hand: only once the cleaning item is the ACTIVE one, which is when its own animation
+    -- is playing and the hands are free to hold it.
+    local wiping = false
+    if db.actor:active_slot() == wipe_slot then
+        local item = db.actor:item_in_slot(wipe_slot)
+        wiping = item and item:section() == wipe_section or false
+    end
     if wiping and not was_wiping then
-        get_console():execute("visor_wipe")
+        get_console():execute(string.format("visor_wipe %.2f %.2f", wipe_delay, wipe_len))
     end
     was_wiping = wiping
 end

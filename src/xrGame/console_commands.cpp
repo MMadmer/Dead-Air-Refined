@@ -2826,18 +2826,24 @@ public:
     }
 };
 
-// visor_wipe: a hand across the visor. The mask-cleaning animation calls this when the hand
-// comes up, and the renderer's drop field turns it into a sweep that takes the better part of a
-// second, collects the water ahead of the hand and leaves a smeared film behind it. Shipped
-// rather than QA: it is how the game asks for a wipe.
+// visor_wipe [delay] [duration]: a hand across the visor, starting delay seconds from now and
+// taking duration to cross. The mask-cleaning script calls this when the cleaning item is
+// actually in the hands, and the delay is what is left of the draw animation before the hand
+// reaches the glass - both live in the script, because both belong to an animation and an
+// animation is data. The renderer turns it into a sweep that collects the water ahead of the
+// hand and leaves a smeared film behind it. Shipped rather than QA: it is how the game asks.
 class CCC_VisorWipe : public IConsole_Command
 {
 public:
     CCC_VisorWipe(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
-    void Execute(pcstr) override
+    void Execute(pcstr args) override
     {
-        if (g_pGamePersistent)
-            GamePersistent().Environment().visor_wipe();
+        if (!g_pGamePersistent)
+            return;
+        float delay = 0.f, len = 0.55f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f %f", &delay, &len);
+        GamePersistent().Environment().visor_wipe(delay, len);
     }
 };
 

@@ -1495,10 +1495,20 @@ numerical diffusion goes as `CFL (1 - CFL)` and vanishes at both ends; at 0.8 a 
 twice its width in a second of running and arrived at the bottom of the glass as a streak with no
 head at all.
 
-Gravity is the world's, resolved into the plane of the glass. The visor turns with the head so the
-drops are still in screen space, but which way is down on it is not: look up at the sky, the plate
-goes horizontal, the in-plane component goes to zero and the drops stop running and just sit -
-which is what they do.
+Two things pull the water and only using one of them is why the tracks used to run dead vertically
+whatever the weather. **Gravity**, the world's, resolved into the plane of the glass: the visor
+turns with the head so the drops are still in screen space, but which way is down on it is not -
+look up at the sky, the plate goes horizontal, the in-plane component goes to zero and the drops
+stop running and just sit. And **the air**, because a drop standing on the glass is in the
+airflow and the drag on it is not small: a two-millimetre drop in five metres a second of relative
+wind feels about as much push as it does weight. Only the component ALONG the glass counts - air
+arriving square on presses the drop against the plate and moves it nowhere - so walking straight
+ahead with the head level changes nothing, a crosswind lays the tracks over, and looking down while
+running drives them up the visor. The relative wind is the weather's minus the eye's own travel,
+differenced from the camera in the phase rather than asked of the game, so a sprint through still
+air slants them too. Drag goes as the square of it, and the two are capped together: a gale may lay
+the tracks flat but it must not drive them at twice the speed gravity does, because past that the
+water is asked to cross more cells than the flux can send.
 
 Arrivals are a lottery per 4 mm cell per step at a rate from `r2_lenswater_val`, read as a RATE
 and not as a level. That one word is most of the old effect's problem: the driver walks that value
@@ -1522,9 +1532,16 @@ visor photographs as soft bright blobs with structure only in the big merged run
 blur is about a seventh of the screen height; a third of that is taken, because the honest figure
 erases the effect.
 
-A **wipe is a sweep, not a switch**. `visor_wipe` starts it (the game calls it when the cleaning
-item reaches the hands, `dead_air_x64_visor.script`), and over the better part of a second the
-hand crosses the glass: the water just ahead of the edge is shoved along and piles into a bead
+A **wipe is a sweep, not a switch**. `visor_wipe delay duration` starts it, and both numbers come
+from `dead_air_x64_visor.script` because both belong to an animation and an animation is data. The
+trigger is the moment the cleaning item becomes the ACTIVE item and not the moment it is created:
+the game has to put away whatever was in the hands first, and firing on creation wiped the glass
+while the player was still watching a rifle being holstered. The delay is what is left of the draw
+animation before the hand actually reaches the glass. The sweep runs one way and only one way -
+it follows an animation, and that animation goes the same way every time; alternating it, which is
+the obvious thing to do so that two wipes do not smear alike, had the glass being wiped against
+the arm the player could see half the time. Over the better part of a second the hand crosses the
+glass: the water just ahead of the edge is shoved along and piles into a bead
 that rides in front of it and runs off the far side, what the edge has passed keeps six per cent
 of its water as a smeared film streaked along the way the hand went, and what it has not reached
 is untouched. It never clears to zero - a wiped visor is not clean glass, and the couple of per

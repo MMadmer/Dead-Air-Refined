@@ -1393,20 +1393,25 @@ float CEnvironment::puddle_fill_at(const Fvector& p) const
     return top + (bot - top) * tz;
 }
 
-// A hand across the visor. One sweep at a time: the animation that triggers this is a second
-// long and the player can hold the key down through all of it, and restarting the sweep every
-// frame would park the hand at the left edge and clean nothing.
-void CEnvironment::visor_wipe()
+// A hand across the visor. One sweep at a time: the animation that triggers this is a second long
+// and the player can hold the key down through all of it, and restarting the sweep every frame
+// would park the hand at the near edge and clean nothing.
+//
+// The delay is not padding. The game has to put away whatever is in the hands before the cleaning
+// item can be drawn, and then that item has its own draw animation - so the glass is wiped some
+// way into all of it, not at the moment the player asked. Without it the water cleared while the
+// player was still watching their own hands holster a rifle.
+void CEnvironment::visor_wipe(float delay, float len)
 {
-    if (visor.wipe_start >= 0.f && Device.fTimeGlobal - visor.wipe_start < visor.wipe_len)
+    if (visor.wipe_start >= 0.f && Device.fTimeGlobal < visor.wipe_start + visor.wipe_len)
         return;
-    visor.wipe_start = Device.fTimeGlobal;
-    visor.wipe_dir = -visor.wipe_dir;
+    visor.wipe_len = clampr(len, 0.05f, 4.f);
+    visor.wipe_start = Device.fTimeGlobal + clampr(delay, 0.f, 4.f);
 }
 
-// 0 while the hand has not started, 1 once it is off the far edge. The renderer turns this into
-// a position and a direction; keeping the mapping there is what lets the sweep be a shape - it
-// eases in and out, as an arm does - without the engine having to agree about the shape.
+// 0 while the hand has not reached the glass, 1 once it is off the far edge. The renderer turns
+// this into a position and a direction; keeping the mapping there is what lets the sweep be a
+// shape - it eases in and out, as an arm does - without the engine having to agree about it.
 float CEnvironment::visor_wipe_phase() const
 {
     if (visor.wipe_start < 0.f)

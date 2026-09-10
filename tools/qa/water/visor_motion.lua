@@ -19,6 +19,10 @@ local function on_update()
 	if stage == 0 then
 		level.set_weather(qa_water_weather or "af3_bright_rain", true)
 		cmd("qa_visor_wet 1")
+		-- A wind to lean the tracks over. The drops are pushed by the air the glass is moving
+		-- through, so with none of it they run dead vertically and the slant cannot be checked
+		-- at all; a rain cycle's own wind is whatever the weather felt like that hour.
+		cmd("wind_force 0.70")
 		t0 = now stage = 1
 	elseif stage == 1 and now - t0 > 20000 then
 		-- Twenty seconds of rain first: the point is to film water that has had time to merge
@@ -50,6 +54,7 @@ local function on_update()
 			t0 = now stage = 4
 		end
 	elseif stage == 4 and now - t0 > 5000 then
+		cmd("wind_force -1")
 		printf("DA_WATER_PROBE_DONE")
 		cmd("flush")
 		stage = 5

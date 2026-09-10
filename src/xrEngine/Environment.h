@@ -680,14 +680,19 @@ public:
         // A rig override for the wetting rate, negative when off: the QA stand wears no mask, so
         // the drivers push nothing and the field stays empty however hard it is raining.
         float qa_wet{-1.f};
-        float wipe_start{-1.f}; // fTimeGlobal the sweep began at, negative when none is running
-        float wipe_len{0.75f}; // seconds the hand takes to cross
-        int wipe_dir{1}; // which way it goes, alternating, so two wipes do not smear the same way
+        float wipe_start{-1.f}; // fTimeGlobal the sweep begins at, negative when none is running
+        float wipe_len{0.55f}; // seconds the hand takes to cross
+        // Which way the hand travels. NOT alternating: it follows an animation, and that
+        // animation goes the same way every time - a sweep that came back the other way half the
+        // time was the glass being wiped against the arm the player could see.
+        int wipe_dir{1};
     };
     SVisor visor;
-    // Start a hand across the visor. Called from the game when the mask-cleaning animation
-    // begins; a second call while one is running is ignored rather than restarting the sweep.
-    void visor_wipe();
+    // Start a hand across the visor. delay is how long from now the hand actually reaches the
+    // glass - the cleaning animation has to draw first, and the game has to put away whatever was
+    // in the hands before that - and len is how long the sweep itself takes. A second call while
+    // one is running is ignored rather than restarting the sweep.
+    void visor_wipe(float delay, float len);
     // Where the hand is now, 0 before the sweep and 1 once it is over, and which way it travels.
     float visor_wipe_phase() const;
 
