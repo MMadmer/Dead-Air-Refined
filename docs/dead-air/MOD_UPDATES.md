@@ -205,6 +205,11 @@ XFined Editor's **Publish Release** does about it.
   release `X` again, so files changed under the same number reach nobody; the
   editor refuses to publish a tag that already exists and asks for a higher
   version instead.
+- Deleting a release takes its git tag with it in the editor, release first: a
+  published release whose tag goes first falls back to a draft. Once the latest
+  release is gone GitHub marks the newest remaining one Latest, and that is what
+  the game is served from then on; a client that already has the deleted version
+  sees nothing newer and stays where it is.
 - The repository has to be public: the game downloads anonymously.
 - One repository per module is the simple arrangement. The editor publishes one
   module per release, so it refuses when the current latest release carries the
