@@ -187,6 +187,30 @@ file 2c26b4...e7ae 394 1 66 214 8 mod.ltx
   long as the game supports XMS modules. A release always carries its complete
   packages and index.
 
+### 2.5 Publishing (informative)
+
+Nothing here binds the game; it says what a publisher has to get right, and what
+XFined Editor's **Publish Release** does about it.
+
+- Only the descriptor's name is fixed. The tag, the title and the notes of the
+  GitHub release are the author's: the game reads none of them. Which release is
+  newer is decided by the descriptor's `version` against the installed
+  `mod.ltx`, never by a tag or a date.
+- The game sees a release the moment GitHub marks it Latest, so a release must
+  be complete by then. The editor uploads the assets into a *draft*, compares
+  what GitHub stored with what it packaged (name, size, SHA-256 digest), and only
+  then publishes the draft as the latest release. At the end it fetches the
+  descriptor from the URL of section 2 and reports whether it is served.
+- A published version is final. A client that has version `X` never looks at a
+  release `X` again, so files changed under the same number reach nobody; the
+  editor refuses to publish a tag that already exists and asks for a higher
+  version instead.
+- The repository has to be public: the game downloads anonymously.
+- One repository per module is the simple arrangement. The editor publishes one
+  module per release, so it refuses when the current latest release carries the
+  descriptor of another module - its own release would hide that module from
+  its players.
+
 ## 3. Client behaviour
 
 ### 3.1 Check
