@@ -344,7 +344,8 @@ void CUIModsWnd::RefreshDetails(const Row& row, const ModUpdateService::ModuleSt
     case State::Current: xr_strcpy(text, mods_text("st_mods_status_current").c_str()); break;
     case State::NoRelease: xr_strcpy(text, mods_text("st_mods_status_no_release").c_str()); break;
     case State::Available:
-        xr_sprintf(text, sizeof(text), mods_text("st_mods_status_available").c_str(), status.version.c_str(),
+        xr_sprintf(text, sizeof(text),
+            mods_text(status.reissue ? "st_mods_status_reissue" : "st_mods_status_available").c_str(), status.version.c_str(),
             mods_size(status.totalBytes).c_str());
         break;
     case State::Blocked:

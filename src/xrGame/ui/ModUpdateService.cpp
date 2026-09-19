@@ -45,6 +45,18 @@ struct ModKnownIndex
     std::shared_ptr<const ModRelease::FileIndex> index;
 };
 
+// What comparing an installed module with a release of its own version found. The comparison
+// reads the whole module, so its answer is kept for as long as it holds: the same release (the
+// hash of its index) over the same installation (the manifest's size and time).
+struct ModVerdict
+{
+    xr_string id;
+    xr_string index;
+    xr_string stamp;
+    bool same{};
+    u64 bytes{}; // !same: what the update is expected to download
+};
+
 struct ModService
 {
     ~ModService()
@@ -66,6 +78,8 @@ struct ModService
 
     // worker thread only: one worker runs at a time, so these need no lock
     xr_vector<ModKnownIndex> indexes;
+    xr_vector<ModVerdict> verdicts;
+    bool verdictsLoaded{};
 
     bool initialized{};
     std::atomic_bool stop{};
@@ -388,11 +402,200 @@ u64 mod_estimate_download(const XMS::Module& module, const ModRelease::FileIndex
     return bytes;
 }
 
-// Turns a descriptor into the state the Mods menu shows. True when the release can be taken.
-bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRelease::Descriptor& descriptor,
-    u64 downloadBytes)
+// ---- a release of the version that is already installed -----------------------------------
+//
+// An author who takes a release down and publishes the same version again means the players
+// who have it to get the new files. Versions cannot tell the two releases apart; content can.
+
+// <game>\modules\.update_state: "<id>\t<index sha256>\t<stamp>\t<same 0|1>\t<bytes>" per line
+std::filesystem::path mod_verdict_file()
 {
-    const bool newer = ModRelease::ParseVersion(descriptor.version) > ModRelease::ParseVersion(installedVersion);
+    return std::filesystem::path(XMS::StagedRoot().c_str()).parent_path().parent_path() / L".update_state";
+}
+
+void mod_load_verdicts(ModService& service)
+{
+    if (service.verdictsLoaded)
+        return;
+    service.verdictsLoaded = true;
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, mod_verdict_file().c_str(), L"rb") || !file)
+        return;
+    char line[1024];
+    while (fgets(line, sizeof(line), file) && service.verdicts.size() < 4096)
+    {
+        ModVerdict verdict;
+        xr_string* fields[] = {&verdict.id, &verdict.index, &verdict.stamp};
+        pcstr cursor = line;
+        bool whole = true;
+        for (xr_string* field : fields)
+        {
+            pcstr tab = strchr(cursor, '\t');
+            if (!(whole = tab != nullptr))
+                break;
+            field->assign(cursor, tab);
+            cursor = tab + 1;
+        }
+        unsigned same = 0;
+        unsigned long long bytes = 0;
+        if (!whole || sscanf_s(cursor, "%u\t%llu", &same, &bytes) != 2 || verdict.id.empty())
+            continue;
+        verdict.same = same != 0;
+        verdict.bytes = bytes;
+        service.verdicts.push_back(std::move(verdict));
+    }
+    fclose(file);
+}
+
+void mod_save_verdicts(const ModService& service)
+{
+    const std::filesystem::path path = mod_verdict_file();
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    // a lost file costs one more comparison, so no temp-and-rename ceremony
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path.c_str(), L"wb") || !file)
+        return;
+    for (const ModVerdict& verdict : service.verdicts)
+        fprintf(file, "%s\t%s\t%s\t%u\t%llu\n", verdict.id.c_str(), verdict.index.c_str(), verdict.stamp.c_str(),
+            verdict.same ? 1u : 0u, static_cast<unsigned long long>(verdict.bytes));
+    fclose(file);
+}
+
+// Staging leaves the installed module where it is until the next start, and whether that start
+// swaps it in is not known here. The verdict is dropped rather than guessed; the first check
+// after the swap compares once and writes the true one.
+void mod_forget_verdict(ModService& service, const xr_string& id)
+{
+    mod_load_verdicts(service);
+    const auto stale = std::ranges::remove_if(service.verdicts, [&](const ModVerdict& verdict) { return verdict.id == id; });
+    if (stale.empty())
+        return;
+    service.verdicts.erase(stale.begin(), stale.end());
+    mod_save_verdicts(service);
+}
+
+xr_string mod_manifest_stamp(const XMS::Module& module)
+{
+    const std::filesystem::path manifest = std::filesystem::path(module.root.c_str()) / L"mod.ltx";
+    std::error_code error;
+    const u64 size = std::filesystem::file_size(manifest, error);
+    if (error)
+        return {};
+    const auto written = std::filesystem::last_write_time(manifest, error);
+    if (error)
+        return {};
+    string64 text;
+    xr_sprintf(text, "%llu:%lld", static_cast<unsigned long long>(size),
+        static_cast<long long>(written.time_since_epoch().count()));
+    return text;
+}
+
+enum class ModCompare
+{
+    Same,
+    Differs,
+    Cancelled
+};
+
+// Every file the release lists, where the release wants it: the size first - another size
+// settles it without a read - then the content. Files the module holds beyond the release do not
+// count; a stray desktop.ini is not an update. `bytes` is the packed size of the content that
+// did not match, each content once, which is what staging would go and fetch.
+ModCompare mod_compare_installed(const XMS::Module& module, const ModRelease::FileIndex& index, u64& bytes)
+{
+    ModService& service = mod_service();
+    const std::filesystem::path root(module.root.c_str());
+    std::unordered_set<std::string> wanted;
+    std::vector<std::pair<const ModRelease::FileEntry*, std::filesystem::path>> sized;
+    u64 total = 0;
+    bytes = 0;
+    for (const ModRelease::FileEntry& entry : index.files)
+    {
+        std::filesystem::path path = root / mod_utf8_path(entry.path);
+        std::error_code error;
+        const u64 size = std::filesystem::file_size(path, error);
+        if (error || size != entry.size)
+        {
+            if (wanted.insert(entry.sha256.c_str()).second)
+                bytes += entry.packed;
+            continue;
+        }
+        total += size;
+        sized.emplace_back(&entry, std::move(path));
+    }
+
+    service.progressDone.store(0, std::memory_order_release);
+    service.progressTotal.store(total, std::memory_order_release);
+    for (const auto& [entry, path] : sized)
+    {
+        const std::string digest = ContentHash::File(path.wstring(), service.stop);
+        if (mod_stopped())
+            return ModCompare::Cancelled;
+        if (digest != entry->sha256.c_str() && wanted.insert(entry->sha256.c_str()).second)
+            bytes += entry->packed;
+        service.progressDone.fetch_add(entry->size, std::memory_order_acq_rel);
+    }
+    return wanted.empty() ? ModCompare::Same : ModCompare::Differs;
+}
+
+// True when the release is the installed version with other content. A comparison that could
+// not be made answers false: nothing is offered without proof.
+bool mod_reissued(ModHttpSession& session, size_t moduleIndex, const XMS::Module& module,
+    const ModRelease::Descriptor& descriptor, u64& bytes)
+{
+    ModService& service = mod_service();
+    mod_load_verdicts(service);
+    const xr_string stamp = mod_manifest_stamp(module);
+    for (const ModVerdict& verdict : service.verdicts)
+    {
+        if (verdict.id != module.id || stamp.empty() || verdict.stamp != stamp || verdict.index != descriptor.index.sha256)
+            continue;
+        bytes = verdict.bytes;
+        return !verdict.same;
+    }
+
+    xr_string error;
+    const auto files = mod_fetch_index(session, moduleIndex, module, descriptor, error);
+    if (!files)
+    {
+        Msg("* [mods] %s: the release of the installed version could not be compared - %s", module.id.c_str(),
+            error.c_str());
+        return false;
+    }
+    mod_set_state(moduleIndex, State::Preparing);
+    const ModCompare compared = mod_compare_installed(module, *files, bytes);
+    if (compared == ModCompare::Cancelled)
+        return false;
+
+    if (compared == ModCompare::Same)
+        Msg("* [mods] %s: the installed files are release %s", module.id.c_str(), descriptor.version.c_str());
+    if (!stamp.empty())
+    {
+        const auto stale = std::ranges::remove_if(service.verdicts, [&](const ModVerdict& verdict) { return verdict.id == module.id; });
+        service.verdicts.erase(stale.begin(), stale.end());
+        service.verdicts.push_back({module.id, descriptor.index.sha256, stamp, compared == ModCompare::Same, bytes});
+        mod_save_verdicts(service);
+    }
+    return compared == ModCompare::Differs;
+}
+
+// a release this build cannot read, or one that asks for a newer game
+bool mod_release_blocked(const ModRelease::Descriptor& descriptor)
+{
+    return descriptor.schema > ModRelease::SupportedSchema ||
+        (!descriptor.requiresGame.empty() &&
+            ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version));
+}
+
+// Turns a descriptor into the state the Mods menu shows. True when the release can be taken.
+// `reissue`: the release is the installed version with other content - see mod_reissued.
+bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRelease::Descriptor& descriptor,
+    u64 downloadBytes, bool reissue = false)
+{
+    const bool ahead = ModRelease::ParseVersion(descriptor.version) > ModRelease::ParseVersion(installedVersion);
+    reissue = reissue && !ahead;
+    const bool newer = ahead || reissue;
     const bool unreadable = descriptor.schema > ModRelease::SupportedSchema;
     const bool gameTooOld = !unreadable && !descriptor.requiresGame.empty() &&
         ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version);
@@ -401,6 +604,7 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
     {
         status.message.clear();
         status.version = newer ? descriptor.version : xr_string();
+        status.reissue = reissue;
         status.requiresGame = newer && gameTooOld ? descriptor.requiresGame : xr_string();
         status.totalBytes = newer && !unreadable ? downloadBytes : 0;
         status.downloadedBytes = 0;
@@ -738,7 +942,11 @@ void mod_run_update(ModHttpSession& session, size_t index)
         mod_set_state(index, fetched == ModFetch::NotFound ? State::NoRelease : State::Failed, std::move(error));
         return;
     }
-    if (!mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes()))
+    // the check has usually compared already, and then this is a lookup
+    u64 reissueBytes = 0;
+    const bool reissue = ModRelease::ParseVersion(descriptor.version) == ModRelease::ParseVersion(module.version) &&
+        mod_reissued(session, index, module, descriptor, reissueBytes);
+    if (mod_stopped() || !mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes(), reissue))
         return;
 
     mod_set_state(index, State::Preparing);
@@ -746,6 +954,7 @@ void mod_run_update(ModHttpSession& session, size_t index)
     if (files && mod_stage(session, index, module, descriptor, *files, error))
     {
         Msg("* [mods] %s: %s staged, applied by the next start", module.id.c_str(), descriptor.version.c_str());
+        mod_forget_verdict(service, module.id);
         mod_set_state(index, State::Staged);
         std::lock_guard lock(service.mutex);
         ++service.stagedThisRun;
@@ -782,6 +991,25 @@ void mod_run_check(ModHttpSession& session)
         {
             Msg("* [mods] %s: installed %s, released %s", module.id.c_str(), module.version.c_str(),
                 descriptor.version.c_str());
+            // The same number is not yet "nothing new": the author may have taken that release
+            // down and published it again. Worth a comparison only for a release this game can take.
+            if (ModRelease::ParseVersion(descriptor.version) == ModRelease::ParseVersion(module.version) &&
+                !mod_release_blocked(descriptor))
+            {
+                u64 download = 0;
+                const bool reissue = mod_reissued(session, index, module, descriptor, download);
+                if (mod_stopped())
+                {
+                    mod_set_state(index, State::Unchecked);
+                    break;
+                }
+                mod_evaluate(index, module.version, descriptor, download, reissue);
+                if (reissue)
+                    Msg("* [mods] %s: %s was published again with other content - about %llu of %llu byte(s) to download",
+                        module.id.c_str(), descriptor.version.c_str(), static_cast<unsigned long long>(download),
+                        static_cast<unsigned long long>(descriptor.PackageBytes()));
+                break;
+            }
             if (!mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes()))
                 break;
             // An update on offer comes with its size. The index is what knows it; without one
@@ -1017,8 +1245,9 @@ void ModUpdateService::LogStatus()
     for (size_t index = 0; index != snapshot.modules.size() && index != modules.size(); ++index)
     {
         const ModuleStatus& status = snapshot.modules[index];
-        Msg("*   %s %s: %s%s%s%s%s", status.id.c_str(), modules[index].version.c_str(), mod_state_name(status.state),
-            status.version.empty() ? "" : " - ", status.version.c_str(), status.message.empty() ? "" : " - ",
+        Msg("*   %s %s: %s%s%s%s%s%s", status.id.c_str(), modules[index].version.c_str(), mod_state_name(status.state),
+            status.version.empty() ? "" : " - ", status.version.c_str(),
+            status.reissue ? " (the installed version, published again)" : "", status.message.empty() ? "" : " - ",
             status.message.c_str());
     }
 }

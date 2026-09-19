@@ -195,21 +195,25 @@ XFined Editor's **Publish Release** does about it.
 - Only the descriptor's name is fixed. The tag, the title and the notes of the
   GitHub release are the author's: the game reads none of them. Which release is
   newer is decided by the descriptor's `version` against the installed
-  `mod.ltx`, never by a tag or a date.
+  `mod.ltx`, never by a tag or a date. The editor's **Releases** window edits
+  the title and the notes of a release that is out and leaves the rest alone -
+  including the Latest mark, which GitHub's default for an edit would move.
 - The game sees a release the moment GitHub marks it Latest, so a release must
   be complete by then. The editor uploads the assets into a *draft*, compares
   what GitHub stored with what it packaged (name, size, SHA-256 digest), and only
   then publishes the draft as the latest release. At the end it fetches the
   descriptor from the URL of section 2 and reports whether it is served.
-- A published version is final. A client that has version `X` never looks at a
-  release `X` again, so files changed under the same number reach nobody; the
-  editor refuses to publish a tag that already exists and asks for a higher
-  version instead.
+- A published release is never overwritten: the editor refuses to publish a tag
+  that already exists. Other files under the same version go out the long way
+  round - delete the release, publish the version again - and the game notices
+  (3.1): to a client that has version `X`, a release `X` with other content is an
+  update like any other, told to the player as a fix. A higher version remains
+  the plain way to ship a change.
 - Deleting a release takes its git tag with it in the editor, release first: a
   published release whose tag goes first falls back to a draft. Once the latest
   release is gone GitHub marks the newest remaining one Latest, and that is what
-  the game is served from then on; a client that already has the deleted version
-  sees nothing newer and stays where it is.
+  the game is served from then on; a client that already has a higher version
+  than the one served stays where it is.
 - The repository has to be public: the game downloads anonymously.
 - One repository per module is the simple arrangement. The editor publishes one
   module per release, so it refuses when the current latest release carries the
@@ -231,12 +235,30 @@ Per module the client fetches the descriptor and compares:
 | descriptor invalid, id mismatch | check failed |
 | `schema` above 1, or `requires_game` above the running game | blocked |
 | `version` above the installed one | available |
+| `version` equal to the installed one, content differs | available, as a fix |
 | otherwise | current |
 
 For an available update the client also fetches the index and tells the player
 how much there is to download: the packed size of every file the installed
 module does not hold under the same path and size. It is an estimate - the
 update itself decides by content.
+
+**The same version, published again.** An author may delete a release and
+publish its version a second time with other files. Numbers cannot tell the two
+apart, so for a release of the installed version the client compares content:
+it fetches the index and checks that the module holds every listed file under
+its path with the listed size and SHA-256. Files the module holds beyond the
+index do not count. When everything matches the module is current; when
+anything differs the release is offered like any update - same staging, same
+delta - and the Mods menu words it as a fix by the author rather than as
+"version X is available" over an installed X.
+
+The comparison reads the whole module, so its verdict is kept in
+`modules\.update_state`, one line per module: the SHA-256 of the index it was
+made against and the size and time of the installed `mod.ltx`. While both still
+hold the verdict is reused and neither the index nor the module is read; a
+staged update drops it, and the first check after the swap makes a fresh one.
+Deleting the file costs one comparison.
 
 ### 3.2 Update
 

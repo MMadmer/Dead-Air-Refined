@@ -54,6 +54,9 @@
     <string id="st_mods_status_available">
         <text>Version %s is available, about %s to download</text>
     </string>
+    <string id="st_mods_status_reissue">
+        <text>The author has fixed version %s, about %s to download</text>
+    </string>
     <string id="st_mods_status_blocked">
         <text>Version %s requires Dead Air: Refined %s</text>
     </string>

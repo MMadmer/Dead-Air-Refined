@@ -54,6 +54,9 @@
     <string id="st_mods_status_available">
         <text>Доступна версия %s, к загрузке около %s</text>
     </string>
+    <string id="st_mods_status_reissue">
+        <text>Автор исправил версию %s, к загрузке около %s</text>
+    </string>
     <string id="st_mods_status_blocked">
         <text>Версия %s требует Dead Air: Refined %s</text>
     </string>

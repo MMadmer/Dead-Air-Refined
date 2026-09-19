@@ -354,6 +354,20 @@ function New-Fixture {
     Install-Module -Id 'qa.norelease' -ManifestText (New-ManifestText -Id 'qa.norelease' -Name 'No Release Yet' `
             -Version '1.0.0' -Github 'QaOwner/qa-norelease')
 
+    # The author took 1.0.0 down and published 1.0.0 again: the same manifest, one file fixed, one
+    # added. No version says so - only the content does.
+    $script:reissueKeep = New-Payload -Bytes (1024 * 1024) -Seed 20
+    $reissue = New-ManifestText -Id 'qa.reissue' -Name 'Published Again' -Version '1.0.0' -Github 'QaOwner/qa-reissue'
+    Install-Module -Id 'qa.reissue' -ManifestText $reissue -Files @{
+        'gamedata\keep.bin'  = $script:reissueKeep
+        'gamedata\fixed.ltx' = $text.GetBytes("[reissue]`r`nrevision = 1`r`n")
+    }
+    Publish-Release -Id 'qa.reissue' -Version '1.0.0' -ManifestText $reissue -Files @{
+        'gamedata/keep.bin'  = $script:reissueKeep
+        'gamedata/fixed.ltx' = $text.GetBytes("[reissue]`r`nrevision = 2`r`n")
+        'gamedata/extra.ltx' = $text.GetBytes("[extra]`r`n")
+    }
+
     $secondArgs = @{ Id = 'qa.second'; Name = 'Second Update'; Github = 'QaOwner/qa-second' }
     Install-Module -Id 'qa.second' -ManifestText (New-ManifestText @secondArgs -Version '1.2')
     Publish-Release -Id 'qa.second' -Version '1.3' -Parts 2 -ManifestText (New-ManifestText @secondArgs -Version '1.3') -Files @{
@@ -486,6 +500,7 @@ try {
     # ---- Update
     $log = Invoke-Engine -Phase 'update' -Commands @('xms_mods', 'xms_update all') -WaitFor @(
         '\[mods\] qa\.story: 1\.1\.0 staged', '\[mods\] qa\.second: 1\.3 staged', '\[mods\] qa\.delta: 1\.3\.0 staged',
+        '\[mods\] qa\.reissue: 1\.0\.0 staged',
         '\[mods\] qa\.broken: update failed', '\[mods\] qa\.tampered: update failed')
     Assert-That 'website outside the allow-list is refused' ($log -match 'module \[qa\.badsite\] website ignored')
     Assert-That 'malformed repository is refused' ($log -match 'module \[qa\.badsite\] update source ignored')
@@ -514,6 +529,15 @@ try {
     Assert-That 'check quotes the delta, not the package' ($log -match '\[mods\] qa\.delta: about (\d+) of (\d+) byte' -and
         [long]$Matches[1] * 4 -lt [long]$Matches[2]) "$($Matches[1]) of $($Matches[2])"
 
+    # the same version published again: an update by content, not by number
+    Assert-That 'a version published again is offered as an update' ($log -match
+        '\[mods\] qa\.reissue: 1\.0\.0 was published again with other content - about (\d+) of (\d+) byte') "$($Matches[1]) of $($Matches[2])"
+    $reissuePackage = (Get-Item -LiteralPath (Join-Path $qaAssets 'qa.reissue-1.0.0.zip')).Length
+    $reissueSent = Get-MockBytes 'qa.reissue-1.0.0.zip'
+    Assert-That 'and downloads the fixed files alone' ($reissueSent -gt 0 -and $reissueSent * 8 -lt $reissuePackage) "$reissueSent of $reissuePackage byte(s)"
+    Assert-That 'the same version with the same content is not an update' ($log -match
+        '\[mods\] qa\.current: the installed files are release 2\.0\.0' -and $log -notmatch '\[mods\] qa\.current: .* staged')
+
     # ---- Apply
     $log = Invoke-Engine -Phase 'apply' -RelaunchParentSeconds 12 -Commands @('xms_update_status') -WaitFor @(
         '\[mods\] qa\.story: installed 1\.1\.0, released 1\.1\.0')
@@ -530,6 +554,13 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $delta 'old_name.bin')) -and
         -not (Test-Path -LiteralPath (Join-Path $delta 'removed.ltx')) -and
         @(Get-ChildItem -LiteralPath (Join-Path $qaModules 'qa.delta') -Recurse -File).Count -eq 5)
+    $reissued = Join-Path $qaModules 'qa.reissue\gamedata'
+    Assert-That 'the version published again was swapped in' ((Get-ModuleVersion 'qa.reissue') -eq '1.0.0' -and
+        (Test-FileIs (Join-Path $reissued 'fixed.ltx') ([Text.Encoding]::ASCII.GetBytes("[reissue]`r`nrevision = 2`r`n"))) -and
+        (Test-FileIs (Join-Path $reissued 'keep.bin') $script:reissueKeep) -and
+        (Test-Path -LiteralPath (Join-Path $reissued 'extra.ltx')))
+    Assert-That 'and is not offered a second time' ($log -match '\[mods\] qa\.reissue: the installed files are release 1\.0\.0' -and
+        $log -notmatch 'qa\.reissue: 1\.0\.0 was published again')
     Assert-That 'staging folder is gone' (-not (Test-Path -LiteralPath $qaStaged))
     $stage = [regex]::Match($log, 'Startup checkpoint:\s*([\d.]+) ms stage,[^\r\n]*Filesystem initialized')
     $waited = if ($stage.Success) { [double]$stage.Groups[1].Value } else { 0 }
@@ -550,6 +581,16 @@ try {
     finally { $held.Dispose() }
     $log = Invoke-Engine -Phase 'locked-released' -WaitFor @('module \[qa\.story\] updated to 1\.1\.0')
     Assert-That 'update lands once the handle is gone' ((Get-ModuleVersion 'qa.story') -eq '1.1.0')
+
+    # The comparison reads the whole module, so its verdict is kept. Over every start so far the
+    # index of the unchanged release was fetched once, and the reissue's twice: when it was offered,
+    # and after the swap, to see that the swap took.
+    $state = Join-Path $qaModules '.update_state'
+    Assert-That 'the verdict of a comparison is kept' ((Test-Path -LiteralPath $state) -and
+        (Select-String -LiteralPath $state -Pattern "^qa\.current`t" -Quiet))
+    $currentIndexFetches = @(Select-String -LiteralPath $script:mockLog -Pattern '<- qa\.current-2\.0\.0\.files sent=').Count
+    $reissueIndexFetches = @(Select-String -LiteralPath $script:mockLog -Pattern '<- qa\.reissue-1\.0\.0\.files sent=').Count
+    Assert-That 'and spares the next starts the comparison' ($currentIndexFetches -eq 1 -and $reissueIndexFetches -eq 2) "current $currentIndexFetches, reissue $reissueIndexFetches"
 
     # ---- Recover: a swap interrupted between its two renames, and an update for a deleted module
     $interrupted = Join-Path $qaStaged 'qa.current'

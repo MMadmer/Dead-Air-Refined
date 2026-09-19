@@ -28,6 +28,10 @@ struct ModuleStatus
     State state{State::NoSource};
     // Available, Blocked, and every state of an update in flight
     xr_string version;
+    // The release carries the version that is already installed, with other content: the author
+    // took it down and published it again. The same update, told to the player in other words -
+    // "1.0.0 is available" over an installed 1.0.0 reads like a fault.
+    bool reissue{};
     // Blocked only: the game version the release asks for. Empty when it is the descriptor
     // schema this build cannot read, which no version number on our side can express.
     xr_string requiresGame;
