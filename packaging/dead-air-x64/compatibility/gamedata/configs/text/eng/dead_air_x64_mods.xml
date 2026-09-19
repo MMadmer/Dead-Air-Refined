@@ -52,7 +52,7 @@
         <text>No releases found</text>
     </string>
     <string id="st_mods_status_available">
-        <text>Version %s is available (%s)</text>
+        <text>Version %s is available, about %s to download</text>
     </string>
     <string id="st_mods_status_blocked">
         <text>Version %s requires Dead Air: Refined %s</text>
@@ -69,8 +69,8 @@
     <string id="st_mods_status_downloading">
         <text>Downloading: %s / %s</text>
     </string>
-    <string id="st_mods_status_unpacking">
-        <text>Unpacking...</text>
+    <string id="st_mods_status_preparing">
+        <text>Verifying installed files: %s / %s</text>
     </string>
     <string id="st_mods_status_staged">
         <text>Version %s will be installed at the next game start</text>

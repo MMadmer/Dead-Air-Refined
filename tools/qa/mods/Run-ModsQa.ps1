@@ -8,14 +8,17 @@
     and saves are never touched. The fixture - a set of installed modules and the release assets
     published for them - is generated into the QA root on every run, and a loopback mock
     (Start-ContentAssetMock.ps1) stands in for github.com: throttled and dropping every connection
-    mid-body, so a download only completes by resuming.
+    mid-body, so a large file only arrives by resuming. The fixture writes descriptors, file indexes
+    and packages on its own, from the contract text - an independent second reading of it next to
+    XFined Editor's packager.
 
     The engine is driven through its console only (xms_mods, xms_update, xms_update_status appended
-    to the QA user.ltx). Nothing is clicked: every verdict comes from the engine log and from what is
-    on disk afterwards. Window captures are saved next to the results as evidence.
+    to the QA user.ltx). Nothing is clicked: every verdict comes from the engine log, the mock's byte
+    count and what is on disk afterwards. Window captures are saved next to the results as evidence.
 
     Phases:
-      Update   check every module, take every available release, stage it
+      Update   check every module, take every available release, stage it; a release that differs
+               in a few files downloads those files only and reuses a renamed one
       Apply    the next start swaps the staged modules in, after waiting for the process a relaunch
                names in DAR_RELAUNCH_WAIT_PID
       Locked   a module folder held open by another process keeps its update staged, and takes it on
@@ -95,6 +98,14 @@ function Copy-TreeContents {
 function Assert-NoTargetEngine {
     $running = @(Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine })
     if ($running.Count) { throw "The QA engine is already running (pid $($running.Id -join ', ')); stop it first." }
+}
+
+function Get-Sha256 {
+    # an empty file is a legitimate member of a release, and an empty array a legitimate argument
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($hasher.ComputeHash($Bytes)).Replace('-', '').ToLowerInvariant() }
+    finally { $hasher.Dispose() }
 }
 
 # ---------------------------------------------------------------------------- QA root
@@ -184,39 +195,93 @@ function Install-Module {
     }
 }
 
+function Get-ZipLayout {
+    # Where the data of every entry sits, read back from the finished archive: central directory
+    # for the method and the packed size, local header for the two lengths that precede the data.
+    param([Parameter(Mandatory)][string]$Path)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $end = -1
+    for ($i = $bytes.Length - 22; $i -ge 0; --$i) {
+        if ([BitConverter]::ToUInt32($bytes, $i) -eq 0x06054b50) { $end = $i; break }
+    }
+    if ($end -lt 0) { throw "no end of central directory in $Path" }
+    $count = [BitConverter]::ToUInt16($bytes, $end + 10)
+    $cursor = [int][BitConverter]::ToUInt32($bytes, $end + 16)
+    $layout = @{}
+    for ($n = 0; $n -lt $count; ++$n) {
+        $nameLength = [BitConverter]::ToUInt16($bytes, $cursor + 28)
+        $local = [int][BitConverter]::ToUInt32($bytes, $cursor + 42)
+        $name = [Text.Encoding]::UTF8.GetString($bytes, $cursor + 46, $nameLength)
+        $layout[$name] = [pscustomobject]@{
+            Method = [BitConverter]::ToUInt16($bytes, $cursor + 10)
+            Packed = [BitConverter]::ToUInt32($bytes, $cursor + 20)
+            Offset = $local + 30 + [BitConverter]::ToUInt16($bytes, $local + 26) + [BitConverter]::ToUInt16($bytes, $local + 28)
+        }
+        $cursor += 46 + $nameLength + [BitConverter]::ToUInt16($bytes, $cursor + 30) + [BitConverter]::ToUInt16($bytes, $cursor + 32)
+    }
+    return $layout
+}
+
 function Publish-Release {
-    # One descriptor plus $Parts package(s). $Prefix lets a case build a package the contract forbids.
+    # Descriptor, file index and $Parts package(s). -HostilePath renames one file in the index to a
+    # path the contract forbids; -Tamper flips a byte of stored data after the index was made.
     param([string]$Id, [string]$Version, [string]$ManifestText, [hashtable]$Files = @{}, [string]$RequiresGame = '',
-        [int]$Parts = 1, [string]$Prefix)
-    if (-not $Prefix) { $Prefix = "modules/$Id/" }
+        [int]$Parts = 1, [string]$HostilePath, [switch]$Tamper)
     $entries = @{ 'mod.ltx' = $utf8.GetBytes($ManifestText) }
     foreach ($relative in $Files.Keys) { $entries[$relative] = [byte[]]$Files[$relative] }
     $names = @($entries.Keys | Sort-Object)
 
     $packages = @()
+    $rows = @()
     for ($part = 0; $part -lt $Parts; ++$part) {
         $asset = if ($Parts -eq 1) { "$Id-$Version.zip" } else { "$Id-$Version.part$($part + 1).zip" }
         $path = Join-Path $qaAssets $asset
         $stream = [IO.File]::Create($path)
         $zip = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create)
+        $held = @()
         for ($index = $part; $index -lt $names.Count; $index += $Parts) {
-            $entry = $zip.CreateEntry($Prefix + $names[$index], [IO.Compression.CompressionLevel]::Optimal)
+            $entry = $zip.CreateEntry("modules/$Id/$($names[$index])", [IO.Compression.CompressionLevel]::Optimal)
             $target = $entry.Open()
             $bytes = [byte[]]$entries[$names[$index]]
             $target.Write($bytes, 0, $bytes.Length)
             $target.Dispose()
+            $held += $names[$index]
         }
         $zip.Dispose()
         $stream.Dispose()
-        $packages += "$asset = $((Get-Item -LiteralPath $path).Length), $((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+        $layout = Get-ZipLayout -Path $path
+        foreach ($name in $held) {
+            $place = $layout["modules/$Id/$name"]
+            $bytes = [byte[]]$entries[$name]
+            $listed = if ($HostilePath -and $name -ne 'mod.ltx') { $HostilePath; $HostilePath = $null } else { $name }
+            $rows += "file $(Get-Sha256 $bytes) $($bytes.Length) $($part + 1) $($place.Offset) $($place.Packed) $($place.Method) $listed"
+        }
+        if ($Tamper -and $part -eq 0) {
+            $place = $layout["modules/$Id/mod.ltx"]
+            $archive = [IO.File]::Open($path, 'Open', 'ReadWrite')
+            $archive.Position = $place.Offset + 1
+            $byte = $archive.ReadByte()
+            $archive.Position = $place.Offset + 1
+            $archive.WriteByte($byte -bxor 0xFF)
+            $archive.Dispose()
+        }
+        $packages += [pscustomobject]@{ Name = $asset; Line = "$asset = $((Get-Item -LiteralPath $path).Length), $((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())" }
     }
+
+    $indexName = "$Id-$Version.files"
+    $indexText = (@('xms-files 1') + @($packages | ForEach-Object { "pack $($_.Name)" }) + $rows) -join "`n"
+    $indexBytes = $utf8.GetBytes($indexText + "`n")
+    [IO.File]::WriteAllBytes((Join-Path $qaAssets $indexName), $indexBytes)
 
     $total = 0L
     foreach ($bytes in $entries.Values) { $total += ([byte[]]$bytes).Length }
     $lines = @('; XMS module release descriptor. QA fixture.', '[release]', 'schema        = 1',
         "id            = $Id", "version       = $Version")
     if ($RequiresGame) { $lines += "requires_game = $RequiresGame" }
-    $lines += @("files         = $($entries.Count)", "unpacked      = $total", '', '[packages]') + $packages
+    $lines += @("files         = $($entries.Count)", "unpacked      = $total",
+        "index         = $indexName, $($indexBytes.Length), $(Get-Sha256 $indexBytes)", '', '[packages]')
+    $lines += @($packages | ForEach-Object { $_.Line })
     [IO.File]::WriteAllText((Join-Path $qaAssets "$Id.update.ltx"), (($lines -join "`r`n") + "`r`n"), $utf8)
 }
 
@@ -246,7 +311,27 @@ function New-Fixture {
     }
     Publish-Release -Id 'qa.story' -Version '1.1.0' -ManifestText (New-ManifestText @storyArgs -Version '1.1.0') -Files @{
         'gamedata/configs/qa_story_marker.ltx' = $text.GetBytes("[qa_story]`r`nversion = 1.1.0`r`n")
+        'gamedata/configs/empty.ltx'           = [byte[]]::new(0)
         'gamedata/textures/qa/payload.bin'     = (New-Payload -Bytes (3 * 1024 * 1024) -Seed 1)
+    }
+
+    # The point of the whole design: a big module that changed in a few files. big.bin stays,
+    # old_name.bin comes back as new_name.bin, removed.ltx goes, changed.ltx and added.ltx arrive.
+    $script:deltaBig = New-Payload -Bytes (4 * 1024 * 1024) -Seed 10
+    $script:deltaMoved = New-Payload -Bytes (300 * 1024) -Seed 11
+    $deltaArgs = @{ Id = 'qa.delta'; Name = 'Delta Update'; Github = 'QaOwner/qa-delta' }
+    Install-Module -Id 'qa.delta' -ManifestText (New-ManifestText @deltaArgs -Version '1.0.0') -Files @{
+        'gamedata\big.bin'      = $script:deltaBig
+        'gamedata\old_name.bin' = $script:deltaMoved
+        'gamedata\changed.ltx'  = $text.GetBytes("[delta]`r`nrevision = 1`r`n")
+        'gamedata\removed.ltx'  = $text.GetBytes("[gone]`r`n")
+    }
+    # three versions later on purpose: the gap is not supposed to matter
+    Publish-Release -Id 'qa.delta' -Version '1.3.0' -ManifestText (New-ManifestText @deltaArgs -Version '1.3.0') -Files @{
+        'gamedata/big.bin'            = $script:deltaBig
+        'gamedata/moved/new_name.bin' = $script:deltaMoved
+        'gamedata/changed.ltx'        = $text.GetBytes("[delta]`r`nrevision = 4`r`n")
+        'gamedata/added.ltx'          = $text.GetBytes("[added]`r`n")
     }
 
     $current = New-ManifestText -Id 'qa.current' -Name 'Current Module' -Version '2.0' -Author 'Somebody' `
@@ -277,17 +362,17 @@ function New-Fixture {
         'gamedata/c.bin' = (New-Payload -Bytes 200000 -Seed 4)
     }
 
-    # a package that climbs out of its folder: must fail and leave the module alone
+    # an index that names a path outside the module: must fail and leave the module alone
     Install-Module -Id 'qa.broken' -ManifestText (New-ManifestText -Id 'qa.broken' -Name 'Broken Release' `
             -Version '1.0.0' -Github 'QaOwner/qa-broken')
-    Publish-Release -Id 'qa.broken' -Version '1.0.1' -ManifestText (New-ManifestText -Id 'qa.broken' `
-            -Name 'Broken Release' -Version '1.0.1') -Files @{ '../../escape.txt' = $text.GetBytes('never written') }
+    Publish-Release -Id 'qa.broken' -Version '1.0.1' -HostilePath '../../escape.txt' -ManifestText (New-ManifestText `
+            -Id 'qa.broken' -Name 'Broken Release' -Version '1.0.1') -Files @{ 'gamedata/x.ltx' = $text.GetBytes('never written') }
 
-    # a package that belongs to another module
-    Install-Module -Id 'qa.foreign' -ManifestText (New-ManifestText -Id 'qa.foreign' -Name 'Foreign Package' `
-            -Version '1.0.0' -Github 'QaOwner/qa-foreign')
-    Publish-Release -Id 'qa.foreign' -Version '1.0.1' -Prefix 'modules/qa.story/' -ManifestText (New-ManifestText `
-            -Id 'qa.foreign' -Name 'Foreign Package' -Version '1.0.1')
+    # a package whose bytes are not the ones its index vouches for
+    Install-Module -Id 'qa.tampered' -ManifestText (New-ManifestText -Id 'qa.tampered' -Name 'Tampered Package' `
+            -Version '1.0.0' -Github 'QaOwner/qa-tampered')
+    Publish-Release -Id 'qa.tampered' -Version '1.0.1' -Tamper -ManifestText (New-ManifestText `
+            -Id 'qa.tampered' -Name 'Tampered Package' -Version '1.0.1')
 }
 
 # ---------------------------------------------------------------------------- engine
@@ -377,6 +462,21 @@ function Get-ModuleVersion {
     return $(if ($line) { $line.Matches[0].Groups[1].Value } else { $null })
 }
 
+function Get-MockBytes {
+    # bytes the mock actually sent for one asset, over every request
+    param([string]$Asset)
+    $sent = 0L
+    foreach ($line in Select-String -LiteralPath $script:mockLog -Pattern ("<- {0} sent=(\d+)" -f [regex]::Escape($Asset))) {
+        $sent += [long]$line.Matches[0].Groups[1].Value
+    }
+    return $sent
+}
+
+function Test-FileIs {
+    param([string]$Path, [byte[]]$Bytes)
+    return (Test-Path -LiteralPath $Path) -and ((Get-Sha256 ([IO.File]::ReadAllBytes($Path))) -eq (Get-Sha256 $Bytes))
+}
+
 # ---------------------------------------------------------------------------- run
 Assert-NoTargetEngine
 New-QaRoot
@@ -385,23 +485,34 @@ $mockProcess = Start-Mock
 try {
     # ---- Update
     $log = Invoke-Engine -Phase 'update' -Commands @('xms_mods', 'xms_update all') -WaitFor @(
-        '\[mods\] qa\.story: 1\.1\.0 staged', '\[mods\] qa\.second: 1\.3 staged',
-        '\[mods\] qa\.broken: update failed', '\[mods\] qa\.foreign: update failed')
+        '\[mods\] qa\.story: 1\.1\.0 staged', '\[mods\] qa\.second: 1\.3 staged', '\[mods\] qa\.delta: 1\.3\.0 staged',
+        '\[mods\] qa\.broken: update failed', '\[mods\] qa\.tampered: update failed')
     Assert-That 'website outside the allow-list is refused' ($log -match 'module \[qa\.badsite\] website ignored')
     Assert-That 'malformed repository is refused' ($log -match 'module \[qa\.badsite\] update source ignored')
     Assert-That 'current module reports nothing newer' ($log -match '\[mods\] qa\.current: installed 2\.0, released 2\.0\.0')
     Assert-That 'missing release is a 404, not an error' ($log -match '\[mods\] qa\.norelease: .* publishes no release')
-    Assert-That 'release for a newer game is not taken' ($log -notmatch '\[mods\] qa\.blocked: downloading')
-    Assert-That 'path outside the module is refused' ($log -match 'qa\.broken: update failed - package holds an unsafe path')
-    Assert-That 'package of another module is refused' ($log -match 'qa\.foreign: update failed - package holds a path outside')
+    Assert-That 'release for a newer game is not taken' ($log -notmatch '\[mods\] qa\.blocked: .* staged')
+    Assert-That 'index path outside the module is refused' ($log -match 'qa\.broken: update failed - file index holds a malformed or unsafe record')
+    # a flipped byte either breaks the deflate stream or survives it and fails the hash
+    Assert-That 'package bytes that differ from the index are refused' ($log -match
+        'qa\.tampered: update failed - a file (does not match the index|of the package is damaged)')
     Assert-That 'hostile entry was written nowhere' (-not @(Get-ChildItem -LiteralPath $qaRoot -Recurse -Filter 'escape.txt' -File).Count)
     Assert-That 'failed updates leave no staging behind' (-not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.broken')) -and
-        -not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.foreign')))
+        -not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.tampered')))
     Assert-That 'staged update is armed' (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.story\ready.ltx'))
-    Assert-That 'downloads are removed once unpacked' (-not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.story\download')))
     Assert-That 'installed module is untouched until the next start' ((Get-ModuleVersion 'qa.story') -eq '1.0.0')
-    $mockText = Get-Content -LiteralPath $script:mockLog -Raw
-    Assert-That 'interrupted download resumed with a Range request' ($mockText -match 'qa\.story-1\.1\.0\.zip range=[1-9]')
+    Assert-That 'empty file is staged' ((Test-Path -LiteralPath (Join-Path $qaStaged 'qa.story\payload\gamedata\configs\empty.ltx')) -and
+        (Get-Item -LiteralPath (Join-Path $qaStaged 'qa.story\payload\gamedata\configs\empty.ltx')).Length -eq 0)
+    $storyRequests = @(Select-String -LiteralPath $script:mockLog -Pattern '-> qa\.story-1\.1\.0\.zip range=').Count
+    Assert-That 'dropped download resumed at the file in progress' ($storyRequests -ge 3) "$storyRequests request(s)"
+
+    # the delta: 4.3 MB release, a few hundred bytes of it new
+    $deltaPackage = (Get-Item -LiteralPath (Join-Path $qaAssets 'qa.delta-1.3.0.zip')).Length
+    $deltaSent = Get-MockBytes 'qa.delta-1.3.0.zip'
+    Assert-That 'delta downloads what changed, not the package' ($deltaSent -gt 0 -and $deltaSent * 8 -lt $deltaPackage) "$deltaSent of $deltaPackage byte(s)"
+    Assert-That 'delta counts reused files' ($log -match '\[mods\] qa\.delta: 2 of 5 file\(s\) already here')
+    Assert-That 'check quotes the delta, not the package' ($log -match '\[mods\] qa\.delta: about (\d+) of (\d+) byte' -and
+        [long]$Matches[1] * 4 -lt [long]$Matches[2]) "$($Matches[1]) of $($Matches[2])"
 
     # ---- Apply
     $log = Invoke-Engine -Phase 'apply' -RelaunchParentSeconds 12 -Commands @('xms_update_status') -WaitFor @(
@@ -410,6 +521,15 @@ try {
     Assert-That 'two-package module was swapped in' ((Get-ModuleVersion 'qa.second') -eq '1.3' -and
         (Test-Path -LiteralPath (Join-Path $qaModules 'qa.second\gamedata\c.bin')))
     Assert-That 'file dropped by the new version is gone' (-not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.story\gamedata\configs\removed_in_next.ltx')))
+    $delta = Join-Path $qaModules 'qa.delta\gamedata'
+    Assert-That 'delta module is the released one, file for file' ((Get-ModuleVersion 'qa.delta') -eq '1.3.0' -and
+        (Test-FileIs (Join-Path $delta 'big.bin') $script:deltaBig) -and
+        (Test-FileIs (Join-Path $delta 'moved\new_name.bin') $script:deltaMoved) -and
+        (Test-FileIs (Join-Path $delta 'changed.ltx') ([Text.Encoding]::ASCII.GetBytes("[delta]`r`nrevision = 4`r`n"))) -and
+        (Test-Path -LiteralPath (Join-Path $delta 'added.ltx')) -and
+        -not (Test-Path -LiteralPath (Join-Path $delta 'old_name.bin')) -and
+        -not (Test-Path -LiteralPath (Join-Path $delta 'removed.ltx')) -and
+        @(Get-ChildItem -LiteralPath (Join-Path $qaModules 'qa.delta') -Recurse -File).Count -eq 5)
     Assert-That 'staging folder is gone' (-not (Test-Path -LiteralPath $qaStaged))
     $stage = [regex]::Match($log, 'Startup checkpoint:\s*([\d.]+) ms stage,[^\r\n]*Filesystem initialized')
     $waited = if ($stage.Success) { [double]$stage.Groups[1].Value } else { 0 }

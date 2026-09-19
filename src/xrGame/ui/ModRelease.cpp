@@ -2,11 +2,14 @@
 #include "ModRelease.h"
 
 #ifdef XR_PLATFORM_WINDOWS
-#include <contrib/minizip/unzip.h>
+#include "xrContentSync/ContentHash.h"
+
+#include <zlib.h>
 
 #include <array>
 #include <charconv>
 #include <fstream>
+#include <vector>
 
 namespace
 {
@@ -19,13 +22,18 @@ std::string_view mod_trim(std::string_view text)
     return text;
 }
 
+std::string_view mod_skip_bom(std::string_view text)
+{
+    if (text.starts_with("\xEF\xBB\xBF"))
+        text.remove_prefix(3);
+    return text;
+}
+
 // callback(section, key, value); sections arrive lowercased, ';' starts a comment
 template <typename Callback>
 void mod_parse_ini(std::string_view text, const Callback& callback)
 {
-    if (text.starts_with("\xEF\xBB\xBF"))
-        text.remove_prefix(3);
-
+    text = mod_skip_bom(text);
     xr_string section;
     while (!text.empty())
     {
@@ -75,13 +83,32 @@ bool mod_valid_id(std::string_view id)
     });
 }
 
-bool mod_valid_asset_name(std::string_view name)
+bool mod_valid_asset_name(std::string_view name, std::string_view extension)
 {
-    if (name.size() < 5 || name.size() > 128 || name.front() == '.' || !mod_all_of(name, "-._"))
+    if (name.size() <= extension.size() || name.size() > 128 || name.front() == '.' || !mod_all_of(name, "-._"))
         return false;
-    const std::string_view extension = name.substr(name.size() - 4);
-    return extension[0] == '.' && (extension[1] | 0x20) == 'z' && (extension[2] | 0x20) == 'i' &&
-        (extension[3] | 0x20) == 'p';
+    const std::string_view tail = name.substr(name.size() - extension.size());
+    return std::ranges::equal(tail, extension, [](char a, char b) { return (a | 0x20) == b; });
+}
+
+bool mod_valid_digest(xr_string& digest)
+{
+    xr_strlwr(digest);
+    return digest.size() == 64 &&
+        std::ranges::all_of(digest, [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+}
+
+// "<name>, <size>, <sha256>" or, for a [packages] line, "<size>, <sha256>" behind its key
+bool mod_parse_asset(std::string_view name, std::string_view sizeAndDigest, std::string_view extension,
+    ModRelease::Asset& asset)
+{
+    const size_t comma = sizeAndDigest.find(',');
+    if (comma == std::string_view::npos)
+        return false;
+    asset.name = name;
+    asset.sha256 = mod_trim(sizeAndDigest.substr(comma + 1));
+    return mod_parse_number(mod_trim(sizeAndDigest.substr(0, comma)), asset.size) && asset.size &&
+        mod_valid_digest(asset.sha256) && mod_valid_asset_name(name, extension);
 }
 
 bool mod_reserved_device(std::string_view component)
@@ -94,113 +121,19 @@ bool mod_reserved_device(std::string_view component)
         base[3] <= '9';
 }
 
-std::wstring mod_utf8_to_wide(std::string_view text)
+bool mod_valid_utf8(std::string_view text)
 {
-    if (text.empty())
-        return {};
-    const int length =
-        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
-    if (length <= 0)
-        return {};
-    std::wstring wide(static_cast<size_t>(length), L'\0');
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wide.data(), length);
-    return wide;
+    return text.empty() ||
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0) > 0;
 }
 
-// minizip's static library ships without its Win32 backend, and the stdio one takes a narrow
-// path. These five callbacks are all it needs to read an archive by its wide path instead.
-voidpf ZCALLBACK mod_zip_open(voidpf, const void* filename, int)
+// next space-separated field of an index record; empty when the line has run out
+std::string_view mod_next_field(std::string_view& line)
 {
-    const HANDLE file = CreateFileW(static_cast<const wchar_t*>(filename), GENERIC_READ, FILE_SHARE_READ, nullptr,
-        OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    return file == INVALID_HANDLE_VALUE ? nullptr : file;
-}
-
-uLong ZCALLBACK mod_zip_read(voidpf, voidpf stream, void* buffer, uLong size)
-{
-    DWORD received = 0;
-    return ReadFile(stream, buffer, size, &received, nullptr) ? received : 0;
-}
-
-uLong ZCALLBACK mod_zip_write(voidpf, voidpf, const void*, uLong) { return 0; }
-
-ZPOS64_T ZCALLBACK mod_zip_tell(voidpf, voidpf stream)
-{
-    LARGE_INTEGER position{};
-    return SetFilePointerEx(stream, {}, &position, FILE_CURRENT) ? static_cast<ZPOS64_T>(position.QuadPart) :
-                                                                   static_cast<ZPOS64_T>(-1);
-}
-
-long ZCALLBACK mod_zip_seek(voidpf, voidpf stream, ZPOS64_T offset, int origin)
-{
-    const DWORD method = origin == ZLIB_FILEFUNC_SEEK_CUR ? FILE_CURRENT :
-        origin == ZLIB_FILEFUNC_SEEK_END                  ? FILE_END :
-                                                            FILE_BEGIN;
-    LARGE_INTEGER distance;
-    distance.QuadPart = static_cast<LONGLONG>(offset);
-    return SetFilePointerEx(stream, distance, nullptr, method) ? 0 : -1;
-}
-
-int ZCALLBACK mod_zip_close(voidpf, voidpf stream) { return CloseHandle(stream) ? 0 : -1; }
-int ZCALLBACK mod_zip_error(voidpf, voidpf) { return 0; }
-
-bool mod_write_entry(unzFile archive, const std::filesystem::path& target, u64 declaredSize,
-    const std::atomic_bool& cancel, xr_string& error)
-{
-    std::error_code directoryError;
-    std::filesystem::create_directories(target.parent_path(), directoryError);
-    if (directoryError || unzOpenCurrentFile(archive) != UNZ_OK)
-    {
-        error = directoryError ? "could not create a folder of the package" : "unsupported or damaged package entry";
-        return false;
-    }
-
-    // CREATE_NEW: the staging folder starts empty, so an existing file is a path the release
-    // names twice - under whatever spelling the file system considers the same
-    const HANDLE file = CreateFileW(target.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    bool success = file != INVALID_HANDLE_VALUE;
-    if (!success)
-        error = GetLastError() == ERROR_FILE_EXISTS ? "the release names a path twice" : "could not create a package file";
-
-    u64 total = 0;
-    std::array<u8, 64 * 1024> buffer{};
-    while (success)
-    {
-        if (cancel.load(std::memory_order_acquire))
-        {
-            error = "cancelled";
-            success = false;
-            break;
-        }
-        const int received = unzReadCurrentFile(archive, buffer.data(), static_cast<unsigned>(buffer.size()));
-        if (received < 0)
-        {
-            error = "damaged package entry";
-            success = false;
-            break;
-        }
-        if (!received)
-            break;
-        DWORD written = 0;
-        total += static_cast<u32>(received);
-        success = total <= declaredSize &&
-            WriteFile(file, buffer.data(), static_cast<DWORD>(received), &written, nullptr) &&
-            written == static_cast<DWORD>(received);
-        if (!success)
-            error = total > declaredSize ? "a package entry is larger than it declares" : "could not write a package file";
-    }
-    if (file != INVALID_HANDLE_VALUE)
-        CloseHandle(file);
-
-    // the close is where minizip reports a CRC mismatch
-    const bool closed = unzCloseCurrentFile(archive) == UNZ_OK;
-    if (success && (!closed || total != declaredSize))
-    {
-        error = "damaged package entry";
-        success = false;
-    }
-    return success;
+    const size_t space = line.find(' ');
+    const std::string_view field = line.substr(0, space);
+    line.remove_prefix(space == std::string_view::npos ? line.size() : space + 1);
+    return field;
 }
 }
 
@@ -227,10 +160,10 @@ ModRelease::Version ModRelease::ParseVersion(std::string_view text)
     return version;
 }
 
-u64 ModRelease::Descriptor::DownloadBytes() const
+u64 ModRelease::Descriptor::PackageBytes() const
 {
     u64 total = 0;
-    for (const Package& package : packages)
+    for (const Asset& package : packages)
         total += package.size;
     return total;
 }
@@ -246,6 +179,7 @@ bool ModRelease::ParseDescriptor(std::string_view text, Descriptor& out, xr_stri
 
     u64 schema = 0;
     bool malformed = false;
+    bool indexed = false;
     mod_parse_ini(text, [&](std::string_view section, std::string_view key, std::string_view value)
     {
         if (section == "release")
@@ -262,16 +196,18 @@ bool ModRelease::ParseDescriptor(std::string_view text, Descriptor& out, xr_stri
                 malformed |= !mod_parse_number(value, out.files);
             else if (key == "unpacked")
                 malformed |= !mod_parse_number(value, out.unpacked);
+            else if (key == "index")
+            {
+                const size_t comma = value.find(',');
+                indexed = comma != std::string_view::npos &&
+                    mod_parse_asset(mod_trim(value.substr(0, comma)), value.substr(comma + 1), ".files", out.index);
+                malformed |= !indexed;
+            }
         }
         else if (section == "packages")
         {
-            Package package;
-            package.name = key;
-            const size_t comma = value.find(',');
-            const std::string_view digest = comma == std::string_view::npos ? std::string_view() : mod_trim(value.substr(comma + 1));
-            package.sha256 = digest;
-            xr_strlwr(package.sha256);
-            malformed |= !mod_parse_number(mod_trim(value.substr(0, comma)), package.size);
+            Asset package;
+            malformed |= !mod_parse_asset(key, value, ".zip", package);
             out.packages.emplace_back(std::move(package));
         }
     });
@@ -291,21 +227,19 @@ bool ModRelease::ParseDescriptor(std::string_view text, Descriptor& out, xr_stri
         error = "descriptor holds a malformed value";
         return false;
     }
-    if (out.packages.empty() || out.packages.size() > MaximumPackages)
+    if (!indexed || out.packages.empty() || out.packages.size() > MaximumPackages ||
+        out.index.size > MaximumIndexBytes)
     {
-        error = "descriptor names no package";
+        error = "descriptor names no file index or no package";
         return false;
     }
     for (size_t index = 0; index != out.packages.size(); ++index)
     {
-        const Package& package = out.packages[index];
         const bool duplicate = std::ranges::any_of(out.packages.begin(), out.packages.begin() + index,
-            [&](const Package& other) { return 0 == xr_stricmp(other.name.c_str(), package.name.c_str()); });
-        const bool digest = package.sha256.size() == 64 &&
-            std::ranges::all_of(package.sha256, [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
-        if (duplicate || !digest || !package.size || !mod_valid_asset_name(package.name))
+            [&](const Asset& other) { return 0 == xr_stricmp(other.name.c_str(), out.packages[index].name.c_str()); });
+        if (duplicate)
         {
-            error = "descriptor names an invalid package";
+            error = "descriptor names a package twice";
             return false;
         }
     }
@@ -314,12 +248,15 @@ bool ModRelease::ParseDescriptor(std::string_view text, Descriptor& out, xr_stri
 
 bool ModRelease::SafeRelativePath(std::string_view path)
 {
-    if (path.empty())
+    if (path.empty() || path.size() > 1024)
         return false;
     while (!path.empty())
     {
         const size_t slash = path.find('/');
         const std::string_view component = path.substr(0, slash);
+        // a trailing slash would leave an empty last component: a file path has none
+        if (slash != std::string_view::npos && slash + 1 == path.size())
+            return false;
         path.remove_prefix(slash == std::string_view::npos ? path.size() : slash + 1);
         if (component.empty() || component == "." || component == ".." || component.back() == '.' ||
             component.back() == ' ' || mod_reserved_device(component))
@@ -334,107 +271,249 @@ bool ModRelease::SafeRelativePath(std::string_view path)
     return true;
 }
 
-bool ModRelease::Unpack(const std::filesystem::path& archivePath, std::string_view moduleId,
-    const std::filesystem::path& destination, u64 fileLimit, u64 byteLimit, UnpackTotals& totals,
-    const std::atomic_bool& cancel, xr_string& error)
+bool ModRelease::ParseFileIndex(std::string_view text, const Descriptor& descriptor, FileIndex& out, xr_string& error)
 {
-    zlib_filefunc64_def functions{};
-    functions.zopen64_file = mod_zip_open;
-    functions.zread_file = mod_zip_read;
-    functions.zwrite_file = mod_zip_write;
-    functions.ztell64_file = mod_zip_tell;
-    functions.zseek64_file = mod_zip_seek;
-    functions.zclose_file = mod_zip_close;
-    functions.zerror_file = mod_zip_error;
+    out = {};
+    text = mod_skip_bom(text);
 
-    const unzFile archive = unzOpen2_64(archivePath.c_str(), &functions);
-    if (!archive)
+    xr_vector<u32> packs; // pack number - 1 -> index into descriptor.packages
+    bool headed = false;
+    while (!text.empty())
     {
-        error = "package is not a ZIP archive";
+        const size_t end = text.find('\n');
+        std::string_view line = text.substr(0, end);
+        text.remove_prefix(end == std::string_view::npos ? text.size() : end + 1);
+        if (!line.empty() && line.back() == '\r')
+            line.remove_suffix(1);
+        if (line.empty())
+            continue;
+
+        const std::string_view keyword = mod_next_field(line);
+        if (!headed)
+        {
+            u64 version = 0;
+            if (keyword != "xms-files" || !mod_parse_number(mod_next_field(line), version) || !version)
+            {
+                error = "file index has no header";
+                return false;
+            }
+            if (version > SupportedIndexVersion)
+            {
+                error = "file index is newer than this game";
+                return false;
+            }
+            headed = true;
+        }
+        else if (keyword == "pack")
+        {
+            const auto package = std::ranges::find(descriptor.packages, xr_string(line), &Asset::name);
+            const u32 position = static_cast<u32>(package - descriptor.packages.begin());
+            if (package == descriptor.packages.end() || std::ranges::find(packs, position) != packs.end())
+            {
+                error = "file index names a package the descriptor does not";
+                return false;
+            }
+            packs.push_back(position);
+        }
+        else if (keyword == "file")
+        {
+            FileEntry entry;
+            entry.sha256 = mod_next_field(line);
+            u64 pack = 0, method = 0;
+            const bool numbers = mod_parse_number(mod_next_field(line), entry.size) &&
+                mod_parse_number(mod_next_field(line), pack) && mod_parse_number(mod_next_field(line), entry.offset) &&
+                mod_parse_number(mod_next_field(line), entry.packed) && mod_parse_number(mod_next_field(line), method);
+            entry.path = line;
+            if (!numbers || !mod_valid_digest(entry.sha256) || !pack || pack > packs.size() || (method != 0 && method != 8) ||
+                !SafeRelativePath(entry.path) || !mod_valid_utf8(entry.path))
+            {
+                error = "file index holds a malformed or unsafe record";
+                return false;
+            }
+            entry.package = packs[pack - 1];
+            entry.deflated = method == 8;
+            const u64 packageSize = descriptor.packages[entry.package].size;
+            if (entry.offset > packageSize || entry.packed > packageSize - entry.offset ||
+                (!entry.deflated && entry.packed != entry.size))
+            {
+                error = "file index points outside its package";
+                return false;
+            }
+            out.unpacked += entry.size;
+            out.files.emplace_back(std::move(entry));
+        }
+    }
+
+    // the file system would not tell two spellings of one name apart, so neither does this
+    xr_vector<xr_string> names;
+    names.reserve(out.files.size());
+    for (const FileEntry& entry : out.files)
+        xr_strlwr(names.emplace_back(entry.path));
+    std::ranges::sort(names);
+    if (std::ranges::adjacent_find(names) != names.end())
+    {
+        error = "file index names a path twice";
+        return false;
+    }
+    if (!std::ranges::binary_search(names, xr_string("mod.ltx")))
+    {
+        error = "file index holds no mod.ltx";
+        return false;
+    }
+    if ((descriptor.files && descriptor.files != out.files.size()) ||
+        (descriptor.unpacked && descriptor.unpacked != out.unpacked))
+    {
+        error = "file index does not match the totals of its descriptor";
+        return false;
+    }
+    return true;
+}
+
+struct ModRelease::FileSink::Impl
+{
+    HANDLE file{INVALID_HANDLE_VALUE};
+    std::filesystem::path path;
+    ContentHash::Stream digest;
+    z_stream stream{};
+    bool inflating{};
+    bool ended{};
+    xr_string sha256;
+    u64 size{};
+    u64 written{};
+    u64 packedLeft{};
+    std::vector<u8> buffer;
+};
+
+ModRelease::FileSink::FileSink() : m_impl(std::make_unique<Impl>()) {}
+
+ModRelease::FileSink::~FileSink() { Discard(); }
+
+void ModRelease::FileSink::Discard()
+{
+    Impl& impl = *m_impl;
+    if (impl.inflating)
+        inflateEnd(&impl.stream);
+    impl.inflating = false;
+    if (impl.file != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(impl.file);
+        DeleteFileW(impl.path.c_str());
+    }
+    impl.file = INVALID_HANDLE_VALUE;
+}
+
+bool ModRelease::FileSink::Open(const std::filesystem::path& target, const FileEntry& entry, xr_string& error)
+{
+    Discard();
+    Impl& impl = *m_impl;
+    impl.path = target;
+    impl.sha256 = entry.sha256;
+    impl.size = entry.size;
+    impl.written = 0;
+    impl.packedLeft = entry.packed;
+    impl.ended = !entry.deflated;
+
+    std::error_code directoryError;
+    std::filesystem::create_directories(target.parent_path(), directoryError);
+    impl.digest = ContentHash::Stream();
+    if (directoryError || !impl.digest.Open())
+    {
+        error = "could not create a folder of the module";
+        return false;
+    }
+    if (entry.deflated)
+    {
+        impl.stream = {};
+        // raw deflate, as a ZIP entry stores it
+        if (inflateInit2(&impl.stream, -MAX_WBITS) != Z_OK)
+        {
+            error = "could not start unpacking";
+            return false;
+        }
+        impl.inflating = true;
+        impl.buffer.resize(256 * 1024);
+    }
+
+    impl.file = CreateFileW(target.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (impl.file == INVALID_HANDLE_VALUE)
+    {
+        error = GetLastError() == ERROR_FILE_EXISTS ? "the release names a path twice" : "could not create a module file";
+        return false;
+    }
+    return true;
+}
+
+bool ModRelease::FileSink::Append(const void* data, size_t size, xr_string& error)
+{
+    Impl& impl = *m_impl;
+    const auto write = [&](const void* bytes, size_t count)
+    {
+        DWORD written = 0;
+        impl.written += count;
+        return impl.written <= impl.size && impl.digest.Append(bytes, count) &&
+            WriteFile(impl.file, bytes, static_cast<DWORD>(count), &written, nullptr) && written == count;
+    };
+
+    if (size > impl.packedLeft)
+    {
+        error = "a file is larger than the index declares";
+        return false;
+    }
+    impl.packedLeft -= size;
+
+    if (!impl.inflating)
+    {
+        if (write(data, size))
+            return true;
+        error = "could not write a module file";
         return false;
     }
 
-    xr_string prefix = "modules/";
-    prefix.append(moduleId).append("/");
-
-    unz_global_info64 global{};
-    bool success = unzGetGlobalInfo64(archive, &global) == UNZ_OK;
-    if (!success)
-        error = "package is not a ZIP archive";
-
-    int step = success && global.number_entry ? unzGoToFirstFile(archive) : UNZ_END_OF_LIST_OF_FILE;
-    for (ZPOS64_T index = 0; success && index != global.number_entry; ++index)
+    impl.stream.next_in = const_cast<Bytef*>(static_cast<const Bytef*>(data));
+    impl.stream.avail_in = static_cast<uInt>(size);
+    while (impl.stream.avail_in && !impl.ended)
     {
-        unz_file_info64 info{};
-        std::array<char, 1024> rawName{};
-        success = step == UNZ_OK &&
-            unzGetCurrentFileInfo64(archive, &info, rawName.data(), static_cast<uLong>(rawName.size() - 1), nullptr, 0,
-                nullptr, 0) == UNZ_OK &&
-            info.size_filename < rawName.size();
-        if (!success)
+        impl.stream.next_out = impl.buffer.data();
+        impl.stream.avail_out = static_cast<uInt>(impl.buffer.size());
+        const int result = inflate(&impl.stream, Z_NO_FLUSH);
+        if (result != Z_OK && result != Z_STREAM_END)
         {
-            error = "damaged package directory";
-            break;
+            error = "a file of the package is damaged";
+            return false;
         }
-
-        xr_string name(rawName.data());
-        std::ranges::replace(name, '\\', '/');
-        const bool folder = !name.empty() && name.back() == '/';
-        if (folder)
-            name.pop_back();
-
-        // "modules" and "modules/<id>" themselves are legitimate folder entries
-        const std::string_view prefixFolder(prefix.data(), prefix.size() - 1);
-        const bool container = folder &&
-            (0 == xr_stricmp(name.c_str(), "modules") || 0 == xr_stricmp(name.c_str(), xr_string(prefixFolder).c_str()));
-        if (!container)
+        if (!write(impl.buffer.data(), impl.buffer.size() - impl.stream.avail_out))
         {
-            const bool ascii = std::ranges::all_of(name, [](char c) { return static_cast<u8>(c) < 0x80; });
-            const bool inside = name.size() > prefix.size() && 0 == _strnicmp(name.c_str(), prefix.c_str(), prefix.size());
-            const std::string_view relative = inside ? std::string_view(name).substr(prefix.size()) : std::string_view();
-            const std::wstring wide = mod_utf8_to_wide(relative);
-            if (!inside || !SafeRelativePath(relative) || wide.empty() || (!ascii && !(info.flag & (1u << 11))))
-            {
-                error = inside ? "package holds an unsafe path" : "package holds a path outside modules/<id>/";
-                success = false;
-                break;
-            }
-            if (info.flag & 1u)
-            {
-                error = "package is encrypted";
-                success = false;
-                break;
-            }
-
-            std::filesystem::path target = destination / std::filesystem::path(wide).make_preferred();
-            if (folder)
-            {
-                std::error_code directoryError;
-                std::filesystem::create_directories(target, directoryError);
-                success = !directoryError;
-                if (!success)
-                    error = "could not create a folder of the package";
-            }
-            else
-            {
-                ++totals.files;
-                totals.bytes += info.uncompressed_size;
-                if ((fileLimit && totals.files > fileLimit) || (byteLimit && totals.bytes > byteLimit))
-                {
-                    error = "release is larger than its descriptor declares";
-                    success = false;
-                    break;
-                }
-                success = mod_write_entry(archive, target, info.uncompressed_size, cancel, error);
-            }
+            error = impl.written > impl.size ? "a file is larger than the index declares" : "could not write a module file";
+            return false;
         }
-
-        if (success && index + 1 != global.number_entry)
-            step = unzGoToNextFile(archive);
+        impl.ended = result == Z_STREAM_END;
     }
+    if (impl.stream.avail_in)
+    {
+        error = "a file of the package is damaged";
+        return false;
+    }
+    return true;
+}
 
-    unzClose(archive);
-    return success;
+bool ModRelease::FileSink::Finish(xr_string& error)
+{
+    Impl& impl = *m_impl;
+    const bool whole = impl.file != INVALID_HANDLE_VALUE && !impl.packedLeft && impl.ended && impl.written == impl.size &&
+        impl.digest.Finish() == impl.sha256.c_str();
+    if (!whole)
+    {
+        error = "a file does not match the index";
+        Discard();
+        return false;
+    }
+    if (impl.inflating)
+        inflateEnd(&impl.stream);
+    impl.inflating = false;
+    CloseHandle(impl.file);
+    impl.file = INVALID_HANDLE_VALUE;
+    return true;
 }
 
 bool ModRelease::ReadManifestIdentity(const std::filesystem::path& manifest, xr_string& id, xr_string& version)

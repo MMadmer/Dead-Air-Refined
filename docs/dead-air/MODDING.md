@@ -121,10 +121,12 @@ Runtime facts:
 - The main menu's Mods entry lists every module with its name, author and
   version, shows the description, opens the module's AP-PRO or ModDB page and
   updates a module from the GitHub releases its manifest names
-  (`[update] github = owner/repo`). An update is downloaded and verified while
-  the game runs and swapped in by the next start, before modules mount. The
-  manifest keys, the release layout and the client rules are one frozen
-  contract: `MOD_UPDATES.md`. Console: `xms_update <id>|all`,
+  (`[update] github = owner/repo`). A release is always the complete module plus
+  an index of its files; the game compares that index with the files it has and
+  downloads, by HTTP range, only what differs - however many versions were
+  skipped. The result is verified file by file while the game runs and swapped
+  in by the next start, before modules mount. The manifest keys, the release
+  layout and the client rules are one frozen contract: `MOD_UPDATES.md`. Console: `xms_update <id>|all`,
   `xms_update_status`, `xms_mods`.
 - Load order is deterministic: `[requires]`/`[order]` topology, then
   `modules/order.ltx` (one id per line), then id. `xms_list` shows it.

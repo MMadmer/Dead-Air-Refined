@@ -12,7 +12,10 @@
 # a framework that keeps trying to be correct.
 #
 # Serves <base>/<tag>/<asset>, which is the shape the downloader builds. Loopback only, which
-# is also the only shape the downloader will accept from DAR_QA_CONTENT_BASE.
+# is also the only shape the downloader will accept from DAR_QA_CONTENT_BASE. Only the last
+# path segment picks the file, so the same mock stands in for a module's release downloads
+# (<base>/<owner>/<repo>/releases/latest/download/<asset>, see tools\qa\mods); every request is
+# logged with its range and the bytes actually sent, which is how that test measures a delta.
 [CmdletBinding()]
 param(
     # Directory holding the bundle files, flat.
@@ -76,13 +79,17 @@ try {
             $requestLine = $lines[0]
             $path = ($requestLine -split ' ')[1]
             $rangeStart = -1L
+            $rangeEnd = -1L
             foreach ($line in $lines) {
-                if ($line -match '^(?i)Range:\s*bytes=(\d+)-') { $rangeStart = [long]$Matches[1] }
+                if ($line -match '^(?i)Range:\s*bytes=(\d+)-(\d*)') {
+                    $rangeStart = [long]$Matches[1]
+                    if ($Matches[2]) { $rangeEnd = [long]$Matches[2] }
+                }
             }
 
             $name = ($path.Trim('/') -split '/')[-1]
             $file = Join-Path $AssetRoot $name
-            Write-Host "  -> $name range=$rangeStart"
+            Write-Host "  -> $name range=$rangeStart$(if ($rangeEnd -ge 0) { "-$rangeEnd" })"
 
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
                 Send-Text $stream "HTTP/1.1 404 Not Found`r`nContent-Length: 0`r`nConnection: close`r`n`r`n"
@@ -103,10 +110,13 @@ try {
                 $start = $rangeStart
                 $source.Position = $start
                 $status = "206 Partial Content"
-                $extra = "Content-Range: bytes $start-$($total - 1)/$total`r`n"
+                # a closed range is honoured to the byte: a client that fetches pieces of a file
+                # is measured by what it asked for, not by what it stopped reading
+                $last = if ($rangeEnd -ge 0) { [Math]::Min($rangeEnd, $total - 1) } else { $total - 1 }
+                $extra = "Content-Range: bytes $start-$last/$total`r`n"
             }
 
-            $remaining = $total - $start
+            $remaining = if ($status -like '206*') { $last - $start + 1 } else { $total - $start }
             Send-Text $stream ("HTTP/1.1 $status`r`nContent-Type: application/octet-stream`r`n" +
                 "Content-Length: $remaining`r`n" + $extra + "Connection: close`r`n`r`n")
 
@@ -128,6 +138,7 @@ try {
                 }
             }
             $source.Dispose()
+            Write-Host "  <- $name sent=$sent"
         }
         catch {
             Write-Host "  request failed: $($_.Exception.Message)"

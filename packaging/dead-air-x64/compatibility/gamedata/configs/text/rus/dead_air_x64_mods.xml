@@ -52,7 +52,7 @@
         <text>Релизы не найдены</text>
     </string>
     <string id="st_mods_status_available">
-        <text>Доступна версия %s (%s)</text>
+        <text>Доступна версия %s, к загрузке около %s</text>
     </string>
     <string id="st_mods_status_blocked">
         <text>Версия %s требует Dead Air: Refined %s</text>
@@ -69,8 +69,8 @@
     <string id="st_mods_status_downloading">
         <text>Загрузка: %s / %s</text>
     </string>
-    <string id="st_mods_status_unpacking">
-        <text>Распаковка...</text>
+    <string id="st_mods_status_preparing">
+        <text>Проверка установленных файлов: %s / %s</text>
     </string>
     <string id="st_mods_status_staged">
         <text>Версия %s будет установлена при следующем запуске игры</text>

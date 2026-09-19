@@ -74,12 +74,13 @@ names one provider; another provider would be another key.
 
 A module release is an ordinary GitHub Release. The game looks only at the
 release GitHub marks **Latest** - drafts and pre-releases are invisible - and
-reads two kinds of assets from it:
+reads three kinds of assets from it:
 
-| Asset | Name |
-|---|---|
-| Release descriptor | `<module id>.update.ltx` |
-| Package, one or more | named by the descriptor |
+| Asset | Name | Read |
+|---|---|---|
+| Release descriptor | `<module id>.update.ltx` | on every check |
+| File index | named by the descriptor | when an update is on offer |
+| Package, one or more | named by the descriptor | in byte ranges, while updating |
 
 Every asset is fetched from
 
@@ -90,7 +91,15 @@ https://github.com/<owner>/<repo>/releases/latest/download/<asset name>
 The GitHub REST API is not used: it allows an anonymous address 60 requests an
 hour, which a handful of installed modules would exhaust between them. A
 repository may serve several modules as long as every release carries the
-descriptor and packages of each.
+assets of each.
+
+A release is always complete and self-contained: it carries every file of the
+module and refers to no other release. What makes an update small is the client,
+not the publisher. The index says which bytes of which package hold each file;
+the client compares it with the files it already has and asks for the rest with
+HTTP `Range` requests. The distance between the installed version and the
+released one does not matter - one version behind or twenty, the download is
+what actually differs, and nobody has to publish a patch for it.
 
 ### 2.1 Descriptor
 
@@ -101,9 +110,10 @@ UTF-8 ini, at most 64 KiB.
 schema        = 1
 id            = madmer.agroprom_story
 version       = 1.2.0
-requires_game = 1.5.0
+requires_game = 1.4.2
 files         = 412
 unpacked      = 181403648
+index         = madmer.agroprom_story-1.2.0.files, 61538, 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae
 
 [packages]
 madmer.agroprom_story-1.2.0.zip = 48211044, 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -115,40 +125,67 @@ madmer.agroprom_story-1.2.0.zip = 48211044, 9f86d081884c7d659a2feaa0c55ad015a3bf
 | `id` | yes | Must equal the installed module's id. |
 | `version` | yes | Version of the release, grammar of 1.2. |
 | `requires_game` | no | Lowest Dead Air: Refined version (`MAJOR.MINOR.PATCH`) the release runs on. |
-| `files` | no | Number of files in all packages together. |
-| `unpacked` | no | Total unpacked size in bytes. |
+| `files` | no | Number of files in the release. When present it equals the index. |
+| `unpacked` | no | Total size of those files in bytes. When present it equals the index. |
+| `index` | yes | The file index: `<asset name>, <size in bytes>, <SHA-256 hex>`. |
 | `[packages]` | yes | One line per package: `<asset name> = <size in bytes>, <SHA-256 hex>`. |
 
-An asset name is 1-128 characters of `A-Z a-z 0-9 - . _`, does not start with a
-dot and ends with `.zip`. At most 64 packages. XFined Editor names a package
-`<id>-<version>.zip`, and `<id>-<version>.partN.zip` when it splits one to stay
-under GitHub's 2 GiB asset limit.
+An asset name is 1-128 characters of `A-Z a-z 0-9 - . _` and does not start with
+a dot; a package ends with `.zip`, the index with `.files`. At most 64 packages.
+XFined Editor names them `<id>-<version>.zip` - `<id>-<version>.partN.zip` when it
+splits a module to stay under GitHub's 2 GiB asset limit - and
+`<id>-<version>.files`.
 
-### 2.2 Package
+### 2.2 File index
 
-- A ZIP archive: stored or deflated entries, ZIP64 allowed, no encryption, no
-  spanning.
-- Every entry lies under `modules/<module id>/`. The same archive is therefore
-  the manual installation: extracted into the game folder it lands where the
-  game reads modules from.
-- Below that prefix a path is relative, has no `.` or `..` component, no
-  `< > : " | ? *`, no control character, no component ending in a dot or a
-  space, and no reserved device name (`con`, `nul`, `com1`, ...).
-- A name outside ASCII requires the ZIP UTF-8 flag.
-- No path occurs twice, within one package or across packages.
-- The packages together hold `modules/<module id>/mod.ltx`, whose `[module] id`
-  and `version` equal the descriptor's.
+UTF-8 text, at most 64 MiB, one record per line, fields separated by single
+spaces:
 
-### 2.3 Evolution
+```text
+xms-files 1
+pack madmer.agroprom_story-1.2.0.zip
+file 9f86d0...0a08 1284 1 4096 517 8 spawn/l01_escape.xspawn
+file 2c26b4...e7ae 394 1 66 214 8 mod.ltx
+```
 
-- A client ignores keys and sections it does not know. New capabilities arrive
-  as new optional keys or sections under `schema = 1`.
-- `schema` rises only for a release an older client must not install. Such a
-  client reports that the game has to be updated first and installs nothing.
-- The descriptor name, the download URL and every rule of 2.1 and 2.2 stay valid
-  for as long as the game supports XMS modules. A release always carries its
-  complete packages; anything smaller - a patch, a delta - can only ever be an
-  optional addition an older client never notices.
+- The first line names the format and its version.
+- `pack <asset name>` - a package of `[packages]`. Packages are numbered from 1 in
+  the order of these lines.
+- `file <sha256> <size> <pack> <offset> <packed> <method> <path>` - one file of
+  the module: the SHA-256 of its content in lower-case hex, its size in bytes,
+  the number of the package that holds it, the offset of the first byte of its
+  stored data inside that package, the length of that data, how it is stored
+  (`0` as is, `8` raw deflate - the ZIP method numbers), and its path: the rest of
+  the line, relative to the module folder, with forward slashes.
+- A line that starts with any other word is ignored.
+- A path has no empty, `.` or `..` component, no `< > : " | ? * \`, no control
+  character, no component ending in a dot or a space, and no reserved device
+  name (`con`, `nul`, `com1`, ...). No path occurs twice.
+- The index lists `mod.ltx`, whose `[module] id` and `version` equal the
+  descriptor's.
+
+### 2.3 Package
+
+- A ZIP archive: stored or deflated entries, ZIP64 where needed, no encryption,
+  no spanning. Every entry is `modules/<module id>/` followed by its index path,
+  and a name outside ASCII carries the ZIP UTF-8 flag. The same archive is
+  therefore the manual installation: extracted into the game folder it lands
+  where the game reads modules from.
+- The game never reads ZIP structures. It addresses a package through the index
+  alone, so an archive must not be rewritten once its index exists - repacking
+  moves the data and the offsets with it. Whatever the bytes at an offset turn
+  out to be, a file is accepted only when it matches its size and SHA-256.
+
+### 2.4 Evolution
+
+- A client ignores keys, sections and index records it does not know. New
+  capabilities arrive as new optional ones under `schema = 1` and `xms-files 1`.
+- `schema` and the index version rise only for a release an older client must
+  not install. Such a client reports that the game has to be updated first and
+  installs nothing.
+- The asset names, the download URL and every rule of 2.1-2.3 stay valid for as
+  long as the game supports XMS modules. A release always carries its complete
+  packages and index.
 
 ## 3. Client behaviour
 
@@ -167,24 +204,38 @@ Per module the client fetches the descriptor and compares:
 | `version` above the installed one | available |
 | otherwise | current |
 
+For an available update the client also fetches the index and tells the player
+how much there is to download: the packed size of every file the installed
+module does not hold under the same path and size. It is an estimate - the
+update itself decides by content.
+
 ### 3.2 Update
 
 `Update` queues one module, `Update all` every available one; the queue runs one
-module at a time.
+module at a time and builds the complete new module in
+`modules\.staged\<id>\payload\`:
 
-1. Free disk space is checked against the package sizes plus `unpacked`.
-2. Each package is downloaded into `modules\.staged\<id>\download\` and must
-   match its declared size and SHA-256. A dropped connection resumes with a
-   `Range` request, up to five attempts per package; a server that answers a
-   ranged request with `200` restarts that package from its first byte.
-3. The packages are unpacked into `modules\.staged\<id>\payload\` under the
-   rules of 2.2; `files` and `unpacked`, when declared, are upper bounds.
-4. The unpacked `mod.ltx` must carry the descriptor's id and version.
-5. `modules\.staged\<id>\ready.ltx` is written last. It names the installed
+1. The descriptor is fetched again, and the index with it unless the one from the
+   check still matches the descriptor's SHA-256.
+2. Installed files are matched by content. Every installed file whose size the
+   index names is hashed, and a file whose SHA-256 the index names is reused -
+   under whatever path the new version wants it, so a renamed or moved file
+   costs nothing. Reuse is a hard link, or a copy on a volume without them.
+3. Free disk space is checked against what is left to fetch.
+4. The rest is downloaded. Per package the needed ranges are sorted by offset,
+   ranges less than 256 KiB apart are merged into one request, and every file is
+   unpacked as it arrives and must match its size and SHA-256. A file the index
+   names more than once is fetched once. A dropped connection resumes at the
+   byte it stopped at, in the middle of a file if need be, and gives up after
+   five attempts in a row that brought nothing. A server that answers a ranged
+   request with `200` still works: the client skips what it did not ask for.
+5. The staged `mod.ltx` must carry the descriptor's id and version.
+6. `modules\.staged\<id>\ready.ltx` is written last. It names the installed
    module folder the payload replaces.
 
-Nothing above touches the installed module. A failure removes the staging
-folder and leaves the module as it was.
+Files the new version no longer names are simply not carried over. Nothing above
+touches the installed module; a failure removes the staging folder and leaves the
+module as it was.
 
 ### 3.3 Apply
 
@@ -246,8 +297,10 @@ English.
 generates installed modules and their releases, serves them from
 `Start-ContentAssetMock.ps1` - throttled and dropping every connection mid-body -
 and drives the engine through the console commands of 3.4 on a hidden desktop.
-It covers the check verdicts, the refused website and repository, a package
-that leaves its folder, a package of another module, resume, staging, the apply
-and its wait for the relaunching process, a module folder held open by another
-process, an interrupted swap and an update for a deleted module. Every verdict
-comes from the engine log and the disk; window captures are kept as evidence.
+It covers the check verdicts, the refused website and repository, an index that
+names a path outside the module, a package whose bytes do not match the index,
+a delta that downloads the changed files only and reuses a renamed one, resume,
+staging, the apply and its wait for the relaunching process, a module folder
+held open by another process, an interrupted swap and an update for a deleted
+module. Every verdict comes from the engine log, the mock's byte count and the
+disk; window captures are kept as evidence.

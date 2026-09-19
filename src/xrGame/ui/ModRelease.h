@@ -1,19 +1,22 @@
 #pragma once
 
 // The release side of the XMS module update contract (docs/dead-air/MOD_UPDATES.md, section 2):
-// the descriptor grammar, version ordering, and unpacking a package under the rules a package
-// has to obey. No network and no engine state, so every rule here can be exercised on its own.
+// the descriptor and file index grammars, version ordering, and the sink that turns a stretch of
+// package bytes back into a verified file. No network and no engine state, so every rule here
+// can be exercised on its own.
 
 #include <algorithm>
-#include <atomic>
 #include <compare>
 #include <filesystem>
+#include <memory>
 #include <string_view>
 
 namespace ModRelease
 {
 inline constexpr u32 SupportedSchema = 1;
+inline constexpr u32 SupportedIndexVersion = 1;
 inline constexpr size_t MaximumDescriptorBytes = 64 * 1024;
+inline constexpr size_t MaximumIndexBytes = 64 * 1024 * 1024;
 inline constexpr size_t MaximumPackages = 64;
 
 struct Version
@@ -38,7 +41,7 @@ bool ValidModuleId(std::string_view id);
 // One to four dot-separated numbers; whatever follows the numeric part is ignored.
 Version ParseVersion(std::string_view text);
 
-struct Package
+struct Asset
 {
     xr_string name;
     xr_string sha256; // lowercase hex
@@ -53,9 +56,10 @@ struct Descriptor
     xr_string requiresGame;
     u64 files{};    // 0 = not declared
     u64 unpacked{}; // 0 = not declared
-    xr_vector<Package> packages;
+    Asset index;
+    xr_vector<Asset> packages;
 
-    u64 DownloadBytes() const;
+    u64 PackageBytes() const;
 };
 
 // False with a reason when the text is not a usable descriptor. A schema above SupportedSchema
@@ -63,23 +67,55 @@ struct Descriptor
 // nobody can validate the rest of a format that does not exist yet.
 bool ParseDescriptor(std::string_view text, Descriptor& out, xr_string& error);
 
-// The path rules of 2.2 for what follows "modules/<id>/". Forward slashes only.
+// The path rules of 2.2: relative to the module folder, forward slashes only.
 bool SafeRelativePath(std::string_view path);
 
-struct UnpackTotals
+struct FileEntry
 {
-    u64 files{};
-    u64 bytes{};
+    xr_string path;
+    xr_string sha256;
+    u64 size{};
+    u64 offset{}; // first byte of the stored data inside the package
+    u64 packed{}; // length of that data
+    u32 package{}; // index into Descriptor::packages
+    bool deflated{};
 };
 
-// Unpacks one package into `destination`, stripping the mandatory "modules/<id>/" prefix.
-// `totals` runs across the packages of one release, so a release larger than it declared is
-// caught wherever the excess sits. The limits are upper bounds; zero means undeclared. Files
-// are created, never replaced: a path repeated anywhere in the release fails the unpack.
-bool Unpack(const std::filesystem::path& archive, std::string_view moduleId,
-    const std::filesystem::path& destination, u64 fileLimit, u64 byteLimit, UnpackTotals& totals,
-    const std::atomic_bool& cancel, xr_string& error);
+struct FileIndex
+{
+    xr_vector<FileEntry> files;
+    u64 unpacked{};
+};
 
-// [module] id and version of an unpacked manifest.
+// Parses an index against the descriptor that named it: every `pack` has to be one of its
+// packages, every `file` has to lie inside the package it points into, and the totals have to
+// be the ones the descriptor declared.
+bool ParseFileIndex(std::string_view text, const Descriptor& descriptor, FileIndex& out, xr_string& error);
+
+// Writes one file of a release from the bytes a package stores for it. The data arrives in
+// whatever pieces the network delivers; Finish() is where the file either is what the index
+// promised - size and SHA-256 - or is deleted.
+class FileSink
+{
+public:
+    FileSink();
+    ~FileSink();
+    FileSink(const FileSink&) = delete;
+    FileSink& operator=(const FileSink&) = delete;
+
+    // Creates the file, never replaces one: the staging folder starts empty, so an existing
+    // file is a path the release names twice.
+    bool Open(const std::filesystem::path& target, const FileEntry& entry, xr_string& error);
+    bool Append(const void* data, size_t size, xr_string& error);
+    bool Finish(xr_string& error);
+
+private:
+    void Discard();
+
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+// [module] id and version of a manifest on disk.
 bool ReadManifestIdentity(const std::filesystem::path& manifest, xr_string& id, xr_string& version);
 }

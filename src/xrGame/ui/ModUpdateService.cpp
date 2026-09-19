@@ -17,8 +17,12 @@
 #include <atomic>
 #include <deque>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #pragma comment(lib, "winhttp.lib")
 
@@ -28,7 +32,18 @@ using ModUpdateService::ModuleStatus;
 using ModUpdateService::State;
 
 constexpr std::wstring_view ModReleaseHost = L"https://github.com";
+// consecutive failures a download survives without having finished a single file in between
 constexpr unsigned ModDownloadAttempts = 5;
+// Two wanted files this close inside a package travel in one request: on a slow line the bytes
+// skipped between them cost about what another round trip through the redirects would.
+constexpr u64 ModRangeGap = 256 * 1024;
+
+// what the check learned about a release, kept for the update that usually follows
+struct ModKnownIndex
+{
+    xr_string sha256;
+    std::shared_ptr<const ModRelease::FileIndex> index;
+};
 
 struct ModService
 {
@@ -49,10 +64,14 @@ struct ModService
     bool workerRunning{};
     u32 stagedThisRun{};
 
+    // worker thread only: one worker runs at a time, so these need no lock
+    xr_vector<ModKnownIndex> indexes;
+
     bool initialized{};
     std::atomic_bool stop{};
     std::atomic_bool restartPrompt{};
-    std::atomic<u64> downloaded{};
+    std::atomic<u64> progressDone{};
+    std::atomic<u64> progressTotal{};
     std::thread worker;
 };
 
@@ -79,10 +98,20 @@ void mod_set_state(size_t index, State state, xr_string message = {})
     });
 }
 
+bool mod_stopped() { return mod_service().stop.load(std::memory_order_acquire); }
+
 std::wstring mod_widen(std::string_view text)
 {
     // every string that reaches a URL here has already been held to an ASCII grammar
     return std::wstring(text.begin(), text.end());
+}
+
+std::filesystem::path mod_utf8_path(std::string_view text)
+{
+    const int length = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+    std::wstring wide(static_cast<size_t>(std::max(length, 0)), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
+    return std::filesystem::path(std::move(wide)).make_preferred();
 }
 
 // QA only: a loopback stand-in for github.com, judged on the parsed host - the string
@@ -124,6 +153,34 @@ std::wstring mod_asset_url(const xr_string& repository, const xr_string& asset)
     return url.append(L"/").append(mod_widen(repository)).append(L"/releases/latest/download/").append(mod_widen(asset));
 }
 
+// One session for a worker's whole run: WinHTTP pools connections per session, and an update
+// made of ranged requests is mostly connection setup without that.
+class ModHttpSession
+{
+public:
+    ~ModHttpSession()
+    {
+        if (m_session)
+            WinHttpCloseHandle(m_session);
+    }
+
+    HINTERNET Handle()
+    {
+        if (!m_session)
+        {
+            const std::wstring agent = L"Dead Air Refined/" + std::wstring(DeadAirRefined::VersionWide);
+            m_session = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                WINHTTP_NO_PROXY_BYPASS, 0);
+            if (m_session)
+                WinHttpSetTimeouts(m_session, 5000, 10000, 15000, 60000);
+        }
+        return m_session;
+    }
+
+private:
+    HINTERNET m_session{};
+};
+
 class ModHttpGet
 {
 public:
@@ -133,30 +190,20 @@ public:
             WinHttpCloseHandle(m_request);
         if (m_connection)
             WinHttpCloseHandle(m_connection);
-        if (m_session)
-            WinHttpCloseHandle(m_session);
     }
 
-    bool Send(const std::wstring& url, const std::wstring& headers, xr_string& error)
+    // [rangeBegin, rangeEnd) of the resource, or all of it when rangeEnd is zero
+    bool Send(ModHttpSession& session, const std::wstring& url, u64 rangeBegin, u64 rangeEnd, xr_string& error)
     {
-        const std::wstring agent = L"Dead Air Refined/" + std::wstring(DeadAirRefined::VersionWide);
-        m_session = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
-            WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!m_session)
-        {
-            error = "WinHTTP initialization failed";
-            return false;
-        }
-        WinHttpSetTimeouts(m_session, 5000, 10000, 15000, 60000);
-
+        const HINTERNET handle = session.Handle();
         URL_COMPONENTS parts{};
         parts.dwStructSize = sizeof(parts);
         parts.dwHostNameLength = static_cast<DWORD>(-1);
         parts.dwUrlPathLength = static_cast<DWORD>(-1);
         parts.dwExtraInfoLength = static_cast<DWORD>(-1);
-        if (!WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &parts))
+        if (!handle || !WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &parts))
         {
-            error = "invalid URL";
+            error = handle ? "invalid URL" : "WinHTTP initialization failed";
             return false;
         }
         const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
@@ -164,7 +211,7 @@ public:
         if (parts.dwExtraInfoLength)
             path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
 
-        m_connection = WinHttpConnect(m_session, host.c_str(), parts.nPort, 0);
+        m_connection = WinHttpConnect(handle, host.c_str(), parts.nPort, 0);
         m_request = m_connection ?
             WinHttpOpenRequest(m_connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
                 WINHTTP_DEFAULT_ACCEPT_TYPES, parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) :
@@ -174,8 +221,12 @@ public:
             error = "could not connect";
             return false;
         }
-        if (!headers.empty())
-            WinHttpAddRequestHeaders(m_request, headers.c_str(), static_cast<DWORD>(headers.size()), WINHTTP_ADDREQ_FLAG_ADD);
+        if (rangeEnd)
+        {
+            const std::wstring range =
+                L"Range: bytes=" + std::to_wstring(rangeBegin) + L"-" + std::to_wstring(rangeEnd - 1) + L"\r\n";
+            WinHttpAddRequestHeaders(m_request, range.c_str(), static_cast<DWORD>(range.size()), WINHTTP_ADDREQ_FLAG_ADD);
+        }
 
         DWORD statusSize = sizeof(m_status);
         if (!WinHttpSendRequest(m_request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
@@ -212,8 +263,16 @@ public:
         return true;
     }
 
+    // where the redirects ended: the storage URL behind releases/latest/download
+    std::wstring FinalUrl() const
+    {
+        std::array<wchar_t, 4096> value{};
+        DWORD size = sizeof(value);
+        return WinHttpQueryOption(m_request, WINHTTP_OPTION_URL, value.data(), &size) ? std::wstring(value.data()) :
+                                                                                         std::wstring();
+    }
+
 private:
-    HINTERNET m_session{};
     HINTERNET m_connection{};
     HINTERNET m_request{};
     DWORD m_status{};
@@ -226,11 +285,11 @@ enum class ModFetch
     Failed
 };
 
-ModFetch mod_fetch_descriptor(const xr_string& repository, const xr_string& moduleId,
-    ModRelease::Descriptor& descriptor, xr_string& error)
+// a small text asset, whole, into memory
+ModFetch mod_fetch_text(ModHttpSession& session, const std::wstring& url, size_t limit, xr_string& body, xr_string& error)
 {
     ModHttpGet request;
-    if (!request.Send(mod_asset_url(repository, moduleId + ".update.ltx"), {}, error))
+    if (!request.Send(session, url, 0, 0, error))
         return ModFetch::Failed;
     if (request.Status() == HTTP_STATUS_NOT_FOUND)
         return ModFetch::NotFound;
@@ -240,29 +299,39 @@ ModFetch mod_fetch_descriptor(const xr_string& repository, const xr_string& modu
         return ModFetch::Failed;
     }
 
-    xr_string body;
-    std::array<char, 8192> buffer{};
-    for (;;)
+    std::vector<char> buffer(64 * 1024);
+    while (!mod_stopped())
     {
         DWORD received = 0;
         if (!request.Read(buffer.data(), static_cast<DWORD>(buffer.size()), received))
         {
-            error = "descriptor download was interrupted";
+            error = "download was interrupted";
             return ModFetch::Failed;
         }
         if (!received)
-            break;
+            return ModFetch::Ok;
         body.append(buffer.data(), received);
-        if (body.size() > ModRelease::MaximumDescriptorBytes)
+        if (body.size() > limit)
         {
-            error = "descriptor is too large";
+            error = "asset is larger than the contract allows";
             return ModFetch::Failed;
         }
     }
+    error = "cancelled";
+    return ModFetch::Failed;
+}
 
+ModFetch mod_fetch_descriptor(ModHttpSession& session, const XMS::Module& module, ModRelease::Descriptor& descriptor,
+    xr_string& error)
+{
+    xr_string body;
+    const ModFetch fetched = mod_fetch_text(session, mod_asset_url(module.update_github, module.id + ".update.ltx"),
+        ModRelease::MaximumDescriptorBytes, body, error);
+    if (fetched != ModFetch::Ok)
+        return fetched;
     if (!ModRelease::ParseDescriptor(body, descriptor, error))
         return ModFetch::Failed;
-    if (descriptor.id != moduleId)
+    if (descriptor.id != module.id)
     {
         error = "descriptor belongs to another module";
         return ModFetch::Failed;
@@ -270,8 +339,58 @@ ModFetch mod_fetch_descriptor(const xr_string& repository, const xr_string& modu
     return ModFetch::Ok;
 }
 
+// The index the descriptor names: the one the check already fetched when it is still the same
+// file, a fresh download otherwise.
+std::shared_ptr<const ModRelease::FileIndex> mod_fetch_index(ModHttpSession& session, size_t moduleIndex,
+    const XMS::Module& module, const ModRelease::Descriptor& descriptor, xr_string& error)
+{
+    ModKnownIndex& known = mod_service().indexes[moduleIndex];
+    if (known.index && known.sha256 == descriptor.index.sha256)
+        return known.index;
+
+    xr_string body;
+    if (mod_fetch_text(session, mod_asset_url(module.update_github, descriptor.index.name),
+            static_cast<size_t>(descriptor.index.size), body, error) != ModFetch::Ok)
+    {
+        if (error.empty())
+            error = "release has no file index";
+        return nullptr;
+    }
+    if (body.size() != descriptor.index.size || ContentHash::Buffer(body.data(), body.size()) != descriptor.index.sha256.c_str())
+    {
+        error = "file index does not match the descriptor";
+        return nullptr;
+    }
+
+    auto index = std::make_shared<ModRelease::FileIndex>();
+    if (!ModRelease::ParseFileIndex(body, descriptor, *index, error))
+        return nullptr;
+    known.sha256 = descriptor.index.sha256;
+    known.index = index;
+    return index;
+}
+
+// What the player is told before they press Update: the packed size of every file the module
+// does not already hold under the same path and size. Cheap on purpose - no hashing at startup.
+u64 mod_estimate_download(const XMS::Module& module, const ModRelease::FileIndex& index)
+{
+    const std::filesystem::path root(module.root.c_str());
+    u64 bytes = 0;
+    for (const ModRelease::FileEntry& entry : index.files)
+    {
+        std::error_code error;
+        const u64 size = std::filesystem::file_size(root / mod_utf8_path(entry.path), error);
+        // the manifest of another version is another file even when "1.0.0" became "1.0.1"
+        // and the size stayed put
+        if (error || size != entry.size || 0 == xr_stricmp(entry.path.c_str(), "mod.ltx"))
+            bytes += entry.packed;
+    }
+    return bytes;
+}
+
 // Turns a descriptor into the state the Mods menu shows. True when the release can be taken.
-bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRelease::Descriptor& descriptor)
+bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRelease::Descriptor& descriptor,
+    u64 downloadBytes)
 {
     const bool newer = ModRelease::ParseVersion(descriptor.version) > ModRelease::ParseVersion(installedVersion);
     const bool unreadable = descriptor.schema > ModRelease::SupportedSchema;
@@ -283,7 +402,7 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
         status.message.clear();
         status.version = newer ? descriptor.version : xr_string();
         status.requiresGame = newer && gameTooOld ? descriptor.requiresGame : xr_string();
-        status.totalBytes = newer && !unreadable ? descriptor.DownloadBytes() : 0;
+        status.totalBytes = newer && !unreadable ? downloadBytes : 0;
         status.downloadedBytes = 0;
         status.state = !newer ? State::Current : (unreadable || gameTooOld) ? State::Blocked : State::Available;
     });
@@ -292,186 +411,339 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
 
 bool mod_sleep(unsigned milliseconds)
 {
-    const std::atomic_bool& stop = mod_service().stop;
-    for (unsigned elapsed = 0; elapsed < milliseconds && !stop.load(std::memory_order_acquire); elapsed += 100)
+    for (unsigned elapsed = 0; elapsed < milliseconds && !mod_stopped(); elapsed += 100)
         Sleep(100);
-    return !stop.load(std::memory_order_acquire);
+    return !mod_stopped();
 }
 
-// A dropped connection resumes from where it stopped: the running digest already covers every
-// byte on disk, so a 206 that starts at that offset simply continues both. A server that
-// answers a ranged request with 200 is sending the file from its first byte, so both restart.
-bool mod_download(const std::wstring& url, const ModRelease::Package& package, const std::filesystem::path& target,
-    u64 alreadyDownloaded, xr_string& error)
+// A hard link where the volume has them: the staged module is the installed one plus what
+// changed, and copying the unchanged gigabytes to say so would be the slow part of an update.
+bool mod_reuse_file(const std::filesystem::path& source, const std::filesystem::path& target, bool& linksWork)
+{
+    std::error_code error;
+    std::filesystem::create_directories(target.parent_path(), error);
+    if (linksWork && CreateHardLinkW(target.c_str(), source.c_str(), nullptr))
+        return true;
+    if (linksWork && GetLastError() == ERROR_ALREADY_EXISTS)
+        return false;
+    linksWork = false;
+    return CopyFileW(source.c_str(), target.c_str(), TRUE) != FALSE;
+}
+
+// Installed files by content. Only files whose size the release names are read at all, and what
+// comes back is what was actually hashed just now - nothing on disk is taken on trust.
+bool mod_hash_installed(const std::filesystem::path& root, const ModRelease::FileIndex& index,
+    std::unordered_map<std::string, std::filesystem::path>& byHash)
 {
     ModService& service = mod_service();
-    const HANDLE file = CreateFileW(target.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-    {
-        error = "could not create the package file";
-        return false;
-    }
+    std::unordered_set<u64> sizes;
+    for (const ModRelease::FileEntry& entry : index.files)
+        sizes.insert(entry.size);
 
-    ContentHash::Stream digest;
-    bool success = digest.Open();
-    u64 offset = 0;
-    bool complete = false;
-    std::vector<u8> buffer(256 * 1024);
-    for (unsigned attempt = 0; success && !complete && attempt != ModDownloadAttempts; ++attempt)
+    std::vector<std::pair<std::filesystem::path, u64>> candidates;
+    u64 total = 0;
+    std::error_code error;
+    for (std::filesystem::recursive_directory_iterator it(root, std::filesystem::directory_options::skip_permission_denied, error), end;
+         !error && it != end; it.increment(error))
     {
-        if (attempt && !mod_sleep(1000u << attempt))
-            break;
-
-        ModHttpGet request;
-        const std::wstring range = offset ? L"Range: bytes=" + std::to_wstring(offset) + L"-\r\n" : std::wstring();
-        if (!request.Send(url, range, error))
+        std::error_code entryError;
+        if (!it->is_regular_file(entryError))
             continue;
-
-        u64 start = 0;
-        const bool resumed = request.Status() == HTTP_STATUS_PARTIAL_CONTENT && request.RangeStart(start) && start == offset;
-        if (!resumed && request.Status() != HTTP_STATUS_OK)
-        {
-            error = "HTTP " + xr_string(std::to_string(request.Status()).c_str());
-            // nothing a retry would change
-            if (request.Status() == HTTP_STATUS_NOT_FOUND)
-                break;
+        const u64 size = it->file_size(entryError);
+        if (entryError || !sizes.contains(size))
             continue;
-        }
-        if (!resumed && offset)
-        {
-            offset = 0;
-            digest = ContentHash::Stream();
-            success = digest.Open() && SetFilePointerEx(file, {}, nullptr, FILE_BEGIN) && SetEndOfFile(file);
-        }
+        candidates.emplace_back(it->path(), size);
+        total += size;
+    }
 
-        while (success && !service.stop.load(std::memory_order_acquire))
-        {
-            DWORD received = 0;
-            if (!request.Read(buffer.data(), static_cast<DWORD>(buffer.size()), received))
-            {
-                error = "download was interrupted";
-                break;
-            }
-            if (!received)
-            {
-                // a stream that ends early is an interruption like any other
-                complete = offset >= package.size;
-                error = "download was interrupted";
-                break;
-            }
-            DWORD written = 0;
-            offset += received;
-            success = offset <= package.size && WriteFile(file, buffer.data(), received, &written, nullptr) &&
-                written == received && digest.Append(buffer.data(), received);
-            if (!success)
-                error = offset > package.size ? "package is larger than declared" : "could not write the package file";
-            service.downloaded.store(alreadyDownloaded + offset, std::memory_order_release);
-        }
-        if (service.stop.load(std::memory_order_acquire))
-            break;
-    }
-    CloseHandle(file);
-
-    if (service.stop.load(std::memory_order_acquire))
+    service.progressDone.store(0, std::memory_order_release);
+    service.progressTotal.store(total, std::memory_order_release);
+    for (const auto& [path, size] : candidates)
     {
-        error = "cancelled";
-        return false;
-    }
-    if (!success || !complete)
-    {
-        if (error.empty())
-            error = "download failed";
-        return false;
-    }
-    if (offset != package.size || digest.Finish() != package.sha256.c_str())
-    {
-        error = offset != package.size ? "package size does not match the descriptor" :
-                                         "package checksum does not match the descriptor";
-        return false;
+        const std::string digest = ContentHash::File(path.wstring(), service.stop);
+        if (mod_stopped())
+            return false;
+        if (!digest.empty())
+            byHash.try_emplace(digest, path);
+        service.progressDone.fetch_add(size, std::memory_order_acq_rel);
     }
     return true;
 }
 
-bool mod_stage(size_t index, const xr_string& moduleId, const xr_string& repository,
-    const ModRelease::Descriptor& descriptor, xr_string& error)
+enum class ModRead
+{
+    Done,
+    Network,  // worth another attempt
+    Rejected  // the bytes arrived and are wrong: another attempt would fetch the same ones
+};
+
+// The file a package download is in the middle of. It outlives a dropped connection: the sink
+// keeps its unpacking state, so the next request asks for the byte after the last one it took.
+struct ModTransfer
+{
+    ModRelease::FileSink sink;
+    size_t next{};   // first wanted file that is not finished
+    u64 taken{};     // packed bytes of that file already fed to the sink
+    bool open{};
+    unsigned failures{};
+};
+
+// Consumes one ranged response: skips to each wanted file in turn and feeds it to the sink.
+ModRead mod_read_span(ModHttpGet& request, u64 position, const xr_vector<const ModRelease::FileEntry*>& wanted,
+    size_t last, const std::filesystem::path& payload, ModTransfer& transfer, xr_string& error)
 {
     ModService& service = mod_service();
-    const std::filesystem::path root = std::filesystem::path(XMS::StagedRoot().c_str()) / moduleId.c_str();
-    const std::filesystem::path download = root / L"download";
-    const std::filesystem::path payload = root / L"payload";
+    std::vector<u8> buffer(256 * 1024);
 
-    XMS::DiscardStaged(moduleId.c_str());
+    // pulls exactly `count` bytes off the response, handing each piece to `consume`
+    const auto pull = [&](u64 count, const auto& consume)
+    {
+        while (count)
+        {
+            if (mod_stopped())
+                return ModRead::Network;
+            DWORD received = 0;
+            const DWORD want = static_cast<DWORD>(std::min<u64>(count, buffer.size()));
+            if (!request.Read(buffer.data(), want, received) || !received)
+            {
+                error = "download was interrupted";
+                return ModRead::Network;
+            }
+            if (!consume(buffer.data(), received))
+                return ModRead::Rejected;
+            count -= received;
+            position += received;
+        }
+        return ModRead::Done;
+    };
+
+    while (transfer.next <= last)
+    {
+        const ModRelease::FileEntry& entry = *wanted[transfer.next];
+        const u64 resumeAt = entry.offset + transfer.taken;
+        if (resumeAt < position)
+        {
+            error = "file index names overlapping data";
+            return ModRead::Rejected;
+        }
+        ModRead result = pull(resumeAt - position, [](const u8*, DWORD) { return true; });
+        if (result != ModRead::Done)
+            return result;
+
+        if (!transfer.open && !transfer.sink.Open(payload / mod_utf8_path(entry.path), entry, error))
+            return ModRead::Rejected;
+        transfer.open = true;
+        result = pull(entry.packed - transfer.taken, [&](const u8* data, DWORD size)
+        {
+            // bytes that arrived are progress: a long file on a bad line is not a failing one
+            transfer.failures = 0;
+            transfer.taken += size;
+            service.progressDone.fetch_add(size, std::memory_order_acq_rel);
+            return transfer.sink.Append(data, size, error);
+        });
+        if (result != ModRead::Done)
+            return result;
+        if (!transfer.sink.Finish(error))
+            return ModRead::Rejected;
+
+        transfer.open = false;
+        transfer.taken = 0;
+        ++transfer.next;
+    }
+    return ModRead::Done;
+}
+
+// Everything one package has to give, in ascending order of offset.
+bool mod_fetch_package(ModHttpSession& session, const std::wstring& canonicalUrl,
+    const xr_vector<const ModRelease::FileEntry*>& wanted, const std::filesystem::path& payload, xr_string& error)
+{
+    // The storage URL the first request was redirected to answers ranged requests directly,
+    // which saves two redirects per request. It is signed and expires, so a refusal from it
+    // just sends the next request the long way round again.
+    std::wstring directUrl;
+    ModTransfer transfer;
+    while (transfer.next != wanted.size())
+    {
+        if (transfer.failures == ModDownloadAttempts || (transfer.failures && !mod_sleep(500u << transfer.failures)) ||
+            mod_stopped())
+        {
+            if (mod_stopped())
+                error = "cancelled";
+            return false;
+        }
+
+        size_t last = transfer.next;
+        const u64 begin = wanted[last]->offset + transfer.taken;
+        u64 end = wanted[last]->offset + wanted[last]->packed;
+        while (last + 1 != wanted.size() && wanted[last + 1]->offset <= end + ModRangeGap)
+        {
+            ++last;
+            end = std::max(end, wanted[last]->offset + wanted[last]->packed);
+        }
+
+        ModHttpGet request;
+        const bool direct = !directUrl.empty();
+        // an empty file is a span of no bytes, which no Range header can spell
+        if (!request.Send(session, direct ? directUrl : canonicalUrl, begin, std::max(end, begin + 1), error))
+        {
+            directUrl.clear();
+            ++transfer.failures;
+            continue;
+        }
+
+        u64 position = 0;
+        const bool partial = request.Status() == HTTP_STATUS_PARTIAL_CONTENT && request.RangeStart(position) && position <= begin;
+        // 416 is what a range starting at the very end of a package gets: only empty files
+        const bool nothingToRead = request.Status() == 416 && end == begin;
+        if (!partial && !nothingToRead && request.Status() != HTTP_STATUS_OK)
+        {
+            error = "HTTP " + xr_string(std::to_string(request.Status()).c_str());
+            if (direct)
+                directUrl.clear();
+            else if (request.Status() == HTTP_STATUS_NOT_FOUND)
+                return false;
+            else
+                ++transfer.failures;
+            continue;
+        }
+        if (nothingToRead)
+            position = begin;
+        else if (!partial)
+            position = 0; // the whole package from its first byte: what is not wanted gets skipped
+        if (!direct)
+            directUrl = request.FinalUrl();
+
+        switch (mod_read_span(request, position, wanted, last, payload, transfer, error))
+        {
+        case ModRead::Done: break;
+        case ModRead::Network: ++transfer.failures; break;
+        case ModRead::Rejected: return false;
+        }
+    }
+    return true;
+}
+
+bool mod_stage(ModHttpSession& session, size_t moduleIndex, const XMS::Module& module,
+    const ModRelease::Descriptor& descriptor, const ModRelease::FileIndex& index, xr_string& error)
+{
+    ModService& service = mod_service();
+    const std::filesystem::path installed(module.root.c_str());
+    const std::filesystem::path staging = std::filesystem::path(XMS::StagedRoot().c_str()) / module.id.c_str();
+    const std::filesystem::path payload = staging / L"payload";
+
+    XMS::DiscardStaged(module.id.c_str());
     std::error_code fileError;
-    std::filesystem::create_directories(download, fileError);
+    std::filesystem::create_directories(payload, fileError);
     if (fileError)
     {
         error = "could not create the staging folder";
         return false;
     }
 
-    // the archives and what they unpack to exist side by side until the unpack is done
-    const u64 required = descriptor.DownloadBytes() + std::max(descriptor.unpacked, descriptor.DownloadBytes());
+    std::unordered_map<std::string, std::filesystem::path> byHash;
+    if (!mod_hash_installed(installed, index, byHash))
+    {
+        error = "cancelled";
+        return false;
+    }
+
+    // Reuse what is already here, under whatever path the new version wants it. Of the rest,
+    // one file per distinct content is fetched; its other paths are filled from that copy.
+    xr_vector<xr_vector<const ModRelease::FileEntry*>> wanted(descriptor.packages.size());
+    xr_vector<const ModRelease::FileEntry*> repeats;
+    std::unordered_map<std::string, const ModRelease::FileEntry*> fetching;
+    bool linksWork = true;
+    u64 reusedFiles = 0, downloadBytes = 0, writeBytes = 0;
+    for (const ModRelease::FileEntry& entry : index.files)
+    {
+        if (const auto local = byHash.find(entry.sha256.c_str()); local != byHash.end())
+        {
+            if (!mod_reuse_file(local->second, payload / mod_utf8_path(entry.path), linksWork))
+            {
+                error = "could not carry an installed file over";
+                return false;
+            }
+            ++reusedFiles;
+        }
+        else if (!fetching.try_emplace(entry.sha256.c_str(), &entry).second)
+            repeats.push_back(&entry);
+        else
+        {
+            wanted[entry.package].push_back(&entry);
+            downloadBytes += entry.packed;
+            writeBytes += entry.size;
+        }
+    }
+    for (const ModRelease::FileEntry* entry : repeats)
+        writeBytes += entry->size;
+
     ULARGE_INTEGER available{};
-    if (GetDiskFreeSpaceExW(root.c_str(), &available, nullptr, nullptr) && available.QuadPart < required)
+    if (GetDiskFreeSpaceExW(staging.c_str(), &available, nullptr, nullptr) && available.QuadPart < writeBytes)
     {
         error = "not enough free disk space";
         return false;
     }
 
-    u64 done = 0;
-    for (const ModRelease::Package& package : descriptor.packages)
-    {
-        if (!mod_download(mod_asset_url(repository, package.name), package, download / package.name.c_str(), done, error))
-            return false;
-        done += package.size;
-    }
+    Msg("* [mods] %s: %llu of %zu file(s) already here, downloading %llu byte(s)", module.id.c_str(),
+        static_cast<unsigned long long>(reusedFiles), index.files.size(), static_cast<unsigned long long>(downloadBytes));
+    service.progressDone.store(0, std::memory_order_release);
+    service.progressTotal.store(downloadBytes, std::memory_order_release);
+    mod_set_state(moduleIndex, State::Downloading);
 
-    mod_set_state(index, State::Unpacking);
-    ModRelease::UnpackTotals totals;
-    for (const ModRelease::Package& package : descriptor.packages)
+    for (size_t package = 0; package != wanted.size(); ++package)
     {
-        if (!ModRelease::Unpack(download / package.name.c_str(), moduleId, payload, descriptor.files,
-                descriptor.unpacked, totals, service.stop, error))
+        if (wanted[package].empty())
+            continue;
+        std::ranges::sort(wanted[package], {}, &ModRelease::FileEntry::offset);
+        if (!mod_fetch_package(session, mod_asset_url(module.update_github, descriptor.packages[package].name),
+                wanted[package], payload, error))
             return false;
+    }
+    for (const ModRelease::FileEntry* entry : repeats)
+    {
+        const std::filesystem::path source = payload / mod_utf8_path(fetching[entry->sha256.c_str()]->path);
+        if (!mod_reuse_file(source, payload / mod_utf8_path(entry->path), linksWork))
+        {
+            error = "could not write a module file";
+            return false;
+        }
     }
 
     xr_string id, version;
-    if (!ModRelease::ReadManifestIdentity(payload / L"mod.ltx", id, version) || id != moduleId ||
+    if (!ModRelease::ReadManifestIdentity(payload / L"mod.ltx", id, version) || id != module.id ||
         ModRelease::ParseVersion(version) != ModRelease::ParseVersion(descriptor.version))
     {
-        error = "package does not hold the module and version its descriptor names";
+        error = "release does not hold the module and version its descriptor names";
         return false;
     }
-
-    std::filesystem::remove_all(download, fileError);
-    return XMS::MarkStagedReady(moduleId.c_str(), descriptor.version.c_str(), error);
+    return XMS::MarkStagedReady(module.id.c_str(), descriptor.version.c_str(), error);
 }
 
-void mod_run_update(size_t index)
+void mod_run_update(ModHttpSession& session, size_t index)
 {
     const XMS::Module& module = XMS::Modules()[index];
     ModService& service = mod_service();
-    service.downloaded.store(0, std::memory_order_release);
+    service.progressDone.store(0, std::memory_order_release);
+    service.progressTotal.store(0, std::memory_order_release);
+    mod_set_state(index, State::Preparing);
 
     // Fetched again rather than kept from the check: the assets are addressed through
     // "latest", and a release published in between would answer with another version's files.
     ModRelease::Descriptor descriptor;
     xr_string error;
-    const ModFetch fetched = mod_fetch_descriptor(module.update_github, module.id, descriptor, error);
+    const ModFetch fetched = mod_fetch_descriptor(session, module, descriptor, error);
     if (fetched != ModFetch::Ok)
     {
         Msg("! [mods] %s: update failed - %s", module.id.c_str(), error.c_str());
         mod_set_state(index, fetched == ModFetch::NotFound ? State::NoRelease : State::Failed, std::move(error));
         return;
     }
-    if (!mod_evaluate(index, module.version, descriptor))
+    if (!mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes()))
         return;
 
-    mod_set_state(index, State::Downloading);
-    Msg("* [mods] %s: downloading %s (%llu bytes)", module.id.c_str(), descriptor.version.c_str(),
-        static_cast<unsigned long long>(descriptor.DownloadBytes()));
-    if (mod_stage(index, module.id, module.update_github, descriptor, error))
+    mod_set_state(index, State::Preparing);
+    const auto files = mod_fetch_index(session, index, module, descriptor, error);
+    if (files && mod_stage(session, index, module, descriptor, *files, error))
     {
         Msg("* [mods] %s: %s staged, applied by the next start", module.id.c_str(), descriptor.version.c_str());
         mod_set_state(index, State::Staged);
@@ -485,13 +757,13 @@ void mod_run_update(size_t index)
     mod_set_state(index, State::Failed, std::move(error));
 }
 
-void mod_run_check()
+void mod_run_check(ModHttpSession& session)
 {
     ModService& service = mod_service();
     XMS::DiscardUnarmedStaged();
 
     const xr_vector<XMS::Module>& modules = XMS::Modules();
-    for (size_t index = 0; index != modules.size() && !service.stop.load(std::memory_order_acquire); ++index)
+    for (size_t index = 0; index != modules.size() && !mod_stopped(); ++index)
     {
         {
             std::lock_guard lock(service.mutex);
@@ -501,30 +773,51 @@ void mod_run_check()
             status.state = State::Checking;
         }
 
+        const XMS::Module& module = modules[index];
         ModRelease::Descriptor descriptor;
         xr_string error;
-        switch (mod_fetch_descriptor(modules[index].update_github, modules[index].id, descriptor, error))
+        switch (mod_fetch_descriptor(session, module, descriptor, error))
         {
         case ModFetch::Ok:
-            mod_evaluate(index, modules[index].version, descriptor);
-            if (!descriptor.version.empty())
-                Msg("* [mods] %s: installed %s, released %s", modules[index].id.c_str(),
-                    modules[index].version.c_str(), descriptor.version.c_str());
+        {
+            Msg("* [mods] %s: installed %s, released %s", module.id.c_str(), module.version.c_str(),
+                descriptor.version.c_str());
+            if (!mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes()))
+                break;
+            // An update on offer comes with its size. The index is what knows it; without one
+            // the offer still stands and quotes the packages whole.
+            xr_string indexError;
+            if (const auto files = mod_fetch_index(session, index, module, descriptor, indexError))
+            {
+                const u64 download = mod_estimate_download(module, *files);
+                mod_set_status(index, [&](ModuleStatus& status) { status.totalBytes = download; });
+                Msg("* [mods] %s: about %llu of %llu byte(s) to download", module.id.c_str(),
+                    static_cast<unsigned long long>(download), static_cast<unsigned long long>(descriptor.PackageBytes()));
+            }
             break;
+        }
         case ModFetch::NotFound:
-            Msg("* [mods] %s: %s publishes no release for it", modules[index].id.c_str(),
-                modules[index].update_github.c_str());
+            Msg("* [mods] %s: %s publishes no release for it", module.id.c_str(), module.update_github.c_str());
             mod_set_state(index, State::NoRelease);
             break;
         case ModFetch::Failed:
-            Msg("* [mods] %s: update check failed - %s", modules[index].id.c_str(), error.c_str());
+            Msg("* [mods] %s: update check failed - %s", module.id.c_str(), error.c_str());
             mod_set_state(index, State::CheckFailed, std::move(error));
             break;
         }
     }
 }
 
-bool mod_queue(ModService& service, size_t index);
+bool mod_queue(ModService& service, size_t index)
+{
+    ModuleStatus& status = service.modules[index];
+    if (status.state != State::Available && status.state != State::Failed)
+        return false;
+    status.state = State::Queued;
+    status.message.clear();
+    service.queue.push_back(index);
+    return true;
+}
 
 // worker thread: what the console asked for, now that the check has an answer
 void mod_queue_requests()
@@ -549,13 +842,14 @@ void mod_queue_requests()
 void mod_worker()
 {
     ModService& service = mod_service();
+    ModHttpSession session;
     for (;;)
     {
         size_t update = 0;
         bool check = false;
         {
             std::lock_guard lock(service.mutex);
-            if (service.stop.load(std::memory_order_acquire))
+            if (mod_stopped())
             {
                 service.workerRunning = false;
                 return;
@@ -581,11 +875,11 @@ void mod_worker()
         }
         if (check)
         {
-            mod_run_check();
+            mod_run_check(session);
             mod_queue_requests();
         }
         else
-            mod_run_update(update);
+            mod_run_update(session, update);
     }
 }
 
@@ -602,8 +896,8 @@ pcstr mod_state_name(State state)
     case State::Blocked: return "update needs a newer game";
     case State::CheckFailed: return "check failed";
     case State::Queued: return "queued";
+    case State::Preparing: return "verifying installed files";
     case State::Downloading: return "downloading";
-    case State::Unpacking: return "unpacking";
     case State::Staged: return "staged for the next start";
     case State::Failed: return "update failed";
     }
@@ -641,17 +935,7 @@ void mod_initialize(ModService& service)
             status.state = State::Unchecked;
         service.modules.emplace_back(std::move(status));
     }
-}
-
-bool mod_queue(ModService& service, size_t index)
-{
-    ModuleStatus& status = service.modules[index];
-    if (status.state != State::Available && status.state != State::Failed)
-        return false;
-    status.state = State::Queued;
-    status.message.clear();
-    service.queue.push_back(index);
-    return true;
+    service.indexes.resize(service.modules.size());
 }
 }
 
@@ -704,11 +988,6 @@ u32 ModUpdateService::StartUpdateAll()
     return queued;
 }
 
-bool ModUpdateService::RestartPromptPending()
-{
-    return mod_service().restartPrompt.load(std::memory_order_acquire);
-}
-
 void ModUpdateService::RequestUpdate(pcstr moduleId)
 {
     ModService& service = mod_service();
@@ -744,10 +1023,14 @@ void ModUpdateService::LogStatus()
     }
 }
 
+bool ModUpdateService::RestartPromptPending()
+{
+    return mod_service().restartPrompt.load(std::memory_order_acquire);
+}
+
 void ModUpdateService::AcknowledgeRestartPrompt()
 {
-    ModService& service = mod_service();
-    service.restartPrompt.store(false, std::memory_order_release);
+    mod_service().restartPrompt.store(false, std::memory_order_release);
 }
 
 bool ModUpdateService::RestartGame()
@@ -784,8 +1067,10 @@ ModUpdateService::Snapshot ModUpdateService::GetSnapshot()
     snapshot.restartPrompt = service.restartPrompt.load(std::memory_order_acquire);
     for (ModuleStatus& status : snapshot.modules)
     {
-        if (status.state == State::Downloading)
-            status.downloadedBytes = service.downloaded.load(std::memory_order_acquire);
+        if (status.state != State::Preparing && status.state != State::Downloading)
+            continue;
+        status.downloadedBytes = service.progressDone.load(std::memory_order_acquire);
+        status.totalBytes = service.progressTotal.load(std::memory_order_acquire);
     }
     return snapshot;
 }

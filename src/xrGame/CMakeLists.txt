@@ -2545,7 +2545,6 @@ target_link_libraries(xrGame
     xrPhysics
     xrNetServer
     ZLIB::ZLIBSTATIC
-    MINIZIP::minizipstatic
     NVIDIA::Ansel
     $<$<PLATFORM_ID:Windows>:delayimp>
 )

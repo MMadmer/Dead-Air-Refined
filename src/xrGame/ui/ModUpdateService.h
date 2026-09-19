@@ -16,8 +16,8 @@ enum class State : u8
     Blocked,     // the release needs a newer game
     CheckFailed,
     Queued,
+    Preparing,   // hashing installed files to find what the release already has here
     Downloading,
-    Unpacking,
     Staged,      // swapped in by the next start
     Failed
 };
@@ -33,6 +33,8 @@ struct ModuleStatus
     xr_string requiresGame;
     // log-grade reason behind CheckFailed and Failed
     xr_string message;
+    // Available: what the update is expected to download. Preparing: bytes of installed files
+    // hashed. Downloading: packed bytes fetched.
     u64 downloadedBytes{};
     u64 totalBytes{};
 };

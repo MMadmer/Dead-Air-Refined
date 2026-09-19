@@ -84,7 +84,7 @@ xr_string mods_multiline(const xr_string& text)
 
 bool mods_in_flight(State state)
 {
-    return state == State::Queued || state == State::Downloading || state == State::Unpacking;
+    return state == State::Queued || state == State::Preparing || state == State::Downloading;
 }
 }
 
@@ -360,7 +360,10 @@ void CUIModsWnd::RefreshDetails(const Row& row, const ModUpdateService::ModuleSt
         xr_sprintf(text, sizeof(text), mods_text("st_mods_status_downloading").c_str(),
             mods_size(status.downloadedBytes).c_str(), mods_size(status.totalBytes).c_str());
         break;
-    case State::Unpacking: xr_strcpy(text, mods_text("st_mods_status_unpacking").c_str()); break;
+    case State::Preparing:
+        xr_sprintf(text, sizeof(text), mods_text("st_mods_status_preparing").c_str(),
+            mods_size(status.downloadedBytes).c_str(), mods_size(status.totalBytes).c_str());
+        break;
     case State::Staged:
         xr_sprintf(text, sizeof(text), mods_text("st_mods_status_staged").c_str(), status.version.c_str());
         break;
@@ -378,7 +381,7 @@ void CUIModsWnd::RefreshDetails(const Row& row, const ModUpdateService::ModuleSt
         status.state == State::Blocked;
     m_status->SetTextColor(error ? m_errorColor : m_statusColor);
 
-    const bool downloading = status.state == State::Downloading;
+    const bool downloading = status.state == State::Downloading || status.state == State::Preparing;
     m_progress->Show(downloading);
     if (downloading)
     {
