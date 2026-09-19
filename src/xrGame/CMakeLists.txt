@@ -2506,6 +2506,12 @@ target_sources(xrGame PRIVATE
     ui/UIUpdateWnd.h
     ui/ModOptOut.cpp
     ui/ModOptOut.h
+    ui/ModRelease.cpp
+    ui/ModRelease.h
+    ui/ModUpdateService.cpp
+    ui/ModUpdateService.h
+    ui/UIModsWnd.cpp
+    ui/UIModsWnd.h
     ui/UpdateService.cpp
     ui/UpdateService.h
 )
@@ -2538,6 +2544,8 @@ target_link_libraries(xrGame
     xrCDB
     xrPhysics
     xrNetServer
+    ZLIB::ZLIBSTATIC
+    MINIZIP::minizipstatic
     NVIDIA::Ansel
     $<$<PLATFORM_ID:Windows>:delayimp>
 )

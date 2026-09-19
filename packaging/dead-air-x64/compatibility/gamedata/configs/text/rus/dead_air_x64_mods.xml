@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+    <string id="ui_mm_mods">
+        <text>Моды</text>
+    </string>
+    <string id="st_mods_caption">
+        <text>Моды</text>
+    </string>
+    <string id="st_mods_column_name">
+        <text>Название</text>
+    </string>
+    <string id="st_mods_column_author">
+        <text>Автор</text>
+    </string>
+    <string id="st_mods_column_version">
+        <text>Версия</text>
+    </string>
+    <string id="st_mods_empty">
+        <text>Моды XFined не установлены.</text>
+    </string>
+    <string id="st_mods_author">
+        <text>Автор: %s</text>
+    </string>
+    <string id="st_mods_version">
+        <text>Версия: %s</text>
+    </string>
+    <string id="st_mods_no_description">
+        <text>Описание отсутствует.</text>
+    </string>
+    <string id="st_mods_update">
+        <text>Обновить</text>
+    </string>
+    <string id="st_mods_update_all">
+        <text>Обновить все</text>
+    </string>
+    <string id="st_mods_website">
+        <text>На сайт</text>
+    </string>
+    <string id="st_mods_status_disabled">
+        <text>Отключён</text>
+    </string>
+    <string id="st_mods_status_no_source">
+        <text>Обновления не поддерживаются</text>
+    </string>
+    <string id="st_mods_status_checking">
+        <text>Проверка обновлений...</text>
+    </string>
+    <string id="st_mods_status_current">
+        <text>Установлена последняя версия</text>
+    </string>
+    <string id="st_mods_status_no_release">
+        <text>Релизы не найдены</text>
+    </string>
+    <string id="st_mods_status_available">
+        <text>Доступна версия %s (%s)</text>
+    </string>
+    <string id="st_mods_status_blocked">
+        <text>Версия %s требует Dead Air: Refined %s</text>
+    </string>
+    <string id="st_mods_status_blocked_schema">
+        <text>Для обновления нужна новая версия игры</text>
+    </string>
+    <string id="st_mods_status_check_failed">
+        <text>Не удалось проверить обновления</text>
+    </string>
+    <string id="st_mods_status_queued">
+        <text>В очереди на загрузку</text>
+    </string>
+    <string id="st_mods_status_downloading">
+        <text>Загрузка: %s / %s</text>
+    </string>
+    <string id="st_mods_status_unpacking">
+        <text>Распаковка...</text>
+    </string>
+    <string id="st_mods_status_staged">
+        <text>Версия %s будет установлена при следующем запуске игры</text>
+    </string>
+    <string id="st_mods_status_failed">
+        <text>Не удалось обновить. Попробуйте ещё раз</text>
+    </string>
+    <string id="st_mods_restart_prompt">
+        <text>Обновления модов загружены. Перезапустить игру сейчас?\nИначе они будут установлены при следующем запуске.</text>
+    </string>
+    <string id="st_mods_size_mb">
+        <text>%.1f МБ</text>
+    </string>
+    <string id="st_mods_size_kb">
+        <text>%.1f КБ</text>
+    </string>
+    <string id="st_mods_back">
+        <text>Назад</text>
+    </string>
+</string_table>

@@ -187,18 +187,32 @@ void CUIMMShniaga::CreateList(xr_vector<CUIStatic*>& lst, CUIXml& xml_doc, LPCST
     // The report goes to this project's tracker; once a mod changed the build, reports
     // from it describe someone else's game, so the entry disappears with the updates.
     const bool mainPage = std::string_view(path).starts_with("menu_main") && !ModOptOut::AutoUpdateDisabled();
+    // The Mods entry is added here rather than in ui_mm_main.xml: a mod that replaces the menu
+    // layout or its script would otherwise take the entry away. Only the pages shown without a
+    // level - an update is never staged under a running game.
+    const std::string_view page(path);
+    const bool modsPage = page == "menu_main" || page == "menu_main_last_save" || page == "menu_main_logout";
     bool bugButtonAdded = false;
+    bool modsButtonAdded = false;
     for (int i = 0; i < nodes_num; ++i)
     {
         const pcstr name = xml_doc.ReadAttrib("btn", i, "name");
-        if (mainPage && !bugButtonAdded &&
-            (xr_strcmp(name, "btn_quit_to_mm") == 0 || xr_strcmp(name, "btn_quit") == 0))
+        const bool quitEntry = xr_strcmp(name, "btn_quit_to_mm") == 0 || xr_strcmp(name, "btn_quit") == 0;
+        if (modsPage && !modsButtonAdded && quitEntry)
+        {
+            createButton("btn_mods", "ui_mm_mods");
+            modsButtonAdded = true;
+        }
+        if (mainPage && !bugButtonAdded && quitEntry)
         {
             createButton("btn_bug_report", "ui_mm_bug_report");
             bugButtonAdded = true;
         }
         createButton(name, xml_doc.ReadAttrib("btn", i, "caption"));
     }
+    // a layout without a quit entry still gets the button
+    if (modsPage && !modsButtonAdded)
+        createButton("btn_mods", "ui_mm_mods");
     xml_doc.SetLocalRoot(xml_doc.GetRoot());
 }
 
@@ -402,6 +416,8 @@ void CUIMMShniaga::OnBtnClick()
         ShowMain();
     else if (0 == xr_strcmp("btn_bug_report", m_selected->WindowName()))
         MainMenu()->ShowBugReportDialog();
+    else if (0 == xr_strcmp("btn_mods", m_selected->WindowName()))
+        MainMenu()->ShowModsDialog();
     else
         GetMessageTarget()->SendMessage(m_selected, BUTTON_CLICKED);
 }

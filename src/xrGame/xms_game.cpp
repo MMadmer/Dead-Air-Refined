@@ -495,6 +495,9 @@ luabind::object xms_native_modules(lua_State* L)
         entry["id"] = m.id.c_str();
         entry["name"] = m.name.c_str();
         entry["version"] = m.version.c_str();
+        entry["author"] = m.author.c_str();
+        entry["description"] = m.description.c_str();
+        entry["website"] = m.website.c_str();
         entry["ns"] = u32(m.ns);
         entry["layer"] = u32(m.layer);
         entry["enabled"] = !m.disabled;

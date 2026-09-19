@@ -5,6 +5,7 @@ class CUIDialogWnd;
 class CUICursor;
 class CUIMessageBoxEx;
 class CUIBugReportWnd;
+class CUIModsWnd;
 class CUIUpdateWnd;
 class CUIMajorUpdateWnd;
 class CUIContentWnd;
@@ -121,6 +122,7 @@ protected:
 
     xr_vector<CUIMessageBoxEx*> m_pMB_ErrDlgs;
     CUIBugReportWnd* m_bugReportDialog{};
+    CUIModsWnd* m_modsDialog{};
     CUIUpdateWnd* m_updateDialog{};
     CUIMajorUpdateWnd* m_majorUpdateDialog{};
     CUIContentWnd* m_contentDialog{};
@@ -183,6 +185,10 @@ public:
 
     void SwitchToMultiplayerMenu();
     void ShowBugReportDialog();
+    void ShowModsDialog();
+    // Console entry (xms_mods). A latch rather than a call: the command may run from user.ltx
+    // before the menu exists, or from the console while the console still owns the input.
+    static void RequestModsDialog();
 
     void OnPatchCheck(bool success);
 

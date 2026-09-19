@@ -24,10 +24,12 @@ the process described here.
   behavior that mods built in XFined Editor (`D:\Games\XFined-Editor`) rely
   on: the module manifest, mount order and conflict resolution, `.ltxp`,
   `.xmlp`, string table priorities, `.xspawn`, `.xcform`, aimap append,
-  overlay_visuals, the composite `game.graph`, the game mode registry, and the
-  `.scov` chunks. The game and the editor evolve independently: a Dead Air
-  Refined update has no right to break a mod built by any earlier editor
-  version.
+  overlay_visuals, the composite `game.graph`, the game mode registry, the
+  `.scov` chunks, and the module release contract - the `<id>.update.ltx`
+  descriptor, the package layout and the download URL every installed module
+  updates itself through. The game and the editor evolve independently: a Dead
+  Air Refined update has no right to break a mod built by any earlier editor
+  version, nor the update path of a release already published.
 - The project targets a player who installs the game, picks a graphics preset,
   and plays. Customization is minimized on purpose: setup steps, optional
   downloads, and per-feature switches are not features, they are friction, and
@@ -80,7 +82,8 @@ the process described here.
   Editor. Any change touching XMS contract points (module registry and
   mounting, LTX/XML/string table merge order, level deltas
   `.xspawn`/`.xcform`/aimap/overlay_visuals/`game.graph`, `.scov` chunks, the
-  mode registry) is made backward-compatibly only: new capabilities are added
+  mode registry, the module release descriptor and package rules of
+  `MOD_UPDATES.md`) is made backward-compatibly only: new capabilities are added
   as new chunk/field versions with a silent fallback, and behavior already
   shipped is neither changed nor removed. A mod built by an earlier editor
   version must keep working after any game update — this is the condition of
@@ -564,6 +567,8 @@ drive. Do not install both. Existing saves are preserved.
 - `docs/dead-air/DEPENDENCIES.md` — pinned dependencies and build policy.
 - `docs/dead-air/DIAGNOSTIC_REPORTS.md` — report schema and privacy contract.
 - `docs/dead-air/MODDING.md` — compatibility contract for addons.
+- `docs/dead-air/MOD_UPDATES.md` — module metadata, the Mods menu and the frozen
+  module release contract.
 - `docs/dead-air/NQ_RUNTIME.md` — the `.nqasset` format and NQ runtime contract.
 - `docs/dead-air/SAVE_COMPATIBILITY.md` — the binary save-group contract.
 - `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — an open proposal, not implemented.

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+    <string id="ui_mm_mods">
+        <text>Mods</text>
+    </string>
+    <string id="st_mods_caption">
+        <text>Mods</text>
+    </string>
+    <string id="st_mods_column_name">
+        <text>Name</text>
+    </string>
+    <string id="st_mods_column_author">
+        <text>Author</text>
+    </string>
+    <string id="st_mods_column_version">
+        <text>Version</text>
+    </string>
+    <string id="st_mods_empty">
+        <text>No XFined mods installed.</text>
+    </string>
+    <string id="st_mods_author">
+        <text>Author: %s</text>
+    </string>
+    <string id="st_mods_version">
+        <text>Version: %s</text>
+    </string>
+    <string id="st_mods_no_description">
+        <text>No description.</text>
+    </string>
+    <string id="st_mods_update">
+        <text>Update</text>
+    </string>
+    <string id="st_mods_update_all">
+        <text>Update all</text>
+    </string>
+    <string id="st_mods_website">
+        <text>Website</text>
+    </string>
+    <string id="st_mods_status_disabled">
+        <text>Disabled</text>
+    </string>
+    <string id="st_mods_status_no_source">
+        <text>Updates are not supported</text>
+    </string>
+    <string id="st_mods_status_checking">
+        <text>Checking for updates...</text>
+    </string>
+    <string id="st_mods_status_current">
+        <text>Up to date</text>
+    </string>
+    <string id="st_mods_status_no_release">
+        <text>No releases found</text>
+    </string>
+    <string id="st_mods_status_available">
+        <text>Version %s is available (%s)</text>
+    </string>
+    <string id="st_mods_status_blocked">
+        <text>Version %s requires Dead Air: Refined %s</text>
+    </string>
+    <string id="st_mods_status_blocked_schema">
+        <text>A newer game version is required to update</text>
+    </string>
+    <string id="st_mods_status_check_failed">
+        <text>Update check failed</text>
+    </string>
+    <string id="st_mods_status_queued">
+        <text>Queued</text>
+    </string>
+    <string id="st_mods_status_downloading">
+        <text>Downloading: %s / %s</text>
+    </string>
+    <string id="st_mods_status_unpacking">
+        <text>Unpacking...</text>
+    </string>
+    <string id="st_mods_status_staged">
+        <text>Version %s will be installed at the next game start</text>
+    </string>
+    <string id="st_mods_status_failed">
+        <text>Update failed. Try again</text>
+    </string>
+    <string id="st_mods_restart_prompt">
+        <text>Mod updates are ready. Restart the game now?\nOtherwise they are installed at the next start.</text>
+    </string>
+    <string id="st_mods_size_mb">
+        <text>%.1f MB</text>
+    </string>
+    <string id="st_mods_size_kb">
+        <text>%.1f KB</text>
+    </string>
+    <string id="st_mods_back">
+        <text>Back</text>
+    </string>
+</string_table>

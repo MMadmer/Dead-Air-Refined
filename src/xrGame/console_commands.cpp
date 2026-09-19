@@ -41,6 +41,7 @@
 #include "UIGameSP.h"
 #include "ui/UIActorMenu.h"
 #include "ui/ContentService.h"
+#include "ui/ModUpdateService.h"
 #include "player_hud.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/ui_styles.h"
@@ -1116,6 +1117,46 @@ public:
     {
         xr_strcpy(I, m_enable ? "switch an XMS module back on (next start)" : "switch an XMS module off (next start)");
     }
+};
+
+// The Mods menu from the console: the same checks and downloads, without the window.
+class CCC_XmsUpdate : public IConsole_Command
+{
+public:
+    CCC_XmsUpdate(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        if (!args || !args[0])
+        {
+            Msg("! usage: %s <module id> | all   (see xms_update_status)", cName);
+            return;
+        }
+        const bool all = 0 == xr_strcmp(args, "all");
+        if (!all && !XMS::FindModule(args))
+        {
+            Msg("! XMS: no module [%s]", args);
+            return;
+        }
+        ModUpdateService::RequestUpdate(all ? "" : args);
+        Msg("* XMS: update of %s requested - progress in xms_update_status, applied on the next start", args);
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "check an XMS module (or 'all') for a release and download it"); }
+};
+
+class CCC_XmsUpdateStatus : public IConsole_Command
+{
+public:
+    CCC_XmsUpdateStatus(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR) { ModUpdateService::LogStatus(); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "list XMS modules with the state of their updates"); }
+};
+
+class CCC_XmsMods : public IConsole_Command
+{
+public:
+    CCC_XmsMods(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR) { CMainMenu::RequestModsDialog(); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "open the Mods window of the main menu"); }
 };
 
 class CCC_XmsConflicts : public IConsole_Command
@@ -3221,6 +3262,9 @@ void CCC_RegisterCommands()
     CMD2(CCC_XmsEnable, "xms_enable", true);
     CMD2(CCC_XmsEnable, "xms_disable", false);
     CMD1(CCC_XmsConflicts, "xms_conflicts");
+    CMD1(CCC_XmsUpdate, "xms_update");
+    CMD1(CCC_XmsUpdateStatus, "xms_update_status");
+    CMD1(CCC_XmsMods, "xms_mods");
     CMD1(CCC_XmsModes, "xms_modes");
     CMD1(CCC_XmsWhy, "xms_why");
     CMD1(CCC_XmsNq, "nq");

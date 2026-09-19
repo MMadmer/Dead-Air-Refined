@@ -77,3 +77,6 @@ doc/doxygen/html/*
 
 # QA run artefacts: logs, engine dumps and captured frames of a local NQ run
 /tools/qa/nq/results/
+
+# QA run artefacts of a local mod update run
+/tools/qa/mods/results/

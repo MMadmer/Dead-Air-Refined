@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <background x="72" y="84" width="880" height="600" stretch="1">
+            <texture>ui_frame_error</texture>
+        </background>
+        <!-- the frame above is translucent; this keeps the main menu from reading through it -->
+        <backdrop x="86" y="98" width="852" height="572" stretch="1">
+            <texture>ui_inGame2_main_window</texture>
+        </backdrop>
+        <caption x="92" y="100" width="840" height="32">
+            <text font="graffiti22" align="c" vert_align="c">st_mods_caption</text>
+        </caption>
+
+        <column_name x="110" y="144" width="300" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_name</text>
+        </column_name>
+        <column_author x="410" y="144" width="140" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_author</text>
+        </column_author>
+        <column_version x="550" y="144" width="70" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_version</text>
+        </column_version>
+
+        <list_back x="100" y="166" width="540" height="440" stretch="1">
+            <texture>ui_inGame2_picture_window</texture>
+        </list_back>
+        <list x="106" y="172" width="528" height="428" item_height="26" can_select="1" always_show_scroll="0"
+              name_width="300" author_width="140" version_width="70">
+            <font font="letterica16" r="220" g="220" b="220"/>
+            <color_disabled r="120" g="120" b="120"/>
+            <color_update r="210" g="190" b="115"/>
+        </list>
+        <empty x="106" y="360" width="528" height="40">
+            <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="150" g="145" b="125">st_mods_empty</text>
+        </empty>
+
+        <details_back x="652" y="144" width="280" height="462" stretch="1">
+            <texture>ui_inGame2_picture_window</texture>
+        </details_back>
+        <name x="662" y="152" width="260" height="48">
+            <text font="graffiti19" align="c" vert_align="c" complex_mode="1"/>
+        </name>
+        <author x="662" y="204" width="260" height="20">
+            <text font="letterica16" align="l" vert_align="c"/>
+        </author>
+        <version x="662" y="224" width="260" height="20">
+            <text font="letterica16" align="l" vert_align="c"/>
+        </version>
+        <status x="662" y="248" width="260" height="40">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="210" g="190" b="115"/>
+            <color_error r="220" g="100" b="90"/>
+        </status>
+        <progress x="666" y="292" width="252" height="9" horz="1" min="0" max="100" pos="0">
+            <progress stretch="1">
+                <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
+            </progress>
+            <background stretch="1">
+                <texture a="220">ui_inGame2_hint_wnd_bar</texture>
+            </background>
+        </progress>
+        <description x="662" y="308" width="260" height="290" always_show_scroll="0" vert_interval="4"
+                     right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
+        <description_text x="0" y="0" width="236" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+        </description_text>
+
+        <update_all x="100" y="626" width="200" height="30" stretch="1" accel="kF5">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_mods_update_all</text>
+        </update_all>
+        <back x="312" y="626" width="140" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_mods_back</text>
+        </back>
+        <update x="652" y="626" width="134" height="30" stretch="1" accel="ui_accept">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_mods_update</text>
+        </update>
+        <website x="798" y="626" width="134" height="30" stretch="1">
+            <texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text font="letterica16" align="c" vert_align="c">st_mods_website</text>
+        </website>
+    </main>
+</w>

@@ -7,6 +7,10 @@
 #include <sys/stat.h>
 #include <direct.h>
 
+#include <algorithm>
+#include <ranges>
+#include <string_view>
+
 #include "xrCommon/xr_unordered_map.h"
 #include "xrCommon/xr_string.h"
 
@@ -48,6 +52,7 @@ struct State
     bool registry_dirty{false};
     string_path registry_path{};
     string_path report_path{};
+    xr_string staged_root; // modules\.staged\ with a trailing delimiter, empty until the FS is up
     // ltx parse attribution stack
     xr_vector<u16> ltx_layer_stack;
     u32 composition_hash{0};
@@ -156,8 +161,29 @@ bool read_raw(pcstr path, RawFile& out)
     return true;
 }
 
-template <typename Callback> // callback(section, key, value)
-void parse_plain_ini(char* text, const Callback& cb)
+// First ';' that starts a comment. With `quoted` a ';' between double quotes is text: a
+// manifest description is prose, and prose has semicolons.
+char* find_comment(char* line, bool quoted)
+{
+    if (!quoted)
+        return strchr(line, ';');
+    bool inside = false;
+    for (char* c = line; *c; ++c)
+    {
+        if (inside && *c == '\\' && c[1])
+            ++c;
+        else if (*c == '"')
+            inside = !inside;
+        else if (*c == ';' && !inside)
+            return c;
+    }
+    return nullptr;
+}
+
+// callback(section, key, value). `quoted_values` is for manifests only: every other file this
+// reads (.xspawn, registries, overlay lists) keeps the comment rule it shipped with.
+template <typename Callback>
+void parse_plain_ini(char* text, const Callback& cb, bool quoted_values = false)
 {
     string256 section = "";
     for (char* line = text; line && *line;)
@@ -169,7 +195,7 @@ void parse_plain_ini(char* text, const Callback& cb)
             *cr = 0;
         while (*line == ' ' || *line == '\t')
             ++line;
-        if (char* comment = strchr(line, ';'))
+        if (char* comment = find_comment(line, quoted_values))
             *comment = 0;
         if (line[0] == '[')
         {
@@ -283,20 +309,62 @@ u16 acquire_ns(const xr_string& id)
 
 // ---- discovery -------------------------------------------------------------
 
+// Display text of a manifest: "..." is unwrapped and \n \" \\ are resolved inside it. A value
+// without the quotes is taken as written, so a name like C:\new stays what the author typed.
+xr_string display_text(pcstr value)
+{
+    const size_t length = xr_strlen(value);
+    if (length < 2 || value[0] != '"' || value[length - 1] != '"')
+        return value;
+    xr_string out;
+    out.reserve(length);
+    for (size_t i = 1; i + 1 < length; ++i)
+    {
+        if (value[i] == '\\' && i + 2 < length)
+        {
+            const char next = value[i + 1];
+            if (next == 'n' || next == '"' || next == '\\')
+            {
+                out += next == 'n' ? '\n' : next;
+                ++i;
+                continue;
+            }
+        }
+        out += value[i];
+    }
+    return out;
+}
+
 void parse_manifest(Module& m, char* text)
 {
-    parse_plain_ini(text, [&m](pcstr section, pcstr key, pcstr value)
+    // a BOM in front of "[module]" would hide the section header
+    if (u8(text[0]) == 0xEF && u8(text[1]) == 0xBB && u8(text[2]) == 0xBF)
+        text += 3;
+
+    xr_string website, github;
+    parse_plain_ini(text, [&](pcstr section, pcstr key, pcstr value)
     {
         if (0 == xr_strcmp(section, "module"))
         {
             if (0 == xr_strcmp(key, "id"))
                 m.id = lower_copy(value);
             else if (0 == xr_strcmp(key, "name"))
-                m.name = value;
+                m.name = display_text(value);
             else if (0 == xr_strcmp(key, "version"))
                 m.version = value;
             else if (0 == xr_strcmp(key, "mode"))
                 m.mode = lower_copy(value);
+            else if (0 == xr_strcmp(key, "author"))
+                m.author = display_text(value);
+            else if (0 == xr_strcmp(key, "description"))
+                m.description = display_text(value);
+            else if (0 == xr_strcmp(key, "website"))
+                website = value;
+        }
+        else if (0 == xr_strcmp(section, "update"))
+        {
+            if (0 == xr_strcmp(key, "github"))
+                github = value;
         }
         else if (0 == xr_strcmp(section, "provides_mode"))
         {
@@ -326,7 +394,19 @@ void parse_manifest(Module& m, char* text)
             m.vfs_maps.push_back({lower_copy(key), value});
         else if (0 == xr_strcmp(section, "redirects"))
             m.redirect_maps.push_back({lower_copy(key), lower_copy(value)});
-    });
+    }, true);
+
+    // Refused values are dropped, not repaired: the Mods menu then shows a disabled button
+    // instead of opening or polling something the manifest had no right to name.
+    if (ValidWebsite(website.c_str()))
+        m.website = std::move(website);
+    else if (!website.empty())
+        Msg("! XMS: module [%s] website ignored - only https://ap-pro.ru and https://moddb.com are allowed",
+            m.id.c_str());
+    if (ValidGithubRepo(github.c_str()))
+        m.update_github = std::move(github);
+    else if (!github.empty())
+        Msg("! XMS: module [%s] update source ignored - [update] github must be owner/repo", m.id.c_str());
 }
 
 // Manifest paths arrive in whatever style the author typed. Virtual sides are
@@ -400,6 +480,7 @@ void discover(pcstr mods_root, bool legacy)
         Module m;
         parse_manifest(m, raw.data);
         m.root = xr_string(mods_root) + entry.name + DELIMITER;
+        m.legacy_root = legacy;
         if (!valid_id(m.id.c_str()))
         {
             m.id = lower_copy(entry.name);
@@ -759,6 +840,204 @@ void mount_all()
         mount_redirects(m, gamedata->m_Path);
     }
 }
+
+// ---- staged module updates -------------------------------------------------
+// Layout and rules: docs/dead-air/MOD_UPDATES.md 3.2-3.3.
+
+constexpr pcstr kStagedDir = ".staged";
+constexpr pcstr kStagedReady = "ready.ltx";
+constexpr pcstr kStagedPayload = "payload";
+constexpr pcstr kStagedPrevious = "previous";
+
+struct StagedInfo
+{
+    xr_string id;
+    xr_string version;
+    xr_string root;   // "modules" or "mods"
+    xr_string folder; // the installed module folder inside that root
+};
+
+bool is_directory(const xr_string& path)
+{
+    const DWORD attributes = GetFileAttributesA(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+bool valid_folder_name(const xr_string& name)
+{
+    if (name.empty() || name == "." || name == ".." || name.back() == '.' || name.back() == ' ')
+        return false;
+    return name.find_first_of("\\/:*?\"<>|") == xr_string::npos;
+}
+
+// Never walks through a link: a module folder that is a junction into an author's working
+// copy loses the junction, not the working copy.
+void remove_tree(const xr_string& path)
+{
+    const DWORD attributes = GetFileAttributesA(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+        return;
+    if (!(attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+    {
+        WIN32_FIND_DATAA data;
+        const HANDLE find = FindFirstFileA((path + DELIMITER "*").c_str(), &data);
+        if (find != INVALID_HANDLE_VALUE)
+        {
+            do
+            {
+                if (0 == xr_strcmp(data.cFileName, ".") || 0 == xr_strcmp(data.cFileName, ".."))
+                    continue;
+                const xr_string child = path + DELIMITER + data.cFileName;
+                if (data.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
+                    SetFileAttributesA(child.c_str(), data.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY);
+                if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                    remove_tree(child);
+                else
+                    DeleteFileA(child.c_str());
+            } while (FindNextFileA(find, &data));
+            FindClose(find);
+        }
+    }
+    RemoveDirectoryA(path.c_str());
+}
+
+bool read_staged_info(const xr_string& ready_path, StagedInfo& info)
+{
+    RawFile raw;
+    if (!read_raw(ready_path.c_str(), raw))
+        return false;
+    parse_plain_ini(raw.data, [&info](pcstr section, pcstr key, pcstr value)
+    {
+        if (0 != xr_strcmp(section, "staged"))
+            return;
+        if (0 == xr_strcmp(key, "id"))
+            info.id = lower_copy(value);
+        else if (0 == xr_strcmp(key, "version"))
+            info.version = value;
+        else if (0 == xr_strcmp(key, "root"))
+            info.root = lower_copy(value);
+        else if (0 == xr_strcmp(key, "folder"))
+            info.folder = value;
+    });
+    return valid_id(info.id.c_str()) && (info.root == "modules" || info.root == "mods") &&
+        valid_folder_name(info.folder) && info.folder != kStagedDir;
+}
+
+bool manifest_id_is(const xr_string& module_dir, const xr_string& id)
+{
+    RawFile raw;
+    if (!read_raw((module_dir + DELIMITER "mod.ltx").c_str(), raw))
+        return false;
+    Module probe;
+    parse_manifest(probe, raw.data);
+    return probe.id == id;
+}
+
+// The Mods menu relaunches the game while the old process is still shutting down, and a
+// folder cannot be renamed while that process has a file open in it.
+void wait_for_relaunch_parent()
+{
+    char value[32]{};
+    const DWORD length = GetEnvironmentVariableA("DAR_RELAUNCH_WAIT_PID", value, sizeof(value));
+    if (!length || length >= sizeof(value))
+        return;
+    SetEnvironmentVariableA("DAR_RELAUNCH_WAIT_PID", nullptr);
+    const DWORD pid = strtoul(value, nullptr, 10);
+    if (!pid || pid == GetCurrentProcessId())
+        return;
+    if (const HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid))
+    {
+        WaitForSingleObject(process, 30000);
+        CloseHandle(process);
+    }
+}
+
+// Two renames with the old folder parked in between, so every point of failure - including a
+// power cut between them - leaves either the old module or the new one, never neither.
+void apply_staged(pcstr game_root, const xr_string& dir, const StagedInfo& info)
+{
+    const xr_string target = xr_string(game_root) + info.root + DELIMITER + info.folder;
+    const xr_string payload = dir + kStagedPayload;
+    const xr_string previous = dir + kStagedPrevious;
+    const bool has_target = is_directory(target);
+    const bool has_previous = is_directory(previous);
+
+    if (!is_directory(payload) || !manifest_id_is(payload, info.id))
+    {
+        if (!has_target && has_previous)
+            MoveFileExA(previous.c_str(), target.c_str(), 0);
+        Msg("! XMS: staged update of [%s] holds no such module - discarded", info.id.c_str());
+        remove_tree(dir);
+        return;
+    }
+    if (has_target ? !manifest_id_is(target, info.id) : !has_previous)
+    {
+        Msg("~ XMS: module [%s] is no longer installed - staged update %s discarded", info.id.c_str(),
+            info.version.c_str());
+        remove_tree(dir);
+        return;
+    }
+
+    if (has_target)
+    {
+        remove_tree(previous);
+        if (!MoveFileExA(target.c_str(), previous.c_str(), 0))
+        {
+            Msg("! XMS: module [%s] is in use (error %u) - update %s stays staged", info.id.c_str(),
+                GetLastError(), info.version.c_str());
+            return;
+        }
+    }
+    if (!MoveFileExA(payload.c_str(), target.c_str(), 0))
+    {
+        const DWORD error = GetLastError();
+        MoveFileExA(previous.c_str(), target.c_str(), 0);
+        Msg("! XMS: module [%s] update %s could not be moved in (error %u) - previous version kept",
+            info.id.c_str(), info.version.c_str(), error);
+        return;
+    }
+
+    DeleteFileA((dir + kStagedReady).c_str());
+    remove_tree(dir);
+    Msg("* XMS: module [%s] updated to %s", info.id.c_str(), info.version.c_str());
+}
+
+// Runs before discovery: the one moment no module file is open by this process.
+void apply_staged_updates(pcstr game_root)
+{
+    const xr_string& root = st().staged_root;
+    xr_vector<xr_string> ids;
+    {
+        _finddata_t entry;
+        const intptr_t handle = _findfirst((root + "*").c_str(), &entry);
+        if (handle == -1)
+            return;
+        do
+        {
+            if ((entry.attrib & _A_SUBDIR) && valid_folder_name(entry.name) && valid_id(entry.name))
+                ids.emplace_back(entry.name);
+        } while (_findnext(handle, &entry) == 0);
+        _findclose(handle);
+    }
+
+    bool waited = false;
+    for (const xr_string& id : ids)
+    {
+        const xr_string dir = root + id + DELIMITER;
+        StagedInfo info;
+        // no ready.ltx = an interrupted download; the Mods menu clears it, nothing is applied
+        if (!read_staged_info(dir + kStagedReady, info) || info.id != id)
+            continue;
+        if (!waited)
+        {
+            waited = true;
+            wait_for_relaunch_parent();
+        }
+        apply_staged(game_root, dir, info);
+    }
+    // fails while anything is left inside, which is the point
+    RemoveDirectoryA(root.substr(0, root.size() - 1).c_str());
+}
 } // namespace
 
 // ---- public API ------------------------------------------------------------
@@ -799,6 +1078,9 @@ void InitializeAndMount()
             Msg("! XMS: mod.ltx in the game root - a module was installed with JSGME. Deactivate it there: "
                 "its files are now merged into the game and are being applied twice");
     }
+
+    s.staged_root = xr_string(mods_root) + kStagedDir + DELIMITER;
+    apply_staged_updates(fs_root->m_Path);
 
     discover(mods_root, false);
     discover(legacy_root, true);
@@ -859,6 +1141,127 @@ const Module* FindModule(pcstr id)
 }
 
 u32 CompositionHash() { return st().composition_hash; }
+
+bool ValidWebsite(pcstr url)
+{
+    constexpr std::string_view scheme = "https://";
+    constexpr std::string_view hosts[] = {"ap-pro.ru", "www.ap-pro.ru", "moddb.com", "www.moddb.com"};
+    const std::string_view text = url ? std::string_view(url) : std::string_view();
+    if (text.size() <= scheme.size() || text.size() > 512 || text.substr(0, scheme.size()) != scheme)
+        return false;
+
+    // The host is everything up to the first '/', compared whole: a prefix test would pass
+    // ap-pro.ru.evil.example and ap-pro.ru@evil.example.
+    const std::string_view rest = text.substr(scheme.size());
+    const size_t slash = rest.find('/');
+    xr_string host(rest.substr(0, slash));
+    xr_strlwr(host);
+    if (std::ranges::find(hosts, std::string_view(host)) == std::end(hosts))
+        return false;
+
+    const std::string_view path = slash == std::string_view::npos ? std::string_view() : rest.substr(slash);
+    return std::ranges::all_of(path, [](char c)
+    {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            std::string_view("-._~/?#&=%+").find(c) != std::string_view::npos;
+    });
+}
+
+bool ValidGithubRepo(pcstr repo)
+{
+    const std::string_view text = repo ? std::string_view(repo) : std::string_view();
+    const size_t slash = text.find('/');
+    if (slash == std::string_view::npos)
+        return false;
+    const std::string_view owner = text.substr(0, slash);
+    const std::string_view name = text.substr(slash + 1);
+    const auto alnum = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); };
+    if (owner.empty() || owner.size() > 39 || name.empty() || name.size() > 100 || name == "." || name == "..")
+        return false;
+    return std::ranges::all_of(owner, [&](char c) { return alnum(c) || c == '-'; }) &&
+        std::ranges::all_of(name, [&](char c) { return alnum(c) || c == '-' || c == '.' || c == '_'; });
+}
+
+xr_string StagedRoot() { return st().staged_root; }
+
+bool MarkStagedReady(pcstr module_id, pcstr version, xr_string& err)
+{
+    const Module* m = FindModule(module_id);
+    if (!m || st().staged_root.empty())
+    {
+        err = "no such module";
+        return false;
+    }
+    // root is "<game>\<modules|mods>\<folder>\": the folder name is what the swap needs
+    xr_string folder = m->root.substr(0, m->root.size() - 1);
+    folder.erase(0, folder.find_last_of("\\/") + 1);
+    if (!valid_folder_name(folder))
+    {
+        err = "unsupported module folder name";
+        return false;
+    }
+
+    const xr_string path = st().staged_root + m->id + DELIMITER + kStagedReady;
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f)
+    {
+        err = "cannot write ready.ltx";
+        return false;
+    }
+    fprintf(f, "; XMS staged module update. Machine-written, applied by the next start.\n[staged]\n");
+    fprintf(f, "id = %s\nversion = %s\nroot = %s\nfolder = %s\n", m->id.c_str(), version,
+        m->legacy_root ? "mods" : "modules", folder.c_str());
+    const bool ok = 0 == ferror(f);
+    fclose(f);
+    if (!ok)
+    {
+        DeleteFileA(path.c_str());
+        err = "cannot write ready.ltx";
+    }
+    return ok;
+}
+
+void DiscardStaged(pcstr module_id)
+{
+    if (!st().staged_root.empty() && valid_id(module_id) && valid_folder_name(module_id))
+        remove_tree(st().staged_root + module_id);
+}
+
+void DiscardUnarmedStaged()
+{
+    const xr_string& root = st().staged_root;
+    if (root.empty())
+        return;
+    xr_vector<xr_string> unarmed;
+    _finddata_t entry;
+    const intptr_t handle = _findfirst((root + "*").c_str(), &entry);
+    if (handle == -1)
+        return;
+    do
+    {
+        if (!(entry.attrib & _A_SUBDIR) || !valid_folder_name(entry.name))
+            continue;
+        const xr_string ready = root + entry.name + DELIMITER + kStagedReady;
+        if (GetFileAttributesA(ready.c_str()) == INVALID_FILE_ATTRIBUTES)
+            unarmed.emplace_back(entry.name);
+    } while (_findnext(handle, &entry) == 0);
+    _findclose(handle);
+
+    for (const xr_string& name : unarmed)
+        remove_tree(root + name);
+    RemoveDirectoryA(root.substr(0, root.size() - 1).c_str());
+}
+
+bool StagedVersion(pcstr module_id, xr_string& version)
+{
+    if (st().staged_root.empty() || !valid_id(module_id))
+        return false;
+    StagedInfo info;
+    if (!read_staged_info(st().staged_root + module_id + DELIMITER + kStagedReady, info) || info.id != module_id)
+        return false;
+    version = info.version;
+    return true;
+}
 
 pcstr ResolvePhysical(pcstr registered_name)
 {

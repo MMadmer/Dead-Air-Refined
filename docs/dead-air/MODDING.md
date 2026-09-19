@@ -15,7 +15,9 @@ writes because of modules is its own bookkeeping under `_appdata_`
 <game root>/modules/<mod.id>/
   mod.ltx            ; manifest: [module] id/name/version, [requires], [order]
                      ; after/before, [conflicts], [budget] spawns=N,
-                     ; [vfs], [redirects] (see below)
+                     ; [vfs], [redirects] (see below); author/description/
+                     ; website and [update] github for the Mods menu
+                     ; (MOD_UPDATES.md)
   gamedata/          ; classic overlay, mirrors game layout 1:1 (assets,
                      ; full-file overrides); later modules win per file
   gamedata/configs/xms/*.ltx   ; NEW config sections, merged into system.ltx
@@ -116,6 +118,14 @@ Runtime facts:
   anywhere. Modules mount while the file system comes up, so it takes effect
   on the next start. JSGME keeps working normally for JSGME mods, including a
   module exported as a flat `gamedata_<id>` overlay — that IS a JSGME mod.
+- The main menu's Mods entry lists every module with its name, author and
+  version, shows the description, opens the module's AP-PRO or ModDB page and
+  updates a module from the GitHub releases its manifest names
+  (`[update] github = owner/repo`). An update is downloaded and verified while
+  the game runs and swapped in by the next start, before modules mount. The
+  manifest keys, the release layout and the client rules are one frozen
+  contract: `MOD_UPDATES.md`. Console: `xms_update <id>|all`,
+  `xms_update_status`, `xms_mods`.
 - Load order is deterministic: `[requires]`/`[order]` topology, then
   `modules/order.ltx` (one id per line), then id. `xms_list` shows it.
 - Conflicts never block loading: the later layer wins and the resolution is

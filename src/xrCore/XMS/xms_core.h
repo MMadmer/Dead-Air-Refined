@@ -31,9 +31,16 @@ struct Module
 {
     xr_string id;      // [a-z0-9_.-]+, unique
     xr_string name;    // human readable
-    xr_string version; // free-form, informational
+    xr_string version; // 1-4 dot-separated numbers when the module takes updates, else free-form
     xr_string root;    // absolute physical path, trailing delimiter
     xr_string mode;    // gate: "" = ordinary game only (unless provides_modes), "*" = everywhere, else that mode
+    // Mods menu metadata (docs/dead-air/MOD_UPDATES.md). Text is kept as the manifest
+    // spells it - UTF-8, or Windows-1251 in a hand-written file - and may be a string table id.
+    xr_string author;
+    xr_string description; // '\n' separates lines
+    xr_string website;       // empty unless it passed ValidWebsite
+    xr_string update_github; // "owner/repo", empty unless it passed ValidGithubRepo
+    bool legacy_root{false}; // lives in the "mods" folder JSGME manages, not in "modules"
     xr_vector<ProvidedMode> provides_modes;
     xr_vector<xr_string> requires_ids;
     xr_vector<xr_string> after_ids;
@@ -112,6 +119,34 @@ XRCORE_API u16 LayerOfPath(pcstr physical_path);
 // while the file system comes up, so the change lands on the next launch.
 // false + reason when there is no such module or the list cannot be written.
 XRCORE_API bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err);
+
+// ---- Mods menu metadata and staged updates ----------------------------------
+// Contract: docs/dead-air/MOD_UPDATES.md.
+
+// https:// on ap-pro.ru or moddb.com and nothing else. The allow-list is code on purpose:
+// a manifest must not be able to send the player anywhere it likes.
+XRCORE_API bool ValidWebsite(pcstr url);
+
+// "owner/repo" in GitHub's own character set.
+XRCORE_API bool ValidGithubRepo(pcstr repo);
+
+// <game>\modules\.staged\ with a trailing delimiter; empty until the file system is up. A
+// downloaded update is unpacked to <id>\payload\ under it and swapped in by the next start.
+XRCORE_API xr_string StagedRoot();
+
+// Arms the payload already unpacked under StagedRoot()\<id>\payload\: writes ready.ltx, the
+// one file the next start looks for. Written last, so an interrupted download is never applied.
+XRCORE_API bool MarkStagedReady(pcstr module_id, pcstr version, xr_string& err);
+
+// Version of the update waiting for the next start; false when none is armed.
+XRCORE_API bool StagedVersion(pcstr module_id, xr_string& version);
+
+// Deletes StagedRoot()\<id>\, armed or not. Staging is only ever deleted through these two:
+// the walk never follows a link, which a generic recursive delete does not promise.
+XRCORE_API void DiscardStaged(pcstr module_id);
+
+// Deletes every staging folder that was never armed - what an interrupted download leaves.
+XRCORE_API void DiscardUnarmedStaged();
 
 // ---- ledger / report -------------------------------------------------------
 

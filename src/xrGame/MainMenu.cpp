@@ -8,6 +8,8 @@
 #include "ui/UpdateService.h"
 #include "ui/UIContentWnd.h"
 #include "ui/ContentService.h"
+#include "ui/UIModsWnd.h"
+#include "ui/ModUpdateService.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/x_ray.h"
@@ -50,6 +52,8 @@
 
 // fwd. decl.
 extern ENGINE_API bool bShowPauseString;
+
+static bool s_modsDialogRequested = false;
 
 //#define DEMO_BUILD
 
@@ -147,6 +151,7 @@ CMainMenu::~CMainMenu()
 
     UpdateService::Shutdown();
     ContentService::Shutdown();
+    ModUpdateService::Shutdown();
 
     xr_delete(g_btnHint);
     xr_delete(g_statHint);
@@ -156,6 +161,7 @@ CMainMenu::~CMainMenu()
     xr_delete(m_updateDialog);
     xr_delete(m_majorUpdateDialog);
     xr_delete(m_contentDialog);
+    xr_delete(m_modsDialog);
 
     xr_delete(m_account_mngr);
     xr_delete(m_login_mngr);
@@ -197,6 +203,10 @@ void CMainMenu::Activate(bool bActivate)
 
         UpdateService::StartCheck();
         ContentService::StartVerify();
+        // No level means nothing of a module is in use yet. With one loaded the entry is not
+        // even in the menu, so there is nobody to show the answer to.
+        if (!g_pGameLevel)
+            ModUpdateService::StartCheck();
 
         m_Flags.set(flRestoreConsole, Console->bVisible);
 
@@ -612,6 +622,14 @@ void CMainMenu::OnFrame()
         {
             CheckUpdateDialog();
             CheckForErrorDlg();
+            // a download that finished after the player left the Mods window still owes them
+            // the restart question
+            const bool modsWanted = s_modsDialogRequested || ModUpdateService::RestartPromptPending();
+            if (modsWanted && !g_pGameLevel && TopInputReceiver() == m_startDialog && !Console->bVisible)
+            {
+                s_modsDialogRequested = false;
+                ShowModsDialog();
+            }
         }
         if (m_Flags.test(flNeedUIRestart))
         {
@@ -778,6 +796,24 @@ void CMainMenu::ShowBugReportDialog()
 {
     if (EnsureBugReportDialog())
         m_bugReportDialog->ShowManual();
+}
+
+void CMainMenu::RequestModsDialog() { s_modsDialogRequested = true; }
+
+void CMainMenu::ShowModsDialog()
+{
+    if (!m_modsDialog)
+    {
+        m_modsDialog = xr_new<CUIModsWnd>();
+        if (!m_modsDialog->Init())
+        {
+            xr_delete(m_modsDialog);
+            Msg("! Failed to initialize the mods window");
+            return;
+        }
+    }
+    if (!m_modsDialog->IsShown())
+        m_modsDialog->ShowDialog(true);
 }
 
 bool CMainMenu::CheckCrashReportDialog()

@@ -61,7 +61,7 @@ function New-DeadAirCompatibilityArchive {
         [Text.EncoderExceptionFallback]::new(),
         [Text.DecoderExceptionFallback]::new()
     )
-    foreach ($localizedTextName in @("dead_air_x64.xml", "dead_air_1_2_1.xml")) {
+    foreach ($localizedTextName in @("dead_air_x64.xml", "dead_air_x64_mods.xml", "dead_air_1_2_1.xml")) {
         $localizedTextPath =
             Join-Path $compatibilityStageGameRoot "configs\text\rus\$localizedTextName"
         try {

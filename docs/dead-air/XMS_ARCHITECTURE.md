@@ -177,10 +177,12 @@ module — the analog of UE redirectors. Syntax and resolution rules are in
 
 ### The `mod.ltx` manifest
 
-Recognized sections: `[module]` (`id` `[a-z0-9_.-]`, `name`, `version`, `mode`),
+Recognized sections: `[module]` (`id` `[a-z0-9_.-]`, `name`, `version`, `mode`,
+and the Mods menu metadata `author`, `description`, `website`),
 `[provides_mode]` (`id`/`title`), `[requires]`, `[conflicts]`,
 `[order]` (`after`/`before`), `[budget]` (`spawns`, default 256), `[vfs]`,
-`[redirects]`. Unknown keys are ignored by the engine but survive the editor's
+`[redirects]`, `[update]` (`github`). The metadata keys, their text rules and
+the update source are specified in `MOD_UPDATES.md`. Unknown keys are ignored by the engine but survive the editor's
 round-trip — format extensions are added as new keys only.
 
 ```ini
