@@ -208,7 +208,12 @@ XFined Editor's **Publish Release** does about it.
   round - delete the release, publish the version again - and the game notices
   (3.1): to a client that has version `X`, a release `X` with other content is an
   update like any other, told to the player as a fix. A higher version remains
-  the plain way to ship a change.
+  the plain way to ship a change. One thing GitHub does on its own: a release
+  deleted and published again under the SAME tag keeps its download address, and
+  that address goes on answering with the deleted files for several minutes -
+  the game sees the old descriptor until then. Right after a deletion the editor
+  therefore publishes the version under a fresh tag (`v1.0.0-r2`), whose address
+  is new.
 - Deleting a release takes its git tag with it in the editor, release first: a
   published release whose tag goes first falls back to a draft. Once the latest
   release is gone GitHub marks the newest remaining one Latest, and that is what
