@@ -1,0 +1,763 @@
+-- NQ runtime: scenarios - graphs that drive NPCs (NQ_ARCHITECTURE par. 19).
+--   quest side:    scenario.run, scenario.stop, scenario_running, scenario_done
+--   scenario side: npc.goto, npc.hold, npc.anim, npc.follow, npc.attack,
+--                  npc.stance, npc.release, npc_at_place, npc_in_combat, role_alive
+--
+-- A running scenario is an instance of the ordinary NQ interpreter (core.instance_*),
+-- so nodes, pins, conditions, vars, tokens and saves are the ones quests already use.
+-- What is new is two things only:
+--
+--   ROLES. The asset declares them; the calling quest binds them to NPCs, squads,
+--   refs or communities. Members are resolved ONCE, on entry, and kept in the
+--   instance state - the cast cannot change under the graph's feet.
+--
+--   STEPS. None of them moves, aims or shoots anything. A step writes a small
+--   logic section and hands it to the stock scheme through create_ini_file +
+--   xr_logic.configure_schemes - exactly what a smart terrain does in
+--   xr_gulag/smart_terrain. Combat, cover, danger, wounded and death therefore
+--   keep working, because the same schemes keep running them.
+--
+-- An NPC that is offline cannot be given a scheme (there is no game object to
+-- give it to), so the step is parked and applied the moment it spawns in.
+
+local core = xms_nq
+local util = xms_nq_util
+
+local K = {}
+
+local tick_on = false
+local UID_MARK = "#"		-- "<module>.<scenario>#<n>": no asset id can contain it
+
+-- ============================================================================ helpers
+local function actor()
+	return db and db.actor
+end
+
+local function go_by_id(id)
+	return id and util.go_by_id(id) or nil
+end
+
+local function se_by_id(id)
+	return id and util.se_by_id(id) or nil
+end
+
+local function alive_id(id)
+	local se = se_by_id(id)
+	return se ~= nil and util.se_alive(se)
+end
+
+local function is_instance(uid)
+	return type(uid) == "string" and string.find(uid, UID_MARK, 1, true) ~= nil
+end
+
+-- every id of a role, living or not, in binding order
+local function role_ids(qs, name)
+	if not (qs and qs.roles) then return {} end
+	local r = qs.roles[name]
+	return (type(r) == "table" and r.ids) or {}
+end
+
+local function role_names_of(p)
+	local who = p and p.who
+	if (type(who) == "string") then return { who } end
+	if (type(who) == "table") then
+		local out = {}
+		for _, n in ipairs(who) do if (type(n) == "string") then out[#out + 1] = n end end
+		return out
+	end
+	return {}
+end
+
+-- every LIVING member of every role a step addresses
+local function targets(ctx, p)
+	local qs = ctx.qs
+	local out = {}
+	for _, name in ipairs(role_names_of(p)) do
+		for _, id in ipairs(role_ids(qs, name)) do
+			if (alive_id(id)) then out[#out + 1] = id end
+		end
+	end
+	return out
+end
+
+local function patrol_exists(path)
+	if (type(path) ~= "string" or path == "") then return false end
+	local ok, r = pcall(level.patrol_path_exists, path)
+	return ok and r == true
+end
+
+-- the last point of a path: where "has arrived" is measured against
+local function path_end(path)
+	if not (patrol_exists(path)) then return nil end
+	local ok, p = pcall(patrol, path)
+	if not (ok and p) then return nil end
+	local n = p:count()
+	if (not n or n < 1) then return nil end
+	local ok2, pos = pcall(p.point, p, n - 1)
+	return ok2 and pos or nil
+end
+
+local function near(id, pos, radius)
+	if not (pos) then return false end
+	local go = go_by_id(id)
+	if (go) then
+		local ok, d = pcall(function() return go:position():distance_to(pos) end)
+		if (ok) then return d <= radius end
+		return false
+	end
+	local se = se_by_id(id)
+	if not (se) then return false end
+	local ok, d = pcall(function() return se.position:distance_to(pos) end)
+	return ok and d <= radius
+end
+
+-- ============================================================================ applying a step
+-- The one place a scenario touches an NPC. Everything above builds text; this
+-- hands it to the schemes and lets them do what they have always done.
+local function apply_now(id, tag, text)
+	local go = go_by_id(id)
+	if not (go) then return false end
+	if not (create_ini_file and xr_logic and modules) then return false end
+
+	local ok, err = pcall(function()
+		local ini = create_ini_file(text)
+		local section = "logic@" .. tag
+		-- gulag_name "" on purpose: paths in a scenario are the names the author
+		-- gave them in the editor, not names to be prefixed with a smart's
+		xr_logic.configure_schemes(go, ini, "*" .. tag, modules.stype_stalker, section, "")
+		local sect = xr_logic.determine_section_to_activate(go, ini, section, actor())
+		xr_logic.activate_by_section(go, ini, sect, "", false)
+	end)
+	if not (ok) then
+		util.err("scenario: cannot apply '%s' to %s: %s", tag, tostring(id), tostring(err))
+		return false
+	end
+	return true
+end
+
+-- An offline NPC has no game object to take a scheme. The step waits in the
+-- instance state (which survives a save) and the poll applies it the moment the
+-- NPC is in the world.
+local function apply(ctx, id, tag, text)
+	local qs = ctx.qs
+	qs.held = qs.held or {}
+	qs.held[tostring(id)] = true
+	if (apply_now(id, tag, text)) then
+		if (qs.pending) then qs.pending[tostring(id)] = nil end
+		core.mark_dirty()
+		return true
+	end
+	qs.pending = qs.pending or {}
+	qs.pending[tostring(id)] = { tag = tag, text = text }
+	core.mark_dirty()
+	return false
+end
+
+local function drain_pending(uid)
+	local qs = core.quest_state(uid)
+	if not (qs and qs.pending) then return end
+	for key, job in pairs(util.copy(qs.pending)) do
+		local id = tonumber(key)
+		if not (id) or not (alive_id(id)) then
+			qs.pending[key] = nil
+			core.mark_dirty()
+		elseif (apply_now(id, job.tag, job.text)) then
+			qs.pending[key] = nil
+			core.mark_dirty()
+		end
+	end
+end
+
+-- Gives an NPC back to whatever owned it. A member of a smart terrain gets its
+-- job again; anyone else simply stops being driven, which returns them to the
+-- game's own behaviour. Never left in a scheme nothing updates.
+local function release(id)
+	local go = go_by_id(id)
+	if not (go) then return end
+	local se = se_by_id(id)
+	local smart_id = se and se.m_smart_terrain_id
+	if (smart_id and smart_id ~= 65535 and alife()) then
+		local smart = alife():object(smart_id)
+		if (smart and smart.setup_logic) then
+			if (pcall(smart.setup_logic, smart, go)) then return end
+		end
+	end
+	local st = db and db.storage and db.storage[id]
+	if (st and st.ini and xr_logic) then
+		pcall(xr_logic.switch_to_section, go, st.ini, "nil")
+	end
+end
+
+local function release_all(uid)
+	local qs = core.quest_state(uid)
+	if not (qs) then return 0 end
+	local n = 0
+	for key in pairs(qs.held or {}) do
+		local id = tonumber(key)
+		if (id) then release(id) n = n + 1 end
+	end
+	qs.held = {}
+	qs.pending = {}
+	return n
+end
+
+-- ============================================================================ roles
+-- A binding is one of the object reference forms of par. 8, or a list of them.
+-- Resolution runs against the OWNER's refs, because that is where a ref a quest
+-- saved with spawn.squad actually lives.
+local function squad_member_ids(se)
+	local out = {}
+	if not (se) then return out end
+	local ok = pcall(function()
+		for member in se:squad_members() do
+			out[#out + 1] = member.id
+		end
+	end)
+	if not (ok) then out = {} end
+	return out
+end
+
+local function ids_from_binding(owner_ctx, binding)
+	local out = {}
+	if (type(binding) ~= "table") then return out end
+
+	-- a list of bindings
+	if (#binding > 0 and binding.story == nil and binding.ref == nil and
+		binding.squad == nil and binding.community == nil and binding.profile == nil) then
+		for _, one in ipairs(binding) do
+			for _, id in ipairs(ids_from_binding(owner_ctx, one)) do out[#out + 1] = id end
+		end
+		return out
+	end
+
+	if (binding.squad ~= nil) then
+		local sid = util.resolve_target_id(owner_ctx, type(binding.squad) == "table"
+			and binding.squad or { ref = binding.squad })
+		local se = sid and se_by_id(sid) or nil
+		for _, id in ipairs(squad_member_ids(se)) do out[#out + 1] = id end
+		return out
+	end
+
+	local se = util.resolve_npc_se(owner_ctx, binding)
+	if (se) then
+		-- a ref may name a squad even without the squad= form
+		local members = squad_member_ids(se)
+		if (#members > 0) then
+			for _, id in ipairs(members) do out[#out + 1] = id end
+		else
+			out[#out + 1] = se.id
+		end
+		return out
+	end
+
+	-- a whole community, on this level
+	if (binding.community and db and db.storage) then
+		for id, st in pairs(db.storage) do
+			local go = st and st.object
+			if (go and util.go_community(go) == binding.community) then out[#out + 1] = id end
+		end
+	end
+	return out
+end
+
+local function bind_roles(owner_ctx, scen, bindings, qs, problems)
+	qs.roles = {}
+	for _, name in ipairs(scen.role_names or {}) do
+		local spec = scen.roles[name]
+		local binding = (type(bindings) == "table") and bindings[name] or nil
+		if (binding == nil) then binding = spec.default end
+
+		local ids = {}
+		if (binding ~= nil) then ids = ids_from_binding(owner_ctx, binding) end
+
+		-- dead members are of no use to anyone, and one NPC is a role of one
+		local live = {}
+		for _, id in ipairs(ids) do
+			if (alive_id(id)) then live[#live + 1] = id end
+		end
+		if (not spec.many and #live > 1) then
+			problems[#problems + 1] = string.format("role '%s' takes one NPC, the binding gives %d", name, #live)
+			live = { live[1] }
+		end
+		if (#live == 0 and not spec.optional) then
+			problems[#problems + 1] = string.format("role '%s' is bound to nobody", name)
+		end
+		qs.roles[name] = { ids = live }
+	end
+end
+
+-- ============================================================================ the instance
+local function instance_uid(scen_uid, qs_owner)
+	qs_owner.scen_n = (qs_owner.scen_n or 0) + 1
+	return scen_uid .. UID_MARK .. tostring(qs_owner.scen_n)
+end
+
+local function find_start(q)
+	for _, node in ipairs(q.nodes) do
+		if (node.kind == "trigger.start") then return node.id end
+	end
+	return nil
+end
+
+local function stop_instance(uid, reason)
+	if not (is_instance(uid)) then return end
+	local qs = core.quest_state(uid)
+	if not (qs) then return end
+	local owner = qs.owner
+	local n = release_all(uid)
+	util.info("scenario %s ended (%s), %d NPC(s) released", uid, tostring(reason), n)
+	core.instance_forget(uid)
+	-- the quest that started it hears about it: its ref becomes "done" and a
+	-- node that was waiting is let go
+	if (type(owner) == "table" and owner.uid and owner.node) then
+		local oqs = core.quest_state(owner.uid)
+		if (oqs and owner.ref) then
+			local rec = oqs.refs[owner.ref]
+			if (type(rec) == "table") then
+				rec.ended = true
+				core.mark_dirty()
+			end
+		end
+		if (owner.wait) then
+			core.complete_external(owner.uid, owner.node, "done")
+		end
+	end
+end
+
+local function instance_of_ref(ctx, ref_name)
+	local qs = ctx.qs
+	local rec = qs and qs.refs and qs.refs[ref_name]
+	if (type(rec) ~= "table") then return nil, nil end
+	return rec.instance, rec
+end
+
+-- ============================================================================ quest side
+K["scenario.run"] = {
+	begin = function(ctx)
+		local p = ctx.params
+		local scen_uid = tostring(p.asset)
+		if not (string.find(scen_uid, ".", 1, true)) then
+			scen_uid = tostring(ctx.uid):match("^(.-)%.") .. "." .. scen_uid
+		end
+		local scen = core.scenario_def(scen_uid)
+		if not (scen) then
+			error("scenario.run: no scenario '" .. scen_uid .. "' in this module")
+		end
+		local start = find_start(scen)
+		if not (start) then
+			error("scenario.run: scenario '" .. scen_uid .. "' has no start node")
+		end
+
+		local uid = instance_uid(scen_uid, ctx.qs)
+		local qs = core.instance_start(uid, scen)
+		qs.scenario = scen_uid
+		qs.owner = { uid = ctx.uid, node = ctx.node_id, ref = p.ref, wait = p.wait_end ~= false }
+
+		local problems = {}
+		bind_roles(ctx, scen, p.roles, qs, problems)
+		for _, text in ipairs(problems) do
+			util.warn("%s/%s: %s: %s", ctx.uid, ctx.node_id, scen_uid, text)
+		end
+
+		if (p.ref) then
+			core.ref_set(ctx.qs, p.ref, { kind = "scenario", instance = uid, scenario = scen_uid, ended = false })
+		end
+
+		local cast = 0
+		for _, r in pairs(qs.roles) do cast = cast + #r.ids end
+		util.info("scenario %s started by %s/%s, %d NPC(s)", uid, ctx.uid, ctx.node_id, cast)
+
+		core.instance_arm(uid)
+
+		if (p.wait_end == false) then return { pin = "done" } end
+		return "wait"
+	end,
+	-- the instance tells the node when it is over (stop_instance); the poll is
+	-- the safety net for an instance that went away with a save it was not in
+	poll = function(ctx)
+		local rec = ctx.qs.refs and ctx.params.ref and ctx.qs.refs[ctx.params.ref]
+		if (type(rec) == "table" and rec.instance and not core.quest_state(rec.instance)) then
+			return "done"
+		end
+		return nil
+	end,
+}
+
+K["scenario.stop"] = {
+	run = function(ctx)
+		local uid = instance_of_ref(ctx, ctx.params.target)
+		if not (uid) then
+			util.warn("%s/%s: scenario.stop: nothing running under ref '%s'", ctx.uid, ctx.node_id, tostring(ctx.params.target))
+			return
+		end
+		stop_instance(uid, "scenario.stop")
+	end,
+}
+
+K["scenario_running"] = {
+	test = function(ctx, p)
+		local uid = instance_of_ref(ctx, p.target)
+		return uid ~= nil and core.quest_state(uid) ~= nil
+	end,
+}
+
+K["scenario_done"] = {
+	test = function(ctx, p)
+		local uid, rec = instance_of_ref(ctx, p.target)
+		if (rec == nil) then return false end
+		return uid == nil or core.quest_state(uid) == nil
+	end,
+}
+
+-- ============================================================================ steps
+local function tag_of(ctx, suffix)
+	local base = string.gsub(tostring(ctx.uid) .. "_" .. tostring(ctx.node_id), "[^%w_]", "_")
+	return base .. (suffix or "")
+end
+
+local function switch_tail(p)
+	-- nothing switches a scenario section by itself: the graph decides when the
+	-- next step replaces this one, so the section carries no on_* conditions
+	return ""
+end
+
+K["npc.goto"] = {
+	begin = function(ctx)
+		local p = ctx.params
+		if not (patrol_exists(p.path)) then
+			error("npc.goto: there is no waypoint path '" .. tostring(p.path) .. "'")
+		end
+		if (p.look and p.look ~= "" and not patrol_exists(p.look)) then
+			error("npc.goto: there is no waypoint path '" .. tostring(p.look) .. "'")
+		end
+		local tag = tag_of(ctx)
+		local moving = (p.move == "run") and "rush" or "patrol"
+		for _, id in ipairs(targets(ctx, p)) do
+			local text = "[logic@" .. tag .. "]\n" ..
+						 "active = walker@" .. tag .. "\n\n" ..
+						 "[walker@" .. tag .. "]\n" ..
+						 "path_walk = " .. p.path .. "\n" ..
+						 "def_state_moving = " .. moving .. "\n" ..
+						 "def_state_standing = guard\n" ..
+						 switch_tail(p)
+			if (p.look and p.look ~= "" and p.look ~= p.path) then
+				text = text .. "path_look = " .. p.look .. "\n"
+			end
+			apply(ctx, id, tag, text)
+		end
+		if (p.arrive == false) then return { pin = "done" } end
+		return "wait"
+	end,
+	poll = function(ctx)
+		local p = ctx.params
+		local pos = path_end(p.path)
+		if not (pos) then return "done" end
+		local any = false
+		for _, id in ipairs(targets(ctx, p)) do
+			any = true
+			if not (near(id, pos, p.radius or 3)) then return nil end
+		end
+		-- nobody left alive is also an answer: the graph moves on instead of
+		-- waiting for the dead
+		return "done"
+	end,
+}
+
+K["npc.hold"] = {
+	run = function(ctx)
+		local p = ctx.params
+		if not (patrol_exists(p.path)) then
+			error("npc.hold: there is no waypoint path '" .. tostring(p.path) .. "'")
+		end
+		local tag = tag_of(ctx)
+		local look = (p.look and p.look ~= "" and p.look ~= p.path and patrol_exists(p.look)) and p.look or nil
+		for _, id in ipairs(targets(ctx, p)) do
+			local text
+			if (look) then
+				-- camper: digs in and watches the look path
+				text = "[logic@" .. tag .. "]\n" ..
+					   "active = camper@" .. tag .. "\n\n" ..
+					   "[camper@" .. tag .. "]\n" ..
+					   "path_walk = " .. p.path .. "\n" ..
+					   "path_look = " .. look .. "\n" ..
+					   "radius = " .. tostring(p.radius or 20) .. "\n" ..
+					   "shoot = " .. tostring(p.shoot or "always") .. "\n" ..
+					   "no_retreat = " .. tostring(p.no_retreat == true) .. "\n"
+			else
+				-- no direction to watch: stand on the path and fight normally
+				text = "[logic@" .. tag .. "]\n" ..
+					   "active = walker@" .. tag .. "\n\n" ..
+					   "[walker@" .. tag .. "]\n" ..
+					   "path_walk = " .. p.path .. "\n" ..
+					   "def_state_standing = guard\n" ..
+					   "def_state_moving = patrol\n"
+			end
+			apply(ctx, id, tag, text)
+		end
+	end,
+}
+
+K["npc.anim"] = {
+	run = function(ctx)
+		local p = ctx.params
+		local tag = tag_of(ctx)
+		local state = (type(p.state) == "string" and p.state ~= "") and p.state or "wait"
+		for _, id in ipairs(targets(ctx, p)) do
+			local text = "[logic@" .. tag .. "]\n" ..
+						 "active = remark@" .. tag .. "\n\n" ..
+						 "[remark@" .. tag .. "]\n" ..
+						 "anim = " .. state .. "\n"
+			if (p.sound and p.sound ~= "") then text = text .. "snd = " .. p.sound .. "\n" end
+			if (type(p.look) == "table") then
+				if (p.look.actor) then
+					text = text .. "target = story | actor\n"
+				elseif (p.look.story) then
+					text = text .. "target = story | " .. tostring(p.look.story) .. "\n"
+				end
+			end
+			apply(ctx, id, tag, text)
+		end
+	end,
+}
+
+K["npc.follow"] = {
+	run = function(ctx)
+		local p = ctx.params
+		local tag = tag_of(ctx)
+		-- who to walk after: the player, or one member of another role
+		local target_story = nil
+		if (type(p.target) == "table" and p.target.actor) then
+			target_story = "actor"
+		elseif (type(p.target) == "table" and p.target.role) then
+			local ids = role_ids(ctx.qs, p.target.role)
+			for _, id in ipairs(ids) do
+				if (alive_id(id)) then
+					local se = se_by_id(id)
+					local sid = se and util.story_id_of and util.story_id_of(id) or nil
+					if (sid) then target_story = tostring(sid) end
+					break
+				end
+			end
+			if not (target_story) then
+				util.warn("%s/%s: npc.follow: role '%s' has nobody with a story id to follow",
+					ctx.uid, ctx.node_id, tostring(p.target.role))
+			end
+		end
+		if not (target_story) then target_story = "actor" end
+
+		for _, id in ipairs(targets(ctx, p)) do
+			local text = "[logic@" .. tag .. "]\n" ..
+						 "active = companion@" .. tag .. "\n\n" ..
+						 "[companion@" .. tag .. "]\n" ..
+						 "behavior = around\n" ..
+						 "dist_min = " .. tostring(math.max(1, (p.distance or 3) - 1)) .. "\n" ..
+						 "dist_max = " .. tostring(p.distance or 3) .. "\n" ..
+						 "sound_idle = state\n"
+			if (target_story ~= "actor") then
+				text = text .. "target = " .. target_story .. "\n"
+			end
+			apply(ctx, id, tag, text)
+		end
+	end,
+}
+
+-- Hostility, not a firing solution: the stock combat picks the fight up as soon
+-- as the two sides are enemies and nothing tells them to ignore each other.
+local function set_enemy(id, other_id)
+	local a, b = go_by_id(id), go_by_id(other_id)
+	if not (a and b) then return end
+	pcall(function() a:force_set_goodwill(-3000, b) end)
+	pcall(function() b:force_set_goodwill(-3000, a) end)
+end
+
+K["npc.attack"] = {
+	run = function(ctx)
+		local p = ctx.params
+		local mine = targets(ctx, p)
+		local foes = {}
+
+		if (type(p.target) == "table") then
+			if (p.target.actor) then
+				local a = actor()
+				for _, id in ipairs(mine) do
+					local go = go_by_id(id)
+					if (go and a) then
+						pcall(function() go:force_set_goodwill(-3000, a) end)
+						pcall(function() go:set_relation(game_object.enemy, a) end)
+					end
+				end
+			elseif (p.target.role) then
+				for _, id in ipairs(role_ids(ctx.qs, p.target.role)) do foes[#foes + 1] = id end
+			elseif (p.target.community) then
+				for _, id in ipairs(mine) do
+					local go = go_by_id(id)
+					if (go and game_relations and game_relations.set_community_goodwill) then
+						pcall(game_relations.set_community_goodwill, util.go_community(go), p.target.community, -3000)
+					end
+				end
+			else
+				local se = util.resolve_npc_se(ctx, p.target)
+				if (se) then foes[#foes + 1] = se.id end
+			end
+		end
+
+		for _, id in ipairs(mine) do
+			local go = go_by_id(id)
+			-- an NPC told to attack must be allowed to start a fight
+			if (go and db and db.storage and db.storage[id]) then
+				db.storage[id].combat_ignore = nil
+			end
+			for _, fid in ipairs(foes) do
+				if (fid ~= id) then set_enemy(id, fid) end
+			end
+		end
+	end,
+}
+
+K["npc.stance"] = {
+	run = function(ctx)
+		local p = ctx.params
+		local a = actor()
+		for _, id in ipairs(targets(ctx, p)) do
+			local go = go_by_id(id)
+			if (go) then
+				if (p.to_actor and a and game_object) then
+					local rel = (p.to_actor == "enemy" and game_object.enemy)
+							 or (p.to_actor == "friend" and game_object.friend)
+							 or game_object.neutral
+					pcall(function() go:set_relation(rel, a) end)
+				end
+				if (type(p.goodwill) == "number" and a) then
+					pcall(function() go:force_set_goodwill(p.goodwill, a) end)
+				end
+				if (p.invulnerable ~= nil) then
+					pcall(function() go:invulnerable(p.invulnerable == true) end)
+				end
+			end
+			if (p.combat_ignore ~= nil and db and db.storage and db.storage[id]) then
+				db.storage[id].combat_ignore = (p.combat_ignore == true) and {} or nil
+			end
+		end
+	end,
+}
+
+K["npc.release"] = {
+	run = function(ctx)
+		local qs = ctx.qs
+		for _, id in ipairs(targets(ctx, ctx.params)) do
+			release(id)
+			if (qs.held) then qs.held[tostring(id)] = nil end
+			if (qs.pending) then qs.pending[tostring(id)] = nil end
+		end
+		core.mark_dirty()
+	end,
+}
+
+-- ============================================================================ scenario conditions
+K["npc_at_place"] = {
+	test = function(ctx, p)
+		local pos = path_end(p.path)
+		if not (pos) then return false end
+		local any = false
+		for _, id in ipairs(targets(ctx, p)) do
+			any = true
+			if not (near(id, pos, p.radius or 3)) then return false end
+		end
+		return any
+	end,
+}
+
+K["npc_in_combat"] = {
+	test = function(ctx, p)
+		for _, id in ipairs(targets(ctx, p)) do
+			local go = go_by_id(id)
+			if (go) then
+				local ok, e = pcall(go.best_enemy, go)
+				if (ok and e) then return true end
+			end
+		end
+		return false
+	end,
+}
+
+K["role_alive"] = {
+	test = function(ctx, p)
+		local names = role_names_of(p)
+		local seen, living = 0, 0
+		for _, name in ipairs(names) do
+			for _, id in ipairs(role_ids(ctx.qs, name)) do
+				seen = seen + 1
+				if (alive_id(id)) then living = living + 1 end
+			end
+		end
+		if (seen == 0) then return false end
+		if (p.all == true) then return living == seen end
+		return living > 0
+	end,
+}
+
+-- ============================================================================ module hooks
+function register()
+	for name, impl in pairs(K) do core.register_kind(name, impl) end
+end
+
+-- A save brings the instance state back but not its graph: the definitions come
+-- from the scan, so every live instance is put back into the registry here. An
+-- instance whose asset is gone after a module update is stopped and released -
+-- an NPC is never left standing in a scheme nothing drives any more.
+function on_init()
+	local state = core.get_state()
+	if not (state and state.quests) then return end
+	local restored, dropped = 0, 0
+	for uid, qs in pairs(util.copy(state.quests)) do
+		if (is_instance(uid)) then
+			local scen = qs.scenario and core.scenario_def(qs.scenario) or nil
+			if (scen) then
+				core.instance_restore(uid, scen)
+				restored = restored + 1
+			else
+				util.warn("scenario %s: the asset is gone, releasing its NPCs", uid)
+				release_all(uid)
+				core.instance_forget(uid)
+				dropped = dropped + 1
+			end
+		end
+	end
+	if (restored > 0 or dropped > 0) then
+		util.info("scenarios: %d restored, %d dropped", restored, dropped)
+	end
+	if not (tick_on) and RegisterScriptCallback then
+		RegisterScriptCallback("actor_on_update", tick)
+		tick_on = true
+	end
+end
+
+-- The interpreter finished a graph. For an instance that is the end of the
+-- scenario: release everyone and tell the quest that started it.
+function on_quest_finish(uid, status)
+	if (is_instance(uid)) then stop_instance(uid, status) end
+end
+
+-- Parked steps are applied here, and an instance whose whole cast is dead ends
+-- instead of waiting for people who are not coming back. The engine calls only
+-- xms_nq back, so this module asks for the tick itself - once, like the world
+-- module does for squad registration.
+function tick()
+	local state = core.get_state()
+	if not (state and state.quests) then return end
+	for uid, qs in pairs(util.copy(state.quests)) do
+		if (is_instance(uid)) then
+			drain_pending(uid)
+			local seen, living = 0, 0
+			for _, r in pairs(qs.roles or {}) do
+				for _, id in ipairs(r.ids or {}) do
+					seen = seen + 1
+					if (alive_id(id)) then living = living + 1 end
+				end
+			end
+			if (seen > 0 and living == 0) then stop_instance(uid, "every role is empty") end
+		end
+	end
+end
+
+function kinds() return K end

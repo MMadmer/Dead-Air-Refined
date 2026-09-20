@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 14
+version = 15
 api     = 1
 
 ; ============================================================ triggers
@@ -55,6 +55,7 @@ since  = 1
 ; ============================================================ main: dialog
 [nq.dialog.topic]
 group  = dialog
+docs   = quest
 title  = Dialog: topic
 desc   = Adds a talk topic to the NPC while the node token and conditions hold. next: phrases, done: a leaf phrase was said.
 use    = main
@@ -70,6 +71,7 @@ since  = 1
 
 [nq.dialog.npc_phrase]
 group  = dialog
+docs   = quest
 title  = Dialog: NPC phrase
 desc   = NPC line. Node conditions gate visibility, the first matching phrase is spoken.
 use    = main
@@ -83,6 +85,7 @@ since  = 1
 
 [nq.dialog.actor_phrase]
 group  = dialog
+docs   = quest
 title  = Dialog: player phrase
 desc   = Player reply option. Node conditions gate visibility.
 use    = main
@@ -97,6 +100,7 @@ since  = 1
 ; ============================================================ main: objectives
 [nq.objective.kill]
 group  = objective
+docs   = quest
 title  = Kill target
 desc   = Waits for the target to die: an NPC by story id, a saved ref, or a squad from spawn (created on entry, saved under ref). spot_task points the bound task marker (spot_objective: its objective) at the target. spot_done completes the bound task or objective when the node closes.
 use    = main
@@ -114,6 +118,7 @@ since  = 1
 
 [nq.objective.kill_count]
 group  = objective
+docs   = quest
 title  = Kill N targets
 desc   = Counts kills from node entry until count is reached, survives saves. by_actor counts only player kills. Optional single filter: community, squad, or section.
 use    = main
@@ -131,6 +136,7 @@ since  = 2
 
 [nq.objective.fetch]
 group  = objective
+docs   = quest
 title  = Fetch items
 desc   = Waits until the player holds the items. items rows: a section with a count, or one concrete object (ref or story id), mixed freely. section+count is the one-row shorthand. from credits only items taken from that container. spawn creates the loot on entry and credits only those instances. spot_task (spot_objective: its objective) points the bound marker at the nearest pending source. spot_done completes the bound task or objective on close. count is in items (ammo: boxes).
 use    = main
@@ -151,6 +157,7 @@ since  = 1
 
 [nq.objective.reach]
 group  = objective
+docs   = quest
 title  = Reach location
 desc   = Waits until the player is inside the place: a point with radius, a restrictor, a smart, or a ref created by this quest. spot_task (spot_objective: its objective) points the bound marker. spot_done completes it on close.
 use    = main
@@ -402,6 +409,7 @@ since  = 1
 
 [nq.quest.activate]
 group  = quest
+docs   = quest
 title  = Activate quest
 desc   = Activates another quest declared with activation = manual.
 use    = extra
@@ -413,6 +421,7 @@ since  = 1
 ; ============================================================ extra: tasks
 [nq.task.give]
 group  = tasks
+docs   = quest
 title  = Give task
 desc   = Creates a PDA task from the quest tasks declaration.
 use    = extra
@@ -423,6 +432,7 @@ since  = 1
 
 [nq.task.complete]
 group  = tasks
+docs   = quest
 title  = Complete task
 desc   = Marks a PDA task completed.
 use    = extra
@@ -433,6 +443,7 @@ since  = 1
 
 [nq.task.fail]
 group  = tasks
+docs   = quest
 title  = Fail task
 desc   = Marks a PDA task failed.
 use    = extra
@@ -443,6 +454,7 @@ since  = 1
 
 [nq.task.remove]
 group  = tasks
+docs   = quest
 title  = Remove task
 desc   = Removes a task from the PDA without a status.
 use    = extra
@@ -453,6 +465,7 @@ since  = 1
 
 [nq.task.set_target]
 group  = tasks
+docs   = quest
 title  = Task target
 desc   = Re-points the task marker at a target. No target clears the marker.
 use    = extra
@@ -464,6 +477,7 @@ since  = 1
 
 [nq.task.set_text]
 group  = tasks
+docs   = quest
 title  = Task text
 desc   = Changes the task title and/or description.
 use    = extra
@@ -477,6 +491,7 @@ since  = 1
 ; ============================================================ extra: spawn and squads
 [nq.task.objective_complete]
 group     = tasks
+docs   = quest
 title     = Complete objective
 desc      = Marks one task objective completed. With auto_complete on, the last one also closes the task.
 use       = extra
@@ -488,6 +503,7 @@ since     = 4
 
 [nq.task.objective_fail]
 group     = tasks
+docs   = quest
 title     = Fail objective
 desc      = Marks one task objective failed.
 use       = extra
@@ -499,6 +515,7 @@ since     = 4
 
 [nq.task.set_objective_target]
 group     = tasks
+docs   = quest
 title     = Objective target
 desc      = Re-points one objective marker. No target clears it. Each objective owns its marker.
 use       = extra
@@ -511,6 +528,7 @@ since     = 4
 
 [nq.task.set_objective_text]
 group     = tasks
+docs   = quest
 title     = Objective text
 desc      = Changes one objective title and description.
 use       = extra
@@ -524,6 +542,7 @@ since     = 4
 
 [nq.task.set_objective_visible]
 group     = tasks
+docs   = quest
 title     = Objective visibility
 desc      = Shows or hides one objective in the PDA. A hidden objective still runs and can be completed.
 use       = extra
@@ -688,6 +707,7 @@ since  = 1
 
 [nq.dialog.force]
 group  = dialog_ctl
+docs   = quest
 title  = Start dialog
 desc   = Force-opens a dialog with the NPC (must be nearby and online).
 use    = extra
@@ -699,6 +719,7 @@ since  = 1
 
 [nq.dialog.break]
 group  = dialog_ctl
+docs   = quest
 title  = Break dialog
 desc   = Closes the current dialog.
 use    = extra
@@ -1079,3 +1100,195 @@ npc    = npc_ref
 event  = true
 impl   = core
 since  = 1
+
+; ============================================================ scenario: driving NPCs
+; Every kind below addresses a ROLE the calling quest bound (NQ_ARCHITECTURE par. 19).
+; None of them carries its own movement or combat: a step writes a logic section and
+; hands it to the stock scheme, the way a smart terrain does.
+
+[nq.npc.goto]
+group  = npc
+docs   = scenario
+title  = Go to
+desc   = Sends the role along a waypoint path - the walker scheme, so danger, cover and combat keep working on the way. look is a second path it watches while walking. arrive holds the node until everyone is within radius of the path's end.
+use    = main
+params = who, path, look, move, arrive, radius
+who    = role, required
+path   = way_path, required
+look   = way_path
+move   = enum, enum=walk|run, default=walk
+arrive = bool, default=true
+radius = float, default=3, min=0.5, max=50
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 15
+
+[nq.npc.hold]
+group  = npc
+docs   = scenario
+title  = Hold position
+desc   = Posts the role on a path and lets it fight from there. With a look path it digs in and watches that direction (camper); without one it simply stands guard. radius is how far it will go after someone.
+use    = extra
+params = who, path, look, radius, shoot, no_retreat
+who    = role, required
+path   = way_path, required
+look   = way_path
+radius = float, default=20, min=1, max=100
+shoot  = enum, enum=always|none|terminal, default=always
+no_retreat = bool, default=false
+impl   = core
+since  = 15
+
+[nq.npc.anim]
+group  = npc
+docs   = scenario
+title  = Play state
+desc   = The role plays an animation state where it stands (remark): wait, guard, hide, sit, prisoner, backoff, ... look turns it toward the player or an object by story id.
+use    = extra
+params = who, state, look, sound
+who    = role, required
+state  = string, default=wait
+look   = target_ref
+sound  = string
+impl   = core
+since  = 15
+
+[nq.npc.follow]
+group  = npc
+docs   = scenario
+title  = Follow
+desc   = The role follows the player or another role (companion). distance is how close it keeps.
+use    = extra
+params = who, target, distance
+who    = role, required
+target = role_or_actor, required
+distance = float, default=3, min=1, max=30
+impl   = core
+since  = 15
+
+[nq.npc.attack]
+group  = npc
+docs   = scenario
+title  = Attack
+desc   = Makes the role hostile to the target and lets it engage - the game's own combat does the rest. The target is another role, the player, an NPC by story id, or a whole community.
+use    = extra
+params = who, target
+who    = role, required
+target = attack_target, required
+impl   = core
+since  = 15
+
+[nq.npc.stance]
+group  = npc
+docs   = scenario
+title  = Set stance
+desc   = How the role stands toward the player, whether it starts fights at all, and whether it can be hurt. Only the fields you set are changed.
+use    = extra
+params = who, to_actor, goodwill, combat_ignore, invulnerable
+who    = role, required
+to_actor = relation
+goodwill = int, min=-5000, max=5000
+combat_ignore = bool
+invulnerable  = bool
+impl   = core
+since  = 15
+
+[nq.npc.release]
+group  = npc
+docs   = scenario
+title  = Release
+desc   = Gives the role back to the logic that owned it - its smart terrain, or what its own spawn carries. A scenario releases everyone it touched when it ends, so this is only for letting someone go early.
+use    = extra
+params = who
+who    = role, required
+impl   = core
+since  = 15
+
+[nq.npc_at_place]
+group  = conditions
+docs   = scenario
+title  = Role has arrived
+desc   = True when every living member of the role is within radius of the end of the path.
+use    = cond
+params = who, path, radius
+who    = role, required
+path   = way_path, required
+radius = float, default=3, min=0.5, max=50
+impl   = core
+since  = 15
+
+[nq.npc_in_combat]
+group  = conditions
+docs   = scenario
+title  = Role is fighting
+desc   = True while any living member of the role has an enemy.
+use    = cond
+params = who
+who    = role, required
+impl   = core
+since  = 15
+
+[nq.role_alive]
+group  = conditions
+docs   = scenario
+title  = Role is alive
+desc   = True while a member of the role is alive. all = true asks for every one of them.
+use    = cond
+params = who, all
+who    = role, required
+all    = bool, default=false
+impl   = core
+since  = 15
+
+; ============================================================ quest: running a scenario
+[nq.scenario.run]
+group  = scenario
+docs   = quest
+title  = Run scenario
+desc   = Starts a scenario asset of this module. roles binds its roles to NPCs, squads, refs or communities - a role the asset gives a default of needs no binding. wait_end holds the node until the scenario ends. ref saves the running instance for scenario.stop and the conditions.
+use    = main
+params = asset, roles, wait_end, ref
+asset  = scenario_id, required
+roles  = role_bindings
+wait_end = bool, default=true
+ref    = ref_name
+pins   = done
+wait   = true
+once   = false
+impl   = core
+since  = 15
+
+[nq.scenario.stop]
+group  = scenario
+docs   = quest
+title  = Stop scenario
+desc   = Ends a running scenario and hands its NPCs back to the logic that owned them.
+use    = extra
+params = target
+target = ref_name, required
+impl   = core
+since  = 15
+
+[nq.scenario_running]
+group  = conditions
+docs   = quest
+title  = Scenario is running
+desc   = True while the instance saved under this ref is still going.
+use    = cond
+params = target
+target = ref_name, required
+impl   = core
+since  = 15
+
+[nq.scenario_done]
+group  = conditions
+docs   = quest
+title  = Scenario has ended
+desc   = True once the instance saved under this ref has finished or been stopped.
+use    = cond
+params = target
+target = ref_name, required
+impl   = core
+since  = 15

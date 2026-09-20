@@ -82,6 +82,16 @@ local function read_kind_section(ini, sec, cat, source)
 		impl = raw.impl or "core", since = tonumber(raw.since) or 1, source = source,
 	}
 	for _, u in ipairs(split_csv(raw.use)) do k.use[u] = true end
+	-- Which document may carry it (NQ_ARCHITECTURE par. 19.8). Absent = both: a
+	-- kind that does not say otherwise is as good in a scenario as in a quest,
+	-- and only the ones that speak to the player or to the PDA say otherwise.
+	k.docs = {}
+	local docs = split_csv(raw.docs)
+	if (#docs == 0) then
+		k.docs.quest, k.docs.scenario = true, true
+	else
+		for _, d in ipairs(docs) do k.docs[d] = true end
+	end
 	for _, pname in ipairs(split_csv(raw.params)) do
 		local p = parse_param_spec(pname, raw[pname] or "string")
 		k.params[#k.params + 1] = p
@@ -1280,8 +1290,23 @@ function build(raw, module, relpath, src)
 	end
 	q.uid = tostring(module) .. "." .. tostring(q.id)
 	st.uid = q.uid
+	-- quest or scenario: the same graph doing a different job (par. 19)
+	if (raw.type == nil or raw.type == "quest") then
+		q.type = "quest"
+	elseif (raw.type == "scenario") then
+		q.type = "scenario"
+	else
+		problem(st.problems, "E006", nil, "type", "type must be quest or scenario")
+		q.type = "quest"
+	end
 	q.title = canon_text(raw.title, st, nil, "title") or q.id
-	if (raw.activation == nil) then
+	if (q.type == "scenario") then
+		-- a scenario never starts itself: a quest node runs it
+		if (raw.activation ~= nil) then
+			problem(st.problems, "E006", nil, "activation", "a scenario is started by a quest, not by activation")
+		end
+		q.activation = "manual"
+	elseif (raw.activation == nil) then
 		q.activation = "auto"
 	elseif (raw.activation == "auto" or raw.activation == "manual") then
 		q.activation = raw.activation
@@ -1307,6 +1332,38 @@ function build(raw, module, relpath, src)
 			end
 			table.sort(q.var_names)
 		end
+	end
+	-- roles: the cast a scenario is run with, bound by the calling quest
+	q.roles, q.role_names = {}, {}
+	if (raw.roles ~= nil) then
+		if (q.type ~= "scenario") then
+			problem(st.problems, "E006", nil, "roles", "roles belong to a scenario")
+		elseif (type(raw.roles) ~= "table") then
+			problem(st.problems, "E006", nil, "roles", "roles must be a table of name = { ... }")
+		else
+			for name, r in pairs(raw.roles) do
+				if not (is_ident(name)) then
+					problem(st.problems, "E006", nil, "roles", "role name '%s' must match [a-z0-9_]", tostring(name))
+				elseif (type(r) ~= "table") then
+					problem(st.problems, "E006", nil, "roles", "role '%s' must be a table", tostring(name))
+				else
+					q.roles[name] = {
+						title    = canon_text(r.title, st, nil, "roles") or name,
+						many     = r.many == true,
+						optional = r.optional == true,
+						default  = (type(r.default) == "table") and r.default or nil,
+					}
+					q.role_names[#q.role_names + 1] = name
+				end
+			end
+			table.sort(q.role_names)
+		end
+	end
+	if (q.type == "scenario" and #q.role_names == 0) then
+		problem(st.problems, "E006", nil, "roles", "a scenario needs at least one role - it has nobody to drive otherwise")
+	end
+	if (q.type == "scenario" and raw.tasks ~= nil) then
+		problem(st.problems, "E006", nil, "tasks", "a scenario has no tasks of its own - those belong to the quest that runs it")
 	end
 	-- tasks
 	if (raw.tasks ~= nil) then
@@ -1413,7 +1470,43 @@ function build(raw, module, relpath, src)
 	-- kinds without implementation: the quest still loads, those nodes error at runtime
 	q.missing_impl = {}
 	for kname in pairs(st.used_kinds) do
+		local spec = st.cat.kinds[kname]
+		if (spec and spec.docs and not spec.docs[q.type]) then
+			problem(st.problems, "E007", nil, "kind", "kind '%s' cannot be used in a %s", kname, q.type)
+		end
 		if not (kind_impl(kname)) then q.missing_impl[#q.missing_impl + 1] = kname end
+	end
+	-- every `who` names a role the scenario declares; a role declared and never
+	-- used is worth saying out loud, because the quest still has to bind it
+	if (q.type == "scenario") then
+		local seen = {}
+		local function check_who(list, where)
+			for _, e in ipairs(list or {}) do
+				local who = e.params and e.params.who
+				if (type(who) == "string") then who = { who } end
+				if (type(who) == "table") then
+					for _, name in ipairs(who) do
+						if (type(name) == "string") then
+							seen[name] = true
+							if not (q.roles[name]) then
+								problem(st.problems, "E008", where, "who", "no role called '%s' is declared", name)
+							end
+						end
+					end
+				end
+			end
+		end
+		for _, node in ipairs(q.nodes) do
+			check_who({ node }, node.id)
+			check_who(node.cond, node.id)
+			check_who(node.on_enter, node.id)
+			check_who(node.on_exit, node.id)
+		end
+		for _, name in ipairs(q.role_names) do
+			if not (seen[name]) then
+				problem(st.problems, "W009", nil, "roles", "role '%s' is declared but never used", name)
+			end
+		end
 	end
 	table.sort(q.missing_impl)
 	q.errors, q.warnings = count_problems(st.problems)
@@ -1489,7 +1582,8 @@ end
 -- Discovers every *.nqasset of every enabled, applicable module. Returns
 -- { quests = {uid = q}, order = {uid...}, invalid = {q...}, invalid_by_uid = {uid = q}, files = n }.
 function scan()
-	local all = { quests = {}, order = {}, invalid = {}, invalid_by_uid = {}, files = 0, modules = 0 }
+	local all = { quests = {}, order = {}, invalid = {}, invalid_by_uid = {}, files = 0, modules = 0,
+				  scenarios = {}, scenario_order = {} }
 	if not (xms and xms.list_files and xms.read_file) then return all end
 	local ok, mods = pcall(xms.modules)
 	if not (ok and type(mods) == "table") then return all end
@@ -1517,7 +1611,11 @@ function scan()
 							q.errors, q.warnings = count_problems(q.problems)
 							q.valid = false
 						end
-						if (q.valid) then
+						if (q.valid and q.type == "scenario") then
+							seen_ids[q.id] = q
+							all.scenarios[q.uid] = q
+							all.scenario_order[#all.scenario_order + 1] = q.uid
+						elseif (q.valid) then
 							seen_ids[q.id] = q
 							all.quests[q.uid] = q
 							all.order[#all.order + 1] = q.uid
@@ -1547,6 +1645,7 @@ function scan()
 	end
 	table.sort(order)
 	all.order = order
+	table.sort(all.scenario_order)
 	return all
 end
 

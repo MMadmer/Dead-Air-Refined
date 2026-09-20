@@ -37,7 +37,7 @@ local QUEUE_CAP = 20000
 -- The .scov container refuses a chunk above 16 MiB and that failure takes the WHOLE save group
 -- with it, so the runtime keeps its own margin and reports instead of letting the save die.
 local BLOB_LIMIT = 15 * 1024 * 1024
-local EXTENSIONS = { "xms_nq_kinds", "xms_nq_dialog", "xms_nq_task", "xms_nq_world" }
+local EXTENSIONS = { "xms_nq_kinds", "xms_nq_dialog", "xms_nq_task", "xms_nq_world", "xms_nq_scenario" }
 
 -- Callback names are limited to the fixed axr_main intercept table.
 local CALLBACKS = {
@@ -63,6 +63,8 @@ local disabled_logged = false
 local callbacks_on = false
 local Q = {}				-- uid -> canonical quest (valid only)
 local Q_ORDER = {}			-- sorted uids
+local SCEN = {}				-- uid -> scenario definition (par. 19); never a quest
+local SCEN_ORDER = {}		-- sorted uids
 local INVALID = {}			-- list of invalid quest records
 local SCAN = nil			-- last scan result
 local state = nil			-- persisted table
@@ -117,6 +119,8 @@ function mark_dirty() dirty = true end
 function is_ready() return ready end
 function get_state() return state end
 function quests() return Q, Q_ORDER, INVALID end
+function scenarios() return SCEN, SCEN_ORDER end
+function scenario_def(uid) return SCEN[uid] end
 function quest_def(uid) return Q[uid] end
 function quest_state(uid) return state and state.quests[uid] or nil end
 function tokens_of(uid) local qs = quest_state(uid) return qs and qs.tokens or nil end
@@ -1048,6 +1052,56 @@ function activate(uid)
 end
 
 -- Cancels every token and disarms triggers; the record stays with the given status.
+-- ---------------------------------------------------------------------------- scenario instances
+-- A running scenario is an instance of THIS interpreter: its own uid, its own
+-- state record, and the same nodes, pins, conditions, tokens and persistence a
+-- quest gets (NQ_ARCHITECTURE par. 19.1). Nothing below is duplicated for it -
+-- only the kind vocabulary and the lifetime differ, and both live in
+-- xms_nq_scenario. The uid of an instance is "<module>.<scenario>#<n>", which
+-- no asset can produce, so an instance can never collide with a quest.
+local function instance_list(uid)
+	for _, u in ipairs(Q_ORDER) do if (u == uid) then return end end
+	Q_ORDER[#Q_ORDER + 1] = uid
+	table.sort(Q_ORDER)
+end
+
+function instance_start(uid, q)
+	Q[uid] = q
+	instance_list(uid)
+	local qs = new_quest_state(q)
+	state.quests[uid] = qs
+	dirty = true
+	return qs
+end
+
+-- After a load the state record is back but the graph is not: the definition
+-- comes from the scan, and the instance has to be put back into the registry
+-- before anything can step it.
+function instance_restore(uid, q)
+	Q[uid] = q
+	instance_list(uid)
+end
+
+function instance_arm(uid)
+	arm_triggers(uid)
+end
+
+function instance_forget(uid)
+	local qs = state.quests[uid]
+	if (qs) then
+		for node_id in pairs(util.copy(qs.tokens or {})) do
+			cancel_token_impl(uid, node_id, "the scenario ended")
+		end
+	end
+	Q[uid] = nil
+	for i, u in ipairs(Q_ORDER) do
+		if (u == uid) then table.remove(Q_ORDER, i) break end
+	end
+	state.quests[uid] = nil
+	rt[uid] = nil
+	dirty = true
+end
+
 function finish_quest(uid, status, restart)
 	local q, qs = Q[uid], quest_state(uid)
 	if not (q and qs) then return false end
@@ -1212,6 +1266,7 @@ end
 local function apply_scan(all, first_time)
 	SCAN = all
 	Q, Q_ORDER, INVALID = all.quests, all.order, all.invalid
+	SCEN, SCEN_ORDER = all.scenarios or {}, all.scenario_order or {}
 	for _, uid in ipairs(Q_ORDER) do
 		local q = Q[uid]
 		if (#q.problems > 0) then loader.log_problems(q.module .. "/" .. q.file, q.problems, false) end
