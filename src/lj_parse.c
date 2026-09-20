@@ -1181,7 +1181,7 @@ static void var_add(LexState *ls, BCReg nvars)
     v->slot = nactvar++;
     if (hash != -1) {
       v->prev = ls->vhash[hash];
-      ls->vhash[hash] = vidx;
+      ls->vhash[hash] = (VarIndex)vidx;
     }
   }
   fs->nactvar = nactvar;

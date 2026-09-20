@@ -314,7 +314,7 @@ LJFOLDF(kfold_intovarith)
 {
   int64_t k = kfold_int64arith(J, (int64_t)fleft->i, (int64_t)fright->i,
 		(IROp)((int)fins->o - (int)IR_ADDOV + (int)IR_ADD));
-  return checki32(k) ? INTFOLD(k) : FAILFOLD;
+  return checki32(k) ? INTFOLD((int32_t)k) : FAILFOLD;
 }
 
 LJFOLD(BNOT KINT)
