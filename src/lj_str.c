@@ -262,15 +262,6 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 }
 #endif
 
-/* Reseed String ID from PRNG after random interval < 2^bits. */
-#if LUAJIT_SECURITY_STRID == 1
-#define STRID_RESEED_INTERVAL	8
-#elif LUAJIT_SECURITY_STRID == 2
-#define STRID_RESEED_INTERVAL	4
-#elif LUAJIT_SECURITY_STRID >= 3
-#define STRID_RESEED_INTERVAL	0
-#endif
-
 /* Allocate a new string and add to string interning table. */
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
 			   StrHash hash, int hashalg)
@@ -282,18 +273,13 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   s->gct = ~LJ_TSTR;
   s->len = len;
   s->hash = hash;
-#ifndef STRID_RESEED_INTERVAL
-  s->sid = g->str.id++;
-#elif STRID_RESEED_INTERVAL
-  if (!g->str.idreseed--) {
-    uint64_t r = lj_prng_u64(&g->prng);
-    g->str.id = (StrID)r;
-    g->str.idreseed = (uint8_t)(r >> (64 - STRID_RESEED_INTERVAL));
-  }
-  s->sid = g->str.id++;
-#else
-  s->sid = (StrID)lj_prng_u64(&g->prng);
-#endif
+  /* X-Ray scripts write state while walking pairs() and read it back with
+  ** another walk, possibly in a later session. That only works while the
+  ** slot of a string key is a function of its content, as it was before
+  ** string IDs. The unseeded sparse hash is exactly the LuaJIT 2.0 hash,
+  ** so the traversal order of existing saves is preserved as well.
+  */
+  s->sid = (StrID)hash_sparse(0, str, len);
   s->reserved = 0;
   s->hashalg = (uint8_t)hashalg;
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
