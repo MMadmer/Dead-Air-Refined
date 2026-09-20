@@ -2,8 +2,9 @@
 * text=auto
 
 # Submodule patches must reach the working tree byte-exact: git apply rejects a
-# CRLF patch against LF sources, and these are applied on a fresh clone.
-*.patch text eol=lf
+# CRLF patch against LF sources, and these are applied on a fresh clone. Their
+# context lines are whitespace by nature, which is nothing for diff --check to flag.
+*.patch text eol=lf -whitespace
 
 # Custom for Visual Studio
 *.cs     diff=csharp

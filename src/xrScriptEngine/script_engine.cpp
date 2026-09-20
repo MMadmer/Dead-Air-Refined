@@ -29,6 +29,7 @@
 
 #include <luabind/class_info.hpp>
 
+#include <mutex>
 #include <stdarg.h>
 
 Flags32 g_LuaDebug;
@@ -107,6 +108,24 @@ bool RunJITCommand(lua_State* ls, const char* command)
     }
     return true;
 }
+
+// Without LJ_GC64 all Lua memory comes from below 2 GB, out of an arena LuaJIT reserves when the
+// process starts. The numbers tell scripts that used their memory up from a process that never
+// got the address space: "not enough memory" reads the same in both cases.
+void LogLuaLowMemory(bool failure)
+{
+    luaJIT_LowMem info;
+    const int regions = luaJIT_lowmem(&info);
+
+    constexpr size_t megabyte = 1024 * 1024;
+    // The scripts of a long session do not fit into less.
+    constexpr size_t comfortable = 512 * megabyte;
+    const bool alarming = failure || info.reserved < comfortable;
+
+    Msg("%s LuaJIT low memory: %u MB reserved in %d region(s), %u MB in use, peak %u MB, %u MB outside the arena",
+        alarming ? "!" : "*", u32(info.reserved / megabyte), regions, u32(info.used / megabyte),
+        u32(info.peak / megabyte), u32(info.outside / megabyte));
+}
 }
 
 const char* const CScriptEngine::GlobalNamespace = SCRIPT_GLOBAL_NAMESPACE;
@@ -138,8 +157,11 @@ void CScriptEngine::reinit()
     if (!m_virtual_machine)
     {
         Log("! ERROR : Cannot initialize script virtual machine!");
+        LogLuaLowMemory(true);
         return;
     }
+    static std::once_flag lowMemoryReported;
+    std::call_once(lowMemoryReported, [] { LogLuaLowMemory(false); });
     RegisterState(m_virtual_machine, this);
     if (strstr(Core.Params, "-_g"))
         file_header = file_header_new;
@@ -592,6 +614,7 @@ void CScriptEngine::print_error(lua_State* L, int iErrorCode)
         break;
     case LUA_ERRMEM:
         scriptEngine->script_log(LuaMessageType::Error, "SCRIPT ERROR (memory allocation)");
+        LogLuaLowMemory(true);
         break;
     case LUA_ERRERR:
         scriptEngine->script_log(LuaMessageType::Error, "SCRIPT ERROR (while running the error handler function)");
@@ -821,6 +844,8 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
     ZoneScoped;
 
     reinit();
+    // Nothing below works without a state; the null one used to crash inside luabind instead.
+    R_ASSERT2(lua(), "Cannot create the Lua virtual machine: LuaJIT got no memory below 2 GB");
     luabind::open(lua());
 
     // Workarounds to preserve backwards compatibility with game scripts

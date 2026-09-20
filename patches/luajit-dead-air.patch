@@ -1,0 +1,755 @@
+diff --git a/src/lib_base.c b/src/lib_base.c
+index f120b2de..af86fc8d 100644
+--- a/src/lib_base.c
++++ b/src/lib_base.c
+@@ -616,6 +616,12 @@ LJLIB_ASM(coroutine_yield)
+   return FFH_UNREACHABLE;
+ }
+ 
++LJLIB_CF(coroutine_cstacksize)
++{
++  lua_pushinteger(L, luaL_optint(L, 1, -1)); // literally do nothing
++  return 1;
++}
++
+ static int ffh_resume(lua_State *L, lua_State *co, int wrap)
+ {
+   if (co->cframe != NULL || co->status > LUA_YIELD ||
+diff --git a/src/lib_math.c b/src/lib_math.c
+index 2f598355..3b83fb3a 100644
+--- a/src/lib_math.c
++++ b/src/lib_math.c
+@@ -200,6 +200,10 @@ LUALIB_API int luaopen_math(lua_State *L)
+   PRNGState *rs = (PRNGState *)lua_newuserdata(L, sizeof(PRNGState));
+   lj_prng_seed_fixed(rs);
+   LJ_LIB_REG(L, LUA_MATHLIBNAME, math);
++#if defined(LUA_COMPAT_MOD) && !LJ_52
++  lua_getfield(L, -1, "fmod");
++  lua_setfield(L, -2, "mod");
++#endif
+   return 1;
+ }
+ 
+diff --git a/src/lib_string.c b/src/lib_string.c
+index e107e25d..0338d483 100644
+--- a/src/lib_string.c
++++ b/src/lib_string.c
+@@ -676,6 +676,10 @@ LUALIB_API int luaopen_string(lua_State *L)
+   GCtab *mt;
+   global_State *g;
+   LJ_LIB_REG(L, LUA_STRLIBNAME, string);
++#if defined(LUA_COMPAT_GFIND) && !LJ_52
++  lua_getfield(L, -1, "gmatch");
++  lua_setfield(L, -2, "gfind");
++#endif
+   mt = lj_tab_new(L, 0, 1);
+   /* NOBARRIER: basemt is a GC root. */
+   g = G(L);
+diff --git a/src/lj_alloc.c b/src/lj_alloc.c
+index f4d3a7da..1324ba0e 100644
+--- a/src/lj_alloc.c
++++ b/src/lj_alloc.c
+@@ -32,6 +32,7 @@
+ #include "lj_arch.h"
+ #include "lj_alloc.h"
+ #include "lj_prng.h"
++#include "luajit.h"
+ 
+ #ifndef LUAJIT_USE_SYSMALLOC
+ 
+@@ -140,28 +141,237 @@ static void init_mmap(void)
+ }
+ #define INIT_MMAP()	init_mmap()
+ 
+-/* Win64 32 bit MMAP via NtAllocateVirtualMemory. */
+-static void *mmap_plain(size_t size)
++/* -- Low-address arena ---------------------------------------------------
++**
++** GC memory has to stay below 2 GB in this mode, and the kernel is asked
++** for it piecemeal, whenever a state grows. A host that maps gigabytes of
++** files on startup can use up that range before the first state exists:
++** every allocation then fails with "not enough memory", no matter how
++** much RAM is free. Whether it happens depends on where the OS puts the
++** mappings, i.e. on ASLR settings outside of our control.
++**
++** So the range is claimed once, while the process is still empty. The
++** largest free blocks below 2 GB are reserved (address space only, no
++** commit charge) and all states of the process are served from them in
++** 64 KB pages. The kernel remains the fallback once the arena is full.
++*/
++
++#define LOWARENA_PAGEBITS	16	/* Allocation granularity of the OS. */
++#define LOWARENA_PAGESIZE	((size_t)1 << LOWARENA_PAGEBITS)
++#define LOWARENA_NPAGES		(1u << (31 - LOWARENA_PAGEBITS))
++#define LOWARENA_BOTTOM		((uintptr_t)0x00010000)
++#define LOWARENA_TOP		((uintptr_t)0x7ffe0000)  /* KUSER_SHARED_DATA. */
++#define LOWARENA_MAXREGIONS	8
++#define LOWARENA_MINREGION	((size_t)8 << 20)
++/* Leaves room below 2 GB for anything else that may depend on it. */
++#define LOWARENA_BUDGET		((size_t)1536 << 20)
++
++#define lowarena_addr(page)	((char *)((uintptr_t)(page) << LOWARENA_PAGEBITS))
++
++typedef struct LowRegion {
++  uint32_t first;	/* First page. */
++  uint32_t end;		/* One past the last page. */
++} LowRegion;
++
++static SRWLOCK lowarena_lock = SRWLOCK_INIT;
++static int lowarena_ready;
++static uint32_t lowarena_nregions;
++static LowRegion lowarena_region[LOWARENA_MAXREGIONS];	/* By address. */
++static uint32_t lowarena_used[LOWARENA_NPAGES/32];	/* One bit per page. */
++static luaJIT_LowMem lowarena_stat;
++
++/* Reserve the largest free blocks below 2 GB. Needs the lock. */
++static void lowarena_setup(void)
+ {
+-  DWORD olderr = GetLastError();
++  LowRegion cand[LOWARENA_MAXREGIONS];	/* By size, largest first. */
++  uint32_t ncand = 0, i, j;
++  size_t budget = LOWARENA_BUDGET;
++  uintptr_t addr = LOWARENA_BOTTOM;
++  lowarena_ready = 1;
++  while (addr < LOWARENA_TOP) {
++    MEMORY_BASIC_INFORMATION minfo;
++    uintptr_t base, end;
++    if (VirtualQuery((void *)addr, &minfo, sizeof(minfo)) == 0)
++      break;
++    base = (uintptr_t)minfo.BaseAddress;
++    end = base + minfo.RegionSize;
++    if (end <= addr)
++      break;
++    if (minfo.State == MEM_FREE) {
++      uintptr_t lo = (addr + LOWARENA_PAGESIZE-1) & ~(LOWARENA_PAGESIZE-1);
++      uintptr_t hi = (end < LOWARENA_TOP ? end : LOWARENA_TOP) &
++		     ~(LOWARENA_PAGESIZE-1);
++      if (hi > lo && hi - lo >= LOWARENA_MINREGION) {
++	LowRegion r;
++	r.first = (uint32_t)(lo >> LOWARENA_PAGEBITS);
++	r.end = (uint32_t)(hi >> LOWARENA_PAGEBITS);
++	for (i = 0; i < ncand; i++)
++	  if (r.end - r.first > cand[i].end - cand[i].first)
++	    break;
++	if (i < LOWARENA_MAXREGIONS) {
++	  if (ncand < LOWARENA_MAXREGIONS) ncand++;
++	  for (j = ncand-1; j > i; j--) cand[j] = cand[j-1];
++	  cand[i] = r;
++	}
++      }
++    }
++    addr = end;
++  }
++  for (i = 0; i < ncand && budget >= LOWARENA_MINREGION; i++) {
++    LowRegion r = cand[i];
++    size_t size = (size_t)(r.end - r.first) << LOWARENA_PAGEBITS;
++    if (size > budget) {  /* Keep the top part, the bottom fills up first. */
++      size = budget;
++      r.first = r.end - (uint32_t)(size >> LOWARENA_PAGEBITS);
++    }
++    if (VirtualAlloc(lowarena_addr(r.first), size, MEM_RESERVE,
++		     PAGE_NOACCESS) == NULL)
++      continue;  /* Somebody else was faster. */
++    budget -= size;
++    lowarena_stat.reserved += size;
++    for (j = lowarena_nregions++; j > 0; j--) {
++      if (lowarena_region[j-1].first < r.first) break;
++      lowarena_region[j] = lowarena_region[j-1];
++    }
++    lowarena_region[j] = r;
++  }
++}
++
++/* Find a run of n free pages. Returns the first page or 0. */
++static uint32_t lowarena_find(uint32_t n, int topdown)
++{
++  uint32_t k;
++  for (k = 0; k < lowarena_nregions; k++) {
++    const LowRegion *r = &lowarena_region[topdown ? lowarena_nregions-1-k : k];
++    uint32_t run = 0, i;
++    if (r->end - r->first < n)
++      continue;
++    if (!topdown) {
++      for (i = r->first; i < r->end; i++) {
++	uint32_t w = lowarena_used[i >> 5];
++	if (w == ~(uint32_t)0 && (i & 31) == 0) {
++	  i += 31; run = 0;  /* Only pages in use set bits: skip the word. */
++	} else if ((w >> (i & 31)) & 1) {
++	  run = 0;
++	} else if (++run == n) {
++	  return i + 1 - n;
++	}
++      }
++    } else {
++      for (i = r->end; i-- > r->first; ) {
++	uint32_t w = lowarena_used[i >> 5];
++	if (w == ~(uint32_t)0 && (i & 31) == 31 && i >= r->first + 31) {
++	  i -= 31; run = 0;
++	} else if ((w >> (i & 31)) & 1) {
++	  run = 0;
++	} else if (++run == n) {
++	  return i;
++	}
++      }
++    }
++  }
++  return 0;
++}
++
++/* Allocate committed memory from the arena. Returns NULL if there is none. */
++static void *lowarena_alloc(size_t size, int topdown)
++{
++  size_t asize = (size + LOWARENA_PAGESIZE-1) & ~(LOWARENA_PAGESIZE-1);
++  uint32_t n = (uint32_t)(asize >> LOWARENA_PAGEBITS), page, i;
+   void *ptr = NULL;
+-  long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
+-		  MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+-  SetLastError(olderr);
+-  return st == 0 ? ptr : MFAIL;
++  if (asize < size || asize > LOWARENA_BUDGET)
++    return NULL;
++  AcquireSRWLockExclusive(&lowarena_lock);
++  if (!lowarena_ready)
++    lowarena_setup();
++  page = lowarena_find(n, topdown);
++  if (page) {
++    /* Commit what was asked for: the tail of the last page stays untouched. */
++    ptr = VirtualAlloc(lowarena_addr(page), size, MEM_COMMIT, PAGE_READWRITE);
++    if (ptr != NULL) {
++      for (i = page; i < page + n; i++)
++	lowarena_used[i >> 5] |= (uint32_t)1 << (i & 31);
++      lowarena_stat.used += asize;
++      if (lowarena_stat.used > lowarena_stat.peak)
++	lowarena_stat.peak = lowarena_stat.used;
++    }
++  }
++  ReleaseSRWLockExclusive(&lowarena_lock);
++  return ptr;
+ }
+ 
+-/* For direct MMAP, use MEM_TOP_DOWN to minimize interference */
+-static void *direct_mmap(size_t size)
++/* Length of the leading part of a range that lies either completely
++** inside of one region or completely outside of all of them.
++*/
++static size_t lowarena_span(char *ptr, size_t size, int *inside)
++{
++  uintptr_t a = (uintptr_t)ptr, e = a + size;
++  uint32_t k;
++  *inside = 0;
++  for (k = 0; k < lowarena_nregions; k++) {  /* Immutable after setup. */
++    uintptr_t rs = (uintptr_t)lowarena_addr(lowarena_region[k].first);
++    uintptr_t re = (uintptr_t)lowarena_addr(lowarena_region[k].end);
++    if (a >= rs && a < re) {
++      *inside = 1;
++      return (size_t)((e < re ? e : re) - a);
++    }
++    if (a < rs && e > rs)  /* Regions are sorted: this is the nearest one. */
++      return (size_t)(rs - a);
++  }
++  return size;
++}
++
++/* Give pages back to the arena. The range must lie inside of one region. */
++static int lowarena_release(char *ptr, size_t size)
++{
++  uintptr_t a = (uintptr_t)ptr;
++  uint32_t page = (uint32_t)(a >> LOWARENA_PAGEBITS), i;
++  uint32_t n = (uint32_t)((size + LOWARENA_PAGESIZE-1) >> LOWARENA_PAGEBITS);
++  size_t asize = (size_t)n << LOWARENA_PAGEBITS;
++  int ok = 1;
++  if ((a & (LOWARENA_PAGESIZE-1)) != 0)
++    return 0;
++  AcquireSRWLockExclusive(&lowarena_lock);
++  for (i = page; i < page + n; i++)
++    if (!((lowarena_used[i >> 5] >> (i & 31)) & 1)) ok = 0;
++  if (ok && VirtualFree(ptr, asize, MEM_DECOMMIT)) {
++    for (i = page; i < page + n; i++)
++      lowarena_used[i >> 5] &= ~((uint32_t)1 << (i & 31));
++    lowarena_stat.used -= asize;
++  } else {
++    ok = 0;
++  }
++  ReleaseSRWLockExclusive(&lowarena_lock);
++  return ok;
++}
++
++/* Account for memory the kernel had to provide. */
++static void lowarena_outside(size_t size, int release)
++{
++  AcquireSRWLockExclusive(&lowarena_lock);
++  if (release) lowarena_stat.outside -= size; else lowarena_stat.outside += size;
++  ReleaseSRWLockExclusive(&lowarena_lock);
++}
++
++/* Win64 32 bit MMAP: low-address arena, then NtAllocateVirtualMemory. */
++static void *mmap_lowmem(size_t size, int topdown)
+ {
+   DWORD olderr = GetLastError();
+-  void *ptr = NULL;
+-  long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
+-		  MEM_RESERVE|MEM_COMMIT|MEM_TOP_DOWN, PAGE_READWRITE);
++  void *ptr = lowarena_alloc(size, topdown);
++  if (ptr == NULL) {
++    long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
++		    MEM_RESERVE|MEM_COMMIT|(topdown ? MEM_TOP_DOWN : 0),
++		    PAGE_READWRITE);
++    if (st == 0) lowarena_outside(size, 0); else ptr = MFAIL;
++  }
+   SetLastError(olderr);
+-  return st == 0 ? ptr : MFAIL;
++  return ptr;
+ }
+ 
++#define mmap_plain(size)	mmap_lowmem((size), 0)
++/* For direct MMAP, allocate top-down to minimize interference */
++#define direct_mmap(size)	mmap_lowmem((size), 1)
++
+ #else
+ 
+ /* Win32 MMAP via VirtualAlloc */
+@@ -195,6 +405,18 @@ static int CALL_MUNMAP(void *ptr, size_t size)
+   MEMORY_BASIC_INFORMATION minfo;
+   char *cptr = (char *)ptr;
+   while (size) {
++#if LJ_ALLOC_NTAVM
++    /* A coalesced segment may mix arena pages with kernel allocations. */
++    int inside;
++    size_t span = lowarena_span(cptr, size, &inside);
++    if (inside) {
++      if (!lowarena_release(cptr, span))
++	return -1;
++      cptr += span;
++      size -= span;
++      continue;
++    }
++#endif
+     if (VirtualQuery(cptr, &minfo, sizeof(minfo)) == 0)
+       return -1;
+     if (minfo.BaseAddress != cptr || minfo.AllocationBase != cptr ||
+@@ -202,6 +424,9 @@ static int CALL_MUNMAP(void *ptr, size_t size)
+       return -1;
+     if (VirtualFree(cptr, 0, MEM_RELEASE) == 0)
+       return -1;
++#if LJ_ALLOC_NTAVM
++    lowarena_outside(minfo.RegionSize, 1);
++#endif
+     cptr += minfo.RegionSize;
+     size -= minfo.RegionSize;
+   }
+@@ -1483,3 +1708,42 @@ void *lj_alloc_f(void *msp, void *ptr, size_t osize, size_t nsize)
+ }
+ 
+ #endif
++
++/* -- Low-address arena: public part -------------------------------------- */
++
++LUA_API int luaJIT_lowmem(luaJIT_LowMem *info)
++{
++#if !defined(LUAJIT_USE_SYSMALLOC) && LJ_ALLOC_NTAVM
++  int nregions;
++  AcquireSRWLockExclusive(&lowarena_lock);
++  if (!lowarena_ready)
++    lowarena_setup();
++  *info = lowarena_stat;
++  nregions = (int)lowarena_nregions;
++  ReleaseSRWLockExclusive(&lowarena_lock);
++  return nregions;
++#else
++  memset(info, 0, sizeof(*info));
++  return 0;
++#endif
++}
++
++#if !defined(LUAJIT_USE_SYSMALLOC) && LJ_ALLOC_NTAVM && defined(LUA_BUILD_AS_DLL)
++/* The loader gets here before the host had a chance to map anything. */
++BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
++{
++  UNUSED(hinst);
++  if (reason == DLL_PROCESS_ATTACH) {
++    AcquireSRWLockExclusive(&lowarena_lock);
++    if (!lowarena_ready)
++      lowarena_setup();
++    ReleaseSRWLockExclusive(&lowarena_lock);
++  } else if (reason == DLL_PROCESS_DETACH && reserved == NULL) {
++    /* Unloaded on request: a later copy of the DLL needs the range again. */
++    uint32_t k;
++    for (k = 0; k < lowarena_nregions; k++)
++      VirtualFree(lowarena_addr(lowarena_region[k].first), 0, MEM_RELEASE);
++  }
++  return TRUE;
++}
++#endif
+diff --git a/src/lj_api.c b/src/lj_api.c
+index f972a760..139680cd 100644
+--- a/src/lj_api.c
++++ b/src/lj_api.c
+@@ -26,6 +26,53 @@
+ #include "lj_strscan.h"
+ #include "lj_strfmt.h"
+ 
++#if LJ_TARGET_POSIX
++#include <time.h>
++#endif
++
++#if LJ_TARGET_WINDOWS
++static inline uint64_t get_high_resolution_time(void)
++{
++  LARGE_INTEGER cnt;
++  QueryPerformanceCounter(&cnt);
++  return cnt.QuadPart;
++}
++#elif LJ_TARGET_POSIX
++static inline uint64_t get_high_resolution_time(void)
++{
++  struct timespec ts;
++#ifdef CLOCK_MONOTONIC_RAW
++  clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
++#else
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++#endif
++  return 1000000000ULL * ts.tv_sec + ts.tv_nsec;
++}
++#endif
++
++static int gc_step_timeout(lua_State *L, uint32_t timeout_usec)
++{
++#if LJ_TARGET_WINDOWS || LJ_TARGET_POSIX
++  int res = 0;
++  uint64_t timeout = timeout_usec * 1000;
++
++  uint64_t time_current = get_high_resolution_time();
++
++  timeout += time_current;
++  while (time_current < timeout) {
++    if (lj_gc_step(L) > 0) {
++      res = 1;
++      break;
++    }
++
++    time_current = get_high_resolution_time();
++  }
++  return res;
++#else
++  return -1;
++#endif
++}
++
+ /* -- Common helper functions --------------------------------------------- */
+ 
+ #define lj_checkapi_slot(idx) \
+@@ -1265,11 +1312,17 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
+     g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
+     while (g->gc.total >= g->gc.threshold)
+       if (lj_gc_step(L) > 0) {
+-	res = 1;
+-	break;
++        res = 1;
++        break;
+       }
+     break;
+   }
++  case LUA_GCTIMEOUT:
++    res = gc_step_timeout(L, (uint32_t)data);
++    if (res >= 0) {
++      g->gc.threshold = LJ_MAX_MEM;
++    }
++    break;
+   case LUA_GCSETPAUSE:
+     res = (int)(g->gc.pause);
+     g->gc.pause = (MSize)data;
+diff --git a/src/lj_bcread.c b/src/lj_bcread.c
+index c8e884a8..b58435a2 100644
+--- a/src/lj_bcread.c
++++ b/src/lj_bcread.c
+@@ -25,6 +25,7 @@
+ 
+ /* Reuse some lexer fields for our own purposes. */
+ #define bcread_flags(ls)	ls->level
++#define bcread_version(ls)	ls->linenumber
+ #define bcread_swap(ls) \
+   ((bcread_flags(ls) & BCDUMP_F_BE) != LJ_BE*BCDUMP_F_BE)
+ #define bcread_oldtop(L, ls)	restorestack(L, ls->lastline)
+@@ -284,6 +285,7 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
+ {
+   BCIns *bc = proto_bc(pt);
+   BCIns op;
++  MSize i;
+   if (ls->fr2 != LJ_FR2) op = BC_NOT;  /* Mark non-native prototype. */
+   else if ((pt->flags & PROTO_VARARG)) op = BC_FUNCV;
+   else op = BC_FUNCF;
+@@ -291,9 +293,21 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
+   bcread_block(ls, bc+1, (sizebc-1)*(MSize)sizeof(BCIns));
+   /* Swap bytecode instructions if the endianess differs. */
+   if (bcread_swap(ls)) {
+-    MSize i;
+     for (i = 1; i < sizebc; i++) bc[i] = lj_bswap(bc[i]);
+   }
++  /* LuaJIT 2.1 inserted four opcodes into the version 1 instruction table. */
++  if (bcread_version(ls) == 1) {
++    for (i = 1; i < sizebc; i++) {
++      BCOp lop = bc_op(bc[i]);
++      if (lop >= 61)
++	lop = (BCOp)(lop + 4);
++      else if (lop >= 57)
++	lop = (BCOp)(lop + 3);
++      else if (lop >= 16)
++	lop = (BCOp)(lop + 2);
++      setbc_op(&bc[i], lop);
++    }
++  }
+ }
+ 
+ /* Read upvalue refs. */
+@@ -393,11 +407,13 @@ GCproto *lj_bcread_proto(LexState *ls)
+ /* Read and check header of bytecode dump. */
+ static int bcread_header(LexState *ls)
+ {
+-  uint32_t flags;
++  uint32_t flags, version;
+   bcread_want(ls, 3+5+5);
+   if (bcread_byte(ls) != BCDUMP_HEAD2 ||
+-      bcread_byte(ls) != BCDUMP_HEAD3 ||
+-      bcread_byte(ls) != BCDUMP_VERSION) return 0;
++      bcread_byte(ls) != BCDUMP_HEAD3) return 0;
++  version = bcread_byte(ls);
++  if (version != BCDUMP_VERSION && version != 1) return 0;
++  bcread_version(ls) = version;
+   bcread_flags(ls) = flags = bcread_uleb128(ls);
+   if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;
+   if ((flags & BCDUMP_F_FR2) != (uint32_t)ls->fr2*BCDUMP_F_FR2) return 0;
+diff --git a/src/lj_ccallback.c b/src/lj_ccallback.c
+index 15346775..bf9f138c 100644
+--- a/src/lj_ccallback.c
++++ b/src/lj_ccallback.c
+@@ -136,7 +136,7 @@ static void *callback_mcode_init(global_State *g, uint8_t *page)
+     *(uint32_t *)p = XI_ENDBR64; p += 4;
+ #endif
+     /* mov al, slot; jmp group */
+-    *p++ = XI_MOVrib | RID_EAX; *p++ = (uint8_t)slot;
++    *p++ = (uint8_t)((uint8_t)XI_MOVrib | (uint8_t)RID_EAX); *p++ = (uint8_t)slot;
+     if ((slot & (CALLBACK_MCODE_NSLOT-1)) == (CALLBACK_MCODE_NSLOT-1) ||
+ 	slot == CALLBACK_MAX_SLOT-1) {
+       /* push ebp/rbp; mov ah, slot>>8; mov ebp, &g. */
+@@ -146,7 +146,7 @@ static void *callback_mcode_init(global_State *g, uint8_t *page)
+       *p++ = 0x48; *p++ = XI_MOVri | RID_EBP;
+       *(uint64_t *)p = (uint64_t)(g); p += 8;
+ #else
+-      *p++ = XI_MOVri | RID_EBP;
++      *p++ = (uint8_t)((uint8_t)XI_MOVri | (uint8_t)RID_EBP);
+       *(int32_t *)p = i32ptr(g); p += 4;
+ #endif
+ #if LJ_64
+diff --git a/src/lj_cconv.c b/src/lj_cconv.c
+index 091675c7..0da6eddd 100644
+--- a/src/lj_cconv.c
++++ b/src/lj_cconv.c
+@@ -199,7 +199,7 @@ void lj_cconv_ct_ct(CTState *cts, CType *d, CType *s,
+     /* The conversion must exactly match the semantics of JIT-compiled code! */
+     if (dsize < 8) {
+       int64_t i = lj_num2i64(n);  /* Always convert via int64_t. */
+-      if (dsize == 4) *(int32_t *)dp = i;
++      if (dsize == 4) *(int32_t *)dp = (int32_t)i;
+       else if (dsize == 2) *(int16_t *)dp = (int16_t)i;
+       else *(int8_t *)dp = (int8_t)i;
+     } else if (dsize == 8) {
+diff --git a/src/lj_lex.c b/src/lj_lex.c
+index 4bbe1835..91ab2a13 100644
+--- a/src/lj_lex.c
++++ b/src/lj_lex.c
+@@ -42,6 +42,12 @@ TKDEF(TKSTR1, TKSTR2)
+ #define LEX_EOF			(-1)
+ #define lex_iseol(ls)		(ls->c == '\n' || ls->c == '\r')
+ 
++int escape_sequences_allowed = 1;
++LUALIB_API void lj_allow_escape_sequences(int allowed)
++{
++    escape_sequences_allowed = allowed;
++}
++
+ /* Get more input from reader. */
+ static LJ_NOINLINE LexChar lex_more(LexState *ls)
+ {
+@@ -260,6 +266,8 @@ static void lex_string(LexState *ls, TValue *tv)
+       case '\\': case '\"': case '\'': break;
+       case LEX_EOF: continue;
+       default:
++	if (!escape_sequences_allowed)
++	  break;  /* Keep the escaped character verbatim. */
+ 	if (!lj_char_isdigit(c))
+ 	  goto err_xesc;
+ 	c -= '0';  /* Decimal escape '\ddd'. */
+@@ -344,6 +352,27 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
+       while (!lex_iseol(ls) && ls->c != LEX_EOF)
+ 	lex_next(ls);
+       continue;
++    case '/': /* C-style comments */
++      lex_next(ls);
++      if (ls->c == '/') { /* Short comment "//.*\n". */
++        while (!lex_iseol(ls) && ls->c != LEX_EOF)
++          lex_next(ls);
++        continue;
++      } else if (ls->c == '*') { /* Long comment /* =*[...]=* */
++        lex_next(ls);
++        while (ls->c != LEX_EOF) {
++          if (ls->c == '*') {
++            lex_next(ls);
++            if (ls->c == '/') {
++              lex_next(ls);
++              break;
++            }
++          }
++          lex_next(ls);
++        }
++        continue;
++      }
++      return '/';
+     case '[': {
+       int sep = lex_skipeq(ls);
+       if (sep >= 0) {
+diff --git a/src/lj_opt_fold.c b/src/lj_opt_fold.c
+index 6c9b8573..b06df20a 100644
+--- a/src/lj_opt_fold.c
++++ b/src/lj_opt_fold.c
+@@ -314,7 +314,7 @@ LJFOLDF(kfold_intovarith)
+ {
+   int64_t k = kfold_int64arith(J, (int64_t)fleft->i, (int64_t)fright->i,
+ 		(IROp)((int)fins->o - (int)IR_ADDOV + (int)IR_ADD));
+-  return checki32(k) ? INTFOLD(k) : FAILFOLD;
++  return checki32(k) ? INTFOLD((int32_t)k) : FAILFOLD;
+ }
+ 
+ LJFOLD(BNOT KINT)
+diff --git a/src/lj_parse.c b/src/lj_parse.c
+index 00a64382..b18268d2 100644
+--- a/src/lj_parse.c
++++ b/src/lj_parse.c
+@@ -1181,7 +1181,7 @@ static void var_add(LexState *ls, BCReg nvars)
+     v->slot = nactvar++;
+     if (hash != -1) {
+       v->prev = ls->vhash[hash];
+-      ls->vhash[hash] = vidx;
++      ls->vhash[hash] = (VarIndex)vidx;
+     }
+   }
+   fs->nactvar = nactvar;
+diff --git a/src/lj_str.c b/src/lj_str.c
+index 2ece8ee0..f3e6f772 100644
+--- a/src/lj_str.c
++++ b/src/lj_str.c
+@@ -262,15 +262,6 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
+ }
+ #endif
+ 
+-/* Reseed String ID from PRNG after random interval < 2^bits. */
+-#if LUAJIT_SECURITY_STRID == 1
+-#define STRID_RESEED_INTERVAL	8
+-#elif LUAJIT_SECURITY_STRID == 2
+-#define STRID_RESEED_INTERVAL	4
+-#elif LUAJIT_SECURITY_STRID >= 3
+-#define STRID_RESEED_INTERVAL	0
+-#endif
+-
+ /* Allocate a new string and add to string interning table. */
+ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
+ 			   StrHash hash, int hashalg)
+@@ -282,18 +273,13 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
+   s->gct = ~LJ_TSTR;
+   s->len = len;
+   s->hash = hash;
+-#ifndef STRID_RESEED_INTERVAL
+-  s->sid = g->str.id++;
+-#elif STRID_RESEED_INTERVAL
+-  if (!g->str.idreseed--) {
+-    uint64_t r = lj_prng_u64(&g->prng);
+-    g->str.id = (StrID)r;
+-    g->str.idreseed = (uint8_t)(r >> (64 - STRID_RESEED_INTERVAL));
+-  }
+-  s->sid = g->str.id++;
+-#else
+-  s->sid = (StrID)lj_prng_u64(&g->prng);
+-#endif
++  /* X-Ray scripts write state while walking pairs() and read it back with
++  ** another walk, possibly in a later session. That only works while the
++  ** slot of a string key is a function of its content, as it was before
++  ** string IDs. The unseeded sparse hash is exactly the LuaJIT 2.0 hash,
++  ** so the traversal order of existing saves is preserved as well.
++  */
++  s->sid = (StrID)hash_sparse(0, str, len);
+   s->reserved = 0;
+   s->hashalg = (uint8_t)hashalg;
+   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
+diff --git a/src/ljamalg.c b/src/ljamalg.c
+index 1dd96989..31900a4d 100644
+--- a/src/ljamalg.c
++++ b/src/ljamalg.c
+@@ -44,6 +44,7 @@
+ #include "lj_profile.c"
+ #include "lj_lex.c"
+ #include "lj_parse.c"
++/* The bytecode reader translates compatible LuaJIT 2.0 save closures. */
+ #include "lj_bcread.c"
+ #include "lj_bcwrite.c"
+ #include "lj_load.c"
+diff --git a/src/lua.h b/src/lua.h
+index 6d1634d1..bc577ede 100644
+--- a/src/lua.h
++++ b/src/lua.h
+@@ -228,6 +228,7 @@ LUA_API int  (lua_status) (lua_State *L);
+ #define LUA_GCSETPAUSE		6
+ #define LUA_GCSETSTEPMUL	7
+ #define LUA_GCISRUNNING		9
++#define LUA_GCTIMEOUT		10
+ 
+ LUA_API int (lua_gc) (lua_State *L, int what, int data);
+ 
+diff --git a/src/luaconf.h b/src/luaconf.h
+index e659e100..1f5fd81d 100644
+--- a/src/luaconf.h
++++ b/src/luaconf.h
+@@ -94,6 +94,10 @@
+ #define LUAI_GCMUL	200	/* Run GC at 200% of allocation speed. */
+ #define LUA_MAXCAPTURES	32	/* Max. pattern captures. */
+ 
++/* Compatibility with older library function names. */
++#define LUA_COMPAT_MOD		/* OLD: math.mod, NEW: math.fmod */
++#define LUA_COMPAT_GFIND	/* OLD: string.gfind, NEW: string.gmatch */
++
+ /* Configuration for the frontend (the luajit executable). */
+ #if defined(luajit_c)
+ #define LUA_PROGNAME	"luajit"  /* Fallback frontend name. */
+diff --git a/src/luajit_rolling.h b/src/luajit_rolling.h
+index f0b64f2a..08fe1465 100644
+--- a/src/luajit_rolling.h
++++ b/src/luajit_rolling.h
+@@ -73,6 +73,17 @@ LUA_API void luaJIT_profile_stop(lua_State *L);
+ LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
+ 					     int depth, size_t *len);
+ 
++/* Low-address arena of Windows/x64 builds without LJ_GC64. Sizes in bytes. */
++typedef struct luaJIT_LowMem {
++  size_t reserved;	/* Address space claimed below 2 GB at startup. */
++  size_t used;		/* Part of it that Lua states hold right now. */
++  size_t peak;		/* High-water mark of the above. */
++  size_t outside;	/* Held below 2 GB, but outside of the arena. */
++} luaJIT_LowMem;
++
++/* Returns the number of reserved regions. Zero: this build has no arena. */
++LUA_API int luaJIT_lowmem(luaJIT_LowMem *info);
++
+ /* Enforce (dynamic) linker error for version mismatches. Call from main. */
+ LUA_API void LUAJIT_VERSION_SYM(void);
+ 
+diff --git a/src/lualib.h b/src/lualib.h
+index f0d1642f..42aa5a4a 100644
+--- a/src/lualib.h
++++ b/src/lualib.h
+@@ -22,6 +22,8 @@
+ #define LUA_JITLIBNAME	"jit"
+ #define LUA_FFILIBNAME	"ffi"
+ 
++LUALIB_API void lj_allow_escape_sequences(int allowed);
++
+ LUALIB_API int luaopen_base(lua_State *L);
+ LUALIB_API int luaopen_math(lua_State *L);
+ LUALIB_API int luaopen_string(lua_State *L);

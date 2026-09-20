@@ -12,7 +12,7 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | Dear ImGui | docking `b334d19b6` | Pinned docking revision based on 1.92.9. |
 | GameSpy | `5597a6c582` | Pinned OpenXRay fork plus local x64 warning fixes. |
 | GLI | `3542f8830` | Pinned upstream revision. |
-| LuaJIT | `ade7495df8` | Dead Air bytecode compatibility is applied by the canonical build wrapper. |
+| LuaJIT | `8b7a19e030` (upstream v2.1 `c6ffc141`, 2026-09-08) | Dead Air fork of the upstream rolling release, see [LuaJIT](#luajit). The same changes are applied to a pristine upstream checkout by the canonical build wrapper. |
 | Luabind | `ffb1e5adb8` | Pinned Dead Air integration revision. |
 | mimalloc | `v3.4.3` (`152fbf2634`) | Static allocator built from pinned source for each configuration. |
 | SDL2 | `2.32.8` (`98d1f3a45a`) | Shared runtime and headers built from pinned source. |
@@ -20,6 +20,60 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | SSE2RVV | `f1ab91659` | Pinned upstream revision. |
 | xrLuaFix | `e0fadfd9d1` | Lua marshal compatibility is applied by the canonical build wrapper. |
 | zlib | `v1.3.2` (`da607da73`) | Built with warnings enabled and treated as errors. |
+
+## LuaJIT
+
+The engine runs upstream LuaJIT v2.1 with a short list of changes on top, each of them a separate
+commit on the `dependencies/luajit` branch. `patches/luajit-dead-air.patch` is the same list as one
+diff against the upstream revision named above, for a checkout that comes from upstream directly.
+
+LuaJIT is built without `LJ_GC64` (`LUAJIT_DISABLE_GC64`), and that is a compatibility decision, not
+an oversight. A save carries Lua closures as dumped bytecode, written either by the original x86
+game (LuaJIT 2.0) or by an earlier Refined build, and both use the one-slot frame layout. The
+two-slot layout of `LJ_GC64` numbers the registers of every call differently, so those closures
+could be neither run nor translated, and the saves holding them would stop loading.
+
+| Change | Why the engine needs it |
+| --- | --- |
+| `math.mod`, `string.gfind` | Lua 5.0 names the game scripts still use. |
+| C-style comments, `lj_allow_escape_sequences()` | The lexer accepts what the original script engine accepted. |
+| `coroutine.cstacksize` | Scripts written for LuaJIT 1.1 call it. |
+| `lua_gc(LUA_GCTIMEOUT)` | Time-boxed collection behind `lua_gc_method 2`. |
+| LuaJIT 2.0 bytecode in `lj_bcread.c` | Closures inside saves of the original game. |
+| String IDs derived from content | Upstream hashes a table key by an ID handed out when its string is interned, so `pairs()` order depends on the history of the session. Scripts save state with one `pairs()` walk and load it with another, in another session. The ID is the unseeded LuaJIT 2.0 hash again, which also keeps the order existing saves were written in. |
+| Casts at four sites | The LuaJIT target builds without a single warning at `/W3`. |
+| Low-address arena | See below. |
+
+Without `LJ_GC64` every GC object has to live below 2 GB, and stock LuaJIT asks the kernel for
+that memory piecemeal, whenever a state grows. The engine maps its archives, more than 16 GB of
+views, before the first state exists. Where Windows puts a view is a matter of ASLR policy: with
+bottom-up randomization, the default, the views land far above 4 GB; with it switched off (a
+common "gaming tweak", and the default of some stripped-down Windows builds) they are packed from
+the lowest address up and the range below 2 GB is gone before LuaJIT gets any of it. The game then
+died during device creation with dozens of `not enough memory` lines, or with `Cannot initialize
+script virtual machine`, on a machine with plenty of free RAM.
+
+LuaJIT therefore reserves its memory when the DLL is loaded, which the loader does before the
+engine runs a single instruction: the largest free blocks below 2 GB, up to 1.5 GB, as address
+space without commit charge. All states are served from that arena in 64 KB pages, the kernel is
+the fallback behind it, and `luaJIT_lowmem()` reports the numbers. The engine prints them once at
+startup and next to every Lua allocation failure:
+
+```
+* LuaJIT low memory: 1536 MB reserved in 1 region(s), 0 MB in use, peak 0 MB, 0 MB outside the arena
+```
+
+A line starting with `!` instead means that less than 512 MB could be reserved or that an
+allocation failed; the numbers tell a starved process (`reserved` small) from scripts that really
+used their memory up (`in use` close to `reserved`).
+
+`tools\qa\luajit-lowmem\Run-LuaJitLowMemQa.ps1` takes the address space below 2 GB away from a
+test process and runs a workload, an exhaustion and a two-thread case on top. With `-BaselineDll`
+it also shows that a DLL without the arena fails under the same conditions, and that both DLLs
+walk the tables of `table_order_fingerprint.lua` in the same order, which is the check to repeat
+after every LuaJIT update. `tools\qa\luajit-lowmem\Run-LowMemEngineBoot.ps1 -Rig <clone>` boots a
+QA clone with bottom-up ASLR switched off for the engine process alone and waits for a loaded
+level; `qa_luajit_probe.script` adds a save for a second process to load.
 
 ## Vendored source and generated bindings
 

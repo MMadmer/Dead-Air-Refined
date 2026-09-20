@@ -122,7 +122,7 @@ foreach ($submodule in @("Externals\SDL", "Externals\DirectXMath", "Externals\Di
 
 Apply-RequiredPatch `
     -Repository (Join-Path $repositoryRoot "Externals\LuaJIT") `
-    -Patch (Join-Path $repositoryRoot "patches\luajit-dead-air-bytecode.patch")
+    -Patch (Join-Path $repositoryRoot "patches\luajit-dead-air.patch")
 Apply-RequiredPatch `
     -Repository (Join-Path $repositoryRoot "Externals\xrLuaFix\lua-marshal") `
     -Patch (Join-Path $repositoryRoot "patches\lua-marshal-decode-error.patch") `

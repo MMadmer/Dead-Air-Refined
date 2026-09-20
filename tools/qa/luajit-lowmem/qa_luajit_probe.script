@@ -1,0 +1,50 @@
+-- LuaJIT update probe for a QA clone: reports the VM once the level is up, saves the game and
+-- quits, so that a second process can load what this one wrote. Copy it into the clone's
+-- gamedata\scripts for the run and remove it afterwards. Nothing here moves the actor.
+
+local started = false
+
+-- The engine's printf formats %s only, and the log is buffered until a flush.
+local function say(text)
+    printf("[LUAJIT_QA] %s", text)
+    get_console():execute("flush")
+end
+
+local function start()
+    if started then
+        return
+    end
+    started = true
+
+    say("level=" .. level.name() .. " jit=" .. tostring(jit and jit.version) ..
+        " lua_mb=" .. tostring(math.floor(collectgarbage("count") / 1024)))
+
+    local mark = time_global()
+    local saved = false
+    level.add_call(function()
+        -- A few seconds of ordinary updates first: binders, schemes and timers all get to run.
+        if not saved then
+            if time_global() - mark < 4000 then
+                return false
+            end
+            saved = true
+            mark = time_global()
+            get_console():execute("save qa_luajit_roundtrip")
+            say("save requested lua_mb=" .. tostring(math.floor(collectgarbage("count") / 1024)))
+            return false
+        end
+
+        -- The save is committed by a background transaction.
+        if time_global() - mark < 6000 then
+            return false
+        end
+        say("done")
+        get_console():execute("quit")
+        return true
+    end, function() end)
+end
+
+function on_game_start()
+    started = false
+    RegisterScriptCallback("actor_on_first_update", start)
+end

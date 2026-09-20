@@ -12,10 +12,9 @@ endif()
 
 project(xrLuaJIT C CXX ASM)
 
-# Version
+# Version. The release number is rolling: luajit.h gets it from the commit date.
 set(MAJVER 2)
-set(MINVER 0)
-set(RELVER 5)
+set(MINVER 1)
 set(ABIVER 5.1)
 set(NODOTABIVER 51)
 
@@ -85,7 +84,8 @@ endif()
 
 # Compiler options
 if (MSVC)
-    set(CCOPT "${CMAKE_C_FLAGS} /D_FILE_OFFSET_BITS=64 /D_LARGEFILE_SOURCE /U_FORTIFY_SOURCE")
+    # Same as upstream's msvcbuild.bat: LuaJIT is portable C and calls the plain CRT on purpose.
+    set(CCOPT "${CMAKE_C_FLAGS} /D_CRT_SECURE_NO_DEPRECATE /D_FILE_OFFSET_BITS=64 /D_LARGEFILE_SOURCE /U_FORTIFY_SOURCE")
     target_compile_options(xrLuaJIT PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
 else()
     set(CCOPT "${CMAKE_C_FLAGS} -O3")
@@ -353,6 +353,14 @@ set(DASM "${LUAJIT_DIR}/../dynasm/dynasm.lua")
 set(BUILDVM_ARCH "${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h")
 
 # Generate buildvm arch header
+# The host tools are configured with the parent's generator. A multi-config one
+# ignores the build type and warns about it on every configure.
+get_property(LUAJIT_HOST_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (LUAJIT_HOST_MULTI_CONFIG)
+    set(LUAJIT_HOST_BUILD_TYPE "")
+else()
+    set(LUAJIT_HOST_BUILD_TYPE "-DCMAKE_BUILD_TYPE=Release")
+endif()
 set(MINILUA_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/HostBuildTools/minilua")
 set(MINILUA_FILE "${MINILUA_BINARY_DIR}/minilua${CMAKE_EXECUTABLE_SUFFIX}")
 
@@ -364,7 +372,7 @@ add_custom_command(
         -S${CMAKE_CURRENT_SOURCE_DIR}/HostBuildTools/minilua
         -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
         -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
-        -DCMAKE_BUILD_TYPE=Release
+        ${LUAJIT_HOST_BUILD_TYPE}
         -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${MINILUA_BINARY_DIR}
         -DLUAJIT_DIR=${LUAJIT_DIR}
         -DLUA_USE_POSIX=${LUA_USE_POSIX}
@@ -378,8 +386,50 @@ add_custom_command(OUTPUT ${BUILDVM_ARCH}
     DEPENDS "${MINILUA_FILE}" "${DASM}" "${DASM_DASC}"
 )
 
+# luajit.h is generated: upstream stamps the rolling release number into
+# luajit_rolling.h. The number is the commit time of the LuaJIT checkout, and a
+# source tree without git history carries it in .relver instead.
+set(LUAJIT_RELVER_FILE "${CMAKE_CURRENT_BINARY_DIR}/luajit_relver.txt")
+set(LUAJIT_H "${CMAKE_CURRENT_BINARY_DIR}/luajit.h")
+
+find_package(Git QUIET)
+set(LUAJIT_RELVER "")
+if (GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" show -s --format=%ct
+        WORKING_DIRECTORY "${LUAJIT_DIR}"
+        OUTPUT_VARIABLE LUAJIT_RELVER
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+if (NOT LUAJIT_RELVER MATCHES "^[0-9]+$" AND EXISTS "${LUAJIT_DIR}/../.relver")
+    file(STRINGS "${LUAJIT_DIR}/../.relver" LUAJIT_RELVER LIMIT_COUNT 1)
+endif()
+if (NOT LUAJIT_RELVER MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "Cannot determine the LuaJIT rolling release number: neither git nor .relver has it.")
+endif()
+
+# Rewritten only on change, so a reconfigure does not rebuild the library.
+set(LUAJIT_RELVER_CONTENT "${LUAJIT_RELVER}\n")
+if (EXISTS "${LUAJIT_RELVER_FILE}")
+    file(READ "${LUAJIT_RELVER_FILE}" LUAJIT_RELVER_OLD)
+else()
+    set(LUAJIT_RELVER_OLD "")
+endif()
+if (NOT LUAJIT_RELVER_OLD STREQUAL LUAJIT_RELVER_CONTENT)
+    file(WRITE "${LUAJIT_RELVER_FILE}" "${LUAJIT_RELVER_CONTENT}")
+endif()
+
+add_custom_command(OUTPUT "${LUAJIT_H}"
+    COMMAND "${MINILUA_FILE}" "${LUAJIT_DIR}/host/genversion.lua"
+        "${LUAJIT_DIR}/luajit_rolling.h" "${LUAJIT_RELVER_FILE}" "${LUAJIT_H}"
+    DEPENDS "${MINILUA_FILE}" "${LUAJIT_DIR}/host/genversion.lua"
+        "${LUAJIT_DIR}/luajit_rolling.h" "${LUAJIT_RELVER_FILE}"
+)
+
 add_custom_target(buildvm_arch
-    DEPENDS ${BUILDVM_ARCH}
+    DEPENDS ${BUILDVM_ARCH} "${LUAJIT_H}"
 )
 
 set_target_properties(buildvm_arch PROPERTIES
@@ -397,14 +447,14 @@ add_custom_command(
         -G${CMAKE_GENERATOR}
         -S${CMAKE_CURRENT_SOURCE_DIR}/HostBuildTools/buildvm
         -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
-        -DCMAKE_BUILD_TYPE=Release
+        ${LUAJIT_HOST_BUILD_TYPE}
         -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${BUILDVM_BINARY_DIR}
         -DLUAJIT_DIR=${LUAJIT_DIR}
         -DBUILDVM_ARCH=${BUILDVM_ARCH}
         -DHOST_ACFLAGS="${HOST_ACFLAGS}"
         -DHOST_ALDFLAGS="${HOST_ALDFLAGS}"
     COMMAND ${CMAKE_COMMAND} --build ${BUILDVM_BINARY_DIR} --config Release --verbose
-    DEPENDS "${BUILDVM_ARCH}"
+    DEPENDS "${BUILDVM_ARCH}" "${LUAJIT_H}"
 )
 
 add_custom_target(buildvm
@@ -420,6 +470,7 @@ add_dependencies(buildvm buildvm_arch)
 list(APPEND LJLIB_C
     "${LUAJIT_DIR}/lib_base.c"
     "${LUAJIT_DIR}/lib_bit.c"
+    "${LUAJIT_DIR}/lib_buffer.c"
     "${LUAJIT_DIR}/lib_debug.c"
     "${LUAJIT_DIR}/lib_ffi.c"
     "${LUAJIT_DIR}/lib_io.c"
@@ -468,6 +519,7 @@ target_sources(xrLuaJIT PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/lj_libdef.h"
     "${CMAKE_CURRENT_BINARY_DIR}/lj_recdef.h"
     "${CMAKE_CURRENT_BINARY_DIR}/lj_folddef.h"
+    "${LUAJIT_H}"
 )
 
 if (CMAKE_UNITY_BUILD)
@@ -560,6 +612,8 @@ else()
         "${LUAJIT_DIR}/lj_profile.h"
         "${LUAJIT_DIR}/lj_record.c"
         "${LUAJIT_DIR}/lj_record.h"
+        "${LUAJIT_DIR}/lj_serialize.c"
+        "${LUAJIT_DIR}/lj_serialize.h"
         "${LUAJIT_DIR}/lj_snap.c"
         "${LUAJIT_DIR}/lj_snap.h"
         "${LUAJIT_DIR}/lj_state.c"
@@ -585,16 +639,15 @@ else()
         "${LUAJIT_DIR}/lua.h"
         "${LUAJIT_DIR}/lua.hpp"
         "${LUAJIT_DIR}/luaconf.h"
-        "${LUAJIT_DIR}/luajit.h"
+        "${LUAJIT_DIR}/luajit_rolling.h"
         "${LUAJIT_DIR}/lualib.h"
     )
 endif()
 
+# The binary directory is public: lua.hpp includes the generated luajit.h.
 target_include_directories(xrLuaJIT
     PUBLIC
     "${CMAKE_SOURCE_DIR}/Externals/LuaJIT/src"
-
-    PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
