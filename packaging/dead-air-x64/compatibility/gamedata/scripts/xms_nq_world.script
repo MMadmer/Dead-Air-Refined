@@ -621,6 +621,31 @@ K["npc.kill"] = {
 	end,
 }
 
+-- The name the player reads belongs to the character, not to a profile: the
+-- engine takes it straight, so a mod does not need its own character_desc entry
+-- for one renamed stalker. Offline there is no game object to take it, so the
+-- rename is parked as an online job and lands the moment the NPC spawns in -
+-- which is the normal case when a quest names someone on the far side of a map.
+K["npc.set_name"] = {
+	run = function(ctx, p)
+		local name = util.format_text(ctx, util.pick_text(p.name))
+		if (type(name) ~= "string" or name == "") then
+			util.warn("%s/%s: npc.set_name: the name is empty", ctx.uid, ctx.node_id)
+			return
+		end
+		local go = util.resolve_npc_go(ctx, p.npc)
+		if (go and go.set_character_name and pcall(go.set_character_name, go, name)) then return end
+
+		local se = util.resolve_npc_se(ctx, p.npc)
+		local id = se and se.id or util.ref_object_id(ctx, p.npc)
+		if not (id) then
+			util.warn("%s/%s: npc.set_name: npc not found", ctx.uid, ctx.node_id)
+			return
+		end
+		core.online_job(ctx.qs, id, { name = name })
+	end,
+}
+
 -- ---------------------------------------------------------------------------- extra: relations
 local function actor_community()
 	local ok, c = pcall(function() return alife():actor():community() end)

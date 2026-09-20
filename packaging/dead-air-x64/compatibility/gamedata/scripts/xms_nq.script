@@ -197,6 +197,8 @@ local function run_online_jobs()
 					local go = util.go_by_id(id)
 					if (go) then
 						if (job.uses and go.set_remaining_uses) then pcall(go.set_remaining_uses, go, job.uses) end
+						-- a rename parked while the NPC was offline (npc.set_name)
+						if (job.name and go.set_character_name) then pcall(go.set_character_name, go, job.name) end
 						local done = true
 						if (job.kill) then
 							local ok, alive = pcall(go.alive, go)

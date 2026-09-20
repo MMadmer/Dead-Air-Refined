@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 13
+version = 14
 api     = 1
 
 ; ============================================================ triggers
@@ -615,6 +615,17 @@ params = npc
 npc    = npc_ref, required
 impl   = core
 since  = 1
+
+[nq.npc.set_name]
+group  = npc
+title  = Set NPC name
+desc   = Renames the NPC - the name over their head, in the dialog window and in the PDA. No character profile is needed for it. An NPC that is offline is renamed the moment it comes online, so the name survives being set far from the player.
+use    = extra
+params = npc, name
+npc    = npc_ref, required
+name   = text, required
+impl   = core
+since  = 14
 
 ; ============================================================ extra: relations, ui, misc
 [nq.relation.set]
