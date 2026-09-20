@@ -73,6 +73,17 @@ LUA_API void luaJIT_profile_stop(lua_State *L);
 LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
 					     int depth, size_t *len);
 
+/* Low-address arena of Windows/x64 builds without LJ_GC64. Sizes in bytes. */
+typedef struct luaJIT_LowMem {
+  size_t reserved;	/* Address space claimed below 2 GB at startup. */
+  size_t used;		/* Part of it that Lua states hold right now. */
+  size_t peak;		/* High-water mark of the above. */
+  size_t outside;	/* Held below 2 GB, but outside of the arena. */
+} luaJIT_LowMem;
+
+/* Returns the number of reserved regions. Zero: this build has no arena. */
+LUA_API int luaJIT_lowmem(luaJIT_LowMem *info);
+
 /* Enforce (dynamic) linker error for version mismatches. Call from main. */
 LUA_API void LUAJIT_VERSION_SYM(void);
 
