@@ -1,0 +1,52 @@
+-- Headless fixture: a scenario with two roles, one of them a group.
+-- Drives them with the steps that generate logic (goto, hold) and the ones that
+-- do not (stance), then ends - so the test can watch the instance live and die.
+return {
+  nq    = 1,
+  type  = "scenario",
+  id    = "scen_guards",
+  title = "QA guards",
+  roles = {
+    leader = { title = "Leader" },
+    guards = { title = "Guards", many = true, optional = true },
+  },
+  vars  = {
+    stage = 0,
+  },
+  nodes = {
+    {
+      id   = "start",
+      kind = "trigger.start",
+      out  = { next = "hostile" },
+    },
+    {
+      id       = "hostile",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "npc.stance", params = { who = { "leader", "guards" }, to_actor = "enemy", combat_ignore = false } },
+        { kind = "var.set", params = { name = "stage", value = 1 } },
+      },
+      out      = { next = "move" },
+    },
+    {
+      id     = "move",
+      kind   = "npc.goto",
+      params = { who = "leader", path = "qa_walk", look = "qa_look", move = "run", arrive = true, radius = 3 },
+      out    = { done = "dig_in" },
+    },
+    {
+      id       = "dig_in",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "npc.hold", params = { who = "leader", path = "qa_post", look = "qa_look", radius = 15 } },
+        { kind = "var.set", params = { name = "stage", value = 2 } },
+      },
+      out      = { next = "finish" },
+    },
+    {
+      id     = "finish",
+      kind   = "flow.end",
+      params = { status = "completed" },
+    },
+  },
+}

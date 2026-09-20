@@ -705,8 +705,73 @@ function alife() return alife_obj end
 mock.level_names = { [1] = "l01_escape", [2] = "l02_garbage" }
 mock.level_name = "l01_escape"
 
+-- ---------------------------------------------------------------------------- schemes
+-- What a scenario step actually does is write logic text and hand it to a stock
+-- scheme. The test wants to READ that text, so the three entry points it goes
+-- through are recorded instead of simulated: mock.applied[id] holds the section
+-- it was given, the scheme that ended up active and the whole ini text.
+mock.applied = {}
+mock.paths = {}				-- patrol paths that "exist" on this level
+
+function mock.add_path(name, points)
+	mock.paths[name] = points or { vector():set(0, 0, 0) }
+end
+
+local dyn_ini_mt = {}
+dyn_ini_mt.__index = dyn_ini_mt
+function dyn_ini_mt:section_exist(s) return self.sections[s] ~= nil end
+function dyn_ini_mt:line_exist(s, k) return self.sections[s] and self.sections[s][k] ~= nil end
+function dyn_ini_mt:r_string(s, k) return self.sections[s] and self.sections[s][k] end
+
+function create_ini_file(text)
+	local sections, cur = {}, nil
+	for line in string.gmatch(tostring(text) .. "\n", "([^\n]*)\n") do
+		local head = string.match(line, "^%s*%[([^%]]+)%]")
+		if (head) then
+			cur = {}
+			sections[head] = cur
+		elseif (cur) then
+			local k, v = string.match(line, "^%s*([%w_]+)%s*=%s*(.-)%s*$")
+			if (k) then cur[k] = v end
+		end
+	end
+	return setmetatable({ sections = sections, text = tostring(text) }, dyn_ini_mt)
+end
+
+modules = modules or { stype_stalker = 0, stype_mobile = 1, stype_item = 2 }
+
+xr_logic = {
+	configure_schemes = function(go, ini, name, stype, section, gulag)
+		local id = go and go:id()
+		mock.applied[id] = { section = section, ini_name = name, text = ini and ini.text or "", gulag = gulag }
+		-- the real one parks the ini on the storage; everything that later wants to
+		-- switch the object off reads it from there
+		db.storage[id] = db.storage[id] or {}
+		db.storage[id].ini = ini
+	end,
+	determine_section_to_activate = function(go, ini, section)
+		local s = ini and ini.sections and ini.sections[section]
+		return s and s.active or section
+	end,
+	activate_by_section = function(go, ini, sect, gulag, loading)
+		local id = go and go:id()
+		local rec = mock.applied[id]
+		if (rec) then
+			rec.active = sect
+			rec.scheme = string.match(tostring(sect), "^([%w_]+)@") or sect
+		end
+	end,
+	switch_to_section = function(go, ini, section)
+		local id = go and go:id()
+		mock.applied[id] = mock.applied[id] or {}
+		mock.applied[id].active = section
+		mock.applied[id].scheme = section
+	end,
+}
+
 level = {
 	name = function() return mock.level_name end,
+	patrol_path_exists = function(name) return mock.paths[name] ~= nil end,
 	-- a navmesh that snaps to a one metre grid, so scatter tests can see real,
 	-- distinct, reproducible points instead of one magic number
 	vertex_id = function(pos)
@@ -728,6 +793,17 @@ level = {
 	get_time_hours = function() return mock.time_hours end,
 	get_start_time = function() return ctime(0) end,
 }
+
+local patrol_mt = {}
+patrol_mt.__index = patrol_mt
+function patrol_mt:count() return #self.points end
+function patrol_mt:point(i) return self.points[i + 1] end
+
+function patrol(name)
+	local pts = mock.paths[name]
+	if not (pts) then error("no patrol path " .. tostring(name)) end
+	return setmetatable({ points = pts }, patrol_mt)
+end
 
 game_graph = function()
 	return {
@@ -1264,7 +1340,7 @@ local function build_xms()
 end
 
 -- ---------------------------------------------------------------------------- script namespaces
-local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true }
+local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_scenario = true }
 local loading = {}
 
 local function load_script(name)

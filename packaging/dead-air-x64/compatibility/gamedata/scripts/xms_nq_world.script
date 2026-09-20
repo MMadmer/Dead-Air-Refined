@@ -70,6 +70,47 @@ local function release_se(se)
 	pcall(function() alife():release(se, true) end)
 end
 
+-- An object a quest removes is rarely idle: it may be talking to the player,
+-- running a scheme a scenario gave it, or in the middle of a fight. The engine's
+-- own safe release handles the object; what it does not do is tell the things
+-- that were DRIVING it to stop, and those are the ones that would go looking for
+-- it a frame later.
+--
+--   * a scenario holding it lets it go, so no step re-applies a scheme to
+--     something that is being released;
+--   * a dialog with the player is ended, because the talk window outlives the
+--     object otherwise;
+--   * the active scheme is switched off, so nothing updates a corpse of an id.
+--
+-- Called for every removal, online or offline: offline most of this is a no-op,
+-- and an object that comes online between the two is exactly the case worth
+-- covering.
+local function prepare_removal(id)
+	if not (id) then return end
+	if (xms_nq_scenario and xms_nq_scenario.forget_object) then
+		pcall(xms_nq_scenario.forget_object, id)
+	end
+	local go = util.go_by_id(id)
+	if not (go) then return end
+	if (go.stop_talk) then pcall(go.stop_talk, go) end
+	local st = db and db.storage and db.storage[id]
+	if (st and st.ini and xr_logic and xr_logic.switch_to_section) then
+		pcall(xr_logic.switch_to_section, go, st.ini, "nil")
+	end
+end
+
+-- Every member of a squad, by id - a squad is removed member by member, and each
+-- of them may be busy with something of its own.
+local function squad_member_ids(se)
+	local out = {}
+	if not (se) then return out end
+	local ok = pcall(function()
+		for member in se:squad_members() do out[#out + 1] = member.id end
+	end)
+	if not (ok) then return {} end
+	return out
+end
+
 local function sim_board()
 	if (SIMBOARD) then return SIMBOARD end
 	if (sim_board and sim_board.get_sim_board) then
@@ -562,6 +603,8 @@ K["squad.remove"] = {
 			util.warn("%s/%s: squad.remove: target squad not found (already gone?)", ctx.uid, ctx.node_id)
 			return
 		end
+		for _, id in ipairs(squad_member_ids(sq)) do prepare_removal(id) end
+		prepare_removal(sq.id)
 		local board = sim_board()
 		local ok = false
 		if (board and board.remove_squad) then ok = pcall(board.remove_squad, board, sq) end
@@ -580,6 +623,7 @@ K["object.remove"] = {
 		if not (se) then
 			util.warn("%s/%s: object.remove: object not found (already gone?)", ctx.uid, ctx.node_id)
 		else
+			prepare_removal(id)
 			release_se(se)
 		end
 		-- the ref named a thing that no longer exists; leaving it would let a later
@@ -596,6 +640,7 @@ K["npc.remove"] = {
 			util.warn("%s/%s: npc.remove: npc not found", ctx.uid, ctx.node_id)
 			return
 		end
+		prepare_removal(se.id)
 		release_se(se)
 	end,
 }

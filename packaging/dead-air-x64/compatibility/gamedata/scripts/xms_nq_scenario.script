@@ -50,6 +50,30 @@ local function is_instance(uid)
 	return type(uid) == "string" and string.find(uid, UID_MARK, 1, true) ~= nil
 end
 
+local function any_instance()
+	local st = core.get_state()
+	for uid in pairs((st and st.quests) or {}) do
+		if (is_instance(uid)) then return true end
+	end
+	return false
+end
+
+-- The engine calls only xms_nq back, so this module asks for the tick itself -
+-- and gives it up again the moment nothing is running, the way the world module
+-- does with squad registration. A callback that outlives its reason is a
+-- callback that fires in a game with no quests at all.
+local function ensure_tick()
+	if (tick_on or not RegisterScriptCallback) then return end
+	RegisterScriptCallback("actor_on_update", tick)
+	tick_on = true
+end
+
+local function drop_tick()
+	if not (tick_on) then return end
+	if (UnregisterScriptCallback) then pcall(UnregisterScriptCallback, "actor_on_update", tick) end
+	tick_on = false
+end
+
 -- every id of a role, living or not, in binding order
 local function role_ids(qs, name)
 	if not (qs and qs.roles) then return {} end
@@ -307,6 +331,7 @@ local function stop_instance(uid, reason)
 	local n = release_all(uid)
 	util.info("scenario %s ended (%s), %d NPC(s) released", uid, tostring(reason), n)
 	core.instance_forget(uid)
+	if not (any_instance()) then drop_tick() end
 	-- the quest that started it hears about it: its ref becomes "done" and a
 	-- node that was waiting is let go
 	if (type(owner) == "table" and owner.uid and owner.node) then
@@ -367,6 +392,7 @@ K["scenario.run"] = {
 		for _, r in pairs(qs.roles) do cast = cast + #r.ids end
 		util.info("scenario %s started by %s/%s, %d NPC(s)", uid, ctx.uid, ctx.node_id, cast)
 
+		ensure_tick()
 		core.instance_arm(uid)
 
 		if (p.wait_end == false) then return { pin = "done" } end
@@ -384,10 +410,10 @@ K["scenario.run"] = {
 }
 
 K["scenario.stop"] = {
-	run = function(ctx)
-		local uid = instance_of_ref(ctx, ctx.params.target)
+	run = function(ctx, p)
+		local uid = instance_of_ref(ctx, p.target)
 		if not (uid) then
-			util.warn("%s/%s: scenario.stop: nothing running under ref '%s'", ctx.uid, ctx.node_id, tostring(ctx.params.target))
+			util.warn("%s/%s: scenario.stop: nothing running under ref '%s'", ctx.uid, ctx.node_id, tostring(p.target))
 			return
 		end
 		stop_instance(uid, "scenario.stop")
@@ -464,8 +490,7 @@ K["npc.goto"] = {
 }
 
 K["npc.hold"] = {
-	run = function(ctx)
-		local p = ctx.params
+	run = function(ctx, p)
 		if not (patrol_exists(p.path)) then
 			error("npc.hold: there is no waypoint path '" .. tostring(p.path) .. "'")
 		end
@@ -498,8 +523,7 @@ K["npc.hold"] = {
 }
 
 K["npc.anim"] = {
-	run = function(ctx)
-		local p = ctx.params
+	run = function(ctx, p)
 		local tag = tag_of(ctx)
 		local state = (type(p.state) == "string" and p.state ~= "") and p.state or "wait"
 		for _, id in ipairs(targets(ctx, p)) do
@@ -521,8 +545,7 @@ K["npc.anim"] = {
 }
 
 K["npc.follow"] = {
-	run = function(ctx)
-		local p = ctx.params
+	run = function(ctx, p)
 		local tag = tag_of(ctx)
 		-- who to walk after: the player, or one member of another role
 		local target_story = nil
@@ -571,8 +594,7 @@ local function set_enemy(id, other_id)
 end
 
 K["npc.attack"] = {
-	run = function(ctx)
-		local p = ctx.params
+	run = function(ctx, p)
 		local mine = targets(ctx, p)
 		local foes = {}
 
@@ -615,8 +637,7 @@ K["npc.attack"] = {
 }
 
 K["npc.stance"] = {
-	run = function(ctx)
-		local p = ctx.params
+	run = function(ctx, p)
 		local a = actor()
 		for _, id in ipairs(targets(ctx, p)) do
 			local go = go_by_id(id)
@@ -642,9 +663,9 @@ K["npc.stance"] = {
 }
 
 K["npc.release"] = {
-	run = function(ctx)
+	run = function(ctx, p)
 		local qs = ctx.qs
-		for _, id in ipairs(targets(ctx, ctx.params)) do
+		for _, id in ipairs(targets(ctx, p)) do
 			release(id)
 			if (qs.held) then qs.held[tostring(id)] = nil end
 			if (qs.pending) then qs.pending[tostring(id)] = nil end
@@ -726,10 +747,13 @@ function on_init()
 	if (restored > 0 or dropped > 0) then
 		util.info("scenarios: %d restored, %d dropped", restored, dropped)
 	end
-	if not (tick_on) and RegisterScriptCallback then
-		RegisterScriptCallback("actor_on_update", tick)
-		tick_on = true
-	end
+	if (any_instance()) then ensure_tick() else drop_tick() end
+end
+
+-- A reload rebuilds every graph from the assets: whatever was running stops
+-- being driven until on_init puts it back.
+function on_reload_begin()
+	drop_tick()
 end
 
 -- The interpreter finished a graph. For an instance that is the end of the
@@ -758,6 +782,28 @@ function tick()
 			if (seen > 0 and living == 0) then stop_instance(uid, "every role is empty") end
 		end
 	end
+end
+
+-- A quest removed this object. Every instance drops it: a role loses the member,
+-- a parked step is thrown away, and the held list forgets it - so nothing tries
+-- to hand a scheme to something that is being released, and an instance whose
+-- whole cast was removed ends instead of waiting for it.
+function forget_object(id)
+	local st = core.get_state()
+	if not (st and st.quests or id == nil) then return end
+	local key = tostring(id)
+	for uid, qs in pairs(st.quests) do
+		if (is_instance(uid)) then
+			if (qs.held) then qs.held[key] = nil end
+			if (qs.pending) then qs.pending[key] = nil end
+			for _, r in pairs(qs.roles or {}) do
+				for i = #(r.ids or {}), 1, -1 do
+					if (r.ids[i] == id) then table.remove(r.ids, i) end
+				end
+			end
+		end
+	end
+	core.mark_dirty()
 end
 
 function kinds() return K end

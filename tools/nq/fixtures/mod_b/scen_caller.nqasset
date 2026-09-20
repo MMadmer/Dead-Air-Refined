@@ -1,0 +1,49 @@
+-- Headless fixture: the quest side of a scenario - spawn a squad, run the
+-- scenario on it, and go on once it is over. Manual activation so the test
+-- starts it when it wants to.
+return {
+  nq         = 1,
+  id         = "scen_caller",
+  title      = "QA scenario caller",
+  activation = "manual",
+  vars       = {
+    after = false,
+  },
+  nodes = {
+    {
+      id       = "start",
+      kind     = "trigger.start",
+      on_enter = {
+        { kind = "spawn.squad", params = { section = "army_sim_squad_novice", smart = "esc_smart_terrain_2_12", ref = "band" } },
+      },
+      out      = { next = "run" },
+    },
+    {
+      id     = "run",
+      kind   = "scenario.run",
+      params = {
+        asset    = "scen_guards",
+        ref      = "show",
+        wait_end = true,
+        roles    = {
+          leader = { story = "esc_2_12_stalker_wolf" },
+          guards = { squad = "band" },
+        },
+      },
+      out    = { done = "after" },
+    },
+    {
+      id       = "after",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "after", value = true } },
+      },
+      out      = { next = "finish" },
+    },
+    {
+      id     = "finish",
+      kind   = "flow.end",
+      params = { status = "completed" },
+    },
+  },
+}

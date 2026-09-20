@@ -688,6 +688,49 @@ local function canon_param(st, node, slot, p, v, kind)
 	elseif (t == "cond_list") then
 		if (type(v) ~= "table") then return nil, false, "must be a list of conditions" end
 		return canon_cond_list(st, node, slot, v), true
+	elseif (t == "role") then
+		-- one role or a list of them: a step that addresses three roles at once is
+		-- how a whole ambush moves on one line (par. 19.5)
+		if (type(v) == "string") then
+			if not (is_ident(v)) then return nil, false, "must be a role name [a-z0-9_]" end
+			return { v }, true
+		end
+		if (type(v) ~= "table" or #v == 0) then return nil, false, "must be a role name or a list of them" end
+		local out = {}
+		for _, name in ipairs(v) do
+			if (type(name) ~= "string" or not is_ident(name)) then
+				return nil, false, "role names must be [a-z0-9_]"
+			end
+			out[#out + 1] = name
+		end
+		return out, true
+	elseif (t == "role_or_actor" or t == "attack_target") then
+		if (type(v) ~= "table") then return nil, false, "must be { actor = true } or { role = ... }" end
+		local forms = 0
+		if (v.actor ~= nil) then forms = forms + 1 end
+		if (v.role ~= nil) then
+			forms = forms + 1
+			if (type(v.role) ~= "string" or not is_ident(v.role)) then return nil, false, "role must be a role name" end
+		end
+		if (t == "attack_target") then
+			if (v.community ~= nil) then forms = forms + 1 end
+			if (v.story ~= nil or v.ref ~= nil or v.profile ~= nil) then forms = forms + 1 end
+		end
+		if (forms == 0) then return nil, false, "names nobody" end
+		if (forms > 1) then return nil, false, "must name exactly one target" end
+		return v, true
+	elseif (t == "role_bindings") then
+		-- what the quest hands the scenario: role name -> the reference forms of par. 8
+		if (type(v) ~= "table") then return nil, false, "must be { role = { story = ... }, ... }" end
+		for name, binding in pairs(v) do
+			if (type(name) ~= "string" or not is_ident(name)) then
+				return nil, false, "binding keys must be role names [a-z0-9_]"
+			end
+			if (type(binding) ~= "table") then
+				return nil, false, "the binding of role '" .. name .. "' must be a reference table"
+			end
+		end
+		return v, true
 	elseif (t == "lua") then
 		if (type(v) ~= "string") then return nil, false, "must be a string of Lua code" end
 		return v, true
