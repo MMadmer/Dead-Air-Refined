@@ -29,6 +29,7 @@
 
 #include <luabind/class_info.hpp>
 
+#include <cstring>
 #include <mutex>
 #include <stdarg.h>
 
@@ -1080,7 +1081,7 @@ void CScriptEngine::parse_script_namespace(pcstr name, pstr ns, size_t nsSize, p
     else
     {
         VERIFY(size_t(p - name + 1) <= nsSize);
-        strncpy(ns, name, p - name);
+        std::memcpy(ns, name, p - name);
         ns[p - name] = 0;
     }
     xr_strcpy(func, funcSize, p + 1);

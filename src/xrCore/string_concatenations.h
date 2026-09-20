@@ -72,7 +72,7 @@ pstr strconcat(char (&dest)[Size], const Args... sources)
     {                                                                       \
         xray::core::detail::string_tupples tupplesUniqueId(__VA_ARGS__);    \
         size_t bufferSize = tupplesUniqueId.size();                         \
-        xray::core::detail::check_stack_overflow(bufferSize);               \
+        xray::core::detail::check_stack_overflow(static_cast<u32>(bufferSize)); \
         (dest) = static_cast<pstr>(xr_alloca(bufferSize));                  \
         tupplesUniqueId.concat(dest);                                       \
     } while (0)
