@@ -1,6 +1,6 @@
 /*
 ** Garbage collector.
-** Copyright (C) 2005-2021 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #ifndef _LJ_GC_H
@@ -33,10 +33,6 @@ enum {
 #define isblack(x)	((x)->gch.marked & LJ_GC_BLACK)
 #define isgray(x)	(!((x)->gch.marked & (LJ_GC_BLACK|LJ_GC_WHITES)))
 #define tviswhite(x)	(tvisgcv(x) && iswhite(gcV(x)))
-#ifdef __e2k__
-/* Workaround for speculative loads from invalid addresses */
-#define tviswhite_volatile(x)  (tvisgcv(x) && iswhite((volatile GCobj *) gcV(x)))
-#endif
 #define otherwhite(g)	(g->gc.currentwhite ^ LJ_GC_WHITES)
 #define isdead(g, v)	((v)->gch.marked & otherwhite(g) & LJ_GC_WHITES)
 

@@ -1,6 +1,6 @@
 /*
 ** Stack frames.
-** Copyright (C) 2005-2021 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 */
 
 #ifndef _LJ_FRAME_H
@@ -192,12 +192,12 @@ enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 #endif
 #define CFRAME_SHIFT_MULTRES	3
 #elif LJ_TARGET_ARM64
-#define CFRAME_OFS_ERRF		196
-#define CFRAME_OFS_NRES		200
-#define CFRAME_OFS_PREV		160
-#define CFRAME_OFS_L		176
-#define CFRAME_OFS_PC		168
-#define CFRAME_OFS_MULTRES	192
+#define CFRAME_OFS_ERRF		36
+#define CFRAME_OFS_NRES		40
+#define CFRAME_OFS_PREV		0
+#define CFRAME_OFS_L		16
+#define CFRAME_OFS_PC		8
+#define CFRAME_OFS_MULTRES	32
 #define CFRAME_SIZE		208
 #define CFRAME_SHIFT_MULTRES	3
 #elif LJ_TARGET_PPC
@@ -219,15 +219,6 @@ enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 #define CFRAME_OFS_MULTRES	456
 #define CFRAME_SIZE		400
 #define CFRAME_SHIFT_MULTRES	3
-#elif LJ_ARCH_PPC64
-#define CFRAME_OFS_ERRF         88
-#define CFRAME_OFS_NRES         80
-#define CFRAME_OFS_L            72
-#define CFRAME_OFS_PC           64
-#define CFRAME_OFS_MULTRES      56
-#define CFRAME_OFS_PREV         48
-#define CFRAME_SIZE             400
-#define CFRAME_SHIFT_MULTRES    3
 #else
 #define CFRAME_OFS_ERRF		48
 #define CFRAME_OFS_NRES		44
@@ -273,15 +264,6 @@ enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 #endif
 #define CFRAME_OFS_MULTRES	0
 #define CFRAME_SHIFT_MULTRES	3
-#elif LJ_TARGET_E2K
-#define CFRAME_OFS_PREV     96
-#define CFRAME_OFS_PC       88
-#define CFRAME_OFS_L        80
-#define CFRAME_OFS_ERRF     76
-#define CFRAME_OFS_NRES     72
-#define CFRAME_OFS_MULTRES  64
-#define CFRAME_SIZE         112
-#define CFRAME_SHIFT_MULTRES    3
 #else
 #error "Missing CFRAME_* definitions for this architecture"
 #endif

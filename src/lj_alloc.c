@@ -32,6 +32,7 @@
 #include "lj_arch.h"
 #include "lj_alloc.h"
 #include "lj_prng.h"
+#include "luajit.h"
 
 #ifndef LUAJIT_USE_SYSMALLOC
 
@@ -100,8 +101,8 @@
 
 #if LJ_GC64
 #define LJ_ALLOC_MBITS		47	/* 128 TB in LJ_GC64 mode. */
-#elif LJ_TARGET_X64 && LJ_HASJIT
-/* Due to limitations in the x64 compiler backend. */
+#elif LJ_TARGET_X64
+/* Due to limitations in the x64 non-GC64 VM. */
 #define LJ_ALLOC_MBITS		31	/* 2 GB on x64 with !LJ_GC64. */
 #else
 #define LJ_ALLOC_MBITS		32	/* 4 GB on other archs with !LJ_GC64. */
@@ -140,27 +141,236 @@ static void init_mmap(void)
 }
 #define INIT_MMAP()	init_mmap()
 
-/* Win64 32 bit MMAP via NtAllocateVirtualMemory. */
-static void *mmap_plain(size_t size)
+/* -- Low-address arena ---------------------------------------------------
+**
+** GC memory has to stay below 2 GB in this mode, and the kernel is asked
+** for it piecemeal, whenever a state grows. A host that maps gigabytes of
+** files on startup can use up that range before the first state exists:
+** every allocation then fails with "not enough memory", no matter how
+** much RAM is free. Whether it happens depends on where the OS puts the
+** mappings, i.e. on ASLR settings outside of our control.
+**
+** So the range is claimed once, while the process is still empty. The
+** largest free blocks below 2 GB are reserved (address space only, no
+** commit charge) and all states of the process are served from them in
+** 64 KB pages. The kernel remains the fallback once the arena is full.
+*/
+
+#define LOWARENA_PAGEBITS	16	/* Allocation granularity of the OS. */
+#define LOWARENA_PAGESIZE	((size_t)1 << LOWARENA_PAGEBITS)
+#define LOWARENA_NPAGES		(1u << (31 - LOWARENA_PAGEBITS))
+#define LOWARENA_BOTTOM		((uintptr_t)0x00010000)
+#define LOWARENA_TOP		((uintptr_t)0x7ffe0000)  /* KUSER_SHARED_DATA. */
+#define LOWARENA_MAXREGIONS	8
+#define LOWARENA_MINREGION	((size_t)8 << 20)
+/* Leaves room below 2 GB for anything else that may depend on it. */
+#define LOWARENA_BUDGET		((size_t)1536 << 20)
+
+#define lowarena_addr(page)	((char *)((uintptr_t)(page) << LOWARENA_PAGEBITS))
+
+typedef struct LowRegion {
+  uint32_t first;	/* First page. */
+  uint32_t end;		/* One past the last page. */
+} LowRegion;
+
+static SRWLOCK lowarena_lock = SRWLOCK_INIT;
+static int lowarena_ready;
+static uint32_t lowarena_nregions;
+static LowRegion lowarena_region[LOWARENA_MAXREGIONS];	/* By address. */
+static uint32_t lowarena_used[LOWARENA_NPAGES/32];	/* One bit per page. */
+static luaJIT_LowMem lowarena_stat;
+
+/* Reserve the largest free blocks below 2 GB. Needs the lock. */
+static void lowarena_setup(void)
 {
-  DWORD olderr = GetLastError();
-  void *ptr = NULL;
-  long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
-		  MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-  SetLastError(olderr);
-  return st == 0 ? ptr : MFAIL;
+  LowRegion cand[LOWARENA_MAXREGIONS];	/* By size, largest first. */
+  uint32_t ncand = 0, i, j;
+  size_t budget = LOWARENA_BUDGET;
+  uintptr_t addr = LOWARENA_BOTTOM;
+  lowarena_ready = 1;
+  while (addr < LOWARENA_TOP) {
+    MEMORY_BASIC_INFORMATION minfo;
+    uintptr_t base, end;
+    if (VirtualQuery((void *)addr, &minfo, sizeof(minfo)) == 0)
+      break;
+    base = (uintptr_t)minfo.BaseAddress;
+    end = base + minfo.RegionSize;
+    if (end <= addr)
+      break;
+    if (minfo.State == MEM_FREE) {
+      uintptr_t lo = (addr + LOWARENA_PAGESIZE-1) & ~(LOWARENA_PAGESIZE-1);
+      uintptr_t hi = (end < LOWARENA_TOP ? end : LOWARENA_TOP) &
+		     ~(LOWARENA_PAGESIZE-1);
+      if (hi > lo && hi - lo >= LOWARENA_MINREGION) {
+	LowRegion r;
+	r.first = (uint32_t)(lo >> LOWARENA_PAGEBITS);
+	r.end = (uint32_t)(hi >> LOWARENA_PAGEBITS);
+	for (i = 0; i < ncand; i++)
+	  if (r.end - r.first > cand[i].end - cand[i].first)
+	    break;
+	if (i < LOWARENA_MAXREGIONS) {
+	  if (ncand < LOWARENA_MAXREGIONS) ncand++;
+	  for (j = ncand-1; j > i; j--) cand[j] = cand[j-1];
+	  cand[i] = r;
+	}
+      }
+    }
+    addr = end;
+  }
+  for (i = 0; i < ncand && budget >= LOWARENA_MINREGION; i++) {
+    LowRegion r = cand[i];
+    size_t size = (size_t)(r.end - r.first) << LOWARENA_PAGEBITS;
+    if (size > budget) {  /* Keep the top part, the bottom fills up first. */
+      size = budget;
+      r.first = r.end - (uint32_t)(size >> LOWARENA_PAGEBITS);
+    }
+    if (VirtualAlloc(lowarena_addr(r.first), size, MEM_RESERVE,
+		     PAGE_NOACCESS) == NULL)
+      continue;  /* Somebody else was faster. */
+    budget -= size;
+    lowarena_stat.reserved += size;
+    for (j = lowarena_nregions++; j > 0; j--) {
+      if (lowarena_region[j-1].first < r.first) break;
+      lowarena_region[j] = lowarena_region[j-1];
+    }
+    lowarena_region[j] = r;
+  }
 }
 
-/* For direct MMAP, use MEM_TOP_DOWN to minimize interference */
-static void *direct_mmap(size_t size)
+/* Find a run of n free pages. Returns the first page or 0. */
+static uint32_t lowarena_find(uint32_t n, int topdown)
+{
+  uint32_t k;
+  for (k = 0; k < lowarena_nregions; k++) {
+    const LowRegion *r = &lowarena_region[topdown ? lowarena_nregions-1-k : k];
+    uint32_t run = 0, i;
+    if (r->end - r->first < n)
+      continue;
+    if (!topdown) {
+      for (i = r->first; i < r->end; i++) {
+	uint32_t w = lowarena_used[i >> 5];
+	if (w == ~(uint32_t)0 && (i & 31) == 0) {
+	  i += 31; run = 0;  /* Only pages in use set bits: skip the word. */
+	} else if ((w >> (i & 31)) & 1) {
+	  run = 0;
+	} else if (++run == n) {
+	  return i + 1 - n;
+	}
+      }
+    } else {
+      for (i = r->end; i-- > r->first; ) {
+	uint32_t w = lowarena_used[i >> 5];
+	if (w == ~(uint32_t)0 && (i & 31) == 31 && i >= r->first + 31) {
+	  i -= 31; run = 0;
+	} else if ((w >> (i & 31)) & 1) {
+	  run = 0;
+	} else if (++run == n) {
+	  return i;
+	}
+      }
+    }
+  }
+  return 0;
+}
+
+/* Allocate committed memory from the arena. Returns NULL if there is none. */
+static void *lowarena_alloc(size_t size, int topdown)
+{
+  size_t asize = (size + LOWARENA_PAGESIZE-1) & ~(LOWARENA_PAGESIZE-1);
+  uint32_t n = (uint32_t)(asize >> LOWARENA_PAGEBITS), page, i;
+  void *ptr = NULL;
+  if (asize < size || asize > LOWARENA_BUDGET)
+    return NULL;
+  AcquireSRWLockExclusive(&lowarena_lock);
+  if (!lowarena_ready)
+    lowarena_setup();
+  page = lowarena_find(n, topdown);
+  if (page) {
+    /* Commit what was asked for: the tail of the last page stays untouched. */
+    ptr = VirtualAlloc(lowarena_addr(page), size, MEM_COMMIT, PAGE_READWRITE);
+    if (ptr != NULL) {
+      for (i = page; i < page + n; i++)
+	lowarena_used[i >> 5] |= (uint32_t)1 << (i & 31);
+      lowarena_stat.used += asize;
+      if (lowarena_stat.used > lowarena_stat.peak)
+	lowarena_stat.peak = lowarena_stat.used;
+    }
+  }
+  ReleaseSRWLockExclusive(&lowarena_lock);
+  return ptr;
+}
+
+/* Length of the leading part of a range that lies either completely
+** inside of one region or completely outside of all of them.
+*/
+static size_t lowarena_span(char *ptr, size_t size, int *inside)
+{
+  uintptr_t a = (uintptr_t)ptr, e = a + size;
+  uint32_t k;
+  *inside = 0;
+  for (k = 0; k < lowarena_nregions; k++) {  /* Immutable after setup. */
+    uintptr_t rs = (uintptr_t)lowarena_addr(lowarena_region[k].first);
+    uintptr_t re = (uintptr_t)lowarena_addr(lowarena_region[k].end);
+    if (a >= rs && a < re) {
+      *inside = 1;
+      return (size_t)((e < re ? e : re) - a);
+    }
+    if (a < rs && e > rs)  /* Regions are sorted: this is the nearest one. */
+      return (size_t)(rs - a);
+  }
+  return size;
+}
+
+/* Give pages back to the arena. The range must lie inside of one region. */
+static int lowarena_release(char *ptr, size_t size)
+{
+  uintptr_t a = (uintptr_t)ptr;
+  uint32_t page = (uint32_t)(a >> LOWARENA_PAGEBITS), i;
+  uint32_t n = (uint32_t)((size + LOWARENA_PAGESIZE-1) >> LOWARENA_PAGEBITS);
+  size_t asize = (size_t)n << LOWARENA_PAGEBITS;
+  int ok = 1;
+  if ((a & (LOWARENA_PAGESIZE-1)) != 0)
+    return 0;
+  AcquireSRWLockExclusive(&lowarena_lock);
+  for (i = page; i < page + n; i++)
+    if (!((lowarena_used[i >> 5] >> (i & 31)) & 1)) ok = 0;
+  if (ok && VirtualFree(ptr, asize, MEM_DECOMMIT)) {
+    for (i = page; i < page + n; i++)
+      lowarena_used[i >> 5] &= ~((uint32_t)1 << (i & 31));
+    lowarena_stat.used -= asize;
+  } else {
+    ok = 0;
+  }
+  ReleaseSRWLockExclusive(&lowarena_lock);
+  return ok;
+}
+
+/* Account for memory the kernel had to provide. */
+static void lowarena_outside(size_t size, int release)
+{
+  AcquireSRWLockExclusive(&lowarena_lock);
+  if (release) lowarena_stat.outside -= size; else lowarena_stat.outside += size;
+  ReleaseSRWLockExclusive(&lowarena_lock);
+}
+
+/* Win64 32 bit MMAP: low-address arena, then NtAllocateVirtualMemory. */
+static void *mmap_lowmem(size_t size, int topdown)
 {
   DWORD olderr = GetLastError();
-  void *ptr = NULL;
-  long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
-		  MEM_RESERVE|MEM_COMMIT|MEM_TOP_DOWN, PAGE_READWRITE);
+  void *ptr = lowarena_alloc(size, topdown);
+  if (ptr == NULL) {
+    long st = ntavm(INVALID_HANDLE_VALUE, &ptr, NTAVM_ZEROBITS, &size,
+		    MEM_RESERVE|MEM_COMMIT|(topdown ? MEM_TOP_DOWN : 0),
+		    PAGE_READWRITE);
+    if (st == 0) lowarena_outside(size, 0); else ptr = MFAIL;
+  }
   SetLastError(olderr);
-  return st == 0 ? ptr : MFAIL;
+  return ptr;
 }
+
+#define mmap_plain(size)	mmap_lowmem((size), 0)
+/* For direct MMAP, allocate top-down to minimize interference */
+#define direct_mmap(size)	mmap_lowmem((size), 1)
 
 #else
 
@@ -195,6 +405,18 @@ static int CALL_MUNMAP(void *ptr, size_t size)
   MEMORY_BASIC_INFORMATION minfo;
   char *cptr = (char *)ptr;
   while (size) {
+#if LJ_ALLOC_NTAVM
+    /* A coalesced segment may mix arena pages with kernel allocations. */
+    int inside;
+    size_t span = lowarena_span(cptr, size, &inside);
+    if (inside) {
+      if (!lowarena_release(cptr, span))
+	return -1;
+      cptr += span;
+      size -= span;
+      continue;
+    }
+#endif
     if (VirtualQuery(cptr, &minfo, sizeof(minfo)) == 0)
       return -1;
     if (minfo.BaseAddress != cptr || minfo.AllocationBase != cptr ||
@@ -202,6 +424,9 @@ static int CALL_MUNMAP(void *ptr, size_t size)
       return -1;
     if (VirtualFree(cptr, 0, MEM_RELEASE) == 0)
       return -1;
+#if LJ_ALLOC_NTAVM
+    lowarena_outside(minfo.RegionSize, 1);
+#endif
     cptr += minfo.RegionSize;
     size -= minfo.RegionSize;
   }
@@ -330,7 +555,7 @@ static void *mmap_plain(size_t size)
 #define CALL_MMAP(prng, size)	mmap_plain(size)
 #endif
 
-#if LJ_64 && !LJ_GC64 && ((defined(__FreeBSD__) && __FreeBSD__ < 10) || defined(__FreeBSD_kernel__)) && !LJ_TARGET_PS4
+#if LJ_64 && !LJ_GC64 && ((defined(__FreeBSD__) && __FreeBSD__ < 10) || defined(__FreeBSD_kernel__)) && !LJ_TARGET_PS4 && !LJ_TARGET_PS5
 
 #include <sys/resource.h>
 
@@ -365,7 +590,7 @@ static void *CALL_MREMAP_(void *ptr, size_t osz, size_t nsz, int flags)
 #define CALL_MREMAP(addr, osz, nsz, mv) CALL_MREMAP_((addr), (osz), (nsz), (mv))
 #define CALL_MREMAP_NOMOVE	0
 #define CALL_MREMAP_MAYMOVE	1
-#if LJ_64 && !LJ_GC64
+#if LJ_64 && (!LJ_GC64 || LJ_TARGET_ARM64)
 #define CALL_MREMAP_MV		CALL_MREMAP_NOMOVE
 #else
 #define CALL_MREMAP_MV		CALL_MREMAP_MAYMOVE
@@ -1057,7 +1282,7 @@ static size_t release_unused_segments(mstate m)
       mchunkptr p = align_as_chunk(base);
       size_t psize = chunksize(p);
       /* Can unmap if first chunk holds entire segment and not pinned */
-      if (!cinuse(p) && (char *)p + psize >= base + size - TOP_FOOT_SIZE) {
+      if (!cinuse(p) && (char *)p + psize == (char *)mem2chunk(sp)) {
 	tchunkptr tp = (tchunkptr)p;
 	if (p == m->dv) {
 	  m->dv = 0;
@@ -1482,4 +1707,43 @@ void *lj_alloc_f(void *msp, void *ptr, size_t osize, size_t nsize)
   }
 }
 
+#endif
+
+/* -- Low-address arena: public part -------------------------------------- */
+
+LUA_API int luaJIT_lowmem(luaJIT_LowMem *info)
+{
+#if !defined(LUAJIT_USE_SYSMALLOC) && LJ_ALLOC_NTAVM
+  int nregions;
+  AcquireSRWLockExclusive(&lowarena_lock);
+  if (!lowarena_ready)
+    lowarena_setup();
+  *info = lowarena_stat;
+  nregions = (int)lowarena_nregions;
+  ReleaseSRWLockExclusive(&lowarena_lock);
+  return nregions;
+#else
+  memset(info, 0, sizeof(*info));
+  return 0;
+#endif
+}
+
+#if !defined(LUAJIT_USE_SYSMALLOC) && LJ_ALLOC_NTAVM && defined(LUA_BUILD_AS_DLL)
+/* The loader gets here before the host had a chance to map anything. */
+BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
+{
+  UNUSED(hinst);
+  if (reason == DLL_PROCESS_ATTACH) {
+    AcquireSRWLockExclusive(&lowarena_lock);
+    if (!lowarena_ready)
+      lowarena_setup();
+    ReleaseSRWLockExclusive(&lowarena_lock);
+  } else if (reason == DLL_PROCESS_DETACH && reserved == NULL) {
+    /* Unloaded on request: a later copy of the DLL needs the range again. */
+    uint32_t k;
+    for (k = 0; k < lowarena_nregions; k++)
+      VirtualFree(lowarena_addr(lowarena_region[k].first), 0, MEM_RELEASE);
+  }
+  return TRUE;
+}
 #endif

@@ -1,6 +1,6 @@
 /*
 ** Garbage collector.
-** Copyright (C) 2005-2021 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -27,9 +27,7 @@
 #include "lj_trace.h"
 #include "lj_dispatch.h"
 #include "lj_vm.h"
-#ifdef __e2k__
-#include "e2kintrin.h"
-#endif
+#include "lj_vmevent.h"
 
 #define GCSTEPSIZE	1024u
 #define GCSWEEPMAX	40
@@ -48,14 +46,6 @@
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
 	       "TValue and GC type mismatch"); \
     if (tviswhite(tv)) gc_mark(g, gcV(tv)); }
-
-#ifdef __e2k__
-/* Mark a TValue (if needed). */
-#define gc_marktv_volatile(g, tv) \
-  { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
-	       "TValue and GC type mismatch"); \
-    if (tviswhite_volatile(tv)) gc_mark(g, gcV(tv)); }
-#endif
 
 /* Mark a GCobj (if needed). */
 #define gc_markobj(g, o) \
@@ -76,6 +66,15 @@ static void gc_mark(global_State *g, GCobj *o)
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
     gc_markobj(g, tabref(gco2ud(o)->env));
+    if (LJ_HASBUFFER && gco2ud(o)->udtype == UDTYPE_BUFFER) {
+      SBufExt *sbx = (SBufExt *)uddata(gco2ud(o));
+      if (sbufiscow(sbx) && gcref(sbx->cowref))
+	gc_markobj(g, gcref(sbx->cowref));
+      if (gcref(sbx->dict_str))
+	gc_markobj(g, gcref(sbx->dict_str));
+      if (gcref(sbx->dict_mt))
+	gc_markobj(g, gcref(sbx->dict_mt));
+    }
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);
     gc_marktv(g, uvval(uv));
@@ -107,6 +106,7 @@ static void gc_mark_start(global_State *g)
   setgcrefnull(g->gc.weak);
   gc_markobj(g, mainthread(g));
   gc_markobj(g, tabref(mainthread(g)->env));
+  gc_markobj(g, vmthread(g));
   gc_marktv(g, &g->registrytv);
   gc_mark_gcroot(g);
   g->gc.state = GCSpropagate;
@@ -188,8 +188,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     }
     if (weak) {  /* Weak tables are cleared in the atomic phase. */
 #if LJ_HASFFI
-      CTState *cts = ctype_ctsG(g);
-      if (cts && cts->finalizer == t) {
+      if (gcref(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t)) {
 	weak = (int)(~0u & ~LJ_GC_WEAKVAL);
       } else
 #endif
@@ -204,24 +203,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
     MSize i, asize = t->asize;
-#ifdef __e2k__
-    for (i = 0; i < asize; i++) {
-      const TValue *tv = arrayslot(t, i);
-
-      // Prefetch next cache line in array.
-      __builtin_e2k_prefetch(((const uint8_t *) tv) + 64, E2K_HINT_T0);
-
-      // Prefetch next iteration pointer.
-      if ((i + 1) < asize && tvisgcv(&tv[1])) {
-        __builtin_e2k_prefetch(gcV(&tv[1]), E2K_HINT_T0);
-      }
-
-      gc_marktv_volatile(g, tv);
-    }
-#else
     for (i = 0; i < asize; i++)
       gc_marktv(g, arrayslot(t, i));
-#endif
   }
   if (t->hmask > 0) {  /* Mark hash part. */
     Node *node = noderef(t->node);
@@ -425,9 +408,6 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   int ow = otherwhite(g);
   GCobj *o;
   while ((o = gcref(*p)) != NULL && lim-- > 0) {
-#ifdef __e2k__
-    __builtin_e2k_prefetch(gcref(o->gch.nextgc), E2K_HINT_T0);
-#endif
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
     if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
@@ -445,6 +425,32 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
     }
   }
   return p;
+}
+
+/* Sweep one string interning table chain. Preserves hashalg bit. */
+static void gc_sweepstr(global_State *g, GCRef *chain)
+{
+  /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
+  int ow = otherwhite(g);
+  uintptr_t u = gcrefu(*chain);
+  GCRef q;
+  GCRef *p = &q;
+  GCobj *o;
+  setgcrefp(q, (u & ~(uintptr_t)1));
+  while ((o = gcref(*p)) != NULL) {
+    if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
+      lj_assertG(!isdead(g, o) || (o->gch.marked & LJ_GC_FIXED),
+		 "sweep of undead string");
+      makewhite(g, o);  /* String is alive, change to the current white. */
+      p = &o->gch.nextgc;
+    } else {  /* Otherwise string is dead, free it. */
+      lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
+		 "sweep of unlive string");
+      setgcrefr(*p, o->gch.nextgc);
+      lj_str_free(g, gco2str(o));
+    }
+  }
+  setgcrefp(*chain, (gcrefu(q) | (u & 1)));
 }
 
 /* Check whether we can clear a key or a value slot from a table. */
@@ -502,22 +508,30 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   uint8_t oldh = hook_save(g);
   GCSize oldt = g->gc.threshold;
   int errcode;
+  lua_State *VL = vmthread(g);
   TValue *top;
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
-  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g);
+  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   g->gc.threshold = LJ_MAX_MEM;  /* Prevent GC steps. */
-  top = L->top;
-  copyTV(L, top++, mo);
+  top = VL->top;
+  copyTV(VL, top++, mo);
   if (LJ_FR2) setnilV(top++);
-  setgcV(L, top, o, ~o->gch.gct);
-  L->top = top+1;
-  errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  setgcV(VL, top, o, ~o->gch.gct);
+  VL->top = top+1;
+  errcode = lj_vm_pcall(VL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  setgcref(g->cur_L, obj2gco(L));
   hook_restore(g, oldh);
-  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g);
+  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   g->gc.threshold = oldt;  /* Restore GC threshold. */
-  if (errcode)
-    lj_err_throw(L, errcode);  /* Propagate errors. */
+  if (errcode) {
+    TValue tmp;
+    copyTV(VL, &tmp, VL->top-1);
+    VL->top--;
+    lj_vmevent_send(g, ERRFIN,
+      copyTV(V, V->top++, &tmp);
+    );
+  }
 }
 
 /* Finalize one userdata or cdata object from the mmudata list. */
@@ -542,9 +556,8 @@ static void gc_finalize(lua_State *L)
     o->gch.marked &= (uint8_t)~LJ_GC_CDATA_FIN;
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
-    tv = lj_tab_set(L, ctype_ctsG(g)->finalizer, &tmp);
+    tv = lj_tab_set(L, tabref(g->gcroot[GCROOT_FFI_FIN]), &tmp);
     if (!tvisnil(tv)) {
-      g->gc.nocdatafin = 0;
       copyTV(L, &tmp, tv);
       setnilV(tv);  /* Clear entry in finalizer table. */
       gc_call_finalizer(g, L, &tmp, o);
@@ -574,36 +587,32 @@ void lj_gc_finalize_udata(lua_State *L)
 void lj_gc_finalize_cdata(lua_State *L)
 {
   global_State *g = G(L);
-  CTState *cts = ctype_ctsG(g);
-  if (cts) {
-    GCtab *t = cts->finalizer;
-    Node *node = noderef(t->node);
-    ptrdiff_t i;
-    setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
-    for (i = (ptrdiff_t)t->hmask; i >= 0; i--)
-      if (!tvisnil(&node[i].val) && tviscdata(&node[i].key)) {
-	GCobj *o = gcV(&node[i].key);
-	TValue tmp;
-	makewhite(g, o);
-	o->gch.marked &= (uint8_t)~LJ_GC_CDATA_FIN;
-	copyTV(L, &tmp, &node[i].val);
-	setnilV(&node[i].val);
-	gc_call_finalizer(g, L, &tmp, o);
-      }
-  }
+  GCtab *t = tabref(g->gcroot[GCROOT_FFI_FIN]);
+  Node *node = noderef(t->node);
+  ptrdiff_t i;
+  setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
+  for (i = (ptrdiff_t)t->hmask; i >= 0; i--)
+    if (!tvisnil(&node[i].val) && tviscdata(&node[i].key)) {
+      GCobj *o = gcV(&node[i].key);
+      TValue tmp;
+      makewhite(g, o);
+      o->gch.marked &= (uint8_t)~LJ_GC_CDATA_FIN;
+      copyTV(L, &tmp, &node[i].val);
+      setnilV(&node[i].val);
+      gc_call_finalizer(g, L, &tmp, o);
+    }
 }
 #endif
 
 /* Free all remaining GC objects. */
 void lj_gc_freeall(global_State *g)
 {
-  MSize i, strmask;
+  MSize i;
   /* Free everything, except super-fixed objects (the main thread). */
   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
   gc_fullsweep(g, &g->gc.root);
-  strmask = g->strmask;
-  for (i = 0; i <= strmask; i++)  /* Free all string hash chains. */
-    gc_fullsweep(g, &g->strhash[i]);
+  for (i = g->str.mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
+    gc_sweepstr(g, &g->str.tab[i]);
 }
 
 /* -- Collector ----------------------------------------------------------- */
@@ -620,6 +629,10 @@ static void atomic(global_State *g, lua_State *L)
   setgcrefnull(g->gc.weak);
   lj_assertG(!iswhite(obj2gco(mainthread(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
+#if LJ_HASFFI
+  if (ctype_ctsG(g) && ctype_ctsG(g)->L)  /* Mark cts->L thread. */
+    gc_markobj(g, ctype_ctsG(g)->L);
+#endif
   gc_traverse_curtrace(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
   gc_propagate_gray(g);  /* Propagate all of the above. */
@@ -666,8 +679,8 @@ static size_t gc_onestep(lua_State *L)
     return 0;
   case GCSsweepstring: {
     GCSize old = g->gc.total;
-    gc_fullsweep(g, &g->strhash[g->gc.sweepstr++]);  /* Sweep one chain. */
-    if (g->gc.sweepstr > g->strmask)
+    gc_sweepstr(g, &g->str.tab[g->gc.sweepstr++]);  /* Sweep one chain. */
+    if (g->gc.sweepstr > g->str.mask)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
@@ -679,13 +692,10 @@ static size_t gc_onestep(lua_State *L)
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
     if (gcref(*mref(g->gc.sweep, GCRef)) == NULL) {
-      if (g->strnum <= (g->strmask >> 2) && g->strmask > LJ_MIN_STRTAB*2-1)
-	lj_str_resize(L, g->strmask >> 1);  /* Shrink string table. */
+      if (g->str.num <= (g->str.mask >> 2) && g->str.mask > LJ_MIN_STRTAB*2-1)
+	lj_str_resize(L, g->str.mask >> 1);  /* Shrink string table. */
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
-#if LJ_HASFFI
-	g->gc.nocdatafin = 1;
-#endif
       } else {  /* Otherwise skip this phase to help the JIT. */
 	g->gc.state = GCSpause;  /* End of GC cycle. */
 	g->gc.debt = 0;
@@ -695,16 +705,16 @@ static size_t gc_onestep(lua_State *L)
     }
   case GCSfinalize:
     if (gcref(g->gc.mmudata) != NULL) {
+      GCSize old = g->gc.total;
       if (tvref(g->jit_base))  /* Don't call finalizers on trace. */
 	return LJ_MAX_MEM;
       gc_finalize(L);  /* Finalize one userdata object. */
+      if (old >= g->gc.total && g->gc.estimate > old - g->gc.total)
+	g->gc.estimate -= old - g->gc.total;
       if (g->gc.estimate > GCFINALIZECOST)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
-#if LJ_HASFFI
-    if (!g->gc.nocdatafin) lj_tab_rehash(L, ctype_ctsG(g)->finalizer);
-#endif
     g->gc.state = GCSpause;  /* End of GC cycle. */
     g->gc.debt = 0;
     return 0;

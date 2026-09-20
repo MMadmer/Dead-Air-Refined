@@ -1,6 +1,6 @@
 /*
 ** Lexical analyzer.
-** Copyright (C) 2005-2021 Mike Pall. See Copyright Notice in luajit.h
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Major portions taken verbatim or adapted from the Lua interpreter.
 ** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
@@ -103,15 +103,21 @@ static void lex_number(LexState *ls, TValue *tv)
   StrScanFmt fmt;
   LexChar c, xp = 'e';
   lj_assertLS(lj_char_isdigit(ls->c), "bad usage");
-  if ((c = ls->c) == '0' && (lex_savenext(ls) | 0x20) == 'x')
-    xp = 'p';
+  if ((c = ls->c) == '0') {
+    lex_save(ls, c);
+    do { c = lex_next(ls); } while (c == '_');
+    if ((c | 0x20) == 'x') xp = 'p';
+  }
   while (lj_char_isident(ls->c) || ls->c == '.' ||
 	 ((ls->c == '-' || ls->c == '+') && (c | 0x20) == xp)) {
-    c = ls->c;
-    lex_savenext(ls);
+    if (LJ_LIKELY(ls->c != '_')) {
+      c = ls->c;
+      lex_save(ls, ls->c);
+    }
+    lex_next(ls);
   }
   lex_save(ls, '\0');
-  fmt = lj_strscan_scan((const uint8_t *)sbufB(&ls->sb), sbuflen(&ls->sb)-1, tv,
+  fmt = lj_strscan_scan((const uint8_t *)ls->sb.b, sbuflen(&ls->sb)-1, tv,
 	  (LJ_DUALNUM ? STRSCAN_OPT_TOINT : STRSCAN_OPT_TONUM) |
 	  (LJ_HASFFI ? (STRSCAN_OPT_LL|STRSCAN_OPT_IMAG) : 0));
   if (LJ_DUALNUM && fmt == STRSCAN_INT) {
@@ -124,11 +130,7 @@ static void lex_number(LexState *ls, TValue *tv)
     GCcdata *cd;
     lj_assertLS(fmt == STRSCAN_I64 || fmt == STRSCAN_U64 || fmt == STRSCAN_IMAG,
 		"unexpected number format %d", fmt);
-    if (!ctype_ctsG(G(L))) {
-      ptrdiff_t oldtop = savestack(L, L->top);
-      luaopen_ffi(L);  /* Load FFI library on-demand. */
-      L->top = restorestack(L, oldtop);
-    }
+    ctype_loadffi(L);
     if (fmt == STRSCAN_IMAG) {
       cd = lj_cdata_new_(L, CTID_COMPLEX_DOUBLE, 2*sizeof(double));
       ((double *)cdataptr(cd))[0] = 0;
@@ -186,7 +188,7 @@ static void lex_longstring(LexState *ls, TValue *tv, int sep)
     }
   } endloop:
   if (tv) {
-    GCstr *str = lj_parse_keepstr(ls, sbufB(&ls->sb) + (2 + (MSize)sep),
+    GCstr *str = lj_parse_keepstr(ls, ls->sb.b + (2 + (MSize)sep),
 				      sbuflen(&ls->sb) - 2*(2 + (MSize)sep));
     setstrV(ls->L, tv, str);
   }
@@ -216,94 +218,85 @@ static void lex_string(LexState *ls, TValue *tv)
       case 'r': c = '\r'; break;
       case 't': c = '\t'; break;
       case 'v': c = '\v'; break;
-      case 'x': { /* Hexadecimal escape '\xXX'. */
-	    c = (lex_next(ls) & 15u) << 4;
-	    if (!lj_char_isdigit(ls->c)) {
-	      if (!lj_char_isxdigit(ls->c)) goto err_xesc;
-	      c += 9 << 4;
-	    }
-	    c += (lex_next(ls) & 15u);
-	    if (!lj_char_isdigit(ls->c)) {
-	      if (!lj_char_isxdigit(ls->c)) goto err_xesc;
-	      c += 9;
-	    }
-	    break;
-      }
-      case 'u': { /* Unicode escape '\u{XX...}'. */
-	    if (lex_next(ls) != '{') goto err_xesc;
-	    lex_next(ls);
-	    c = 0;
-	    do {
-	      c = (c << 4) | (ls->c & 15u);
-	      if (!lj_char_isdigit(ls->c)) {
-	        if (!lj_char_isxdigit(ls->c)) goto err_xesc;
-	        c += 9;
-	      }
-	      if (c >= 0x110000) goto err_xesc;  /* Out of Unicode range. */
-	    } while (lex_next(ls) != '}');
-	    if (c < 0x800) {
-	      if (c < 0x80) break;
-	      lex_save(ls, 0xc0 | (c >> 6));
-	    } else {
-	      if (c >= 0x10000) {
-	        lex_save(ls, 0xf0 | (c >> 18));
-	        lex_save(ls, 0x80 | ((c >> 12) & 0x3f));
-	      } else {
-	        if (c >= 0xd800 && c < 0xe000) goto err_xesc;  /* No surrogates. */
-	        lex_save(ls, 0xe0 | (c >> 12));
-	      }
-	      lex_save(ls, 0x80 | ((c >> 6) & 0x3f));
-	    }
-	    c = 0x80 | (c & 0x3f);
-	    break;
-      }
-      case 'z': { /* Skip whitespace. */
-	    lex_next(ls);
-	    while (lj_char_isspace(ls->c))
-	      if (lex_iseol(ls)) lex_newline(ls); else lex_next(ls);
-	    continue;
-      }
-      case '\n':
-      case '\r': {
-        lex_save(ls, '\n');
-        lex_newline(ls);
-        continue;
-      }
+      case 'x':  /* Hexadecimal escape '\xXX'. */
+	c = (lex_next(ls) & 15u) << 4;
+	if (!lj_char_isdigit(ls->c)) {
+	  if (!lj_char_isxdigit(ls->c)) goto err_xesc;
+	  c += 9 << 4;
+	}
+	c += (lex_next(ls) & 15u);
+	if (!lj_char_isdigit(ls->c)) {
+	  if (!lj_char_isxdigit(ls->c)) goto err_xesc;
+	  c += 9;
+	}
+	break;
+      case 'u':  /* Unicode escape '\u{XX...}'. */
+	if (lex_next(ls) != '{') goto err_xesc;
+	lex_next(ls);
+	c = 0;
+	do {
+	  c = (c << 4) | (ls->c & 15u);
+	  if (!lj_char_isdigit(ls->c)) {
+	    if (!lj_char_isxdigit(ls->c)) goto err_xesc;
+	    c += 9;
+	  }
+	  if (c >= 0x110000) goto err_xesc;  /* Out of Unicode range. */
+	} while (lex_next(ls) != '}');
+	if (c < 0x800) {
+	  if (c < 0x80) break;
+	  lex_save(ls, 0xc0 | (c >> 6));
+	} else {
+	  if (c >= 0x10000) {
+	    lex_save(ls, 0xf0 | (c >> 18));
+	    lex_save(ls, 0x80 | ((c >> 12) & 0x3f));
+	  } else {
+	    if (c >= 0xd800 && c < 0xe000) goto err_xesc;  /* No surrogates. */
+	    lex_save(ls, 0xe0 | (c >> 12));
+	  }
+	  lex_save(ls, 0x80 | ((c >> 6) & 0x3f));
+	}
+	c = 0x80 | (c & 0x3f);
+	break;
+      case 'z':  /* Skip whitespace. */
+	lex_next(ls);
+	while (lj_char_isspace(ls->c))
+	  if (lex_iseol(ls)) lex_newline(ls); else lex_next(ls);
+	continue;
+      case '\n': case '\r': lex_save(ls, '\n'); lex_newline(ls); continue;
       case '\\': case '\"': case '\'': break;
       case LEX_EOF: continue;
-      default: {
-        if (!escape_sequences_allowed)
-            break;
-        if (!lj_char_isdigit(c))
-          goto err_xesc;
-	    c -= '0';  /* Decimal escape '\ddd'. */
-	    if (lj_char_isdigit(lex_next(ls))) {
-	      c = c*10 + (ls->c - '0');
-	        if (lj_char_isdigit(lex_next(ls))) {
-	          c = c*10 + (ls->c - '0');
-	          if (c > 255) {
-	          err_xesc:
-	            lj_lex_error(ls, TK_string, LJ_ERR_XESC);
-	          }
-	          lex_next(ls);
-	        }
+      default:
+	if (!escape_sequences_allowed)
+	  break;  /* Keep the escaped character verbatim. */
+	if (!lj_char_isdigit(c))
+	  goto err_xesc;
+	c -= '0';  /* Decimal escape '\ddd'. */
+	if (lj_char_isdigit(lex_next(ls))) {
+	  c = c*10 + (ls->c - '0');
+	  if (lj_char_isdigit(lex_next(ls))) {
+	    c = c*10 + (ls->c - '0');
+	    if (c > 255) {
+	    err_xesc:
+	      lj_lex_error(ls, TK_string, LJ_ERR_XESC);
 	    }
-	    lex_save(ls, c);
-	    continue;
+	    lex_next(ls);
+	  }
+	}
+	lex_save(ls, c);
+	continue;
       }
-      } // switch (c)
       lex_save(ls, c);
       lex_next(ls);
       continue;
-    }
+      }
     default:
       lex_savenext(ls);
       break;
-    } // switch (ls->c)
+    }
   }
   lex_savenext(ls);  /* Skip trailing delimiter. */
   setstrV(ls->L, tv,
-	  lj_parse_keepstr(ls, sbufB(&ls->sb)+1, sbuflen(&ls->sb)-2));
+	  lj_parse_keepstr(ls, ls->sb.b+1, sbuflen(&ls->sb)-2));
 }
 
 /* -- Main lexical scanner ------------------------------------------------ */
@@ -323,7 +316,7 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
       do {
 	lex_savenext(ls);
       } while (lj_char_isident(ls->c));
-      s = lj_parse_keepstr(ls, sbufB(&ls->sb), sbuflen(&ls->sb));
+      s = lj_parse_keepstr(ls, ls->sb.b, sbuflen(&ls->sb));
       setstrV(ls->L, tv, s);
       if (s->reserved > 0)  /* Reserved word? */
 	return TK_OFS + s->reserved;
@@ -342,7 +335,9 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
       continue;
     case '-':
       lex_next(ls);
-      if (ls->c != '-') return '-';
+      if (ls->c != '-') {
+	if (ls->c != '>') return '-'; else { lex_next(ls); return TK_arrow; }
+      }
       lex_next(ls);
       if (ls->c == '[') {  /* Long comment "--[=*[...]=*]". */
 	int sep = lex_skipeq(ls);
@@ -395,16 +390,41 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
       if (ls->c != '=') return '='; else { lex_next(ls); return TK_eq; }
     case '<':
       lex_next(ls);
-      if (ls->c != '=') return '<'; else { lex_next(ls); return TK_le; }
+      if (ls->c == '=') { lex_next(ls); return TK_le; }
+      if (ls->c == '<') { lex_next(ls); return TK_shl; }
+      return '<';
     case '>':
       lex_next(ls);
-      if (ls->c != '=') return '>'; else { lex_next(ls); return TK_ge; }
+      if (ls->c == '=') { lex_next(ls); return TK_ge; }
+      if (ls->c == '>') { lex_next(ls); return TK_shr; }
+      return '>';
     case '~':
       lex_next(ls);
-      if (ls->c != '=') return '~'; else { lex_next(ls); return TK_ne; }
+      if (ls->c == '=') { lex_next(ls); return TK_ne; }
+      if (ls->c == '>') {
+	lex_next(ls);
+	if (ls->c != '>') lj_lex_error(ls, '~', LJ_ERR_XSYMBOL);
+	lex_next(ls);
+	return TK_sar;
+      }
+      return '~';
+    case '!':
+      lex_next(ls);
+      if (ls->c != '=') return '!'; else { lex_next(ls); return TK_ne_; }
     case ':':
       lex_next(ls);
       if (ls->c != ':') return ':'; else { lex_next(ls); return TK_label; }
+    case '?':
+      lex_next(ls);
+      if (ls->c == '.') { lex_next(ls); return TK_nav; }
+      if (ls->c == '?') { lex_next(ls); return TK_coal; }
+      return '?';
+    case '&':
+      lex_next(ls);
+      if (ls->c != '&') return '&'; else { lex_next(ls); return TK_and_; }
+    case '|':
+      lex_next(ls);
+      if (ls->c != '|') return '|'; else { lex_next(ls); return TK_or_; }
     case '"':
     case '\'':
       lex_string(ls, tv);
@@ -453,6 +473,7 @@ int lj_lex_setup(lua_State *L, LexState *ls)
   ls->linenumber = 1;
   ls->lastline = 1;
   ls->endmark = 0;
+  ls->fr2 = LJ_FR2;  /* Generate native bytecode by default. */
   lex_next(ls);  /* Read-ahead first char. */
   if (ls->c == 0xef && ls->p + 2 <= ls->pe && (uint8_t)ls->p[0] == 0xbb &&
       (uint8_t)ls->p[1] == 0xbf) {  /* Skip UTF-8 BOM (if buffered). */
@@ -534,7 +555,7 @@ void lj_lex_error(LexState *ls, LexToken tok, ErrMsg em, ...)
     tokstr = NULL;
   } else if (tok == TK_name || tok == TK_string || tok == TK_number) {
     lex_save(ls, '\0');
-    tokstr = sbufB(&ls->sb);
+    tokstr = ls->sb.b;
   } else {
     tokstr = lj_lex_token2str(ls, tok);
   }
