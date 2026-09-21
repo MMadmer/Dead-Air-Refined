@@ -598,8 +598,8 @@ chance in either build: misfires come from the fault bits and the ammo's `misfir
 
 There is one control for how the game looks at a given cost: the preset list on the basic video
 page. The advanced page next to it carries taste - grass height, sun shaft strength, sharpen,
-bloom, chromatic aberration, depth of field, FXAA, technicolor, grain, lens dirt - and nothing
-that a preset also writes. A row for a value the preset owns is a second control for one value,
+bloom, chromatic aberration, depth of field, technicolor, grain, lens dirt - and nothing that a
+preset also writes. A row for a value the preset owns is a second control for one value,
 and the player who moves it finds it moved back.
 
 What follows from that, for anyone shipping a preset file or a menu page of their own:
@@ -615,6 +615,10 @@ What follows from that, for anyone shipping a preset file or a menu page of thei
   those switches (shadow map size, AO technique, grass density and radius, visor droplets) used
   to be held back on renderer start because the menu also showed them; the menu does not any
   more, and they follow the preset like the rest.
+- Antialiasing is one ladder: FXAA on the two cheapest presets, SMAA 1x from Default up, camera
+  TAA on top of it on Extreme. `phase_combine` runs SMAA or FXAA and never both, so the FXAA
+  checkbox that used to sit on the advanced page did nothing on three presets out of five; it is
+  gone and `r2_fxaa` is a runtime command now, session-only like `r__smaa` beside it.
 - `appdata\qa_autoexec.ltx`, the measurement hook, still executes last of all.
 - Every node of the advanced page is still in `ui_mm_opt.xml` and `ui_mm_opt_16.xml`, including
   the ones the page no longer builds. An addon that ships its own `ui_mm_opt_video_adv.script`

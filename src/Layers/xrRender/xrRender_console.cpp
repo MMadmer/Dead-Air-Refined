@@ -1041,8 +1041,13 @@ void xrRender_sync_preset_derived()
     // denser foliage silhouettes = more shaded pixels; Minimum/Low trim exactly there.
     static constexpr int aref_by_preset[] = {180, 160, 128, 110, 100};
     // SMAA 1x from the Default preset up: better gradients than FXAA for ~3 cheap fullscreen
-    // passes. The two lowest presets keep the reference pipeline (r2_fxaa keeps working there).
+    // passes.
     static constexpr int smaa_by_preset[] = {0, 0, 1, 1, 1};
+    // FXAA underneath it, so the two cheapest presets are antialiased too - one fullscreen pass,
+    // which is what they can afford. phase_combine runs SMAA or FXAA, never both, so above them
+    // this is off rather than compiled in and never reached: the checkbox it replaces did
+    // nothing on three presets out of five, whichever way the player set it.
+    static constexpr int fxaa_by_preset[] = {1, 1, 0, 0, 0};
     // Camera TAA only on the top preset: it trades a touch of sharpness under motion for a
     // stable field, which is an Extreme-tier call.
     static constexpr int taa_by_preset[] = {0, 0, 0, 0, 1};
@@ -1120,6 +1125,7 @@ void xrRender_sync_preset_derived()
     ps_r3_dyn_wet_surf_sm_res = wet_sm_res_by_preset[ps_Preset];
     ps_r__aref_quality = aref_by_preset[ps_Preset];
     ps_r__smaa = smaa_by_preset[ps_Preset];
+    ps_r2_fxaa = fxaa_by_preset[ps_Preset];
     ps_r__taa = taa_by_preset[ps_Preset];
     ps_r2_lenswater = lenswater_by_preset[ps_Preset];
     ps_r2_smapsize = smapsize_by_preset[ps_Preset];
@@ -1830,7 +1836,9 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_sss_phase1", &ps_r2_sss_phase1, 0.01f, 0.2f);
     CMD4(CCC_Float, "r2_sss_phase2", &ps_r2_sss_phase2, 0.01f, 0.2f);
     CMD4(CCC_Float, "r2_sss_radius", &ps_r2_sss_radius, 0.5f, 2.f);
-    CMD4(CCC_Integer, "r2_fxaa", &ps_r2_fxaa, 0, 1);
+    // Runtime, like r__smaa beside it: antialiasing is the preset's call, and a line in user.ltx
+    // would be read before the renderer and overwritten by it anyway.
+    CMD4(CCC_RuntimeInteger, "r2_fxaa", &ps_r2_fxaa, 0, 1);
     CMD3(CCC_SSAO_Mode, "r2_ssao_mode", &ps_r_ssao_mode, qssao_mode_token);
     CMD3(CCC_Token, "r2_ssao", &ps_r_ssao, qssao_token);
     CMD3(CCC_Mask, "r2_ssao_blur", &ps_r2_ls_flags_ext, R2FLAGEXT_SSAO_BLUR); // Need restart

@@ -52,7 +52,7 @@ end
 -- anisotropy, MSAA, grass density and radius, sun and grass shadows, shadow map size and
 -- quality, light and particle distance, ambient occlusion, detail bump, parallax, sun shafts,
 -- soft water and particles, volumetric light and smoke, wet surfaces, visor drops,
--- tessellation, NPC torches - is the preset list on the basic page and nothing else.
+-- tessellation, NPC torches, antialiasing - is the preset list on the basic page and nothing else.
 --
 -- Their console commands are untouched, and so is every node in ui_mm_opt*.xml: an addon that
 -- ships the stock copy of this script still finds all of them and gets the stock page.
@@ -128,11 +128,6 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	xml:InitStatic("video_adv:cap_dof", _st)
 	ctl = xml:InitCheck("video_adv:check_dof", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_fxaa", _st)
-	xml:InitCheck("video_adv:check_fxaa", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
 
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_technicolor", _st)

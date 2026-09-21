@@ -53,6 +53,14 @@ local function probe()
 	dlg:OnSimplyGraphic()
 	say("refresh and page switch passed")
 
+	-- The antialiasing ladder. All three are runtime commands, so they are in no config file and
+	-- the only way to read them back is to ask the console.
+	local console = get_console()
+	say("preset=" .. tostring(console:get_string("_preset")) ..
+		" fxaa=" .. tostring(console:get_integer("r2_fxaa")) ..
+		" smaa=" .. tostring(console:get_integer("r__smaa")) ..
+		" taa=" .. tostring(console:get_integer("r__taa")))
+
 	-- The write half of Accept, without the vid restart and the message box that follow it.
 	local opt = COptionsManager()
 	get_console():execute("cfg_save qa_options_before")
