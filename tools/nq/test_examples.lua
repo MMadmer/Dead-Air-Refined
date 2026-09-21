@@ -2817,14 +2817,16 @@ end
 z16_run()
 end
 
--- ============================================================================ (z17) scenarios
+-- ============================================================================ (z17) behaviour graphs
 -- Its own function: the main chunk is already at Lua's 200-local ceiling, and
 -- a nested one gets a budget of its own.
 ;(function()
--- A scenario is the same interpreter with a different job (NQ_ARCHITECTURE par. 19):
--- roles the caller binds, steps that hand generated logic to the stock schemes,
--- and an instance that lives and dies on its own.
-local UID_SCEN, UID_CALL = "mod_b.scen_guards", "mod_b.scen_caller"
+-- A behaviour graph is its own asset (.behasset) on the same interpreter
+-- (NQ_ARCHITECTURE par. 19): roles the caller binds, steps that hand generated
+-- logic to the stock schemes, an instance that lives and dies on its own, and a
+-- call with three exits - started, finished, aborted.
+local UID_BEH, UID_CALL = "mod_b.beh_guards", "mod_b.beh_caller"
+local UID_FETCH, UID_FETCH_CALL = "mod_b.beh_fetch", "mod_b.beh_fetch_caller"
 
 local function instance_uid()
 	local st = xms_nq.get_state()
@@ -2834,42 +2836,82 @@ local function instance_uid()
 	return nil
 end
 
-local function scen_paths()
+local function beh_paths()
 	mock.add_path("qa_walk", { vector():set(0, 0, 0), vector():set(10, 0, 10) })
 	mock.add_path("qa_look", { vector():set(11, 0, 11) })
 	mock.add_path("qa_post", { vector():set(20, 0, 20) })
 end
 
-section("(z17) a scenario loads as a scenario, not as a quest")
+section("(z17) the extension says what a document is")
 setup()
-scen_paths()
+beh_paths()
 mock.first_update()
 do
 	local Q = xms_nq.quests()
-	local SC = xms_nq.scenarios()
-	check(Q[UID_SCEN] == nil, "the scenario is not in the quest registry")
-	check(SC[UID_SCEN] ~= nil, "the scenario is in the scenario registry")
-	check(Q[UID_CALL] ~= nil, "the quest that runs it is a quest")
-	check(SC[UID_SCEN] and SC[UID_SCEN].roles and SC[UID_SCEN].roles.guards
-		and SC[UID_SCEN].roles.guards.many == true, "a role that takes a group says so")
-	check(instance_uid() == nil, "nothing runs until a quest asks for it")
+	local B = xms_nq.behaviours()
+	check(Q[UID_BEH] == nil, "a .behasset is not in the quest registry")
+	check(B[UID_BEH] ~= nil, "it is in the behaviour registry")
+	check(Q[UID_CALL] ~= nil, "the .nqasset that runs it is a quest")
+	check(B[UID_BEH] and B[UID_BEH].type == "behaviour", "and it knows what it is without a type key")
+	check(B[UID_BEH] and B[UID_BEH].roles and B[UID_BEH].roles.guards
+		and B[UID_BEH].roles.guards.many == true, "a role that takes a group says so")
+	check(B[UID_FETCH] ~= nil, "a graph naming a ref it never creates still loads: the caller makes it")
+	check(instance_uid() == nil, "nothing runs until a caller asks for it")
 end
 
-section("(z17) scenario.run binds the roles and starts an instance")
+section("(z17) a type key is refused: a rename must not be able to lie")
+do
+	local src = 'return { nq = 1, type = "scenario", id = "liar", title = "x", nodes = { { id = "s", kind = "trigger.start" } } }'
+	local q = xms_nq_load.load_asset("mod_b", "liar.nqasset", src, "quest")
+	local said = false
+	for _, p in ipairs(q.problems or {}) do
+		if (p.code == "E006" and string.find(tostring(p.message), "extension", 1, true)) then said = true end
+	end
+	check(not q.valid and said, "type = ... is an error that names the extension")
+	local b = xms_nq_load.load_asset("mod_b", "quiet.behasset",
+		'return { beh = 1, id = "quiet", title = "x", roles = { a = { title = "A" } }, nodes = { { id = "s", kind = "trigger.start", out = { next = "g" } }, { id = "g", kind = "npc.release", params = { who = "a" } } } }',
+		"behaviour")
+	check(b.type == "behaviour", "the kind comes from the caller of load_asset - the file's extension")
+end
+
+section("(z17) a quest kind has no business in a behaviour graph, and the other way round")
+do
+	local b = xms_nq_load.load_asset("mod_b", "rich.behasset",
+		'return { beh = 1, id = "rich", title = "x", roles = { a = { title = "A" } }, nodes = { { id = "s", kind = "trigger.start", on_enter = { { kind = "money.give", params = { amount = 5 } }, { kind = "npc.release", params = { who = "a" } } } } } }',
+		"behaviour")
+	local refused = false
+	for _, p in ipairs(b.problems or {}) do
+		if (p.code == "E007" and string.find(tostring(p.message), "money.give", 1, true)) then refused = true end
+	end
+	check(refused, "money.give is the player's: a behaviour graph may not carry it")
+	local q = xms_nq_load.load_asset("mod_b", "walker.nqasset",
+		'return { nq = 1, id = "walker", title = "x", nodes = { { id = "s", kind = "trigger.start", on_enter = { { kind = "npc.release", params = { who = "a" } } } } } }',
+		"quest")
+	local refused_q = false
+	for _, p in ipairs(q.problems or {}) do
+		if (p.code == "E007" and string.find(tostring(p.message), "npc.release", 1, true)) then refused_q = true end
+	end
+	check(refused_q, "npc.release addresses a role: a quest may not carry it")
+end
+
+section("(z17) behaviour.run binds the roles, starts an instance and leaves by `started` at once")
 xms_nq_console.exec("activate " .. UID_CALL)
 mock.ticks(2)
-local scen_instance = instance_uid()
+local beh_instance = instance_uid()
 do
-	check(scen_instance ~= nil, "an instance exists")
-	local qs = scen_instance and xms_nq.quest_state(scen_instance)
-	check(qs ~= nil and qs.scenario == UID_SCEN, "it knows which scenario it is")
-	check(qs and qs.owner and qs.owner.uid == UID_CALL, "and which quest started it")
+	check(beh_instance ~= nil, "an instance exists")
+	local qs = beh_instance and xms_nq.quest_state(beh_instance)
+	check(qs ~= nil and qs.behaviour == UID_BEH, "it knows which graph it is")
+	check(qs and qs.owner and qs.owner.uid == UID_CALL, "and who started it")
 	local leader = qs and qs.roles and qs.roles.leader
 	check(leader and #leader.ids == 1, "the single role took exactly one NPC")
 	check(leader and leader.ids[1] == wolf:id(), "the one the caller named by story id")
 	local guards = qs and qs.roles and qs.roles.guards
 	check(guards and #guards.ids == mock.squad_size,
 		"the group role took the whole squad (" .. tostring(guards and #guards.ids) .. ")")
+	check(xms_nq.get_var(UID_CALL, "started") == true, "`started` ran the caller on - the quest did not wait")
+	check(xms_nq.get_var(UID_CALL, "after") ~= true, "while `finished` has not fired")
+	check(xms_nq.quest_status(UID_CALL) == "active", "and the calling node is still waiting for its other exit")
 end
 
 section("(z17) a step reaches the NPC as generated logic, not as new AI")
@@ -2885,12 +2927,13 @@ do
 	check(rec and string.find(rec.text, "def_state_moving = rush", 1, true) ~= nil,
 		"move = run became the running state")
 	check(rec and rec.gulag == "", "no gulag prefix: the paths are the author's own names")
-	local qs = xms_nq.quest_state(scen_instance)
+	check(mock.patrol_point_calls == 0, "a drawn path needs nothing registered in the engine")
+	local qs = xms_nq.quest_state(beh_instance)
 	check(qs and qs.vars and qs.vars.stage == 1, "the graph is still on its first stage")
 	check(instance_uid() ~= nil, "and the node waits for the leader to arrive")
 end
 
-section("(z17) arrival moves the graph on, and the instance ends")
+section("(z17) arrival moves the graph on, and the natural end is `finished`")
 do
 	-- the walker is the game's; what the step waits for is the NPC being there
 	wolf._pos = vector():set(10, 0, 10)
@@ -2901,23 +2944,176 @@ do
 	check(rec and string.find(rec.text, "path_walk = qa_post", 1, true) ~= nil,
 		"on the post the step named")
 	check(rec and rec.scheme == "nil",
-		"and the scenario switched it off again on the way out (" .. tostring(rec and rec.scheme) .. ")")
+		"and the behaviour switched it off again on the way out (" .. tostring(rec and rec.scheme) .. ")")
 	check(rec and string.find(rec.text, "radius = 15", 1, true) ~= nil, "with the radius it was given")
 	check(instance_uid() == nil, "the instance is gone once its graph ends")
-	check(xms_nq.quest_state(scen_instance) == nil, "and so is its state record")
-	check(xms_nq.get_var(UID_CALL, "after") == true, "the waiting quest node was let go")
+	check(xms_nq.quest_state(beh_instance) == nil, "and so is its state record")
+	check(xms_nq.get_var(UID_CALL, "after") == true, "the caller left by `finished`")
+	check(xms_nq.get_var(UID_CALL, "gave_up") ~= true, "and not by `aborted`: exactly one of the two fires")
 	check(xms_nq.quest_status(UID_CALL) == "completed", "and the quest finished")
 end
 
-section("(z17) removing an NPC that is busy with something is safe")
+section("(z17) a cast that dies is `aborted`, not `finished`")
 setup()
-scen_paths()
+beh_paths()
 mock.first_update()
 do
 	xms_nq_console.exec("activate " .. UID_CALL)
 	mock.ticks(1)
 	local uid = instance_uid()
-	check(uid ~= nil, "a scenario is driving the leader")
+	check(uid ~= nil, "an instance is running")
+	local qs = uid and xms_nq.quest_state(uid)
+	for _, r in pairs((qs and qs.roles) or {}) do
+		for _, id in ipairs(r.ids or {}) do
+			local se = mock.se[id]
+			if (se) then se._alive = false end
+			local go = db.storage[id] and db.storage[id].object
+			if (go) then go._alive = false end
+		end
+	end
+	mock.ticks(2)
+	check(instance_uid() == nil, "the instance ended: nobody is left to drive")
+	check(xms_nq.get_var(UID_CALL, "gave_up") == true, "the caller left by `aborted`")
+	check(xms_nq.get_var(UID_CALL, "after") ~= true, "and `finished` stayed quiet")
+end
+
+section("(z17) a destination that is not there yet parks the step")
+setup()
+mock.first_update()
+local fetch_instance
+do
+	xms_nq_console.exec("activate " .. UID_FETCH_CALL)
+	mock.ticks(2)
+	fetch_instance = instance_uid()
+	check(fetch_instance ~= nil, "the errand runs")
+	check(xms_nq.get_var(UID_FETCH_CALL, "started") == true, "`started` fired")
+	local qs = xms_nq.quest_state(fetch_instance)
+	check(mock.applied[wolf:id()] == nil, "the runner was given nothing: there is nowhere to go yet")
+	check(qs and qs.pending and qs.pending[tostring(wolf:id())] ~= nil, "the step is parked in the instance state")
+	check(mock.patrol_point_calls == 0, "and no path was registered for a place that does not exist")
+end
+
+section("(z17) the ref appears: the engine gets a one-point path and the stock walker walks it")
+local case_box
+do
+	-- the CALLER makes the ref, the way spawn.object would - the behaviour graph never does
+	case_box = mock.add_container("inventory_box", nil, true, vector():set(30, 0, 30))
+	xms_nq.ref_set(xms_nq.quest_state(UID_FETCH_CALL), "case", { id = case_box.id })
+	mock.ticks(2)
+	local rec = mock.applied[wolf:id()]
+	check(rec ~= nil and rec.scheme == "walker", "the parked step was applied the moment the ref resolved")
+	local slot = rec and string.match(rec.text, "path_walk = (xms_rt_%d+)")
+	check(slot ~= nil, "it walks a runtime path, not one anybody drew (" .. tostring(slot) .. ")")
+	local pt = slot and mock.rt_points[slot]
+	check(pt and pt[1] == 30 and pt[3] == 30, "registered where the caller's ref stands")
+	local qs = xms_nq.quest_state(fetch_instance)
+	check(qs and qs.applied and qs.applied[tostring(wolf:id())] ~= nil, "the instance remembers what the runner runs")
+	check(qs and qs.pending and qs.pending[tostring(wolf:id())] == nil, "and nothing is parked any more")
+end
+
+section("(z17) the ref moves: its path moves with it and the runner is sent again")
+do
+	local rec0 = mock.applied[wolf:id()]
+	local slot = rec0 and string.match(rec0.text, "path_walk = (xms_rt_%d+)")
+	local applied_before = mock.apply_count
+	case_box.position = vector():set(60, 0, 60)
+	if (case_box._pos) then case_box._pos = vector():set(60, 0, 60) end
+	mock.ticks(12, 300)
+	local pt = slot and mock.rt_points[slot]
+	check(pt and pt[1] == 60 and pt[3] == 60, "the same slot now stands where the ref went")
+	check(mock.apply_count > applied_before, "and the walker was handed the step again")
+	check(instance_uid() == fetch_instance, "the instance is the same one: nothing restarted")
+end
+
+section("(z17) a load in the middle of a step: the logic file and the path are back before the NPC")
+do
+	local st = db.storage[wolf:id()]
+	local ini_name = st and st.ini_filename
+	local rec = mock.applied[wolf:id()]
+	local active = rec and rec.active
+	check(type(ini_name) == "string" and string.sub(ini_name, 1, 1) == "*", "the NPC would be saved naming a generated file")
+	xms_nq.save_now()
+	-- a new Lua state and a reloaded level: both the file and the path are gone
+	local seen_before_init
+	mock.after_game_load = function()
+		seen_before_init = { mock.npc_would_restore(ini_name, active) }
+	end
+	mock.rebuild()
+	check(mock.npc_would_restore(ini_name, active) == nil, "right after the reload neither exists")
+	mock.first_update()
+	mock.after_game_load = nil
+	check(seen_before_init and seen_before_init[1] ~= nil,
+		"on_game_load put both back BEFORE the first update (" .. tostring(seen_before_init and seen_before_init[2]) .. ")")
+	mock.ticks(1)
+	check(instance_uid() == fetch_instance, "and the instance itself came back with its state")
+end
+
+section("(z17) an NPC something else took back is taken again")
+do
+	local id = wolf:id()
+	local before = mock.apply_count
+	-- a smart terrain handing out jobs does exactly this
+	db.storage[id].ini_filename = "*esc_smart_terrain_2_12"
+	mock.ticks(2)
+	check(mock.apply_count > before, "the instance noticed and re-applied its step")
+	check(db.storage[id].ini_filename ~= "*esc_smart_terrain_2_12", "the runner runs the behaviour's logic again")
+end
+
+section("(z17) the ref goes away in the middle of the step: the graph moves on")
+do
+	xms_nq.ref_clear(xms_nq.quest_state(UID_FETCH_CALL), "case")
+	mock.ticks(3)
+	local node = xms_nq.quest_state(fetch_instance)
+	check(node and node.tokens and node.tokens.go == nil, "npc.goto stopped waiting for something that is not coming back")
+	check(instance_uid() == fetch_instance, "the instance lives on - only the step ended")
+end
+
+section("(z17) behaviour.stop is `aborted`, and gives the slots back")
+do
+	local qs = xms_nq.quest_state(fetch_instance)
+	local slots = 0
+	for _, step in pairs((qs and qs.steps) or {}) do if (step.path) then slots = slots + 1 end end
+	check(slots > 0, "the instance holds runtime path slots")
+	xms_nq.emit({ name = "signal", signal = "qa_stop_errand", module = "mod_b", quest = UID_FETCH_CALL })
+	mock.ticks(3)
+	check(instance_uid() == nil, "the instance is gone")
+	check(xms_nq.get_var(UID_FETCH_CALL, "aborted") == true, "the caller left by `aborted`")
+	check(xms_nq.get_var(UID_FETCH_CALL, "finished") ~= true, "not by `finished`")
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "nil", "the runner was handed back to its own logic")
+	local leftover = 0
+	for _ in pairs(db.dynamic_ltx) do leftover = leftover + 1 end
+	check(leftover == 0, "no generated logic file is kept for an instance that ended")
+end
+
+section("(z17) a place with no walkable cell near it parks instead of failing")
+setup()
+mock.first_update()
+do
+	mock.no_navmesh = true
+	xms_nq_console.exec("activate " .. UID_FETCH_CALL)
+	mock.ticks(1)
+	local box = mock.add_container("inventory_box", nil, true, vector():set(5, 0, 5))
+	xms_nq.ref_set(xms_nq.quest_state(UID_FETCH_CALL), "case", { id = box.id })
+	mock.ticks(2)
+	check(mock.applied[wolf:id()] == nil, "the engine refused the point, so nothing was applied")
+	local uid = instance_uid()
+	local qs = uid and xms_nq.quest_state(uid)
+	check(qs and qs.pending and qs.pending[tostring(wolf:id())] ~= nil, "the step waits instead of erroring")
+	mock.no_navmesh = false
+	mock.ticks(2)
+	check(mock.applied[wolf:id()] ~= nil, "and goes through once the place can be reached")
+end
+
+section("(z17) removing an NPC that is busy with something is safe")
+setup()
+beh_paths()
+mock.first_update()
+do
+	xms_nq_console.exec("activate " .. UID_CALL)
+	mock.ticks(1)
+	local uid = instance_uid()
+	check(uid ~= nil, "a behaviour is driving the leader")
 	check(mock.applied[wolf:id()] ~= nil, "and a scheme is on it")
 
 	-- exactly what a quest does when the player crosses the second trigger: the
@@ -2931,16 +3127,16 @@ do
 
 	local after = xms_nq.quest_state(uid)
 	local ids = (after and after.roles and after.roles.leader and after.roles.leader.ids) or {}
-	check(#ids == 0, "the scenario dropped it instead of driving a released object")
+	check(#ids == 0, "the behaviour dropped it instead of driving a released object")
 	check(mock.applied[wolf:id()] and mock.applied[wolf:id()].scheme == "nil",
 		"and its scheme was switched off first (" ..
 		tostring(mock.applied[wolf:id()] and mock.applied[wolf:id()].scheme) .. ")")
 	check(mock.talking ~= true, "the talk it was in was ended")
 end
 
-section("(z17) an object a quest removes leaves the scenario it was in")
+section("(z17) an object a quest removes leaves the behaviour it was in")
 setup()
-scen_paths()
+beh_paths()
 mock.first_update()
 do
 	xms_nq_console.exec("activate " .. UID_CALL)
@@ -2952,7 +3148,7 @@ do
 	check(victim ~= nil, "the leader is bound")
 	if (victim) then
 		-- what npc.remove does before it releases anything
-		xms_nq_scenario.forget_object(victim)
+		xms_nq_behaviour.forget_object(victim)
 		local after = xms_nq.quest_state(uid)
 		local ids = (after and after.roles and after.roles.leader and after.roles.leader.ids) or {}
 		check(#ids == 0, "the role lost it")
@@ -2960,6 +3156,8 @@ do
 			"and nothing holds it any more")
 		check(after == nil or after.pending == nil or after.pending[tostring(victim)] == nil,
 			"a parked step for it is dropped too")
+		check(after == nil or after.applied == nil or after.applied[tostring(victim)] == nil,
+			"and so is the record of what it was running")
 	end
 end
 end)()

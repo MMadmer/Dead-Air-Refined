@@ -1,10 +1,10 @@
--- Headless fixture: a scenario with two roles, one of them a group.
+-- Headless fixture: a behaviour graph with two roles, one of them a group.
 -- Drives them with the steps that generate logic (goto, hold) and the ones that
 -- do not (stance), then ends - so the test can watch the instance live and die.
+-- The extension says what this is: there is no `type` key.
 return {
-  nq    = 1,
-  type  = "scenario",
-  id    = "scen_guards",
+  beh   = 1,
+  id    = "beh_guards",
   title = "QA guards",
   roles = {
     leader = { title = "Leader" },
@@ -31,14 +31,14 @@ return {
     {
       id     = "move",
       kind   = "npc.goto",
-      params = { who = "leader", path = "qa_walk", look = "qa_look", move = "run", arrive = true, radius = 3 },
+      params = { who = "leader", place = { path = "qa_walk" }, look = "qa_look", move = "run", arrive = true, radius = 3 },
       out    = { done = "dig_in" },
     },
     {
       id       = "dig_in",
       kind     = "flow.step",
       on_enter = {
-        { kind = "npc.hold", params = { who = "leader", path = "qa_post", look = "qa_look", radius = 15 } },
+        { kind = "npc.hold", params = { who = "leader", place = { path = "qa_post" }, look = "qa_look", radius = 15 } },
         { kind = "var.set", params = { name = "stage", value = 2 } },
       },
       out      = { next = "finish" },

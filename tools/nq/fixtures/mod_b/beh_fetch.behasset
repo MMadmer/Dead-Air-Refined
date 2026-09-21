@@ -1,0 +1,44 @@
+-- Headless fixture: walking to something that is NOT always there. The
+-- destination is a ref the CALLER makes - maybe later, maybe never - so the step
+-- has to park until it appears, follow it when it moves and let go when it is
+-- gone. No waypoint path is drawn for any of it.
+return {
+  beh   = 1,
+  id    = "beh_fetch",
+  title = "QA fetch",
+  roles = {
+    runner = { title = "Runner" },
+  },
+  nodes = {
+    {
+      id   = "start",
+      kind = "trigger.start",
+      out  = { next = "go" },
+    },
+    {
+      id     = "go",
+      kind   = "npc.goto",
+      params = { who = "runner", place = { ref = "case" }, move = "run", arrive = true, radius = 3 },
+      out    = { done = "guard" },
+    },
+    {
+      id       = "guard",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "npc.hold", params = { who = "runner", place = { ref = "case" }, radius = 10 } },
+      },
+      out      = { next = "linger" },
+    },
+    {
+      id     = "linger",
+      kind   = "wait.timer",
+      params = { duration = { game_hours = 24 } },
+      out    = { done = "finish" },
+    },
+    {
+      id     = "finish",
+      kind   = "flow.end",
+      params = { status = "completed" },
+    },
+  },
+}

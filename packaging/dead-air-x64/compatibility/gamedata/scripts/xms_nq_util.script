@@ -331,16 +331,32 @@ end
 -- npc_ref = {story=} | {ref=} | {profile=} | {community=, level=?}
 -- Resolution order: ref -> story -> first online NPC by profile/community.
 
-local function refs_of(ctx)
-	return ctx and ((ctx.qs and ctx.qs.refs) or ctx.refs) or nil
+-- A ref by name. A behaviour instance sees what its caller made: its own refs
+-- first, then the caller's, up the chain - so a graph can walk to "the case the
+-- quest dropped" without the quest handing every object over as a role. Returns
+-- the record and the uid of the state that owns it.
+function ref_record(ctx, name)
+	if (name == nil or ctx == nil) then return nil, nil end
+	local qs = ctx.qs
+	local refs = (qs and qs.refs) or ctx.refs
+	local r = refs and refs[name]
+	if (r ~= nil) then return r, (qs and qs.uid) or ctx.uid end
+	local hops = 0
+	while (qs and type(qs.owner) == "table" and qs.owner.uid and hops < 8) do
+		local uid = qs.owner.uid
+		qs = xms_nq and xms_nq.quest_state and xms_nq.quest_state(uid) or nil
+		r = qs and qs.refs and qs.refs[name]
+		if (r ~= nil) then return r, uid end
+		hops = hops + 1
+	end
+	return nil, nil
 end
 
 -- Object id of a ref/story reference; nil for profile/community (they have no single object).
 function ref_object_id(ctx, ref)
 	if (type(ref) ~= "table") then return nil end
 	if (ref.ref) then
-		local refs = refs_of(ctx)
-		local r = refs and refs[ref.ref]
+		local r = ref_record(ctx, ref.ref)
 		return r and r.id or nil
 	end
 	if (ref.story) then return id_by_story(ref.story) end
@@ -392,8 +408,7 @@ function npc_matches(ctx, ref, go)
 	local is_rec = (type(go) == "table" and type(go.id) ~= "function")
 	local id = is_rec and go.id or (go.id and go:id())
 	if (ref.ref) then
-		local refs = refs_of(ctx)
-		local r = refs and refs[ref.ref]
+		local r = ref_record(ctx, ref.ref)
 		return (r and r.id ~= nil and r.id == id) and true or false
 	end
 	if (ref.story) then

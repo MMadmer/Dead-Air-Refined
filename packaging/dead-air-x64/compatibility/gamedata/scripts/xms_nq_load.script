@@ -83,12 +83,12 @@ local function read_kind_section(ini, sec, cat, source)
 	}
 	for _, u in ipairs(split_csv(raw.use)) do k.use[u] = true end
 	-- Which document may carry it (NQ_ARCHITECTURE par. 19.8). Absent = both: a
-	-- kind that does not say otherwise is as good in a scenario as in a quest,
+	-- kind that does not say otherwise is as good in a behaviour as in a quest,
 	-- and only the ones that speak to the player or to the PDA say otherwise.
 	k.docs = {}
 	local docs = split_csv(raw.docs)
 	if (#docs == 0) then
-		k.docs.quest, k.docs.scenario = true, true
+		k.docs.quest, k.docs.behaviour = true, true
 	else
 		for _, d in ipairs(docs) do k.docs[d] = true end
 	end
@@ -461,6 +461,17 @@ local function valid_place(v)
 	return false
 end
 
+-- Where a behaviour step sends people: everything a place is, plus a waypoint
+-- path (the best destination - the walker gets a route, not just a point), an
+-- object by story id, and a role (wherever its first living member stands).
+local function valid_destination(v)
+	if (type(v) ~= "table") then return false end
+	if (type(v.path) == "string" and v.path ~= "") then return true end
+	if (type(v.story) == "string" and v.story ~= "") then return true end
+	if (type(v.role) == "string" and v.role ~= "") then return true end
+	return valid_place(v)
+end
+
 local function valid_spawn_spec(v)
 	if (type(v) ~= "table" or type(v.section) ~= "string") then return false end
 	-- a smart or a place: without either there is nothing to create the squad on
@@ -604,6 +615,9 @@ local function canon_param(st, node, slot, p, v, kind)
 	elseif (t == "place") then
 		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=} | {ref=}" end
 		return util.copy(v), true
+	elseif (t == "destination") then
+		if not (valid_destination(v)) then return nil, false, "must be {path=} | {ref=} | {story=} | {role=} | {smart=} | {restrictor=} | {level=, pos={x,y,z}} | {actor=true, distance=}" end
+		return util.copy(v), true
 	elseif (t == "spawn_spec") then
 		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=, place=, restrictor=, spread=0..1}" end
 		return util.copy(v), true
@@ -705,7 +719,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		end
 		return out, true
 	elseif (t == "role_or_actor" or t == "attack_target") then
-		if (type(v) ~= "table") then return nil, false, "must be { actor = true } or { role = ... }" end
+		if (type(v) ~= "table") then return nil, false, "must be { actor = true }, { role = ... } or an object ({ ref = } | { story = })" end
 		local forms = 0
 		if (v.actor ~= nil) then forms = forms + 1 end
 		if (v.role ~= nil) then
@@ -715,12 +729,15 @@ local function canon_param(st, node, slot, p, v, kind)
 		if (t == "attack_target") then
 			if (v.community ~= nil) then forms = forms + 1 end
 			if (v.story ~= nil or v.ref ~= nil or v.profile ~= nil) then forms = forms + 1 end
+		elseif (v.story ~= nil or v.ref ~= nil) then
+			-- something to walk after: a ref the caller spawned, or an object of the level
+			forms = forms + 1
 		end
 		if (forms == 0) then return nil, false, "names nobody" end
 		if (forms > 1) then return nil, false, "must name exactly one target" end
 		return v, true
 	elseif (t == "role_bindings") then
-		-- what the quest hands the scenario: role name -> the reference forms of par. 8
+		-- what the caller hands the graph: role name -> the reference forms of par. 8
 		if (type(v) ~= "table") then return nil, false, "must be { role = { story = ... }, ... }" end
 		for name, binding in pairs(v) do
 			if (type(name) ~= "string" or not is_ident(name)) then
@@ -1300,6 +1317,11 @@ local function check_graph(st, q)
 	-- E030 refs used but never created by any node. An error, not a warning: nothing can ever
 	-- resolve such a ref, so the node holding it fails forever. The editor refuses the build for
 	-- the same reason, and W030 stays what the editor uses it for (created, but maybe too late).
+	-- A behaviour graph is the exception, and on purpose: it sees the refs of whoever runs
+	-- it (util.ref_record walks up to the caller), so "the case the quest dropped" is a ref
+	-- this document never creates. Which quest will call it cannot be known here, so such
+	-- a ref is taken on trust; at run time a step naming one that is not there parks.
+	if (q.type == "behaviour") then return end
 	for _, u in ipairs(st.ref_users) do
 		if not (st.ref_creators[u.name]) then
 			problem(st.problems, "E030", u.node, u.slot, "ref '%s' is never created by this quest", u.name)
@@ -1308,7 +1330,7 @@ local function check_graph(st, q)
 end
 
 -- Builds the canonical quest from a parsed table. Returns q (with q.valid / q.problems).
-function build(raw, module, relpath, src)
+function build(raw, module, relpath, src, kind)
 	local st = {
 		cat = catalog(), problems = {}, used_kinds = {}, ref_creators = {}, ref_users = {},
 		var_users = {}, task_users = {}, objective_users = {}, node_users = {}, quest_users = {},
@@ -1317,36 +1339,46 @@ function build(raw, module, relpath, src)
 	q.hash = util.fnv1a(src or "")
 	-- E001 / E002 header. Only the future is refused: every released version stays loadable, and
 	-- whatever is not readable as-is has been lifted to NQ_VERSION by migrate() before we get here.
-	if (raw.nq == nil) then
-		problem(st.problems, "E001", nil, "nq", "nq version is missing")
-	elseif (type(raw.nq) ~= "number" or math.floor(raw.nq) ~= raw.nq or raw.nq < 1) then
-		problem(st.problems, "E001", nil, "nq", "nq version %s is not a version number", tostring(raw.nq))
-	elseif (raw.nq > NQ_VERSION) then
-		problem(st.problems, "E001", nil, "nq", "nq version %s was written by a newer editor (this runtime supports up to %d)", tostring(raw.nq), NQ_VERSION)
+	-- The version key is the document's own: `nq` in a quest, `beh` in a behaviour graph.
+	-- The other one inside means the file was renamed across kinds - say so rather than
+	-- load a quest as a behaviour or the other way round.
+	local vkey = (kind == "behaviour") and "beh" or "nq"
+	local other = (kind == "behaviour") and "nq" or "beh"
+	local ver = raw[vkey]
+	if (raw[other] ~= nil) then
+		problem(st.problems, "E001", nil, other, "'%s' is the header of a %s - this file's extension says it is a %s",
+			other, (kind == "behaviour") and "quest (.nqasset)" or "behaviour graph (.behasset)",
+			(kind == "behaviour") and "behaviour graph" or "quest")
 	end
-	q.nq = raw.nq
+	if (ver == nil) then
+		problem(st.problems, "E001", nil, vkey, "%s version is missing", vkey)
+	elseif (type(ver) ~= "number" or math.floor(ver) ~= ver or ver < 1) then
+		problem(st.problems, "E001", nil, vkey, "%s version %s is not a version number", vkey, tostring(ver))
+	elseif (ver > NQ_VERSION) then
+		problem(st.problems, "E001", nil, vkey, "%s version %s was written by a newer editor (this runtime supports up to %d)", vkey, tostring(ver), NQ_VERSION)
+	end
+	q.nq = ver
 	if not (is_ident(raw.id)) then
 		problem(st.problems, "E002", nil, "id", "quest id must match [a-z0-9_]")
-		q.id = string.match(string.gsub(tostring(relpath), "^.*[\\/]", ""), "^(.-)%.nqasset$") or "invalid"
+		local leaf = string.gsub(tostring(relpath), "^.*[\\/]", "")
+		q.id = string.match(leaf, "^(.-)%.nqasset$") or string.match(leaf, "^(.-)%.behasset$") or "invalid"
 	else
 		q.id = raw.id
 	end
 	q.uid = tostring(module) .. "." .. tostring(q.id)
 	st.uid = q.uid
-	-- quest or scenario: the same graph doing a different job (par. 19)
-	if (raw.type == nil or raw.type == "quest") then
-		q.type = "quest"
-	elseif (raw.type == "scenario") then
-		q.type = "scenario"
-	else
-		problem(st.problems, "E006", nil, "type", "type must be quest or scenario")
-		q.type = "quest"
+	-- quest or behaviour: the same graph doing a different job (par. 19). Which
+	-- one it is was decided by the file's EXTENSION before we got here, so a
+	-- `type` key inside the document could only ever disagree with it.
+	q.type = (kind == "behaviour") and "behaviour" or "quest"
+	if (raw.type ~= nil) then
+		problem(st.problems, "E006", nil, "type", "there is no type key: the extension says what this is (.nqasset = quest, .behasset = behaviour)")
 	end
 	q.title = canon_text(raw.title, st, nil, "title") or q.id
-	if (q.type == "scenario") then
-		-- a scenario never starts itself: a quest node runs it
+	if (q.type == "behaviour") then
+		-- a behaviour graph never starts itself: a caller runs it
 		if (raw.activation ~= nil) then
-			problem(st.problems, "E006", nil, "activation", "a scenario is started by a quest, not by activation")
+			problem(st.problems, "E006", nil, "activation", "a behaviour graph is started by a caller, not by activation")
 		end
 		q.activation = "manual"
 	elseif (raw.activation == nil) then
@@ -1376,11 +1408,11 @@ function build(raw, module, relpath, src)
 			table.sort(q.var_names)
 		end
 	end
-	-- roles: the cast a scenario is run with, bound by the calling quest
+	-- roles: the cast a behaviour graph is run with, bound by its caller
 	q.roles, q.role_names = {}, {}
 	if (raw.roles ~= nil) then
-		if (q.type ~= "scenario") then
-			problem(st.problems, "E006", nil, "roles", "roles belong to a scenario")
+		if (q.type ~= "behaviour") then
+			problem(st.problems, "E006", nil, "roles", "roles belong to a behaviour graph")
 		elseif (type(raw.roles) ~= "table") then
 			problem(st.problems, "E006", nil, "roles", "roles must be a table of name = { ... }")
 		else
@@ -1402,11 +1434,11 @@ function build(raw, module, relpath, src)
 			table.sort(q.role_names)
 		end
 	end
-	if (q.type == "scenario" and #q.role_names == 0) then
-		problem(st.problems, "E006", nil, "roles", "a scenario needs at least one role - it has nobody to drive otherwise")
+	if (q.type == "behaviour" and #q.role_names == 0) then
+		problem(st.problems, "E006", nil, "roles", "a behaviour graph needs at least one role - it has nobody to drive otherwise")
 	end
-	if (q.type == "scenario" and raw.tasks ~= nil) then
-		problem(st.problems, "E006", nil, "tasks", "a scenario has no tasks of its own - those belong to the quest that runs it")
+	if (q.type == "behaviour" and raw.tasks ~= nil) then
+		problem(st.problems, "E006", nil, "tasks", "a behaviour graph has no tasks of its own - those belong to the quest that runs it")
 	end
 	-- tasks
 	if (raw.tasks ~= nil) then
@@ -1519,9 +1551,9 @@ function build(raw, module, relpath, src)
 		end
 		if not (kind_impl(kname)) then q.missing_impl[#q.missing_impl + 1] = kname end
 	end
-	-- every `who` names a role the scenario declares; a role declared and never
+	-- every `who` names a role the graph declares; a role declared and never
 	-- used is worth saying out loud, because the quest still has to bind it
-	if (q.type == "scenario") then
+	if (q.type == "behaviour") then
 		local seen = {}
 		local function check_who(list, where)
 			for _, e in ipairs(list or {}) do
@@ -1534,6 +1566,16 @@ function build(raw, module, relpath, src)
 							if not (q.roles[name]) then
 								problem(st.problems, "E008", where, "who", "no role called '%s' is declared", name)
 							end
+						end
+					end
+				end
+				-- a role is also somewhere to go and someone to follow
+				for _, key in ipairs({ "place", "target" }) do
+					local v = e.params and e.params[key]
+					if (type(v) == "table" and type(v.role) == "string") then
+						seen[v.role] = true
+						if not (q.roles[v.role]) then
+							problem(st.problems, "E008", where, key, "no role called '%s' is declared", v.role)
 						end
 					end
 				end
@@ -1580,14 +1622,16 @@ local ASSET_MIGRATE = {}
 
 function migrate(raw)
 	if (type(raw) ~= "table") then return raw end
-	local v = tonumber(raw.nq)
+	-- one format, one version line: a behaviour graph counts it under `beh`
+	local key = (raw.beh ~= nil and raw.nq == nil) and "beh" or "nq"
+	local v = tonumber(raw[key])
 	if not (v) then return raw end
 	while (v < NQ_VERSION) do
 		local step = ASSET_MIGRATE[v]
 		if not (step) then break end
 		raw = step(raw) or raw
 		v = v + 1
-		raw.nq = v
+		raw[key] = v
 	end
 	return raw
 end
@@ -1609,7 +1653,7 @@ function log_problems(q_or_file, problems, only_errors)
 end
 
 -- Loads one asset text. Returns q (valid or not); q.uid may fall back to the file name.
-function load_asset(module, relpath, src)
+function load_asset(module, relpath, src, kind)
 	local raw, perr = parse(src, module .. "/" .. relpath)
 	if not (raw) then
 		local id = string.match(string.gsub(tostring(relpath), "^.*[\\/]", ""), "^(.-)%.nqasset$") or "invalid"
@@ -1619,14 +1663,20 @@ function load_asset(module, relpath, src)
 		return q
 	end
 	raw = migrate(raw)
-	return build(raw, module, relpath, src)
+	return build(raw, module, relpath, src, kind)
 end
 
--- Discovers every *.nqasset of every enabled, applicable module. Returns
--- { quests = {uid = q}, order = {uid...}, invalid = {q...}, invalid_by_uid = {uid = q}, files = n }.
+-- Discovers every *.nqasset and *.behasset of every enabled, applicable module.
+-- The EXTENSION decides which registry a document lands in - nothing inside the
+-- file says it, so a rename cannot put a quest among the behaviour graphs.
+-- Returns { quests = {uid = q}, order = {uid...}, behaviours = {uid = q},
+-- behaviour_order = {uid...}, invalid = {q...}, invalid_by_uid = {uid = q}, files = n }.
+local SCAN_KINDS = { { mask = "*.nqasset", kind = "quest" },
+					 { mask = "*.behasset", kind = "behaviour" } }
+
 function scan()
 	local all = { quests = {}, order = {}, invalid = {}, invalid_by_uid = {}, files = 0, modules = 0,
-				  scenarios = {}, scenario_order = {} }
+				  behaviours = {}, behaviour_order = {} }
 	if not (xms and xms.list_files and xms.read_file) then return all end
 	local ok, mods = pcall(xms.modules)
 	if not (ok and type(mods) == "table") then return all end
@@ -1638,36 +1688,40 @@ function scan()
 			if (ok2 and r == false) then applies = false end
 		end
 		if (applies) then
-			local ok3, files = pcall(xms.list_files, m.id, "", "*.nqasset", true)
-			if (ok3 and type(files) == "table" and #files > 0) then
-				all.modules = all.modules + 1
-				table.sort(files)
-				local seen_ids = {}
-				for _, rel in ipairs(files) do
-					local ok4, src = pcall(xms.read_file, m.id, rel)
-					if (ok4 and type(src) == "string") then
-						all.files = all.files + 1
-						local q = load_asset(m.id, rel, src)
-						local pq = seen_ids[q.id]
-						if (pq and q.valid) then
-							problem(q.problems, "E002", nil, "id", "quest id '%s' is already used by %s", q.id, tostring(pq.file))
-							q.errors, q.warnings = count_problems(q.problems)
-							q.valid = false
-						end
-						if (q.valid and q.type == "scenario") then
-							seen_ids[q.id] = q
-							all.scenarios[q.uid] = q
-							all.scenario_order[#all.scenario_order + 1] = q.uid
-						elseif (q.valid) then
-							seen_ids[q.id] = q
-							all.quests[q.uid] = q
-							all.order[#all.order + 1] = q.uid
+			local counted, seen_ids = false, {}
+			for _, sk in ipairs(SCAN_KINDS) do
+				local ok3, files = pcall(xms.list_files, m.id, "", sk.mask, true)
+				if (ok3 and type(files) == "table" and #files > 0) then
+					if not (counted) then all.modules = all.modules + 1 counted = true end
+					table.sort(files)
+					for _, rel in ipairs(files) do
+						local ok4, src = pcall(xms.read_file, m.id, rel)
+						if (ok4 and type(src) == "string") then
+							all.files = all.files + 1
+							local q = load_asset(m.id, rel, src, sk.kind)
+							-- one id space for both kinds: the uid is what a
+							-- call names, and two documents cannot share one
+							local pq = seen_ids[q.id]
+							if (pq and q.valid) then
+								problem(q.problems, "E002", nil, "id", "id '%s' is already used by %s", q.id, tostring(pq.file))
+								q.errors, q.warnings = count_problems(q.problems)
+								q.valid = false
+							end
+							if (q.valid and q.type == "behaviour") then
+								seen_ids[q.id] = q
+								all.behaviours[q.uid] = q
+								all.behaviour_order[#all.behaviour_order + 1] = q.uid
+							elseif (q.valid) then
+								seen_ids[q.id] = q
+								all.quests[q.uid] = q
+								all.order[#all.order + 1] = q.uid
+							else
+								all.invalid[#all.invalid + 1] = q
+								if not (all.invalid_by_uid[q.uid]) then all.invalid_by_uid[q.uid] = q end
+							end
 						else
-							all.invalid[#all.invalid + 1] = q
-							if not (all.invalid_by_uid[q.uid]) then all.invalid_by_uid[q.uid] = q end
+							util.err("%s/%s: cannot read file", tostring(m.id), tostring(rel))
 						end
-					else
-						util.err("%s/%s: cannot read file", tostring(m.id), tostring(rel))
 					end
 				end
 			end
@@ -1688,7 +1742,7 @@ function scan()
 	end
 	table.sort(order)
 	all.order = order
-	table.sort(all.scenario_order)
+	table.sort(all.behaviour_order)
 	return all
 end
 

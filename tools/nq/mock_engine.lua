@@ -706,7 +706,7 @@ mock.level_names = { [1] = "l01_escape", [2] = "l02_garbage" }
 mock.level_name = "l01_escape"
 
 -- ---------------------------------------------------------------------------- schemes
--- What a scenario step actually does is write logic text and hand it to a stock
+-- What a behaviour step actually does is write logic text and hand it to a stock
 -- scheme. The test wants to READ that text, so the three entry points it goes
 -- through are recorded instead of simulated: mock.applied[id] holds the section
 -- it was given, the scheme that ended up active and the whole ini text.
@@ -716,6 +716,12 @@ mock.paths = {}				-- patrol paths that "exist" on this level
 function mock.add_path(name, points)
 	mock.paths[name] = points or { vector():set(0, 0, 0) }
 end
+
+-- Runtime one-point paths (xms.patrol_point): engine state, so they die with the
+-- level/Lua state the way CPatrolPathStorage does. mock.no_navmesh makes the
+-- engine refuse, as it does for a place with no walkable cell near it.
+mock.rt_points = {}
+mock.no_navmesh = false
 
 local dyn_ini_mt = {}
 dyn_ini_mt.__index = dyn_ini_mt
@@ -744,10 +750,13 @@ xr_logic = {
 	configure_schemes = function(go, ini, name, stype, section, gulag)
 		local id = go and go:id()
 		mock.applied[id] = { section = section, ini_name = name, text = ini and ini.text or "", gulag = gulag }
+		mock.apply_count = (mock.apply_count or 0) + 1
 		-- the real one parks the ini on the storage; everything that later wants to
-		-- switch the object off reads it from there
+		-- switch the object off reads it from there. ini_filename is what a save
+		-- keeps and what a load restores the logic from.
 		db.storage[id] = db.storage[id] or {}
 		db.storage[id].ini = ini
+		db.storage[id].ini_filename = name
 	end,
 	determine_section_to_activate = function(go, ini, section)
 		local s = ini and ini.sections and ini.sections[section]
@@ -814,7 +823,7 @@ game_graph = function()
 	}
 end
 
-db = { storage = {}, zone_by_name = {}, actor = nil }
+db = { storage = {}, zone_by_name = {}, actor = nil, dynamic_ltx = {} }
 
 function IsStalker(go, cls)
 	if (cls ~= nil) then return cls == "stalker" end
@@ -1283,6 +1292,16 @@ local function build_xms()
 		mode_active = function(id) return false end,
 		module_applies = function(id) local m = module_by_id(id) return m ~= nil and m.applies ~= false end,
 		graph_vertex = function(lvl, x, y, z) return 1 end,
+		patrol_point = function(name, x, y, z)
+			if (type(name) ~= "string" or string.sub(name, 1, 7) ~= "xms_rt_") then return false end
+			if (mock.no_navmesh) then return false end
+			-- a path the level shipped is never the runtime's to move
+			if (mock.paths[name] and not mock.rt_points[name]) then return false end
+			mock.rt_points[name] = { x, y, z }
+			mock.paths[name] = { vector():set(x, y, z) }
+			mock.patrol_point_calls = (mock.patrol_point_calls or 0) + 1
+			return true
+		end,
 		save_data = function(id, s)
 			mock.save_calls = mock.save_calls + 1
 			mock.blobs[id] = s
@@ -1297,9 +1316,11 @@ local function build_xms()
 			for _, f in ipairs(files) do
 				if not (mock.deleted[id .. "/" .. f]) then out[#out + 1] = f end
 			end
+			-- an override is a file like any other: it answers to the mask too
+			local want_ext = string.match(mask or "*.nqasset", "%.([%w_]+)$")
 			for key in pairs(mock.overrides) do
 				local mid, rel = string.match(key, "^(.-)/(.*)$")
-				if (mid == id) then
+				if (mid == id and (not want_ext or string.match(rel, "%.([%w_]+)$") == want_ext)) then
 					local seen = false
 					for _, f in ipairs(out) do if (f == rel) then seen = true end end
 					if not (seen) then out[#out + 1] = rel end
@@ -1340,7 +1361,7 @@ local function build_xms()
 end
 
 -- ---------------------------------------------------------------------------- script namespaces
-local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_scenario = true }
+local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true }
 local loading = {}
 
 local function load_script(name)
@@ -1623,6 +1644,13 @@ function mock.fresh()
 	db.actor = make_actor()
 	db.storage = { [0] = { object = db.actor } }
 	db.zone_by_name = {}
+	db.dynamic_ltx = {}
+	for name in pairs(mock.rt_points) do mock.paths[name] = nil end
+	mock.rt_points = {}
+	mock.applied = {}
+	mock.no_navmesh = false
+	mock.apply_count = 0
+	mock.patrol_point_calls = 0
 	for name, smart in pairs(mock.smarts) do mock.se[smart.id] = smart end
 	mock.rebuild()
 end
@@ -1632,6 +1660,11 @@ end
 function mock.rebuild()
 	for name in pairs(SCRIPT_NAMES) do rawset(_G, name, nil) end
 	mock.callbacks = {}
+	-- a new Lua state and a reloaded level: generated logic files and runtime
+	-- patrol paths are gone until somebody puts them back
+	db.dynamic_ltx = {}
+	for name in pairs(mock.rt_points) do mock.paths[name] = nil end
+	mock.rt_points = {}
 	mock.talk = nil
 	mock.talking = false
 	build_xms()
@@ -1645,8 +1678,27 @@ end
 function mock.first_update()
 	local nq = xms_nq
 	if (nq and nq.on_game_start) then nq.on_game_start() end
+	-- axr_main runs every script's on_game_start; the actor's net_spawn then sends
+	-- on_game_load - BEFORE any NPC spawns and long before the first update
+	local beh = xms_nq_behaviour
+	if (beh and beh.on_game_start) then beh.on_game_start() end
+	SendScriptCallback("on_game_load", { })
+	if (mock.after_game_load) then mock.after_game_load() end
 	SendScriptCallback("actor_on_first_update", { }, 0)
 	SendScriptCallback("actor_on_update", { }, 0)
+end
+
+-- What xr_logic would find for an NPC coming back from a save: the logic file it
+-- names (db.dynamic_ltx, exactly as get_customdata_or_ini_file looks it up) and
+-- the path its active section walks. nil, reason when the load would break.
+function mock.npc_would_restore(ini_filename, section)
+	if (type(ini_filename) ~= "string" or string.sub(ini_filename, 1, 1) ~= "*") then return nil, "not a generated file" end
+	local ini = db.dynamic_ltx[string.sub(ini_filename, 2)]
+	if not (ini) then return nil, "no logic file" end
+	local sect = ini.sections and ini.sections[section]
+	if not (sect) then return nil, "no section " .. tostring(section) end
+	if (sect.path_walk and not mock.paths[sect.path_walk]) then return nil, "no patrol path " .. sect.path_walk end
+	return ini
 end
 
 function mock.tick(ms)

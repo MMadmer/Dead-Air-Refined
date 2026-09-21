@@ -1,9 +1,9 @@
--- NQ runtime: scenarios - graphs that drive NPCs (NQ_ARCHITECTURE par. 19).
---   quest side:    scenario.run, scenario.stop, scenario_running, scenario_done
---   scenario side: npc.goto, npc.hold, npc.anim, npc.follow, npc.attack,
---                  npc.stance, npc.release, npc_at_place, npc_in_combat, role_alive
+-- NQ runtime: behaviour graphs - the assets that drive NPCs (NQ_ARCHITECTURE par. 19).
+--   caller side:    behaviour.run, behaviour.stop, behaviour_running, behaviour_done
+--   behaviour side: npc.goto, npc.hold, npc.anim, npc.follow, npc.attack,
+--                   npc.stance, npc.release, npc_at_place, npc_in_combat, role_alive
 --
--- A running scenario is an instance of the ordinary NQ interpreter (core.instance_*),
+-- A running behaviour is an instance of the ordinary NQ interpreter (core.instance_*),
 -- so nodes, pins, conditions, vars, tokens and saves are the ones quests already use.
 -- What is new is two things only:
 --
@@ -18,7 +18,12 @@
 --   keep working, because the same schemes keep running them.
 --
 -- An NPC that is offline cannot be given a scheme (there is no game object to
--- give it to), so the step is parked and applied the moment it spawns in.
+-- give it to), so the step is parked and applied the moment it spawns in. The
+-- same queue carries a step whose DESTINATION is not there yet: a place naming
+-- a ref the caller has not spawned is parked, not failed.
+--
+-- behaviour.run has three pins and no flag: started fires at once (as a side
+-- branch - the node keeps waiting), then exactly one of finished / aborted.
 
 local core = xms_nq
 local util = xms_nq_util
@@ -26,7 +31,7 @@ local util = xms_nq_util
 local K = {}
 
 local tick_on = false
-local UID_MARK = "#"		-- "<module>.<scenario>#<n>": no asset id can contain it
+local UID_MARK = "#"		-- "<module>.<behaviour>#<n>": no asset id can contain it
 
 -- ============================================================================ helpers
 local function actor()
@@ -135,8 +140,95 @@ local function near(id, pos, radius)
 	return ok and d <= radius
 end
 
+-- ============================================================================ destinations
+-- A destination is always WALKED as a patrol path, because that is what the stock
+-- schemes walk. When the author drew one, that is it. For anything else - a ref,
+-- an object, a role, a smart, a restrictor, a position, the player - the engine
+-- registers a one-point runtime path at the place (xms.patrol_point, XFined-Ray)
+-- and the same walker/camper walks to it: no movement code lives here.
+--
+-- Runtime paths are POOLED. A name is a slot ("xms_rt_<n>"); a step keeps the slot
+-- it took in the instance state, which survives a save, and the slot goes back to
+-- the pool when the instance ends. The engine never frees a runtime path - it
+-- moves its point - so an NPC still holding a stale one holds nothing dangling.
+local RT_PREFIX = "xms_rt_"
+local rt_used = {}			-- slot name -> true; rebuilt from the state on load
+
+local function rt_alloc()
+	local n = 1
+	while (rt_used[RT_PREFIX .. n]) do n = n + 1 end
+	local name = RT_PREFIX .. n
+	rt_used[name] = true
+	return name
+end
+
+local function first_living(qs, role)
+	for _, id in ipairs(role_ids(qs, role)) do
+		if (alive_id(id)) then return id end
+	end
+	return nil
+end
+
+local function object_pos(id)
+	local go = go_by_id(id)
+	if (go) then
+		local ok, pos = pcall(go.position, go)
+		if (ok and pos) then return pos end
+	end
+	local se = se_by_id(id)
+	return se and se.position or nil
+end
+
+-- Where a destination is RIGHT NOW, or nil when it cannot be said at the moment:
+-- the ref is not in the world (yet, or any more), the role is empty, or the place
+-- is on another level - a walker walks within a level.
+local function destination_pos(ctx, dest)
+	if (type(dest) ~= "table") then return nil end
+	if (dest.role) then
+		local id = first_living(ctx.qs, dest.role)
+		return id and object_pos(id) or nil
+	end
+	if (dest.story) then
+		local id = util.id_by_story(dest.story)
+		local se = id and se_by_id(id)
+		if not (se) then return nil end
+		local lvl, here = util.level_name_of_gvid and util.level_name_of_gvid(se.m_game_vertex_id), util.current_level()
+		if (lvl and here and lvl ~= here) then return nil end
+		return object_pos(id)
+	end
+	local lvl, pos = util.place_position(dest, ctx)
+	if not (pos) then return nil end
+	local here = util.current_level()
+	if (lvl and here and lvl ~= here) then return nil end
+	return pos
+end
+
+local function dist3(a, b)
+	local dx, dy, dz = a[1] - b.x, a[2] - b.y, a[3] - b.z
+	return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- Puts a step's runtime path where its destination is now. True when the step
+-- may be applied: it has a path of the author's, or its point has just been set.
+local function step_ready(ctx, step)
+	if not (step.dest) then return true end
+	local pos = destination_pos(ctx, step.dest)
+	if not (pos) then return false end
+	if not (xms and xms.patrol_point) then return false end
+	if not (xms.patrol_point(step.path, pos.x, pos.y, pos.z)) then return false end
+	step.at = { pos.x, pos.y, pos.z }
+	step.lvl = util.current_level()
+	return true
+end
+
 -- ============================================================================ applying a step
--- The one place a scenario touches an NPC. Everything above builds text; this
+-- What an instance remembers about a step, all of it in the state so a save keeps it:
+--   qs.steps[tag]  = { text = <logic>, dest = <destination|nil>, path = <slot|nil>,
+--                      at = {x,y,z}, lvl = <level> }
+--   qs.applied[id] = tag		what the NPC is running
+--   qs.pending[id] = tag		what it will run once it - or its destination - is there
+--
+-- The one place a behaviour touches an NPC. Everything above builds text; this
 -- hands it to the schemes and lets them do what they have always done.
 local function apply_now(id, tag, text)
 	local go = go_by_id(id)
@@ -145,49 +237,104 @@ local function apply_now(id, tag, text)
 
 	local ok, err = pcall(function()
 		local ini = create_ini_file(text)
+		-- The game restores a "*name" logic file from db.dynamic_ltx when an NPC
+		-- comes back from a save (xr_logic.get_customdata_or_ini_file) - the same
+		-- table its smart terrains keep their generated job files in. Ours goes
+		-- there too, or an NPC saved in the middle of a step loads into a nil ini.
+		if (db and db.dynamic_ltx) then db.dynamic_ltx[tag] = ini end
 		local section = "logic@" .. tag
-		-- gulag_name "" on purpose: paths in a scenario are the names the author
+		-- gulag_name "" on purpose: paths in a behaviour are the names the author
 		-- gave them in the editor, not names to be prefixed with a smart's
 		xr_logic.configure_schemes(go, ini, "*" .. tag, modules.stype_stalker, section, "")
 		local sect = xr_logic.determine_section_to_activate(go, ini, section, actor())
 		xr_logic.activate_by_section(go, ini, sect, "", false)
 	end)
 	if not (ok) then
-		util.err("scenario: cannot apply '%s' to %s: %s", tag, tostring(id), tostring(err))
+		util.err("behaviour: cannot apply '%s' to %s: %s", tag, tostring(id), tostring(err))
 		return false
 	end
 	return true
 end
 
--- An offline NPC has no game object to take a scheme. The step waits in the
--- instance state (which survives a save) and the poll applies it the moment the
--- NPC is in the world.
-local function apply(ctx, id, tag, text)
+-- Remembers a step. `dest` is a destination nobody drew a path for; its slot is
+-- kept across re-entries of the same node so the pool does not grow with them.
+local function remember_step(qs, tag, text, dest)
+	qs.steps = qs.steps or {}
+	local had = qs.steps[tag]
+	local step = { text = text }
+	if (dest) then
+		step.dest = dest
+		step.path = (had and had.path) or rt_alloc()
+	elseif (had and had.path) then
+		rt_used[had.path] = nil
+	end
+	qs.steps[tag] = step
+	return step
+end
+
+-- An offline NPC has no game object to take a scheme, and a destination that is
+-- not in the world has no point to walk to. Either way the step waits in the
+-- instance state (which survives a save) and the tick applies it the moment both
+-- are there.
+local function apply(ctx, id, tag, text, dest)
 	local qs = ctx.qs
+	local key = tostring(id)
+	-- a node entered again may say something else this time (who to follow, say)
+	local step = qs.steps and qs.steps[tag]
+	if not (step and step.text == text) then step = remember_step(qs, tag, text, dest) end
 	qs.held = qs.held or {}
-	qs.held[tostring(id)] = true
-	if (apply_now(id, tag, text)) then
-		if (qs.pending) then qs.pending[tostring(id)] = nil end
+	qs.held[key] = true
+	qs.applied = qs.applied or {}
+	qs.pending = qs.pending or {}
+	if (step_ready(ctx, step) and apply_now(id, tag, step.text)) then
+		qs.applied[key] = tag
+		qs.pending[key] = nil
 		core.mark_dirty()
 		return true
 	end
-	qs.pending = qs.pending or {}
-	qs.pending[tostring(id)] = { tag = tag, text = text }
+	qs.applied[key] = nil
+	qs.pending[key] = tag
 	core.mark_dirty()
 	return false
+end
+
+local function instance_ctx(uid, qs)
+	return { uid = uid, qs = qs, refs = qs.refs }
 end
 
 local function drain_pending(uid)
 	local qs = core.quest_state(uid)
 	if not (qs and qs.pending) then return end
-	for key, job in pairs(util.copy(qs.pending)) do
+	local ctx = instance_ctx(uid, qs)
+	for key, tag in pairs(util.copy(qs.pending)) do
 		local id = tonumber(key)
-		if not (id) or not (alive_id(id)) then
+		local step = qs.steps and qs.steps[tag]
+		if not (id and step) or not (alive_id(id)) then
 			qs.pending[key] = nil
 			core.mark_dirty()
-		elseif (apply_now(id, job.tag, job.text)) then
+		elseif (step_ready(ctx, step) and apply_now(id, tag, step.text)) then
 			qs.pending[key] = nil
+			qs.applied = qs.applied or {}
+			qs.applied[key] = tag
 			core.mark_dirty()
+		end
+	end
+end
+
+-- Whoever this instance drives still runs what it was given. A smart terrain
+-- handing out jobs, a script resetting logic, a load that could not restore the
+-- file - anything may take an NPC back; the instance takes it again, quietly.
+local function heal_applied(uid)
+	local qs = core.quest_state(uid)
+	if not (qs and qs.applied and db and db.storage) then return end
+	for key, tag in pairs(qs.applied) do
+		local id = tonumber(key)
+		local st = id and db.storage[id]
+		if (st and st.object and st.ini_filename ~= "*" .. tag) then
+			local step = qs.steps and qs.steps[tag]
+			if (step and alive_id(id) and step_ready(instance_ctx(uid, qs), step)) then
+				apply_now(id, tag, step.text)
+			end
 		end
 	end
 end
@@ -220,8 +367,16 @@ local function release_all(uid)
 		local id = tonumber(key)
 		if (id) then release(id) n = n + 1 end
 	end
+	-- the slots go back to the pool and the logic files are forgotten: nobody
+	-- runs them any more (release switched every NPC away first)
+	for tag, step in pairs(qs.steps or {}) do
+		if (step.path) then rt_used[step.path] = nil end
+		if (db and db.dynamic_ltx) then db.dynamic_ltx[tag] = nil end
+	end
 	qs.held = {}
 	qs.pending = {}
+	qs.applied = {}
+	qs.steps = {}
 	return n
 end
 
@@ -323,29 +478,61 @@ local function find_start(q)
 	return nil
 end
 
-local function stop_instance(uid, reason)
+-- `ok` is the whole difference between the two exits of behaviour.run: true
+-- when the graph reached flow.end by itself, false when it was cut short - the
+-- cast died, behaviour.stop said so, or the asset went away with an update.
+local function stop_instance(uid, reason, ok)
 	if not (is_instance(uid)) then return end
 	local qs = core.quest_state(uid)
 	if not (qs) then return end
 	local owner = qs.owner
 	local n = release_all(uid)
-	util.info("scenario %s ended (%s), %d NPC(s) released", uid, tostring(reason), n)
+	util.info("behaviour %s ended (%s), %d NPC(s) released", uid, tostring(reason), n)
 	core.instance_forget(uid)
 	if not (any_instance()) then drop_tick() end
-	-- the quest that started it hears about it: its ref becomes "done" and a
-	-- node that was waiting is let go
+	-- the caller hears about it: its ref becomes "done" and the node that has
+	-- been waiting leaves by finished or by aborted
 	if (type(owner) == "table" and owner.uid and owner.node) then
 		local oqs = core.quest_state(owner.uid)
 		if (oqs and owner.ref) then
 			local rec = oqs.refs[owner.ref]
 			if (type(rec) == "table") then
 				rec.ended = true
+				rec.ok = (ok == true)
 				core.mark_dirty()
 			end
 		end
-		if (owner.wait) then
-			core.complete_external(owner.uid, owner.node, "done")
+		core.complete_external(owner.uid, owner.node, (ok == true) and "finished" or "aborted")
+	end
+end
+
+-- An instance whose asset is gone cannot be restored, so it cannot be stopped
+-- the ordinary way either: release what it holds and give the caller its
+-- `aborted` exit by hand.
+local function stop_instance_gone(uid)
+	local qs = core.quest_state(uid)
+	local owner = qs and qs.owner
+	release_all(uid)
+	core.instance_forget(uid)
+	if (type(owner) == "table" and owner.uid and owner.node) then
+		local oqs = core.quest_state(owner.uid)
+		if (oqs and owner.ref and type(oqs.refs[owner.ref]) == "table") then
+			oqs.refs[owner.ref].ended = true
+			oqs.refs[owner.ref].ok = false
+			core.mark_dirty()
 		end
+		core.complete_external(owner.uid, owner.node, "aborted")
+	end
+end
+
+-- Walks one pin of a node WITHOUT completing it: the node goes on waiting for
+-- its later exit. This is how `started` runs the rest of the quest while the
+-- behaviour plays out - the same enqueue the interpreter uses for its own pins.
+local function fork(ctx, pin)
+	local node = ctx.node
+	if not (node and node.out and node.out[pin]) then return end
+	for _, tid in ipairs(node.out[pin]) do
+		core.enqueue_enter(ctx.uid, tid, tostring(ctx.node_id) .. "/" .. pin)
 	end
 end
 
@@ -357,26 +544,40 @@ local function instance_of_ref(ctx, ref_name)
 end
 
 -- ============================================================================ quest side
-K["scenario.run"] = {
+K["behaviour.run"] = {
 	begin = function(ctx)
 		local p = ctx.params
 		local scen_uid = tostring(p.asset)
 		if not (string.find(scen_uid, ".", 1, true)) then
 			scen_uid = tostring(ctx.uid):match("^(.-)%.") .. "." .. scen_uid
 		end
-		local scen = core.scenario_def(scen_uid)
+		local scen = core.behaviour_def(scen_uid)
 		if not (scen) then
-			error("scenario.run: no scenario '" .. scen_uid .. "' in this module")
+			error("behaviour.run: no behaviour graph '" .. scen_uid .. "' in this module")
 		end
 		local start = find_start(scen)
 		if not (start) then
-			error("scenario.run: scenario '" .. scen_uid .. "' has no start node")
+			error("behaviour.run: behaviour graph '" .. scen_uid .. "' has no start node")
+		end
+		-- A graph may run another one, never itself - directly or through a chain
+		-- (the editor's E113). Checked here too: a module is not always built by
+		-- the editor, and the alternative is instances spawning instances forever.
+		do
+			local up, hops = ctx.qs, 0
+			while (up and hops < 16) do
+				if (up.behaviour == scen_uid) then
+					error("behaviour.run: '" .. scen_uid .. "' would run itself")
+				end
+				local owner = up.owner
+				up = (type(owner) == "table" and owner.uid) and core.quest_state(owner.uid) or nil
+				hops = hops + 1
+			end
 		end
 
 		local uid = instance_uid(scen_uid, ctx.qs)
 		local qs = core.instance_start(uid, scen)
-		qs.scenario = scen_uid
-		qs.owner = { uid = ctx.uid, node = ctx.node_id, ref = p.ref, wait = p.wait_end ~= false }
+		qs.behaviour = scen_uid
+		qs.owner = { uid = ctx.uid, node = ctx.node_id, ref = p.ref }
 
 		local problems = {}
 		bind_roles(ctx, scen, p.roles, qs, problems)
@@ -385,17 +586,19 @@ K["scenario.run"] = {
 		end
 
 		if (p.ref) then
-			core.ref_set(ctx.qs, p.ref, { kind = "scenario", instance = uid, scenario = scen_uid, ended = false })
+			core.ref_set(ctx.qs, p.ref, { kind = "behaviour", instance = uid, behaviour = scen_uid, ended = false })
 		end
 
 		local cast = 0
 		for _, r in pairs(qs.roles) do cast = cast + #r.ids end
-		util.info("scenario %s started by %s/%s, %d NPC(s)", uid, ctx.uid, ctx.node_id, cast)
+		util.info("behaviour %s started by %s/%s, %d NPC(s)", uid, ctx.uid, ctx.node_id, cast)
 
 		ensure_tick()
 		core.instance_arm(uid)
 
-		if (p.wait_end == false) then return { pin = "done" } end
+		-- the rest of the caller runs NOW, alongside the behaviour; this node
+		-- stays waiting for finished or aborted. Wire whichever you want.
+		fork(ctx, "started")
 		return "wait"
 	end,
 	-- the instance tells the node when it is over (stop_instance); the poll is
@@ -403,31 +606,31 @@ K["scenario.run"] = {
 	poll = function(ctx)
 		local rec = ctx.qs.refs and ctx.params.ref and ctx.qs.refs[ctx.params.ref]
 		if (type(rec) == "table" and rec.instance and not core.quest_state(rec.instance)) then
-			return "done"
+			return "aborted"
 		end
 		return nil
 	end,
 }
 
-K["scenario.stop"] = {
+K["behaviour.stop"] = {
 	run = function(ctx, p)
 		local uid = instance_of_ref(ctx, p.target)
 		if not (uid) then
-			util.warn("%s/%s: scenario.stop: nothing running under ref '%s'", ctx.uid, ctx.node_id, tostring(p.target))
+			util.warn("%s/%s: behaviour.stop: nothing running under ref '%s'", ctx.uid, ctx.node_id, tostring(p.target))
 			return
 		end
-		stop_instance(uid, "scenario.stop")
+		stop_instance(uid, "behaviour.stop", false)
 	end,
 }
 
-K["scenario_running"] = {
+K["behaviour_running"] = {
 	test = function(ctx, p)
 		local uid = instance_of_ref(ctx, p.target)
 		return uid ~= nil and core.quest_state(uid) ~= nil
 	end,
 }
 
-K["scenario_done"] = {
+K["behaviour_done"] = {
 	test = function(ctx, p)
 		local uid, rec = instance_of_ref(ctx, p.target)
 		if (rec == nil) then return false end
@@ -442,46 +645,92 @@ local function tag_of(ctx, suffix)
 end
 
 local function switch_tail(p)
-	-- nothing switches a scenario section by itself: the graph decides when the
+	-- nothing switches a behaviour section by itself: the graph decides when the
 	-- next step replaces this one, so the section carries no on_* conditions
 	return ""
+end
+
+-- The path a step walks: the author's own, or the slot of a runtime one. The
+-- second value is the destination when there is no drawn path to walk.
+local function step_path(ctx, p, kind, tag)
+	local dest = p.place
+	if (type(dest) ~= "table") then error(kind .. ": no destination") end
+	if (dest.path) then
+		if not (patrol_exists(dest.path)) then
+			error(kind .. ": there is no waypoint path '" .. tostring(dest.path) .. "'")
+		end
+		return dest.path, nil
+	end
+	local had = ctx.qs.steps and ctx.qs.steps[tag]
+	local slot = (had and had.path) or rt_alloc()
+	if (had) then had.path = slot else ctx.qs.steps = ctx.qs.steps or {} ctx.qs.steps[tag] = { path = slot } end
+	return slot, dest
 end
 
 K["npc.goto"] = {
 	begin = function(ctx)
 		local p = ctx.params
-		if not (patrol_exists(p.path)) then
-			error("npc.goto: there is no waypoint path '" .. tostring(p.path) .. "'")
-		end
 		if (p.look and p.look ~= "" and not patrol_exists(p.look)) then
 			error("npc.goto: there is no waypoint path '" .. tostring(p.look) .. "'")
 		end
 		local tag = tag_of(ctx)
+		local path, dest = step_path(ctx, p, "npc.goto", tag)
 		local moving = (p.move == "run") and "rush" or "patrol"
+		local text = "[logic@" .. tag .. "]\n" ..
+					 "active = walker@" .. tag .. "\n\n" ..
+					 "[walker@" .. tag .. "]\n" ..
+					 "path_walk = " .. path .. "\n" ..
+					 "def_state_moving = " .. moving .. "\n" ..
+					 "def_state_standing = guard\n" ..
+					 switch_tail(p)
+		if (p.look and p.look ~= "" and p.look ~= path) then
+			text = text .. "path_look = " .. p.look .. "\n"
+		end
+		local step = remember_step(ctx.qs, tag, text, dest)
+		step.path = dest and path or nil
 		for _, id in ipairs(targets(ctx, p)) do
-			local text = "[logic@" .. tag .. "]\n" ..
-						 "active = walker@" .. tag .. "\n\n" ..
-						 "[walker@" .. tag .. "]\n" ..
-						 "path_walk = " .. p.path .. "\n" ..
-						 "def_state_moving = " .. moving .. "\n" ..
-						 "def_state_standing = guard\n" ..
-						 switch_tail(p)
-			if (p.look and p.look ~= "" and p.look ~= p.path) then
-				text = text .. "path_look = " .. p.look .. "\n"
-			end
-			apply(ctx, id, tag, text)
+			apply(ctx, id, tag, text, dest)
 		end
 		if (p.arrive == false) then return { pin = "done" } end
 		return "wait"
 	end,
 	poll = function(ctx)
 		local p = ctx.params
-		local pos = path_end(p.path)
-		if not (pos) then return "done" end
-		local any = false
+		local tag = tag_of(ctx)
+		local step = ctx.qs.steps and ctx.qs.steps[tag]
+		local radius = p.radius or 3
+		local pos
+		if (step and step.dest) then
+			local now = destination_pos(ctx, step.dest)
+			if not (now) then
+				-- it was there and it is gone: the graph moves on. It has never
+				-- been there: the step is parked, and so is the node.
+				if (step.at) then return "done" end
+				return nil
+			end
+			-- a destination that moved takes its path with it, and the people
+			-- on their way are sent again - at most once every two seconds
+			if (step.at and dist3(step.at, now) > math.max(2, radius)) then
+				local w = ctx.w or {}
+				if ((w.moved or 0) + 2000 <= (ctx.now and ctx.now.r or 0)) then
+					w.moved = ctx.now and ctx.now.r or 0
+					if (step_ready(ctx, step)) then
+						for key, t in pairs(ctx.qs.applied or {}) do
+							if (t == tag) then apply_now(tonumber(key), tag, step.text) end
+						end
+						core.mark_dirty()
+					end
+				end
+			end
+			-- arrival is measured against where the engine put the point: a
+			-- case on a table is reached at the foot of the table
+			pos = path_end(step.path) or now
+		else
+			pos = path_end(p.place and p.place.path)
+			if not (pos) then return "done" end
+		end
 		for _, id in ipairs(targets(ctx, p)) do
-			any = true
-			if not (near(id, pos, p.radius or 3)) then return nil end
+			if not (near(id, pos, radius)) then return nil end
 		end
 		-- nobody left alive is also an answer: the graph moves on instead of
 		-- waiting for the dead
@@ -491,19 +740,17 @@ K["npc.goto"] = {
 
 K["npc.hold"] = {
 	run = function(ctx, p)
-		if not (patrol_exists(p.path)) then
-			error("npc.hold: there is no waypoint path '" .. tostring(p.path) .. "'")
-		end
 		local tag = tag_of(ctx)
-		local look = (p.look and p.look ~= "" and p.look ~= p.path and patrol_exists(p.look)) and p.look or nil
-		for _, id in ipairs(targets(ctx, p)) do
+		local path, dest = step_path(ctx, p, "npc.hold", tag)
+		local look = (p.look and p.look ~= "" and p.look ~= path and patrol_exists(p.look)) and p.look or nil
+		do
 			local text
 			if (look) then
 				-- camper: digs in and watches the look path
 				text = "[logic@" .. tag .. "]\n" ..
 					   "active = camper@" .. tag .. "\n\n" ..
 					   "[camper@" .. tag .. "]\n" ..
-					   "path_walk = " .. p.path .. "\n" ..
+					   "path_walk = " .. path .. "\n" ..
 					   "path_look = " .. look .. "\n" ..
 					   "radius = " .. tostring(p.radius or 20) .. "\n" ..
 					   "shoot = " .. tostring(p.shoot or "always") .. "\n" ..
@@ -513,11 +760,15 @@ K["npc.hold"] = {
 				text = "[logic@" .. tag .. "]\n" ..
 					   "active = walker@" .. tag .. "\n\n" ..
 					   "[walker@" .. tag .. "]\n" ..
-					   "path_walk = " .. p.path .. "\n" ..
+					   "path_walk = " .. path .. "\n" ..
 					   "def_state_standing = guard\n" ..
 					   "def_state_moving = patrol\n"
 			end
-			apply(ctx, id, tag, text)
+			local step = remember_step(ctx.qs, tag, text, dest)
+			step.path = dest and path or nil
+			for _, id in ipairs(targets(ctx, p)) do
+				apply(ctx, id, tag, text, dest)
+			end
 		end
 	end,
 }
@@ -551,6 +802,17 @@ K["npc.follow"] = {
 		local target_story = nil
 		if (type(p.target) == "table" and p.target.actor) then
 			target_story = "actor"
+		elseif (type(p.target) == "table" and (p.target.ref or p.target.story)) then
+			-- something the caller spawned, or an object of the level: a ref has a
+			-- story id of its own from the moment it is set (core.ref_set)
+			local oid = util.ref_object_id(ctx, p.target)
+			local sid = oid and util.story_id_of(oid) or nil
+			if (sid) then
+				target_story = tostring(sid)
+			else
+				util.warn("%s/%s: npc.follow: the target is not in the world, following the player instead",
+					ctx.uid, ctx.node_id)
+			end
 		elseif (type(p.target) == "table" and p.target.role) then
 			local ids = role_ids(ctx.qs, p.target.role)
 			for _, id in ipairs(ids) do
@@ -669,15 +931,19 @@ K["npc.release"] = {
 			release(id)
 			if (qs.held) then qs.held[tostring(id)] = nil end
 			if (qs.pending) then qs.pending[tostring(id)] = nil end
+			if (qs.applied) then qs.applied[tostring(id)] = nil end
 		end
 		core.mark_dirty()
 	end,
 }
 
--- ============================================================================ scenario conditions
+-- ============================================================================ behaviour conditions
 K["npc_at_place"] = {
 	test = function(ctx, p)
-		local pos = path_end(p.path)
+		local dest = p.place
+		local pos
+		if (type(dest) == "table" and dest.path) then pos = path_end(dest.path)
+		else pos = destination_pos(ctx, dest) end
 		if not (pos) then return false end
 		local any = false
 		for _, id in ipairs(targets(ctx, p)) do
@@ -732,22 +998,72 @@ function on_init()
 	local restored, dropped = 0, 0
 	for uid, qs in pairs(util.copy(state.quests)) do
 		if (is_instance(uid)) then
-			local scen = qs.scenario and core.scenario_def(qs.scenario) or nil
+			local scen = qs.behaviour and core.behaviour_def(qs.behaviour) or nil
 			if (scen) then
 				core.instance_restore(uid, scen)
 				restored = restored + 1
 			else
-				util.warn("scenario %s: the asset is gone, releasing its NPCs", uid)
-				release_all(uid)
-				core.instance_forget(uid)
+				-- the asset went away with an update: release, and leave the
+				-- caller by `aborted` rather than stranding a node that waits
+				util.warn("behaviour %s: the asset is gone, releasing its NPCs", uid)
+				stop_instance_gone(uid)
 				dropped = dropped + 1
 			end
 		end
 	end
 	if (restored > 0 or dropped > 0) then
-		util.info("scenarios: %d restored, %d dropped", restored, dropped)
+		util.info("behaviours: %d restored, %d dropped", restored, dropped)
+	end
+	-- the pool knows what is taken from the state alone, whatever on_game_load saw
+	rt_used = {}
+	for uid, qs in pairs(state.quests) do
+		if (is_instance(uid)) then
+			for _, step in pairs(qs.steps or {}) do
+				if (step.path) then rt_used[step.path] = true end
+			end
+		end
 	end
 	if (any_instance()) then ensure_tick() else drop_tick() end
+end
+
+-- BEFORE the first NPC spawns. An NPC saved in the middle of a step comes back
+-- naming a logic file ("*<tag>") and perhaps a runtime patrol path, and the game
+-- resolves both the moment it spawns - long before init(). So the saved state is
+-- read as it is (core.peek_state) and both are put back here: the inis into
+-- db.dynamic_ltx, the paths into the engine, on the level they belong to.
+function restore_early()
+	local st = core.peek_state and core.peek_state() or nil
+	if not (st and type(st.quests) == "table") then return end
+	local here = util.current_level()
+	local inis, paths = 0, 0
+	for uid, qs in pairs(st.quests) do
+		if (is_instance(uid) and type(qs.steps) == "table") then
+			local running = {}
+			for _, tag in pairs(qs.applied or {}) do running[tag] = true end
+			for tag, step in pairs(qs.steps) do
+				if (step.path) then
+					rt_used[step.path] = true
+					if (step.at and step.lvl == here and xms and xms.patrol_point) then
+						if (xms.patrol_point(step.path, step.at[1], step.at[2], step.at[3])) then paths = paths + 1 end
+					end
+				end
+				if (running[tag] and step.text and create_ini_file and db and db.dynamic_ltx) then
+					db.dynamic_ltx[tag] = create_ini_file(step.text)
+					inis = inis + 1
+				end
+			end
+		end
+	end
+	if (inis > 0 or paths > 0) then
+		util.info("behaviours: %d logic file(s) and %d runtime path(s) put back before the world spawns", inis, paths)
+	end
+end
+
+function on_game_start()
+	RegisterScriptCallback("on_game_load", function()
+		local ok, e = pcall(restore_early)
+		if not (ok) then util.err("behaviours: early restore failed: %s", tostring(e)) end
+	end)
 end
 
 -- A reload rebuilds every graph from the assets: whatever was running stops
@@ -757,9 +1073,23 @@ function on_reload_begin()
 end
 
 -- The interpreter finished a graph. For an instance that is the end of the
--- scenario: release everyone and tell the quest that started it.
+-- behaviour: release everyone and tell the caller that started it.
 function on_quest_finish(uid, status)
-	if (is_instance(uid)) then stop_instance(uid, status) end
+	if not (is_instance(uid)) then return end
+	-- The graph got to flow.end on its own, and that is `finished` - unless it
+	-- says it failed (flow.end status = failed is how a graph reports it), or
+	-- it ran out over a cast that is dead: steps let a dead role pass so a graph
+	-- never waits for the dead, which must not read as "played out as written".
+	local qs = core.quest_state(uid)
+	local seen, living = 0, 0
+	for _, r in pairs((qs and qs.roles) or {}) do
+		for _, id in ipairs(r.ids or {}) do
+			seen = seen + 1
+			if (alive_id(id)) then living = living + 1 end
+		end
+	end
+	local ok = (status ~= "failed") and not (seen > 0 and living == 0)
+	stop_instance(uid, status, ok)
 end
 
 -- Parked steps are applied here, and an instance whose whole cast is dead ends
@@ -772,6 +1102,7 @@ function tick()
 	for uid, qs in pairs(util.copy(state.quests)) do
 		if (is_instance(uid)) then
 			drain_pending(uid)
+			heal_applied(uid)
 			local seen, living = 0, 0
 			for _, r in pairs(qs.roles or {}) do
 				for _, id in ipairs(r.ids or {}) do
@@ -779,7 +1110,7 @@ function tick()
 					if (alive_id(id)) then living = living + 1 end
 				end
 			end
-			if (seen > 0 and living == 0) then stop_instance(uid, "every role is empty") end
+			if (seen > 0 and living == 0) then stop_instance(uid, "every role is empty", false) end
 		end
 	end
 end
@@ -796,6 +1127,7 @@ function forget_object(id)
 		if (is_instance(uid)) then
 			if (qs.held) then qs.held[key] = nil end
 			if (qs.pending) then qs.pending[key] = nil end
+			if (qs.applied) then qs.applied[key] = nil end
 			for _, r in pairs(qs.roles or {}) do
 				for i = #(r.ids or {}), 1, -1 do
 					if (r.ids[i] == id) then table.remove(r.ids, i) end

@@ -1,0 +1,66 @@
+-- Headless fixture: the caller side of a behaviour graph - spawn a squad, run
+-- the behaviour on it, carry on AT ONCE by `started`, and pick the thread up
+-- again by `finished` or `aborted`. Manual activation so the test starts it
+-- when it wants to.
+return {
+  nq         = 1,
+  id         = "beh_caller",
+  title      = "QA behaviour caller",
+  activation = "manual",
+  vars       = {
+    started = false,
+    after   = false,
+    gave_up = false,
+  },
+  nodes = {
+    {
+      id       = "start",
+      kind     = "trigger.start",
+      on_enter = {
+        { kind = "spawn.squad", params = { section = "army_sim_squad_novice", smart = "esc_smart_terrain_2_12", ref = "band" } },
+      },
+      out      = { next = "run" },
+    },
+    {
+      id     = "run",
+      kind   = "behaviour.run",
+      params = {
+        asset = "beh_guards",
+        ref   = "show",
+        roles = {
+          leader = { story = "esc_2_12_stalker_wolf" },
+          guards = { squad = "band" },
+        },
+      },
+      out    = { started = "mark_started", finished = "after", aborted = "gave_up" },
+    },
+    {
+      id       = "mark_started",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "started", value = true } },
+      },
+    },
+    {
+      id       = "after",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "after", value = true } },
+      },
+      out      = { next = "finish" },
+    },
+    {
+      id       = "gave_up",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "var.set", params = { name = "gave_up", value = true } },
+      },
+      out      = { next = "finish" },
+    },
+    {
+      id     = "finish",
+      kind   = "flow.end",
+      params = { status = "completed" },
+    },
+  },
+}

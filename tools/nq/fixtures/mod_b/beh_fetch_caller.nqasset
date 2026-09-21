@@ -1,0 +1,58 @@
+-- Headless fixture: runs a behaviour whose destination - the ref "case" - does
+-- not exist when it starts. The test makes the ref afterwards, moves it and takes
+-- it away; the graph itself just runs the behaviour and stops it on a signal.
+return {
+  nq         = 1,
+  id         = "beh_fetch_caller",
+  title      = "QA fetch caller",
+  activation = "manual",
+  vars       = {
+    started  = false,
+    finished = false,
+    aborted  = false,
+  },
+  nodes = {
+    {
+      id   = "start",
+      kind = "trigger.start",
+      out  = { next = "run" },
+    },
+    {
+      id     = "run",
+      kind   = "behaviour.run",
+      params = {
+        asset = "beh_fetch",
+        ref   = "errand",
+        roles = { runner = { story = "esc_2_12_stalker_wolf" } },
+      },
+      out    = { started = "mark_started", finished = "mark_finished", aborted = "mark_aborted" },
+    },
+    {
+      id       = "mark_started",
+      kind     = "flow.step",
+      on_enter = { { kind = "var.set", params = { name = "started", value = true } } },
+      out      = { next = "wait_stop" },
+    },
+    {
+      id     = "wait_stop",
+      kind   = "wait.when",
+      cond   = { { kind = "event.signal", params = { name = "qa_stop_errand" } } },
+      out    = { done = "stop" },
+    },
+    {
+      id       = "stop",
+      kind     = "flow.step",
+      on_enter = { { kind = "behaviour.stop", params = { target = "errand" } } },
+    },
+    {
+      id       = "mark_finished",
+      kind     = "flow.step",
+      on_enter = { { kind = "var.set", params = { name = "finished", value = true } } },
+    },
+    {
+      id       = "mark_aborted",
+      kind     = "flow.step",
+      on_enter = { { kind = "var.set", params = { name = "aborted", value = true } } },
+    },
+  },
+}

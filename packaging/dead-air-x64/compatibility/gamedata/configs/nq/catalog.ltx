@@ -1,4 +1,4 @@
-; NQ kind catalog v5 - Dead Air Refined. Encoding: cp1251 (like every other game config).
+; NQ kind catalog v6 - Dead Air Refined. Encoding: cp1251 (like every other game config).
 ; A ';' starts a comment, so it must never appear inside a value - one in a desc
 ; truncates it silently and the editor shows half the text. Use a dash instead.
 ; Read by the game runtime (xms_nq_kinds via ini_file) and by XFined Editor (NqCatalog).
@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 15
+version = 16
 api     = 1
 
 ; ============================================================ triggers
@@ -280,6 +280,7 @@ since  = 1
 ; ============================================================ extra: items and money
 [nq.item.give]
 group  = items
+docs   = quest
 title  = Give items
 desc   = Gives the player items: one section with a count, or a list of rows. In dialog: handed over by the NPC with a notification. count is in items (ammo: boxes).
 use    = extra
@@ -295,6 +296,7 @@ since  = 1
 
 [nq.item.take]
 group  = items
+docs   = quest
 title  = Take items
 desc   = Takes items from the player: one section with a count, or a list of rows. count = all takes every one. count is in items (ammo: boxes).
 use    = extra
@@ -336,6 +338,7 @@ since  = 1
 
 [nq.money.give]
 group  = money
+docs   = quest
 title  = Give money
 desc   = Gives the player money.
 use    = extra
@@ -346,6 +349,7 @@ since  = 1
 
 [nq.money.take]
 group  = money
+docs   = quest
 title  = Take money
 desc   = Takes money from the player.
 use    = extra
@@ -671,6 +675,7 @@ since  = 1
 
 [nq.news.tip]
 group  = ui
+docs   = quest
 title  = PDA message
 desc   = Shows a news tip to the player. sender sets the author.
 use    = extra
@@ -684,6 +689,7 @@ since  = 1
 
 [nq.map.spot]
 group  = ui
+docs   = quest
 title  = Map spot
 desc   = Puts a map spot on the target.
 use    = extra
@@ -696,6 +702,7 @@ since  = 1
 
 [nq.map.unspot]
 group  = ui
+docs   = quest
 title  = Remove map spot
 desc   = Removes the map spot from the target.
 use    = extra
@@ -729,6 +736,7 @@ since  = 1
 
 [nq.actor.teleport]
 group  = actor
+docs   = quest
 title  = Teleport player
 desc   = Moves the player to a point on the current level.
 use    = extra
@@ -818,6 +826,7 @@ since  = 1
 
 [nq.quest_status]
 group  = cond_state
+docs   = quest
 title  = Quest status
 desc   = Another quest is in the given status.
 use    = cond
@@ -830,6 +839,7 @@ since  = 1
 
 [nq.task_status]
 group  = cond_state
+docs   = quest
 title  = Task status
 desc   = A quest task is in the given status.
 use    = cond
@@ -842,6 +852,7 @@ since  = 1
 
 [nq.objective_status]
 group     = cond_state
+docs   = quest
 title     = Objective status
 desc      = One task objective is in the given status, so the graph can branch on a single objective.
 use       = cond
@@ -1101,20 +1112,20 @@ event  = true
 impl   = core
 since  = 1
 
-; ============================================================ scenario: driving NPCs
+; ============================================================ behaviour: driving NPCs
 ; Every kind below addresses a ROLE the calling quest bound (NQ_ARCHITECTURE par. 19).
 ; None of them carries its own movement or combat: a step writes a logic section and
 ; hands it to the stock scheme, the way a smart terrain does.
 
 [nq.npc.goto]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Go to
-desc   = Sends the role along a waypoint path - the walker scheme, so danger, cover and combat keep working on the way. look is a second path it watches while walking. arrive holds the node until everyone is within radius of the path's end.
+desc   = Sends the role to a destination - a way path, a ref, an object, a role or a place - with the stock walker, so danger, cover and combat keep working. A ref not in the world yet parks the step, one that moves is followed, one that disappears ends it.
 use    = main
-params = who, path, look, move, arrive, radius
+params = who, place, look, move, arrive, radius
 who    = role, required
-path   = way_path, required
+place  = destination, required
 look   = way_path
 move   = enum, enum=walk|run, default=walk
 arrive = bool, default=true
@@ -1127,13 +1138,13 @@ since  = 15
 
 [nq.npc.hold]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Hold position
-desc   = Posts the role on a path and lets it fight from there. With a look path it digs in and watches that direction (camper); without one it simply stands guard. radius is how far it will go after someone.
+desc   = Posts the role at a destination to fight from there. With a look path it digs in and watches it (camper), without one it stands guard. radius is how far it goes after someone.
 use    = extra
-params = who, path, look, radius, shoot, no_retreat
+params = who, place, look, radius, shoot, no_retreat
 who    = role, required
-path   = way_path, required
+place  = destination, required
 look   = way_path
 radius = float, default=20, min=1, max=100
 shoot  = enum, enum=always|none|terminal, default=always
@@ -1143,7 +1154,7 @@ since  = 15
 
 [nq.npc.anim]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Play state
 desc   = The role plays an animation state where it stands (remark): wait, guard, hide, sit, prisoner, backoff, ... look turns it toward the player or an object by story id.
 use    = extra
@@ -1157,9 +1168,9 @@ since  = 15
 
 [nq.npc.follow]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Follow
-desc   = The role follows the player or another role (companion). distance is how close it keeps.
+desc   = The role follows the player, another role, or an object - a ref something spawned or a story id (companion). distance is how close it keeps.
 use    = extra
 params = who, target, distance
 who    = role, required
@@ -1170,7 +1181,7 @@ since  = 15
 
 [nq.npc.attack]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Attack
 desc   = Makes the role hostile to the target and lets it engage - the game's own combat does the rest. The target is another role, the player, an NPC by story id, or a whole community.
 use    = extra
@@ -1182,7 +1193,7 @@ since  = 15
 
 [nq.npc.stance]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Set stance
 desc   = How the role stands toward the player, whether it starts fights at all, and whether it can be hurt. Only the fields you set are changed.
 use    = extra
@@ -1197,9 +1208,9 @@ since  = 15
 
 [nq.npc.release]
 group  = npc
-docs   = scenario
+docs   = behaviour
 title  = Release
-desc   = Gives the role back to the logic that owned it - its smart terrain, or what its own spawn carries. A scenario releases everyone it touched when it ends, so this is only for letting someone go early.
+desc   = Gives the role back to the logic that owned it - its smart terrain, or what its own spawn carries. A behaviour graph releases everyone it touched when it ends, so this is only for letting someone go early.
 use    = extra
 params = who
 who    = role, required
@@ -1208,20 +1219,20 @@ since  = 15
 
 [nq.npc_at_place]
 group  = conditions
-docs   = scenario
+docs   = behaviour
 title  = Role has arrived
-desc   = True when every living member of the role is within radius of the end of the path.
+desc   = True when every living member of the role is within radius of the destination - the end of a path, or wherever the ref, object, role or place is right now.
 use    = cond
-params = who, path, radius
+params = who, place, radius
 who    = role, required
-path   = way_path, required
+place  = destination, required
 radius = float, default=3, min=0.5, max=50
 impl   = core
 since  = 15
 
 [nq.npc_in_combat]
 group  = conditions
-docs   = scenario
+docs   = behaviour
 title  = Role is fighting
 desc   = True while any living member of the role has an enemy.
 use    = cond
@@ -1232,7 +1243,7 @@ since  = 15
 
 [nq.role_alive]
 group  = conditions
-docs   = scenario
+docs   = behaviour
 title  = Role is alive
 desc   = True while a member of the role is alive. all = true asks for every one of them.
 use    = cond
@@ -1242,39 +1253,38 @@ all    = bool, default=false
 impl   = core
 since  = 15
 
-; ============================================================ quest: running a scenario
-[nq.scenario.run]
-group  = scenario
-docs   = quest
-title  = Run scenario
-desc   = Starts a scenario asset of this module. roles binds its roles to NPCs, squads, refs or communities - a role the asset gives a default of needs no binding. wait_end holds the node until the scenario ends. ref saves the running instance for scenario.stop and the conditions.
+; ============================================================ calling a behaviour graph
+[nq.behaviour.run]
+group  = behaviour
+docs   = quest,behaviour
+title  = Run behaviour
+desc   = Runs a behaviour graph on the roles bound here. The wiring is the mode - started fires at once, then exactly one of finished or aborted. ref saves the running instance.
 use    = main
-params = asset, roles, wait_end, ref
-asset  = scenario_id, required
+params = asset, roles, ref
+asset  = behaviour_id, required
 roles  = role_bindings
-wait_end = bool, default=true
 ref    = ref_name
-pins   = done
+pins   = started, finished, aborted
 wait   = true
 once   = false
 impl   = core
-since  = 15
+since  = 16
 
-[nq.scenario.stop]
-group  = scenario
-docs   = quest
-title  = Stop scenario
-desc   = Ends a running scenario and hands its NPCs back to the logic that owned them.
+[nq.behaviour.stop]
+group  = behaviour
+docs   = quest,behaviour
+title  = Stop behaviour
+desc   = Ends a running behaviour graph and hands its NPCs back to the logic that owned them. The call that started it leaves by its aborted pin.
 use    = extra
 params = target
 target = ref_name, required
 impl   = core
 since  = 15
 
-[nq.scenario_running]
+[nq.behaviour_running]
 group  = conditions
-docs   = quest
-title  = Scenario is running
+docs   = quest,behaviour
+title  = Behaviour is running
 desc   = True while the instance saved under this ref is still going.
 use    = cond
 params = target
@@ -1282,10 +1292,10 @@ target = ref_name, required
 impl   = core
 since  = 15
 
-[nq.scenario_done]
+[nq.behaviour_done]
 group  = conditions
-docs   = quest
-title  = Scenario has ended
+docs   = quest,behaviour
+title  = Behaviour has ended
 desc   = True once the instance saved under this ref has finished or been stopped.
 use    = cond
 params = target

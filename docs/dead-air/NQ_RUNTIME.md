@@ -25,9 +25,11 @@ One quest is one file:
   quests/wolf_debt.nqasset      ; anywhere inside the module, any folder depth
 ```
 
-The runtime scans **the whole module root recursively** for `*.nqasset`
-(`xms.list_files(id, "", "*.nqasset", true)`), so the folder layout is the
-author's business. There is no registry, no manifest key, no index file: the
+The runtime scans **the whole module root recursively** for `*.nqasset` (quests)
+and `*.behasset` (behaviour graphs, section 15) - `xms.list_files(id, "", mask,
+true)` once per extension - so the folder layout is the author's business. The
+EXTENSION is what says which of the two a document is; nothing inside the file
+does, so a rename cannot put a quest among the behaviour graphs. There is no registry, no manifest key, no index file: the
 folder is the only source of truth.
 
 A quest gets a **uid** of `<module id>.<quest id>`. Everything a quest creates in
@@ -1011,6 +1013,7 @@ mounted none of it runs.
 | `xms.dialog_unregister` | `(dialog_id)` | Removes it. |
 | `xms.dialog_invalidate` | `(dialog_id) → bool` | Drops the cached phrase graph so the next conversation rebuilds it. **Returns false while a talk window is open** (the open dialog holds pointers into that graph); the runtime retries on `actor_on_leave_dialog`. |
 | `xms.save_data` / `xms.load_data` | `("xms.nq", blob)` | The core pseudo-namespace, resolved before any module id. |
+| `xms.patrol_point` | `(name, x, y, z) → bool` | **XFined-Ray.** Registers the one-point runtime patrol path `name` at the navmesh cell nearest to the position, or moves it there when it exists already. `name` must start with `xms_rt_`; a path the level shipped is never touched. `false` without a level graph, or when no walkable cell lies within 15 m. See section 15.4. |
 
 ### 12.2 The `dialogs_for` hook
 
@@ -1143,6 +1146,133 @@ release on, the following are frozen and only ever extended additively:
 The game's own obligation is stronger and independent of all of this: a module
 built by any released version of the editor keeps working, and old-style modding
 keeps working forever.
+
+## 15. Behaviour graphs
+
+The contract is the editor repository's `docs/NQ_ARCHITECTURE.md` section 19;
+this section is what the runtime does about it.
+
+### 15.1 A second kind of document on the same interpreter
+
+A **behaviour graph** (`.behasset`, header `beh = 1`) drives NPCs and never
+touches the player's screen. It is loaded by the same loader, walked by the
+same interpreter and saved in the same state blob as a quest, and differs in
+three things only:
+
+- it lands in its own registry (`xms_nq.behaviours()` / `behaviour_def(uid)`),
+  never among the quests, and never starts itself - `activation` is an error;
+- it declares `roles` instead of `tasks`, and its `npc.*` steps address roles;
+- the catalog's `docs` key decides which kinds it may carry (`E007`): the role
+  vocabulary is behaviour-only, everything the player sees - tasks, objectives,
+  dialogs, money, news, map spots, `item.give` / `item.take`, `actor.teleport`,
+  the quest/task/objective status conditions - is quest-only, and the graph
+  plumbing (`flow.*`, `wait.*`, `var.*`, the world conditions, `spawn.*`,
+  `squad.*`, `relation.*`, `npc.remove` / `kill` / `set_name`) is shared.
+
+`type = ...` inside a document is an error (`E006`) and so is the other kind's
+header key (`E001`): the extension is the only thing that says what a file is.
+
+### 15.2 Instances, and the three exits of `behaviour.run`
+
+`behaviour.run` starts an **instance**: an ordinary graph instance
+(`core.instance_start`) with the uid `<module>.<asset>#<n>` - the `#` is what no
+asset id can contain. The instance state records who started it
+(`owner = { uid, node, ref }`).
+
+The node has three pins and no mode flag - the wiring is the mode:
+
+| pin | fires | how |
+|---|---|---|
+| `started` | at once | walked as a SIDE BRANCH (`core.enqueue_enter`) - the node itself keeps waiting |
+| `finished` | the graph reached `flow.end` by itself, with `status = completed` and somebody of its cast still alive | `core.complete_external(owner, "finished")` |
+| `aborted` | `behaviour.stop`, every role dead, `flow.end` with `status = failed`, or the asset gone after an update | `core.complete_external(owner, "aborted")` |
+
+Exactly one of `finished` / `aborted` fires, exactly once; a pin nobody wired is
+not an error. A behaviour graph may run another one with the same node.
+
+An instance sees the refs of whoever started it: `util.ref_record` looks a ref
+up in the instance first and then walks the `owner` chain. That is why a
+behaviour graph may name a ref it never creates (the loader's `E030` does not
+apply to it) - "the case the quest dropped" is the quest's ref.
+
+### 15.3 Steps hand logic to the stock schemes
+
+No step moves, aims or shoots anything. A step writes a logic section
+(`walker`, `camper`, `remark`, `companion`, ...), turns it into an ini with
+`create_ini_file` and hands it to `xr_logic.configure_schemes` /
+`activate_by_section` - what a smart terrain does for its jobs. Combat, cover,
+danger, wounded and death keep working because the same schemes keep running
+them. On end every NPC the instance touched is released to its smart terrain or
+its own logic.
+
+The instance remembers every step IN ITS STATE, so a save keeps it:
+
+| key | holds |
+|---|---|
+| `qs.steps[tag]` | `{ text, dest, path, at, lvl }` - the logic, and for a drawn-nowhere destination the runtime path slot and where it stands |
+| `qs.applied[id]` | the tag an NPC is running |
+| `qs.pending[id]` | the tag an NPC will run once it - or its destination - is in the world |
+
+### 15.4 Destinations, and the engine addition behind them
+
+`npc.goto`, `npc.hold` and `npc_at_place` take a **`destination`**: a waypoint
+path (`{ path = }`), a ref (`{ ref = }`), an object (`{ story = }`), a role
+(`{ role = }`), or any `place` - a smart, a restrictor, a position, the player.
+
+X-Ray walks patrol paths and nothing else. A drawn path is handed to the walker
+as it is. For every other destination the runtime asks the ENGINE for a path:
+`xms.patrol_point("xms_rt_<n>", x, y, z)` registers a one-point runtime patrol
+path at the navmesh cell nearest to the place (`CPatrolPathStorage::
+set_runtime_point`), and the same stock walker / camper walks to it. There is no
+movement code in the scripts.
+
+- **Pooled.** A name is a slot; a step keeps its slot in the instance state and
+  the slot returns to the pool when the instance ends.
+- **Never freed.** `CPatrolPathManager` keeps a raw `CPatrolPath*` plus point
+  indices, so the engine MOVES the single point of a runtime path in place and
+  frees the object only with the storage itself. A stale NPC can hold nothing
+  dangling.
+- **Not there yet** - a ref nobody spawned, a place on another level, no cell
+  within 15 m: the step PARKS (`qs.pending`) and is applied the moment the
+  destination resolves.
+- **Moved** - the poll re-reads the destination; past `max(2 m, radius)` the
+  point is moved and the step re-applied, at most once every two seconds.
+- **Gone** - a destination that resolved once and no longer does ends the step:
+  the node leaves by `done` and the graph moves on.
+- **Arrival** is measured against the path's own point - where the engine put
+  it - so a case on a table is reached at the foot of the table.
+
+Nothing of this reaches a save file: the patrol storage is level data
+(`all.spawn`), never part of `.scop` / `.scoc` / `.scov`, and a script that never
+calls `xms.patrol_point` sees no difference. The original game, its mods and its
+saves are untouched.
+
+### 15.5 A save in the middle of a step
+
+The game saves an NPC's logic as a file NAME plus the active section
+(`xr_logic.save_obj`) and restores both when the NPC spawns
+(`initialize_obj`). A generated file is named `*<tag>` and the game looks such a
+name up in `db.dynamic_ltx` - the table its smart terrains keep their generated
+job files in. Two things follow, and both happen in `xms_nq_behaviour`:
+
+1. `apply_now` stores the step's ini in `db.dynamic_ltx[tag]`;
+2. on **`on_game_load`** - sent from the actor's `net_spawn`, i.e. before any
+   NPC spawns and long before the interpreter initialises - `restore_early`
+   reads the saved state as it is (`core.peek_state`), puts every running
+   step's ini back into `db.dynamic_ltx` and re-registers every runtime path
+   that belongs to the current level.
+
+So an NPC saved mid-step comes back into the very section it was in, walking
+the very path it was walking. Without this it would load into a nil logic file.
+
+`core.instance_restore` re-wires the instance's waiting tokens itself: instances
+come back from the owner module's `on_init`, which runs after the core's own
+`restore_quests`, and a waiting node that is never re-wired is never polled
+again.
+
+As a last line of defence `heal_applied` runs with the tick: an NPC whose
+`ini_filename` is no longer the instance's - a smart terrain handed it a job, a
+script reset its logic - is given its step again.
 
 ## Task objectives
 

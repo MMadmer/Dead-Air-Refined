@@ -71,12 +71,12 @@ local function release_se(se)
 end
 
 -- An object a quest removes is rarely idle: it may be talking to the player,
--- running a scheme a scenario gave it, or in the middle of a fight. The engine's
+-- running a scheme a behaviour gave it, or in the middle of a fight. The engine's
 -- own safe release handles the object; what it does not do is tell the things
 -- that were DRIVING it to stop, and those are the ones that would go looking for
 -- it a frame later.
 --
---   * a scenario holding it lets it go, so no step re-applies a scheme to
+--   * a behaviour holding it lets it go, so no step re-applies a scheme to
 --     something that is being released;
 --   * a dialog with the player is ended, because the talk window outlives the
 --     object otherwise;
@@ -87,8 +87,8 @@ end
 -- covering.
 local function prepare_removal(id)
 	if not (id) then return end
-	if (xms_nq_scenario and xms_nq_scenario.forget_object) then
-		pcall(xms_nq_scenario.forget_object, id)
+	if (xms_nq_behaviour and xms_nq_behaviour.forget_object) then
+		pcall(xms_nq_behaviour.forget_object, id)
 	end
 	local go = util.go_by_id(id)
 	if not (go) then return end

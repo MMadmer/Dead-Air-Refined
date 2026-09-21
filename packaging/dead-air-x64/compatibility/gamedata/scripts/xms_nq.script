@@ -37,7 +37,7 @@ local QUEUE_CAP = 20000
 -- The .scov container refuses a chunk above 16 MiB and that failure takes the WHOLE save group
 -- with it, so the runtime keeps its own margin and reports instead of letting the save die.
 local BLOB_LIMIT = 15 * 1024 * 1024
-local EXTENSIONS = { "xms_nq_kinds", "xms_nq_dialog", "xms_nq_task", "xms_nq_world", "xms_nq_scenario" }
+local EXTENSIONS = { "xms_nq_kinds", "xms_nq_dialog", "xms_nq_task", "xms_nq_world", "xms_nq_behaviour" }
 
 -- Callback names are limited to the fixed axr_main intercept table.
 local CALLBACKS = {
@@ -63,7 +63,7 @@ local disabled_logged = false
 local callbacks_on = false
 local Q = {}				-- uid -> canonical quest (valid only)
 local Q_ORDER = {}			-- sorted uids
-local SCEN = {}				-- uid -> scenario definition (par. 19); never a quest
+local SCEN = {}				-- uid -> behaviour graph definition (par. 19); never a quest
 local SCEN_ORDER = {}		-- sorted uids
 local INVALID = {}			-- list of invalid quest records
 local SCAN = nil			-- last scan result
@@ -119,8 +119,8 @@ function mark_dirty() dirty = true end
 function is_ready() return ready end
 function get_state() return state end
 function quests() return Q, Q_ORDER, INVALID end
-function scenarios() return SCEN, SCEN_ORDER end
-function scenario_def(uid) return SCEN[uid] end
+function behaviours() return SCEN, SCEN_ORDER end
+function behaviour_def(uid) return SCEN[uid] end
 function quest_def(uid) return Q[uid] end
 function quest_state(uid) return state and state.quests[uid] or nil end
 function tokens_of(uid) local qs = quest_state(uid) return qs and qs.tokens or nil end
@@ -345,6 +345,21 @@ local function load_state()
 	end
 	st.v = STATE_VERSION
 	return st, fresh
+end
+
+-- The state as the save holds it, decoded and NOT adopted: for a module that has
+-- to act before init(). The behaviour runtime puts its scheme inis and its runtime
+-- patrol paths back on on_game_load - before the first NPC spawns, which is long
+-- before the interpreter is up - or an NPC saved in the middle of a step would come
+-- back to a logic file and a path that do not exist yet.
+function peek_state()
+	if (state) then return state end
+	if not (xms and xms.load_data) then return nil end
+	local ok, blob = pcall(xms.load_data, BLOB_ID)
+	if not (ok and type(blob) == "string" and blob ~= "") then return nil end
+	local st = util.decode(blob)
+	if (type(st) ~= "table" or type(st.quests) ~= "table") then return nil end
+	return st
 end
 
 -- ---------------------------------------------------------------------------- refs
@@ -1052,12 +1067,12 @@ function activate(uid)
 end
 
 -- Cancels every token and disarms triggers; the record stays with the given status.
--- ---------------------------------------------------------------------------- scenario instances
--- A running scenario is an instance of THIS interpreter: its own uid, its own
+-- ---------------------------------------------------------------------------- behaviour instances
+-- A running behaviour graph is an instance of THIS interpreter: its own uid, its own
 -- state record, and the same nodes, pins, conditions, tokens and persistence a
 -- quest gets (NQ_ARCHITECTURE par. 19.1). Nothing below is duplicated for it -
 -- only the kind vocabulary and the lifetime differ, and both live in
--- xms_nq_scenario. The uid of an instance is "<module>.<scenario>#<n>", which
+-- xms_nq_behaviour. The uid of an instance is "<module>.<behaviour>#<n>", which
 -- no asset can produce, so an instance can never collide with a quest.
 local function instance_list(uid)
 	for _, u in ipairs(Q_ORDER) do if (u == uid) then return end end
@@ -1077,9 +1092,16 @@ end
 -- After a load the state record is back but the graph is not: the definition
 -- comes from the scan, and the instance has to be put back into the registry
 -- before anything can step it.
+local restore_one -- forward: defined with restore_quests, below
+
+-- An instance comes back AFTER restore_quests() has run (its owner module puts it
+-- back from on_init), so it is restored here, by itself: without the re-wire a
+-- node that was waiting at save time - an npc.goto, a wait.timer - is never polled
+-- again and the graph sits there for the rest of the game.
 function instance_restore(uid, q)
 	Q[uid] = q
 	instance_list(uid)
+	restore_one(uid)
 end
 
 function instance_arm(uid)
@@ -1090,7 +1112,7 @@ function instance_forget(uid)
 	local qs = state.quests[uid]
 	if (qs) then
 		for node_id in pairs(util.copy(qs.tokens or {})) do
-			cancel_token_impl(uid, node_id, "the scenario ended")
+			cancel_token_impl(uid, node_id, "the behaviour ended")
 		end
 	end
 	Q[uid] = nil
@@ -1235,38 +1257,39 @@ local function unregister_callbacks()
 	callbacks_on = false
 end
 
-local function restore_quests()
-	-- (re)wire tokens and triggers of active quests, register ref story ids
-	for _, uid in ipairs(Q_ORDER) do
-		local q, qs = Q[uid], quest_state(uid)
-		if (qs and qs.status == "active") then
-			make_runtime(uid)
-			restore_refs(uid, qs)
-			for _, node in ipairs(q.nodes) do
-				local tok = qs.tokens[node.id]
-				if (tok) then
-					if (tok.b) then
-						local impl = kind_impl(node.kind)
-						if (impl and impl.load) then
-							local ok, e = pcall(impl.load, make_ctx(uid, node.id), tok.w)
-							if not (ok) then util.err("%s/%s: load: %s", uid, node.id, tostring(e)) end
-						end
-						wire(uid, node.id)
-					else
-						polled[key_of(uid, node.id)] = { uid = uid, node = node.id }
-					end
+-- (re)wires the tokens and triggers of one active graph and registers its ref story ids
+restore_one = function(uid)
+	local q, qs = Q[uid], quest_state(uid)
+	if not (q and qs and qs.status == "active") then return end
+	make_runtime(uid)
+	restore_refs(uid, qs)
+	for _, node in ipairs(q.nodes) do
+		local tok = qs.tokens[node.id]
+		if (tok) then
+			if (tok.b) then
+				local impl = kind_impl(node.kind)
+				if (impl and impl.load) then
+					local ok, e = pcall(impl.load, make_ctx(uid, node.id), tok.w)
+					if not (ok) then util.err("%s/%s: load: %s", uid, node.id, tostring(e)) end
 				end
+				wire(uid, node.id)
+			else
+				polled[key_of(uid, node.id)] = { uid = uid, node = node.id }
 			end
-			arm_triggers(uid)
-			touched[uid] = true
 		end
 	end
+	arm_triggers(uid)
+	touched[uid] = true
+end
+
+local function restore_quests()
+	for _, uid in ipairs(Q_ORDER) do restore_one(uid) end
 end
 
 local function apply_scan(all, first_time)
 	SCAN = all
 	Q, Q_ORDER, INVALID = all.quests, all.order, all.invalid
-	SCEN, SCEN_ORDER = all.scenarios or {}, all.scenario_order or {}
+	SCEN, SCEN_ORDER = all.behaviours or {}, all.behaviour_order or {}
 	for _, uid in ipairs(Q_ORDER) do
 		local q = Q[uid]
 		if (#q.problems > 0) then loader.log_problems(q.module .. "/" .. q.file, q.problems, false) end
