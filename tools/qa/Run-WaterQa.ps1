@@ -40,8 +40,10 @@ Copy-Item (Join-Path $pack "configs\*.ltx") (Join-Path $Rig "gamedata\configs\")
 $shots = Join-Path $Rig "appdata\screenshots"
 Get-ChildItem $shots -Filter *.jpg -ErrorAction SilentlyContinue | Remove-Item -Force
 if (-not $KeepShaderCache) {
-    $cache = Join-Path $Rig "appdata\shaders_cache_oxr"
-    if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
+    foreach ($name in "shaders_cache_xfr", "shaders_cache_oxr") {
+        $cache = Join-Path $Rig "appdata\$name"
+        if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
+    }
 }
 
 & (Join-Path $PSScriptRoot "Run-ContentProbe.ps1") -Rig $Rig -Label $Name -RunSeconds $Seconds `
@@ -56,7 +58,7 @@ Get-ChildItem $shots -Filter *.jpg | Sort-Object LastWriteTime | ForEach-Object 
     Copy-Item $_.FullName (Join-Path $dest ("{0:d2}.jpg" -f $i)) -Force
     $i++
 }
-Copy-Item (Join-Path $Rig "appdata\logs\openxray_admin.log") (Join-Path $dest "log.txt") -Force
+Copy-Item (Join-Path $Rig "appdata\logs\xfined-ray_admin.log") (Join-Path $dest "log.txt") -Force
 
 Write-Output "$Name : $i frame(s) -> $dest"
 $log = Join-Path $dest "log.txt"

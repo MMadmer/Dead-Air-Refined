@@ -5,7 +5,13 @@ It is not presented as an engine implementation created from an empty codebase.
 
 ## Engine foundation
 
-The engine foundation originates from the
+The engine of Dead Air: Refined is named **XFined-Ray**. The name is the
+project's own and covers what the engine reports about itself - the log banner
+and file name, the crash dialog, the settings file, the shader cache, the
+packaging metadata. It does not restate authorship: the foundation, and the
+history below, remain what they are.
+
+That foundation originates from the
 [OpenXRay `xray-16`](https://github.com/OpenXRay/xray-16) project. Development
 of the Dead Air port began from upstream commit:
 

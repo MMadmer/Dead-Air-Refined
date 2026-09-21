@@ -590,7 +590,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     string_path file_name;
     {
         string_path file;
-        strconcat(sizeof(file), file, "shaders_cache_oxr" DELIMITER, filename, DELIMITER, sh_name.c_str());
+        strconcat(sizeof(file), file, "shaders_cache_xfr" DELIMITER, filename, DELIMITER, sh_name.c_str());
         strconcat(sizeof(filename), filename, filename, DELIMITER, sh_name.c_str());
         FS.update_path(file_name, "$app_data_root$", file);
     }

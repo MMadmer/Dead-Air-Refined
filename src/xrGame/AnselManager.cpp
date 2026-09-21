@@ -59,7 +59,7 @@ bool AnselManager::Init() const
     {
         ansel::Configuration config;
 
-        config.titleNameUtf8 = "S.T.A.L.K.E.R.: Call of Pripyat (OpenXRay)";
+        config.titleNameUtf8 = "S.T.A.L.K.E.R.: Call of Pripyat (XFined-Ray)";
         config.right = { 1, 0, 0 };
         config.up = { 0, 1, 0 };
         config.forward = { 0, 0, 1 };

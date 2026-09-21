@@ -107,7 +107,7 @@ enum EGameActions : u32
     kPDA_TAB5,
     kPDA_TAB6,
 
-    // OpenXRay-specific actions follow the complete legacy range.
+    // Engine-specific actions follow the complete legacy range.
     kLOOK_AROUND, // gamepad
     kMOVE_AROUND, // gamepad
     kCROUCH_TOGGLE,

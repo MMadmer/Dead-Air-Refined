@@ -142,7 +142,7 @@ void CInventory::Take(CGameObject* pObj, bool bNotActivate, bool strict_placemen
 
     if (pIItem->CurrPlace() == eItemPlaceUndefined)
     {
-        const bool slotFirst = pSettingsOpenXRay->read_if_exists<bool>("compatibility", "default_to_slot", ShadowOfChernobylMode);
+        const bool slotFirst = pSettingsXFinedRay->read_if_exists<bool>("compatibility", "default_to_slot", ShadowOfChernobylMode);
         const bool defaultToRuck = pIItem->RuckDefault();
 
         if (slotFirst || !defaultToRuck)

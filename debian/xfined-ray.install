@@ -14,6 +14,6 @@ usr/lib/*/xrLuaJIT.so
 usr/lib/*/xrLuabind.so
 usr/lib/*/xrMaterialSystem.so
 usr/games/xr_3da
-usr/share/applications/openxray_cop.desktop
-usr/share/applications/openxray_soc.desktop
-usr/share/applications/openxray_cs.desktop
+usr/share/applications/xfined-ray_cop.desktop
+usr/share/applications/xfined-ray_soc.desktop
+usr/share/applications/xfined-ray_cs.desktop

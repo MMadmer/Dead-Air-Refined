@@ -1,0 +1,16 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=false
+Categories = Game;
+Icon=xfined-ray_cs
+Exec=xr_3da -cs
+Name = S.T.A.L.K.E.R.: Clear Sky (XFined-Ray)
+Comment=S.T.A.L.K.E.R.: Clear Sky (Powered by XFined-Ray)
+Comment[ru_RU]=S.T.A.L.K.E.R.: Чистое Небо (Powered by XFined-Ray)
+Comment[uk]=S.T.A.L.K.E.R.: Чісте небо (Powered by XFined-Ray)
+GenericName=X-Ray Engine descendant of Dead Air: Refined (original engine developed by GSC Game World)
+GenericName[ru_RU]=Потомок игрового движка X-Ray Engine из Dead Air: Refined (оригинальный движок разработан компанией GSC Game World)
+GenericName[uk]=Нащадок ігрового движка X-Ray Engine з Dead Air: Refined (оригінальний движок розроблений компанією GSC Game World)
+

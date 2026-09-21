@@ -470,7 +470,7 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
 
     float degrees;
     if (!config.read_if_exists(degrees, identifier, "sun_azimuth"))
-        degrees = pSettingsOpenXRay->read_if_exists<float>("environment", "sun_dir_azimuth", 0.0f);
+        degrees = pSettingsXFinedRay->read_if_exists<float>("environment", "sun_dir_azimuth", 0.0f);
 
     clamp(degrees, 0.0f, 360.0f);
     sun_azimuth = deg2rad(degrees);
@@ -610,7 +610,7 @@ void CEnvDescriptor::on_device_destroy()
 CEnvDescriptorMixer::CEnvDescriptorMixer()
     : CEnvDescriptor("00:00:00"), soc_style(false)
 {
-    use_dynamic_sun_dir = pSettingsOpenXRay->read_if_exists<bool>("environment", "dynamic_sun_dir", true);
+    use_dynamic_sun_dir = pSettingsXFinedRay->read_if_exists<bool>("environment", "dynamic_sun_dir", true);
 }
 
 void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDescriptor& B,

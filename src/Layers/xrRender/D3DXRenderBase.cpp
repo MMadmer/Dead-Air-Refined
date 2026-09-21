@@ -241,7 +241,7 @@ void D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float
                 g_renderdoc_api->UnloadCrashHandler();
 
                 string_path FolderName;
-                FS.update_path(FolderName, "$app_data_root$", "captures\\openxray");
+                FS.update_path(FolderName, "$app_data_root$", "captures\\xfined-ray");
                 g_renderdoc_api->SetCaptureFilePathTemplate(FolderName);
 
                 RENDERDOC_InputButton CaptureButton[] = {eRENDERDOC_Key_PrtScrn};

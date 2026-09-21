@@ -5,17 +5,17 @@
 #ArchLinux or Majaro.
 #To build the package, open a terminal, go to the xray-16/ArchLinux directory and run the makepkg -fi command
 #where the options are -f to overwrite the package if it was built before that -i install the package after the build.
-pkgname=openxray-dev                                    
+pkgname=xfined-ray-dev
 pkgver=1.6.02_
 pkgrel=1          
-pkgdesc="Unofficial X-Ray Engine Linux port by OpenXRay team (Originally developed by GSC Game World)"                                          
+pkgdesc="XFined-Ray, the engine of Dead Air: Refined (X-Ray Engine originally developed by GSC Game World)"
 arch=('x86_64') 
-url="https://github.com/OpenXRay/xray-16"
+url="https://github.com/MMadmer/Dead-Air-Refined"
 license=('custom:Custom 3-сlause BSD')
 install="info.install"
 makedepends=(gcc git cmake libglvnd libjpeg6-turbo ncurses pcre2 pcre)
 depends=(glew sdl2 openal crypto++ freeimage libogg libtheora libvorbis lzo lzop libjpeg-turbo)
-conflicts=(openxray openxray-git)
+conflicts=(xfined-ray xfined-ray-git)
 
 pkgver() {
   cd ../..

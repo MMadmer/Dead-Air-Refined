@@ -1,0 +1,44 @@
+-- Checks what the engine settings file resolves to and that both Lua accessors reach it. The
+-- runner plants a `[window] title` in one or both of `configs\openxray.ltx` (the name the file
+-- had while the engine was OpenXRay) and `configs\xfined-ray.ltx`, and reads the answer back
+-- from here. Copy into the clone's gamedata\scripts for the run and remove it afterwards.
+
+local started = false
+
+-- The engine's printf formats %s only, and the log is buffered until a flush.
+local function say(text)
+	printf("[ENGINE_NAME_QA] %s", text)
+	get_console():execute("flush")
+end
+
+local function title_of(ini)
+	if not ini then
+		return "<no ini>"
+	end
+	if not ini:section_exist("window") or not ini:line_exist("window", "title") then
+		return "<no title>"
+	end
+	return ini:r_string("window", "title")
+end
+
+local function probe()
+	-- luabind objects have no __eq, so the two accessors are compared by what they answer.
+	say("xfined_ray_ini -> " .. title_of(xfined_ray_ini()))
+	say("openxray_ini   -> " .. title_of(openxray_ini()))
+end
+
+local function start()
+	if started then
+		return
+	end
+	started = true
+
+	local ok, err = pcall(probe)
+	say(ok and "done" or ("FAILED " .. tostring(err)))
+	get_console():execute("quit")
+end
+
+function on_game_start()
+	started = false
+	RegisterScriptCallback("actor_on_first_update", start)
+end

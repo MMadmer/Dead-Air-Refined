@@ -84,8 +84,10 @@ if ($KeepAslr) {
 }
 
 $logDirectory = Join-Path $rigPath "appdata\logs"
-Get-ChildItem -LiteralPath $logDirectory -Filter "openxray_*.log" -ErrorAction SilentlyContinue |
-    Remove-Item -Force
+# Whatever the engine calls its log - the name follows the application, and the baseline run
+# here is a build from before it was renamed.
+Get-ChildItem -LiteralPath $logDirectory -Filter "*.log" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notlike "*_lua.log" } | Remove-Item -Force
 
 $launcherIdFile = Join-Path $outputPath "engine-boot-launcher.pid"
 $startedIdFile = Join-Path $outputPath "engine-boot-started.pid"
@@ -110,7 +112,8 @@ while ($clock.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         }
     }
     if (-not $log) {
-        $log = Get-ChildItem -LiteralPath $logDirectory -Filter "openxray_*.log" -ErrorAction SilentlyContinue |
+        $log = Get-ChildItem -LiteralPath $logDirectory -Filter "*.log" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike "*_lua.log" } |
             Select-Object -First 1 -ExpandProperty FullName
     }
     if ($log) {

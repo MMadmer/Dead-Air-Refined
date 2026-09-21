@@ -133,7 +133,7 @@ Get-ChildItem -LiteralPath (Join-Path $root "appdata\savedgames") -File |
 # Seed the derived caches, otherwise every run recompiles shaders and rebuilds the collision
 # cache while being measured: frame rate then climbs throughout the window and the numbers are
 # systematically pessimistic. Copies, so the player's caches are never written to.
-foreach ($cache in @("shaders_cache", "shaders_cache_oxr", "cdb_cache", "render-hardware.cache")) {
+foreach ($cache in @("shaders_cache", "shaders_cache_xfr", "shaders_cache_oxr", "cdb_cache", "render-hardware.cache")) {
     $source = Join-Path $root "appdata\$cache"
     if (Test-Path -LiteralPath $source) {
         Copy-Item -LiteralPath $source -Destination $qaAppData -Recurse -Force

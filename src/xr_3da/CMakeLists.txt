@@ -11,7 +11,7 @@ target_sources(xr_3da PRIVATE
     resource.h
     resource.rc
 
-    splash_oxr.bmp
+    splash_xfr.bmp
     stalker_cop.ico
     stalker_cs.ico
     stalker_soc.ico
@@ -32,7 +32,7 @@ set_property(
     SOURCE resource.rc
     APPEND PROPERTY OBJECT_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/xrCore/ProductVersion.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/splash_oxr.bmp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/splash_xfr.bmp"
 )
 
 set_property(

@@ -16,7 +16,7 @@ SKY_CROP_BIAS = 0.78
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = REPO_ROOT / "tools" / "branding" / "splash_source.png"
-BMP_PATH = REPO_ROOT / "src" / "xr_3da" / "splash_oxr.bmp"
+BMP_PATH = REPO_ROOT / "src" / "xr_3da" / "splash_xfr.bmp"
 PREVIEW_PATH = REPO_ROOT / "tools" / "branding" / "splash_preview.png"
 
 

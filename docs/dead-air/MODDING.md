@@ -594,6 +594,25 @@ broken firing parts); the x86 0.98b build used 0.03 / 0.05 / 0.15 for the lesser
 difference is a 1.0 decision, not a porting defect, and durability never fed the misfire
 chance in either build: misfires come from the fault bits and the ammo's `misfire_chance`.
 
+## The engine is called XFined-Ray
+
+The engine reports itself under that name, which changes a handful of names an addon or a tool
+may have hard-coded. Nothing was removed: every old name still works, so a mod written against
+the previous one keeps running.
+
+| What | Was | Is | If you used the old one |
+| --- | --- | --- | --- |
+| Log banner and file | `OpenXRay ...`, `appdata\logs\openxray_<user>.log` | `XFined-Ray ...`, `appdata\logs\xfined-ray_<user>.log` | A tool that opens the log by name has to follow. The `_lua.log` and the profiler files carry the same prefix. |
+| Engine settings file | `configs\openxray.ltx` | `configs\xfined-ray.ltx` | Still read: the new name wins when both exist, the old one is used when it is the only one there. |
+| Engine string file | `configs\text\<lang>\openxray.xml` | `configs\text\<lang>\xfined-ray.xml` | Still recognised; either name counts as "the engine's own file" when the folder holds nothing else. |
+| Lua accessor for it | `openxray_ini()` | `xfined_ray_ini()` | Still exported and returns the same thing. A public Lua name is never withdrawn. |
+| Shader cache | `appdata\shaders_cache_oxr` | `appdata\shaders_cache_xfr` | The old folder is not read any more, so the first start after the update compiles shaders once. Nothing else uses it and it can be deleted by hand. |
+| RenderDoc captures | `appdata\captures\openxray` | `appdata\captures\xfined-ray` | A diagnostic path only. |
+
+Unchanged on purpose: the `xray` C++ namespace and the `xr*` module names, because those are
+X-Ray rather than the fork; the upstream links in source comments; and the copyright headers of
+the files that carry them. `docs/dead-air/UPSTREAM.md` says what the engine descends from.
+
 ## The quality preset owns the quality settings
 
 There is one control for how the game looks at a given cost: the preset list on the basic video
@@ -1760,7 +1779,7 @@ Fresnel and the sea state cost nothing and there is no tier where being wrong is
 `settings_da_water.h` holds what is genuinely a look and has no physical value to derive it from -
 the detail layer's share, the rain and impact ripple amplitudes, the foam colour, the debris
 window, the refraction strength, and the SSR hand-over distances. It is compile-time on purpose:
-wiping `appdata/shaders_cache_oxr` applies a change without an engine rebuild.
+wiping `appdata/shaders_cache_xfr` applies a change without an engine rebuild.
 
 ## Rain puddles, wet ground and the far fades
 

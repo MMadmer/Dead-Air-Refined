@@ -1,6 +1,6 @@
 #####################################################################################
 #                                                                                   #
-#   This file is used by bash-completion and contains all the OpenXRay startup keys #
+#   This file is used by bash-completion and contains all the XFined-Ray startup keys #
 #   that should work under Linux. The list of keys was taken from here.             #
 #   https://github.com/OpenXRay/xray-16/wiki/%5BEN%5D-Engine%27s-command-line-keys  #
 #                                                                                   #

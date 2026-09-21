@@ -852,13 +852,13 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
     // Workarounds to preserve backwards compatibility with game scripts
     {
         const bool nilConversion =
-            pSettingsOpenXRay->read_if_exists<bool>("lua_scripting", "allow_nil_conversion", true);
+            pSettingsXFinedRay->read_if_exists<bool>("lua_scripting", "allow_nil_conversion", true);
 
         luabind::allow_nil_conversion(nilConversion);
         luabind::disable_super_deprecation();
 
         const bool escapeSequences =
-            pSettingsOpenXRay->read_if_exists<bool>("lua_scripting", "allow_escape_sequences", false);
+            pSettingsXFinedRay->read_if_exists<bool>("lua_scripting", "allow_escape_sequences", false);
         luajit::allow_escape_sequences(escapeSequences);
     }
 

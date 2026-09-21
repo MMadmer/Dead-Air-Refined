@@ -1133,7 +1133,7 @@ EXPORTS
     ?open_chunk_iterator@IReader@@QEAAPEAV1@AEAIPEAV1@@Z @1133
     ?pSettings@@3PEBVCInifile@@EB @1134
     ?pSettingsAuth@@3PEBVCInifile@@EB @1135
-    ?pSettingsOpenXRay@@3PEBVCInifile@@EB @1136
+    ?pSettingsXFinedRay@@3PEBVCInifile@@EB @1136
     ?part@CPartition@@QEBAAEBVCPartDef@@G@Z @1137
     ?part_id@CPartition@@QEBAGAEBVshared_str@@@Z @1138
     ?partition@shared_motions@@QEBAPEAVCPartition@@XZ @1139

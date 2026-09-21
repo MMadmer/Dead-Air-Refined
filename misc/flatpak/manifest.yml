@@ -1,4 +1,4 @@
-id: io.github.OpenXRay.xray-16
+id: io.github.MMadmer.Dead-Air-Refined
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
@@ -12,15 +12,15 @@ finish-args:
   - --device=dri
 
 modules:
-  - name: OpenXRay
+  - name: XFined-Ray
     buildsystem: cmake
     sources:
       - type: git
-        url: https://github.com/OpenXRay/xray-16.git
+        url: https://github.com/MMadmer/Dead-Air-Refined.git
         branch: dev
     config-opts:
       - -D CMAKE_BUILD_TYPE=ReleaseMasterGold
       - -D CMAKE_UNITY_BUILD=ON
 
-#rename-icon: openxray_cop.png
-rename-desktop-file: openxray_cop.desktop
+#rename-icon: xfined-ray_cop.png
+rename-desktop-file: xfined-ray_cop.desktop

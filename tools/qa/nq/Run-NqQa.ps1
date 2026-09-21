@@ -162,7 +162,7 @@ function New-QaRoot {
     Copy-Item -LiteralPath (Join-Path $GameRoot 'fsgame.ltx') -Destination (Join-Path $qaRoot 'fsgame.ltx') -Force
 
     # Seed the derived caches so a run is not spent recompiling shaders or rebuilding collision data.
-    foreach ($cache in @('shaders_cache', 'shaders_cache_oxr', 'cdb_cache', 'render-hardware.cache')) {
+    foreach ($cache in @('shaders_cache', 'shaders_cache_xfr', 'shaders_cache_oxr', 'cdb_cache', 'render-hardware.cache')) {
         $source = Join-Path $GameRoot "appdata\$cache"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $qaAppData -Recurse -Force }
     }

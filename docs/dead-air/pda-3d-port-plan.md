@@ -11,7 +11,7 @@
 Это было в `asset_bom.md` (Critical finding №3). Вывод сделан по IX-Ray'евской *копии* (`gamedata/shaders/d3d11/*.ps.hlsl` + `*.lua`). Оригинал Gunslinger лежит в **нашем ровно диалекте**: `shaders/r3/models_pda.s` + `shaders/r3/model_pda_screen.ps`, `#include "common.h"`. Вершинный вход `model_def_lplanes` **есть у нас**:
 
 * исходник — `D:\Games\Dead Air\_analysis\base_configs\shaders\r3\model_def_lplanes.vs`
-* скомпилированные варианты в кэше — `D:\Games\Dead Air\appdata\shaders_cache_oxr\r4\model_def_lplanes_0.vs`, `..._1.vs`
+* скомпилированные варианты в кэше — `D:\Games\Dead Air\appdata\shaders_cache_xfr\r4\model_def_lplanes_0.vs`, `..._1.vs`
 
 Lua-API в нашем `ResourceManager_Scripting.cpp` покрывает **все** вызовы из `models_pda.s`: `sorting` (:268), `emissive` (:269), `distort` (:270), `fog` (:272), `zb` (:273), `blend` (:274), `aref` (:275), плюс `dx10texture`/`dx10sampler`. То есть `.s` копируется почти байт-в-байт.
 

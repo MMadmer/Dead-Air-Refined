@@ -1055,7 +1055,7 @@ void CActor::Die(IGameObject* who)
 
     if (IsGameTypeSingle())
     {
-        pcstr camera = READ_IF_EXISTS(pSettingsOpenXRay, r_string, "gameplay", "actor_death_camera", "freelook");
+        pcstr camera = READ_IF_EXISTS(pSettingsXFinedRay, r_string, "gameplay", "actor_death_camera", "freelook");
 
         if (xr_strcmp("firsteye", camera) == 0 || g_first_person_death)
             cam_Set(eacFirstEye);

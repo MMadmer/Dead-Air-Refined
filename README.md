@@ -20,7 +20,8 @@ content its version declares.
 ## Project lineage
 
 Dead Air: Refined is an independent derivative project maintained by MMadmer.
-Its engine foundation is based on the
+Its engine is called **XFined-Ray**, and that is the name it reports in logs,
+diagnostics and packaging. The foundation it descends from is the
 [OpenXRay `xray-16`](https://github.com/OpenXRay/xray-16) project, with the
 initial Dead Air port derived from upstream commit
 [`29030f81b137f6ea5365b3d71f2b588490832f5b`](https://github.com/OpenXRay/xray-16/commit/29030f81b137f6ea5365b3d71f2b588490832f5b).

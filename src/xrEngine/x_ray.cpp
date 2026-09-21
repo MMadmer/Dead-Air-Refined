@@ -196,7 +196,15 @@ void InitSettings()
     XMS::SetLtxMergeEnabled(XMS::Active());
 
     InitConfig(pSettings, "system.ltx");
-    InitConfig(pSettingsOpenXRay, "openxray.ltx", false, true, true, false);
+    // The engine settings file was named after the engine, so it is renamed with it. An
+    // installation or an addon that still ships the old name keeps working: the new name is
+    // preferred, the old one is read when it is the only one there.
+    {
+        string_path fname;
+        FS.update_path(fname, "$game_config$", XFINEDRAY_INI_FILE);
+        pcstr engineIni = FS.exist(fname) ? XFINEDRAY_INI_FILE : XFINEDRAY_INI_FILE_LEGACY;
+        InitConfig(pSettingsXFinedRay, engineIni, false, true, true, false);
+    }
     InitConfig(pGameIni, "game.ltx");
 
     // module config overlays + .ltxp directive patches on top of system.ltx
@@ -230,7 +238,7 @@ void InitSettings()
         set_free_mode();
     else
     {
-        pcstr gameMode = READ_IF_EXISTS(pSettingsOpenXRay, r_string, "compatibility", "game_mode", "cop");
+        pcstr gameMode = READ_IF_EXISTS(pSettingsXFinedRay, r_string, "compatibility", "game_mode", "cop");
         if (xr_strcmpi("cop", gameMode) == 0)
             set_cop_mode();
         else if (xr_strcmpi("cs", gameMode) == 0)
@@ -285,7 +293,7 @@ void destroySettings()
     auto sa = const_cast<CInifile**>(&pSettingsAuth);
     xr_delete(*sa);
 
-    auto so = const_cast<CInifile**>(&pSettingsOpenXRay);
+    auto so = const_cast<CInifile**>(&pSettingsXFinedRay);
     xr_delete(*so);
 
     xr_delete(pGameIni);
@@ -312,7 +320,7 @@ constexpr pcstr FRAME_MARK_APPLICATION_RUN = "Application run";
 
 CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array<RendererModule*, 1>& modules)
 {
-    TracySetProgramName("OpenXRay");
+    TracySetProgramName("XFined-Ray");
     Threading::SetCurrentThreadName("Primary thread");
     FrameMarkStart(FRAME_MARK_APPLICATION_STARTUP);
 
@@ -364,7 +372,7 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
         sscanf(strstr(commandLine, fsltx) + sz, "%[^ ] ", fsgame);
     }
 
-    Core.Initialize("OpenXRay", commandLine, true, *fsgame ? fsgame : nullptr);
+    Core.Initialize("XFined-Ray", commandLine, true, *fsgame ? fsgame : nullptr);
     StartupProfileCheckpoint("Filesystem initialized");
 
     InitSettings();

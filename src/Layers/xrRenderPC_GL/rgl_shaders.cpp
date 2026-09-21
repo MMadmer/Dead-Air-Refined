@@ -496,7 +496,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     if (GLAD_GL_ARB_get_program_binary && GLAD_GL_ARB_separate_shader_objects)
     {
         string_path file;
-        strconcat(sizeof(file), file, "shaders_cache_oxr" DELIMITER, filename);
+        strconcat(sizeof(file), file, "shaders_cache_xfr" DELIMITER, filename);
         FS.update_path(full_path, "$app_data_root$", file);
 
         string_path shadersFolder;

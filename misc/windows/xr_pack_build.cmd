@@ -22,7 +22,7 @@ if %PLATFORM%==x86 (
 )
 
 if [%3]==[] (
-    set PACKED_ARCHIVE_NAME=xpatch_openxray_plus.db
+    set PACKED_ARCHIVE_NAME=xpatch_xfined-ray_plus.db
 ) else (
     set PACKED_ARCHIVE_NAME=%~3
 )
@@ -48,12 +48,12 @@ del /q /f /s "res\bin\mfc*.dll"
 cd res
 
 rem Pack gamedata
-bin\utils\xrCompress gamedata -ltx openxray_plus.ltx -filename %PACKED_ARCHIVE_NAME%
+bin\utils\xrCompress gamedata -ltx xfined-ray_plus.ltx -filename %PACKED_ARCHIVE_NAME%
 mkdir patches
 move %PACKED_ARCHIVE_NAME% patches/%PACKED_ARCHIVE_NAME%
 
 rem Make archives
-7z a "OpenXRay.%EDITION_NAME%.7z" bin -xr!.* -xr!*.pdb -x!bin\utils -i!patches -i!fsgame.ltx -i!License.txt -i!README.md
+7z a "XFined-Ray.%EDITION_NAME%.7z" bin -xr!.* -xr!*.pdb -x!bin\utils -i!patches -i!fsgame.ltx -i!License.txt -i!README.md
 7z a "Symbols.%EDITION_NAME%.7z" bin\*.pdb -i!License.txt -i!README.md -xr!.*
 7z a "Utils.%EDITION_NAME%.7z" bin\utils\* -i!License.txt -i!README.md -xr!.*
 

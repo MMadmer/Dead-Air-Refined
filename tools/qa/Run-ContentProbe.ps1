@@ -26,7 +26,7 @@ $ErrorActionPreference = "Stop"
 $matched = $false
 $userLtx = Join-Path $Rig "appdata\user.ltx"
 $backup = "$userLtx.content-probe-backup"
-$log = Join-Path $Rig "appdata\logs\openxray_admin.log"
+$log = Join-Path $Rig "appdata\logs\xfined-ray_admin.log"
 
 if (-not (Test-Path $backup)) {
     Copy-Item $userLtx $backup -Force

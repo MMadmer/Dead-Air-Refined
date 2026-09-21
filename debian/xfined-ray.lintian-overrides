@@ -1,0 +1,9 @@
+xfined-ray binary: embedded-library
+xfined-ray binary: shared-library-is-multi-arch-foreign
+xfined-ray binary: shared-library-lacks-version
+xfined-ray binary: package-name-doesnt-match-sonames
+xfined-ray binary: no-manual-page
+xfined-ray binary: copyright-without-copyright-notice
+xfined-ray binary: script-not-executable
+xfined-ray binary: unusual-interpreter
+xfined-ray binary: extended-description-line-too-long

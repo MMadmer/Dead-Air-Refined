@@ -1113,7 +1113,7 @@ void CLocatorAPI::setup_fs_path(pcstr fs_name)
                 pref_path = SDL_GetPrefPath("GSC Game World", "S.T.A.L.K.E.R. - Call of Pripyat");
 
             /* A final decision must be made regarding the changed resources. Since only OpenGL shaders remain mandatory for Linux for the entire trilogy,
-             * I propose adding shaders from <CMAKE_INSTALL_FULL_DATAROOTDIR>/openxray/gamedata/shaders so that we remove unnecessary questions from users who want to start
+             * I propose adding shaders from <CMAKE_INSTALL_FULL_DATAROOTDIR>/xfined-ray/gamedata/shaders so that we remove unnecessary questions from users who want to start
              * the game using resources not from the proposed ~/.local/share/GSC Game World/Game in this case, this section of code can be safely removed */
             chdir(pref_path);
             static constexpr pcstr install_dir = CMAKE_INSTALL_FULL_DATAROOTDIR;
@@ -1133,7 +1133,7 @@ void CLocatorAPI::setup_fs_path(pcstr fs_name)
                 res = lstat(tmp, &statbuf);
                 if (res == 0)
                     xr_unlink(tmp);
-                xr_sprintf(tmp_link, "%s/openxray/fsgame.ltx", install_dir);
+                xr_sprintf(tmp_link, "%s/xfined-ray/fsgame.ltx", install_dir);
                 symlink(tmp_link, tmp);
             }
             xr_sprintf(tmp, "%sgamedata/shaders/gl", pref_path);
@@ -1150,7 +1150,7 @@ void CLocatorAPI::setup_fs_path(pcstr fs_name)
                     mkdir("gamedata", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
                     mkdir("gamedata/shaders", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
                 }
-                xr_sprintf(tmp_link, "%s/openxray/gamedata/shaders/gl", install_dir);
+                xr_sprintf(tmp_link, "%s/xfined-ray/gamedata/shaders/gl", install_dir);
                 symlink(tmp_link, tmp);
             }
 

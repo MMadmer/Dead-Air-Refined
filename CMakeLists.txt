@@ -10,11 +10,11 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PreProjectInit)
 
 calculate_xray_build_id(XRAY_BUILD_ID)
-project(OpenXRay
-    DESCRIPTION "OpenXRay is an improved version of the X-Ray Engine, \
-                the game engine used in the world-famous S.T.A.L.K.E.R. game series by GSC Game World."
+project(XFinedRay
+    DESCRIPTION "XFined-Ray is the engine of Dead Air: Refined, a descendant of the X-Ray Engine \
+                used in the world-famous S.T.A.L.K.E.R. game series by GSC Game World."
     VERSION 1.6.02.${XRAY_BUILD_ID}
-    HOMEPAGE_URL "https://github.com/OpenXRay/xray-16"
+    HOMEPAGE_URL "https://github.com/MMadmer/Dead-Air-Refined"
     LANGUAGES CXX C
 )
 

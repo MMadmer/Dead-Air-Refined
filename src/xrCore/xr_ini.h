@@ -13,7 +13,10 @@
 #include "xrCommon/xr_hash_map.h"
 #include "xrCommon/xr_vector.h"
 
-constexpr pcstr OPENXRAY_INI_SECTION = "openxray";
+// The engine settings file, and the name it had while the engine was OpenXRay: an
+// installation or an addon that still ships the old one is read from it.
+constexpr pcstr XFINEDRAY_INI_FILE = "xfined-ray.ltx";
+constexpr pcstr XFINEDRAY_INI_FILE_LEGACY = "openxray.ltx";
 
 // refs
 class CInifile;
@@ -320,6 +323,6 @@ public:
 // Main configuration file
 extern XRCORE_API CInifile const* pSettings;
 extern XRCORE_API CInifile const* pSettingsAuth;
-extern XRCORE_API CInifile const* pSettingsOpenXRay;
+extern XRCORE_API CInifile const* pSettingsXFinedRay;
 
 #endif //__XR_INI_H__
