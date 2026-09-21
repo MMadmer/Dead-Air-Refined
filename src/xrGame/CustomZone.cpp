@@ -704,9 +704,16 @@ void CCustomZone::feel_touch_delete(IGameObject* O)
 
 bool CCustomZone::feel_touch_contact(IGameObject* O)
 {
-    if (smart_cast<CCustomZone*>(O))
+    // Down to CGameObject first: smart_cast is only specialised for pairs whose source
+    // is CGameObject, so casting straight from IGameObject* fell through to a real
+    // dynamic_cast on every test below - once per touched object per frame.
+    CGameObject* object = smart_cast<CGameObject*>(O);
+    if (!object)
         return FALSE;
-    if (smart_cast<CBreakableObject*>(O))
+
+    if (smart_cast<CCustomZone*>(object))
+        return FALSE;
+    if (smart_cast<CBreakableObject*>(object))
         return FALSE;
     if (0 == smart_cast<IKinematics*>(O->Visual()))
         return FALSE;
@@ -714,8 +721,7 @@ bool CCustomZone::feel_touch_contact(IGameObject* O)
     if (O->ID() == ID())
         return (FALSE);
 
-    CGameObject* object = smart_cast<CGameObject*>(O);
-    if (!object || !object->IsVisibleForZones() || object->IsGhost())
+    if (!object->IsVisibleForZones() || object->IsGhost())
         return (FALSE);
 
     if (!((CCF_Shape*)GetCForm())->Contact(O))

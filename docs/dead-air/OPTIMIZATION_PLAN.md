@@ -344,3 +344,38 @@ loops, i.e. memcpy with no public symbol next to it. Nothing throws.
 - **Explicit SSE stores for the constant-buffer write**, on the theory that the memcpy under
   `hw_Render_dump` was those four `Fvector4` assignments: no change outside the noise band, so it
   did not ship.
+
+### Stage 7, second pass
+
+Two more things the profiler settled, and one it closed off.
+
+3. **`smart_cast` was falling back to `dynamic_cast` wherever the source was `IGameObject*`.**
+   `_RTDynamicCast` is 2.6% of the game thread. smart_cast has a fast path - a virtual `cast_*()`
+   per type pair, declared in `smart_cast.h` - but every declared pair names `CGameObject` as the
+   source. A handler that takes an `IGameObject*` matches none of them, so each test is a real
+   RTTI walk. `CCustomZone::feel_touch_contact` and `CPda::feel_touch_contact` are the two largest
+   single contributors and run per touched object per frame; both now convert to `CGameObject*`
+   once, through the one pair that is specialised, and everything after that is back on the fast
+   path. Honest accounting: those two sites are about a tenth of the 2.6%, so roughly 0.25% of the
+   thread - below what this rig can measure. They ship because they are strictly less work with
+   identical results, not because a number moved. The other two thirds of the RTTI cost is a long
+   tail of sites at 0.1-0.3% each, including a whole class where `smart_cast<const T*>` misses a
+   specialisation declared for `T`; that is its own audit.
+4. **A dense side table for the detail visibility answers** - stamp plus result in one `u32` per
+   slot of `cache_pool`, replacing the stamp that lived inside the `Slot` - **bought nothing**
+   (7.30% against the 7.01-7.55% band the slot version already measured). The remaining cost is
+   the number of parts walked per pass, not the layout of what is read per part. Reverted.
+
+**Where the grass actually stands.** `hw_Render_dump` 11.5% + `IsPartVisible` 7.4% + the memcpy
+under them (69% of `_NLG_Return2`, ~2.7%) is about 21% of the game thread, and the structural
+redundancy in it is now gone. What is left is the cost of walking tens of thousands of instances
+across the main pass and the shadow passes. Taking that further is a redesign - GPU-side culling,
+or fewer passes - not an optimization, and it would have to answer to the rule that a swaying
+plant's shadow sways with it in every shadow map.
+
+**Lua is the other fifth and is not the engine's to spend.** `luabind::detail::pcall` is 19.6%
+of the thread: 56% of it is `CScriptBinderObjectWrapper::shedule_Update` - the mod's per-object
+update - and 34% is `CScriptPropertyEvaluatorWrapper::evaluate` called by the GOAP planner. LuaJIT's
+own GC is another ~5.5%. The engine drives none of that per-frame itself (the `lua_gc` step in
+`script_process.cpp` is DEBUG-only), and tuning LuaJIT's GC pause trades exactly the low-2GB
+headroom that the arena work in `DEPENDENCIES.md` exists to protect. Left alone deliberately.

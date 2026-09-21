@@ -107,22 +107,24 @@ void CPda::feel_touch_delete(IGameObject* O)
 
 bool CPda::feel_touch_contact(IGameObject* O)
 {
-    CEntityAlive* entity_alive = smart_cast<CEntityAlive*>(O);
+    // Same story as CCustomZone::feel_touch_contact: the specialised cast pairs all
+    // start from CGameObject, so going there once keeps the rest off dynamic_cast.
+    CGameObject* object = smart_cast<CGameObject*>(O);
+    if (!object)
+        return false;
+
+    CEntityAlive* entity_alive = smart_cast<CEntityAlive*>(object);
 
     if (entity_alive && entity_alive->cast_base_monster())
     {
         return true;
     }
-    else if (CInventoryOwner* pInvOwner = smart_cast<CInventoryOwner*>(O))
+    else if (CInventoryOwner* pInvOwner = smart_cast<CInventoryOwner*>(object))
     {
         if (this != pInvOwner->GetPDA())
-        {
-            CEntityAlive* pEntityAlive = smart_cast<CEntityAlive*>(O);
-            if (pEntityAlive)
-                return true;
-        }
-        else
-            return false;
+            return entity_alive != nullptr;
+
+        return false;
     }
 
     return false;
