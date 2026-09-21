@@ -115,6 +115,13 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     const float grass_shadow_dist_sq =
         float(ps_r__grass_shadow_dist) * float(ps_r__grass_shadow_dist);
 
+    // Instances per draw. 61 comes from the DX9 vertex register file (256 registers, four
+    // per instance, minus a header) and is what every detail shader's array declares. A
+    // bigger array was tried: the constant buffer is re-uploaded WHOLE on every flush, so a
+    // batch of 512 pays for 512 instances' worth of bytes to draw the 90 a slot group has.
+    // 256 and 512 both measured slower than 61 on l01_escape.
+    const u32 batch_limit = static_cast<u32>(hw_BatchSize);
+
     vis_list& list = m_visibles[var_id];
 
     // Iterate
@@ -146,14 +153,14 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
             // u32			c_base				= x_array->vs.index;
             // Fvector4*	c_storage			= RCache.get_ConstantCache_Vertex().get_array_f().access(c_base);
-            Fvector4* c_storage = 0;
             //	Map constants to memory directly
-            {
-                void* pVData;
-                cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
-                c_storage = (Fvector4*)pVData;
-            }
-            VERIFY(c_storage);
+            void* pVData = nullptr;
+            cmd_list.get_ConstantDirect(strArray, batch_limit * sizeof(Fvector4) * 4, &pVData, 0, 0);
+            // A detail shader whose instance array is smaller than the batch draws nothing
+            // rather than writing through a null pointer, which is what release used to do.
+            if (!pVData)
+                continue;
+            Fvector4* c_storage = (Fvector4*)pVData;
 
             u32 dwBatch = 0;
 
@@ -170,39 +177,21 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 if (!IsPartVisible(part, frustum))
                     continue;
 
-                for (SlotItem* item : *part.items)
+                // The upload bytes are already packed, in draw order, by the slot refresh
+                // (UpdateVisibleM). What used to be a SlotItem pointer dereference and a
+                // 64-byte gather per instance is now a straight run of memory, so the copy
+                // goes out in batch-sized pieces and the prefetcher sees every one coming.
+                const InstanceRows* src = part.rows->data();
+                u32 left = static_cast<u32>(part.rows->size());
+                while (left)
                 {
-                    SlotItem& Instance = *item;
-                    u32 base = dwBatch * 4;
+                    const u32 take = _min(left, batch_limit - dwBatch);
+                    std::memcpy(c_storage + dwBatch * 4, src, take * sizeof(InstanceRows));
+                    src += take;
+                    left -= take;
+                    dwBatch += take;
 
-                    // The instance never moves: mRotY/c_hemi/c_sun are set once at slot
-                    // decompression, scale/height once per 15-30 frames per slot. Rebuilding
-                    // 12 multiplies per instance per frame for ~47k instances was pure waste.
-                    if (!Instance.cache_valid)
-                    {
-                        // Build matrix ( 3x4 matrix, last row - color ). Height is scaled
-                        // SEPARATELY: the local-height contribution is the second element of
-                        // each row, so scaling just those lays the blade flat without
-                        // touching its ground footprint (r__grass_fade_flat).
-                        const float scale = Instance.scale_calculated;
-                        const float hs = scale * Instance.height_calculated;
-                        Fmatrix& M = Instance.mRotY;
-                        Instance.cached_out[0].set(M._11 * scale, M._21 * hs, M._31 * scale, M._41);
-                        Instance.cached_out[1].set(M._12 * scale, M._22 * hs, M._32 * scale, M._42);
-                        Instance.cached_out[2].set(M._13 * scale, M._23 * hs, M._33 * scale, M._43);
-
-                        // Build color (R2 only needs hemisphere)
-                        const float h = Instance.c_hemi;
-                        const float s = Instance.c_sun;
-                        Instance.cached_out[3].set(s, s, s, h);
-                        Instance.cache_valid = true;
-                    }
-                    c_storage[base + 0] = Instance.cached_out[0];
-                    c_storage[base + 1] = Instance.cached_out[1];
-                    c_storage[base + 2] = Instance.cached_out[2];
-                    c_storage[base + 3] = Instance.cached_out[3];
-                    dwBatch++;
-                    if (dwBatch == hw_BatchSize)
+                    if (dwBatch == batch_limit)
                     {
                         // flush
                         if (collectStats)
@@ -219,9 +208,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
                         //	Remap constants to memory directly (just in case anything goes wrong)
                         {
-                            void* pVData;
-                            cmd_list.get_ConstantDirect(strArray, hw_BatchSize * sizeof(Fvector4) * 4, &pVData, 0, 0);
-                            c_storage = (Fvector4*)pVData;
+                            void* pNext = nullptr;
+                            cmd_list.get_ConstantDirect(strArray, batch_limit * sizeof(Fvector4) * 4, &pNext, 0, 0);
+                            c_storage = (Fvector4*)pNext;
                         }
                         VERIFY(c_storage);
                     }

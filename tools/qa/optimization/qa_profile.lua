@@ -6,6 +6,9 @@
 -- has running - A-Life, the NPCs in earshot, physics on whatever is settling, the renderer -
 -- because that is the mix a player pays for.
 local stage, t0, frames = 0, 0, 0
+-- Frame count at the moment sampling starts. The profile says where the time went; this
+-- says whether there was less of it, which is the only number that settles an argument.
+local frames_at_start = 0
 
 local function cmd(s) get_console():execute(s) end
 
@@ -25,14 +28,26 @@ local function on_update()
 
 	elseif stage == 1 and after(500) then
 		cmd("dar_profile_start " .. tostring(qa_profile_hz or 1000))
+		frames_at_start = frames
 		t0 = now stage = 2
 
 	elseif stage == 2 and after((qa_profile_seconds or 20) * 1000) then
+		local drawn = frames - frames_at_start
+		-- %s for everything on purpose: the engine's printf does not take a precision.
+		printf("PROFILE: fps %s over %s frame(s) in %s ms",
+			tostring(math.floor(drawn * 100000.0 / (now - t0)) / 100.0),
+			tostring(drawn), tostring(now - t0))
 		cmd("dar_profile_stop " .. tostring(qa_profile_top or 45))
 		cmd("flush")
 		t0 = now stage = 3
 
 	elseif stage == 3 and after(2000) then
+		-- One frame out of the measured window. A profile that says a renderer got cheaper
+		-- means nothing if the thing it stopped drawing was the point.
+		cmd("screenshot qa_profile")
+		t0 = now stage = 31
+
+	elseif stage == 31 and after(1500) then
 		-- Ask who called the symbols the run was set up to investigate. Costs nothing: the
 		-- samples are still in memory and this only reads them again.
 		for _, needle in ipairs(qa_profile_callers or {}) do

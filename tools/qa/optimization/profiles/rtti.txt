@@ -1,0 +1,91 @@
+[LUA]  PROFILE: begin level=l01_escape seconds=30
+~ [profiler] sampling the game thread at 1000 Hz
+~ [profiler] 28547 sample(s), 3176 distinct symbol(s), 0 suspend failure(s)
+~ [profiler] --- self time (where the game thread actually was) ---
+~ [profiler] self  15.16%    4329  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] self   4.24%    1210  ntdll!NtDelayExecution
+~ [profiler] self   3.91%    1115  VCRUNTIME140!_NLG_Return2
+~ [profiler] self   3.58%    1022  d3d11!D3DKMTOpenResource
+~ [profiler] self   2.96%     846  VCRUNTIME140!_CxxUnregisterExceptionObject
+~ [profiler] self   2.20%     628  xrRender_R4!xray::render::render_r4::CBackend::set_Constants
+~ [profiler] self   2.09%     597  LuaJIT!gc_sweep
+~ [profiler] self   1.95%     558  nvwgf2umx!NVAPI_Thunk
+~ [profiler] self   1.39%     397  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::add_leafs_static
+~ [profiler] self   1.35%     384  LuaJIT!gc_traverse_tab
+~ [profiler] self   1.32%     376  xrRender_R4!xray::render::render_r4::CBackend::UpdateConstantBuffers
+~ [profiler] self   1.22%     349  LuaJIT!atomic
+~ [profiler] self   1.12%     321  xrRender_R4!xray::render::render_r4::CKinematicsAnimated::LL_BuldBoneMatrixDequatize
+~ [profiler] self   1.12%     319  LuaJIT!lj_tab_get
+~ [profiler] self   1.10%     314  xrRender_R4!xray::render::render_r4::CDetailManager::IsPartVisible
+~ [profiler] self   1.06%     302  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::add_static
+~ [profiler] self   1.04%     298  xrCDB!box_walker<0>::walk
+~ [profiler] self   1.01%     288  ntdll!ZwSetEvent
+~ [profiler] self   0.90%     258  xrRender_R4!xray::render::render_r4::dx11ConstantBuffer::Update
+~ [profiler] self   0.90%     257  xrRender_R4!xray::render::render_r4::CSkeletonX::_Render
+~ [profiler] self   0.88%     250  VCRUNTIME140!memcmp
+~ [profiler] self   0.87%     248  LuaJIT!lj_BC_TGETS
+~ [profiler] self   0.85%     242  xrRender_R4!xray::render::render_r4::CBackend::set_Pass
+~ [profiler] self   0.77%     220  d3d11!CreateDirect3D11DeviceFromDXGIDevice
+~ [profiler] self   0.74%     212  xrCDB!Spatial::ray_walker<1,0,0>::walk
+~ [profiler] self   0.73%     209  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::insert_static
+~ [profiler] self   0.73%     208  xrCDB!walker::walk
+~ [profiler] self   0.73%     207  nvwgf2umx!SetDependencyInfo
+~ [profiler] self   0.64%     183  nvwgf2umx!NVAPI_DirectMethods
+~ [profiler] self   0.61%     175  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::render_graph
+~ [profiler] self   0.61%     173  xrRender_R4!xray::render::render_r4::CBackend::set_Textures
+~ [profiler] self   0.56%     160  VCRUNTIME140!_RTDynamicCast
+~ [profiler] self   0.54%     155  LuaJIT!lj_alloc_malloc
+~ [profiler] self   0.54%     154  xrRender_R4!xray::render::render_r4::R_constants::queue_for_flush
+~ [profiler] self   0.50%     144  ntdll!RtlAllocateHeap
+~ [profiler] self   0.49%     141  xrRender_R4!xray::render::render_r4::Fvisual::Render
+~ [profiler] self   0.47%     135  ucrtbase!strcmp
+~ [profiler] self   0.46%     132  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::build_subspace_dynamic
+~ [profiler] self   0.45%     129  LuaJIT!propagatemark
+~ [profiler] self   0.44%     127  LuaJIT!gc_finalize
+~ [profiler] self   0.41%     118  nvwgf2umx!OpenAdapter10
+~ [profiler] self   0.41%     116  LuaJIT!lua_tocfunction
+~ [profiler] self   0.40%     115  ntdll!RtlQueryPerformanceCounter
+~ [profiler] self   0.38%     108  d3d11!D3D11CoreRegisterLayers
+~ [profiler] self   0.37%     106  LuaJIT!lj_str_new
+~ [profiler] --- inclusive time (function or anything it called) ---
+~ [profiler] incl  89.39%   25518  xrEngine!CRenderDevice::ProcessFrame
+~ [profiler] incl  87.19%   24889  xrEngine!CApplication::Run
+~ [profiler] incl  84.71%   24183  xrEngine!entry_point
+~ [profiler] incl  81.48%   23260  xrEngine!WinMain
+~ [profiler] incl  78.73%   22474  xrEngine!__scrt_common_main_seh
+~ [profiler] incl  76.20%   21752  KERNEL32!BaseThreadInitThunk
+~ [profiler] incl  72.22%   20616  ntdll!RtlUserThreadStart
+~ [profiler] incl  62.66%   17887  xrEngine!CRenderDevice::DoRender
+~ [profiler] incl  61.74%   17624  xrGame!CLevel::OnRender
+~ [profiler] incl  54.60%   15588  xrRender_R4!xray::render::render_r4::CRender::Render
+~ [profiler] incl  29.70%    8479  xrEngine!MessageRegistry<pureFrame>::Process
+~ [profiler] incl  28.48%    8130  xrEngine!CRenderDevice::FrameMove
+~ [profiler] incl  21.39%    6107  xrRender_R4!xray::render::render_r4::CDetailManager::Render
+~ [profiler] incl  21.34%    6091  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] incl  21.11%    6026  xrRender_R4!xray::render::render_r4::CRender::render_lights
+~ [profiler] incl  17.79%    5078  xrRender_R4!`xray::render::render_r4::CRender::render_lights'::`2'::<lambda_3>::operator()
+~ [profiler] incl  16.90%    4825  xrGame!CGamePersistent::OnFrame
+~ [profiler] incl  16.64%    4749  xrEngine!CSheduler::Update
+~ [profiler] incl  15.07%    4301  luabind!luabind::detail::pcall
+~ [profiler] incl  15.03%    4292  LuaJIT!lua_pcall
+~ [profiler] incl  14.23%    4063  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::render_graph
+~ [profiler] incl  12.64%    3607  LuaJIT!lj_BC_FUNCC
+~ [profiler] done
+~ [profiler] samples kept - dar_profile_callers <symbol> to ask who called what
+~ [profiler] "_RTDynamicCast" appears in 1007 of 28547 sample(s) - 3.53% of the thread
+~ [profiler] from   6.65%      67  CPda::feel_touch_contact <- Feel::Touch::feel_touch_update <- CPda::shedule_Update
+~ [profiler] from   5.66%      57  CCustomZone::feel_touch_contact <- Feel::Touch::feel_touch_update <- CCustomZone::shedule_Update
+~ [profiler] from   5.56%      56  CScriptGameObject::Alive <- luabind::detail::function_object_impl<bool (__cdecl CScriptGameObject::*)(void)const ,luabind::meta::type_list<bool,CScriptGameObject const &>,luabind::meta::type_list<> >::invoke_defer <- luabind::detail::function_object_impl<bool (__cdecl CScriptGameObject::*)(void)const ,luabind::meta::type_list<bool,CScriptGameObject const &>,luabind::meta::type_list<> >::entry_point
+~ [profiler] from   2.88%      29  luabind::detail::invoke_struct<luabind::meta::type_list<>,luabind::meta::type_list<CZoneCampfire *,CScriptGameObject &>,CZoneCampfire * (__cdecl CScriptGameObject::*)(void)>::invoke <- luabind::detail::function_object_impl<CZoneCampfire * (__cdecl CScriptGameObject::*)(void),luabind::meta::type_list<CZoneCampfire *,CScriptGameObject &>,luabind::meta::type_list<> >::invoke_defer <- luabind::detail::function_object_impl<CZoneCampfire * (__cdecl CScriptGameObject::*)(void),luabind::meta::type_list<CZoneCampfire *,CScriptGameObject &>,luabind::meta::type_list<> >::entry_point
+~ [profiler] from   2.78%      28  RELATION_REGISTRY::GetRelationType<CInventoryOwner const *> <- CAI_Stalker::tfGetRelationType <- CEntityAlive::is_relation_enemy
+~ [profiler] from   2.78%      28  luabind::detail::function_object_impl<CSE_ALifeDynamicObject * (__cdecl*)(CALifeSimulator const *,unsigned short),luabind::meta::type_list<CSE_ALifeDynamicObject *,CALifeSimulator const *,unsigned short>,luabind::meta::type_list<> >::call <- luabind::detail::function_object_impl<CSE_ALifeDynamicObject * (__cdecl*)(CALifeSimulator const *,unsigned short,bool),luabind::meta::type_list<CSE_ALifeDynamicObject *,CALifeSimulator const *,unsigned short,bool>,luabind::meta::type_list<> >::call <- luabind::detail::invoke_struct<luabind::meta::type_list<>,luabind::meta::type_list<CSE_ALifeDynamicObject *,CALifeSimulator const *,char const *>,CSE_ALifeDynamicObject * (__cdecl*)(CALifeSimulator const *,char const *)>::invoke
+~ [profiler] from   2.68%      27  CScriptGameObject::GetBestEnemy <- luabind::detail::invoke_struct<luabind::meta::type_list<>,luabind::meta::type_list<CScriptGameObject *,CScriptGameObject &>,CScriptGameObject * (__cdecl CScriptGameObject::*)(void)>::invoke <- luabind::detail::function_object_impl<CScriptGameObject * (__cdecl CScriptGameObject::*)(void),luabind::meta::type_list<CScriptGameObject *,CScriptGameObject &>,luabind::meta::type_list<> >::invoke_defer
+~ [profiler] from   2.48%      25  obstacles_query::remove_links <- stalker_movement_manager_smart_cover::remove_links <- CAI_Stalker::net_Relcase
+~ [profiler] from   2.38%      24  CCustomZone::net_Relcase <- CObjectList::ProcessDestroyQueue <- IGame_Level::OnFrame
+~ [profiler] from   2.38%      24  CScriptGameObject::IsOnBelt <- luabind::detail::invoke_struct<luabind::meta::type_list<>,luabind::meta::type_list<bool,CScriptGameObject const &,CScriptGameObject *>,bool (__cdecl CScriptGameObject::*)(CScriptGameObject *)const >::invoke <- luabind::detail::function_object_impl<bool (__cdecl CScriptGameObject::*)(CScriptGameObject *)const ,luabind::meta::type_list<bool,CScriptGameObject const &,CScriptGameObject *>,luabind::meta::type_list<> >::invoke_defer
+~ [profiler] from   2.18%      22  CScriptGameObject::get_campfire <- luabind::detail::invoke_struct<luabind::meta::type_list<>,luabind::meta::type_list<CZoneCampfire *,CScriptGameObject &>,CZoneCampfire * (__cdecl CScriptGameObject::*)(void)>::invoke <- luabind::detail::function_object_impl<CZoneCampfire * (__cdecl CScriptGameObject::*)(void),luabind::meta::type_list<CZoneCampfire *,CScriptGameObject &>,luabind::meta::type_list<> >::invoke_defer
+~ [profiler] from   2.09%      21  CAI_Stalker::Radius <- CGameObject::spatial_update <- CGameObject::UpdateCL
+~ [profiler] from   1.89%      19  CStalkerAnimationManager::update <- CCustomMonster::UpdatePositionAnimation <- CCustomMonster::UpdateCL
+~ [profiler] from   1.69%      17  luabind::detail::function_object_impl<CALifeSimulator * (__cdecl*)(void),luabind::meta::type_list<CALifeSimulator *>,luabind::meta::type_list<> >::invoke_defer <- luabind::detail::function_object_impl<CALifeSimulator * (__cdecl*)(void),luabind::meta::type_list<CALifeSimulator *>,luabind::meta::type_list<> >::entry_point <- lj_BC_FUNCC
+~ [profiler] callers done
+[LUA]  PROFILE: DONE

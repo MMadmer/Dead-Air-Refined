@@ -67,21 +67,27 @@ public:
 #if RENDER == R_R1
         Fvector c_rgb;
 #endif
-        // Ready-made constant-buffer rows for hw_Render_dump. mRotY/c_hemi/c_sun never change
-        // after slot decompression and scale_calculated changes once per 15-30 frames per slot
-        // (UpdateVisibleM amortisation), yet the dump used to redo 12 multiplies per instance
-        // per frame for ~47k instances. Invalidated where the inputs change, not where drawn.
-        Fvector4 cached_out[4];
-        bool cache_valid = false;
     };
 
     using SlotItemVec = xr_vector<SlotItem*>;
+
+    // The four constant-buffer rows one instance contributes, in upload order: three rows
+    // of a 3x4 transform, then colour.
+    struct InstanceRows
+    {
+        Fvector4 row[4];
+    };
+
+    using InstanceRowVec = xr_vector<InstanceRows>;
 
     struct Slot;
 
     struct VisiblePart
     {
         SlotItemVec* items;
+        // The same instances with their upload bytes already packed. The hardware path
+        // streams these; the software path still walks items.
+        InstanceRowVec* rows;
         // The slot rather than just its bounds: the frustum answer depends only on the
         // slot, and one slot yields a part per object id per wave group.
         Slot* slot;
@@ -92,6 +98,11 @@ public:
         u32 id; // ID модельки
         SlotItemVec items; // список кустиков
         SlotItemVec r_items[3]; // список кустиков for render
+        // Built beside r_items, once per slot refresh. The dump used to dereference a
+        // SlotItem pointer per instance per pass and copy 64 bytes out of the middle of
+        // it - a cache miss per blade, tens of thousands of them per pass. Packed, the
+        // same upload is a memcpy the prefetcher can see coming.
+        InstanceRowVec r_rows[3];
     };
 
     enum SlotType : u32

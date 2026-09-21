@@ -37,6 +37,12 @@ if (-not $SkipDeploy) {
         ForEach-Object { Copy-Item $_.FullName (Join-Path $Rig $_.Name) -Force }
 }
 
+# A stale shot from the last run reads as this run's frame; clear it before the game starts.
+# The engine names its own file (ss_<user>_<date>_(<level>).jpg) and ignores the argument,
+# so the only way to know which one is ours is that no others are left.
+$shots = Join-Path $Rig "appdata\screenshots"
+Get-ChildItem $shots -Filter "*.jpg" -ErrorAction SilentlyContinue | Remove-Item -Force
+
 $parked = @()
 $scriptDir = Join-Path $Rig "gamedata\scripts"
 foreach ($other in (Get-ChildItem $scriptDir -Filter "qa_*.script" -ErrorAction SilentlyContinue)) {
@@ -73,6 +79,14 @@ $lines = Select-String -Path $log -Pattern "\[profiler\]|PROFILE:" | ForEach-Obj
 if (-not $lines) { throw "no profiler output in $log - did the level load?" }
 Set-Content -LiteralPath $dest -Value $lines -Encoding UTF8
 
+$shot = Get-ChildItem $shots -Filter "*.jpg" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime | Select-Object -Last 1
+if ($shot) {
+    $shotDest = Join-Path $resultRoot "$Label.jpg"
+    Copy-Item $shot.FullName $shotDest -Force
+}
+
 Write-Host "== profile $Label =="
 $lines | ForEach-Object { Write-Host "   $_" }
 Write-Host "   -> $dest"
+if ($shot) { Write-Host "   -> $(Join-Path $resultRoot "$Label.jpg")" }

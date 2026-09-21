@@ -421,6 +421,9 @@ void CDetailManager::UpdateVisibleM()
                         sp.r_items[0].clear();
                         sp.r_items[1].clear();
                         sp.r_items[2].clear();
+                        sp.r_rows[0].clear();
+                        sp.r_rows[1].clear();
+                        sp.r_rows[2].clear();
 
                         const float Rq_drcp = m_objectRadiusSquared[sp.id] * dist_sq_rcp;
 
@@ -434,9 +437,6 @@ void CDetailManager::UpdateVisibleM()
                             const float uni = 1.f - (1.f - fade) * (1.f - ps_r__grass_fade_flat);
                             Item.height_calculated = (uni > 1e-4f) ? (fade / uni) : 1.f;
                             const float scale = Item.scale_calculated = Item.scale * uni;
-                            // The only place the dump's constant rows change - drop the cache
-                            // here, not in the (much hotter) draw loop.
-                            Item.cache_valid = false;
                             const float ssa = scale * scale * Rq_drcp;
                             if (ssa < r_ssaDISCARD)
                             {
@@ -447,6 +447,20 @@ void CDetailManager::UpdateVisibleM()
                                 vis_id = Item.vis_ID;
 
                             sp.r_items[vis_id].push_back(siIT);
+
+                            // The bytes the hardware dump uploads, built where their inputs
+                            // change instead of in the draw loop. Height is scaled SEPARATELY:
+                            // the local-height contribution is the second element of each row,
+                            // so scaling just those lays the blade flat without touching its
+                            // ground footprint (r__grass_fade_flat).
+                            const float hs = scale * Item.height_calculated;
+                            const Fmatrix& M = Item.mRotY;
+                            InstanceRows& rows = sp.r_rows[vis_id].emplace_back();
+                            rows.row[0].set(M._11 * scale, M._21 * hs, M._31 * scale, M._41);
+                            rows.row[1].set(M._12 * scale, M._22 * hs, M._32 * scale, M._42);
+                            rows.row[2].set(M._13 * scale, M._23 * hs, M._33 * scale, M._43);
+                            // R2 only needs hemisphere
+                            rows.row[3].set(Item.c_sun, Item.c_sun, Item.c_sun, Item.c_hemi);
 
                             // 2 visible[vis_id][sp.id].push_back(&Item);
                         }
@@ -462,21 +476,21 @@ void CDetailManager::UpdateVisibleM()
                         auto& visibleItems = m_visibles[0][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[0].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[0], &S});
+                        visibleItems.push_back({&sp.r_items[0], &sp.r_rows[0], &S});
                     }
                     if (!sp.r_items[1].empty())
                     {
                         auto& visibleItems = m_visibles[1][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[1].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[1], &S});
+                        visibleItems.push_back({&sp.r_items[1], &sp.r_rows[1], &S});
                     }
                     if (!sp.r_items[2].empty())
                     {
                         auto& visibleItems = m_visibles[2][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[2].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[2], &S});
+                        visibleItems.push_back({&sp.r_items[2], &sp.r_rows[2], &S});
                     }
                 }
             }

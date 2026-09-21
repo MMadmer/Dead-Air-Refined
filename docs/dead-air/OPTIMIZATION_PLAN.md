@@ -359,8 +359,12 @@ Two more things the profiler settled, and one it closed off.
    path. Honest accounting: those two sites are about a tenth of the 2.6%, so roughly 0.25% of the
    thread - below what this rig can measure. They ship because they are strictly less work with
    identical results, not because a number moved. The other two thirds of the RTTI cost is a long
-   tail of sites at 0.1-0.3% each, including a whole class where `smart_cast<const T*>` misses a
-   specialisation declared for `T`; that is its own audit.
+   tail of sites at 0.1-0.3% each, each a type pair that has no `DECLARE_SPECIALIZATION` and so
+   reaches the `dynamic_cast` fallback at the bottom of `smart_cast_impl1.h`.
+   (An earlier note here guessed that `smart_cast<const T*>` misses a specialisation declared for
+   `T`. That guess was wrong and is corrected rather than quietly deleted: `smart_cast` strips
+   const with `std::remove_const_t` and forwards to the non-const path, so a const cast is as fast
+   as its non-const twin. Checking beat assuming.)
 4. **A dense side table for the detail visibility answers** - stamp plus result in one `u32` per
    slot of `cache_pool`, replacing the stamp that lived inside the `Slot` - **bought nothing**
    (7.30% against the 7.01-7.55% band the slot version already measured). The remaining cost is
@@ -406,3 +410,52 @@ renderer ~15%, Lua and LuaJIT ~11% self (19.6% inclusive through `pcall`), drive
 collision and spatial ~2.7%. The remaining renderer cost is spread across `R_dsgraph_structure`'s
 recursive static walk (~2%) and the backend's state changes (~4%), with no single redundancy left
 of the kind the last three passes removed.
+
+### Stage 7, fourth pass - the grass upload, and a frame rate to argue with
+
+Every number above is a share of the game thread. A share can fall because the work got cheaper
+or because something else got dearer, so this pass added the one measurement that cannot be read
+two ways: `qa_profile.lua` now counts frames across the sampling window and prints the average
+frame rate, and takes a screenshot at the end so "the renderer got cheaper" can be checked against
+what it drew. Same save, same 30 seconds, same rig, uncapped (`rs_fps_limit 0`, `rs_v_sync off`).
+
+7. **The dump chased a pointer per blade to copy 64 bytes out of the middle of a struct.**
+   `hw_Render_dump` walked `SlotItemVec` - a vector of `SlotItem*` - and copied each instance's
+   four cached constant rows into the mapped buffer. The pointers are in draw order; the
+   `SlotItem`s they point at are scattered across the slot pool, so every instance was a cache
+   miss, tens of thousands of them per pass, three passes plus the shadow cascades. The rows are
+   now built where their inputs change (`UpdateVisibleM`, once per slot per 15-30 frames) into a
+   packed `InstanceRows` array beside `r_items`, and the draw loop is a `memcpy` of batch-sized
+   runs. `cached_out`/`cache_valid` leave `SlotItem` entirely, which also removes a branch per
+   instance per pass. **66.83 -> 69.40 FPS (+3.8%)**; `hw_Render_dump` self 15.16% -> 7.85% with
+   the copy moving into `memcpy`, `CDetailManager::Render` inclusive 21.34% -> 18.72%.
+8. **The instance array shared a constant buffer with everything else the pass sets.**
+   `dx11ConstantBuffer::Flush` re-uploads the WHOLE buffer on every flush - `D3D_MAP_WRITE_DISCARD`
+   leaves anything not written undefined, so a partial upload is not an option. With `array` in
+   `$Globals`, every batch of 61 instances re-uploaded the seven per-pass constants and the header
+   with it. `array` now lives in its own `cbuffer DetailInstances`, so the per-batch flush carries
+   instance data and nothing else, and `$Globals` flushes only when one of its constants actually
+   changes. **69.40 -> 70.40 FPS.**
+9. **`AccessDirect` hands out raw bytes, so `Flush` cannot know whether they changed.** It used to
+   find out with a `memcmp` of the dirty range against the committed copy on every flush - for the
+   detail dump, comparing one batch of instances against the previous, unrelated one. The buffer
+   now marks itself known-different where the pointer is handed out. This is the only caller of
+   `AccessDirect` in the engine.
+10. **A detail shader whose instance array is smaller than the batch used to write through a null
+    pointer.** `AccessDirect` returns null when the request runs past the array; release built
+    `VERIFY` out and wrote anyway. It now skips the pass. A mod shipping its own detail shader is
+    a real case, and this is what it would have hit.
+
+**Tried, measured, rejected (again).** The 61-instance batch comes from the DX9 vertex register
+file - 256 registers, four per instance, minus a ten-register header - and has nothing to do with
+DX11, where the only bound is the shader's own array. A larger array was the obvious next step:
+fewer draw calls, fewer flushes. It is slower, monotonically. **61 -> 70.40, 256 -> 68.55,
+512 -> 67.14 FPS.** The reason is the full-buffer upload in point 8: a batch of 512 pays for 512
+instances' worth of bytes whether or not the slot group has 512 blades in it, and the groups are
+nearer 90. The draw calls the bigger batch saves are cheaper than the bytes it wastes. The engine
+keeps `hw_BatchSize`, the probe ladder that went with the experiment is gone, and this paragraph
+is here so the next person does not spend the afternoon finding it out again.
+
+**Where the frame stands after this pass:** 66.83 -> ~70 FPS on `l01_escape`, **+4.6%**, from four
+changes in two files and two shaders. The screenshot next to each profile
+(`tools/qa/optimization/profiles/<label>.jpg`) is how the claim is checked, not how it is made.

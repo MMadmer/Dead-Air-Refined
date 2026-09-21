@@ -143,6 +143,11 @@ IC void* dx11ConstantBuffer::AccessDirect(R_constant_load& L, size_t DataSize)
 
     if ((size_t)L.index + DataSize <= m_uiBufferSize)
     {
+        // The caller is handed the raw bytes and writes whatever it likes into them, so
+        // Flush cannot know whether the range still matches what was committed. It used to
+        // find out with a memcmp of the whole range on every flush - for the detail dump,
+        // a compare of a batch of instances against the previous, unrelated batch.
+        m_knownDifferent = true;
         MarkDirty(L.index, DataSize);
         return res;
     }

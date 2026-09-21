@@ -13,11 +13,15 @@ uniform float4 		grass_sfade_eye;
 uniform float4 		grass_tint;
 uniform float4 		wave; 	// cx,cy,cz,tm
 uniform float4 		dir2D;
-//uniform float4 		array	[200] : register(c12);
-//tbuffer DetailsData
-//{
+// The instance array lives in its OWN constant buffer: it is rewritten per draw call, while
+// everything above it changes once per pass, and a shared buffer makes every batch flush
+// re-upload both. 512 instances is what the engine's batch ladder probes for first - it is
+// eight draw calls' worth of the old 61-instance limit, which came from the DX9 vertex
+// register file and has nothing to do with this hardware.
+cbuffer DetailInstances
+{
 	uniform float4 		array[61*4];
-//}
+};
 
 v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 {
