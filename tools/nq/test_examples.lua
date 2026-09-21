@@ -3162,6 +3162,107 @@ do
 end
 end)()
 
+-- ============================================================================ (z18) spawn.npc
+;(function()
+-- One node, a list of NPCs: each row a CHARACTER of the module (the editor's asset)
+-- or a spawn section, each with a ref of its own, and `unique` - on by default for a
+-- character, asked for explicitly for a section - that takes every NPC of the same
+-- kind out of the world first.
+local UID = "mod_b.npc_spawner"
+
+local function count_section(section)
+	local n = 0
+	for _, se in pairs(mock.se) do
+		if (se._section == section) then n = n + 1 end
+	end
+	return n
+end
+
+local function ref_id(name)
+	local qs = xms_nq.quest_state(UID)
+	local r = qs and qs.refs and qs.refs[name]
+	return r and r.id or nil
+end
+
+section("(z18) a row names a character of the module, and the engine gets its section")
+setup()
+mock.first_update()
+xms_nq_console.exec("activate " .. UID)
+mock.ticks(1)
+do
+	check(xms_nq.quests()[UID] ~= nil, "the quest loads: a ref a row creates counts as created (no E030)")
+	check(count_section("mod_b_valera") == 1, "character = \"valera\" became the section <module>_<id> (" .. count_section("mod_b_valera") .. ")")
+	check(count_section("sim_default_stalker_1") == 1, "and a row with a plain section spawned that section")
+	local v, g = ref_id("valera"), ref_id("guard")
+	check(v ~= nil and mock.se[v] and mock.se[v]._section == "mod_b_valera", "each row kept its own ref: valera")
+	check(g ~= nil and mock.se[g] and mock.se[g]._section == "sim_default_stalker_1", "and guard")
+	check(v ~= g, "two rows, two NPCs")
+end
+
+section("(z18) unique is on by default: a second Valera replaces the first")
+do
+	local first = ref_id("valera")
+	xms_nq.emit({ name = "signal", signal = "qa_spawn_again", module = "mod_b", quest = UID })
+	mock.ticks(2)
+	check(count_section("mod_b_valera") == 1, "there is still exactly one in the world (" .. count_section("mod_b_valera") .. ")")
+	local second = ref_id("valera_two")
+	check(second ~= nil and second ~= first, "and it is the new one")
+	check(mock.se[first] == nil, "the first was taken out")
+	check(ref_id("valera") == nil, "and the ref that named it names nothing now - no dead id left behind")
+	check(count_section("sim_default_stalker_1") == 1, "an NPC of another kind was not touched")
+end
+
+section("(z18) unique = false keeps them all, and the rows do not remove each other")
+do
+	xms_nq.emit({ name = "signal", signal = "qa_spawn_twin", module = "mod_b", quest = UID })
+	mock.ticks(2)
+	check(count_section("mod_b_valera") == 3, "one that was there plus two on purpose (" .. count_section("mod_b_valera") .. ")")
+	local a, b = ref_id("twin_a"), ref_id("twin_b")
+	check(a ~= nil and b ~= nil and a ~= b, "each twin has a ref of its own")
+	local pa, pb = a and mock.se[a] and mock.se[a].position, b and mock.se[b] and mock.se[b].position
+	check(pa and pb and (pa.x ~= pb.x or pa.z ~= pb.z), "and they were not created standing inside one another")
+	check(ref_id("guard") == nil and count_section("sim_default_stalker_1") == 0, "a ref a row made is removable like any other")
+end
+
+section("(z18) a section is a kind: nobody of it is removed unless the row asks")
+do
+	xms_nq.emit({ name = "signal", signal = "qa_spawn_kind", module = "mod_b", quest = UID })
+	mock.ticks(2)
+	check(count_section("sim_default_stalker_2") == 2, "two spawns of one section, unique not written: both stay (" .. count_section("sim_default_stalker_2") .. ")")
+	check(ref_id("kind_a") ~= nil and ref_id("kind_b") ~= nil, "and both refs still name somebody")
+	xms_nq.emit({ name = "signal", signal = "qa_spawn_purge", module = "mod_b", quest = UID })
+	mock.ticks(2)
+	check(count_section("sim_default_stalker_2") == 1, "unique = true on a section row clears the kind first (" .. count_section("sim_default_stalker_2") .. ")")
+	check(ref_id("kind_c") ~= nil and ref_id("kind_a") == nil and ref_id("kind_b") == nil, "only the new one is left, and only its ref")
+	check(count_section("mod_b_valera") == 3, "the characters were none of its business")
+end
+
+section("(z18) a row that names both, or neither, is refused")
+do
+	local function load(rows)
+		return xms_nq_load.load_asset("mod_b", "rows.nqasset",
+			'return { nq = 1, id = "rows", title = "x", nodes = { { id = "s", kind = "trigger.start", on_enter = { { kind = "spawn.npc", params = { place = { smart = "a" }, npcs = ' .. rows .. ' } } } } } }',
+			"quest")
+	end
+	check(load('{ { character = "valera" } }').valid, "a character alone is a row")
+	check(load('{ { section = "stalker" } }').valid, "a section alone is a row")
+	check(not load('{ { character = "valera", section = "stalker" } }').valid, "both at once is not")
+	check(not load('{ { ref = "nobody" } }').valid, "neither is not")
+	check(not load('{ { character = "valera", uniqe = true } }').valid, "a misspelt key is an error, not a silent no-op")
+	check(not load('{ }').valid, "an empty list spawns nobody and says so")
+end
+
+section("(z18) a character of another module is reached by <module>.<id>")
+do
+	local impl = xms_nq.kind_impl("spawn.npc")
+	local before = count_section("other.mod_boss")
+	local ok, e = pcall(impl.run, xms_nq.make_ctx(UID, "start"),
+		{ place = { smart = "esc_smart_terrain_2_12" }, npcs = { { character = "other.mod.boss", unique = false } } })
+	check(ok, "it runs (" .. tostring(e) .. ")")
+	check(count_section("other.mod_boss") == before + 1, "and the section is <other module>_<id>, dots of the module id and all")
+end
+end)()
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

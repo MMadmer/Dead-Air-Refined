@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 16
+version = 17
 api     = 1
 
 ; ============================================================ triggers
@@ -586,6 +586,25 @@ dead    = bool, default=false
 ref     = ref_name
 impl   = core
 since  = 1
+
+[nq.spawn.npc]
+group  = spawn
+title  = Spawn NPCs
+desc   = Creates one NPC per row at a place. A row names a character of this module or a spawn section, ref saves that NPC. unique first removes every NPC of that kind - on by default for a character.
+use    = extra
+params  = npcs, place, spread
+npcs    = npc_list, required
+place   = place, required
+spread  = float, default=1.5, min=0, max=30
+rows    = character, section, ref, unique, dead, yaw
+row.character = character_id
+row.section   = spawn_section
+row.ref       = ref_name
+row.unique    = bool
+row.dead      = bool, default=false
+row.yaw       = float, default=0, min=-360, max=360
+impl   = core
+since  = 17
 
 [nq.squad.move]
 group  = squad

@@ -549,7 +549,9 @@ K["behaviour.run"] = {
 		local p = ctx.params
 		local scen_uid = tostring(p.asset)
 		if not (string.find(scen_uid, ".", 1, true)) then
-			scen_uid = tostring(ctx.uid):match("^(.-)%.") .. "." .. scen_uid
+			-- the module comes from the definition: a module id may carry dots of its own
+			local mod = (ctx.def and ctx.def.module) or tostring(ctx.uid):match("^(.-)%.")
+			scen_uid = tostring(mod) .. "." .. scen_uid
 		end
 		local scen = core.behaviour_def(scen_uid)
 		if not (scen) then

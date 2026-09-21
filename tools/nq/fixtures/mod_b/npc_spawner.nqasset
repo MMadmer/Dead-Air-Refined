@@ -1,0 +1,105 @@
+-- Headless fixture: spawn.npc. A row names a CHARACTER of the module (the
+-- editor's asset) or a plain spawn section, keeps a ref of its own, and `unique`
+-- takes every NPC of the same kind out of the world first - on by default for a
+-- character, asked for explicitly for a section. The test walks it one signal at a time.
+return {
+  nq         = 1,
+  id         = "npc_spawner",
+  title      = "QA NPC spawner",
+  activation = "manual",
+  nodes = {
+    {
+      id       = "start",
+      kind     = "trigger.start",
+      on_enter = {
+        { kind = "spawn.npc", params = {
+            place = { smart = "esc_smart_terrain_2_12" },
+            npcs  = {
+              { character = "valera", ref = "valera" },
+              { section = "sim_default_stalker_1", ref = "guard", unique = false },
+            },
+        } },
+      },
+      out      = { next = "wait_again" },
+    },
+    {
+      id   = "wait_again",
+      kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "qa_spawn_again" } } },
+      out  = { done = "again" },
+    },
+    {
+      id       = "again",
+      kind     = "flow.step",
+      on_enter = {
+        -- unique is on by default: the first Valera goes before this one comes
+        { kind = "spawn.npc", params = {
+            place = { smart = "esc_smart_terrain_2_12" },
+            npcs  = { { character = "valera", ref = "valera_two" } },
+        } },
+      },
+      out      = { next = "wait_twin" },
+    },
+    {
+      id   = "wait_twin",
+      kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "qa_spawn_twin" } } },
+      out  = { done = "twin" },
+    },
+    {
+      id       = "twin",
+      kind     = "flow.step",
+      on_enter = {
+        -- two on purpose: both rows keep the one that is there, and each other
+        { kind = "spawn.npc", params = {
+            place  = { smart = "esc_smart_terrain_2_12" },
+            spread = 3,
+            npcs   = {
+              { character = "valera", ref = "twin_a", unique = false },
+              { character = "valera", ref = "twin_b", unique = false, dead = true },
+            },
+        } },
+        { kind = "object.remove", params = { target = { ref = "guard" } } },
+      },
+      out      = { next = "wait_kind" },
+    },
+    {
+      id   = "wait_kind",
+      kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "qa_spawn_kind" } } },
+      out  = { done = "kind" },
+    },
+    {
+      id       = "kind",
+      kind     = "flow.step",
+      on_enter = {
+        -- a section is a kind, not a person: nobody of it is removed unless asked
+        { kind = "spawn.npc", params = {
+            place = { smart = "esc_smart_terrain_2_12" },
+            npcs  = { { section = "sim_default_stalker_2", ref = "kind_a" } },
+        } },
+        { kind = "spawn.npc", params = {
+            place = { smart = "esc_smart_terrain_2_12" },
+            npcs  = { { section = "sim_default_stalker_2", ref = "kind_b" } },
+        } },
+      },
+      out      = { next = "wait_purge" },
+    },
+    {
+      id   = "wait_purge",
+      kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "qa_spawn_purge" } } },
+      out  = { done = "purge" },
+    },
+    {
+      id       = "purge",
+      kind     = "flow.step",
+      on_enter = {
+        { kind = "spawn.npc", params = {
+            place = { smart = "esc_smart_terrain_2_12" },
+            npcs  = { { section = "sim_default_stalker_2", ref = "kind_c", unique = true } },
+        } },
+      },
+    },
+  },
+}

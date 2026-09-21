@@ -461,6 +461,30 @@ local function valid_place(v)
 	return false
 end
 
+-- The rows of spawn.npc: who to create. A row names a CHARACTER of the module (the
+-- editor's .npcasset, by its id - "other.module.id" reaches into another module) or
+-- a spawn section, never both; ref saves that NPC, unique / dead / yaw are its own.
+local NPC_ROW_KEYS = { character = true, section = true, ref = true, unique = true, dead = true, yaw = true }
+
+local function valid_npc_list(v)
+	if (type(v) ~= "table" or #v == 0) then return false, "must be a non-empty list of rows" end
+	for i, e in ipairs(v) do
+		if (type(e) ~= "table") then return false, "row " .. i .. " must be a table" end
+		-- a key nobody reads is a typo that would silently do nothing
+		for k in pairs(e) do
+			if not (NPC_ROW_KEYS[k]) then return false, "row " .. i .. ": unknown key '" .. tostring(k) .. "'" end
+		end
+		local has_char = type(e.character) == "string" and e.character ~= ""
+		local has_sect = type(e.section) == "string" and e.section ~= ""
+		if (has_char == has_sect) then return false, "row " .. i .. " names a character OR a section - exactly one" end
+		if (e.ref ~= nil and (type(e.ref) ~= "string" or not is_ident(e.ref))) then return false, "row " .. i .. ": ref must be a name [a-z0-9_]" end
+		if (e.unique ~= nil and type(e.unique) ~= "boolean") then return false, "row " .. i .. ": unique must be true or false" end
+		if (e.dead ~= nil and type(e.dead) ~= "boolean") then return false, "row " .. i .. ": dead must be true or false" end
+		if (e.yaw ~= nil and type(e.yaw) ~= "number") then return false, "row " .. i .. ": yaw must be a number" end
+	end
+	return true
+end
+
 -- Where a behaviour step sends people: everything a place is, plus a waypoint
 -- path (the best destination - the walker gets a route, not just a point), an
 -- object by story id, and a role (wherever its first living member stands).
@@ -614,6 +638,10 @@ local function canon_param(st, node, slot, p, v, kind)
 		return util.copy(v), true
 	elseif (t == "place") then
 		if not (valid_place(v)) then return nil, false, "must be {level=, pos={x,y,z}, radius=} | {restrictor=} | {smart=} | {ref=}" end
+		return util.copy(v), true
+	elseif (t == "npc_list") then
+		local ok, why = valid_npc_list(v)
+		if not (ok) then return nil, false, why end
 		return util.copy(v), true
 	elseif (t == "destination") then
 		if not (valid_destination(v)) then return nil, false, "must be {path=} | {ref=} | {story=} | {role=} | {smart=} | {restrictor=} | {level=, pos={x,y,z}} | {actor=true, distance=}" end
@@ -1003,6 +1031,11 @@ local function scan_refs(st, node, spec, params, tasks_hint)
 				st.ref_creators[v] = true
 			elseif (p.type == "spawn_spec" and type(v) == "table" and type(v.ref) == "string") then
 				st.ref_creators[v.ref] = true
+			elseif (p.type == "npc_list" and type(v) == "table") then
+				-- every row of spawn.npc may save the NPC it creates under a ref of its own
+				for _, row in ipairs(v) do
+					if (type(row) == "table" and type(row.ref) == "string") then st.ref_creators[row.ref] = true end
+				end
 			elseif (p.type == "kill_target" and type(v) == "table") then
 				if (v.spawn and type(v.spawn.ref) == "string") then st.ref_creators[v.spawn.ref] = true end
 				if (type(v.ref) == "string") then st.ref_users[#st.ref_users + 1] = { name = v.ref, node = node, slot = "param:" .. p.name } end
