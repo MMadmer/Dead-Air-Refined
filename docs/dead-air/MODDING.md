@@ -594,6 +594,37 @@ broken firing parts); the x86 0.98b build used 0.03 / 0.05 / 0.15 for the lesser
 difference is a 1.0 decision, not a porting defect, and durability never fed the misfire
 chance in either build: misfires come from the fault bits and the ammo's `misfire_chance`.
 
+## The quality preset owns the quality settings
+
+There is one control for how the game looks at a given cost: the preset list on the basic video
+page. The advanced page next to it carries taste - grass height, sun shaft strength, sharpen,
+bloom, chromatic aberration, depth of field, FXAA, technicolor, grain, lens dirt - and nothing
+that a preset also writes. A row for a value the preset owns is a second control for one value,
+and the player who moves it finds it moved back.
+
+What follows from that, for anyone shipping a preset file or a menu page of their own:
+
+- `rspec_minimum|low|default|high|extreme.ltx` is replayed in full every time the renderer comes
+  up (`xrRender_apply_preset()`), not only when a preset is chosen. `user.ltx` executes before
+  that and still carries preset-owned values from its own last save - below the `_preset` line
+  that would have set them - so the file has to lose to the preset. The values it saves are
+  corrected on the way out, so a `user.ltx` written by an older build heals itself after one run.
+  A session override still works: the console command applies until the next start, as always.
+- `xrRender_sync_preset_derived()` runs right after the file and has the last word on everything
+  it names, so a preset file that carries a value from both worlds does not fight it. Five of
+  those switches (shadow map size, AO technique, grass density and radius, visor droplets) used
+  to be held back on renderer start because the menu also showed them; the menu does not any
+  more, and they follow the preset like the rest.
+- `appdata\qa_autoexec.ltx`, the measurement hook, still executes last of all.
+- Every node of the advanced page is still in `ui_mm_opt.xml` and `ui_mm_opt_16.xml`, including
+  the ones the page no longer builds. An addon that ships its own `ui_mm_opt_video_adv.script`
+  gets exactly the page that script asks for.
+- `ui_mm_opt_main.script` belongs to the game, not to Refined, and it reaches into the advanced
+  page for three controls by name (`texture_lod_track`, `tab_ao_opt`, `combo_ssao`). The page
+  still builds those three - hidden children of the page rather than rows on the list - so the
+  stock script and every addon copy of it keep working. They read and write their console values
+  as before, which costs nothing: the options manager writes back only what the player changed.
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

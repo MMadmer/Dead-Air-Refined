@@ -378,8 +378,11 @@ enum
 
 extern void xrRender_initconsole();
 // Re-derive the preset-driven switches (shadow budget, light details, hud/actor shadow)
-// from ps_Preset. Called by CCC_Preset and on renderer creation, so the preset stays the
-// single source of truth for values that never serialize into user.ltx.
-extern void xrRender_sync_preset_derived(bool user_facing);
+// from ps_Preset, for values that never serialize into user.ltx.
+extern void xrRender_sync_preset_derived();
+// Replay the whole quality preset: its rspec file, then the switches above. The advanced video
+// page shows nothing the preset owns, so nothing else can be the source of those values - and a
+// user.ltx line left over from a build whose menu did show them has to lose to the preset.
+extern void xrRender_apply_preset();
 extern BOOL xrRender_test_hw();
 } // namespace xray::render::RENDER_NAMESPACE

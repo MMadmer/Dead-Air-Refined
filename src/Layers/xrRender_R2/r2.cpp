@@ -571,9 +571,10 @@ void CRender::create()
 
     Device.seqFrame.Add(this, REG_PRIORITY_HIGH + 0x12345678);
 
-    // The preset-derived switches never persist in user.ltx; re-derive them from the
-    // replayed preset so a value lost mid-session cannot survive into the next one.
-    xrRender_sync_preset_derived(false);
+    // user.ltx runs before this and carries preset-owned values from its own last save, below
+    // the `_preset` line that would have set them. Replaying the preset here is what makes the
+    // quality tier the one place those values come from.
+    xrRender_apply_preset();
 
     m_skinning = -1;
     m_MSAASample = -1;

@@ -1,0 +1,79 @@
+-- Options menu probe for a QA clone: builds the real options dialog - the stock
+-- ui_mm_opt_main.script out of the game archives on top of whichever video pages the
+-- installation has - and walks every path that touches the advanced video page.
+--
+-- Copy it into the clone's gamedata\scripts for the run and remove it afterwards. The dialog is
+-- kept in a global on purpose: a collected CUIScriptWnd takes its controls with it while the
+-- options manager still holds them.
+--
+-- Phase two writes the video groups back the way Accept does and brackets that with two
+-- cfg_save files. Everything the options page touches is in them, so the runner can diff the
+-- pair instead of naming the commands one by one: a row that was dropped from the page must not
+-- change, and a row that is only hidden must round-trip its value untouched.
+
+local started = false
+
+-- The engine's printf formats %s only, and the log is buffered until a flush.
+local function say(text)
+	printf("[OPTIONS_QA] %s", text)
+	get_console():execute("flush")
+end
+
+local function probe()
+	_G.qa_options_dialog = ui_mm_opt_main.options_dialog()
+	local dlg = _G.qa_options_dialog
+
+	-- What the main menu does before it shows the dialog: every group is read from the console,
+	-- then UpdateDependControls() fills the scroll list for the current renderer.
+	dlg:SetCurrentValues()
+
+	local renderer = dlg.combo_renderer:CurrentID()
+	local shown = 0
+	for _, row in pairs(dlg.m_preconditions) do
+		if row.func(renderer) then
+			shown = shown + 1
+		end
+	end
+	say("renderer_id=" .. tostring(renderer) .. " rows=" .. tostring(#dlg.m_preconditions) ..
+		" shown=" .. tostring(shown))
+
+	-- The three controls the stock main script calls by name on every refresh. A page that
+	-- dropped them would die here, which is the whole reason they still exist.
+	say("texture_lod=" .. type(dlg.texture_lod_track) .. " ao_tab=" .. type(dlg.tab_ao_opt) ..
+		" ssao=" .. type(dlg.combo_ssao) .. " ao_id=" .. tostring(dlg.tab_ao_opt:GetActiveId()))
+
+	-- A preset change refreshes the page, a renderer change rebuilds the list, and the AO
+	-- callback runs on both.
+	dlg:OnPresetChanged()
+	dlg:UpdateDependControls()
+	dlg:OnAOOptionChange()
+
+	-- Both buttons of the video tab, so the pages are shown and hidden for real.
+	dlg:OnBtnAdvGraphic()
+	dlg:OnSimplyGraphic()
+	say("refresh and page switch passed")
+
+	-- The write half of Accept, without the vid restart and the message box that follow it.
+	local opt = COptionsManager()
+	get_console():execute("cfg_save qa_options_before")
+	opt:SaveValues("mm_opt_video")
+	opt:SaveValues("mm_opt_video_adv")
+	get_console():execute("cfg_save qa_options_after")
+	say("values written")
+end
+
+local function start()
+	if started then
+		return
+	end
+	started = true
+
+	local ok, err = pcall(probe)
+	say(ok and "done" or ("FAILED " .. tostring(err)))
+	get_console():execute("quit")
+end
+
+function on_game_start()
+	started = false
+	RegisterScriptCallback("actor_on_first_update", start)
+end

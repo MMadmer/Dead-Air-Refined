@@ -46,6 +46,16 @@ function mode_4(render_id)
 	return render_id==5
 end
 
+-- A row that the quality preset also writes is a second control for one value, and the next
+-- start of the renderer silently undoes whatever it was set to. So this page carries taste
+-- only, and everything the preset decides - draw distance, geometry and texture detail,
+-- anisotropy, MSAA, grass density and radius, sun and grass shadows, shadow map size and
+-- quality, light and particle distance, ambient occlusion, detail bump, parallax, sun shafts,
+-- soft water and particles, volumetric light and smoke, wet surfaces, visor drops,
+-- tessellation, NPC torches - is the preset list on the basic page and nothing else.
+--
+-- Their console commands are untouched, and so is every node in ui_mm_opt*.xml: an addon that
+-- ships the stock copy of this script still finds all of them and gets the stock page.
 function opt_video_adv:InitControls(x, y, xml, handler)
 	local ctl
     local _st
@@ -57,123 +67,43 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	self.scroll_v = xml:InitScrollView("video_adv:scroll_v", self)
     handler.scroll_v = self.scroll_v
 
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_vis_dist", _st)
-	xml:InitTrackBar("video_adv:track_vis_dist", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
+	-- Three controls the preset owns, which ui_mm_opt_main.script - not ours, and shipped by
+	-- addons in their own copies - calls by name on every refresh of the page. They are built
+	-- as usual, so they still read and write their console values, and live as hidden children
+	-- of this page: off the scroll list, never drawn, and owned by something (a row with no
+	-- parent at all is what the stock page leaks for every precondition that never matches).
+	local function preset_owned(cap, init)
+		local row = xml:InitStatic("video_adv:templ_item", self)
+		xml:InitStatic(cap, row)
+		local control = init(row)
+		row:Show(false)
+		return control
+	end
 
-	_st	= xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_geometry_lod", _st)
-	xml:InitTrackBar("video_adv:track_geometry_lod", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
+	handler.texture_lod_track = preset_owned("video_adv:cap_texture_lod", function(row)
+		return xml:InitTrackBar("video_adv:track_texture_lod", row)
+	end)
 
-	_st	= xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_texture_lod",	_st)
-	ctl = xml:InitTrackBar("video_adv:track_texture_lod", _st)
-	handler.texture_lod_track = ctl
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
+	handler.tab_ao_opt = preset_owned("video_adv:cap_ao", function(row)
+		return xml:InitTab("video_adv:radio_tab_ao_options", row)
+	end)
+	handler:Register(handler.tab_ao_opt, "tab_ao_opt")
 
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_aniso", _st)
-	xml:InitTrackBar("video_adv:track_aniso", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
+	handler.combo_ssao = preset_owned("video_adv:cap_ssao", function(row)
+		return xml:InitComboBox("video_adv:combo_ssao", row)
+	end)
 
-	--[[
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_ssample", _st)
-	ctl = xml:InitTrackBar("video_adv:track_ssample", _st)
-	table.insert(handler.m_preconditions, {func=mode_less_3, control=_st})
-	--]]
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_ssample", _st)
-	ctl = xml:InitComboBox("video_adv:combo_ssample", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_3, control=_st})
-	-- Sorry has to be done. Many people max video settings without thinking. Adv user will know how to change this via console
-		-- Sorry, Alundaio, not anymore
-	
-	---[[
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_detail_density", _st)
-	xml:InitTrackBar("video_adv:track_detail_density", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
-	
-	_st	= xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_detail_radius", _st)
-	xml:InitTrackBar("video_adv:track_detail_radius", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
-	
 	_st	= xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_detail_height", _st)
 	xml:InitTrackBar("video_adv:track_detail_height", _st)
 	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
 
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_sun", _st)
-	ctl = xml:InitCheck("video_adv:check_r2_sun", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2, control=_st})
-	
-	-- Shadows from grass are finaly back! Thanks to LostAlphaRus
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_sun_details", _st)
-	ctl = xml:InitCheck("video_adv:check_r2_sun_details", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_light_distance", _st)
-	ctl = xml:InitTrackBar("video_adv:track_light_distance", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_particles_distance", _st)
-	ctl = xml:InitTrackBar("video_adv:track_particles_distance", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_shadow_map", _st)
-	ctl = xml:InitComboBox("video_adv:combo_shadow_map", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_npc_torch", _st)
-	xml:InitCheck("video_adv:check_npc_torch", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
-
--- r1_detail_textures	r1 only
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r1_detail_textures", _st)
-	ctl = xml:InitCheck("video_adv:check_r1_detail_textures", _st)
-	table.insert(handler.m_preconditions, {func=mode_1, control=_st})
-
--- r2_detail_bump			=>r2
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_detail_bump", _st)
-	ctl = xml:InitCheck("video_adv:check_r2_detail_bump", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2, control=_st})
-
--- r2_steep_parallax		>r2
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_steep_parallax", _st)
-	ctl = xml:InitCheck("video_adv:check_r2_steep_parallax", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_sun_quality", _st)
-	ctl = xml:InitComboBox("video_adv:list_r2_sun_quality", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-	
 	-- those shiny ajustable sunshafts were also made by LostAlphaRus
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_sun_shafts", _st)
-	ctl = xml:InitComboBox("video_adv:combo_sun_shafts", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-	
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_r2_ss_shafts", _st)
 	ctl = xml:InitCheck("video_adv:check_r2_ss_shafts", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-	
+
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_r2_sun_shafts_value", _st)
 	xml:InitTrackBar("video_adv:track_r2_sun_shafts_value", _st)
@@ -183,7 +113,7 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	xml:InitStatic("video_adv:cap_sharp", _st)
 	xml:InitTrackBar("video_adv:track_sharp", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-	
+
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_bloom", _st)
 	xml:InitTrackBar("video_adv:track_bloom", _st)
@@ -194,47 +124,11 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	xml:InitTrackBar("video_adv:track_aberration", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
 
-	--[[
-	_st	= xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_gloss_factor", _st)
-	xml:InitTrackBar("video_adv:track_r2_gloss_factor", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-	--]]
-	
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	_st:SetWndSize(vector2():set(_st:GetWidth(), 131))
-	xml:InitStatic("video_adv:cap_ao", _st)
-	ctl = xml:InitTab("video_adv:radio_tab_ao_options", _st)
-	handler.tab_ao_opt = ctl
-	handler:Register(ctl, "tab_ao_opt")
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_ssao", _st)
-	ctl = xml:InitComboBox("video_adv:combo_ssao", _st)
-	handler.combo_ssao = ctl
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_soft_water", _st)
-	ctl = xml:InitCheck("video_adv:check_soft_water", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_soft_particles", _st)
-	ctl = xml:InitCheck("video_adv:check_soft_particles", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_dof", _st)
 	ctl = xml:InitCheck("video_adv:check_dof", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-	
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_volumetric_light", _st)
-	ctl = xml:InitCheck("video_adv:check_volumetric_light", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-	
+
 	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_fxaa", _st)
 	xml:InitCheck("video_adv:check_fxaa", _st)
@@ -251,39 +145,9 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
 
 	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_lenswater", _st)
-	xml:InitCheck("video_adv:check_lenswater", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-	
-	_st = xml:InitStatic("video_adv:templ_item", nil)
 	xml:InitStatic("video_adv:cap_lensdirt", _st)
 	xml:InitCheck("video_adv:check_lensdirt", _st)
 	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-	
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_reflections", _st)
-	xml:InitCheck("video_adv:check_reflections", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
--- r3_dynamic_wet_surfaces	>r25
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r3_dynamic_wet_surfaces", _st)
-	ctl = xml:InitCheck ("video_adv:check_r3_dynamic_wet_surfaces", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_3, control=_st})
-
--- r3_volumetric_smoke		>r25
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r3_volumetric_smoke", _st)
-	ctl = xml:InitCheck("video_adv:check_r3_volumetric_smoke", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_3, control=_st})
-
--- r4_enable_tessellation		only r4
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r4_tessellation", _st)
-	ctl = xml:InitCheck("video_adv:check_r4_tessellation", _st)
-	table.insert(handler.m_preconditions, {func=mode_4, control=_st})
----------
-
 
 	btn = xml:Init3tButton("video_adv:btn_to_simply", self)
 	handler:Register(btn, "btn_simply_graphic")

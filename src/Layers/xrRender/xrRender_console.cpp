@@ -931,11 +931,13 @@ public:
 // whenever the renderer comes up: any way a value gets lost or overwritten mid-session
 // (a script, a console line, a stale options control) heals on the next start instead
 // of surviving as "weapon shadows stopped working" with a Maximum preset on screen.
-// user_facing: the switches that also live in the options menu and user.ltx (shadow map size,
-// AO technique, grass density and radius, visor droplets). They follow the preset only when the
-// player applies a preset; on renderer start the player's own user.ltx values stay, or the
-// options would show a choice the next start silently undid.
-void xrRender_sync_preset_derived(bool user_facing)
+//
+// A few of them used to be held back on renderer start (shadow map size, AO technique, grass
+// density and radius, visor droplets) because the options menu also showed them, and following
+// the preset would have undone a choice the player had just made. The advanced video page does
+// not show anything the preset owns any more, so there is no such choice to protect and no
+// reason to treat those five differently from the rest.
+void xrRender_sync_preset_derived()
 {
     // The shadow-map budget follows the preset: it caps how many local light faces
     // keep their shadows in one frame, the rest light unshadowed. Maximum keeps the
@@ -994,8 +996,7 @@ void xrRender_sync_preset_derived(bool user_facing)
     // and is not on this ladder at all.
     static constexpr int rain_quality_by_preset[] = {1, 1, 2, 3, 4};
     // Visor droplets: a post effect in the combine, so it joins at Default with the rest of the
-    // post stack. User-facing (there is a checkbox for it), hence the user_facing block below.
-    // It is also a shader option (USE_LENS_WATER), so like the checkbox it lands on vid restart.
+    // post stack. It is a shader option (USE_LENS_WATER), so it lands on the vid restart.
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
     // How wide the visor's drop field is. The height follows the screen's aspect, so this is the
     // resolution of the glass ITSELF, and it is what decides whether a drop can be a drop: across
@@ -1114,26 +1115,22 @@ void xrRender_sync_preset_derived(bool user_facing)
     // dxRainRender scales this base by the r__rain_quality tier factor. A second table here
     // would apply the ladder twice, so what this heals is only a stale pinned count.
     ps_r__rain_drops = 6000;
-    if (user_facing)
-        ps_current_detail_density = detail_density_by_preset[ps_Preset];
+    ps_current_detail_density = detail_density_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_sm_res = wet_sm_res_by_preset[ps_Preset];
     ps_r__aref_quality = aref_by_preset[ps_Preset];
     ps_r__smaa = smaa_by_preset[ps_Preset];
     ps_r__taa = taa_by_preset[ps_Preset];
-    if (user_facing)
-    {
-        ps_r2_lenswater = lenswater_by_preset[ps_Preset];
-        ps_r2_smapsize = smapsize_by_preset[ps_Preset];
-        string_path ssao_cmd;
-        strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
-        Console->Execute(ssao_cmd);
-        // Radius goes through the console command so dm_current_size/dm_fade recompute exactly
-        // the way a manual r__detail_radius change does.
-        string32 radius_cmd;
-        xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius_by_preset[ps_Preset]);
-        Console->Execute(radius_cmd);
-    }
+    ps_r2_lenswater = lenswater_by_preset[ps_Preset];
+    ps_r2_smapsize = smapsize_by_preset[ps_Preset];
+    string_path ssao_cmd;
+    strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
+    Console->Execute(ssao_cmd);
+    // Radius goes through the console command so dm_current_size/dm_fade recompute exactly
+    // the way a manual r__detail_radius change does.
+    string32 radius_cmd;
+    xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius_by_preset[ps_Preset]);
+    Console->Execute(radius_cmd);
 
     // QA hook: an optional appdata\qa_autoexec.ltx executes AFTER the derived switches.
     // The rig runs headless and user.ltx executes BEFORE renderer create, so any
@@ -1152,6 +1149,30 @@ void xrRender_sync_preset_derived(bool user_facing)
     }
 }
 
+// The preset file plus the derived switches: everything the quality tier decides, in the order
+// that leaves the switches in charge of whatever the file carries.
+void xrRender_apply_preset()
+{
+    string_path cfg;
+
+    switch (ps_Preset)
+    {
+    case 0: xr_strcpy(cfg, "rspec_minimum.ltx"); break;
+    case 1: xr_strcpy(cfg, "rspec_low.ltx"); break;
+    case 2: xr_strcpy(cfg, "rspec_default.ltx"); break;
+    case 3: xr_strcpy(cfg, "rspec_high.ltx"); break;
+    case 4: xr_strcpy(cfg, "rspec_extreme.ltx"); break;
+    default: return;
+    }
+    FS.update_path(cfg, "$game_config$", cfg);
+
+    string_path cmd;
+    strconcat(sizeof(cmd), cmd, "cfg_load", " ", cfg);
+    Console->Execute(cmd);
+
+    xrRender_sync_preset_derived();
+}
+
 class CCC_Preset : public CCC_Token
 {
 public:
@@ -1160,24 +1181,7 @@ public:
     virtual void Execute(LPCSTR args)
     {
         CCC_Token::Execute(args);
-        string_path _cfg;
-        string_path cmd;
-
-        switch (*value)
-        {
-        case 0: xr_strcpy(_cfg, "rspec_minimum.ltx"); break;
-        case 1: xr_strcpy(_cfg, "rspec_low.ltx"); break;
-        case 2: xr_strcpy(_cfg, "rspec_default.ltx"); break;
-        case 3: xr_strcpy(_cfg, "rspec_high.ltx"); break;
-        case 4: xr_strcpy(_cfg, "rspec_extreme.ltx"); break;
-        }
-        FS.update_path(_cfg, "$game_config$", _cfg);
-        strconcat(sizeof(cmd), cmd, "cfg_load", " ", _cfg);
-        Console->Execute(cmd);
-
-        // Applied after the preset file so the derived switches stay in charge
-        // regardless of what the file carries.
-        xrRender_sync_preset_derived(true);
+        xrRender_apply_preset();
     }
 };
 
