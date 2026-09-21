@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #include "StdAfx.h"
 
 // XMS P5: composite game.graph. The base blob from all.spawn chunk 4 is

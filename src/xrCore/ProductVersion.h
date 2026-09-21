@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 #define DAR_VERSION_MAJOR 1

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // Water response of the procedural puddles to bullets and explosions. Data lives in

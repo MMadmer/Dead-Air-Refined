@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // SHA-256, for everything that has to answer "are these the bytes the manifest asked for?" -

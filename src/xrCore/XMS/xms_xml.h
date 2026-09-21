@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // XMS XML composition: .xmlp DOM patches applied to a parsed XMLDocument.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // Update checks and downloads for XMS modules, behind the Mods menu.

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // XMS config composition: per-module ltx overlays (gamedata\configs\xms\*.ltx)

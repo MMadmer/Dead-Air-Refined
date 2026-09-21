@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 // Builds a .darpatch between two revisions of a content bundle.
 //
 // A release-time tool, never shipped to a player. It exists because a content update usually

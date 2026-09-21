@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // The release side of the XMS module update contract (docs/dead-air/MOD_UPDATES.md, section 2):

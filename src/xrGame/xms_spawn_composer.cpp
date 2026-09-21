@@ -1,4 +1,7 @@
-﻿#include "StdAfx.h"
+﻿// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
+#include "StdAfx.h"
 
 // XMS spawn composer: applies module .xspawn layers on top of the freshly
 // loaded base spawn graph. Base spawn ids never move; module vertices live in

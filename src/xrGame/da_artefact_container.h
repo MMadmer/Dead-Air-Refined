@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // [DA] An artefact inside a container, for the code that asks whether the actor HAS one.

@@ -33,7 +33,10 @@ source history, copyright notices, and third-party licenses rather than being
 represented as Refined-specific contributions.
 
 See [`docs/dead-air/UPSTREAM.md`](docs/dead-air/UPSTREAM.md) for the complete
-provenance statement.
+provenance statement, and
+[`ENGINE_SURFACE.md`](docs/dead-air/ENGINE_SURFACE.md) for the measurement
+behind it: what this project has rewritten, what is still byte-for-byte
+upstream, and where the untouched code that actually runs is.
 
 ## Highlights
 
@@ -255,6 +258,8 @@ versions and compatibility pins are recorded in
   addons: XMS modules, content bundles and load order, loose particle
   overrides.
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
+- [`ENGINE_SURFACE.md`](docs/dead-air/ENGINE_SURFACE.md) — how much of the
+  engine is this project’s own, and the map of what is still stock.
 
 ## Credits
 

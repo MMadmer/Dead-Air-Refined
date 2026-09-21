@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #include "StdAfx.h"
 #include "da_script_cam.h"
 

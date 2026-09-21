@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // The actor in water (DESIGN2 section 4): wading, footstep wakes and splashes, the entry

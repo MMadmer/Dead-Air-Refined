@@ -28,6 +28,11 @@ https://github.com/OpenXRay/xray-16
 
 The local Git remote named `upstream` points to this repository.
 
+`ENGINE_SURFACE.md` measures the distance from that commit: what this project
+has rewritten, what is still byte-for-byte upstream, and which of the untouched
+code actually runs. It is the factual backing for any statement about how much
+of this engine is its own, and the map for where performance work has room.
+
 ## Dead Air source reference
 
 Lanforse provided the surviving unfinished Dead Air 1.0 source tree together

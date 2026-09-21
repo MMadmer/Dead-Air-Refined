@@ -1,3 +1,6 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
 #pragma once
 
 // 3D PDA feature core (docs/dead-air/pda-3d-port-plan.md, docs/dead-air/pda-1to1-plan.md).

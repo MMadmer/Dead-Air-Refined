@@ -6,6 +6,11 @@ When using OpenXRay for making modifications for S.T.A.L.K.E.R. games developed 
 https://www.gsc-game.com/eula/
 https://www.gsc-game.com/guidelines/
 
+XFined-Ray is the engine of Dead Air: Refined and a derivative of OpenXRay. The layers above are unchanged by it: the original engine remains GSC Game World's, and the OpenXRay modifications remain OpenXRay's, under the notice below.
+All the modifications and new code created for XFined-Ray are released under the same licence, and the files it authored carry their own notice:
+
+Copyright (c) 2026 XFined-Ray
+
 All the modifications to the original code and new code created by the OpenXRay team and contributors are released under the following licence:
 
 MIT License
