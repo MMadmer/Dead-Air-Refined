@@ -199,6 +199,9 @@ public:
 #endif
 
 private:
+    mutable R_constant* m_base_constant{};
+    mutable bool m_base_resolved{};
+
     void fatal(LPCSTR s);
 
 #if defined(USE_DX11)
@@ -212,6 +215,26 @@ private:
 public:
     R_constant_table() = default;
     ~R_constant_table();
+
+    // set_Constants resolved "s_base" by name on every constant-table switch, which is a
+    // string search through the table on the hottest state change the backend has. The
+    // answer depends only on this table, so it is resolved once and dropped whenever the
+    // table itself changes - clear(), parse() and merge() are the only things that can.
+    R_constant* get_base_constant() const
+    {
+        if (!m_base_resolved)
+        {
+            m_base_constant = get("s_base")._get();
+            m_base_resolved = true;
+        }
+        return m_base_constant;
+    }
+
+    void invalidate_base_constant()
+    {
+        m_base_constant = nullptr;
+        m_base_resolved = false;
+    }
 
     void clear();
     BOOL parse(void* desc, u32 destination);

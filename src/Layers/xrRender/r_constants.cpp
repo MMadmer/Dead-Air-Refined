@@ -70,6 +70,7 @@ ref_constant R_constant_table::get(const shared_str& S, u16 type /*= u16(-1)*/) 
 /// !!!!!!!!FIX THIS FOR DX11!!!!!!!!!
 void R_constant_table::merge(R_constant_table* T)
 {
+    invalidate_base_constant();
     if (!T)
         return;
 
@@ -144,6 +145,7 @@ void R_constant_table::merge(R_constant_table* T)
 
 void R_constant_table::clear()
 {
+    invalidate_base_constant();
     //.
     for (u32 it = 0; it < table.size(); it++)
         table[it] = 0; //.g_constant_allocator.destroy(table[it]);

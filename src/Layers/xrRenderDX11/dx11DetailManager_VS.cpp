@@ -159,12 +159,15 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
             for (const VisiblePart& part : vis)
             {
-                if (!IsPartVisible(part, frustum))
-                    continue;
-
+                // Distance first, frustum second. In a shadow pass most parts are past the
+                // grass shadow radius, and this test is three subtractions against a frustum
+                // test that walks up to six planes - so the cheap one gets to reject them.
                 // Recomputed per frame on purpose: the slot-refresh distance in UpdateVisibleM
                 // is amortised over 15-30 frames and would make the shadow radius lag in steps.
                 if (shadow_pass && ep.distance_to_sqr(part.slot->vis.sphere.P) > grass_shadow_dist_sq)
+                    continue;
+
+                if (!IsPartVisible(part, frustum))
                     continue;
 
                 for (SlotItem* item : *part.items)

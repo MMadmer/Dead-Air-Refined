@@ -379,3 +379,30 @@ update - and 34% is `CScriptPropertyEvaluatorWrapper::evaluate` called by the GO
 own GC is another ~5.5%. The engine drives none of that per-frame itself (the `lua_gc` step in
 `script_process.cpp` is DEBUG-only), and tuning LuaJIT's GC pause trades exactly the low-2GB
 headroom that the arena work in `DEPENDENCIES.md` exists to protect. Left alone deliberately.
+
+### Stage 7, third pass - the renderer
+
+5. **The cheap test was behind the expensive one in the grass loop.** `hw_Render_dump` ran the
+   frustum test first and the shadow-distance test second, so in a shadow pass every part beyond
+   the grass shadow radius paid for a six-plane frustum walk before three subtractions rejected
+   it. Swapped. `IsPartVisible` fell from **7.35% to 1.05%** of the thread, and `CDetailManager::
+   Render` inclusive from **24.06% to 21.94%** - the work moved into the distance test rather than
+   vanishing, but a large part of it stopped being done at all. The thread now idles 3% where it
+   idled 0.4%, which is the frame getting cheaper against the cap. Two independent `continue`s,
+   so the order between them carries no meaning: Tier A.
+6. **`set_Constants` resolved `"s_base"` by name on every constant-table switch.** A string search
+   through the pass's constant table, on the hottest state change the backend has, for an answer
+   that depends only on the table. Resolved once and cached on `R_constant_table`, dropped by the
+   only three things that can change it (`clear`, `parse`, `merge`). `R_constant_table::get` fell
+   from **1.55% to 0.34%**. The other by-name lookups in the renderer are all in one-time setup.
+
+**Checked and found not worth touching in this pass:** `ZoneScoped` is a no-op here (Tracy is not
+compiled into this configuration, so the macro costs nothing in the recursive dsgraph walk);
+`CKey BK[4][16]` in `LL_BuldBoneMatrixDequatize` is a POD array, so the ~1.8 KB of stack per call
+costs a stack-pointer adjustment and nothing else - the 1.4% there is the dequantisation itself.
+
+**Where the game thread stands now**, by area, on the same save: grass ~19%, the rest of the
+renderer ~15%, Lua and LuaJIT ~11% self (19.6% inclusive through `pcall`), driver ~6%, RTTI ~3%,
+collision and spatial ~2.7%. The remaining renderer cost is spread across `R_dsgraph_structure`'s
+recursive static walk (~2%) and the backend's state changes (~4%), with no single redundancy left
+of the kind the last three passes removed.

@@ -287,6 +287,7 @@ IC u32 dest_to_cbuf_type(u32 destination)
 
 BOOL R_constant_table::parse(void* _desc, u32 destination)
 {
+    invalidate_base_constant();
     ID3DShaderReflection* pReflection = (ID3DShaderReflection*)_desc;
 
     D3D_SHADER_DESC ShaderDesc;

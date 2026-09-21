@@ -504,7 +504,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
     // caching
     if (ctable == C) return;
     ctable = C;
-    lmaterial_base_constant = C ? C->get("s_base")._get() : nullptr;
+    lmaterial_base_constant = C ? C->get_base_constant() : nullptr;
     xforms.unmap();
     hemi.unmap();
     tree.unmap();
