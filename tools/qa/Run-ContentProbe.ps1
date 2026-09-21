@@ -18,7 +18,11 @@ param(
     # is killed and the probe returns. Poll rather than wait on the process, because the engine
     # is not going to exit on its own - the whole point of -RunSeconds is that it keeps running.
     [string]$WaitFor,
-    [int]$TimeoutSeconds = 180
+    [int]$TimeoutSeconds = 180,
+    # Extra engine switches for this run. `-always_active` is the one that matters here: an
+    # unfocused engine on the hidden desktop throttles its frame loop, which is fine for a
+    # content check and useless for anything that measures time.
+    [string]$ExtraArgs = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +51,7 @@ $idFile = Join-Path ([IO.Path]::GetTempPath()) "dar-probe-engine.pid"
 Remove-Item -LiteralPath $idFile -Force -ErrorAction SilentlyContinue
 $launcherFile = Join-Path ([IO.Path]::GetTempPath()) "dar-probe-launcher.pid"
 & (Join-Path $PSScriptRoot "Start-DetachedHiddenDesktopProcess.ps1") `
-    -FilePath (Join-Path $Rig "xrEngine.exe") -Arguments "-noprefetch -nointro" `
+    -FilePath (Join-Path $Rig "xrEngine.exe") -Arguments ("-noprefetch -nointro " + $ExtraArgs).Trim() `
     -ProcessIdFile $idFile -LauncherIdFile $launcherFile -TimeoutSeconds $TimeoutSeconds | Out-Null
 
 # The launcher is detached, so the pid file appears a moment after it returns. Poll rather

@@ -77,10 +77,14 @@ public:
 
     using SlotItemVec = xr_vector<SlotItem*>;
 
+    struct Slot;
+
     struct VisiblePart
     {
         SlotItemVec* items;
-        vis_data* bounds;
+        // The slot rather than just its bounds: the frustum answer depends only on the
+        // slot, and one slot yields a part per object id per wave group.
+        Slot* slot;
     };
 
     struct SlotPart
@@ -106,6 +110,10 @@ public:
         };
         int sx, sz; // координаты слота X x Y
         vis_data vis; //
+        // Which visibility pass last asked about this slot, and what it answered. Every
+        // part cut from this slot shares the answer, so only the first one pays.
+        u32 vis_stamp;
+        u8 vis_result;
         SlotPart G[dm_obj_in_slot]; //
 
         Slot()
@@ -114,6 +122,8 @@ public:
             empty = 1;
             type = stReady;
             sx = sz = 0;
+            vis_stamp = 0;
+            vis_result = 0;
             vis.clear();
         }
     };
@@ -157,6 +167,9 @@ public:
     Fvector4 m_wind_dir1{};
     Fvector4 m_wind_dir2{};
     u32 m_render_state_frame{u32(-1)};
+    // Bumped once per render entry, where the frustum changes. Slot stamps start at 0,
+    // so this starts at 1 and no slot can look pre-tested.
+    u32 m_vis_stamp{1};
 
     IReader* dtFS;
     DetailHeader dtH;
@@ -234,7 +247,7 @@ public:
     void hw_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum);
     void hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, const Fvector4& wave,
         const Fvector4& wind, u32 var_id, u32 lod_id, bool collectStats, const CFrustum* frustum);
-    bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum) const;
+    bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum);
 
     // get unpacked slot
     DetailSlot& QueryDB(int sx, int sz);

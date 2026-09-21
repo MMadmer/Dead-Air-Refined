@@ -24,6 +24,7 @@
 #include "HudItem.h"
 #include "da_pda3d.h"
 #include "da_opt_bench.h"
+#include "da_profiler.h"
 #include "Actor_Flags.h"
 #include "Bolt.h"
 #include "CustomZone.h"
@@ -3787,6 +3788,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_VisorRate, "visor_rate");
     CMD1(CCC_QaVisorBlob, "qa_visor_blob");
     da_opt_bench_register();
+    da_profiler_register();
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

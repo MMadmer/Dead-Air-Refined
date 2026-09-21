@@ -289,4 +289,58 @@ Honestly stated, because the alternative is pretending 286k lines were all revie
   expansion order, which changes chosen paths. Tier A forbids it and it stays.
 - **A frame-time gate.** `dar_bench_frame` exists and works, but the QA probe runs the engine on
   a hidden desktop without `-always_active` and an unfocused engine throttles its frame loop, so
-  it is opt-in (`-Frames N`) and has to be run from a session that can keep the window active.
+  it is opt-in (`-Frames N`). `Run-Profile.ps1` passes `-always_active` for exactly this reason.
+
+## Stage 7 - the sampling profiler, and what it found
+
+The limit above ("no way to attribute time inside these files") is gone. `dar_profile_start` /
+`dar_profile_stop` sample the game thread from a second thread - suspend, unwind with
+`RtlVirtualUnwind`, resume - and symbolize once at the end from the PDBs. `dar_profile_callers
+<symbol>` answers "who called that?" from the same samples, three frames deep.
+`tools/qa/optimization/Run-Profile.ps1` drives it on the rig.
+
+Rules the sampler obeys, because getting them wrong hangs the game: it never allocates while the
+target is suspended (a container that grows there can take a lock only the frozen thread can
+release), the unwind is wrapped in SEH because a stack caught mid-prologue leads anywhere, and the
+run uses `-always_active` so it does not measure the unfocused-window throttle.
+
+First profile, l01_escape, 1753 objects online, 23734 samples at 1 kHz:
+
+| | self | what it really is |
+|---|---|---|
+| `CDetailManager::hw_Render_dump` | 11.2% | grass instancing |
+| `CDetailManager::IsPartVisible` | 9.3% | one frustum test per part |
+| `VCRUNTIME140!_NLG_Return2` | 3.6% | **not** exceptions - see below |
+| `CInifile::Load` | 3.9% incl | **scripts re-parsing .ltx per frame** |
+| LuaJIT GC | ~5.9% | `gc_sweep`, `gc_traverse_tab`, `atomic` |
+| `str_container::dock` | 1.5% | string interning, 87% of it from `CInifile::Load` |
+
+**What the caller view was worth.** `_NLG_Return2` reads like C++ exception machinery and would
+have sent this round hunting for something that throws every frame. It is 69% called from
+`hw_Render_dump` and 11% from `CSkeletonX::_Render`: unsymbolized VCRUNTIME reached from render
+loops, i.e. memcpy with no public symbol next to it. Nothing throws.
+
+### Landed
+
+1. **Script ini parse cache.** `CInifile::Load` was 3.9% of the thread and 99.6% of it came through
+   luabind constructing a `CScriptIniFile` - Lua calling `ini_file("...")` from update handlers,
+   re-tokenizing a whole file and re-interning every key and value each time. The parse is cached
+   per resolved path and copied out, so each object keeps writable sections of its own (Lua can
+   call `set_readonly(false)` and `w_string()` on one, and must not reach another script's copy).
+   Afterwards the profiler finds no sample in `CInifile::Load` at all, and `dock` leaves the top of
+   the list with it.
+   The trap worth remembering: lookups go through `m_sectionIndex`, not through `sections()`, so
+   replacing DATA wholesale makes every section silently stop existing. The rig said so with a
+   fatal on the first save load. `CInifile::rebuild_section_index()` exists for this.
+2. **Per-slot visibility cache in `CDetailManager`.** A slot reaches the render lists once per
+   object id per wave group, and each of those parts repeated the identical frustum test against
+   the identical bounds. Cached on the slot, stamped once per render entry where the frustum
+   changes: **9.3% -> 7.0%**.
+
+### Tried and rejected here too
+
+- **Bounds by value inside `VisiblePart`** instead of by pointer, to kill the pointer chase:
+  **worse, 11.1%**, because it tripled the size of the array the visibility loop walks.
+- **Explicit SSE stores for the constant-buffer write**, on the theory that the memcpy under
+  `hw_Render_dump` was those four `Fvector4` assignments: no change outside the noise band, so it
+  did not ship.

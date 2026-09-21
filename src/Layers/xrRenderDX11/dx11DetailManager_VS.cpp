@@ -164,7 +164,7 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
                 // Recomputed per frame on purpose: the slot-refresh distance in UpdateVisibleM
                 // is amortised over 15-30 frames and would make the shadow radius lag in steps.
-                if (shadow_pass && ep.distance_to_sqr(part.bounds->sphere.P) > grass_shadow_dist_sq)
+                if (shadow_pass && ep.distance_to_sqr(part.slot->vis.sphere.P) > grass_shadow_dist_sq)
                     continue;
 
                 for (SlotItem* item : *part.items)

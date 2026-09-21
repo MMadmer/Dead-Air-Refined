@@ -13,11 +13,73 @@
 #include "object_factory.h"
 #include "xrCore/xrDebug.h"
 
+namespace
+{
+// One parsed copy per resolved path, kept for the life of the process. A game session
+// never changes what an .ltx contains: modules are swapped in on the next start, not
+// while it runs, so a parse taken now stays correct for the rest of the run.
+xr_map<xr_string, CInifile*>& parse_cache()
+{
+    static xr_map<xr_string, CInifile*> cache;
+    return cache;
+}
+
+// Sect copies cleanly: Name and every Item hold shared_str, so a copy shares the same
+// interned buffers, and LineIndex keys - raw pointers into those buffers - stay valid.
+CInifile::Sect* clone_section(const CInifile::Sect& source)
+{
+    return xr_new<CInifile::Sect>(source);
+}
+} // namespace
+
+void CScriptIniFile::load_cached(pcstr resolvedPath)
+{
+    auto& cache = parse_cache();
+    const xr_string key(resolvedPath);
+
+    auto it = cache.find(key);
+    if (it == cache.end())
+    {
+        // The first open goes through the ordinary path, so includes and the module
+        // layers behave exactly as they always have.
+        CInifile* parsed = xr_new<CInifile>(resolvedPath, true, true, false);
+        it = cache.emplace(key, parsed).first;
+    }
+
+    const CInifile::Root& source = it->second->sections();
+    CInifile::Root& target = sections();
+    target.clear();
+    target.reserve(source.size());
+    for (const auto* section : source)
+        target.emplace_back(clone_section(*section));
+
+    // The clones are different objects from the cached originals, and every lookup in
+    // this file goes through the section index rather than the vector.
+    rebuild_section_index();
+}
+
+void CScriptIniFile::forget_cached_parses()
+{
+    for (auto& entry : parse_cache())
+        xr_delete(entry.second);
+    parse_cache().clear();
+}
+
 CScriptIniFile::CScriptIniFile(IReader* F, LPCSTR path) : inherited(F, path) {}
 CScriptIniFile::CScriptIniFile(LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart, BOOL SaveAtEnd)
-    : inherited(update("$game_config$", szFileName), ReadOnly, bLoadAtStart, SaveAtEnd) {}
+    // The base is told not to load: the parse comes from the cache below instead.
+    : inherited(update("$game_config$", szFileName), ReadOnly, false, SaveAtEnd)
+{
+    if (bLoadAtStart)
+        load_cached(fname());
+}
+
 CScriptIniFile::CScriptIniFile(LPCSTR initial, LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart, BOOL SaveAtEnd)
-    : inherited(update(initial, szFileName), ReadOnly, bLoadAtStart, SaveAtEnd) {}
+    : inherited(update(initial, szFileName), ReadOnly, false, SaveAtEnd)
+{
+    if (bLoadAtStart)
+        load_cached(fname());
+}
 
 LPCSTR CScriptIniFile::update(LPCSTR initial, LPCSTR file_name)
 {

@@ -462,21 +462,21 @@ void CDetailManager::UpdateVisibleM()
                         auto& visibleItems = m_visibles[0][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[0].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[0], &S.vis});
+                        visibleItems.push_back({&sp.r_items[0], &S});
                     }
                     if (!sp.r_items[1].empty())
                     {
                         auto& visibleItems = m_visibles[1][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[1].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[1], &S.vis});
+                        visibleItems.push_back({&sp.r_items[1], &S});
                     }
                     if (!sp.r_items[2].empty())
                     {
                         auto& visibleItems = m_visibles[2][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[2].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[2], &S.vis});
+                        visibleItems.push_back({&sp.r_items[2], &S});
                     }
                 }
             }
@@ -501,13 +501,22 @@ bool CDetailManager::HasRenderableDetails() const
 #endif
 }
 
-bool CDetailManager::IsPartVisible(const VisiblePart& part, const CFrustum* frustum) const
+bool CDetailManager::IsPartVisible(const VisiblePart& part, const CFrustum* frustum)
 {
     if (!frustum)
         return true;
 
+    Slot& slot = *part.slot;
+    if (slot.vis_stamp == m_vis_stamp)
+        return slot.vis_result != 0;
+
     u32 mask = frustum->getMask();
-    return frustum->testSAABB(part.bounds->sphere.P, part.bounds->sphere.R, part.bounds->box.data(), mask) != fcvNone;
+    const bool visible =
+        frustum->testSAABB(slot.vis.sphere.P, slot.vis.sphere.R, slot.vis.box.data(), mask) != fcvNone;
+
+    slot.vis_stamp = m_vis_stamp;
+    slot.vis_result = visible ? 1u : 0u;
+    return visible;
 }
 
 void CDetailManager::UpdateRenderState()
@@ -577,6 +586,9 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
 {
     if (!HasRenderableDetails())
         return;
+
+    // A new frustum invalidates every cached slot answer at once, without touching them.
+    ++m_vis_stamp;
 
     ZoneScoped;
 

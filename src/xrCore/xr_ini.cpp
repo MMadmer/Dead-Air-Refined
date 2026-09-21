@@ -489,6 +489,17 @@ void CInifile::insert_section(Sect* section)
     m_sectionIndex.emplace(section->Name.c_str(), section);
 }
 
+void CInifile::rebuild_section_index()
+{
+    m_sectionIndex.clear();
+    m_sectionIndex.reserve(DATA.size());
+    for (auto* section : DATA)
+    {
+        if (section)
+            m_sectionIndex.emplace(section->Name.c_str(), section);
+    }
+}
+
 CInifile::Sect* CInifile::find_section(pcstr section) const
 {
     // A script asking about a nil section is a question, not a fault: se_artefact.script

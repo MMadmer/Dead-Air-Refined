@@ -150,6 +150,10 @@ public:
     bool section_exist(pcstr S) const;
     bool section_exist(const shared_str& S) const;
     Root& sections() { return DATA; }
+    // Section lookup goes through m_sectionIndex, not through DATA, so anything that
+    // replaces DATA wholesale has to say so - otherwise every section silently
+    // stops existing.
+    void rebuild_section_index();
     Root const& sections() const { return DATA; }
 
     // Generic reading templated functions

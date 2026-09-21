@@ -50,6 +50,14 @@ public:
     bool save_as(pcstr new_fname /* = nullptr */);
     void remove_line(pcstr S, pcstr L);
 
+    // Scripts open the same .ltx over and over from update handlers, and each open
+    // re-parsed the whole file. The parse is cached per resolved path and copied out
+    // here, so every object still owns writable sections of its own - Lua can call
+    // set_readonly(false) and w_string() on one of these, and must not be able to
+    // scribble on another script's copy.
+    void load_cached(pcstr resolvedPath);
+    static void forget_cached_parses();
+
 private:
     DECLARE_SCRIPT_REGISTER_FUNCTION();
 };
