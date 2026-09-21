@@ -9,10 +9,11 @@ Intermediate runs are not kept. Several of them measured ideas that were then th
 for code that does not exist invites someone to quote it. What those runs decided is written down
 in `docs/dead-air/OPTIMIZATION_PLAN.md`, which is where it is useful.
 
-`grassbase.txt` and `grass-final.txt` bracket the fourth pass over the detail manager, and are
-kept as a pair because that is the first pass measured in frames per second rather than in shares
-of the thread. `grass-final.jpg` is the frame that rate was measured on - a profile saying a
-renderer got cheaper means nothing if what it stopped drawing was the point.
+`round2-before.txt` and `round2-after.txt` bracket the fourth to eighth passes - the detail
+upload, the constant-table switch, and smart_cast - and are kept as a pair because that is where
+the measurement moved from shares of the thread to frames per second: **66.8 -> 72.1 FPS** on the
+same save, same 30 seconds, uncapped. `round2-after.jpg` is a frame from that run, because a
+profile saying a renderer got cheaper means nothing if what it stopped drawing was the point.
 
 Take a new one with `tools\qa\optimization\Run-Profile.ps1 -Label <name>`. Each run leaves both
 `<name>.txt` and `<name>.jpg` here.
