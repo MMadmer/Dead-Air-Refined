@@ -113,6 +113,21 @@ inline CHashFixedVertexManagerT::Vertex& CHashFixedVertexManager::get_node(const
 }
 
 TEMPLATE_SPECIALIZATION
+inline CHashFixedVertexManagerT::Vertex* CHashFixedVertexManager::find_vertex(const Index& vertex_id) const
+{
+    const u32 index = hash_index(vertex_id);
+    IndexVertex* vertex = m_hash[index];
+    if (!vertex || vertex->m_path_id != current_path_id() || vertex->m_hash != index)
+        return nullptr;
+    for (; vertex; vertex = vertex->m_next)
+    {
+        if (vertex->m_vertex->index() == vertex_id)
+            return vertex->m_vertex;
+    }
+    return nullptr;
+}
+
+TEMPLATE_SPECIALIZATION
 inline CHashFixedVertexManagerT::Vertex& CHashFixedVertexManager::create_vertex(
     Vertex& vertex, const Index& vertex_id)
 {

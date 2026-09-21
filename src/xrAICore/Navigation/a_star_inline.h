@@ -73,12 +73,13 @@ inline bool CSAStar::step(TPathManager& path_manager)
         if (!path_manager.is_accessible(neighbour_index))
             continue;
         // check if neighbour is visited, i.e. is in the opened or
-        // closed lists
-        if (data_storage.is_visited(neighbour_index))
+        // closed lists. One lookup answers both questions: asking is_visited() and then
+        // get_node() walked the same hash chain, or re-read the same index, twice.
+        Vertex* const visited = data_storage.find_vertex(neighbour_index);
+        if (visited)
         {
             // so, this neighbour node has been already visited
-            // therefore get the pointer to this node
-            Vertex& neighbour = data_storage.get_node(neighbour_index);
+            Vertex& neighbour = *visited;
             // check if this node is in the opened list
             if (data_storage.is_opened(neighbour))
             {

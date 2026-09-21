@@ -87,9 +87,11 @@ void CAI_Rat::activate_turn()
     Fvector m_dest_direction;
     Fvector m_enemy_position = get_enemy()->Position();
     Fvector m_temp = Position();
-    m_dest_direction.x = (m_enemy_position.x - m_temp.x) / m_temp.distance_to(m_enemy_position);
-    m_dest_direction.y = (m_enemy_position.y - m_temp.y) / m_temp.distance_to(m_enemy_position);
-    m_dest_direction.z = (m_enemy_position.z - m_temp.z) / m_temp.distance_to(m_enemy_position);
+    // One square root for the three components, not one each.
+    const float m_dist = m_temp.distance_to(m_enemy_position);
+    m_dest_direction.x = (m_enemy_position.x - m_temp.x) / m_dist;
+    m_dest_direction.y = (m_enemy_position.y - m_temp.y) / m_dist;
+    m_dest_direction.z = (m_enemy_position.z - m_temp.z) / m_dist;
     m_dest_direction.getHP(m_heading, m_pitch);
     set_pitch(m_pitch, m_heading);
     m_tGoalDir = m_enemy_position;

@@ -320,6 +320,9 @@ int dcTriListCollider::dTriBox(const dReal* v0, const dReal* v1, const dReal* v2
 
     dReal depth0, depth1, depth2;
     dReal dist0, dist1, dist2;
+    // The box centre projected on the axis under test: one dot product per axis
+    // rather than one per vertex of the triangle.
+    dReal pdot;
 
 #define CMP(sd, c)                                      \
     \
@@ -373,11 +376,13 @@ else if (depth1 > depth2) if (test1##sd)                \
 #define TEST(sd, c)                              \
     \
 \
-dist0 = dDOT14(v0, R + sd) - dDOT14(p, R + sd);  \
+pdot = dDOT14(p, R + sd);                        \
+                                                 \
+dist0 = dDOT14(v0, R + sd) - pdot;               \
     \
-dist1 = dDOT14(v1, R + sd) - dDOT14(p, R + sd);  \
+dist1 = dDOT14(v1, R + sd) - pdot;               \
     \
-dist2 = dDOT14(v2, R + sd) - dDOT14(p, R + sd);  \
+dist2 = dDOT14(v2, R + sd) - pdot;               \
     \
 \
 isPdist0 = dist0 > 0.f;                          \
@@ -470,10 +475,13 @@ for(i = 0; i < 3; ++i)                                                          
             continue;                                                                                                  \
         int ix1 = (i + 1) % 3;                                                                                         \
         int ix2 = (i + 2) % 3;                                                                                         \
-        sidePr = dFabs(dDOT14(axis, R + ix1) * hside[ix1]) + dFabs(dDOT14(axis, R + ix2) * hside[ix2]);                \
+        const dReal ad1 = dDOT14(axis, R + ix1);                                                                       \
+        const dReal ad2 = dDOT14(axis, R + ix2);                                                                       \
+        sidePr = dFabs(ad1 * hside[ix1]) + dFabs(ad2 * hside[ix2]);                                                    \
                                                                                                                        \
-        dist##ax = dDOT(v##ax, axis) - dDOT(p, axis);                                                                  \
-        dist##ox = dDOT(v##ox, axis) - dDOT(p, axis);                                                                  \
+        const dReal pdotc = dDOT(p, axis);                                                                             \
+        dist##ax = dDOT(v##ax, axis) - pdotc;                                                                          \
+        dist##ox = dDOT(v##ox, axis) - pdotc;                                                                          \
         \
 \
 isPdist##ax = dist##ax > 0.f;                                                                                          \
@@ -493,8 +501,8 @@ depth##ox = sidePr - dFabs(dist##ox);                                           
                 if (depth##ax * 1.05f < outDepth)                                                                      \
                 {                                                                                                      \
                     dReal sgn = dist##ax < 0.f ? -1.f : 1.f;                                                           \
-                    dReal sgn1 = sgn * dDOT14(axis, R + ix1) < 0.f ? -1.f : 1.f;                                       \
-                    dReal sgn2 = sgn * dDOT14(axis, R + ix2) < 0.f ? -1.f : 1.f;                                       \
+                    dReal sgn1 = sgn * ad1 < 0.f ? -1.f : 1.f;                                                         \
+                    dReal sgn2 = sgn * ad2 < 0.f ? -1.f : 1.f;                                                         \
                     for (int ii = 0; ii < 3; ++ii)                                                                     \
                         crpos[ii] = p[ii] + R[ii * 4 + ix1] * hside[ix1] * sgn1 + R[ii * 4 + ix2] * hside[ix2] * sgn2; \
                     if (CrossProjLine14(v##ax, triSideAx##ax, crpos, R + i, hside[i], pos))                            \

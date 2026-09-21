@@ -36,7 +36,8 @@ struct CVertexManagerHashFixed
         using Index = TIndex;
         using PathId = TPathId;
 
-#pragma pack(push, 1)
+        // No pack(1): every member here is already naturally aligned at its offset, so
+        // packing only told the compiler to assume it was not.
         struct IndexVertex
         {
             Vertex* m_vertex;
@@ -45,7 +46,6 @@ struct CVertexManagerHashFixed
             u32 m_hash;
             PathId m_path_id;
         };
-#pragma pack(pop)
 
     protected:
         PathId m_current_path_id;
@@ -64,6 +64,8 @@ struct CVertexManagerHashFixed
         inline bool is_visited(const Index& vertex_id) const;
         inline bool is_closed(const Vertex& vertex) const;
         inline Vertex& get_node(const Index& vertex_id) const;
+        // One chain walk instead of the two that is_visited()+get_node() cost.
+        inline Vertex* find_vertex(const Index& vertex_id) const;
         inline Vertex& create_vertex(Vertex& vertex, const Index& vertex_id);
         inline void add_opened(Vertex& vertex);
         inline void add_closed(Vertex& vertex);

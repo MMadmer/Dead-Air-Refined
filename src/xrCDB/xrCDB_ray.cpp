@@ -211,6 +211,15 @@ ICF bool isect_sse(const aabb_t& box, const ray_t& ray, float& dist)
 #undef rotatelps
 #undef muxhps
 
+// SSE2 is part of the x64 ABI, so the FPU collider below can never run there. Compiling it
+// anyway cost eight unreachable template instantiations in the instruction cache and a runtime
+// branch on every single query.
+#if defined(XR_ARCHITECTURE_X64)
+static constexpr bool cdb_sse_always = true;
+#else
+static constexpr bool cdb_sse_always = false;
+#endif
+
 template <bool bUseSSE, bool bCull, bool bFirst, bool bNearest>
 class alignas(16) ray_collider
 {
@@ -223,6 +232,13 @@ public:
     float rRange;
     float rRange2;
 
+    // A nearest query keeps overwriting its single result as the range shrinks. Remember the
+    // winner instead and build the RESULT once, at the end: the three vertex copies and the
+    // material word are paid per surviving hit otherwise.
+    int best_prim;
+    float best_range, best_u, best_v;
+    bool any_hit;
+
     IC void _init(COLLIDER* CL, Fvector* V, TRI* T, const Fvector& C, const Fvector& D, float R)
     {
         dest = CL;
@@ -233,6 +249,9 @@ public:
         ray.fwd_dir.set(D);
         rRange = R;
         rRange2 = R * R;
+        best_prim = -1;
+        best_range = best_u = best_v = 0.f;
+        any_hit = false;
         if constexpr (!bUseSSE)
         {
             // for FPU - zero out inf
@@ -262,18 +281,18 @@ public:
         BB.vMax.add(bCenter, bExtents);
         return isect_fpu(BB.vMin, BB.vMax, ray, coord);
     }
+
     // sse
-    ICF bool _box_sse(const Fvector& bCenter, const Fvector& bExtents, float& dist)
+    //
+    // mCenter and mExtents are adjacent Points inside CollisionAABB, which is itself the first
+    // member of the node, so a 4-float load from either stays inside the node. Lane 3 picks up
+    // the neighbouring float and is garbage - isect_sse reduces over lanes 0..2 only and never
+    // reads it, so two loads replace six load_ss plus four shuffles for bit-identical lanes.
+    ICF bool _box_sse(const CollisionAABB& bb, float& dist)
     {
         aabb_t box;
-        /*
-            box.min.sub (bCenter,bExtents);	box.min.pad = 0;
-            box.max.add	(bCenter,bExtents); box.max.pad = 0;
-        */
-        __m128 CN = _mm_unpacklo_ps(_mm_load_ss((float*)&bCenter.x), _mm_load_ss((float*)&bCenter.y));
-        CN = _mm_movelh_ps(CN, _mm_load_ss((float*)&bCenter.z));
-        __m128 EX = _mm_unpacklo_ps(_mm_load_ss((float*)&bExtents.x), _mm_load_ss((float*)&bExtents.y));
-        EX = _mm_movelh_ps(EX, _mm_load_ss((float*)&bExtents.z));
+        const __m128 CN = _mm_loadu_ps(&bb.mCenter.x);
+        const __m128 EX = _mm_loadu_ps(&bb.mExtents.x);
 
         _mm_store_ps((float*)&box.min, _mm_sub_ps(CN, EX));
         _mm_store_ps((float*)&box.max, _mm_add_ps(CN, EX));
@@ -332,6 +351,20 @@ public:
         return true;
     }
 
+    ICF void _store(u32 prim, float r, float u, float v)
+    {
+        const TRI& T = tris[prim];
+        RESULT& R = dest->r_add();
+        R.id = int(prim);
+        R.range = r;
+        R.u = u;
+        R.v = v;
+        R.verts[0] = verts[T.verts[0]];
+        R.verts[1] = verts[T.verts[1]];
+        R.verts[2] = verts[T.verts[2]];
+        R.dummy = T.dummy;
+    }
+
     void _prim(u32 prim)
     {
         float u, v, r;
@@ -342,62 +375,44 @@ public:
 
         if constexpr (bNearest)
         {
-            if (dest->r_count())
-            {
-                RESULT& R = *dest->r_begin();
-                if (r < R.range)
-                {
-                    R.id = prim;
-                    R.range = r;
-                    R.u = u;
-                    R.v = v;
-                    R.verts[0] = verts[tris[prim].verts[0]];
-                    R.verts[1] = verts[tris[prim].verts[1]];
-                    R.verts[2] = verts[tris[prim].verts[2]];
-                    R.dummy = tris[prim].dummy;
-                    rRange = r;
-                    rRange2 = r * r;
-                }
-            }
-            else
-            {
-                RESULT& R = dest->r_add();
-                R.id = prim;
-                R.range = r;
-                R.u = u;
-                R.v = v;
-                R.verts[0] = verts[tris[prim].verts[0]];
-                R.verts[1] = verts[tris[prim].verts[1]];
-                R.verts[2] = verts[tris[prim].verts[2]];
-                R.dummy = tris[prim].dummy;
-                rRange = r;
-                rRange2 = r * r;
-            }
+            // An exact tie keeps the hit found first, which is what the immediate-write version
+            // did through its own `r < R.range`.
+            if (any_hit && !(r < best_range))
+                return;
+            best_prim = int(prim);
+            best_range = r;
+            best_u = u;
+            best_v = v;
+            rRange = r;
+            rRange2 = r * r;
+            any_hit = true;
         }
         else
         {
-            RESULT& R = dest->r_add();
-            R.id = prim;
-            R.range = r;
-            R.u = u;
-            R.v = v;
-            R.verts[0] = verts[tris[prim].verts[0]];
-            R.verts[1] = verts[tris[prim].verts[1]];
-            R.verts[2] = verts[tris[prim].verts[2]];
-            R.dummy = tris[prim].dummy;
+            _store(prim, r, u, v);
+            any_hit = true;
         }
     }
+
+    // Writes out whatever a nearest query decided on. Nothing to do for the other modes, which
+    // append as they go.
+    void _flush()
+    {
+        if constexpr (bNearest)
+        {
+            if (best_prim >= 0)
+                _store(u32(best_prim), best_range, best_u, best_v);
+        }
+    }
+
     void _stab(const AABBNoLeafNode* node)
     {
-        // Should help
-        _mm_prefetch((char*)node->GetNeg(), _MM_HINT_NTA);
-
         // Actual ray/aabb test
         if constexpr (bUseSSE)
         {
             // use SSE
             float d;
-            if (!_box_sse((Fvector&)node->mAABB.mCenter, (Fvector&)node->mAABB.mExtents, d))
+            if (!_box_sse(node->mAABB, d))
                 return;
             if (d > rRange)
                 return;
@@ -412,6 +427,12 @@ public:
                 return;
         }
 
+        // Both children are about to be needed, and BVH nodes are re-read by every ray that
+        // passes through them - T0 keeps them, NTA (what this was) asks the cache to throw
+        // away the hottest data in the structure.
+        _mm_prefetch((const char*)node->GetPos(), _MM_HINT_T0);
+        _mm_prefetch((const char*)node->GetNeg(), _MM_HINT_T0);
+
         // 1st chield
         if (node->HasLeaf())
             _prim(node->GetPrimitive());
@@ -421,7 +442,7 @@ public:
         // Early exit for "only first"
         if constexpr (bFirst)
         {
-            if (dest->r_count())
+            if (any_hit)
                 return;
         }
 
@@ -433,6 +454,37 @@ public:
     }
 };
 
+template <bool bUseSSE, bool bCull, bool bFirst, bool bNearest>
+ICF void ray_run(COLLIDER* dest, Fvector* V, TRI* T, const AABBNoLeafNode* N, const Fvector& start,
+    const Fvector& dir, float range)
+{
+    ray_collider<bUseSSE, bCull, bFirst, bNearest> RC;
+    RC._init(dest, V, T, start, dir, range);
+    RC._stab(N);
+    RC._flush();
+}
+
+// One switch instead of a four-level if tree: same instantiations, same codegen, and the mode
+// bits are read once.
+template <bool bUseSSE>
+ICF void ray_dispatch(u32 mode, COLLIDER* dest, Fvector* V, TRI* T, const AABBNoLeafNode* N, const Fvector& start,
+    const Fvector& dir, float range)
+{
+    const u32 sel = ((mode & OPT_CULL) ? 1u : 0u) | ((mode & OPT_ONLYFIRST) ? 2u : 0u) |
+        ((mode & OPT_ONLYNEAREST) ? 4u : 0u);
+    switch (sel)
+    {
+    case 0: ray_run<bUseSSE, false, false, false>(dest, V, T, N, start, dir, range); break;
+    case 1: ray_run<bUseSSE, true, false, false>(dest, V, T, N, start, dir, range); break;
+    case 2: ray_run<bUseSSE, false, true, false>(dest, V, T, N, start, dir, range); break;
+    case 3: ray_run<bUseSSE, true, true, false>(dest, V, T, N, start, dir, range); break;
+    case 4: ray_run<bUseSSE, false, false, true>(dest, V, T, N, start, dir, range); break;
+    case 5: ray_run<bUseSSE, true, false, true>(dest, V, T, N, start, dir, range); break;
+    case 6: ray_run<bUseSSE, false, true, true>(dest, V, T, N, start, dir, range); break;
+    default: ray_run<bUseSSE, true, true, true>(dest, V, T, N, start, dir, range); break;
+    }
+}
+
 void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_start, const Fvector& r_dir, float r_range)
 {
     ZoneScoped;
@@ -443,147 +495,11 @@ void COLLIDER::ray_query(u32 ray_mode, const MODEL* m_def, const Fvector& r_star
     const AABBNoLeafNode* N = T->GetNodes();
     r_clear();
 
-    if (CPU::HasSSE)
-    {
-        // SSE
-        // Binary dispatcher
-        if (ray_mode & OPT_CULL)
-        {
-            if (ray_mode & OPT_ONLYFIRST)
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<true, true, true, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<true, true, true, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-            else
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<true, true, false, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<true, true, false, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-        }
-        else
-        {
-            if (ray_mode & OPT_ONLYFIRST)
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<true, false, true, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<true, false, true, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-            else
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<true, false, false, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<true, false, false, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-        }
-    }
+    if constexpr (cdb_sse_always)
+        ray_dispatch<true>(ray_mode, this, m_def->verts, m_def->tris, N, r_start, r_dir, r_range);
+    else if (CPU::HasSSE)
+        ray_dispatch<true>(ray_mode, this, m_def->verts, m_def->tris, N, r_start, r_dir, r_range);
     else
-    {
-        // FPU
-        // Binary dispatcher
-        if (ray_mode & OPT_CULL)
-        {
-            if (ray_mode & OPT_ONLYFIRST)
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<false, true, true, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<false, true, true, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-            else
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<false, true, false, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<false, true, false, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-        }
-        else
-        {
-            if (ray_mode & OPT_ONLYFIRST)
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<false, false, true, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<false, false, true, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-            else
-            {
-                if (ray_mode & OPT_ONLYNEAREST)
-                {
-                    ray_collider<false, false, false, true> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-                else
-                {
-                    ray_collider<false, false, false, false> RC;
-                    RC._init(this, m_def->verts, m_def->tris, r_start, r_dir, r_range);
-                    RC._stab(N);
-                }
-            }
-        }
-    }
+        ray_dispatch<false>(ray_mode, this, m_def->verts, m_def->tris, N, r_start, r_dir, r_range);
 }
 } // namespace CDB

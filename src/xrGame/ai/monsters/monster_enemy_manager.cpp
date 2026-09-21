@@ -102,8 +102,9 @@ void CMonsterEnemyManager::update()
 
     if (prev_enemy == enemy)
     {
-        const float dist_now  = position.distance_to(monster->Position());
-        const float dist_prev = prev_enemy_position.distance_to(monster->Position());
+        const Fvector monster_position = monster->Position();
+        const float dist_now  = position.distance_to(monster_position);
+        const float dist_prev = prev_enemy_position.distance_to(monster_position);
 
         if (_abs(dist_now - dist_prev) < 0.2f)
             flags._or (FLAG_ENEMY_STANDING);

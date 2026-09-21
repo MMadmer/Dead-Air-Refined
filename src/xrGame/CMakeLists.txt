@@ -1155,6 +1155,8 @@ target_sources(xrGame PRIVATE
     da_artefact_container.h
     da_pda3d.cpp
     da_pda3d.h
+    da_opt_bench.cpp
+    da_opt_bench.h
     da_script_cam.cpp
     da_script_cam.h
     PdaAnimatorItem.cpp

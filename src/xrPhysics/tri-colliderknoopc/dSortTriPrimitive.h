@@ -187,6 +187,9 @@ IC int dcTriListCollider::dSortTriPrimitiveCollide(
     gl_cl_tries_state.resize(data->cashed_tries.size(), Flags8().assign(0));
     B = data->cashed_tries.begin(), E = data->cashed_tries.end();
     bool gb_pased = false;
+    // The query box does not move inside this loop; it was being rebuilt per triangle.
+    const Point box_center(const_cast<dReal*>(p));
+    const Point box_extents((float*)&AABB);
     for (I = B; I != E; ++I)
     {
 #ifdef DEBUG
@@ -196,7 +199,7 @@ IC int dcTriListCollider::dSortTriPrimitiveCollide(
 		CDB::TRI* Tr = T_array + *I;
 		const Point vertices[3] = {Point((dReal*)&V_array[Tr->verts[0]]), Point((dReal*)&V_array[Tr->verts[1]]),
 			Point((dReal*)&V_array[Tr->verts[2]])};
-        if (!aabb_tri_aabb(Point(p), Point((float*)&AABB), vertices))
+        if (!aabb_tri_aabb(box_center, box_extents, vertices))
             continue;
 #ifdef DEBUG
         if (debug_output().ph_dbg_draw_mask().test(phDBgDrawIntersectedTries))
@@ -213,7 +216,7 @@ IC int dcTriListCollider::dSortTriPrimitiveCollide(
 #endif
             float last_pos_dist = dDOT(last_pos, tri.norm) - tri.pos;
             if ((!(last_pos_dist < 0.f)) || b_pushing)
-                if (__aabb_tri(Point(p), Point((float*)&AABB), vertices))
+                if (__aabb_tri(box_center, box_extents, vertices))
                 {
 #ifdef DEBUG
                     if (debug_output().ph_dbg_draw_mask().test(phDBgDrawTriesChangesSign))

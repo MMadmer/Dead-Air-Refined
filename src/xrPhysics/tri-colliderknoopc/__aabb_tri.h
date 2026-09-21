@@ -294,7 +294,7 @@ ICF bool planeBoxOverlap(const Point& normal, const float d, const Point& maxbox
     if (min > rad || max < -rad)           \
         return false;
 
-IC bool aabb_tri_aabb(Point center, Point extents, const Point* mLeafVerts)
+IC bool aabb_tri_aabb(const Point& center, const Point& extents, const Point* mLeafVerts)
 {
     Point v0, v1, v2;
     // Fvector v0,v1,v2;
@@ -346,7 +346,7 @@ IC bool aabb_tri_aabb(Point center, Point extents, const Point* mLeafVerts)
         return false;
     return true;
 }
-IC bool __aabb_tri(Point center, Point extents, const Point* mLeafVerts)
+IC bool __aabb_tri(const Point& center, const Point& extents, const Point* mLeafVerts)
 {
     // move everything so that the boxcenter is in (0,0,0)
     Point v0, v1, v2;

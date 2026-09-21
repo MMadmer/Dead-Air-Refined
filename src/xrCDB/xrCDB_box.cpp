@@ -3,6 +3,8 @@
 
 #include "xrCDB.h"
 
+#include <xmmintrin.h>
+
 using namespace CDB;
 using namespace Opcode;
 
@@ -138,6 +140,10 @@ public:
     Fvector b_min, b_max;
     Point center, extents;
 
+    // The query box as SSE lanes, lane 3 pushed to the infinities so the packed compare
+    // below can ignore it without a mask.
+    __m128 q_min, q_max;
+
     Point mLeafVerts[3];
 
     IC void _init(COLLIDER* CL, Fvector* V, TRI* T, const Fvector& C, const Fvector& E)
@@ -149,22 +155,21 @@ public:
         extents = Point(E.x, E.y, E.z);
         b_min.sub(C, E);
         b_max.add(C, E);
+        q_min = _mm_setr_ps(b_min.x, b_min.y, b_min.z, -std::numeric_limits<float>::infinity());
+        q_max = _mm_setr_ps(b_max.x, b_max.y, b_max.z, std::numeric_limits<float>::infinity());
     }
-    ICF bool _box(const Fvector& C, const Fvector& E)
+    // Six dependent scalar compares become two packed ones. mCenter and mExtents are
+    // adjacent Points inside the node, so each 4-float load stays inside it; lane 3 picks
+    // up the neighbouring float and cannot decide the result, because the query lanes
+    // there are the infinities.
+    ICF bool _box(const CollisionAABB& bb) const
     {
-        if (b_max.x < C.x - E.x)
-            return false;
-        if (b_max.y < C.y - E.y)
-            return false;
-        if (b_max.z < C.z - E.z)
-            return false;
-        if (b_min.x > C.x + E.x)
-            return false;
-        if (b_min.y > C.y + E.y)
-            return false;
-        if (b_min.z > C.z + E.z)
-            return false;
-        return true;
+        const __m128 CN = _mm_loadu_ps(&bb.mCenter.x);
+        const __m128 EX = _mm_loadu_ps(&bb.mExtents.x);
+        const __m128 lo = _mm_sub_ps(CN, EX);
+        const __m128 hi = _mm_add_ps(CN, EX);
+        const __m128 miss = _mm_or_ps(_mm_cmplt_ps(q_max, lo), _mm_cmpgt_ps(q_min, hi));
+        return 0 == _mm_movemask_ps(miss);
     };
     ICF bool _tri()
     {
@@ -271,7 +276,7 @@ public:
     void _stab(const AABBNoLeafNode* node)
     {
         // Actual box-box test
-        if (!_box((Fvector&)node->mAABB.mCenter, (Fvector&)node->mAABB.mExtents))
+        if (!_box(node->mAABB))
             return;
 
         // 1st chield
@@ -295,6 +300,15 @@ public:
     }
 };
 
+template <bool bClass3, bool bFirst>
+ICF void box_run(
+    COLLIDER* dest, Fvector* V, TRI* T, const AABBNoLeafNode* N, const Fvector& center, const Fvector& dim)
+{
+    box_collider<bClass3, bFirst> BC;
+    BC._init(dest, V, T, center, dim);
+    BC._stab(N);
+}
+
 void COLLIDER::box_query(u32 box_mode, const MODEL* m_def, const Fvector& b_center, const Fvector& b_dim)
 {
     ZoneScoped;
@@ -305,35 +319,13 @@ void COLLIDER::box_query(u32 box_mode, const MODEL* m_def, const Fvector& b_cent
     const AABBNoLeafNode* N = T->GetNodes();
     r_clear();
 
-    // Binary dispatcher
-    if (box_mode & OPT_FULL_TEST)
+    // One switch instead of a two-level if tree: same instantiations, mode bits read once.
+    const u32 sel = ((box_mode & OPT_FULL_TEST) ? 1u : 0u) | ((box_mode & OPT_ONLYFIRST) ? 2u : 0u);
+    switch (sel)
     {
-        if (box_mode & OPT_ONLYFIRST)
-        {
-            box_collider<true, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, b_center, b_dim);
-            BC._stab(N);
-        }
-        else
-        {
-            box_collider<true, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, b_center, b_dim);
-            BC._stab(N);
-        }
-    }
-    else
-    {
-        if (box_mode & OPT_ONLYFIRST)
-        {
-            box_collider<false, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, b_center, b_dim);
-            BC._stab(N);
-        }
-        else
-        {
-            box_collider<false, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, b_center, b_dim);
-            BC._stab(N);
-        }
+    case 0: box_run<false, false>(this, m_def->verts, m_def->tris, N, b_center, b_dim); break;
+    case 1: box_run<true, false>(this, m_def->verts, m_def->tris, N, b_center, b_dim); break;
+    case 2: box_run<false, true>(this, m_def->verts, m_def->tris, N, b_center, b_dim); break;
+    default: box_run<true, true>(this, m_def->verts, m_def->tris, N, b_center, b_dim); break;
     }
 }

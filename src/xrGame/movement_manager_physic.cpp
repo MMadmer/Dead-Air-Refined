@@ -125,12 +125,16 @@ Fvector CMovementManager::path_position(const float& velocity, const Fvector& po
     Fvector target;
 
     // обновить detail().m_current_travel_point в соответствие с текущей позицией
-    while (current_travel_point < detail().path().size() - 2)
+    // detail().path() was resolved four times per iteration for a container that does
+    // not change while the loop runs.
+    const auto& travel_path = detail().path();
+    while (current_travel_point < travel_path.size() - 2)
     {
-        float pos_dist_to_cur_point = dest_position.distance_to(detail().path()[current_travel_point].position);
-        float pos_dist_to_next_point = dest_position.distance_to(detail().path()[current_travel_point + 1].position);
-        float cur_point_dist_to_next_point = detail().path()[current_travel_point].position.distance_to(
-            detail().path()[current_travel_point + 1].position);
+        const Fvector& cur_point = travel_path[current_travel_point].position;
+        const Fvector& next_point = travel_path[current_travel_point + 1].position;
+        float pos_dist_to_cur_point = dest_position.distance_to(cur_point);
+        float pos_dist_to_next_point = dest_position.distance_to(next_point);
+        float cur_point_dist_to_next_point = cur_point.distance_to(next_point);
 
         if ((pos_dist_to_cur_point > cur_point_dist_to_next_point) && (pos_dist_to_cur_point > pos_dist_to_next_point))
         {

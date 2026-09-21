@@ -332,9 +332,10 @@ int dcTriListCollider::dTriCyl(const dReal* v0, const dReal* v1, const dReal* v2
     //////////////////////////////////////////////////////////////////////////////
     // cylinder axis - one of the triangle vertexes touches cylinder's flat surface
     //////////////////////////////////////////////////////////////////////////////
-    dist0 = dDOT14(v0, R + 1) - dDOT14(p, R + 1);
-    dist1 = dDOT14(v1, R + 1) - dDOT14(p, R + 1);
-    dist2 = dDOT14(v2, R + 1) - dDOT14(p, R + 1);
+    const dReal pdot_y = dDOT14(p, R + 1);
+    dist0 = dDOT14(v0, R + 1) - pdot_y;
+    dist1 = dDOT14(v1, R + 1) - pdot_y;
+    dist2 = dDOT14(v2, R + 1) - pdot_y;
 
     isPdist0 = dist0 > 0.f;
     isPdist1 = dist1 > 0.f;
@@ -416,9 +417,10 @@ int dcTriListCollider::dTriCyl(const dReal* v0, const dReal* v1, const dReal* v2
                                                                           \
         accurate_normalize(axis);                                         \
                                                                           \
-        dist0 = dDOT(v0, axis) - dDOT(p, axis);                           \
-        dist1 = dDOT(v1, axis) - dDOT(p, axis);                           \
-        dist2 = dDOT(v2, axis) - dDOT(p, axis);                           \
+        const dReal pdot_a = dDOT(p, axis);                               \
+        dist0 = dDOT(v0, axis) - pdot_a;                                  \
+        dist1 = dDOT(v1, axis) - pdot_a;                                  \
+        dist2 = dDOT(v2, axis) - pdot_a;                                  \
                                                                           \
         isPdist0 = dist0 > 0.f;                                           \
         isPdist1 = dist1 > 0.f;                                           \
@@ -485,8 +487,9 @@ int dcTriListCollider::dTriCyl(const dReal* v0, const dReal* v1, const dReal* v2
     {                                                                          \
         dCROSS114(axis, =, triSideAx##ax, R + 1);                              \
         accurate_normalize(axis);                                              \
-        dist##ax = dDOT(v##ax, axis) - dDOT(p, axis);                          \
-        dist##ox = dDOT(v##ox, axis) - dDOT(p, axis);                          \
+        const dReal pdotc = dDOT(p, axis);                                     \
+        dist##ax = dDOT(v##ax, axis) - pdotc;                                  \
+        dist##ox = dDOT(v##ox, axis) - pdotc;                                  \
                                                                                \
         isPdist##ax = dist##ax > 0.f;                                          \
         isPdist##ox = dist##ox > 0.f;                                          \
@@ -596,7 +599,8 @@ dCROSS(axis, =, triSideAx##ax, tAx);                                            
         \
 accurate_normalize(axis);                                                           \
         \
-dist##ax = dDOT(v##ax, axis) - dDOT(p, axis);                                       \
+const dReal pdotc = dDOT(p, axis);                                                  \
+dist##ax = dDOT(v##ax, axis) - pdotc;                                               \
         \
 if(dist##ax* dDOT(axis, triSideAx##nx) > 0.f)                                       \
         {                                                                           \
@@ -615,7 +619,7 @@ sin1 = _sqrt(cos0 * cos0 + cos2 * cos2);                                        
 \
 sidePr = cos1 * hlz + sin1 * radius;                                                \
                                                                                     \
-            dist##ox = dDOT(v##ox, axis) - dDOT(p, axis);                           \
+            dist##ox = dDOT(v##ox, axis) - pdotc;                                   \
                                                                                     \
             isPdist##ax = dist##ax > 0.f;                                           \
             isPdist##ox = dist##ox > 0.f;                                           \

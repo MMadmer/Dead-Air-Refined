@@ -130,9 +130,11 @@ void CAI_Rat::set_dir()
             float m_heading, m_pitch;
             Fvector m_temp, m_dest_direction;
             m_temp = squad->GetLeader()->Position();
-            m_dest_direction.x = (m_temp.x - m_enemy_position.x) / m_temp.distance_to(m_enemy_position);
-            m_dest_direction.y = (m_temp.y - m_enemy_position.y) / m_temp.distance_to(m_enemy_position);
-            m_dest_direction.z = (m_temp.z - m_enemy_position.z) / m_temp.distance_to(m_enemy_position);
+            // One square root for the three components, not one each.
+            const float m_dist = m_temp.distance_to(m_enemy_position);
+            m_dest_direction.x = (m_temp.x - m_enemy_position.x) / m_dist;
+            m_dest_direction.y = (m_temp.y - m_enemy_position.y) / m_dist;
+            m_dest_direction.z = (m_temp.z - m_enemy_position.z) / m_dist;
             m_dest_direction.getHP(m_heading, m_pitch);
             m_heading = angle_normalize(m_heading + m_delta_Angle * squad->get_index(this));
             m_dest_direction.setHP(m_heading, m_pitch);

@@ -35,18 +35,15 @@ struct CVertexManagerFixed
 //        using Index = TIndex;
 //        using PathId = TPathId;
 
-#pragma pack(push, 1)
-        struct IndexVertex
-        {
-            TPathId m_path_id;
-            TCompoundVertex* m_vertex;
-        };
-#pragma pack(pop)
-
     protected:
         TPathId m_current_path_id;
         u32 m_max_node_count;
-        IndexVertex* m_indexes;
+        // Parallel arrays rather than one packed {path_id, vertex*} record. is_visited is
+        // the most frequent operation in the whole search and only needs the id, so this
+        // puts 16 of them in a cache line instead of 5, for the same total memory - and
+        // the vertex pointer stops living at a misaligned offset.
+        TPathId* m_path_ids;
+        TCompoundVertex** m_vertices;
 
     public:
         inline CDataStorage(const u32 vertex_count);
@@ -56,6 +53,9 @@ struct CVertexManagerFixed
         inline bool is_visited(const TIndex& vertex_id) const;
         inline bool is_closed(const TCompoundVertex& vertex) const;
         inline TCompoundVertex& get_node(const TIndex& vertex_id) const;
+        // is_visited() immediately followed by get_node() was two lookups of the same
+        // index on the hottest path of every search; this answers both at once.
+        inline TCompoundVertex* find_vertex(const TIndex& vertex_id) const;
         inline TCompoundVertex& create_vertex(TCompoundVertex& vertex, const TIndex& vertex_id);
         inline void add_opened(TCompoundVertex& vertex);
         inline void add_closed(TCompoundVertex& vertex);

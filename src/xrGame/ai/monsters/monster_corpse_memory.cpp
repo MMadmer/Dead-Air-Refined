@@ -121,11 +121,15 @@ CORPSE_MAP_IT CMonsterCorpseMemory::find_best_corpse()
     CORPSE_MAP_IT it = m_objects.end();
     float min_dist = flt_max;
 
+    // The monster does not move inside this loop, and the distance to a candidate was
+    // computed twice whenever the candidate won.
+    const Fvector monster_position = monster->Position();
     for (CORPSE_MAP_IT I = m_objects.begin(); I != m_objects.end(); ++I)
     {
-        if (I->second.position.distance_to(monster->Position()) < min_dist)
+        const float dist = I->second.position.distance_to(monster_position);
+        if (dist < min_dist)
         {
-            min_dist = I->second.position.distance_to(monster->Position());
+            min_dist = dist;
             it = I;
         }
     }

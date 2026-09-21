@@ -174,13 +174,16 @@ void Vision::o_trace(Fvector& P, float dt, float vis_threshold)
         //
         Fvector D, OP = I->cp_LAST;
         D.sub(OP, P);
-        if (fis_zero(D.magnitude()))
+        // One square root, not two: this runs for every object an NPC can currently see,
+        // for every NPC, on every vision update.
+        const float d_mag = D.magnitude();
+        if (fis_zero(d_mag))
         {
             I->fuzzy = 1.f;
             continue;
         }
 
-        float f = D.magnitude() + .2f;
+        float f = d_mag + .2f;
         if (f > fuzzy_guaranteed)
         {
             D.div(f);

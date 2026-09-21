@@ -21,12 +21,18 @@ inline CFixedVertexManager::CDataStorage(const u32 vertex_count)
 {
     m_current_path_id = TPathId(0);
     m_max_node_count = vertex_count;
-    m_indexes = xr_alloc<IndexVertex>(vertex_count);
-    ZeroMemory(m_indexes, vertex_count * sizeof(IndexVertex));
+    m_path_ids = xr_alloc<TPathId>(vertex_count);
+    m_vertices = xr_alloc<TCompoundVertex*>(vertex_count);
+    ZeroMemory(m_path_ids, vertex_count * sizeof(TPathId));
+    ZeroMemory(m_vertices, vertex_count * sizeof(TCompoundVertex*));
 }
 
 TEMPLATE_SPECIALIZATION
-CFixedVertexManager::~CDataStorage() { xr_free(m_indexes); }
+CFixedVertexManager::~CDataStorage()
+{
+    xr_free(m_path_ids);
+    xr_free(m_vertices);
+}
 TEMPLATE_SPECIALIZATION
 inline void CFixedVertexManager::init()
 {
@@ -35,7 +41,7 @@ inline void CFixedVertexManager::init()
     ++m_current_path_id;
     if (!m_current_path_id)
     {
-        ZeroMemory(m_indexes, m_max_node_count * sizeof(IndexVertex));
+        ZeroMemory(m_path_ids, m_max_node_count * sizeof(TPathId));
         ++m_current_path_id;
     }
 }
@@ -46,7 +52,7 @@ TEMPLATE_SPECIALIZATION
 inline bool CFixedVertexManager::is_visited(const TIndex& vertex_id) const
 {
     VERIFY(vertex_id < m_max_node_count);
-    return m_indexes[vertex_id].m_path_id == m_current_path_id;
+    return m_path_ids[vertex_id] == m_current_path_id;
 }
 
 TEMPLATE_SPECIALIZATION
@@ -60,15 +66,22 @@ inline TCompoundVertex& CFixedVertexManager::get_node(const TIndex& vertex_id) c
 {
     VERIFY(vertex_id < m_max_node_count);
     VERIFY(is_visited(vertex_id));
-    return *m_indexes[vertex_id].m_vertex;
+    return *m_vertices[vertex_id];
+}
+
+TEMPLATE_SPECIALIZATION
+inline TCompoundVertex* CFixedVertexManager::find_vertex(const TIndex& vertex_id) const
+{
+    VERIFY(vertex_id < m_max_node_count);
+    return m_path_ids[vertex_id] == m_current_path_id ? m_vertices[vertex_id] : nullptr;
 }
 
 TEMPLATE_SPECIALIZATION
 inline TCompoundVertex& CFixedVertexManager::create_vertex(TCompoundVertex& vertex, const TIndex& vertex_id)
 {
     VERIFY(vertex_id < m_max_node_count);
-    m_indexes[vertex_id].m_vertex = &vertex;
-    m_indexes[vertex_id].m_path_id = m_current_path_id;
+    m_vertices[vertex_id] = &vertex;
+    m_path_ids[vertex_id] = m_current_path_id;
     vertex._index = vertex_id;
     return vertex;
 }

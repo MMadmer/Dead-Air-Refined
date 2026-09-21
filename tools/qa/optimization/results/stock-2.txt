@@ -1,0 +1,13 @@
+[LUA]  OPTBENCH: begin level=l01_escape
+~ [optbench] cdb level bbox (-833.5 -38.5 -633.8)-(766.5 92.5 966.4) tris=2166276
+~ [optbench] cdb.nearest_cull rays=200000 time=148.828 ms rate=1343830/s hits=32822 range_sum=1896023.651488 mat=75530311078
+~ [optbench] cdb.nearest rays=200000 time=146.076 ms rate=1369152/s hits=48908 range_sum=2725852.765470 mat=112402264733
+~ [optbench] cdb.first_cull rays=200000 time=115.492 ms rate=1731716/s hits=32822 range_sum=1982749.795035 mat=75459040101
+~ [optbench] cdb.all rays=200000 time=177.557 ms rate=1126402/s hits=83283 range_sum=5132293.620971 mat=191370274030
+~ [optbench] cdb.nearest_short rays=200000 time=53.205 ms rate=3759031/s hits=3548 range_sum=17283.967320 mat=8157431764
+~ [optbench] cdb.box boxes=20000 time=5.592 ms rate=3576538/s hits=6264 mat=14405155791
+~ [optbench] cdb done
+~ [optbench] path searches=1000 time=168.515 ms rate=5934.2/s found=622 nodes=359082 length=255208.3735
+~ [optbench] path done
+[LUA]  ~ [optbench] frame skipped
+[LUA]  OPTBENCH: DONE

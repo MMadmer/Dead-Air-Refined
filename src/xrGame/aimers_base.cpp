@@ -82,11 +82,17 @@ void base::aim_at_position(
 
     Fvector direction_target = Fvector().sub(m_target, bone_position);
     VERIFY(_valid(direction_target));
-    if (direction_target.magnitude() < EPS_L)
+    // The magnitude is wanted twice and the vector only changes on the degenerate
+    // branch, so the common path takes one square root instead of two.
+    float direction_magnitude = direction_target.magnitude();
+    if (direction_magnitude < EPS_L)
+    {
         direction_target.set(0.f, 0.f, EPS_L);
+        direction_magnitude = direction_target.magnitude();
+    }
     VERIFY(_valid(direction_target));
 
-    float const invert_magnitude = 1.f / direction_target.magnitude();
+    float const invert_magnitude = 1.f / direction_magnitude;
     direction_target.mul(invert_magnitude);
     VERIFY2(fsimilar(direction_target.magnitude(), 1.f),
         make_string("[%f][%f] [%f][%f][%f] [%f][%f][%f]", direction_target.magnitude(), invert_magnitude,

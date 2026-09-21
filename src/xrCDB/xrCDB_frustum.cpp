@@ -4,6 +4,8 @@
 #include "xrCDB.h"
 #include "Frustum.h"
 
+#include <xmmintrin.h>
+
 using namespace CDB;
 using namespace Opcode;
 
@@ -31,33 +33,34 @@ public:
         mM[1].add(C, E);
         return F->testAABB(&mM[0].x, mask);
     }
+    ICF void _store(u32 prim, const TRI& T)
+    {
+        RESULT& R = dest->r_add();
+        R.id = prim;
+        R.verts[0] = verts[T.verts[0]];
+        R.verts[1] = verts[T.verts[1]];
+        R.verts[2] = verts[T.verts[2]];
+        R.dummy = T.dummy;
+    }
+
     void _prim(u32 prim)
     {
+        // tris[prim] was re-indexed five times per accepted triangle, and the clipped copy
+        // re-read the vertices it had just been handed.
+        const TRI& T = tris[prim];
         if constexpr (bClass3)
         {
             sPoly src, dst;
             src.resize(3);
-            src[0] = verts[tris[prim].verts[0]];
-            src[1] = verts[tris[prim].verts[1]];
-            src[2] = verts[tris[prim].verts[2]];
+            src[0] = verts[T.verts[0]];
+            src[1] = verts[T.verts[1]];
+            src[2] = verts[T.verts[2]];
             if (F->ClipPoly(src, dst))
-            {
-                RESULT& R = dest->r_add();
-                R.id = prim;
-                R.verts[0] = verts[tris[prim].verts[0]];
-                R.verts[1] = verts[tris[prim].verts[1]];
-                R.verts[2] = verts[tris[prim].verts[2]];
-                R.dummy = tris[prim].dummy;
-            }
+                _store(prim, T);
         }
         else
         {
-            RESULT& R = dest->r_add();
-            R.id = prim;
-            R.verts[0] = verts[tris[prim].verts[0]];
-            R.verts[1] = verts[tris[prim].verts[1]];
-            R.verts[2] = verts[tris[prim].verts[2]];
-            R.dummy = tris[prim].dummy;
+            _store(prim, T);
         }
     }
 
@@ -67,6 +70,10 @@ public:
         EFC_Visible result = _box((Fvector&)node->mAABB.mCenter, (Fvector&)node->mAABB.mExtents, mask);
         if (fcvNone == result)
             return;
+
+        // Keep the children in cache: a BVH node is walked by every query that reaches it.
+        _mm_prefetch((const char*)node->GetPos(), _MM_HINT_T0);
+        _mm_prefetch((const char*)node->GetNeg(), _MM_HINT_T0);
 
         // 1st chield
         if (node->HasLeaf())
@@ -89,6 +96,15 @@ public:
     }
 };
 
+template <bool bClass3, bool bFirst>
+ICF void frustum_run(
+    COLLIDER* dest, Fvector* V, TRI* T, const AABBNoLeafNode* N, const CFrustum& F, u32 mask)
+{
+    frustum_collider<bClass3, bFirst> BC;
+    BC._init(dest, V, T, &F);
+    BC._stab(N, mask);
+}
+
 void COLLIDER::frustum_query(u32 frustum_mode, const MODEL* m_def, const CFrustum& F)
 {
     ZoneScoped;
@@ -100,35 +116,13 @@ void COLLIDER::frustum_query(u32 frustum_mode, const MODEL* m_def, const CFrustu
     const u32 mask = F.getMask();
     r_clear();
 
-    // Binary dispatcher
-    if (frustum_mode & OPT_FULL_TEST)
+    // One switch instead of a two-level if tree: same instantiations, mode bits read once.
+    const u32 sel = ((frustum_mode & OPT_FULL_TEST) ? 1u : 0u) | ((frustum_mode & OPT_ONLYFIRST) ? 2u : 0u);
+    switch (sel)
     {
-        if (frustum_mode & OPT_ONLYFIRST)
-        {
-            frustum_collider<true, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
-        else
-        {
-            frustum_collider<true, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
-    }
-    else
-    {
-        if (frustum_mode & OPT_ONLYFIRST)
-        {
-            frustum_collider<false, true> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
-        else
-        {
-            frustum_collider<false, false> BC;
-            BC._init(this, m_def->verts, m_def->tris, &F);
-            BC._stab(N, mask);
-        }
+    case 0: frustum_run<false, false>(this, m_def->verts, m_def->tris, N, F, mask); break;
+    case 1: frustum_run<true, false>(this, m_def->verts, m_def->tris, N, F, mask); break;
+    case 2: frustum_run<false, true>(this, m_def->verts, m_def->tris, N, F, mask); break;
+    default: frustum_run<true, true>(this, m_def->verts, m_def->tris, N, F, mask); break;
     }
 }
