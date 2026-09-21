@@ -731,22 +731,28 @@ ICF void CBackend::set_VS(SVS* _vs)
     set_VS(_vs->sh, _vs->cName.c_str());
 }
 
-IC bool CBackend::UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers],
-    dx11ConstantBuffer* const desired[MaxCBuffers], u32& uiMin, u32& uiMax)
+IC bool CBackend::UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers], u32& currentCount,
+    const R_constant_table::cb_stage_binding& desired, u32& uiMin, u32& uiMax)
 {
-    bool changed = false;
-    for (u32 i = 0; i < MaxCBuffers; ++i)
-    {
-        if (desired[i])
-            constants.queue_for_flush(*desired[i]);
+    // Past the union of the two extents both sides are null and the loop was comparing
+    // nothing with nothing - fourteen slots per stage, six stages, on the hottest state
+    // change the backend has.
+    const u32 span = _max(currentCount, desired.count);
+    currentCount = desired.count;
 
-        if (current[i]._get() == desired[i])
+    bool changed = false;
+    for (u32 i = 0; i < span; ++i)
+    {
+        if (desired.buffers[i])
+            constants.queue_for_flush(*desired.buffers[i]);
+
+        if (current[i]._get() == desired.buffers[i])
             continue;
 
         if (!changed)
             uiMin = i;
         uiMax = i;
-        current[i]._set(desired[i]);
+        current[i]._set(desired.buffers[i]);
         changed = true;
     }
 
@@ -782,7 +788,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
         u32 uiMin;
         u32 uiMax;
 
-        if (UpdateConstantBuffers(m_aPixelConstants, bindings.pixel, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aPixelConstants, m_aPixelConstantsCount, bindings.pixel, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -797,7 +803,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->PSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aVertexConstants, bindings.vertex, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aVertexConstants, m_aVertexConstantsCount, bindings.vertex, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -811,7 +817,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->VSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aGeometryConstants, bindings.geometry, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aGeometryConstants, m_aGeometryConstantsCount, bindings.geometry, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -825,7 +831,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->GSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aHullConstants, bindings.hull, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aHullConstants, m_aHullConstantsCount, bindings.hull, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -839,7 +845,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->HSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aDomainConstants, bindings.domain, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aDomainConstants, m_aDomainConstantsCount, bindings.domain, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -853,7 +859,7 @@ IC void CBackend::set_Constants(R_constant_table* C)
             HW.get_context(context_id)->DSSetConstantBuffers(uiMin, uiMax - uiMin, &tempBuffer[uiMin]);
         }
 
-        if (UpdateConstantBuffers(m_aComputeConstants, bindings.compute, uiMin, uiMax))
+        if (UpdateConstantBuffers(m_aComputeConstants, m_aComputeConstantsCount, bindings.compute, uiMin, uiMax))
         {
             ++uiMax;
 
@@ -897,15 +903,10 @@ IC void CBackend::set_Constants(R_constant_table* C)
     }
 
     // process constant-loaders
-    R_constant_table::c_table::iterator it = C->table.begin();
-    R_constant_table::c_table::iterator end = C->table.end();
-    for (; it != end; ++it)
-    {
-        R_constant* Cs = &**it;
-        VERIFY(Cs);
-        if (Cs && Cs->handler)
-            Cs->handler->setup(*this, Cs);
-    }
+    // The table knows which of its constants carry one; this used to read the handler
+    // field of every constant in it, through a refcounted handle each, to find out.
+    for (R_constant* Cs : C->get_handlers())
+        Cs->handler->setup(*this, Cs);
 }
 
 ICF void CBackend::ApplyRTandZB()

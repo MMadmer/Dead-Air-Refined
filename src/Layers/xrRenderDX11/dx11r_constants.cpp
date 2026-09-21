@@ -287,7 +287,6 @@ IC u32 dest_to_cbuf_type(u32 destination)
 
 BOOL R_constant_table::parse(void* _desc, u32 destination)
 {
-    invalidate_base_constant();
     ID3DShaderReflection* pReflection = (ID3DShaderReflection*)_desc;
 
     D3D_SHADER_DESC ShaderDesc;
@@ -346,6 +345,7 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
         return xr_strcmp(C1->name, C2->name) < 0;
     });
     rebuildConstantBufferBindings();
+    refresh_cached_lookups();
     return TRUE;
 }
 } // namespace xray::render::RENDER_NAMESPACE

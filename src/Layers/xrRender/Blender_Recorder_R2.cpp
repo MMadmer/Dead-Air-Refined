@@ -64,7 +64,12 @@ void CBlender_Compile::r_Constant(LPCSTR name, R_constant_setup* s)
     R_ASSERT(s);
     ref_constant C = ctable.get(name);
     if (C)
+    {
         C->handler = s;
+        // The only writer of a handler outside parse/merge, and the table caches which
+        // of its constants have one.
+        ctable.refresh_handlers();
+    }
 }
 
 void CBlender_Compile::r_ColorWriteEnable(bool cR, bool cG, bool cB, bool cA)

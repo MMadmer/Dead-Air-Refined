@@ -459,3 +459,30 @@ is here so the next person does not spend the afternoon finding it out again.
 **Where the frame stands after this pass:** 66.83 -> ~70 FPS on `l01_escape`, **+4.6%**, from four
 changes in two files and two shaders. The screenshot next to each profile
 (`tools/qa/optimization/profiles/<label>.jpg`) is how the claim is checked, not how it is made.
+
+### Stage 7, fifth pass - the constant-table switch
+
+`CBackend::set_Constants` runs on every pass change the renderer makes, which is thousands of
+times a frame, and it did two things from scratch each time that depend only on the table it was
+handed.
+
+11. **It walked the whole constant table looking for setup handlers.** One refcounted handle per
+    entry, dereferenced to read a field that is almost always null, for a set of constants that
+    changes only when the table does. The table now keeps the list and `set_Constants` iterates
+    it directly.
+12. **It walked fourteen constant-buffer slots per shader stage, six stages, to rebind two.**
+    Fourteen is what the API allows; a shader binds one or two. The binding layout now carries
+    its own extent, the backend remembers the extent the previous table left behind, and the loop
+    covers the union of the two - which is exactly what can have changed.
+
+**70.40 -> 70.91 FPS**, `set_Constants` self 2.54% -> 1.75%, and `UpdateConstantBuffers` off the
+board entirely (it was 1.40%).
+
+**The bug this round taught something.** The handler list was written as a lazy cache first,
+filled on first use, the same shape as the `s_base` cache from the third pass. It crashed on the
+rig inside `set_Constants` - **on a task worker**, under `render_sun::render`. The sun cascades
+render on several threads against one shared `R_constant_table`, so two of them filled the same
+`xr_vector` at once. Both caches are now built where the table changes - `clear()`, `parse()`,
+`merge()` and `CBlender_Compile::r_Constant`, all of which run while shaders load, single
+threaded - and the getters are plain reads. The `s_base` cache had the same latent race; a single
+aligned pointer write hid it. Lazy caching is not safe on anything a render task can reach.

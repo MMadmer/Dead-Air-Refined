@@ -22,7 +22,6 @@ static class cl_sampler : public R_constant_setup
 // TODO: OGL: Use constant buffers like DX11.
 BOOL R_constant_table::parse(void* _desc, u32 destination)
 {
-    invalidate_base_constant();
     GLuint program = *(GLuint*)_desc;
 
     // Get the maximum length of the constant name and allocate a buffer for it

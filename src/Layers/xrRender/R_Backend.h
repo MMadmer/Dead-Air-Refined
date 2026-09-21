@@ -85,6 +85,16 @@ public:
     ref_cbuffer m_aHullConstants[MaxCBuffers];
     ref_cbuffer m_aDomainConstants[MaxCBuffers];
 
+    // One past the highest slot each array has ever had bound. The desired layout knows
+    // its own extent; this is what the previous table left behind and still has to be
+    // unbound, so the union of the two is all set_Constants needs to walk.
+    u32 m_aVertexConstantsCount{};
+    u32 m_aPixelConstantsCount{};
+    u32 m_aGeometryConstantsCount{};
+    u32 m_aComputeConstantsCount{};
+    u32 m_aHullConstantsCount{};
+    u32 m_aDomainConstantsCount{};
+
     D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
     ID3DInputLayout* m_pInputLayout;
     SDeclaration* m_pInputLayoutDecl;
@@ -626,8 +636,8 @@ private:
     bool ApplyVertexLayout();
     void ApplyRTandZB();
     void ApplyPrimitieTopology(D3D_PRIMITIVE_TOPOLOGY Topology);
-    bool UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers],
-        dx11ConstantBuffer* const desired[MaxCBuffers], u32& uiMin, u32& uiMax);
+    bool UpdateConstantBuffers(ref_cbuffer current[MaxCBuffers], u32& currentCount,
+        const R_constant_table::cb_stage_binding& desired, u32& uiMin, u32& uiMax);
 
 private:
     ID3DBlob* m_pInputSignature{ nullptr };

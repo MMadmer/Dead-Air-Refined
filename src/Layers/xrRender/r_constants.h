@@ -187,22 +187,27 @@ public:
 
     static constexpr u32 ConstantBufferCount = 14;
 
+    // One shader stage's constant-buffer bindings. `count` is one past the highest slot
+    // that is actually bound - a shader binds one or two of the fourteen the API allows,
+    // and set_Constants walked all fourteen per stage on every constant-table switch.
+    struct cb_stage_binding
+    {
+        dx11ConstantBuffer* buffers[ConstantBufferCount]{};
+        u32 count{};
+    };
+
     struct cb_binding_layout
     {
-        dx11ConstantBuffer* pixel[ConstantBufferCount]{};
-        dx11ConstantBuffer* vertex[ConstantBufferCount]{};
-        dx11ConstantBuffer* geometry[ConstantBufferCount]{};
-        dx11ConstantBuffer* hull[ConstantBufferCount]{};
-        dx11ConstantBuffer* domain[ConstantBufferCount]{};
-        dx11ConstantBuffer* compute[ConstantBufferCount]{};
+        cb_stage_binding pixel, vertex, geometry, hull, domain, compute;
     };
 #endif
 
 private:
-    mutable R_constant* m_base_constant{};
-    mutable bool m_base_resolved{};
+    R_constant* m_base_constant{};
+    xr_vector<R_constant*> m_handlers;
 
     void fatal(LPCSTR s);
+    void refresh_cached_lookups();
 
 #if defined(USE_DX11)
     cb_binding_layout m_CBBindings[R__NUM_CONTEXTS]{};
@@ -216,25 +221,19 @@ public:
     R_constant_table() = default;
     ~R_constant_table();
 
-    // set_Constants resolved "s_base" by name on every constant-table switch, which is a
-    // string search through the table on the hottest state change the backend has. The
-    // answer depends only on this table, so it is resolved once and dropped whenever the
-    // table itself changes - clear(), parse() and merge() are the only things that can.
-    R_constant* get_base_constant() const
-    {
-        if (!m_base_resolved)
-        {
-            m_base_constant = get("s_base")._get();
-            m_base_resolved = true;
-        }
-        return m_base_constant;
-    }
+    // Two answers set_Constants used to work out from scratch on every constant-table
+    // switch, which is the hottest state change the backend has: "s_base" by name (a
+    // string search through the table) and which constants carry a setup handler (a walk
+    // of the whole table, one refcounted handle per entry, to read a field that is almost
+    // always null). Both depend only on the table.
+    R_constant* get_base_constant() const { return m_base_constant; }
+    const xr_vector<R_constant*>& get_handlers() const { return m_handlers; }
 
-    void invalidate_base_constant()
-    {
-        m_base_constant = nullptr;
-        m_base_resolved = false;
-    }
+    // Rebuilt wherever the table changes: clear(), parse(), merge() and r_Constant() are
+    // all of them, and all of them run while shaders load. Filling these on first use
+    // instead would fill them from several render tasks at once - the sun cascades run
+    // set_Constants on task workers against one shared table.
+    void refresh_handlers();
 
     void clear();
     BOOL parse(void* desc, u32 destination);

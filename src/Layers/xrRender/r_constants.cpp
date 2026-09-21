@@ -70,7 +70,6 @@ ref_constant R_constant_table::get(const shared_str& S, u16 type /*= u16(-1)*/) 
 /// !!!!!!!!FIX THIS FOR DX11!!!!!!!!!
 void R_constant_table::merge(R_constant_table* T)
 {
-    invalidate_base_constant();
     if (!T)
         return;
 
@@ -141,15 +140,16 @@ void R_constant_table::merge(R_constant_table* T)
     }
     rebuildConstantBufferBindings();
 #endif
+    refresh_cached_lookups();
 }
 
 void R_constant_table::clear()
 {
-    invalidate_base_constant();
     //.
     for (u32 it = 0; it < table.size(); it++)
         table[it] = 0; //.g_constant_allocator.destroy(table[it]);
     table.clear();
+    refresh_cached_lookups();
 #if defined(USE_DX11)
     for (int id = 0; id < R__NUM_CONTEXTS; ++id)
     {
@@ -157,6 +157,22 @@ void R_constant_table::clear()
     }
     rebuildConstantBufferBindings();
 #endif
+}
+
+void R_constant_table::refresh_handlers()
+{
+    m_handlers.clear();
+    for (const ref_constant& C : table)
+    {
+        if (C->handler)
+            m_handlers.push_back(C._get());
+    }
+}
+
+void R_constant_table::refresh_cached_lookups()
+{
+    m_base_constant = get("s_base")._get();
+    refresh_handlers();
 }
 
 #if defined(USE_DX11)
@@ -174,16 +190,20 @@ void R_constant_table::rebuildConstantBufferBindings()
             VERIFY(index < ConstantBufferCount);
             VERIFY(buffer);
 
+            cb_stage_binding* stage;
             switch (record.first & CB_BufferTypeMask)
             {
-            case CB_BufferPixelShader: bindings.pixel[index] = buffer; break;
-            case CB_BufferVertexShader: bindings.vertex[index] = buffer; break;
-            case CB_BufferGeometryShader: bindings.geometry[index] = buffer; break;
-            case CB_BufferHullShader: bindings.hull[index] = buffer; break;
-            case CB_BufferDomainShader: bindings.domain[index] = buffer; break;
-            case CB_BufferComputeShader: bindings.compute[index] = buffer; break;
+            case CB_BufferPixelShader: stage = &bindings.pixel; break;
+            case CB_BufferVertexShader: stage = &bindings.vertex; break;
+            case CB_BufferGeometryShader: stage = &bindings.geometry; break;
+            case CB_BufferHullShader: stage = &bindings.hull; break;
+            case CB_BufferDomainShader: stage = &bindings.domain; break;
+            case CB_BufferComputeShader: stage = &bindings.compute; break;
             default: NODEFAULT;
             }
+
+            stage->buffers[index] = buffer;
+            stage->count = _max(stage->count, index + 1);
         }
     }
 }
