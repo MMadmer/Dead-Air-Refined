@@ -474,6 +474,10 @@ public:
     IC void SetTextureFactor(u32 factor) const;
     IC void SetAmbient(u32 ambient) const;
 
+    // Which table set_Constants last bound. A caller that resolves the same handful of
+    // constants for every element can tell from this when its answers went stale.
+    ICF const R_constant_table* get_ctable() const { return ctable; }
+
     // constants
     ICF ref_constant get_c(LPCSTR n)
     {

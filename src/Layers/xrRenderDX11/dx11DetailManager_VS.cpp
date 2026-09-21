@@ -122,6 +122,10 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     // 256 and 512 both measured slower than 61 on l01_escape.
     const u32 batch_limit = static_cast<u32>(hw_BatchSize);
 
+    const R_constant_table* resolved_table = nullptr;
+    R_constant *cConsts = nullptr, *cWave = nullptr, *cDir2D = nullptr, *cXForm = nullptr;
+    R_constant *cSFade = nullptr, *cSFadeEye = nullptr, *cGrassTint = nullptr;
+
     vis_list& list = m_visibles[var_id];
 
     // Iterate
@@ -140,13 +144,28 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
             //	This could be cached in the corresponding consatant buffer
             //	as it is done for DX9
-            cmd_list.set_c(strConsts, consts);
-            cmd_list.set_c(strWave, wave);
-            cmd_list.set_c(strDir2D, wind);
-            cmd_list.set_c(strXForm, cmd_list.xforms.m_wvp);
-            cmd_list.set_c(strSFade, sfade);
-            cmd_list.set_c(strSFadeEye, eye);
-            cmd_list.set_c(strGrassTint, tint);
+            // Seven names resolved per object per pass per dump, for constants that
+            // belong to the element's table and move only when the element does. Detail
+            // objects share shaders, so one remembered table answers for most of them.
+            if (cmd_list.get_ctable() != resolved_table)
+            {
+                resolved_table = cmd_list.get_ctable();
+                cConsts = cmd_list.get_c(strConsts)._get();
+                cWave = cmd_list.get_c(strWave)._get();
+                cDir2D = cmd_list.get_c(strDir2D)._get();
+                cXForm = cmd_list.get_c(strXForm)._get();
+                cSFade = cmd_list.get_c(strSFade)._get();
+                cSFadeEye = cmd_list.get_c(strSFadeEye)._get();
+                cGrassTint = cmd_list.get_c(strGrassTint)._get();
+            }
+
+            cmd_list.set_c(cConsts, consts);
+            cmd_list.set_c(cWave, wave);
+            cmd_list.set_c(cDir2D, wind);
+            cmd_list.set_c(cXForm, cmd_list.xforms.m_wvp);
+            cmd_list.set_c(cSFade, sfade);
+            cmd_list.set_c(cSFadeEye, eye);
+            cmd_list.set_c(cGrassTint, tint);
 
             // ref_constant constArray = RCache.get_c(strArray);
             // VERIFY(constArray);

@@ -1,0 +1,69 @@
+[LUA]  PROFILE: begin level=l01_escape seconds=45
+~ [profiler] sampling the game thread at 1000 Hz
+[LUA]  PROFILE: fps 71.64 over 3225 frame(s) in 45013 ms
+~ [profiler] 42141 sample(s), 3652 distinct symbol(s), 0 suspend failure(s)
+~ [profiler] --- self time (where the game thread actually was) ---
+~ [profiler] self   8.03%    3383  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] self   6.90%    2906  VCRUNTIME140!_NLG_Return2
+~ [profiler] self   3.74%    1577  ntdll!NtDelayExecution
+~ [profiler] self   3.62%    1527  d3d11!D3DKMTOpenResource
+~ [profiler] self   2.46%    1035  LuaJIT!gc_sweep
+~ [profiler] self   2.11%     890  nvwgf2umx!NVAPI_Thunk
+~ [profiler] self   1.82%     765  xrRender_R4!xray::render::render_r4::CBackend::set_Constants
+~ [profiler] self   1.60%     673  LuaJIT!gc_traverse_tab
+~ [profiler] self   1.52%     639  LuaJIT!atomic
+~ [profiler] self   1.43%     603  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::add_leafs_static
+~ [profiler] self   1.32%     557  LuaJIT!lj_tab_get
+~ [profiler] self   1.27%     535  xrCDB!box_walker<0>::walk
+~ [profiler] self   1.22%     513  xrRender_R4!xray::render::render_r4::CKinematicsAnimated::LL_BuldBoneMatrixDequatize
+~ [profiler] self   1.21%     508  xrRender_R4!xray::render::render_r4::CSkeletonX::_Render
+~ [profiler] self   1.20%     504  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::add_static
+~ [profiler] self   1.14%     482  VCRUNTIME140!_CxxUnregisterExceptionObject
+~ [profiler] self   1.14%     481  xrRender_R4!xray::render::render_r4::CBackend::set_Pass
+~ [profiler] self   1.07%     453  xrRender_R4!xray::render::render_r4::CDetailManager::IsPartVisible
+~ [profiler] self   1.07%     452  xrRender_R4!xray::render::render_r4::CBackend::UpdateConstantBuffers
+~ [profiler] self   0.96%     405  xrRender_R4!xray::render::render_r4::dx11ConstantBuffer::Update
+~ [profiler] self   0.91%     383  xrCDB!walker::walk
+~ [profiler] self   0.91%     382  LuaJIT!lj_BC_TGETS
+~ [profiler] self   0.89%     374  ntdll!ZwSetEvent
+~ [profiler] self   0.84%     354  d3d11!CreateDirect3D11DeviceFromDXGIDevice
+~ [profiler] self   0.83%     350  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::insert_static
+~ [profiler] self   0.82%     347  VCRUNTIME140!memcmp
+~ [profiler] self   0.79%     332  nvwgf2umx!SetDependencyInfo
+~ [profiler] self   0.75%     317  xrRender_R4!xray::render::render_r4::CBackend::set_Textures
+~ [profiler] self   0.68%     288  xrCDB!Spatial::ray_walker<1,0,0>::walk
+~ [profiler] self   0.68%     287  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::render_graph
+~ [profiler] self   0.64%     269  xrRender_R4!xray::render::render_r4::R_constant_table::get
+~ [profiler] self   0.62%     262  xrRender_R4!xray::render::render_r4::Fvisual::Render
+~ [profiler] self   0.61%     257  nvwgf2umx!NVAPI_DirectMethods
+~ [profiler] self   0.58%     243  LuaJIT!lj_alloc_malloc
+~ [profiler] self   0.54%     227  ntdll!RtlAllocateHeap
+~ [profiler] self   0.51%     217  xrRender_R4!xray::render::render_r4::R_constants::queue_for_flush
+~ [profiler] self   0.51%     215  ucrtbase!strcmp
+~ [profiler] self   0.49%     208  LuaJIT!gc_finalize
+~ [profiler] self   0.49%     205  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::build_subspace_dynamic
+~ [profiler] self   0.46%     195  LuaJIT!gc_sweepstr
+~ [profiler] --- inclusive time (function or anything it called) ---
+~ [profiler] incl  88.77%   37410  xrEngine!CRenderDevice::ProcessFrame
+~ [profiler] incl  86.71%   36539  xrEngine!CApplication::Run
+~ [profiler] incl  84.33%   35536  xrEngine!entry_point
+~ [profiler] incl  80.73%   34022  xrEngine!WinMain
+~ [profiler] incl  77.67%   32732  xrEngine!__scrt_common_main_seh
+~ [profiler] incl  74.68%   31469  KERNEL32!BaseThreadInitThunk
+~ [profiler] incl  70.30%   29624  ntdll!RtlUserThreadStart
+~ [profiler] incl  60.35%   25430  xrEngine!CRenderDevice::DoRender
+~ [profiler] incl  59.30%   24991  xrGame!CLevel::OnRender
+~ [profiler] incl  51.61%   21750  xrRender_R4!xray::render::render_r4::CRender::Render
+~ [profiler] incl  31.01%   13069  xrEngine!MessageRegistry<pureFrame>::Process
+~ [profiler] incl  29.93%   12611  xrEngine!CRenderDevice::FrameMove
+~ [profiler] incl  21.07%    8880  xrRender_R4!xray::render::render_r4::CRender::render_lights
+~ [profiler] incl  17.74%    7474  xrRender_R4!`xray::render::render_r4::CRender::render_lights'::`2'::<lambda_3>::operator()
+~ [profiler] incl  16.97%    7151  xrRender_R4!xray::render::render_r4::CDetailManager::Render
+~ [profiler] incl  16.95%    7143  xrGame!CGamePersistent::OnFrame
+~ [profiler] incl  16.89%    7116  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] incl  16.86%    7106  xrEngine!CSheduler::Update
+~ [profiler] incl  15.88%    6693  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::render_graph
+~ [profiler] incl  15.55%    6554  luabind!luabind::detail::pcall
+~ [profiler] done
+~ [profiler] samples kept - dar_profile_callers <symbol> to ask who called what
+[LUA]  PROFILE: DONE

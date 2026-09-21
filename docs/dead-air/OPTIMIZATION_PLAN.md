@@ -565,3 +565,14 @@ the shipping build; the checker is, as a tool, because a table like this decays 
 **70.91 -> 72.78 FPS.** `_RTDynamicCast` and `_CxxUnregisterExceptionObject` - which was the RTTI
 machinery, not exception handling - are both off the profile. The thread idles 2.86% where it
 idled 1.63%.
+
+17. **The detail dump resolved seven constants by name per object per pass.** They belong to the
+    element's constant table and move only when the element does, and detail objects share
+    shaders, so one remembered table answers for most of them. `hw_Render_dump` 8.03% -> 7.45%,
+    `R_constant_table::get` off the board. **73.38 FPS.**
+
+**Left alone on purpose.** `R_constants::queue_for_flush` (0.51%) searches the dirty list instead
+of trusting the buffer's own flag, and the comment above it says why: the flag desynced from the
+list once and every draw after that read stale GPU constants - the lamp blackout. The list is
+sixteen pointers. A generation stamp would make it O(1) and could put the bug back; the half a
+percent is not worth it.

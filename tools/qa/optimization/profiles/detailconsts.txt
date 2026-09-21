@@ -1,0 +1,21 @@
+[LUA]  PROFILE: begin level=l01_escape seconds=45
+~ [profiler] sampling the game thread at 1000 Hz
+[LUA]  PROFILE: fps 73.38 over 3303 frame(s) in 45008 ms
+~ [profiler] 42573 sample(s), 3642 distinct symbol(s), 0 suspend failure(s)
+~ [profiler] --- self time (where the game thread actually was) ---
+~ [profiler] self   7.45%    3172  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] self   6.89%    2935  VCRUNTIME140!_NLG_Return2
+~ [profiler] self   3.80%    1616  d3d11!D3DKMTOpenResource
+~ [profiler] self   3.38%    1439  ntdll!NtDelayExecution
+~ [profiler] self   2.46%    1048  LuaJIT!gc_sweep
+~ [profiler] self   2.10%     892  nvwgf2umx!NVAPI_Thunk
+~ [profiler] self   1.92%     819  xrRender_R4!xray::render::render_r4::CBackend::set_Constants
+~ [profiler] self   1.68%     715  LuaJIT!gc_traverse_tab
+~ [profiler] --- inclusive time (function or anything it called) ---
+~ [profiler] incl  88.29%   37588  xrEngine!CRenderDevice::ProcessFrame
+~ [profiler] incl  86.14%   36671  xrEngine!CApplication::Run
+~ [profiler] incl  83.64%   35609  xrEngine!entry_point
+~ [profiler] incl  80.09%   34098  xrEngine!WinMain
+~ [profiler] done
+~ [profiler] samples kept - dar_profile_callers <symbol> to ask who called what
+[LUA]  PROFILE: DONE
