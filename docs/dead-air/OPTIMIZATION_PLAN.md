@@ -486,3 +486,27 @@ render on several threads against one shared `R_constant_table`, so two of them 
 `merge()` and `CBlender_Compile::r_Constant`, all of which run while shaders load, single
 threaded - and the getters are plain reads. The `s_base` cache had the same latent race; a single
 aligned pointer write hid it. Lazy caching is not safe on anything a render task can reach.
+
+### Stage 7, sixth pass - three copies of the same bytes
+
+`dar_profile_callers` on the unsymbolised `VCRUNTIME140!_NLG_Return2` - which is `memcpy` -
+answered the question the fourth pass left open: **9.05% of the thread, 85.6% of it under
+`hw_Render_dump`.** Per batch of 61 instances the same 3904 bytes were copied three times: by the
+dump into the constant buffer's CPU shadow, by `Flush` out of the shadow into the mapped GPU
+buffer, and by `Flush` again into the committed copy kept for a change comparison.
+
+13. **A constant buffer with exactly one member is now written straight into its map.** One
+    member is what makes `D3D_MAP_WRITE_DISCARD` safe: there is nothing else in the buffer for
+    the discard to throw away, so the caller's bytes are the buffer. The gate is
+    `m_singleMember && (already mapped || nothing has written the shadow since the last flush)`,
+    which a shared `$Globals` - what a mod's own detail shader would give us - fails, falling back
+    to the shadow path unchanged. `Flush` is the unmap, and it runs before every draw; the detail
+    dump also flushes explicitly at the end, because a pass whose parts were all culled maps a
+    buffer and then draws nothing. **memcpy 9.40% -> 6.77% of the thread.**
+
+**About the frame rate.** Two runs of the *same binary* measured 69.11 and 70.91 FPS, so a single
+30-second run on this rig carries about +-1.3%. Everything claimed above that band (the packed
+rows at +3.8%, the batch-size ladder at -2.7% and -4.6%) is real; a half-frame difference is not
+evidence of anything. Where a change is smaller than the band it is reported as what the profile
+measured - a share of the thread - and shipped because it is strictly less work, not because the
+frame rate moved. This one removes two of three copies of every byte of grass the GPU is shown.

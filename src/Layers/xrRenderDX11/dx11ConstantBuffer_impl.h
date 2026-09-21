@@ -139,19 +139,25 @@ IC void* dx11ConstantBuffer::AccessDirect(R_constant_load& L, size_t DataSize)
     //	Check buffer size in client code: don't know if actual data will cross
     //	buffer boundaries.
     VERIFY(L.index < (int)m_uiBufferSize);
-    u8* res = ((u8*)m_pBufferData) + L.index;
+    if ((size_t)L.index + DataSize > m_uiBufferSize)
+        return nullptr;
 
-    if ((size_t)L.index + DataSize <= m_uiBufferSize)
+    // Straight into the mapped buffer when this buffer holds nothing else and nothing has
+    // written its shadow since the last flush - see m_singleMember. Either condition
+    // failing means something else's bytes are in there and the discard would lose them.
+    if (m_singleMember && (m_pMapped || !m_bChanged))
     {
-        // The caller is handed the raw bytes and writes whatever it likes into them, so
-        // Flush cannot know whether the range still matches what was committed. It used to
-        // find out with a memcmp of the whole range on every flush - for the detail dump,
-        // a compare of a batch of instances against the previous, unrelated batch.
-        m_knownDifferent = true;
+        u8* mapped = static_cast<u8*>(MapDirect());
         MarkDirty(L.index, DataSize);
-        return res;
+        return mapped + L.index;
     }
-    else
-        return 0;
+
+    // The caller is handed the raw bytes and writes whatever it likes into them, so Flush
+    // cannot know whether the range still matches what was committed. It used to find out
+    // with a memcmp of the whole range on every flush - for the detail dump, a compare of
+    // a batch of instances against the previous, unrelated batch.
+    m_knownDifferent = true;
+    MarkDirty(L.index, DataSize);
+    return static_cast<u8*>(m_pBufferData) + L.index;
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -1,0 +1,27 @@
+[LUA]  PROFILE: begin level=l01_escape seconds=30
+~ [profiler] sampling the game thread at 1000 Hz
+[LUA]  PROFILE: fps 70.63 over 2120 frame(s) in 30013 ms
+~ [profiler] 28311 sample(s), 3227 distinct symbol(s), 0 suspend failure(s)
+~ [profiler] --- self time (where the game thread actually was) ---
+~ [profiler] self   8.08%    2288  xrRender_R4!xray::render::render_r4::CDetailManager::hw_Render_dump
+~ [profiler] self   6.77%    1916  VCRUNTIME140!_NLG_Return2
+~ [profiler] self   3.39%     960  d3d11!D3DKMTOpenResource
+~ [profiler] self   2.91%     823  VCRUNTIME140!_CxxUnregisterExceptionObject
+~ [profiler] self   2.52%     713  LuaJIT!gc_sweep
+~ [profiler] self   1.94%     549  nvwgf2umx!NVAPI_Thunk
+~ [profiler] self   1.87%     530  xrRender_R4!xray::render::render_r4::CBackend::set_Constants
+~ [profiler] self   1.72%     486  LuaJIT!gc_traverse_tab
+~ [profiler] self   1.65%     467  xrRender_R4!xray::render::render_r4::R_dsgraph_structure::add_leafs_static
+~ [profiler] self   1.63%     462  ntdll!NtDelayExecution
+~ [profiler] self   1.44%     409  LuaJIT!atomic
+~ [profiler] self   1.38%     392  LuaJIT!lj_tab_get
+~ [profiler] --- inclusive time (function or anything it called) ---
+~ [profiler] incl  87.09%   24657  xrEngine!CRenderDevice::ProcessFrame
+~ [profiler] incl  84.75%   23993  xrEngine!CApplication::Run
+~ [profiler] incl  82.12%   23249  xrEngine!entry_point
+~ [profiler] incl  78.32%   22174  xrEngine!WinMain
+~ [profiler] incl  75.18%   21284  xrEngine!__scrt_common_main_seh
+~ [profiler] incl  72.18%   20436  KERNEL32!BaseThreadInitThunk
+~ [profiler] done
+~ [profiler] samples kept - dar_profile_callers <symbol> to ask who called what
+[LUA]  PROFILE: DONE

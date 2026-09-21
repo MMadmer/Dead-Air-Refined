@@ -15,7 +15,7 @@ public:
     ID3DBuffer* GetBuffer() { return m_pBuffer; }
     void Flush(u32 context_id);
     bool QueueForFlush();
-    void CancelFlush() { m_queuedForFlush = false; }
+    void CancelFlush();
     bool NeedsFlush() const { return m_bChanged; }
 
     //	Set copy data into constant buffer
@@ -31,6 +31,7 @@ public:
     void* AccessDirect(R_constant_load& L, size_t DataSize);
 
 private:
+    void* MapDirect();
     void Update(u16 offset, const void* data, size_t size);
     void MarkDirty(u16 offset, size_t size);
     void ResetDirtyRange();
@@ -55,6 +56,16 @@ private:
     bool m_knownDifferent;
     u32 m_dirtyBegin;
     u32 m_dirtyEnd;
+
+    // A buffer with exactly one member, written wholesale through AccessDirect, can be
+    // written straight into the mapped GPU buffer. Through the shadow the same bytes are
+    // copied three times - into the shadow, out of it into the map, and into the
+    // committed copy kept for a change comparison a caller that hands out raw bytes can
+    // never win. For the detail dump that was 7% of the frame. One member is what makes
+    // MAP_WRITE_DISCARD safe: there is nothing else in the buffer for the discard to
+    // throw away.
+    bool m_singleMember;
+    void* m_pMapped;
 
     static const u32 lineSize = sizeof(Fvector4);
 

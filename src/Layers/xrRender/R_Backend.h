@@ -489,6 +489,11 @@ public:
         return nullptr;
     }
 
+    // Leaves no constant buffer mapped. A buffer written straight into its map is only
+    // unmapped by a flush, and the detail dump can finish a pass without drawing - every
+    // part culled - having mapped one for instances it then had none of.
+    ICF void flush_Constants() { constants.flush(); }
+
     // constants - direct (fast)
     template<typename... Args>
     ICF void set_c(R_constant* C, Args&&... args)

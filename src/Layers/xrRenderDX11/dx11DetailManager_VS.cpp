@@ -228,5 +228,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             }
         }
     }
+
+    // A pass whose parts were all culled mapped an instance buffer and then drew nothing,
+    // and a draw is what would have unmapped it.
+    cmd_list.flush_Constants();
 }
 } // namespace xray::render::RENDER_NAMESPACE
