@@ -49,6 +49,8 @@ public:
     const CGameLevelCrossTable& cross_table() const;
     const CGameLevelCrossTable* get_cross_table() const;
     inline const CPatrolPathStorage& patrol_paths() const;
+    // null before a level is loaded; for callers that may run that early
+    inline CPatrolPathStorage* get_patrol_paths() const { return m_patrol_path_storage; }
     CGraphEngine& graph_engine() const;
 };
 

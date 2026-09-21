@@ -8,6 +8,8 @@
 #include "xrScriptEngine/script_engine.hpp"
 #include "ai_space.h"
 #include "xrAICore/Navigation/game_graph.h"
+#include "xrAICore/Navigation/level_graph.h"
+#include "xrAICore/Navigation/PatrolPath/patrol_path_storage.h"
 #include "alife_simulator_base.h"
 #include "alife_simulator.h"
 #include "alife_spawn_registry.h"
@@ -801,6 +803,29 @@ u32 xms_native_graph_vertex(pcstr level_name, float x, float y, float z)
     return best;
 }
 
+// A destination nobody drew: registers the one-point runtime patrol path
+// `name` at the navmesh cell nearest to the position, or moves it there when it
+// exists already. With it the STOCK schemes (walker, camper, ...) walk to any
+// place - danger, cover and combat intact - instead of the scripts growing a
+// movement system of their own. Runtime names live under one reserved prefix so
+// a module can never shadow or move a path the level shipped.
+bool xms_native_patrol_point(pcstr name, float x, float y, float z)
+{
+    static constexpr pcstr kPrefix = "xms_rt_";
+    if (!name || 0 != strncmp(name, kPrefix, xr_strlen(kPrefix)) || xr_strlen(name) > 120)
+        return false;
+    CPatrolPathStorage* storage = ai().get_patrol_paths();
+    if (!storage || !ai().get_level_graph() || !ai().get_cross_table() || !ai().get_game_graph())
+        return false;
+    const Fvector position = {x, y, z};
+    if (!_valid(position))
+        return false;
+    // 15 m: far enough for an object lying off the mesh, close enough that a
+    // place in the void is refused instead of walked to the map's edge
+    return storage->set_runtime_point(name, position, 15.f, ai().get_level_graph(), ai().get_cross_table(),
+        ai().get_game_graph());
+}
+
 // Lua bootstrap: hooks, module require, registries, persistence facade.
 // Kept in C++ so the engine is self-contained; a loose gamedata\scripts\
 // xms.script (if present) is loaded instead to allow iteration.
@@ -819,6 +844,7 @@ xms.active_modes = xms_native_active_modes
 xms.mode_active = xms_native_mode_active
 xms.known_modes = xms_native_known_modes
 xms.graph_vertex = xms_native_graph_vertex
+xms.patrol_point = xms_native_patrol_point
 -- NQ quest-graph support (feature-test with xms.nq_api)
 xms.nq_api = 1
 xms.list_files = xms_native_list_files
@@ -1043,6 +1069,7 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_mode_active", &xms_native_mode_active),
         def("xms_native_known_modes", &xms_native_known_modes),
         def("xms_native_graph_vertex", &xms_native_graph_vertex),
+        def("xms_native_patrol_point", &xms_native_patrol_point),
         def("xms_native_recompose_spawns", &xms_native_recompose_spawns),
         def("xms_native_list_files", &xms_native_list_files),
         def("xms_native_read_file", &xms_native_read_file),

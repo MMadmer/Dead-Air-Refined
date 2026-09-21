@@ -46,6 +46,23 @@ public:
     IC const PATROL_REGISTRY& patrol_paths() const;
 
     const CPatrolPath* add_alias_if_exist(shared_str patrol_name, shared_str duplicate_name);
+
+    // Runtime one-point paths (XMS behaviour graphs): a destination nobody drew
+    // in the level editor. Creates the path, or MOVES its single point when the
+    // name is already a runtime one. The position is snapped to the nearest
+    // navmesh cell; false when there is no cell within `max_snap` metres, when
+    // the name belongs to a path the level shipped, or without a level graph.
+    //
+    // A runtime path is never freed or replaced before the storage itself dies:
+    // CPatrolPathManager keeps a raw CPatrolPath* plus point INDICES, so moving
+    // the point in place is safe where deleting the object would not be.
+    // Nothing of this is serialized - the storage is level data, not a save.
+    bool set_runtime_point(shared_str patrol_name, const Fvector& position, float max_snap,
+        const CLevelGraph* level_graph, const CGameLevelCrossTable* cross, const CGameGraph* game_graph);
+    bool runtime(shared_str patrol_name) const;
+
+private:
+    xr_vector<shared_str> m_runtime; // names created through set_runtime_point
 };
 
 #include "xrAICore/Navigation/PatrolPath/patrol_path_storage_inline.h"

@@ -10,6 +10,7 @@
 #include "patrol_path_storage.h"
 #include "patrol_path.h"
 #include "patrol_point.h"
+#include "xrAICore/Navigation/level_graph.h"
 #include "Common/LevelGameDef.h"
 
 // The registry may hold the same CPatrolPath* under several keys: add_alias_if_exist()
@@ -31,6 +32,7 @@ void CPatrolPathStorage::destroy_registry()
         xr_delete(path);
 
     m_registry.clear();
+    m_runtime.clear();
 }
 
 CPatrolPathStorage::~CPatrolPathStorage() { destroy_registry(); }
@@ -147,6 +149,49 @@ void CPatrolPathStorage::save(IWriter& stream)
     }
 
     stream.close_chunk();
+}
+
+bool CPatrolPathStorage::runtime(shared_str patrol_name) const
+{
+    return std::find(m_runtime.begin(), m_runtime.end(), patrol_name) != m_runtime.end();
+}
+
+bool CPatrolPathStorage::set_runtime_point(shared_str patrol_name, const Fvector& position, float max_snap,
+    const CLevelGraph* level_graph, const CGameLevelCrossTable* cross, const CGameGraph* game_graph)
+{
+    if (!level_graph || !cross || !game_graph || !patrol_name.size())
+        return false;
+
+    // The navmesh decides where a stalker can stand. An exact hit first; a
+    // crate on a table or an item in the grass is off the mesh by a little, so
+    // the nearest cell is the honest destination - within reason.
+    // (with no current vertex to start from, vertex() tries the exact cell and
+    // falls back to the nearest one)
+    const u32 vertex_id = level_graph->vertex(u32(-1), position);
+    if (!level_graph->valid_vertex_id(vertex_id))
+        return false;
+    if (level_graph->distance(vertex_id, position) > max_snap)
+        return false;
+
+    const_iterator it = patrol_paths().find(patrol_name);
+    if (it != patrol_paths().end())
+    {
+        // a name the level shipped is never ours to move
+        if (!runtime(patrol_name))
+            return false;
+        CPatrolPath* path = it->second;
+        CPatrolPath::CVertex* point = path->vertex(0);
+        if (!point)
+            return false;
+        point->data(CPatrolPoint(level_graph, cross, game_graph, path, position, vertex_id, 0, "wp00"));
+        return true;
+    }
+
+    CPatrolPath* path = xr_new<CPatrolPath>(patrol_name);
+    path->add_vertex(CPatrolPoint(level_graph, cross, game_graph, path, position, vertex_id, 0, "wp00"), 0);
+    m_registry.emplace(patrol_name, path);
+    m_runtime.push_back(patrol_name);
+    return true;
 }
 
 const CPatrolPath* CPatrolPathStorage::add_alias_if_exist(shared_str patrol_name, shared_str duplicate_name)

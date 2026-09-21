@@ -146,6 +146,9 @@ Runtime facts:
   to read a module's own data files, `xms.module_applies(id)` for the engine's
   `mode=` gate, and `xms.dialog_register/unregister/invalidate(id, …)` for
   dialogs built by script instead of XML (`xms.nq_api` feature-tests the group).
+  `xms.patrol_point(name, x, y, z)` registers a one-point runtime patrol path
+  (`xms_rt_*`) at the navmesh cell nearest to a position, so the stock schemes
+  walk to a place nobody drew a path for; it is level data, never saved.
 - Saves: the module set is recorded in the save's `.scov` sidecar; removing a
   module does not brick the save — its objects are skipped on load and
   reported. `.scop` stays byte-compatible with original Dead Air 0.98b.
