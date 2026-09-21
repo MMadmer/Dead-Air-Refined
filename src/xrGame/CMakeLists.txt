@@ -2557,9 +2557,17 @@ if (WIN32)
     target_link_options(xrGame PRIVATE "/DELAYLOAD:AnselSDK64.dll")
 endif()
 
+# smart_cast is the engine's own dynamic_cast accelerator: a declared type pair resolves
+# through a virtual cast_*() instead of an RTTI walk, which is how the original X-Ray
+# shipped. PURE_DYNAMIC_CAST turns every smart_cast in the target back into a plain
+# dynamic_cast, and it was here because DECLARE_SPECIALIZATION was defined for the whole
+# target - which makes every translation unit DEFINE the specialisations instead of
+# declaring them, and the link fails. Neither define is needed: smart_cast.cpp includes
+# the header twice, and the first include leaves DECLARE_SPECIALIZATION defined as the
+# macro that switches the second one to the defining form. Consumers of this target keep
+# PURE_DYNAMIC_CAST, because the specialisations live in this DLL and are not exported.
 target_compile_definitions(xrGame
-    PUBLIC
-    DECLARE_SPECIALIZATION
+    INTERFACE
     PURE_DYNAMIC_CAST
 
     PRIVATE

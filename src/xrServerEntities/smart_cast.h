@@ -38,6 +38,14 @@
 
 #ifdef XRGAME_EXPORTS
 
+// The table below is the engine's own dynamic_cast accelerator: for a declared pair
+// (target, source, method) smart_cast calls source->method() instead of walking RTTI.
+// It is only correct while every class that derives from the target answers that method
+// with an unconditional `this`, and the table decayed for years while PURE_DYNAMIC_CAST
+// kept it out of the build. tools/qa/Check-SmartCastTable.py is what says whether it
+// still holds; three pairs it rejects are marked below, and each one falls back to the
+// RTTI walk rather than being quietly wrong.
+
 DECLARE_SPECIALIZATION(IKinematics, IRenderVisual, dcast_PKinematics);
 #undef cast_type_list
 #define cast_type_list save_cast_list(IKinematics, IRenderVisual)
@@ -112,9 +120,8 @@ DECLARE_SPECIALIZATION(CInventoryItem, CGameObject, cast_inventory_item);
 #undef cast_type_list
 #define cast_type_list save_cast_list(CInventoryItem, CGameObject)
 
-DECLARE_SPECIALIZATION(CInventoryOwner, CGameObject, cast_inventory_owner);
-#undef cast_type_list
-#define cast_type_list save_cast_list(CInventoryOwner, CGameObject)
+// CInventoryOwner from CGameObject is NOT in the table: CBaseMonster returns null in Call of Pripyat mode
+// cast_inventory_owner() and dynamic_cast give different answers, so this pair takes the RTTI walk.
 
 DECLARE_SPECIALIZATION(CActor, CGameObject, cast_actor);
 #undef cast_type_list
@@ -132,9 +139,8 @@ DECLARE_SPECIALIZATION(CWeapon, CGameObject, cast_weapon);
 #undef cast_type_list
 #define cast_type_list save_cast_list(CWeapon, CGameObject)
 
-DECLARE_SPECIALIZATION(CFoodItem, CInventoryItem, cast_food_item);
-#undef cast_type_list
-#define cast_type_list save_cast_list(CFoodItem, CInventoryItem)
+// CFoodItem from CInventoryItem is NOT in the table: nothing in the tree returns this from it, CBottleItem included
+// cast_food_item() and dynamic_cast give different answers, so this pair takes the RTTI walk.
 
 DECLARE_SPECIALIZATION(CMissile, CInventoryItem, cast_missile);
 #undef cast_type_list
@@ -216,9 +222,8 @@ DECLARE_SPECIALIZATION(CHolderCustom, CGameObject, cast_holder_custom);
 #undef cast_type_list
 #define cast_type_list save_cast_list(CHolderCustom, CGameObject)
 
-DECLARE_SPECIALIZATION(CAttachmentOwner, CGameObject, cast_attachment_owner);
-#undef cast_type_list
-#define cast_type_list save_cast_list(CAttachmentOwner, CGameObject)
+// CAttachmentOwner from CGameObject is NOT in the table: CBaseMonster is one through CInventoryOwner and never overrides it
+// cast_attachment_owner() and dynamic_cast give different answers, so this pair takes the RTTI walk.
 
 DECLARE_SPECIALIZATION(CEatableItem, CInventoryItem, cast_eatable_item);
 #undef cast_type_list

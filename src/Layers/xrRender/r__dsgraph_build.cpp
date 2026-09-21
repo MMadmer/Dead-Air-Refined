@@ -53,15 +53,20 @@ ICF bool is_static_geometry_valuable(dxRender_Visual* visual, u32 context)
 
     const u32 quality = _min(ps_r_optimize_static, u32(geometry_optimization_high));
     const float volume = visual->vis.sphere.volume();
-    const float distance = Device.vCameraPosition.distance_to(visual->vis.sphere.P) + EPS;
-    const float adjustedDistance = distance * Device.fFOV / 67.f;
+    // Squared on both sides. Every term is non-negative, so the comparison is the same one;
+    // the square root it used to take ran once per static visual per context per frame, and
+    // this runs for every visual the dsgraph walk reaches.
+    const float fovScale = Device.fFOV / 67.f;
+    const float adjustedDistanceSq =
+        (Device.vCameraPosition.distance_to_sqr(visual->vis.sphere.P) + EPS) * fovScale * fovScale;
 
     const bool sticky = (Device.dwFrame - visual->vis.valuable_frame[context]) <= 1;
     const float distanceScale = sticky ? staticGeometryStickyScale : 1.f;
 
     for (const auto& threshold : staticGeometryThresholds[quality - 1])
     {
-        if (volume < threshold.volume && adjustedDistance > threshold.distance * distanceScale)
+        const float limit = threshold.distance * distanceScale;
+        if (volume < threshold.volume && adjustedDistanceSq > limit * limit)
             return false;
     }
 

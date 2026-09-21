@@ -91,7 +91,10 @@ IC void Dequantize(CKey& K, const CBlend& BD, const CMotion& M)
     u32 frame = iFloor(time);
     float delta = time - float(frame);
     u32 count = M.get_count();
-    const u32 currentFrame = frame % count;
+    // The blend wraps timeCurrent, so the frame is inside the clip except on the tick it
+    // wraps. A branch the predictor gets right beats the integer divide % compiles to for
+    // a runtime divisor, and this runs per bone per blend per frame.
+    const u32 currentFrame = frame < count ? frame : frame % count;
     const u32 nextFrame = currentFrame + 1 == count ? 0 : currentFrame + 1;
     // rotation
     if (M.test_flag(flRKeyAbsent))

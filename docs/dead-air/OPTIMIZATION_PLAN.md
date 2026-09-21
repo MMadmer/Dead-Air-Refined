@@ -510,3 +510,58 @@ rows at +3.8%, the batch-size ladder at -2.7% and -4.6%) is real; a half-frame d
 evidence of anything. Where a change is smaller than the band it is reported as what the profile
 measured - a share of the thread - and shipped because it is strictly less work, not because the
 frame rate moved. This one removes two of three copies of every byte of grass the GPU is shown.
+
+### Stage 7, seventh pass - the accelerator the engine ships switched off
+
+`_RTDynamicCast` had been sitting at ~3% of the game thread since the first profile, spread over
+dozens of call sites, and every attempt to attribute it to a missing `DECLARE_SPECIALIZATION`
+came back wrong. So the fallback itself was instrumented: a deprecated function template called
+from `CSmartMatcher::smart_cast<Loki::NullType>` makes the compiler name both types of every cast
+that misses the table. A full rebuild of xrGame printed **nothing**.
+
+The reason is one line in `src/xrGame/CMakeLists.txt`:
+
+```cmake
+target_compile_definitions(xrGame PUBLIC DECLARE_SPECIALIZATION PURE_DYNAMIC_CAST ...)
+```
+
+`PURE_DYNAMIC_CAST` is `#define smart_cast dynamic_cast`. **Every smart_cast in xrGame, xrEngine,
+xrUICore and xrPhysics is a plain RTTI walk**, and has been since the OpenXRay import - the
+accelerator the original X-Ray shipped with has never run in this engine. `DECLARE_SPECIALIZATION`
+next to it is why: defined for the whole target it makes every translation unit *define* the
+specialisations instead of declaring them, and the link fails - so `PURE_DYNAMIC_CAST` had to be
+there to switch the whole thing off. Neither define is needed. `smart_cast.cpp` includes the
+header twice on purpose, and the first include leaves `DECLARE_SPECIALIZATION` defined as the
+macro that switches the second one to the defining form.
+
+**But the table had decayed while it was out of the build**, which is exactly what one would
+expect of a type table nothing compiles. `tools/qa/Check-SmartCastTable.py` reads the class
+hierarchy and every definition of every cast method, and asks the only question that matters: does
+every class that derives from a declared target resolve that method to an unconditional `this`?
+Three pairs of 65 do not, and all three would have been silent wrong answers rather than slow ones:
+
+| pair | what disagrees |
+| --- | --- |
+| `CInventoryOwner` from `CGameObject` | `CBaseMonster::cast_inventory_owner` returns null in Call of Pripyat mode - which Dead Air is - while `dynamic_cast` succeeds. 18 monster classes. |
+| `CAttachmentOwner` from `CGameObject` | monsters are one through `CInventoryOwner` and never override it, so `CGameObject`'s null wins. 18 classes. |
+| `CFoodItem` from `CInventoryItem` | nothing in the tree returns `this` from `cast_food_item`; `CEatableItemObject` returns 0. `CBottleItem` is a `CFoodItem` and would stop being one. |
+
+Those three are out of the table with the reason written next to them, and take the RTTI walk -
+which is what the game does today, so their behaviour is unchanged. The other 62 are on.
+
+**Checked three ways before shipping.** The static check above; a Release build that ran *both*
+paths for every cast in the game and logged any disagreement, over 45 seconds of `l01_escape`
+(1753 objects online) - **none**; and the same build spawning a new game, 22958 spawn points and
+27415 A-Life objects through the whole `CSE_*` serialisation path - **none**. The audit is not in
+the shipping build; the checker is, as a tool, because a table like this decays quietly.
+
+14. **smart_cast resolves 62 type pairs through a virtual call instead of an RTTI walk.**
+15. **The static-geometry cull took a square root per visual per context per frame.** Both sides of
+    the comparison are non-negative, so it squares instead. `add_leafs_static` 1.65% -> 1.45%.
+16. **The animation key lookup did an integer divide per bone per blend per frame.** `frame % count`
+    where the blend has already wrapped `timeCurrent`, so the frame is inside the clip on every
+    tick but the one that wraps. A branch the predictor gets right instead.
+
+**70.91 -> 72.78 FPS.** `_RTDynamicCast` and `_CxxUnregisterExceptionObject` - which was the RTTI
+machinery, not exception handling - are both off the profile. The thread idles 2.86% where it
+idled 1.63%.
