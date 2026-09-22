@@ -26,6 +26,21 @@
 
 void CUIActorMenu::InitTradeMode()
 {
+    // The backpack comes out to trade out of, the same as for the inventory - but the window
+    // does NOT wait for the scene the way the inventory key does. Trading is a conversation
+    // the partner is standing in the middle of; the hands catch up behind the open window,
+    // which is what dar_instant_inventory does for the inventory and what trade does always.
+    // The script only starts the scene here: the window is shown by whoever asked for the
+    // mode, so the script must not open one itself.
+    //
+    // Here rather than in CUIGameSP::StartTrade because that is only one of the two ways in:
+    // the game's own dialogs call CScriptGameObject::StartTrade, which sets the mode itself.
+    // SetMenuMode only reaches this function when the mode actually changes, so re-showing a
+    // menu already in trade does not start the scene again.
+    luabind::functor<bool> before;
+    if (GEnv.ScriptEngine->functor("_G.da_before_trade", before))
+        before();
+
     ShowIfExist(m_pTradeWnd, true);
     m_pLists[eInventoryBagList]->Show(false);
     GetModeSpecificPartnerInfo(mmTrade)->Show(true);

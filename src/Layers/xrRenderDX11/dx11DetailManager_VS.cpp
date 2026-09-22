@@ -193,7 +193,7 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 if (shadow_pass && ep.distance_to_sqr(part.slot->vis.sphere.P) > grass_shadow_dist_sq)
                     continue;
 
-                if (!IsPartVisible(part, frustum))
+                if (!IsPartVisible(part, frustum, cmd_list.context_id))
                     continue;
 
                 // The upload bytes are already packed, in draw order, by the slot refresh
@@ -247,9 +247,5 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             }
         }
     }
-
-    // A pass whose parts were all culled mapped an instance buffer and then drew nothing,
-    // and a draw is what would have unmapped it.
-    cmd_list.flush_Constants();
 }
 } // namespace xray::render::RENDER_NAMESPACE

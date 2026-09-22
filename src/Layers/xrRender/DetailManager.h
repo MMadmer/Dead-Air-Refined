@@ -123,8 +123,15 @@ public:
         vis_data vis; //
         // Which visibility pass last asked about this slot, and what it answered. Every
         // part cut from this slot shares the answer, so only the first one pays.
-        u32 vis_stamp;
-        u8 vis_result;
+        //
+        // PER RENDER CONTEXT. The sun cascades run through xr_parallel_for, three of them
+        // at once, each with its OWN frustum (render_phase_sun.cpp), and the local lamps
+        // do the same on the aux contexts. One shared answer meant cascade 2 reading what
+        // cascade 0 had just decided about a different frustum - and a slot of grass
+        // appearing in one cascade's shadow map and not in the next, frame after frame.
+        // That is the shimmer along the edges of grass shadows.
+        u32 vis_stamp[R__NUM_CONTEXTS];
+        u8 vis_result[R__NUM_CONTEXTS];
         SlotPart G[dm_obj_in_slot]; //
 
         Slot()
@@ -133,8 +140,8 @@ public:
             empty = 1;
             type = stReady;
             sx = sz = 0;
-            vis_stamp = 0;
-            vis_result = 0;
+            ZeroMemory(vis_stamp, sizeof(vis_stamp));
+            ZeroMemory(vis_result, sizeof(vis_result));
             vis.clear();
         }
     };
@@ -178,9 +185,10 @@ public:
     Fvector4 m_wind_dir1{};
     Fvector4 m_wind_dir2{};
     u32 m_render_state_frame{u32(-1)};
-    // Bumped once per render entry, where the frustum changes. Slot stamps start at 0,
-    // so this starts at 1 and no slot can look pre-tested.
-    u32 m_vis_stamp{1};
+    // Bumped once per render entry of ITS OWN context, where that context's frustum
+    // changes. Slot stamps start at 0, so these start at 1 and no slot can look
+    // pre-tested.
+    u32 m_vis_stamp[R__NUM_CONTEXTS];
 
     IReader* dtFS;
     DetailHeader dtH;
@@ -223,7 +231,7 @@ public:
     ref_geom soft_Geom;
     void soft_Load();
     void soft_Unload();
-    void soft_Render(const CFrustum* frustum);
+    void soft_Render(const CFrustum* frustum, u32 context_id);
 
     // Hardware processor
     ref_geom hw_Geom;
@@ -258,7 +266,7 @@ public:
     void hw_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum);
     void hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, const Fvector4& wave,
         const Fvector4& wind, u32 var_id, u32 lod_id, bool collectStats, const CFrustum* frustum);
-    bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum);
+    bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum, u32 context_id);
 
     // get unpacked slot
     DetailSlot& QueryDB(int sx, int sz);

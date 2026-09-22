@@ -98,6 +98,8 @@ CDetailManager::CDetailManager() : xrc("detail manager")
     soft_Geom = nullptr;
     hw_Geom = nullptr;
     hw_BatchSize = 0;
+    for (u32& stamp : m_vis_stamp)
+        stamp = 1;
     m_time_rot_1 = 0;
     m_time_rot_2 = 0;
     m_time_pos = 0;
@@ -515,21 +517,21 @@ bool CDetailManager::HasRenderableDetails() const
 #endif
 }
 
-bool CDetailManager::IsPartVisible(const VisiblePart& part, const CFrustum* frustum)
+bool CDetailManager::IsPartVisible(const VisiblePart& part, const CFrustum* frustum, u32 context_id)
 {
     if (!frustum)
         return true;
 
     Slot& slot = *part.slot;
-    if (slot.vis_stamp == m_vis_stamp)
-        return slot.vis_result != 0;
+    if (slot.vis_stamp[context_id] == m_vis_stamp[context_id])
+        return slot.vis_result[context_id] != 0;
 
     u32 mask = frustum->getMask();
     const bool visible =
         frustum->testSAABB(slot.vis.sphere.P, slot.vis.sphere.R, slot.vis.box.data(), mask) != fcvNone;
 
-    slot.vis_stamp = m_vis_stamp;
-    slot.vis_result = visible ? 1u : 0u;
+    slot.vis_stamp[context_id] = m_vis_stamp[context_id];
+    slot.vis_result[context_id] = visible ? 1u : 0u;
     return visible;
 }
 
@@ -601,8 +603,9 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
     if (!HasRenderableDetails())
         return;
 
-    // A new frustum invalidates every cached slot answer at once, without touching them.
-    ++m_vis_stamp;
+    // A new frustum invalidates every cached slot answer at once, without touching them -
+    // this context's answers, and only this context's.
+    ++m_vis_stamp[cmd_list.context_id];
 
     ZoneScoped;
 
@@ -624,7 +627,7 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
     if (UseVS())
         hw_Render(cmd_list, collectStats, frustum);
     else
-        soft_Render(frustum);
+        soft_Render(frustum, cmd_list.context_id);
     cmd_list.detailRendering = previousDetailRendering;
     cmd_list.set_CullMode(CULL_CCW);
 

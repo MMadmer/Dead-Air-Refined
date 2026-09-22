@@ -142,20 +142,16 @@ IC void* dx11ConstantBuffer::AccessDirect(R_constant_load& L, size_t DataSize)
     if ((size_t)L.index + DataSize > m_uiBufferSize)
         return nullptr;
 
-    // Straight into the mapped buffer when this buffer holds nothing else and nothing has
-    // written its shadow since the last flush - see m_singleMember. Either condition
-    // failing means something else's bytes are in there and the discard would lose them.
-    if (m_singleMember && (m_pMapped || !m_bChanged))
-    {
-        u8* mapped = static_cast<u8*>(MapDirect());
-        MarkDirty(L.index, DataSize);
-        return mapped + L.index;
-    }
-
     // The caller is handed the raw bytes and writes whatever it likes into them, so Flush
     // cannot know whether the range still matches what was committed. It used to find out
     // with a memcmp of the whole range on every flush - for the detail dump, a compare of
     // a batch of instances against the previous, unrelated batch.
+    //
+    // Handing out the MAPPED buffer instead was tried and taken back out. It removed two of
+    // the three copies every batch makes and moved the frame rate by nothing measurable,
+    // which is not a price worth paying to hold a D3D buffer mapped across a stretch of
+    // engine code that binds it - the same shape of hazard as the constant-buffer skips that
+    // blacked out every lamp once.
     m_knownDifferent = true;
     MarkDirty(L.index, DataSize);
     return static_cast<u8*>(m_pBufferData) + L.index;

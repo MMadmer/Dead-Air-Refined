@@ -16,7 +16,7 @@ void CDetailManager::soft_Load()
 }
 
 void CDetailManager::soft_Unload() { soft_Geom.destroy(); }
-void CDetailManager::soft_Render(const CFrustum* frustum)
+void CDetailManager::soft_Render(const CFrustum* frustum, u32 context_id)
 {
     ZoneScoped;
     // Render itself
@@ -38,7 +38,7 @@ void CDetailManager::soft_Render(const CFrustum* frustum)
         VisiblePartVec::iterator _vE = _vis.end();
         for (; _vI != _vE; _vI++)
         {
-            if (!IsPartVisible(*_vI, frustum))
+            if (!IsPartVisible(*_vI, frustum, context_id))
                 continue;
 
             SlotItemVec* items = _vI->items;

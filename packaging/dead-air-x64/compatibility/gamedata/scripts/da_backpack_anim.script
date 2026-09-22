@@ -205,7 +205,10 @@ function update()
 			return
 		end
 		if progress() >= 1 then
-			if not menu then open_window() end
+			-- Окно торговли открывает движок, и к этому моменту оно уже открыто. Открывать
+			-- что-то своё тут нельзя: без этой оговорки по концу доставания поверх торговли
+			-- вылезал бы инвентарь.
+			if not menu and not for_trade then open_window() end
 			play_clip("anm_ea_idle", 0)
 			-- Иначе движок снял бы сцену по концу цикла и рюкзак пропал бы из рук.
 			game.hold_hud_motion()
@@ -292,6 +295,9 @@ _G.da_before_inventory = function()
 	return before_open()
 end
 
+-- Движок зовёт это как functor<bool> - той же формы, что и da_before_inventory, чтобы обе точки
+-- входа вели себя одинаково. Само значение никому не нужно: окно торговли открывает движок.
 _G.da_before_trade = function()
 	before_trade()
+	return true
 end

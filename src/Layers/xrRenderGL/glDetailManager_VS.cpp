@@ -128,7 +128,7 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, 
 
                 for (const VisiblePart& part : vis)
                 {
-                    if (!IsPartVisible(part, frustum))
+                    if (!IsPartVisible(part, frustum, cmd_list.context_id))
                         continue;
 
                     for (auto& instance : *part.items)

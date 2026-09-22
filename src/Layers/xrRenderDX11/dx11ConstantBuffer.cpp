@@ -7,8 +7,6 @@ namespace xray::render::RENDER_NAMESPACE
 {
 dx11ConstantBuffer::~dx11ConstantBuffer()
 {
-    if (m_pMapped)
-        HW.get_context(m_contextId)->Unmap(m_pBuffer, 0);
     RImplementation.Resources->_DeleteConstantBuffer(m_contextId, this);
     //	Flush();
     _RELEASE(m_pBuffer);
@@ -19,7 +17,7 @@ dx11ConstantBuffer::~dx11ConstantBuffer()
 dx11ConstantBuffer::dx11ConstantBuffer(u32 contextId, ID3DShaderReflectionConstantBuffer* pTable)
     : m_contextId(contextId), m_pBuffer(nullptr), m_uiBufferSize(0), m_pBufferData(nullptr), m_pCommittedData(nullptr),
       m_bChanged(true), m_hasCommittedData(false), m_queuedForFlush(false), m_knownDifferent(false),
-      m_dirtyBegin(0), m_dirtyEnd(0), m_singleMember(false), m_pMapped(nullptr)
+      m_dirtyBegin(0), m_dirtyEnd(0)
 {
     D3D_SHADER_BUFFER_DESC Desc;
 
@@ -50,7 +48,6 @@ dx11ConstantBuffer::dx11ConstantBuffer(u32 contextId, ID3DShaderReflectionConsta
     }
 
     m_uiMembersCRC = crc32(&m_MembersList[0], Desc.Variables * sizeof(m_MembersList[0]));
-    m_singleMember = (Desc.Variables == 1);
 
     R_CHK(BufferUtils::CreateConstantBuffer(&m_pBuffer, Desc.Size));
     VERIFY(m_pBuffer);
@@ -148,52 +145,8 @@ void dx11ConstantBuffer::Update(u16 offset, const void* data, size_t size)
     MarkDirty(offset, size);
 }
 
-// m_contextId, not the caller's: a buffer belongs to one context, and Map and Unmap have
-// to be the same one.
-void* dx11ConstantBuffer::MapDirect()
-{
-    if (!m_pMapped)
-    {
-        D3D11_MAPPED_SUBRESOURCE sub;
-        CHK_DX(HW.get_context(m_contextId)->Map(m_pBuffer, 0, D3D_MAP_WRITE_DISCARD, 0, &sub));
-        m_pMapped = sub.pData;
-    }
-    return m_pMapped;
-}
-
-// The buffer must not be left mapped past the point where something draws with it, and
-// Flush runs before every draw - it is the unmap.
-void dx11ConstantBuffer::CancelFlush()
-{
-    m_queuedForFlush = false;
-    if (m_pMapped)
-    {
-        HW.get_context(m_contextId)->Unmap(m_pBuffer, 0);
-        m_pMapped = nullptr;
-        m_hasCommittedData = false;
-        m_bChanged = false;
-        m_knownDifferent = false;
-        ResetDirtyRange();
-    }
-}
-
 void dx11ConstantBuffer::Flush(u32 context_id)
 {
-    if (m_pMapped)
-    {
-        // Written straight into the map: nothing to copy out of a shadow, nothing to
-        // compare against a committed copy. The shadow no longer describes what the GPU
-        // holds, which is what clearing m_hasCommittedData says.
-        HW.get_context(m_contextId)->Unmap(m_pBuffer, 0);
-        m_pMapped = nullptr;
-        m_hasCommittedData = false;
-        m_bChanged = false;
-        m_queuedForFlush = false;
-        m_knownDifferent = false;
-        ResetDirtyRange();
-        return;
-    }
-
     if (!m_bChanged)
     {
         m_queuedForFlush = false;

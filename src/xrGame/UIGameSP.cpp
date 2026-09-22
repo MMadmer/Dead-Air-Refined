@@ -209,16 +209,9 @@ void CUIGameSP::StartTrade(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOw
     ActorMenu->SetActor(pActorInv);
     ActorMenu->SetPartner(pOtherOwner);
 
-    // The backpack comes out to trade out of, the same as for the inventory - but the window
-    // does NOT wait for the scene here the way the inventory key does. Trading is a
-    // conversation the partner is standing in the middle of; the hands catch up behind the
-    // open window, which is what dar_instant_inventory does for the inventory and what this
-    // does always. The script only starts the scene: showing the window is this function's
-    // job either way, so it must not open one itself.
-    luabind::functor<void> before;
-    if (GEnv.ScriptEngine->functor("_G.da_before_trade", before))
-        before();
-
+    // The backpack scene is started from CUIActorMenu::InitTradeMode, which is the one place
+    // every route into trade passes through - this one and CScriptGameObject::StartTrade,
+    // which is the route the game's own dialogs take.
     ActorMenu->SetMenuMode(mmTrade);
     ActorMenu->ShowDialog(true);
 }

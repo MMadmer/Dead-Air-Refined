@@ -56,6 +56,18 @@ local function on_update()
 	local now = time_global()
 
 	if stage == 0 then
+		-- A global to poke before the first frame. Some reports are about what the engine does
+		-- when something asks it to - a scene starting, a window opening - and the rig has no
+		-- hands to press the key with.
+		if qa_repro_call and qa_repro_call ~= "" then
+			local f = _G[qa_repro_call]
+			if f then
+				printf("[repro] calling %s", qa_repro_call)
+				f()
+			else
+				printf("[repro] !! no global named %s", qa_repro_call)
+			end
+		end
 		build_views()
 		local p = db.actor:position()
 		printf("[repro] begin level=%s at %s %s %s, time %s:%s, settle %s s",
