@@ -663,6 +663,13 @@ constexpr float k_veg_min_height = 0.25f;
 // at the half-way point of that fade - which is what tells a boot in the grass from a boot on
 // a crate standing in it.
 constexpr float k_veg_below_feet = 0.5f;
+// And how far ABOVE the feet a tuft's ROOT may sit and still be brushed. A boot brushes what
+// grows at the height it walks on; grass rooted well over your head grows on whatever you are
+// walking UNDER - a ledge, a roof, the terrain above an interior - and you are not touching it.
+// Reported from the field as a rustle at every step inside a windowless concrete room with the
+// map's grass overhead: only the tuft's TOP was tested, so anything high enough passed.
+// A step's worth of slack, so a verge above a kerb still counts.
+constexpr float k_veg_above_feet = 0.5f;
 } // namespace
 
 void CDetailManager::DispatchMTCalc()
@@ -715,6 +722,7 @@ void CDetailManager::DispatchMTCalc()
         // by its own height: what a boot brushes through is TALL, ground clutter is flat.
         if (environment)
         {
+            static const bool wvdbg = !!strstr(Core.Params, "-wvdbg");
             for (u32 i = 0; i < m_wind_probes.size(); ++i)
             {
                 const auto& m = m_wind_probes[i];
@@ -722,6 +730,9 @@ void CDetailManager::DispatchMTCalc()
                     continue;
 
                 float vegetation = 0.f;
+                // -wvdbg: the nearest tall tuft the disc saw, whether or not it was accepted -
+                // the answer to "why does this room rustle" is its height against the feet.
+                float dbg_root = 0.f, dbg_top = 0.f, dbg_d2 = flt_max;
                 // Only the slots the search disc actually touches (it is smaller than a cell,
                 // so at most four), each clamped into the cache the same way as before.
                 const int lo_x = iFloor((m.pos.x - k_veg_probe_r) / dm_slot_size + .5f) - s_x;
@@ -752,9 +763,26 @@ void CDetailManager::DispatchMTCalc()
                             {
                                 if (!it || model_h * it->scale < k_veg_min_height)
                                     continue;
-                                // Its top against the feet: grass a storey down is not brushed.
-                                const float top = it->mRotY.c.y + model_h * it->scale;
+                                // The tuft has to straddle the height the feet are at: its top
+                                // above them (grass a storey down is not brushed) AND its root
+                                // not above them (grass a storey up is not brushed either).
+                                const float root = it->mRotY.c.y;
+                                const float top = root + model_h * it->scale;
+                                if (wvdbg)
+                                {
+                                    const float sx = it->mRotY.c.x - m.pos.x;
+                                    const float sz = it->mRotY.c.z - m.pos.z;
+                                    const float s_d2 = sx * sx + sz * sz;
+                                    if (s_d2 <= k_veg_probe_r * k_veg_probe_r && s_d2 < dbg_d2)
+                                    {
+                                        dbg_d2 = s_d2;
+                                        dbg_root = root;
+                                        dbg_top = top;
+                                    }
+                                }
                                 if (top < m.pos.y - k_veg_below_feet)
+                                    continue;
+                                if (root > m.pos.y + k_veg_above_feet)
                                     continue;
                                 const float dx = it->mRotY.c.x - m.pos.x;
                                 const float dz = it->mRotY.c.z - m.pos.z;
@@ -769,6 +797,9 @@ void CDetailManager::DispatchMTCalc()
                         }
                     }
                 }
+                if (wvdbg && dbg_d2 < flt_max)
+                    Msg("* [wind-veg] probe[%u]: feet=%.2f nearest tuft root=%.2f top=%.2f -> veg=%.0f", i,
+                        m.pos.y, dbg_root, dbg_top, vegetation);
                 std::atomic_ref<float>(environment->wind_motors[i].veg).store(vegetation, std::memory_order_relaxed);
             }
         }
