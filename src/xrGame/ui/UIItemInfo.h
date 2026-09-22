@@ -28,12 +28,20 @@ private:
     };
     _desc_info m_desc_info;
     CInventoryItem* m_pInvItem;
+    // The id of the object that pointer belongs to. The panel is handed a raw item and
+    // then shown for as long as the window is up; the item can go away underneath it -
+    // sold, taken, or released by a script finishing a task while the trade window is
+    // open - and nothing tells the panel. Re-resolving the id is the one way to find out
+    // that does not read through the pointer being checked.
+    u16 m_inv_item_id;
 
 public:
     CUIItemInfo();
     ~CUIItemInfo() override;
 
     pcstr GetDebugType() override { return "CUIItemInfo"; }
+
+    void Update() override;
 
     CInventoryItem* CurrentItem() const { return m_pInvItem; }
     void InitItemInfo(Fvector2 pos, Fvector2 size, LPCSTR xml_name);

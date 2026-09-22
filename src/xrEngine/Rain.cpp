@@ -458,14 +458,16 @@ void CEffect_Rain::OnFrame()
     // ambient sound
     if (snd_Ambient._feedback())
     {
-        rain_volume_snd = factor * cover_factor;
+        const float cover_snd = da_rain::cover_snd_floor + (1.f - da_rain::cover_snd_floor) * cover_factor;
+        rain_volume_snd = factor * cover_snd;
         clamp(rain_volume_snd, 0.f, 1.f);
         snd_Ambient.set_volume(rain_volume_snd);
 
-        // The script-facing value keeps the daylight term the old one had. Indoors it is now
-        // strictly lower (cover closes), outdoors in daylight it is unchanged, and at night it
-        // still falls away - so no shipped script sees a storm it has never seen before.
-        rain_volume = rain_volume_snd * hemi_factor;
+        // The script-facing value keeps the daylight term the old one had, and the raw cover
+        // with it - the floor above belongs to the ambient bed alone. Indoors it is strictly
+        // lower (cover closes), outdoors in daylight it is unchanged, and at night it still
+        // falls away - so no shipped script sees a storm it has never seen before.
+        rain_volume = factor * cover_factor * hemi_factor;
         clamp(rain_volume, 0.f, 1.f);
     }
 }

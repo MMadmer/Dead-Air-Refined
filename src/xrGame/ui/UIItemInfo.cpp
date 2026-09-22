@@ -87,6 +87,7 @@ CUIItemInfo::CUIItemInfo() : CUIWindow(CUIItemInfo::GetDebugType())
     UIName = NULL;
     UIBackground = NULL;
     m_pInvItem = NULL;
+    m_inv_item_id = u16(-1);
     m_b_FitToHeight = false;
     m_complex_desc = false;
 }
@@ -204,6 +205,27 @@ bool CUIItemInfo::InitItemInfo(cpcstr xml_name)
     return true;
 }
 
+// Shown for as long as its window is, which is longer than the item it describes is
+// guaranteed to live. A trade window is open while scripts run: a task that ends takes its
+// items back, and the panel went on reading the one it was given - a read through freed
+// memory, at the far end of the child-update walk. The check never dereferences the
+// pointer it is checking: it asks the level for the id and compares what comes back.
+void CUIItemInfo::Update()
+{
+    if (m_pInvItem)
+    {
+        IGameObject* alive = (m_inv_item_id != u16(-1)) ? Level().Objects.net_Find(m_inv_item_id) : nullptr;
+        if (!alive || smart_cast<CInventoryItem*>(alive) != m_pInvItem)
+        {
+            m_pInvItem = nullptr;
+            m_inv_item_id = u16(-1);
+            Enable(false);
+        }
+    }
+
+    inherited::Update();
+}
+
 void CUIItemInfo::InitItemInfo(Fvector2 pos, Fvector2 size, LPCSTR xml_name)
 {
     inherited::SetWndPos(pos);
@@ -216,6 +238,7 @@ void CUIItemInfo::InitItem(CUICellItem* pCellItem, CInventoryItem* pCompareItem,
     if (!pCellItem)
     {
         m_pInvItem = nullptr;
+        m_inv_item_id = u16(-1);
         Enable(false);
         return;
     }
@@ -223,6 +246,7 @@ void CUIItemInfo::InitItem(CUICellItem* pCellItem, CInventoryItem* pCompareItem,
     PIItem pInvItem = static_cast<PIItem>(pCellItem->m_pData);
 
     m_pInvItem = pInvItem;
+    m_inv_item_id = m_pInvItem ? m_pInvItem->object().ID() : u16(-1);
     Enable(NULL != m_pInvItem);
     if (!m_pInvItem)
         return;

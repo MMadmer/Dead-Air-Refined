@@ -655,6 +655,11 @@ constexpr float k_veg_probe_r = 0.55f;
 // Below this it is ground clutter - gravel, twigs, moss patches - which a road is full of
 // and which must not rustle. Picked off the level's own model heights (-wvdbg dumps them).
 constexpr float k_veg_min_height = 0.25f;
+// How far below the feet a tuft's top may be and still be brushed. The shader fades a press
+// out over the metre below the presser (da_wind_motors.h); the sound is one bit, so it stops
+// at the half-way point of that fade - which is what tells a boot in the grass from a boot on
+// a crate standing in it.
+constexpr float k_veg_below_feet = 0.5f;
 } // namespace
 
 void CDetailManager::DispatchMTCalc()
@@ -743,6 +748,10 @@ void CDetailManager::DispatchMTCalc()
                             for (const SlotItem* it : part.items)
                             {
                                 if (!it || model_h * it->scale < k_veg_min_height)
+                                    continue;
+                                // Its top against the feet: grass a storey down is not brushed.
+                                const float top = it->mRotY.c.y + model_h * it->scale;
+                                if (top < m.pos.y - k_veg_below_feet)
                                     continue;
                                 const float dx = it->mRotY.c.x - m.pos.x;
                                 const float dz = it->mRotY.c.z - m.pos.z;

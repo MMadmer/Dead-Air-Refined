@@ -66,6 +66,13 @@ constexpr float crown_life_max = 0.18f;
 // A crown needs something like level ground under it; on a wall a drop runs off instead.
 constexpr float crown_min_ny = 0.35f;
 
+// What is left of the rain bed under full cover. Rain on the roof over your head, and on the
+// ground a step away through the doorway, is not silence - and a shop on the marsh with
+// barely a wall to it went completely quiet on the threshold. Only the SOUND takes this
+// floor: what the rain wets, what it draws and what level.get_rain_volume() answers still
+// stop dead under a roof.
+constexpr float cover_snd_floor = 0.30f;
+
 // Sky-cover probe: rays, their reach, and the share of the weight the fall axis itself carries.
 constexpr int cover_rays = 5;
 // The shelter test is a question about what is OVERHEAD, and it is answered by rays that stay

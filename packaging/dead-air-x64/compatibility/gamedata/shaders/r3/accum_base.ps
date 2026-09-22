@@ -83,6 +83,14 @@ float4 main( p_volume I, float4 pos2d : SV_Position ) : SV_Target
                 #else
 							s		= shadow( PS );
                 #endif
+				// First-person geometry is in no local light's shadow map, so every lookup it makes
+				// lands on the world BEHIND it. A lamp riding the actor's own head then sits a few
+				// centimetres from the hands, where the depth compare flips frame to frame - the
+				// shadow and half-shadow that crawl over the hands under the headlamp. Nothing in
+				// the world can shadow what is drawn in front of all of it anyway; the hands' own
+				// self-shadow is the sun's and is drawn separately (hud_shadow.ps).
+				[branch] if ( hud )
+					s = 1.h;
         #endif
 
         // ----- lightmap

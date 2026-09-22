@@ -87,13 +87,15 @@ taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Po
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
     // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
     // target is cleared to zero, so view-z below epsilon means sky.
-    // The other end of the same test is the HUD: hands and the weapon live in the first
-    // ~0.6 m of view-z and move with the player, not the world - the camera reprojection is
-    // simply wrong for them, and running history over the barrel doubles it on every turn
-    // and every bob step. World geometry this close to the eye is a wall filling the whole
-    // view; losing TAA on it for a moment is invisible.
+    // The other end of the same test is the HUD: hands and whatever is in them move with the
+    // player, not the world - the camera reprojection is simply wrong for them, and running
+    // history over the barrel doubles it on every turn and every bob step, which reads as
+    // cracks and a wireframe across the weapon. 0.65 m covered the hands and left a rifle's
+    // barrel and a scope outside; a held item reaches past a metre, so the cut is there.
+    // World geometry this close to the eye is a surface being leant against; losing TAA on it
+    // for a moment is invisible.
     [branch]
-    if (gbd.P.z < 0.65)
+    if (gbd.P.z < 1.10)
         return taa_write(current);
 
     // Reproject the view-space position into the previous frame.
@@ -141,6 +143,17 @@ taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Po
     // a still or slowly turning camera converges to a stable field.
     float motion_px = length((prev_uv - tc) * screen_res.xy);
     float w = 0.88 * saturate(1.0 - motion_px / 24.0);
+
+    // How far the history had to be pulled to fit the current distribution is also how much
+    // it DISAGREES with it, and clipping alone still blends the pulled value in at full
+    // weight. Nothing here carries velocity, so a leaf card moving in the wind reprojects as
+    // if it had stood still: its history is the leaf one frame ago, the clip drags that to
+    // the local mean - which at a leaf edge is half sky - and 88% of that lands on the
+    // pixel. Frame after frame the crown turns into a haze with the cloud pattern showing
+    // through it, which is what a player sees as the sky coming through the trees. Weighted
+    // down by the same number, a moving leaf keeps its own pixel while everything that
+    // reprojects honestly (t <= 1, the whole static world) keeps its history untouched.
+    w *= saturate(1.0 - (t - 1.0) * 0.5);
 
     return taa_write(lerp(current, history, w));
 }

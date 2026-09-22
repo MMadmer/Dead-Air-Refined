@@ -115,15 +115,18 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
             w = exp(-tau * 3.5f) * cos(tau * 9.0f);
         }
         // The height lever belongs to grass, bushes and the branches a body brushes, where the
-        // plant bends from its root - unchanged up to 2.2 m. Above that a press fades out and
-        // is gone by 3.2 m: a stalker walking past a trunk used to throw crown cards twelve
-        // metres up out by metres (H at the top times the press strength, then the 0.5 H
-        // cap). A blast keeps the full lever at any height - its front bends the whole tree.
-        const float reach = is_blast ? 1.0f : saturate(3.2f - H);
+        // plant bends from its root. The reach is measured from the PRESSER, not from the
+        // plant's own root, which is the rule the tree path has always used (h_body below in
+        // da_tree_motors_bend): a body presses what is at its own level, up to 3.2 m above it
+        // and no more than a metre below. Against the root it was measured before, and then
+        // standing on a crate flattened - and rustled - the grass a metre and a half
+        // underneath. A blast keeps the full lever at any height: its front bends the lot.
+        const float h_body = (root_w.y + H) - P.y;
+        const float reach = is_blast ? 1.0f : (saturate(3.2f - h_body) * saturate(h_body + 1.0f));
         bend += (d / dist) * (w * amp * H * reach);
         // Press motors are the ones with a still ring (A.y == 0) and a positive amplitude
         // envelope; their footprint also flattens the wind wave.
-        press_w = max(press_w, w * saturate(A.x * 2.0f) * ((A.y <= 0.001f && !is_blast) ? 1.0f : 0.0f));
+        press_w = max(press_w, w * reach * saturate(A.x * 2.0f) * ((A.y <= 0.001f && !is_blast) ? 1.0f : 0.0f));
     }
     return bend;
 }

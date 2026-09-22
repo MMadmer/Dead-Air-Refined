@@ -297,7 +297,13 @@ float4 main( vf I ) : SV_Target
 			const float3 d = normalize( vreflect );
 			const float3 e0 = s_env0.SampleLevel( smp_base, d, env_mip ).xyz;
 			const float3 e1 = s_env1.SampleLevel( smp_base, d, env_mip ).xyz;
-			env = lerp( e0, e1, L_ambient.w );
+			// The cubes are the skybox TEXTURES. What the dome on screen shows is those textures
+			// tinted by the weather's own sky colour and scaled (sky2.vs/ps; da_fog_mix_sky spells
+			// out the same conversion for the haze). Mirrored raw they are the daylit texture at
+			// full strength whatever the hour - which is why a marsh at night in the rain had the
+			// water glowing brighter than anything around it while the sky above it was dim. Same
+			// conversion as the fog, so the water reflects the sky that is actually drawn.
+			env = da_sky_tint.rgb * lerp( e0, e1, L_ambient.w ) * 0.66f;
 		}
 
 		reflection = env;

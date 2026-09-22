@@ -31,6 +31,10 @@ local playing = false
 -- Пока идёт уборка оружия, сцена ещё не началась; здесь лежит смещение, с которого её начать.
 local pending_start = 0
 local instant = false
+-- Заведена торговлей. Сцена тогда смотрит на ОКНО ИНВЕНТАРЯ, а не на "хоть какой-то приёмник
+-- ввода": после закрытия торговли игрок остаётся в диалоге, и общий признак держал бы рюкзак в
+-- руках весь дальнейший разговор.
+local for_trade = false
 local menu_was_open = false
 -- Окно появляется не в том же кадре, в котором его попросили: до этого момента "меню закрыто"
 -- не значит, что игрок его закрыл.
@@ -55,6 +59,7 @@ function reset()
 	-- Сцена держится до нашей команды, а загрузка сейва её не снимает: снимаем сами.
 	if state ~= ST_OFF or game.scene_active() then game.stop_hud_motion() end
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	for_trade = false
 	scene_snd = nil
 end
 
@@ -157,13 +162,23 @@ local function finish()
 	level.enable_input()
 	if db.actor then db.actor:restore_weapon() end
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	for_trade = false
 	scene_snd = nil
+end
+
+-- Открыто ли окно, ради которого достали рюкзак.
+local function window_open()
+	if for_trade then
+		local am = ActorMenu.get_actor_menu()
+		return am ~= nil and am:IsShown()
+	end
+	return level.main_input_receiver() ~= nil
 end
 
 function update()
 	if state == ST_OFF or not db.actor then return end
 
-	local menu = level.main_input_receiver() ~= nil
+	local menu = window_open()
 	-- Окно увидено открытым - фора больше не нужна, дальше "закрыто" значит закрыто.
 	if menu then menu_was_open, menu_grace = true, 0 end
 	local closed = menu_was_open and (not menu) and time_global() > menu_grace
@@ -237,14 +252,46 @@ function before_open()
 		return true
 	end
 
+	for_trade = false
 	start_show(0)
 	menu_was_open, menu_grace = false, 0
 	if instant then open_window() end
 	return false
 end
 
+-- Торговля. Рюкзак достаётся так же, но окно НЕ ждёт конца доставания: его показывает движок сразу
+-- после этого вызова, а руки догоняют за ним - то есть ровно как с "Мгновенным рюкзаком", всегда.
+-- Поэтому open_window() здесь не зовётся: окно не наше.
+function before_trade()
+	if not enabled() or not db.actor then return end
+
+	for_trade = true
+
+	if state == ST_OPEN or (state == ST_SHOW and playing) then
+		-- Рюкзак уже в руках или как раз достаётся: окно просто откроется поверх.
+		menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+		return
+	end
+
+	if state == ST_HIDE then
+		-- Передумал на полпути к уборке: достаём обратно с зеркальной точки.
+		local from = 1 - progress()
+		sect = sect or scene_section()
+		play_clip("anm_ea_show", from)
+		state = ST_SHOW
+	elseif state ~= ST_SHOW then
+		start_show(0)
+	end
+
+	menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+end
+
 -- Точка входа для движка: имя обязано лежать в НАСТОЯЩЕЙ глобальной области, иначе functor его не
 -- найдёт. Присваивание внутри скрипта такой области не создаёт (setfenv), поэтому пишем в _G.
 _G.da_before_inventory = function()
 	return before_open()
+end
+
+_G.da_before_trade = function()
+	before_trade()
 end

@@ -153,11 +153,17 @@ void CActor::update_shadow_caster(bool enabled)
 void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source)
 {
     // A light sitting on the actor itself - the torch above all - cannot be shadowed by the body
-    // carrying it, and letting it try only paints the beam with the player's own silhouette. The
-    // sun and every lamp in the world are far outside this radius.
+    // carrying it, and letting it try only paints the beam with the player's own silhouette.
+    //
+    // The measure is the body, not Radius(): Radius() is the actor's REACH and grows with the
+    // weapon in hand, so with a rifle out it covered nearly two metres and any world light the
+    // player walked up to lost his shadow - reported as the shadow from a campfire vanishing on
+    // approach. A carried lamp rides the actor's head, about 0.7 m off his centre; a fire he can
+    // stand next to is a metre away at the closest its own collision allows.
+    constexpr float k_carried_light_r = 0.8f;
     Fvector center;
     Center(center);
-    if (center.distance_to(source) < Radius())
+    if (center.distance_to_sqr(source) < k_carried_light_r * k_carried_light_r)
         return;
 
     IRenderVisual* body = m_shadow_caster ? m_shadow_caster : Visual();

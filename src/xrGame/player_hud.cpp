@@ -693,7 +693,12 @@ void player_hud::load(const shared_str& player_hud_sect)
     // the model that has just been deleted.
     m_scene_motions.clear();
     for (auto& [name, item] : m_pool)
-        item->rebind_hand_motions(m_model);
+    {
+        // A section the pool refused (no visual on disk) is remembered as a null so it is
+        // not looked for again.
+        if (item)
+            item->rebind_hand_motions(m_model);
+    }
 
     // Same model, same bone and motion ids: a cycle found through one copy plays on the other.
     // The clavicle name differs between rigs (l_clavicle, bip01_l_clavicle) - both are tried,
@@ -879,6 +884,8 @@ u32 player_hud::motion_length(const shared_str& anim_name, const shared_str& hud
 {
     const float speed = CalcMotionSpeed(anim_name, 1.0f);
     attachable_hud_item* pi = create_hud_item(hud_name);
+    if (!pi)
+        return 100; // ms, the same answer a missing motion gets
     const player_hud_motion* pm = pi->m_hand_motions.find_motion(anim_name);
 
     if (!pm)
@@ -1034,9 +1041,11 @@ void player_hud::update(const Fmatrix& cam_trans)
     if (m_scene_hand != u8(-1) && m_scene_one_hand && m_scene_end && Device.dwTimeGlobal >= m_scene_end)
     {
         m_scene_hand = u8(-1);
-        if (attachable_hud_item* hi = m_attached_items[0])
-            if (hi->m_parent_hud_item)
+        for (attachable_hud_item* hi : m_attached_items)
+        {
+            if (hi && hi->m_parent_hud_item)
                 hi->m_parent_hud_item->PlayAnimIdle();
+        }
     }
 
     if (m_scene_hand != u8(-1))
@@ -1363,13 +1372,16 @@ void player_hud::scene_stop()
 {
     scene_item_release();
 
-    // After a one-hand scene the weapon replays its idle: our cycle sat on the partition of the
-    // other hand and does not go away by itself.
-    if (m_scene_one_hand)
+    // Both hands get their idle back, not only the right one. A scene's cycle owns the
+    // partition it sits on and play_blend refuses an item's own cycle while it does, so
+    // nothing replays by itself. The weapon comes back anyway - the scripts that run a
+    // two-hand scene end it with restore_weapon - but the item in the LEFT hand has no such
+    // path: after the backpack scene a lamp stayed unanimated and undrawn while its light
+    // went on burning, and only walking brought it back.
+    for (attachable_hud_item* hi : m_attached_items)
     {
-        if (attachable_hud_item* hi = m_attached_items[0])
-            if (hi->m_parent_hud_item)
-                hi->m_parent_hud_item->PlayAnimIdle();
+        if (hi && hi->m_parent_hud_item)
+            hi->m_parent_hud_item->PlayAnimIdle();
     }
     m_scene_one_hand = false;
     m_scene_hand = u8(-1);
@@ -1516,14 +1528,51 @@ void player_hud::update_inertion(Fmatrix& trans) const
     }
 }
 
+// Is the visual this hud section names actually on disk? The model pool answers a miss with
+// a fatal, which is right for level geometry and wrong for an item: a mod that ships a knife
+// section without its hud model took the whole game down the moment the player drew it. The
+// search is the pool's own (Instance_Load): the name as given, then $level$, then
+// $game_meshes$, with .ogf appended when there is no extension.
+static bool hud_visual_on_disk(const shared_str& sect)
+{
+    pcstr visual = nullptr;
+    if (pSettings->line_exist(sect, "item_visual"))
+        visual = pSettings->r_string(sect, "item_visual");
+    else if (pSettings->line_exist(sect, "visual"))
+        visual = pSettings->r_string(sect, "visual");
+    if (!visual || !visual[0])
+        return false;
+
+    string_path name;
+    if (!strext(visual))
+        strconcat(sizeof(name), name, visual, ".ogf");
+    else
+        xr_strcpy(name, sizeof(name), visual);
+
+    string_path found;
+    return FS.exist(visual) || FS.exist(found, "$level$", name) || FS.exist(found, "$game_meshes$", name);
+}
+
 attachable_hud_item* player_hud::create_hud_item(const shared_str& sect)
 {
     current_player_hud_sect = sect;
-    auto& item = m_pool[sect];
 
-    if (!item)
-        item = xr_new<attachable_hud_item>(this, sect, m_model);
+    const auto it = m_pool.find(sect);
+    if (it != m_pool.end())
+        return it->second;
 
+    if (!hud_visual_on_disk(sect))
+    {
+        // Said once per section: the pool is asked for the same one every time the item is
+        // drawn, and a log line per frame would be its own bug.
+        Msg("! [hud] section [%s]: its visual is not installed, the item will be carried but not drawn",
+            sect.c_str());
+        m_pool.emplace(sect, nullptr);
+        return nullptr;
+    }
+
+    attachable_hud_item* item = xr_new<attachable_hud_item>(this, sect, m_model);
+    m_pool.emplace(sect, item);
     return item;
 }
 
@@ -1538,6 +1587,10 @@ bool player_hud::allow_activation(CHudItem* item) const
 void player_hud::attach_item(CHudItem* item)
 {
     attachable_hud_item* pi = create_hud_item(item->HudSection());
+    // No visual, no hud item. CHudItem already treats a null HudItemData() as "not in the
+    // hands right now" everywhere it reads it, which is exactly what this is.
+    if (!pi)
+        return;
     const int item_idx = pi->m_attach_place_idx;
 
     if (m_attached_items[item_idx] != pi || pi->m_parent_hud_item != item)

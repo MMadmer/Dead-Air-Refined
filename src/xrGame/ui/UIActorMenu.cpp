@@ -231,6 +231,13 @@ void CUIActorMenu::Update()
     }
     case mmTrade:
     {
+        // The partner can be gone by the time this runs - killed, unloaded, released by a
+        // script - and then there is nothing left to trade with.
+        if (!m_pPartnerInvOwner)
+        {
+            HideDialog();
+            break;
+        }
         if (m_pPartnerInvOwner->inventory().ModifyFrame() != m_trade_partner_inventory_state)
             InitPartnerInventoryContents();
         CheckDistance();
@@ -303,7 +310,16 @@ void CUIActorMenu::CheckDistance()
     CGameObject* pActorGO = smart_cast<CGameObject*>(m_pActorInvOwner);
     CGameObject* pPartnerGO = smart_cast<CGameObject*>(m_pPartnerInvOwner);
     CGameObject* pBoxGO = smart_cast<CGameObject*>(m_pInvBox);
-    VERIFY(pActorGO && (pPartnerGO || pBoxGO));
+
+    // The VERIFY that used to stand here is compiled out of a release build, and the
+    // branch below then read through a null box whenever the partner had gone away.
+    // Nothing to measure a distance to means nothing to trade with.
+    if (!pActorGO || (!pPartnerGO && !pBoxGO))
+    {
+        g_btnHint->Discard();
+        HideDialog();
+        return;
+    }
 
     if (pPartnerGO)
     {
@@ -316,7 +332,6 @@ void CUIActorMenu::CheckDistance()
     }
     else // pBoxGO
     {
-        VERIFY(pBoxGO);
         if (pActorGO->Position().distance_to(pBoxGO->Position()) > 3.0f)
         {
             g_btnHint->Discard();
