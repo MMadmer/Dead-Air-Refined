@@ -841,9 +841,27 @@ bool CInifile::save_as(pcstr new_fname)
 
     R_ASSERT(m_file_name[0]);
     convert_path_separators(m_file_name);
+
+    // w_open_ex opens with SH_DENYWR, so anything else holding the file refuses it - and the
+    // writer that comes back then swallows every byte instead of failing, which is a settings
+    // save that reports success and changes nothing. The new-game screen lost its whole choice
+    // that way: faction, start and modes were written, saved, and never reached the file, so
+    // the game started with none of them. The plain writer does not deny-share, so a refusal
+    // is retried through it, and a save that is genuinely lost says so instead of pretending.
     IWriter* F = FS.w_open_ex(m_file_name);
+    if (F && !F->valid())
+    {
+        FS.w_close(F);
+        F = FS.w_open(m_file_name);
+    }
     if (!F)
         return false;
+    if (!F->valid())
+    {
+        FS.w_close(F);
+        Msg("! Could not write '%s' - it is held open elsewhere. Settings were NOT saved.", m_file_name);
+        return false;
+    }
 
     save_as(*F);
     FS.w_close(F);

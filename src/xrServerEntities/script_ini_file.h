@@ -57,6 +57,9 @@ public:
     // scribble on another script's copy.
     void load_cached(pcstr resolvedPath);
     static void forget_cached_parses();
+    // A file the game WRITES leaves the cache describing what it used to hold, so the
+    // write drops its entry and the next open parses the file again.
+    static void forget_cached_parse(pcstr resolvedPath);
 
 private:
     DECLARE_SCRIPT_REGISTER_FUNCTION();

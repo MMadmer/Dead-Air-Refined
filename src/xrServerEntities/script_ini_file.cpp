@@ -30,12 +30,27 @@ CInifile::Sect* clone_section(const CInifile::Sect& source)
 {
     return xr_new<CInifile::Sect>(source);
 }
+
+// The cache is keyed by the path the FS resolved, and a save is handed the same path with the
+// separators already converted - compare them the way the filesystem does rather than by bytes.
+xr_string cache_key(pcstr path)
+{
+    xr_string key(path ? path : "");
+    for (char& c : key)
+    {
+        if (c == '\\')
+            c = '/';
+        else
+            c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    }
+    return key;
+}
 } // namespace
 
 void CScriptIniFile::load_cached(pcstr resolvedPath)
 {
     auto& cache = parse_cache();
-    const xr_string key(resolvedPath);
+    const xr_string key(cache_key(resolvedPath));
 
     auto it = cache.find(key);
     if (it == cache.end())
@@ -56,6 +71,16 @@ void CScriptIniFile::load_cached(pcstr resolvedPath)
     // The clones are different objects from the cached originals, and every lookup in
     // this file goes through the section index rather than the vector.
     rebuild_section_index();
+}
+
+void CScriptIniFile::forget_cached_parse(pcstr resolvedPath)
+{
+    auto& cache = parse_cache();
+    const auto it = cache.find(cache_key(resolvedPath));
+    if (it == cache.end())
+        return;
+    xr_delete(it->second);
+    cache.erase(it);
 }
 
 void CScriptIniFile::forget_cached_parses()
@@ -226,7 +251,17 @@ void CScriptIniFile::w_u8(pcstr S, pcstr L, u8 V, pcstr comment)
 bool CScriptIniFile::save_as(pcstr new_fname)
 {
     THROW2(new_fname, "File name is null");
-    return(inherited::save_as(new_fname));
+    const bool saved = inherited::save_as(new_fname);
+    // The parse cache exists because scripts reopen the same static .ltx thousands of times a
+    // session. A handful of files are not static: the game writes its own settings back, and
+    // axr_options.ltx is how the new-game screen hands the chosen faction, start location and
+    // campaign modes to the game that is about to start. Cached, the new game read the file as
+    // it was when the process began - empty - and began with no faction, which leaves the actor
+    // standing in fake_start with no mode applied. A written file is no longer what the cache
+    // describes, so its entry goes.
+    if (saved)
+        forget_cached_parse(fname());
+    return saved;
 }
 
 void CScriptIniFile::remove_line(pcstr S, pcstr L)
