@@ -965,11 +965,14 @@ void xrRender_sync_preset_derived()
     // Step count of that ray: the band where neighbouring pixels disagree on a hit is one
     // step wide, so at 8 steps over 35 cm it is 4 cm of rough edge - Maximum halves it.
     static constexpr float sss_steps_by_preset[] = {8.f, 8.f, 8.f, 8.f, 16.f};
-    // Water screen-space reflections ladder (r3_water_refl semantics: 0 off, the march length
-    // scales 64/110/160 with the tier). The two top presets take the sibling engine's tuned
-    // default (high); Minimum stays on the plain cubemap. A shader-options change, so it
-    // applies on renderer (re)start like the token itself.
-    static constexpr u32 water_refl_by_preset[] = {0, 1, 2, 3, 3};
+    // Water screen-space reflections ladder. The tier IS the reflection distance: REFL_RANGE in
+    // ogse_reflections.h cuts the reflection off past 100/140/180/220 metres of eye depth for
+    // tiers 1..4, and the sample count along the ray follows it (16/24/30/48) so the far end
+    // does not thin out. Reported from the field as reflections ending too close: the fourth
+    // tier exists, the video menu offers it by name, and no preset ever selected it - Maximum
+    // sat on the same 180 m as High. It has it now; Minimum stays on the plain cubemap.
+    // A shader-options change, so it applies on renderer (re)start like the token itself.
+    static constexpr u32 water_refl_by_preset[] = {0, 1, 2, 3, 4};
     // Wave rows the water surface evaluates, of the eight the engine solves. Each row is a sin,
     // a cos and a tanh per water pixel, and the tail rows are the short steep ones - dropping
     // them costs texture, not silhouette, because none of this displaces geometry anyway.
@@ -1053,6 +1056,21 @@ void xrRender_sync_preset_derived()
     static constexpr int taa_by_preset[] = {0, 0, 0, 0, 1};
     // Sun shadow-map size ladder - the single most expensive shadow knob was pinned at 2048
     // on every preset ("presets or nothing" gap). Applies on renderer (re)start, since the
+    // How far the sun casts, metres: the far edge of the last cascade (r2_R_sun clamps it
+    // against the weather's own far_plane). Pinned at 100 on every preset, which is where the
+    // field report of shadows ending mid-view comes from - cloud shadows crossing a valley are
+    // the thing this cuts, and they are the whole point of having them move. The stock ceiling
+    // is 180 and it is what Maximum gets back; Default stays exactly where it is today, so
+    // nobody's frame rate moves without them asking for it. The cost lands on the FAR cascade -
+    // the same texels cover more ground - and the near cascade, which is what you look at, is
+    // untouched.
+    static constexpr float sun_far_by_preset[] = {60.f, 80.f, 100.f, 140.f, 180.f};
+    // How far grass casts into those cascades, metres. Also pinned - at 40 - so the top presets
+    // drew grass out to a hundred metres that stopped shadowing itself at forty. Grass is fed
+    // per blade into the near pass, so this is the one shadow distance that is genuinely
+    // expensive (the sibling measured 5.05 ms -> 2.42 ms cutting it back), and the ladder is
+    // correspondingly modest. Default keeps its 40.
+    static constexpr int grass_shadow_by_preset[] = {24, 32, 40, 56, 72};
     // smap targets are created once. Default keeps the historical 2048 exactly.
     // 4096 cascades cost ~3.5 ms more than 2048 in the sun pass at 1440p (rig, 3 cascades);
     // 2048 on the top presets too: the clouds are where those milliseconds go now.
@@ -1129,6 +1147,15 @@ void xrRender_sync_preset_derived()
     ps_r__taa = taa_by_preset[ps_Preset];
     ps_r2_lenswater = lenswater_by_preset[ps_Preset];
     ps_r2_smapsize = smapsize_by_preset[ps_Preset];
+    ps_r2_sun_far = sun_far_by_preset[ps_Preset];
+    ps_r__grass_shadow_dist = grass_shadow_by_preset[ps_Preset];
+
+    // The distances the preset just decided, in the log. Every report about something ending
+    // too close - shadows, reflections, grass - is answered by these five numbers, and until
+    // now answering it meant reading this function.
+    Msg("* [preset] %u: sun_far=%.0f m, grass_shadow=%d m, grass=%d m, refl_tier=%u, puddles=%d m",
+        ps_Preset, ps_r2_sun_far, ps_r__grass_shadow_dist, detail_radius_by_preset[ps_Preset],
+        ps_r_water_reflection, ps_r__puddles_dist);
     string_path ssao_cmd;
     strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
     Console->Execute(ssao_cmd);
