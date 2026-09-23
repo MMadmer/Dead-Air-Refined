@@ -21,6 +21,19 @@ namespace XMS
 {
 namespace
 {
+// What a walk of a module folder passes by: hidden entries and Thumbs.db, which the
+// engine's own file system skips too, plus system entries, desktop.ini and every
+// dot-name. A module that is a git working copy - or a junction into the author's -
+// must not mount, list or be slowed down by its .git.
+bool tooling_entry(const _finddata_t& entry)
+{
+    if (entry.attrib & (_A_HIDDEN | _A_SYSTEM))
+        return true;
+    if (entry.name[0] == '.')
+        return true;
+    return 0 == _stricmp(entry.name, "Thumbs.db") || 0 == _stricmp(entry.name, "desktop.ini");
+}
+
 struct Overlay
 {
     xr_string vpath; // registered (virtual) lowercase path
@@ -715,7 +728,7 @@ void mount_tree(const Module& m, pcstr phys_dir, pcstr virt_dir)
         return;
     do
     {
-        if (0 == xr_strcmp(entry.name, ".") || 0 == xr_strcmp(entry.name, ".."))
+        if (tooling_entry(entry))
             continue;
         string_path phys, virt;
         strconcat(phys, phys_dir, entry.name);
@@ -1695,7 +1708,7 @@ void ListFiles(pcstr dir, pcstr mask, xr_vector<xr_string>& out)
         return;
     do
     {
-        if (!(entry.attrib & _A_SUBDIR))
+        if (!(entry.attrib & _A_SUBDIR) && !tooling_entry(entry))
             out.emplace_back(xr_string(dir) + entry.name);
     } while (_findnext(handle, &entry) == 0);
     _findclose(handle);
@@ -1744,9 +1757,12 @@ void list_relative(const xr_string& root, const xr_string& rel, pcstr mask, bool
         return;
     do
     {
+        // "." and ".." included
+        if (tooling_entry(entry))
+            continue;
         if (entry.attrib & _A_SUBDIR)
         {
-            if (recursive && 0 != xr_strcmp(entry.name, ".") && 0 != xr_strcmp(entry.name, ".."))
+            if (recursive)
                 list_relative(root, rel + entry.name + DELIMITER, mask, recursive, out);
         }
         else if (wildcard_match(mask, entry.name))

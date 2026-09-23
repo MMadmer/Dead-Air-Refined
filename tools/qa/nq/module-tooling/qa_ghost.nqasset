@@ -1,0 +1,15 @@
+-- nq: qa_ghost - a VALID quest that must never load.
+-- Run-NqQa.ps1 copies it into the QA module's .git folder at run time (git cannot track a
+-- folder of that name): a module that is also a git working copy must not have XMS walk,
+-- mount or list what version control keeps there. The discovery check wants exactly the
+-- four reference quests, so this one appearing is a failure.
+return {
+  nq = 1,
+  id = "qa_ghost",
+  title = "QA ghost",
+  activation = "auto",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "finish" } },
+    { id = "finish", kind = "flow.end" },
+  },
+}

@@ -67,6 +67,15 @@ cannot be redirected to — and that covers nearly everything the game ships, se
 *Content bundles* below. Both sections refuse `..` and report bad or missing
 entries in the log instead of silently dropping them.
 
+A module folder may be an author's git working copy, or a junction into one. XMS
+therefore never mounts or lists what version control and tools keep there: hidden
+and system entries, `Thumbs.db`, `desktop.ini` and every name that starts with a
+dot (`.git`, `.gitignore`, `.github`, `.vscode`, ...). That is more than the
+engine's own file system leaves out of loose `gamedata` (hidden entries,
+`Thumbs.db`, `.svn`, `.vs`): a module is a folder its author works in.
+`xms.list_files` does not see them either, so a quest file under `.git` is no
+quest. XFined Editor never ships them in the first place.
+
 Visual overlay registry — one section per entry, section name is free-form. A
 section either **adds** a visual (`file`) or **hides** base ones (`hide`):
 

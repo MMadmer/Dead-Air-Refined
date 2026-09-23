@@ -321,6 +321,12 @@ function Set-QaModule {
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'module-changed\linear_fetch.nqasset') `
                     -Destination (Join-Path $qaModule 'quests\linear_fetch.nqasset') -Force
             }
+            # A module that is also a git working copy: a VALID quest inside its .git must not
+            # load (XMS skips tooling). Made here because git cannot track a folder named .git.
+            $git = Join-Path $qaModule '.git'
+            New-Item -ItemType Directory -Path $git -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'module-tooling\qa_ghost.nqasset') `
+                -Destination (Join-Path $git 'qa_ghost.nqasset') -Force
         }
     }
     if ($AnyMode) { Set-QaModuleAnyMode }
