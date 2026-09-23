@@ -1311,6 +1311,233 @@ local function build_quiet(tag)
 end
 
 -- ============================================================================ registry
+-- ============================================================================ phase pw (scenario World)
+-- A NEW game with the world_qa module (tools\qa\nq\module-world): Cordon without anything
+-- of the original game, the player on the module's Player Start, every way out of Cordon
+-- closed, the module's patrol path registered, and the stalker the module placed walking it
+-- on the standing order its custom data carries. Garbage, which the rules do not name,
+-- keeps its population. Last, a scripted jump out of the area has to be refused.
+local QA_START = { -220.9, -19.6, -145.0 }
+
+local function level_of_se(se)
+	local name
+	pcall(function() name = alife():level_name(game_graph():vertex(se.m_game_vertex_id):level_id()) end)
+	return name
+end
+
+local function each_se(fn)
+	local sim = alife()
+	for id = 1, 65534 do
+		local se = sim:object(id)
+		if (se) then fn(se) end
+	end
+end
+
+local function build_pw()
+	step("w.api", function()
+		local w = xms and xms.world
+		check("w.api", w ~= nil and xms.world_api == 1, "xms.world present = %s, world_api = %s",
+			tostring(w ~= nil), tostring(xms and xms.world_api))
+		if not (w) then return true end
+		check("w.declared", w.declared() == true, "a world is declared = %s", tostring(w.declared()))
+		check("w.rules_here", w.keep("random_stalkers", "l01_escape") == false and w.keep("original_npcs", "l01_escape") == false
+			and w.keep("story_quests", "l01_escape") == false, "Cordon keeps no random stalkers, no original characters, no story quests")
+		-- the author removed the jobs and offered the rule; the new-game answer said keep
+		check("w.player_choice", w.keep("npc_quests", "l01_escape") == true,
+			"the player's new-game answer keeps the jobs the author removed = %s", tostring(w.keep("npc_quests", "l01_escape")))
+		local offered = {}
+		pcall(function()
+			for _, row in ipairs(w.choices("") or {}) do
+				offered[#offered + 1] = tostring(row.module) .. ":" .. tostring(row.key) .. "=" .. tostring(row.keep)
+			end
+		end)
+		check("w.choices", #offered == 1 and offered[1] == "world_qa:npc_quests=false",
+			"the plain game's screen offers %s", table.concat(offered, ", "))
+		check("w.rules_scoped", w.keep("random_stalkers", "l02_garbage") == true,
+			"Garbage keeps its world = %s", tostring(w.keep("random_stalkers", "l02_garbage")))
+		check("w.area", w.in_area("l01_escape") == true and w.in_area("l02_garbage") == false,
+			"the area is Cordon alone: in_area(l01_escape)=%s in_area(l02_garbage)=%s",
+			tostring(w.in_area("l01_escape")), tostring(w.in_area("l02_garbage")))
+		return true
+	end, { timeout = 20000 })
+
+	step_until("w.start", 20000, function()
+		local a = actor()
+		return a ~= nil and level.name() == "l01_escape"
+			and a:position():distance_to(vector():set(QA_START[1], QA_START[2], QA_START[3])) < 4
+	end, function()
+		local a = actor()
+		local p = a and a:position()
+		return fmt1("level %s, actor at %s (the Player Start is %.1f,%.1f,%.1f)", tostring(level.name()),
+			p and string.format("%.1f,%.1f,%.1f", p.x, p.y, p.z) or "?", QA_START[1], QA_START[2], QA_START[3])
+	end)
+
+	step("w.population", function()
+		local here, there = 0, 0
+		each_se(function(se)
+			if (se:clsid() == clsid.online_offline_group_s) then
+				local lvl = level_of_se(se)
+				if (lvl == "l01_escape") then here = here + 1 elseif (lvl == "l02_garbage") then there = there + 1 end
+			end
+		end)
+		check("w.escape_empty", here == 0, "squads on Cordon = %d", here)
+		check("w.garbage_kept", there > 0, "squads on Garbage = %d", there)
+		local trader
+		pcall(function() trader = get_story_object_id("esc_m_trader") end)
+		check("w.story_gone", trader == nil, "Sidorovich (esc_m_trader) is in the world = %s", tostring(trader ~= nil))
+		return true
+	end, { wait = 3000, timeout = 60000 })
+
+	step("w.transitions", function()
+		local total, open, names = 0, 0, {}
+		each_se(function(se)
+			if (se:section_name() == "level_changer" and level_of_se(se) == "l01_escape") then
+				total = total + 1
+				if (xms.world.transition_open(se:name())) then
+					open = open + 1
+					names[#names + 1] = se:name()
+				end
+			end
+		end)
+		check("w.ways_closed", total > 0 and open == 0, "Cordon's level changers: %d, open: %d %s", total, open,
+			table.concat(names, ","))
+		return true
+	end, { timeout = 30000 })
+
+	step("w.path", function()
+		local exists = level.patrol_path_exists("qa_world_walk")
+		local n = 0
+		if (exists) then pcall(function() n = patrol("qa_world_walk"):count() end) end
+		check("w.path", exists and n == 3, "the module's path is registered = %s, points = %d", tostring(exists), n)
+		return true
+	end, { timeout = 10000 })
+
+	step_until("w.guard_online", 90000, function()
+		if not (shared.guard) then
+			each_se(function(se) if (se:name() == "world_qa.qa_world_guard") then shared.guard = se.id end end)
+		end
+		return shared.guard ~= nil and level.object_by_id(shared.guard) ~= nil
+	end, function()
+		if not (shared.guard) then return "the placed stalker is not in the world" end
+		return fmt1("the placed stalker %s is %s", tostring(shared.guard),
+			level.object_by_id(shared.guard) and "online" or "in the world but not online")
+	end)
+
+	step_until("w.guard_order", 60000, function()
+		local st = xms_nq.get_state()
+		local o = st and st.orders and st.orders[tostring(shared.guard)]
+		shared.order = o
+		return o ~= nil and o.kind == "patrol" and o.applied == true
+	end, function()
+		local o = shared.order
+		return fmt1("the placed stalker's order: %s", o and (tostring(o.kind) .. " applied=" .. tostring(o.applied)) or "none")
+	end)
+
+	step_until("w.guard_walks", 60000, function()
+		local st = db.storage and db.storage[shared.guard]
+		shared.section = st and st.active_section
+		return shared.section ~= nil and string.find(tostring(shared.section), "^walker@xms_ord_") ~= nil
+	end, function() return fmt1("the placed stalker's active section: %s", tostring(shared.section)) end)
+
+	-- the new-game screen's answers are cleared once the game runs, like the game's own
+	step_until("w.choice_cleared", 20000, function()
+		local cfg = axr_main and axr_main.config
+		return cfg ~= nil and cfg:r_value("character_creation", "new_game_xmsw_npc_quests", 3) == nil
+	end, function()
+		local v
+		pcall(function() v = axr_main.config:r_value("character_creation", "new_game_xmsw_npc_quests", 3) end)
+		return fmt1("new_game_xmsw_npc_quests after the start = %s", tostring(v))
+	end)
+
+	step("w.describe", function()
+		console("xms_world")
+		local text = xms.world.describe()
+		check("w.describe", text ~= nil and string.find(text, "l01_escape", 1, true) ~= nil,
+			"the console state names the area: %s", tostring(text and string.sub(string.gsub(text, "%s+", " "), 1, 200)))
+		return true
+	end, { timeout = 10000 })
+
+	-- the area holds scripted jumps too: this one has to stay on Cordon
+	step("w.jump_refused", function()
+		local ok = false
+		pcall(function() ok = JumpToLevel("l02_garbage") end)
+		info("JumpToLevel(l02_garbage) sent = %s", tostring(ok))
+		shared.jump_at = time_global()
+		return true
+	end, { timeout = 10000 })
+	step_until("w.still_here", 12000, function()
+		return time_global() - (shared.jump_at or 0) > 8000 and level.name() == "l01_escape"
+	end, function() return fmt1("level after the refused jump: %s", tostring(level.name())) end)
+end
+
+-- ============================================================================ phase pw0 (scenario WorldControl)
+-- The negative control of pw: the same module without its [world]. The same probes must now
+-- find the stock game - squads and Sidorovich on Cordon, every way open - or the pw checks
+-- prove nothing; and the Player Start, the module path and the placed stalker's order must
+-- work all the same, since none of them is a world rule.
+local function build_pw0()
+	step("w0.api", function()
+		local w = xms and xms.world
+		check("w0.api", w ~= nil, "xms.world present = %s", tostring(w ~= nil))
+		check("w0.undeclared", w ~= nil and w.declared() == false, "no world is declared = %s",
+			tostring(w ~= nil and not w.declared()))
+		return true
+	end, { timeout = 20000 })
+
+	step("w0.population", function()
+		local here = 0
+		each_se(function(se)
+			if (se:clsid() == clsid.online_offline_group_s and level_of_se(se) == "l01_escape") then here = here + 1 end
+		end)
+		check("w0.escape_populated", here > 0, "squads on Cordon = %d", here)
+		local trader
+		pcall(function() trader = get_story_object_id("esc_m_trader") end)
+		check("w0.story_there", trader ~= nil, "Sidorovich (esc_m_trader) is in the world = %s", tostring(trader ~= nil))
+		return true
+	end, { wait = 3000, timeout = 60000 })
+
+	step("w0.transitions", function()
+		local total, open = 0, 0
+		each_se(function(se)
+			if (se:section_name() == "level_changer" and level_of_se(se) == "l01_escape") then
+				total = total + 1
+				if (xms.world.transition_open(se:name())) then open = open + 1 end
+			end
+		end)
+		check("w0.ways_open", total > 0 and open == total, "Cordon's level changers: %d, open: %d", total, open)
+		return true
+	end, { timeout = 30000 })
+
+	step_until("w0.start", 20000, function()
+		local a = actor()
+		return a ~= nil and level.name() == "l01_escape"
+			and a:position():distance_to(vector():set(QA_START[1], QA_START[2], QA_START[3])) < 4
+	end, function()
+		local a = actor()
+		local p = a and a:position()
+		return fmt1("level %s, actor at %s", tostring(level.name()), p and string.format("%.1f,%.1f,%.1f", p.x, p.y, p.z) or "?")
+	end)
+
+	step("w0.path", function()
+		local exists = level.patrol_path_exists("qa_world_walk")
+		check("w0.path", exists, "the module's path is registered without a world = %s", tostring(exists))
+		return true
+	end, { timeout = 10000 })
+
+	step_until("w0.guard_order", 90000, function()
+		if not (shared.guard) then
+			each_se(function(se) if (se:name() == "world_qa.qa_world_guard") then shared.guard = se.id end end)
+		end
+		local st = xms_nq.get_state()
+		local o = shared.guard and st and st.orders and st.orders[tostring(shared.guard)]
+		shared.order = o
+		return o ~= nil and o.kind == "patrol" and o.applied == true
+	end, function()
+		local o = shared.order
+		return fmt1("the placed stalker's order: %s", o and (tostring(o.kind) .. " applied=" .. tostring(o.applied)) or "none")
+	end)
+end
+
 local BUILDERS = {
 	-- Look inside a save that is not ours: load a player's own game and print what the
 	-- runtime and the PDA each hold. `save` in the phase ini names the quest to dump.
@@ -1377,6 +1604,8 @@ local BUILDERS = {
 		end, { timeout = 20000 })
 	end,
 	p1 = build_p1,
+	pw = build_pw,
+	pw0 = build_pw0,
 	p2 = build_p2,
 	p3 = build_p3,
 	p4 = build_p4,

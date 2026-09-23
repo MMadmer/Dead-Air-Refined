@@ -1,0 +1,19 @@
+[module]
+id      = world_qa
+name    = World rules acceptance test module
+version = 1.0.0
+api     = 1
+
+; Cordon to itself: nothing of the original game on it, the player kept there, the
+; start placed, one stalker of the module's own on patrol. Garbage keeps its world -
+; the rules name one level, and the probe checks that the next one is untouched.
+[world]
+original_npcs   = false
+random_stalkers = false
+mutants         = false
+npc_quests      = false
+story_quests    = false
+levels          = l01_escape
+; offered on the new-game screen; the QA run answers it with new_game_xmsw_npc_quests = 1
+player_choice   = npc_quests
+area            = l01_escape

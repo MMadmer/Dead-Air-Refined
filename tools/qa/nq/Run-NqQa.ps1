@@ -18,6 +18,10 @@
     Scenario Dialog additionally drives the real talk window: the probe prints "NQQA-AWAIT: <tag>",
     this script captures the hidden-desktop window as evidence and clicks the reply.
 
+    Scenario World starts a NEW game (world rules only ever apply to one) with the world_qa
+    module (tools\qa\nq\module-world): its [world], Player Start, patrol path and a placed
+    stalker with a standing order.
+
 .EXAMPLE
     pwsh -NoProfile -File tools\qa\nq\Run-NqQa.ps1 -SaveName "admin - autosave" -ResultLabel run1
 #>
@@ -34,7 +38,7 @@ param(
     [string]$ResultLabel = (Get-Date -Format 'yyyyMMdd-HHmmss'),
 
     [ValidateSet('All', 'Scout', 'Main', 'Reload', 'Dialog', 'LevelChange', 'ModuleRemoved',
-        'ChangedGraph', 'EmptyModule', 'Control')]
+        'ChangedGraph', 'EmptyModule', 'Control', 'World', 'WorldControl')]
     [string]$Scenario = 'All',
 
     [int]$TimeoutSeconds = 900,
@@ -87,6 +91,7 @@ $qaSaves = Join-Path $qaAppData 'savedgames'
 $qaLogs = Join-Path $qaAppData 'logs'
 $qaModules = Join-Path $qaRoot 'modules'
 $qaModule = Join-Path $qaModules 'nq_qa'
+$qaWorldModule = Join-Path $qaModules 'world_qa'
 $qaEngine = Join-Path $qaRoot 'xrEngine.exe'
 
 $compatGameData = Join-Path $repositoryRoot 'packaging\dead-air-x64\compatibility\gamedata'
@@ -309,11 +314,27 @@ function Copy-SaveGroup {
 }
 
 function Set-QaModule {
-    param([ValidateSet('Full', 'Changed', 'Empty', 'None')][string]$Variant)
+    param([ValidateSet('Full', 'Changed', 'Empty', 'None', 'World', 'WorldControl')][string]$Variant)
     if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
     New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
     switch ($Variant) {
         'None' { return }
+        'World' {
+            Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-world') -Destination $qaWorldModule
+            return
+        }
+        'WorldControl' {
+            # the same module minus its [world]: the start, the path and the order stay
+            Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-world') -Destination $qaWorldModule
+            $manifest = Join-Path $qaWorldModule 'mod.ltx'
+            $keep = $true
+            $lines = @(Get-Content -LiteralPath $manifest | Where-Object {
+                    if ($_ -match '^\s*\[(.+)\]') { $keep = ($Matches[1].Trim() -ne 'world') }
+                    $keep
+                })
+            Set-Content -LiteralPath $manifest -Value $lines -Encoding Default
+            return
+        }
         'Empty' { Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-empty') -Destination $qaModule }
         default {
             Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module') -Destination $qaModule
@@ -362,6 +383,8 @@ function Invoke-NqPhase {
         [Parameter(Mandatory)][string]$Phase,
         [Parameter(Mandatory)][string]$LoadSave,
         [string]$WriteSave = '',
+        # a new game instead of a save: $LoadSave is then the level list the server takes ("all")
+        [switch]$NewGame,
         [switch]$DriveTalkUi,
         [switch]$AllowNoNqLines,
         # Diagnostics this phase is designed to provoke. Everything else still fails the run:
@@ -395,8 +418,9 @@ function Invoke-NqPhase {
     # "-i" keeps the engine out of exclusive mouse mode (x_ray.cpp: captureInput). Without it SDL
     # runs in relative mode, ignores WM_MOUSEMOVE and takes motion from raw input only - which
     # cannot be injected into a hidden desktop, so the talk window could never be clicked.
+    $startKind = if ($NewGame) { 'new' } else { 'load' }
     $arguments = '-i -fsltx fsgame.ltx -always_active -silent_error_mode -force_flushlog -r4 ' +
-        "-start `"server($LoadSave/single/alife/load)`""
+        "-start `"server($LoadSave/single/alife/$startKind)`""
 
     Write-Host ""
     Write-Host "== [$Name] phase=$Phase load='$LoadSave' write='$WriteSave'"
@@ -837,6 +861,38 @@ function Invoke-Control {
     Set-QaModule -Variant Full
 }
 
+# World rules only ever apply to a new game, so this one starts one instead of loading a save.
+function Set-QaNewGameAnswer {
+    # What the new-game screen writes for an offered world rule: the run starts the game with
+    # -start, past the screen, so the answer is put where the screen would have put it.
+    param([Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][string]$Value)
+    $options = Join-Path $qaConfigs 'axr_options.ltx'
+    $lines = if (Test-Path -LiteralPath $options) { @(Get-Content -LiteralPath $options -Encoding Default) } else { @() }
+    $lines = @($lines | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($Key))\s*=" })
+    $out = [Collections.Generic.List[string]]::new()
+    $placed = $false
+    foreach ($line in $lines) {
+        $out.Add($line)
+        if (-not $placed -and $line -match '^\s*\[character_creation\]') { $out.Add("$Key = $Value"); $placed = $true }
+    }
+    if (-not $placed) { $out.Add('[character_creation]'); $out.Add("$Key = $Value") }
+    Set-Content -LiteralPath $options -Value $out -Encoding Default
+}
+
+function Invoke-World {
+    Set-QaModule -Variant World
+    Set-QaNewGameAnswer -Key 'new_game_xmsw_npc_quests' -Value '1'
+    [void](Invoke-NqPhase -Name 'World' -Phase 'pw' -LoadSave 'all' -NewGame)
+}
+
+# Its negative control: the same module without its [world], the same probes, the stock game
+# where it matters - and the start, the path and the order working without any world rule.
+function Invoke-WorldControl {
+    Set-QaModule -Variant WorldControl
+    [void](Invoke-NqPhase -Name 'WorldControl' -Phase 'pw0' -LoadSave 'all' -NewGame)
+    Set-QaModule -Variant Full
+}
+
 # ---------------------------------------------------------------------------- main
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
 Assert-NoTargetEngine
@@ -879,6 +935,8 @@ try {
         'ChangedGraph' { Invoke-Scenario 'ChangedGraph' { Invoke-ChangedGraph } }
         'EmptyModule' { Invoke-Scenario 'EmptyModule' { Invoke-EmptyModule } }
         'Control' { Invoke-Scenario 'Control' { Invoke-Control } }
+        'World' { Invoke-Scenario 'World' { Invoke-World } }
+        'WorldControl' { Invoke-Scenario 'WorldControl' { Invoke-WorldControl } }
         default {
             Invoke-Scenario 'Main' { Invoke-Main }
             Invoke-Scenario 'Reload' { Invoke-Reload }
@@ -888,6 +946,8 @@ try {
             Invoke-Scenario 'ChangedGraph' { Invoke-ChangedGraph }
             Invoke-Scenario 'EmptyModule' { Invoke-EmptyModule }
             Invoke-Scenario 'Control' { Invoke-Control }
+            Invoke-Scenario 'World' { Invoke-World }
+            Invoke-Scenario 'WorldControl' { Invoke-WorldControl }
         }
     }
 }

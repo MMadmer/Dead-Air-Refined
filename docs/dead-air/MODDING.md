@@ -328,6 +328,122 @@ hardcore, rerum, good weapons, good loot) is deliberately not listed - those
 are modifiers and stay multi-select; note their keys carry `_mode` too, the
 suffix proves nothing.
 
+### World rules - what a mode keeps of the original game
+
+A story mode usually wants its world to itself. `[world]` in the manifest says
+what of the ORIGINAL game the module's mode keeps, where the player may go and
+which ways start closed; XFined Editor writes it from Mod > World.
+
+```ini
+[world]
+original_npcs   = false   ; traders, story characters, squads the game placed by story id
+random_stalkers = false   ; the simulation's stalker squads: placed at the start, respawned
+mutants         = false   ; the simulation's monster squads
+npc_quests      = false   ; squad leaders' jobs ("got any work?")
+story_quests    = false   ; tasks of named characters and the storylines
+player_choice   = random_stalkers, mutants     ; checkboxes on the new-game screen, three at most
+levels          = l03_agroprom                 ; where the rules apply; absent = everywhere
+area            = l03_agroprom, l03u_agr_underground   ; the only levels the player may reach
+locked_levels   = l03u_agr_underground         ; every transition on these starts closed
+locked          = agr_level_changer_to_garbage ; these level changers start closed
+```
+
+- **A rule changes only on an explicit no** (`false`, `0`, `no`, `off`); a
+  rule left out, or garbled, keeps the game as it is. The section being there
+  is what declares a world.
+- **Resolved once per NEW game** from every module that applies (its mode is
+  on), with the player's choices where the author offered them (the new-game
+  screen writes `[character_creation] new_game_xmsw_<rule> = 1|0`; the keys are
+  cleared after the load, like the game's own). The screen shows the offered
+  rules of the module mode picked in its dropdown - with none picked, those of the
+  modules built for the plain game - as checkboxes in the options column, ticked
+  as the author set them; `xms.world.choices(<mode id>)` is what it asks. The result is kept in the
+  save's `.scov` (engine blob `0x584DFF02`): a save plays in the world it was
+  started with, whatever the modules say later, and a save without the blob -
+  every save made before, or on a mode without a world - plays the stock game.
+- **Several modules:** a rule is off on a level when any applying module turns
+  it off there (its `levels`, or everywhere); areas, locked levels and locked
+  changers are united. A quest's `world.rule` overrides a rule for the whole
+  world until `default`.
+- **Nothing of the game is rewritten.** The spawn composer takes the original
+  population the mode does not keep out of the new game's spawn in memory,
+  BEFORE any module op runs - a module's own objects are never "the original
+  game". Classification: a squad section with a `story_id` is an original
+  character, a `monster*` faction a mutant, the rest random stalkers. What the
+  game's SCRIPTS create - the simulation's initial fill, smart terrain
+  respawns, story effects - is filtered by `xms_world.script` with the same
+  rules (a story effect creating a random squad is a story beat and passes).
+  Jobs and story tasks are hidden by dialog preconditions Refined appends to
+  the base dialogs (`patch\dead_air_x64_world.xmlp`: `xms_world.allow_npc_quests`
+  and `allow_story_quests`); a talk already running is never cut.
+- **Transitions:** a closed level changer is disabled with its own message
+  (`st_xms_transition_closed`). What decides, in this order: a way a quest
+  opened (`world.transition`) is open; a way `locked` is closed; a way on a
+  `locked_levels` level is closed; a way leading out of the `area` is closed.
+  Every level change reaches the server through
+  `CALifeUpdateManager::change_level`, where a destination outside the area is
+  refused too - a scripted jump cannot leave it either, except to a level a
+  quest-opened changer leads to. The developer's `jump_to_level` ignores the
+  area (QA must reach anything).
+
+**The Player Start** is a spawn op of its own:
+
+```ini
+[obj:player_start]
+op        = start
+level     = l03_agroprom
+position  = -144.2,-5.8,73.9
+direction = 0,1.57,0      ; the actor's heading, like any op's direction
+```
+
+On a new game the actor spawns there - one level load, no teleport - and the
+faction start the new-game screen asks for is dropped once. The first module
+that places a start wins; a second one is logged as a conflict and ignored.
+
+**Module patrol paths** - what an order, a behaviour step or a quest walks -
+ship in the spawn layer and are registered as the level's patrol paths when the
+level loads:
+
+```ini
+[path:agr_gate_walk]
+level  = l03_agroprom
+points = 3
+p0 = -140.0,-5.5,70.0
+p0_name = wp00|a=patrol   ; optional, the stock point annotations
+p0_flags = 1              ; optional
+p1 = -130.0,-5.5,70.0
+p2 = -130.0,-5.5,60.0
+links  = 0-1:1, 1-2:1, 2-0:1   ; from-to:probability
+mode   = my_campaign      ; optional, as on any op
+```
+
+A point more than 15 m from the navmesh, or a name the level already has, is
+refused - a module path never replaces the game's.
+
+**A placed stalker's standing order** rides in its custom data, and the orders
+runtime adopts it once, the first time the NPC comes online:
+
+```ini
+[xms_order]
+order    = patrol          ; guard | patrol | wander | follow
+route    = agr_gate_walk   ; patrol: a patrol path
+look     = agr_gate_look   ; guard: a path the post watches
+radius   = 20              ; guard: the post; wander: the area around the spawn
+move     = run             ; patrol / wander
+target   = actor           ; follow: actor or a story id
+distance = 3               ; follow
+hostile  = true            ; an enemy of the player from the start
+```
+
+While the game runs, quests change all of this: `world.transition`,
+`world.area`, `world.rule`, the condition `transition_open`, and the `order.*`
+kinds (NQ_RUNTIME.md section 16). Lua: `xms.world` (`keep`, `set_rule`,
+`in_area`, `area_level`, `transition_lock`, `level_lock`, `transition_open`,
+`declared`, `describe`, `choices`; `xms.world_api = 1` when present). Console:
+`xms_world` shows the state; `xms_world lock|unlock <changer>`,
+`close|open <level>`, `area_add|area_remove <level>`,
+`rule <key> keep|remove|clear` change it.
+
 ## Content bundles
 
 Refined's own assets ship as versioned archives in `database\` instead of riding

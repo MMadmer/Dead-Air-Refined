@@ -1276,6 +1276,58 @@ As a last line of defence `heal_applied` runs with the tick: an NPC whose
 `ini_filename` is no longer the instance's - a smart terrain handed it a job, a
 script reset its logic - is given its step again.
 
+## 16. The mode's world and standing orders
+
+### 16.1 The world kinds
+
+`world.transition` (`changer: level_changer` or `level: level`, `open: bool`)
+opens or closes one level changer or every changer on a level; an explicit open
+beats every lock, the area included, and a changer it opens also makes its
+destination reachable for scripted jumps. `world.area` (`level`, `include`)
+grows or shrinks the playable area. `world.rule` (`rule`, `value =
+keep|remove|default`) overrides one rule of the mode's world for the rest of
+the game. `transition_open` (`changer`) is true while the changer lets the
+player through. All of them go through `xms.world.*`; an engine without it
+(`xms.world_api` absent) fails the action with a clear line instead of
+pretending. The state is the engine's world blob, so it is saved with the game.
+What `[world]` means and how it is enforced: MODDING.md, "World rules".
+
+### 16.2 Standing orders
+
+An order is what an NPC does until told otherwise: `order.guard` (a post at a
+destination, or where it stands; `look` makes it a camper), `order.patrol` (a
+route walked over and over, or an area wandered with rests at every stop),
+`order.follow` (the player, a ref or a story id, as a companion),
+`order.attack` (hostile to the player, an NPC, a squad or a community) and
+`order.clear`.
+
+- **It belongs to the NPC**, not to the quest: kept in the runtime state as
+  `orders[<id>] = { kind, tag, text, path, dest, at, lvl, wander, by, applied }`,
+  it outlives the quest that gave it, survives saves, and a new order replaces
+  the old one. `order.clear` hands the NPC back to its own logic.
+- **It is applied like a behaviour step** - a logic section handed to a stock
+  scheme (walker, camper, companion) through `configure_schemes` - so combat,
+  cover and danger stay the game's own. The generated file is stored in
+  `db.dynamic_ltx` under `xms_ord_<id>` at once, so an NPC offline now comes
+  back with the NEW order, never the one it had.
+- **A behaviour graph outranks it.** While a graph holds the NPC the order
+  waits (`applied = false`) and resumes the moment the graph lets go.
+- **Offline, dead, not there yet:** an order to an NPC that is offline parks
+  and is applied when it comes online; a dead NPC's order is forgotten;
+  hostility to an NPC that is offline is set the moment it spawns.
+- **After a load** `restore_early` puts the order files and their runtime paths
+  back before any NPC spawns, the same way as for a step (15.5).
+- **A placed NPC's own order**: `[xms_order]` in its custom data (MODDING.md)
+  is adopted once per NPC - the id is remembered in the state, so a quest that
+  dismissed the order is not undone by the next load. NPCs spawn before this
+  runtime is up, so the world script queues them (`xms_world.on_npc_spawn` ->
+  `xms_nq_behaviour.adopt_npc`).
+- **No cost when unused:** the orders tick runs only while there are orders,
+  instances or pending hostility.
+
+`npc.patrol` is the behaviour-graph step of the same walk (a role instead of an
+NPC reference); `order.patrol` is what a quest gives.
+
 ## Task objectives
 
 A PDA task can hold several steps. `CGameTask` keeps a vector of `SGameTaskObjective`;

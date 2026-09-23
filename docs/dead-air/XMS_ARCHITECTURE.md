@@ -414,6 +414,27 @@ do not change game.graph, do not touch the GUIDs. New vertices are simply append
 
 ---
 
+### 7.4 The mode's world, the Player Start and module paths
+
+Three more things ride the spawn layer and the manifest, all applied in memory
+while a new game's spawn is composed (`XmsWorld`, `xms_world.cpp`):
+
+- `mod.ltx [world]` - what the mode keeps of the original game. The composer
+  removes base objects the rules do not keep BEFORE module ops run (so a
+  module's own objects are never touched), and `xms_world.script` filters what
+  the game's scripts spawn. Resolved once per new game into the engine blob
+  `0x584DFF02` of the `.scov`: saves keep the world they began with.
+- `op = start` - the module's Player Start: the actor spawns there, the faction
+  jump of the new-game screen is dropped once; the first module's start wins,
+  a second is a conflict.
+- `[path:<name>]` - module patrol paths, registered with
+  `CPatrolPathStorage::set_runtime_path` when the level loads; the level's own
+  names are refused.
+
+Level changers read the world on spawn and on load (`XmsWorld::Apply`), and
+`CALifeUpdateManager::change_level` refuses a destination outside the playable
+area. The contract is MODDING.md "World rules".
+
 ## 8. Layer 5 — World: new levels and geometry overlays
 
 ### 8.1 The composite `game.graph`

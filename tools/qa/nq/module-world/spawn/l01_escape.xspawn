@@ -1,0 +1,27 @@
+; World rules QA: where the new game starts, a patrol path of the module's own, and a
+; stalker placed with a standing order to walk it.
+
+[obj:qa_start]
+op        = start
+level     = l01_escape
+position  = -220.9,-19.6,-145.0
+direction = 0,1.57,0
+
+[path:qa_world_walk]
+level  = l01_escape
+points = 3
+p0 = -216.0,-19.6,-145.0
+p0_name = wp00
+p1 = -211.0,-19.6,-149.0
+p1_name = wp01
+p2 = -216.0,-19.6,-153.0
+p2_name = wp02
+links  = 0-1:1, 1-2:1, 2-0:1
+
+[obj:qa_world_guard]
+op          = add
+section     = sim_default_stalker_1
+level       = l01_escape
+position    = -214.0,-19.6,-147.0
+direction   = 0,0,0
+custom_data = @spawn/custom_data/qa_world_guard.ltx
