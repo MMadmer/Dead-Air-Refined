@@ -47,8 +47,10 @@ local function picked_mode(screen)
 	return (idx and idx > 0 and MODES[idx]) and MODES[idx].id or nil
 end
 
+-- no module mode picked is the plain game: the choices of the modules built for it
 local function world_choices(mode_id)
-	if not (mode_id and xms and xms.world and xms.world.choices) then return {} end
+	mode_id = mode_id or ""
+	if not (xms and xms.world and xms.world.choices) then return {} end
 	local ok, list = pcall(xms.world.choices, mode_id)
 	return (ok and type(list) == "table") and list or {}
 end
@@ -74,7 +76,8 @@ local function refresh_world_slots(screen)
 	local slots = screen.dax64_world or {}
 	local list = world_choices(picked_mode(screen))
 	if (#list > #slots) then
-		printf("! dead_air_x64: the mode offers %d world choices, the screen has room for %d", #list, #slots)
+		-- the game's printf substitutes %s alone
+		printf("! dead_air_x64: the mode offers %s world choices, the screen has room for %s", tostring(#list), tostring(#slots))
 	end
 	for i, slot in ipairs(slots) do
 		local choice = list[i]
