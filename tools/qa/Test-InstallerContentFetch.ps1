@@ -222,8 +222,11 @@ finally {
     # Only what this run started: a fetcher that is still up here is ours, and a cancel flag is
     # the polite way to stop it.
     if (Test-Path -LiteralPath $cache) { Set-Content -LiteralPath $cancelFlag -Value "cancel" -ErrorAction SilentlyContinue }
-    foreach ($fetcher in @($stale, $first)) {
-        if ($fetcher -and -not $fetcher.HasExited -and -not $fetcher.WaitForExit(15000)) { $fetcher | Stop-Process -Force }
+    # Not $fetcher: PowerShell names are case-blind, so that IS the [string]$Fetcher parameter,
+    # which turns each process into its type name - the teardown then threw here and never got
+    # to the mock or to the uninstall entry below.
+    foreach ($leftover in @($stale, $first)) {
+        if ($leftover -and -not $leftover.HasExited -and -not $leftover.WaitForExit(15000)) { $leftover | Stop-Process -Force }
     }
     if ($mock -and -not $mock.HasExited) { $mock | Stop-Process -Force }
     Remove-Item Env:\DAR_QA_CONTENT_BASE -ErrorAction SilentlyContinue
