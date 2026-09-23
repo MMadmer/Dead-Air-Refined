@@ -25,6 +25,7 @@
 #include "xrNetServer/NET_Messages.h"
 #include "alife_storage_manager.h"
 #include "saved_game_wrapper.h"
+#include "xms_world.h"
 
 using namespace ALife;
 
@@ -148,6 +149,28 @@ bool CALifeUpdateManager::change_level(NET_Packet& net_packet)
 {
     if (m_changing_level)
         return (false);
+
+    // XMS world: every level change passes here - a level changer, a guide, a script, the
+    // faction start. Peeked before the Lua hook below, which reads the same packet.
+    {
+        const u32 packet_pos = net_packet.r_pos;
+        GameGraph::_GRAPH_ID dest_vertex = GameGraph::_GRAPH_ID(-1);
+        net_packet.r(&dest_vertex, sizeof(dest_vertex));
+        net_packet.r_pos = packet_pos;
+        // a module's Player Start placed the actor: the new-game screen's faction start
+        // would carry the player straight away from it
+        if (XmsWorld::ConsumeFactionJump())
+        {
+            Msg("* XMS world: the mode's player start stands - the faction start jump is dropped");
+            return false;
+        }
+        if (!XmsWorld::LevelChangeAllowed(dest_vertex))
+        {
+            Msg("* XMS world: the way to game vertex %u leads out of the mode's area - level change refused",
+                u32(dest_vertex));
+            return false;
+        }
+    }
 
     if (!CALifeStorageManager::wait_for_pending_saves())
     {
@@ -399,6 +422,9 @@ void CALifeUpdateManager::set_interactive(ALife::_OBJECT_ID id, bool value)
 
 void CALifeUpdateManager::jump_to_level(LPCSTR level_name) const
 {
+    // the developer's jump (console jump_to_level, game.jump_to_level) goes wherever it is
+    // told: the mode's area is for the player, not for the person testing the mode
+    XmsWorld::AllowNextLevelChange();
     const CGameGraph::SLevel& level = ai().game_graph().header().level(level_name);
     GameGraph::_GRAPH_ID dest = GameGraph::_GRAPH_ID(-1);
     GraphEngineSpace::CGameLevelParams evaluator(level.id());

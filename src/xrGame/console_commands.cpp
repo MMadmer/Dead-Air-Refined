@@ -1,6 +1,7 @@
 #include "pch_script.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xms_world.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "xrEngine/Rain.h"
 #include "xrEngine/xr_ioc_cmd.h"
@@ -1070,6 +1071,57 @@ public:
                 Msg("* [%02u] %s %s (ns=%u)", u32(m.layer), m.id.c_str(), m.version.c_str(), u32(m.ns));
         }
     }
+};
+
+// The mode's world (XMS world rules): shows it, and changes it the way a quest would.
+//   xms_world                          - rules, area, locks, start
+//   xms_world lock|unlock <changer>    - one level changer
+//   xms_world close|open <level>       - every changer on a level
+//   xms_world area_add|area_remove <level>
+//   xms_world rule <key> keep|remove|clear
+class CCC_XmsWorld : public IConsole_Command
+{
+public:
+    CCC_XmsWorld(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR args)
+    {
+        string256 verb = "", a = "", b = "";
+        if (args && args[0])
+            sscanf(args, "%255s %255s %255s", verb, a, b);
+        if (!verb[0])
+        {
+            xr_string text;
+            XmsWorld::Describe(text);
+            Msg("* XMS world:%s", text.empty() ? " none" : text.c_str());
+            return;
+        }
+        if (0 == xr_strcmp(verb, "lock") || 0 == xr_strcmp(verb, "unlock"))
+            XmsWorld::SetTransitionLock(a, 0 == xr_strcmp(verb, "lock"));
+        else if (0 == xr_strcmp(verb, "close") || 0 == xr_strcmp(verb, "open"))
+            XmsWorld::SetLevelLock(a, 0 == xr_strcmp(verb, "close"));
+        else if (0 == xr_strcmp(verb, "area_add") || 0 == xr_strcmp(verb, "area_remove"))
+            XmsWorld::SetAreaLevel(a, 0 == xr_strcmp(verb, "area_add"));
+        else if (0 == xr_strcmp(verb, "rule"))
+        {
+            const u32 rule = XMS::WorldRules::FromKey(a);
+            if (rule >= XMS::WorldRules::Count)
+            {
+                Msg("! xms_world rule: unknown rule '%s'", a);
+                return;
+            }
+            XmsWorld::SetOverride(rule, 0 == xr_strcmp(b, "clear") ? -1 : (0 == xr_strcmp(b, "keep") ? 1 : 0));
+        }
+        else
+        {
+            Msg("! usage: xms_world [lock|unlock <changer> | close|open <level> | area_add|area_remove <level> | "
+                "rule <key> keep|remove|clear]");
+            return;
+        }
+        xr_string text;
+        XmsWorld::Describe(text);
+        Msg("* XMS world:%s", text.c_str());
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "show or change the mode's world: rules, area, closed transitions"); }
 };
 
 class CCC_XmsModes : public IConsole_Command
@@ -3268,6 +3320,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_XmsUpdateStatus, "xms_update_status");
     CMD1(CCC_XmsMods, "xms_mods");
     CMD1(CCC_XmsModes, "xms_modes");
+    CMD1(CCC_XmsWorld, "xms_world");
     CMD1(CCC_XmsWhy, "xms_why");
     CMD1(CCC_XmsNq, "nq");
 

@@ -46,6 +46,9 @@ public:
     void EnableSilentMode(bool silent) { m_bSilentMode = silent; }
     bool IsSilentModeEnabled() const { return m_bSilentMode; }
     void SetLevelChangerInvitationStr(LPCSTR str) { m_invite_str = str; }
+    const shared_str& LevelChangerInvitationStr() const { return m_invite_str; }
+    // where the changer leads: the game vertex on the other level
+    GameGraph::_GRAPH_ID DestinationVertex() const { return m_game_vertex_id; }
     // serialization
     virtual bool net_SaveRelevant();
     virtual void save(NET_Packet& output_packet);

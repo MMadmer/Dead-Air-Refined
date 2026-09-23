@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- XMS world rules (xms_world.cpp, xms_world.script, dead_air_x64_mode_select.script) -->
+	<string id="st_xms_transition_closed">
+		<text>Проход закрыт.</text>
+	</string>
+	<string id="st_xms_world_caption">
+		<text>Мир режима:</text>
+	</string>
+	<string id="st_xms_world_original_npcs">
+		<text>Персонажи игры</text>
+	</string>
+	<string id="st_xms_world_random_stalkers">
+		<text>Случайные сталкеры</text>
+	</string>
+	<string id="st_xms_world_mutants">
+		<text>Мутанты</text>
+	</string>
+	<string id="st_xms_world_npc_quests">
+		<text>Задания лидеров отрядов</text>
+	</string>
+	<string id="st_xms_world_story_quests">
+		<text>Задания важных персонажей</text>
+	</string>
+</string_table>

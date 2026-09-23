@@ -10,7 +10,9 @@
 #include "alife_spawn_registry.h"
 #include "xrServerEntities/xrServer_Objects.h"		// CSE_Shape: restrictors carry their geometry
 #include "xrServerEntities/xrServer_Objects_ALife.h"	// CSE_ALifeObjectPhysic: fixed_bones
+#include "xrServerEntities/xrServer_Objects_ALife_Monsters.h" // world rules: who is population
 #include "xms_game.h"
+#include "xms_world.h"
 #include "xrCore/XMS/xms_core.h"
 
 namespace
@@ -51,6 +53,39 @@ GameGraph::_GRAPH_ID nearest_game_vertex(const CGameGraph& graph, GameGraph::_LE
         }
     }
     return best;
+}
+
+// Which world rule a base spawn object answers to, WorldRules::Count when it is no
+// population at all. The player is never population; a squad goes by its config (a
+// story id means the game placed it on purpose, a monster faction means mutants); a
+// person the level placed is one of the game's own characters; a mutant with a story
+// id is one too.
+u32 population_rule(CSE_Abstract& object)
+{
+    using Rules = XMS::WorldRules;
+    if (smart_cast<CSE_ALifeCreatureActor*>(&object))
+        return Rules::Count;
+    if (smart_cast<CSE_ALifeOnlineOfflineGroup*>(&object))
+    {
+        pcstr section = object.name();
+        if (!section || !pSettings->section_exist(section))
+            return Rules::Count;
+        if (pSettings->line_exist(section, "story_id"))
+            return Rules::OriginalNpcs;
+        pcstr faction = pSettings->line_exist(section, "faction") ? pSettings->r_string(section, "faction") : "";
+        return (faction && 0 == strncmp(faction, "monster", 7)) ? Rules::Mutants : Rules::RandomStalkers;
+    }
+    // a trader is its own entity class, not a human: Sidorovich would survive an empty world
+    if (smart_cast<CSE_ALifeHumanAbstract*>(&object) || smart_cast<CSE_ALifeTrader*>(&object))
+        return Rules::OriginalNpcs;
+    if (smart_cast<CSE_ALifeMonsterAbstract*>(&object))
+    {
+        const CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(&object);
+        const bool storied = alife_object && (alife_object->m_story_id != INVALID_STORY_ID ||
+            (alife_object->m_ini_string.size() && strstr(alife_object->m_ini_string.c_str(), "story_id")));
+        return storied ? Rules::OriginalNpcs : Rules::Mutants;
+    }
+    return Rules::Count;
 }
 
 // custom_data value: inline ltx text, or @relative\path.ltx inside the module
@@ -108,6 +143,98 @@ void CALifeSpawnRegistry::xms_compose()
     // ledger attribution: who touched a base object last
     xr_map<xr_string, xr_string> last_toucher;
     u32 added = 0, modified = 0, removed = 0, failed = 0;
+
+    // ---- world rules: the original population this mode does not keep ---------------
+    // Base objects only, and before any module op: a module's own NPCs are never "the
+    // original game", and a modify op aimed at a culled NPC reports as any other missing
+    // target. The Lua side (xms_world.script) filters what scripts spawn at start.
+    u32 culled = 0;
+    if (XmsWorld::Declared())
+    {
+        xr_vector<ALife::_SPAWN_ID> doomed;
+        for (const auto& [vertex_id, vertex] : m_spawns.vertices())
+        {
+            CSE_Abstract& object = vertex->data()->object();
+            const u32 rule = population_rule(object);
+            if (rule >= XMS::WorldRules::Count)
+                continue;
+            const CSE_ALifeObject* alife_object = smart_cast<CSE_ALifeObject*>(&object);
+            const auto* graph_vertex = alife_object ? m_game_graph->vertex(alife_object->m_tGraphID) : nullptr;
+            pcstr level = graph_vertex && m_game_graph->header().level_exist(graph_vertex->level_id()) ?
+                m_game_graph->header().level(graph_vertex->level_id()).name().c_str() :
+                nullptr;
+            if (!XmsWorld::Keep(rule, level))
+                doomed.push_back(vertex_id);
+        }
+        for (const ALife::_SPAWN_ID id : doomed)
+        {
+            for (const auto& [other_id, other_vertex] : m_spawns.vertices())
+                if (other_id != id && m_spawns.edge(other_id, id))
+                    m_spawns.remove_edge(other_id, id);
+            m_spawns.remove_vertex(id);
+            ++culled;
+        }
+        if (culled)
+            Msg("* XMS: world rules took %u object(s) of the original population out of the spawn", culled);
+    }
+
+    // ---- the player start: a module's Player Start places the actor ------------------
+    // The actor spawns there on a new game - one level load, no teleport. The faction
+    // start the new-game screen asks for is then dropped once (XmsWorld::ConsumeFactionJump).
+    bool start_placed = false;
+    auto apply_start = [&](const XMS::Module& m, const OpSection& op) -> bool
+    {
+        pcstr level_name = op.value("level");
+        Fvector position;
+        if (!level_name || !parse_fvector(op.value("position"), position))
+        {
+            Msg("! XMS: [%s] start %s: level and position are required", m.id.c_str(), op.name.c_str());
+            return false;
+        }
+        if (!m_game_graph->header().level_exist(level_name))
+        {
+            Msg("! XMS: [%s] start %s: unknown level [%s]", m.id.c_str(), op.name.c_str(), level_name);
+            return false;
+        }
+        if (start_placed)
+        {
+            Msg("! XMS: [%s] start %s: the player start is placed already - the first one stands", m.id.c_str(),
+                op.name.c_str());
+            XMS::AddConflict(XMS::ConflictKind::Other, "player start", "first module", m.id.c_str());
+            return false;
+        }
+        CSE_ALifeCreatureActor* actor = nullptr;
+        for (const auto& [vertex_id, vertex] : m_spawns.vertices())
+            if ((actor = smart_cast<CSE_ALifeCreatureActor*>(&vertex->data()->object())) != nullptr)
+                break;
+        if (!actor)
+        {
+            Msg("! XMS: [%s] start %s: the spawn has no actor to place", m.id.c_str(), op.name.c_str());
+            return false;
+        }
+        const GameGraph::_LEVEL_ID level_id = m_game_graph->header().level(level_name).id();
+        const GameGraph::_GRAPH_ID game_vertex = nearest_game_vertex(*m_game_graph, level_id, position);
+        if (game_vertex == GameGraph::_GRAPH_ID(-1) || !m_game_graph->vertex(game_vertex))
+        {
+            Msg("! XMS: [%s] start %s: no game vertex on level [%s]", m.id.c_str(), op.name.c_str(), level_name);
+            return false;
+        }
+        actor->o_Position = position;
+        Fvector direction;
+        if (parse_fvector(op.value("direction"), direction))
+            actor->o_Angle = direction;
+        actor->o_torso.yaw = actor->o_Angle.y;
+        actor->o_torso.pitch = actor->o_Angle.x;
+        actor->o_torso.roll = 0.f;
+        actor->m_tGraphID = game_vertex;
+        // the nearest game vertex's cell is a hint: the actor's spawn validates its AI
+        // location against the position itself (CGameObject::net_Spawn)
+        actor->m_tNodeID = m_game_graph->vertex(game_vertex)->level_vertex_id();
+        start_placed = true;
+        XmsWorld::NoteStartPlaced(m.id.c_str(), level_name);
+        Msg("* XMS: [%s] the player starts on %s at [%.1f, %.1f, %.1f]", m.id.c_str(), level_name, VPUSH(position));
+        return true;
+    };
 
     for (const XMS::Module& m : XMS::Modules())
     {
@@ -226,6 +353,15 @@ void CALifeSpawnRegistry::xms_compose()
                 if (pcstr disabled = op.value("disabled"))
                     object.m_spawn_flags.set(CSE_Abstract::flSpawnEnabled, 0 != xr_strcmp(disabled, "true"));
                 ++modified;
+                continue;
+            }
+
+            if (0 == xr_strcmp(op_kind, "start"))
+            {
+                if (apply_start(m, op))
+                    ++modified;
+                else
+                    ++failed;
                 continue;
             }
 
@@ -402,10 +538,10 @@ void CALifeSpawnRegistry::xms_compose()
         }
     }
 
-    if (added || modified || removed || failed)
+    if (added || modified || removed || failed || culled)
     {
-        Msg("* XMS: spawn layers composed: +%u added, %u modified, %u removed, %u failed", added, modified, removed,
-            failed);
+        Msg("* XMS: spawn layers composed: +%u added, %u modified, %u removed, %u failed, %u culled by world rules",
+            added, modified, removed, failed, culled);
         XMS::WriteReport();
     }
 }

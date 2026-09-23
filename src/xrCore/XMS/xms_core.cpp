@@ -410,6 +410,33 @@ void parse_manifest(Module& m, char* text)
             m.vfs_maps.push_back({lower_copy(key), value});
         else if (0 == xr_strcmp(section, "redirects"))
             m.redirect_maps.push_back({lower_copy(key), lower_copy(value)});
+        else if (0 == xr_strcmp(section, "world"))
+        {
+            WorldRules& w = m.world;
+            w.declared = true;
+            if (const u32 rule = WorldRules::FromKey(key); rule < WorldRules::Count)
+            {
+                // only an explicit "no" changes anything: an absent or garbled rule keeps the game as it is
+                w.keep[rule] = !(0 == _stricmp(value, "false") || 0 == _stricmp(value, "0") ||
+                    0 == _stricmp(value, "no") || 0 == _stricmp(value, "off"));
+            }
+            else if (0 == xr_strcmp(key, "levels"))
+                split_list(lower_copy(value).c_str(), w.levels);
+            else if (0 == xr_strcmp(key, "area"))
+                split_list(lower_copy(value).c_str(), w.area);
+            else if (0 == xr_strcmp(key, "locked_levels"))
+                split_list(lower_copy(value).c_str(), w.locked_levels);
+            else if (0 == xr_strcmp(key, "locked"))
+                split_list(value, w.locked);
+            else if (0 == xr_strcmp(key, "player_choice"))
+            {
+                xr_vector<xr_string> names;
+                split_list(lower_copy(value).c_str(), names);
+                for (const xr_string& name : names)
+                    if (const u32 rule = WorldRules::FromKey(name.c_str()); rule < WorldRules::Count)
+                        w.player_choice[rule] = true;
+            }
+        }
     }, true);
 
     // Refused values are dropped, not repaired: the Mods menu then shows a disabled button

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!--
+	XMS world rules: the task offers a mode can take out of the game.
+
+	Every dialog that HANDS OUT work gets one more precondition, answered by
+	xms_world.script from the mode's [world] rules; with no rules in force the
+	answer is always yes, so a stock game sees no difference. Turning in a task
+	already taken is never gated. The dialogs ship in a third-party mod, so this
+	is a data patch on their ids (gamedata\patch\, the base layer) - a replaced
+	file without these ids just logs the misses and stays intact.
+
+	npc_quests   - jobs of squad leaders (the simulation task dialog)
+	story_quests - tasks of named characters and the storylines (DoctorX questlines)
+-->
+<xms-patch target="gameplay\dialogs.xml">
+	<append into="dialog[id=dm_sim_ordered_task_dialog]">
+		<precondition>xms_world.allow_npc_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_esc_m_trader_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_bar_dolg_general_petrenko_stalker_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mil_smart_terrain_7_7_freedom_leader_stalker_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mar_smart_terrain_base_stalker_leader_marsh_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_yan_stalker_sakharov_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_cit_killers_merc_trader_stalker_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_agr_smart_terrain_1_6_near_2_military_colonel_kovalski_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_zat_b7_bandit_boss_sultan_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_pri_monolith_monolith_trader_stalker_game_start_dialog_1]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_esc_m_trader_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_esc_smart_terrain_5_7_loner_mechanic_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_zat_a2_stalker_barmen_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_zat_b18_noah_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_bar_dolg_general_petrenko_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_bar_visitors_stalker_mechanic_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mil_smart_terrain_7_7_freedom_leader_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_jup_a6_freedom_leader_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mar_smart_terrain_base_stalker_leader_marsh_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mar_base_stalker_barmen_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_yan_stalker_sakharov_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_jup_b6_scientist_tech_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_cit_killers_merc_trader_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_cit_killers_merc_mechanic_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_agr_smart_terrain_1_6_near_2_military_colonel_kovalski_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_agr_smart_terrain_1_6_army_mechanic_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_zat_b7_bandit_boss_sultan_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_val_smart_terrain_7_4_bandit_trader_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_pri_monolith_monolith_trader_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_pri_monolith_monolith_mechanic_stalker_meet_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_change_faction_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=drx_sl_mechanic_task_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+	<append into="dialog[id=dm_ordered_task_dialog]">
+		<precondition>xms_world.allow_story_quests</precondition>
+	</append>
+</xms-patch>

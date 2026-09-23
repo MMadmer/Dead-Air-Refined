@@ -882,6 +882,53 @@ K["relation.goodwill"] = {
 	end,
 }
 
+-- ---------------------------------------------------------------------------- the mode's world
+-- The world rules a new game started with (XMS world, xms.world): a quest opens or
+-- closes the ways, grows or shrinks the playable area, and changes a rule for the
+-- rest of the game - the zone filling up again once the story allows it. The engine
+-- keeps all of it in the save.
+local function world_api(kind)
+	local w = xms and xms.world
+	if not (w) then error(kind .. ": this engine has no world rules (xms.world_api)") end
+	return w
+end
+
+K["world.transition"] = {
+	run = function(ctx, p)
+		local w = world_api("world.transition")
+		local open = (p.open ~= false)
+		if (type(p.changer) == "string" and p.changer ~= "") then w.transition_lock(p.changer, not open) end
+		if (type(p.level) == "string" and p.level ~= "") then w.level_lock(p.level, not open) end
+		if not ((p.changer and p.changer ~= "") or (p.level and p.level ~= "")) then
+			error("world.transition: name a level changer or a level")
+		end
+	end,
+}
+
+K["world.area"] = {
+	run = function(ctx, p)
+		world_api("world.area").area_level(p.level, p.include ~= false)
+	end,
+}
+
+K["world.rule"] = {
+	run = function(ctx, p)
+		local value = (p.value == "keep" and 1) or (p.value == "remove" and 0) or -1
+		world_api("world.rule").set_rule(p.rule, value)
+		-- a game that started without a world has no script filters yet: the rule is
+		-- only real once the respawns and story spawns ask it
+		if (xms_world and xms_world.install) then xms_world.install() end
+	end,
+}
+
+K["transition_open"] = {
+	test = function(ctx, p)
+		local w = xms and xms.world
+		if not (w and w.transition_open) then return true end
+		return w.transition_open(p.changer) == true
+	end,
+}
+
 -- ---------------------------------------------------------------------------- restore
 -- squad_on_register: a held squad came (back) into the world - put its target back.
 function on_squad_register(squad)

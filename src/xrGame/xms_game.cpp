@@ -4,6 +4,7 @@
 #include "pch_script.h"
 
 #include "xms_game.h"
+#include "xms_world.h"
 #include "save_extension_gameplay.h"
 #include "save_extension_chunk_ids.h"
 #include "PhraseDialog.h"
@@ -244,7 +245,10 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     // content into a save that never asked for it.
     XMS::SetActiveModes("");
     if (!XMS::Active() && chunks.empty())
+    {
+        XmsWorld::OnLoaded(nullptr);
         return;
+    }
 
     for (const SaveExtensionContainer::Chunk& chunk : chunks)
     {
@@ -267,6 +271,9 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
             std::sort(ids.begin(), ids.end());
         }
     }
+    // the world this save was started with (engine blob 0xFF02); none = no world rules
+    const auto world = state.loaded.find(0xFF02);
+    XmsWorld::OnLoaded(world != state.loaded.end() ? &world->second : nullptr);
 }
 
 void SyncModesFromNewGameOptions()
@@ -282,7 +289,12 @@ void SyncModesFromNewGameOptions()
     state.orphans.clear();
     state.skipped_objects = 0;
     if (!XMS::Active())
+    {
+        // process-global like the mode set: a world left over from the last session must not
+        // reach a game that has no modules at all
+        XmsWorld::ResolveForNewGame(nullptr);
         return;
+    }
 
     // Always publish a set, even an empty one: XMS::SetActiveModes writes
     // process-global state that survives "quit to menu, start another game",
@@ -292,6 +304,7 @@ void SyncModesFromNewGameOptions()
     if (!FS.exist(options))
     {
         XMS::SetActiveModes("");
+        XmsWorld::ResolveForNewGame(nullptr);
         return;
     }
 
@@ -300,6 +313,7 @@ void SyncModesFromNewGameOptions()
     if (!ini.section_exist(section))
     {
         XMS::SetActiveModes("");
+        XmsWorld::ResolveForNewGame(nullptr);
         return;
     }
 
@@ -340,6 +354,9 @@ void SyncModesFromNewGameOptions()
     XMS::SetActiveModes(csv.c_str());
     if (!csv.empty())
         Msg("* XMS: new game modes: %s", csv.c_str());
+    // the world of the modules that apply to these modes, with the player's choices
+    // from the same screen - before the composer, which already removes by it
+    XmsWorld::ResolveForNewGame(&ini);
 }
 
 u32 SkippedObjectCount() { return bs().skipped_objects; }
@@ -857,6 +874,24 @@ xms.dialog_register = xms_native_dialog_register
 xms.dialog_unregister = xms_native_dialog_unregister
 xms.dialog_invalidate = xms_native_dialog_invalidate
 
+-- World rules of the mode (docs/dead-air/MODDING.md, "World rules"); feature-test with
+-- xms.world_api. Rules are named by their manifest keys: original_npcs, random_stalkers,
+-- mutants, npc_quests, story_quests.
+xms.world_api = 1
+xms.world = {
+    keep            = xms_native_world_keep,             -- (rule, level) -> true when the original content stays
+    set_rule        = xms_native_world_set_rule,         -- (rule, 1 keep | 0 remove | -1 clear), whole world
+    in_area         = xms_native_world_in_area,          -- (level) -> true inside the playable area
+    area_level      = xms_native_world_area_level,       -- (level, true|false) grows or shrinks the area
+    transition_lock = xms_native_world_transition_lock,  -- (level changer name, locked)
+    level_lock      = xms_native_world_level_lock,       -- (level, locked): every changer on it
+    transition_open = xms_native_world_transition_open,  -- (level changer name) -> bool
+    declared        = xms_native_world_declared,         -- () -> any rule, area or lock in force
+    settle          = xms_native_world_settle,           -- () the faction start jump is not coming
+    describe        = xms_native_world_describe,         -- () -> text
+    choices         = xms_native_world_choices,          -- (mode id) -> { {key, keep, module}, ... }
+}
+
 -- ---- module script namespaces ----------------------------------------------
 local script_cache = {}
 function xms.require(mod_id, name)
@@ -1081,6 +1116,7 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_dialog_unregister", &xms_native_dialog_unregister),
         def("xms_native_dialog_invalidate", &xms_native_dialog_invalidate)
     ];
+    XmsWorld::ScriptRegister(luaState);
 
     // defer the bootstrap to the end of CScriptEngine::init - the base Lua
     // libraries are not open yet while export_all is running

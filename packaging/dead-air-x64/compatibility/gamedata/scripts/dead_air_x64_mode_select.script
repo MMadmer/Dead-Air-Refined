@@ -33,6 +33,61 @@ function modes_count()
 	return #MODES
 end
 
+-- ---- the world choices of the picked mode ----------------------------------
+-- An author may let the player decide some of the mode's world rules (XMS world,
+-- [world] player_choice): they show up as checkboxes in the options column while
+-- that mode is picked, ticked as the author set them. The engine reads the answer
+-- from [character_creation] new_game_xmsw_<rule> = 1|0 when the game starts.
+local WORLD_SLOTS = 3
+local WORLD_KEYS = { "original_npcs", "random_stalkers", "mutants", "npc_quests", "story_quests" }
+
+local function picked_mode(screen)
+	local combo = screen.dax64_mode_combo
+	local idx = combo and combo:GetCurrentIdx() or 0
+	return (idx and idx > 0 and MODES[idx]) and MODES[idx].id or nil
+end
+
+local function world_choices(mode_id)
+	if not (mode_id and xms and xms.world and xms.world.choices) then return {} end
+	local ok, list = pcall(xms.world.choices, mode_id)
+	return (ok and type(list) == "table") and list or {}
+end
+
+local function build_world_slots(screen)
+	screen.dax64_world = {}
+	local xml = CScriptXmlInit()
+	if not (pcall(xml.ParseFile, xml, "dead_air_x64_world_choices.xml")) then return end
+	for i = 1, WORLD_SLOTS do
+		local ok, box, cap = pcall(function()
+			return xml:InitCheck("check_xmsw_" .. i, screen.dialog), xml:InitTextWnd("cap_xmsw_" .. i, screen.dialog)
+		end)
+		if (ok and box and cap) then
+			box:Show(false)
+			cap:Show(false)
+			screen:Register(box, "dax64_world_" .. i)
+			screen.dax64_world[i] = { box = box, cap = cap }
+		end
+	end
+end
+
+local function refresh_world_slots(screen)
+	local slots = screen.dax64_world or {}
+	local list = world_choices(picked_mode(screen))
+	if (#list > #slots) then
+		printf("! dead_air_x64: the mode offers %d world choices, the screen has room for %d", #list, #slots)
+	end
+	for i, slot in ipairs(slots) do
+		local choice = list[i]
+		slot.key = choice and choice.key or nil
+		if (choice) then
+			slot.cap:SetText(game.translate_string("st_xms_world_" .. choice.key))
+			slot.box:SetCheck(choice.keep == true)
+		end
+		slot.box:Show(choice ~= nil)
+		slot.cap:Show(choice ~= nil)
+	end
+end
+
 -- what OnStartGame writes: the selected module mode's key gets true, every
 -- other registered one is cleared - exactly the shape the engine reads back
 local function write_keys(screen)
@@ -44,6 +99,14 @@ local function write_keys(screen)
 		-- not exist here - calling it only threw inside the pcall above
 		local picked = (screen.dax64_mode_combo and screen.dax64_mode_combo:GetCurrentIdx() == i) and true or nil
 		cfg:w_value("character_creation", "new_game_" .. m.id .. "_mode", picked)
+	end
+	-- the world choices shown for the picked mode; every other rule's key is cleared
+	local answers = {}
+	for _, slot in ipairs(screen.dax64_world or {}) do
+		if (slot.key) then answers[slot.key] = slot.box:GetCheck() and "1" or "0" end
+	end
+	for _, key in ipairs(WORLD_KEYS) do
+		cfg:w_value("character_creation", "new_game_xmsw_" .. key, answers[key])
 	end
 end
 
@@ -110,11 +173,15 @@ local function build_bar(screen)
 	screen:Register(combo, "dax64_mode_combo")
 	screen.dax64_mode_combo = combo
 
+	-- the world choices live beside the dropdown and follow it
+	pcall(build_world_slots, screen)
+
 	screen:AddCallback("dax64_mode_combo", ui_events.LIST_ITEM_SELECT, function()
 		local ok, err = pcall(function()
 			if (combo:GetCurrentIdx() > 0) then
 				clear_campaign_checkboxes(screen)
 			end
+			refresh_world_slots(screen)
 		end)
 		if not (ok) then
 			printf("! dead_air_x64: mode dropdown select failed: %s", tostring(err))
@@ -159,6 +226,7 @@ local function install()
 			excl.on_campaign_picked = function(screen)
 				if (screen.dax64_mode_combo) then
 					screen.dax64_mode_combo:SetCurrentID(0)
+					pcall(refresh_world_slots, screen)
 				end
 			end
 		end

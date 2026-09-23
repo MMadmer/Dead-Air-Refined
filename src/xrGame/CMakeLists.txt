@@ -1149,6 +1149,8 @@ target_sources(xrGame PRIVATE
     xms_game.h
     xms_graph_composer.cpp
     xms_spawn_composer.cpp
+    xms_world.cpp
+    xms_world.h
     setup_manager.h
     setup_manager_inline.h
     da_artefact_container.cpp

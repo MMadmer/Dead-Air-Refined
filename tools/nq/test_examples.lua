@@ -3263,6 +3263,256 @@ do
 end
 end)()
 
+-- ============================================================================ (z19) world rules and standing orders
+-- The mode's world (XMS world rules) as quests see it - opening and closing ways,
+-- the area, a rule changed for the rest of the game - and standing orders: what an
+-- NPC does until it is told otherwise (NQ_ARCHITECTURE par. 20). An order is a step
+-- that never ends and belongs to the NPC, so the checks follow it through the same
+-- machinery a behaviour step goes through: a stock scheme, a runtime path, a load,
+-- a graph that borrows the NPC and gives it back.
+;(function()
+game_object = game_object or { enemy = 0, neutral = 1, friend = 2 }
+local CTX = { uid = "mod_b.order_giver", node_id = "n", qs = { refs = {} } }
+local WOLF = { story = "esc_2_12_stalker_wolf" }
+
+local function order_paths()
+	mock.add_path("qa_walk", { vector():set(0, 0, 0), vector():set(10, 0, 10) })
+	mock.add_path("qa_look", { vector():set(11, 0, 11) })
+	mock.add_path("qa_post", { vector():set(20, 0, 20) })
+end
+
+local function order_rec(id)
+	local st = xms_nq.get_state()
+	return st and st.orders and st.orders[tostring(id)] or nil
+end
+
+section("(z19) world kinds talk to the engine's world and to nothing else")
+setup()
+mock.first_update()
+do
+	local calls = {}
+	xms.world = {
+		transition_lock = function(name, locked) calls[#calls + 1] = "lock:" .. name .. "=" .. tostring(locked) end,
+		level_lock = function(lvl, locked) calls[#calls + 1] = "level:" .. lvl .. "=" .. tostring(locked) end,
+		area_level = function(lvl, add) calls[#calls + 1] = "area:" .. lvl .. "=" .. tostring(add) end,
+		set_rule = function(rule, v) calls[#calls + 1] = "rule:" .. rule .. "=" .. tostring(v) end,
+		transition_open = function(name) return name == "open_one" end,
+	}
+	local W = xms_nq_world.kinds()
+	W["world.transition"].run(CTX, { changer = "agr_to_garbage", open = false })
+	W["world.transition"].run(CTX, { level = "l03_agroprom", open = true })
+	W["world.area"].run(CTX, { level = "l03u_agr_underground", include = true })
+	W["world.rule"].run(CTX, { rule = "random_stalkers", value = "keep" })
+	W["world.rule"].run(CTX, { rule = "mutants", value = "default" })
+	check(calls[1] == "lock:agr_to_garbage=true", "closing a changer locks it (" .. tostring(calls[1]) .. ")")
+	check(calls[2] == "level:l03_agroprom=false", "opening a level opens every changer on it (" .. tostring(calls[2]) .. ")")
+	check(calls[3] == "area:l03u_agr_underground=true", "a level joins the area")
+	check(calls[4] == "rule:random_stalkers=1", "keep reaches the engine as 1")
+	check(calls[5] == "rule:mutants=-1", "default clears the quest's word on a rule")
+	check(W["transition_open"].test(CTX, { changer = "open_one" }) == true
+		and W["transition_open"].test(CTX, { changer = "closed_one" }) == false, "transition_open asks the engine")
+	check(not pcall(W["world.transition"].run, CTX, {}), "a transition node naming neither a changer nor a level is an error")
+	xms.world = nil
+	local ok, err = pcall(W["world.area"].run, CTX, { level = "x" })
+	check(not ok and string.find(tostring(err), "world_api", 1, true) ~= nil, "an engine without world rules says so")
+end
+
+section("(z19) order.guard: a post where the NPC stands, walked by the stock walker")
+setup()
+order_paths()
+mock.first_update()
+local B = xms_nq_behaviour.kinds()
+do
+	wolf._pos = vector():set(5, 0, 7)
+	B["order.guard"].run(CTX, { who = WOLF, radius = 20 })
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "walker", "no look path: it stands guard on a walker (" .. tostring(rec and rec.scheme) .. ")")
+	local slot = rec and string.match(rec.text, "path_walk = (xms_rt_%d+)")
+	check(slot ~= nil, "on a runtime path nobody drew")
+	local pt = slot and mock.rt_points[slot]
+	check(pt and pt[1] == 5 and pt[3] == 7, "registered where it stood")
+	check(db.storage[wolf:id()].ini_filename == "*xms_ord_" .. wolf:id(), "it runs the order's own logic file")
+	local o = order_rec(wolf:id())
+	check(o and o.kind == "guard" and o.applied == true, "the order is in the state, applied")
+end
+
+section("(z19) a new order replaces the old one, and a look path digs the NPC in")
+do
+	B["order.guard"].run(CTX, { who = WOLF, place = { path = "qa_post" }, look = "qa_look", radius = 30 })
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "camper", "a look path makes it a camper (" .. tostring(rec and rec.scheme) .. ")")
+	check(rec and string.find(rec.text, "path_walk = qa_post", 1, true) ~= nil, "on the post the author drew")
+	check(rec and string.find(rec.text, "radius = 30", 1, true) ~= nil, "with its radius")
+	local o = order_rec(wolf:id())
+	check(o and o.path == nil, "a drawn post needs no runtime path: the slot went back to the pool")
+end
+
+section("(z19) order.patrol along a route")
+do
+	B["order.patrol"].run(CTX, { who = WOLF, route = "qa_walk", move = "run" })
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "walker" and string.find(rec.text, "path_walk = qa_walk", 1, true) ~= nil,
+		"the walker walks the route")
+	check(rec and string.find(rec.text, "def_state_moving = rush", 1, true) ~= nil, "move = run runs it")
+	check(not pcall(B["order.patrol"].run, CTX, { who = WOLF, route = "no_such_path" }),
+		"a route that does not exist is an error, not an NPC standing still")
+end
+
+section("(z19) order.patrol over an area: the NPC wanders from spot to spot and rests at each")
+do
+	B["order.patrol"].run(CTX, { who = WOLF, area = { pos = { 50, 0, 50 }, level = mock.level_name }, radius = 10 })
+	local rec = mock.applied[wolf:id()]
+	local slot = rec and string.match(rec.text, "path_walk = (xms_rt_%d+)")
+	check(slot ~= nil, "a runtime path carries each leg")
+	local pt = slot and mock.rt_points[slot]
+	local function within(p) return p and math.sqrt((p[1] - 50) ^ 2 + (p[3] - 50) ^ 2) <= 10.001 end
+	check(within(pt), "the first spot lies inside the area")
+	local first = pt and { pt[1], pt[3] }
+	-- it gets there, rests, and moves on to another spot
+	wolf._pos = vector():set(pt[1], 0, pt[3])
+	mock.ticks(4, 300)
+	local p1 = mock.rt_points[slot]
+	check(p1 and p1[1] == first[1] and p1[3] == first[2], "at the spot it rests first")
+	mock.ticks(70, 300)
+	local p2 = mock.rt_points[slot]
+	check(within(p2) and not (p2[1] == first[1] and p2[3] == first[2]), "then it is sent on to another spot in the area")
+	check(mock.applied[wolf:id()] and mock.applied[wolf:id()].scheme == "walker", "every leg is the stock walker's")
+end
+
+section("(z19) order.follow and order.attack")
+do
+	B["order.follow"].run(CTX, { who = WOLF, target = { actor = true }, distance = 5 })
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "companion", "following is the companion scheme (" .. tostring(rec and rec.scheme) .. ")")
+	check(rec and string.find(rec.text, "dist_max = 5", 1, true) ~= nil, "keeping the distance it was given")
+	check(rec and string.find(rec.text, "target =", 1, true) == nil, "and the player is the default target")
+	B["order.attack"].run(CTX, { who = WOLF, target = { actor = true } })
+	check(wolf._relation == game_object.enemy and wolf._goodwill == -3000, "attacking the player makes it an enemy")
+	check(order_rec(wolf:id()) and order_rec(wolf:id()).kind == "follow", "hostility is a relation: the standing order stays")
+end
+
+section("(z19) a behaviour graph outranks an order, and gives the NPC back to it")
+setup()
+order_paths()
+mock.first_update()
+do
+	B = xms_nq_behaviour.kinds()
+	B["order.patrol"].run(CTX, { who = WOLF, route = "qa_post" })
+	check(mock.applied[wolf:id()] and string.find(mock.applied[wolf:id()].text, "qa_post", 1, true) ~= nil, "the order runs")
+	xms_nq_console.exec("activate mod_b.beh_caller")
+	mock.ticks(3)
+	local rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = qa_walk", 1, true) ~= nil, "the graph took the NPC")
+	local handed = mock.apply_count
+	mock.ticks(6)
+	rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = qa_walk", 1, true) ~= nil, "the graph keeps the NPC")
+	check(mock.apply_count == handed, "and the order does not fight it for the NPC - nothing is handed over twice ("
+		.. tostring(mock.apply_count - handed) .. " extra)")
+	-- the graph plays out: it arrives, holds, the graph ends and lets go
+	wolf._pos = vector():set(10, 0, 10)
+	mock.ticks(8, 300)
+	rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "walker" and string.find(rec.text, "path_walk = qa_post", 1, true) ~= nil,
+		"once the graph is over the NPC is back on its order (" .. tostring(rec and rec.scheme) .. ")")
+	check(db.storage[wolf:id()].ini_filename == "*xms_ord_" .. wolf:id(), "running the order's file again")
+end
+
+section("(z19) a load: the order's logic file and path are back before the NPC")
+setup()
+order_paths()
+mock.first_update()
+do
+	B = xms_nq_behaviour.kinds()
+	wolf._pos = vector():set(3, 0, 4)
+	B["order.guard"].run(CTX, { who = WOLF })
+	local name = db.storage[wolf:id()].ini_filename
+	local active = mock.applied[wolf:id()] and mock.applied[wolf:id()].active
+	xms_nq.save_now()
+	local seen
+	mock.after_game_load = function() seen = { mock.npc_would_restore(name, active) } end
+	mock.rebuild()
+	check(mock.npc_would_restore(name, active) == nil, "right after the reload neither the file nor the path exist")
+	mock.first_update()
+	mock.after_game_load = nil
+	check(seen and seen[1] ~= nil, "on_game_load put both back before the NPC could ask (" .. tostring(seen and seen[2]) .. ")")
+	mock.ticks(3)
+	local o = order_rec(wolf:id())
+	check(o and o.applied == true, "and the order is running, not parked")
+end
+
+section("(z19) order.clear gives the NPC back to what owned it")
+do
+	B = xms_nq_behaviour.kinds()
+	B["order.clear"].run(CTX, { who = WOLF })
+	check(order_rec(wolf:id()) == nil, "the order is gone from the state")
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "nil", "and the NPC was switched off its logic (" .. tostring(rec and rec.scheme) .. ")")
+end
+
+section("(z19) a placed NPC's [xms_order] is adopted once")
+setup()
+order_paths()
+mock.first_update()
+do
+	local placed = mock.add_npc("stalker_placed", "qa_placed", { community = "bandit", name = "Placed" })
+	placed.spawn_ini = function()
+		return create_ini_file("[xms_order]\norder = patrol\nroute = qa_walk\nhostile = true\n")
+	end
+	xms_nq_behaviour.adopt_npc(placed:id())
+	local rec = mock.applied[placed:id()]
+	check(rec and rec.scheme == "walker" and string.find(rec.text, "path_walk = qa_walk", 1, true) ~= nil,
+		"the order its spawn carries runs")
+	check(placed._relation == game_object.enemy, "hostile = true made it the player's enemy")
+	local st = xms_nq.get_state()
+	check(st.adopted and st.adopted[tostring(placed:id())] == true, "the adoption is remembered")
+	xms_nq_behaviour.kinds()["order.clear"].run(CTX, { who = { story = "qa_placed" } })
+	xms_nq_behaviour.adopt_npc(placed:id())
+	check(order_rec(placed:id()) == nil, "an order a quest took away is not given back by the next spawn")
+end
+
+section("(z19) the vocabularies stay apart")
+do
+	local q = xms_nq_load.load_asset("mod_b", "orders.nqasset",
+		'return { nq = 1, id = "orders", title = "x", nodes = { { id = "s", kind = "trigger.start", on_enter = { ' ..
+		'{ kind = "order.guard", params = { who = { story = "esc_2_12_stalker_wolf" } } }, ' ..
+		'{ kind = "order.patrol", params = { who = { story = "esc_2_12_stalker_wolf" }, route = "qa_walk" } }, ' ..
+		'{ kind = "world.transition", params = { changer = "x", open = false } } } } } }', "quest")
+	check(q.valid, "a quest may give orders and open or close ways")
+	local b = xms_nq_load.load_asset("mod_b", "pat.behasset",
+		'return { beh = 1, id = "pat", title = "x", roles = { a = { title = "A" } }, nodes = { { id = "s", kind = "trigger.start", on_enter = { ' ..
+		'{ kind = "npc.patrol", params = { who = "a", route = "qa_walk" } } } } } }', "behaviour")
+	check(b.valid, "a behaviour graph may patrol a role")
+	local bad = xms_nq_load.load_asset("mod_b", "bad.behasset",
+		'return { beh = 1, id = "bad", title = "x", roles = { a = { title = "A" } }, nodes = { { id = "s", kind = "trigger.start", on_enter = { ' ..
+		'{ kind = "order.guard", params = { who = { story = "x" } } } } } } }', "behaviour")
+	local refused = false
+	for _, p in ipairs(bad.problems or {}) do
+		if (p.code == "E007" and string.find(tostring(p.message), "order.guard", 1, true)) then refused = true end
+	end
+	check(refused, "an order is a quest's: a behaviour graph drives roles with steps instead")
+end
+
+section("(z19) npc.patrol: a role wanders an area inside a behaviour graph")
+setup()
+order_paths()
+mock.first_update()
+do
+	local BK = xms_nq_behaviour.kinds()
+	local ictx = { uid = "mod_b.pat#1", node_id = "p",
+		qs = { roles = { a = { ids = { wolf:id() } } }, steps = {}, refs = {} } }
+	BK["npc.patrol"].run(ictx, { who = "a", area = { pos = { 40, 0, 40 }, level = mock.level_name }, radius = 8 })
+	local rec = mock.applied[wolf:id()]
+	local slot = rec and string.match(rec.text, "path_walk = (xms_rt_%d+)")
+	check(rec and rec.scheme == "walker" and slot ~= nil, "each member walks a runtime path of its own")
+	local pt = slot and mock.rt_points[slot]
+	check(pt and math.sqrt((pt[1] - 40) ^ 2 + (pt[3] - 40) ^ 2) <= 8.001, "to a spot inside the area")
+	BK["npc.patrol"].run(ictx, { who = "a", route = "qa_walk" })
+	rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = qa_walk", 1, true) ~= nil, "or along the route it names")
+end
+end)()
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

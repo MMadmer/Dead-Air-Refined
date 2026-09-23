@@ -194,6 +194,42 @@ bool CPatrolPathStorage::set_runtime_point(shared_str patrol_name, const Fvector
     return true;
 }
 
+bool CPatrolPathStorage::set_runtime_path(shared_str patrol_name, const xr_vector<RuntimePoint>& points,
+    const xr_vector<RuntimeLink>& links, float max_snap, const CLevelGraph* level_graph,
+    const CGameLevelCrossTable* cross, const CGameGraph* game_graph)
+{
+    if (!level_graph || !cross || !game_graph || !patrol_name.size() || points.empty())
+        return false;
+    // a shipped path is never ours; a runtime one may be walked right now
+    if (patrol_paths().find(patrol_name) != patrol_paths().end())
+        return false;
+
+    xr_vector<u32> vertex_ids;
+    vertex_ids.reserve(points.size());
+    for (const RuntimePoint& p : points)
+    {
+        const u32 vertex_id = level_graph->vertex(u32(-1), p.position);
+        if (!level_graph->valid_vertex_id(vertex_id) || level_graph->distance(vertex_id, p.position) > max_snap)
+            return false;
+        vertex_ids.push_back(vertex_id);
+    }
+
+    CPatrolPath* path = xr_new<CPatrolPath>(patrol_name);
+    for (u32 i = 0; i < points.size(); ++i)
+    {
+        const RuntimePoint& p = points[i];
+        path->add_vertex(CPatrolPoint(level_graph, cross, game_graph, path, p.position, vertex_ids[i], p.flags,
+                             p.name.size() ? p.name : shared_str("wp")),
+            i);
+    }
+    for (const RuntimeLink& link : links)
+        if (link.from < points.size() && link.to < points.size() && link.from != link.to)
+            path->add_edge(link.from, link.to, link.weight);
+    m_registry.emplace(patrol_name, path);
+    m_runtime.push_back(patrol_name);
+    return true;
+}
+
 const CPatrolPath* CPatrolPathStorage::add_alias_if_exist(shared_str patrol_name, shared_str duplicate_name)
 {
     const_iterator it = patrol_paths().find(patrol_name);

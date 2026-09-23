@@ -59,10 +59,31 @@ public:
     // Nothing of this is serialized - the storage is level data, not a save.
     bool set_runtime_point(shared_str patrol_name, const Fvector& position, float max_snap,
         const CLevelGraph* level_graph, const CGameLevelCrossTable* cross, const CGameGraph* game_graph);
+
+    // A whole runtime path - a waypoint path a MODULE drew in the level editor and
+    // ships in its spawn layer, registered once the level's navmesh is loaded. Same
+    // rules as a runtime point: every point is snapped to the nearest navmesh cell
+    // within `max_snap` (a point that has none refuses the whole path), a name the
+    // level shipped is never taken, and an existing runtime path of that name is left
+    // as it is - an NPC may already be walking it.
+    struct RuntimePoint
+    {
+        Fvector position;
+        u32 flags;
+        shared_str name;
+    };
+    struct RuntimeLink
+    {
+        u32 from, to;
+        float weight;
+    };
+    bool set_runtime_path(shared_str patrol_name, const xr_vector<RuntimePoint>& points,
+        const xr_vector<RuntimeLink>& links, float max_snap, const CLevelGraph* level_graph,
+        const CGameLevelCrossTable* cross, const CGameGraph* game_graph);
     bool runtime(shared_str patrol_name) const;
 
 private:
-    xr_vector<shared_str> m_runtime; // names created through set_runtime_point
+    xr_vector<shared_str> m_runtime; // names created through set_runtime_point / set_runtime_path
 };
 
 #include "xrAICore/Navigation/PatrolPath/patrol_path_storage_inline.h"

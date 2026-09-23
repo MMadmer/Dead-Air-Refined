@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 17
+version = 18
 api     = 1
 
 ; ============================================================ triggers
@@ -1171,6 +1171,21 @@ no_retreat = bool, default=false
 impl   = core
 since  = 15
 
+[nq.npc.patrol]
+group  = npc
+docs   = behaviour
+title  = Patrol
+desc   = The role walks a waypoint path over and over - along the links, back the way it came where the path has no way round - or, without a path, wanders the area around a place and rests at every stop. Danger, cover and combat stay the game's own.
+use    = extra
+params = who, route, area, radius, move
+who    = role, required
+route  = way_path
+area   = destination
+radius = float, default=15, min=3, max=150
+move   = enum, enum=walk|run, default=walk
+impl   = core
+since  = 18
+
 [nq.npc.anim]
 group  = npc
 docs   = behaviour
@@ -1271,6 +1286,118 @@ who    = role, required
 all    = bool, default=false
 impl   = core
 since  = 15
+
+; ============================================================ the mode's world (XMS world rules)
+[nq.world.transition]
+group  = world
+title  = Open or close a way
+desc   = Opens or closes one level changer, or every changer on a level. A way the mode's world closed at the start opens this way too - the story decides when the player may leave. The game keeps it in the save.
+use    = extra
+params = changer, level, open
+changer = level_changer
+level  = level
+open   = bool, default=true
+impl   = core
+since  = 18
+
+[nq.world.area]
+group  = world
+title  = Grow or shrink the area
+desc   = Adds a level to the area the player may travel to, or takes one out. Only a mode that limits the area has one to change.
+use    = extra
+params = level, include
+level  = level, required
+include = bool, default=true
+impl   = core
+since  = 18
+
+[nq.world.rule]
+group  = world
+title  = Change a world rule
+desc   = Changes one of the mode's world rules for the rest of the game - the simulation spawning random stalkers again once the story allows it, or the jobs of squad leaders coming back. default goes back to what the mode started with.
+use    = extra
+params = rule, value
+rule   = enum, required, enum=original_npcs|random_stalkers|mutants|npc_quests|story_quests
+value  = enum, required, enum=keep|remove|default
+impl   = core
+since  = 18
+
+[nq.transition_open]
+group  = cond_world
+title  = Way is open
+desc   = True while the level changer lets the player through - the mode's world and the quests that opened or closed it both counted.
+use    = cond
+params = changer
+changer = level_changer, required
+event  = false
+impl   = core
+since  = 18
+
+; ============================================================ standing orders: what an NPC does until told otherwise
+[nq.order.guard]
+group  = orders
+docs   = quest
+title  = Order - guard
+desc   = The NPC, or every member of a squad, takes a post and fights from it - at a place, or where it stands now. With a look path it digs in and watches it. The order belongs to the NPC - it outlives the quest, survives saves and waits while a behaviour graph borrows the NPC.
+use    = extra
+params = who, place, look, radius
+who    = npc_ref, required
+place  = destination
+look   = way_path
+radius = float, default=20, min=1, max=100
+impl   = core
+since  = 18
+
+[nq.order.patrol]
+group  = orders
+docs   = quest
+title  = Order - patrol
+desc   = The NPC walks a waypoint path over and over, or wanders the area around a place and rests at every stop - danger, cover and combat stay the game's own. Lasts until another order.
+use    = extra
+params = who, route, area, radius, move
+who    = npc_ref, required
+route  = way_path
+area   = destination
+radius = float, default=15, min=3, max=150
+move   = enum, enum=walk|run, default=walk
+impl   = core
+since  = 18
+
+[nq.order.follow]
+group  = orders
+docs   = quest
+title  = Order - follow
+desc   = The NPC follows the player or another NPC and keeps close - a companion that fights beside the one it follows. Lasts until another order.
+use    = extra
+params = who, target, distance
+who    = npc_ref, required
+target = role_or_actor, required
+distance = float, default=3, min=1, max=30
+impl   = core
+since  = 18
+
+[nq.order.attack]
+group  = orders
+docs   = quest
+title  = Order - attack
+desc   = Makes the NPC hostile to the target and lets it engage - the player, another NPC or squad, or a whole community. Hostility is a relation and stays after the fight. An NPC that is offline turns hostile the moment it spawns.
+use    = extra
+params = who, target
+who    = npc_ref, required
+target = attack_target, required
+impl   = core
+since  = 18
+
+[nq.order.clear]
+group  = orders
+docs   = quest
+title  = Order - dismiss
+desc   = Takes the NPC's standing order away - it goes back to its own logic, its smart terrain or what its spawn carries.
+use    = extra
+params = who
+who    = npc_ref, required
+impl   = core
+since  = 18
 
 ; ============================================================ calling a behaviour graph
 [nq.behaviour.run]

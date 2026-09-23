@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- XMS world rules (xms_world.cpp, xms_world.script, dead_air_x64_mode_select.script) -->
+	<string id="st_xms_transition_closed">
+		<text>The way is closed.</text>
+	</string>
+	<string id="st_xms_world_caption">
+		<text>The mode's world:</text>
+	</string>
+	<string id="st_xms_world_original_npcs">
+		<text>The game's characters</text>
+	</string>
+	<string id="st_xms_world_random_stalkers">
+		<text>Random stalkers</text>
+	</string>
+	<string id="st_xms_world_mutants">
+		<text>Mutants</text>
+	</string>
+	<string id="st_xms_world_npc_quests">
+		<text>Jobs from squad leaders</text>
+	</string>
+	<string id="st_xms_world_story_quests">
+		<text>Tasks from key characters</text>
+	</string>
+</string_table>

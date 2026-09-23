@@ -30,6 +30,45 @@ struct PathMap
     xr_string to;
 };
 
+// [world] of a manifest: what of the original game a mode keeps, where the player may
+// go, and which transitions start closed. Applies only while the module applies
+// (ModuleApplies) and only to NEW games - a save carries the world it was started with.
+// Contract: docs/dead-air/MODDING.md, "World rules".
+struct WorldRules
+{
+    enum Rule : u8
+    {
+        OriginalNpcs,   // story squads, garrisons, traders, leaders, base-spawn NPCs
+        RandomStalkers, // stalker squads the simulation spawns at start and respawns
+        Mutants,        // mutant squads the simulation spawns at start and respawns
+        NpcQuests,      // jobs squad leaders hand out
+        StoryQuests,    // tasks of named characters and the storylines
+        Count,
+    };
+    bool declared{false};                 // the manifest has a [world] section
+    bool keep[Count]{true, true, true, true, true};
+    bool player_choice[Count]{};          // offered on the new-game screen
+    xr_vector<xr_string> levels;          // where the rules apply; empty = everywhere
+    xr_vector<xr_string> area;            // the only levels the player may reach; empty = anywhere
+    xr_vector<xr_string> locked_levels;   // every transition ON these levels starts closed
+    xr_vector<xr_string> locked;          // these transitions (level changer names) start closed
+
+    // manifest key of a rule ("original_npcs", ...); null for an unknown index
+    static pcstr Key(u32 rule)
+    {
+        constexpr pcstr keys[Count] = {"original_npcs", "random_stalkers", "mutants", "npc_quests", "story_quests"};
+        return rule < Count ? keys[rule] : nullptr;
+    }
+    // rule index of a manifest key; Count when unknown
+    static u32 FromKey(pcstr key)
+    {
+        for (u32 i = 0; key && i < Count; ++i)
+            if (0 == _stricmp(key, Key(i)))
+                return i;
+        return Count;
+    }
+};
+
 struct Module
 {
     xr_string id;      // [a-z0-9_.-]+, unique
@@ -56,6 +95,7 @@ struct Module
     // rename inside the module never breaks outside references (saves, other
     // modules, base configs) - the UE redirector idea in manifest form
     xr_vector<PathMap> redirect_maps;
+    WorldRules world;
     u32 budget_spawns{256};
     u16 ns{0};        // stable namespace id from the persistent registry
     u16 layer{0};     // 1-based position in the final load order (0 = base game)

@@ -1,0 +1,241 @@
+-- XMS world rules, the Lua half. The engine half (src/xrGame/xms_world.cpp) resolves
+-- the rules of the mode once per new game, keeps them in the save, removes the
+-- original population from the spawn, closes transitions and places the player; this
+-- file filters what the game's SCRIPTS create and hides the quests the mode does not
+-- keep. Contract: docs/dead-air/MODDING.md, "World rules".
+--
+-- The engine calls install() once the session knows it has a world (XmsWorld: a new
+-- game resolved, a save with a world loaded), before a single object registers - the
+-- initial population is created while alife builds a new game (se_actor:on_register ->
+-- SIMBOARD:fill_start_position), long before on_game_start. Never earlier: loading
+-- xr_effects while the application itself starts creates particles against a game
+-- persistent that does not exist yet. world.rule installs it for a game that began
+-- without a world. Every hook is guarded - a global mod that replaced sim_board or
+-- smart_terrain just loses the filter, never the game - and a game without a world
+-- hooks nothing.
+--
+-- Rules (the manifest keys): original_npcs, random_stalkers, mutants, npc_quests,
+-- story_quests. A squad answers to one of the first three by its config: a story id
+-- means the game placed it on purpose, a monster faction means mutants, the rest are
+-- random stalkers. What a MODULE spawns (NQ spawn.*, its spawn layer) is never touched.
+
+local installed = false
+local context = nil		-- "fill" | "respawn" | "story" while one of those creates squads
+local context_level = nil
+local stats = { fill = 0, respawn = 0, story = 0 }
+
+local function world()
+	return xms and xms.world
+end
+
+local function declared()
+	local w = world()
+	return w ~= nil and w.declared ~= nil and w.declared() == true
+end
+
+-- true when the original game's content of this kind stays on that level
+function keep(rule, level_name)
+	local w = world()
+	if not (w and w.keep) then return true end
+	return w.keep(rule, level_name or "") ~= false
+end
+
+local function level_of_se(se)
+	if not (se and alife and game_graph) then return nil end
+	local gvid = se.m_game_vertex_id
+	local gg = game_graph()
+	if not (gvid and gg and gg:valid_vertex_id(gvid)) then return nil end
+	local ok, name = pcall(function() return alife():level_name(gg:vertex(gvid):level_id()) end)
+	return ok and name or nil
+end
+
+function squad_rule(section)
+	local ini = system_ini()
+	if not (ini and section and ini:section_exist(section)) then return nil end
+	if (ini:line_exist(section, "story_id")) then return "original_npcs" end
+	local faction = ini:line_exist(section, "faction") and ini:r_string_ex(section, "faction") or ""
+	if (string.find(faction, "^monster")) then return "mutants" end
+	return "random_stalkers"
+end
+
+-- a squad the given context wants to create: may it?
+local function squad_allowed(section, level_name)
+	local rule = squad_rule(section)
+	if not (rule) then return true end
+	-- a story effect creating a random squad is part of a story beat, not of the
+	-- simulation's population: only the game's own characters are refused there
+	if (context == "story" and rule ~= "original_npcs") then return true end
+	return keep(rule, level_name)
+end
+
+-- ============================================================================ install
+local function wrap_fill(sb)
+	local base = sb.fill_start_position
+	if (type(base) ~= "function") then return false end
+	sb.fill_start_position = function(self, ...)
+		if not (declared()) then return base(self, ...) end
+		context, context_level = "fill", nil
+		local ok, err = pcall(base, self, ...)
+		context = nil
+		if (stats.fill > 0) then
+			-- the game's printf substitutes %s alone
+			printf("* xms_world: the initial population left out %s squad(s) the mode does not keep", tostring(stats.fill))
+		end
+		if not (ok) then printf("! xms_world: fill_start_position failed: %s", tostring(err)) end
+	end
+	return true
+end
+
+local function wrap_create(sb)
+	local base = sb.create_squad
+	if (type(base) ~= "function") then return false end
+	sb.create_squad = function(self, smart, squad_id, ...)
+		if (context and declared()) then
+			local level_name = context_level or level_of_se(smart)
+			if not (squad_allowed(squad_id, level_name)) then
+				stats[context] = (stats[context] or 0) + 1
+				return nil
+			end
+		end
+		return base(self, smart, squad_id, ...)
+	end
+	return true
+end
+
+local function wrap_respawn(cls)
+	local base = cls.try_respawn
+	if (type(base) ~= "function") then return false end
+	cls.try_respawn = function(self, ...)
+		if not (declared()) then return base(self, ...) end
+		local level_name = level_of_se(self)
+		-- neither kind is kept here: the smart has nothing to bring back
+		if not (keep("random_stalkers", level_name) or keep("mutants", level_name)) then return end
+		context, context_level = "respawn", level_name
+		local ok, r = pcall(base, self, ...)
+		context, context_level = nil, nil
+		if not (ok) then
+			printf("! xms_world: try_respawn failed: %s", tostring(r))
+			return
+		end
+		return r
+	end
+	return true
+end
+
+local function wrap_story(name)
+	local base = xr_effects and xr_effects[name]
+	if (type(base) ~= "function") then return false end
+	xr_effects[name] = function(...)
+		if not (declared()) then return base(...) end
+		local outer = context
+		context = "story"
+		local ok, r = pcall(base, ...)
+		context = outer
+		if not (ok) then
+			printf("! xms_world: xr_effects.%s failed: %s", name, tostring(r))
+			return
+		end
+		return r
+	end
+	return true
+end
+
+function install()
+	if (installed) then return end
+	installed = true
+	local hooked = {}
+	pcall(function()
+		local sb = sim_board and sim_board.simulation_board
+		if (sb) then
+			if (wrap_fill(sb)) then hooked[#hooked + 1] = "fill" end
+			if (wrap_create(sb)) then hooked[#hooked + 1] = "create_squad" end
+		end
+	end)
+	pcall(function()
+		local cls = smart_terrain and smart_terrain.se_smart_terrain
+		if (cls and wrap_respawn(cls)) then hooked[#hooked + 1] = "respawn" end
+	end)
+	pcall(function()
+		if (wrap_story("create_squad")) then hooked[#hooked + 1] = "story" end
+		wrap_story("create_squad_member")
+	end)
+	if (#hooked < 4) then
+		printf("! xms_world: world rules hooked %s only - the game's scripts were replaced", table.concat(hooked, ", "))
+	end
+end
+
+-- ============================================================================ quests
+-- Dialog preconditions, added to the game's task dialogs by Refined's base patch
+-- (gamedata\patch\dead_air_x64_world.xmlp). A dialog already running is never
+-- touched - these only decide whether the offer shows up.
+local function here()
+	local ok, name = pcall(level.name)
+	return ok and name or nil
+end
+
+-- jobs of squad leaders ("есть работа?")
+function allow_npc_quests(first_speaker, second_speaker)
+	if not (declared()) then return true end
+	return keep("npc_quests", here())
+end
+
+-- tasks of named characters and the storylines
+function allow_story_quests(first_speaker, second_speaker)
+	if not (declared()) then return true end
+	return keep("story_quests", here())
+end
+
+-- ============================================================================ new game
+-- The engine drops the faction start jump that follows a module's Player Start; this
+-- tells it when that jump is no longer coming, so a later jump of the mod's own is
+-- never taken for it. The new-game screen's world choices are cleared afterwards, the
+-- way the game clears its own new_game_* keys.
+local RULE_KEYS = { "original_npcs", "random_stalkers", "mutants", "npc_quests", "story_quests" }
+local settle_at = nil
+
+local function on_update()
+	if (settle_at and time_global() >= settle_at) then
+		settle_at = nil
+		local w = world()
+		if (w and w.settle) then w.settle() end
+		UnregisterScriptCallback("actor_on_update", on_update)
+	end
+end
+
+local function on_first_update()
+	settle_at = time_global() + 3000
+	RegisterScriptCallback("actor_on_update", on_update)
+end
+
+local function on_game_load()
+	local cfg = axr_main and axr_main.config
+	if not (cfg) then return end
+	local dirty = false
+	for _, key in ipairs(RULE_KEYS) do
+		local name = "new_game_xmsw_" .. key
+		if (cfg:r_value("character_creation", name, 3) ~= nil) then
+			cfg:w_value("character_creation", name)
+			dirty = true
+		end
+	end
+	if (dirty) then cfg:save() end
+end
+
+-- ============================================================================ placed NPCs' orders
+-- A placed NPC carries its standing order in its custom data ([xms_order], written by
+-- the level editor); the orders runtime (xms_nq_behaviour) adopts it once.
+local function on_npc_spawn(npc, se_obj)
+	local ok, has = pcall(function()
+		local ini = npc:spawn_ini()
+		return ini ~= nil and ini:section_exist("xms_order")
+	end)
+	if (ok and has and xms_nq_behaviour and xms_nq_behaviour.adopt_npc) then
+		xms_nq_behaviour.adopt_npc(npc:id())
+	end
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+	RegisterScriptCallback("on_game_load", on_game_load)
+	RegisterScriptCallback("npc_on_net_spawn", on_npc_spawn)
+end

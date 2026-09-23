@@ -20,6 +20,7 @@
 
 #include "UIGameSP.h"
 #include "xrEngine/xr_collide_form.h"
+#include "xms_world.h"
 
 xr_vector<CLevelChanger*> g_lchangers;
 
@@ -103,6 +104,9 @@ bool CLevelChanger::net_Spawn(CSE_Abstract* DC)
         setEnabled(TRUE);
     }
     g_lchangers.push_back(this);
+    // the mode's world closes what it closes (XMS world rules); a world that says
+    // nothing about transitions leaves the changer alone
+    XmsWorld::Apply(*this);
     return (bOk);
 }
 
@@ -226,6 +230,9 @@ void CLevelChanger::load(IReader& input_packet)
     inherited::load(input_packet);
     input_packet.r_stringZ(m_invite_str);
     m_b_enabled = !!input_packet.r_u8();
+    // a quest may have opened or closed the way since this object was saved: the
+    // world state is the authority, the saved flag only its last copy
+    XmsWorld::Apply(*this);
 }
 
 bool CLevelChanger::net_SaveRelevant()

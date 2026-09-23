@@ -21,6 +21,7 @@
 #include "alife_simulator.h"
 #include "moving_objects.h"
 #include "doors_manager.h"
+#include "xms_world.h"
 
 CAI_Space* g_ai_space;
 
@@ -184,6 +185,9 @@ void CAI_Space::load(LPCSTR level_name)
     timer.Start();
 #endif
     AISpaceBase::Load(level_name);
+    // waypoint paths modules drew for this level join the shipped ones, now that there
+    // is a navmesh to snap their points to (XMS world, [path:*] in the spawn layers)
+    XmsWorld::RegisterModulePaths(level_name);
     m_cover_manager->compute_static_cover();
     m_moving_objects->on_level_load();
 

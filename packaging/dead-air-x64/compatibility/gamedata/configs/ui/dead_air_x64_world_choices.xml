@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!--
+	The world choices of a module mode on the new-game screen (XMS world rules the
+	author offered the player): three slots in the options column, below the last
+	option once Refined's base patch has opened the mode band (y 555..605).
+	dead_air_x64_mode_select.script shows the ones the picked mode offers and hides
+	the rest. Data, not code: a global mod with another screen patches this file.
+-->
+<w>
+	<cap_xmsw_1 x="545" y="555" width="160" height="20" stretch="1">
+		<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+	</cap_xmsw_1>
+	<check_xmsw_1 x="515" y="555" width="30" height="21" stretch="1">
+	</check_xmsw_1>
+	<cap_xmsw_2 x="545" y="580" width="160" height="20" stretch="1">
+		<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+	</cap_xmsw_2>
+	<check_xmsw_2 x="515" y="580" width="30" height="21" stretch="1">
+	</check_xmsw_2>
+	<cap_xmsw_3 x="545" y="605" width="160" height="20" stretch="1">
+		<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
+	</cap_xmsw_3>
+	<check_xmsw_3 x="515" y="605" width="30" height="21" stretch="1">
+	</check_xmsw_3>
+</w>

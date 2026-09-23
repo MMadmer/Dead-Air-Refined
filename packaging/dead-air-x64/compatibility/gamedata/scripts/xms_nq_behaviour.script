@@ -1,7 +1,10 @@
--- NQ runtime: behaviour graphs - the assets that drive NPCs (NQ_ARCHITECTURE par. 19).
+-- NQ runtime: behaviour graphs - the assets that drive NPCs (NQ_ARCHITECTURE par. 19) -
+-- and standing orders, the one-line version for a quest (par. 20).
 --   caller side:    behaviour.run, behaviour.stop, behaviour_running, behaviour_done
---   behaviour side: npc.goto, npc.hold, npc.anim, npc.follow, npc.attack,
+--   behaviour side: npc.goto, npc.hold, npc.patrol, npc.anim, npc.follow, npc.attack,
 --                   npc.stance, npc.release, npc_at_place, npc_in_combat, role_alive
+--   orders:         order.guard, order.patrol, order.follow, order.attack, order.clear,
+--                   and [xms_order] in a placed NPC's custom data
 --
 -- A running behaviour is an instance of the ordinary NQ interpreter (core.instance_*),
 -- so nodes, pins, conditions, vars, tokens and saves are the ones quests already use.
@@ -339,12 +342,22 @@ local function heal_applied(uid)
 	end
 end
 
--- Gives an NPC back to whatever owned it. A member of a smart terrain gets its
--- job again; anyone else simply stops being driven, which returns them to the
--- game's own behaviour. Never left in a scheme nothing updates.
+local order_of, has_orders	-- standing orders, below
+
+-- Gives an NPC back to whatever owned it. An NPC with a standing order goes back
+-- to its order (the orders tick puts it back on the next pass, once the graph
+-- that held it is gone); a member of a smart terrain gets its job again; anyone
+-- else simply stops being driven, which returns them to the game's own
+-- behaviour. Never left in a scheme nothing updates.
 local function release(id)
 	local go = go_by_id(id)
 	if not (go) then return end
+	local o = order_of and order_of(id)
+	if (o) then
+		o.applied = false
+		core.mark_dirty()
+		return
+	end
 	local se = se_by_id(id)
 	local smart_id = se and se.m_smart_terrain_id
 	if (smart_id and smart_id ~= 65535 and alife()) then
@@ -489,7 +502,8 @@ local function stop_instance(uid, reason, ok)
 	local n = release_all(uid)
 	util.info("behaviour %s ended (%s), %d NPC(s) released", uid, tostring(reason), n)
 	core.instance_forget(uid)
-	if not (any_instance()) then drop_tick() end
+	-- standing orders live on the same tick
+	if not (any_instance() or has_orders()) then drop_tick() end
 	-- the caller hears about it: its ref becomes "done" and the node that has
 	-- been waiting leaves by finished or by aborted
 	if (type(owner) == "table" and owner.uid and owner.node) then
@@ -939,6 +953,466 @@ K["npc.release"] = {
 	end,
 }
 
+-- ============================================================================ wandering
+-- "Patrol this area" without a drawn route: one runtime path whose single point hops
+-- to a random walkable spot within the radius each time the NPC gets there (or gives
+-- up after a while), with a pause in between. The stock walker walks every leg, so
+-- danger, cover and combat stay the game's own. The hop is kept in the owner's state
+-- ({ center, lvl, radius, at, next }) and survives a save like any step.
+local WANDER_PAUSE = { 4000, 15000 }	-- ms standing at a spot
+local WANDER_GIVE_UP = 60000			-- ms walking to one before picking another
+
+local function wander_hop(slot, w)
+	if not (xms and xms.patrol_point and w.center) then return false end
+	for _ = 1, 8 do
+		local a = math.random() * 2 * math.pi
+		local d = (w.radius or 15) * math.sqrt(math.random())
+		local x, y, z = w.center[1] + math.cos(a) * d, w.center[2], w.center[3] + math.sin(a) * d
+		if (xms.patrol_point(slot, x, y, z)) then
+			w.at = { x, y, z }
+			w.leg = time_global()
+			w.rest = nil
+			return true
+		end
+	end
+	return false
+end
+
+-- One wandering NPC: hops when it has arrived and rested, or walked too long.
+-- Returns true when the path moved and the logic has to be handed over again.
+local function wander_drive(id, slot, w)
+	if (w.lvl and w.lvl ~= util.current_level()) then return false end
+	local now = time_global()
+	local here = w.at and { x = w.at[1], y = w.at[2], z = w.at[3] }
+	if (w.at and here and near(id, vector():set(here.x, here.y, here.z), 3)) then
+		if not (w.rest) then
+			w.rest = now + math.random(WANDER_PAUSE[1], WANDER_PAUSE[2])
+			return false
+		end
+		if (now < w.rest) then return false end
+	elseif (w.at and (w.leg or now) + WANDER_GIVE_UP > now) then
+		if not (w.leg) then w.leg = now end
+		return false
+	end
+	return wander_hop(slot, w)
+end
+
+-- the npc.patrol members of one instance that wander: moved when due
+local function drive_wanderers(uid)
+	local qs = core.quest_state(uid)
+	if not (qs and qs.applied and qs.steps) then return end
+	for key, tag in pairs(qs.applied) do
+		local step = qs.steps[tag]
+		local id = tonumber(key)
+		if (id and step and step.wander and step.path and wander_drive(id, step.path, step.wander)) then
+			step.at, step.lvl = step.wander.at, step.wander.lvl
+			apply_now(id, tag, step.text)
+			core.mark_dirty()
+		end
+	end
+end
+
+local function walker_text(tag, path, move, look)
+	local text = "[logic@" .. tag .. "]\n" ..
+				 "active = walker@" .. tag .. "\n\n" ..
+				 "[walker@" .. tag .. "]\n" ..
+				 "path_walk = " .. path .. "\n" ..
+				 "def_state_moving = " .. ((move == "run") and "rush" or "patrol") .. "\n" ..
+				 "def_state_standing = guard\n"
+	if (look and look ~= "" and look ~= path) then text = text .. "path_look = " .. look .. "\n" end
+	return text
+end
+
+local function position_of(id)
+	local pos = object_pos(id)
+	return pos and { pos.x, pos.y, pos.z } or nil
+end
+
+-- ============================================================================ npc.patrol
+-- A role walks a drawn route over and over (the stock walker: along the links, back
+-- the way it came where a route has no way round), or wanders the area around a
+-- place. Instant, like every other posting: the role patrols until the next step.
+K["npc.patrol"] = {
+	run = function(ctx, p)
+		local tag = tag_of(ctx)
+		if (p.route and p.route ~= "") then
+			if not (patrol_exists(p.route)) then
+				error("npc.patrol: there is no waypoint path '" .. tostring(p.route) .. "'")
+			end
+			local text = walker_text(tag, p.route, p.move)
+			remember_step(ctx.qs, tag, text, nil)
+			for _, id in ipairs(targets(ctx, p)) do apply(ctx, id, tag, text) end
+			return
+		end
+		-- an area: every member wanders on a path of its own around the same centre
+		for _, id in ipairs(targets(ctx, p)) do
+			local center = nil
+			if (type(p.area) == "table") then
+				local pos = destination_pos(ctx, p.area)
+				center = pos and { pos.x, pos.y, pos.z } or nil
+			end
+			center = center or position_of(id)
+			if (center) then
+				local mtag = tag .. "_" .. tostring(id)
+				local step = remember_step(ctx.qs, mtag, walker_text(mtag, "?", p.move), nil)
+				step.path = step.path or rt_alloc()
+				step.text = walker_text(mtag, step.path, p.move)
+				step.wander = { center = center, lvl = util.current_level(), radius = p.radius or 15 }
+				if (wander_hop(step.path, step.wander)) then
+					step.at, step.lvl = step.wander.at, step.wander.lvl
+					apply(ctx, id, mtag, step.text)
+				end
+			end
+		end
+	end,
+}
+
+-- ============================================================================ standing orders
+-- An ORDER is what an NPC does until it is told otherwise - guard a post, patrol a
+-- route or an area, follow someone (NQ_ARCHITECTURE par. 20). It is a step that
+-- never ends and belongs to the NPC, not to a graph: the quest that gave it may
+-- finish, the NPC keeps guarding. Same machinery as a behaviour step - a generated
+-- logic handed to a stock scheme, parked while the NPC is offline, put back before
+-- it spawns after a load, taken again when something else takes the NPC - and one
+-- rule on top: a running behaviour graph OUTRANKS an order. The order waits while a
+-- graph holds the NPC and resumes the moment the graph lets it go.
+--
+-- Given by a quest (order.*) or by the NPC's own spawn: [xms_order] in its custom
+-- data, which is what the level editor writes for a placed NPC.
+--   state.orders[id] = { kind, tag, text, path, dest, at, lvl, wander, by, applied }
+local ORDER_PREFIX = "xms_ord_"
+local ORDER_TICK = 500				-- ms between two passes over the orders
+local order_last = 0
+
+local function orders()
+	local st = core.get_state()
+	if not (st) then return nil end
+	st.orders = st.orders or {}
+	return st.orders
+end
+
+order_of = function(id)
+	local all = orders()
+	return all and all[tostring(id)] or nil
+end
+
+local function held_by_graph(id)
+	local st = core.get_state()
+	local key = tostring(id)
+	for uid, qs in pairs((st and st.quests) or {}) do
+		if (is_instance(uid) and qs.held and qs.held[key]) then return uid end
+	end
+	return nil
+end
+
+-- the context a destination of an order resolves in: the quest that gave it, whose
+-- refs it may name
+local function order_ctx(o)
+	local qs = (o.by and core.quest_state(o.by)) or { refs = {} }
+	return { uid = o.by or "order", qs = qs, refs = qs.refs }
+end
+
+local function order_forget(key)
+	local all = orders()
+	local o = all and all[key]
+	if not (o) then return end
+	if (o.path) then rt_used[o.path] = nil end
+	if (db and db.dynamic_ltx and o.tag) then db.dynamic_ltx[o.tag] = nil end
+	all[key] = nil
+	core.mark_dirty()
+end
+
+-- Hands an order to its NPC when that is possible now: online, alive, not held by a
+-- graph, destination in the world. Otherwise it stays parked for the tick.
+local function order_apply(id)
+	local key = tostring(id)
+	local o = order_of(id)
+	if not (o) then return false end
+	if not (alive_id(id)) then order_forget(key) return false end
+	if (held_by_graph(id)) then o.applied = false return false end
+	if (o.dest and o.path) then
+		if not (step_ready(order_ctx(o), o)) then o.applied = false return false end
+	elseif (o.wander and o.path) then
+		if (o.wander.lvl and o.wander.lvl ~= util.current_level()) then o.applied = false return false end
+		if not (o.wander.at) then
+			if not (wander_hop(o.path, o.wander)) then o.applied = false return false end
+		elseif (xms and xms.patrol_point) then
+			xms.patrol_point(o.path, o.wander.at[1], o.wander.at[2], o.wander.at[3])
+		end
+		o.at, o.lvl = o.wander.at, o.wander.lvl
+	end
+	if (o.text and apply_now(id, o.tag, o.text)) then
+		o.applied = true
+		core.mark_dirty()
+		return true
+	end
+	o.applied = false
+	return false
+end
+
+-- A new order replaces the old one of the same NPC. `spec` carries what the kind
+-- built: { kind, text, dest, wander, follow = true }.
+local function order_set(id, spec, by)
+	local all = orders()
+	if not (all and id) then return end
+	local key = tostring(id)
+	local old = all[key]
+	local o = { kind = spec.kind, tag = ORDER_PREFIX .. key, by = by }
+	-- the runtime path slot is the NPC's for as long as it has orders: reused
+	if (spec.dest or spec.wander) then o.path = (old and old.path) or rt_alloc() end
+	if (old and old.path and not o.path) then rt_used[old.path] = nil end
+	o.dest, o.wander = spec.dest, spec.wander
+	o.text = spec.text and string.gsub(spec.text, "%$PATH", o.path or "") or nil
+	all[key] = o
+	-- the file an NPC that is offline right now will come back naming: the NEW order,
+	-- never the one it had when it went offline
+	if (o.text and create_ini_file and db and db.dynamic_ltx) then
+		pcall(function() db.dynamic_ltx[o.tag] = create_ini_file(o.text) end)
+	end
+	core.mark_dirty()
+	ensure_tick()
+	order_apply(id)
+	util.info("order %s: %s (by %s)", key, tostring(o.kind), tostring(by))
+end
+
+local function order_clear(id)
+	local key = tostring(id)
+	if not (order_of(id)) then return end
+	order_forget(key)
+	-- the NPC goes back to what owned it, unless a graph holds it right now
+	if not (held_by_graph(id)) then release(id) end
+end
+
+-- ---- what each order hands to the schemes ($PATH is the NPC's runtime path)
+local function guard_spec(ctx, p, id)
+	local look = (p.look and p.look ~= "" and patrol_exists(p.look)) and p.look or nil
+	local dest = p.place
+	if (type(dest) == "table" and dest.path) then
+		if not (patrol_exists(dest.path)) then error("order.guard: there is no waypoint path '" .. tostring(dest.path) .. "'") end
+	elseif (type(dest) ~= "table") then
+		-- where it stands now: a post is a place, not a person to walk after
+		local here = position_of(id)
+		if not (here) then return nil end
+		dest = { pos = here, level = util.current_level() }
+	end
+	local path = (type(dest) == "table" and dest.path) and dest.path or "$PATH"
+	local text
+	if (look) then
+		text = "[logic@$TAG]\nactive = camper@$TAG\n\n[camper@$TAG]\npath_walk = " .. path ..
+			   "\npath_look = " .. look .. "\nradius = " .. tostring(p.radius or 20) .. "\n"
+	else
+		text = walker_text("$TAG", path, "walk")
+	end
+	return { kind = "guard", text = text, dest = (path == "$PATH") and dest or nil }
+end
+
+local function patrol_spec(ctx, p, id)
+	if (p.route and p.route ~= "") then
+		if not (patrol_exists(p.route)) then error("order.patrol: there is no waypoint path '" .. tostring(p.route) .. "'") end
+		return { kind = "patrol", text = walker_text("$TAG", p.route, p.move) }
+	end
+	local center
+	if (type(p.area) == "table") then
+		local pos = destination_pos(ctx, p.area)
+		center = pos and { pos.x, pos.y, pos.z } or nil
+	end
+	center = center or position_of(id)
+	if not (center) then return nil end
+	return { kind = "wander", text = walker_text("$TAG", "$PATH", p.move),
+			 wander = { center = center, lvl = util.current_level(), radius = p.radius or 15 } }
+end
+
+local function follow_spec(ctx, p, id)
+	local story = "actor"
+	if (type(p.target) == "table" and not p.target.actor) then
+		local oid = util.ref_object_id(ctx, p.target)
+		local sid = oid and util.story_id_of(oid) or nil
+		if (sid) then story = tostring(sid)
+		else util.warn("order.follow: the target is not in the world, following the player instead") end
+	end
+	local text = "[logic@$TAG]\nactive = companion@$TAG\n\n[companion@$TAG]\nbehavior = around\n" ..
+				 "dist_min = " .. tostring(math.max(1, (p.distance or 3) - 1)) .. "\n" ..
+				 "dist_max = " .. tostring(p.distance or 3) .. "\nsound_idle = state\n"
+	if (story ~= "actor") then text = text .. "target = " .. story .. "\n" end
+	return { kind = "follow", text = text }
+end
+
+local function give_orders(ctx, p, build)
+	local n = 0
+	for _, id in ipairs(ids_from_binding(ctx, p.who)) do
+		if (alive_id(id)) then
+			local spec = build(ctx, p, id)
+			if (spec) then
+				spec.text = string.gsub(spec.text, "%$TAG", ORDER_PREFIX .. tostring(id))
+				order_set(id, spec, ctx.uid)
+				n = n + 1
+			end
+		end
+	end
+	if (n == 0) then util.warn("%s/%s: the order reached nobody", tostring(ctx.uid), tostring(ctx.node_id)) end
+end
+
+K["order.guard"] = { run = function(ctx, p) give_orders(ctx, p, guard_spec) end }
+K["order.patrol"] = { run = function(ctx, p) give_orders(ctx, p, patrol_spec) end }
+K["order.follow"] = { run = function(ctx, p) give_orders(ctx, p, follow_spec) end }
+
+K["order.clear"] = {
+	run = function(ctx, p)
+		for _, id in ipairs(ids_from_binding(ctx, p.who)) do order_clear(id) end
+	end,
+}
+
+-- Hostility is a relation, not a scheme: it is set once and the game keeps it (the
+-- goodwill registry is saved). An NPC that is offline gets it the moment it spawns.
+local function hostile_now(id, target, ctx)
+	local go = go_by_id(id)
+	if not (go) then return false end
+	if (db and db.storage and db.storage[id]) then db.storage[id].combat_ignore = nil end
+	if (target.actor) then
+		local a = actor()
+		if not (a) then return false end
+		pcall(function() go:force_set_goodwill(-3000, a) end)
+		pcall(function() go:set_relation(game_object.enemy, a) end)
+		return true
+	end
+	if (target.community) then
+		if (game_relations and game_relations.set_community_goodwill) then
+			pcall(game_relations.set_community_goodwill, util.go_community(go), target.community, -3000)
+		end
+		return true
+	end
+	local se = util.resolve_npc_se(ctx, target)
+	if (se) then
+		for _, fid in ipairs(ids_from_binding(ctx, target)) do
+			if (fid ~= id) then set_enemy(id, fid) end
+		end
+		return true
+	end
+	return false
+end
+
+K["order.attack"] = {
+	run = function(ctx, p)
+		if (type(p.target) ~= "table") then return end
+		local st = core.get_state()
+		for _, id in ipairs(ids_from_binding(ctx, p.who)) do
+			if (alive_id(id) and not hostile_now(id, p.target, ctx) and st) then
+				-- offline: the tick sets it the moment the NPC is there
+				st.hostile = st.hostile or {}
+				st.hostile[tostring(id)] = { target = util.copy(p.target), by = ctx.uid }
+				core.mark_dirty()
+				ensure_tick()
+			end
+		end
+	end,
+}
+
+-- ---- orders from the NPC's own spawn: [xms_order] in its custom data -------
+-- What the level editor writes for a placed NPC. Adopted ONCE per NPC (the id is
+-- remembered in the state), so a quest that dismissed the order later is not undone
+-- by the next load. Keys: order = guard|patrol|follow, route, look, radius, move,
+-- target (actor or a story id), distance, hostile = true (to the player).
+-- The world script (xms_world) hears every NPC spawn and hands the ones carrying
+-- [xms_order] here; NPCs spawn before this runtime is up, so they wait in a queue.
+local adopt_queue = {}		-- this Lua state: id -> true, waiting for the runtime
+
+local function adopt(id, go)
+	local st = core.get_state()
+	if not (st) then return end
+	st.adopted = st.adopted or {}
+	local key = tostring(id)
+	if (st.adopted[key]) then return end
+	local ok, ini = pcall(go.spawn_ini, go)
+	if not (ok and ini and ini:section_exist("xms_order")) then return end
+	st.adopted[key] = true
+	core.mark_dirty()
+	local function r(k) return ini:line_exist("xms_order", k) and ini:r_string("xms_order", k) or nil end
+	local p = { route = r("route"), look = r("look"), move = r("move"),
+				radius = tonumber(r("radius") or ""), distance = tonumber(r("distance") or "") }
+	local ctx = { uid = "spawn", qs = { refs = {} }, refs = {} }
+	local kind, build = r("order"), nil
+	if (kind == "guard") then build = guard_spec
+	elseif (kind == "patrol" or kind == "wander") then build = patrol_spec
+	elseif (kind == "follow") then
+		build = follow_spec
+		local t = r("target")
+		p.target = (t and t ~= "" and t ~= "actor") and { story = t } or { actor = true }
+	end
+	if (build) then
+		local okb, spec = pcall(build, ctx, p, id)
+		if (okb and spec) then
+			spec.text = string.gsub(spec.text, "%$TAG", ORDER_PREFIX .. key)
+			order_set(id, spec, "spawn")
+		elseif not (okb) then
+			util.warn("[xms_order] of %s: %s", key, tostring(spec))
+		end
+	end
+	if (r("hostile") == "true") then hostile_now(id, { actor = true }, ctx) end
+end
+
+local function adopt_drain()
+	if not (core.get_state()) then return end
+	for id in pairs(adopt_queue) do
+		adopt_queue[id] = nil
+		local go = go_by_id(id)
+		if (go) then
+			local ok, e = pcall(adopt, id, go)
+			if not (ok) then util.warn("[xms_order] of %s: %s", tostring(id), tostring(e)) end
+		end
+	end
+end
+
+-- An NPC whose spawn carries [xms_order] came online (xms_world.on_npc_spawn).
+function adopt_npc(id)
+	if not (id) then return end
+	adopt_queue[id] = true
+	adopt_drain()
+end
+
+has_orders = function()
+	local st = core.get_state()
+	return st ~= nil and ((st.orders and next(st.orders) ~= nil) or (st.hostile and next(st.hostile) ~= nil))
+end
+
+-- ---- the pass: parked orders applied, taken NPCs taken back, wanderers moved ----
+local function orders_tick()
+	local now = time_global()
+	if (now < order_last + ORDER_TICK) then return end
+	order_last = now
+	adopt_drain()
+	local all = orders()
+	if not (all) then return end
+	for key, o in pairs(util.copy(all)) do
+		local id = tonumber(key)
+		o = all[key]
+		if not (id and alive_id(id)) then
+			order_forget(key)
+		elseif not (held_by_graph(id)) then
+			local stg = db and db.storage and db.storage[id]
+			local running = stg and stg.object and stg.ini_filename == "*" .. o.tag
+			-- back from a save or a spawn with its order's file: nothing to hand over again
+			if (running) then o.applied = true end
+			if not (o.applied and running) then
+				order_apply(id)
+			elseif (o.wander and o.path and wander_drive(id, o.path, o.wander)) then
+				o.at = o.wander.at
+				apply_now(id, o.tag, o.text)
+				core.mark_dirty()
+			end
+		end
+	end
+	local st = core.get_state()
+	for key, h in pairs(util.copy((st and st.hostile) or {})) do
+		local id = tonumber(key)
+		if not (id and alive_id(id)) then
+			st.hostile[key] = nil
+		elseif (hostile_now(id, h.target, { uid = h.by, qs = core.quest_state(h.by) or { refs = {} } })) then
+			st.hostile[key] = nil
+			core.mark_dirty()
+		end
+	end
+end
+
 -- ============================================================================ behaviour conditions
 K["npc_at_place"] = {
 	test = function(ctx, p)
@@ -1025,7 +1499,14 @@ function on_init()
 			end
 		end
 	end
-	if (any_instance()) then ensure_tick() else drop_tick() end
+	for _, o in pairs(state.orders or {}) do
+		if (o.path) then rt_used[o.path] = true end
+		-- the tick finds out whether the NPC runs it already (the load put its file back)
+		o.applied = false
+	end
+	-- NPCs that spawned before the runtime was up and carry [xms_order]
+	adopt_drain()
+	if (any_instance() or has_orders()) then ensure_tick() else drop_tick() end
 end
 
 -- BEFORE the first NPC spawns. An NPC saved in the middle of a step comes back
@@ -1054,6 +1535,19 @@ function restore_early()
 					inis = inis + 1
 				end
 			end
+		end
+	end
+	-- standing orders: every one is a logic file an NPC may come back naming
+	for _, o in pairs(type(st.orders) == "table" and st.orders or {}) do
+		if (o.path) then
+			rt_used[o.path] = true
+			if (o.at and o.lvl == here and xms and xms.patrol_point) then
+				if (xms.patrol_point(o.path, o.at[1], o.at[2], o.at[3])) then paths = paths + 1 end
+			end
+		end
+		if (o.tag and o.text and create_ini_file and db and db.dynamic_ltx) then
+			db.dynamic_ltx[o.tag] = create_ini_file(o.text)
+			inis = inis + 1
 		end
 	end
 	if (inis > 0 or paths > 0) then
@@ -1101,10 +1595,13 @@ end
 function tick()
 	local state = core.get_state()
 	if not (state and state.quests) then return end
+	local ok, e = pcall(orders_tick)
+	if not (ok) then util.err("orders: %s", tostring(e)) end
 	for uid, qs in pairs(util.copy(state.quests)) do
 		if (is_instance(uid)) then
 			drain_pending(uid)
 			heal_applied(uid)
+			drive_wanderers(uid)
 			local seen, living = 0, 0
 			for _, r in pairs(qs.roles or {}) do
 				for _, id in ipairs(r.ids or {}) do
@@ -1115,6 +1612,8 @@ function tick()
 			if (seen > 0 and living == 0) then stop_instance(uid, "every role is empty", false) end
 		end
 	end
+	-- nothing left to drive: the callback goes with its reason
+	if not (any_instance() or has_orders()) then drop_tick() end
 end
 
 -- A quest removed this object. Every instance drops it: a role loses the member,
@@ -1125,6 +1624,9 @@ function forget_object(id)
 	local st = core.get_state()
 	if not (st and st.quests or id == nil) then return end
 	local key = tostring(id)
+	-- an NPC that leaves the world takes its standing order with it
+	order_forget(key)
+	if (st.hostile) then st.hostile[key] = nil end
 	for uid, qs in pairs(st.quests) do
 		if (is_instance(uid)) then
 			if (qs.held) then qs.held[key] = nil end
