@@ -1538,6 +1538,475 @@ local function build_pw0()
 	end)
 end
 
+-- ---------------------------------------------------------------------------- PDA layouts
+-- The pda_qa module (tools\qa\nq\module-pda) names tools\nq\fixtures\pda\courier.pdaasset
+-- as its PDA. pp drives the live layout through xms.pda and the stock entry points, asks the
+-- runner for a screenshot of every screen (NQQA-SHOT) and saves; pp2 loads that save and
+-- wants the vars back; pp0 runs without [pda] and wants the stock PDA.
+local function pda_wnd() return ActorMenu.get_pda_menu() end
+
+local function pda_lines()
+	local text = ""
+	pcall(function() text = xms.pda.describe() or "" end)
+	local out = {}
+	for line in string.gmatch(text, "[^\n]+") do out[#out + 1] = line end
+	return out, text
+end
+
+local function pda_count(prefix)
+	local n = 0
+	for _, l in ipairs((pda_lines())) do
+		if (string.sub(l, 1, #prefix) == prefix) then n = n + 1 end
+	end
+	return n
+end
+
+local function pda_head() return (pda_lines())[1] or "" end
+
+local function pda_item(kind, id)
+	for _, l in ipairs((pda_lines())) do
+		local k, i, vis = string.match(l, "^item (%S+) (%S+) (%S+)")
+		if (k == kind and i == id) then return vis end
+	end
+end
+
+local function shot(tag)
+	printf("NQQA-SHOT: %s", tag)
+end
+
+-- "Нет заказа" in cp1251: what var:current=... of the fixture leaves once the engine has it
+local function no_order() return bytes(205, 229, 242, 32, 231, 224, 234, 224, 231, 224) end
+
+local function build_pp()
+	step("pp.api", function()
+		check("pp.api", xms and xms.pda_api == 1 and xms.pda ~= nil, "xms.pda_api = %s", tostring(xms and xms.pda_api))
+		local src = xms_native_pda_source and xms_native_pda_source()
+		check("pp.source", src and src.module == "pda_qa" and src.path == "ui\\courier.pdaasset",
+			"the layout of %s: %s", tostring(src and src.module), tostring(src and src.path))
+		return true
+	end, { timeout = 20000 })
+
+	step_until("pp.active", 20000, function() return xms.pda.active() == "courier" end,
+		function() return fmt1("xms.pda.active() = %s", tostring(xms.pda.active())) end)
+
+	step("pp.hook", function()
+		shared.pda_actions = {}
+		xms.hook("xms_pda.on_action", function(action) shared.pda_actions[#shared.pda_actions + 1] = tostring(action) end,
+			{ mode = "post" })
+		return pass("pp.hook", "watching the script actions")
+	end)
+
+	step("pp.open", function()
+		check("pp.open", xms.pda.open("orders") == true, "xms.pda.open(orders)")
+		return true
+	end)
+	step_until("pp.shown", 15000, function() return pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+
+	step("pp.orders", function()
+		if (time_global() - step_start < 1500) then return nil end
+		local head = pda_head()
+		check("pp.orders", xms.pda.current() == "orders" and string.find(head, "page orders", 1, true) ~= nil,
+			"current page %s | %s", tostring(xms.pda.current()), head)
+		check("pp.rows_static", pda_count("item row ") == 2, "static rows in the list: %d", pda_count("item row "))
+		check("pp.details_hidden", pda_item("group", "details") == "hidden", "the overlay starts hidden: %s",
+			tostring(pda_item("group", "details")))
+		shot("pda_orders")
+		return true
+	end, { timeout = 10000 })
+	step_wait("pp.orders_shot", 2500)
+
+	step("pp.tab_map", function()
+		check("pp.tab_map", xms.pda.click("tab_map") and xms.pda.current() == "map", "a tab click opens the map: %s",
+			tostring(xms.pda.current()))
+		return true
+	end)
+	step("pp.map_shown", function()
+		if (time_global() - step_start < 1500) then return nil end
+		local head = pda_head()
+		check("pp.map_shown", string.find(head, "map shown", 1, true) ~= nil, "%s", head)
+		shot("pda_map")
+		return true
+	end, { timeout = 10000 })
+	step_wait("pp.map_shot", 2500)
+
+	step("pp.vars", function()
+		xms.pda.set("current", "QA order")
+		check("pp.var_set", xms.pda.get("current") == "QA order", "set/get: %s", tostring(xms.pda.get("current")))
+		check("pp.done", xms.pda.click("done"), "the Done button clicked")
+		check("pp.var_action", xms.pda.get("current") == no_order(), "var:current= from the action: %s",
+			hexof(xms.pda.get("current") or "", 12))
+		local seen = false
+		for _, a in ipairs(shared.pda_actions) do seen = seen or a == "signal:courier_done" end
+		check("pp.signal", seen, "signal:courier_done reached the scripts (%d action(s))", #shared.pda_actions)
+		return true
+	end)
+
+	step("pp.rows_live", function()
+		local ok = xms.pda.rows("orders", {
+			{ title = "A", from = "x", to = "y", price = 1, tile = "soft", icon = "ui_xms_icon_box" },
+			{ title = "B", from = "x", to = "y", price = 2, tile = "soft", icon = "ui_xms_icon_box" },
+			{ title = "C", from = "x", to = "y", price = 3, tile = "soft", icon = "ui_xms_icon_bag" },
+		})
+		check("pp.rows_live", ok and pda_count("item row ") == 3, "rows at run time: %s, %d row(s)", tostring(ok),
+			pda_count("item row "))
+		return true
+	end)
+
+	step("pp.details", function()
+		xms.pda.page("orders")
+		-- a row by its number: the row's action fills {picked} and opens the overlay
+		check("pp.row_click", xms.pda.click("orders", 2) and xms.pda.get("picked") == "B"
+			and pda_item("group", "details") == "visible", "row 2 of 'orders': picked=%s details=%s",
+			tostring(xms.pda.get("picked")), tostring(pda_item("group", "details")))
+		check("pp.row_missing", not xms.pda.click("orders", 9), "a row the list does not have is refused")
+		xms.pda.hide("details")
+		xms.pda.set("picked", "QA pick")
+		check("pp.details_show", xms.pda.show("details") and pda_item("group", "details") == "visible",
+			"xms.pda.show(details): %s", tostring(pda_item("group", "details")))
+		shot("pda_details")
+		return true
+	end)
+	step_wait("pp.details_shot", 2500)
+	step("pp.take", function()
+		check("pp.take", xms.pda.click("take"), "Take clicked")
+		check("pp.take_effects", xms.pda.get("current") == "QA pick" and pda_item("group", "details") == "hidden"
+			and xms.pda.current() == "map", "current=%s details=%s page=%s", tostring(xms.pda.get("current")),
+			tostring(pda_item("group", "details")), tostring(xms.pda.current()))
+		return true
+	end)
+
+	step("pp.stock", function()
+		check("pp.stock_click", xms.pda.click("tab_journal"), "the stock tab clicked")
+		return true
+	end)
+	step("pp.stock_shown", function()
+		if (time_global() - step_start < 1500) then return nil end
+		local head = pda_head()
+		check("pp.stock_shown", string.find(head, "stock eptTasks", 1, true) ~= nil
+			and pda_wnd():GetActiveSection() == "eptTasks", "%s | section %s", head, tostring(pda_wnd():GetActiveSection()))
+		shot("pda_journal")
+		return true
+	end, { timeout = 10000 })
+	step_wait("pp.stock_shot", 2500)
+
+	step("pp.keys", function()
+		pda_wnd():SetActiveSubdialog("eptTasks")
+		check("pp.key_map", xms.pda.current() == "map" and not string.find(pda_head(), "stock", 1, true),
+			"the map key's eptTasks goes to the layout's map page: %s", pda_head())
+		pda_wnd():SetActiveSubdialog("eptContacts")
+		check("pp.key_contacts", string.find(pda_head(), "stock eptContacts", 1, true) ~= nil,
+			"eptContacts shows the stock contacts: %s", pda_head())
+		pda_wnd():SetActiveSubdialog("eptRelations")
+		check("pp.stock_other", string.find(pda_head(), "stock eptRelations", 1, true) ~= nil,
+			"any other section is shown as it is: %s", pda_head())
+		xms.pda.page("orders")
+		check("pp.stock_left", not string.find(pda_head(), "stock", 1, true) and xms.pda.current() == "orders",
+			"a page closes the stock section: %s", pda_head())
+		return true
+	end)
+
+	-- a tutorial step closing an open PDA crashed on the 3D PDA (no dialog holder)
+	step("pp.tutorial", function(s)
+		if not (s.started) then
+			if not (pda_wnd():IsShown()) then return fail("pp.tutorial", "the PDA was not open") end
+			pcall(function() game.start_tutorial("talk_ssu") end)
+			s.started = time_global()
+			return nil
+		end
+		if (time_global() - s.started < 3000) then return nil end
+		return check("pp.tutorial", not pda_wnd():IsShown(), "a tutorial step closed the open PDA (module layout) and the game runs on")
+	end, { timeout = 20000 })
+	step("pp.close", function()
+		xms.pda.close()
+		return true
+	end)
+	step_until("pp.closed", 15000, function() return not pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+
+	step("pp.save", function()
+		xms.pda.set("persist", "kept")
+		info("saving '%s' with the PDA vars set", save_name)
+		console("save " .. save_name)
+		return pass("pp.save", "saved")
+	end)
+	step_wait("pp.save_wait", 5000)
+end
+
+local function build_pp2()
+	step_until("pp2.active", 20000, function() return xms and xms.pda and xms.pda.active() == "courier" end,
+		function() return fmt1("xms.pda.active() = %s", tostring(xms and xms.pda and xms.pda.active())) end)
+	step("pp2.vars", function()
+		check("pp2.persist", xms.pda.get("persist") == "kept", "a var a script set came back with the save: %s",
+			tostring(xms.pda.get("persist")))
+		check("pp2.current", xms.pda.get("current") == "QA pick", "the var an action set came back: %s",
+			tostring(xms.pda.get("current")))
+		check("pp2.default", xms.pda.get("picked") == "QA pick" and xms.pda.current() == "orders",
+			"picked=%s, the PDA starts on its start page again: %s", tostring(xms.pda.get("picked")),
+			tostring(xms.pda.current()))
+		return true
+	end, { timeout = 10000 })
+end
+
+local function build_pp0()
+	step("pp0.api", function()
+		check("pp0.inactive", xms and xms.pda and xms.pda.active() == nil, "no layout without [pda]: %s",
+			tostring(xms and xms.pda and xms.pda.active()))
+		check("pp0.describe", xms.pda.describe() == "no module layout", "%s", tostring(xms.pda.describe()))
+		return true
+	end, { timeout = 20000 })
+	step("pp0.open", function()
+		pda_wnd():ShowDialog(true)
+		return true
+	end)
+	step_until("pp0.shown", 15000, function() return pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+	step("pp0.stock", function()
+		if (time_global() - step_start < 1500) then return nil end
+		local shown = false
+		pcall(function() shown = pda_wnd():GetTabControl():IsShown() end)
+		check("pp0.tabs", shown, "the stock tabs are there")
+		check("pp0.section", pda_wnd():GetActiveSection() == "eptTasks", "the stock PDA opens on %s",
+			tostring(pda_wnd():GetActiveSection()))
+		shot("pda_stock")
+		return true
+	end, { timeout = 10000 })
+	step_wait("pp0.shot", 2500)
+	step("pp0.tutorial", function(s)
+		if not (s.started) then
+			if not (pda_wnd():IsShown()) then return fail("pp0.tutorial", "the PDA was not open") end
+			pcall(function() game.start_tutorial("talk_ssu") end)
+			s.started = time_global()
+			return nil
+		end
+		if (time_global() - s.started < 3000) then return nil end
+		return check("pp0.tutorial", not pda_wnd():IsShown(), "a tutorial step closed the open PDA (stock PDA) and the game runs on")
+	end, { timeout = 20000 })
+	step("pp0.close", function()
+		pda_wnd():HideDialog()
+		return true
+	end)
+	step_until("pp0.closed", 15000, function() return not pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+end
+
+-- A module's own layout, whatever it is (-Scenario PdaModule): every page is opened and
+-- captured; when the layout has an `accept` button (an order to take), the probe opens the
+-- overlay `order_card` when there is one, captures it, clicks accept and, when the phase ini
+-- names the quest (pda_quest) and its ref (pda_ref), wants the quest to have created the
+-- object with a map spot on it - the app's map shows the player and the order.
+local function build_ppm()
+	local extra = {}
+	pcall(function()
+		local ini = ini_file(PHASE_INI)
+		for _, k in ipairs({ "pda_quest", "pda_ref", "pda_start" }) do
+			if (ini:line_exist("qa", k)) then extra[k] = ini:r_string("qa", k) end
+		end
+	end)
+
+	-- A new game begins on fake_start and the faction script moves the player to the start
+	-- location the new-game screen chose; that ChangeLevel replaces this Lua state and the
+	-- phase starts over on the real level. The level that loads next would pause itself
+	-- ("application start": the window on the hidden desktop has no focus) before any script
+	-- of the new state can run, unless the device stays active.
+	local here = level.name()
+	if (extra.pda_start and here == "fake_start") then
+		console("rs_always_active on")
+		quit_at_end = false
+		step("ppm.start", function() return nil end, { timeout = 60000, on_timeout = function()
+			quit_at_end = true
+			fail("ppm.start", "the new game stayed on fake_start: start location '%s' was not applied", extra.pda_start)
+		end })
+		return
+	end
+	if (extra.pda_start) then
+		pass("ppm.start", "the game started at %s on %s", extra.pda_start, here)
+		-- the level that has just loaded is still precaching: a tutorial started now never runs
+		step("ppm.loaded", function(s)
+			if (device().precache_frame > 0) then
+				s.at = nil
+				return nil
+			end
+			s.at = s.at or time_global()
+			return time_global() - s.at > 3000 or nil
+		end, { timeout = 60000 })
+		-- the start is at 20:00 and a 3D PDA in the dark is a dim screen: the captures want daylight
+		step("ppm.daylight", function(s)
+			if not (s.at) then
+				local h = level.get_time_hours()
+				if (h < 9 or h > 16) then level.change_game_time(0, (36 - h) % 24, 0) end
+				info("the time was %02d:00, now %02d:00", h, level.get_time_hours())
+				s.at = time_global()
+				return nil
+			end
+			return time_global() - s.at > 2000 or nil
+		end, { timeout = 10000 })
+	end
+
+	step_until("ppm.active", 30000, function() return xms and xms.pda and xms.pda.active() ~= nil end,
+		function() return fmt1("the module's layout is up: %s", tostring(xms and xms.pda and xms.pda.active())) end)
+
+	step("ppm.describe", function()
+		local lines = pda_lines()
+		shared.pda_pages = {}
+		for _, l in ipairs(lines) do
+			local id = string.match(l, "^page (%S+)")
+			if (id) then shared.pda_pages[#shared.pda_pages + 1] = id end
+		end
+		info("%s", lines[1] or "")
+		return check("ppm.pages", #shared.pda_pages > 0, "%d page(s): %s", #shared.pda_pages, table.concat(shared.pda_pages, ", "))
+	end)
+
+	step("ppm.open", function()
+		check("ppm.open", xms.pda.open(xms.pda.current()), "xms.pda.open(%s)", tostring(xms.pda.current()))
+		return true
+	end)
+	step_until("ppm.shown", 15000, function() return pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+
+	-- A tutorial step closes an open PDA (CUISequenceSimpleItem::Start - the new game's intro
+	-- is one), which crashed on a 3D PDA: the window is shown without a dialog holder.
+	-- talk_ssu is the game's own empty one-step tutorial, the intro's shape.
+	step("ppm.tutorial", function(s)
+		if not (s.started) then
+			pcall(function() game.start_tutorial("talk_ssu") end)
+			s.started = time_global()
+			return nil
+		end
+		if (time_global() - s.started < 3000) then return nil end
+		return check("ppm.tutorial", not pda_wnd():IsShown(), "a tutorial step closed the open PDA and the game runs on")
+	end, { timeout = 20000 })
+
+	-- one page after another, captured once it has had a moment to draw
+	step("ppm.tour", function(s)
+		s.i = s.i or 0
+		if not (pda_wnd():IsShown()) then
+			xms.pda.open(shared.pda_pages[math.max(s.i, 1)])
+			s.at = time_global()
+			s.shot = nil
+			return nil
+		end
+		if (s.i > 0 and time_global() - (s.at or 0) < 1800) then return nil end
+		-- the runner captures a moment after the SHOT line: the page stays until then
+		if (s.i > 0 and not s.shot) then
+			shot("module_" .. shared.pda_pages[s.i])
+			s.shot = time_global()
+			return nil
+		end
+		if (s.shot and time_global() - s.shot < 1500) then return nil end
+		s.shot = nil
+		s.i = s.i + 1
+		if (s.i > #shared.pda_pages) then
+			return pass("ppm.tour", "%d page(s) shown", #shared.pda_pages)
+		end
+		if not (xms.pda.page(shared.pda_pages[s.i])) then
+			return fail("ppm.tour", "page %s does not open", shared.pda_pages[s.i])
+		end
+		s.at = time_global()
+		return nil
+	end, { timeout = 120000 })
+	step_wait("ppm.tour_shot", 2000)
+
+	step("ppm.card", function()
+		if (pda_item("button", "accept") == nil) then return skip("ppm.card", "the layout has no accept button") end
+		xms.pda.page(shared.pda_pages[1])
+		if not (pda_wnd():IsShown()) then xms.pda.open(shared.pda_pages[1]) end
+		-- the first order of the list, clicked as the player clicks it; the card opens itself
+		local clicked = pda_item("list", "orders") ~= nil and xms.pda.click("orders", 1)
+		info("the first row of 'orders' clicked: %s", tostring(clicked))
+		if (not clicked and pda_item("group", "order_card")) then xms.pda.show("order_card", true) end
+		shot("module_card")
+		return pass("ppm.card", "the order card: %s", tostring(pda_item("group", "order_card")))
+	end)
+	step_wait("ppm.card_shot", 2000)
+
+	step("ppm.accept", function()
+		if (pda_item("button", "accept") == nil) then return skip("ppm.accept", "the layout has no accept button") end
+		check("ppm.accept", xms.pda.click("accept"), "accept clicked; the page is now %s", tostring(xms.pda.current()))
+		return true
+	end)
+
+	step("ppm.order", function()
+		if (pda_item("button", "accept") == nil or not extra.pda_quest) then return skip("ppm.order", "no quest named") end
+		local qs = xms_nq.quest_state(extra.pda_quest)
+		local rec = qs and qs.refs and qs.refs[extra.pda_ref or "parcel"]
+		local id = rec and rec.id
+		if not (id) then return nil end
+		local spots = 0
+		pcall(function() spots = level.map_has_object_spot(id, "secondary_task_location") end)
+		-- the server object: a fresh spawn is not online for a few frames
+		local a, se = actor(), alife():object(id)
+		local ap, op = a and a:position(), se and se.position
+		local dist = (ap and op) and ap:distance_to(op) or -1
+		info("level %s, the player at %.1f,%.1f, the %s at %.1f,%.1f", level.name(), ap and ap.x or 0, ap and ap.z or 0,
+			extra.pda_ref or "parcel", op and op.x or 0, op and op.z or 0)
+		shared.pda_order_id = id
+		check("ppm.order", spots ~= 0, "the quest made %s (id %s, %.0f m away) with a map spot = %s",
+			extra.pda_ref or "parcel", tostring(id), dist, tostring(spots))
+		return true
+	end, { timeout = 20000, on_timeout = function() fail("ppm.order", "the quest made no %s", tostring(extra.pda_ref)) end })
+
+	step("ppm.map_shot", function()
+		if (time_global() - step_start < 2500) then return nil end
+		shot("module_order_on_map")
+		return true
+	end, { timeout = 10000 })
+	step_wait("ppm.map_shot_wait", 2000)
+
+	-- describe() lists the spots the map slot draws (a spot is attached only while the slot
+	-- holds it): the player and the order both, which is what the app's map is for
+	step("ppm.on_map", function()
+		if not (shared.pda_order_id) then return skip("ppm.on_map", "no order was made") end
+		local me, it
+		for _, l in ipairs(pda_lines()) do
+			local id, how = string.match(l, "^spot (%d+) (%a+)")
+			if (how == "shown" and tonumber(id) == actor():id()) then me = l end
+			if (how == "shown" and tonumber(id) == shared.pda_order_id) then it = l end
+		end
+		return check("ppm.on_map", me ~= nil and it ~= nil, "the app's map shows the player [%s] and the order [%s]",
+			tostring(me), tostring(it))
+	end)
+
+	-- the same map zoomed out by the layout's own button, when it has one with that id
+	step("ppm.map_wide", function(s)
+		if (pda_item("button", "zoom_out") == nil) then return skip("ppm.map_wide", "the layout has no zoom_out button") end
+		if not (s.shot) then
+			xms.pda.click("zoom_out")
+			xms.pda.click("zoom_out")
+			s.shot = time_global()
+			return nil
+		end
+		if (time_global() - s.shot < 1500) then return nil end
+		shot("module_order_on_map_wide")
+		return pass("ppm.map_wide", "zoomed out twice")
+	end, { timeout = 10000 })
+	step_wait("ppm.map_wide_wait", 2000)
+
+	step("ppm.confirm", function()
+		if (pda_item("button", "confirm") == nil) then return skip("ppm.confirm", "the layout has no confirm button") end
+		check("ppm.confirm", xms.pda.click("confirm"), "confirm clicked")
+		return true
+	end)
+	step("ppm.unspot", function()
+		if (pda_item("button", "confirm") == nil or not extra.pda_quest) then return skip("ppm.unspot", "no quest named") end
+		if (time_global() - step_start < 2000) then return nil end
+		local qs = xms_nq.quest_state(extra.pda_quest)
+		local rec = qs and qs.refs and qs.refs[extra.pda_ref or "parcel"]
+		local spots = 0
+		pcall(function() spots = rec and rec.id and level.map_has_object_spot(rec.id, "secondary_task_location") or 0 end)
+		shot("module_confirmed")
+		return check("ppm.unspot", spots == 0, "the map spot is gone after the confirm (%s)", tostring(spots))
+	end, { timeout = 10000 })
+	step_wait("ppm.unspot_wait", 2000)
+
+	step("ppm.close", function()
+		xms.pda.close()
+		return true
+	end)
+	step_until("ppm.closed", 15000, function() return not pda_wnd():IsShown() end,
+		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
+end
+
 local BUILDERS = {
 	-- Look inside a save that is not ours: load a player's own game and print what the
 	-- runtime and the PDA each hold. `save` in the phase ini names the quest to dump.
@@ -1606,6 +2075,10 @@ local BUILDERS = {
 	p1 = build_p1,
 	pw = build_pw,
 	pw0 = build_pw0,
+	pp = build_pp,
+	pp2 = build_pp2,
+	pp0 = build_pp0,
+	ppm = build_ppm,
 	p2 = build_p2,
 	p3 = build_p3,
 	p4 = build_p4,

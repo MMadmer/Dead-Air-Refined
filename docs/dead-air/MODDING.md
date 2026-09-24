@@ -444,6 +444,60 @@ kinds (NQ_RUNTIME.md section 16). Lua: `xms.world` (`keep`, `set_rule`,
 `close|open <level>`, `area_add|area_remove <level>`,
 `rule <key> keep|remove|clear` change it.
 
+### PDA layouts - a module's own PDA interface
+
+A module can give the PDA its own screens: pages, buttons, lists, menus, and a slot for
+the live map. The device stays (2D and 3D alike), the map is the stock map with every
+spot and task marker, the tasks, contacts and every other stock section stay reachable;
+only the interface inside the device changes. XFined Editor writes the file and shows
+it in a clickable preview (docs/pda/PDA_FORMAT.md in the editor repo is the format).
+
+```ini
+[pda]
+layout = pda\app.pdaasset     ; a .pdaasset inside the module
+```
+
+- The layout is declarative Lua (`return { pda = 1, ... }`), read in the NQ loader's
+  sandbox and turned by `scripts\xms_pda_layout.script` into a flat item list (canvas
+  units, colours resolved, texts in cp1251 by `xms_pda.script`). The engine
+  (`CUIPdaLayout`, a window per item under the device's screen) draws it. The editor runs
+  the same `xms_pda_layout.script` for its checks and preview, so the two agree.
+- **Nothing of the game is written.** No `pda.xml`, no script of the game: without a
+  module layout the PDA is the stock one. The layout applies while its module does
+  (`[module] mode`), so a mod's own mode gets its PDA and the plain game keeps the stock
+  one. Two applying modules with a layout: the later one in the load order wins, the
+  other is a conflict in `xms_report.json` and the log.
+- A layout with an error (`E3xx`) is not shown: the log names the problems and the stock
+  PDA stays. Warnings (`W3xx`) are logged.
+- The screen is the rect of `noice_static` of the loaded `pda.xml` / `pda_16.xml`; the
+  canvas (960x680 unless the layout says otherwise) is laid over it per axis. The stock
+  tabs, caption, clock and the screen's decorations of `pda.xml` step aside; the device
+  picture, its close button and the screen noise stay unless `device` says otherwise.
+- The keys: Dead Air's map key asks for `eptTasks`, the kMAP binding and tutorials call
+  `Show_MapWnd` - both open the layout's `keys.map` (its map page by default);
+  `eptContacts` and `Show_ContactsWnd` open `keys.contacts` (the stock contacts by
+  default); any other section a script asks for (`SetActiveSubdialog`) is shown as it is,
+  over the layout, under its overlay.
+- Actions: `page:`, `back`, `close`, `show:`/`hide:`/`toggle:`, `stock:<section>`,
+  `map:actor|zoom_in|zoom_out|global`, `var:name=value`, `signal:<name>` (every quest's
+  `event.signal` hears it as `<name>` or `<module>.<name>`), `lua:<script>.<function>`
+  (called with the item id and the row).
+- Lua, `xms.pda` (`xms.pda_api = 1`): `active()`, `set(name, value)` / `get(name)` (the
+  `{placeholders}`; values ride the save as the engine blob `0x584DFF03` of the `.scov`),
+  `page(id)` / `current()`, `show(id, on)` / `hide(id)` / `toggle(id)`, `text(id, text)`,
+  `rows(id, rows)` (a list's rows at run time), `click(id, row)`, `open(page)` / `close()`,
+  `describe()` (the live layout as text; while the map slot is up it adds one
+  `spot <object id> shown|pointer <x>,<y> <hint>` line per map spot the slot draws, so a
+  script can tell the player and its marker are on the app's map). Texts may be UTF-8 or
+  cp1251.
+- Refined ships the sheet `ui_xms_pda` (textures_descr `ui_xms_pda.xml`): the white block
+  every rounded rectangle is drawn with, four fades, and ~48 white icons
+  (`ui_xms_icon_star`, `_box`, `_map`, `_pin`, ...) a layout tints; made by
+  `tools\graphics\make_xms_pda_sheet.py`. A module brings pictures of its own the usual way
+  (its own textures_descr, or a file under `textures\`).
+- Dead Air's fonts: `letterica25` is the 16 px texture, the big ones are `graffiti19/22/
+  32/50`; `—` and `–` draw blank, `→`, `★`, `×` are not in cp1251.
+
 ## Content bundles
 
 Refined's own assets ship as versioned archives in `database\` instead of riding

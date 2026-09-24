@@ -435,6 +435,21 @@ Level changers read the world on spawn and on load (`XmsWorld::Apply`), and
 `CALifeUpdateManager::change_level` refuses a destination outside the playable
 area. The contract is MODDING.md "World rules".
 
+### 7.5 PDA layouts
+
+`mod.ltx [pda] layout` names a module's own PDA interface, a `.pdaasset`
+(`XMS::Module::pda_layout`, a path inside the module). `XmsPda::Owner()` picks the last
+applying module that declares one (the others are conflicts). `CUIPdaWnd::Init` asks
+`xms_pda.build` for the layout - `xms_nq_load.parse` reads it in the sandbox,
+`xms_pda_layout.normalize` (pure Lua, shared with the editor) turns it into a flat item
+list - and `CUIPdaLayout` builds a window per item under `UIMainPdaFrame`, so the 3D
+PDA's screen UV and the stock sections keep working unchanged. The map slot is a
+second `CUIMapWnd` (`InitFromXml` from a generated description); map windows are kept
+in a list, so a map location that goes away leaves the hint of each
+(`MapLocationRelcaseAll`). Run-time vars ride the save as the engine blob `0x584DFF03`.
+Nothing is composed or written: without a layout the PDA is the stock one. The contract
+is MODDING.md "PDA layouts".
+
 ## 8. Layer 5 — World: new levels and geometry overlays
 
 ### 8.1 The composite `game.graph`

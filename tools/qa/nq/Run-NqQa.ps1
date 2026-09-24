@@ -22,6 +22,24 @@
     module (tools\qa\nq\module-world): its [world], Player Start, patrol path and a placed
     stalker with a standing order.
 
+    Scenario Pda loads the base save with the pda_qa module (tools\qa\nq\module-pda and the
+    layout fixture tools\nq\fixtures\pda\courier.pdaasset): the PDA shows the module's own
+    screens, the probe drives them through xms.pda and the stock entry points and prints
+    "NQQA-SHOT: <tag>" on every screen, which this script answers with a capture of the
+    hidden-desktop window (screens\<tag>.png); a second launch loads the save it wrote and wants
+    the vars back. PdaControl runs the same module without [pda] and wants the stock PDA.
+
+    Scenario PdaModule checks a module built by the editor (-PdaModuleDir <game>\modules\<id>
+    as the build wrote it): a NEW game in the module's mode (-PdaMode, answered the way the
+    new-game screen does), every page of its layout opened and captured, and - when the layout
+    has an `accept` button - the order taken; -PdaQuest <module>.<quest> and -PdaRef name the
+    quest and the ref it must create with a map spot on it. The game starts as a stalker at
+    -PdaStart (a section of plugins\faction_start_locations.ltx; by default the rookie village
+    of Cordon, out in the open - Agroprom's research_institute is a dark room, and a 3D PDA
+    there is a dim screen) the way the new-game screen asks for it; without a start location a
+    new game stays on the fake_start level, whose map is a placeholder. -PdaStart '' keeps it.
+    The probe then checks describe()'s map spots: the player and the order both in the slot.
+
 .EXAMPLE
     pwsh -NoProfile -File tools\qa\nq\Run-NqQa.ps1 -SaveName "admin - autosave" -ResultLabel run1
 #>
@@ -38,10 +56,18 @@ param(
     [string]$ResultLabel = (Get-Date -Format 'yyyyMMdd-HHmmss'),
 
     [ValidateSet('All', 'Scout', 'Main', 'Reload', 'Dialog', 'LevelChange', 'ModuleRemoved',
-        'ChangedGraph', 'EmptyModule', 'Control', 'World', 'WorldControl')]
+        'ChangedGraph', 'EmptyModule', 'Control', 'World', 'WorldControl', 'Pda', 'PdaControl', 'PdaModule')]
     [string]$Scenario = 'All',
 
     [int]$TimeoutSeconds = 900,
+
+    # -Scenario PdaModule: a built module folder, the mode its game runs in, and optionally the
+    # quest (<module>.<quest id>) and the ref an accepted order must create
+    [string]$PdaModuleDir,
+    [string]$PdaMode,
+    [string]$PdaQuest,
+    [string]$PdaRef = 'parcel',
+    [string]$PdaStart = '_rookie_village',
 
     # The QA module carries no `mode =`, so it applies only when no campaign mode is active -
     # which means the suite cannot run from a save made inside a campaign (Revolution II and the
@@ -92,6 +118,7 @@ $qaLogs = Join-Path $qaAppData 'logs'
 $qaModules = Join-Path $qaRoot 'modules'
 $qaModule = Join-Path $qaModules 'nq_qa'
 $qaWorldModule = Join-Path $qaModules 'world_qa'
+$qaPdaModule = Join-Path $qaModules 'pda_qa'
 $qaEngine = Join-Path $qaRoot 'xrEngine.exe'
 
 $compatGameData = Join-Path $repositoryRoot 'packaging\dead-air-x64\compatibility\gamedata'
@@ -314,7 +341,7 @@ function Copy-SaveGroup {
 }
 
 function Set-QaModule {
-    param([ValidateSet('Full', 'Changed', 'Empty', 'None', 'World', 'WorldControl')][string]$Variant)
+    param([ValidateSet('Full', 'Changed', 'Empty', 'None', 'World', 'WorldControl', 'Pda', 'PdaControl')][string]$Variant)
     if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
     New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
     switch ($Variant) {
@@ -333,6 +360,23 @@ function Set-QaModule {
                     $keep
                 })
             Set-Content -LiteralPath $manifest -Value $lines -Encoding Default
+            return
+        }
+        { $_ -in 'Pda', 'PdaControl' } {
+            # the layout has one home: the fixture of the headless tests
+            Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-pda') -Destination $qaPdaModule
+            $ui = Join-Path $qaPdaModule 'ui'
+            New-Item -ItemType Directory -Path $ui -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $repositoryRoot 'tools\nq\fixtures\pda\courier.pdaasset') -Destination $ui -Force
+            if ($Variant -eq 'PdaControl') {
+                $manifest = Join-Path $qaPdaModule 'mod.ltx'
+                $keep = $true
+                $lines = @(Get-Content -LiteralPath $manifest | Where-Object {
+                        if ($_ -match '^\s*\[(.+)\]') { $keep = ($Matches[1].Trim() -ne 'pda') }
+                        $keep
+                    })
+                Set-Content -LiteralPath $manifest -Value $lines -Encoding Default
+            }
             return
         }
         'Empty' { Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-empty') -Destination $qaModule }
@@ -385,7 +429,11 @@ function Invoke-NqPhase {
         [string]$WriteSave = '',
         # a new game instead of a save: $LoadSave is then the level list the server takes ("all")
         [switch]$NewGame,
+        # more [qa] keys for the probe (key = value)
+        [hashtable]$ExtraIni = @{},
         [switch]$DriveTalkUi,
+        # capture the window whenever the probe prints NQQA-SHOT: <tag>
+        [switch]$WatchShots,
         [switch]$AllowNoNqLines,
         # Diagnostics this phase is designed to provoke. Everything else still fails the run:
         # a scenario that orphans a quest on purpose must not be read as "any warning is fine".
@@ -396,8 +444,10 @@ function Invoke-NqPhase {
     $phaseResult = Join-Path $resultRoot $Name
     New-Item -ItemType Directory -Path $phaseResult -Force | Out-Null
 
-    Set-Content -LiteralPath (Join-Path $qaConfigs 'nq_qa.ltx') -Encoding Default -Value @(
-        '[qa]', "phase = $Phase", "save  = $WriteSave", 'quit  = true')
+    $iniLines = [Collections.Generic.List[string]]::new()
+    foreach ($line in @('[qa]', "phase = $Phase", "save  = $WriteSave", 'quit  = true')) { $iniLines.Add($line) }
+    foreach ($key in $ExtraIni.Keys) { $iniLines.Add("$key = $($ExtraIni[$key])") }
+    Set-Content -LiteralPath (Join-Path $qaConfigs 'nq_qa.ltx') -Encoding Default -Value $iniLines
 
     $oldLogs = @(Get-ChildItem -LiteralPath $qaLogs -File -ErrorAction SilentlyContinue)
     if ($oldLogs.Count) {
@@ -451,8 +501,9 @@ function Invoke-NqPhase {
         }
         Write-Host "   engine pid $engineProcessId, launcher pid $launcherProcessId"
 
-        if ($DriveTalkUi -or $CaptureEverySeconds -gt 0) {
-            Watch-Run -EngineProcess $engineProcess -DesktopName $desktopName -PhaseResult $phaseResult -DriveTalkUi:$DriveTalkUi
+        if ($DriveTalkUi -or $WatchShots -or $CaptureEverySeconds -gt 0) {
+            Watch-Run -EngineProcess $engineProcess -DesktopName $desktopName -PhaseResult $phaseResult `
+                -DriveTalkUi:$DriveTalkUi -WatchShots:$WatchShots
         }
         if (-not $engineProcess.WaitForExit($TimeoutSeconds * 1000)) {
             throw "The engine did not exit within $TimeoutSeconds s."
@@ -663,7 +714,8 @@ function Watch-Run {
         [Parameter(Mandatory)][Diagnostics.Process]$EngineProcess,
         [Parameter(Mandatory)][string]$DesktopName,
         [Parameter(Mandatory)][string]$PhaseResult,
-        [switch]$DriveTalkUi
+        [switch]$DriveTalkUi,
+        [switch]$WatchShots
     )
 
     $shots = Join-Path $PhaseResult 'screens'
@@ -681,6 +733,7 @@ function Watch-Run {
     $pendingRow = 0
     $attempts = 0
     $nextClick = [DateTime]::MaxValue
+    $shotsTaken = 0
 
     while (-not $EngineProcess.HasExited -and [DateTime]::UtcNow -lt $deadline) {
         if ($CaptureEverySeconds -gt 0 -and [DateTime]::UtcNow -ge $nextShot) {
@@ -690,7 +743,7 @@ function Watch-Run {
             try { & $capture -DesktopName $DesktopName -ProcessId $EngineProcess.Id -OutputPath $periodic | Out-Null }
             catch { Write-Warning "periodic capture failed: $_" }
         }
-        if (-not $DriveTalkUi) { Start-Sleep -Milliseconds 500; continue }
+        if (-not $DriveTalkUi -and -not $WatchShots) { Start-Sleep -Milliseconds 500; continue }
         if (-not $logFile) {
             $logFile = Get-ChildItem -LiteralPath $qaLogs -File -Filter '*.log' -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
@@ -698,15 +751,32 @@ function Watch-Run {
             continue
         }
         $awaits = @()
+        $shotLines = @()
         try {
             $stream = [IO.File]::Open($logFile.FullName, 'Open', 'Read', 'ReadWrite')
             try {
                 $reader = [IO.StreamReader]::new($stream)
-                $awaits = @($reader.ReadToEnd() -split "`r?`n" | Where-Object { $_ -match 'NQQA-AWAIT: (\S+)' })
+                $logLines = @($reader.ReadToEnd() -split "`r?`n")
+                $awaits = @($logLines | Where-Object { $_ -match 'NQQA-AWAIT: (\S+)' })
+                $shotLines = @($logLines | Where-Object { $_ -match 'NQQA-SHOT: (\S+)' })
             }
             finally { $stream.Dispose() }
         }
         catch { Start-Sleep -Milliseconds 500; continue }
+
+        # the probe waits a couple of seconds after each request; the capture is taken at once
+        while ($WatchShots -and $shotLines.Count -gt $shotsTaken) {
+            $line = $shotLines[$shotsTaken]
+            $shotsTaken++
+            if ($line -notmatch 'NQQA-SHOT: (\S+)') { continue }
+            $target = Join-Path $shots ("{0}.png" -f ($Matches[1] -replace '[^A-Za-z0-9_.-]', '_'))
+            try {
+                & $capture -DesktopName $DesktopName -ProcessId $EngineProcess.Id -OutputPath $target | Out-Null
+                Write-Host "   [shot] $target"
+            }
+            catch { Write-Warning "capture failed for $line : $_" }
+        }
+        if (-not $DriveTalkUi) { Start-Sleep -Milliseconds 300; continue }
 
         # A new request supersedes the previous one: the probe only asks again once it has moved on.
         if ($awaits.Count -gt $handled) {
@@ -865,7 +935,7 @@ function Invoke-Control {
 function Set-QaNewGameAnswer {
     # What the new-game screen writes for an offered world rule: the run starts the game with
     # -start, past the screen, so the answer is put where the screen would have put it.
-    param([Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][string]$Value)
+    param([Parameter(Mandatory)][string]$Key, [Parameter(Mandatory)][AllowEmptyString()][string]$Value)
     $options = Join-Path $qaConfigs 'axr_options.ltx'
     $lines = if (Test-Path -LiteralPath $options) { @(Get-Content -LiteralPath $options -Encoding Default) } else { @() }
     $lines = @($lines | Where-Object { $_ -notmatch "^\s*$([regex]::Escape($Key))\s*=" })
@@ -891,6 +961,60 @@ function Invoke-WorldControl {
     Set-QaModule -Variant WorldControl
     [void](Invoke-NqPhase -Name 'WorldControl' -Phase 'pw0' -LoadSave 'all' -NewGame)
     Set-QaModule -Variant Full
+}
+
+# The module's own PDA: its screens driven and captured, then the vars back from the save.
+$SAVE_PDA = 'nq_qa_pda'
+function Invoke-Pda {
+    Set-QaModule -Variant Pda
+    Copy-SaveGroup
+    Get-ChildItem -LiteralPath $qaSaves -File | Where-Object { $_.Name -like "$SAVE_PDA.*" } | Remove-Item -Force
+    [void](Invoke-NqPhase -Name 'Pda' -Phase 'pp' -LoadSave $SaveName -WriteSave $SAVE_PDA -WatchShots)
+    if (-not (Test-Path -LiteralPath (Join-Path $qaSaves "$SAVE_PDA.scop"))) {
+        $script:failures.Add('[Pda] the save with the PDA vars was not written')
+        return
+    }
+    [void](Invoke-NqPhase -Name 'PdaReload' -Phase 'pp2' -LoadSave $SAVE_PDA)
+}
+
+# Its negative control: the same module without [pda] - the stock PDA, tabs and all.
+function Invoke-PdaControl {
+    Set-QaModule -Variant PdaControl
+    Copy-SaveGroup
+    [void](Invoke-NqPhase -Name 'PdaControl' -Phase 'pp0' -LoadSave $SaveName -WatchShots)
+    Set-QaModule -Variant Full
+}
+
+# A module the editor built, in the mode it is made for: its layout toured and captured.
+function Invoke-PdaModule {
+    if (-not $PdaModuleDir -or -not (Test-Path -LiteralPath (Join-Path $PdaModuleDir 'mod.ltx'))) {
+        throw '-PdaModuleDir must name a built module folder (the one with mod.ltx).'
+    }
+    if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
+    New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
+    Copy-TreeContents -Source $PdaModuleDir -Destination (Join-Path $qaModules (Split-Path -Leaf $PdaModuleDir))
+    $modeKey = if ($PdaMode) { "new_game_$($PdaMode)_mode" } else { '' }
+    if ($modeKey) { Set-QaNewGameAnswer -Key $modeKey -Value 'true' }
+    if ($PdaStart) {
+        Set-QaNewGameAnswer -Key 'new_game_faction' -Value 'stalker'
+        Set-QaNewGameAnswer -Key 'new_game_faction_position' -Value $PdaStart
+    }
+    try {
+        $extra = @{}
+        if ($PdaQuest) { $extra['pda_quest'] = $PdaQuest; $extra['pda_ref'] = $PdaRef }
+        if ($PdaStart) { $extra['pda_start'] = $PdaStart }
+        [void](Invoke-NqPhase -Name 'PdaModule' -Phase 'ppm' -LoadSave 'all' -NewGame -WatchShots -ExtraIni $extra)
+    }
+    finally {
+        # the answers stay in the QA root's options: the next scenario must not start in this mode
+        # (the game clears the faction keys itself once it reads them, but a run that died first did not)
+        if ($modeKey) { Set-QaNewGameAnswer -Key $modeKey -Value 'false' }
+        if ($PdaStart) {
+            Set-QaNewGameAnswer -Key 'new_game_faction' -Value ''
+            Set-QaNewGameAnswer -Key 'new_game_faction_position' -Value ''
+        }
+        Set-QaModule -Variant Full
+    }
 }
 
 # ---------------------------------------------------------------------------- main
@@ -937,6 +1061,9 @@ try {
         'Control' { Invoke-Scenario 'Control' { Invoke-Control } }
         'World' { Invoke-Scenario 'World' { Invoke-World } }
         'WorldControl' { Invoke-Scenario 'WorldControl' { Invoke-WorldControl } }
+        'Pda' { Invoke-Scenario 'Pda' { Invoke-Pda } }
+        'PdaControl' { Invoke-Scenario 'PdaControl' { Invoke-PdaControl } }
+        'PdaModule' { Invoke-Scenario 'PdaModule' { Invoke-PdaModule } }
         default {
             Invoke-Scenario 'Main' { Invoke-Main }
             Invoke-Scenario 'Reload' { Invoke-Reload }
@@ -948,6 +1075,8 @@ try {
             Invoke-Scenario 'Control' { Invoke-Control }
             Invoke-Scenario 'World' { Invoke-World }
             Invoke-Scenario 'WorldControl' { Invoke-WorldControl }
+            Invoke-Scenario 'Pda' { Invoke-Pda }
+            Invoke-Scenario 'PdaControl' { Invoke-PdaControl }
         }
     }
 }

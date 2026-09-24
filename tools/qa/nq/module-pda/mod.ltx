@@ -1,0 +1,11 @@
+[module]
+id      = pda_qa
+name    = PDA layout acceptance test module
+version = 1.0.0
+api     = 1
+
+; The PDA shows this module's own screens (tools\nq\fixtures\pda\courier.pdaasset, copied
+; to ui\ by Run-NqQa.ps1 so the fixture has one home). -Scenario PdaControl drops this
+; section and wants the stock PDA back.
+[pda]
+layout  = ui\courier.pdaasset

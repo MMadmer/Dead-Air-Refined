@@ -36,7 +36,8 @@ Useful parameters:
 |---|---|---|
 | `-SaveName` | `admin - autosave` | save group copied out of the player's `savedgames`; every derived save is written inside the QA root |
 | `-ResultLabel` | timestamp | subdirectory of `tools\qa\nq\results` |
-| `-Scenario` | `All` | `Scout`, `Main`, `Reload`, `Dialog`, `LevelChange`, `ModuleRemoved`, `ChangedGraph`, `EmptyModule`, `Control` |
+| `-Scenario` | `All` | `Scout`, `Main`, `Reload`, `Dialog`, `LevelChange`, `ModuleRemoved`, `ChangedGraph`, `EmptyModule`, `Control`, `World`, `WorldControl`, `Pda`, `PdaControl`; `PdaModule` runs alone |
+| `-PdaModuleDir`, `-PdaMode`, `-PdaQuest`, `-PdaRef`, `-PdaStart` | - / - / - / `parcel` / `_rookie_village` | `-Scenario PdaModule`: a module folder the editor built, the mode its new game runs in and the start location (a section of `plugins\faction_start_locations.ltx`, as a stalker; all answered in `[character_creation]` like the new-game screen, cleared afterwards; `''` stays on `fake_start`, whose map is a placeholder), and the quest and ref an accepted order must create with a map spot |
 | `-TimeoutSeconds` | `900` | per launch |
 | `-RebuildRoot` | off | rebuild `_qa\nq` from scratch instead of refreshing it |
 | `-AnyMode` | off | write `mode = *` into the module manifest copied into the QA root, so a save made inside a campaign mode can drive the run. The tracked manifest is never touched |

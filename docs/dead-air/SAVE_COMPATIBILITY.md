@@ -111,6 +111,8 @@ ID can be reused; ordinary online/offline transitions keep the record alive.
 | `WFL1` | 1 | Weapon fault accumulators: `u16 objectId`, `u16 reserved`, `u32 sectionCRC`, `u16 fouling`, `u16 stress`, `u16 wear`, `u16 foulingStage`. |
 | `SEA1` | 1 | One finite `f32` environment season value; no record count. |
 | `0x584DFF01` | 1 | NQ quest-graph runtime state: opaque marshal blob owned by `xms_nq` (`xms.save_data("xms.nq", ...)`); no record count. Core pseudo-namespace `0xFF01` on the XMS per-module data channel `0x584D0000\|ns`; the range `0xFF00`–`0xFFFF` is reserved for engine-owned blobs and is never allocated to a module. |
+| `0x584DFF02` | 1 | The world a new game was composed with (`XmsWorld`, MODDING.md "World rules"): `u8 version`, the rule sets of the modules, the run-time overrides, the area, the locks, the Player Start. Absent when no module declared a world. |
+| `0x584DFF03` | 1 | Run-time vars of a module PDA layout (`XmsPda`, MODDING.md "PDA layouts"): `u8 version`, `u32 count`, `count` pairs of zero-terminated name and value (cp1251). Absent when no script set a var. |
 
 The XMS module set manifest (`XMS1`) and the per-module data (`0x584D0000|ns`)
 and spawn-ledger (`0x584C0000|ns`) chunk families are described in
