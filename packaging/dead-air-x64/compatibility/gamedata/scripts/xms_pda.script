@@ -1,0 +1,193 @@
+-- XMS PDA layouts: the game's half.
+--
+-- The engine (CUIPdaLayout) asks build() for the layout of the module that owns the PDA;
+-- this reads the module's .pdaasset in the NQ loader's sandbox, runs it through the reader
+-- the editor shares (xms_pda_layout.script), converts every text to cp1251 and hands back
+-- the flat item list. It is also the script side of xms.pda (rows, texts, vars) and of the
+-- signal: and lua: actions of a layout.
+-- Contract: docs/dead-air/MODDING.md, "PDA layouts".
+
+local layout      -- the normalized layout of the live PDA, for rows at run time
+local module_id   -- the module it came from
+
+local function sfmt(fmt, ...)
+	local ok, s = pcall(string.format, tostring(fmt), ...)
+	return ok and s or tostring(fmt)
+end
+
+local function log(prefix, fmt, ...)
+	printf("%s", prefix .. " XMS PDA: " .. sfmt(fmt, ...))
+end
+
+-- ---------------------------------------------------------------------------- encodings
+-- Texts of a layout are UTF-8; a game script may pass cp1251. A string whose high bytes do
+-- not form UTF-8 is taken to be cp1251 already.
+local function looks_utf8(s)
+	local i, len = 1, #s
+	local high = false
+	while (i <= len) do
+		local b = string.byte(s, i)
+		if (b < 0x80) then
+			i = i + 1
+		else
+			high = true
+			local n = (b >= 0xF0 and b < 0xF8) and 3 or (b >= 0xE0 and b < 0xF0) and 2 or (b >= 0xC2 and b < 0xE0) and 1 or nil
+			if not (n) then return false end
+			for k = 1, n do
+				local c = string.byte(s, i + k)
+				if not (c and c >= 0x80 and c < 0xC0) then return false end
+			end
+			i = i + n + 1
+		end
+	end
+	return high
+end
+
+local function to_cp1251(s)
+	if (type(s) ~= "string" or not looks_utf8(s)) then return s end
+	local out = xms_nq_util.to_cp1251(s)
+	return out
+end
+
+-- cp1251 byte -> code point for 0x80..0xBF (0xC0..0xFF is the contiguous Cyrillic block)
+local CP_HIGH = { 0x0402, 0x0403, 0x201A, 0x0453, 0x201E, 0x2026, 0x2020, 0x2021, 0x20AC, 0x2030,
+	0x0409, 0x2039, 0x040A, 0x040C, 0x040B, 0x040F, 0x0452, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022,
+	0x2013, 0x2014, 0x003F, 0x2122, 0x0459, 0x203A, 0x045A, 0x045C, 0x045B, 0x045F, 0x00A0, 0x040E,
+	0x045E, 0x0408, 0x00A4, 0x0490, 0x00A6, 0x00A7, 0x0401, 0x00A9, 0x0404, 0x00AB, 0x00AC, 0x00AD,
+	0x00AE, 0x0407, 0x00B0, 0x00B1, 0x0406, 0x0456, 0x0491, 0x00B5, 0x00B6, 0x00B7, 0x0451, 0x2116,
+	0x0454, 0x00BB, 0x0458, 0x0405, 0x0455, 0x0457 }
+
+local function utf8_char(cp)
+	if (cp < 0x80) then return string.char(cp) end
+	if (cp < 0x800) then return string.char(0xC0 + math.floor(cp / 64), 0x80 + cp % 64) end
+	return string.char(0xE0 + math.floor(cp / 4096), 0x80 + math.floor(cp / 64) % 64, 0x80 + cp % 64)
+end
+
+-- a row value a game script wrote in cp1251 joins a UTF-8 template; bring it to UTF-8 first
+local function to_utf8(s)
+	if (type(s) ~= "string" or looks_utf8(s)) then return s end
+	if not (string.find(s, "[" .. string.char(128) .. "-" .. string.char(255) .. "]")) then return s end
+	local out = {}
+	for i = 1, #s do
+		local b = string.byte(s, i)
+		if (b < 0x80) then
+			out[#out + 1] = string.char(b)
+		elseif (b >= 0xC0) then
+			out[#out + 1] = utf8_char(0x0410 + (b - 0xC0))
+		else
+			out[#out + 1] = utf8_char(CP_HIGH[b - 0x80 + 1] or 0x3F)
+		end
+	end
+	return table.concat(out)
+end
+
+local TEXT_FIELDS = { "text", "hint", "empty" }
+
+-- the engine's copy of an item: texts and actions in cp1251, the rest as the reader made it
+local function engine_item(it)
+	local out = {}
+	for k, v in pairs(it) do out[k] = v end
+	for _, k in ipairs(TEXT_FIELDS) do
+		if (type(out[k]) == "string") then out[k] = to_cp1251(out[k]) end
+	end
+	if (type(it.action) == "table") then
+		out.action = {}
+		for i, a in ipairs(it.action) do out.action[i] = to_cp1251(a) end
+	end
+	return out
+end
+
+local function engine_items(items)
+	local out = {}
+	for i, it in ipairs(items) do out[i] = engine_item(it) end
+	return out
+end
+
+-- ---------------------------------------------------------------------------- the engine
+-- Reads, checks and converts the layout of a module. nil when it cannot be used - the
+-- engine keeps the stock PDA then, and the log says why.
+function build(mod_id, rel)
+	layout, module_id = nil, nil
+	if not (xms and xms.read_file) then return nil end
+	local ok, src = pcall(xms.read_file, mod_id, rel)
+	if not (ok and type(src) == "string") then
+		log("!", "[%s] %s: the layout file cannot be read - the stock PDA stays", tostring(mod_id), tostring(rel))
+		return nil
+	end
+	local asset, err = xms_nq_load.parse(src, tostring(mod_id) .. "/" .. tostring(rel))
+	if not (asset) then
+		log("!", "[%s] %s: %s - the stock PDA stays", tostring(mod_id), tostring(rel), tostring(err))
+		return nil
+	end
+	local lay = xms_pda_layout.normalize(asset, { lang = xms_nq_util.language() })
+	for _, p in ipairs(lay.problems) do
+		log(string.sub(p.code, 1, 1) == "E" and "!" or "~", "[%s] %s: %s %s: %s", tostring(mod_id), tostring(rel),
+			p.code, p.path ~= "" and p.path or "layout", to_cp1251(p.message))
+	end
+	if not (lay.ok) then
+		log("!", "[%s] %s: %d error(s) - the stock PDA stays", tostring(mod_id), tostring(rel), lay.errors)
+		return nil
+	end
+	layout, module_id = lay, mod_id
+
+	local out = { id = lay.id, title = to_cp1251(lay.title), canvas = lay.canvas, start = lay.start,
+		keys = lay.keys, device = lay.device, vars = {}, pages = {} }
+	for k, v in pairs(lay.vars) do out.vars[k] = to_cp1251(v) end
+	for i, p in ipairs(lay.pages) do out.pages[i] = { id = p.id, title = to_cp1251(p.title), stock = p.stock } end
+	out.items = engine_items(lay.items)
+	return out
+end
+
+-- signal: and lua: actions of a layout (the engine does the rest itself)
+function on_action(action, item_id, row)
+	local verb, arg = string.match(tostring(action), "^([%a_]+):(.*)$")
+	if (verb == "signal") then
+		-- event.signal of any quest hears it, under its own name or <module>.<name>
+		if (xms_nq and xms_nq.emit) then
+			xms_nq.emit({ name = "signal", signal = arg, module = module_id })
+		end
+	elseif (verb == "lua") then
+		local script, fn = string.match(arg, "^([%a_][%w_]*)%.(.+)$")
+		local target = script and _G[script]
+		for part in string.gmatch(fn or "", "[^%.]+") do
+			target = type(target) == "table" and target[part] or nil
+		end
+		if (type(target) ~= "function") then
+			log("!", "action %s: there is no such function", tostring(action))
+			return
+		end
+		local ok, err = pcall(target, item_id ~= "" and item_id or nil, row ~= 0 and row or nil)
+		if not (ok) then log("!", "action %s: %s", tostring(action), tostring(err)) end
+	end
+end
+
+-- ---------------------------------------------------------------------------- xms.pda
+function set(name, value)
+	if (value ~= nil) then value = to_cp1251(tostring(value)) end
+	return xms_native_pda_set(name, value)
+end
+
+function text(id, value)
+	return xms_native_pda_text(id, to_cp1251(tostring(value or "")))
+end
+
+-- rows = { { field = value, ... }, ... }: the list's item repeated per row, {field} filled in
+function rows(id, list)
+	if not (layout) then return false end
+	local clean = {}
+	for i, r in ipairs(type(list) == "table" and list or {}) do
+		local row = {}
+		if (type(r) == "table") then
+			for k, v in pairs(r) do row[k] = type(v) == "string" and to_utf8(v) or v end
+		else
+			row.value = to_utf8(tostring(r))
+		end
+		clean[i] = row
+	end
+	local items = xms_pda_layout.list_rows(layout, id, clean)
+	if not (items) then
+		log("~", "rows: the layout has no list '%s'", tostring(id))
+		return false
+	end
+	return xms_native_pda_rows(id, engine_items(items))
+end

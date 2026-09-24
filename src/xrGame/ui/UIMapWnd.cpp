@@ -22,8 +22,15 @@
 #include "xrEngine/xr_input.h" //remove me !!!
 #include "UIHelper.h"
 
-CUIMapWnd* g_map_wnd = NULL; // quick temporary solution -(
-CUIMapWnd* GetMapWnd() { return g_map_wnd; }
+// Every map window alive: the task window's and, with a module PDA layout, the layout's.
+// A map location that goes away has to leave the hint of each of them.
+static xr_vector<CUIMapWnd*> g_map_wnds;
+CUIMapWnd* GetMapWnd() { return g_map_wnds.empty() ? nullptr : g_map_wnds.back(); }
+void MapLocationRelcaseAll(CMapLocation* ml)
+{
+    for (CUIMapWnd* w : g_map_wnds)
+        w->MapLocationRelcase(ml);
+}
 
 CUIMapWnd::CUIMapWnd(UIHint* hint)
     : CUIWindow("CUIMapWnd"), m_ActionPlanner(nullptr)
@@ -46,7 +53,7 @@ CUIMapWnd::CUIMapWnd(UIHint* hint)
     m_scroll_mode = false;
     m_nav_timing = Device.dwTimeGlobal;
     hint_wnd = hint;
-    g_map_wnd = this;
+    g_map_wnds.push_back(this);
     m_cur_location = nullptr;
 }
 
@@ -61,7 +68,7 @@ CUIMapWnd::~CUIMapWnd()
         delete_data( m_dbg_info );
     #endif // DEBUG
     */
-    g_map_wnd = NULL;
+    g_map_wnds.erase(std::remove(g_map_wnds.begin(), g_map_wnds.end(), this), g_map_wnds.end());
 }
 
 bool CUIMapWnd::Init(cpcstr xml_name, cpcstr start_from, bool critical /*= true*/)
@@ -69,7 +76,11 @@ bool CUIMapWnd::Init(cpcstr xml_name, cpcstr start_from, bool critical /*= true*
     CUIXml uiXml;
     if (!uiXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, xml_name, critical))
         return false;
+    return InitFromXml(uiXml, start_from, critical);
+}
 
+bool CUIMapWnd::InitFromXml(CUIXml& uiXml, cpcstr start_from, bool critical /*= true*/)
+{
     string512 pth;
     strconcat(sizeof(pth), pth, start_from, ":main_wnd");
     CUIXmlInit::InitWindow(uiXml, pth, 0, this);

@@ -19,6 +19,12 @@ class CUIRankingWnd;
 class CUILogsWnd;
 class CUIAnimatedStatic;
 class UIHint;
+class CUIPdaLayout;
+
+namespace XMS
+{
+struct Module;
+}
 
 class CUIPdaWnd final : public CUIDialogWnd
 {
@@ -40,6 +46,11 @@ protected:
     shared_str m_sActiveSection;
 
     UIHint* m_hint_wnd;
+
+    // A module's own interface (XmsPda); null = the stock tabs. The device, the hint and the
+    // stock sections stay this window's.
+    CUIPdaLayout* m_layout{};
+    void BuildLayout(const XMS::Module& owner);
 
 public:
     // Поддиалоги PDA
@@ -69,6 +80,9 @@ public:
     // already-shown window and the key went dead.
     void ShowDialog(bool bDoHideIndicators) override;
     void HideDialog() override;
+    // The base goes straight to the dialog holder, which a 3D PDA shown render-only does not
+    // have: a tutorial step closing an open 3D PDA (CUISequenceSimpleItem::Start) crashed on it.
+    void ShowOrHideDialog(bool bDoHideIndicators) override;
     // Feeds the joystick accumulator in the focused stage; always returns true because
     // StopAnyMove() == false.
     bool OnMouseAction(float x, float y, EUIMessages mouse_action) override;
@@ -89,6 +103,11 @@ public:
     pcstr GetActiveSection() const { return m_sActiveSection.c_str(); }
     void SetActiveSubdialog(const shared_str& section);
     CUITabControl* GetTabControl() const { return UITabControl; }
+    CUIPdaLayout* GetLayout() const { return m_layout; }
+    // A stock section in the device's screen and out of it again; a layout shows the stock
+    // sections through these, SetActiveSubdialog routes through the layout when there is one.
+    void ShowStockSection(const shared_str& section);
+    void HideStockSection();
 
     bool StopAnyMove() override { return false; }
     bool NeedCursor() const override;

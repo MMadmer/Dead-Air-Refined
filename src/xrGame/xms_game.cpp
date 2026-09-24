@@ -5,6 +5,7 @@
 
 #include "xms_game.h"
 #include "xms_world.h"
+#include "xms_pda.h"
 #include "save_extension_gameplay.h"
 #include "save_extension_chunk_ids.h"
 #include "PhraseDialog.h"
@@ -520,6 +521,7 @@ luabind::object xms_native_modules(lua_State* L)
         entry["author"] = m.author.c_str();
         entry["description"] = m.description.c_str();
         entry["website"] = m.website.c_str();
+        entry["pda"] = m.pda_layout.c_str();
         entry["ns"] = u32(m.ns);
         entry["layer"] = u32(m.layer);
         entry["enabled"] = !m.disabled;
@@ -892,6 +894,26 @@ xms.world = {
     choices         = xms_native_world_choices,          -- (mode id) -> { {key, keep, module}, ... }
 }
 
+-- The module's own PDA interface (docs/dead-air/MODDING.md, "PDA layouts"); feature-test with
+-- xms.pda_api. Texts may be UTF-8 or cp1251; xms_pda.script converts what needs it.
+xms.pda_api = 1
+xms.pda = {
+    active   = function() return xms_native_pda_active() end,             -- () -> layout id | nil
+    set      = function(name, value) return xms_pda.set(name, value) end, -- {name} of every text; nil clears; saved
+    get      = function(name) return xms_native_pda_get(name) end,
+    page     = function(id) return xms_native_pda_page(id) end,           -- (page id) -> true when it exists
+    current  = function() return xms_native_pda_current() end,
+    show     = function(id, on) return xms_native_pda_show(id, on == false and 0 or 1) end,
+    hide     = function(id) return xms_native_pda_show(id, 0) end,
+    toggle   = function(id) return xms_native_pda_show(id, -1) end,
+    text     = function(id, text) return xms_pda.text(id, text) end,      -- a text or a button's caption
+    rows     = function(id, rows) return xms_pda.rows(id, rows) end,      -- a list's rows, { {field = value}, ... }
+    click    = function(id, row) return xms_native_pda_click(id, row or 0) end, -- a click on the item (a list: its row)
+    open     = function(page) return xms_native_pda_open(page) end,       -- opens the PDA, on a page when named
+    close    = function() return xms_native_pda_close() end,
+    describe = function() return xms_native_pda_describe() end,
+}
+
 -- ---- module script namespaces ----------------------------------------------
 local script_cache = {}
 function xms.require(mod_id, name)
@@ -1117,6 +1139,7 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_dialog_invalidate", &xms_native_dialog_invalidate)
     ];
     XmsWorld::ScriptRegister(luaState);
+    XmsPda::ScriptRegister(luaState);
 
     // defer the bootstrap to the end of CScriptEngine::init - the base Lua
     // libraries are not open yet while export_all is running

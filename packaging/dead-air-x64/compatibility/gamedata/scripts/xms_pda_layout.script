@@ -1,0 +1,889 @@
+-- XMS PDA layouts: the .pdaasset reader shared by the game and the editor.
+--
+-- A module can replace what the PDA SHOWS - its screens, buttons, menus - and keep
+-- the device and the live map. The layout is a declarative Lua asset (.pdaasset);
+-- this file turns one into a flat list of items with every default applied, every
+-- colour resolved and every position in canvas units, plus coded problems.
+--
+-- Pure Lua on purpose: no engine call, no global of the game. The game loads it as a
+-- script namespace (xms_pda_layout), the editor runs the SAME file from the linked
+-- game in a sandbox for its preview and its validator, so the two can never read a
+-- layout differently. Texts stay UTF-8 here; the game converts them (xms_pda.script).
+--
+-- Contract: docs/dead-air/MODDING.md "PDA layouts" (game repo) and docs/pda/PDA_FORMAT.md
+-- (editor repo).
+
+FORMAT = 1
+CANVAS_W = 960
+CANVAS_H = 680
+MAX_ROWS = 200
+
+-- Fonts the engine knows by name (CUIXmlInitBase::InitFont); anything else would be
+-- fatal there, so an unknown font falls back to DEFAULT_FONT with a warning.
+FONTS = { letterica16 = true, letterica18 = true, letterica25 = true, graffiti19 = true,
+	graffiti22 = true, graffiti32 = true, graffiti50 = true, arial_14 = true, medium = true,
+	small = true, di = true }
+DEFAULT_FONT = "letterica18"
+
+-- Stock PDA sections a page or an action may show (CUIPdaWnd::SetActiveSubdialog and the
+-- Lua tabs of pda.script). A global mod can add its own, so an unknown one is a warning.
+SECTIONS = { eptTasks = true, eptMap = true, eptRanking = true, eptRelations = true,
+	eptContacts = true, eptLogs = true, eptEncyclopedia = true, eptStatistics = true,
+	eptFractionWar = true }
+
+-- {placeholders} the renderer fills in by itself.
+BUILTIN_VARS = { time = true, date = true, actor = true, money = true, rank = true,
+	community = true, level = true, task = true, title = true, page = true }
+
+MAP_ACTIONS = { actor = true, zoom_in = true, zoom_out = true, global = true }
+
+-- Named colours usable without declaring them.
+BUILTIN_COLORS = { white = "#FFFFFF", black = "#000000", none = "#00000000",
+	transparent = "#00000000" }
+
+local COMMON_KEYS = { kind = true, id = true, x = true, y = true, w = true, h = true,
+	visible = true, style = true, hint = true }
+
+KIND_KEYS = {
+	rect   = { color = true, radius = true, border = true, border_w = true },
+	image  = { texture = true, color = true, radius = true, stretch = true },
+	text   = { text = true, font = true, color = true, align = true, valign = true, wrap = true },
+	button = { color = true, hover = true, press = true, selected = true, radius = true,
+		border = true, border_w = true, text = true, font = true, text_color = true,
+		text_hover = true, text_selected = true, align = true, valign = true, wrap = true,
+		icon = true, icon_size = true, icon_color = true, icon_selected = true, action = true,
+		page = true, selected_on = true },
+	list   = { rows = true, item = true, row_h = true, gap = true, action = true,
+		row_color = true, row_hover = true, row_selected = true, row_radius = true,
+		empty = true, font = true, text_color = true, color = true, radius = true },
+	group  = { widgets = true, color = true, radius = true, border = true, border_w = true },
+	map    = { color = true, zoom = true },
+}
+
+local TOP_KEYS = { pda = true, id = true, title = true, canvas = true, start = true,
+	keys = true, device = true, colors = true, styles = true, chrome = true, overlay = true,
+	pages = true, vars = true, preview = true }
+
+local PAGE_KEYS = { id = true, title = true, widgets = true, stock = true }
+
+-- ---------------------------------------------------------------------------- helpers
+local function sfmt(fmt, ...)
+	local ok, s = pcall(string.format, fmt, ...)
+	return ok and s or tostring(fmt)
+end
+
+local function is_ident(s)
+	return type(s) == "string" and s ~= "" and string.find(s, "^[a-z0-9_]+$") ~= nil
+end
+
+local function add_problem(st, code, path, fmt, ...)
+	st.problems[#st.problems + 1] = { code = code, path = path or "", message = sfmt(fmt, ...) }
+	if (string.sub(code, 1, 1) == "E") then st.errors = st.errors + 1 end
+end
+
+-- text value -> string of the requested language (rus is the base of every text)
+function pick_text(v, lang)
+	if (type(v) == "string") then return v end
+	if (type(v) == "number") then return tostring(v) end
+	if (type(v) ~= "table") then return nil end
+	if (lang and type(v[lang]) == "string") then return v[lang] end
+	if (type(v.rus) == "string") then return v.rus end
+	if (type(v.eng) == "string") then return v.eng end
+	local keys = {}
+	for k, s in pairs(v) do
+		if (type(k) == "string" and type(s) == "string") then keys[#keys + 1] = k end
+	end
+	table.sort(keys)
+	return keys[1] and v[keys[1]] or nil
+end
+
+local HEX = "^#(%x%x)(%x%x)(%x%x)(%x?%x?)$"
+
+-- "#RRGGBB" / "#RRGGBBAA" / palette name -> ARGB number, or nil
+local function parse_color(st, v)
+	if (type(v) ~= "string") then return nil end
+	local s = v
+	if (string.sub(s, 1, 1) ~= "#") then
+		s = st.palette[s] or BUILTIN_COLORS[s]
+		if (type(s) ~= "string") then return nil end
+	end
+	local r, g, b, a = string.match(s, HEX)
+	if not (r) then return nil end
+	if (a ~= "" and #a ~= 2) then return nil end
+	local av = a == "" and 255 or tonumber(a, 16)
+	return ((av * 256 + tonumber(r, 16)) * 256 + tonumber(g, 16)) * 256 + tonumber(b, 16)
+end
+
+local function color_of(st, path, v, key, default)
+	if (v == nil) then return default end
+	-- a list item's colour may name a {field} of the row; the row fills it in
+	if (st.in_template and type(v) == "string" and string.find(v, "{", 1, true)) then return default end
+	local c = parse_color(st, v)
+	-- a palette entry that is not a colour was reported once, where it is declared
+	if (c == nil and st.bad_colors[v]) then return default end
+	if (c == nil) then
+		add_problem(st, "E311", path, "%s: '%s' is not a colour (#RRGGBB, #RRGGBBAA or a name from colors)", key, tostring(v))
+		return default
+	end
+	return c
+end
+
+-- channel arithmetic on ARGB numbers (no bit library needed)
+local function argb_split(c)
+	local b = c % 256; c = (c - b) / 256
+	local g = c % 256; c = (c - g) / 256
+	local r = c % 256; c = (c - r) / 256
+	return c, r, g, b
+end
+
+local function argb_join(a, r, g, b)
+	return ((a * 256 + r) * 256 + g) * 256 + b
+end
+
+-- lighter (k > 0) or darker (k < 0) shade; alpha kept, a transparent colour stays so
+function shade(c, k)
+	if (c == nil) then return nil end
+	local a, r, g, b = argb_split(c)
+	if (a == 0) then return c end
+	local function ch(x)
+		local y = k > 0 and (x + (255 - x) * k) or (x * (1 + k))
+		y = math.floor(y + 0.5)
+		if (y < 0) then y = 0 elseif (y > 255) then y = 255 end
+		return y
+	end
+	return argb_join(a, ch(r), ch(g), ch(b))
+end
+
+local function num(st, path, v, key, default, required)
+	if (v == nil) then
+		if (required) then add_problem(st, "E306", path, "'%s' is required", key) end
+		return default
+	end
+	if (type(v) ~= "number") then
+		add_problem(st, "E306", path, "'%s' must be a number", key)
+		return default
+	end
+	return v
+end
+
+local function substitute(s, fields)
+	if (type(s) ~= "string" or not fields) then return s end
+	return (string.gsub(s, "{([%w_]+)}", function(name)
+		local v = fields[name]
+		if (v == nil) then return nil end
+		if (type(v) == "table") then v = pick_text(v, fields.__lang) end
+		return v ~= nil and tostring(v) or nil
+	end))
+end
+
+-- deep copy of a template widget with {field} substituted in every string value
+local function instantiate(v, fields)
+	if (type(v) == "string") then return substitute(v, fields) end
+	if (type(v) ~= "table") then return v end
+	local out = {}
+	for k, x in pairs(v) do out[k] = instantiate(x, fields) end
+	return out
+end
+
+local function each_var(text, fn)
+	if (type(text) ~= "string") then return end
+	for name in string.gmatch(text, "{([%w_]+)}") do fn(name) end
+end
+
+-- ---------------------------------------------------------------------------- styles
+local function resolve_style(st, path, name, seen)
+	local s = st.styles[name]
+	if (type(s) ~= "table") then
+		add_problem(st, "E310", path, "style '%s' does not exist", tostring(name))
+		return nil
+	end
+	if (s.style == nil) then return s end
+	seen = seen or {}
+	if (seen[name]) then
+		add_problem(st, "E310", path, "style '%s' inherits from itself", tostring(name))
+		return s
+	end
+	seen[name] = true
+	local base = resolve_style(st, path, s.style, seen)
+	if not (base) then return s end
+	local merged = {}
+	for k, x in pairs(base) do merged[k] = x end
+	for k, x in pairs(s) do if (k ~= "style") then merged[k] = x end end
+	return merged
+end
+
+-- the widget with its style's keys under its own
+local function apply_style(st, path, w)
+	if (w.style == nil) then return w end
+	local s = resolve_style(st, path, w.style)
+	if not (s) then return w end
+	local out = {}
+	for k, x in pairs(s) do if (k ~= "style") then out[k] = x end end
+	for k, x in pairs(w) do if (k ~= "style") then out[k] = x end end
+	return out
+end
+
+-- ---------------------------------------------------------------------------- actions
+local function split_action(a)
+	local verb, arg = string.match(a, "^([%a_]+):(.*)$")
+	if not (verb) then return a, nil end
+	return verb, arg
+end
+
+local function check_action(st, path, a)
+	if (type(a) ~= "string" or a == "") then
+		add_problem(st, "E308", path, "an action must be a non-empty string")
+		return false
+	end
+	-- a list item's action names {fields} of a row that does not exist yet
+	if (st.in_template and string.find(a, "{", 1, true)) then return true end
+	local verb, arg = split_action(a)
+	if (verb == "back" or verb == "close") then
+		if (arg ~= nil) then add_problem(st, "E308", path, "'%s' takes no argument", verb) return false end
+		return true
+	end
+	if (arg == nil or arg == "") then
+		add_problem(st, "E308", path, "unknown action '%s'", a)
+		return false
+	end
+	if (verb == "page") then
+		if not (st.page_ids[arg]) then
+			add_problem(st, "E308", path, "action '%s': there is no page '%s'", a, arg)
+			return false
+		end
+	elseif (verb == "show" or verb == "hide" or verb == "toggle") then
+		-- ids are checked once every widget is known (deferred below)
+		st.deferred_ids[#st.deferred_ids + 1] = { path = path, action = a, id = arg }
+	elseif (verb == "stock") then
+		if not (SECTIONS[arg]) then
+			add_problem(st, "W315", path, "action '%s': '%s' is not a stock PDA section of the game", a, arg)
+		end
+	elseif (verb == "map") then
+		if not (MAP_ACTIONS[arg]) then
+			add_problem(st, "E308", path, "action '%s': the map knows actor, zoom_in, zoom_out and global", a)
+			return false
+		end
+		st.map_actions = true
+	elseif (verb == "signal") then
+		if not (string.find(arg, "^[%w_%.%-]+$")) then
+			add_problem(st, "E308", path, "action '%s': a signal name is letters, digits, _ . -", a)
+			return false
+		end
+	elseif (verb == "lua") then
+		if not (string.find(arg, "^[%a_][%w_]*%.[%a_][%w_%.]*$")) then
+			add_problem(st, "E308", path, "action '%s': name a function as script.function", a)
+			return false
+		end
+	elseif (verb == "var") then
+		local name = string.match(arg, "^([%w_]+)=")
+		if not (name) then
+			add_problem(st, "E308", path, "action '%s': write var:name=value", a)
+			return false
+		end
+		if (BUILTIN_VARS[name]) then
+			add_problem(st, "E308", path, "action '%s': {%s} is filled in by the game and cannot be set", a, name)
+			return false
+		end
+		st.set_vars[name] = true
+	else
+		add_problem(st, "E308", path, "unknown action '%s'", a)
+		return false
+	end
+	return true
+end
+
+local function norm_actions(st, path, v)
+	if (v == nil) then return nil end
+	local list = {}
+	if (type(v) == "string") then
+		list[1] = v
+	elseif (type(v) == "table") then
+		for i, a in ipairs(v) do list[i] = a end
+	else
+		add_problem(st, "E308", path, "'action' must be a string or a list of strings")
+		return nil
+	end
+	local out = {}
+	for i, a in ipairs(list) do
+		if (check_action(st, path .. ".action", a)) then out[#out + 1] = a end
+	end
+	return #out > 0 and out or nil
+end
+
+-- ---------------------------------------------------------------------------- widgets
+local function check_keys(st, path, w, kind)
+	local known = KIND_KEYS[kind]
+	local names = {}
+	for k in pairs(w) do names[#names + 1] = tostring(k) end
+	table.sort(names)
+	for _, k in ipairs(names) do
+		if not (COMMON_KEYS[k] or (known and known[k])) then
+			add_problem(st, "W318", path, "'%s' means nothing to a %s widget", k, kind)
+		end
+	end
+end
+
+local function norm_align(v, map, default)
+	if (v == nil) then return default end
+	return map[v] or default
+end
+
+local HALIGN = { left = "l", center = "c", right = "r", l = "l", c = "c", r = "r" }
+local VALIGN = { top = "t", center = "c", bottom = "b", t = "t", c = "c", b = "b" }
+
+local function font_of(st, path, v)
+	if (v == nil) then return DEFAULT_FONT end
+	if (type(v) == "string" and FONTS[v]) then return v end
+	add_problem(st, "W316", path, "font '%s' is not a font of the game - %s is used", tostring(v), DEFAULT_FONT)
+	return DEFAULT_FONT
+end
+
+local function text_of(st, path, v, in_template)
+	if (v == nil) then return nil end
+	local s = pick_text(v, st.lang)
+	if (s == nil) then
+		add_problem(st, "E306", path, "'text' must be a string or a table of languages")
+		return nil
+	end
+	if not (in_template) then
+		each_var(s, function(name)
+			if not (BUILTIN_VARS[name] or st.var_names[name] or st.set_vars[name]) then
+				st.deferred_vars[#st.deferred_vars + 1] = { path = path, name = name }
+			end
+		end)
+	end
+	return s
+end
+
+local function radius_of(st, path, v)
+	if (v == nil) then return 0 end
+	if (type(v) ~= "number" or v < 0) then
+		add_problem(st, "E306", path, "'radius' must be a number of 0 or more")
+		return 0
+	end
+	return v
+end
+
+local add_widget -- forward
+
+local function add_children(st, path, list, ctx)
+	if (list == nil) then return end
+	if (type(list) ~= "table") then
+		add_problem(st, "E305", path, "must be a list of widgets")
+		return
+	end
+	for i, w in ipairs(list) do
+		add_widget(st, sfmt("%s[%d]", path, i), w, ctx)
+	end
+end
+
+-- ctx = { layer, page, parent (item index), template (inside a list item), ox, oy }
+add_widget = function(st, path, raw, ctx)
+	if (type(raw) ~= "table") then
+		add_problem(st, "E305", path, "a widget must be a table")
+		return nil
+	end
+	local w = apply_style(st, path, raw)
+	local kind = w.kind
+	if (type(kind) ~= "string" or not KIND_KEYS[kind]) then
+		add_problem(st, "E305", path, "unknown widget kind '%s' (rect, image, text, button, list, group, map)", tostring(kind))
+		return nil
+	end
+	check_keys(st, path, raw, kind)
+
+	local item = { kind = kind, layer = ctx.layer, page = ctx.page, parent = ctx.parent or 0 }
+	item.x = num(st, path, w.x, "x", 0, true)
+	item.y = num(st, path, w.y, "y", 0, true)
+	item.w = num(st, path, w.w, "w", 0, true)
+	item.h = num(st, path, w.h, "h", 0, true)
+	if (item.w < 0 or item.h < 0) then
+		add_problem(st, "E306", path, "'w' and 'h' cannot be negative")
+		item.w = math.max(item.w, 0)
+		item.h = math.max(item.h, 0)
+	end
+	item.visible = w.visible ~= false
+
+	if (w.id ~= nil) then
+		if not (is_ident(w.id)) then
+			add_problem(st, "E307", path, "id '%s' must be lowercase letters, digits and _", tostring(w.id))
+		elseif (ctx.template) then
+			add_problem(st, "W318", path, "id '%s' inside a list item is ignored - a row is not addressable", w.id)
+		elseif (st.widget_ids[w.id]) then
+			add_problem(st, "E307", path, "id '%s' is already used by %s", w.id, st.widget_ids[w.id])
+		else
+			st.widget_ids[w.id] = path
+			item.id = w.id
+		end
+	end
+	if (w.hint ~= nil) then item.hint = text_of(st, path, w.hint, ctx.template) end
+
+	-- outside the canvas (top level only: children are relative)
+	if ((ctx.parent or 0) == 0 and not ctx.template) then
+		local cw, ch = st.canvas_w, st.canvas_h
+		if (item.x < 0 or item.y < 0 or item.x + item.w > cw + 0.5 or item.y + item.h > ch + 0.5) then
+			add_problem(st, "W317", path, "reaches outside the %dx%d canvas", cw, ch)
+		end
+	end
+
+	if (kind == "rect" or kind == "group") then
+		item.color = color_of(st, path, w.color, "color", kind == "rect" and 0xFFFFFFFF or 0)
+		item.radius = radius_of(st, path, w.radius)
+		item.border = color_of(st, path, w.border, "border", nil)
+		item.border_w = item.border and num(st, path, w.border_w, "border_w", 2) or nil
+	elseif (kind == "image") then
+		if (type(w.texture) ~= "string" or w.texture == "") then
+			add_problem(st, "E306", path, "an image needs a 'texture' (an id of textures_descr or a file under textures)")
+		else
+			item.texture = w.texture
+		end
+		item.tint = color_of(st, path, w.color, "color", 0xFFFFFFFF)
+		item.radius = radius_of(st, path, w.radius)
+		item.stretch = w.stretch ~= false
+	elseif (kind == "text") then
+		item.text = text_of(st, path, w.text, ctx.template) or ""
+		item.font = font_of(st, path, w.font)
+		item.text_color = color_of(st, path, w.color, "color", 0xFFFFFFFF)
+		item.align = norm_align(w.align, HALIGN, "l")
+		item.valign = norm_align(w.valign, VALIGN, "c")
+		item.wrap = w.wrap == true
+	elseif (kind == "button") then
+		item.color = color_of(st, path, w.color, "color", 0)
+		item.hover = color_of(st, path, w.hover, "hover", shade(item.color, 0.12))
+		item.press = color_of(st, path, w.press, "press", shade(item.color, -0.15))
+		item.selected = color_of(st, path, w.selected, "selected", nil)
+		item.radius = radius_of(st, path, w.radius)
+		item.border = color_of(st, path, w.border, "border", nil)
+		item.border_w = item.border and num(st, path, w.border_w, "border_w", 2) or nil
+		item.text = text_of(st, path, w.text, ctx.template)
+		item.font = font_of(st, path, w.font)
+		item.text_color = color_of(st, path, w.text_color, "text_color", 0xFFFFFFFF)
+		item.text_hover = color_of(st, path, w.text_hover, "text_hover", nil)
+		item.text_selected = color_of(st, path, w.text_selected, "text_selected", nil)
+		item.align = norm_align(w.align, HALIGN, "c")
+		item.valign = norm_align(w.valign, VALIGN, "c")
+		item.wrap = w.wrap == true
+		if (w.icon ~= nil) then
+			if (type(w.icon) ~= "string" or w.icon == "") then
+				add_problem(st, "E306", path, "'icon' must be a texture id")
+			else
+				item.icon = w.icon
+				item.icon_size = num(st, path, w.icon_size, "icon_size", math.min(item.h * 0.6, 32))
+				item.icon_color = color_of(st, path, w.icon_color, "icon_color", item.text_color)
+				item.icon_selected = color_of(st, path, w.icon_selected, "icon_selected", item.text_selected)
+			end
+		end
+		local actions = norm_actions(st, path, w.action)
+		if (w.page ~= nil) then
+			if (type(w.page) ~= "string" or not st.page_ids[w.page]) then
+				add_problem(st, "E308", path, "'page': there is no page '%s'", tostring(w.page))
+			else
+				actions = actions or {}
+				actions[#actions + 1] = "page:" .. w.page
+			end
+		end
+		item.action = actions
+		local sel = w.selected_on
+		if (sel == nil and type(w.page) == "string" and st.page_ids[w.page]) then sel = w.page end
+		if (sel ~= nil) then
+			local list = type(sel) == "table" and sel or { sel }
+			item.selected_on = {}
+			for _, p in ipairs(list) do
+				if (type(p) == "string" and st.page_ids[p]) then
+					item.selected_on[#item.selected_on + 1] = p
+				else
+					add_problem(st, "E309", path, "'selected_on': there is no page '%s'", tostring(p))
+				end
+			end
+		end
+		if (not item.action and not item.hint) then
+			add_problem(st, "W321", path, "a button without an action does nothing")
+		end
+	elseif (kind == "map") then
+		if (ctx.template) then
+			add_problem(st, "E314", path, "the map cannot sit inside a list item")
+			return nil
+		end
+		if (st.map_path) then
+			add_problem(st, "E313", path, "a layout has one map, and %s already is it", st.map_path)
+			return nil
+		end
+		st.map_path = path
+		st.map_page = ctx.page
+		item.color = color_of(st, path, w.color, "color", 0)
+		item.zoom = (w.zoom == "global") and "global" or "actor"
+		if (w.zoom ~= nil and w.zoom ~= "global" and w.zoom ~= "actor") then
+			add_problem(st, "W318", path, "'zoom' is actor or global")
+		end
+	elseif (kind == "list") then
+		if (ctx.template) then
+			add_problem(st, "E312", path, "a list cannot sit inside another list's item")
+			return nil
+		end
+		item.row_h = num(st, path, w.row_h, "row_h", 60)
+		item.gap = num(st, path, w.gap, "gap", 6)
+		item.color = color_of(st, path, w.color, "color", 0)
+		item.radius = radius_of(st, path, w.radius)
+		item.font = font_of(st, path, w.font)
+		item.text_color = color_of(st, path, w.text_color, "text_color", 0xFFFFFFFF)
+		item.empty = text_of(st, path, w.empty, false)
+		if (type(w.item) ~= "table" or #w.item == 0) then
+			add_problem(st, "E312", path, "a list needs 'item' - the widgets of one row")
+		end
+		if (w.rows ~= nil and type(w.rows) ~= "table") then
+			add_problem(st, "E312", path, "'rows' must be a list of tables")
+		end
+	end
+
+	st.items[#st.items + 1] = item
+	local index = #st.items
+	item.n = index
+
+	if (kind == "group") then
+		add_children(st, path .. ".widgets", w.widgets, { layer = ctx.layer, page = ctx.page,
+			parent = index, template = ctx.template })
+	elseif (kind == "list") then
+		local def = { item = item, template = w.item, action = w.action, path = path,
+			row_color = color_of(st, path, w.row_color, "row_color", 0),
+			row_radius = radius_of(st, path, w.row_radius) }
+		def.row_hover = color_of(st, path, w.row_hover, "row_hover", shade(def.row_color, 0.12))
+		def.row_selected = color_of(st, path, w.row_selected, "row_selected", nil)
+		-- the item template is checked once, with no row: every row reuses it
+		st.in_template = true
+		if (type(w.item) == "table") then
+			local mark = #st.items
+			add_children(st, path .. ".item", w.item, { layer = ctx.layer, page = ctx.page,
+				parent = index, template = true })
+			for i = #st.items, mark + 1, -1 do st.items[i] = nil end
+		end
+		if (w.action ~= nil) then norm_actions(st, path, w.action) end
+		st.in_template = false
+		if (item.id) then st.lists[item.id] = def end
+		st.list_defs[#st.list_defs + 1] = def
+		if (type(w.rows) == "table") then def.rows = w.rows end
+	end
+	return index
+end
+
+-- ---------------------------------------------------------------------------- rows
+-- Items of one list's rows: a "row" container per row, the template under it with
+-- {field} filled from the row. parent = 0 names the list itself; the rest index into
+-- the returned array. Used at load for static rows and at run time (xms.pda.rows).
+function row_items(st, def, rows)
+	local out = {}
+	if (type(rows) ~= "table") then return out end
+	local list = def.item
+	local saved_items, saved_ids = st.items, st.widget_ids
+	local y = 0
+	local count = 0
+	for r, fields in ipairs(rows) do
+		if (count >= MAX_ROWS) then
+			add_problem(st, "W322", def.path, "only the first %d rows are shown", MAX_ROWS)
+			break
+		end
+		count = count + 1
+		local f = type(fields) == "table" and fields or { value = fields }
+		f.__lang = st.lang
+		local row = { kind = "row", layer = list.layer, page = list.page, parent = 0, row = r,
+			x = 0, y = y, w = list.w, h = list.row_h, visible = true,
+			color = def.row_color, hover = def.row_hover, selected = def.row_selected,
+			radius = def.row_radius }
+		if (def.action ~= nil) then
+			local tmp = { problems = {}, errors = 0, page_ids = st.page_ids, deferred_ids = {},
+				set_vars = st.set_vars }
+			row.action = norm_actions(tmp, def.path, instantiate(def.action, f))
+		end
+		out[#out + 1] = row
+		row.n = #out
+		local row_index = #out
+		-- build the template into a scratch list, then re-home it under this row
+		st.items = {}
+		st.widget_ids = {}
+		local probs = #st.problems
+		add_children(st, def.path .. ".item", instantiate(def.template, f), { layer = list.layer,
+			page = list.page, parent = -1, template = true })
+		-- a row repeats the template's problems; report them once, from the check at load
+		for i = #st.problems, probs + 1, -1 do st.problems[i] = nil end
+		local base = #out
+		for _, it in ipairs(st.items) do
+			local copy = it
+			copy.parent = (it.parent == -1) and row_index or (it.parent + base)
+			out[#out + 1] = copy
+			copy.n = #out
+		end
+		f.__lang = nil
+		y = y + list.row_h + list.gap
+	end
+	st.items, st.widget_ids = saved_items, saved_ids
+	return out
+end
+
+-- ---------------------------------------------------------------------------- pages
+local function read_pages(st, raw)
+	if (type(raw) ~= "table" or #raw == 0) then
+		add_problem(st, "E303", "pages", "a layout needs at least one page")
+		return
+	end
+	for i, p in ipairs(raw) do
+		local path = sfmt("pages[%d]", i)
+		if (type(p) ~= "table") then
+			add_problem(st, "E304", path, "a page must be a table")
+		elseif not (is_ident(p.id)) then
+			add_problem(st, "E304", path, "a page needs an id of lowercase letters, digits and _")
+		elseif (st.page_ids[p.id]) then
+			add_problem(st, "E304", path, "page id '%s' is used twice", p.id)
+		else
+			st.page_ids[p.id] = path
+			st.pages[#st.pages + 1] = { id = p.id, raw = p, path = path }
+			local names = {}
+			for k in pairs(p) do names[#names + 1] = tostring(k) end
+			table.sort(names)
+			for _, k in ipairs(names) do
+				if not (PAGE_KEYS[k]) then add_problem(st, "W318", path, "'%s' means nothing to a page", k) end
+			end
+		end
+	end
+end
+
+-- key target: a page id, "page:<id>" or "stock:<section>"
+local function key_action(st, path, v)
+	if (type(v) ~= "string" or v == "") then
+		add_problem(st, "E309", path, "a key opens a page id or stock:<section>")
+		return nil
+	end
+	if (st.page_ids[v]) then return "page:" .. v end
+	local verb, arg = split_action(v)
+	if (verb == "page" and st.page_ids[arg or ""]) then return v end
+	if (verb == "stock" and arg and arg ~= "") then
+		if not (SECTIONS[arg]) then
+			add_problem(st, "W315", path, "'%s' is not a stock PDA section of the game", arg)
+		end
+		return v
+	end
+	add_problem(st, "E309", path, "there is no page '%s'", v)
+	return nil
+end
+
+-- ---------------------------------------------------------------------------- normalize
+-- asset: the table a .pdaasset returns. opts: { lang = "rus" | "eng" | ... }.
+-- Returns a layout: { ok, problems, errors, warnings, id, title, canvas, start, keys,
+-- device, vars, pages, items, lists } - see the contract for every field.
+function normalize(asset, opts)
+	opts = opts or {}
+	local st = { problems = {}, errors = 0, lang = opts.lang or "rus", palette = {}, styles = {},
+		page_ids = {}, pages = {}, widget_ids = {}, items = {}, lists = {}, list_defs = {},
+		deferred_ids = {}, deferred_vars = {}, var_names = {}, set_vars = {}, bad_colors = {},
+		canvas_w = CANVAS_W, canvas_h = CANVAS_H }
+	local out = { ok = false, problems = st.problems, pages = {}, items = st.items, vars = {},
+		keys = {}, device = { noise = true, close = true } }
+	out.state = st
+
+	if (type(asset) ~= "table") then
+		add_problem(st, "E301", "", "the file must return a table")
+		out.errors = st.errors
+		return out
+	end
+	if (asset.pda ~= FORMAT) then
+		add_problem(st, "E301", "pda", "the header must be pda = %d", FORMAT)
+	end
+	do
+		local names = {}
+		for k in pairs(asset) do names[#names + 1] = tostring(k) end
+		table.sort(names)
+		for _, k in ipairs(names) do
+			if not (TOP_KEYS[k]) then add_problem(st, "W318", "", "'%s' means nothing to a layout", k) end
+		end
+	end
+	if not (is_ident(asset.id)) then
+		add_problem(st, "E302", "id", "the layout needs an id of lowercase letters, digits and _")
+	end
+	out.id = asset.id
+	out.title = pick_text(asset.title, st.lang) or tostring(asset.id or "")
+
+	if (asset.canvas ~= nil) then
+		local c = asset.canvas
+		local cw = type(c) == "table" and (c.w or c[1]) or nil
+		local ch = type(c) == "table" and (c.h or c[2]) or nil
+		if (type(cw) == "number" and type(ch) == "number" and cw >= 100 and ch >= 100) then
+			st.canvas_w, st.canvas_h = cw, ch
+		else
+			add_problem(st, "E306", "canvas", "canvas is { w, h }, both 100 or more")
+		end
+	end
+	out.canvas = { w = st.canvas_w, h = st.canvas_h }
+
+	if (asset.device ~= nil) then
+		if (type(asset.device) ~= "table") then
+			add_problem(st, "E306", "device", "device is { noise = bool, close = bool }")
+		else
+			out.device.noise = asset.device.noise ~= false
+			out.device.close = asset.device.close ~= false
+		end
+	end
+
+	if (asset.colors ~= nil) then
+		if (type(asset.colors) ~= "table") then
+			add_problem(st, "E311", "colors", "colors is a table of name = \"#RRGGBB[AA]\"")
+		else
+			for name, v in pairs(asset.colors) do
+				if (type(name) == "string") then st.palette[name] = v end
+			end
+			local names = {}
+			for name in pairs(st.palette) do names[#names + 1] = name end
+			table.sort(names)
+			for _, name in ipairs(names) do
+				local v = st.palette[name]
+				if (type(v) ~= "string" or not string.match(v, HEX)) then
+					add_problem(st, "E311", "colors." .. name, "'%s' is not #RRGGBB or #RRGGBBAA", tostring(v))
+					st.palette[name] = nil
+					st.bad_colors[name] = true
+				end
+			end
+		end
+	end
+	if (asset.styles ~= nil) then
+		if (type(asset.styles) ~= "table") then
+			add_problem(st, "E310", "styles", "styles is a table of name = { widget keys }")
+		else
+			for name, s in pairs(asset.styles) do
+				if (type(name) == "string" and type(s) == "table") then st.styles[name] = s end
+			end
+		end
+	end
+	if (asset.vars ~= nil) then
+		if (type(asset.vars) ~= "table") then
+			add_problem(st, "E306", "vars", "vars is a table of name = text")
+		else
+			for name, v in pairs(asset.vars) do
+				if (type(name) == "string" and string.find(name, "^[%w_]+$")) then
+					if (BUILTIN_VARS[name]) then
+						add_problem(st, "W319", "vars." .. name, "{%s} is filled in by the game; this value is never shown", name)
+					end
+					local s = pick_text(v, st.lang)
+					if (s == nil) then
+						add_problem(st, "E306", "vars." .. name, "a var is a text")
+					else
+						out.vars[name] = s
+						st.var_names[name] = true
+					end
+				end
+			end
+		end
+	end
+
+	read_pages(st, asset.pages)
+
+	add_children(st, "chrome", asset.chrome, { layer = "chrome" })
+	for _, p in ipairs(st.pages) do
+		local raw = p.raw
+		local page = { id = p.id, title = pick_text(raw.title, st.lang) or p.id }
+		if (raw.stock ~= nil) then
+			if (type(raw.stock) ~= "string" or raw.stock == "") then
+				add_problem(st, "E304", p.path, "'stock' names a stock PDA section")
+			else
+				if not (SECTIONS[raw.stock]) then
+					add_problem(st, "W315", p.path, "'%s' is not a stock PDA section of the game", raw.stock)
+				end
+				page.stock = raw.stock
+			end
+			if (raw.widgets ~= nil) then
+				add_problem(st, "W318", p.path, "a stock page shows the game's section; its widgets are ignored")
+			end
+		else
+			add_children(st, p.path .. ".widgets", raw.widgets, { layer = "page", page = p.id })
+		end
+		out.pages[#out.pages + 1] = page
+	end
+	add_children(st, "overlay", asset.overlay, { layer = "overlay" })
+
+	-- static rows go in right after their list, so a list's items stay contiguous
+	for _, def in ipairs(st.list_defs) do
+		if (def.rows) then
+			def.static_rows = row_items(st, def, def.rows)
+		end
+	end
+	if (#st.list_defs > 0) then
+		local merged = {}
+		local remap = {}
+		local by_list = {}
+		for _, def in ipairs(st.list_defs) do by_list[def.item.n] = def end
+		for _, it in ipairs(st.items) do
+			merged[#merged + 1] = it
+			remap[it.n] = #merged
+			local def = by_list[it.n]
+			if (def and def.static_rows) then
+				local base = #merged
+				local list_n = #merged
+				for _, r in ipairs(def.static_rows) do
+					local copy = {}
+					for k, v in pairs(r) do copy[k] = v end
+					copy.parent = (r.parent == 0) and list_n or (r.parent + base)
+					copy.from_rows = true
+					merged[#merged + 1] = copy
+				end
+			end
+		end
+		for i, it in ipairs(merged) do
+			if not (it.from_rows) then
+				it.parent = (it.parent or 0) > 0 and remap[it.parent] or 0
+			end
+			it.from_rows = nil
+			it.n = i
+		end
+		for i = 1, #st.items do st.items[i] = nil end
+		for i, it in ipairs(merged) do st.items[i] = it end
+	end
+
+	-- ids named by show/hide/toggle
+	for _, d in ipairs(st.deferred_ids) do
+		if not (st.widget_ids[d.id]) then
+			add_problem(st, "E308", d.path, "action '%s': no widget has the id '%s'", d.action, d.id)
+		end
+	end
+	for _, d in ipairs(st.deferred_vars) do
+		if not (st.var_names[d.name] or st.set_vars[d.name]) then
+			add_problem(st, "W319", d.path, "{%s} is neither a var of the layout nor filled in by the game", d.name)
+		end
+	end
+
+	if (#st.pages > 0) then
+		local start = asset.start
+		if (start == nil) then
+			out.start = st.pages[1].id
+		elseif (type(start) == "string" and st.page_ids[start]) then
+			out.start = start
+		else
+			add_problem(st, "E309", "start", "there is no page '%s'", tostring(start))
+			out.start = st.pages[1].id
+		end
+	end
+
+	local keys = type(asset.keys) == "table" and asset.keys or {}
+	if (asset.keys ~= nil and type(asset.keys) ~= "table") then
+		add_problem(st, "E309", "keys", "keys is { map = page, tasks = page, contacts = page }")
+	end
+	for _, k in ipairs({ "map", "tasks", "contacts" }) do
+		if (keys[k] ~= nil) then out.keys[k] = key_action(st, "keys." .. k, keys[k]) end
+	end
+	if (out.start) then
+		out.keys.map = out.keys.map or (st.map_page and ("page:" .. st.map_page)) or ("page:" .. out.start)
+		out.keys.tasks = out.keys.tasks or ("page:" .. out.start)
+		out.keys.contacts = out.keys.contacts or "stock:eptContacts"
+	end
+	if (st.map_actions and not st.map_path) then
+		add_problem(st, "E308", "", "map: actions need a map widget in the layout")
+	end
+
+	out.lists = st.lists
+	out.errors = st.errors
+	out.warnings = #st.problems - st.errors
+	out.ok = st.errors == 0
+	return out
+end
+
+-- Items for new rows of the list `id` of a normalized layout (xms.pda.rows at run time).
+function list_rows(layout, id, rows)
+	local st = layout and layout.state
+	local def = st and st.lists[id]
+	if not (def) then return nil end
+	return row_items(st, def, rows)
+end

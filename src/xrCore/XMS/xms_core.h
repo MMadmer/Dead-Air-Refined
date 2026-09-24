@@ -96,6 +96,10 @@ struct Module
     // modules, base configs) - the UE redirector idea in manifest form
     xr_vector<PathMap> redirect_maps;
     WorldRules world;
+    // [pda] layout: the module's PDA interface, a .pdaasset path relative to the module root
+    // ('\' separators, never climbing out). Empty = the module leaves the PDA alone. Only the
+    // last applying module that declares one is used (XmsPda); contract: MODDING.md "PDA layouts".
+    xr_string pda_layout;
     u32 budget_spawns{256};
     u16 ns{0};        // stable namespace id from the persistent registry
     u16 layer{0};     // 1-based position in the final load order (0 = base game)

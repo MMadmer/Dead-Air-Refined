@@ -351,13 +351,15 @@ xr_string display_text(pcstr value)
     return out;
 }
 
+bool normalize_rel_path(xr_string& p);
+
 void parse_manifest(Module& m, char* text)
 {
     // a BOM in front of "[module]" would hide the section header
     if (u8(text[0]) == 0xEF && u8(text[1]) == 0xBB && u8(text[2]) == 0xBF)
         text += 3;
 
-    xr_string website, github;
+    xr_string website, github, pda_layout;
     parse_plain_ini(text, [&](pcstr section, pcstr key, pcstr value)
     {
         if (0 == xr_strcmp(section, "module"))
@@ -406,6 +408,11 @@ void parse_manifest(Module& m, char* text)
             if (0 == xr_strcmp(key, "spawns"))
                 m.budget_spawns = u32(atoi(value));
         }
+        else if (0 == xr_strcmp(section, "pda"))
+        {
+            if (0 == xr_strcmp(key, "layout"))
+                pda_layout = value;
+        }
         else if (0 == xr_strcmp(section, "vfs"))
             m.vfs_maps.push_back({lower_copy(key), value});
         else if (0 == xr_strcmp(section, "redirects"))
@@ -450,6 +457,14 @@ void parse_manifest(Module& m, char* text)
         m.update_github = std::move(github);
     else if (!github.empty())
         Msg("! XMS: module [%s] update source ignored - [update] github must be owner/repo", m.id.c_str());
+    if (!pda_layout.empty())
+    {
+        if (normalize_rel_path(pda_layout))
+            m.pda_layout = std::move(pda_layout);
+        else
+            Msg("! XMS: module [%s] PDA layout ignored - [pda] layout must be a path inside the module",
+                m.id.c_str());
+    }
 }
 
 // Manifest paths arrive in whatever style the author typed. Virtual sides are

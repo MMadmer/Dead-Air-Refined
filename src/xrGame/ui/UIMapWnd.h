@@ -123,6 +123,9 @@ public:
     virtual ~CUIMapWnd();
 
     virtual bool Init(cpcstr xml_name, cpcstr start_from, bool critical = true);
+    // the same from a document already in memory - a module's PDA layout describes its map
+    // slot at run time (CUIPdaLayout)
+    bool InitFromXml(CUIXml& xml, cpcstr start_from, bool critical = true);
     virtual void Show(bool status);
     virtual void Draw();
     virtual void Reset();

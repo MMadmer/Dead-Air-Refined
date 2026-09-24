@@ -1149,6 +1149,8 @@ target_sources(xrGame PRIVATE
     xms_game.h
     xms_graph_composer.cpp
     xms_spawn_composer.cpp
+    xms_pda.cpp
+    xms_pda.h
     xms_world.cpp
     xms_world.h
     setup_manager.h
@@ -2314,6 +2316,8 @@ target_sources(xrGame PRIVATE
     ui/UIPdaKillMessage.h
     ui/UIPdaMsgListItem.cpp
     ui/UIPdaMsgListItem.h
+    ui/UIPdaLayout.cpp
+    ui/UIPdaLayout.h
     ui/UIPdaWnd.cpp
     ui/UIPdaWnd.h
     ui/UIRankFaction.cpp

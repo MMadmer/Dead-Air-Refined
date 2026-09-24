@@ -1,0 +1,71 @@
+-- Test fixture of XMS PDA layouts (tools/nq/test_pda_layout.lua): a small courier app with
+-- every widget kind, styles, a palette, row templates, an overlay and the actions.
+return {
+  pda = 1,
+  id = "courier",
+  title = { rus = "Курьер", eng = "Courier" },
+  start = "orders",
+  keys = { map = "map" },
+  colors = { bg = "#101114", card = "#1E2026", accent = "#FFD21E", text = "#F4F4F6", muted = "#9AA0AB",
+             soft = "#FFD21E1F" },
+  styles = {
+    tab = { kind = "button", color = "none", hover = "#FFFFFF10", text_color = "muted", text_selected = "accent",
+            icon_color = "muted", icon_selected = "accent", align = "center", valign = "bottom" },
+    title = { kind = "text", font = "letterica25", color = "text" },
+    primary = { kind = "button", color = "accent", text_color = "bg", radius = 12 },
+  },
+  vars = { current = "Нет заказа", picked = "" },
+  chrome = {
+    { kind = "rect", x = 0, y = 0, w = 960, h = 680, color = "bg" },
+    { style = "title", x = 20, y = 10, w = 400, h = 40, text = { rus = "Курьер", eng = "Courier" } },
+    { kind = "text", x = 840, y = 10, w = 100, h = 40, text = "{time}", align = "right" },
+    { style = "tab", id = "tab_orders", x = 0, y = 600, w = 320, h = 80, text = "Orders", icon = "ui_xms_icon_box", page = "orders" },
+    { style = "tab", id = "tab_map", x = 320, y = 600, w = 320, h = 80, text = "Map", icon = "ui_xms_icon_map", page = "map" },
+    { style = "tab", id = "tab_journal", x = 640, y = 600, w = 320, h = 80, text = "Journal", icon = "ui_xms_icon_list", page = "journal" },
+  },
+  pages = {
+    { id = "orders", title = "Orders", widgets = {
+      { kind = "list", id = "orders", x = 16, y = 70, w = 928, h = 520, row_h = 80, gap = 8,
+        row_color = "card", row_selected = "#2B2E38", row_radius = 12, empty = "No orders",
+        action = { "var:picked={title}", "show:details" },
+        item = {
+          { kind = "rect", x = 12, y = 12, w = 56, h = 56, radius = 12, color = "{tile}" },
+          { kind = "image", x = 24, y = 24, w = 32, h = 32, texture = "{icon}", color = "accent" },
+          { kind = "text", x = 84, y = 10, w = 600, h = 30, text = "{title}" },
+          { kind = "text", x = 84, y = 42, w = 600, h = 26, text = "{from} — {to}", font = "letterica16", color = "muted" },
+          { kind = "text", x = 700, y = 10, w = 212, h = 30, text = "{price} RU", align = "right", color = "accent" },
+        },
+        rows = {
+          { title = "Тушёнка", from = "Ангар", to = "Костёр", price = 450, tile = "soft", icon = "ui_xms_icon_box" },
+          { title = "Batteries", from = "Pump", to = "Hatch", price = 700, tile = "#FF9F0A26", icon = "ui_xms_icon_battery" },
+        } },
+    } },
+    { id = "map", title = "Map", widgets = {
+      { kind = "map", x = 16, y = 70, w = 928, h = 520 },
+      { kind = "button", x = 880, y = 90, w = 48, h = 48, radius = 24, color = "card", icon = "ui_xms_icon_plus",
+        action = "map:zoom_in", hint = "Zoom in" },
+      { kind = "group", id = "card", x = 30, y = 470, w = 500, h = 100, radius = 16, color = "card", border = "muted",
+        widgets = {
+          { kind = "text", x = 16, y = 10, w = 460, h = 30, text = "{current}" },
+          { style = "primary", id = "done", x = 16, y = 50, w = 200, h = 36, text = "Done",
+            action = { "signal:courier_done", "var:current=Нет заказа" } },
+        } },
+    } },
+    { id = "journal", title = "Journal", stock = "eptTasks" },
+  },
+  overlay = {
+    { kind = "group", id = "details", x = 0, y = 0, w = 960, h = 680, color = "#000000A0", visible = false,
+      widgets = {
+        { kind = "group", x = 230, y = 170, w = 500, h = 300, radius = 20, color = "card", widgets = {
+          { style = "title", x = 24, y = 20, w = 452, h = 40, text = "{picked}" },
+          { style = "primary", id = "take", x = 24, y = 230, w = 220, h = 48, text = "Take",
+            action = { "var:current={picked}", "hide:details", "page:map" } },
+          { kind = "button", x = 256, y = 230, w = 220, h = 48, radius = 12, color = "#2B2E38", text = "Close",
+            action = "hide:details" },
+        } },
+      } },
+    { kind = "button", id = "back", x = 780, y = 10, w = 40, h = 40, color = "none", icon = "ui_xms_icon_cross",
+      action = "back", hint = "Back" },
+  },
+  preview = { level = "l01_escape" },
+}

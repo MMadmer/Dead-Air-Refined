@@ -32,6 +32,8 @@
 #include "UIRankingWnd.h"
 #include "UILogsWnd.h"
 #include "UIScriptWnd.h"
+#include "UIPdaLayout.h"
+#include "xms_pda.h"
 
 #define PDA_XML "pda.xml"
 
@@ -54,6 +56,8 @@ CUIPdaWnd::CUIPdaWnd() : CUIDialogWnd(CUIPdaWnd::GetDebugType())
 
 CUIPdaWnd::~CUIPdaWnd()
 {
+    // first: its windows hang under UIMainPdaFrame, which the window tree deletes
+    xr_delete(m_layout);
     if (pUIMapWnd)
         delete_data(pUIMapWnd);
     if (pUITaskWnd)
@@ -188,6 +192,53 @@ void CUIPdaWnd::Init()
     // XXX: dynamically determine if we need to rearrange the tabs
     if (ClearSkyMode)
         RearrangeTabButtons(UITabControl);
+
+    if (IsGameTypeSingle())
+        if (const XMS::Module* owner = XmsPda::Owner())
+            BuildLayout(*owner);
+}
+
+void CUIPdaWnd::BuildLayout(const XMS::Module& owner)
+{
+    // The device's screen is where the stock noise lies (pda.xml and pda_16.xml alike); a
+    // layout without one gets the whole device frame.
+    const Fvector2 frame_pos = UIMainPdaFrame->GetWndPos();
+    Frect screen;
+    screen.set(0.f, 0.f, UIMainPdaFrame->GetWidth(), UIMainPdaFrame->GetHeight());
+    if (UINoice)
+    {
+        const Frect& n = UINoice->GetWndRect();
+        screen.set(n.x1 - frame_pos.x, n.y1 - frame_pos.y, n.x2 - frame_pos.x, n.y2 - frame_pos.y);
+    }
+
+    // The stock chrome steps aside first - tabs, caption, clock, what pda.xml drew into the
+    // screen - so the layout's own windows are the only ones left shown there.
+    xr_vector<CUIWindow*> hidden;
+    const auto hide = [&hidden](CUIWindow* w) {
+        if (w && w->IsShown())
+        {
+            w->Show(false);
+            hidden.push_back(w);
+        }
+    };
+    for (CUIWindow* w : UIMainPdaFrame->GetChildWndList())
+        hide(w);
+    for (CUIWindow* w : GetChildWndList())
+        if (w != UIMainPdaFrame && w != m_btn_close)
+            hide(w);
+
+    m_layout = xr_new<CUIPdaLayout>(*this);
+    if (!m_layout->Build(owner, UIMainPdaFrame, screen))
+    {
+        xr_delete(m_layout);
+        for (CUIWindow* w : hidden)
+            w->Show(true);
+        return;
+    }
+    if (m_btn_close && !m_layout->KeepClose())
+        m_btn_close->Show(false);
+    if (UINoice && !m_layout->KeepNoise())
+        xr_delete(UINoice);
 }
 
 void CUIPdaWnd::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)
@@ -231,6 +282,14 @@ void CUIPdaWnd::ShowDialog(bool bDoHideIndicators)
         return;
     }
     inherited::ShowDialog(bDoHideIndicators);
+}
+
+void CUIPdaWnd::ShowOrHideDialog(bool bDoHideIndicators)
+{
+    if (IsShown())
+        HideDialog();
+    else
+        ShowDialog(bDoHideIndicators);
 }
 
 void CUIPdaWnd::HideDialog()
@@ -289,7 +348,11 @@ void CUIPdaWnd::Show(bool status)
             actor->CInventoryOwner::OnReceiveInfo("ui_pda");
         }
 
-        if (m_sActiveSection.size())
+        if (m_layout)
+        {
+            m_layout->OnShow();
+        }
+        else if (m_sActiveSection.size())
         {
             SetActiveSubdialog(m_sActiveSection);
         }
@@ -310,7 +373,13 @@ void CUIPdaWnd::Show(bool status)
             actor->CInventoryOwner::OnReceiveInfo("ui_pda_hide");
         }
         CurrentGameUI()->UIMainIngameWnd->SetFlashIconState_(CUIMainIngameWnd::efiPdaTask, false);
-        if (m_pActiveDialog)
+        if (m_layout)
+        {
+            // the layout brings its page back, stock section included, when the PDA reopens
+            m_layout->OnHide();
+            HideStockSection();
+        }
+        else if (m_pActiveDialog)
         {
             m_pActiveDialog->Show(false);
             m_pActiveDialog = pUITaskWnd; //hack for script window
@@ -327,6 +396,9 @@ void CUIPdaWnd::Update()
     if (m_pActiveDialog)
         m_pActiveDialog->Update();
 
+    if (m_layout)
+        m_layout->Update();
+
     if (m_clock)
     {
         auto time = GetGameTimeAsString(InventoryUtilities::etpTimeToMinutes);
@@ -342,6 +414,28 @@ void CUIPdaWnd::Update()
 }
 
 void CUIPdaWnd::SetActiveSubdialog(const shared_str& section)
+{
+    if (m_layout)
+    {
+        m_layout->OpenStock(section.c_str());
+        return;
+    }
+    ShowStockSection(section);
+}
+
+void CUIPdaWnd::HideStockSection()
+{
+    if (m_pActiveDialog)
+    {
+        if (UIMainPdaFrame->IsChild(m_pActiveDialog))
+            UIMainPdaFrame->DetachChild(m_pActiveDialog);
+        m_pActiveDialog->Show(false);
+    }
+    m_pActiveDialog = nullptr;
+    m_sActiveSection = "";
+}
+
+void CUIPdaWnd::ShowStockSection(const shared_str& section)
 {
     if (m_sActiveSection == section && m_pActiveDialog && m_pActiveDialog->IsShown())
         return;
@@ -429,6 +523,12 @@ void CUIPdaWnd::SetActiveCaption()
 
 void CUIPdaWnd::Show_SecondTaskWnd(bool status)
 {
+    if (m_layout)
+    {
+        if (status)
+            m_layout->OpenKey("tasks");
+        return;
+    }
     if (pUITaskWnd)
     {
         if (status)
@@ -442,6 +542,12 @@ void CUIPdaWnd::Show_SecondTaskWnd(bool status)
 
 void CUIPdaWnd::Show_MapWnd(bool status)
 {
+    if (m_layout)
+    {
+        if (status)
+            m_layout->OpenKey("map");
+        return;
+    }
     if (pUIMapWnd)
     {
         if (status)
@@ -465,6 +571,12 @@ void CUIPdaWnd::Show_MapWnd(bool status)
 
 void CUIPdaWnd::Show_ContactsWnd(bool status)
 {
+    if (m_layout)
+    {
+        if (status)
+            m_layout->OpenKey("contacts");
+        return;
+    }
     if (true) // XXX: replace with contacts wnd pointer
     {
         if (status)
@@ -513,6 +625,8 @@ void CUIPdaWnd::DrawHint()
         pUIMapWnd->DrawHint();
     else if (m_pActiveDialog == pUIRankingWnd && pUIRankingWnd)
         pUIRankingWnd->DrawHint();
+    if (m_layout)
+        m_layout->DrawHint();
 
     if (m_hint_wnd)
         m_hint_wnd->Draw();
