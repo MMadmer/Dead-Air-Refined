@@ -515,6 +515,12 @@ void CUIModsWnd::BuildItems()
             item.thumbnail = thumbnail->second;
             if (item.thumbnail.empty() && item.entry)
                 item.thumbnail = item.entry->thumbnailTexture;
+            // no card any more, but its id is still bound to its key: a revocation reaches it all the same
+            if (XMS::Catalog::Withdrawn(module))
+            {
+                item.withdrawn = XMS::Catalog::InstalledFromBrowser(module.id.c_str());
+                item.revoked = mods_to_ui(XMS::Catalog::RevocationReason(module));
+            }
         }
         // what the browser is installing is the player's too, before it is on the disk
         for (const ModUpdateService::ModuleStatus& install : m_snapshot.installs)
@@ -869,7 +875,8 @@ void CUIModsWnd::RefreshRows()
             badge = "st_mods_badge_working", color = "accent";
         else if (state == State::Staged)
             badge = "st_mods_badge_restart", color = "accent";
-        else if (state == State::Refused || state == State::Failed)
+        // an update refused because the author withdrew the module is no fault: the card says why
+        else if (state == State::Failed || (state == State::Refused && !item.withdrawn))
             badge = state == State::Refused ? "st_mods_badge_refused" : "st_mods_badge_failed", color = "bad";
         else if (item.Installed() && XMS::Modules()[item.module].disabled)
             badge = "st_mods_badge_off", color = "muted";
@@ -1084,14 +1091,19 @@ void CUIModsWnd::RefreshDetails()
         break;
     case State::Failed: text = mods_format("st_mods_status_failed", status->message.c_str()), color = m_badColor; break;
     }
+    // what an update would say matters no more; one already on its way still does
+    if (item->withdrawn && !mods_in_flight(state) && state != State::Staged)
+        text = mods_text("st_mods_status_author_withdrawn").c_str(), color = m_warnColor;
     if (staged == "remove")
         text = mods_text("st_mods_status_removal").c_str(), color = m_badColor;
     else if (installed && disabledNow != !enabledNext)
         text = mods_text(enabledNext ? "st_mods_status_enable_next" : "st_mods_status_disable_next").c_str(), color = m_accentColor;
     else if (disabledNow)
         text = xr_string(mods_text("st_mods_status_disabled").c_str()) + ". " + text;
-    if (item->entry && !item->entry->revoked.empty())
-        text = mods_format("st_mods_status_withdrawn", item->entry->revoked.c_str()), color = m_badColor;
+    // a revocation outranks everything the line could say, a withdrawn module's too
+    const xr_string& revoked = item->entry ? item->entry->revoked : item->revoked;
+    if (!revoked.empty())
+        text = mods_format("st_mods_status_withdrawn", revoked.c_str()), color = m_badColor;
     if (0 != xr_strcmp(m_status->GetText(), text.c_str()))
         m_status->SetText(text.c_str());
     m_status->SetTextColor(color);

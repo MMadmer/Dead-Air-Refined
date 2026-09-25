@@ -7,12 +7,13 @@
 The fixture writes installed modules into <root>\\modules and everything the network serves into
 <assets>: GitHub releases (signed descriptors with a [card], file indexes, packages), the catalog
 signed with a fresh QA maintainer key (index, cards, thumbnails, VirusTotal results, ratings,
-reviews), VirusTotal API answers, and variants of the index for the rollback and tamper phases.
+reviews), VirusTotal API answers, and variants of the index for the rollback, tamper, duplicate
+and withdrawal phases (withdraw\\ holds the release a withdrawn module publishes afterwards).
 It writes env.json with what the engine needs to trust it (DAR_QA_CATALOG_KEY and friends).
 
 The mock serves /catalog/..., /<owner>/<repo>/releases/latest/download/<asset> with Range,
 /vt/api/v3/files/<sha256> (the x-apikey of the fixture only) and a POST /inbox that keeps every
-review the game sends.
+review the game sends. Its log has one line a request: "<unix time> <method> <path>".
 """
 import argparse
 import base64
@@ -25,6 +26,7 @@ import socketserver
 import struct
 import sys
 import threading
+import time
 import urllib.parse
 import zipfile
 
@@ -237,37 +239,44 @@ def manifest(mod_id, name, version, github, thumbnail=False, tags=""):
     return ("\r\n".join(lines) + "\r\n").encode("utf-8")
 
 
-def publish_release(assets, mod_id, version, github, files, key=None, card=True, thumbnail=False):
-    """Descriptor (+ [card], signed by `key`), index and one package, the way the contract says."""
+def publish_release(assets, mod_id, version, github, files, key=None, card=True, thumbnail=False, parts=1,
+                    descriptor_dir=None):
+    """Descriptor (+ [card], signed by `key`), index and `parts` packages (the files dealt out in turn),
+    the way the contract says. The descriptor goes to `descriptor_dir` when one is named: a release
+    the repository publishes later, while another one is its latest."""
     owner, repo = github.split("/")
     folder = os.path.join(assets, "github", owner, repo)
     os.makedirs(folder, exist_ok=True)
-    package = "%s-%s.zip" % (mod_id, version)
-    path = os.path.join(folder, package)
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in sorted(files):
-            archive.writestr("modules/%s/%s" % (mod_id, name), files[name])
+    names = sorted(files)
+    packages = []
     rows = []
-    with open(path, "rb") as f:
-        raw = f.read()
-    with zipfile.ZipFile(path) as archive:
-        for info in archive.infolist():
-            local = raw[info.header_offset:info.header_offset + 30]
-            name_length, extra_length = struct.unpack("<HH", local[26:30])
-            offset = info.header_offset + 30 + name_length + extra_length
-            relative = info.filename[len("modules/%s/" % mod_id):]
-            data = files[relative]
-            rows.append("file %s %d 1 %d %d %d %s" % (hashlib.sha256(data).hexdigest(), len(data), offset,
-                                                     info.compress_size, info.compress_type, relative))
+    for part in range(parts):
+        package = "%s-%s.zip" % (mod_id, version) if parts == 1 else "%s-%s.part%d.zip" % (mod_id, version, part + 1)
+        path = os.path.join(folder, package)
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name in names[part::parts]:
+                archive.writestr("modules/%s/%s" % (mod_id, name), files[name])
+        with open(path, "rb") as f:
+            raw = f.read()
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                local = raw[info.header_offset:info.header_offset + 30]
+                name_length, extra_length = struct.unpack("<HH", local[26:30])
+                offset = info.header_offset + 30 + name_length + extra_length
+                relative = info.filename[len("modules/%s/" % mod_id):]
+                data = files[relative]
+                rows.append("file %s %d %d %d %d %d %s" % (hashlib.sha256(data).hexdigest(), len(data), part + 1, offset,
+                                                          info.compress_size, info.compress_type, relative))
+        packages.append((package, len(raw), hashlib.sha256(raw).hexdigest()))
     index_name = "%s-%s.files" % (mod_id, version)
-    index = ("xms-files 1\npack %s\n" % package + "\n".join(rows) + "\n").encode("utf-8")
+    index = ("xms-files 1\n" + "".join("pack %s\n" % p[0] for p in packages) + "\n".join(rows) + "\n").encode("utf-8")
     with open(os.path.join(folder, index_name), "wb") as f:
         f.write(index)
     total = sum(len(v) for v in files.values())
     lines = ["[release]", "schema        = 1", "id            = " + mod_id, "version       = " + version,
              "files         = %d" % len(files), "unpacked      = %d" % total,
              "index         = %s, %d, %s" % (index_name, len(index), hashlib.sha256(index).hexdigest()),
-             "", "[packages]", "%s = %d, %s" % (package, len(raw), hashlib.sha256(raw).hexdigest())]
+             "", "[packages]"] + ["%s = %d, %s" % p for p in packages]
     if card:
         man = files["mod.ltx"]
         lines += ["", "[card]", 'name        = "QA %s"' % mod_id, 'name@eng    = "QA %s"' % mod_id,
@@ -280,10 +289,12 @@ def publish_release(assets, mod_id, version, github, files, key=None, card=True,
             lines.append("thumbnail   = thumbnail.dds, %d, %s" % (len(thumb), hashlib.sha256(thumb).hexdigest()))
     body = "\n".join(lines) + "\n"
     text = xc.sign_text(body, key) if key else body
-    with open(os.path.join(folder, mod_id + ".update.ltx"), "w", encoding="utf-8", newline="\n") as f:
+    descriptor_dir = descriptor_dir or folder
+    os.makedirs(descriptor_dir, exist_ok=True)
+    with open(os.path.join(descriptor_dir, mod_id + ".update.ltx"), "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
-    return {"descriptor": text.encode("utf-8"), "package_sha": hashlib.sha256(raw).hexdigest(),
-            "thumbnail": files.get("thumbnail.dds")}
+    return {"descriptor": text.encode("utf-8"), "package_sha": packages[0][2],
+            "package_shas": [p[2] for p in packages], "thumbnail": files.get("thumbnail.dds")}
 
 
 def install_module(qa_root, mod_id, files):
@@ -325,11 +336,13 @@ def make_fixture(qa_root, assets, port):
         return files
 
     releases = {}
+    # (id, line): the same line serves [mods] and, once its author withdraws the module, [withdrawn]
     listings = []
+    withdrawals = []
 
     def listed(mod_id, version, key_text, min_version="1.0.0"):
         github = "QaOwner/" + mod_id.replace(".", "-")
-        listings.append("%s = %s, %s, %s, 2026-09-25" % (mod_id, github, key_text, min_version))
+        listings.append((mod_id, "%s = %s, %s, %s, 2026-09-25" % (mod_id, github, key_text, min_version)))
         return github
 
     g = listed("qa.cat.good", "1.0.0", author_key)
@@ -358,6 +371,10 @@ def make_fixture(qa_root, assets, port):
     g = listed("qa.cat.vtlive", "1.0.0", author_key)
     releases["qa.cat.vtlive"] = publish_release(assets, "qa.cat.vtlive", "1.0.0", g,
                                                 base_files("qa.cat.vtlive", "1.0.0", g), author)
+    # a release in two packages: the first clean, the second flagged - by the catalog (warn) and live (block)
+    g = listed("qa.cat.vtparts", "1.0.0", author_key)
+    releases["qa.cat.vtparts"] = publish_release(assets, "qa.cat.vtparts", "1.0.0", g, base_files(
+        "qa.cat.vtparts", "1.0.0", g, {"gamedata/configs/qa_cat_vtparts_more.ltx": b"[more]\r\n"}), author, parts=2)
 
     # installed catalog modules: an unsigned update, a signed one, a revoked installation
     g = listed("qa.cat.upd", "1.0.0", author_key)
@@ -371,6 +388,24 @@ def make_fixture(qa_root, assets, port):
     releases["qa.cat.revinst"] = publish_release(assets, "qa.cat.revinst", "1.0.0", g,
                                                  base_files("qa.cat.revinst", "1.0.0", g), author)
 
+    # installed through the browser while listed, then withdrawn by their authors (index_withdrawn):
+    # wdrawn publishes 1.1.0 afterwards (withdraw\), wdrevoked is revoked after its withdrawal
+    g = listed("qa.cat.wdrawn", "1.0.0", author_key)
+    releases["qa.cat.wdrawn"] = publish_release(assets, "qa.cat.wdrawn", "1.0.0", g,
+                                                base_files("qa.cat.wdrawn", "1.0.0", g), author)
+    publish_release(assets, "qa.cat.wdrawn", "1.1.0", g, base_files("qa.cat.wdrawn", "1.1.0", g), author,
+                    descriptor_dir=os.path.join(assets, "withdraw"))
+    g = listed("qa.cat.wdrevoked", "1.0.0", author_key)
+    releases["qa.cat.wdrevoked"] = publish_release(assets, "qa.cat.wdrevoked", "1.0.0", g,
+                                                   base_files("qa.cat.wdrevoked", "1.0.0", g), author)
+    # withdrawn before the game ever saw it; its stale card still in cards.txt. And a withdrawal
+    # line that is no line.
+    g = "QaOwner/qa-cat-wdnew"
+    withdrawals.append("qa.cat.wdnew = %s, %s, 1.0.0, 2026-09-20" % (g, author_key))
+    releases["qa.cat.wdnew"] = publish_release(assets, "qa.cat.wdnew", "1.0.0", g,
+                                               base_files("qa.cat.wdnew", "1.0.0", g), author)
+    withdrawals.append("qa.cat.wdbad = not a repository, %s, 1.0.0, 2026-09-20" % author_key)
+
     # the probe rides in an ordinary module: protection is the game's, not a module's
     install_module(qa_root, "qa.legacy", {
         "mod.ltx": b"[module]\r\nid = qa.legacy\r\nname = QA Legacy\r\nversion = 1.0\r\napi = 1\r\ntarget = default\r\n",
@@ -382,16 +417,20 @@ def make_fixture(qa_root, assets, port):
     os.makedirs(os.path.join(catalog, "reviews"))
     base = "http://127.0.0.1:%d/catalog/" % port
 
-    def index(serial, tamper=False):
+    def index(serial, tamper=False, withdraw=(), revoke=(), duplicate=None):
+        """`withdraw`: listed ids their authors withdraw; `duplicate`: a listed id also put under
+        [withdrawn], which makes the index invalid however well it is signed."""
+        mods = [line for mod_id, line in listings if mod_id not in withdraw]
+        withdrawn = [line for mod_id, line in listings if mod_id in withdraw or mod_id == duplicate] + withdrawals
         body = "\n".join([
             "[catalog]", "format  = 1", "serial  = %d" % serial, "issued  = 2026-09-25", "mirrors = https://example.invalid/",
             "", "[virustotal]", "trusted       = " + TRUSTED, "block_trusted = 1", "warn_trusted  = 1",
             "block_others  = 5", "warn_others   = 2",
             "", "[reviews]", "inbox_url     = http://127.0.0.1:%d/inbox" % port, "inbox_field   = entry.1",
             "salt          = qa-salt", "identity_bits = 12", "review_bits   = 8",
-            "", "[mods]"] + listings + [
-            "", "[revoked]", "qa.cat.revoked = *, QA revocation", "qa.cat.revinst = *, QA revocation of an installed module",
-            ""])
+            "", "[mods]"] + mods + ["", "[withdrawn]"] + withdrawn + [
+            "", "[revoked]", "qa.cat.revoked = *, QA revocation", "qa.cat.revinst = *, QA revocation of an installed module"]
+            + list(revoke) + [""])
         text = xc.sign_text(body, maintainer)
         if tamper:
             text = text.replace("qa.cat.good = ", "qa.cat.goods = ", 1)
@@ -399,8 +438,11 @@ def make_fixture(qa_root, assets, port):
 
     with open(os.path.join(catalog, "index.ltx"), "w", encoding="utf-8", newline="\n") as f:
         f.write(index(5))
+    withdrawn_index = index(7, withdraw=("qa.cat.wdrawn", "qa.cat.wdrevoked"),
+                            revoke=("qa.cat.wdrevoked = *, QA revocation after its withdrawal",))
     for name, text in (("index_serial4.ltx", index(4)), ("index_tampered.ltx", index(6, tamper=True)),
-                       ("index_serial5.ltx", index(5))):
+                       ("index_serial5.ltx", index(5)), ("index_duplicate.ltx", index(9, duplicate="qa.cat.good")),
+                       ("index_withdrawn.ltx", withdrawn_index)):
         with open(os.path.join(assets, name), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
 
@@ -416,10 +458,13 @@ def make_fixture(qa_root, assets, port):
 
     vt_lines = ["xms-vt 1"]
     for mod_id, release in sorted(releases.items()):
-        if mod_id == "qa.cat.vtblock":
-            vt_lines.append("%s 2026-09-25 70 1 0 0 Microsoft" % release["package_sha"])
-        else:
-            vt_lines.append("%s 2026-09-25 70 0 0 1 NoNameAV" % release["package_sha"])
+        for part, sha in enumerate(release["package_shas"]):
+            if mod_id == "qa.cat.vtblock":
+                vt_lines.append("%s 2026-09-25 70 1 0 0 Microsoft" % sha)
+            elif mod_id == "qa.cat.vtparts" and part == 1:
+                vt_lines.append("%s 2026-09-24 70 0 1 0 ESET-NOD32" % sha)
+            else:
+                vt_lines.append("%s 2026-09-25 70 0 0 1 NoNameAV" % sha)
     with open(os.path.join(catalog, "vt.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(vt_lines) + "\n")
     with open(os.path.join(catalog, "ratings.txt"), "w", encoding="utf-8", newline="\n") as f:
@@ -447,15 +492,22 @@ def make_fixture(qa_root, assets, port):
         f.write(vt_report(clean))
     with open(os.path.join(vt, releases["qa.cat.vtlive"]["package_sha"] + ".json"), "w") as f:
         f.write(vt_report(flagged))
+    # the second package of a split release is the flagged one
+    first, second = releases["qa.cat.vtparts"]["package_shas"]
+    with open(os.path.join(vt, first + ".json"), "w") as f:
+        f.write(vt_report({"Microsoft": "undetected", "Kaspersky": "undetected", "Other": "harmless"}))
+    with open(os.path.join(vt, second + ".json"), "w") as f:
+        f.write(vt_report(flagged))
     os.makedirs(os.path.join(assets, "inbox"))
 
     env = {"DAR_QA_CATALOG_KEY": xc.key_text(xc.public_of(maintainer)), "DAR_QA_CATALOG_BASE": base,
            "DAR_QA_VT_KEY": VT_KEY, "DAR_QA_VT_BASE": "http://127.0.0.1:%d/vt/" % port,
-           "packages": {k: v["package_sha"] for k, v in releases.items()}, "author_key": author_key,
+           "packages": {k: v["package_sha"] for k, v in releases.items()},
+           "package_parts": {k: v["package_shas"] for k, v in releases.items()}, "author_key": author_key,
            "stranger_key": stranger_key, "thumbnail_sha": hashlib.sha256(thumb).hexdigest()}
     with open(os.path.join(assets, "env.json"), "w") as f:
         json.dump(env, f, indent=1)
-    print("fixture: %d listed module(s), serial 5" % len(listings))
+    print("fixture: %d listed module(s), %d withdrawal line(s), serial 5" % (len(listings), len(withdrawals)))
 
 
 # ---- the mock ----------------------------------------------------------------------------------------------
@@ -468,7 +520,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if self.log_file:
             with open(self.log_file, "a", encoding="utf-8") as f:
-                f.write("%s %s\n" % (self.command, self.path))
+                f.write("%.3f %s %s\n" % (time.time(), self.command, self.path))
 
     def send_body(self, status, body, content_type="application/octet-stream", headers=None):
         self.send_response(status)

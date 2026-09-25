@@ -667,6 +667,14 @@ const Listing* Index::Find(std::string_view id) const
     return nullptr;
 }
 
+const Listing* Index::FindWithdrawn(std::string_view id) const
+{
+    for (const Listing& listing : withdrawn)
+        if (listing.id == id)
+            return &listing;
+    return nullptr;
+}
+
 const Revocation* Index::Revoked(std::string_view id, std::string_view version, std::string_view keyId) const
 {
     for (const Revocation& r : revoked)
@@ -743,8 +751,9 @@ bool parse_index_body(std::string_view text, Index& out, xr_string& error)
             else if (key == "review_bits" && parse_u64(value, number) && number <= 40)
                 out.reviews.reviewBits = u32(number);
         }
-        else if (section == "mods")
+        else if (section == "mods" || section == "withdrawn")
         {
+            const bool withdrawn = section == "withdrawn";
             const auto fields = split_commas(value);
             Listing listing;
             listing.id = lower(key);
@@ -758,15 +767,17 @@ bool parse_index_body(std::string_view text, Index& out, xr_string& error)
             if (fields.size() < 3 || !module_id_ok(listing.id) || !ValidGithubRepo(listing.github.c_str()) ||
                 !ParsePublicKey(fields[1], listing.key) || !parse_version(listing.minVersion).valid)
             {
-                Msg("! XMS catalog: listing [%s] is malformed - skipped", listing.id.c_str());
+                Msg("! XMS catalog: %s [%s] is malformed - skipped", withdrawn ? "withdrawal" : "listing",
+                    listing.id.c_str());
                 return;
             }
-            if (out.Find(listing.id))
+            // one id, one entry: a module both listed and withdrawn is as ambiguous as one listed twice
+            if (out.Find(listing.id) || out.FindWithdrawn(listing.id))
             {
                 bad = true;
                 return;
             }
-            out.mods.push_back(std::move(listing));
+            (withdrawn ? out.withdrawn : out.mods).push_back(std::move(listing));
         }
         else if (section == "revoked")
         {
@@ -904,10 +915,23 @@ bool Listed(const Module& m)
     return listing && !m.update_github.empty() && iequals(listing->github, m.update_github);
 }
 
+bool Withdrawn(const Module& m)
+{
+    const std::shared_ptr<const Index> index = Current();
+    const Listing* listing = index ? index->FindWithdrawn(m.id) : nullptr;
+    return listing && !m.update_github.empty() && iequals(listing->github, m.update_github);
+}
+
 xr_string RevocationReason(const Module& m)
 {
     const std::shared_ptr<const Index> index = Current();
-    const Listing* listing = index ? index->Find(m.id) : nullptr;
+    if (!index)
+        return {};
+    // a withdrawal keeps the id bound to its repository and key, so a revocation reaches the module
+    // just the same: one made after the withdrawal as well
+    const Listing* listing = index->Find(m.id);
+    if (!listing)
+        listing = index->FindWithdrawn(m.id);
     if (!listing || m.update_github.empty() || !iequals(listing->github, m.update_github))
         return {};
     const Revocation* r = index->Revoked(m.id, m.version, listing->key.id);

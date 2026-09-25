@@ -109,6 +109,9 @@ ModService& mod_service()
 // a module being installed has none yet.
 constexpr size_t ModInstallSlot = static_cast<size_t>(-1);
 
+// Why a module its author withdrew from the catalog is neither installed nor updated through it.
+constexpr pcstr ModWithdrawnByAuthor = "its author withdrew it from the Mod Browser";
+
 template <typename Change>
 void mod_set_status(size_t index, const Change& change)
 {
@@ -498,6 +501,9 @@ xr_string mod_catalog_refusal(const XMS::Module& module, std::string_view text, 
 {
     const std::shared_ptr<const XMS::Catalog::Index> index = XMS::Catalog::Current();
     const XMS::Catalog::Listing* listing = index ? index->Find(module.id) : nullptr;
+    // the catalog checks no release of a withdrawn module, so none is taken
+    if (!listing && XMS::Catalog::Withdrawn(module))
+        return ModWithdrawnByAuthor;
     if (!listing)
         return index ? "the mod catalog no longer lists this module" : "the mod catalog has not been loaded yet";
     if (0 != xr_stricmp(listing->github.c_str(), module.update_github.c_str()))
@@ -939,7 +945,9 @@ void mod_run_install(ModHttpSession& session, const xr_string& id)
     xr_string error;
     if (!listing || XMS::FindModule(id.c_str()))
     {
-        error = listing ? "the module is installed already" : "the mod catalog does not list this module";
+        error = listing                           ? "the module is installed already" :
+            catalog && catalog->FindWithdrawn(id) ? ModWithdrawnByAuthor :
+                                                    "the mod catalog does not list this module";
         Msg("! [mods] %s: installation failed - %s", id.c_str(), error.c_str());
         mod_set_state(ModInstallSlot, State::Failed, std::move(error));
         return;
@@ -1350,7 +1358,8 @@ bool ModUpdateService::StartInstall(pcstr moduleId, xr_string& error)
     const std::shared_ptr<const XMS::Catalog::Index> catalog = XMS::Catalog::Current();
     if (!moduleId || !catalog || !catalog->Find(moduleId))
     {
-        error = "the mod catalog does not list this module";
+        error = moduleId && catalog && catalog->FindWithdrawn(moduleId) ? ModWithdrawnByAuthor :
+                                                                          "the mod catalog does not list this module";
         return false;
     }
     if (XMS::FindModule(moduleId))

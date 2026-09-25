@@ -85,9 +85,12 @@ struct Index
     VtPolicy vt;
     ReviewPolicy reviews;
     xr_vector<Listing> mods;
+    // withdrawn by their authors: not offered any more, the id still bound to its repository and key
+    xr_vector<Listing> withdrawn;
     xr_vector<Revocation> revoked;
 
     XRCORE_API const Listing* Find(std::string_view id) const;
+    XRCORE_API const Listing* FindWithdrawn(std::string_view id) const;
     // What revokes this module, this version of it or its key; nullptr when nothing does.
     XRCORE_API const Revocation* Revoked(std::string_view id, std::string_view version, std::string_view keyId) const;
 };
@@ -124,7 +127,9 @@ XRCORE_API void MarkInstalled(pcstr id, bool installed);
 
 // A module the catalog lists under the module's own repository - however it got onto the disk.
 XRCORE_API bool Listed(const Module& m);
-// The reason the catalog revokes this installed module; empty when it does not.
+// A module its author withdrew from the catalog, under the module's own repository.
+XRCORE_API bool Withdrawn(const Module& m);
+// The reason the catalog revokes this installed module, listed or withdrawn; empty when it does not.
 XRCORE_API xr_string RevocationReason(const Module& m);
 
 // Protected mode (9.1), decided once at start-up.

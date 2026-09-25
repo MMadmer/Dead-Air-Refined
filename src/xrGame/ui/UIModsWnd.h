@@ -68,6 +68,10 @@ private:
         xr_string thumbnail;
         xr_string website;
         xr_string date;
+        // installed from the Mod Browser, then withdrawn by its author: the catalog takes no update of it
+        bool withdrawn{};
+        // what revokes an installed module its author withdrew (it has no entry); UI code page
+        xr_string revoked;
         // folded for the search (ModSearch)
         xr_string foldName, foldAuthor, foldTags, foldDescription;
         float score{};

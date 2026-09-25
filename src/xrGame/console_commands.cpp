@@ -1290,6 +1290,9 @@ public:
                 entry.thumbnailTexture.empty() ? "-" : entry.thumbnailTexture.c_str(), entry.rating.count,
                 entry.rating.average100 / 100, entry.rating.average100 % 100, verdicts[static_cast<int>(entry.vt.verdict)],
                 entry.vt.live ? "(live)" : "", entry.revoked.empty() ? "" : " REVOKED: ", entry.revoked.c_str());
+        if (const auto index = XMS::Catalog::Current())
+            for (const XMS::Catalog::Listing& listing : index->withdrawn)
+                Msg("*   %s withdrawn by its author (%s)", listing.id.c_str(), listing.github.c_str());
     }
     virtual void Info(TInfo& I)
     {

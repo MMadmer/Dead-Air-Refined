@@ -17,6 +17,7 @@
 #include <wincred.h>
 
 #include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
@@ -599,6 +600,8 @@ struct CatalogService
     // VirusTotal answers asked with the player's key, per module id
     std::unordered_map<std::string, ModCatalog::VirusTotal> liveVt;
     xr_vector<xr_string> vtBusy;
+    // when the last four VirusTotal requests went out; worker thread only
+    std::deque<std::chrono::steady_clock::time_point> vtSent;
     // thumbnails: sha256 -> downloaded file, waiting for the UI thread; sha256 -> texture name
     xr_vector<std::pair<xr_string, std::filesystem::path>> toMount;
     std::unordered_map<std::string, xr_string> mounted;
@@ -692,6 +695,43 @@ Verdict judge(const XMS::Catalog::VtPolicy& policy, u32 trustedMalicious, u32 tr
     if (trustedSuspicious >= policy.warnTrusted || othersMalicious >= policy.warnOthers)
         return Verdict::Warn;
     return Verdict::Clean;
+}
+
+// How decisive a package's verdict is: block, warn, not scanned or no result, clean.
+int vt_rank(Verdict verdict)
+{
+    switch (verdict)
+    {
+    case Verdict::Block: return 3;
+    case Verdict::Warn: return 2;
+    case Verdict::Unknown: return 1;
+    case Verdict::Clean: return 0;
+    }
+    return 1;
+}
+
+// A release from the results of its packages (sha256, result), as ModCatalog::VirusTotal describes.
+ModCatalog::VirusTotal vt_combine(const xr_vector<std::pair<xr_string, ModCatalog::VirusTotal>>& packages)
+{
+    ModCatalog::VirusTotal out;
+    int decisive = -1;
+    xr_string oldest;
+    bool unknown = false;
+    for (const auto& [sha, result] : packages)
+    {
+        if (vt_rank(result.verdict) > decisive)
+        {
+            decisive = vt_rank(result.verdict);
+            out = result;
+            out.package = sha;
+        }
+        unknown = unknown || result.unknown;
+        if (!result.date.empty() && (oldest.empty() || result.date < oldest))
+            oldest = result.date;
+    }
+    out.date = oldest;
+    out.unknown = unknown;
+    return out;
 }
 
 std::shared_ptr<Snapshot> build_snapshot(Status status, xr_string error)
@@ -817,9 +857,18 @@ std::shared_ptr<Snapshot> build_snapshot(Status status, xr_string error)
     {
         if (const auto rating = byModule.find(entry.id.c_str()); rating != byModule.end())
             entry.rating = rating->second;
+        // every package of the release: a clean first part says nothing about the second
         if (entry.hasCard && !entry.release.packages.empty())
-            if (const auto result = byPackage.find(entry.release.packages.front().sha256.c_str()); result != byPackage.end())
-                entry.vt = result->second;
+        {
+            xr_vector<std::pair<xr_string, ModCatalog::VirusTotal>> packages;
+            for (const ModRelease::Asset& package : entry.release.packages)
+            {
+                const auto result = byPackage.find(package.sha256.c_str());
+                packages.emplace_back(package.sha256,
+                    result != byPackage.end() ? result->second : ModCatalog::VirusTotal{});
+            }
+            entry.vt = vt_combine(packages);
+        }
         if (const auto live = s.liveVt.find(entry.id.c_str()); live != s.liveVt.end())
             entry.vt = live->second;
         if (entry.hasCard && entry.release.card.thumbnail.present)
@@ -1057,6 +1106,94 @@ xr_string vt_base()
     return "https://www.virustotal.com/";
 }
 
+// The free API takes 4 requests a minute: the first four go at once, every later one waits until
+// the one four before it is a little over a minute old. Worker thread only; false when stopping.
+bool vt_pace()
+{
+    CatalogService& s = service();
+    if (s.vtSent.size() >= 4)
+    {
+        const auto due = s.vtSent.front() + std::chrono::seconds(61);
+        if (const auto now = std::chrono::steady_clock::now(); now < due)
+            Msg("~ [catalog] VirusTotal takes 4 requests a minute: the next one in %lld s",
+                static_cast<long long>(std::chrono::ceil<std::chrono::seconds>(due - now).count()));
+        while (std::chrono::steady_clock::now() < due)
+        {
+            if (s.stop.load(std::memory_order_acquire))
+                return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        s.vtSent.pop_front();
+    }
+    s.vtSent.push_back(std::chrono::steady_clock::now());
+    return true;
+}
+
+// The report of one package. A package VirusTotal has never seen is an answer too (unknown); false
+// when there is none to go by - a refused key, the quota, the network, an answer that is no report.
+bool vt_ask(ModHttp::Session& session, const xr_string& key, const xr_string& base, const xr_string& id,
+    const xr_string& sha, const XMS::Catalog::VtPolicy& policy, ModCatalog::VirusTotal& result)
+{
+    xr_string body, error;
+    DWORD status = 0;
+    const std::wstring headers = L"x-apikey: " + ModHttp::Widen(key) + L"\r\nAccept: application/json\r\n";
+    const bool asked = ModHttp::Exchange(session, L"GET", ModHttp::Widen(base + "api/v3/files/" + sha), headers, {},
+        SmallFileLimit, body, status, error);
+    if (asked && status == 404)
+    {
+        result.unknown = true;
+        return true;
+    }
+    if (!asked || status != 200)
+    {
+        Msg("! [catalog] VirusTotal did not answer for [%s]: %s", id.c_str(),
+            !asked                               ? error.c_str() :
+                (status == 401 || status == 403) ? "the key was refused" :
+                status == 429                    ? "too many requests, try again in a minute" :
+                                                   ("HTTP " + xr_string(std::to_string(status).c_str())).c_str());
+        return false;
+    }
+    Json root;
+    const Json* attributes = nullptr;
+    if (JsonReader(body).Parse(root))
+        if (const Json* data = root.Get("data"))
+            attributes = data->Get("attributes");
+    const Json* results = attributes ? attributes->Get("last_analysis_results") : nullptr;
+    if (!results || results->type != Json::Type::Object)
+    {
+        Msg("! [catalog] VirusTotal's answer for [%s] is not a report", id.c_str());
+        return false;
+    }
+    xr_vector<xr_string> flagged;
+    for (const auto& [engine, verdict] : results->members)
+    {
+        const Json* category = verdict.Get("category");
+        if (!category || category->type != Json::Type::String)
+            continue;
+        const xr_string& value = category->text;
+        if (value != "malicious" && value != "suspicious" && value != "undetected" && value != "harmless")
+            continue;
+        ++result.engines;
+        const bool trusted = std::ranges::find(policy.trusted, lower(engine)) != policy.trusted.end();
+        if (value == "malicious")
+        {
+            (trusted ? result.trustedMalicious : result.othersMalicious)++;
+            flagged.push_back(plain_text(engine, false));
+        }
+        else if (value == "suspicious" && trusted)
+        {
+            ++result.trustedSuspicious;
+            flagged.push_back(plain_text(engine, false));
+        }
+    }
+    for (const xr_string& name : flagged)
+        result.flaggedBy += (result.flaggedBy.empty() ? "" : ", ") + name;
+    if (const Json* date = attributes->Get("last_analysis_date"); date && date->type == Json::Type::Number)
+        result.date = date_of_unix(static_cast<u64>(date->number));
+    result.verdict = judge(policy, result.trustedMalicious, result.trustedSuspicious, result.othersMalicious);
+    return true;
+}
+
 void run_vt(ModHttp::Session& session, const xr_string& id)
 {
     CatalogService& s = service();
@@ -1080,70 +1217,40 @@ void run_vt(ModHttp::Session& session, const xr_string& id)
         finish(nullptr);
         return;
     }
-    const xr_string sha = entry->release.packages.front().sha256;
-    xr_string body, error;
-    DWORD status = 0;
-    const std::wstring headers = L"x-apikey: " + ModHttp::Widen(key) + L"\r\nAccept: application/json\r\n";
-    const bool asked = ModHttp::Exchange(session, L"GET", ModHttp::Widen(base + "api/v3/files/" + sha), headers, {},
-        SmallFileLimit, body, status, error);
-
-    ModCatalog::VirusTotal result;
-    result.live = true;
-    if (asked && status == 404)
-        result.unknown = true;
-    else if (!asked || status != 200)
+    // every package, not the first alone: a release split in parts is as good as its worst part.
+    // Copied - the snapshot may be replaced while a request waits for its turn.
+    const xr_vector<ModRelease::Asset> packages = entry->release.packages;
+    xr_vector<std::pair<xr_string, ModCatalog::VirusTotal>> results;
+    for (size_t n = 0; n != packages.size(); ++n)
     {
-        Msg("! [catalog] VirusTotal did not answer for [%s]: %s", id.c_str(),
-            !asked ? error.c_str() : (status == 401 || status == 403) ? "the key was refused" :
-                status == 429 ? "too many requests, try again in a minute" : ("HTTP " + xr_string(std::to_string(status).c_str())).c_str());
-        finish(nullptr);
-        return;
-    }
-    else
-    {
-        Json root;
-        const Json* attributes = nullptr;
-        if (JsonReader(body).Parse(root))
-            if (const Json* data = root.Get("data"))
-                attributes = data->Get("attributes");
-        const Json* results = attributes ? attributes->Get("last_analysis_results") : nullptr;
-        if (!results || results->type != Json::Type::Object)
+        ModCatalog::VirusTotal result;
+        if (!vt_pace() || !vt_ask(session, key, base, id, packages[n].sha256, index->vt, result))
         {
-            Msg("! [catalog] VirusTotal's answer for [%s] is not a report", id.c_str());
             finish(nullptr);
             return;
         }
-        xr_vector<xr_string> flagged;
-        for (const auto& [engine, verdict] : results->members)
-        {
-            const Json* category = verdict.Get("category");
-            if (!category || category->type != Json::Type::String)
-                continue;
-            const xr_string& value = category->text;
-            if (value != "malicious" && value != "suspicious" && value != "undetected" && value != "harmless")
-                continue;
-            ++result.engines;
-            const bool trusted = std::ranges::find(index->vt.trusted, lower(engine)) != index->vt.trusted.end();
-            if (value == "malicious")
-            {
-                (trusted ? result.trustedMalicious : result.othersMalicious)++;
-                flagged.push_back(plain_text(engine, false));
-            }
-            else if (value == "suspicious" && trusted)
-            {
-                ++result.trustedSuspicious;
-                flagged.push_back(plain_text(engine, false));
-            }
-        }
-        for (const xr_string& name : flagged)
-            result.flaggedBy += (result.flaggedBy.empty() ? "" : ", ") + name;
-        if (const Json* date = attributes->Get("last_analysis_date"); date && date->type == Json::Type::Number)
-            result.date = date_of_unix(static_cast<u64>(date->number));
-        result.verdict = judge(index->vt, result.trustedMalicious, result.trustedSuspicious, result.othersMalicious);
+        if (packages.size() > 1)
+            Msg("* [catalog] VirusTotal for [%s] package %zu of %zu: %u engine(s), %u trusted malicious, "
+                "%u trusted suspicious, %u other malicious%s",
+                id.c_str(), n + 1, packages.size(), result.engines, result.trustedMalicious, result.trustedSuspicious,
+                result.othersMalicious, result.unknown ? " (never scanned)" : "");
+        results.emplace_back(packages[n].sha256, std::move(result));
     }
-    Msg("* [catalog] VirusTotal for [%s]: %u engine(s), %u trusted malicious, %u trusted suspicious, %u other malicious%s",
-        id.c_str(), result.engines, result.trustedMalicious, result.trustedSuspicious, result.othersMalicious,
-        result.unknown ? " (never scanned)" : "");
+    ModCatalog::VirusTotal result = vt_combine(results);
+    result.live = true;
+    if (packages.size() == 1)
+        Msg("* [catalog] VirusTotal for [%s]: %u engine(s), %u trusted malicious, %u trusted suspicious, "
+            "%u other malicious%s",
+            id.c_str(), result.engines, result.trustedMalicious, result.trustedSuspicious, result.othersMalicious,
+            result.unknown ? " (never scanned)" : "");
+    else
+    {
+        static constexpr pcstr verdicts[] = {"not scanned", "clean", "warn", "block"};
+        const auto decisive = std::ranges::find(packages, result.package, &ModRelease::Asset::sha256);
+        Msg("* [catalog] VirusTotal for [%s]: %s, decided by package %zu of %zu%s", id.c_str(),
+            verdicts[static_cast<int>(result.verdict)], static_cast<size_t>(decisive - packages.begin()) + 1,
+            packages.size(), result.unknown ? "; VirusTotal has never seen one of them" : "");
+    }
     finish(&result);
 }
 
@@ -1646,10 +1753,14 @@ bool ModCatalog::OpenVirusTotalReport(pcstr id)
 {
     const std::shared_ptr<const Snapshot> snapshot = Current();
     const Entry* entry = snapshot->Find(id);
-    if (!entry || !entry->hasCard || entry->release.packages.empty() || !is_hex64(entry->release.packages.front().sha256))
+    if (!entry || !entry->hasCard || entry->release.packages.empty())
+        return false;
+    // the report of the package the verdict comes from: one part of a split release can be flagged alone
+    const xr_string& sha = is_hex64(entry->vt.package) ? entry->vt.package : entry->release.packages.front().sha256;
+    if (!is_hex64(sha))
         return false;
     // built from the hash alone: nothing a card says reaches the command line
-    const std::wstring url = L"https://www.virustotal.com/gui/file/" + ModHttp::Widen(entry->release.packages.front().sha256);
+    const std::wstring url = L"https://www.virustotal.com/gui/file/" + ModHttp::Widen(sha);
     return reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32;
 }
 

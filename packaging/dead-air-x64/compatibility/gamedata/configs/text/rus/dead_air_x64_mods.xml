@@ -252,6 +252,9 @@
     <string id="st_mods_status_withdrawn">
         <text>ќтозван из браузера модов: %s</text>
     </string>
+    <string id="st_mods_status_author_withdrawn">
+        <text>”бран автором из браузера модов: обновлений больше не будет</text>
+    </string>
     <string id="st_mods_vt_checking">
         <text>VirusTotal: проверка...</text>
     </string>

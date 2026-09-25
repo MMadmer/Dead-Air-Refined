@@ -22,6 +22,8 @@ enum class Verdict : u8
     Block
 };
 
+// A release is judged by its most decisive package: block, warn, not scanned, clean. The counts and
+// names are that package's, the date is the oldest analysis of any package of the release.
 struct VirusTotal
 {
     Verdict verdict{Verdict::Unknown};
@@ -31,8 +33,9 @@ struct VirusTotal
     u32 othersMalicious{};
     xr_string date;      // YYYY-MM-DD
     xr_string flaggedBy; // engine names
+    xr_string package;   // SHA-256 of the package the verdict comes from
     bool live{};         // asked with the player's own key just now, not read from the catalog
-    bool unknown{};      // VirusTotal has never seen the package
+    bool unknown{};      // VirusTotal has never seen a package of the release
 };
 
 struct Rating

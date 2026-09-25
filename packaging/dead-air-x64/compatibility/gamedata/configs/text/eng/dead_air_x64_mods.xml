@@ -252,6 +252,9 @@
     <string id="st_mods_status_withdrawn">
         <text>Withdrawn from the Mod Browser: %s</text>
     </string>
+    <string id="st_mods_status_author_withdrawn">
+        <text>Withdrawn from the Mod Browser by its author: no more updates</text>
+    </string>
     <string id="st_mods_vt_checking">
         <text>VirusTotal: checking...</text>
     </string>

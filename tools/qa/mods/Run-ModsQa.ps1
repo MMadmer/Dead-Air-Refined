@@ -31,11 +31,16 @@
     author key, a stranger's key, a program in a release, VirusTotal answers - and serves it with a
     review inbox. The engine trusts that key only with -qa_catalog and the fixture's environment.
       Ordinary  no catalog module yet: the probe shows every escape a script has is real; the
-                installations the catalog's rules refuse are refused, the good one is staged
+                installations the catalog's rules refuse are refused, a withdrawn module's too,
+                the good ones are staged; a release in two packages is judged by its flagged one;
+                VirusTotal is asked at most four times a minute
       Protected the installation lands, protection comes on; the probe hits every wall, and a
                 script cannot pass a console command off as the player's
-      Rollback  an older and a forged index are refused and the accepted one is kept
+      Ui        the Mods window as the mouse drives it; Check turns a split release to "block"
+      Rollback  an older, a forged and a self-contradicting index are refused, the accepted one kept
       Review    a review arrives signed, paid for and intact; a short one is refused
+      Withdraw  the authors withdraw two installed modules: the one keeps working and takes no
+                update, the one also revoked is switched off; the window says which is which
       Remove    a removal is applied by the next start; protection stays on
 
 .EXAMPLE
@@ -540,6 +545,29 @@ function Complete-QaRun {
 }
 
 # ---------------------------------------------------------------------------- the mod catalog
+function Read-PhaseLog {
+    # The window's text reaches the log in its own code page, Windows-1251 - not what Invoke-Engine
+    # decodes the log as.
+    param([Parameter(Mandatory)][string]$Phase)
+    return [IO.File]::ReadAllText((Join-Path $resultRoot "$Phase.log"), [Text.Encoding]::GetEncoding(1251))
+}
+
+function Test-ModsText {
+    # Whether $Value is the Mods window's string $Id in one of the languages the game ships, its %s
+    # filled with $Arguments in turn. Read from the tables the QA root was given.
+    param([AllowNull()][AllowEmptyString()][string]$Value, [Parameter(Mandatory)][string]$Id, [string[]]$Arguments = @())
+    $cp1251 = [Text.Encoding]::GetEncoding(1251)
+    foreach ($language in @('rus', 'eng')) {
+        $table = [xml][IO.File]::ReadAllText((Join-Path $compatGameData "configs\text\$language\dead_air_x64_mods.xml"), $cp1251)
+        $node = @($table.string_table.string | Where-Object { $_.id -eq $Id }) | Select-Object -First 1
+        if (-not $node) { continue }
+        $expected = [string]$node.text
+        foreach ($argument in $Arguments) { $expected = ([regex]'%s').Replace($expected, $argument.Replace('$', '$$'), 1) }
+        if ($Value -ceq $expected) { return $true }
+    }
+    return $false
+}
+
 function Get-ProbeResults {
     param([string]$Log)
     $results = @{}
@@ -576,21 +604,25 @@ function Invoke-CatalogScenario {
 
     try {
         # ---- an ordinary game: no catalog module yet, every capability real; the installations
+        # the last VirusTotal lookup is the fifth request: it has to wait for the first to be a minute old
         $after = @('xms_catalog', 'xms_catalog thumbs', 'xms_catalog reviews qa.cat.good', 'xms_catalog vt qa.cat.good',
-            'xms_catalog vt qa.cat.vtlive', 'xms_catalog reviews qa.cat.good', 'xms_catalog',
+            'xms_catalog vt qa.cat.vtlive', 'xms_catalog vt qa.cat.vtparts', 'xms_catalog reviews qa.cat.good', 'xms_catalog',
             'run_string qa_protect_probe.run()',
             'xms_install qa.cat.good', 'xms_install qa.cat.dllname', 'xms_install qa.cat.pehidden', 'xms_install qa.cat.unsigned',
             'xms_install qa.cat.wrongkey', 'xms_install qa.cat.revoked', 'xms_install qa.cat.old', 'xms_install qa.cat.vtblock',
-            'xms_install qa.cat.vtlive')
+            'xms_install qa.cat.vtlive', 'xms_install qa.cat.vtparts', 'xms_install qa.cat.wdnew', 'xms_install qa.cat.wdrawn',
+            'xms_install qa.cat.wdrevoked', 'xms_catalog vt qa.cat.upd2')
         $log = Invoke-Engine -Phase 'catalog-ordinary' -Catalog -Commands (@('xms_protect', 'xms_catalog refresh') +
             @($after | ForEach-Object { "xms_catalog after $_" })) -WaitFor @(
             'PROTECTQA: DONE', 'qa\.cat\.good: 1\.0\.0 staged for installation', 'qa\.cat\.dllname: installation refused',
             'qa\.cat\.pehidden: installation refused', 'qa\.cat\.unsigned: installation of 1\.0\.0 refused',
             'qa\.cat\.wrongkey: installation of 1\.0\.0 refused', 'qa\.cat\.revoked cannot be installed',
             'qa\.cat\.old: installation of 1\.1\.0 refused', 'qa\.cat\.vtblock cannot be installed',
-            'qa\.cat\.vtlive cannot be installed')
+            'qa\.cat\.vtlive cannot be installed', 'qa\.cat\.vtparts cannot be installed', 'qa\.cat\.wdnew cannot be installed',
+            'qa\.cat\.wdrawn: 1\.0\.0 staged for installation', 'qa\.cat\.wdrevoked: 1\.0\.0 staged for installation',
+            'VirusTotal for \[qa\.cat\.upd2\]')
         Assert-That 'without a catalog module the game is not protected' ($log -match 'protected mode off \(no module from the mod catalog\)')
-        Assert-That 'the signed catalog is accepted' ($log -match '\[catalog\] serial 5 from http://127\.0\.0\.1:\d+/catalog/: 12 module\(s\)')
+        Assert-That 'the signed catalog is accepted' ($log -match '\[catalog\] serial 5 from http://127\.0\.0\.1:\d+/catalog/: 15 module\(s\)')
         Assert-That 'a card signed by its author is used' ($log -match '\*   qa\.cat\.good 1\.0\.0 card=signed')
         Assert-That 'an unsigned card is not' ($log -match 'the card of \[qa\.cat\.unsigned\] is not used: not signed')
         Assert-That 'a card signed by another key is not' ($log -match 'the card of \[qa\.cat\.wrongkey\] is not used: signed by key')
@@ -612,6 +644,34 @@ function Invoke-CatalogScenario {
         Assert-That 'a revoked module is refused' ($log -match 'qa\.cat\.revoked cannot be installed: withdrawn from the mod catalog: QA revocation')
         Assert-That 'a release below the listed version is refused' ($log -match 'qa\.cat\.old: installation of 1\.1\.0 refused - below the lowest version the catalog lists \(1\.2\.0\)')
         Assert-That 'the disclaimer is logged with an installation' ($log -match 'Modules are made by third parties\. The author of Dead Air: Refined is not responsible')
+
+        # withdrawn by its author before this game ever saw it, a stale card of it still served
+        Assert-That 'a malformed withdrawal is skipped, the index kept' ($log -match '! XMS catalog: withdrawal \[qa\.cat\.wdbad\] is malformed - skipped')
+        Assert-That 'the console names what its author withdrew' ($log -match '\*   qa\.cat\.wdnew withdrawn by its author \(QaOwner/qa-cat-wdnew\)')
+        Assert-That 'the browser has no entry for it, card or not' ($log -notmatch '\*   qa\.cat\.wdnew \S+ card=')
+        Assert-That 'and it cannot be installed, before a byte is fetched' (($log -match
+                'qa\.cat\.wdnew cannot be installed: its author withdrew it from the Mod Browser') -and
+            -not (Select-String -LiteralPath $script:mockLog -Pattern 'qa-cat-wdnew' -Quiet))
+
+        # a release in two packages, the second one flagged
+        Assert-That 'the catalog''s verdict on a split release is its worst package''s' ($log -match
+            '(?m)^\*   qa\.cat\.vtparts 1\.0\.0 card=signed .* vt=warn\r?$')
+        $parts = @($script:catalogEnv.package_parts.'qa.cat.vtparts')
+        $asked = @($parts | Where-Object { Select-String -LiteralPath $script:mockLog -Pattern "GET /vt/api/v3/files/$_" -Quiet })
+        Assert-That 'the player''s lookup asks VirusTotal about every package' ($asked.Count -eq 2 -and $parts.Count -eq 2 -and
+            ($log -match 'VirusTotal for \[qa\.cat\.vtparts\] package 1 of 2: 3 engine\(s\), 0 trusted malicious') -and
+            ($log -match 'VirusTotal for \[qa\.cat\.vtparts\] package 2 of 2: 3 engine\(s\), 1 trusted malicious')) "$($asked.Count) of $($parts.Count) package(s) asked"
+        Assert-That 'and the flagged one decides' (($log -match 'VirusTotal for \[qa\.cat\.vtparts\]: block, decided by package 2 of 2') -and
+            ($log -match '\*   qa\.cat\.vtparts 1\.0\.0 .* vt=block\(live\)') -and
+            ($log -match 'qa\.cat\.vtparts cannot be installed: VirusTotal: flagged by Kaspersky'))
+        # the free API takes 4 requests a minute: no five of them inside 60 seconds
+        $vtTimes = @(Get-Content -LiteralPath $script:mockLog | ForEach-Object {
+                if ($_ -match '^(\d+\.\d+) GET /vt/api/v3/files/') { [double]$Matches[1] } })
+        $closest = [double]::MaxValue
+        for ($i = 0; $i + 4 -lt $vtTimes.Count; ++$i) { $closest = [Math]::Min($closest, $vtTimes[$i + 4] - $vtTimes[$i]) }
+        Assert-That 'VirusTotal is asked at most four times a minute' ($vtTimes.Count -ge 5 -and $closest -ge 60 -and
+            ($log -match 'VirusTotal takes 4 requests a minute: the next one in \d+ s')) ("{0} request(s), every five {1:N1} s apart or more" -f
+            $vtTimes.Count, $closest)
         $ready = Join-Path $qaStaged 'qa.cat.good\ready.ltx'
         Assert-That 'the installation is staged, not applied' ((Test-Path -LiteralPath $ready) -and
             (Select-String -LiteralPath $ready -Pattern 'action = install' -Quiet) -and
@@ -635,6 +695,9 @@ function Invoke-CatalogScenario {
         Assert-That 'the browser installation is moved in by the next start' (($log -match 'module \[qa\.cat\.good\] 1\.0\.0 installed') -and
             (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good\mod.ltx')))
         Assert-That 'and remembered as the browser''s' ((Test-Path -LiteralPath $state) -and (Select-String -LiteralPath $state -Pattern '^qa\.cat\.good = ' -Quiet))
+        Assert-That 'so are the two its authors withdraw later' (($log -match 'module \[qa\.cat\.wdrawn\] 1\.0\.0 installed') -and
+            ($log -match 'module \[qa\.cat\.wdrevoked\] 1\.0\.0 installed') -and
+            (Select-String -LiteralPath $state -Pattern '^qa\.cat\.wdrawn = ' -Quiet))
         Assert-That 'a catalog module switches protection on' (($log -match 'protected mode ON \(module \[qa\.cat\.[a-z0-9]+\] is from the mod catalog\)') -and
             ($log -match 'protected mode applied to the script state'))
         Assert-That 'a revoked installed module is switched off at the start' ($log -match 'module \[qa\.cat\.revinst\] disabled: withdrawn from the mod catalog: QA revocation of an installed module')
@@ -680,17 +743,19 @@ function Invoke-CatalogScenario {
             'xms_mods clear', 'xms_mods sort name', 'xms_mods tag quests', 'xms_mods wait 300', 'xms_mods state',
             'xms_mods select qa.cat.dllname', 'xms_mods press primary', 'xms_mods wait 300', 'xms_mods state',
             'xms_mods answer yes', 'xms_mods wait 4000', 'xms_mods state',
+            'xms_mods select qa.cat.vtparts', 'xms_mods wait 300', 'xms_mods state', 'xms_mods press vt_check', 'xms_mods wait 3000',
+            'xms_mods state',
             'xms_mods view installed', 'xms_mods select qa.cat.good', 'xms_mods press remove', 'xms_mods wait 300', 'xms_mods state',
             'xms_mods answer no', 'xms_mods press review', 'xms_mods wait 500', 'xms_mods state', 'xms_mods mark ui_done') -WaitFor @(
             '\[mods-ui\] mark ui_done')
         $views = [regex]::Matches($log, '\[mods-ui\] view (\w+), (\d+) item\(s\), sort (\w+), query "([^"]*)", tags (\S+)')
         $viewText = @($views | ForEach-Object { $_.Value }) -join ' | '
-        Assert-That 'the browser lists what can be installed' ($views.Count -ge 1 -and $views[0].Groups[2].Value -eq '6') $viewText
+        Assert-That 'the browser lists what can be installed' ($views.Count -ge 1 -and $views[0].Groups[2].Value -eq '9') $viewText
         Assert-That 'with the thumbnail the catalog published' ($log -match '\[mods-ui\] row qa\.cat\.good "[^"]*" badge=\S+ rating=4\.5 thumbnail=yes')
         Assert-That 'a word with a typo still finds the mod' ($views.Count -ge 2 -and $views[1].Groups[2].Value -eq '1' -and
             $views[1].Groups[4].Value -eq 'dlname' -and $log -match '\[mods-ui\] row qa\.cat\.dllname ')
         $sorted = [regex]::Match($log, '(?s)sort name, query "", tags quests[^\n]*\n\* \[mods-ui\] row (\S+) ')
-        Assert-That 'a tag filters and the name sorts' ($views.Count -ge 3 -and $views[2].Groups[2].Value -eq '6' -and
+        Assert-That 'a tag filters and the name sorts' ($views.Count -ge 3 -and $views[2].Groups[2].Value -eq '9' -and
             $sorted.Success -and $sorted.Groups[1].Value -eq 'qa.cat.dllname') "first row: $($sorted.Groups[1].Value)"
         Assert-That 'Install asks first, with the disclaimer' ($log -match '\[mods-ui\] prompt install:qa\.cat\.dllname ')
         Assert-That 'and the answer starts the installation the catalog then refuses' ($log -match
@@ -698,6 +763,16 @@ function Invoke-CatalogScenario {
         Assert-That 'Remove asks, naming the mod' ($log -match '\[mods-ui\] prompt remove:qa\.cat\.good ')
         Assert-That 'and No keeps it' (-not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.cat.good')))
         Assert-That 'Write a review opens the review' ($log -match '\[mods-ui\] review dialog for qa\.cat\.good')
+        # the split release: the catalog's warning first, then what Check found in its second package
+        $uiLog = Read-PhaseLog 'catalog-ui'
+        $cards = [regex]::Matches($uiLog, '\[mods-ui\] card qa\.cat\.vtparts: status "[^"]*", primary "[^"]*"(?<off> \(off\))?, vt "(?<vt>[^"]*)"')
+        Assert-That 'the window shows the catalog''s warning of a split release' ($cards.Count -eq 2 -and
+            (Test-ModsText $cards[0].Groups['vt'].Value 'st_mods_vt_warn' 'ESET-NOD32')) $(if ($cards.Count) { $cards[0].Groups['vt'].Value })
+        $badge = [regex]::Matches($uiLog, '\[mods-ui\] row qa\.cat\.vtparts "[^"]*" badge=(\S+) ')
+        Assert-That 'and Check turns it into the block its second package earns' ($cards.Count -eq 2 -and
+            (Test-ModsText $cards[1].Groups['vt'].Value 'st_mods_vt_block' 'Kaspersky') -and $cards[1].Groups['off'].Success -and
+            $badge.Count -and (Test-ModsText $badge[$badge.Count - 1].Groups[1].Value 'st_mods_badge_blocked')) $(if ($cards.Count -eq 2) {
+                "$($cards[1].Groups['vt'].Value), badge $($badge[$badge.Count - 1].Groups[1].Value)" })
 
         # ---- a mirror serving an older publication, then a forged one
         Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_serial4.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
@@ -710,6 +785,12 @@ function Invoke-CatalogScenario {
         $log = Invoke-Engine -Phase 'catalog-tampered' -Catalog -Commands @('xms_catalog refresh', 'xms_catalog after xms_catalog') -WaitFor @(
             '\[catalog\] (offline|failed|ready), serial')
         Assert-That 'a changed index is refused' (($log -match 'index\.ltx: signature does not match') -and ($log -match '\[catalog\] offline, serial 5'))
+        # signed and newer, but it names one module both listed and withdrawn
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_duplicate.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
+        $log = Invoke-Engine -Phase 'catalog-duplicate' -Catalog -Commands @('xms_catalog refresh', 'xms_catalog after xms_catalog') -WaitFor @(
+            '\[catalog\] (offline|failed|ready), serial')
+        Assert-That 'a module both listed and withdrawn makes the index invalid' (($log -notmatch '\[catalog\] serial 9 from') -and
+            ($log -match 'index\.ltx: a module is listed twice') -and ($log -match '\[catalog\] offline, serial 5'))
         Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_serial5.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
 
         # ---- a review: posted, then verified the way the catalog's workflow will
@@ -724,14 +805,57 @@ function Invoke-CatalogScenario {
         Assert-That 'with its stars, module, version and text' ($posted.Count -eq 1 -and $posted[0].mod -eq 'qa.cat.good' -and
             $posted[0].stars -eq 4 -and $posted[0].version -eq '1.0.0' -and $posted[0].text -eq $text)
 
+        # ---- two authors withdraw modules the browser installed: qa.cat.wdrawn publishes 1.1.0 after
+        # that, qa.cat.wdrevoked is revoked after that
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_withdrawn.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'withdraw\qa.cat.wdrawn.update.ltx') -Force `
+            -Destination (Join-Path $catalogAssets 'github\QaOwner\qa-cat-wdrawn\qa.cat.wdrawn.update.ltx')
+        $log = Invoke-Engine -Phase 'catalog-withdraw' -Catalog -Commands @('xms_catalog refresh', 'xms_catalog after xms_catalog',
+            'xms_catalog after xms_update all') -WaitFor @('\[catalog\] ready, serial 7', 'qa\.cat\.wdrawn: update 1\.1\.0 refused')
+        Assert-That 'a withdrawal arrives in the signed index' (($log -match '\[catalog\] serial 7 from http://127\.0\.0\.1:\d+/catalog/: 13 module\(s\)') -and
+            ($log -match '\*   qa\.cat\.wdrawn withdrawn by its author') -and ($log -match '\*   qa\.cat\.wdrevoked withdrawn by its author'))
+        Assert-That 'an update of a module its author withdrew is refused for that' ($log -match
+            'qa\.cat\.wdrawn: update 1\.1\.0 refused - its author withdrew it from the Mod Browser')
+        Assert-That 'and not a byte of it is downloaded' (-not (Select-String -LiteralPath $script:mockLog -Pattern 'qa\.cat\.wdrawn-1\.1\.0\.zip' -Quiet) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.cat.wdrawn')))
+
+        # the next start decides with the withdrawals and the revocation cached
+        $log = Invoke-Engine -Phase 'catalog-withdrawn' -Catalog -Commands @('xms_catalog refresh', 'xms_mods view installed',
+            'xms_mods wait 4000', 'xms_mods select qa.cat.wdrawn', 'xms_mods wait 300', 'xms_mods state', 'xms_mods select qa.cat.wdrevoked',
+            'xms_mods wait 300', 'xms_mods state', 'xms_mods view browser', 'xms_mods wait 1000', 'xms_mods state',
+            'xms_mods mark withdrawn_done') -WaitFor @('qa\.cat\.wdrawn: update 1\.1\.0 refused', '\[mods-ui\] mark withdrawn_done')
+        Assert-That 'a module its author withdrew stays enabled' (($log -match '\* XMS: \[\d+\] qa\.cat\.wdrawn 1\.0\.0 \(') -and
+            ($log -notmatch 'module \[qa\.cat\.wdrawn\] disabled'))
+        Assert-That 'a revocation still switches a withdrawn module off' ($log -match
+            'module \[qa\.cat\.wdrevoked\] disabled: withdrawn from the mod catalog: QA revocation after its withdrawal')
+        Assert-That 'the withdrawn module''s updates stay refused' ($log -match
+            'qa\.cat\.wdrawn: update 1\.1\.0 refused - its author withdrew it from the Mod Browser')
+        $uiLog = Read-PhaseLog 'catalog-withdrawn'
+        $cardStatus = @{}
+        foreach ($card in [regex]::Matches($uiLog, '\[mods-ui\] card (\S+): status "([^"]*)"')) { $cardStatus[$card.Groups[1].Value] = $card.Groups[2].Value }
+        Assert-That 'the Mods window says its author withdrew it' (Test-ModsText $cardStatus['qa.cat.wdrawn'] 'st_mods_status_author_withdrawn') `
+            $cardStatus['qa.cat.wdrawn']
+        Assert-That 'as news, not as a refusal' ($uiLog -match '\[mods-ui\] row qa\.cat\.wdrawn "[^"]*" badge=- ')
+        Assert-That 'a revocation''s own text wins over the withdrawal' (Test-ModsText $cardStatus['qa.cat.wdrevoked'] 'st_mods_status_withdrawn' `
+                'QA revocation after its withdrawal') $cardStatus['qa.cat.wdrevoked']
+        # every row of the browser's dump, whatever other lines a worker wrote between them
+        $browserAt = $uiLog.IndexOf('[mods-ui] view browser,')
+        $doneAt = $uiLog.IndexOf('[mods-ui] mark withdrawn_done')
+        $browserRows = @(if ($browserAt -ge 0 -and $doneAt -gt $browserAt) {
+                [regex]::Matches($uiLog.Substring($browserAt, $doneAt - $browserAt), '\[mods-ui\] row (\S+) ') | ForEach-Object { $_.Groups[1].Value } })
+        Assert-That 'the browser offers no withdrawn module' ($browserRows.Count -gt 0 -and
+            -not @($browserRows | Where-Object { $_ -like 'qa.cat.wd*' }).Count) ($browserRows -join ', ')
+
         # ---- removal, and protection that stays on
         $log = Invoke-Engine -Phase 'catalog-remove' -Catalog -Commands @('xms_remove qa.cat.good', 'xms_remove qa.cat.upd',
-            'xms_remove qa.cat.upd2', 'xms_remove qa.cat.revinst') -WaitFor @('qa\.cat\.revinst: removed by the next start')
+            'xms_remove qa.cat.upd2', 'xms_remove qa.cat.wdrawn', 'xms_remove qa.cat.wdrevoked', 'xms_remove qa.cat.revinst') -WaitFor @(
+            'qa\.cat\.revinst: removed by the next start')
         $removal = Join-Path $qaStaged 'qa.cat.good\ready.ltx'
         Assert-That 'a removal is staged' ((Test-Path -LiteralPath $removal) -and (Select-String -LiteralPath $removal -Pattern 'action = remove' -Quiet))
         $log = Invoke-Engine -Phase 'catalog-removed' -Catalog -Commands @('xms_protect') -WaitFor @('XMS: protected mode')
         Assert-That 'the removal is applied by the next start' (($log -match 'module \[qa\.cat\.good\] removed') -and
-            -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good')) -and -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.upd')))
+            -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good')) -and -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.upd')) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.wdrawn')))
         Assert-That 'and forgotten by the browser''s list' (-not (Select-String -LiteralPath $state -Pattern '^qa\.cat\.good = ' -Quiet))
         Assert-That 'protection stays on without catalog modules' ($log -match 'protected mode ON \(switched on in the Mods window, or a catalog module was enabled before\)')
     }
