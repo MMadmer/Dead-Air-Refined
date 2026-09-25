@@ -26,11 +26,15 @@ jobs:
           python-version: '3.12'
       - name: Cards and thumbnails
         run: python tools/catalog.py cards --issues issues.md
+      # VirusTotal and the review inbox are outside services: a failure of either leaves its own
+      # files as they were and never keeps the cards from being committed
       - name: VirusTotal
+        continue-on-error: true
         env:
           VT_API_KEY: ${{ secrets.VT_API_KEY }}
         run: python tools/catalog.py vt
       - name: Reviews
+        continue-on-error: true
         run: python tools/catalog.py reviews
       - name: Commit what changed
         run: |

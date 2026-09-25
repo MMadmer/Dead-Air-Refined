@@ -21,6 +21,7 @@ github.com, the VirusTotal API and the review inbox only; XMS_CATALOG_GITHUB poi
 downloads somewhere else for tests.
 """
 import argparse
+import contextlib
 import csv
 import datetime
 import getpass
@@ -503,16 +504,37 @@ def vt_policy(config):
             "block_others": int(section.get("block_others", 5)), "warn_others": int(section.get("warn_others", 2))}
 
 
+class VtUnavailable(Exception):
+    """VirusTotal gave no answer about a file: the network, the service or the key."""
+
+
+class VtQuota(VtUnavailable):
+    """The key's free quota is used up (4 lookups a minute, 500 a day): no point asking again today."""
+
+
+class VtKeyRefused(VtUnavailable):
+    """The key itself was refused: no point asking again with it."""
+
+
 def vt_lookup(sha, key):
-    """(engines, trusted malicious, trusted suspicious, other malicious, flagged names) or None when unknown."""
+    """The per-engine results of a file VirusTotal knows, or None when it does not know it. Raises
+    VtQuota when the key's quota is used up and VtUnavailable when there was no usable answer."""
     try:
         _, data = http_get(VT_API + "files/" + sha, 8 * 1024 * 1024, headers={"x-apikey": key})
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
-        raise
-    results = json.loads(data.decode("utf-8"))["data"]["attributes"].get("last_analysis_results", {})
-    return results
+        if error.code == 429:
+            raise VtQuota("the VirusTotal key's quota is used up") from None
+        if error.code in (401, 403):
+            raise VtKeyRefused("VirusTotal refused the key (HTTP %d)" % error.code) from None
+        raise VtUnavailable("VirusTotal answered HTTP %d" % error.code) from None
+    except (urllib.error.URLError, OSError) as error:
+        raise VtUnavailable("VirusTotal did not answer: %s" % getattr(error, "reason", error)) from None
+    try:
+        return json.loads(data.decode("utf-8"))["data"]["attributes"].get("last_analysis_results", {})
+    except (ValueError, KeyError, TypeError):
+        raise VtUnavailable("VirusTotal's answer is not a file report") from None
 
 
 def vt_verdict(results, policy):
@@ -605,7 +627,13 @@ def check_submission(repo, sub, author=None, vt_key=None, deep=True):
     if vt_key:
         policy = vt_policy(repo.config())
         for name, _, sha in release.packages:
-            results = vt_lookup(sha, vt_key)
+            try:
+                results = vt_lookup(sha, vt_key)
+            except VtUnavailable as error:
+                findings.append(Finding("note", "VirusTotal not checked for %s: %s" % (name, error)))
+                if isinstance(error, (VtQuota, VtKeyRefused)):
+                    break
+                continue
             if results is None:
                 findings.append(Finding("note", "VirusTotal does not know %s yet" % name))
                 continue
@@ -758,19 +786,34 @@ def cmd_vt(args):
             parts = line.split(" ")
             if len(parts) == 7:
                 old[parts[0]] = line
-    lines, asked = ["xms-vt 1"], 0
+    # A VirusTotal that cannot answer - the quota used up, the key refused, the service down -
+    # costs a stale vt.txt and never the run: the cards and the reviews still go out, and the
+    # game treats a package without a result as one VirusTotal does not know (MOD_CATALOG 11).
+    lines, asked, stopped = ["xms-vt 1"], 0, ""
     for module_id, text in sorted(cards.items()):
-        body, _, _, _ = xc.split_signed(text)
+        try:
+            body, _, _, _ = xc.split_signed(text)
+        except ValueError:
+            continue
         for name, value in parse_ini(body.decode("utf-8")).get("packages", []):
             sha = value.split(",")[1].strip().lower()
             # a result younger than a day is kept: the free API allows 500 lookups a day
-            if sha in old and old[sha].split(" ")[1] == today():
-                lines.append(old[sha])
+            if (sha in old and old[sha].split(" ")[1] == today()) or stopped:
+                if sha in old:
+                    lines.append(old[sha])
                 continue
             if asked:
                 time.sleep(16)
             asked += 1
-            results = vt_lookup(sha, key)
+            try:
+                results = vt_lookup(sha, key)
+            except VtUnavailable as error:
+                print("%s %s: %s - the last result stays" % (module_id, name, error))
+                if sha in old:
+                    lines.append(old[sha])
+                if isinstance(error, (VtQuota, VtKeyRefused)):
+                    stopped = str(error)
+                continue
             if results is None:
                 if sha in old:
                     lines.append(old[sha])
@@ -780,6 +823,8 @@ def cmd_vt(args):
                                                    ",".join(e.replace(" ", "_") for e in flagged) or "-"))
             print("%s %s: %s" % (module_id, name, verdict))
     write_text(path, "\n".join(lines) + "\n")
+    if stopped:
+        print("VirusTotal stopped for this run (%s): the other packages keep their last results" % stopped)
     return 0
 
 
@@ -974,6 +1019,40 @@ def cmd_init(args):
     return 0
 
 
+def selftest_vt_quota():
+    """VirusTotal out of quota: vt.txt keeps every result it had and the run still succeeds."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        d = xc.new_private()
+        cards, old_lines = b"xms-cards 1\n", ["xms-vt 1"]
+        for n in range(2):
+            sha = hashlib.sha256(b"package %d" % n).hexdigest()
+            body = "[release]\nid = m%d\nversion = 1.0.0\n\n[packages]\nm%d-1.0.0.zip = 10, %s\n" % (n, n, sha)
+            text = xc.sign_text(body, d).encode("utf-8")
+            cards += b"card m%d %d\n" % (n, len(text)) + text
+            old_lines.append("%s 2000-01-01 70 0 0 0 -" % sha)
+        write_bytes(os.path.join(folder, "public", "cards.txt"), cards)
+        write_text(os.path.join(folder, "public", "vt.txt"), "\n".join(old_lines) + "\n")
+
+        def quota(*_args, **_kwargs):
+            raise urllib.error.HTTPError(VT_API, 429, "Quota exceeded", None, None)
+
+        saved_get, saved_key = globals()["http_get"], os.environ.get("VT_API_KEY")
+        globals()["http_get"] = quota
+        os.environ["VT_API_KEY"] = "selftest"
+        try:
+            # what the run says about the quota is the expected outcome here, not news
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert cmd_vt(argparse.Namespace(repo=folder)) == 0
+        finally:
+            globals()["http_get"] = saved_get
+            if saved_key is None:
+                os.environ.pop("VT_API_KEY", None)
+            else:
+                os.environ["VT_API_KEY"] = saved_key
+        assert read_text(os.path.join(folder, "public", "vt.txt")).splitlines() == old_lines
+
+
 def cmd_selftest(_args):
     xc.selftest()
     assert path_problem("gamedata/scripts/a.script") is None
@@ -1001,6 +1080,7 @@ def cmd_selftest(_args):
     assert vt_verdict({"NoName": {"category": "malicious"}}, policy)[0] == "clean"
     assert vt_verdict({"NoName": {"category": "malicious"}, "Other": {"category": "malicious"}}, policy)[0] == "warn"
     assert vt_verdict({"Kaspersky": {"category": "malicious"}}, policy)[0] == "block"
+    selftest_vt_quota()
     print("catalog selftest: ok")
     return 0
 

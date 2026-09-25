@@ -479,7 +479,10 @@ section 9 contains.
   when VirusTotal does not know it; the report link goes into the pull request.
 - The catalog, in `watch.yml` with the maintainer's key: every listed package, written to
   `vt.txt`. `block` keeps a module out of the listing (section 7) and opens an issue for a
-  listed one.
+  listed one. A package is looked up at most once a day, a request every 16 seconds - so
+  the free quota covers some 500 packages. When the quota is used up, the key is refused or
+  VirusTotal does not answer, the packages keep their last results and nothing else of the
+  run is held up: the cards and the reviews still go out.
 - The player, in the Mod Browser: the verdict from `vt.txt` next to every module, and the
   report one click away (`https://www.virustotal.com/gui/file/<sha256>`). With their own
   key (Mods window, stored in the Windows Credential Manager, used for nothing else) the
