@@ -23,10 +23,7 @@ jobs:
       CATALOG_KEY: ${{ secrets.CATALOG_KEY }}
       CATALOG_KEY_PASSWORD: ${{ secrets.CATALOG_KEY_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - uses: actions/checkout@v7
       - name: Sign and publish
         run: |
           if [ -z "$CATALOG_KEY" ]; then
@@ -35,7 +32,7 @@ jobs:
           fi
           umask 077
           printf '%s\n' "$CATALOG_KEY" > "$RUNNER_TEMP/catalog.xkey"
-          python tools/catalog.py publish --key "$RUNNER_TEMP/catalog.xkey" --password-env CATALOG_KEY_PASSWORD
+          python3 tools/catalog.py publish --key "$RUNNER_TEMP/catalog.xkey" --password-env CATALOG_KEY_PASSWORD
           rm -f "$RUNNER_TEMP/catalog.xkey"
           git config user.name "catalog-bot"
           git config user.email "catalog-bot@users.noreply.github.com"

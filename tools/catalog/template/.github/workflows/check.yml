@@ -12,18 +12,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Only one submission file changes
         run: |
           git diff --name-only "origin/${{ github.base_ref }}...HEAD" > changed.txt
-          python tools/catalog.py only-submissions changed.txt
+          python3 tools/catalog.py only-submissions changed.txt
       - name: Check the submission
         run: >
-          python tools/catalog.py check --changed changed.txt
+          python3 tools/catalog.py check --changed changed.txt
           --author "${{ github.event.pull_request.user.login }}"
           --summary "$GITHUB_STEP_SUMMARY"
