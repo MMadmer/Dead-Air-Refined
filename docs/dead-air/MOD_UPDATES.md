@@ -143,8 +143,10 @@ descriptor is never edited afterwards: any changed byte breaks the signature.
 An asset name is 1-128 characters of `A-Z a-z 0-9 - . _` and does not start with
 a dot; a package ends with `.zip`, the index with `.files`. At most 64 packages.
 XFined Editor names them `<id>-<version>.zip` - `<id>-<version>.partN.zip` when it
-splits a module to stay under GitHub's 2 GiB asset limit - and
-`<id>-<version>.files`.
+splits a module: a package holds at most 512 MiB of files, so it stays under the
+650 MB VirusTotal takes (every package of a catalog module is scanned,
+[MOD_CATALOG.md](MOD_CATALOG.md) 11) and under GitHub's 2 GiB asset limit; a
+single larger file gets a package of its own - and `<id>-<version>.files`.
 
 ### 2.2 File index
 

@@ -479,8 +479,9 @@ refused outright.
 
 **Mod > Submit to Mod Browser...** (MCP `mod_catalog`) checks section 7 on the project and
 its latest release, scans the packages on VirusTotal with the author's own key - uploading
-one VirusTotal does not know and waiting for its report; without a key nothing is sent
-(section 11) - and opens an issue in the catalog repository from the author's GitHub account - no
+one VirusTotal does not know and waiting for its report; without a key, or without a report
+of every package, nothing is sent (section 11) - and opens an issue in the catalog
+repository from the author's GitHub account - no
 fork, no branch, no pull request; the catalog's owner submits the same way. An issue and
 not a pull request: GitHub holds pull-request runs for an approval (a first-time
 contributor's fork, a run it flags) and turns `pull_request_target` off by default in
@@ -634,7 +635,11 @@ author's scan - it reads the report that scan left, once.
   scans the packages before the submission is sent (10.1), and Publish Release scans every
   release of a listed module before anything goes out on GitHub - uploading a package
   VirusTotal does not know and waiting for its report. A package VirusTotal blocks is not
-  sent at all; without a key nothing is sent.
+  sent at all; without a key nothing is sent. A submission leaves only once VirusTotal has
+  a report of every package: VirusTotal answers "not found" for a file until its first
+  analysis ends, and the catalog refuses that as a package nobody scanned. A release
+  published while VirusTotal still analyses it is held back by the catalog until the
+  report is out (5.2).
 - The catalog, with its own key, a repository secret, one request at a time every 16
   seconds and at most 60 a run:
   - `accept` reads the report of each package of a submission once: `block` refuses it,
