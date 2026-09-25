@@ -2,11 +2,13 @@
 its workflows - by itself, with nobody there - and what a maintainer may still run by hand.
 
     catalog.py judge [--issue <number>] [--outputs <file>] [--summary <file>]
-                                             section 7 on every open submission issue: accepted,
-                                             refused (and closed) or waiting; the verdict is a
-                                             comment (10.2)
-    catalog.py merge "<number>:<sha256> ..." commits what judge accepted - the judged bytes and
-                                             nothing else - closes those issues, starts publish.yml
+                                             section 7 on every open submission issue, and 10.2 on
+                                             every withdrawal issue (only the listing's owner takes
+                                             a module out): accepted, refused (and closed) or
+                                             waiting; the verdict is a comment (10.2)
+    catalog.py merge "<number>:<sha256> ..." commits what judge accepted - a listing's judged bytes,
+                                             or a withdrawal's one withdrawn line, and nothing else -
+                                             closes those issues, starts publish.yml
     catalog.py cards [--issues <file>]       public/cards.txt and public/thumbs/ from the live releases
     catalog.py vt                            public/vt.txt (VT_API_KEY): reads the reports the authors'
                                              scans left, as few times as it can; uploads nothing
@@ -74,10 +76,11 @@ JUDGED_PER_RUN = int(os.environ.get("XMS_CATALOG_JUDGED_PER_RUN", "30"))
 BOT = "github-actions[bot]"
 MEMBERS = ("OWNER", "MEMBER", "COLLABORATOR")
 SUBMISSION_MARKER = "<!-- xms-catalog submission -->"
+WITHDRAWAL_MARKER = "<!-- xms-catalog withdrawal -->"
 VERDICT_MARKER = "<!-- xms-catalog verdict="
 STATE_MARKER = "<!-- xms-catalog-state "
 STATUS_TITLE = "Listed modules failing the checks"
-SUBMISSION_BLOCK = re.compile(r"^```ini[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
+INI_BLOCK = re.compile(r"^```ini[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
 HOLDS_HEADER = ("; Versions withdrawn automatically because VirusTotal blocks them (MOD_CATALOG 11).\n"
                 "; publish.yml rewrites this file; catalog.py publish signs it into public/index.ltx\n"
                 "; together with revoked.ltx.\n"
@@ -145,6 +148,17 @@ def days_since(text):
         return (now() - parse_time(text if "T" in text else text + "T00:00:00Z")).days
     except (TypeError, ValueError):
         return 1 << 30
+
+
+def is_date(text):
+    """YYYY-MM-DD, and a day the calendar has."""
+    if not re.fullmatch(r"\d{4}-\d\d-\d\d", text):
+        return False
+    try:
+        datetime.date.fromisoformat(text)
+        return True
+    except ValueError:
+        return False
 
 
 def read_text(path):
@@ -382,11 +396,15 @@ class Submission:
 
     def __init__(self, path, fields):
         self.path = path
+        self.fields = fields
         self.id = fields.get("id", "")
         self.github = fields.get("github", "")
         self.key = fields.get("key", "")
         self.version = fields.get("version", "")
         self.website = fields.get("website", "")
+        # the day its author withdrew it (10.2); only merge writes it, and the file stays, so the id
+        # stays bound to its key (4.1)
+        self.withdrawn = fields.get("withdrawn", "")
 
     @staticmethod
     def load(path):
@@ -417,40 +435,53 @@ class Submission:
             out.append("version %s is below 1.0.0" % (self.version or "(none)"))
         if not any(pattern.match(self.website) for pattern in WEBSITE_RE):
             out.append("website is not a module page on AP-PRO or ModDB")
+        if self.withdrawn and not is_date(self.withdrawn):
+            out.append("withdrawn is not a date (YYYY-MM-DD)")
         return out
 
 
-def listed_dates(repo):
-    """Each module's listing date as the signed index has it."""
+def indexed(repo):
+    """Every module line of the signed index, listed ([mods]) or withdrawn ([withdrawn]): the two
+    share one format. [(module id, [github, key, lowest version, date])]."""
     listed = repo.index()
+    return [(key, [f.strip() for f in value.split(",")]) for section in ("mods", "withdrawn")
+            for key, value in (listed[0].get(section, []) if listed else [])]
+
+
+def listed_dates(repo):
+    """Each module's first listing date as the signed index has it: a module withdrawn and listed
+    again keeps the one it had."""
     dates = {}
-    for key, value in listed[0].get("mods", []) if listed else []:
-        fields = [f.strip() for f in value.split(",")]
+    for module_id, fields in indexed(repo):
         if len(fields) >= 4:
-            dates[key] = fields[3]
+            dates.setdefault(module_id, fields[3])
     return dates
 
 
 def bound_keys(repo, module_id):
-    """The author keys a module id is bound to already: its file and the signed index."""
+    """The author keys a module id is bound to already: its file and the signed index, withdrawn
+    or not."""
     keys = []
     path = repo.path("mods", module_id + ".ltx")
-    if os.path.isfile(path):
+    if ID_RE.match(module_id) and os.path.isfile(path):
         keys.append(Submission.load(path).key)
-    listed = repo.index()
-    for key, value in listed[0].get("mods", []) if listed else []:
-        fields = [f.strip() for f in value.split(",")]
-        if key == module_id and len(fields) >= 2:
-            keys.append(fields[1])
+    keys += [fields[1] for key, fields in indexed(repo) if key == module_id and len(fields) >= 2]
     return keys
 
 
+def listed_now(repo, module_id):
+    """Whether mods/<id>.ltx lists the module now: there, and not withdrawn."""
+    path = repo.path("mods", module_id + ".ltx")
+    return bool(ID_RE.match(module_id)) and os.path.isfile(path) and not Submission.load(path).withdrawn
+
+
 def listing(repo):
-    """What the catalog lists: mods/ of this checkout - only files that passed the checks get there -
-    with each module's listing date from the signed index, today for a module it does not hold yet."""
+    """What the catalog lists and serves: mods/ of this checkout - only files that passed the checks
+    get there - without the modules their authors withdrew, with each module's listing date from the
+    signed index, today for a module it does not hold yet."""
     dates = listed_dates(repo)
     return {module_id: {"github": sub.github, "key": sub.key, "min": sub.version, "date": dates.get(module_id, today())}
-            for module_id, sub in repo.submissions().items() if not sub.problems()}
+            for module_id, sub in repo.submissions().items() if not sub.problems() and not sub.withdrawn}
 
 
 def read_holds(path):
@@ -874,8 +905,12 @@ def read_vt(path):
     return rows
 
 
+def vt_text(rows):
+    return "xms-vt 1\n" + "".join(rows[sha]["line"] + "\n" for sha in sorted(rows))
+
+
 def write_vt(path, rows):
-    write_text(path, "xms-vt 1\n" + "".join(rows[sha]["line"] + "\n" for sha in sorted(rows)))
+    write_text(path, vt_text(rows))
 
 
 def vt_package(sha, name, key, policy):
@@ -1030,8 +1065,8 @@ def accept_settings(config):
 
 
 def listing_counts(repo):
-    """What is listed already: modules per owner, and new module ids of today."""
-    subs = repo.submissions()
+    """What is listed now - a withdrawn module is not: modules per owner, and new module ids of today."""
+    subs = {module_id: sub for module_id, sub in repo.submissions().items() if not sub.withdrawn}
     dates = listed_dates(repo)
     owners = {}
     for sub in subs.values():
@@ -1048,17 +1083,20 @@ def verdict_state(findings):
 
 
 class Outcome:
-    def __init__(self, state, findings, sub=None, new=False, text="", rows=()):
+    def __init__(self, state, findings, sub=None, new=False, text="", rows=(), kind="submission"):
         self.state, self.findings, self.sub, self.new, self.text = state, findings, sub, new, text
         # VirusTotal's reports the judge read, for merge to keep: nothing asks about them again
         self.rows = list(rows)
+        # "submission" or "withdrawal"; a withdrawal's sub is the listing it takes out
+        self.kind = kind
 
 
 def judge_submission(repo, sub, author, created, settings, counts, vt_key, policy, memory, folder):
     """Section 7 on one submission, cheapest first: the release's files are read last, once
     everything else holds and VirusTotal has spoken. Returns (state, findings, new, vt.txt rows)."""
     findings, release = release_checks(repo, sub, author)
-    new = not bound_keys(repo, sub.id)
+    # a module listed again after its withdrawal is new as well: both limits hold for it
+    new = not listed_now(repo, sub.id)
     if new and counts["owners"].get(sub.owner.lower(), 0) >= settings["max_mods_per_owner"]:
         findings.append(Finding("block", "%s lists %d modules already, the most one account may list" %
                                 (sub.owner, counts["owners"][sub.owner.lower()])))
@@ -1092,14 +1130,18 @@ def judge_submission(repo, sub, author, created, settings, counts, vt_key, polic
     return verdict_state(findings) or "accepted", findings, new, rows
 
 
-def submission_text(body):
-    """The mods/<id>.ltx text a submission issue carries in its first ```ini block; None for an
-    issue that is not a submission, "" for one without the block."""
+def issue_request(body):
+    """What an issue asks of the catalog (10.1), by the marker its body starts with: (kind, the text
+    of its first ```ini block - "" when it has none), kind "submission" or "withdrawal"; (None, None)
+    for an issue that is neither."""
     body = (body or "").replace("\r\n", "\n")
-    if not body.lstrip().startswith(SUBMISSION_MARKER):
-        return None
-    found = SUBMISSION_BLOCK.search(body)
-    return found.group(1) if found else ""
+    head = body.lstrip()
+    kind = next((name for name, marker in (("submission", SUBMISSION_MARKER), ("withdrawal", WITHDRAWAL_MARKER))
+                 if head.startswith(marker)), None)
+    if not kind:
+        return None, None
+    found = INI_BLOCK.search(body)
+    return kind, found.group(1) if found else ""
 
 
 def submission_of(text):
@@ -1108,21 +1150,72 @@ def submission_of(text):
     return Submission.parse("mods/%s.ltx" % (module_id if ID_RE.match(module_id) else "invalid"), text)
 
 
+def withdrawal_id(text):
+    """The module a withdrawal's ini block names ([withdraw] id), "" for none; None when the block
+    holds another section as well. Judge and merge both refuse that one: the judged hash covers the
+    block and not the marker, and a block that read as both kinds could be judged as one and merged
+    as the other."""
+    sections = parse_ini(text)
+    return None if set(sections) - {"withdraw"} else first(sections, "withdraw", "id")
+
+
+NO_BLOCK = {"submission": "the issue holds no ```ini block with the submission: submit from XFined Editor "
+                          "(Mod > Submit to Mod Browser)",
+            "withdrawal": "the issue names no module: withdraw from XFined Editor (Mod > Submit to Mod Browser)"}
+
+
 def judge_issue(api, repo, issue, settings, counts, vt_key, policy, memory, folder):
-    text = submission_text(issue.get("body"))
-    if text is None:
+    kind, text = issue_request(issue.get("body"))
+    if kind is None:
         return None
     if not text:
-        return Outcome("refused", [Finding("block", "the issue holds no ```ini block with the submission: submit "
-                                                    "from XFined Editor (Mod > Submit to Mod Browser)")])
+        return Outcome("refused", [Finding("block", NO_BLOCK[kind])], kind=kind)
     if len(text.encode("utf-8")) > SUBMISSION_LIMIT:
-        return Outcome("refused", [Finding("block", "the submission is larger than %d bytes" % SUBMISSION_LIMIT)])
-    sub = submission_of(text)
+        return Outcome("refused", [Finding("block", "the %s is larger than %d bytes" % (kind, SUBMISSION_LIMIT))],
+                       kind=kind)
     login = (issue.get("user") or {}).get("login", "")
+    if kind == "withdrawal":
+        return judge_withdrawal(repo, text, login)
+    sub = submission_of(text)
+    if "withdrawn" in sub.fields:
+        return Outcome("refused", [Finding("block", "a submission cannot carry withdrawn: the catalog writes that line "
+                                                    "itself when the module's owner withdraws it")], sub, text=text)
     user = api.get("users/" + urllib.parse.quote(login))
     state, findings, new, rows = judge_submission(repo, sub, login, parse_time(user["created_at"]), settings, counts,
                                                   vt_key, policy, memory, folder)
     return Outcome(state, findings, sub, new, text, rows)
+
+
+def judge_withdrawal(repo, text, login):
+    """10.2 on one withdrawal: only the account the listing came from - the rule its submission
+    passed (7.6) - takes a module out of the browser. Its file stays, marked withdrawn, and keeps the
+    id bound to its key. No account age: an owner may always take their own module out."""
+    def refused(reason):
+        return Outcome("refused", [Finding("block", reason)], text=text, kind="withdrawal")
+
+    module_id = withdrawal_id(text)
+    if module_id is None:
+        return refused("the withdrawal holds more than [withdraw]: withdraw from XFined Editor (Mod > Submit to "
+                       "Mod Browser)")
+    if not module_id:
+        return refused(NO_BLOCK["withdrawal"])
+    if not ID_RE.match(module_id):
+        return refused("%s is not a module id" % module_id)
+    path = repo.path("mods", module_id + ".ltx")
+    if not os.path.isfile(path):
+        return refused("%s is not in the catalog" % module_id)
+    sub = Submission.load(path)
+    problems = sub.problems()
+    if problems:
+        return refused("mods/%s.ltx does not pass the checks (%s): a person with write access has to fix it first" %
+                       (module_id, problems[0]))
+    if login.lower() != sub.owner.lower():
+        return refused("the withdrawal comes from %s, and %s is listed from %s, the repository of %s: withdraw it "
+                       "from %s" % (login, module_id, sub.github, sub.owner, sub.owner))
+    note = "%s was withdrawn on %s" % (module_id, sub.withdrawn) if sub.withdrawn else \
+        "%s stays bound to its author key: submitting it again with that key lists it again, and no other key can " \
+        "take the id" % module_id
+    return Outcome("accepted", [Finding("note", note)], sub, text=text, kind="withdrawal")
 
 
 # ---- verdicts --------------------------------------------------------------------------------------------------
@@ -1132,7 +1225,12 @@ def verdict_body(outcome, memory):
     def first_of(level):
         return clean(next((f.text for f in outcome.findings if f.level == level), ""), 300)
 
-    if outcome.state == "accepted":
+    withdrawal = outcome.kind == "withdrawal"
+    if outcome.state == "accepted" and withdrawal:
+        summary = "Accepted: the module is withdrawn already." if outcome.sub.withdrawn else \
+            "Accepted: the module leaves the Mod Browser within minutes. Installed copies keep working, and " \
+            "submitting it again lists it again."
+    elif outcome.state == "accepted":
         summary = "Accepted: the module is listed and appears in the Mod Browser within minutes." if outcome.new else \
             "Accepted: the listing is updated."
     elif outcome.state == "refused":
@@ -1149,9 +1247,10 @@ def verdict_body(outcome, memory):
                 lines.append("- and %d more" % (len(chosen) - 40))
             lines.append("")
     if outcome.state == "refused":
-        lines += ["Fix what blocks and submit again from XFined Editor (Mod > Submit to Mod Browser).", ""]
-    lines.append("<sub>Judged on %s by the catalog's own checks (MOD_CATALOG.md, section 7); nobody reviews by "
-                 "hand.</sub>" % stamp().replace("T", " ").replace("Z", " UTC"))
+        lines += ["Fix what blocks and %s again from XFined Editor (Mod > Submit to Mod Browser)." %
+                  ("withdraw it" if withdrawal else "submit"), ""]
+    lines.append("<sub>Judged on %s by the catalog's own checks (MOD_CATALOG.md, section %s); nobody reviews by "
+                 "hand.</sub>" % (stamp().replace("T", " ").replace("Z", " UTC"), "10.2" if withdrawal else "7"))
     if memory:
         lines.append(STATE_MARKER + " ".join("%s=%s" % pair for pair in sorted(memory.items())) + " -->")
     return "\n".join(lines) + "\n"
@@ -1206,9 +1305,10 @@ def cmd_judge(args):
     for item in items:
         number = item["number"]
         pull = "pull_request" in item
-        text = None if pull else submission_text(item.get("body"))
-        # submissions are issues; any other issue, and maintenance by the repository's own people, is theirs
-        if item.get("state") != "open" or (pull and item.get("author_association") in MEMBERS) or (not pull and text is None):
+        kind, text = (None, None) if pull else issue_request(item.get("body"))
+        # submissions and withdrawals are issues; any other issue, and maintenance by the repository's
+        # own people, is theirs
+        if item.get("state") != "open" or (pull and item.get("author_association") in MEMBERS) or (not pull and not kind):
             continue
         # the oldest first, and a bounded number a run: a flood of issues costs time, never the API budget
         if judged >= JUDGED_PER_RUN:
@@ -1246,10 +1346,11 @@ def cmd_judge(args):
             lines.append("#%d: %s" % (number, body.splitlines()[1]))
         except (ApiError, urllib.error.URLError, OSError, KeyError, TypeError, ValueError) as error:
             lines.append("#%d: not judged this time (%s)" % (number, error))
-    print("\n".join(lines) or "no open submissions")
+    print("\n".join(lines) or "no open submissions or withdrawals")
     append_text(args.outputs, "merge=%s\n" % " ".join(merges))
     append_text(args.outputs, "vt<<XMS_VT\n%sXMS_VT\n" % "".join(row + "\n" for row in vt_rows))
-    append_text(args.summary, "## Submissions\n\n" + ("\n".join("- " + clean(line) for line in lines) or "none open") + "\n")
+    append_text(args.summary, "## Submissions and withdrawals\n\n" +
+                ("\n".join("- " + clean(line) for line in lines) or "none open") + "\n")
     return 0
 
 
@@ -1272,13 +1373,123 @@ def push(repo, branch):
             time.sleep(5)
 
 
+def changes(repo):
+    """Every path of the checkout that differs from HEAD, an untracked file by its own name."""
+    return [line[3:] for line in git(repo, "status", "--porcelain", "--untracked-files=all").splitlines()]
+
+
+def commit_file(repo, rel, data, author, *message):
+    """Writes one file of the checkout and commits it: False when it was that already. The checkout
+    holds no other change before the file is written and none after, or the run stops there with
+    nothing pushed - merge never commits a surprise."""
+    def stop(found):
+        sys.exit("merge stopped: the checkout holds %s, and %s is the one file this commit may change - "
+                 "nothing is pushed" % (", ".join(found), rel))
+
+    found = changes(repo)
+    if found:
+        stop(found)
+    write_bytes(repo.path(*rel.split("/")), data)
+    found = changes(repo)
+    if not found:
+        return False
+    if found != [rel]:
+        stop([path for path in found if path != rel])
+    git(repo, "add", "--", rel)
+    git(repo, "commit", "-q", "--author=" + author, *[part for line in message for part in ("-m", line)])
+    return True
+
+
+def with_withdrawn(text, day):
+    """A listing's text with the line withdrawn = <day> at the end of its [mod] section - of the last
+    one, whose values parse_ini reads last - and every other byte as it was."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines(keepends=True)
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += newline
+    at, section = len(lines), None
+    for n, raw in enumerate(lines):
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            if section == "mod":
+                at = n + 1
+        elif section == "mod" and line and not line.startswith(";"):
+            at = n + 1
+    lines.insert(at, "withdrawn = %s%s" % (day, newline))
+    return "".join(lines)
+
+
+class Skip(Exception):
+    """Why merge leaves an accepted issue alone; the next run judges it again."""
+
+
+def merge_submission(repo, number, text, login, author):
+    """A listing, the judged bytes exactly: (what was done, whether it was committed)."""
+    sub = submission_of(text)
+    # what a writer can check without trusting the judge: a well-formed file from its repository's
+    # owner, for an id that is free or bound to this very key, without the line only a withdrawal writes
+    if sub.problems() or "withdrawn" in sub.fields:
+        raise Skip("the listing does not pass the checks")
+    if not LOGIN_RE.match(login) or login.lower() != sub.owner.lower():
+        raise Skip("%s does not own %s" % (login, sub.github))
+    if any(key != sub.key for key in bound_keys(repo, sub.id)):
+        raise Skip("%s is bound to another author key" % sub.id)
+    path = repo.path("mods", sub.id + ".ltx")
+    data = text.encode("utf-8")
+    old = open(path, "rb").read() if os.path.isfile(path) else None
+    if old == data:
+        return "%s is listed as submitted already" % sub.id, False
+    what = "List %s" % sub.id if old is None else \
+        "List %s again" % sub.id if Submission.parse(path, old.decode("utf-8", "replace")).withdrawn else \
+        "Update %s" % sub.id
+    return what, commit_file(repo, "mods/%s.ltx" % sub.id, data, author, "%s (#%d)" % (what, number),
+                             "Accepted by the catalog's own checks (MOD_CATALOG.md 10.2).")
+
+
+def merge_withdrawal(repo, number, text, login, author):
+    """A withdrawal: the module's own file gains one line, the day it was withdrawn, and keeps every
+    other byte - the id stays bound to its key (4.1). Never a deletion, never another file."""
+    module_id = withdrawal_id(text)
+    if not module_id or not ID_RE.match(module_id):
+        raise Skip("it names no module id")
+    path = repo.path("mods", module_id + ".ltx")
+    if not os.path.isfile(path):
+        raise Skip("%s is not in the catalog" % module_id)
+    try:
+        old = open(path, "rb").read().decode("utf-8")
+    except ValueError:
+        raise Skip("mods/%s.ltx is not UTF-8 text" % module_id) from None
+    sub = Submission.parse(path, old)
+    # what a writer can check without trusting the judge: a well-formed listing, withdrawn from the
+    # account that owns the repository it is listed from
+    if sub.problems():
+        raise Skip("mods/%s.ltx does not pass the checks" % module_id)
+    if not LOGIN_RE.match(login) or login.lower() != sub.owner.lower():
+        raise Skip("%s does not own %s" % (login, sub.github))
+    if sub.withdrawn:
+        return "%s is withdrawn already" % module_id, False
+    day = today()
+    new = with_withdrawn(old, day)
+    # the new text reads as the same listing with the day added, or it is not written
+    after = Submission.parse(path, new)
+    if after.withdrawn != day or after.problems() or \
+            dict(after.fields, withdrawn="") != dict(sub.fields, withdrawn=""):
+        raise Skip("mods/%s.ltx does not read back as the same listing with the withdrawn line" % module_id)
+    what = "Withdraw %s" % module_id
+    return what, commit_file(repo, "mods/%s.ltx" % module_id, new.encode("utf-8"), author,
+                             "%s (#%d)" % (what, number),
+                             "Withdrawn by its author through the catalog's own checks (MOD_CATALOG.md 10.2).")
+
+
 def cmd_merge(args):
-    """Commits what judge accepted: the file is the judged bytes exactly, re-read and re-checked
-    against their hash here, so a submission edited after the verdict waits for its next verdict."""
+    """Commits what judge accepted, re-read and re-checked here against the judged hash, so an issue
+    edited after its verdict waits for its next verdict: a listing is the judged bytes exactly, a
+    withdrawal one line in the module's own file. One file a commit, and never anything else."""
     repo = Repo(args.repo)
     api = Github.from_env(args.catalog)
     branch = api.branch()
-    accepted = []
+    handled, committed = [], False
     for pair in args.pairs.split():
         found = re.fullmatch(r"(\d{1,9}):([0-9a-f]{64})", pair)
         if not found:
@@ -1286,47 +1497,43 @@ def cmd_merge(args):
             continue
         number, digest = int(found.group(1)), found.group(2)
         issue = api.get("repos/%s/issues/%d" % (api.repo, number))
-        text = submission_text(issue.get("body"))
+        kind, text = issue_request(issue.get("body"))
         if issue.get("state") != "open" or "pull_request" in issue or not text or \
                 hashlib.sha256(text.encode("utf-8")).hexdigest() != digest:
             print("#%d changed since it was judged: the next run judges it again" % number)
             continue
-        sub = submission_of(text)
         user = issue.get("user") or {}
         login = user.get("login", "")
-        # what a writer can check without trusting the judge: a well-formed file from its repository's
-        # owner, for an id that is free or bound to this very key
-        if sub.problems() or not LOGIN_RE.match(login) or login.lower() != sub.owner.lower() or \
-                any(key != sub.key for key in bound_keys(repo, sub.id)):
-            print("#%d does not hold up: the next run judges it again" % number)
+        author = "%s <%d+%s@users.noreply.github.com>" % (login, int(user.get("id", 0)), login)
+        # the marker picks the kind; the hash does not cover it, so no block may read as both kinds
+        # (withdrawal_id), and each kind is checked again here on its own terms
+        merger = merge_withdrawal if kind == "withdrawal" else merge_submission
+        try:
+            what, changed = merger(repo, number, text, login, author)
+        except Skip as skip:
+            print("#%d does not hold up (%s): the next run judges it again" % (number, clean(skip, 200)))
             continue
-        path = repo.path("mods", sub.id + ".ltx")
-        old = open(path, "rb").read() if os.path.isfile(path) else None
-        if old != text.encode("utf-8"):
-            write_bytes(path, text.encode("utf-8"))
-            git(repo, "add", "--", "mods/%s.ltx" % sub.id)
-            git(repo, "commit", "-q", "--author=%s <%d+%s@users.noreply.github.com>" % (login, int(user.get("id", 0)), login),
-                "-m", "%s %s (#%d)" % ("Update" if old is not None else "List", sub.id, number),
-                "-m", "Accepted by the catalog's own checks (MOD_CATALOG.md 10.2).")
-        accepted.append((number, sub.id))
-    if not accepted:
+        print("#%d: %s" % (number, what))
+        handled.append(number)
+        committed |= changed
+    if not handled:
         return 0
     # the reports the judge read go in with the listing, so no later run asks VirusTotal about them again
     rows = [line.strip() for line in os.environ.get("VT_ROWS", "").splitlines() if VT_ROW.match(line.strip())]
     if rows:
-        path = repo.path("public", "vt.txt")
-        table = read_vt(path)
+        table = read_vt(repo.path("public", "vt.txt"))
         table.update({line.split(" ", 1)[0]: parse_vt_row(line) for line in rows})
-        write_vt(path, table)
-        git(repo, "add", "--", "public/vt.txt")
-        if git(repo, "status", "--porcelain", "--", "public/vt.txt").strip():
-            git(repo, "commit", "-q", "--author=catalog-bot <catalog-bot@users.noreply.github.com>",
-                "-m", "Keep VirusTotal's reports of the accepted packages")
-    push(repo, branch)
-    for number, _ in accepted:
+        committed |= commit_file(repo, "public/vt.txt", vt_text(table).encode("utf-8"),
+                                 "catalog-bot <catalog-bot@users.noreply.github.com>",
+                                 "Keep VirusTotal's reports of the accepted packages")
+    # a run that committed nothing has nothing to push or publish: its issues are closed at once
+    if committed:
+        push(repo, branch)
+    for number in handled:
         close_issue(api, number, "completed")
-    api.dispatch("publish.yml", branch)
-    print("listed %s; publish.yml started" % ", ".join(module_id for _, module_id in accepted))
+    if committed:
+        api.dispatch("publish.yml", branch)
+        print("publish.yml started")
     return 0
 
 
@@ -1334,7 +1541,8 @@ def cmd_merge(args):
 
 def read_live(path):
     """state/live.txt: the live release of every listed module whose descriptor its key signs,
-    withdrawn or not: {id: {version, github, packages}}."""
+    revoked or held or not - a module its author withdrew is not listed: {id: {version, github,
+    packages}}."""
     out = {}
     for line in read_lines(path):
         parts = line.split(" ")
@@ -1470,8 +1678,8 @@ def cmd_vt(args):
     config = repo.config()
     policy = vt_policy(config)
     rescan_days = accept_settings(config)["vt_rescan_days"]
-    # every package of a live release, withdrawn ones included (a hold is lifted by a later report
-    # of the same package), and of every card served
+    # every package of a live release, held ones included (a hold is lifted by a later report of the
+    # same package), and of every card served; a module its author withdrew has neither
     packages = {}
     for module_id, entry in read_live(repo.path("state", "live.txt")).items():
         for name, _, sha in entry["packages"]:
@@ -1566,6 +1774,8 @@ def cmd_holds(args):
     live = read_live(repo.path("state", "live.txt"))
     path = repo.path("holds.ltx")
     old = read_holds(path)
+    # a module that is not live - its release unreadable, or the module withdrawn by its author -
+    # keeps its holds: the game goes on switching off the installed copies they name
     holds = {key: row for key, row in old.items() if key[0] not in live or live[key[0]]["version"] != key[1]}
     for module_id, entry in live.items():
         key = (module_id, entry["version"])
@@ -1738,10 +1948,15 @@ def cmd_publish(args):
     if reviews.get("inbox_url") and reviews.get("inbox_field"):
         lines += ["", "[reviews]"] + ["%s = %s" % (k, reviews[k]) for k in
                                       ("inbox_url", "inbox_field", "salt", "identity_bits", "review_bits") if reviews.get(k)]
-    # a module keeps the date it was first listed on, whatever its listing changes later
-    lines += ["", "[mods]"] + ["%s = %s, %s, %s, %s" % (module_id, sub.github, sub.key, sub.version,
-                                                        dates.get(module_id) or today())
-                               for module_id, sub in sorted(subs.items())]
+    def modules(withdrawn_ones):
+        # a module keeps the date it was first listed on, whatever its listing changes later - a
+        # withdrawal and a listing again included
+        return ["%s = %s, %s, %s, %s" % (module_id, sub.github, sub.key, sub.version, dates.get(module_id) or today())
+                for module_id, sub in sorted(subs.items()) if bool(sub.withdrawn) == withdrawn_ones]
+
+    # [withdrawn]: out of the browser by their authors' will, each id still bound to its key (4.1)
+    listed, gone = modules(False), modules(True)
+    lines += ["", "[mods]"] + listed + ["", "[withdrawn]"] + gone
     lines += ["", "[revoked]"] + ["%s = %s, %s" % row for row in withdrawals(repo)]
     body = "\n".join(lines) + "\n"
     # an index that would say the same again is not signed again: no new serial, no commit
@@ -1754,7 +1969,8 @@ def cmd_publish(args):
             return 0
     text = xc.sign_text(body, d)
     write_text(repo.path("public", "index.ltx"), text)
-    print("index.ltx: serial %d, %d module(s), signed by %s" % (serial, len(subs), xc.key_id(xc.public_of(d))))
+    print("index.ltx: serial %d, %d module(s), %d withdrawn, signed by %s" %
+          (serial, len(listed), len(gone), xc.key_id(xc.public_of(d))))
     if not args.no_cards:
         cmd_cards(argparse.Namespace(repo=args.repo, issues=None))
     return 0
@@ -1907,8 +2123,27 @@ def selftest_verdicts():
     assert comment is ours and state == "waiting" and read == memory, (state, read)
     text = "[mod]\nid = a\n"
     issue = SUBMISSION_MARKER + "\r\nFrom the editor.\r\n\r\n```ini\r\n" + text.replace("\n", "\r\n") + "```\r\nrest\r\n"
-    assert submission_text(issue) == text and submission_text("hello") is None
-    assert submission_text(SUBMISSION_MARKER + "\nno block\n") == ""
+    assert issue_request(issue) == ("submission", text) and issue_request("hello") == (None, None)
+    assert issue_request(SUBMISSION_MARKER + "\nno block\n") == ("submission", "")
+
+
+def selftest_withdrawal():
+    """A withdrawal is read whatever its line ends, names one module and nothing else, and its line
+    lands inside [mod] with every other byte kept."""
+    text = "[withdraw]\nid = a\n"
+    issue = WITHDRAWAL_MARKER + "\r\nFrom the editor.\r\n\r\n```ini\r\n" + text.replace("\n", "\r\n") + "```\r\n"
+    assert issue_request(issue) == ("withdrawal", text)
+    assert withdrawal_id(text) == "a" and withdrawal_id("[withdraw]\n") == ""
+    assert withdrawal_id("[mod]\nid = a\n[withdraw]\nid = a\n") is None
+    listing_text = "; a listing\n[mod]\nid = a\nwebsite = x\n\n; the next one\n[extra]\nk = v\n"
+    assert with_withdrawn(listing_text, "2026-12-01") == \
+        "; a listing\n[mod]\nid = a\nwebsite = x\nwithdrawn = 2026-12-01\n\n; the next one\n[extra]\nk = v\n"
+    assert with_withdrawn("[mod]\r\nid = a", "2026-12-01") == "[mod]\r\nid = a\r\nwithdrawn = 2026-12-01\r\n"
+    assert dict(parse_ini(with_withdrawn("[mod]\nid = a\n[extra]\n[mod]\nb = c\n", "2026-12-01"))["mod"])["withdrawn"] \
+        == "2026-12-01"
+    for day, fine in (("2026-12-01", True), ("", True), ("2026-13-01", False), ("20261201", False), ("soon", False)):
+        sub = Submission.parse("mods/a.ltx", "[mod]\nid = a\nwithdrawn = %s\n" % day)
+        assert ("withdrawn is not a date (YYYY-MM-DD)" not in sub.problems()) == fine, day
 
 
 def selftest_holds():
@@ -1964,6 +2199,7 @@ def cmd_selftest(_args):
     assert clean("a <b> @c\nd") == "a  b> (at)c d"
     selftest_vt_quota()
     selftest_verdicts()
+    selftest_withdrawal()
     selftest_holds()
     print("catalog selftest: ok")
     return 0

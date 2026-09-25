@@ -27,7 +27,9 @@ order of importance:
    which the catalog's publishing workflow uses after the checks; the owner of the catalog
    keeps the key file as well (4.1). Write access to the catalog repository - its owner's
    GitHub account - can still change anything: the catalog is exactly as safe as that
-   account.
+   account. An author takes their own module out the same way, with nobody involved
+   (10.2): only the account it was listed from can, one module at a time, and nothing of
+   anyone else's changes.
 5. **A bad module is switched off.** A version VirusTotal blocks, and a new release its
    author did not scan, is withdrawn automatically (5.2): the catalog reads the report of a
    new release within six hours and has every listed package analysed again every
@@ -53,7 +55,7 @@ copy on any host is as good as the original (section 13).
 |---|---|---|
 | Catalog workflows | the catalog key and a VirusTotal key, as repository secrets | listing what passes section 7; withdrawing what VirusTotal blocks or does not know |
 | Maintainer (optional) | the catalog repository, as its owner, and the catalog key file | revocations by hand; moderation of reviews |
-| Author | an author key, made and kept by XFined Editor, and their own VirusTotal key | the content of their releases; scanning every release on VirusTotal before it goes out |
+| Author | an author key, made and kept by XFined Editor, and their own VirusTotal key | the content of their releases; scanning every release on VirusTotal before it goes out; withdrawing their own module when they want it out |
 | Mirrors, hosts, proxies | nothing secret | nothing - everything they serve is verified |
 | Player | optionally their own VirusTotal key | - |
 
@@ -160,8 +162,9 @@ The catalog's rules never replace a lost author key. A submission that brings an
 for a listed module is refused automatically: nobody but the holder of the old key can
 vouch for a new one, and the catalog has no person to ask. The module keeps its listing and
 installed copies keep working, but no update is accepted; the author lists the module again
-under a new module id. A maintainer, if there is one, can still bind a new key by hand with
-a commit (5.3).
+under a new module id, and can still withdraw the old one - a withdrawal needs the GitHub
+account the module was listed from, not the key (10.2). A maintainer, if there is one, can
+still bind a new key by hand with a commit (5.3).
 
 ## 5. The catalog
 
@@ -171,7 +174,7 @@ The catalog is five kinds of files under one base URL:
 
 | File | Signed by | Content |
 |---|---|---|
-| `index.ltx` | the catalog key (3.1) | the listed modules, their keys, the revocations and withdrawals, the mirrors, the VirusTotal policy |
+| `index.ltx` | the catalog key (3.1) | the listed modules and the ones their authors withdrew, their keys, the revocations and withdrawals, the mirrors, the VirusTotal policy |
 | `cards.txt` | nobody - every card is signed by its author | the latest release descriptor of every listed module |
 | `thumbs/<sha256>.dds` | nobody - named by a signed card | the thumbnails those cards name |
 | `vt.txt` | nobody - informational | VirusTotal results per package |
@@ -198,6 +201,9 @@ warn_others   = 2
 [mods]
 darf-overnight-delivery = MMadmer/DARF-Overnight-Delivery, p256:..., 1.0.0, 2026-09-25
 
+[withdrawn]
+old-mod                 = SomeAuthor/old-mod, p256:..., 1.0.0, 2026-08-01
+
 [revoked]
 evil-mod                  = *, Malware in scripts\x.script
 some-mod                  = 1.2.0, Breaks saves - update to 1.2.1
@@ -220,6 +226,14 @@ sig = ...
   A release below the lowest listed version is not offered. `<date>` is the day the module
   was first listed: publishing takes it from the previous index, so an updated listing
   keeps its date.
+- `[withdrawn]`: the modules their authors withdrew (10.2), in the same line format as
+  `[mods]`. A withdrawn module is not offered, installed or updated by the game. Its id
+  stays bound to its repository and key - no other key can list it, and submitting it
+  again with its key lists it again, under its first-listed date - and `[revoked]` keeps
+  applying to installed copies of it exactly as to a listed module: a withdrawal never
+  switches a revoked or held module back on. An id twice in `[withdrawn]`, or in both
+  `[mods]` and `[withdrawn]`, makes the index invalid, like an id listed twice (the game
+  keeps the index it accepted before); a malformed line is skipped, as in `[mods]`.
 - `[revoked]`: `<module id> = <version or *>, <reason>` or `key:<key id> = *, <reason>`.
   Publishing signs two files of the catalog repository into it together, and the game
   makes no difference between them: `revoked.ltx`, the revocations made by hand (5.3), and
@@ -245,6 +259,8 @@ The rules make these changes by themselves, with no person involved (10.2):
 - listing a module that meets section 7;
 - updating a listing with the same key: its repository, its lowest listed version, its
   website;
+- withdrawing a module its author asks to withdraw - from the GitHub account it was listed
+  from, nobody else - and listing it again when they submit it again with its key (10.2);
 - withdrawing a version VirusTotal blocks or a new release VirusTotal does not know, and
   restoring the current release when a report of its packages clears it (5.2).
 
@@ -278,7 +294,8 @@ live descriptor from the module's own repository anyway.
 While the live release of a listed module fails the catalog's checks, the module keeps the
 last card that passed. After `dormant_days` (section 7) of failing it loses its card: it
 stays listed - its id stays bound to its key - and has a card again with the first release
-that passes.
+that passes. A withdrawn module has no card, no reviews file and no place in the
+pipeline's VirusTotal reads.
 
 ### 5.5 Thumbnails
 
@@ -337,11 +354,15 @@ and the catalog's `accept` workflow judges the submission by them (10.2):
    account is at least `min_account_days` old. A younger one is refused, with the day it
    may submit again: a submission that waited would be judged every half hour, and a pile
    of them from throwaway accounts would use up the workflow's API budget.
-7. The module id is not listed yet, or listed with the same key. A listing with the same
-   key may change its repository (the key proves it is the same author), its lowest
-   version and its website. Another key is refused (4.1).
-8. One owner lists at most `max_mods_per_owner` modules.
-9. At most `max_new_per_day` new module ids are listed a day; the rest wait.
+7. The module id is not listed yet, or listed - or withdrawn by its author - with the same
+   key. A listing with the same key may change its repository (the key proves it is the
+   same author), its lowest version and its website; a withdrawn module submitted again is
+   listed again. Another key is refused (4.1). The submitted text never carries
+   `withdrawn`: only the catalog writes that line.
+8. One owner lists at most `max_mods_per_owner` modules; withdrawn ones do not count, and
+   listing one again counts like a new one.
+9. At most `max_new_per_day` modules not listed yet - new ids and withdrawn ones listed
+   again - are listed a day; the rest wait.
 10. VirusTotal: the author scanned every package with their own VirusTotal key (XFined
     Editor does it on Submit), so VirusTotal has a report of it, and no package's verdict
     (section 11) is `block`. A `warn` is listed, and the game asks the player before it
@@ -396,8 +417,8 @@ At every start, before the first script runs, XMS decides once for the whole pro
 Protection is a switch that **stays on once it is on**:
 
 - it turns on by itself at the first start with an enabled catalog module - installed
-  through the Mod Browser, or listed in the last verified catalog under its own
-  repository, however it got onto the disk;
+  through the Mod Browser, or listed in the last verified catalog (`[mods]`, not
+  `[withdrawn]`) under its own repository, however it got onto the disk;
 - the player can turn it on at any time in the Mods window;
 - only the player turns it off, in the Mods window, after a warning, and only while no
   catalog module is enabled.
@@ -509,6 +530,25 @@ One module and one account have at most one open submission: submitting again ed
 issue, which makes the catalog judge it again; with none open, a new one is opened. The
 window follows the issue and shows the catalog's verdict (10.2).
 
+**Withdraw...** in the same window (MCP `mod_catalog action=withdraw`, the bridge tool
+`xfined_mod_catalog_withdraw`) takes a listed module out of the Mod Browser - a rights
+problem, a module its author gives up. The window asks once, naming what happens, with
+Cancel as the default. It opens an issue titled `Withdraw <module id>` from the author's
+GitHub account, or edits the account's open one; the body starts with the line
+`<!-- xms-catalog withdrawal -->`, then one line of text, then a fenced `ini` block that
+names the module and nothing else:
+
+```ini
+[withdraw]
+id = darf-overnight-delivery
+```
+
+The editor reads `mods/<id>.ltx` from the catalog's default branch first and sends nothing
+when the catalog does not hold the module, when the file names another owner's repository
+- only the account the module was listed from may withdraw it - or when it is withdrawn
+already. Neither the author key nor a VirusTotal key is needed: an author who lost the key
+can still take the module out.
+
 ### 10.2 The catalog repository
 
 `mods/<id>.ltx` (the listings, one per module), `catalog.ltx` (mirrors, VirusTotal policy,
@@ -535,11 +575,27 @@ withdrawals), `moderation.ltx` (12.4), `public/` (what mirrors serve: `index.ltx
     VirusTotal, GitHub or the network not answering, the day's quota of new listings used
     up.
 
-  A run judges at most 30 submissions, the oldest first; the rest wait for the next run,
-  so a flood of issues costs time and never the workflow's API budget. An issue without
-  the submission marker is left alone. A pull request by anyone but the
+  A run judges at most 30 submissions and withdrawals, the oldest first; the rest wait for
+  the next run, so a flood of issues costs time and never the workflow's API budget. An
+  issue without either marker is left alone. A pull request by anyone but the
   repository's owner, members or collaborators is closed with a pointer to **Mod > Submit
   to Mod Browser...**; theirs are left alone, so maintenance by hand stays possible.
+
+  **A withdrawal** (10.1) is judged in the same run, by the marker its body starts with.
+  It is accepted when its `ini` block names a module id, `mods/<id>.ltx` exists on the
+  default branch, and the issue comes from the account that owns the repository the file
+  names - the same account rule a submission passed (7.6); no account age, no key and no
+  VirusTotal are asked. Anything else is refused and closed. A module withdrawn already is
+  accepted as such, with nothing to commit. `merge` then re-reads the issue, requires the
+  judged bytes again, checks the id, the file and the account again by itself - it trusts
+  no verdict - and adds one line to that one file, `withdrawn = <YYYY-MM-DD>` in `[mod]`,
+  authored by the requester's noreply address. Nothing is deleted: the file keeps the id
+  bound to its key (4.1), so nobody else can list it and installed copies keep meeting the
+  catalog's revocations. `merge` refuses to commit when anything but that file changed. The
+  next publication moves the module from `[mods]` to `[withdrawn]` (5.2); a later
+  submission with its key lists it again. So the worst a withdrawal can do is take one
+  module out of the browser - its owner's own, recoverable by submitting it again - and
+  nobody can use it on another author's module or on anything else in the repository.
 - `publish.yml` - the whole pipeline: every six hours, when `accept` starts it, by hand,
   and on a person's push to `mods/`, `catalog.ltx` or `revoked.ltx`. Three jobs, each on
   a machine of its own:
@@ -562,9 +618,13 @@ withdrawals), `moderation.ltx` (12.4), `public/` (what mirrors serve: `index.ltx
   `public/`.
 
 Only a person with write access changes a workflow: `merge` commits nothing but one
-`mods/<id>.ltx`, and nothing a submitter sends is ever run - only read.
+`mods/<id>.ltx` an issue - a listing, or the `withdrawn` line of a withdrawal - and the
+VirusTotal rows the judge read into `public/vt.txt`, and nothing a submitter sends is ever
+run - only read. Forks of the catalog or of XFined Editor change none of this: the
+catalog's checks run in its own repository with its own secrets, it believes nothing an
+editor reports, and the game takes an index only when a key built into it signed it.
 
-**The verdict** is a comment on the submission's issue, and XFined Editor shows it (10.1):
+**The verdict** is a comment on the submission's or the withdrawal's issue, and XFined Editor shows it (10.1):
 its form is a contract between the two as well. The body starts with the line
 `<!-- xms-catalog verdict=accepted|waiting|refused -->` (one of the three), the next line
 says the verdict in plain text, then come a blank line and the report in Markdown:
@@ -635,11 +695,13 @@ author's scan - it reads the report that scan left, once.
   scans the packages before the submission is sent (10.1), and Publish Release scans every
   release of a listed module before anything goes out on GitHub - uploading a package
   VirusTotal does not know and waiting for its report. A package VirusTotal blocks is not
-  sent at all; without a key nothing is sent. A submission leaves only once VirusTotal has
-  a report of every package: VirusTotal answers "not found" for a file until its first
-  analysis ends, and the catalog refuses that as a package nobody scanned. A release
-  published while VirusTotal still analyses it is held back by the catalog until the
-  report is out (5.2).
+  sent at all; without a key nothing is sent. A submission and a release of a listed
+  module leave only once VirusTotal has a report of every package: VirusTotal answers "not
+  found" for a file until its first analysis ends, the catalog refuses that as a package
+  nobody scanned, and a listed module's players take a release through their updates at
+  once. Still analysing after the wait, or VirusTotal not answering, the author is told to
+  try again later. A release that reaches GitHub some other way while VirusTotal does not
+  know a package is held back by the catalog until it does (5.2).
 - The catalog, with its own key, a repository secret, one request at a time every 16
   seconds and at most 60 a run:
   - `accept` reads the report of each package of a submission once: `block` refuses it,
@@ -663,7 +725,12 @@ author's scan - it reads the report that scan left, once.
   key (Mods window, stored in the Windows Credential Manager, used for nothing else) the
   game asks VirusTotal for the live report before it installs. `block` refuses the
   installation; `warn` asks, with Cancel as the default; a package VirusTotal does not know
-  installs on the other guarantees.
+  installs on the other guarantees. A release is judged by EVERY package - a clean first
+  part says nothing about the second: the most decisive package decides (`block`, `warn`,
+  not scanned, `clean`, with that package's counts and engines), the date is the oldest
+  analysis, and the report button opens the deciding package. The player's own lookups keep
+  the free API's pace, four requests in any minute; the catalog's `vt.txt` verdict is
+  combined the same way.
 
 ## 12. Ratings and reviews
 
@@ -768,9 +835,9 @@ control characters and the UI's colour codes are removed.
 - The game keeps the last accepted catalog, cards and thumbnails in `modules\.catalog\`
   and shows them when every mirror is down. Installing needs only the module's own GitHub
   release, as updating always did.
-- If the maintainer stops, nothing stops: submissions are judged and listed; updates come
-  from the authors' releases; VirusTotal results, the withdrawals they cause and the
-  reviews keep being refreshed (10.2).
+- If the maintainer stops, nothing stops: submissions and withdrawals are judged and
+  carried out; updates come from the authors' releases; VirusTotal results, the
+  withdrawals they cause and the reviews keep being refreshed (10.2).
 - GitHub switches off a scheduled workflow of a public repository after 60 days without
   activity and treats working around that as abuse; the catalog does not try. Submissions
   do not depend on the schedule: an issue starts its own judging, and a waiting submission
@@ -808,6 +875,16 @@ content policy runs on the index, then MOD_UPDATES 3.2 fetches and verifies ever
 `modules\.staged\<id>\payload\`, and the next start moves it to `modules\<id>` and marks the
 module as installed through the browser.
 
+**A module its author withdrew** (`[withdrawn]`, 5.2) leaves the browser: the browser lists
+`[mods]` only, a card served for a withdrawn id anyway is ignored, and installing it - from
+the browser or with `xms_install` - is refused: "its author withdrew it from the Mod
+Browser". An installed copy whose repository matches keeps working, and `[revoked]` still
+switches it off at the next start, with the revocation's own text. A copy the browser
+installed takes no more updates (the catalog checks no release of it) and its status line
+says so: "Withdrawn from the Mod Browser by its author: no more updates". A copy installed
+by hand is no catalog module any more: it updates from its repository like any module
+outside the catalog, with the disclaimer. `xms_catalog` lists the withdrawn ids too.
+
 **Disclaimer.** Every installation and every update started from the Mods window - Install,
 Update, Update all - first asks for confirmation with the disclaimer of the author of Dead
 Air: Refined: modules are made by third parties, the author of the game is not responsible
@@ -826,13 +903,24 @@ Cancel is the default. The browser view carries the same sentence at its foot. T
   first proves every escape of 9.2 and 9.3 real in an ordinary game, then meets a wall at
   each, the console routes of 9.2 included; an unsigned and a signed update; a rolled-back
   and a forged index; a review verified the way the catalog's workflow verifies it;
-  removal, with protection staying on.
+  removal, with protection staying on; a release split in two packages whose second one is
+  flagged (in `vt.txt` and in the player's live lookup, four requests a minute); a module
+  withdrawn before it is installed (refused, its served card ignored), an index holding an
+  id in both `[mods]` and `[withdrawn]` (refused), and two browser-installed modules
+  withdrawn later - one keeps working without updates and says so, the other, revoked after
+  its withdrawal, is switched off.
 - Editor: `tools\qa\test_mod_catalog.py` - the author key, the signed descriptor, the
   thumbnail, the submission issue and the catalog's verdict against the GitHub mock,
-  VirusTotal against its mock.
+  VirusTotal against its mock (a package without a report is a `required` finding), the
+  withdrawal issue and its refusal for another account; `tools\qa\test_mod_publish.py`
+  phase V - a listed module's release refused while VirusTotal is still analysing it, a
+  withdrawn module's published with a warning.
 - Catalog: `python tools/catalog.py selftest`.
 - Catalog workflows: `python tools/catalog/test_accept.py` against a mock of the GitHub
   API, the releases and VirusTotal - accepted, refused and waiting submissions, the merge
   committing the judged bytes only, a forged verdict comment, the catalog's key reading a
   report once and never uploading, holds from a VirusTotal `block` and from an update its
-  author did not scan, the fresh analysis every `vt_rescan_days`, the status issue.
+  author did not scan, the fresh analysis every `vt_rescan_days`, the status issue; a
+  withdrawal by the listing's owner changing exactly one file, one by anybody else
+  refused, a forged merge pair refused by `merge` itself, a hold that outlives the
+  withdrawal, and the module listed again with its first-listed date.

@@ -1,8 +1,10 @@
-# Submissions (MOD_CATALOG 10.2). A submission is an issue XFined Editor opens. judge reads it
-# through the API - nothing of it is ever run - and gives the verdict of section 7: accepted
-# (merge commits the judged file and starts publish.yml), refused (the issue is closed with the
-# reasons) or waiting (judged again every half hour, and whenever its author submits again).
-# Nobody has to be here for any of it. Submissions are issues because GitHub holds pull
+# Submissions and withdrawals (MOD_CATALOG 10.2). Both are issues XFined Editor opens: a
+# submission lists a module or updates its listing, a withdrawal takes a listed module out of the
+# browser and is accepted from the account that owns it only. judge reads them through the API -
+# nothing of them is ever run - and gives the verdict: accepted (merge commits the judged file, or
+# the withdrawn line in the module's own file, and starts publish.yml), refused (the issue is
+# closed with the reasons) or waiting (judged again every half hour, and whenever its author
+# submits again). Nobody has to be here for any of it. They are issues because GitHub holds pull
 # requests of first-time contributors for an approval, and blocks pull_request_target.
 name: accept
 
@@ -21,8 +23,8 @@ permissions: {}
 
 jobs:
   judge:
-    # an issue that is not a submission starts nothing
-    if: github.event_name != 'issues' || startsWith(github.event.issue.body, '<!-- xms-catalog submission -->')
+    # an issue that is neither a submission nor a withdrawal starts nothing
+    if: github.event_name != 'issues' || startsWith(github.event.issue.body, '<!-- xms-catalog submission -->') || startsWith(github.event.issue.body, '<!-- xms-catalog withdrawal -->')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,8 +45,9 @@ jobs:
         run: python3 tools/catalog.py judge --outputs "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
 
   # the only job that may write to the repository; it re-reads each accepted issue and commits
-  # its file only when the bytes are the ones judged, with the VirusTotal reports judge read, so
-  # nothing asks VirusTotal about those packages again
+  # only when the bytes are the ones judged: a listing's file, or one withdrawn line in the
+  # module's own file, never a deletion. A listing goes in with the VirusTotal reports judge
+  # read, so nothing asks VirusTotal about those packages again
   merge:
     needs: judge
     if: needs.judge.outputs.merge != ''

@@ -20,7 +20,7 @@ left, once, and has every listed package analysed again every 30 days.
 
 | Path | What it is |
 |---|---|
-| `mods/<id>.ltx` | one file per listed module, committed by the catalog when its submission passed |
+| `mods/<id>.ltx` | one file per listed module, committed by the catalog when its submission passed; a withdrawn module keeps its file, marked `withdrawn` |
 | `catalog.ltx` | mirrors, the VirusTotal policy, the review inbox, the listing rules (`[accept]`) |
 | `revoked.ltx` | modules, versions and author keys withdrawn by hand |
 | `holds.ltx` | versions withdrawn automatically: VirusTotal blocks them, or does not know them |
@@ -52,10 +52,19 @@ requirements:
 6. The submission comes from the owner of the module's repository, whose GitHub account is at
    least 14 days old; the module id is new, or listed with the same author key.
 
+## Withdrawing a module
+
+XFined Editor takes a module out of the browser too: **Mod > Submit to Mod Browser** opens a
+withdrawal issue here, and the catalog accepts it from the account that owns the module's
+repository and from nobody else. The module leaves the browser within minutes and installed copies
+keep working. Its file stays, marked `withdrawn`, so the module id stays bound to its author key:
+submitting the module again with that key lists it again, and no other key can take the id.
+
 ## Workflows
 
-- `accept.yml` - every submission issue, and every half hour: `judge` gives the verdict,
-  `merge` commits an accepted module's file and starts `publish.yml`.
+- `accept.yml` - every submission and withdrawal issue, and every half hour: `judge` gives the
+  verdict, `merge` commits an accepted module's file (or marks it withdrawn) and starts
+  `publish.yml`.
 - `publish.yml` - every six hours, after a listing, by hand: `refresh` (cards, VirusTotal,
   withdrawals, reviews, one status issue), `sign` (signs `public/index.ltx` with the secret
   `CATALOG_KEY`), `deploy` (GitHub Pages).

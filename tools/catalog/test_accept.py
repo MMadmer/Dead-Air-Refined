@@ -1,8 +1,9 @@
 """The catalog judging and listing by itself (MOD_CATALOG 10.2), against a mock of GitHub's API,
 of release downloads and of VirusTotal, with a real git remote: accepted, refused and waiting
 submissions, the merge committing the judged bytes only, a forged verdict, the listing rules, the
-catalog's VirusTotal key only reading reports (never uploading, never asking twice), withdrawals,
-the status issue and a dormant module.
+catalog's VirusTotal key only reading reports (never uploading, never asking twice), automatic
+withdrawals, the status issue, a dormant module, and authors withdrawing their own modules - and
+nobody else's.
 
     python test_accept.py
 """
@@ -254,6 +255,15 @@ def issue_body(text, extra="The editor's report."):
     return catalog.SUBMISSION_MARKER + "\nSubmitted from XFined Editor.\n\n```ini\n" + text + "```\n\n" + extra + "\n"
 
 
+def withdrawal(module_id):
+    return "[withdraw]\nid = %s\n" % module_id
+
+
+def withdrawal_body(block):
+    return catalog.WITHDRAWAL_MARKER + "\nWithdrawn by its author from XFined Editor.\n\n```ini\n" + block + "```\n\n" \
+        "The editor's details.\n"
+
+
 def git(folder, *args):
     return subprocess.run(["git", "-C", folder] + list(args), check=True, capture_output=True, text=True).stdout
 
@@ -289,8 +299,9 @@ def judge(work, outputs):
 
 
 def merge(work, pairs, rows=""):
+    """One run of accept.yml's merge; what it printed."""
     os.environ["VT_ROWS"] = rows
-    quiet(catalog.cmd_merge, argparse.Namespace(repo=work, catalog=REPO, pairs=" ".join(pairs)))
+    return quiet(catalog.cmd_merge, argparse.Namespace(repo=work, catalog=REPO, pairs=" ".join(pairs)))[1]
 
 
 def pipeline(work, key_file, issues=None):
@@ -569,6 +580,177 @@ def main():
         judge(work, outputs)
         run.check(verdict(flood[2])[0] == "refused", "the next run takes the rest")
         catalog.JUDGED_PER_RUN = 30
+
+        # ---- authors withdraw their own modules: one line in the module's own file, nobody else's
+        # module, and the id stays bound to its key ----
+        with open(os.path.join(HERE, "template", ".github", "workflows", "accept.yml"), encoding="utf-8") as f:
+            judge_if = next(line for line in f if line.strip().startswith("if:"))
+        run.check(catalog.SUBMISSION_MARKER in judge_if and catalog.WITHDRAWAL_MARKER in judge_if,
+                  "accept.yml starts its judge for a withdrawal issue as well")
+        os.environ["XMS_CATALOG_NOW"] = "2026-12-01T12:00:00Z"
+        bob_hold = release("bob/bob-mod", "bob-mod", "1.2.0", bob, GOOD_FILES + [("gamedata/configs/c.ltx", b"[c]\n")])
+        index = pipeline(work, key_file)
+        run.check(("bob-mod", "1.2.0, Not scanned by VirusTotal yet") in index.get("revoked", []) and
+                  not git(work, "status", "--porcelain").strip(),
+                  "bob's unscanned update is held before he withdraws the module")
+
+        n_w_bob = MOCK.issue("bob", withdrawal_body(withdrawal("bob-mod")).replace("\n", "\r\n"), "Withdraw bob-mod")
+        n_w_old = MOCK.issue("alice", withdrawal_body(withdrawal("old-mod")), "Withdraw old-mod")
+        n_w_theft = MOCK.issue("mallory", withdrawal_body(withdrawal("edit-mod")), "Withdraw edit-mod")
+        n_w_absent = MOCK.issue("alice", withdrawal_body(withdrawal("no-such-mod")), "Withdraw no-such-mod")
+        n_w_noblock = MOCK.issue("alice", catalog.WITHDRAWAL_MARKER + "\nno block here\n", "Withdraw")
+        n_w_path = MOCK.issue("alice", withdrawal_body(withdrawal("../x")), "Withdraw ../x")
+        n_w_noid = MOCK.issue("alice", withdrawal_body("[withdraw]\n"), "Withdraw")
+        n_w_both = MOCK.issue("alice", withdrawal_body(submission("warn-mod", "alice/warn-mod", alice) +
+                                                       withdrawal("warn-mod")), "Withdraw warn-mod")
+        n_w_warn = MOCK.issue("alice", withdrawal_body(withdrawal("warn-mod")), "Withdraw warn-mod")
+        carried = submission("warn-mod", "alice/warn-mod", alice) + "withdrawn = 2026-12-01\n"
+        n_carry = MOCK.issue("alice", issue_body(carried))
+        merges, rows = judge(work, outputs)
+        run.check(verdict(n_w_bob)[0] == "accepted" and verdict(n_w_bob)[1].splitlines()[1] ==
+                  "Accepted: the module leaves the Mod Browser within minutes. Installed copies keep working, and "
+                  "submitting it again lists it again.", "the owner's withdrawal is accepted, whatever its line ends")
+        run.check("(MOD_CATALOG.md, section 10.2)" in verdict(n_w_bob)[1] and "section 7" not in verdict(n_w_bob)[1],
+                  "a withdrawal's verdict cites section 10.2")
+        run.check(verdict(n_w_theft)[0] == "refused" and "Refused: the withdrawal comes from mallory, and edit-mod is "
+                  "listed from carol/edit-mod, the repository of carol: withdraw it from carol." in
+                  verdict(n_w_theft)[1], "a withdrawal of someone else's module is refused")
+        run.check(verdict(n_w_absent)[0] == "refused" and "no-such-mod is not in the catalog" in verdict(n_w_absent)[1],
+                  "a withdrawal of a module the catalog does not hold is refused")
+        run.check(all(verdict(n)[0] == "refused" and "the issue names no module: withdraw from XFined Editor (Mod > "
+                      "Submit to Mod Browser)" in verdict(n)[1] for n in (n_w_noblock, n_w_noid)),
+                  "a withdrawal without its ini block, or with a block that names no module, is refused")
+        run.check(verdict(n_w_path)[0] == "refused" and "../x is not a module id" in verdict(n_w_path)[1],
+                  "a withdrawal naming a path instead of a module id is refused")
+        run.check(verdict(n_w_both)[0] == "refused" and "holds more than [withdraw]" in verdict(n_w_both)[1],
+                  "a withdrawal block that holds a listing as well is refused")
+        run.check(verdict(n_carry)[0] == "refused" and "a submission cannot carry withdrawn" in verdict(n_carry)[1],
+                  "a submission that marks itself withdrawn is refused")
+        run.check(all(MOCK.issues[n]["state"] == "closed" and MOCK.issues[n]["state_reason"] == "not_planned" for n in
+                      (n_w_theft, n_w_absent, n_w_noblock, n_w_path, n_w_noid, n_w_both, n_carry)),
+                  "refused withdrawals are closed")
+        run.check(sorted(int(p.split(":")[0]) for p in merges) == [n_w_bob, n_w_old, n_w_warn] and
+                  all(MOCK.issues[n]["state"] == "open" for n in (n_w_bob, n_w_old, n_w_warn)) and
+                  pair_of(merges, n_w_bob) == "%d:%s" % (n_w_bob, sha(withdrawal("bob-mod").encode())),
+                  "judge hands on the accepted withdrawals, each by the hash of its ini block")
+
+        # before merge runs: alice edits a judged withdrawal, pairs are forged for withdrawals nobody
+        # judged, and the refused submission is reopened with a pair forged for it
+        MOCK.issues[n_w_warn]["body"] = withdrawal_body(withdrawal("edit-mod"))
+        n_forged = MOCK.issue("mallory", withdrawal_body(withdrawal("new-mod")), "Withdraw new-mod")
+        n_ghost = MOCK.issue("alice", withdrawal_body(withdrawal("gone-mod")), "Withdraw gone-mod")
+        MOCK.issues[n_carry]["state"] = "open"
+        forged = ["%d:%s" % (n_forged, sha(withdrawal("new-mod").encode())),
+                  "%d:%s" % (n_ghost, sha(withdrawal("gone-mod").encode())), "%d:%s" % (n_carry, sha(carried.encode()))]
+        head, work_head = git(origin, "rev-parse", "main"), git(work, "rev-parse", "HEAD")
+        dispatched = len(MOCK.dispatches)
+        catalog.write_text(os.path.join(work, "stray.txt"), "left over\n")
+        try:
+            merge(work, merges + forged, rows)
+            stopped = ""
+        except SystemExit as stop:
+            stopped = str(stop.code)
+        run.check("stray.txt" in stopped and git(work, "status", "--porcelain") == "?? stray.txt\n" and
+                  git(work, "rev-parse", "HEAD") == work_head and git(origin, "rev-parse", "main") == head and
+                  len(MOCK.dispatches) == dispatched and MOCK.issues[n_w_bob]["state"] == "open",
+                  "merge stops before it writes anything when the checkout holds a change it did not make")
+        os.remove(os.path.join(work, "stray.txt"))
+        printed = merge(work, forged)
+        run.check("#%d does not hold up (mallory does not own alice/new-mod)" % n_forged in printed and
+                  "#%d does not hold up (gone-mod is not in the catalog)" % n_ghost in printed and
+                  "#%d does not hold up (the listing does not pass the checks)" % n_carry in printed and
+                  git(origin, "rev-parse", "main") == head and len(MOCK.dispatches) == dispatched and
+                  MOCK.issues[n_forged]["state"] == "open",
+                  "merge's own checks refuse forged pairs: a withdrawal of someone else's module, of a module the "
+                  "catalog does not hold, and a submission that marks itself withdrawn")
+        merge(work, merges, rows)
+        commits = [line.split("|") for line in git(origin, "log", "--format=%H|%an <%ae>|%s|%b", "main").splitlines()
+                   if "|Withdraw " in line]
+        run.check([c[1:] for c in commits] == [
+            ["alice <1+alice@users.noreply.github.com>", "Withdraw old-mod (#%d)" % n_w_old,
+             "Withdrawn by its author through the catalog's own checks (MOD_CATALOG.md 10.2)."],
+            ["bob <2+bob@users.noreply.github.com>", "Withdraw bob-mod (#%d)" % n_w_bob,
+             "Withdrawn by its author through the catalog's own checks (MOD_CATALOG.md 10.2)."]],
+            "each withdrawal is a commit of its own, authored by the account that asked")
+        run.check(all(git(origin, "show", "--name-only", "--format=", c[0]).split() == ["mods/%s.ltx" % c[2].split()[1]]
+                      for c in commits), "a withdrawal commit changes exactly one file: the module's own")
+        run.check(git(origin, "show", "main:mods/bob-mod.ltx") == submission("bob-mod", "bob/bob-mod", bob) +
+                  "withdrawn = 2026-12-01\n", "the file keeps every byte and gains the withdrawn line")
+        run.check(all(MOCK.issues[n]["state"] == "closed" and MOCK.issues[n]["state_reason"] == "completed"
+                      for n in (n_w_bob, n_w_old)) and MOCK.dispatches[dispatched:] == [("publish.yml", "main")],
+                  "accepted withdrawals are closed once pushed, and publish.yml starts")
+        run.check(MOCK.issues[n_w_warn]["state"] == "open" and
+                  not any("withdrawn" in git(origin, "show", "main:mods/%s.ltx" % module_id)
+                          for module_id in ("warn-mod", "edit-mod")),
+                  "a withdrawal edited after its verdict is not committed")
+
+        index = pipeline(work, key_file)
+        with open(os.path.join(work, "public", "index.ltx"), "rb") as f:
+            body = xc.split_signed(f.read())[0].decode("utf-8")
+        listed, gone = dict(index["mods"]), dict(index.get("withdrawn", []))
+        run.check(not {"bob-mod", "old-mod"} & set(listed) and
+                  gone.get("bob-mod", "").endswith(", 1.0.0, 2026-10-05") and
+                  gone.get("old-mod", "").endswith(", 1.0.0, 2026-01-01") and
+                  body.index("\n[mods]\n") < body.index("\n[withdrawn]\n") < body.index("\n[revoked]\n"),
+                  "the signed index moves them from [mods] to [withdrawn], each with its first date")
+        run.check(("bob-mod", "1.2.0, Not scanned by VirusTotal yet") in index.get("revoked", []) and
+                  ("bob-mod", "1.2.0") in catalog.read_holds(os.path.join(work, "holds.ltx")),
+                  "a hold of a withdrawn module stays in holds.ltx and in the signed [revoked]")
+        served = set(catalog.read_cards(os.path.join(work, "public", "cards.txt"))) | \
+            set(catalog.read_live(os.path.join(work, "state", "live.txt"))) | set(catalog.listing(catalog.Repo(work)))
+        run.check(not {"bob-mod", "old-mod"} & served, "a withdrawn module has no card, and nothing served follows it")
+        bob_key = xc.key_text(xc.public_of(bob))
+        run.check(catalog.bound_keys(catalog.Repo(work), "bob-mod") == [bob_key, bob_key],
+                  "its id stays bound to its key, in its file and in the index's [withdrawn]")
+        os.environ["XMS_CATALOG_NOW"] = "2026-12-02T12:00:00Z"
+        asked = MOCK.vt_lookups.get(bob_hold)
+        pipeline(work, key_file)
+        run.check(asked == 1 and MOCK.vt_lookups.get(bob_hold) == asked,
+                  "the pipeline asks VirusTotal nothing about a withdrawn module")
+
+        # ---- the day after: twice, another key, the owner's limit ----
+        release("mallory/bob-mod", "bob-mod", "1.0.0", stranger, GOOD_FILES, vt=CLEAN)
+        n_w_again = MOCK.issue("bob", withdrawal_body(withdrawal("bob-mod")), "Withdraw bob-mod")
+        n_grab = MOCK.issue("mallory", issue_body(submission("bob-mod", "mallory/bob-mod", stranger)))
+        n_fifth = MOCK.issue("alice", issue_body(submission("fifth-mod", "alice/fifth-mod", alice)))
+        n_old_again = MOCK.issue("alice", issue_body(submission("old-mod", "alice/old-mod", alice)))
+        merges, rows = judge(work, outputs)
+        run.check(verdict(n_w_again)[0] == "accepted" and
+                  verdict(n_w_again)[1].splitlines()[1] == "Accepted: the module is withdrawn already.",
+                  "withdrawing a withdrawn module is accepted as done already")
+        run.check(verdict(n_grab)[0] == "refused" and "bob-mod is listed with another author key" in verdict(n_grab)[1],
+                  "another key cannot take a withdrawn module's id")
+        run.check(pair_of(merges, n_fifth) and verdict(n_old_again)[0] == "refused" and
+                  "alice lists 4 modules already" in verdict(n_old_again)[1],
+                  "a withdrawn module leaves its owner's count, and listing it again counts like a new one")
+        run.check(verdict(n_w_warn)[0] == "refused" and "withdraw it from carol" in verdict(n_w_warn)[1] and
+                  verdict(n_forged)[0] == "refused", "the edited withdrawal is judged again, as edited")
+        head, dispatched = git(origin, "rev-parse", "main"), len(MOCK.dispatches)
+        merge(work, [pair_of(merges, n_w_again)])
+        run.check(git(origin, "rev-parse", "main") == head and len(MOCK.dispatches) == dispatched and
+                  MOCK.issues[n_w_again]["state"] == "closed" and MOCK.issues[n_w_again]["state_reason"] == "completed",
+                  "a second withdrawal commits nothing, starts nothing, and is closed")
+        merge(work, [p for p in merges if p != pair_of(merges, n_w_again)], rows)
+        pipeline(work, key_file)
+
+        # ---- bob scans his update and lists the module again with his key ----
+        os.environ["XMS_CATALOG_NOW"] = "2026-12-03T12:00:00Z"
+        MOCK.vt[bob_hold] = [answer(CLEAN)]
+        n_relist = MOCK.issue("bob", issue_body(submission("bob-mod", "bob/bob-mod", bob)))
+        merges, rows = judge(work, outputs)
+        run.check(verdict(n_relist)[0] == "accepted" and
+                  verdict(n_relist)[1].splitlines()[1].startswith("Accepted: the module is listed"),
+                  "the same key lists a withdrawn module again, as a new listing")
+        merge(work, merges, rows)
+        run.check("bob <2+bob@users.noreply.github.com>|List bob-mod again (#%d)" % n_relist in
+                  git(origin, "log", "--format=%an <%ae>|%s", "main") and
+                  git(origin, "show", "main:mods/bob-mod.ltx") == submission("bob-mod", "bob/bob-mod", bob),
+                  "listing it again commits the judged text: the withdrawn line is gone")
+        index = pipeline(work, key_file)
+        run.check(dict(index["mods"]).get("bob-mod", "").endswith(", 1.0.0, 2026-10-05") and
+                  "bob-mod" not in dict(index.get("withdrawn", [])) and
+                  not any(k == "bob-mod" for k, _ in index.get("revoked", [])),
+                  "listed again, it keeps its first date, and his scan lifts the hold")
 
     server.shutdown()
     print("test_accept: %d passed, %d failed" % (run.passed, len(run.failed)))

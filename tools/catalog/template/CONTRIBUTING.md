@@ -35,3 +35,11 @@ Notes:
   with your key first) and the browser picks it up within six hours. A release VirusTotal does
   not know - published without the editor, or without the scan - is withdrawn until you scan it.
 - Pull requests are not submissions: one is closed with a pointer here.
+
+## Withdrawing a module
+
+XFined Editor withdraws a module too: **Mod > Submit to Mod Browser** opens a withdrawal issue
+here from your GitHub account. Only the account that owns the module's repository can withdraw
+it. The catalog answers in the issue the same way; accepted, the module leaves the browser within
+minutes, and installed copies keep working. The module id stays bound to your key: submitting the
+module again with that key lists it again.
