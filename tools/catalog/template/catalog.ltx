@@ -33,7 +33,10 @@ min_account_days   = 14
 max_mods_per_owner = 20
 ; new module ids listed in one day; the rest wait for the next
 max_new_per_day    = 10
-; how long a submission waits for VirusTotal before it is judged without it
+; how long a submission waits when the catalog cannot ask VirusTotal before it is judged without it
 vt_wait_days       = 3
+; every listed package is analysed again with the day's engines this often (0 = never): the one
+; recurring cost of the catalog's own VirusTotal key
+vt_rescan_days     = 30
 ; a listed module whose release has failed the checks this long leaves the browser (it stays listed)
 dormant_days       = 30

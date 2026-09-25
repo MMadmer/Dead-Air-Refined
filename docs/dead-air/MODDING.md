@@ -241,9 +241,16 @@ Editor's **Mod > Submit to Mod Browser...**:
   `[update] github` is a public repository whose Latest release carries the
   module; the version is at least `1.0.0`; `website` is the module's own page
   on AP-PRO or ModDB, not the site or an index of it; the release passes the
-  content policy and the script report; the VirusTotal verdict is not `block`;
-  the submission comes from the owner of the repository, whose GitHub account
-  is at least 14 days old.
+  content policy and the script report; the submission comes from the owner of
+  the repository, whose GitHub account is at least 14 days old.
+- **VirusTotal, with your own key.** Scanning is the author's job: a free
+  VirusTotal account's API key, saved in the editor, scans the packages on
+  Submit and every release of a listed module on Publish Release (uploading a
+  package VirusTotal does not know and waiting for the report). The catalog
+  only reads that report: a package VirusTotal does not know is refused, a
+  `block` verdict is refused, and a listed module's release nobody scanned is
+  withdrawn until its author scans it
+  ([MOD_CATALOG 11](MOD_CATALOG.md#11-virustotal)).
 - **Submission.** The editor opens an issue in the catalog repository from the
   account that owns the module's repository, carrying the one file the catalog
   will hold, `mods/<id>.ltx`

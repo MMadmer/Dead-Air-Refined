@@ -30,6 +30,7 @@ jobs:
       pull-requests: write
     outputs:
       merge: ${{ steps.judge.outputs.merge }}
+      vt: ${{ steps.judge.outputs.vt }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,7 +43,8 @@ jobs:
         run: python3 tools/catalog.py judge --outputs "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
 
   # the only job that may write to the repository; it re-reads each accepted issue and commits
-  # its file only when the bytes are the ones judged
+  # its file only when the bytes are the ones judged, with the VirusTotal reports judge read, so
+  # nothing asks VirusTotal about those packages again
   merge:
     needs: judge
     if: needs.judge.outputs.merge != ''
@@ -58,4 +60,5 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           MERGE: ${{ needs.judge.outputs.merge }}
+          VT_ROWS: ${{ needs.judge.outputs.vt }}
         run: python3 tools/catalog.py merge "$MERGE"

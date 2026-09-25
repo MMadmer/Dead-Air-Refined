@@ -8,7 +8,8 @@ its workflows - by itself, with nobody there - and what a maintainer may still r
     catalog.py merge "<number>:<sha256> ..." commits what judge accepted - the judged bytes and
                                              nothing else - closes those issues, starts publish.yml
     catalog.py cards [--issues <file>]       public/cards.txt and public/thumbs/ from the live releases
-    catalog.py vt                            public/vt.txt (VT_API_KEY); unknown packages are uploaded
+    catalog.py vt                            public/vt.txt (VT_API_KEY): reads the reports the authors'
+                                             scans left, as few times as it can; uploads nothing
     catalog.py holds                         holds.ltx: the versions VirusTotal blocks
     catalog.py reviews [--csv <url|file>]    public/ratings.txt and public/reviews/ from the review inbox
     catalog.py status [--issues <file>]      the one issue that says what fails
@@ -24,7 +25,7 @@ Run it from the root of the catalog repository (or pass --repo). The GitHub comm
 (or GITHUB_TOKEN) and GITHUB_REPOSITORY, as a workflow has them. Network access goes to GitHub,
 the VirusTotal API, the modules' websites and the review inbox only. For tests XMS_CATALOG_GITHUB,
 XMS_CATALOG_API and XMS_CATALOG_VT point those somewhere else, XMS_CATALOG_NOW fixes the clock and
-XMS_CATALOG_VT_PAUSE / XMS_CATALOG_VT_POLL shorten VirusTotal's pacing.
+XMS_CATALOG_VT_PAUSE shortens VirusTotal's pacing.
 """
 import argparse
 import base64
@@ -37,7 +38,6 @@ import io
 import json
 import os
 import re
-import secrets
 import shutil
 import struct
 import subprocess
@@ -64,15 +64,10 @@ CARDS_LIMIT = 16 * 1024 * 1024
 SUBMISSION_LIMIT = 4096
 # a release this big or smaller is downloaded whole once; a larger one is read file by file
 PACKAGE_FETCH_LIMIT = 2 * 1024 * 1024 * 1024
-# VirusTotal's free API: 4 requests a minute, 500 a day; files up to 32 MiB go straight in, up to
-# 650 MiB through an upload address
+# VirusTotal's free API: 4 requests a minute, 500 a day. The catalog's key only reads reports -
+# scanning is the authors' job, with their own keys - and never spends more than this in a run.
 VT_PAUSE = float(os.environ.get("XMS_CATALOG_VT_PAUSE", "16"))
-VT_POLL = float(os.environ.get("XMS_CATALOG_VT_POLL", "60"))
-VT_POLL_MINUTES = 10
-VT_DIRECT_LIMIT = 32 * 1024 * 1024
-VT_UPLOAD_LIMIT = 650 * 1024 * 1024
-VT_UPLOADS_PER_RUN = 5
-VT_REUPLOAD_DAYS = 7
+VT_REQUESTS_PER_RUN = 60
 
 JUDGED_PER_RUN = int(os.environ.get("XMS_CATALOG_JUDGED_PER_RUN", "30"))
 
@@ -258,6 +253,14 @@ def http_get(url, limit, headers=None, byte_range=None):
         if len(data) > limit:
             raise ValueError("%s is larger than %d bytes" % (url, limit))
         return response.status, data
+
+
+def http_post(url, limit, headers=None):
+    request = urllib.request.Request(url, data=b"", method="POST", headers={"User-Agent": USER_AGENT})
+    for name, value in (headers or {}).items():
+        request.add_unredirected_header(name, value)
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.status, response.read(limit)
 
 
 def release_url(repo, asset):
@@ -785,9 +788,9 @@ def vt_error(error):
 
 
 def vt_lookup(sha, key):
-    """The per-engine results of a file VirusTotal knows ({} while it is still analysing it), or None
-    when it does not know it. Raises VtQuota when the key's quota is used up and VtUnavailable when
-    there was no usable answer."""
+    """What VirusTotal knows of a file: None when nothing, else (the per-engine results, the day of
+    its last analysis); the results are {} while VirusTotal is still analysing it. Raises VtQuota
+    when the key's quota is used up and VtUnavailable when there was no usable answer."""
     vt_pace()
     try:
         _, data = http_get(VT_API + "files/" + sha, 8 * 1024 * 1024, headers={"x-apikey": key})
@@ -798,50 +801,23 @@ def vt_lookup(sha, key):
     except (urllib.error.URLError, OSError) as error:
         raise vt_error(error) from None
     try:
-        return json.loads(data.decode("utf-8"))["data"]["attributes"].get("last_analysis_results") or {}
-    except (ValueError, KeyError, TypeError):
+        attributes = json.loads(data.decode("utf-8"))["data"]["attributes"]
+        analysed = attributes.get("last_analysis_date")
+        day = datetime.datetime.fromtimestamp(int(analysed), datetime.timezone.utc).date().isoformat() \
+            if analysed else today()
+        return attributes.get("last_analysis_results") or {}, day
+    except (ValueError, KeyError, TypeError, OverflowError, OSError):
         raise VtUnavailable("VirusTotal's answer is not a file report") from None
 
 
-def vt_upload(path, name, key):
-    """Hands a package to VirusTotal; its report follows within minutes."""
-    size = os.path.getsize(path)
-    url = VT_API + "files"
+def vt_reanalyse(sha, key):
+    """Asks VirusTotal to analyse a file it knows again, with today's engines: a report stays as old
+    as the file's last analysis, and nothing renews it by itself."""
+    vt_pace()
     try:
-        if size > VT_DIRECT_LIMIT:
-            vt_pace()
-            _, data = http_get(VT_API + "files/upload_url", 64 * 1024, headers={"x-apikey": key})
-            url = json.loads(data.decode("utf-8"))["data"]
-            # the key goes to VirusTotal's own host and nowhere else
-            if urllib.parse.urlsplit(url)[:2] != urllib.parse.urlsplit(VT_API)[:2]:
-                raise VtUnavailable("VirusTotal gave an upload address on another host")
-        boundary = "xms-" + secrets.token_hex(16)
-        head = ('--%s\r\nContent-Disposition: form-data; name="file"; filename="%s"\r\n'
-                'Content-Type: application/octet-stream\r\n\r\n' %
-                (boundary, re.sub(r"[^A-Za-z0-9._-]", "_", name))).encode("ascii")
-        tail = ("\r\n--%s--\r\n" % boundary).encode("ascii")
-
-        def body():
-            yield head
-            with open(path, "rb") as f:
-                while True:
-                    chunk = f.read(1 << 20)
-                    if not chunk:
-                        break
-                    yield chunk
-            yield tail
-
-        request = urllib.request.Request(url, data=body(), method="POST", headers={
-            "User-Agent": USER_AGENT, "Content-Type": "multipart/form-data; boundary=" + boundary,
-            "Content-Length": str(len(head) + size + len(tail))})
-        request.add_unredirected_header("x-apikey", key)
-        vt_pace()
-        with urllib.request.urlopen(request, timeout=1800) as response:
-            response.read(64 * 1024)
+        http_post(VT_API + "files/%s/analyse" % sha, 64 * 1024, headers={"x-apikey": key})
     except (urllib.error.URLError, OSError) as error:
         raise vt_error(error) from None
-    except (ValueError, KeyError, TypeError):
-        raise VtUnavailable("VirusTotal gave no upload address") from None
 
 
 def vt_counts(policy, tm, ts, om):
@@ -867,99 +843,93 @@ def vt_verdict(results, policy):
     return vt_counts(policy, tm, ts, om), len(results), tm, ts, om, flagged
 
 
+VT_ROW = re.compile(r"^[0-9a-f]{64} \d{4}-\d\d-\d\d \d+ \d+ \d+ \d+ \S+$")
+
+
+def vt_row(sha, day, results, policy):
+    """The line public/vt.txt keeps for a package (MOD_CATALOG 5.6)."""
+    _, engines, tm, ts, om, flagged = vt_verdict(results, policy)
+    return "%s %s %d %d %d %d %s" % (sha, day, engines, tm, ts, om,
+                                     ",".join(e.replace(" ", "_") for e in flagged) or "-")
+
+
+def parse_vt_row(line):
+    parts = line.split(" ")
+    if len(parts) != 7:
+        return None
+    try:
+        return {"line": line, "date": parts[1], "engines": int(parts[2]), "tm": int(parts[3]), "ts": int(parts[4]),
+                "om": int(parts[5]), "flagged": [e.replace("_", " ") for e in parts[6].split(",") if e and e != "-"]}
+    except ValueError:
+        return None
+
+
 def read_vt(path):
     """public/vt.txt: {sha256: row}."""
-    out = {}
+    rows = {}
     for line in read_lines(path)[1:]:
-        parts = line.split(" ")
-        if len(parts) == 7:
-            try:
-                out[parts[0]] = {"line": line, "date": parts[1], "engines": int(parts[2]), "tm": int(parts[3]),
-                                 "ts": int(parts[4]), "om": int(parts[5]),
-                                 "flagged": [e.replace("_", " ") for e in parts[6].split(",") if e and e != "-"]}
-            except ValueError:
-                continue
-    return out
+        row = parse_vt_row(line)
+        if row:
+            rows[line.split(" ", 1)[0]] = row
+    return rows
+
+
+def write_vt(path, rows):
+    write_text(path, "xms-vt 1\n" + "".join(rows[sha]["line"] + "\n" for sha in sorted(rows)))
 
 
 def vt_package(sha, name, key, policy):
-    """(finding, None) when VirusTotal has a report on a package, (None, "unknown") when it does not
-    know it, (None, reason) when there is no report yet. VtQuota and VtKeyRefused pass through:
-    after them nothing more is asked."""
+    """One lookup: (finding, row, None) when VirusTotal has a report on the package, (None, None,
+    "unknown") when it does not know it, (None, None, reason) when there is no report yet. VtQuota
+    and VtKeyRefused pass through: after them nothing more is asked."""
     try:
-        results = vt_lookup(sha, key)
+        found = vt_lookup(sha, key)
     except (VtQuota, VtKeyRefused):
         raise
     except VtUnavailable as error:
-        return None, "VirusTotal did not answer about %s (%s)" % (name, error)
-    if results is None:
-        return None, "unknown"
+        return None, None, "VirusTotal did not answer about %s (%s)" % (name, error)
+    if found is None:
+        return None, None, "unknown"
+    results, day = found
     if not results:
-        return None, "VirusTotal is analysing %s" % name
+        return None, None, "VirusTotal is still analysing %s" % name
     verdict, engines, tm, ts, om, flagged = vt_verdict(results, policy)
     text = "VirusTotal %s for %s: %d engines, %d trusted malicious, %d trusted suspicious, %d other malicious%s" % (
         verdict, name, engines, tm, ts, om, (" (" + ", ".join(flagged) + ")") if flagged else "")
     if verdict == "warn":
         text += "; the game asks the player before it installs"
-    return Finding("block" if verdict == "block" else "note", text), None
+    return Finding("block" if verdict == "block" else "note", text), vt_row(sha, day, results, policy), None
 
 
-def vt_checks(release, key, policy, memory=None, folder=None, wait_days=0, poll_minutes=0):
-    """VirusTotal's word on every package of a release. The judge (memory given) uploads a package
-    VirusTotal does not know and waits for its report - up to poll_minutes within this run, up to
-    wait_days in all, then judges without it; review only reports what VirusTotal already has."""
-    findings, pending, uploaded = [], {}, False
+def vt_checks(release, key, policy, memory=None, wait_days=0):
+    """VirusTotal's word on every package of a release: (findings, vt.txt rows). One lookup a package
+    and nothing more. Scanning is the author's job, done with their own key before they submit; the
+    catalog's key only reads the report that scan left. A package VirusTotal does not know refuses a
+    submission. One it is still analysing waits, and so does everything while the catalog cannot ask
+    at all - for the judge (memory given) at most wait_days, then it judges without it."""
+    findings, rows, pending = [], [], []
     try:
-        for n, (name, size, sha) in enumerate(release.packages, 1):
-            finding, reason = vt_package(sha, name, key, policy)
+        for name, _, sha in release.packages:
+            finding, row, reason = vt_package(sha, name, key, policy)
             if finding:
                 findings.append(finding)
-                continue
-            if reason == "unknown":
-                if size > VT_UPLOAD_LIMIT:
-                    findings.append(Finding("note", "%s is larger than VirusTotal takes: judged without it" % name))
-                    continue
-                reason = "VirusTotal is scanning %s" % name
-                if memory is None:
-                    reason = "VirusTotal does not know %s" % name
-                elif days_since(memory.get("vt_uploaded")) >= 1:
-                    try:
-                        vt_upload(release.package_file(n, folder), name, key)
-                        memory["vt_uploaded"] = stamp()
-                        uploaded = True
-                    except ValueError as error:
-                        # the package is not what the signed descriptor says
-                        findings.append(Finding("block", str(error)))
-                        continue
-                    except (VtQuota, VtKeyRefused):
-                        raise
-                    except (VtUnavailable, urllib.error.URLError, OSError) as error:
-                        reason = "%s could not be handed to VirusTotal (%s)" % (name, getattr(error, "reason", error))
-            pending[n] = (name, sha, reason)
-        # a package handed to VirusTotal is usually analysed within minutes: waiting for it here
-        # decides most submissions in the run that uploaded it
-        deadline = time.monotonic() + poll_minutes * 60
-        while pending and uploaded and time.monotonic() < deadline:
-            time.sleep(VT_POLL)
-            for n, (name, sha, _) in list(pending.items()):
-                finding, _ = vt_package(sha, name, key, policy)
-                if finding:
-                    findings.append(finding)
-                    del pending[n]
+                rows.append(row)
+            elif reason == "unknown":
+                findings.append(Finding("block", "VirusTotal does not know %s: scan the release with your own VirusTotal "
+                                                 "key in XFined Editor (Mod > Submit to Mod Browser) and submit again" % name))
+            else:
+                pending.append(reason)
     except (VtQuota, VtKeyRefused) as error:
-        for n, (name, _, sha) in enumerate(release.packages, 1):
-            if n not in pending and not any(name in f.text for f in findings):
-                pending[n] = (name, sha, "")
-        for n, (name, sha, _) in pending.items():
-            pending[n] = (name, sha, "VirusTotal did not answer about %s (%s)" % (name, error))
+        pending.append("VirusTotal did not answer the catalog (%s)" % error)
     if pending:
         late = memory is not None and days_since(memory.setdefault("vt_since", stamp())) >= wait_days
-        for name, sha, reason in pending.values():
+        for reason in pending:
             if memory is None or late:
-                findings.append(Finding("note", reason + (": no report in %d days, judged without it" % wait_days if late else "")))
+                findings.append(Finding("note", reason + (": no report in %d days, judged without it" % wait_days
+                                                          if late else "")))
             else:
                 findings.append(Finding("wait", reason))
-    return findings
+    return findings, rows
 
 
 # ---- section 7 ------------------------------------------------------------------------------------------------
@@ -1051,7 +1021,7 @@ def accept_settings(config):
     section = dict(config.get("accept", []))
     out = {}
     for key, default in (("min_account_days", 14), ("max_mods_per_owner", 20), ("max_new_per_day", 10),
-                         ("vt_wait_days", 3), ("dormant_days", 30)):
+                         ("vt_wait_days", 3), ("vt_rescan_days", 30), ("dormant_days", 30)):
         try:
             out[key] = max(0, int(section.get(key, default)))
         except ValueError:
@@ -1078,13 +1048,15 @@ def verdict_state(findings):
 
 
 class Outcome:
-    def __init__(self, state, findings, sub=None, new=False, text=""):
+    def __init__(self, state, findings, sub=None, new=False, text="", rows=()):
         self.state, self.findings, self.sub, self.new, self.text = state, findings, sub, new, text
+        # VirusTotal's reports the judge read, for merge to keep: nothing asks about them again
+        self.rows = list(rows)
 
 
 def judge_submission(repo, sub, author, created, settings, counts, vt_key, policy, memory, folder):
     """Section 7 on one submission, cheapest first: the release's files are read last, once
-    everything else holds and VirusTotal has spoken. Returns (state, findings, new)."""
+    everything else holds and VirusTotal has spoken. Returns (state, findings, new, vt.txt rows)."""
     findings, release = release_checks(repo, sub, author)
     new = not bound_keys(repo, sub.id)
     if new and counts["owners"].get(sub.owner.lower(), 0) >= settings["max_mods_per_owner"]:
@@ -1100,22 +1072,24 @@ def judge_submission(repo, sub, author, created, settings, counts, vt_key, polic
                                 (author, age, settings["min_account_days"], ready)))
     state = verdict_state(findings)
     if state:
-        return state, findings, new
+        return state, findings, new, []
     if new and counts["new_today"] >= settings["max_new_per_day"]:
         findings.append(Finding("wait", "%d new modules were listed today, the most in one day: this one follows "
                                         "tomorrow" % counts["new_today"]))
     state = verdict_state(findings)
     if state:
-        return state, findings, new
+        return state, findings, new, []
+    rows = []
     if vt_key:
-        findings += vt_checks(release, vt_key, policy, memory, folder, settings["vt_wait_days"], VT_POLL_MINUTES)
+        found, rows = vt_checks(release, vt_key, policy, memory, settings["vt_wait_days"])
+        findings += found
     else:
         findings.append(Finding("note", "VirusTotal is not set up for this catalog: judged without it"))
     state = verdict_state(findings)
     if state:
-        return state, findings, new
+        return state, findings, new, rows
     findings += content_checks(release, folder)
-    return verdict_state(findings) or "accepted", findings, new
+    return verdict_state(findings) or "accepted", findings, new, rows
 
 
 def submission_text(body):
@@ -1146,9 +1120,9 @@ def judge_issue(api, repo, issue, settings, counts, vt_key, policy, memory, fold
     sub = submission_of(text)
     login = (issue.get("user") or {}).get("login", "")
     user = api.get("users/" + urllib.parse.quote(login))
-    state, findings, new = judge_submission(repo, sub, login, parse_time(user["created_at"]), settings, counts, vt_key,
-                                            policy, memory, folder)
-    return Outcome(state, findings, sub, new, text)
+    state, findings, new, rows = judge_submission(repo, sub, login, parse_time(user["created_at"]), settings, counts,
+                                                  vt_key, policy, memory, folder)
+    return Outcome(state, findings, sub, new, text, rows)
 
 
 # ---- verdicts --------------------------------------------------------------------------------------------------
@@ -1198,7 +1172,7 @@ def previous_verdict(api, number):
     found = re.search(re.escape(STATE_MARKER) + r"([^<>\n]*?) -->", body)
     for pair in found.group(1).split() if found else []:
         key, _, value = pair.partition("=")
-        if key in ("vt_since", "vt_uploaded") and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", value) or \
+        if key == "vt_since" and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", value) or \
                 key == "text" and re.fullmatch(r"[0-9a-f]{64}", value):
             memory[key] = value
     return latest, state, memory
@@ -1228,7 +1202,7 @@ def cmd_judge(args):
         items = [api.get("repos/%s/issues/%d" % (api.repo, args.issue))]
     else:
         items = api.get_all("repos/%s/issues" % api.repo, {"state": "open", "sort": "created", "direction": "asc"})
-    merges, lines, judged = [], [], 0
+    merges, vt_rows, lines, judged = [], [], [], 0
     for item in items:
         number = item["number"]
         pull = "pull_request" in item
@@ -1264,6 +1238,7 @@ def cmd_judge(args):
                 close_issue(api, number, "not_planned")
             elif outcome.state == "accepted":
                 merges.append("%d:%s" % (number, digest))
+                vt_rows += outcome.rows
                 if outcome.new:
                     counts["new_today"] += 1
                     owner = outcome.sub.owner.lower()
@@ -1273,6 +1248,7 @@ def cmd_judge(args):
             lines.append("#%d: not judged this time (%s)" % (number, error))
     print("\n".join(lines) or "no open submissions")
     append_text(args.outputs, "merge=%s\n" % " ".join(merges))
+    append_text(args.outputs, "vt<<XMS_VT\n%sXMS_VT\n" % "".join(row + "\n" for row in vt_rows))
     append_text(args.summary, "## Submissions\n\n" + ("\n".join("- " + clean(line) for line in lines) or "none open") + "\n")
     return 0
 
@@ -1335,6 +1311,17 @@ def cmd_merge(args):
         accepted.append((number, sub.id))
     if not accepted:
         return 0
+    # the reports the judge read go in with the listing, so no later run asks VirusTotal about them again
+    rows = [line.strip() for line in os.environ.get("VT_ROWS", "").splitlines() if VT_ROW.match(line.strip())]
+    if rows:
+        path = repo.path("public", "vt.txt")
+        table = read_vt(path)
+        table.update({line.split(" ", 1)[0]: parse_vt_row(line) for line in rows})
+        write_vt(path, table)
+        git(repo, "add", "--", "public/vt.txt")
+        if git(repo, "status", "--porcelain", "--", "public/vt.txt").strip():
+            git(repo, "commit", "-q", "--author=catalog-bot <catalog-bot@users.noreply.github.com>",
+                "-m", "Keep VirusTotal's reports of the accepted packages")
     push(repo, branch)
     for number, _ in accepted:
         close_issue(api, number, "completed")
@@ -1452,91 +1439,130 @@ def read_cards(path):
     return cards
 
 
+def read_vt_state(path):
+    """state/virustotal.txt: {sha256: {checked, answer, rescan}} - when the catalog last asked about
+    a package, what VirusTotal said (report, unknown, analysing, error) and when the catalog asked
+    for a fresh analysis."""
+    out = {}
+    for line in read_lines(path):
+        parts = line.split(" ")
+        if len(parts) == 4 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
+            out[parts[0]] = {k: ("" if v == "-" else v) for k, v in zip(("checked", "answer", "rescan"), parts[1:])}
+    return out
+
+
+def write_vt_state(path, state):
+    write_text(path, "".join("%s %s %s %s\n" % (sha, entry.get("checked") or "-", entry.get("answer") or "-",
+                                                entry.get("rescan") or "-") for sha, entry in sorted(state.items())))
+
+
 def cmd_vt(args):
+    """public/vt.txt, with the catalog's key and as few requests as it can. Scanning is the authors'
+    job: their own keys scan a release before it is submitted or published, and the catalog uploads
+    nothing. A package is read once, when it is new - unless the judge already read it at the
+    submission - and again only while it has no report, while its report is not clean (once a day),
+    and after the catalog asked VirusTotal to analyse it again (every vt_rescan_days)."""
     repo = Repo(args.repo)
     key = os.environ.get("VT_API_KEY")
     if not key:
         print("VT_API_KEY is not set: vt.txt is left as it is")
         return 0
-    policy = vt_policy(repo.config())
-    # every package of a served card and of a live release, withdrawn ones included: a hold is
-    # lifted by a later report of the same package
-    mods = listing(repo)
+    config = repo.config()
+    policy = vt_policy(config)
+    rescan_days = accept_settings(config)["vt_rescan_days"]
+    # every package of a live release, withdrawn ones included (a hold is lifted by a later report
+    # of the same package), and of every card served
     packages = {}
     for module_id, entry in read_live(repo.path("state", "live.txt")).items():
-        for name, size, sha in entry["packages"]:
-            packages.setdefault(sha, (module_id, entry["github"], name, size))
+        for name, _, sha in entry["packages"]:
+            packages.setdefault(sha, (module_id, name))
     for module_id, text in read_cards(repo.path("public", "cards.txt")).items():
         try:
             body, _, _, _ = xc.split_signed(text)
         except ValueError:
             continue
         for name, value in parse_ini(body.decode("utf-8")).get("packages", []):
-            size, _, sha = value.partition(",")
-            if size.strip().isdigit():
-                packages.setdefault(sha.strip().lower(), (module_id, (mods.get(module_id) or {}).get("github"), name,
-                                                          int(size)))
-    old = {sha: row["line"] for sha, row in read_vt(repo.path("public", "vt.txt")).items()}
-    uploads = read_pairs(repo.path("state", "vt-uploads.txt"))
+            sha = value.partition(",")[2].strip().lower()
+            if re.fullmatch(r"[0-9a-f]{64}", sha):
+                packages.setdefault(sha, (module_id, name))
+    rows = {sha: row for sha, row in read_vt(repo.path("public", "vt.txt")).items() if sha in packages}
+    state_path = repo.path("state", "virustotal.txt")
+    state = {sha: entry for sha, entry in read_vt_state(state_path).items() if sha in packages}
+    asked, stopped = 0, ""
+
+    def due(sha):
+        row, entry = rows.get(sha), state.get(sha, {})
+        # a fresh analysis the catalog asked for, a week at most
+        if entry.get("rescan") and (not row or row["date"] < entry["rescan"]) and days_since(entry["rescan"]) <= 7:
+            return True
+        if not row:
+            # new, still analysing or not answered: every run; unknown to VirusTotal: once a day
+            return entry.get("answer") != "unknown" or entry.get("checked", "") < today()
+        return vt_counts(policy, row["tm"], row["ts"], row["om"]) != "clean" and entry.get("checked", "") < today()
+
     # A VirusTotal that cannot answer - the quota used up, the key refused, the service down -
     # costs a stale vt.txt and never the run: the cards and the reviews still go out, and the
     # game treats a package without a result as one VirusTotal does not know (MOD_CATALOG 11).
-    lines, stopped, uploaded = ["xms-vt 1"], "", 0
-    with tempfile.TemporaryDirectory() as folder:
-        for sha, (module_id, github, name, size) in sorted(packages.items(), key=lambda item: (item[1][0], item[1][2])):
-            # a result younger than a day is kept: the free API allows 500 lookups a day
-            if (sha in old and old[sha].split(" ")[1] == today()) or stopped:
-                if sha in old:
-                    lines.append(old[sha])
-                continue
-            try:
-                results = vt_lookup(sha, key)
-            except VtUnavailable as error:
-                print("%s %s: %s - the last result stays" % (module_id, name, error))
-                if sha in old:
-                    lines.append(old[sha])
-                if isinstance(error, (VtQuota, VtKeyRefused)):
-                    stopped = str(error)
-                continue
-            if not results:
-                if sha in old:
-                    lines.append(old[sha])
-                # a package nobody handed to VirusTotal is handed to it by the catalog: an update
-                # an author released gets a report like the release they submitted
-                if results is None and github and size <= VT_UPLOAD_LIMIT and uploaded < VT_UPLOADS_PER_RUN and \
-                        days_since(uploads.get(sha)) >= VT_REUPLOAD_DAYS:
-                    try:
-                        release = Release(github, module_id)
-                        release.packages = [(name, size, sha)]
-                        vt_upload(release.package_file(1, folder), name, key)
-                        uploads[sha] = today()
-                        uploaded += 1
-                        print("%s %s: handed to VirusTotal" % (module_id, name))
-                    except VtUnavailable as error:
-                        print("%s %s: not handed to VirusTotal (%s)" % (module_id, name, error))
-                        if isinstance(error, (VtQuota, VtKeyRefused)):
-                            stopped = str(error)
-                    except (urllib.error.URLError, OSError, ValueError) as error:
-                        print("%s %s: not handed to VirusTotal (%s)" % (module_id, name, getattr(error, "reason", error)))
-                continue
-            verdict, engines, tm, ts, om, flagged = vt_verdict(results, policy)
-            lines.append("%s %s %d %d %d %d %s" % (sha, today(), engines, tm, ts, om,
-                                                   ",".join(e.replace(" ", "_") for e in flagged) or "-"))
-            print("%s %s: %s" % (module_id, name, verdict))
-    write_text(repo.path("public", "vt.txt"), "\n".join(lines) + "\n")
-    write_pairs(repo.path("state", "vt-uploads.txt"), {sha: date for sha, date in uploads.items() if sha in packages})
+    for sha, (module_id, name) in sorted(packages.items(), key=lambda item: item[1]):
+        if stopped or asked >= VT_REQUESTS_PER_RUN or not due(sha):
+            continue
+        asked += 1
+        entry = state.setdefault(sha, {})
+        entry["checked"] = today()
+        try:
+            found = vt_lookup(sha, key)
+        except VtUnavailable as error:
+            entry["answer"] = "error"
+            print("%s %s: %s - the last result stays" % (module_id, name, error))
+            if isinstance(error, (VtQuota, VtKeyRefused)):
+                stopped = str(error)
+            continue
+        if found is None:
+            entry["answer"] = "unknown"
+            print("%s %s: VirusTotal does not know it - its author has not scanned it" % (module_id, name))
+            continue
+        results, day = found
+        if not results:
+            entry["answer"] = "analysing"
+            continue
+        entry["answer"] = "report"
+        rows[sha] = parse_vt_row(vt_row(sha, day, results, policy))
+        if entry.get("rescan") and day >= entry["rescan"]:
+            entry["rescan"] = ""
+        print("%s %s: %s" % (module_id, name, vt_counts(policy, rows[sha]["tm"], rows[sha]["ts"], rows[sha]["om"])))
+    # the pipeline's own safety net: a report older than vt_rescan_days is renewed with today's
+    # engines - one request a package, the oldest first
+    for sha in sorted(rows, key=lambda s: rows[s]["date"]):
+        entry = state.setdefault(sha, {})
+        if not rescan_days or stopped or asked >= VT_REQUESTS_PER_RUN:
+            break
+        if (entry.get("rescan") and days_since(entry["rescan"]) <= 7) or days_since(rows[sha]["date"]) < rescan_days:
+            continue
+        asked += 1
+        try:
+            vt_reanalyse(sha, key)
+            entry["rescan"] = today()
+        except VtUnavailable as error:
+            print("%s: no fresh analysis (%s)" % (sha[:12], error))
+            if isinstance(error, (VtQuota, VtKeyRefused)):
+                stopped = str(error)
+    write_vt(repo.path("public", "vt.txt"), rows)
+    write_vt_state(state_path, state)
+    print("VirusTotal: %d request(s) with the catalog's key" % asked)
     if stopped:
         print("VirusTotal stopped for this run (%s): the other packages keep their last results" % stopped)
     return 0
 
 
 def cmd_holds(args):
-    """holds.ltx from VirusTotal's latest word: a live release it blocks is withdrawn and lifted again
-    when every package of it has a later report that does not block; an older release that was
-    withdrawn stays withdrawn."""
+    """holds.ltx from VirusTotal's latest word: a live release it blocks, or one VirusTotal does not
+    know because its author released it without scanning it, is withdrawn, and lifted again when
+    every package of it has a report that does not block; an older release that was withdrawn stays
+    withdrawn."""
     repo = Repo(args.repo)
     policy = vt_policy(repo.config())
     vt = read_vt(repo.path("public", "vt.txt"))
+    answers = read_vt_state(repo.path("state", "virustotal.txt"))
     live = read_live(repo.path("state", "live.txt"))
     path = repo.path("holds.ltx")
     old = read_holds(path)
@@ -1548,6 +1574,8 @@ def cmd_holds(args):
         if "block" in verdicts:
             flagged = sorted({engine for sha in shas if sha in vt for engine in vt[sha]["flagged"]})
             holds[key] = ("+".join(shas), "VirusTotal: " + (", ".join(flagged) or "blocked"))
+        elif any(sha not in vt and answers.get(sha, {}).get("answer") == "unknown" for sha in shas):
+            holds[key] = ("+".join(shas), "Not scanned by VirusTotal yet")
         elif key in old and (None in verdicts or not shas):
             holds[key] = old[key]
     if holds != old or not os.path.isfile(path):
@@ -1758,7 +1786,7 @@ def cmd_review(args):
     if release and not verdict_state(findings):
         key = os.environ.get("VT_API_KEY")
         if key:
-            findings += vt_checks(release, key, vt_policy(repo.config()))
+            findings += vt_checks(release, key, vt_policy(repo.config()))[0]
         with tempfile.TemporaryDirectory() as folder:
             findings += content_checks(release, folder)
     print(report(findings, "%s (%s)" % (sub.id, sub.github)))
@@ -1818,36 +1846,44 @@ def cmd_init(args):
 # ---- selftest --------------------------------------------------------------------------------------------------
 
 def selftest_vt_quota():
-    """VirusTotal out of quota: vt.txt keeps every result it had and the run still succeeds."""
+    """VirusTotal out of quota: vt.txt keeps every result it had, the run still succeeds, and the
+    catalog asks nothing about a package whose report is clean and fresh."""
     with tempfile.TemporaryDirectory() as folder:
         d = xc.new_private()
         cards, old_lines = b"xms-cards 1\n", ["xms-vt 1"]
-        for n in range(2):
+        for n in range(3):
             sha = hashlib.sha256(b"package %d" % n).hexdigest()
             body = "[release]\nid = m%d\nversion = 1.0.0\n\n[packages]\nm%d-1.0.0.zip = 10, %s\n" % (n, n, sha)
             text = xc.sign_text(body, d).encode("utf-8")
             cards += b"card m%d %d\n" % (n, len(text)) + text
-            old_lines.append("%s 2000-01-01 70 0 0 0 -" % sha)
+            # two reports, one old enough for a fresh analysis and one just read; the third package is new
+            if n < 2:
+                old_lines.append("%s %s 70 0 0 0 -" % (sha, "2000-01-01" if n == 0 else today()))
+        old_lines[1:] = sorted(old_lines[1:])
         write_bytes(os.path.join(folder, "public", "cards.txt"), cards)
         write_text(os.path.join(folder, "public", "vt.txt"), "\n".join(old_lines) + "\n")
+        asked = []
 
-        def quota(*_args, **_kwargs):
+        def quota(url, *_args, **_kwargs):
+            asked.append(url)
             raise urllib.error.HTTPError(VT_API, 429, "Quota exceeded", None, None)
 
-        saved_get, saved_key = globals()["http_get"], os.environ.get("VT_API_KEY")
-        globals()["http_get"] = quota
+        saved = globals()["http_get"], globals()["http_post"], os.environ.get("VT_API_KEY")
+        globals()["http_get"] = globals()["http_post"] = quota
         os.environ["VT_API_KEY"] = "selftest"
         try:
             # what the run says about the quota is the expected outcome here, not news
             with contextlib.redirect_stdout(io.StringIO()):
                 assert cmd_vt(argparse.Namespace(repo=folder)) == 0
         finally:
-            globals()["http_get"] = saved_get
-            if saved_key is None:
+            globals()["http_get"], globals()["http_post"] = saved[:2]
+            if saved[2] is None:
                 os.environ.pop("VT_API_KEY", None)
             else:
-                os.environ["VT_API_KEY"] = saved_key
+                os.environ["VT_API_KEY"] = saved[2]
         assert read_text(os.path.join(folder, "public", "vt.txt")).splitlines() == old_lines
+        # the new package was asked about, and the quota ended the run there: nothing else
+        assert len(asked) == 1 and asked[0].endswith(hashlib.sha256(b"package 2").hexdigest()), asked
 
 
 def selftest_verdicts():
