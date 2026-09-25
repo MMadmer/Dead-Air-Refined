@@ -231,8 +231,9 @@ Editor's **Mod > Submit to Mod Browser...**:
 - **Author key.** The editor makes it on first use: a key file
   (`Documents\XFined Editor\Keys\author.xkey` by default), never inside a
   project. Keep a copy elsewhere: every release of a listed module must be
-  signed with it, and a lost key stops updates until the maintainer binds a new
-  one ([MOD_CATALOG 4.1](MOD_CATALOG.md#41-key-files)).
+  signed with it, and a lost key stops its updates for good - the module can
+  only be listed again under a new id
+  ([MOD_CATALOG 4.1](MOD_CATALOG.md#41-key-files)).
 - **Signed release.** Package Release writes the `[card]` the browser shows into
   the release descriptor and signs the release with the key
   ([MOD_CATALOG 4](MOD_CATALOG.md#4-the-authors-release)).
@@ -240,11 +241,17 @@ Editor's **Mod > Submit to Mod Browser...**:
   `[update] github` is a public repository whose Latest release carries the
   module; the version is at least `1.0.0`; `website` is the module's own page
   on AP-PRO or ModDB, not the site or an index of it; the release passes the
-  content policy and the script report; the VirusTotal verdict is not `block`.
-- **Pull request.** The editor opens it from the account that owns the module's
-  repository: one new file, `mods/<id>.ltx`, in the catalog repository
+  content policy and the script report; the VirusTotal verdict is not `block`;
+  the submission comes from the owner of the repository, whose GitHub account
+  is at least 14 days old.
+- **Submission.** The editor opens an issue in the catalog repository from the
+  account that owns the module's repository, carrying the one file the catalog
+  will hold, `mods/<id>.ltx`
   ([MOD_CATALOG 10.1](MOD_CATALOG.md#101-the-author-in-xfined-editor)). The
-  maintainer reviews it and lists the module; later releases need none.
+  catalog judges it by itself, usually within minutes, and answers in the
+  issue: accepted (listed), refused (with the reasons) or waiting
+  ([MOD_CATALOG 10.2](MOD_CATALOG.md#102-the-catalog-repository)). Nobody
+  reviews by hand; later releases need no submission.
 
 `mod.ltx` gains two optional keys: `[module] thumbnail`, a 256 x 256 DXT1/DXT5
 DDS the editor makes from any picture, and `[module] tags`, words from a fixed

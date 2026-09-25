@@ -23,3 +23,17 @@ csv           =
 salt          =
 identity_bits = 24
 review_bits   = 20
+
+[accept]
+; how the catalog lists modules by itself (MOD_CATALOG 7, 10.2); these stay in this repository and
+; are not signed into the index
+; a submission from a younger GitHub account is refused, with the day it may come again
+min_account_days   = 14
+; modules one GitHub account may list
+max_mods_per_owner = 20
+; new module ids listed in one day; the rest wait for the next
+max_new_per_day    = 10
+; how long a submission waits for VirusTotal before it is judged without it
+vt_wait_days       = 3
+; a listed module whose release has failed the checks this long leaves the browser (it stays listed)
+dormant_days       = 30

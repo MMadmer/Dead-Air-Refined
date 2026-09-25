@@ -1,0 +1,61 @@
+# Submissions (MOD_CATALOG 10.2). A submission is an issue XFined Editor opens. judge reads it
+# through the API - nothing of it is ever run - and gives the verdict of section 7: accepted
+# (merge commits the judged file and starts publish.yml), refused (the issue is closed with the
+# reasons) or waiting (judged again every half hour, and whenever its author submits again).
+# Nobody has to be here for any of it. Submissions are issues because GitHub holds pull
+# requests of first-time contributors for an approval, and blocks pull_request_target.
+name: accept
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  schedule:
+    - cron: '11,41 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: catalog-accept
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  judge:
+    # an issue that is not a submission starts nothing
+    if: github.event_name != 'issues' || startsWith(github.event.issue.body, '<!-- xms-catalog submission -->')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    outputs:
+      merge: ${{ steps.judge.outputs.merge }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - id: judge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: python3 tools/catalog.py judge --outputs "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
+
+  # the only job that may write to the repository; it re-reads each accepted issue and commits
+  # its file only when the bytes are the ones judged
+  merge:
+    needs: judge
+    if: needs.judge.outputs.merge != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE: ${{ needs.judge.outputs.merge }}
+        run: python3 tools/catalog.py merge "$MERGE"

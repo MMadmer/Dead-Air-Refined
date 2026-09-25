@@ -22,31 +22,38 @@ order of importance:
    (section 4); the catalog names that key for the module (section 5). A stolen GitHub
    account cannot publish an update the game accepts, and nobody on the way - GitHub, a
    mirror, a proxy - can change a byte.
-4. **Only the maintainer lists modules.** The catalog index is signed with the
-   maintainer's key: a key file the maintainer keeps (4.1), used on their own computer or,
-   if they choose, by the catalog's publishing workflow as a repository secret (10.4).
-   Write access to the catalog repository alone adds, changes and un-revokes nothing.
-5. **A bad module is switched off.** The maintainer can revoke a module, a version or an
-   author key; the game disables what is revoked at the next start and says why.
+4. **Only a module that passes the checks is listed.** The catalog's own workflows list
+   what meets section 7 and nothing else (10.2). The index is signed with the catalog key,
+   which the catalog's publishing workflow uses after the checks; the owner of the catalog
+   keeps the key file as well (4.1). Write access to the catalog repository - its owner's
+   GitHub account - can still change anything: the catalog is exactly as safe as that
+   account.
+5. **A bad module is switched off.** A version VirusTotal blocks is withdrawn
+   automatically (5.2): the catalog checks a new release within six hours and every listed
+   package once a day (section 11). A person with write access to the catalog may also
+   revoke a module, a version or an author key by hand. The game disables what is
+   withdrawn at the next start and says why.
 6. **VirusTotal.** Every listed release has a public VirusTotal report the player can open;
    with the player's own free VirusTotal key the game checks the live report before it
    installs (section 11).
 
 What protected mode does not cover: the game's own data. A module may still do inside the
 game what modules have always done - change the rules, the world, the saves it writes. That
-is what review and revocation are for.
+is what the players' reviews (section 12) and revocation by hand (5.3) are for.
 
 Nothing in this document runs on a server of ours. The catalog is a handful of static
-files in a public git repository, served by free static hosts; the trust is in the
-signatures, so any copy on any host is as good as the original (section 12).
+files in a public git repository, kept up to date by the repository's own workflows on
+GitHub Actions and served by free static hosts; the trust is in the signatures, so any
+copy on any host is as good as the original (section 13).
 
 ## 2. Parties
 
 | Party | Holds | Trusted for |
 |---|---|---|
-| Maintainer | the catalog key(s), on their own Windows machine | which modules are listed, with which author key; revocations |
+| Catalog workflows | the catalog key and a VirusTotal key, as repository secrets | listing what passes section 7; withdrawing what VirusTotal blocks |
+| Maintainer (optional) | the catalog repository, as its owner, and the catalog key file | revocations by hand; moderation of reviews |
 | Author | an author key, made and kept by XFined Editor | the content of their releases |
-| Catalog repository, CI, mirrors, GitHub | nothing secret | nothing - everything they serve is verified |
+| Mirrors, hosts, proxies | nothing secret | nothing - everything they serve is verified |
 | Player | optionally their own VirusTotal key | - |
 
 ## 3. Keys and signatures
@@ -116,7 +123,7 @@ sig = 0123456789abcdef:...
 
 ### 4.1 Key files
 
-A key - the author's and the maintainer's alike - is a file the owner keeps, never a
+A key - the author's and the catalog's alike - is a file the owner keeps, never a
 secret tied to one computer. Losing a laptop loses nothing as long as the file is kept
 somewhere else: a USB stick, a cloud folder, a password manager.
 
@@ -148,19 +155,22 @@ author.xkey` unless the author picks another place, never inside a project - and
 keep a copy. It remembers where the file is and asks for its password once per session.
 Another computer imports the same file.
 
-A lost author key is not the end of a module: the author makes a new key and submits it
-from the GitHub account that owns the module's repository, and the maintainer binds the
-new key (5.3). Until then the game keeps the installed version and accepts no update.
+The catalog's rules never replace a lost author key. A submission that brings another key
+for a listed module is refused automatically: nobody but the holder of the old key can
+vouch for a new one, and the catalog has no person to ask. The module keeps its listing and
+installed copies keep working, but no update is accepted; the author lists the module again
+under a new module id. A maintainer, if there is one, can still bind a new key by hand with
+a commit (5.3).
 
 ## 5. The catalog
 
 ### 5.1 Files
 
-The catalog is four kinds of files under one base URL:
+The catalog is five kinds of files under one base URL:
 
 | File | Signed by | Content |
 |---|---|---|
-| `index.ltx` | maintainer (3.1) | the listed modules, their keys, the revocations, the mirrors, the VirusTotal policy |
+| `index.ltx` | the catalog key (3.1) | the listed modules, their keys, the revocations and withdrawals, the mirrors, the VirusTotal policy |
 | `cards.txt` | nobody - every card is signed by its author | the latest release descriptor of every listed module |
 | `thumbs/<sha256>.dds` | nobody - named by a signed card | the thumbnails those cards name |
 | `vt.txt` | nobody - informational | VirusTotal results per package |
@@ -190,6 +200,7 @@ darf-overnight-delivery = MMadmer/DARF-Overnight-Delivery, p256:..., 1.0.0, 2026
 [revoked]
 evil-mod                  = *, Malware in scripts\x.script
 some-mod                  = 1.2.0, Breaks saves - update to 1.2.1
+bad-mod                   = 1.0.3, VirusTotal: Kaspersky, ESET-NOD32
 key:0123456789abcdef      = *, Author key reported stolen
 
 [signature]
@@ -205,17 +216,43 @@ sig = ...
   built into the game. This is how the catalog moves host without a game release.
 - `[virustotal]`: section 11.
 - `[mods]`: `<module id> = <owner/repo>, <author key>, <lowest listed version>, <date>`.
-  A release below the lowest listed version is not offered.
+  A release below the lowest listed version is not offered. `<date>` is the day the module
+  was first listed: publishing takes it from the previous index, so an updated listing
+  keeps its date.
 - `[revoked]`: `<module id> = <version or *>, <reason>` or `key:<key id> = *, <reason>`.
+  Publishing signs two files of the catalog repository into it together, and the game
+  makes no difference between them: `revoked.ltx`, the revocations made by hand (5.3), and
+  `holds.ltx`, the automatic withdrawals. The publishing workflow (10.2) rewrites
+  `holds.ltx`, section `[holds]`, with every version whose package VirusTotal's verdict is
+  `block` (section 11), one line each: `<module id> = <version>, <package sha256>+...,
+  VirusTotal: <engines>`; the index gets `<module id> = <version>, VirusTotal: <engines>`. A
+  hold on a module's current release is lifted when a later report of the same package is
+  no longer `block` (a false positive fixed); a held version that is no longer the latest
+  stays held. The game disables a revoked module at the start in memory only, so a lifted
+  hold enables it again.
 
-The game carries the maintainer's public key(s) in code (`ModCatalog::kMaintainerKeys`);
-changing them is a game release. Several keys may be built in; any one of them may sign.
+The game carries the public catalog key(s) in code (`kMaintainerKeys` in
+`src/xrCore/XMS/xms_catalog.cpp`); changing them is a game release. Several keys may be
+built in; any one of them may sign.
 
-### 5.3 Changes only the maintainer can make
+### 5.3 Changes by the rules and by hand
 
-Listing a module; changing its repository or key (an author who lost their key); lowering
-the lowest listed version; revoking and un-revoking; adding a mirror; changing the
-VirusTotal policy.
+The rules make these changes by themselves, with no person involved (10.2):
+
+- listing a module that meets section 7;
+- updating a listing with the same key: its repository, its lowest listed version, its
+  website;
+- withdrawing a version VirusTotal blocks, and restoring the current release when a later
+  report of its package clears it (5.2).
+
+These need a person with write access to the catalog repository. The catalog works
+without one, and then they do not happen:
+
+- binding another key to a listed module (4.1);
+- revoking and un-revoking by hand (`revoked.ltx`);
+- adding a mirror;
+- changing the VirusTotal policy or the limits of section 7 (`catalog.ltx`);
+- moderating reviews (12.4).
 
 ### 5.4 `cards.txt`
 
@@ -230,9 +267,15 @@ card another-module 987
 At most 16 MiB. A card is used only when its descriptor parses (MOD_UPDATES 2.1), its `id`
 is the card's, it carries a valid signature by the module's key from the index, its
 version is at least the lowest listed one and neither the module, the version nor the key
-is revoked. A card that fails is skipped. The file is rebuilt by the catalog's CI, which
-signs nothing: whoever builds it can only leave a card out or serve an older one, and an
-installation always fetches the live descriptor from the module's own repository anyway.
+is revoked. A card that fails is skipped. The file is rebuilt by the publishing workflow's
+`refresh` job, which holds no key and cannot write to the repository (10.2): whoever builds
+it can only leave a card out or serve an older one, and an installation always fetches the
+live descriptor from the module's own repository anyway.
+
+While the live release of a listed module fails the catalog's checks, the module keeps the
+last card that passed. After `dormant_days` (section 7) of failing it loses its card: it
+stays listed - its id stays bound to its key - and has a card again with the first release
+that passes.
 
 ### 5.5 Thumbnails
 
@@ -271,7 +314,7 @@ A comma list from this vocabulary; other words are ignored:
 ## 7. Listing requirements
 
 A module is listed when all of these hold. XFined Editor checks them before it submits,
-the catalog's CI on the pull request, and the maintainer's tool before it signs:
+and the catalog's `accept` workflow judges the submission by them (10.2):
 
 1. `[update] github` names a public repository whose Latest release carries the module's
    descriptor (MOD_UPDATES section 2).
@@ -281,13 +324,42 @@ the catalog's CI on the pull request, and the maintainer's tool before it signs:
    (MOD_UPDATES 1.3 plus): AP-PRO `/stuff/<section>/<slug>-r<number>/` or
    `/forums/topic/<number>-<slug>/`; ModDB `/mods/<slug>`, `/addons/<slug>` or
    `/games/<game>/addons/<slug>`, optionally followed by more path. The page answers
-   HTTP 200 (ModDB turns automated requests away; there a refusal is reported as
-   unverified and the maintainer opens the page).
-5. The release passes the content policy (section 8) and the script report of the CI has
-   no blocking finding (10.3).
-6. The module id is not listed yet, or listed with the same key (a key change is the
-   maintainer's decision, 5.3). The pull request is opened by the owner of the repository.
-7. VirusTotal: the package's verdict (section 11) is not `block`.
+   HTTP 200. ModDB turns automated requests away: its refusal is a note in the verdict and
+   does not stop the listing.
+5. The release passes the content policy (section 8) and the script report has no
+   blocking finding (10.3). Its other findings are notes in the verdict and stop no
+   listing: protected mode stops every one of them.
+6. The submission is opened by the owner of the module's repository, whose GitHub
+   account is at least `min_account_days` old. A younger one is refused, with the day it
+   may submit again: a submission that waited would be judged every half hour, and a pile
+   of them from throwaway accounts would use up the workflow's API budget.
+7. The module id is not listed yet, or listed with the same key. A listing with the same
+   key may change its repository (the key proves it is the same author), its lowest
+   version and its website. Another key is refused (4.1).
+8. One owner lists at most `max_mods_per_owner` modules.
+9. At most `max_new_per_day` new module ids are listed a day; the rest wait.
+10. VirusTotal: no package's verdict (section 11) is `block`. A `warn` is listed, and the
+    game asks the player before it installs. A package VirusTotal does not know is
+    uploaded by the catalog and the submission waits for the report; when VirusTotal has
+    given no answer for `vt_wait_days`, the submission is judged without it.
+
+A submission that cannot be judged yet - where a requirement says it waits, or while
+VirusTotal, GitHub or the network does not answer - stays open and is judged again every
+half hour and whenever its author submits again (10.2).
+
+The numbers are the `[accept]` section of `catalog.ltx` in the catalog repository. They
+are the repository's own and are not copied into the signed index:
+
+```ini
+[accept]
+min_account_days   = 14
+max_mods_per_owner = 20
+max_new_per_day    = 10
+vt_wait_days       = 3
+dormant_days       = 30
+```
+
+`dormant_days` is for modules already listed (5.4).
 
 ## 8. Content policy
 
@@ -392,18 +464,23 @@ refused outright.
   included), and only files with no extension or one of
   `txt log ltx xml json csv ini cfg dat sav scop scoc scov tmp bak md`.
 
-## 10. Submission and review
+## 10. Submission and acceptance
 
 ### 10.1 The author, in XFined Editor
 
 **Mod > Submit to Mod Browser...** (MCP `mod_catalog`) checks section 7 on the project and
 its latest release, can run VirusTotal on the package with the author's own key (section
-11), and opens a pull request against the catalog repository from the author's GitHub
-account: a fork, a branch `submit-<id>`, one file `mods/<id>.ltx`. An account that may push
-to the catalog - the maintainer listing a module of their own; GitHub forks nobody's own
-repository - uses a branch of the catalog itself. A later submission of the same module
-resets that branch and updates the open pull request instead of opening another. The
-window follows the pull request until the maintainer merges it.
+11), and opens an issue in the catalog repository from the author's GitHub account - no
+fork, no branch, no pull request; the catalog's owner submits the same way. An issue and
+not a pull request: GitHub holds pull-request runs for an approval (a first-time
+contributor's fork, a run it flags) and turns `pull_request_target` off by default in
+public repositories, and the catalog has nobody to approve anything. An issue starts the
+catalog's workflow with none of that.
+
+The issue's form is a contract between the editor and the catalog. Its title is
+`Submit <module id>`; its body starts with the line `<!-- xms-catalog submission -->`, then
+one line of text, then a fenced `ini` block holding exactly the text of `mods/<id>.ltx`,
+then the editor's report. The `ini` block:
 
 ```ini
 [mod]
@@ -414,47 +491,108 @@ version = 1.0.0
 website = https://ap-pro.ru/stuff/zov_pripjati/overnight-delivery-r600/
 ```
 
+`version` is the lowest listed version. The file carries no date: the index keeps the day
+of the first listing (5.2).
+
+One module and one account have at most one open submission: submitting again edits that
+issue, which makes the catalog judge it again; with none open, a new one is opened. The
+window follows the issue and shows the catalog's verdict (10.2).
+
 ### 10.2 The catalog repository
 
-`mods/*.ltx` (submissions), `catalog.ltx` (mirrors, VirusTotal policy), `revoked.ltx`,
-`public/` (what mirrors serve: `index.ltx`, `cards.txt`, `vt.txt`, `thumbs/`),
-`tools/catalog.py`, `.github/workflows/`:
+`mods/<id>.ltx` (the listings, one per module), `catalog.ltx` (mirrors, VirusTotal policy,
+review inbox, `[accept]`), `revoked.ltx` (revocations by hand), `holds.ltx` (automatic
+withdrawals), `moderation.ltx` (12.4), `public/` (what mirrors serve: `index.ltx`,
+`cards.txt`, `vt.txt`, `thumbs/`, `ratings.txt`, `reviews/`), `tools/catalog.py`,
+`.github/workflows/`:
 
-- `check.yml` - every pull request: `catalog.py check` on the changed entries, the report
-  in the job summary; a blocking finding fails the check. No secrets, read-only.
-- `watch.yml` - every six hours: `catalog.py cards` and `catalog.py vt` (the maintainer's
-  VirusTotal key as a repository secret), `public/` committed when it changed, an issue
-  opened for a listed module whose new release fails the checks.
-- `pages.yml` - publishes `public/` to GitHub Pages.
+- `accept.yml` - when an issue is opened, edited or reopened, every half hour, and by
+  hand. Job `judge` (reads the repository, may comment on and close issues, holds the
+  VirusTotal key) reads the submission through the GitHub API and applies section 7.
+  After it uploads a package VirusTotal does not know, it waits for the report inside the
+  run, ten minutes at most, so most submissions are decided in one run. The verdict is
+  one of three:
+  - **accepted** - job `merge`, the only one of `accept` with write access to the
+    repository, reads the issue again, requires its `ini` block to be byte-identical to
+    the one judged (SHA-256), commits `mods/<id>.ltx` with exactly those bytes, authored
+    by the submitter's GitHub noreply address, closes the issue as completed and starts
+    `publish.yml`;
+  - **refused** - the issue is closed with the reasons; the author fixes them and submits
+    again;
+  - **waiting** - the issue stays open and is judged again every half hour and whenever
+    its author submits again: VirusTotal still scanning the package, VirusTotal, GitHub
+    or the network not answering, the day's quota of new listings used up.
+
+  A run judges at most 30 submissions, the oldest first; the rest wait for the next run,
+  so a flood of issues costs time and never the workflow's API budget. An issue without
+  the submission marker is left alone. A pull request by anyone but the
+  repository's owner, members or collaborators is closed with a pointer to **Mod > Submit
+  to Mod Browser...**; theirs are left alone, so maintenance by hand stays possible.
+- `publish.yml` - the whole pipeline: every six hours, when `accept` starts it, by hand,
+  and on a person's push to `mods/`, `catalog.ltx` or `revoked.ltx`. Three jobs, each on
+  a machine of its own:
+  - `refresh` (holds the VirusTotal key, reads the repository, may edit the status issue)
+    does everything that reads what strangers publish: the cards (5.4), VirusTotal and the
+    uploads of packages it does not know (section 11), `holds.ltx` (5.2), the reviews
+    (12.3), and one status issue, "Listed modules failing the checks", created, kept up to
+    date and closed when nothing fails. It works from `mods/` of the default branch - the
+    files that passed the checks - not from the signed index, so a new module has its card
+    in the same run that signs it in. Its files go on to `sign` as an artifact.
+  - `sign` (holds the catalog key as the secret `CATALOG_KEY`, may write to the
+    repository) takes those files, signs `public/index.ltx` from `mods/` of its own
+    checkout, `revoked.ltx` and `holds.ltx`, and commits.
+  - `deploy` publishes `public/` to GitHub Pages and refreshes the jsDelivr mirror.
+
+  The catalog key never shares a machine with anything that parses a stranger's file,
+  and the job that parses them cannot write to the repository: at worst it could withhold
+  or add a withdrawal, never list a module.
+- `pages.yml` - publishes `public/` to GitHub Pages after a person's own push to
+  `public/`.
+
+Only a person with write access changes a workflow: `merge` commits nothing but one
+`mods/<id>.ltx`, and nothing a submitter sends is ever run - only read.
+
+**The verdict** is a comment on the submission's issue, and XFined Editor shows it (10.1):
+its form is a contract between the two as well. The body starts with the line
+`<!-- xms-catalog verdict=accepted|waiting|refused -->` (one of the three), the next line
+says the verdict in plain text, then come a blank line and the report in Markdown:
+
+```text
+<!-- xms-catalog verdict=waiting -->
+Waiting: VirusTotal is scanning mymod-1.0.0.zip. The catalog looks again every half hour.
+
+<the report, in Markdown>
+```
+
+Only comments by `github-actions[bot]` that start with that line count; the newest of them
+is the verdict. An unchanged verdict edits the bot's last comment and a changed one is a
+new comment, so the author is notified once per change, not every half hour.
 
 ### 10.3 The script report
 
-`catalog.py check` reads every `.script` of the release with a Lua tokenizer.
-**Blocking**: `ffi`, `os.execute`, `io.popen`, `package.loadlib`, `string.dump`, bytecode,
-`StartDedicatedServer`, `lfs.link`. **For review**: `load`/`loadstring`/`require` of a
-computed string, `_G[...]`, `setfenv`, `debug.*`, `getFS()` writes, `ini_file:save_as`,
-`get_console():execute`, long encoded blobs, `string.char` chains. Protected mode stops
-every one of them anyway; the report stops a module that could only work without it.
+The catalog reads every `.script` of the release with a Lua tokenizer. **Blocking**:
+`ffi`, `os.execute`, `io.popen`, `package.loadlib`, `string.dump`, bytecode,
+`StartDedicatedServer`, `lfs.link`. **Reported, not blocking** (notes in the verdict,
+10.2): `load`/`loadstring`/`require` of a computed string, `_G[...]`, `setfenv`,
+`debug.*`, `getFS()` writes, `ini_file:save_as`, `get_console():execute`, long encoded
+blobs, `string.char` chains. Protected mode stops every one of them anyway; the report
+stops a module that could only work without it.
 
-### 10.4 The maintainer
+### 10.4 A person, optionally
 
-`catalog.py review <pull request>` repeats every check and the VirusTotal verdict on the
-maintainer's machine. Merging lists nothing by itself: `catalog.py publish` builds
-`public/index.ltx` with the next serial, signs it with the maintainer's key file (4.1),
-refreshes the cards, and commits. `catalog.py revoke` records a revocation the same way.
+Nothing requires a person: the workflows of 10.2 list, withdraw and publish by themselves.
+The local tools stay for whoever maintains the catalog by hand:
 
-Where the maintainer key is used is the maintainer's choice:
+- `catalog.py review` repeats every check and the VirusTotal verdict for a submission on
+  their own machine;
+- `catalog.py revoke` records a revocation in `revoked.ltx`;
+- `catalog.py publish --key <file>` builds `public/index.ltx` with the next serial, signs
+  it with the catalog key file (4.1) and refreshes the cards, as `publish.yml` does.
 
-- **Locally** (the default): `catalog.py publish --key <file>` on the maintainer's machine.
-  Nothing on GitHub can sign.
-- **In the publishing workflow**: the key file's content as the repository secret
-  `CATALOG_KEY`; `publish.yml` then signs and publishes whenever a pull request is merged,
-  so listing is one click on GitHub from anywhere. The catalog is then exactly as safe as
-  the maintainer's GitHub account. The file stays the master copy: a secret cannot be read
-  back.
-
-`check.yml` fails any pull request that touches more than `mods/<id>.ltx`, so a workflow
-that could reach the secret only ever changes through the maintainer's own commits.
+A push that changes `mods/`, `catalog.ltx` or `revoked.ltx` starts `publish.yml`, so a
+change made by hand is signed and published like any other; a `public/` published by hand
+goes out through `pages.yml`. The key file stays the master copy: a repository secret
+cannot be read back.
 
 ## 11. VirusTotal
 
@@ -476,13 +614,18 @@ section 9 contains.
 **Where it runs.**
 
 - The author, in XFined Editor, with their own key: looks the package up and uploads it
-  when VirusTotal does not know it; the report link goes into the pull request.
-- The catalog, in `watch.yml` with the maintainer's key: every listed package, written to
-  `vt.txt`. `block` keeps a module out of the listing (section 7) and opens an issue for a
-  listed one. A package is looked up at most once a day, a request every 16 seconds - so
-  the free quota covers some 500 packages. When the quota is used up, the key is refused or
-  VirusTotal does not answer, the packages keep their last results and nothing else of the
-  run is held up: the cards and the reviews still go out.
+  when VirusTotal does not know it; the report link goes into the submission (10.1).
+- The catalog, with its own key, a repository secret. `accept` looks up the packages of a
+  submission: `block` refuses it, `warn` is listed. A package VirusTotal does not know is
+  uploaded and its report awaited in the same run, ten minutes at most; after that the
+  submission waits, `vt_wait_days` at most (section 7). `publish` looks up every listed
+  package and writes the results to `vt.txt`, uploads a package VirusTotal does not know -
+  once a week at most per package - and withdraws a version whose verdict is `block`
+  (5.2). It looks a package up at most once a day, a request every 16 seconds - so the
+  free quota covers some 500 packages. When the quota is used up, the key is refused or
+  VirusTotal does not answer, the packages keep their last results and nothing else of
+  the run is held up: the cards and the reviews still go out, and a submission waits
+  (section 7).
 - The player, in the Mod Browser: the verdict from `vt.txt` next to every module, and the
   report one click away (`https://www.virustotal.com/gui/file/<sha256>`). With their own
   key (Mods window, stored in the Windows Credential Manager, used for nothing else) the
@@ -512,7 +655,8 @@ and an installed one. Writing one needs no account anywhere: only the game.
 
 None of this makes forgery impossible: a determined spammer can fake a hardware hash and
 pay the proofs of work. It makes spam expensive and repeat voting from one computer
-impossible for everyone else; what gets through anyway, the maintainer removes (12.4).
+impossible for everyone else; what gets through anyway, the maintainer, if there is one,
+removes (12.4).
 
 ### 12.2 The review
 
@@ -544,7 +688,7 @@ sig = ...
 
 The game posts the review, as one text field, to the **review inbox** the index names - by
 default a Google Form (anonymous, free, no server of ours); its answers land in a Google
-Sheet published as CSV. `watch.yml` reads that CSV every six hours, keeps what passes
+Sheet published as CSV. `publish.yml` reads that CSV every six hours, keeps what passes
 12.1-12.2, and writes `public/ratings.txt` and `public/reviews/<id>.txt`. The inbox is
 configuration in the signed index, so it can move to another form service without a game
 release:
@@ -569,7 +713,7 @@ say why: a reviewer who expects a delay writes for a reader, not for a counter.
 The latest review of every identity, one per hardware, for a listed module, dated no
 earlier than its listing; valid signature, proofs, stars and text; not by an identity or a
 hardware on the catalog's `moderation.ltx` (the maintainer's list of removed reviews,
-identities and hardware hashes, applied by `watch.yml`).
+identities and hardware hashes, applied by `publish.yml`).
 
 ```text
 xms-ratings 1
@@ -592,9 +736,24 @@ control characters and the UI's colour codes are removed.
 - The game keeps the last accepted catalog, cards and thumbnails in `modules\.catalog\`
   and shows them when every mirror is down. Installing needs only the module's own GitHub
   release, as updating always did.
-- If the maintainer stops, the catalog stays as it is and keeps working: listed modules
-  keep releasing updates under their own keys. Only listing and revoking need the
-  maintainer.
+- If the maintainer stops, nothing stops: submissions are judged and listed; updates come
+  from the authors' releases; VirusTotal results, the withdrawals they cause and the
+  reviews keep being refreshed (10.2).
+- GitHub switches off a scheduled workflow of a public repository after 60 days without
+  activity and treats working around that as abuse; the catalog does not try. Submissions
+  do not depend on the schedule: an issue starts its own judging, and a waiting submission
+  is judged again when its author submits again. A catalog that lists modules commits
+  genuine changes every day (the dates of its VirusTotal results), which is activity. If a
+  schedule is switched off all the same, anyone with write access turns it back on in the
+  repository's Actions tab; until then new modules are still listed and installed modules
+  still update.
+- What the catalog still depends on:
+  - GitHub: the repository and its Actions, free for public repositories;
+  - the VirusTotal key: a free quota; without it submissions are judged on the other
+    checks;
+  - the review inbox, a Google Form of the maintainer's Google account: if that account is
+    deleted (Google deletes accounts unused for two years), new reviews stop and the ones
+    shown stay. The inbox moves with a signed index change (12.3).
 
 ## 14. The game's Mod Browser
 
@@ -635,5 +794,10 @@ Cancel is the default. The browser view carries the same sentence at its foot. T
   and a forged index; a review verified the way the catalog's workflow verifies it;
   removal, with protection staying on.
 - Editor: `tools\qa\test_mod_catalog.py` - the author key, the signed descriptor, the
-  thumbnail, the submission against the GitHub mock, VirusTotal against its mock.
+  thumbnail, the submission issue and the catalog's verdict against the GitHub mock,
+  VirusTotal against its mock.
 - Catalog: `python tools/catalog.py selftest`.
+- Catalog workflows: `python tools/catalog/test_accept.py` against a mock of the GitHub
+  API, the releases and VirusTotal - accepted, refused and waiting submissions, the merge
+  committing the judged bytes only, a forged verdict comment, holds from a VirusTotal
+  `block`, the status issue.

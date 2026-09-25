@@ -1,5 +1,4 @@
-# key files never belong in the repository: the maintainer keeps them
+# key files never belong in the repository: their owner keeps them
 *.xkey
 __pycache__/
 issues.md
-changed.txt

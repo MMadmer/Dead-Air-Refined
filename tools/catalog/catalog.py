@@ -1,26 +1,33 @@
 """The mod catalog's own tool (docs/dead-air/MOD_CATALOG.md): what the catalog repository runs in
-its workflows and what the maintainer runs at home.
+its workflows - by itself, with nobody there - and what a maintainer may still run by hand.
+
+    catalog.py judge [--issue <number>] [--outputs <file>] [--summary <file>]
+                                             section 7 on every open submission issue: accepted,
+                                             refused (and closed) or waiting; the verdict is a
+                                             comment (10.2)
+    catalog.py merge "<number>:<sha256> ..." commits what judge accepted - the judged bytes and
+                                             nothing else - closes those issues, starts publish.yml
+    catalog.py cards [--issues <file>]       public/cards.txt and public/thumbs/ from the live releases
+    catalog.py vt                            public/vt.txt (VT_API_KEY); unknown packages are uploaded
+    catalog.py holds                         holds.ltx: the versions VirusTotal blocks
+    catalog.py reviews [--csv <url|file>]    public/ratings.txt and public/reviews/ from the review inbox
+    catalog.py status [--issues <file>]      the one issue that says what fails
+    catalog.py publish --key <file>          public/index.ltx with the next serial, signed
 
     catalog.py init <folder>                 a new catalog repository: files, workflows, this tool
-    catalog.py keygen <file> [--password]    a key file (4.1): the maintainer's, or an author's
-    catalog.py check [--changed <list>] [--author <login>] [--summary <file>] [<mods/id.ltx>...]
-                                             section 7 on submissions, the content policy (8) and
-                                             the script report (10.3); non-zero on a blocking finding
-    catalog.py only-submissions <list>       fails when a pull request touches anything but mods/<id>.ltx
-    catalog.py cards [--issues <file>]       public/cards.txt and public/thumbs/ from the live releases
-    catalog.py vt                            public/vt.txt (VT_API_KEY in the environment)
-    catalog.py reviews [--csv <url|file>]    public/ratings.txt and public/reviews/ from the review inbox
-    catalog.py publish --key <file>          public/index.ltx with the next serial, signed; then cards
+    catalog.py keygen <file> [--password]    a key file (4.1): the catalog's, or an author's
     catalog.py revoke <id|key:<id>> <version|*> <reason>
-    catalog.py review <mods/id.ltx | pull request number>
-                                             every check again, on the maintainer's machine
+    catalog.py review <mods/id.ltx>          every check again, on a maintainer's machine
     catalog.py selftest
 
-Run it from the root of the catalog repository (or pass --repo). Network access goes to
-github.com, the VirusTotal API and the review inbox only; XMS_CATALOG_GITHUB points the release
-downloads somewhere else for tests.
+Run it from the root of the catalog repository (or pass --repo). The GitHub commands use GH_TOKEN
+(or GITHUB_TOKEN) and GITHUB_REPOSITORY, as a workflow has them. Network access goes to GitHub,
+the VirusTotal API, the modules' websites and the review inbox only. For tests XMS_CATALOG_GITHUB,
+XMS_CATALOG_API and XMS_CATALOG_VT point those somewhere else, XMS_CATALOG_NOW fixes the clock and
+XMS_CATALOG_VT_PAUSE / XMS_CATALOG_VT_POLL shorten VirusTotal's pacing.
 """
 import argparse
+import base64
 import contextlib
 import csv
 import datetime
@@ -30,9 +37,12 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -44,12 +54,40 @@ sys.path.insert(0, HERE)
 import xms_catalog as xc  # noqa: E402
 
 GITHUB = os.environ.get("XMS_CATALOG_GITHUB", "https://github.com").rstrip("/")
+API = os.environ.get("XMS_CATALOG_API", "https://api.github.com").rstrip("/")
 VT_API = os.environ.get("XMS_CATALOG_VT", "https://www.virustotal.com/api/v3/").rstrip("/") + "/"
 USER_AGENT = "DeadAirRefined-ModCatalog/1"
 DESCRIPTOR_LIMIT = 256 * 1024
 INDEX_LIMIT = 16 * 1024 * 1024
 THUMBNAIL_LIMIT = 256 * 1024
 CARDS_LIMIT = 16 * 1024 * 1024
+SUBMISSION_LIMIT = 4096
+# a release this big or smaller is downloaded whole once; a larger one is read file by file
+PACKAGE_FETCH_LIMIT = 2 * 1024 * 1024 * 1024
+# VirusTotal's free API: 4 requests a minute, 500 a day; files up to 32 MiB go straight in, up to
+# 650 MiB through an upload address
+VT_PAUSE = float(os.environ.get("XMS_CATALOG_VT_PAUSE", "16"))
+VT_POLL = float(os.environ.get("XMS_CATALOG_VT_POLL", "60"))
+VT_POLL_MINUTES = 10
+VT_DIRECT_LIMIT = 32 * 1024 * 1024
+VT_UPLOAD_LIMIT = 650 * 1024 * 1024
+VT_UPLOADS_PER_RUN = 5
+VT_REUPLOAD_DAYS = 7
+
+JUDGED_PER_RUN = int(os.environ.get("XMS_CATALOG_JUDGED_PER_RUN", "30"))
+
+BOT = "github-actions[bot]"
+MEMBERS = ("OWNER", "MEMBER", "COLLABORATOR")
+SUBMISSION_MARKER = "<!-- xms-catalog submission -->"
+VERDICT_MARKER = "<!-- xms-catalog verdict="
+STATE_MARKER = "<!-- xms-catalog-state "
+STATUS_TITLE = "Listed modules failing the checks"
+SUBMISSION_BLOCK = re.compile(r"^```ini[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
+HOLDS_HEADER = ("; Versions withdrawn automatically because VirusTotal blocks them (MOD_CATALOG 11).\n"
+                "; publish.yml rewrites this file; catalog.py publish signs it into public/index.ltx\n"
+                "; together with revoked.ltx.\n"
+                "; <module id> = <version>, <package sha256>+..., <reason>\n"
+                "[holds]\n")
 
 ALLOWED_EXTENSIONS = {
     "ltx", "ltxp", "xml", "xmlp", "script", "txt", "md", "json", "csv", "ini", "cfg", "seq", "nqasset", "behasset",
@@ -67,8 +105,11 @@ MAGICS = [
     (b"\x00asm", "WebAssembly"), (b"\x1bLua", "Lua bytecode"), (b"\x1bLJ", "LuaJIT bytecode")]
 TAGS = ["story", "quests", "gameplay", "weapons", "equipment", "npcs", "mutants", "locations", "graphics", "audio",
         "interface", "fixes"]
-ID_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
+# a module id; a release asset name cannot start with a dot, so neither can an id the catalog lists
+ID_RE = re.compile(r"^[a-z0-9_-][a-z0-9_.-]{0,63}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$")
+LOGIN_RE = re.compile(r"^[A-Za-z0-9-]{1,39}(\[bot\])?$")
+VERSION_TEXT = re.compile(r"^(\*|[0-9][0-9A-Za-z.+-]{0,31})$")
 WEBSITE_RE = [
     re.compile(r"^https://(www\.)?ap-pro\.ru/stuff/[a-z0-9_-]+/[a-z0-9_-]+-r\d+/?([?#].*)?$", re.I),
     re.compile(r"^https://(www\.)?ap-pro\.ru/forums/topic/\d+-[a-z0-9_-]+/?([?#].*)?$", re.I),
@@ -78,19 +119,46 @@ WEBSITE_RE = [
 
 class Finding:
     def __init__(self, level, text):
-        self.level = level  # "block", "review", "note"
+        self.level = level  # "block", "wait", "review", "note"
         self.text = text
 
 
 # ---- small helpers ---------------------------------------------------------------------------------------
 
+def now():
+    fixed = os.environ.get("XMS_CATALOG_NOW")
+    moment = parse_time(fixed) if fixed else datetime.datetime.now(datetime.timezone.utc)
+    return moment.replace(microsecond=0)
+
+
+def parse_time(text):
+    moment = datetime.datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    return moment if moment.tzinfo else moment.replace(tzinfo=datetime.timezone.utc)
+
+
+def stamp(moment=None):
+    return (moment or now()).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def today():
-    return datetime.date.today().isoformat()
+    return now().date().isoformat()
+
+
+def days_since(text):
+    """Whole days from a date or a moment to now; a very large number for none."""
+    try:
+        return (now() - parse_time(text if "T" in text else text + "T00:00:00Z")).days
+    except (TypeError, ValueError):
+        return 1 << 30
 
 
 def read_text(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+def read_lines(path):
+    return read_text(path).splitlines() if os.path.isfile(path) else []
 
 
 def write_bytes(path, data):
@@ -101,6 +169,12 @@ def write_bytes(path, data):
 
 def write_text(path, text):
     write_bytes(path, text.encode("utf-8"))
+
+
+def append_text(path, text):
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(text)
 
 
 def parse_ini(text):
@@ -165,8 +239,18 @@ def version_tuple(text):
     return tuple(numbers + [0] * (4 - len(numbers)))
 
 
+def clean(text, limit=400):
+    """Text that came from a submission, a release or a service, made safe for a comment: no markup,
+    no mentions, one line."""
+    text = re.sub(r"[\x00-\x1f\x7f<]", " ", str(text)).replace("@", "(at)").strip()
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
 def http_get(url, limit, headers=None, byte_range=None):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    for name, value in (headers or {}).items():
+        # a key goes to the host it is meant for, never on to wherever that host redirects
+        request.add_unredirected_header(name, value)
     if byte_range:
         request.add_header("Range", "bytes=%d-%d" % byte_range)
     with urllib.request.urlopen(request, timeout=60) as response:
@@ -178,6 +262,70 @@ def http_get(url, limit, headers=None, byte_range=None):
 
 def release_url(repo, asset):
     return "%s/%s/releases/latest/download/%s" % (GITHUB, repo, urllib.parse.quote(asset))
+
+
+# ---- GitHub's API -------------------------------------------------------------------------------------------
+
+class ApiError(Exception):
+    def __init__(self, status, message):
+        super().__init__("GitHub answered HTTP %d: %s" % (status, message))
+        self.status = status
+
+
+class Github:
+    """GitHub's REST API with the workflow's token. Requests never leave API, the token never
+    follows a redirect."""
+
+    def __init__(self, repo, token):
+        if not REPO_RE.match(repo or ""):
+            sys.exit("the catalog repository is not known: set GITHUB_REPOSITORY or pass --catalog")
+        self.repo, self.token = repo, token
+
+    @staticmethod
+    def from_env(repo=None):
+        return Github(repo or os.environ.get("GITHUB_REPOSITORY", ""),
+                      os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "")
+
+    def call(self, method, path, body=None, params=None):
+        url = path if path.startswith(API + "/") else API + "/" + path.lstrip("/")
+        if params:
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(url, data=data, method=method, headers={
+            "User-Agent": USER_AGENT, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+        if data is not None:
+            request.add_header("Content-Type", "application/json")
+        if self.token:
+            request.add_unredirected_header("Authorization", "Bearer " + self.token)
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                raw = response.read(64 * 1024 * 1024)
+                return (json.loads(raw.decode("utf-8")) if raw.strip() else None), response.headers
+        except urllib.error.HTTPError as error:
+            try:
+                message = json.loads(error.read(64 * 1024).decode("utf-8")).get("message", "")
+            except (ValueError, AttributeError, OSError):
+                message = ""
+            raise ApiError(error.code, message or str(error.reason)) from None
+
+    def get(self, path, params=None):
+        return self.call("GET", path, params=params)[0]
+
+    def get_all(self, path, params=None):
+        items, url, query = [], path, dict(params or {}, per_page=100)
+        while url and len(items) < 10000:
+            data, headers = self.call("GET", url, params=query)
+            items += data or []
+            found = re.search(r'<([^>]+)>;\s*rel="next"', headers.get("Link") or "")
+            url, query = (found.group(1) if found and found.group(1).startswith(API + "/") else None), None
+        return items
+
+    def branch(self):
+        return (self.get("repos/" + self.repo) or {}).get("default_branch") or "main"
+
+    def dispatch(self, workflow, branch):
+        self.call("POST", "repos/%s/actions/workflows/%s/dispatches" % (self.repo, urllib.parse.quote(workflow)),
+                  {"ref": branch})
 
 
 # ---- the catalog repository -------------------------------------------------------------------------------
@@ -236,18 +384,24 @@ class Submission:
         self.key = fields.get("key", "")
         self.version = fields.get("version", "")
         self.website = fields.get("website", "")
-        self.listed = fields.get("listed", "")
 
     @staticmethod
     def load(path):
-        fields = dict(parse_ini(read_text(path)).get("mod", []))
-        return Submission(path, fields)
+        return Submission.parse(path, read_text(path))
+
+    @staticmethod
+    def parse(path, text):
+        return Submission(path, dict(parse_ini(text).get("mod", [])))
+
+    @property
+    def owner(self):
+        return self.github.split("/")[0]
 
     def problems(self):
         out = []
         expected = os.path.splitext(os.path.basename(self.path))[0]
         if not ID_RE.match(self.id):
-            out.append("id is not a module id ([a-z0-9_.-])")
+            out.append("id is not a module id (a-z 0-9 _ . -, not starting with a dot)")
         elif self.id != expected:
             out.append("id %s does not match the file name %s.ltx" % (self.id, expected))
         if not REPO_RE.match(self.github):
@@ -261,6 +415,66 @@ class Submission:
         if not any(pattern.match(self.website) for pattern in WEBSITE_RE):
             out.append("website is not a module page on AP-PRO or ModDB")
         return out
+
+
+def listed_dates(repo):
+    """Each module's listing date as the signed index has it."""
+    listed = repo.index()
+    dates = {}
+    for key, value in listed[0].get("mods", []) if listed else []:
+        fields = [f.strip() for f in value.split(",")]
+        if len(fields) >= 4:
+            dates[key] = fields[3]
+    return dates
+
+
+def bound_keys(repo, module_id):
+    """The author keys a module id is bound to already: its file and the signed index."""
+    keys = []
+    path = repo.path("mods", module_id + ".ltx")
+    if os.path.isfile(path):
+        keys.append(Submission.load(path).key)
+    listed = repo.index()
+    for key, value in listed[0].get("mods", []) if listed else []:
+        fields = [f.strip() for f in value.split(",")]
+        if key == module_id and len(fields) >= 2:
+            keys.append(fields[1])
+    return keys
+
+
+def listing(repo):
+    """What the catalog lists: mods/ of this checkout - only files that passed the checks get there -
+    with each module's listing date from the signed index, today for a module it does not hold yet."""
+    dates = listed_dates(repo)
+    return {module_id: {"github": sub.github, "key": sub.key, "min": sub.version, "date": dates.get(module_id, today())}
+            for module_id, sub in repo.submissions().items() if not sub.problems()}
+
+
+def read_holds(path):
+    """holds.ltx: {(module id, version): (package hashes, reason)}."""
+    holds = {}
+    if os.path.isfile(path):
+        for module_id, value in parse_ini(read_text(path)).get("holds", []):
+            parts = [p.strip() for p in value.split(",", 2)]
+            if len(parts) == 3:
+                holds[(module_id, parts[0])] = (parts[1], parts[2])
+    return holds
+
+
+def withdrawals(repo):
+    """Every (subject, version, reason) the catalog withdraws: by hand (revoked.ltx) and by VirusTotal
+    (holds.ltx). A line that is not one is left out rather than signed."""
+    rows = repo.revoked() + [(m, v, r) for (m, v), (_, r) in sorted(read_holds(repo.path("holds.ltx")).items())]
+    return [(s, v, re.sub(r"[\x00-\x1f;]", " ", r)[:200].strip()) for s, v, r in rows
+            if (ID_RE.match(s) or re.fullmatch(r"key:[0-9a-f]{16}", s)) and VERSION_TEXT.match(v)]
+
+
+def withdrawn(rows, module_id, key_text, version):
+    try:
+        key_id = xc.key_id(xc.parse_key(key_text))
+    except ValueError:
+        key_id = ""
+    return any(s in (module_id, "key:" + key_id) and v in ("*", version) for s, v, _ in rows)
 
 
 # ---- releases ------------------------------------------------------------------------------------------------
@@ -277,6 +491,7 @@ class Release:
         self.packages = []
         self.index_name, self.index_size, self.index_sha = "", 0, ""
         self.files = []
+        self.local = {}
 
     def fetch_descriptor(self):
         _, self.text = http_get(release_url(self.repo, self.id + ".update.ltx"), DESCRIPTOR_LIMIT)
@@ -304,6 +519,8 @@ class Release:
         return xc.verify_signed(self.text, xc.parse_key(key_text))
 
     def fetch_index(self):
+        if self.files:
+            return self.files
         _, data = http_get(release_url(self.repo, self.index_name), INDEX_LIMIT)
         if len(data) != self.index_size or hashlib.sha256(data).hexdigest() != self.index_sha:
             raise ValueError("the file index does not match the descriptor")
@@ -318,16 +535,47 @@ class Release:
                                    "path": parts[7]})
         return self.files
 
+    def package_file(self, n, folder):
+        """Package n (from 1) as a file in folder: fetched once, checked against the descriptor."""
+        if n in self.local:
+            return self.local[n]
+        name, size, sha = self.packages[n - 1]
+        path = os.path.join(folder, "package-%d" % n)
+        request = urllib.request.Request(release_url(self.repo, name), headers={"User-Agent": USER_AGENT})
+        digest, total = hashlib.sha256(), 0
+        with urllib.request.urlopen(request, timeout=300) as response, open(path, "wb") as out:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > size:
+                    raise ValueError("%s is larger than the descriptor says" % name)
+                digest.update(chunk)
+                out.write(chunk)
+        if total != size or digest.hexdigest() != sha:
+            raise ValueError("%s does not match the descriptor" % name)
+        self.local[n] = path
+        return path
+
     def read_file(self, entry, limit=None):
         """The bytes of one file, fetched as the game fetches them: a byte range of its package."""
         if limit is not None and entry["size"] > limit:
             raise ValueError("%s is larger than %d bytes" % (entry["path"], limit))
-        package = self.packages[entry["package"] - 1][0]
-        first_byte, last_byte = entry["offset"], entry["offset"] + max(entry["packed"], 1) - 1
-        status, raw = http_get(release_url(self.repo, package), entry["packed"] + 1, byte_range=(first_byte, last_byte))
-        if status == 200:
-            raw = raw[first_byte:last_byte + 1]
-        raw = raw[:entry["packed"]]
+        if not 1 <= entry["package"] <= len(self.packages) or entry["offset"] < 0 or entry["packed"] < 0:
+            raise ValueError("%s points outside the packages" % entry["path"])
+        local = self.local.get(entry["package"])
+        if local:
+            with open(local, "rb") as f:
+                f.seek(entry["offset"])
+                raw = f.read(entry["packed"])
+        else:
+            package = self.packages[entry["package"] - 1][0]
+            first_byte, last_byte = entry["offset"], entry["offset"] + max(entry["packed"], 1) - 1
+            status, raw = http_get(release_url(self.repo, package), entry["packed"] + 1, byte_range=(first_byte, last_byte))
+            if status == 200:
+                raw = raw[first_byte:last_byte + 1]
+            raw = raw[:entry["packed"]]
         data = zlib.decompress(raw, -15) if entry["method"] == 8 else raw
         if len(data) != entry["size"] or hashlib.sha256(data).hexdigest() != entry["sha"]:
             raise ValueError("%s does not match the index" % entry["path"])
@@ -479,8 +727,7 @@ def script_report(path, data):
 def content_report(release):
     """The content policy (8) and the script report (10.3) over every file of a release."""
     findings = []
-    files = release.fetch_index()
-    for entry in files:
+    for entry in release.fetch_index():
         problem = path_problem(entry["path"])
         if problem:
             findings.append(Finding("block", "%s: %s" % (entry["path"], problem)))
@@ -516,25 +763,90 @@ class VtKeyRefused(VtUnavailable):
     """The key itself was refused: no point asking again with it."""
 
 
+_vt_last = [0.0]
+
+
+def vt_pace():
+    """The free API takes 4 requests a minute: every request waits for its turn."""
+    wait = _vt_last[0] + VT_PAUSE - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    _vt_last[0] = time.monotonic()
+
+
+def vt_error(error):
+    if isinstance(error, urllib.error.HTTPError):
+        if error.code == 429:
+            return VtQuota("the VirusTotal key's quota is used up")
+        if error.code in (401, 403):
+            return VtKeyRefused("VirusTotal refused the key (HTTP %d)" % error.code)
+        return VtUnavailable("VirusTotal answered HTTP %d" % error.code)
+    return VtUnavailable("VirusTotal did not answer: %s" % getattr(error, "reason", error))
+
+
 def vt_lookup(sha, key):
-    """The per-engine results of a file VirusTotal knows, or None when it does not know it. Raises
-    VtQuota when the key's quota is used up and VtUnavailable when there was no usable answer."""
+    """The per-engine results of a file VirusTotal knows ({} while it is still analysing it), or None
+    when it does not know it. Raises VtQuota when the key's quota is used up and VtUnavailable when
+    there was no usable answer."""
+    vt_pace()
     try:
         _, data = http_get(VT_API + "files/" + sha, 8 * 1024 * 1024, headers={"x-apikey": key})
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
-        if error.code == 429:
-            raise VtQuota("the VirusTotal key's quota is used up") from None
-        if error.code in (401, 403):
-            raise VtKeyRefused("VirusTotal refused the key (HTTP %d)" % error.code) from None
-        raise VtUnavailable("VirusTotal answered HTTP %d" % error.code) from None
+        raise vt_error(error) from None
     except (urllib.error.URLError, OSError) as error:
-        raise VtUnavailable("VirusTotal did not answer: %s" % getattr(error, "reason", error)) from None
+        raise vt_error(error) from None
     try:
-        return json.loads(data.decode("utf-8"))["data"]["attributes"].get("last_analysis_results", {})
+        return json.loads(data.decode("utf-8"))["data"]["attributes"].get("last_analysis_results") or {}
     except (ValueError, KeyError, TypeError):
         raise VtUnavailable("VirusTotal's answer is not a file report") from None
+
+
+def vt_upload(path, name, key):
+    """Hands a package to VirusTotal; its report follows within minutes."""
+    size = os.path.getsize(path)
+    url = VT_API + "files"
+    try:
+        if size > VT_DIRECT_LIMIT:
+            vt_pace()
+            _, data = http_get(VT_API + "files/upload_url", 64 * 1024, headers={"x-apikey": key})
+            url = json.loads(data.decode("utf-8"))["data"]
+            # the key goes to VirusTotal's own host and nowhere else
+            if urllib.parse.urlsplit(url)[:2] != urllib.parse.urlsplit(VT_API)[:2]:
+                raise VtUnavailable("VirusTotal gave an upload address on another host")
+        boundary = "xms-" + secrets.token_hex(16)
+        head = ('--%s\r\nContent-Disposition: form-data; name="file"; filename="%s"\r\n'
+                'Content-Type: application/octet-stream\r\n\r\n' %
+                (boundary, re.sub(r"[^A-Za-z0-9._-]", "_", name))).encode("ascii")
+        tail = ("\r\n--%s--\r\n" % boundary).encode("ascii")
+
+        def body():
+            yield head
+            with open(path, "rb") as f:
+                while True:
+                    chunk = f.read(1 << 20)
+                    if not chunk:
+                        break
+                    yield chunk
+            yield tail
+
+        request = urllib.request.Request(url, data=body(), method="POST", headers={
+            "User-Agent": USER_AGENT, "Content-Type": "multipart/form-data; boundary=" + boundary,
+            "Content-Length": str(len(head) + size + len(tail))})
+        request.add_unredirected_header("x-apikey", key)
+        vt_pace()
+        with urllib.request.urlopen(request, timeout=1800) as response:
+            response.read(64 * 1024)
+    except (urllib.error.URLError, OSError) as error:
+        raise vt_error(error) from None
+    except (ValueError, KeyError, TypeError):
+        raise VtUnavailable("VirusTotal gave no upload address") from None
+
+
+def vt_counts(policy, tm, ts, om):
+    return "block" if tm >= policy["block_trusted"] or om >= policy["block_others"] else \
+        "warn" if ts >= policy["warn_trusted"] or om >= policy["warn_others"] else "clean"
 
 
 def vt_verdict(results, policy):
@@ -552,50 +864,136 @@ def vt_verdict(results, policy):
         elif category == "suspicious" and trusted:
             ts += 1
             flagged.append(engine)
-    verdict = "block" if tm >= policy["block_trusted"] or om >= policy["block_others"] else \
-        "warn" if ts >= policy["warn_trusted"] or om >= policy["warn_others"] else "clean"
-    return verdict, len(results), tm, ts, om, flagged
+    return vt_counts(policy, tm, ts, om), len(results), tm, ts, om, flagged
 
 
-# ---- commands -------------------------------------------------------------------------------------------------
-
-def cmd_keygen(args):
-    if os.path.exists(args.file):
-        sys.exit("%s exists: a key file is never overwritten" % args.file)
-    password = None
-    if args.password:
-        password = getpass.getpass("Password (empty for none): ") or None
-        if password and getpass.getpass("Again: ") != password:
-            sys.exit("the passwords differ")
-    point = xc.write_key_file(args.file, xc.new_private(), password)
-    print("key file: %s" % args.file)
-    print("public key: %s" % xc.key_text(point))
-    print("key id: %s" % xc.key_id(point))
-    print("Keep a copy of the file somewhere safe: without it nothing can be signed with this key.")
+def read_vt(path):
+    """public/vt.txt: {sha256: row}."""
+    out = {}
+    for line in read_lines(path)[1:]:
+        parts = line.split(" ")
+        if len(parts) == 7:
+            try:
+                out[parts[0]] = {"line": line, "date": parts[1], "engines": int(parts[2]), "tm": int(parts[3]),
+                                 "ts": int(parts[4]), "om": int(parts[5]),
+                                 "flagged": [e.replace("_", " ") for e in parts[6].split(",") if e and e != "-"]}
+            except ValueError:
+                continue
+    return out
 
 
-def check_submission(repo, sub, author=None, vt_key=None, deep=True):
-    """Section 7 for one submission: (findings, release or None)."""
+def vt_package(sha, name, key, policy):
+    """(finding, None) when VirusTotal has a report on a package, (None, "unknown") when it does not
+    know it, (None, reason) when there is no report yet. VtQuota and VtKeyRefused pass through:
+    after them nothing more is asked."""
+    try:
+        results = vt_lookup(sha, key)
+    except (VtQuota, VtKeyRefused):
+        raise
+    except VtUnavailable as error:
+        return None, "VirusTotal did not answer about %s (%s)" % (name, error)
+    if results is None:
+        return None, "unknown"
+    if not results:
+        return None, "VirusTotal is analysing %s" % name
+    verdict, engines, tm, ts, om, flagged = vt_verdict(results, policy)
+    text = "VirusTotal %s for %s: %d engines, %d trusted malicious, %d trusted suspicious, %d other malicious%s" % (
+        verdict, name, engines, tm, ts, om, (" (" + ", ".join(flagged) + ")") if flagged else "")
+    if verdict == "warn":
+        text += "; the game asks the player before it installs"
+    return Finding("block" if verdict == "block" else "note", text), None
+
+
+def vt_checks(release, key, policy, memory=None, folder=None, wait_days=0, poll_minutes=0):
+    """VirusTotal's word on every package of a release. The judge (memory given) uploads a package
+    VirusTotal does not know and waits for its report - up to poll_minutes within this run, up to
+    wait_days in all, then judges without it; review only reports what VirusTotal already has."""
+    findings, pending, uploaded = [], {}, False
+    try:
+        for n, (name, size, sha) in enumerate(release.packages, 1):
+            finding, reason = vt_package(sha, name, key, policy)
+            if finding:
+                findings.append(finding)
+                continue
+            if reason == "unknown":
+                if size > VT_UPLOAD_LIMIT:
+                    findings.append(Finding("note", "%s is larger than VirusTotal takes: judged without it" % name))
+                    continue
+                reason = "VirusTotal is scanning %s" % name
+                if memory is None:
+                    reason = "VirusTotal does not know %s" % name
+                elif days_since(memory.get("vt_uploaded")) >= 1:
+                    try:
+                        vt_upload(release.package_file(n, folder), name, key)
+                        memory["vt_uploaded"] = stamp()
+                        uploaded = True
+                    except ValueError as error:
+                        # the package is not what the signed descriptor says
+                        findings.append(Finding("block", str(error)))
+                        continue
+                    except (VtQuota, VtKeyRefused):
+                        raise
+                    except (VtUnavailable, urllib.error.URLError, OSError) as error:
+                        reason = "%s could not be handed to VirusTotal (%s)" % (name, getattr(error, "reason", error))
+            pending[n] = (name, sha, reason)
+        # a package handed to VirusTotal is usually analysed within minutes: waiting for it here
+        # decides most submissions in the run that uploaded it
+        deadline = time.monotonic() + poll_minutes * 60
+        while pending and uploaded and time.monotonic() < deadline:
+            time.sleep(VT_POLL)
+            for n, (name, sha, _) in list(pending.items()):
+                finding, _ = vt_package(sha, name, key, policy)
+                if finding:
+                    findings.append(finding)
+                    del pending[n]
+    except (VtQuota, VtKeyRefused) as error:
+        for n, (name, _, sha) in enumerate(release.packages, 1):
+            if n not in pending and not any(name in f.text for f in findings):
+                pending[n] = (name, sha, "")
+        for n, (name, sha, _) in pending.items():
+            pending[n] = (name, sha, "VirusTotal did not answer about %s (%s)" % (name, error))
+    if pending:
+        late = memory is not None and days_since(memory.setdefault("vt_since", stamp())) >= wait_days
+        for name, sha, reason in pending.values():
+            if memory is None or late:
+                findings.append(Finding("note", reason + (": no report in %d days, judged without it" % wait_days if late else "")))
+            else:
+                findings.append(Finding("wait", reason))
+    return findings
+
+
+# ---- section 7 ------------------------------------------------------------------------------------------------
+
+def release_checks(repo, sub, author=None):
+    """Section 7 short of the release's files and VirusTotal: (findings, release). A failure that
+    is not the author's - GitHub or a website not answering - is a wait, not a refusal."""
     findings = [Finding("block", "%s: %s" % (os.path.basename(sub.path), p)) for p in sub.problems()]
     if findings:
         return findings, None
-    owner = sub.github.split("/")[0]
-    if author and author.lower() != owner.lower():
-        findings.append(Finding("block", "the pull request is opened by %s, the repository belongs to %s" % (author, owner)))
-    listed = repo.index()
-    if listed:
-        for key, value in listed[0].get("mods", []):
-            if key == sub.id:
-                fields = [f.strip() for f in value.split(",")]
-                if len(fields) >= 2 and fields[1] != sub.key:
-                    findings.append(Finding("block", "%s is listed with another key: a key change is the maintainer's" % sub.id))
+    if author and author.lower() != sub.owner.lower():
+        findings.append(Finding("block", "the submission comes from %s, and the repository %s belongs to %s: "
+                                         "submit it from %s" % (author, sub.github, sub.owner, sub.owner)))
+    if any(key != sub.key for key in bound_keys(repo, sub.id)):
+        findings.append(Finding("block", "%s is listed with another author key: sign the release with that key, "
+                                         "or submit the module under another id" % sub.id))
     try:
         release = Release(sub.github, sub.id).fetch_descriptor()
-    except (urllib.error.URLError, ValueError) as error:
-        findings.append(Finding("block", "%s: no release descriptor in the latest release (%s)" % (sub.github, error)))
+    except urllib.error.HTTPError as error:
+        if error.code in (404, 410):
+            findings.append(Finding("block", "the latest release of %s has no %s.update.ltx: publish the module "
+                                             "with XFined Editor first" % (sub.github, sub.id)))
+        else:
+            findings.append(Finding("wait", "GitHub answered HTTP %d for the release of %s" % (error.code, sub.github)))
+        return findings, None
+    except (urllib.error.URLError, OSError) as error:
+        findings.append(Finding("wait", "the release of %s could not be read this time (%s)" %
+                                (sub.github, getattr(error, "reason", error))))
+        return findings, None
+    except ValueError as error:
+        findings.append(Finding("block", "the release descriptor of %s cannot be read: %s" % (sub.github, error)))
         return findings, None
     if release.fields.get("id") != sub.id:
-        findings.append(Finding("block", "the descriptor is for %s" % release.fields.get("id")))
+        findings.append(Finding("block", "the release descriptor is for %s" % release.fields.get("id")))
     if version_tuple(release.version) < (1, 0, 0, 0):
         findings.append(Finding("block", "release %s is below 1.0.0" % release.version))
     if not release.card:
@@ -608,117 +1006,395 @@ def check_submission(repo, sub, author=None, vt_key=None, deep=True):
     if not any(pattern.match(website) for pattern in WEBSITE_RE):
         findings.append(Finding("block", "website %s is not a module page on AP-PRO or ModDB" % website))
     else:
-        try:
-            status, _ = http_get(website, 4 * 1024 * 1024)
-            if status != 200:
-                findings.append(Finding("block", "website answers HTTP %d" % status))
-        except urllib.error.HTTPError as error:
-            if "moddb.com" in website and error.code in (403, 429, 503):
-                findings.append(Finding("note", "website %s turns automated requests away: open it by hand" % website))
-            else:
-                findings.append(Finding("block", "website answers HTTP %d" % error.code))
-        except urllib.error.URLError as error:
-            findings.append(Finding("note", "website %s could not be reached: %s" % (website, error.reason)))
-    if deep and not any(f.level == "block" for f in findings):
-        try:
-            findings += content_report(release)
-        except (urllib.error.URLError, ValueError, zlib.error) as error:
-            findings.append(Finding("block", "the release files could not be read: %s" % error))
-    if vt_key:
-        policy = vt_policy(repo.config())
-        for name, _, sha in release.packages:
-            try:
-                results = vt_lookup(sha, vt_key)
-            except VtUnavailable as error:
-                findings.append(Finding("note", "VirusTotal not checked for %s: %s" % (name, error)))
-                if isinstance(error, (VtQuota, VtKeyRefused)):
-                    break
-                continue
-            if results is None:
-                findings.append(Finding("note", "VirusTotal does not know %s yet" % name))
-                continue
-            verdict, engines, tm, ts, om, flagged = vt_verdict(results, policy)
-            level = "block" if verdict == "block" else "review" if verdict == "warn" else "note"
-            findings.append(Finding(level, "VirusTotal %s for %s: %d engines, %d trusted malicious, %d trusted suspicious, "
-                                           "%d other malicious%s" % (verdict, name, engines, tm, ts, om,
-                                                                     (" (" + ", ".join(flagged) + ")") if flagged else "")))
+        findings += website_findings(website)
     return findings, release
 
 
-def report(findings, title):
-    lines = ["## " + title, ""]
-    if not findings:
-        lines.append("Nothing to report.")
-    for level in ("block", "review", "note"):
-        chosen = [f for f in findings if f.level == level]
+def website_findings(url):
+    """A module page that is not there refuses a listing; a site that is down or turns robots away
+    only gets a note."""
+    try:
+        http_get(url, 4 * 1024 * 1024)
+    except urllib.error.HTTPError as error:
+        if error.code in (404, 410):
+            return [Finding("block", "website %s does not exist (HTTP %d)" % (url, error.code))]
+        if "moddb.com" in url and error.code in (403, 429, 503):
+            return [Finding("note", "ModDB turns automated requests away: %s was not checked" % url)]
+        return [Finding("note", "website %s answered HTTP %d" % (url, error.code))]
+    except (urllib.error.URLError, OSError) as error:
+        return [Finding("note", "website %s could not be reached: %s" % (url, getattr(error, "reason", error)))]
+    except ValueError:
+        pass
+    return []
+
+
+def content_checks(release, folder=None):
+    """The content policy and the script report; a release up to PACKAGE_FETCH_LIMIT is downloaded
+    whole first, which is one request instead of one per file."""
+    try:
+        if folder and sum(size for _, size, _ in release.packages) <= PACKAGE_FETCH_LIMIT:
+            for n in range(1, len(release.packages) + 1):
+                release.package_file(n, folder)
+        return content_report(release)
+    except urllib.error.HTTPError as error:
+        if error.code in (404, 410, 416):
+            return [Finding("block", "the release files could not be read (HTTP %d)" % error.code)]
+        return [Finding("wait", "GitHub answered HTTP %d for the release files" % error.code)]
+    except (urllib.error.URLError, OSError) as error:
+        return [Finding("wait", "the release files could not be downloaded this time (%s)" %
+                        getattr(error, "reason", error))]
+    except (ValueError, zlib.error, KeyError, IndexError) as error:
+        return [Finding("block", "the release files could not be read: %s" % error)]
+
+
+def accept_settings(config):
+    section = dict(config.get("accept", []))
+    out = {}
+    for key, default in (("min_account_days", 14), ("max_mods_per_owner", 20), ("max_new_per_day", 10),
+                         ("vt_wait_days", 3), ("dormant_days", 30)):
+        try:
+            out[key] = max(0, int(section.get(key, default)))
+        except ValueError:
+            out[key] = default
+    return out
+
+
+def listing_counts(repo):
+    """What is listed already: modules per owner, and new module ids of today."""
+    subs = repo.submissions()
+    dates = listed_dates(repo)
+    owners = {}
+    for sub in subs.values():
+        owners[sub.owner.lower()] = owners.get(sub.owner.lower(), 0) + 1
+    return {"owners": owners, "new_today": sum(1 for module_id in subs if dates.get(module_id, today()) == today())}
+
+
+def verdict_state(findings):
+    if any(f.level == "block" for f in findings):
+        return "refused"
+    if any(f.level == "wait" for f in findings):
+        return "waiting"
+    return None
+
+
+class Outcome:
+    def __init__(self, state, findings, sub=None, new=False, text=""):
+        self.state, self.findings, self.sub, self.new, self.text = state, findings, sub, new, text
+
+
+def judge_submission(repo, sub, author, created, settings, counts, vt_key, policy, memory, folder):
+    """Section 7 on one submission, cheapest first: the release's files are read last, once
+    everything else holds and VirusTotal has spoken. Returns (state, findings, new)."""
+    findings, release = release_checks(repo, sub, author)
+    new = not bound_keys(repo, sub.id)
+    if new and counts["owners"].get(sub.owner.lower(), 0) >= settings["max_mods_per_owner"]:
+        findings.append(Finding("block", "%s lists %d modules already, the most one account may list" %
+                                (sub.owner, counts["owners"][sub.owner.lower()])))
+    # a young account is refused, not kept waiting: a submission that waits is judged again every
+    # half hour, and a pile of them from throwaway accounts would eat the workflow's API budget
+    age = (now() - created).days
+    if age < settings["min_account_days"]:
+        ready = (created + datetime.timedelta(days=settings["min_account_days"])).date().isoformat()
+        findings.append(Finding("block", "the GitHub account %s is %d days old, and the catalog lists modules of accounts "
+                                         "at least %d days old: submit again from %s" %
+                                (author, age, settings["min_account_days"], ready)))
+    state = verdict_state(findings)
+    if state:
+        return state, findings, new
+    if new and counts["new_today"] >= settings["max_new_per_day"]:
+        findings.append(Finding("wait", "%d new modules were listed today, the most in one day: this one follows "
+                                        "tomorrow" % counts["new_today"]))
+    state = verdict_state(findings)
+    if state:
+        return state, findings, new
+    if vt_key:
+        findings += vt_checks(release, vt_key, policy, memory, folder, settings["vt_wait_days"], VT_POLL_MINUTES)
+    else:
+        findings.append(Finding("note", "VirusTotal is not set up for this catalog: judged without it"))
+    state = verdict_state(findings)
+    if state:
+        return state, findings, new
+    findings += content_checks(release, folder)
+    return verdict_state(findings) or "accepted", findings, new
+
+
+def submission_text(body):
+    """The mods/<id>.ltx text a submission issue carries in its first ```ini block; None for an
+    issue that is not a submission, "" for one without the block."""
+    body = (body or "").replace("\r\n", "\n")
+    if not body.lstrip().startswith(SUBMISSION_MARKER):
+        return None
+    found = SUBMISSION_BLOCK.search(body)
+    return found.group(1) if found else ""
+
+
+def submission_of(text):
+    """A submission issue's text as the file it would be."""
+    module_id = dict(parse_ini(text).get("mod", [])).get("id", "")
+    return Submission.parse("mods/%s.ltx" % (module_id if ID_RE.match(module_id) else "invalid"), text)
+
+
+def judge_issue(api, repo, issue, settings, counts, vt_key, policy, memory, folder):
+    text = submission_text(issue.get("body"))
+    if text is None:
+        return None
+    if not text:
+        return Outcome("refused", [Finding("block", "the issue holds no ```ini block with the submission: submit "
+                                                    "from XFined Editor (Mod > Submit to Mod Browser)")])
+    if len(text.encode("utf-8")) > SUBMISSION_LIMIT:
+        return Outcome("refused", [Finding("block", "the submission is larger than %d bytes" % SUBMISSION_LIMIT)])
+    sub = submission_of(text)
+    login = (issue.get("user") or {}).get("login", "")
+    user = api.get("users/" + urllib.parse.quote(login))
+    state, findings, new = judge_submission(repo, sub, login, parse_time(user["created_at"]), settings, counts, vt_key,
+                                            policy, memory, folder)
+    return Outcome(state, findings, sub, new, text)
+
+
+# ---- verdicts --------------------------------------------------------------------------------------------------
+
+def verdict_body(outcome, memory):
+    """The verdict comment (10.2): the marker line, one plain sentence, the report."""
+    def first_of(level):
+        return clean(next((f.text for f in outcome.findings if f.level == level), ""), 300)
+
+    if outcome.state == "accepted":
+        summary = "Accepted: the module is listed and appears in the Mod Browser within minutes." if outcome.new else \
+            "Accepted: the listing is updated."
+    elif outcome.state == "refused":
+        summary = "Refused: %s." % first_of("block")
+    else:
+        summary = "Waiting: %s. The catalog looks again every half hour." % first_of("wait")
+    lines = [VERDICT_MARKER + outcome.state + " -->", summary, ""]
+    for level, title in (("block", "Blocking"), ("wait", "Waiting"), ("review", "Reported, not blocking"),
+                         ("note", "Notes")):
+        chosen = [f for f in outcome.findings if f.level == level]
         if chosen:
-            lines.append({"block": "**Blocking**", "review": "**For review**", "note": "**Notes**"}[level])
-            lines += ["- " + f.text for f in chosen]
+            lines += ["**%s**" % title] + ["- " + clean(f.text) for f in chosen[:40]]
+            if len(chosen) > 40:
+                lines.append("- and %d more" % (len(chosen) - 40))
             lines.append("")
+    if outcome.state == "refused":
+        lines += ["Fix what blocks and submit again from XFined Editor (Mod > Submit to Mod Browser).", ""]
+    lines.append("<sub>Judged on %s by the catalog's own checks (MOD_CATALOG.md, section 7); nobody reviews by "
+                 "hand.</sub>" % stamp().replace("T", " ").replace("Z", " UTC"))
+    if memory:
+        lines.append(STATE_MARKER + " ".join("%s=%s" % pair for pair in sorted(memory.items())) + " -->")
     return "\n".join(lines) + "\n"
 
 
-def cmd_check(args):
+def previous_verdict(api, number):
+    """The newest verdict comment of the catalog's own bot on an issue: (comment, state, memory).
+    Anyone can post a comment that looks like one; only the bot's count."""
+    latest = None
+    for comment in api.get_all("repos/%s/issues/%d/comments" % (api.repo, number)):
+        if (comment.get("user") or {}).get("login") == BOT and (comment.get("body") or "").lstrip().startswith(VERDICT_MARKER):
+            latest = comment
+    if not latest:
+        return None, None, {}
+    body = latest["body"].lstrip()
+    state = body[len(VERDICT_MARKER):].split("-->", 1)[0].strip()
+    memory = {}
+    found = re.search(re.escape(STATE_MARKER) + r"([^<>\n]*?) -->", body)
+    for pair in found.group(1).split() if found else []:
+        key, _, value = pair.partition("=")
+        if key in ("vt_since", "vt_uploaded") and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", value) or \
+                key == "text" and re.fullmatch(r"[0-9a-f]{64}", value):
+            memory[key] = value
+    return latest, state, memory
+
+
+def say(api, number, previous, previous_state, state, body):
+    """A changed verdict is a new comment - its author hears of it - and an unchanged one edits the last."""
+    if previous and previous_state == state:
+        if (previous.get("body") or "") != body:
+            api.call("PATCH", "repos/%s/issues/comments/%d" % (api.repo, previous["id"]), {"body": body})
+    else:
+        api.call("POST", "repos/%s/issues/%d/comments" % (api.repo, number), {"body": body})
+
+
+def close_issue(api, number, reason):
+    api.call("PATCH", "repos/%s/issues/%d" % (api.repo, number), {"state": "closed", "state_reason": reason})
+
+
+def cmd_judge(args):
     repo = Repo(args.repo)
-    paths = list(args.files)
-    if args.changed:
-        with open(args.changed, encoding="utf-8") as f:
-            paths += [repo.path(line.strip()) for line in f if line.strip().startswith("mods/")]
-    if not paths:
-        paths = [s.path for s in repo.submissions().values()]
-    text, blocking = "", False
-    for path in paths:
-        if not os.path.isfile(path):
+    api = Github.from_env(args.catalog)
+    config = repo.config()
+    settings, policy = accept_settings(config), vt_policy(config)
+    vt_key = os.environ.get("VT_API_KEY")
+    counts = listing_counts(repo)
+    if args.issue:
+        items = [api.get("repos/%s/issues/%d" % (api.repo, args.issue))]
+    else:
+        items = api.get_all("repos/%s/issues" % api.repo, {"state": "open", "sort": "created", "direction": "asc"})
+    merges, lines, judged = [], [], 0
+    for item in items:
+        number = item["number"]
+        pull = "pull_request" in item
+        text = None if pull else submission_text(item.get("body"))
+        # submissions are issues; any other issue, and maintenance by the repository's own people, is theirs
+        if item.get("state") != "open" or (pull and item.get("author_association") in MEMBERS) or (not pull and text is None):
             continue
-        sub = Submission.load(path)
-        findings, _ = check_submission(repo, sub, args.author, os.environ.get("VT_API_KEY"), deep=not args.shallow)
-        blocking |= any(f.level == "block" for f in findings)
-        text += report(findings, "%s (%s)" % (sub.id or os.path.basename(path), sub.github))
-    print(text)
-    if args.summary:
-        with open(args.summary, "a", encoding="utf-8") as f:
-            f.write(text)
-    return 1 if blocking else 0
-
-
-def cmd_only_submissions(args):
-    with open(args.changed, encoding="utf-8") as f:
-        changed = [line.strip() for line in f if line.strip()]
-    wrong = [p for p in changed if not re.fullmatch(r"mods/[a-z0-9_.-]+\.ltx", p)]
-    if wrong or len(changed) != 1:
-        print("A submission changes one file, mods/<id>.ltx. This pull request changes:\n" + "\n".join(changed))
-        return 1
+        # the oldest first, and a bounded number a run: a flood of issues costs time, never the API budget
+        if judged >= JUDGED_PER_RUN:
+            lines.append("#%d: left for the next run" % number)
+            continue
+        judged += 1
+        try:
+            if pull:
+                previous, previous_state, _ = previous_verdict(api, number)
+                outcome = Outcome("refused", [Finding("block", "submissions are issues, not pull requests: submit "
+                                                               "from XFined Editor (Mod > Submit to Mod Browser)")])
+                say(api, number, previous, previous_state, "refused", verdict_body(outcome, {}))
+                api.call("PATCH", "repos/%s/pulls/%d" % (api.repo, number), {"state": "closed"})
+                lines.append("#%d: a pull request - closed" % number)
+                continue
+            previous, previous_state, memory = previous_verdict(api, number)
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            # a changed submission starts its waits over
+            if memory.get("text") != digest:
+                memory = {}
+            with tempfile.TemporaryDirectory() as folder:
+                outcome = judge_issue(api, repo, item, settings, counts, vt_key, policy, memory, folder)
+            memory["text"] = digest
+            body = verdict_body(outcome, memory if outcome.state == "waiting" else {})
+            say(api, number, previous, previous_state, outcome.state, body)
+            if outcome.state == "refused":
+                close_issue(api, number, "not_planned")
+            elif outcome.state == "accepted":
+                merges.append("%d:%s" % (number, digest))
+                if outcome.new:
+                    counts["new_today"] += 1
+                    owner = outcome.sub.owner.lower()
+                    counts["owners"][owner] = counts["owners"].get(owner, 0) + 1
+            lines.append("#%d: %s" % (number, body.splitlines()[1]))
+        except (ApiError, urllib.error.URLError, OSError, KeyError, TypeError, ValueError) as error:
+            lines.append("#%d: not judged this time (%s)" % (number, error))
+    print("\n".join(lines) or "no open submissions")
+    append_text(args.outputs, "merge=%s\n" % " ".join(merges))
+    append_text(args.summary, "## Submissions\n\n" + ("\n".join("- " + clean(line) for line in lines) or "none open") + "\n")
     return 0
 
 
-def listed_modules(repo):
-    listed = repo.index()
-    if not listed:
-        sys.exit("public/index.ltx is missing: publish first")
-    mods = {}
-    for key, value in listed[0].get("mods", []):
-        fields = [f.strip() for f in value.split(",")]
-        if len(fields) >= 4:
-            mods[key] = {"github": fields[0], "key": fields[1], "min": fields[2], "date": fields[3]}
-    revoked = [(k, v.split(",")[0].strip()) for k, v in listed[0].get("revoked", [])]
-    return mods, revoked
+def git(repo, *args):
+    # the catalog's bot commits, and replays its commits when a rebase needs to
+    env = dict(os.environ, GIT_COMMITTER_NAME="catalog-bot", GIT_COMMITTER_EMAIL="catalog-bot@users.noreply.github.com")
+    return subprocess.run(["git", "-C", repo.root] + list(args), check=True, capture_output=True, text=True, env=env).stdout
+
+
+def push(repo, branch):
+    """Pushes this checkout's commits, rebased onto whatever reached the branch meanwhile."""
+    for attempt in range(3):
+        try:
+            git(repo, "pull", "--rebase", "origin", branch)
+            git(repo, "push", "origin", "HEAD:" + branch)
+            return
+        except subprocess.CalledProcessError:
+            if attempt == 2:
+                raise
+            time.sleep(5)
+
+
+def cmd_merge(args):
+    """Commits what judge accepted: the file is the judged bytes exactly, re-read and re-checked
+    against their hash here, so a submission edited after the verdict waits for its next verdict."""
+    repo = Repo(args.repo)
+    api = Github.from_env(args.catalog)
+    branch = api.branch()
+    accepted = []
+    for pair in args.pairs.split():
+        found = re.fullmatch(r"(\d{1,9}):([0-9a-f]{64})", pair)
+        if not found:
+            print("ignored: %s" % clean(pair, 80))
+            continue
+        number, digest = int(found.group(1)), found.group(2)
+        issue = api.get("repos/%s/issues/%d" % (api.repo, number))
+        text = submission_text(issue.get("body"))
+        if issue.get("state") != "open" or "pull_request" in issue or not text or \
+                hashlib.sha256(text.encode("utf-8")).hexdigest() != digest:
+            print("#%d changed since it was judged: the next run judges it again" % number)
+            continue
+        sub = submission_of(text)
+        user = issue.get("user") or {}
+        login = user.get("login", "")
+        # what a writer can check without trusting the judge: a well-formed file from its repository's
+        # owner, for an id that is free or bound to this very key
+        if sub.problems() or not LOGIN_RE.match(login) or login.lower() != sub.owner.lower() or \
+                any(key != sub.key for key in bound_keys(repo, sub.id)):
+            print("#%d does not hold up: the next run judges it again" % number)
+            continue
+        path = repo.path("mods", sub.id + ".ltx")
+        old = open(path, "rb").read() if os.path.isfile(path) else None
+        if old != text.encode("utf-8"):
+            write_bytes(path, text.encode("utf-8"))
+            git(repo, "add", "--", "mods/%s.ltx" % sub.id)
+            git(repo, "commit", "-q", "--author=%s <%d+%s@users.noreply.github.com>" % (login, int(user.get("id", 0)), login),
+                "-m", "%s %s (#%d)" % ("Update" if old is not None else "List", sub.id, number),
+                "-m", "Accepted by the catalog's own checks (MOD_CATALOG.md 10.2).")
+        accepted.append((number, sub.id))
+    if not accepted:
+        return 0
+    push(repo, branch)
+    for number, _ in accepted:
+        close_issue(api, number, "completed")
+    api.dispatch("publish.yml", branch)
+    print("listed %s; publish.yml started" % ", ".join(module_id for _, module_id in accepted))
+    return 0
+
+
+# ---- the pipeline: cards, VirusTotal, holds, reviews, the status issue ------------------------------------
+
+def read_live(path):
+    """state/live.txt: the live release of every listed module whose descriptor its key signs,
+    withdrawn or not: {id: {version, github, packages}}."""
+    out = {}
+    for line in read_lines(path):
+        parts = line.split(" ")
+        if len(parts) < 3:
+            continue
+        packages = []
+        for item in parts[3:]:
+            name, _, rest = item.partition(":")
+            size, _, sha = rest.partition(":")
+            if size.isdigit() and re.fullmatch(r"[0-9a-f]{64}", sha):
+                packages.append((urllib.parse.unquote(name), int(size), sha))
+        out[parts[0]] = {"version": urllib.parse.unquote(parts[1]), "github": parts[2], "packages": packages}
+    return out
+
+
+def read_pairs(path):
+    out = {}
+    for line in read_lines(path):
+        key, _, value = line.strip().partition(" ")
+        if key:
+            out[key] = value.strip()
+    return out
+
+
+def write_pairs(path, pairs):
+    write_text(path, "".join("%s %s\n" % pair for pair in sorted(pairs.items())))
 
 
 def cmd_cards(args):
     repo = Repo(args.repo)
-    mods, revoked = listed_modules(repo)
+    settings = accept_settings(repo.config())
+    mods, rows = listing(repo), withdrawals(repo)
     previous = read_cards(repo.path("public", "cards.txt"))
-    out, thumbs, issues = [b"xms-cards 1\n"], set(), []
-    for module_id, listing in sorted(mods.items()):
+    failing = read_pairs(repo.path("state", "failing.txt"))
+    out, thumbs, issues, live, still = [b"xms-cards 1\n"], set(), [], [], {}
+    for module_id, listed in sorted(mods.items()):
         try:
-            release = Release(listing["github"], module_id).fetch_descriptor()
-            release.verify_key(listing["key"])
+            release = Release(listed["github"], module_id).fetch_descriptor()
+            release.verify_key(listed["key"])
             if release.fields.get("id") != module_id:
                 raise ValueError("the descriptor names %s" % release.fields.get("id"))
-            if version_tuple(release.version) < version_tuple(listing["min"]):
-                raise ValueError("release %s is below the listed %s" % (release.version, listing["min"]))
-            if any(k == module_id and v in ("*", release.version) for k, v in revoked):
-                raise ValueError("revoked")
+            live.append(" ".join([module_id, urllib.parse.quote(release.version, safe=""), listed["github"]] +
+                                 ["%s:%d:%s" % (urllib.parse.quote(n, safe=""), s, h) for n, s, h in release.packages]))
+            if version_tuple(release.version) < version_tuple(listed["min"]):
+                raise ValueError("release %s is below the listed %s" % (release.version, listed["min"]))
+            if withdrawn(rows, module_id, listed["key"], release.version):
+                raise ValueError("release %s is withdrawn" % release.version)
             text = release.text
             thumb = [p.strip() for p in release.card.get("thumbnail", "").split(",")]
             if len(thumb) == 3:
@@ -731,16 +1407,21 @@ def cmd_cards(args):
                         write_bytes(target, data)
                 if os.path.isfile(target):
                     thumbs.add(sha)
-        except (urllib.error.URLError, ValueError, zlib.error) as error:
-            issues.append("%s: %s" % (module_id, error))
+        except (urllib.error.URLError, OSError, ValueError, zlib.error) as error:
+            since = failing.get(module_id, today())
+            still[module_id] = since
+            issues.append("%s: %s (since %s)" % (module_id, getattr(error, "reason", error), since))
             text = previous.get(module_id)
-            if text is None:
+            # a module whose release stays broken leaves the browser; its id stays bound to its key
+            if text is None or days_since(since) >= settings["dormant_days"]:
                 continue
         out.append(b"card %s %d\n" % (module_id.encode(), len(text)) + text)
     data = b"".join(out)
     if len(data) > CARDS_LIMIT:
         sys.exit("cards.txt would exceed 16 MiB")
     write_bytes(repo.path("public", "cards.txt"), data)
+    write_text(repo.path("state", "live.txt"), "".join(line + "\n" for line in live))
+    write_pairs(repo.path("state", "failing.txt"), still)
     folder = repo.path("public", "thumbs")
     for name in os.listdir(folder) if os.path.isdir(folder) else []:
         if name.endswith(".dds") and name[:-4] not in thumbs:
@@ -748,8 +1429,8 @@ def cmd_cards(args):
     print("cards: %d module(s), %d thumbnail(s)" % (len(out) - 1, len(thumbs)))
     if issues:
         print("\n".join(issues))
-        if args.issues:
-            write_text(args.issues, "".join("- %s\n" % issue for issue in issues))
+    if args.issues:
+        write_text(args.issues, "".join("- %s\n" % issue for issue in issues))
     return 0
 
 
@@ -778,33 +1459,36 @@ def cmd_vt(args):
         print("VT_API_KEY is not set: vt.txt is left as it is")
         return 0
     policy = vt_policy(repo.config())
-    cards = read_cards(repo.path("public", "cards.txt"))
-    old = {}
-    path = repo.path("public", "vt.txt")
-    if os.path.isfile(path):
-        for line in read_text(path).splitlines()[1:]:
-            parts = line.split(" ")
-            if len(parts) == 7:
-                old[parts[0]] = line
-    # A VirusTotal that cannot answer - the quota used up, the key refused, the service down -
-    # costs a stale vt.txt and never the run: the cards and the reviews still go out, and the
-    # game treats a package without a result as one VirusTotal does not know (MOD_CATALOG 11).
-    lines, asked, stopped = ["xms-vt 1"], 0, ""
-    for module_id, text in sorted(cards.items()):
+    # every package of a served card and of a live release, withdrawn ones included: a hold is
+    # lifted by a later report of the same package
+    mods = listing(repo)
+    packages = {}
+    for module_id, entry in read_live(repo.path("state", "live.txt")).items():
+        for name, size, sha in entry["packages"]:
+            packages.setdefault(sha, (module_id, entry["github"], name, size))
+    for module_id, text in read_cards(repo.path("public", "cards.txt")).items():
         try:
             body, _, _, _ = xc.split_signed(text)
         except ValueError:
             continue
         for name, value in parse_ini(body.decode("utf-8")).get("packages", []):
-            sha = value.split(",")[1].strip().lower()
+            size, _, sha = value.partition(",")
+            if size.strip().isdigit():
+                packages.setdefault(sha.strip().lower(), (module_id, (mods.get(module_id) or {}).get("github"), name,
+                                                          int(size)))
+    old = {sha: row["line"] for sha, row in read_vt(repo.path("public", "vt.txt")).items()}
+    uploads = read_pairs(repo.path("state", "vt-uploads.txt"))
+    # A VirusTotal that cannot answer - the quota used up, the key refused, the service down -
+    # costs a stale vt.txt and never the run: the cards and the reviews still go out, and the
+    # game treats a package without a result as one VirusTotal does not know (MOD_CATALOG 11).
+    lines, stopped, uploaded = ["xms-vt 1"], "", 0
+    with tempfile.TemporaryDirectory() as folder:
+        for sha, (module_id, github, name, size) in sorted(packages.items(), key=lambda item: (item[1][0], item[1][2])):
             # a result younger than a day is kept: the free API allows 500 lookups a day
             if (sha in old and old[sha].split(" ")[1] == today()) or stopped:
                 if sha in old:
                     lines.append(old[sha])
                 continue
-            if asked:
-                time.sleep(16)
-            asked += 1
             try:
                 results = vt_lookup(sha, key)
             except VtUnavailable as error:
@@ -814,17 +1498,62 @@ def cmd_vt(args):
                 if isinstance(error, (VtQuota, VtKeyRefused)):
                     stopped = str(error)
                 continue
-            if results is None:
+            if not results:
                 if sha in old:
                     lines.append(old[sha])
+                # a package nobody handed to VirusTotal is handed to it by the catalog: an update
+                # an author released gets a report like the release they submitted
+                if results is None and github and size <= VT_UPLOAD_LIMIT and uploaded < VT_UPLOADS_PER_RUN and \
+                        days_since(uploads.get(sha)) >= VT_REUPLOAD_DAYS:
+                    try:
+                        release = Release(github, module_id)
+                        release.packages = [(name, size, sha)]
+                        vt_upload(release.package_file(1, folder), name, key)
+                        uploads[sha] = today()
+                        uploaded += 1
+                        print("%s %s: handed to VirusTotal" % (module_id, name))
+                    except VtUnavailable as error:
+                        print("%s %s: not handed to VirusTotal (%s)" % (module_id, name, error))
+                        if isinstance(error, (VtQuota, VtKeyRefused)):
+                            stopped = str(error)
+                    except (urllib.error.URLError, OSError, ValueError) as error:
+                        print("%s %s: not handed to VirusTotal (%s)" % (module_id, name, getattr(error, "reason", error)))
                 continue
             verdict, engines, tm, ts, om, flagged = vt_verdict(results, policy)
             lines.append("%s %s %d %d %d %d %s" % (sha, today(), engines, tm, ts, om,
                                                    ",".join(e.replace(" ", "_") for e in flagged) or "-"))
             print("%s %s: %s" % (module_id, name, verdict))
-    write_text(path, "\n".join(lines) + "\n")
+    write_text(repo.path("public", "vt.txt"), "\n".join(lines) + "\n")
+    write_pairs(repo.path("state", "vt-uploads.txt"), {sha: date for sha, date in uploads.items() if sha in packages})
     if stopped:
         print("VirusTotal stopped for this run (%s): the other packages keep their last results" % stopped)
+    return 0
+
+
+def cmd_holds(args):
+    """holds.ltx from VirusTotal's latest word: a live release it blocks is withdrawn and lifted again
+    when every package of it has a later report that does not block; an older release that was
+    withdrawn stays withdrawn."""
+    repo = Repo(args.repo)
+    policy = vt_policy(repo.config())
+    vt = read_vt(repo.path("public", "vt.txt"))
+    live = read_live(repo.path("state", "live.txt"))
+    path = repo.path("holds.ltx")
+    old = read_holds(path)
+    holds = {key: row for key, row in old.items() if key[0] not in live or live[key[0]]["version"] != key[1]}
+    for module_id, entry in live.items():
+        key = (module_id, entry["version"])
+        shas = [sha for _, _, sha in entry["packages"]]
+        verdicts = [vt_counts(policy, vt[sha]["tm"], vt[sha]["ts"], vt[sha]["om"]) if sha in vt else None for sha in shas]
+        if "block" in verdicts:
+            flagged = sorted({engine for sha in shas if sha in vt for engine in vt[sha]["flagged"]})
+            holds[key] = ("+".join(shas), "VirusTotal: " + (", ".join(flagged) or "blocked"))
+        elif key in old and (None in verdicts or not shas):
+            holds[key] = old[key]
+    if holds != old or not os.path.isfile(path):
+        write_text(path, HOLDS_HEADER + "".join("%s = %s, %s, %s\n" % (m, v, shas, reason)
+                                                for (m, v), (shas, reason) in sorted(holds.items())))
+    print("holds: %d version(s) withdrawn%s" % (len(holds), ", changed" if holds != old else ""))
     return 0
 
 
@@ -869,7 +1598,7 @@ def cmd_reviews(args):
     if not source:
         print("no review inbox configured: ratings are left as they are")
         return 0
-    mods, _ = listed_modules(repo)
+    mods = listing(repo)
     settings = {"identity_bits": int(first(config, "reviews", "identity_bits", "24")),
                 "review_bits": int(first(config, "reviews", "review_bits", "20"))}
     moderation = repo.moderation()
@@ -887,11 +1616,11 @@ def cmd_reviews(args):
             continue
         try:
             review = parse_review(payload, settings)
-        except (ValueError, KeyError) as error:
+        except (ValueError, KeyError):
             rejected += 1
             continue
-        listing = mods.get(review["mod"])
-        if not listing or review["date"] < listing["date"]:
+        listed = mods.get(review["mod"])
+        if not listed or review["date"] < listed["date"]:
             continue
         if review["identity"] in moderation["identities"] or review["hardware"] in moderation["hardware"] or \
                 "%s %s" % (review["mod"], review["identity"]) in moderation["reviews"]:
@@ -930,6 +1659,32 @@ def cmd_reviews(args):
     return 0
 
 
+def cmd_status(args):
+    """One issue says what fails: opened when something does, kept up to date, closed when nothing
+    does - never an issue per run in a repository nobody may be reading."""
+    api = Github.from_env(args.catalog)
+    found = [line.strip() for line in read_lines(args.issues) if line.strip()] if args.issues else []
+    issues = api.get_all("repos/%s/issues" % api.repo, {"state": "open", "creator": BOT})
+    current = next((i for i in issues if i.get("title") == STATUS_TITLE and "pull_request" not in i), None)
+    if found:
+        body = ("What the catalog's last check found (%s). publish.yml keeps this issue up to date and closes it "
+                "when nothing fails.\n\n%s\n" % (stamp().replace("T", " ").replace("Z", " UTC"),
+                                                 "\n".join("- " + clean(line.lstrip("- ")) for line in found)))
+        if current:
+            api.call("PATCH", "repos/%s/issues/%d" % (api.repo, current["number"]), {"body": body})
+        else:
+            api.call("POST", "repos/%s/issues" % api.repo, {"title": STATUS_TITLE, "body": body})
+        print("status issue: %d finding(s)" % len(found))
+    elif current:
+        api.call("PATCH", "repos/%s/issues/%d" % (api.repo, current["number"]),
+                 {"state": "closed", "state_reason": "completed",
+                  "body": "Nothing fails since %s." % stamp().replace("T", " ").replace("Z", " UTC")})
+        print("status issue: closed")
+    return 0
+
+
+# ---- signing and the maintainer's own tools -------------------------------------------------------------
+
 def cmd_publish(args):
     repo = Repo(args.repo)
     password = os.environ.get(args.password_env) if args.password_env else None
@@ -945,6 +1700,7 @@ def cmd_publish(args):
     problems = ["%s: %s" % (os.path.basename(s.path), p) for s in subs.values() for p in s.problems()]
     if problems:
         sys.exit("fix the submissions first:\n" + "\n".join(problems))
+    dates = listed_dates(repo)
     lines = ["[catalog]", "format  = 1", "serial  = %d" % serial, "issued  = %s" % today()]
     mirrors = first(config, "catalog", "mirrors")
     if mirrors:
@@ -954,21 +1710,30 @@ def cmd_publish(args):
     if reviews.get("inbox_url") and reviews.get("inbox_field"):
         lines += ["", "[reviews]"] + ["%s = %s" % (k, reviews[k]) for k in
                                       ("inbox_url", "inbox_field", "salt", "identity_bits", "review_bits") if reviews.get(k)]
-    lines += ["", "[mods]"]
-    for module_id, sub in sorted(subs.items()):
-        if not sub.listed:
-            sub.listed = today()
-            with open(sub.path, "a", encoding="utf-8", newline="\n") as f:
-                f.write("listed  = %s\n" % sub.listed)
-        lines.append("%s = %s, %s, %s, %s" % (module_id, sub.github, sub.key, sub.version, sub.listed))
-    lines += ["", "[revoked]"] + ["%s = %s, %s" % (k, v, r) for k, v, r in repo.revoked()]
+    # a module keeps the date it was first listed on, whatever its listing changes later
+    lines += ["", "[mods]"] + ["%s = %s, %s, %s, %s" % (module_id, sub.github, sub.key, sub.version,
+                                                        dates.get(module_id) or today())
+                               for module_id, sub in sorted(subs.items())]
+    lines += ["", "[revoked]"] + ["%s = %s, %s" % row for row in withdrawals(repo)]
     body = "\n".join(lines) + "\n"
+    # an index that would say the same again is not signed again: no new serial, no commit
+    if previous and not getattr(args, "force", False):
+        old_body, _, old_signer, _ = xc.split_signed(previous[1])
+        if old_signer == xc.key_id(xc.public_of(d)) and unstamped(old_body.decode("utf-8")) == unstamped(body):
+            print("index.ltx: nothing changed, serial %d stays" % (serial - 1))
+            if not args.no_cards:
+                cmd_cards(argparse.Namespace(repo=args.repo, issues=None))
+            return 0
     text = xc.sign_text(body, d)
     write_text(repo.path("public", "index.ltx"), text)
     print("index.ltx: serial %d, %d module(s), signed by %s" % (serial, len(subs), xc.key_id(xc.public_of(d))))
     if not args.no_cards:
         cmd_cards(argparse.Namespace(repo=args.repo, issues=None))
     return 0
+
+
+def unstamped(body):
+    return [line for line in body.splitlines() if not re.match(r"^(serial|issued)\s*=", line)]
 
 
 def cmd_revoke(args):
@@ -981,23 +1746,54 @@ def cmd_revoke(args):
         write_text(path, "; Revoked modules, versions and keys (MOD_CATALOG 5.2). catalog.py publish signs them in.\n[revoked]\n")
     with open(path, "a", encoding="utf-8", newline="\n") as f:
         f.write("%s = %s, %s\n" % (target, args.version, args.reason.replace("\n", " ")))
-    print("revoked %s (%s): run catalog.py publish" % (target, args.version))
+    print("revoked %s (%s): push it, and publish.yml signs it in" % (target, args.version))
     return 0
 
 
 def cmd_review(args):
+    """Every check again on a maintainer's machine; nothing is uploaded and nothing waited for."""
     repo = Repo(args.repo)
-    target = args.target
-    if target.isdigit():
-        sys.exit("fetch the pull request's branch first (gh pr checkout %s), then pass mods/<id>.ltx" % target)
-    sub = Submission.load(target)
-    findings, release = check_submission(repo, sub, None, os.environ.get("VT_API_KEY"))
+    sub = Submission.load(args.target)
+    findings, release = release_checks(repo, sub)
+    if release and not verdict_state(findings):
+        key = os.environ.get("VT_API_KEY")
+        if key:
+            findings += vt_checks(release, key, vt_policy(repo.config()))
+        with tempfile.TemporaryDirectory() as folder:
+            findings += content_checks(release, folder)
     print(report(findings, "%s (%s)" % (sub.id, sub.github)))
     if release:
         print("release %s, packages: %s" % (release.version, ", ".join("%s (%s)" % (n, s[:12]) for n, _, s in release.packages)))
         for _, _, sha in release.packages:
             print("VirusTotal: https://www.virustotal.com/gui/file/%s" % sha)
     return 1 if any(f.level == "block" for f in findings) else 0
+
+
+def report(findings, title):
+    lines = ["## " + title, ""]
+    if not findings:
+        lines.append("Nothing to report.")
+    for level, name in (("block", "Blocking"), ("wait", "Not checked this time"), ("review", "Reported, not blocking"),
+                        ("note", "Notes")):
+        chosen = [f for f in findings if f.level == level]
+        if chosen:
+            lines += ["**%s**" % name] + ["- " + f.text for f in chosen] + [""]
+    return "\n".join(lines) + "\n"
+
+
+def cmd_keygen(args):
+    if os.path.exists(args.file):
+        sys.exit("%s exists: a key file is never overwritten" % args.file)
+    password = None
+    if args.password:
+        password = getpass.getpass("Password (empty for none): ") or None
+        if password and getpass.getpass("Again: ") != password:
+            sys.exit("the passwords differ")
+    point = xc.write_key_file(args.file, xc.new_private(), password)
+    print("key file: %s" % args.file)
+    print("public key: %s" % xc.key_text(point))
+    print("key id: %s" % xc.key_id(point))
+    print("Keep a copy of the file somewhere safe: without it nothing can be signed with this key.")
 
 
 def cmd_init(args):
@@ -1009,7 +1805,7 @@ def cmd_init(args):
     os.makedirs(os.path.join(target, "tools"), exist_ok=True)
     for name in ("catalog.py", "xms_catalog.py"):
         shutil.copy2(os.path.join(HERE, name), os.path.join(target, "tools", name))
-    for name in ("mods", os.path.join("public", "thumbs"), os.path.join("public", "reviews")):
+    for name in ("mods", "state", os.path.join("public", "thumbs"), os.path.join("public", "reviews")):
         os.makedirs(os.path.join(target, name), exist_ok=True)
         keep = os.path.join(target, name, ".gitkeep")
         if not os.path.exists(keep):
@@ -1019,9 +1815,10 @@ def cmd_init(args):
     return 0
 
 
+# ---- selftest --------------------------------------------------------------------------------------------------
+
 def selftest_vt_quota():
     """VirusTotal out of quota: vt.txt keeps every result it had and the run still succeeds."""
-    import tempfile
     with tempfile.TemporaryDirectory() as folder:
         d = xc.new_private()
         cards, old_lines = b"xms-cards 1\n", ["xms-vt 1"]
@@ -1053,7 +1850,54 @@ def selftest_vt_quota():
         assert read_text(os.path.join(folder, "public", "vt.txt")).splitlines() == old_lines
 
 
+def selftest_verdicts():
+    """The verdict comment reads back as it was written, a forged one does not count, and a
+    submission is found in an issue whatever its line ends."""
+    class Api:
+        repo = "o/r"
+
+        def __init__(self, comments):
+            self.comments = comments
+
+        def get_all(self, _path, _params=None):
+            return self.comments
+
+    memory = {"vt_since": "2026-09-25T10:00:00Z", "text": "ab" * 32}
+    body = verdict_body(Outcome("waiting", [Finding("wait", "VirusTotal is scanning <x>.zip @someone")]), memory)
+    assert body.startswith(VERDICT_MARKER + "waiting -->\nWaiting: VirusTotal is scanning  x>.zip (at)someone."), body
+    ours = {"id": 1, "user": {"login": BOT}, "body": body}
+    forged = {"id": 2, "user": {"login": "someone"}, "body": VERDICT_MARKER + "accepted -->\nAccepted: sure.\n"}
+    comment, state, read = previous_verdict(Api([ours, forged]), 1)
+    assert comment is ours and state == "waiting" and read == memory, (state, read)
+    text = "[mod]\nid = a\n"
+    issue = SUBMISSION_MARKER + "\r\nFrom the editor.\r\n\r\n```ini\r\n" + text.replace("\n", "\r\n") + "```\r\nrest\r\n"
+    assert submission_text(issue) == text and submission_text("hello") is None
+    assert submission_text(SUBMISSION_MARKER + "\nno block\n") == ""
+
+
+def selftest_holds():
+    """A live release VirusTotal blocks is withdrawn, lifted by a clean report, and an older
+    release stays withdrawn."""
+    with tempfile.TemporaryDirectory() as folder:
+        blocked, clean_sha, old = (hashlib.sha256(s).hexdigest() for s in (b"blocked", b"clean", b"old"))
+        write_text(os.path.join(folder, "catalog.ltx"), "[virustotal]\ntrusted = Kaspersky\nblock_trusted = 1\n")
+        write_text(os.path.join(folder, "state", "live.txt"), "a 1.2.0 o/a a-1.2.0.zip:10:%s\nb 2.0.0 o/b b-2.0.0.zip:10:%s\n" %
+                   (blocked, clean_sha))
+        write_text(os.path.join(folder, "public", "vt.txt"), "xms-vt 1\n%s 2026-09-25 70 1 0 0 Kaspersky\n%s 2026-09-25 70 0 0 0 -\n" %
+                   (blocked, clean_sha))
+        write_text(os.path.join(folder, "holds.ltx"), HOLDS_HEADER + "b = 2.0.0, %s, VirusTotal: Kaspersky\n"
+                                                                     "c = 1.0.0, %s, VirusTotal: Kaspersky\n" % (clean_sha, old))
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_holds(argparse.Namespace(repo=folder))
+        holds = read_holds(os.path.join(folder, "holds.ltx"))
+        assert set(holds) == {("a", "1.2.0"), ("c", "1.0.0")}, holds
+        assert holds[("a", "1.2.0")][1] == "VirusTotal: Kaspersky"
+        rows = withdrawals(Repo(folder))
+        assert ("a", "1.2.0", "VirusTotal: Kaspersky") in rows and not withdrawn(rows, "b", "", "2.0.0")
+
+
 def cmd_selftest(_args):
+    globals()["VT_PAUSE"] = 0
     xc.selftest()
     assert path_problem("gamedata/scripts/a.script") is None
     assert path_problem("bin/evil.dll")
@@ -1070,6 +1914,7 @@ def cmd_selftest(_args):
     assert ("review", "x.script:3 loadstring of a computed string") in levels, levels
     assert not any("io.popen" in t for _, t in levels) and not any(":4" in t for _, t in levels), levels
     assert version_tuple("1.0") == (1, 0, 0, 0) and version_tuple("0.9.9") < (1, 0, 0, 0)
+    assert ID_RE.match("darf-overnight-delivery") and not ID_RE.match(".hidden") and not ID_RE.match("A")
     for good in ("https://ap-pro.ru/stuff/zov_pripjati/overnight-delivery-r600/", "https://www.moddb.com/mods/dead-air",
                  "https://ap-pro.ru/forums/topic/15259-konkurs-kvestov-2026/"):
         assert any(p.match(good) for p in WEBSITE_RE), good
@@ -1080,7 +1925,10 @@ def cmd_selftest(_args):
     assert vt_verdict({"NoName": {"category": "malicious"}}, policy)[0] == "clean"
     assert vt_verdict({"NoName": {"category": "malicious"}, "Other": {"category": "malicious"}}, policy)[0] == "warn"
     assert vt_verdict({"Kaspersky": {"category": "malicious"}}, policy)[0] == "block"
+    assert clean("a <b> @c\nd") == "a  b> (at)c d"
     selftest_vt_quota()
+    selftest_verdicts()
+    selftest_holds()
     print("catalog selftest: ok")
     return 0
 
@@ -1088,29 +1936,32 @@ def cmd_selftest(_args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--repo", default=".", help="the catalog repository (default: here)")
+    parser.add_argument("--catalog", help="owner/repo on GitHub (default: GITHUB_REPOSITORY)")
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("judge")
+    p.add_argument("--issue", type=int, help="judge this issue only")
+    p.add_argument("--outputs", help="where the merge list goes (GITHUB_OUTPUT)")
+    p.add_argument("--summary", help="where the run's summary goes (GITHUB_STEP_SUMMARY)")
+    p = sub.add_parser("merge")
+    p.add_argument("pairs")
+    p = sub.add_parser("cards")
+    p.add_argument("--issues")
+    sub.add_parser("vt")
+    sub.add_parser("holds")
+    p = sub.add_parser("reviews")
+    p.add_argument("--csv")
+    p = sub.add_parser("status")
+    p.add_argument("--issues")
+    p = sub.add_parser("publish")
+    p.add_argument("--key", required=True)
+    p.add_argument("--password-env", help="the environment variable holding the key file's password")
+    p.add_argument("--no-cards", action="store_true")
+    p.add_argument("--force", action="store_true", help="sign a new serial even when nothing changed")
     p = sub.add_parser("init")
     p.add_argument("folder")
     p = sub.add_parser("keygen")
     p.add_argument("file")
     p.add_argument("--password", action="store_true", help="protect the key file with a password")
-    p = sub.add_parser("check")
-    p.add_argument("files", nargs="*")
-    p.add_argument("--changed")
-    p.add_argument("--author")
-    p.add_argument("--summary")
-    p.add_argument("--shallow", action="store_true", help="skip the release's files")
-    p = sub.add_parser("only-submissions")
-    p.add_argument("changed")
-    p = sub.add_parser("cards")
-    p.add_argument("--issues")
-    sub.add_parser("vt")
-    p = sub.add_parser("reviews")
-    p.add_argument("--csv")
-    p = sub.add_parser("publish")
-    p.add_argument("--key", required=True)
-    p.add_argument("--password-env", help="the environment variable holding the key file's password")
-    p.add_argument("--no-cards", action="store_true")
     p = sub.add_parser("revoke")
     p.add_argument("target")
     p.add_argument("version")

@@ -1,43 +1,150 @@
-# Optional (MOD_CATALOG 10.4): sign and publish on GitHub after every merge. Runs only when the
-# repository has the secret CATALOG_KEY (the maintainer key file's content) and, for a protected
-# key file, CATALOG_KEY_PASSWORD. Without it the maintainer publishes from their own computer.
+# The catalog's pipeline (MOD_CATALOG 10.2): every six hours, when accept.yml lists a module, by
+# hand, and after a maintainer's own push. Three jobs on three machines: refresh reads what
+# strangers publish and can write nothing, sign holds the catalog key and reads nothing of
+# theirs but the files refresh made, deploy serves public/.
 name: publish
 
 on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['mods/**', 'catalog.ltx', 'revoked.ltx']
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 concurrency:
-  group: catalog-public
+  group: catalog-publish
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
-  publish:
+  refresh:
     runs-on: ubuntu-latest
-    env:
-      CATALOG_KEY: ${{ secrets.CATALOG_KEY }}
-      CATALOG_KEY_PASSWORD: ${{ secrets.CATALOG_KEY_PASSWORD }}
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
-      - name: Sign and publish
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Cards and thumbnails
+        run: python3 tools/catalog.py cards --issues issues.md
+      # VirusTotal and the review inbox are outside services: a failure of either leaves its own
+      # files as they were and holds nothing else up
+      - name: VirusTotal
+        continue-on-error: true
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: python3 tools/catalog.py vt
+      - name: Automatic withdrawals
+        run: python3 tools/catalog.py holds
+      - name: Reviews
+        continue-on-error: true
+        run: python3 tools/catalog.py reviews
+      - name: Status issue
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/catalog.py status --issues issues.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: refreshed
+          path: |
+            public
+            state
+            holds.ltx
+          retention-days: 1
+          if-no-files-found: error
+
+  sign:
+    needs: refresh
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/download-artifact@v8
+        with:
+          name: refreshed
+          path: ${{ runner.temp }}/refreshed
+      # what refresh removed goes too; the index is this checkout's own, only this job writes it
+      - name: Take the refreshed files
+        run: |
+          from="$RUNNER_TEMP/refreshed"
+          mkdir -p public state
+          rsync -a --delete --exclude '.gitkeep' --exclude '/index.ltx' "$from/public/" public/
+          rsync -a --delete --exclude '.gitkeep' "$from/state/" state/
+          cp "$from/holds.ltx" holds.ltx
+      - name: Sign the index
+        env:
+          CATALOG_KEY: ${{ secrets.CATALOG_KEY }}
+          CATALOG_KEY_PASSWORD: ${{ secrets.CATALOG_KEY_PASSWORD }}
         run: |
           if [ -z "$CATALOG_KEY" ]; then
-            echo "No CATALOG_KEY secret: the maintainer publishes locally."
+            echo "No CATALOG_KEY secret: the index is left as it is."
             exit 0
           fi
           umask 077
           printf '%s\n' "$CATALOG_KEY" > "$RUNNER_TEMP/catalog.xkey"
-          python3 tools/catalog.py publish --key "$RUNNER_TEMP/catalog.xkey" --password-env CATALOG_KEY_PASSWORD
+          python3 tools/catalog.py publish --key "$RUNNER_TEMP/catalog.xkey" --password-env CATALOG_KEY_PASSWORD --no-cards
           rm -f "$RUNNER_TEMP/catalog.xkey"
+      - id: commit
+        name: Commit what changed
+        run: |
           git config user.name "catalog-bot"
           git config user.email "catalog-bot@users.noreply.github.com"
-          git add public mods
-          if ! git diff --cached --quiet; then
-            git commit -m "Publish the catalog"
-            git push
+          git add -A -- public state holds.ltx
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          git commit -q -m "Publish the catalog"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase origin main && git push -q origin HEAD:main; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+  deploy:
+    needs: sign
+    if: needs.sign.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v5
+      # jsDelivr keeps a branch's files for up to twelve hours: the mirror follows the site now.
+      # Thumbnails are named by their hash and never change, so they are left alone.
+      - name: Refresh the jsDelivr mirror
+        continue-on-error: true
+        run: |
+          cd public
+          find . -type f ! -name '.*' ! -path './thumbs/*' | sed 's|^\./||' | while read -r file; do
+            curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/public/$file" > /dev/null || true
+          done
