@@ -5,10 +5,13 @@
 #include "ModUpdateService.h"
 
 #include "ContentService.h"
+#include "ModCatalog.h"
+#include "ModHttp.h"
 #include "ModRelease.h"
 
 #include "xrContentSync/ContentHash.h"
 #include "xrCore/ProductVersion.h"
+#include "xrCore/XMS/xms_catalog.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xrEngine/XR_IOConsole.h"
 
@@ -72,6 +75,10 @@ struct ModService
     std::mutex mutex;
     xr_vector<ModuleStatus> modules;
     std::deque<size_t> queue;
+    // Mod Browser installations: their statuses, the ones waiting, the one in flight
+    xr_vector<ModuleStatus> installs;
+    std::deque<xr_string> installQueue;
+    xr_string activeInstall;
     // console requests waiting for the check to say what is available
     xr_vector<xr_string> requestedIds;
     bool requestedAll{};
@@ -98,12 +105,23 @@ ModService& mod_service()
     return instance;
 }
 
+// The status slot of the installation in flight: an installed module has a row of XMS::Modules(),
+// a module being installed has none yet.
+constexpr size_t ModInstallSlot = static_cast<size_t>(-1);
+
 template <typename Change>
 void mod_set_status(size_t index, const Change& change)
 {
     ModService& service = mod_service();
     std::lock_guard lock(service.mutex);
-    change(service.modules[index]);
+    if (index != ModInstallSlot)
+    {
+        change(service.modules[index]);
+        return;
+    }
+    for (ModuleStatus& status : service.installs)
+        if (status.id == service.activeInstall)
+            change(status);
 }
 
 void mod_set_state(size_t index, State state, xr_string message = {})
@@ -170,182 +188,31 @@ std::wstring mod_asset_url(const xr_string& repository, const xr_string& asset)
     return url.append(L"/").append(mod_widen(repository)).append(L"/releases/latest/download/").append(mod_widen(asset));
 }
 
-// One session for a worker's whole run: WinHTTP pools connections per session, and an update
-// made of ranged requests is mostly connection setup without that.
-class ModHttpSession
-{
-public:
-    ~ModHttpSession()
-    {
-        if (m_session)
-            WinHttpCloseHandle(m_session);
-    }
-
-    HINTERNET Handle()
-    {
-        if (!m_session)
-        {
-            const std::wstring agent = L"Dead Air Refined/" + std::wstring(DeadAirRefined::VersionWide);
-            m_session = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
-                WINHTTP_NO_PROXY_BYPASS, 0);
-            if (m_session)
-                WinHttpSetTimeouts(m_session, 5000, 10000, 15000, 60000);
-        }
-        return m_session;
-    }
-
-private:
-    HINTERNET m_session{};
-};
-
-class ModHttpGet
-{
-public:
-    ~ModHttpGet()
-    {
-        if (m_request)
-            WinHttpCloseHandle(m_request);
-        if (m_connection)
-            WinHttpCloseHandle(m_connection);
-    }
-
-    // [rangeBegin, rangeEnd) of the resource, or all of it when rangeEnd is zero
-    bool Send(ModHttpSession& session, const std::wstring& url, u64 rangeBegin, u64 rangeEnd, xr_string& error)
-    {
-        const HINTERNET handle = session.Handle();
-        URL_COMPONENTS parts{};
-        parts.dwStructSize = sizeof(parts);
-        parts.dwHostNameLength = static_cast<DWORD>(-1);
-        parts.dwUrlPathLength = static_cast<DWORD>(-1);
-        parts.dwExtraInfoLength = static_cast<DWORD>(-1);
-        if (!handle || !WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &parts))
-        {
-            error = handle ? "invalid URL" : "WinHTTP initialization failed";
-            return false;
-        }
-        const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
-        std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
-        if (parts.dwExtraInfoLength)
-            path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-
-        m_connection = WinHttpConnect(handle, host.c_str(), parts.nPort, 0);
-        m_request = m_connection ?
-            WinHttpOpenRequest(m_connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                WINHTTP_DEFAULT_ACCEPT_TYPES, parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) :
-            nullptr;
-        if (!m_request)
-        {
-            error = "could not connect";
-            return false;
-        }
-        if (rangeEnd)
-        {
-            const std::wstring range =
-                L"Range: bytes=" + std::to_wstring(rangeBegin) + L"-" + std::to_wstring(rangeEnd - 1) + L"\r\n";
-            WinHttpAddRequestHeaders(m_request, range.c_str(), static_cast<DWORD>(range.size()), WINHTTP_ADDREQ_FLAG_ADD);
-        }
-
-        DWORD statusSize = sizeof(m_status);
-        if (!WinHttpSendRequest(m_request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
-            !WinHttpReceiveResponse(m_request, nullptr) ||
-            !WinHttpQueryHeaders(m_request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                WINHTTP_HEADER_NAME_BY_INDEX, &m_status, &statusSize, WINHTTP_NO_HEADER_INDEX))
-        {
-            error = "request failed";
-            return false;
-        }
-        return true;
-    }
-
-    DWORD Status() const { return m_status; }
-
-    bool Read(void* buffer, DWORD capacity, DWORD& received)
-    {
-        return WinHttpReadData(m_request, buffer, capacity, &received) != FALSE;
-    }
-
-    // first byte the server is sending, from Content-Range; false when the header is absent
-    bool RangeStart(u64& start) const
-    {
-        std::array<wchar_t, 128> value{};
-        DWORD size = sizeof(value);
-        if (!WinHttpQueryHeaders(m_request, WINHTTP_QUERY_CONTENT_RANGE, WINHTTP_HEADER_NAME_BY_INDEX, value.data(),
-                &size, WINHTTP_NO_HEADER_INDEX))
-            return false;
-        const std::wstring_view header(value.data());
-        const size_t space = header.find(L' ');
-        if (space == std::wstring_view::npos)
-            return false;
-        start = wcstoull(header.data() + space + 1, nullptr, 10);
-        return true;
-    }
-
-    // where the redirects ended: the storage URL behind releases/latest/download
-    std::wstring FinalUrl() const
-    {
-        std::array<wchar_t, 4096> value{};
-        DWORD size = sizeof(value);
-        return WinHttpQueryOption(m_request, WINHTTP_OPTION_URL, value.data(), &size) ? std::wstring(value.data()) :
-                                                                                         std::wstring();
-    }
-
-private:
-    HINTERNET m_connection{};
-    HINTERNET m_request{};
-    DWORD m_status{};
-};
-
-enum class ModFetch
-{
-    Ok,
-    NotFound,
-    Failed
-};
+// The shared client (ModHttp): one session for a worker's whole run - WinHTTP pools connections
+// per session, and an update made of ranged requests is mostly connection setup without that.
+using ModHttpSession = ModHttp::Session;
+using ModHttpGet = ModHttp::Request;
+using ModFetch = ModHttp::Fetch;
 
 // a small text asset, whole, into memory
 ModFetch mod_fetch_text(ModHttpSession& session, const std::wstring& url, size_t limit, xr_string& body, xr_string& error)
 {
-    ModHttpGet request;
-    if (!request.Send(session, url, 0, 0, error))
-        return ModFetch::Failed;
-    if (request.Status() == HTTP_STATUS_NOT_FOUND)
-        return ModFetch::NotFound;
-    if (request.Status() != HTTP_STATUS_OK)
-    {
-        error = "HTTP " + xr_string(std::to_string(request.Status()).c_str());
-        return ModFetch::Failed;
-    }
-
-    std::vector<char> buffer(64 * 1024);
-    while (!mod_stopped())
-    {
-        DWORD received = 0;
-        if (!request.Read(buffer.data(), static_cast<DWORD>(buffer.size()), received))
-        {
-            error = "download was interrupted";
-            return ModFetch::Failed;
-        }
-        if (!received)
-            return ModFetch::Ok;
-        body.append(buffer.data(), received);
-        if (body.size() > limit)
-        {
-            error = "asset is larger than the contract allows";
-            return ModFetch::Failed;
-        }
-    }
-    error = "cancelled";
-    return ModFetch::Failed;
+    const ModFetch fetched = ModHttp::FetchText(session, url, limit, body, error, &mod_service().stop);
+    if (fetched == ModFetch::Failed && error == "the answer is larger than allowed")
+        error = "asset is larger than the contract allows";
+    return fetched;
 }
 
 ModFetch mod_fetch_descriptor(ModHttpSession& session, const XMS::Module& module, ModRelease::Descriptor& descriptor,
-    xr_string& error)
+    xr_string& error, xr_string* text = nullptr)
 {
     xr_string body;
     const ModFetch fetched = mod_fetch_text(session, mod_asset_url(module.update_github, module.id + ".update.ltx"),
         ModRelease::MaximumDescriptorBytes, body, error);
     if (fetched != ModFetch::Ok)
         return fetched;
+    if (text)
+        *text = body;
     if (!ModRelease::ParseDescriptor(body, descriptor, error))
         return ModFetch::Failed;
     if (descriptor.id != module.id)
@@ -361,7 +228,8 @@ ModFetch mod_fetch_descriptor(ModHttpSession& session, const XMS::Module& module
 std::shared_ptr<const ModRelease::FileIndex> mod_fetch_index(ModHttpSession& session, size_t moduleIndex,
     const XMS::Module& module, const ModRelease::Descriptor& descriptor, xr_string& error)
 {
-    ModKnownIndex& known = mod_service().indexes[moduleIndex];
+    ModKnownIndex scratch;
+    ModKnownIndex& known = moduleIndex == ModInstallSlot ? scratch : mod_service().indexes[moduleIndex];
     if (known.index && known.sha256 == descriptor.index.sha256)
         return known.index;
 
@@ -616,6 +484,56 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
     return newer && !unreadable && !gameTooOld;
 }
 
+// ---- the mod catalog (docs/dead-air/MOD_CATALOG.md) -----------------------------------------
+
+// A module the catalog lists under its own repository, or one the Mod Browser installed.
+bool mod_is_catalog(const XMS::Module& module)
+{
+    return XMS::Catalog::InstalledFromBrowser(module.id.c_str()) || XMS::Catalog::Listed(module);
+}
+
+// The catalog's word on a release of a catalog module: listed under this repository, not revoked,
+// not below the lowest listed version, signed by the author key the catalog names. Empty = taken.
+xr_string mod_catalog_refusal(const XMS::Module& module, std::string_view text, const ModRelease::Descriptor& descriptor)
+{
+    const std::shared_ptr<const XMS::Catalog::Index> index = XMS::Catalog::Current();
+    const XMS::Catalog::Listing* listing = index ? index->Find(module.id) : nullptr;
+    if (!listing)
+        return index ? "the mod catalog no longer lists this module" : "the mod catalog has not been loaded yet";
+    if (0 != xr_stricmp(listing->github.c_str(), module.update_github.c_str()))
+        return "the catalog names another repository for this module";
+    if (const XMS::Catalog::Revocation* revoked = index->Revoked(module.id, descriptor.version, listing->key.id))
+        return "withdrawn from the mod catalog: " + (revoked->reason.empty() ? xr_string("no reason given") : revoked->reason);
+    if (ModRelease::ParseVersion(descriptor.version) < ModRelease::ParseVersion(listing->minVersion))
+        return "below the lowest version the catalog lists (" + listing->minVersion + ")";
+    xr_string error;
+    if (!XMS::Catalog::VerifySigned(text, listing->key, error))
+        return "not signed by the author's key the catalog names (" + error + ")";
+    return {};
+}
+
+// What the index of a catalog release may hold (MOD_CATALOG 8, paths) and that its card and its
+// manifest are one text.
+xr_string mod_catalog_index_refusal(const ModRelease::Descriptor& descriptor, const ModRelease::FileIndex& index)
+{
+    for (const ModRelease::FileEntry& entry : index.files)
+    {
+        xr_string why;
+        if (!ModRelease::CatalogPathAllowed(entry.path, why))
+            return entry.path + ": " + why;
+        if (entry.path == "mod.ltx" && descriptor.card.manifest.present &&
+            (descriptor.card.manifest.sha256 != entry.sha256 || descriptor.card.manifest.size != entry.size))
+            return "the card does not describe this release's mod.ltx";
+    }
+    return {};
+}
+
+void mod_log_disclaimer()
+{
+    Msg("~ [mods] Modules are made by third parties. The author of Dead Air: Refined is not responsible for "
+        "them: the safety measures of the mod catalog are taken, but there is no absolute guarantee.");
+}
+
 bool mod_sleep(unsigned milliseconds)
 {
     for (unsigned elapsed = 0; elapsed < milliseconds && !mod_stopped(); elapsed += 100)
@@ -831,9 +749,20 @@ bool mod_fetch_package(ModHttpSession& session, const std::wstring& canonicalUrl
 }
 
 bool mod_stage(ModHttpSession& session, size_t moduleIndex, const XMS::Module& module,
-    const ModRelease::Descriptor& descriptor, const ModRelease::FileIndex& index, xr_string& error)
+    const ModRelease::Descriptor& descriptor, const ModRelease::FileIndex& index, xr_string& error, bool catalog,
+    bool install, bool& refused)
 {
     ModService& service = mod_service();
+    refused = false;
+    if (catalog)
+    {
+        error = mod_catalog_index_refusal(descriptor, index);
+        if (!error.empty())
+        {
+            refused = true;
+            return false;
+        }
+    }
     const std::filesystem::path installed(module.root.c_str());
     const std::filesystem::path staging = std::filesystem::path(XMS::StagedRoot().c_str()) / module.id.c_str();
     const std::filesystem::path payload = staging / L"payload";
@@ -923,7 +852,22 @@ bool mod_stage(ModHttpSession& session, size_t moduleIndex, const XMS::Module& m
         error = "release does not hold the module and version its descriptor names";
         return false;
     }
-    return XMS::MarkStagedReady(module.id.c_str(), descriptor.version.c_str(), error);
+    // every byte is the author's now; what they are is the catalog's question (MOD_CATALOG 8)
+    if (catalog)
+    {
+        for (const ModRelease::FileEntry& entry : index.files)
+        {
+            xr_string why;
+            if (!ModRelease::CatalogFileAllowed(payload / mod_utf8_path(entry.path), why))
+            {
+                error = entry.path + ": " + why;
+                refused = true;
+                return false;
+            }
+        }
+    }
+    return install ? XMS::MarkStagedInstall(module.id.c_str(), descriptor.version.c_str(), error) :
+                     XMS::MarkStagedReady(module.id.c_str(), descriptor.version.c_str(), error);
 }
 
 void mod_run_update(ModHttpSession& session, size_t index)
@@ -937,24 +881,36 @@ void mod_run_update(ModHttpSession& session, size_t index)
     // Fetched again rather than kept from the check: the assets are addressed through
     // "latest", and a release published in between would answer with another version's files.
     ModRelease::Descriptor descriptor;
-    xr_string error;
-    const ModFetch fetched = mod_fetch_descriptor(session, module, descriptor, error);
+    xr_string error, text;
+    const ModFetch fetched = mod_fetch_descriptor(session, module, descriptor, error, &text);
     if (fetched != ModFetch::Ok)
     {
         Msg("! [mods] %s: update failed - %s", module.id.c_str(), error.c_str());
         mod_set_state(index, fetched == ModFetch::NotFound ? State::NoRelease : State::Failed, std::move(error));
         return;
     }
+    const bool catalog = mod_is_catalog(module);
     // the check has usually compared already, and then this is a lookup
     u64 reissueBytes = 0;
     const bool reissue = ModRelease::ParseVersion(descriptor.version) == ModRelease::ParseVersion(module.version) &&
         mod_reissued(session, index, module, descriptor, reissueBytes);
     if (mod_stopped() || !mod_evaluate(index, module.version, descriptor, descriptor.PackageBytes(), reissue))
         return;
+    if (catalog)
+    {
+        xr_string refusal = mod_catalog_refusal(module, text, descriptor);
+        if (!refusal.empty())
+        {
+            Msg("! [mods] %s: update %s refused - %s", module.id.c_str(), descriptor.version.c_str(), refusal.c_str());
+            mod_set_state(index, State::Refused, std::move(refusal));
+            return;
+        }
+    }
 
     mod_set_state(index, State::Preparing);
+    bool refused = false;
     const auto files = mod_fetch_index(session, index, module, descriptor, error);
-    if (files && mod_stage(session, index, module, descriptor, *files, error))
+    if (files && mod_stage(session, index, module, descriptor, *files, error, catalog, false, refused))
     {
         Msg("* [mods] %s: %s staged, applied by the next start", module.id.c_str(), descriptor.version.c_str());
         mod_forget_verdict(service, module.id);
@@ -965,8 +921,78 @@ void mod_run_update(ModHttpSession& session, size_t index)
     }
 
     XMS::DiscardStaged(module.id.c_str());
-    Msg("! [mods] %s: update failed - %s", module.id.c_str(), error.c_str());
-    mod_set_state(index, State::Failed, std::move(error));
+    Msg("! [mods] %s: update %s - %s", module.id.c_str(), refused ? "refused" : "failed", error.c_str());
+    mod_set_state(index, refused ? State::Refused : State::Failed, std::move(error));
+}
+
+// A module the catalog lists, installed from nothing: its live release, the catalog's rules,
+// the same staging as an update with no installed files to reuse.
+void mod_run_install(ModHttpSession& session, const xr_string& id)
+{
+    ModService& service = mod_service();
+    service.progressDone.store(0, std::memory_order_release);
+    service.progressTotal.store(0, std::memory_order_release);
+    mod_set_state(ModInstallSlot, State::Preparing);
+
+    const std::shared_ptr<const XMS::Catalog::Index> catalog = XMS::Catalog::Current();
+    const XMS::Catalog::Listing* listing = catalog ? catalog->Find(id) : nullptr;
+    xr_string error;
+    if (!listing || XMS::FindModule(id.c_str()))
+    {
+        error = listing ? "the module is installed already" : "the mod catalog does not list this module";
+        Msg("! [mods] %s: installation failed - %s", id.c_str(), error.c_str());
+        mod_set_state(ModInstallSlot, State::Failed, std::move(error));
+        return;
+    }
+    XMS::Module module;
+    module.id = id;
+    module.update_github = listing->github;
+
+    ModRelease::Descriptor descriptor;
+    xr_string text;
+    const ModFetch fetched = mod_fetch_descriptor(session, module, descriptor, error, &text);
+    if (fetched != ModFetch::Ok)
+    {
+        if (fetched == ModFetch::NotFound)
+            error = "the module's repository publishes no release";
+        Msg("! [mods] %s: installation failed - %s", id.c_str(), error.c_str());
+        mod_set_state(ModInstallSlot, State::Failed, std::move(error));
+        return;
+    }
+    const bool unreadable = descriptor.schema > ModRelease::SupportedSchema;
+    if (unreadable || (!descriptor.requiresGame.empty() &&
+            ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version)))
+    {
+        mod_set_status(ModInstallSlot, [&](ModuleStatus& status)
+        {
+            status.state = State::Blocked;
+            status.version = descriptor.version;
+            status.requiresGame = unreadable ? xr_string() : descriptor.requiresGame;
+        });
+        return;
+    }
+    xr_string refusal = mod_catalog_refusal(module, text, descriptor);
+    if (!refusal.empty())
+    {
+        Msg("! [mods] %s: installation of %s refused - %s", id.c_str(), descriptor.version.c_str(), refusal.c_str());
+        mod_set_state(ModInstallSlot, State::Refused, std::move(refusal));
+        return;
+    }
+    mod_set_status(ModInstallSlot, [&](ModuleStatus& status) { status.version = descriptor.version; });
+
+    bool refused = false;
+    const auto files = mod_fetch_index(session, ModInstallSlot, module, descriptor, error);
+    if (files && mod_stage(session, ModInstallSlot, module, descriptor, *files, error, true, true, refused))
+    {
+        Msg("* [mods] %s: %s staged for installation by the next start", id.c_str(), descriptor.version.c_str());
+        mod_set_state(ModInstallSlot, State::Staged);
+        std::lock_guard lock(service.mutex);
+        ++service.stagedThisRun;
+        return;
+    }
+    XMS::DiscardStaged(id.c_str());
+    Msg("! [mods] %s: installation %s - %s", id.c_str(), refused ? "refused" : "failed", error.c_str());
+    mod_set_state(ModInstallSlot, refused ? State::Refused : State::Failed, std::move(error));
 }
 
 void mod_run_check(ModHttpSession& session)
@@ -987,8 +1013,9 @@ void mod_run_check(ModHttpSession& session)
 
         const XMS::Module& module = modules[index];
         ModRelease::Descriptor descriptor;
-        xr_string error;
-        switch (mod_fetch_descriptor(session, module, descriptor, error))
+        xr_string error, text;
+        const ModFetch fetched = mod_fetch_descriptor(session, module, descriptor, error, &text);
+        switch (fetched)
         {
         case ModFetch::Ok:
         {
@@ -1036,6 +1063,22 @@ void mod_run_check(ModHttpSession& session)
             mod_set_state(index, State::CheckFailed, std::move(error));
             break;
         }
+
+        // an update of a catalog module is on offer only when the catalog takes it
+        bool offered = false;
+        {
+            std::lock_guard lock(service.mutex);
+            offered = service.modules[index].state == State::Available;
+        }
+        if (fetched == ModFetch::Ok && offered && mod_is_catalog(module))
+        {
+            xr_string refusal = mod_catalog_refusal(module, text, descriptor);
+            if (!refusal.empty())
+            {
+                Msg("! [mods] %s: update %s refused - %s", module.id.c_str(), descriptor.version.c_str(), refusal.c_str());
+                mod_set_state(index, State::Refused, std::move(refusal));
+            }
+        }
     }
 }
 
@@ -1078,6 +1121,7 @@ void mod_worker()
     {
         size_t update = 0;
         bool check = false;
+        xr_string install;
         {
             std::lock_guard lock(service.mutex);
             if (mod_stopped())
@@ -1089,6 +1133,12 @@ void mod_worker()
             {
                 update = service.queue.front();
                 service.queue.pop_front();
+            }
+            else if (!service.installQueue.empty())
+            {
+                install = service.installQueue.front();
+                service.installQueue.pop_front();
+                service.activeInstall = install;
             }
             else if (service.checkRequested)
             {
@@ -1109,6 +1159,8 @@ void mod_worker()
             mod_run_check(session);
             mod_queue_requests();
         }
+        else if (!install.empty())
+            mod_run_install(session, install);
         else
             mod_run_update(session, update);
     }
@@ -1125,6 +1177,7 @@ pcstr mod_state_name(State state)
     case State::NoRelease: return "no release";
     case State::Available: return "update available";
     case State::Blocked: return "update needs a newer game";
+    case State::Refused: return "refused by the mod catalog's rules";
     case State::CheckFailed: return "check failed";
     case State::Queued: return "queued";
     case State::Preparing: return "verifying installed files";
@@ -1224,6 +1277,7 @@ void ModUpdateService::RequestUpdate(pcstr moduleId)
     ModService& service = mod_service();
     std::lock_guard lock(service.mutex);
     mod_initialize(service);
+    mod_log_disclaimer();
     if (moduleId && moduleId[0])
         service.requestedIds.emplace_back(moduleId);
     else
@@ -1288,6 +1342,80 @@ bool ModUpdateService::OpenWebsite(pcstr moduleId)
     return result > 32;
 }
 
+bool ModUpdateService::StartInstall(pcstr moduleId, xr_string& error)
+{
+    ModService& service = mod_service();
+    std::lock_guard lock(service.mutex);
+    mod_initialize(service);
+    const std::shared_ptr<const XMS::Catalog::Index> catalog = XMS::Catalog::Current();
+    if (!moduleId || !catalog || !catalog->Find(moduleId))
+    {
+        error = "the mod catalog does not list this module";
+        return false;
+    }
+    if (XMS::FindModule(moduleId))
+    {
+        error = "the module is installed already";
+        return false;
+    }
+    // VirusTotal's block is final for an installation (MOD_CATALOG 11)
+    if (const auto snapshot = ModCatalog::Current(); const ModCatalog::Entry* entry = snapshot->Find(moduleId))
+    {
+        if (entry->vt.verdict == ModCatalog::Verdict::Block)
+        {
+            error = "VirusTotal: flagged by " + (entry->vt.flaggedBy.empty() ? xr_string("antivirus engines") : entry->vt.flaggedBy);
+            return false;
+        }
+        if (!entry->revoked.empty())
+        {
+            error = "withdrawn from the mod catalog: " + entry->revoked;
+            return false;
+        }
+    }
+    const auto existing = std::ranges::find(service.installs, xr_string(moduleId), &ModuleStatus::id);
+    if (existing != service.installs.end())
+    {
+        const State state = existing->state;
+        if (state != State::Failed && state != State::Refused && state != State::Blocked)
+        {
+            error = "the module is being installed already";
+            return false;
+        }
+        service.installs.erase(existing);
+    }
+    ModuleStatus& status = service.installs.emplace_back();
+    status.id = moduleId;
+    status.state = State::Queued;
+    service.installQueue.emplace_back(moduleId);
+    mod_log_disclaimer();
+    mod_wake_worker(service);
+    return true;
+}
+
+bool ModUpdateService::StageRemoval(pcstr moduleId, xr_string& error)
+{
+    ModService& service = mod_service();
+    std::lock_guard lock(service.mutex);
+    if (service.workerRunning && !service.queue.empty() && std::ranges::any_of(service.queue, [&](size_t index)
+        { return index < service.modules.size() && service.modules[index].id == moduleId; }))
+    {
+        error = "the module is being updated";
+        return false;
+    }
+    if (!XMS::StageRemoval(moduleId, error))
+        return false;
+    Msg("* [mods] %s: removed by the next start", moduleId);
+    return true;
+}
+
+void ModUpdateService::CancelRemoval(pcstr moduleId)
+{
+    if (XMS::StagedAction(moduleId) == "remove")
+        XMS::DiscardStaged(moduleId);
+}
+
+void ModUpdateService::LogDisclaimer() { mod_log_disclaimer(); }
+
 ModUpdateService::Snapshot ModUpdateService::GetSnapshot()
 {
     ModService& service = mod_service();
@@ -1295,14 +1423,20 @@ ModUpdateService::Snapshot ModUpdateService::GetSnapshot()
     std::lock_guard lock(service.mutex);
     mod_initialize(service);
     snapshot.modules = service.modules;
+    snapshot.installs = service.installs;
     snapshot.busy = service.workerRunning;
     snapshot.restartPrompt = service.restartPrompt.load(std::memory_order_acquire);
-    for (ModuleStatus& status : snapshot.modules)
+    for (xr_vector<ModuleStatus>* list : {&snapshot.modules, &snapshot.installs})
     {
-        if (status.state != State::Preparing && status.state != State::Downloading)
-            continue;
-        status.downloadedBytes = service.progressDone.load(std::memory_order_acquire);
-        status.totalBytes = service.progressTotal.load(std::memory_order_acquire);
+        for (ModuleStatus& status : *list)
+        {
+            if (status.state != State::Preparing && status.state != State::Downloading)
+                continue;
+            if (list == &snapshot.installs && status.id != service.activeInstall)
+                continue;
+            status.downloadedBytes = service.progressDone.load(std::memory_order_acquire);
+            status.totalBytes = service.progressTotal.load(std::memory_order_acquire);
+        }
     }
     return snapshot;
 }
@@ -1324,6 +1458,10 @@ bool ModUpdateService::RestartPromptPending() { return false; }
 void ModUpdateService::AcknowledgeRestartPrompt() {}
 bool ModUpdateService::RestartGame() { return false; }
 bool ModUpdateService::OpenWebsite(pcstr) { return false; }
+bool ModUpdateService::StartInstall(pcstr, xr_string& error) { error = "not supported on this platform"; return false; }
+bool ModUpdateService::StageRemoval(pcstr, xr_string& error) { error = "not supported on this platform"; return false; }
+void ModUpdateService::CancelRemoval(pcstr) {}
+void ModUpdateService::LogDisclaimer() {}
 ModUpdateService::Snapshot ModUpdateService::GetSnapshot() { return {}; }
 void ModUpdateService::Shutdown() {}
 #endif

@@ -263,11 +263,27 @@ void dxUIRender::FlushPrimitive()
     default: NODEFAULT;
     }
 
+    if (m_shapePending)
+    {
+        RCache.set_c("xms_shape_box", m_shapeBox);
+        RCache.set_c("xms_shape_line", m_shapeLine);
+        RCache.set_c("xms_shape_mode", m_shapeMode);
+        m_shapePending = false;
+    }
+
     if (primCount > 0)
         RCache.Render(d3dPrimType, vOffset, primCount);
 
     PrimitiveType = ptNone;
     m_PointType = pttNone;
+}
+
+void dxUIRender::SetShapeParams(const Fvector4& box, const Fvector4& line, const Fvector4& mode)
+{
+    m_shapeBox = box;
+    m_shapeLine = line;
+    m_shapeMode = mode;
+    m_shapePending = true;
 }
 
 void dxUIRender::CacheSetXformWorld(const Fmatrix& M) { RCache.set_xform_world(M); }

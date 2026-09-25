@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 #include "xms_core.h"
+#include "xms_catalog.h"
 #include "xrCore/LocatorAPI.h"
 
 #include <io.h>
@@ -359,7 +360,7 @@ void parse_manifest(Module& m, char* text)
     if (u8(text[0]) == 0xEF && u8(text[1]) == 0xBB && u8(text[2]) == 0xBF)
         text += 3;
 
-    xr_string website, github, pda_layout;
+    xr_string website, github, pda_layout, thumbnail;
     parse_plain_ini(text, [&](pcstr section, pcstr key, pcstr value)
     {
         if (0 == xr_strcmp(section, "module"))
@@ -378,6 +379,10 @@ void parse_manifest(Module& m, char* text)
                 m.description = display_text(value);
             else if (0 == xr_strcmp(key, "website"))
                 website = value;
+            else if (0 == xr_strcmp(key, "thumbnail"))
+                thumbnail = value;
+            else if (0 == xr_strcmp(key, "tags"))
+                m.tags = lower_copy(value);
         }
         else if (0 == xr_strcmp(section, "update"))
         {
@@ -457,6 +462,14 @@ void parse_manifest(Module& m, char* text)
         m.update_github = std::move(github);
     else if (!github.empty())
         Msg("! XMS: module [%s] update source ignored - [update] github must be owner/repo", m.id.c_str());
+    if (!thumbnail.empty())
+    {
+        if (normalize_rel_path(thumbnail))
+            m.thumbnail = std::move(thumbnail);
+        else
+            Msg("! XMS: module [%s] thumbnail ignored - [module] thumbnail must be a path inside the module",
+                m.id.c_str());
+    }
     if (!pda_layout.empty())
     {
         if (normalize_rel_path(pda_layout))
@@ -913,6 +926,9 @@ struct StagedInfo
     xr_string version;
     xr_string root;   // "modules" or "mods"
     xr_string folder; // the installed module folder inside that root
+    // update (the default), install - a module the Mod Browser brings, whose folder does not
+    // exist yet - or remove (MOD_CATALOG 14)
+    xr_string action{"update"};
 };
 
 bool is_directory(const xr_string& path)
@@ -976,9 +992,12 @@ bool read_staged_info(const xr_string& ready_path, StagedInfo& info)
             info.root = lower_copy(value);
         else if (0 == xr_strcmp(key, "folder"))
             info.folder = value;
+        else if (0 == xr_strcmp(key, "action"))
+            info.action = lower_copy(value);
     });
     return valid_id(info.id.c_str()) && (info.root == "modules" || info.root == "mods") &&
-        valid_folder_name(info.folder) && info.folder != kStagedDir;
+        valid_folder_name(info.folder) && info.folder != kStagedDir &&
+        (info.action == "update" || info.action == "install" || info.action == "remove");
 }
 
 bool manifest_id_is(const xr_string& module_dir, const xr_string& id)
@@ -1019,6 +1038,40 @@ void apply_staged(pcstr game_root, const xr_string& dir, const StagedInfo& info)
     const xr_string previous = dir + kStagedPrevious;
     const bool has_target = is_directory(target);
     const bool has_previous = is_directory(previous);
+
+    if (info.action == "remove")
+    {
+        // parked inside the staging folder first: a folder that cannot move is still in use
+        if (has_target && manifest_id_is(target, info.id) && !MoveFileExA(target.c_str(), previous.c_str(), 0))
+        {
+            Msg("! XMS: module [%s] is in use (error %u) - its removal stays staged", info.id.c_str(), GetLastError());
+            return;
+        }
+        remove_tree(dir);
+        Catalog::MarkInstalled(info.id.c_str(), false);
+        Msg("* XMS: module [%s] removed", info.id.c_str());
+        return;
+    }
+    if (info.action == "install")
+    {
+        if (!is_directory(payload) || !manifest_id_is(payload, info.id) || has_target)
+        {
+            Msg("! XMS: staged installation of [%s] %s - discarded", info.id.c_str(),
+                has_target ? "meets a folder that already exists" : "holds no such module");
+            remove_tree(dir);
+            return;
+        }
+        if (!MoveFileExA(payload.c_str(), target.c_str(), 0))
+        {
+            Msg("! XMS: module [%s] %s could not be moved in (error %u) - the installation stays staged",
+                info.id.c_str(), info.version.c_str(), GetLastError());
+            return;
+        }
+        remove_tree(dir);
+        Catalog::MarkInstalled(info.id.c_str(), true);
+        Msg("* XMS: module [%s] %s installed", info.id.c_str(), info.version.c_str());
+        return;
+    }
 
     if (!is_directory(payload) || !manifest_id_is(payload, info.id))
     {
@@ -1138,12 +1191,11 @@ void InitializeAndMount()
     }
 
     s.staged_root = xr_string(mods_root) + kStagedDir + DELIMITER;
+    Catalog::Begin(fs_root->m_Path);
     apply_staged_updates(fs_root->m_Path);
 
     discover(mods_root, false);
     discover(legacy_root, true);
-    if (s.modules.empty())
-        return;
 
     // The player's own on/off list, one id per line. Kept next to the modules
     // rather than in appdata so it travels with the install, exactly like
@@ -1163,6 +1215,16 @@ void InitializeAndMount()
                     break;
                 }
     }
+
+    // revocations and protected mode are decided before any module mounts or script runs,
+    // and with no module at all: protection, once on, stays on
+    {
+        FS_Path* app_data = nullptr;
+        FS.get_path("$app_data_root$", &app_data);
+        Catalog::Evaluate(s.modules, fs_root->m_Path, app_data ? app_data->m_Path : fs_root->m_Path);
+    }
+    if (s.modules.empty())
+        return;
 
     load_registry();
     order_modules(mods_root, legacy_root);
@@ -1277,6 +1339,119 @@ bool MarkStagedReady(pcstr module_id, pcstr version, xr_string& err)
         err = "cannot write ready.ltx";
     }
     return ok;
+}
+
+namespace
+{
+bool write_ready(const xr_string& id, pcstr version, pcstr root, const xr_string& folder, pcstr action, xr_string& err)
+{
+    const xr_string path = st().staged_root + id + DELIMITER + kStagedReady;
+    CreateDirectoryA(st().staged_root.substr(0, st().staged_root.size() - 1).c_str(), nullptr);
+    CreateDirectoryA((st().staged_root + id).c_str(), nullptr);
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f)
+    {
+        err = "cannot write ready.ltx";
+        return false;
+    }
+    fprintf(f, "; XMS staged module change. Machine-written, applied by the next start.\n[staged]\n");
+    fprintf(f, "id = %s\nversion = %s\nroot = %s\nfolder = %s\naction = %s\n", id.c_str(), version, root,
+        folder.c_str(), action);
+    const bool ok = 0 == ferror(f);
+    fclose(f);
+    if (!ok)
+    {
+        DeleteFileA(path.c_str());
+        err = "cannot write ready.ltx";
+    }
+    return ok;
+}
+} // namespace
+
+bool MarkStagedInstall(pcstr module_id, pcstr version, xr_string& err)
+{
+    if (st().staged_root.empty() || !valid_id(module_id) || !valid_folder_name(module_id))
+    {
+        err = "invalid module id";
+        return false;
+    }
+    if (FindModule(module_id))
+    {
+        err = "the module is installed already";
+        return false;
+    }
+    FS_Path* fs_root = nullptr;
+    if (!FS.get_path("$fs_root$", &fs_root) || is_directory(xr_string(fs_root->m_Path) + "modules" DELIMITER + module_id))
+    {
+        err = "modules\\" + xr_string(module_id) + " exists already";
+        return false;
+    }
+    return write_ready(module_id, version, "modules", module_id, "install", err);
+}
+
+bool MountFile(pcstr relative_path, pcstr physical_path)
+{
+    State& s = st();
+    FS_Path* gamedata = nullptr;
+    struct _stat64 info{};
+    if (!relative_path || !physical_path || !FS.get_path("$game_data$", &gamedata) ||
+        _stat64(physical_path, &info) != 0 || (info.st_mode & _S_IFDIR))
+        return false;
+    string_path virt;
+    strconcat(virt, gamedata->m_Path, relative_path);
+    const xr_string vpath = lower_copy(virt);
+    for (auto& [name, index] : s.redirect)
+    {
+        Overlay& overlay = s.overlays[index];
+        if (overlay.vpath != vpath)
+            continue;
+        overlay.phys = physical_path;
+        overlay.size = u32(info.st_size);
+        overlay.modif = u32(info.st_mtime);
+        FS.xms_register(vpath.c_str(), overlay.size, overlay.modif);
+        return true;
+    }
+    Overlay overlay;
+    overlay.vpath = vpath;
+    overlay.phys = physical_path;
+    overlay.size = u32(info.st_size);
+    overlay.modif = u32(info.st_mtime);
+    const CLocatorAPI::file* registered = FS.xms_register(overlay.vpath.c_str(), overlay.size, overlay.modif);
+    if (!registered)
+        return false;
+    s.overlays.emplace_back(std::move(overlay));
+    s.redirect[registered->name] = s.overlays.size() - 1;
+    return true;
+}
+
+bool StageRemoval(pcstr module_id, xr_string& err)
+{
+    const Module* m = FindModule(module_id);
+    if (!m || st().staged_root.empty())
+    {
+        err = "no such module";
+        return false;
+    }
+    xr_string folder = m->root.substr(0, m->root.size() - 1);
+    folder.erase(0, folder.find_last_of("\\/") + 1);
+    if (!valid_folder_name(folder))
+    {
+        err = "unsupported module folder name";
+        return false;
+    }
+    // a staged update of the same module is dropped: the module is going away
+    remove_tree(st().staged_root + m->id + DELIMITER + kStagedPayload);
+    return write_ready(m->id, m->version.c_str(), m->legacy_root ? "mods" : "modules", folder, "remove", err);
+}
+
+xr_string StagedAction(pcstr module_id)
+{
+    if (st().staged_root.empty() || !valid_id(module_id))
+        return {};
+    StagedInfo info;
+    if (!read_staged_info(st().staged_root + module_id + DELIMITER + kStagedReady, info) || info.id != module_id)
+        return {};
+    return info.action;
 }
 
 void DiscardStaged(pcstr module_id)
@@ -1445,6 +1620,18 @@ bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err)
         w->w_string(s.c_str());
     FS.w_close(w);
     return true;
+}
+
+bool ModuleEnabledNextStart(pcstr id)
+{
+    FS_Path* fs_root = nullptr;
+    if (!id || !FS.get_path("$fs_root$", &fs_root))
+        return true;
+    string_path list_path;
+    strconcat(list_path, fs_root->m_Path, "modules" DELIMITER "disabled.ltx");
+    xr_vector<xr_string> off;
+    read_id_list(list_path, off);
+    return std::find(off.begin(), off.end(), lower_copy(id)) == off.end();
 }
 
 void AddConflict(ConflictKind kind, pcstr subject, pcstr loser, pcstr winner)

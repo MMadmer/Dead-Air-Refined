@@ -1,4 +1,6 @@
 #include "pch_script.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_protect.hpp"
 
 #include "MainMenu.h"
 #include "ui/ModOptOut.h"
@@ -140,7 +142,17 @@ void CMainMenu::script_register(lua_State* luaState)
             .def("GetCommandLine", &CUIMapList::GetCommandLine)
             .def("SetServerParams", &CUIMapList::SetServerParams)
             .def("GetCurGameType", &CUIMapList::GetCurGameType)
-            .def("StartDedicatedServer", &CUIMapList::StartDedicatedServer)
+            .def("StartDedicatedServer", +[](CUIMapList* self)
+            {
+                // it starts a process; protected mode starts none (MOD_CATALOG 9.2)
+                if (XMS::Catalog::ProtectedMode())
+                {
+                    ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr,
+                        "CUIMapList:StartDedicatedServer", "not available in protected mode");
+                    return;
+                }
+                self->StartDedicatedServer();
+            })
             .def("SetMapPic", &CUIMapList::SetMapPic)
             .def("SetMapInfo", &CUIMapList::SetMapInfo)
             .def("ClearList", &CUIMapList::ClearList)

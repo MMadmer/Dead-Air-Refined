@@ -26,8 +26,23 @@
       Recover  a swap interrupted between its two renames is completed; an update staged for a
                module the player has since deleted is discarded
 
+    -Scenario Catalog runs the mod catalog instead (docs/dead-air/MOD_CATALOG.md 15). catalog_qa.py
+    makes the fixture - a catalog signed with a fresh QA maintainer key, releases signed with an
+    author key, a stranger's key, a program in a release, VirusTotal answers - and serves it with a
+    review inbox. The engine trusts that key only with -qa_catalog and the fixture's environment.
+      Ordinary  no catalog module yet: the probe shows every escape a script has is real; the
+                installations the catalog's rules refuse are refused, the good one is staged
+      Protected the installation lands, protection comes on; the probe hits every wall, and a
+                script cannot pass a console command off as the player's
+      Rollback  an older and a forged index are refused and the accepted one is kept
+      Review    a review arrives signed, paid for and intact; a short one is refused
+      Remove    a removal is applied by the next start; protection stays on
+
 .EXAMPLE
     pwsh -NoProfile -File tools\qa\mods\Run-ModsQa.ps1 -ResultLabel run1
+
+.EXAMPLE
+    pwsh -NoProfile -File tools\qa\mods\Run-ModsQa.ps1 -Scenario Catalog -ResultLabel catalog1
 #>
 [CmdletBinding()]
 param(
@@ -44,6 +59,9 @@ param(
 
     # 1280x720 exercises ui_mods_16.xml, 1024x768 ui_mods.xml.
     [string]$VidMode = '1280x720',
+
+    [ValidateSet('Updates', 'Catalog')]
+    [string]$Scenario = 'Updates',
 
     [switch]$KeepRoot
 )
@@ -152,8 +170,10 @@ function New-QaRoot {
 
 function Set-QaUserLtx {
     param([string[]]$Commands = @())
+    # the engine reads user.ltx in the UI code page: a review typed there is Windows-1251
+    $cp1251 = [Text.Encoding]::GetEncoding(1251)
     $userLtxSource = Join-Path $GameRoot 'appdata\user.ltx'
-    $userLtx = if (Test-Path -LiteralPath $userLtxSource) { @(Get-Content -LiteralPath $userLtxSource) } else { @() }
+    $userLtx = if (Test-Path -LiteralPath $userLtxSource) { @([IO.File]::ReadAllLines($userLtxSource, $cp1251)) } else { @() }
     $overrides = [ordered]@{
         'renderer' = 'renderer_r4'; 'vid_mode' = $VidMode; 'vid_window_mode' = 'st_opt_windowed'
         'rs_fullscreen' = 'off'; 'rs_v_sync' = 'off'; 'rs_fps_limit' = '60'; 'g_pause_in_background' = '0'
@@ -164,7 +184,7 @@ function Set-QaUserLtx {
             -not (@($overrides.Keys | Where-Object { $line -match "^\s*$_\s" }).Count)
         })
     foreach ($key in $overrides.Keys) { $userLtx += "$key $($overrides[$key])" }
-    Set-Content -LiteralPath (Join-Path $qaAppData 'user.ltx') -Value ($userLtx + $Commands) -Encoding Default
+    [IO.File]::WriteAllLines((Join-Path $qaAppData 'user.ltx'), [string[]]($userLtx + $Commands), $cp1251)
 }
 
 # ---------------------------------------------------------------------------- fixture
@@ -399,8 +419,9 @@ function Start-Mock {
 
 function Invoke-Engine {
     # Boots the QA engine, waits for $WaitFor in the log (every pattern), captures, stops the engine.
+    # -Catalog trusts the catalog fixture's key and mirrors (catalog_qa.py env.json).
     param([Parameter(Mandatory)][string]$Phase, [string[]]$Commands = @(), [string[]]$WaitFor = @(),
-        [int]$RelaunchParentSeconds = 0, [int]$SettleSeconds = 3)
+        [int]$RelaunchParentSeconds = 0, [int]$SettleSeconds = 3, [switch]$Catalog)
 
     Assert-NoTargetEngine
     Set-QaUserLtx -Commands $Commands
@@ -415,6 +436,10 @@ function Invoke-Engine {
             -WindowStyle Hidden -PassThru
         $env:DAR_RELAUNCH_WAIT_PID = "$($parent.Id)"
     }
+    foreach ($name in @('DAR_QA_CATALOG_KEY', 'DAR_QA_CATALOG_BASE', 'DAR_QA_VT_KEY', 'DAR_QA_VT_BASE')) {
+        if ($Catalog) { Set-Item -Path "env:$name" -Value $script:catalogEnv.$name }
+        else { Remove-Item -Path "env:$name" -ErrorAction SilentlyContinue }
+    }
 
     New-Item -Path $layersKey -Force | Out-Null
     New-ItemProperty -Path $layersKey -Name $qaEngine -Value '~ HIGHDPIAWARE' -PropertyType String -Force | Out-Null
@@ -424,6 +449,7 @@ function Invoke-Engine {
     $launcherIdFile = Join-Path $resultRoot "$Phase-launcher.pid"
     Remove-Item -LiteralPath $processIdFile, $launcherIdFile -Force -ErrorAction SilentlyContinue
     $arguments = '-i -fsltx fsgame.ltx -always_active -silent_error_mode -force_flushlog -r4 -nointro -qa_update'
+    if ($Catalog) { $arguments += ' -qa_catalog' }
     Write-Host "== [$Phase] xrEngine.exe $arguments"
 
     $engine = $null
@@ -491,7 +517,237 @@ function Test-FileIs {
     return (Test-Path -LiteralPath $Path) -and ((Get-Sha256 ([IO.File]::ReadAllBytes($Path))) -eq (Get-Sha256 $Bytes))
 }
 
+function Clear-QaEnvironment {
+    Remove-ItemProperty -Path $layersKey -Name $qaEngine -ErrorAction SilentlyContinue
+    foreach ($name in @('DAR_QA_MOD_UPDATE_BASE', 'DAR_QA_UPDATE_API', 'DAR_RELAUNCH_WAIT_PID', 'DAR_QA_CATALOG_KEY',
+            'DAR_QA_CATALOG_BASE', 'DAR_QA_VT_KEY', 'DAR_QA_VT_BASE')) {
+        Remove-Item -Path "env:$name" -ErrorAction SilentlyContinue
+    }
+}
+
+function Complete-QaRun {
+    $failed = @($script:checks | Where-Object { -not $_.Pass })
+    $script:checks | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $resultRoot 'checks.json')
+    Write-Host ''
+    Write-Host ("MODSQA: DONE {0}/{1}" -f ($script:checks.Count - $failed.Count), $script:checks.Count)
+
+    if (-not $KeepRoot) {
+        $databaseLink = Join-Path $qaRoot 'database'
+        if (Test-Path -LiteralPath $databaseLink) { [IO.Directory]::Delete($databaseLink, $false) }
+        Remove-Item -LiteralPath $qaRoot -Recurse -Force
+    }
+    exit $(if ($failed.Count) { 1 } else { 0 })
+}
+
+# ---------------------------------------------------------------------------- the mod catalog
+function Get-ProbeResults {
+    param([string]$Log)
+    $results = @{}
+    foreach ($match in [regex]::Matches($Log, 'PROTECTQA: (\w+) (yes|no)')) { $results[$match.Groups[1].Value] = $match.Groups[2].Value }
+    return $results
+}
+
+function Invoke-CatalogScenario {
+    # MOD_CATALOG.md 15: a signed catalog on a loopback mirror, installations the catalog's rules
+    # refuse or take, protected mode with the probe hitting every wall it has, a rollback and a
+    # forged index, a review that has to arrive signed and paid for, removal.
+    Assert-NoTargetEngine
+    New-QaRoot
+    if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
+    New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
+    $catalogAssets = Join-Path $qaRoot 'catalog-assets'
+    $catalogTool = Join-Path $PSScriptRoot 'catalog_qa.py'
+    Write-Host '== generating the catalog fixture'
+    & python $catalogTool fixture --qa-root $qaRoot --assets $catalogAssets --port $Port
+    if ($LASTEXITCODE) { throw 'the catalog fixture could not be made' }
+    $script:catalogEnv = Get-Content -LiteralPath (Join-Path $catalogAssets 'env.json') -Raw | ConvertFrom-Json
+    $script:mockLog = Join-Path $resultRoot 'mock.log'
+    $mockProcess = Start-Process python -ArgumentList @("`"$catalogTool`"", 'serve', '--assets', "`"$catalogAssets`"", '--port', $Port,
+        '--log', "`"$($script:mockLog)`"") -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 2
+    $fsgameHash = (Get-FileHash -LiteralPath (Join-Path $qaRoot 'fsgame.ltx') -Algorithm SHA256).Hash
+    $state = Join-Path $qaModules '.catalog\state.ltx'
+
+    # what each probe line stands for: a way out of the game a script has in an ordinary game
+    $escapes = @('ffi_available', 'os_execute_available', 'io_popen_available', 'loadlib_available', 'string_dump_available',
+        'marshal_stores_functions', 'write_dll_in_game_root', 'write_script', 'write_fsgame', 'write_outside_game',
+        'fs_w_open_dll', 'ini_save_as_bat', 'console_cfg_save_path', 'lfs_link_available', 'debug_getupvalue_available',
+        'alternate_stream_write')
+
+    try {
+        # ---- an ordinary game: no catalog module yet, every capability real; the installations
+        $after = @('xms_catalog', 'xms_catalog thumbs', 'xms_catalog reviews qa.cat.good', 'xms_catalog vt qa.cat.good',
+            'xms_catalog vt qa.cat.vtlive', 'xms_catalog reviews qa.cat.good', 'xms_catalog',
+            'run_string qa_protect_probe.run()',
+            'xms_install qa.cat.good', 'xms_install qa.cat.dllname', 'xms_install qa.cat.pehidden', 'xms_install qa.cat.unsigned',
+            'xms_install qa.cat.wrongkey', 'xms_install qa.cat.revoked', 'xms_install qa.cat.old', 'xms_install qa.cat.vtblock',
+            'xms_install qa.cat.vtlive')
+        $log = Invoke-Engine -Phase 'catalog-ordinary' -Catalog -Commands (@('xms_protect', 'xms_catalog refresh') +
+            @($after | ForEach-Object { "xms_catalog after $_" })) -WaitFor @(
+            'PROTECTQA: DONE', 'qa\.cat\.good: 1\.0\.0 staged for installation', 'qa\.cat\.dllname: installation refused',
+            'qa\.cat\.pehidden: installation refused', 'qa\.cat\.unsigned: installation of 1\.0\.0 refused',
+            'qa\.cat\.wrongkey: installation of 1\.0\.0 refused', 'qa\.cat\.revoked cannot be installed',
+            'qa\.cat\.old: installation of 1\.1\.0 refused', 'qa\.cat\.vtblock cannot be installed',
+            'qa\.cat\.vtlive cannot be installed')
+        Assert-That 'without a catalog module the game is not protected' ($log -match 'protected mode off \(no module from the mod catalog\)')
+        Assert-That 'the signed catalog is accepted' ($log -match '\[catalog\] serial 5 from http://127\.0\.0\.1:\d+/catalog/: 12 module\(s\)')
+        Assert-That 'a card signed by its author is used' ($log -match '\*   qa\.cat\.good 1\.0\.0 card=signed')
+        Assert-That 'an unsigned card is not' ($log -match 'the card of \[qa\.cat\.unsigned\] is not used: not signed')
+        Assert-That 'a card signed by another key is not' ($log -match 'the card of \[qa\.cat\.wrongkey\] is not used: signed by key')
+        Assert-That 'the thumbnail is fetched, checked and published' ($log -match ('qa\.cat\.good 1\.0\.0 card=signed thumbnail=xms_thumbs\\' + $script:catalogEnv.thumbnail_sha))
+        Assert-That 'the reviews are read' ($log -match '2 review\(s\) of \[qa\.cat\.good\]')
+        Assert-That 'VirusTotal: a lone no-name detection is noise' (($log -match
+                'VirusTotal for \[qa\.cat\.good\]: 4 engine\(s\), 0 trusted malicious, 0 trusted suspicious, 1 other malicious') -and
+            ($log -match '\*   qa\.cat\.good .* vt=clean\(live\)'))
+        Assert-That 'VirusTotal: a trusted engine blocks' (($log -match 'VirusTotal for \[qa\.cat\.vtlive\]: 3 engine\(s\), 1 trusted malicious') -and
+            ($log -match 'qa\.cat\.vtlive cannot be installed: VirusTotal: flagged by Kaspersky'))
+        Assert-That 'the catalog''s VirusTotal verdict blocks too' ($log -match 'qa\.cat\.vtblock cannot be installed: VirusTotal: flagged by Microsoft')
+        Assert-That 'a DLL in a release is refused before a byte is fetched' (($log -match 'qa\.cat\.dllname: installation refused - bin/evil\.dll: ') -and
+            -not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.cat.dllname')))
+        Assert-That 'a program under an innocent name is refused by its bytes' (($log -match
+                'qa\.cat\.pehidden: installation refused - gamedata/configs/looks_like_config\.ltx: ') -and
+            -not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.cat.pehidden')))
+        Assert-That 'an unsigned release is refused' ($log -match 'qa\.cat\.unsigned: installation of 1\.0\.0 refused - not signed by the author''s key the catalog names \(not signed\)')
+        Assert-That 'a release signed by another key is refused' ($log -match 'qa\.cat\.wrongkey: installation of 1\.0\.0 refused - not signed by the author''s key the catalog names \(signed by key')
+        Assert-That 'a revoked module is refused' ($log -match 'qa\.cat\.revoked cannot be installed: withdrawn from the mod catalog: QA revocation')
+        Assert-That 'a release below the listed version is refused' ($log -match 'qa\.cat\.old: installation of 1\.1\.0 refused - below the lowest version the catalog lists \(1\.2\.0\)')
+        Assert-That 'the disclaimer is logged with an installation' ($log -match 'Modules are made by third parties\. The author of Dead Air: Refined is not responsible')
+        $ready = Join-Path $qaStaged 'qa.cat.good\ready.ltx'
+        Assert-That 'the installation is staged, not applied' ((Test-Path -LiteralPath $ready) -and
+            (Select-String -LiteralPath $ready -Pattern 'action = install' -Quiet) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good')))
+        $ordinary = Get-ProbeResults $log
+        $real = @($escapes | Where-Object { $ordinary[$_] -eq 'yes' })
+        Assert-That 'the probe proves every escape is real in an ordinary game' ($real.Count -eq $escapes.Count) ("real: {0} of {1}; not: {2}" -f
+            $real.Count, $escapes.Count, (@($escapes | Where-Object { $ordinary[$_] -ne 'yes' }) -join ', '))
+        # what the ordinary run could not take back (a writer luabind never handed over) must not
+        # count against protection
+        foreach ($leftover in @('protect_probe.dll', 'protect_probe_writer.dll', 'protect_probe.bat', 'protect_probe_cfg.ltx')) {
+            Remove-Item -LiteralPath (Join-Path $qaRoot $leftover) -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath (Join-Path $qaGameData 'scripts\protect_probe_planted.script') -Force -ErrorAction SilentlyContinue
+
+        # ---- the installation lands, protection comes on, the probe hits every wall
+        $log = Invoke-Engine -Phase 'catalog-protected' -Catalog -Commands @('xms_protect', 'xms_catalog refresh',
+            'xms_catalog after run_string qa_protect_probe.run()', 'xms_catalog after run_string qa_protect_probe.console()',
+            'xms_catalog after xms_update all') -WaitFor @('PROTECTQA: DONE', 'PROTECTQA: CONSOLE DONE',
+            'xms_disable qa\.cat\.upd2 refused', 'qa\.cat\.upd: update 1\.1\.0 refused', 'qa\.cat\.upd2: 1\.1\.0 staged')
+        Assert-That 'the browser installation is moved in by the next start' (($log -match 'module \[qa\.cat\.good\] 1\.0\.0 installed') -and
+            (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good\mod.ltx')))
+        Assert-That 'and remembered as the browser''s' ((Test-Path -LiteralPath $state) -and (Select-String -LiteralPath $state -Pattern '^qa\.cat\.good = ' -Quiet))
+        Assert-That 'a catalog module switches protection on' (($log -match 'protected mode ON \(module \[qa\.cat\.[a-z0-9]+\] is from the mod catalog\)') -and
+            ($log -match 'protected mode applied to the script state'))
+        Assert-That 'a revoked installed module is switched off at the start' ($log -match 'module \[qa\.cat\.revinst\] disabled: withdrawn from the mod catalog: QA revocation of an installed module')
+        $protected = Get-ProbeResults $log
+        $open = @($escapes | Where-Object { $protected[$_] -ne 'no' })
+        Assert-That 'protected mode stops every escape' (-not $open.Count) ("still open: {0}" -f ($open -join ', '))
+        Assert-That 'planted bytecode is not loaded' ($protected['bytecode_loads'] -eq 'no' -and $protected['marshal_loads_planted_functions'] -eq 'no') ("bytecode {0}, marshal {1}" -f
+            $protected['bytecode_loads'], $protected['marshal_loads_planted_functions'])
+        Assert-That 'the game''s data folder stays writable for plain text' ($protected['write_appdata_text'] -eq 'yes')
+        Assert-That 'reads through a network path are refused' ($protected['unc_read'] -eq 'no') "ordinary game: $($ordinary['unc_read'])"
+        $located = [regex]::Matches($log, '! \[protect\] .+ refused: .+ \(.*qa_protect_probe\.script:\d+\)').Count
+        Assert-That 'every refusal names its script and line' ($located -ge 15) "$located line(s)"
+        Assert-That 'nothing was planted' (-not (Test-Path -LiteralPath (Join-Path $qaRoot 'protect_probe.dll')) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaRoot 'protect_probe_writer.dll')) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaRoot 'protect_probe.bat')) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaRoot 'protect_probe_cfg.ltx')) -and
+            -not (Test-Path -LiteralPath (Join-Path $qaGameData 'scripts\protect_probe_planted.script')) -and
+            (Get-FileHash -LiteralPath (Join-Path $qaRoot 'fsgame.ltx') -Algorithm SHA256).Hash -eq $fsgameHash)
+
+        # the console: a script's command, a deferred one, a line break, a file of commands three ways
+        $player = 'only the player may install, remove, switch or update modules'
+        Assert-That 'a script may not switch modules' ($log -match "! \[protect\] xms_disable qa\.cat\.upd refused: $player \(.*qa_protect_probe\.script:\d+\)")
+        Assert-That 'nor post reviews in the player''s name' ($log -match "! \[protect\] xms_catalog review qa\.cat\.good 5 .* refused: $player")
+        Assert-That 'nor slip a command in for later' ($log -match "! \[protect\] xms_disable qa\.cat\.upd2 refused: $player")
+        Assert-That 'nor hide one behind a line break' ($log -match '! \[protect\] flush\\nxms_disable qa\.cat\.good refused: a console command is one line')
+        $fromFile = [regex]::Matches($log, "! \[protect\] xms_disable qa\.legacy refused: $player").Count
+        Assert-That 'nor run one from a file of commands' ($fromFile -eq 3) "$fromFile of 3 route(s)"
+        Assert-That 'a file of commands by its full path in the game still loads' ($log -match 'protect_probe_cmds\.ltx\] successfully loaded')
+        Assert-That 'one from outside the game does not' ($log -match '! \[protect\] cfg_load C:\\Windows\\win refused: outside the game and its data folder')
+        Assert-That 'a save may not be given a path' ($log -match '! \[protect\] save \.\.\\\.\.\\protect_probe_save refused: only the player may give this command a path')
+        Assert-That 'the game may not be sent to another computer' ($log -match
+            '! \[protect\] start server\(protect_probe/single/alife/new\) client\(192\.0\.2\.1\) refused: only the player may connect the game to another computer')
+        $disabled = Join-Path $qaModules 'disabled.ltx'
+        $switched = if (Test-Path -LiteralPath $disabled) { @(Select-String -LiteralPath $disabled -Pattern '^(qa\.cat\.upd2?|qa\.cat\.good|qa\.legacy)\b').Count } else { 0 }
+        Assert-That 'and no module was switched by any of them' (-not $switched) "$switched module(s) in disabled.ltx"
+
+        Assert-That 'an unsigned update of a catalog module is refused' ($log -match 'qa\.cat\.upd: update 1\.1\.0 refused - not signed by the author''s key the catalog names \(not signed\)')
+        Assert-That 'a signed one is taken' ($log -match 'qa\.cat\.upd2: 1\.1\.0 staged')
+
+        # ---- the Mods window, driven the way the mouse drives it (xms_mods)
+        $log = Invoke-Engine -Phase 'catalog-ui' -Catalog -Commands @('xms_catalog refresh', 'xms_mods view browser',
+            'xms_mods wait 4000', 'xms_mods state', 'xms_mods search dlname', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods clear', 'xms_mods sort name', 'xms_mods tag quests', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods select qa.cat.dllname', 'xms_mods press primary', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods answer yes', 'xms_mods wait 4000', 'xms_mods state',
+            'xms_mods view installed', 'xms_mods select qa.cat.good', 'xms_mods press remove', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods answer no', 'xms_mods press review', 'xms_mods wait 500', 'xms_mods state', 'xms_mods mark ui_done') -WaitFor @(
+            '\[mods-ui\] mark ui_done')
+        $views = [regex]::Matches($log, '\[mods-ui\] view (\w+), (\d+) item\(s\), sort (\w+), query "([^"]*)", tags (\S+)')
+        $viewText = @($views | ForEach-Object { $_.Value }) -join ' | '
+        Assert-That 'the browser lists what can be installed' ($views.Count -ge 1 -and $views[0].Groups[2].Value -eq '6') $viewText
+        Assert-That 'with the thumbnail the catalog published' ($log -match '\[mods-ui\] row qa\.cat\.good "[^"]*" badge=\S+ rating=4\.5 thumbnail=yes')
+        Assert-That 'a word with a typo still finds the mod' ($views.Count -ge 2 -and $views[1].Groups[2].Value -eq '1' -and
+            $views[1].Groups[4].Value -eq 'dlname' -and $log -match '\[mods-ui\] row qa\.cat\.dllname ')
+        $sorted = [regex]::Match($log, '(?s)sort name, query "", tags quests[^\n]*\n\* \[mods-ui\] row (\S+) ')
+        Assert-That 'a tag filters and the name sorts' ($views.Count -ge 3 -and $views[2].Groups[2].Value -eq '6' -and
+            $sorted.Success -and $sorted.Groups[1].Value -eq 'qa.cat.dllname') "first row: $($sorted.Groups[1].Value)"
+        Assert-That 'Install asks first, with the disclaimer' ($log -match '\[mods-ui\] prompt install:qa\.cat\.dllname ')
+        Assert-That 'and the answer starts the installation the catalog then refuses' ($log -match
+            'qa\.cat\.dllname: installation refused - bin/evil\.dll' -and $log -match '\[mods-ui\] row qa\.cat\.dllname "[^"]*" badge=(?!-)')
+        Assert-That 'Remove asks, naming the mod' ($log -match '\[mods-ui\] prompt remove:qa\.cat\.good ')
+        Assert-That 'and No keeps it' (-not (Test-Path -LiteralPath (Join-Path $qaStaged 'qa.cat.good')))
+        Assert-That 'Write a review opens the review' ($log -match '\[mods-ui\] review dialog for qa\.cat\.good')
+
+        # ---- a mirror serving an older publication, then a forged one
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_serial4.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
+        $log = Invoke-Engine -Phase 'catalog-rollback' -Catalog -Commands @('xms_catalog refresh', 'xms_catalog after xms_catalog') -WaitFor @(
+            '\[catalog\] (offline|failed|ready), serial')
+        Assert-That 'an older serial is refused' ($log -match 'serial 4 is older than the accepted 5')
+        Assert-That 'and the accepted catalog is kept' (($log -match '\[catalog\] offline, serial 5') -and
+            (Select-String -LiteralPath $state -Pattern '^serial = 5$' -Quiet))
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_tampered.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
+        $log = Invoke-Engine -Phase 'catalog-tampered' -Catalog -Commands @('xms_catalog refresh', 'xms_catalog after xms_catalog') -WaitFor @(
+            '\[catalog\] (offline|failed|ready), serial')
+        Assert-That 'a changed index is refused' (($log -match 'index\.ltx: signature does not match') -and ($log -match '\[catalog\] offline, serial 5'))
+        Copy-Item -LiteralPath (Join-Path $catalogAssets 'index_serial5.ltx') -Destination (Join-Path $catalogAssets 'catalog\index.ltx') -Force
+
+        # ---- a review: posted, then verified the way the catalog's workflow will
+        $text = 'Проверка отзыва из QA: доставка работает, заказы приходят, карта показывает метку.'
+        $log = Invoke-Engine -Phase 'catalog-review' -Catalog -Commands @('xms_catalog refresh',
+            "xms_catalog after xms_catalog review qa.cat.good 4 $text", 'xms_catalog after xms_catalog review qa.cat.good 5 short') -WaitFor @(
+            'review of \[qa\.cat\.good\] 1\.0\.0 sent', 'review of \[qa\.cat\.good\] not sent')
+        Assert-That 'a review shorter than 30 characters is refused' ($log -match 'review of \[qa\.cat\.good\] not sent: a review is 30 to 2000 characters long')
+        $inbox = & python $catalogTool inbox --assets $catalogAssets | ConvertFrom-Json
+        $posted = @($inbox.reviews)
+        Assert-That 'the review reached the inbox, signed and paid for' ($inbox.count -eq 1 -and $posted.Count -eq 1 -and $posted[0].ok) ($posted | ConvertTo-Json -Compress)
+        Assert-That 'with its stars, module, version and text' ($posted.Count -eq 1 -and $posted[0].mod -eq 'qa.cat.good' -and
+            $posted[0].stars -eq 4 -and $posted[0].version -eq '1.0.0' -and $posted[0].text -eq $text)
+
+        # ---- removal, and protection that stays on
+        $log = Invoke-Engine -Phase 'catalog-remove' -Catalog -Commands @('xms_remove qa.cat.good', 'xms_remove qa.cat.upd',
+            'xms_remove qa.cat.upd2', 'xms_remove qa.cat.revinst') -WaitFor @('qa\.cat\.revinst: removed by the next start')
+        $removal = Join-Path $qaStaged 'qa.cat.good\ready.ltx'
+        Assert-That 'a removal is staged' ((Test-Path -LiteralPath $removal) -and (Select-String -LiteralPath $removal -Pattern 'action = remove' -Quiet))
+        $log = Invoke-Engine -Phase 'catalog-removed' -Catalog -Commands @('xms_protect') -WaitFor @('XMS: protected mode')
+        Assert-That 'the removal is applied by the next start' (($log -match 'module \[qa\.cat\.good\] removed') -and
+            -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good')) -and -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.upd')))
+        Assert-That 'and forgotten by the browser''s list' (-not (Select-String -LiteralPath $state -Pattern '^qa\.cat\.good = ' -Quiet))
+        Assert-That 'protection stays on without catalog modules' ($log -match 'protected mode ON \(switched on in the Mods window, or a catalog module was enabled before\)')
+    }
+    finally {
+        if ($mockProcess -and -not $mockProcess.HasExited) { Stop-Process -Id $mockProcess.Id -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+
 # ---------------------------------------------------------------------------- run
+if ($Scenario -eq 'Catalog') {
+    try { Invoke-CatalogScenario }
+    finally { Clear-QaEnvironment }
+    Complete-QaRun
+}
+
 Assert-NoTargetEngine
 New-QaRoot
 New-Fixture
@@ -617,20 +873,6 @@ try {
 }
 finally {
     if ($mockProcess -and -not $mockProcess.HasExited) { Stop-Process -Id $mockProcess.Id -Force -ErrorAction SilentlyContinue }
-    Remove-ItemProperty -Path $layersKey -Name $qaEngine -ErrorAction SilentlyContinue
-    $env:DAR_QA_MOD_UPDATE_BASE = $null
-    $env:DAR_QA_UPDATE_API = $null
-    $env:DAR_RELAUNCH_WAIT_PID = $null
+    Clear-QaEnvironment
 }
-
-$failed = @($script:checks | Where-Object { -not $_.Pass })
-$script:checks | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $resultRoot 'checks.json')
-Write-Host ''
-Write-Host ("MODSQA: DONE {0}/{1}" -f ($script:checks.Count - $failed.Count), $script:checks.Count)
-
-if (-not $KeepRoot) {
-    $databaseLink = Join-Path $qaRoot 'database'
-    if (Test-Path -LiteralPath $databaseLink) { [IO.Directory]::Delete($databaseLink, $false) }
-    Remove-Item -LiteralPath $qaRoot -Recurse -Force
-}
-if ($failed.Count) { exit 1 }
+Complete-QaRun

@@ -1,0 +1,3 @@
+# Signed files are verified byte for byte and cards.txt counts bytes: nothing here may have its
+# line ends changed on the way in or out, whatever a clone's core.autocrlf says.
+* -text

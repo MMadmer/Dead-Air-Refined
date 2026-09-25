@@ -98,6 +98,8 @@ target_sources(xrUICore PRIVATE
     Static/UIAnimatedStatic.h
     Static/UILanimController.cpp
     Static/UILanimController.h
+    Static/UIShape.cpp
+    Static/UIShape.h
     Static/UIStatic.cpp
     Static/UIStatic.h
     Static/UIStaticItem.cpp

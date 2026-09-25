@@ -6,17 +6,134 @@
     <string id="st_mods_caption">
         <text>Моды</text>
     </string>
-    <string id="st_mods_column_name">
-        <text>Название</text>
+    <string id="st_mods_tab_installed">
+        <text>Установленные</text>
     </string>
-    <string id="st_mods_column_author">
-        <text>Автор</text>
+    <string id="st_mods_tab_browser">
+        <text>Браузер модов</text>
     </string>
-    <string id="st_mods_column_version">
-        <text>Версия</text>
+    <string id="st_mods_protect_on">
+        <text>Защищённый режим: вкл.</text>
+    </string>
+    <string id="st_mods_protect_off">
+        <text>Защищённый режим: выкл.</text>
+    </string>
+    <string id="st_mods_summary">
+        <text>Установлено модов: %u</text>
+    </string>
+    <string id="st_mods_summary_updates">
+        <text>Доступно обновлений: %u</text>
+    </string>
+    <string id="st_mods_summary_current">
+        <text>Всё обновлено</text>
+    </string>
+    <string id="st_mods_summary_protected">
+        <text>Защищённый режим включён: скрипты модов не могут запускать программы и писать за пределами игры.</text>
+    </string>
+    <string id="st_mods_summary_unprotected">
+        <text>Защищённый режим выключен: скрипты модов работают с полным доступом к компьютеру.</text>
+    </string>
+    <string id="st_mods_search_hint">
+        <text>Поиск по названию, автору, тегу или описанию</text>
+    </string>
+    <string id="st_mods_sort_relevance">
+        <text>По релевантности</text>
+    </string>
+    <string id="st_mods_sort_rating">
+        <text>По рейтингу</text>
+    </string>
+    <string id="st_mods_sort_newest">
+        <text>Сначала новые</text>
+    </string>
+    <string id="st_mods_sort_name">
+        <text>По названию</text>
+    </string>
+    <string id="st_mods_count">
+        <text>Найдено: %u</text>
+    </string>
+    <string id="st_mods_catalog_offline">
+        <text> · сохранённая копия</text>
+    </string>
+    <string id="st_mods_catalog_loading">
+        <text>Загрузка браузера модов...</text>
+    </string>
+    <string id="st_mods_catalog_failed">
+        <text>Не удалось загрузить браузер модов. Проверьте подключение и откройте его снова.</text>
     </string>
     <string id="st_mods_empty">
-        <text>Моды XFined не установлены.</text>
+        <text>Моды не установлены. Их можно найти в браузере модов.</text>
+    </string>
+    <string id="st_mods_empty_search">
+        <text>По запросу ничего не найдено. Попробуйте другие слова или снимите фильтры тегов.</text>
+    </string>
+    <string id="st_mods_select_hint">
+        <text>Выберите мод, чтобы увидеть его здесь</text>
+    </string>
+    <string id="st_mods_tag_story">
+        <text>Сюжет</text>
+    </string>
+    <string id="st_mods_tag_quests">
+        <text>Квесты</text>
+    </string>
+    <string id="st_mods_tag_gameplay">
+        <text>Геймплей</text>
+    </string>
+    <string id="st_mods_tag_weapons">
+        <text>Оружие</text>
+    </string>
+    <string id="st_mods_tag_equipment">
+        <text>Снаряжение</text>
+    </string>
+    <string id="st_mods_tag_npcs">
+        <text>Персонажи</text>
+    </string>
+    <string id="st_mods_tag_mutants">
+        <text>Мутанты</text>
+    </string>
+    <string id="st_mods_tag_locations">
+        <text>Локации</text>
+    </string>
+    <string id="st_mods_tag_graphics">
+        <text>Графика</text>
+    </string>
+    <string id="st_mods_tag_audio">
+        <text>Звук</text>
+    </string>
+    <string id="st_mods_tag_interface">
+        <text>Интерфейс</text>
+    </string>
+    <string id="st_mods_tag_fixes">
+        <text>Исправления</text>
+    </string>
+    <string id="st_mods_badge_update">
+        <text>ОБНОВЛЕНИЕ</text>
+    </string>
+    <string id="st_mods_badge_working">
+        <text>ЗАГРУЗКА</text>
+    </string>
+    <string id="st_mods_badge_restart">
+        <text>ПЕРЕЗАПУСК</text>
+    </string>
+    <string id="st_mods_badge_installed">
+        <text>УСТАНОВЛЕН</text>
+    </string>
+    <string id="st_mods_badge_off">
+        <text>ВЫКЛЮЧЕН</text>
+    </string>
+    <string id="st_mods_badge_removal">
+        <text>УДАЛЕНИЕ</text>
+    </string>
+    <string id="st_mods_badge_blocked">
+        <text>ЗАБЛОКИРОВАН</text>
+    </string>
+    <string id="st_mods_badge_refused">
+        <text>ОТКЛОНЁН</text>
+    </string>
+    <string id="st_mods_badge_failed">
+        <text>ОШИБКА</text>
+    </string>
+    <string id="st_mods_version_short">
+        <text>v%s</text>
     </string>
     <string id="st_mods_author">
         <text>Автор: %s</text>
@@ -24,23 +141,59 @@
     <string id="st_mods_version">
         <text>Версия: %s</text>
     </string>
+    <string id="st_mods_mode_plain">
+        <text>Обычная игра</text>
+    </string>
+    <string id="st_mods_mode_any">
+        <text>Любой режим</text>
+    </string>
+    <string id="st_mods_mode_new">
+        <text>Новый режим: %s</text>
+    </string>
+    <string id="st_mods_mode_existing">
+        <text>Режим: %s</text>
+    </string>
+    <string id="st_mods_rating">
+        <text>%.1f · оценок: %u</text>
+    </string>
+    <string id="st_mods_rating_none">
+        <text>Оценок пока нет</text>
+    </string>
+    <string id="st_mods_rating_unlisted">
+        <text>Нет в браузере модов</text>
+    </string>
     <string id="st_mods_no_description">
         <text>Описание отсутствует.</text>
     </string>
-    <string id="st_mods_update">
-        <text>Обновить</text>
+    <string id="st_mods_reviews">
+        <text>Отзывы</text>
     </string>
-    <string id="st_mods_update_all">
-        <text>Обновить все</text>
+    <string id="st_mods_reviews_loading">
+        <text>Загрузка отзывов...</text>
     </string>
-    <string id="st_mods_website">
-        <text>На сайт</text>
+    <string id="st_mods_reviews_none">
+        <text>Отзывов пока нет. Напишите первый.</text>
+    </string>
+    <string id="st_mods_reviews_failed">
+        <text>Не удалось загрузить отзывы.</text>
+    </string>
+    <string id="st_mods_review_anonymous">
+        <text>Сталкер #%s</text>
+    </string>
+    <string id="st_mods_review_head">
+        <text>%s · v%s · %s</text>
+    </string>
+    <string id="st_mods_write_review">
+        <text>Написать отзыв</text>
     </string>
     <string id="st_mods_status_disabled">
-        <text>Отключён</text>
+        <text>Выключен</text>
     </string>
     <string id="st_mods_status_no_source">
         <text>Обновления не поддерживаются</text>
+    </string>
+    <string id="st_mods_status_not_installed">
+        <text>Не установлен</text>
     </string>
     <string id="st_mods_status_checking">
         <text>Проверка обновлений...</text>
@@ -63,6 +216,9 @@
     <string id="st_mods_status_blocked_schema">
         <text>Для обновления нужна новая версия игры</text>
     </string>
+    <string id="st_mods_status_refused">
+        <text>Браузер модов отклонил этот релиз: %s</text>
+    </string>
     <string id="st_mods_status_check_failed">
         <text>Не удалось проверить обновления</text>
     </string>
@@ -78,19 +234,202 @@
     <string id="st_mods_status_staged">
         <text>Версия %s будет установлена при следующем запуске игры</text>
     </string>
+    <string id="st_mods_status_install_staged">
+        <text>Версия %s будет установлена при следующем запуске игры</text>
+    </string>
     <string id="st_mods_status_failed">
-        <text>Не удалось обновить. Попробуйте ещё раз</text>
+        <text>Загрузка не удалась: %s</text>
+    </string>
+    <string id="st_mods_status_removal">
+        <text>Будет удалён при следующем запуске игры</text>
+    </string>
+    <string id="st_mods_status_enable_next">
+        <text>Будет включён при следующем запуске игры</text>
+    </string>
+    <string id="st_mods_status_disable_next">
+        <text>Будет выключен при следующем запуске игры</text>
+    </string>
+    <string id="st_mods_status_withdrawn">
+        <text>Отозван из браузера модов: %s</text>
+    </string>
+    <string id="st_mods_vt_checking">
+        <text>VirusTotal: проверка...</text>
+    </string>
+    <string id="st_mods_vt_clean">
+        <text>VirusTotal: угроз нет</text>
+    </string>
+    <string id="st_mods_vt_clean_live">
+        <text>VirusTotal: угроз нет (сейчас)</text>
+    </string>
+    <string id="st_mods_vt_warn">
+        <text>VirusTotal: подозрительно - %s</text>
+    </string>
+    <string id="st_mods_vt_block">
+        <text>VirusTotal: угроза по данным %s</text>
+    </string>
+    <string id="st_mods_vt_unseen">
+        <text>VirusTotal: ещё не проверялся</text>
+    </string>
+    <string id="st_mods_vt_unknown">
+        <text>VirusTotal: результата пока нет</text>
+    </string>
+    <string id="st_mods_vt_check">
+        <text>Проверить</text>
+    </string>
+    <string id="st_mods_vt_warn_prompt">
+        <text>VirusTotal считает этот пакет подозрительным (%s). Устанавливайте, только если доверяете автору.</text>
+    </string>
+    <string id="st_mods_vt_report">
+        <text>Отчёт</text>
+    </string>
+    <string id="st_mods_install">
+        <text>Установить</text>
+    </string>
+    <string id="st_mods_update">
+        <text>Обновить</text>
+    </string>
+    <string id="st_mods_retry">
+        <text>Повторить</text>
+    </string>
+    <string id="st_mods_keep">
+        <text>Оставить</text>
+    </string>
+    <string id="st_mods_website">
+        <text>На сайт</text>
+    </string>
+    <string id="st_mods_disable">
+        <text>Выключить</text>
+    </string>
+    <string id="st_mods_enable">
+        <text>Включить</text>
+    </string>
+    <string id="st_mods_remove">
+        <text>Удалить</text>
+    </string>
+    <string id="st_mods_update_all">
+        <text>Обновить все</text>
+    </string>
+    <string id="st_mods_back">
+        <text>Назад</text>
+    </string>
+    <string id="st_mods_ok">
+        <text>OK</text>
+    </string>
+    <string id="st_mods_cancel">
+        <text>Отмена</text>
+    </string>
+    <string id="st_mods_save">
+        <text>Сохранить</text>
+    </string>
+    <string id="st_mods_turn_on">
+        <text>Включить</text>
+    </string>
+    <string id="st_mods_turn_off">
+        <text>Выключить</text>
+    </string>
+    <string id="st_mods_restart">
+        <text>Перезапустить</text>
+    </string>
+    <string id="st_mods_later">
+        <text>Позже</text>
+    </string>
+    <string id="st_mods_disclaimer">
+        <text>Моды созданы сторонними авторами. Автор Dead Air: Refined не несёт ответственности за скачиваемые сторонние моды. Меры безопасности приняты, но 100% гарантии надёжности нет.</text>
+    </string>
+    <string id="st_mods_install_caption">
+        <text>Установить %s?</text>
+    </string>
+    <string id="st_mods_install_text">
+        <text>Версия %s, к загрузке около %s. Мод будет установлен при следующем запуске игры.</text>
+    </string>
+    <string id="st_mods_install_refused">
+        <text>Мод нельзя установить: %s</text>
+    </string>
+    <string id="st_mods_update_caption">
+        <text>Обновить %s?</text>
+    </string>
+    <string id="st_mods_update_text">
+        <text>Версия %s, к загрузке около %s. Обновление будет установлено при следующем запуске игры.</text>
+    </string>
+    <string id="st_mods_update_all_caption">
+        <text>Обновить моды (%u)?</text>
+    </string>
+    <string id="st_mods_remove_caption">
+        <text>Удалить %s?</text>
+    </string>
+    <string id="st_mods_remove_text">
+        <text>Папка modules/%s будет удалена безвозвратно при следующем запуске игры. До этого удаление можно отменить кнопкой «Оставить».</text>
+    </string>
+    <string id="st_mods_protect_caption">
+        <text>Защищённый режим</text>
+    </string>
+    <string id="st_mods_protect_locked">
+        <text>Защищённый режим не выключается, пока включён мод из браузера модов.</text>
+    </string>
+    <string id="st_mods_protect_on_caption">
+        <text>Включить защищённый режим?</text>
+    </string>
+    <string id="st_mods_protect_on_text">
+        <text>Со следующего запуска скрипты модов не смогут запускать программы, подгружать машинный код и писать файлы за пределами игры и её папки данных. Моды из браузера модов всегда работают так.</text>
+    </string>
+    <string id="st_mods_protect_off_caption">
+        <text>Выключить защищённый режим?</text>
+    </string>
+    <string id="st_mods_protect_off_text">
+        <text>Со следующего запуска скрипты модов снова получат полный доступ к компьютеру. Выключайте его, только если мод, которому вы доверяете, иначе не работает.</text>
+    </string>
+    <string id="st_mods_vt_key_caption">
+        <text>Ключ VirusTotal</text>
+    </string>
+    <string id="st_mods_vt_key_text">
+        <text>Для самостоятельной проверки мода нужен бесплатный API-ключ VirusTotal: зарегистрируйтесь на virustotal.com и скопируйте ключ из профиля. Ключ хранится в диспетчере учётных данных Windows и больше ни для чего не используется.</text>
+    </string>
+    <string id="st_mods_vt_key_refused">
+        <text>Ключ не сохранён: %s</text>
+    </string>
+    <string id="st_mods_restart_caption">
+        <text>Обновления загружены</text>
     </string>
     <string id="st_mods_restart_prompt">
-        <text>Обновления модов загружены. Перезапустить игру сейчас?\nИначе они будут установлены при следующем запуске.</text>
+        <text>Перезапустить игру сейчас, чтобы установить их? Иначе они будут установлены при следующем запуске.</text>
+    </string>
+    <string id="st_mods_review_caption">
+        <text>Отзыв о %s</text>
+    </string>
+    <string id="st_mods_review_stars">
+        <text>Ваша оценка</text>
+    </string>
+    <string id="st_mods_review_name">
+        <text>Имя (необязательно)</text>
+    </string>
+    <string id="st_mods_review_text">
+        <text>Ваш отзыв</text>
+    </string>
+    <string id="st_mods_review_counter">
+        <text>Символов: %u, нужно не меньше %u</text>
+    </string>
+    <string id="st_mods_review_note">
+        <text>Отзыв появится в браузере модов не сразу, обычно в течение нескольких часов.</text>
+    </string>
+    <string id="st_mods_review_send">
+        <text>Отправить</text>
+    </string>
+    <string id="st_mods_review_sending">
+        <text>Отправка...</text>
+    </string>
+    <string id="st_mods_review_failed">
+        <text>Отзыв не отправлен: %s</text>
+    </string>
+    <string id="st_mods_review_sent_caption">
+        <text>Спасибо</text>
+    </string>
+    <string id="st_mods_review_sent">
+        <text>Отзыв отправлен. Он появится в браузере модов не сразу, обычно в течение нескольких часов.</text>
     </string>
     <string id="st_mods_size_mb">
         <text>%.1f МБ</text>
     </string>
     <string id="st_mods_size_kb">
         <text>%.1f КБ</text>
-    </string>
-    <string id="st_mods_back">
-        <text>Назад</text>
     </string>
 </string_table>

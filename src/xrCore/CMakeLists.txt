@@ -210,6 +210,8 @@ target_sources_grouped(
     TARGET xrCore
     NAME "XMS"
     FILES
+    XMS/xms_catalog.cpp
+    XMS/xms_catalog.h
     XMS/xms_core.cpp
     XMS/xms_core.h
     XMS/xms_ltx.cpp

@@ -6,17 +6,134 @@
     <string id="st_mods_caption">
         <text>Mods</text>
     </string>
-    <string id="st_mods_column_name">
-        <text>Name</text>
+    <string id="st_mods_tab_installed">
+        <text>Installed</text>
     </string>
-    <string id="st_mods_column_author">
-        <text>Author</text>
+    <string id="st_mods_tab_browser">
+        <text>Mod Browser</text>
     </string>
-    <string id="st_mods_column_version">
-        <text>Version</text>
+    <string id="st_mods_protect_on">
+        <text>Protected mode: on</text>
+    </string>
+    <string id="st_mods_protect_off">
+        <text>Protected mode: off</text>
+    </string>
+    <string id="st_mods_summary">
+        <text>Installed mods: %u</text>
+    </string>
+    <string id="st_mods_summary_updates">
+        <text>Updates available: %u</text>
+    </string>
+    <string id="st_mods_summary_current">
+        <text>Everything is up to date</text>
+    </string>
+    <string id="st_mods_summary_protected">
+        <text>Protected mode is on: mod scripts cannot start programs or write outside the game.</text>
+    </string>
+    <string id="st_mods_summary_unprotected">
+        <text>Protected mode is off: mod scripts run with full access to your computer.</text>
+    </string>
+    <string id="st_mods_search_hint">
+        <text>Search by name, author, tag or description</text>
+    </string>
+    <string id="st_mods_sort_relevance">
+        <text>Most relevant</text>
+    </string>
+    <string id="st_mods_sort_rating">
+        <text>Top rated</text>
+    </string>
+    <string id="st_mods_sort_newest">
+        <text>Newest first</text>
+    </string>
+    <string id="st_mods_sort_name">
+        <text>By name</text>
+    </string>
+    <string id="st_mods_count">
+        <text>Found: %u</text>
+    </string>
+    <string id="st_mods_catalog_offline">
+        <text> � offline copy</text>
+    </string>
+    <string id="st_mods_catalog_loading">
+        <text>Loading the Mod Browser...</text>
+    </string>
+    <string id="st_mods_catalog_failed">
+        <text>The Mod Browser could not be loaded. Check the connection and open it again.</text>
     </string>
     <string id="st_mods_empty">
-        <text>No XFined mods installed.</text>
+        <text>No mods installed. Find some in the Mod Browser.</text>
+    </string>
+    <string id="st_mods_empty_search">
+        <text>Nothing matches the search. Try other words or turn the tag filters off.</text>
+    </string>
+    <string id="st_mods_select_hint">
+        <text>Select a mod to see it here</text>
+    </string>
+    <string id="st_mods_tag_story">
+        <text>Story</text>
+    </string>
+    <string id="st_mods_tag_quests">
+        <text>Quests</text>
+    </string>
+    <string id="st_mods_tag_gameplay">
+        <text>Gameplay</text>
+    </string>
+    <string id="st_mods_tag_weapons">
+        <text>Weapons</text>
+    </string>
+    <string id="st_mods_tag_equipment">
+        <text>Equipment</text>
+    </string>
+    <string id="st_mods_tag_npcs">
+        <text>Characters</text>
+    </string>
+    <string id="st_mods_tag_mutants">
+        <text>Mutants</text>
+    </string>
+    <string id="st_mods_tag_locations">
+        <text>Locations</text>
+    </string>
+    <string id="st_mods_tag_graphics">
+        <text>Graphics</text>
+    </string>
+    <string id="st_mods_tag_audio">
+        <text>Sound</text>
+    </string>
+    <string id="st_mods_tag_interface">
+        <text>Interface</text>
+    </string>
+    <string id="st_mods_tag_fixes">
+        <text>Fixes</text>
+    </string>
+    <string id="st_mods_badge_update">
+        <text>UPDATE</text>
+    </string>
+    <string id="st_mods_badge_working">
+        <text>DOWNLOADING</text>
+    </string>
+    <string id="st_mods_badge_restart">
+        <text>RESTART</text>
+    </string>
+    <string id="st_mods_badge_installed">
+        <text>INSTALLED</text>
+    </string>
+    <string id="st_mods_badge_off">
+        <text>OFF</text>
+    </string>
+    <string id="st_mods_badge_removal">
+        <text>REMOVAL</text>
+    </string>
+    <string id="st_mods_badge_blocked">
+        <text>BLOCKED</text>
+    </string>
+    <string id="st_mods_badge_refused">
+        <text>REFUSED</text>
+    </string>
+    <string id="st_mods_badge_failed">
+        <text>ERROR</text>
+    </string>
+    <string id="st_mods_version_short">
+        <text>v%s</text>
     </string>
     <string id="st_mods_author">
         <text>Author: %s</text>
@@ -24,23 +141,59 @@
     <string id="st_mods_version">
         <text>Version: %s</text>
     </string>
+    <string id="st_mods_mode_plain">
+        <text>Plain game</text>
+    </string>
+    <string id="st_mods_mode_any">
+        <text>Any mode</text>
+    </string>
+    <string id="st_mods_mode_new">
+        <text>New mode: %s</text>
+    </string>
+    <string id="st_mods_mode_existing">
+        <text>Mode: %s</text>
+    </string>
+    <string id="st_mods_rating">
+        <text>%.1f � ratings: %u</text>
+    </string>
+    <string id="st_mods_rating_none">
+        <text>No ratings yet</text>
+    </string>
+    <string id="st_mods_rating_unlisted">
+        <text>Not in the Mod Browser</text>
+    </string>
     <string id="st_mods_no_description">
         <text>No description.</text>
     </string>
-    <string id="st_mods_update">
-        <text>Update</text>
+    <string id="st_mods_reviews">
+        <text>Reviews</text>
     </string>
-    <string id="st_mods_update_all">
-        <text>Update all</text>
+    <string id="st_mods_reviews_loading">
+        <text>Loading reviews...</text>
     </string>
-    <string id="st_mods_website">
-        <text>Website</text>
+    <string id="st_mods_reviews_none">
+        <text>No reviews yet. Be the first to write one.</text>
+    </string>
+    <string id="st_mods_reviews_failed">
+        <text>Reviews could not be loaded.</text>
+    </string>
+    <string id="st_mods_review_anonymous">
+        <text>Stalker #%s</text>
+    </string>
+    <string id="st_mods_review_head">
+        <text>%s � v%s � %s</text>
+    </string>
+    <string id="st_mods_write_review">
+        <text>Write a review</text>
     </string>
     <string id="st_mods_status_disabled">
         <text>Disabled</text>
     </string>
     <string id="st_mods_status_no_source">
         <text>Updates are not supported</text>
+    </string>
+    <string id="st_mods_status_not_installed">
+        <text>Not installed</text>
     </string>
     <string id="st_mods_status_checking">
         <text>Checking for updates...</text>
@@ -63,6 +216,9 @@
     <string id="st_mods_status_blocked_schema">
         <text>A newer game version is required to update</text>
     </string>
+    <string id="st_mods_status_refused">
+        <text>The Mod Browser refused this release: %s</text>
+    </string>
     <string id="st_mods_status_check_failed">
         <text>Update check failed</text>
     </string>
@@ -78,19 +234,202 @@
     <string id="st_mods_status_staged">
         <text>Version %s will be installed at the next game start</text>
     </string>
+    <string id="st_mods_status_install_staged">
+        <text>Version %s will be installed at the next game start</text>
+    </string>
     <string id="st_mods_status_failed">
-        <text>Update failed. Try again</text>
+        <text>Download failed: %s</text>
+    </string>
+    <string id="st_mods_status_removal">
+        <text>Will be removed at the next game start</text>
+    </string>
+    <string id="st_mods_status_enable_next">
+        <text>Will be enabled at the next game start</text>
+    </string>
+    <string id="st_mods_status_disable_next">
+        <text>Will be disabled at the next game start</text>
+    </string>
+    <string id="st_mods_status_withdrawn">
+        <text>Withdrawn from the Mod Browser: %s</text>
+    </string>
+    <string id="st_mods_vt_checking">
+        <text>VirusTotal: checking...</text>
+    </string>
+    <string id="st_mods_vt_clean">
+        <text>VirusTotal: clean</text>
+    </string>
+    <string id="st_mods_vt_clean_live">
+        <text>VirusTotal: clean, just checked</text>
+    </string>
+    <string id="st_mods_vt_warn">
+        <text>VirusTotal: suspicious - %s</text>
+    </string>
+    <string id="st_mods_vt_block">
+        <text>VirusTotal: flagged by %s</text>
+    </string>
+    <string id="st_mods_vt_unseen">
+        <text>VirusTotal: not scanned yet</text>
+    </string>
+    <string id="st_mods_vt_unknown">
+        <text>VirusTotal: no result yet</text>
+    </string>
+    <string id="st_mods_vt_check">
+        <text>Check</text>
+    </string>
+    <string id="st_mods_vt_warn_prompt">
+        <text>VirusTotal calls this package suspicious (%s). Install it only if you trust the author.</text>
+    </string>
+    <string id="st_mods_vt_report">
+        <text>Report</text>
+    </string>
+    <string id="st_mods_install">
+        <text>Install</text>
+    </string>
+    <string id="st_mods_update">
+        <text>Update</text>
+    </string>
+    <string id="st_mods_retry">
+        <text>Try again</text>
+    </string>
+    <string id="st_mods_keep">
+        <text>Keep</text>
+    </string>
+    <string id="st_mods_website">
+        <text>Website</text>
+    </string>
+    <string id="st_mods_disable">
+        <text>Disable</text>
+    </string>
+    <string id="st_mods_enable">
+        <text>Enable</text>
+    </string>
+    <string id="st_mods_remove">
+        <text>Remove</text>
+    </string>
+    <string id="st_mods_update_all">
+        <text>Update all</text>
+    </string>
+    <string id="st_mods_back">
+        <text>Back</text>
+    </string>
+    <string id="st_mods_ok">
+        <text>OK</text>
+    </string>
+    <string id="st_mods_cancel">
+        <text>Cancel</text>
+    </string>
+    <string id="st_mods_save">
+        <text>Save</text>
+    </string>
+    <string id="st_mods_turn_on">
+        <text>Turn on</text>
+    </string>
+    <string id="st_mods_turn_off">
+        <text>Turn off</text>
+    </string>
+    <string id="st_mods_restart">
+        <text>Restart</text>
+    </string>
+    <string id="st_mods_later">
+        <text>Later</text>
+    </string>
+    <string id="st_mods_disclaimer">
+        <text>Mods are made by third parties. The author of Dead Air: Refined is not responsible for the third-party mods you download. Safety measures are taken, but there is no 100% guarantee.</text>
+    </string>
+    <string id="st_mods_install_caption">
+        <text>Install %s?</text>
+    </string>
+    <string id="st_mods_install_text">
+        <text>Version %s, about %s to download. The mod is installed at the next game start.</text>
+    </string>
+    <string id="st_mods_install_refused">
+        <text>The mod cannot be installed: %s</text>
+    </string>
+    <string id="st_mods_update_caption">
+        <text>Update %s?</text>
+    </string>
+    <string id="st_mods_update_text">
+        <text>Version %s, about %s to download. The update is installed at the next game start.</text>
+    </string>
+    <string id="st_mods_update_all_caption">
+        <text>Update %u mods?</text>
+    </string>
+    <string id="st_mods_remove_caption">
+        <text>Remove %s?</text>
+    </string>
+    <string id="st_mods_remove_text">
+        <text>The folder modules/%s is deleted for good at the next game start. Until then the removal can be taken back with Keep.</text>
+    </string>
+    <string id="st_mods_protect_caption">
+        <text>Protected mode</text>
+    </string>
+    <string id="st_mods_protect_locked">
+        <text>Protected mode stays on while a mod from the Mod Browser is enabled.</text>
+    </string>
+    <string id="st_mods_protect_on_caption">
+        <text>Turn protected mode on?</text>
+    </string>
+    <string id="st_mods_protect_on_text">
+        <text>From the next start, mod scripts cannot start programs, load native code or write outside the game and its data folder. Mods from the Mod Browser always run this way.</text>
+    </string>
+    <string id="st_mods_protect_off_caption">
+        <text>Turn protected mode off?</text>
+    </string>
+    <string id="st_mods_protect_off_text">
+        <text>From the next start, mod scripts get full access to your computer again. Turn it off only for a mod you trust that cannot work otherwise.</text>
+    </string>
+    <string id="st_mods_vt_key_caption">
+        <text>VirusTotal key</text>
+    </string>
+    <string id="st_mods_vt_key_text">
+        <text>Checking a mod yourself needs a free VirusTotal API key: sign up at virustotal.com and copy the key from your profile. It is kept in the Windows Credential Manager and used for nothing else.</text>
+    </string>
+    <string id="st_mods_vt_key_refused">
+        <text>The key was not saved: %s</text>
+    </string>
+    <string id="st_mods_restart_caption">
+        <text>Updates are ready</text>
     </string>
     <string id="st_mods_restart_prompt">
-        <text>Mod updates are ready. Restart the game now?\nOtherwise they are installed at the next start.</text>
+        <text>Restart the game now to install them? Otherwise they are installed at the next start.</text>
+    </string>
+    <string id="st_mods_review_caption">
+        <text>Review of %s</text>
+    </string>
+    <string id="st_mods_review_stars">
+        <text>Your rating</text>
+    </string>
+    <string id="st_mods_review_name">
+        <text>Name (optional)</text>
+    </string>
+    <string id="st_mods_review_text">
+        <text>Your review</text>
+    </string>
+    <string id="st_mods_review_counter">
+        <text>%u characters, at least %u</text>
+    </string>
+    <string id="st_mods_review_note">
+        <text>A review appears in the Mod Browser after a while, usually within a few hours.</text>
+    </string>
+    <string id="st_mods_review_send">
+        <text>Send</text>
+    </string>
+    <string id="st_mods_review_sending">
+        <text>Sending...</text>
+    </string>
+    <string id="st_mods_review_failed">
+        <text>The review was not sent: %s</text>
+    </string>
+    <string id="st_mods_review_sent_caption">
+        <text>Thank you</text>
+    </string>
+    <string id="st_mods_review_sent">
+        <text>Your review has been sent. It appears in the Mod Browser after a while, usually within a few hours.</text>
     </string>
     <string id="st_mods_size_mb">
         <text>%.1f MB</text>
     </string>
     <string id="st_mods_size_kb">
         <text>%.1f KB</text>
-    </string>
-    <string id="st_mods_back">
-        <text>Back</text>
     </string>
 </string_table>

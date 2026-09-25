@@ -1,0 +1,25 @@
+; The catalog's settings (MOD_CATALOG 5.2, 11, 12.3). catalog.py publish copies them into the
+; signed public/index.ltx; nothing here reaches the game until it is published.
+
+[catalog]
+; tried after the mirrors built into the game; each ends with a slash
+mirrors = https://mmadmer.github.io/darf-mods/, https://cdn.jsdelivr.net/gh/MMadmer/darf-mods@main/public/
+
+[virustotal]
+; engines whose word counts; the rest count only in numbers
+trusted       = Microsoft, Kaspersky, ESET-NOD32, BitDefender, Avast, AVG, Sophos, Symantec, Malwarebytes, TrendMicro, McAfee, F-Secure, DrWeb, Emsisoft, GData, Panda, Avira, Fortinet, CrowdStrike, SentinelOne, Paloalto
+block_trusted = 1
+warn_trusted  = 1
+block_others  = 5
+warn_others   = 2
+
+[reviews]
+; the form the game posts reviews to, and the CSV its answers are published as; without
+; inbox_url reviews are shown but cannot be written
+inbox_url     =
+inbox_field   =
+csv           =
+; any random text; changing it resets every hardware hash
+salt          =
+identity_bits = 24
+review_bits   = 20

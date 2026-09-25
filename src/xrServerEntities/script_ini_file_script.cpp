@@ -9,6 +9,8 @@
 #include "pch_script.h"
 
 #include "script_ini_file.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_protect.hpp"
 #include "xrScriptEngine/Functor.hpp"
 
 bool r_line(const CScriptIniFile* self, pcstr S, int L, luabind::string& N, luabind::string& V)
@@ -92,8 +94,32 @@ void CScriptIniFile::script_register(lua_State* luaState)
             .def("w_u32", &CScriptIniFile::w_u32)
             .def("w_u64", &CScriptIniFile::w_u64)
             .def("w_u8", &CScriptIniFile::w_u8)
-            .def("save_as", &CScriptIniFile::save_as)
-            .def("save_at_end", +[](CScriptIniFile* self, bool value) { self->save_at_end(value); })
+            .def("save_as", +[](CScriptIniFile* self, pcstr name)
+            {
+                // protected mode (MOD_CATALOG 9.2): the file it would write is a script's write
+                const pcstr target = name && name[0] ? name : self->fname();
+                xr_string why;
+                if (!XMS::Protect::Allow(target, XMS::Protect::Access::Write, why))
+                {
+                    string512 what{};
+                    xr_sprintf(what, "ini_file:save_as(\"%s\")", target);
+                    ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, what, why.c_str());
+                    return false;
+                }
+                return self->save_as(name);
+            })
+            .def("save_at_end", +[](CScriptIniFile* self, bool value)
+            {
+                xr_string why;
+                if (value && !XMS::Protect::Allow(self->fname(), XMS::Protect::Access::Write, why))
+                {
+                    string512 what{};
+                    xr_sprintf(what, "ini_file:save_at_end(\"%s\")", self->fname());
+                    ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, what, why.c_str());
+                    return;
+                }
+                self->save_at_end(value);
+            })
             .def("remove_line", &CScriptIniFile::remove_line)
             .def("set_override_names", +[](CScriptIniFile* self, bool value) { self->set_override_names(value); })
             .def("section_count", &CScriptIniFile::section_count)

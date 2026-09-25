@@ -31,6 +31,7 @@ public:
 
     virtual void StartPrimitive(u32 iMaxVerts, ePrimitiveType primType, ePointType pointType);
     virtual void FlushPrimitive();
+    void SetShapeParams(const Fvector4& box, const Fvector4& line, const Fvector4& mode) override;
 
     virtual LPCSTR UpdateShaderName(LPCSTR tex_name, LPCSTR sh_name);
 
@@ -53,6 +54,10 @@ private:
 
     FVF::LIT* LIT_start_pv;
     FVF::LIT* LIT_pv;
+
+    // applied to the shader of the next FlushPrimitive, then forgotten
+    Fvector4 m_shapeBox{}, m_shapeLine{}, m_shapeMode{};
+    bool m_shapePending{};
 };
 
 extern dxUIRender UIRenderImpl;

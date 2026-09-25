@@ -82,6 +82,10 @@ struct Module
     xr_string description; // '\n' separates lines
     xr_string website;       // empty unless it passed ValidWebsite
     xr_string update_github; // "owner/repo", empty unless it passed ValidGithubRepo
+    // MOD_CATALOG 6: a DDS picture inside the module ('\' separators, never climbing out) and
+    // the tags of the fixed vocabulary, as the manifest spells them
+    xr_string thumbnail;
+    xr_string tags;
     bool legacy_root{false}; // lives in the "mods" folder JSGME manages, not in "modules"
     xr_vector<ProvidedMode> provides_modes;
     xr_vector<xr_string> requires_ids;
@@ -166,6 +170,9 @@ XRCORE_API u16 LayerOfPath(pcstr physical_path);
 // while the file system comes up, so the change lands on the next launch.
 // false + reason when there is no such module or the list cannot be written.
 XRCORE_API bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err);
+// Whether the module is on for the next start: what SetModuleEnabled last wrote, not what this
+// start mounted. Reads disabled.ltx - not for every frame.
+XRCORE_API bool ModuleEnabledNextStart(pcstr id);
 
 // ---- Mods menu metadata and staged updates ----------------------------------
 // Contract: docs/dead-air/MOD_UPDATES.md.
@@ -184,6 +191,18 @@ XRCORE_API xr_string StagedRoot();
 // Arms the payload already unpacked under StagedRoot()\<id>\payload\: writes ready.ltx, the
 // one file the next start looks for. Written last, so an interrupted download is never applied.
 XRCORE_API bool MarkStagedReady(pcstr module_id, pcstr version, xr_string& err);
+
+// The Mod Browser (MOD_CATALOG 14): a new module unpacked under StagedRoot()\<id>\payload\ is moved to
+// modules\<id> by the next start; a removal takes the module folder away at the next start.
+// StagedAction says which of update / install / remove waits for a module, empty for none.
+XRCORE_API bool MarkStagedInstall(pcstr module_id, pcstr version, xr_string& err);
+
+// Publishes a file that belongs to no module at a path under $game_data$ ("textures\\a\\b.dds"),
+// so the engine opens it like game data - the Mod Browser's thumbnails. Main thread only. A path
+// published again points at the new file.
+XRCORE_API bool MountFile(pcstr relative_path, pcstr physical_path);
+XRCORE_API bool StageRemoval(pcstr module_id, xr_string& err);
+XRCORE_API xr_string StagedAction(pcstr module_id);
 
 // Version of the update waiting for the next start; false when none is armed.
 XRCORE_API bool StagedVersion(pcstr module_id, xr_string& version);

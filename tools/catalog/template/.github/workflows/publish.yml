@@ -1,0 +1,46 @@
+# Optional (MOD_CATALOG 10.4): sign and publish on GitHub after every merge. Runs only when the
+# repository has the secret CATALOG_KEY (the maintainer key file's content) and, for a protected
+# key file, CATALOG_KEY_PASSWORD. Without it the maintainer publishes from their own computer.
+name: publish
+
+on:
+  push:
+    branches: [main]
+    paths: ['mods/**', 'catalog.ltx', 'revoked.ltx']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-public
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CATALOG_KEY: ${{ secrets.CATALOG_KEY }}
+      CATALOG_KEY_PASSWORD: ${{ secrets.CATALOG_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Sign and publish
+        run: |
+          if [ -z "$CATALOG_KEY" ]; then
+            echo "No CATALOG_KEY secret: the maintainer publishes locally."
+            exit 0
+          fi
+          umask 077
+          printf '%s\n' "$CATALOG_KEY" > "$RUNNER_TEMP/catalog.xkey"
+          python tools/catalog.py publish --key "$RUNNER_TEMP/catalog.xkey" --password-env CATALOG_KEY_PASSWORD
+          rm -f "$RUNNER_TEMP/catalog.xkey"
+          git config user.name "catalog-bot"
+          git config user.email "catalog-bot@users.noreply.github.com"
+          git add public mods
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish the catalog"
+            git push
+          fi

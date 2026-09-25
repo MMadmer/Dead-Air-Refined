@@ -13,6 +13,7 @@
 #include "embedded_resources_management.h"
 
 #include "xrCore/Threading/TaskManager.hpp"
+#include "xrCore/XMS/xms_catalog.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xrCore/XMS/xms_ltx.h"
 #include "xrNetServer/NET_AuthCheck.h"
@@ -310,6 +311,8 @@ void destroyConsole()
 void execUserScript()
 {
     ZoneScoped;
+    // user.ltx is the player's: in protected mode no script may write it (MOD_CATALOG 9.3)
+    XMS::Protect::OriginScope scope(XMS::Protect::Origin::Player);
     Console->Execute("default_controls");
     Console->ExecuteScript(Console->ConfigFile);
 }
@@ -409,10 +412,13 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
     if (startArgs || loadArgs)
         TaskScheduler->Wait(initializeSound);
 
-    if (startArgs)
-        Console->Execute(startArgs + 1);
-    if (loadArgs)
-        Console->Execute(loadArgs + 1);
+    {
+        XMS::Protect::OriginScope scope(XMS::Protect::Origin::Player);
+        if (startArgs)
+            Console->Execute(startArgs + 1);
+        if (loadArgs)
+            Console->Execute(loadArgs + 1);
+    }
 
     // Initialize APP
     const auto& createLightAnim = TaskScheduler->AddTask([]

@@ -17,7 +17,9 @@ protected:
         eNeedRecalc = (1 << 1),
         eFixedScrollBar = (1 << 2),
         eItemsSelectabe = (1 << 3),
-        eInverseDir = (1 << 4) /*,eMultiSelect=(1<<5)*/
+        eInverseDir = (1 << 4) /*,eMultiSelect=(1<<5)*/,
+        // the bar keeps the range but is never drawn: the owner draws its own (CUIShapeScrollView)
+        eHiddenScrollBar = (1 << 6)
     };
     CUIScrollBar* m_VScrollBar{};
     CUIWindow* m_pad{};
@@ -78,6 +80,7 @@ public:
     void SetScrollPos(int value);
     void SetScrollBarProfile(LPCSTR profile);
     IC bool NeedShowScrollBar() const; // no comment
+    void SetScrollBarHidden(bool hidden);
     float GetHorizIndent() const; // left + right indent
     float GetVertIndent() const; // top + bottom indent
     void UpdateChildrenLenght(); // set default width for all children

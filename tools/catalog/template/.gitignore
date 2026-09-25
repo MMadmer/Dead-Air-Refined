@@ -1,0 +1,5 @@
+# key files never belong in the repository: the maintainer keeps them
+*.xkey
+__pycache__/
+issues.md
+changed.txt

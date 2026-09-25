@@ -5,6 +5,7 @@
 #include "xr_ioc_cmd.h"
 
 #include "xrScriptEngine/script_space.hpp"
+#include "xrCore/XMS/xms_catalog.h"
 
 void CConsole::script_register(lua_State* luaState)
 {
@@ -18,8 +19,19 @@ void CConsole::script_register(lua_State* luaState)
         }),
 
         class_<CConsole>("CConsole")
-            .def("execute", &CConsole::Execute)
-            .def("execute_script", &CConsole::ExecuteScript)
+            .def("execute", +[](CConsole* self, pcstr command)
+            {
+                // a script's command is a script's even inside one the player typed (run_string);
+                // the console checks it in protected mode (MOD_CATALOG 9.2)
+                XMS::Protect::OriginScope scope(XMS::Protect::Origin::Script);
+                self->Execute(command);
+            })
+            .def("execute_script", +[](CConsole* self, pcstr script)
+            {
+                // every line of the file is checked in turn: it runs under the script's origin
+                XMS::Protect::OriginScope scope(XMS::Protect::Origin::Script);
+                self->ExecuteScript(script);
+            })
             .def("show", &CConsole::Show)
             .def("hide", &CConsole::Hide)
 

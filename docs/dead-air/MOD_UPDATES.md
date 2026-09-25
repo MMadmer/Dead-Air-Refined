@@ -26,6 +26,8 @@ github      = Madmer/agroprom-story
 | `[module] author` | Display text. |
 | `[module] description` | Display text, may span lines through `\n`. |
 | `[module] website` | The module's page. AP-PRO or ModDB only, see 1.3. |
+| `[module] thumbnail` | A 256 x 256 DXT1/DXT5 DDS inside the module, shown next to it: [MOD_CATALOG.md](MOD_CATALOG.md) 6.1. |
+| `[module] tags` | Words of a fixed list the Mod Browser filters by: [MOD_CATALOG.md](MOD_CATALOG.md) 6.2. |
 | `[update] github` | `owner/repo` of the GitHub repository whose releases update the module. |
 
 ### 1.1 Text (**frozen**)
@@ -129,6 +131,14 @@ madmer.agroprom_story-1.2.0.zip = 48211044, 9f86d081884c7d659a2feaa0c55ad015a3bf
 | `unpacked` | no | Total size of those files in bytes. When present it equals the index. |
 | `index` | yes | The file index: `<asset name>, <size in bytes>, <SHA-256 hex>`. |
 | `[packages]` | yes | One line per package: `<asset name> = <size in bytes>, <SHA-256 hex>`. |
+
+Two optional sections follow when XFined Editor packages the release: `[card]`,
+what the Mod Browser shows about the module, and `[signature]`, last, the author
+key's signature over every byte before it - the card, the index hash and the
+package hashes alike ([MOD_CATALOG.md](MOD_CATALOG.md) 3.1 and 4). An updater
+that does not know them ignores them (2.4); one that does refuses a catalog
+module's release that is not signed by the key the catalog names. A signed
+descriptor is never edited afterwards: any changed byte breaks the signature.
 
 An asset name is 1-128 characters of `A-Z a-z 0-9 - . _` and does not start with
 a dot; a package ends with `.zip`, the index with `.files`. At most 64 packages.

@@ -1,0 +1,97 @@
+// XMS UI shapes (xrUICore UIShape): boxes, stars and small glyphs computed per pixel from
+// signed distances, at the screen's own resolution. Nothing is sampled from a texture, so a
+// border stays one sharp pixel and a corner stays round at any size.
+//
+// Tex0 is the pixel's position relative to the shape's centre, in screen pixels; the vertex
+// colour is the fill. The output is premultiplied (xms_ui_shape.s blends ONE, INVSRCALPHA).
+#include "common.h"
+
+// half width, half height, corner radius, border (a glyph's stroke) width - screen pixels
+uniform float4 xms_shape_box;
+// the border colour; the empty part of a star
+uniform float4 xms_shape_line;
+// kind (0 box, 1 star, 2 search, 3 check, 4 cross, 5 chevron), a star's filled fraction,
+// the width of the edge's fade in pixels (1 = crisp), unused
+uniform float4 xms_shape_mode;
+
+float sd_box(float2 p, float2 b, float r)
+{
+	float2 q = abs(p) - b + r;
+	return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
+float sd_segment(float2 p, float2 a, float2 b)
+{
+	float2 pa = p - a;
+	float2 ba = b - a;
+	float h = saturate(dot(pa, ba) / dot(ba, ba));
+	return length(pa - ba * h);
+}
+
+// Inigo Quilez's regular five-pointed star: outer radius r, inner radius r * rf; y up
+float sd_star5(float2 p, float r, float rf)
+{
+	const float2 k1 = float2(0.809016994375, -0.587785252292);
+	const float2 k2 = float2(-k1.x, k1.y);
+	p.x = abs(p.x);
+	p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+	p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+	p.x = abs(p.x);
+	p.y -= r;
+	float2 ba = rf * float2(-k1.y, k1.x) - float2(0.0, 1.0);
+	float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+	return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+float4 premultiplied(float4 c) { return float4(c.rgb * c.a, c.a); }
+
+float4 main(p_TL I) : SV_Target
+{
+	float2 p = I.Tex0;
+	float2 half_size = xms_shape_box.xy;
+	float kind = xms_shape_mode.x;
+	float soft = max(xms_shape_mode.z, 1.0);
+	float4 fill = premultiplied(I.Color);
+	float4 edge = premultiplied(xms_shape_line);
+
+	if (kind < 0.5)
+	{
+		// a box: the fill inside the border, the border as a ring of its own width
+		float d = sd_box(p, half_size, min(xms_shape_box.z, min(half_size.x, half_size.y)));
+		float outer = saturate(0.5 - d / soft);
+		float inner = xms_shape_box.w > 0.0 ? saturate(0.5 - (d + xms_shape_box.w) / soft) : outer;
+		return fill * inner + edge * (outer - inner);
+	}
+
+	float size = min(half_size.x, half_size.y);
+	if (kind < 1.5)
+	{
+		// a star centred on its own box, filled from the left up to the fraction
+		float r = size * 0.98 / 0.951;
+		float d = sd_star5(float2(p.x, -p.y + r * 0.0955), r, 0.45);
+		float coverage = saturate(0.5 - d);
+		float filled = saturate(xms_shape_mode.y * 2.0 * half_size.x - (p.x + half_size.x) + 0.5);
+		return lerp(edge, fill, filled) * coverage;
+	}
+
+	// strokes of the border width
+	float w = max(xms_shape_box.w, 1.0) * 0.5;
+	float d;
+	if (kind < 2.5)
+	{
+		float2 c = float2(-0.18, -0.18) * size;
+		float ring = 0.52 * size;
+		float2 from = c + normalize(float2(1.0, 1.0)) * ring;
+		d = min(abs(length(p - c) - ring), sd_segment(p, from, float2(0.85, 0.85) * size));
+	}
+	else if (kind < 3.5)
+		d = min(sd_segment(p, float2(-0.7, 0.0) * size, float2(-0.2, 0.5) * size),
+			sd_segment(p, float2(-0.2, 0.5) * size, float2(0.75, -0.55) * size));
+	else if (kind < 4.5)
+		d = min(sd_segment(p, float2(-0.6, -0.6) * size, float2(0.6, 0.6) * size),
+			sd_segment(p, float2(-0.6, 0.6) * size, float2(0.6, -0.6) * size));
+	else
+		d = min(sd_segment(p, float2(-0.55, -0.25) * size, float2(0.0, 0.3) * size),
+			sd_segment(p, float2(0.0, 0.3) * size, float2(0.55, -0.25) * size));
+	return fill * saturate(0.5 - (d - w));
+}

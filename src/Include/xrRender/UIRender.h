@@ -9,6 +9,8 @@ template <class T> struct _rect;
 using Irect = _rect<int>;
 template <class T> struct _vector2;
 using Fvector2 = _vector2<float>;
+template <class T> struct _vector4;
+using Fvector4 = _vector4<float>;
 struct Fmatrix;
 
 class IUIRender
@@ -65,6 +67,10 @@ public:
 
     virtual void StartPrimitive(u32 iMaxVerts, ePrimitiveType primType, ePointType pointType) = 0;
     virtual void FlushPrimitive() = 0;
+
+    // The parameters of the next flushed primitive drawn with the XMS shape shader
+    // (xms_ui_shape.ps): the shape is computed per pixel, so it has no texture to blur.
+    virtual void SetShapeParams(const Fvector4& /*box*/, const Fvector4& /*line*/, const Fvector4& /*mode*/) {}
 
     virtual LPCSTR UpdateShaderName(LPCSTR tex_name, LPCSTR sh_name) = 0;
 

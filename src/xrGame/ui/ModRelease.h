@@ -51,6 +51,31 @@ struct Asset
     u64 size{};
 };
 
+// A file of the release named by the card: its path in the index, size and SHA-256.
+struct FileRef
+{
+    xr_string path;
+    xr_string sha256;
+    u64 size{};
+    bool present{};
+};
+
+// [card] (docs/dead-air/MOD_CATALOG.md 4): what the Mod Browser shows, the module's own
+// manifest with every string table id resolved. Text is UTF-8 as the author wrote it.
+struct Card
+{
+    bool present{};
+    xr_string name, nameEng;
+    xr_string author, authorEng;
+    xr_string description, descriptionEng;
+    xr_string website;
+    xr_string mode; // "plain", "new <id>" or "mode <id>"
+    xr_string modeTitle, modeTitleEng;
+    xr_vector<xr_string> tags; // MOD_CATALOG 6.2, unknown words dropped
+    FileRef thumbnail;
+    FileRef manifest;
+};
+
 struct Descriptor
 {
     u32 schema{};
@@ -61,9 +86,13 @@ struct Descriptor
     u64 unpacked{}; // 0 = not declared
     Asset index;
     xr_vector<Asset> packages;
+    Card card;
 
     u64 PackageBytes() const;
 };
+
+// The tag vocabulary of MOD_CATALOG 6.2, in its order.
+const xr_vector<xr_string>& TagVocabulary();
 
 // False with a reason when the text is not a usable descriptor. A schema above SupportedSchema
 // still parses, with id and version only: what to do about it is the caller's decision, and
@@ -121,4 +150,9 @@ private:
 
 // [module] id and version of a manifest on disk.
 bool ReadManifestIdentity(const std::filesystem::path& manifest, xr_string& id, xr_string& version);
+
+// The content policy of the mod catalog (MOD_CATALOG 8): a path a catalog module may hold, and
+// a file on disk whose first bytes are not a program or a container.
+bool CatalogPathAllowed(std::string_view path, xr_string& why);
+bool CatalogFileAllowed(const std::filesystem::path& file, xr_string& why);
 }

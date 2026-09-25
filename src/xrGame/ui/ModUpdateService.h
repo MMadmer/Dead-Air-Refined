@@ -17,6 +17,7 @@ enum class State : u8
     NoRelease,   // the repository publishes no descriptor for this module
     Available,
     Blocked,     // the release needs a newer game
+    Refused,     // a catalog module's release breaks the catalog's rules (MOD_CATALOG 1)
     CheckFailed,
     Queued,
     Preparing,   // hashing installed files to find what the release already has here
@@ -50,6 +51,8 @@ struct Snapshot
 {
     // one entry per XMS::Modules() entry, same order
     xr_vector<ModuleStatus> modules;
+    // installations from the Mod Browser, oldest first (MOD_CATALOG 14)
+    xr_vector<ModuleStatus> installs;
     bool busy{};
     // the queue ran dry with at least one module staged and the player has not been asked yet
     bool restartPrompt{};
@@ -79,6 +82,17 @@ bool RestartGame();
 // Opens the module's page. The URL was validated when the manifest was read and is validated
 // again here: the check is the whole point of the feature, so it sits next to the launch.
 bool OpenWebsite(pcstr moduleId);
+
+// Installs a module the mod catalog lists: its live release, held to the catalog's rules, is
+// staged and moved in by the next start (MOD_CATALOG 14). False with a reason when it cannot
+// even start.
+bool StartInstall(pcstr moduleId, xr_string& error);
+// Takes a module away at the next start; Cancel takes the request back.
+bool StageRemoval(pcstr moduleId, xr_string& error);
+void CancelRemoval(pcstr moduleId);
+
+// The disclaimer of the author of the game (MOD_CATALOG 14), for what the console starts.
+void LogDisclaimer();
 
 Snapshot GetSnapshot();
 void Shutdown();

@@ -282,7 +282,14 @@ void CUIScrollView::Draw()
 
 bool CUIScrollView::NeedShowScrollBar() const
 {
-    return m_flags.test(eFixedScrollBar) || GetHeight() < m_pad->GetHeight();
+    return !m_flags.test(eHiddenScrollBar) && (m_flags.test(eFixedScrollBar) || GetHeight() < m_pad->GetHeight());
+}
+
+void CUIScrollView::SetScrollBarHidden(bool hidden)
+{
+    m_flags.set(eHiddenScrollBar, hidden);
+    // hidden, it takes no clicks either; the wheel and a drag of the content still move it
+    m_VScrollBar->Show(!hidden);
 }
 
 void CUIScrollView::OnScrollV(CUIWindow*, void*)

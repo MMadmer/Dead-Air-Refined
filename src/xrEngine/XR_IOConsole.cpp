@@ -11,6 +11,10 @@
 #include "xr_input.h"
 #include "xr_ioc_cmd.h"
 
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_engine.hpp"
+#include "xrScriptEngine/script_protect.hpp"
+
 #include <imgui_internal.h>
 
 static u32 const cmd_history_max = 64;
@@ -245,7 +249,10 @@ void CConsole::OnFrame()
         if (ImGui::InputText("##input", m_edit_string, std::size(m_edit_string), input_text_flags, callback, this))
         {
             if (m_select_tip < 0 || m_select_tip >= static_cast<int>(m_tips.size()))
+            {
+                XMS::Protect::OriginScope scope(XMS::Protect::Origin::Player);
                 ExecuteCommand(m_edit_string);
+            }
             else
             {
                 shared_str const& str = m_tips[m_select_tip].text;
@@ -432,6 +439,12 @@ void CConsole::ExecuteCommand(pcstr cmd_str, bool record_cmd)
     _Trim(edt);
     if (edt[0] == 0)
     {
+        return;
+    }
+    // protected mode (MOD_CATALOG 9.2): what the player did not type is checked, cfg_load's lines too
+    if (xr_string why; !XMS::Protect::AllowConsole(edt, why))
+    {
+        ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, edt, why.c_str());
         return;
     }
     if (record_cmd)

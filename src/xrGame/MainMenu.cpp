@@ -10,6 +10,7 @@
 #include "ui/ContentService.h"
 #include "ui/UIModsWnd.h"
 #include "ui/ModUpdateService.h"
+#include "ui/ModCatalog.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/x_ray.h"
@@ -152,6 +153,7 @@ CMainMenu::~CMainMenu()
     UpdateService::Shutdown();
     ContentService::Shutdown();
     ModUpdateService::Shutdown();
+    ModCatalog::Shutdown();
 
     xr_delete(g_btnHint);
     xr_delete(g_statHint);
@@ -616,6 +618,8 @@ void CMainMenu::OnFrame()
 
     if (IsActive())
     {
+        // the Mod Browser's thumbnails arrive on a worker; the file system takes them here
+        ModCatalog::Tick();
         // Content first: an installation that cannot load a level has nothing useful to say
         // about updates or crash reports until that is fixed.
         if (!CheckContentDialog() && !CheckCrashReportDialog())

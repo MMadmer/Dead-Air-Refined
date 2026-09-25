@@ -45,6 +45,9 @@
 #include "ui/UIActorMenu.h"
 #include "ui/ContentService.h"
 #include "ui/ModUpdateService.h"
+#include "ui/ModCatalog.h"
+#include "ui/UIModsWnd.h"
+#include "xrCore/XMS/xms_catalog.h"
 #include "player_hud.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/ui_styles.h"
@@ -1197,6 +1200,153 @@ public:
     virtual void Info(TInfo& I) { xr_strcpy(I, "check an XMS module (or 'all') for a release and download it"); }
 };
 
+// The mod catalog from the console (docs/dead-air/MOD_CATALOG.md): what the Mod Browser does,
+// without the window. In protected mode only the player may run it (XMS::Protect::AllowConsole).
+class CCC_XmsCatalog : public IConsole_Command
+{
+public:
+    CCC_XmsCatalog(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; bLowerCaseArgs = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        const std::string_view text = args ? args : "";
+        const size_t space = text.find(' ');
+        const std::string_view verb = text.substr(0, space);
+        const xr_string rest = space == std::string_view::npos ? xr_string() : xr_string(text.substr(space + 1));
+        if (verb == "refresh")
+        {
+            ModCatalog::Refresh();
+            Msg("* [catalog] refresh requested");
+            return;
+        }
+        if (verb == "after")
+        {
+            ModCatalog::RunWhenLoaded(rest);
+            return;
+        }
+        if (verb == "thumbs")
+        {
+            for (const ModCatalog::Entry& entry : ModCatalog::Current()->entries)
+                ModCatalog::WantThumbnail(entry.id.c_str());
+            Msg("* [catalog] thumbnails requested");
+            return;
+        }
+        if (verb == "vt")
+        {
+            ModCatalog::CheckVirusTotal(rest.c_str());
+            Msg("* [catalog] VirusTotal lookup of [%s] requested", rest.c_str());
+            return;
+        }
+        if (verb == "reviews")
+        {
+            if (const auto reviews = ModCatalog::GetReviews(rest.c_str()); reviews && reviews->status == ModCatalog::Status::Ready)
+            {
+                Msg("* [catalog] %zu review(s) of [%s]", reviews->list.size(), rest.c_str());
+                for (const ModCatalog::Review& review : reviews->list)
+                    Msg("*   %u star(s) by %s (%s, %s): %zu character(s)", review.stars, review.keyId.c_str(),
+                        review.version.c_str(), review.date.c_str(), ModCatalog::TextLength(review.text));
+            }
+            else
+            {
+                ModCatalog::WantReviews(rest.c_str());
+                Msg("* [catalog] reviews of [%s] requested", rest.c_str());
+            }
+            return;
+        }
+        if (verb == "review")
+        {
+            // review <id> <stars> <text>: the console's text is the UI code page, a review is UTF-8
+            const size_t first = rest.find(' ');
+            const size_t second = first == xr_string::npos ? first : rest.find(' ', first + 1);
+            if (second == xr_string::npos)
+            {
+                Msg("! usage: xms_catalog review <module id> <stars> <text>");
+                return;
+            }
+            const xr_string id = rest.substr(0, first);
+            const u32 stars = static_cast<u32>(atoi(rest.substr(first + 1, second - first - 1).c_str()));
+            const xr_string body = rest.substr(second + 1);
+            const int wide = MultiByteToWideChar(1251, 0, body.data(), static_cast<int>(body.size()), nullptr, 0);
+            std::wstring buffer(static_cast<size_t>(std::max(wide, 0)), L'\0');
+            MultiByteToWideChar(1251, 0, body.data(), static_cast<int>(body.size()), buffer.data(), wide);
+            const int narrow = WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide, nullptr, 0, nullptr, nullptr);
+            xr_string utf8(static_cast<size_t>(std::max(narrow, 0)), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, buffer.data(), wide, utf8.data(), narrow, nullptr, nullptr);
+            xr_string error;
+            if (ModCatalog::PostReview(id.c_str(), stars, utf8, "QA", error))
+                Msg("* [catalog] review of [%s] is being sent", id.c_str());
+            else
+                Msg("! [catalog] review of [%s] not sent: %s", id.c_str(), error.c_str());
+            return;
+        }
+        const auto snapshot = ModCatalog::Current();
+        static constexpr pcstr states[] = {"idle", "loading", "ready", "offline", "failed"};
+        Msg("* [catalog] %s, serial %llu, %zu module(s)%s%s, reviews %s", states[static_cast<int>(snapshot->status)],
+            static_cast<unsigned long long>(snapshot->serial), snapshot->entries.size(), snapshot->error.empty() ? "" : " - ",
+            snapshot->error.c_str(), snapshot->reviewsWritable ? "writable" : "read-only");
+        static constexpr pcstr verdicts[] = {"unknown", "clean", "warn", "block"};
+        for (const ModCatalog::Entry& entry : snapshot->entries)
+            Msg("*   %s %s card=%s thumbnail=%s rating=%u/%u.%02u vt=%s%s%s%s", entry.id.c_str(),
+                entry.hasCard ? entry.release.version.c_str() : "-", entry.hasCard ? "signed" : "none",
+                entry.thumbnailTexture.empty() ? "-" : entry.thumbnailTexture.c_str(), entry.rating.count,
+                entry.rating.average100 / 100, entry.rating.average100 % 100, verdicts[static_cast<int>(entry.vt.verdict)],
+                entry.vt.live ? "(live)" : "", entry.revoked.empty() ? "" : " REVOKED: ", entry.revoked.c_str());
+    }
+    virtual void Info(TInfo& I)
+    {
+        xr_strcpy(I, "the mod catalog: refresh | thumbs | vt <id> | reviews <id> | review <id> <stars> <text> | "
+                     "after <command>; no argument lists it");
+    }
+};
+
+class CCC_XmsInstall : public IConsole_Command
+{
+public:
+    CCC_XmsInstall(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        xr_string error;
+        if (!ModUpdateService::StartInstall(args, error))
+            Msg("! [catalog] %s cannot be installed: %s", args, error.c_str());
+        else
+            Msg("* [catalog] installation of %s requested - progress in xms_update_status, applied on the next start", args);
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "install a module the mod catalog lists (next start)"); }
+};
+
+class CCC_XmsRemove : public IConsole_Command
+{
+public:
+    CCC_XmsRemove(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        xr_string error;
+        if (!ModUpdateService::StageRemoval(args, error))
+            Msg("! XMS: %s cannot be removed: %s", args, error.c_str());
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "remove an XMS module (next start); xms_remove_cancel takes it back"); }
+};
+
+class CCC_XmsRemoveCancel : public IConsole_Command
+{
+public:
+    CCC_XmsRemoveCancel(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    virtual void Execute(LPCSTR args) { ModUpdateService::CancelRemoval(args); }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "keep a module whose removal was requested"); }
+};
+
+class CCC_XmsProtect : public IConsole_Command
+{
+public:
+    CCC_XmsProtect(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR)
+    {
+        Msg("* XMS: protected mode %s in this session (%s); the switch is %s for the next start",
+            XMS::Catalog::ProtectedMode() ? "ON" : "off", XMS::Catalog::ProtectedReason().c_str(),
+            XMS::Catalog::ProtectionLatched() ? "on" : "off");
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "whether scripts run in protected mode, and why (MOD_CATALOG 9)"); }
+};
+
 class CCC_XmsUpdateStatus : public IConsole_Command
 {
 public:
@@ -1208,9 +1358,14 @@ public:
 class CCC_XmsMods : public IConsole_Command
 {
 public:
-    CCC_XmsMods(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
-    virtual void Execute(LPCSTR) { CMainMenu::RequestModsDialog(); }
-    virtual void Info(TInfo& I) { xr_strcpy(I, "open the Mods window of the main menu"); }
+    CCC_XmsMods(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; bLowerCaseArgs = false; };
+    virtual void Execute(LPCSTR args)
+    {
+        // xms_mods <command> does in the window what a click does (xms_mods help)
+        CUIModsWnd::Queue(args);
+        CMainMenu::RequestModsDialog();
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "open the Mods window of the main menu; xms_mods help lists what it can do there"); }
 };
 
 class CCC_XmsConflicts : public IConsole_Command
@@ -3318,6 +3473,11 @@ void CCC_RegisterCommands()
     CMD1(CCC_XmsConflicts, "xms_conflicts");
     CMD1(CCC_XmsUpdate, "xms_update");
     CMD1(CCC_XmsUpdateStatus, "xms_update_status");
+    CMD1(CCC_XmsCatalog, "xms_catalog");
+    CMD1(CCC_XmsInstall, "xms_install");
+    CMD1(CCC_XmsRemove, "xms_remove");
+    CMD1(CCC_XmsRemoveCancel, "xms_remove_cancel");
+    CMD1(CCC_XmsProtect, "xms_protect");
     CMD1(CCC_XmsMods, "xms_mods");
     CMD1(CCC_XmsModes, "xms_modes");
     CMD1(CCC_XmsWorld, "xms_world");

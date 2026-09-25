@@ -1,85 +1,347 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The Mods window and its dialogs (CUIModsWnd): black panels and light lines drawn by the
+     xms_ui_shape shader. ui_mods.xml and ui_mods_16.xml come from one geometry: change both. -->
 <w>
     <main x="0" y="0" width="1024" height="768">
-        <background x="334" y="84" width="660" height="600" stretch="1">
-            <texture>ui_frame_error</texture>
-        </background>
-        <!-- the frame above is translucent; this keeps the main menu from reading through it -->
-        <backdrop x="344.5" y="98" width="639" height="572" stretch="1">
-            <texture>ui_inGame2_main_window</texture>
-        </backdrop>
-        <caption x="349" y="100" width="630" height="32">
-            <text font="graffiti22" align="c" vert_align="c">st_mods_caption</text>
+        <colors text="#ECE9E2FF" muted="#9A968CFF" good="#7FB069FF" warn="#D9A441FF" bad="#DC645AFF" accent="#D2BE73FF"/>
+        <shade x="0" y="0" width="1024" height="768" fill="#00000073"/>
+        <shadow x="75.5" y="28" width="873" height="722" fill="#000000B3" soft="18" radius="8"/>
+        <frame x="83" y="32" width="858" height="704" fill="#000000F5" line="#E8E6E0CC" border="1" radius="3"/>
+        <caption x="98" y="46" width="112.5" height="36">
+            <text font="graffiti22" align="l" vert_align="c" r="236" g="233" b="226">st_mods_caption</text>
         </caption>
-
-        <column_name x="362.5" y="144" width="225" height="20">
-            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_name</text>
-        </column_name>
-        <column_author x="587.5" y="144" width="105" height="20">
-            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_author</text>
-        </column_author>
-        <column_version x="692.5" y="144" width="52.5" height="20">
-            <text font="letterica16" align="l" vert_align="c" r="150" g="145" b="125">st_mods_column_version</text>
-        </column_version>
-
-        <list_back x="355" y="166" width="405" height="440" stretch="1">
-            <texture>ui_inGame2_picture_window</texture>
-        </list_back>
-        <list x="359.5" y="172" width="396" height="428" item_height="26" can_select="1" always_show_scroll="0"
-              name_width="225" author_width="105" version_width="52.5">
-            <font font="letterica16" r="220" g="220" b="220"/>
-            <color_disabled r="120" g="120" b="120"/>
-            <color_update r="210" g="190" b="115"/>
+        <tab_installed x="200" y="50" width="105" height="28">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_tab_installed</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </tab_installed>
+        <tab_browser x="305" y="50" width="105" height="28">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_tab_browser</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </tab_browser>
+        <protect x="738.5" y="52" width="187.5" height="24" icon="check" icon_size="11">
+            <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226" x="19.5">st_mods_protect_on</text>
+            <normal fill="#00000000" line="#E8E6E04D" border="1" radius="2" text="#9A968CFF"/>
+            <highlight fill="#E8E6E014" line="#E8E6E0B3" text="#ECE9E2FF"/>
+            <pushed fill="#E8E6E026" line="#E8E6E0B3" text="#ECE9E2FF"/>
+            <checked fill="#00000000" line="#7FB069B3" text="#7FB069FF"/>
+        </protect>
+        <separator x="98" y="94" width="828" height="1" fill="#E8E6E033"/>
+        <summary x="98" y="108" width="828" height="88">
+            <text x="0" y="4" width="678" height="26">
+                <text font="letterica18" align="l" vert_align="c" r="236" g="233" b="226"/>
+            </text>
+            <note x="0" y="32" width="678" height="44">
+                <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="154" g="150" b="140"/>
+            </note>
+            <update_all x="700.5" y="4" width="127.5" height="30" accel="kF5">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_update_all</text>
+                <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
+                <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+                <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </update_all>
+        </summary>
+        <toolbar x="98" y="108" width="828" height="88">
+            <search_back x="0" y="0" width="387" height="30" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2"/>
+            <search_icon x="7.5" y="8" width="10.5" height="14" kind="search" fill="#9A968CFF" border="1.6"/>
+            <search_hint x="24" y="0" width="354" height="30">
+                <text font="letterica16" align="l" vert_align="c" r="124" g="120" b="111">st_mods_search_hint</text>
+            </search_hint>
+            <search x="24" y="0" width="354" height="30" max_symb_count="96">
+                <text font="letterica18" align="l" vert_align="c" r="236" g="233" b="226" x="0"/>
+                <text_color>
+                    <e r="236" g="233" b="226"/>
+                </text_color>
+            </search>
+            <sort x="394.5" y="0" width="157.5" height="30" icon="chevron" icon_size="10">
+                <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226" x="21">st_mods_sort_relevance</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </sort>
+            <count x="559.5" y="0" width="268.5" height="30">
+                <text font="letterica16" align="r" vert_align="c" r="154" g="150" b="140"/>
+            </count>
+            <tags x="0" y="40" width="828" height="48" gap="4.5" padding="7.5">
+                <tag x="0" y="0" width="45" height="21">
+                    <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226"></text>
+                    <normal fill="#00000000" line="#E8E6E040" border="1" radius="2" text="#9A968CFF"/>
+                    <highlight fill="#E8E6E014" line="#E8E6E0B3" text="#ECE9E2FF"/>
+                    <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                    <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                </tag>
+            </tags>
+        </toolbar>
+        <list_back x="98" y="208" width="462" height="452" fill="#FFFFFF05" line="#E8E6E026" border="1" radius="3"/>
+        <list x="102.5" y="214" width="453" height="440" always_show_scroll="0" vert_interval="2" right_ident="4.5" left_ident="0" top_indent="0" bottom_indent="0" bar_width="2">
+            <track fill="#E8E6E014"/>
+            <thumb fill="#E8E6E080" radius="1"/>
         </list>
-        <empty x="359.5" y="360" width="396" height="40">
-            <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="150" g="145" b="125">st_mods_empty</text>
-        </empty>
-
-        <details_back x="769" y="144" width="210" height="462" stretch="1">
-            <texture>ui_inGame2_picture_window</texture>
-        </details_back>
-        <name x="776.5" y="152" width="195" height="48">
-            <text font="graffiti19" align="c" vert_align="c" complex_mode="1"/>
-        </name>
-        <author x="776.5" y="204" width="195" height="20">
-            <text font="letterica16" align="l" vert_align="c"/>
-        </author>
-        <version x="776.5" y="224" width="195" height="20">
-            <text font="letterica16" align="l" vert_align="c"/>
-        </version>
-        <status x="776.5" y="248" width="195" height="40">
-            <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="210" g="190" b="115"/>
-            <color_error r="220" g="100" b="90"/>
-        </status>
-        <progress x="779.5" y="292" width="189" height="9" horz="1" min="0" max="100" pos="0">
-            <progress stretch="1">
-                <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
-            </progress>
-            <background stretch="1">
-                <texture a="220">ui_inGame2_hint_wnd_bar</texture>
-            </background>
-        </progress>
-        <description x="776.5" y="308" width="195" height="290" always_show_scroll="0" vert_interval="4"
-                     right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
-        <description_text x="0" y="0" width="177" height="16">
-            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
-        </description_text>
-
-        <update_all x="355" y="626" width="150" height="30" stretch="1" accel="kF5">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_mods_update_all</text>
-        </update_all>
-        <back x="514" y="626" width="105" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_mods_back</text>
+        <list_status x="113" y="358" width="432" height="80">
+            <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="154" g="150" b="140"/>
+        </list_status>
+        <row width="448.5" height="60" text_right="93">
+            <back x="0" y="1" width="75" height="58">
+                <normal fill="#00000000" radius="2"/>
+                <highlight fill="#FFFFFF0D" line="#E8E6E026" border="1"/>
+                <checked fill="#FFFFFF17" line="#E8E6E0B3" border="1"/>
+            </back>
+            <thumb_frame x="6" y="8" width="33" height="44" fill="#FFFFFF0A" line="#E8E6E040" border="1" radius="2"/>
+            <initial x="6" y="8" width="33" height="44">
+                <text font="graffiti22" align="c" vert_align="c" r="94" g="91" b="85"/>
+            </initial>
+            <thumb x="6.75" y="9" width="31.5" height="42" stretch="1"/>
+            <name x="48" y="8" width="150" height="22">
+                <text font="letterica18" align="l" vert_align="c" r="236" g="233" b="226"/>
+            </name>
+            <meta x="48" y="31" width="150" height="20">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </meta>
+            <star x="-49.5" y="13" width="9" height="12" kind="star" fill="#D2BE73FF" line="#5E5B55FF"/>
+            <rating x="-37.5" y="8" width="30" height="22">
+                <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226"/>
+            </rating>
+            <badge x="0" y="34" width="45" height="18" line="#9A968CFF" border="1" radius="2" right="7.5" padding="4.5"/>
+            <badge_text x="0" y="34" width="45" height="18">
+                <text font="letterica16" align="c" vert_align="c" r="154" g="150" b="140"/>
+            </badge_text>
+        </row>
+        <details x="572" y="208" width="354" height="452">
+            <back x="0" y="0" width="354" height="452" fill="#FFFFFF05" line="#E8E6E026" border="1" radius="3"/>
+            <hint x="15" y="180" width="324" height="60">
+                <text font="letterica16" align="c" vert_align="c" complex_mode="1" r="154" g="150" b="140">st_mods_select_hint</text>
+            </hint>
+            <thumb_frame x="12" y="16" width="78" height="104" fill="#FFFFFF0A" line="#E8E6E04D" border="1" radius="2"/>
+            <initial x="12" y="16" width="78" height="104">
+                <text font="graffiti50" align="c" vert_align="c" r="94" g="91" b="85"/>
+            </initial>
+            <thumb x="12.75" y="17" width="76.5" height="102" stretch="1"/>
+            <name x="100.5" y="12" width="241.5" height="44">
+                <text font="graffiti19" align="l" vert_align="t" complex_mode="1" r="236" g="233" b="226"/>
+            </name>
+            <author x="100.5" y="56" width="241.5" height="18">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </author>
+            <meta x="100.5" y="74" width="241.5" height="18">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </meta>
+            <tags x="100.5" y="92" width="241.5" height="18">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </tags>
+            <star x="12" y="132" width="10.5" height="14" kind="star" fill="#D2BE73FF" line="#5E5B55FF" step="12.75"/>
+            <rating x="80.25" y="128" width="261.75" height="22">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </rating>
+            <status x="12" y="154" width="330" height="36">
+                <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="154" g="150" b="140"/>
+            </status>
+            <progress_track x="12" y="190" width="330" height="3" fill="#E8E6E026" radius="1"/>
+            <progress_fill x="12" y="190" width="330" height="3" fill="#D2BE73FF" radius="1"/>
+            <vt x="12" y="198" width="210" height="24">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </vt>
+            <vt_check x="225" y="199" width="57" height="22">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_vt_check</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </vt_check>
+            <vt_report x="285" y="199" width="57" height="22">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_vt_report</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </vt_report>
+            <primary x="12" y="230" width="92.24" height="28">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_install</text>
+                <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
+                <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+                <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </primary>
+            <website x="107.24" y="230" width="75.64" height="28">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_website</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </website>
+            <toggle x="185.88" y="230" width="79.33" height="28">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_disable</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </toggle>
+            <remove x="268.21" y="230" width="73.79" height="28">
+                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_remove</text>
+                <normal fill="#00000000" line="#DC645AB3" border="1" radius="2" text="#DC645AFF"/>
+                <highlight fill="#DC645AFF" line="#DC645AFF" text="#0B0B0BFF"/>
+                <pushed fill="#B85047FF" line="#B85047FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </remove>
+            <body_rule x="12" y="270" width="330" height="1" fill="#E8E6E026"/>
+            <body x="12" y="278" width="330" height="166" always_show_scroll="0" vert_interval="2" right_ident="6" left_ident="0" top_indent="0" bottom_indent="0" bar_width="2">
+                <track fill="#E8E6E014"/>
+                <thumb fill="#E8E6E080" radius="1"/>
+            </body>
+            <body_text x="0" y="0" width="324" height="16">
+                <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="236" g="233" b="226"/>
+            </body_text>
+            <body_note x="0" y="0" width="324" height="24">
+                <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+            </body_note>
+            <reviews_head x="0" y="0" width="324" height="38">
+                <title x="0" y="12" width="150" height="22">
+                    <text font="letterica18" align="l" vert_align="c" r="236" g="233" b="226"/>
+                </title>
+                <write x="-99" y="10" width="99" height="24">
+                    <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_write_review</text>
+                    <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                    <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                    <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                    <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                    <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+                </write>
+            </reviews_head>
+            <review x="0" y="0" width="324" height="60" bottom="10">
+                <star x="0" y="4" width="7.5" height="10" kind="star" fill="#D2BE73FF" line="#5E5B55FF" step="9"/>
+                <head x="49.5" y="0" width="270" height="18">
+                    <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
+                </head>
+                <text x="0" y="20" width="324" height="16">
+                    <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="236" g="233" b="226"/>
+                </text>
+            </review>
+        </details>
+        <disclaimer x="98" y="692" width="715.5" height="36">
+            <text font="letterica16" align="l" vert_align="c" complex_mode="1" r="154" g="150" b="140">st_mods_disclaimer</text>
+        </disclaimer>
+        <back x="836" y="694" width="90" height="30">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_back</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
         </back>
-        <update x="769" y="626" width="100.5" height="30" stretch="1" accel="ui_accept">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_mods_update</text>
-        </update>
-        <website x="878.5" y="626" width="100.5" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_mods_website</text>
-        </website>
     </main>
+    <prompt x="0" y="0" width="1024" height="768">
+        <shade x="0" y="0" width="1024" height="768" fill="#0000008C"/>
+        <shadow x="294.5" y="210" width="435" height="358" fill="#000000B3" soft="18" radius="8"/>
+        <frame x="302" y="214" width="420" height="340" fill="#000000F2" line="#E8E6E0CC" border="1" radius="3" min_height="150"/>
+        <caption x="320" y="230" width="384" height="32">
+            <text font="graffiti22" align="l" vert_align="c" r="236" g="233" b="226"/>
+        </caption>
+        <text x="320" y="272" width="384" height="176">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="216" g="213" b="206"/>
+        </text>
+        <input_back x="320" y="454" width="384" height="30" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2"/>
+        <input x="326" y="454" width="372" height="30" max_symb_count="128" password="1">
+            <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226" x="0"/>
+            <text_color>
+                <e r="236" g="233" b="226"/>
+            </text_color>
+        </input>
+        <cancel x="524" y="502" width="85.5" height="32">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_cancel</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </cancel>
+        <accept x="615.5" y="502" width="88.5" height="32">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_ok</text>
+            <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
+            <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+            <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </accept>
+        <accept_danger>
+            <normal fill="#00000000" line="#DC645AB3" border="1" radius="2" text="#DC645AFF"/>
+            <highlight fill="#DC645AFF" line="#DC645AFF" text="#0B0B0BFF"/>
+            <pushed fill="#B85047FF" line="#B85047FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </accept_danger>
+    </prompt>
+    <review x="0" y="0" width="1024" height="768">
+        <shade x="0" y="0" width="1024" height="768" fill="#0000008C"/>
+        <shadow x="279.5" y="146" width="465" height="486" fill="#000000B3" soft="18" radius="8"/>
+        <frame x="287" y="150" width="450" height="468" fill="#000000F2" line="#E8E6E0CC" border="1" radius="3"/>
+        <caption x="305" y="166" width="414" height="32">
+            <text font="graffiti22" align="l" vert_align="c" r="236" g="233" b="226"/>
+        </caption>
+        <stars_label x="305" y="208" width="180" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140">st_mods_review_stars</text>
+        </stars_label>
+        <star x="305" y="232" width="21" height="28" step="25.5">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226"></text>
+            <normal kind="star" fill="#4A4843FF" line="#4A4843FF"/>
+            <highlight fill="#D2BE73FF" line="#D2BE73FF"/>
+            <pushed fill="#B8A45EFF" line="#B8A45EFF"/>
+            <checked fill="#D2BE73FF" line="#D2BE73FF"/>
+            <disabled fill="#2E2D2AFF" line="#2E2D2AFF"/>
+        </star>
+        <name_label x="305" y="274" width="225" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140">st_mods_review_name</text>
+        </name_label>
+        <name_back x="305" y="296" width="414" height="30" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2"/>
+        <name x="311" y="296" width="402" height="30" max_symb_count="32">
+            <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226" x="0"/>
+            <text_color>
+                <e r="236" g="233" b="226"/>
+            </text_color>
+        </name>
+        <text_label x="305" y="338" width="225" height="20">
+            <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140">st_mods_review_text</text>
+        </text_label>
+        <counter x="524" y="338" width="195" height="20" short="#9A968CFF">
+            <text font="letterica16" align="r" vert_align="c" r="127" g="176" b="105"/>
+        </counter>
+        <text_back x="305" y="360" width="414" height="150" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2"/>
+        <text x="311" y="364" width="402" height="142" max_symb_count="2000" multiline="1">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="236" g="233" b="226" x="0" y="4"/>
+            <text_color>
+                <e r="236" g="233" b="226"/>
+            </text_color>
+        </text>
+        <note x="305" y="518" width="414" height="36">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" r="154" g="150" b="140">st_mods_review_note</text>
+        </note>
+        <status x="305" y="570" width="219" height="32" error="#DC645AFF">
+            <text font="letterica16" align="l" vert_align="c" complex_mode="1" r="154" g="150" b="140"/>
+        </status>
+        <cancel x="534.5" y="566" width="88.5" height="32">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_cancel</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </cancel>
+        <send x="627.5" y="566" width="91.5" height="32">
+            <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_review_send</text>
+            <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
+            <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+            <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </send>
+    </review>
 </w>

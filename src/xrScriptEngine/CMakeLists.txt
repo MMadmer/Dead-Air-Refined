@@ -28,6 +28,8 @@ target_sources_grouped(
     Functor.hpp
     script_engine.cpp
     script_engine.hpp
+    script_protect.cpp
+    script_protect.hpp
     script_space.hpp
     script_space_forward.hpp
     ScriptEngineScript.cpp

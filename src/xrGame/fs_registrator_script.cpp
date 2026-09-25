@@ -3,6 +3,8 @@
 #include <luabind/copy_policy.hpp>
 
 #include "xrCore/LocatorAPI.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_protect.hpp"
 
 #include "base_client_classes_wrappers.h"
 #include "saved_game_wrapper.h"
@@ -198,12 +200,41 @@ FS_file_list file_list_open_script_2(CLocatorAPI* fs, LPCSTR initial, LPCSTR fol
     return FS_file_list(fs->file_list_open(initial, folder, flags));
 }
 
-void dir_delete_script_2(CLocatorAPI* fs, LPCSTR path, LPCSTR nm, int remove_files)
+// ---- protected mode (docs/dead-air/MOD_CATALOG.md 9.2) ----------------------------------------
+
+// The physical path a call with an optional alias names - the way CLocatorAPI resolves it.
+static xr_string fs_physical(CLocatorAPI* fs, LPCSTR alias, LPCSTR name)
 {
-    fs->dir_delete(path, nm, remove_files);
+    string_path full{};
+    if (alias && alias[0])
+        fs->update_path(full, alias, name);
+    else
+        xr_strcpy(full, name ? name : "");
+    return full;
 }
 
-void dir_delete_script(CLocatorAPI* fs, LPCSTR full_path, int remove_files) { fs->dir_delete(full_path, remove_files); }
+static bool fs_allowed(pcstr what, const xr_string& path, XMS::Protect::Access access)
+{
+    xr_string why;
+    if (XMS::Protect::Allow(path.c_str(), access, why))
+        return true;
+    string512 subject{};
+    xr_sprintf(subject, "getFS():%s(\"%s\")", what, path.c_str());
+    ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, subject, why.c_str());
+    return false;
+}
+
+void dir_delete_script_2(CLocatorAPI* fs, LPCSTR path, LPCSTR nm, int remove_files)
+{
+    if (fs_allowed("dir_delete", fs_physical(fs, path, nm), XMS::Protect::Access::WriteDir))
+        fs->dir_delete(path, nm, remove_files);
+}
+
+void dir_delete_script(CLocatorAPI* fs, LPCSTR full_path, int remove_files)
+{
+    if (fs_allowed("dir_delete", full_path, XMS::Protect::Access::WriteDir))
+        fs->dir_delete(full_path, remove_files);
+}
 LPCSTR get_file_age_str(CLocatorAPI* fs, LPCSTR nm)
 {
     time_t t = fs->get_file_age(nm);
@@ -285,18 +316,43 @@ void fs_registrator::script_register(lua_State* luaState)
             .def("update_path", &update_path_script)
             .def("get_path", static_cast<FS_Path*(CLocatorAPI::*)(pcstr)>(&CLocatorAPI::get_path))
             .def("get_path", static_cast<bool(CLocatorAPI::*)(pcstr, FS_Path**)>(&CLocatorAPI::get_path))
-            .def("append_path", &CLocatorAPI::append_path)
+            .def("append_path", +[](CLocatorAPI* fs, pcstr alias, pcstr root, pcstr add, bool recursive) -> FS_Path*
+            {
+                // a new root reads files from wherever it points: only where a script may read
+                if (XMS::Catalog::ProtectedMode() &&
+                    !fs_allowed("append_path", fs_physical(fs, root, add), XMS::Protect::Access::Read))
+                    return nullptr;
+                return fs->append_path(alias, root, add, recursive);
+            })
             .def("rescan_path", &rescan_path_script) //Alundaio
 
-            .def("file_delete", (void (CLocatorAPI::*)(LPCSTR, LPCSTR))(&CLocatorAPI::file_delete))
-            .def("file_delete", (void (CLocatorAPI::*)(LPCSTR))(&CLocatorAPI::file_delete))
+            .def("file_delete", +[](CLocatorAPI* fs, LPCSTR path, LPCSTR nm)
+            {
+                if (fs_allowed("file_delete", fs_physical(fs, path, nm), XMS::Protect::Access::Write))
+                    fs->file_delete(path, nm);
+            })
+            .def("file_delete", +[](CLocatorAPI* fs, LPCSTR full_path)
+            {
+                if (fs_allowed("file_delete", full_path, XMS::Protect::Access::Write))
+                    fs->file_delete(full_path);
+            })
 
             .def("dir_delete", &dir_delete_script)
             .def("dir_delete", &dir_delete_script_2)
 
-            .def("file_rename", &CLocatorAPI::file_rename)
+            .def("file_rename", +[](CLocatorAPI* fs, LPCSTR src, LPCSTR dest, bool overwrite)
+            {
+                if (fs_allowed("file_rename", src, XMS::Protect::Access::Write) &&
+                    fs_allowed("file_rename", dest, XMS::Protect::Access::Write))
+                    fs->file_rename(src, dest, overwrite);
+            })
             .def("file_length", &CLocatorAPI::file_length)
-            .def("file_copy", &CLocatorAPI::file_copy)
+            .def("file_copy", +[](CLocatorAPI* fs, LPCSTR src, LPCSTR dest)
+            {
+                if (fs_allowed("file_copy", src, XMS::Protect::Access::Read) &&
+                    fs_allowed("file_copy", dest, XMS::Protect::Access::Write))
+                    fs->file_copy(src, dest);
+            })
 
             .def("exist", &CLocatorAPI::GetFileDesc)
             .def("exist", +[](CLocatorAPI* fs, pcstr path, pcstr name)
@@ -310,12 +366,33 @@ void fs_registrator::script_register(lua_State* luaState)
 
             .def("get_file_age", &CLocatorAPI::get_file_age)
             .def("get_file_age_str", &get_file_age_str)
-            .def("r_open", (IReader * (CLocatorAPI::*)(LPCSTR, LPCSTR))(&CLocatorAPI::r_open))
-            .def("r_open", (IReader * (CLocatorAPI::*)(LPCSTR))(&CLocatorAPI::r_open))
+            .def("r_open", +[](CLocatorAPI* fs, LPCSTR path, LPCSTR nm) -> IReader*
+            {
+                if (XMS::Catalog::ProtectedMode() &&
+                    !fs_allowed("r_open", fs_physical(fs, path, nm), XMS::Protect::Access::Read))
+                    return nullptr;
+                return fs->r_open(path, nm);
+            })
+            .def("r_open", +[](CLocatorAPI* fs, LPCSTR nm) -> IReader*
+            {
+                if (XMS::Catalog::ProtectedMode() && !fs_allowed("r_open", nm, XMS::Protect::Access::Read))
+                    return nullptr;
+                return fs->r_open(nm);
+            })
             .def("r_close", (void (CLocatorAPI::*)(IReader*&))(&CLocatorAPI::r_close))
 
-            .def("w_open", (IWriter * (CLocatorAPI::*)(LPCSTR, LPCSTR))(&CLocatorAPI::w_open))
-            .def("w_open", (IWriter * (CLocatorAPI::*)(LPCSTR))(&CLocatorAPI::w_open))
+            .def("w_open", +[](CLocatorAPI* fs, LPCSTR path, LPCSTR nm) -> IWriter*
+            {
+                if (!fs_allowed("w_open", fs_physical(fs, path, nm), XMS::Protect::Access::Write))
+                    return nullptr;
+                return fs->w_open(path, nm);
+            })
+            .def("w_open", +[](CLocatorAPI* fs, LPCSTR nm) -> IWriter*
+            {
+                if (!fs_allowed("w_open", nm, XMS::Protect::Access::Write))
+                    return nullptr;
+                return fs->w_open(nm);
+            })
             .def("w_close", &CLocatorAPI::w_close)
 
             .def("file_list_open", &file_list_open_script)

@@ -218,6 +218,67 @@ Runtime facts:
   modes are restored. Ask `xms.mode_active(id)` when the thing actually
   happens, not while registering it.
 
+### The Mod Browser and protected mode
+
+The Mods window's **Mod Browser** searches the modules the mod catalog lists;
+from the window the player installs, updates and removes them, and rates and
+reviews the ones installed ([MOD_CATALOG 14](MOD_CATALOG.md#14-the-games-mod-browser),
+[12](MOD_CATALOG.md#12-ratings-and-reviews)). Listing is optional: a module
+that is not listed keeps updating from its own GitHub releases exactly as before
+([`MOD_UPDATES.md`](MOD_UPDATES.md)). A module is listed through XFined
+Editor's **Mod > Submit to Mod Browser...**:
+
+- **Author key.** The editor makes it on first use: a key file
+  (`Documents\XFined Editor\Keys\author.xkey` by default), never inside a
+  project. Keep a copy elsewhere: every release of a listed module must be
+  signed with it, and a lost key stops updates until the maintainer binds a new
+  one ([MOD_CATALOG 4.1](MOD_CATALOG.md#41-key-files)).
+- **Signed release.** Package Release writes the `[card]` the browser shows into
+  the release descriptor and signs the release with the key
+  ([MOD_CATALOG 4](MOD_CATALOG.md#4-the-authors-release)).
+- **Requirements** ([MOD_CATALOG 7](MOD_CATALOG.md#7-listing-requirements)):
+  `[update] github` is a public repository whose Latest release carries the
+  module; the version is at least `1.0.0`; `website` is the module's own page
+  on AP-PRO or ModDB, not the site or an index of it; the release passes the
+  content policy and the script report; the VirusTotal verdict is not `block`.
+- **Pull request.** The editor opens it from the account that owns the module's
+  repository: one new file, `mods/<id>.ltx`, in the catalog repository
+  ([MOD_CATALOG 10.1](MOD_CATALOG.md#101-the-author-in-xfined-editor)). The
+  maintainer reviews it and lists the module; later releases need none.
+
+`mod.ltx` gains two optional keys: `[module] thumbnail`, a 256 x 256 DXT1/DXT5
+DDS the editor makes from any picture, and `[module] tags`, words from a fixed
+list ([MOD_CATALOG 6](MOD_CATALOG.md#6-manifest-additions)).
+
+A catalog module is game data only ([MOD_CATALOG 8](MOD_CATALOG.md#8-content-policy)):
+no program, library, archive (`.db`/`.xdb` included) or compiled Lua under any
+name, and only files of the listed kinds; the game refuses to install or update
+a release that breaks this. Its scripts run in **protected mode**
+([MOD_CATALOG 9](MOD_CATALOG.md#9-protected-mode)), and from the first start
+with a catalog module enabled so does EVERY other Lua script, whoever ships it
+(the game, loose `gamedata`, a JSGME mod, any module; shader `.s` files too):
+
+- `ffi`, `os.execute`, `io.popen`, `package.loadlib`, `string.dump` and most of
+  `debug` are gone; `load`, `loadstring`, `require` and the rest take source
+  text only, never bytecode, and `marshal` carries no functions
+  ([MOD_CATALOG 9.2](MOD_CATALOG.md#92-the-lua-state));
+- files are read only inside the game folder and the player's data folder, and
+  written there only as data (`txt`, `ltx`, `xml`, `json`, saves and a few more
+  kinds), never under `modules\`, `mods\` or `gamedata\scripts\` and never into
+  `fsgame.ltx` or `user.ltx` ([MOD_CATALOG 9.3](MOD_CATALOG.md#93-paths));
+- a console command from a script stays the script's however it runs (deferred,
+  bound to a key, from a file of commands): it may not manage modules or the
+  catalog (`xms_install`, `xms_disable`, `xms_catalog`, ...), carry a line break
+  or give `save`, `load` or `cfg_save` a path, and its `start` connects to
+  `localhost` only ([MOD_CATALOG 9.2](MOD_CATALOG.md#the-console)).
+
+A refused call fails as the library fails (`nil, message` for io and os, a Lua
+error elsewhere) and logs `! [protect] <what> refused: <why>` with the script
+and line; `xms_protect` prints the state and why. Protection stays on after the
+last catalog module is removed, until the player turns it off in the Mods window
+([MOD_CATALOG 9.1](MOD_CATALOG.md#91-when)). Unless the player turns it on, a
+game that never had a catalog module runs every script exactly as before.
+
 ### NQ quest graphs
 
 A module can ship whole quests without a line of Lua. One quest is one
@@ -1891,7 +1952,7 @@ seconds for two minutes, and `live_timeline.py` lays the log out as a table.
 dry for twenty seconds at a time and fill again for three, in step with the wind. The sky probe
 leans up to thirty degrees toward where the rain comes from and the ring twenty-five more, and
 whenever the wind's heading put the crown inside that cone all five rays met it sixteen to twenty
-metres up - `materialsush`, the game material every stock crown carries - and the cover went
+metres up - `materials\bush`, the game material every stock crown carries - and the cover went
 to zero. The rain in the air went with it: a drop's birth ray met the same crown and the drop
 died on it, which is why the player's video showed no rain under the tree either. The rain's ray
 (`CEffect_Rain::RayPickThrough`) now carries on through every PASSABLE material but water -

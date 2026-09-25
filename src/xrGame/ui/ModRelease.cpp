@@ -11,6 +11,7 @@
 
 #include <array>
 #include <charconv>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -32,6 +33,43 @@ std::string_view mod_skip_bom(std::string_view text)
     return text;
 }
 
+// The first ';' outside double quotes - a quoted value is prose and may hold one.
+size_t mod_comment_start(std::string_view line)
+{
+    bool quoted = false;
+    for (size_t i = 0; i != line.size(); ++i)
+    {
+        if (quoted && line[i] == '\\' && i + 1 < line.size())
+            ++i;
+        else if (line[i] == '"')
+            quoted = !quoted;
+        else if (line[i] == ';' && !quoted)
+            return i;
+    }
+    return std::string_view::npos;
+}
+
+// MOD_UPDATES 1.1: a value in double quotes knows \n, \" and \\; anything else is taken as written.
+xr_string mod_text(std::string_view value)
+{
+    if (value.size() < 2 || value.front() != '"' || value.back() != '"')
+        return xr_string(value);
+    value = value.substr(1, value.size() - 2);
+    xr_string out;
+    out.reserve(value.size());
+    for (size_t i = 0; i != value.size(); ++i)
+    {
+        if (value[i] == '\\' && i + 1 < value.size())
+        {
+            const char next = value[++i];
+            out += next == 'n' ? '\n' : next;
+        }
+        else
+            out += value[i];
+    }
+    return out;
+}
+
 // callback(section, key, value); sections arrive lowercased, ';' starts a comment
 template <typename Callback>
 void mod_parse_ini(std::string_view text, const Callback& callback)
@@ -44,7 +82,7 @@ void mod_parse_ini(std::string_view text, const Callback& callback)
         std::string_view line = text.substr(0, end);
         text.remove_prefix(end == std::string_view::npos ? text.size() : end + 1);
 
-        line = mod_trim(line.substr(0, line.find(';')));
+        line = mod_trim(line.substr(0, mod_comment_start(line)));
         if (line.empty())
             continue;
         if (line.front() == '[')
@@ -140,6 +178,171 @@ std::string_view mod_next_field(std::string_view& line)
 }
 }
 
+namespace
+{
+// "<path>, <size>, <sha256>"
+bool mod_parse_file_ref(std::string_view value, ModRelease::FileRef& out)
+{
+    const size_t first = value.find(',');
+    const size_t second = first == std::string_view::npos ? first : value.find(',', first + 1);
+    if (second == std::string_view::npos)
+        return false;
+    out.path = mod_trim(value.substr(0, first));
+    out.sha256 = mod_trim(value.substr(second + 1));
+    out.present = mod_parse_number(mod_trim(value.substr(first + 1, second - first - 1)), out.size) &&
+        mod_valid_digest(out.sha256) && ModRelease::SafeRelativePath(out.path);
+    return out.present;
+}
+
+void mod_parse_card_line(std::string_view key, std::string_view value, ModRelease::Card& card)
+{
+    card.present = true;
+    if (key == "name")
+        card.name = mod_text(value);
+    else if (key == "name@eng")
+        card.nameEng = mod_text(value);
+    else if (key == "author")
+        card.author = mod_text(value);
+    else if (key == "author@eng")
+        card.authorEng = mod_text(value);
+    else if (key == "description")
+        card.description = mod_text(value);
+    else if (key == "description@eng")
+        card.descriptionEng = mod_text(value);
+    else if (key == "website")
+        card.website = value;
+    else if (key == "mode")
+        card.mode = value;
+    else if (key == "mode_title")
+        card.modeTitle = mod_text(value);
+    else if (key == "mode_title@eng")
+        card.modeTitleEng = mod_text(value);
+    else if (key == "tags")
+    {
+        const auto& vocabulary = ModRelease::TagVocabulary();
+        std::string_view rest = value;
+        while (!rest.empty())
+        {
+            const size_t comma = rest.find(',');
+            xr_string tag(mod_trim(rest.substr(0, comma)));
+            xr_strlwr(tag);
+            rest.remove_prefix(comma == std::string_view::npos ? rest.size() : comma + 1);
+            if (std::ranges::find(vocabulary, tag) != vocabulary.end() && std::ranges::find(card.tags, tag) == card.tags.end())
+                card.tags.push_back(tag);
+        }
+    }
+    else if (key == "thumbnail")
+        mod_parse_file_ref(value, card.thumbnail);
+    else if (key == "manifest")
+        mod_parse_file_ref(value, card.manifest);
+}
+}
+
+const xr_vector<xr_string>& ModRelease::TagVocabulary()
+{
+    static const xr_vector<xr_string> tags = {"story", "quests", "gameplay", "weapons", "equipment", "npcs",
+        "mutants", "locations", "graphics", "audio", "interface", "fixes"};
+    return tags;
+}
+
+bool ModRelease::CatalogPathAllowed(std::string_view path, xr_string& why)
+{
+    if (!SafeRelativePath(path))
+    {
+        why = "unsafe path";
+        return false;
+    }
+    for (std::string_view rest = path; !rest.empty();)
+    {
+        const size_t slash = rest.find('/');
+        if (rest.front() == '.')
+        {
+            why = "a dot-named file or folder";
+            return false;
+        }
+        rest.remove_prefix(slash == std::string_view::npos ? rest.size() : slash + 1);
+    }
+    const size_t slash = path.rfind('/');
+    const std::string_view name = path.substr(slash == std::string_view::npos ? 0 : slash + 1);
+    const size_t dot = name.rfind('.');
+    if (dot == std::string_view::npos)
+        return true;
+    xr_string extension(name.substr(dot + 1));
+    xr_strlwr(extension);
+    static constexpr std::string_view allowed[] = {"ltx", "ltxp", "xml", "xmlp", "script", "txt", "md", "json",
+        "csv", "ini", "cfg", "seq", "nqasset", "behasset", "pdaasset", "xspawn", "xcform", "dds", "thm", "ogg", "ogm",
+        "ogf", "omf", "skl", "skls", "anm", "ppe", "xr", "ps", "vs", "gs", "hs", "ds", "cs", "h", "hlsl", "s", "spawn",
+        "graph", "ai", "gct", "cform", "details", "env_mod", "fog_vol", "game", "geom", "geomx", "hom", "ps_static",
+        "snd_env", "snd_static", "som", "sectors", "wallmarks", "lanims"};
+    if (std::ranges::find(allowed, std::string_view(extension)) != std::end(allowed))
+        return true;
+    why = "." + extension + " files are not allowed in a catalog module";
+    return false;
+}
+
+bool ModRelease::CatalogFileAllowed(const std::filesystem::path& file, xr_string& why)
+{
+    std::ifstream stream(file, std::ios::binary);
+    if (!stream)
+    {
+        why = "cannot read the file";
+        return false;
+    }
+    std::array<char, 64> head{};
+    stream.read(head.data(), head.size());
+    const size_t got = static_cast<size_t>(stream.gcount());
+    const std::string_view bytes(head.data(), got);
+    const auto starts = [&bytes](std::string_view magic) { return bytes.starts_with(magic); };
+
+    // MZ alone is two letters; a program is MZ whose e_lfanew points at a PE header
+    if (starts("MZ") && got >= 0x40)
+    {
+        u32 offset = 0;
+        std::memcpy(&offset, head.data() + 0x3C, sizeof(offset));
+        char signature[4]{};
+        stream.clear();
+        stream.seekg(offset);
+        stream.read(signature, 4);
+        if (stream.gcount() == 4 && std::string_view(signature, 4) == std::string_view("PE\0\0", 4))
+        {
+            why = "a Windows program or library";
+            return false;
+        }
+    }
+    struct Magic
+    {
+        std::string_view bytes;
+        pcstr what;
+    };
+    static const Magic magics[] = {
+        {std::string_view("\x7F" "ELF", 4), "a Linux program"},
+        {std::string_view("\xFE\xED\xFA\xCE", 4), "a macOS program"},
+        {std::string_view("\xFE\xED\xFA\xCF", 4), "a macOS program"},
+        {std::string_view("\xCE\xFA\xED\xFE", 4), "a macOS program"},
+        {std::string_view("\xCF\xFA\xED\xFE", 4), "a macOS program"},
+        {std::string_view("\xCA\xFE\xBA\xBE", 4), "a Java class or a universal binary"},
+        {std::string_view("PK\x03\x04", 4), "a ZIP archive"},
+        {std::string_view("PK\x05\x06", 4), "a ZIP archive"},
+        {std::string_view("Rar!\x1A\x07", 6), "a RAR archive"},
+        {std::string_view("7z\xBC\xAF\x27\x1C", 6), "a 7-Zip archive"},
+        {std::string_view("MSCF", 4), "a CAB archive"},
+        {std::string_view("\x1F\x8B", 2), "a GZIP archive"},
+        {std::string_view("\xFD" "7zXZ", 5), "an XZ archive"},
+        {std::string_view("\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1", 8), "an OLE container"},
+        {std::string_view("L\0\0\0\x01\x14\x02\0", 8), "a Windows shortcut"},
+        {std::string_view("\0asm", 4), "WebAssembly"},
+        {std::string_view("\x1BLua", 4), "Lua bytecode"},
+        {std::string_view("\x1BLJ", 3), "LuaJIT bytecode"},
+    };
+    for (const Magic& magic : magics)
+        if (starts(magic.bytes))
+        {
+            why = magic.what;
+            return false;
+        }
+    return true;
+}
+
 bool ModRelease::ValidModuleId(std::string_view id) { return mod_valid_id(id); }
 
 ModRelease::Version ModRelease::ParseVersion(std::string_view text)
@@ -213,6 +416,8 @@ bool ModRelease::ParseDescriptor(std::string_view text, Descriptor& out, xr_stri
             malformed |= !mod_parse_asset(key, value, ".zip", package);
             out.packages.emplace_back(std::move(package));
         }
+        else if (section == "card")
+            mod_parse_card_line(key, value, out.card);
     });
 
     out.schema = static_cast<u32>(std::min<u64>(schema, std::numeric_limits<u32>::max()));

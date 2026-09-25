@@ -24,6 +24,8 @@
 #endif
 
 #include "xrLuaFix/xrLuaFix.h"
+#include "script_protect.hpp"
+#include "xrCore/XMS/xms_catalog.h"
 
 #include <tracy/TracyLua.hpp>
 
@@ -891,7 +893,10 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
     luajit::open_lib(lua(), LUA_MATHLIBNAME, luaopen_math);
     luajit::open_lib(lua(), LUA_STRLIBNAME, luaopen_string);
     luajit::open_lib(lua(), LUA_BITLIBNAME, luaopen_bit);
-    luajit::open_lib(lua(), LUA_FFILIBNAME, luaopen_ffi);
+    // ffi is native code by definition: protected mode never opens it (MOD_CATALOG 9.2)
+    const bool protectedMode = XMS::Catalog::ProtectedMode();
+    if (!protectedMode)
+        luajit::open_lib(lua(), LUA_FFILIBNAME, luaopen_ffi);
 #ifndef MASTER_GOLD
     luajit::open_lib(lua(), LUA_DBLIBNAME, luaopen_debug);
 #endif
@@ -941,6 +946,9 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
         // Xottab_DUTY: commented this. Let's use default opt level, which is 3
         //RunJITCommand(lua(), "opt.start(2)");
     }
+    // every library is open and no script has run yet
+    if (protectedMode)
+        ScriptProtect::Apply(lua());
     setup_auto_load();
 
 #if defined(DEBUG) && !defined(USE_LUA_STUDIO)
