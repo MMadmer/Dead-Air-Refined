@@ -36,3 +36,12 @@ jobs:
           path: public
       - id: deployment
         uses: actions/deploy-pages@v5
+      # jsDelivr keeps a branch's files for up to twelve hours: the mirror follows the site now.
+      # Thumbnails are named by their hash and never change, so they are left alone.
+      - name: Refresh the jsDelivr mirror
+        continue-on-error: true
+        run: |
+          cd public
+          find . -type f ! -name '.*' ! -path './thumbs/*' | sed 's|^\./||' | while read -r file; do
+            curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/public/$file" > /dev/null || true
+          done
