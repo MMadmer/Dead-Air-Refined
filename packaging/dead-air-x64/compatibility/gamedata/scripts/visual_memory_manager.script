@@ -1,0 +1,97 @@
+-- Visual Memory Manager exports
+-- by Alundaio
+
+-- Dead Air: Refined keeps DA's function with two changes (the human NPC AI, configs\dead_air_x64_ai.ltx):
+--   * the actor's torch, flashlight, glowstick and lighter no longer brighten him and stretch the always-visible
+--     distance for every NPC whatever way the lamp points: the engine's light sense sees a beam or a lamp where it is
+--     and where it shines (while the "light" AI feature is on);
+--   * the distance ratio keeps a positive denominator ([ai_script] vision_denominator_floor_m): in fog, with a view
+--     distance under DA's always-visible distance, the value went negative (never visible) or exploded.
+-- The companions' wide vision, the underground bonus and an NPC's own torch lighting what it looks at stay as DA made
+-- them. With the "scripts" AI feature off (console ai_feature scripts 0) this is DA's function exactly.
+
+-- engine global, absent on an engine without the AI
+local feature_enabled = rawget(_G, "ai_feature_enabled")
+local denominator_floor
+
+local function floor_of_denominator()
+	if denominator_floor == nil then
+		local ini = system_ini()
+		denominator_floor = ini:section_exist("ai_script") and ini:line_exist("ai_script", "vision_denominator_floor_m")
+			and ini:r_float_ex("ai_script", "vision_denominator_floor_m") or false
+	end
+	return denominator_floor
+end
+
+-- called from engine
+-- This occurs during the visible check. If value >= visiblity_threshold then object is considered visible
+-- warning npc and who can be nil sometimes
+function get_visible_value(npc,who,time_delta,time_quant,luminocity,velocity_factor,velocity,distance,object_distance,always_visible_distance)
+	distance = distance <= 0 and 0.00001 or distance
+	luminocity = luminocity <= 0 and 0.0001 or luminocity
+
+	if (npc and IsStalker(npc) and npc:has_info("npcx_is_companion")) then
+		npc:set_range(200)
+		npc:set_fov(300)
+		return npc:visibility_threshold()
+	end
+
+	if (level_weathers.bLevelUnderground) then
+		luminocity = luminocity + 0.30
+	end
+
+	local honest = feature_enabled ~= nil and feature_enabled("scripts")
+
+	if (who and who:id() == 0) then
+
+		if not (honest and feature_enabled("light")) then
+			if (itms_manager.Torch2) then
+				luminocity = 1
+				always_visible_distance = always_visible_distance + 15
+			elseif (itms_manager.TorchType == 1) then --device_flashlight
+				luminocity = luminocity + 0.5
+				always_visible_distance = always_visible_distance + 30
+			elseif (itms_manager.TorchType == 3) then --device_glowstick
+				luminocity = 1
+				always_visible_distance = always_visible_distance + 10
+			elseif (itms_manager.TorchType == 4) then --device_lighter
+				luminocity = luminocity + 0.3
+				always_visible_distance = always_visible_distance + 10
+			end
+		end
+
+		local torch = npc and IsStalker(npc) and npc:object("device_torch")
+		if (torch and torch:attachable_item_enabled()) and (object_distance < 25) then
+			local luma_add = 1/(object_distance*object_distance*0.02)
+			luminocity = luminocity + luma_add
+		end
+
+	end
+
+
+	-- unaltered formula
+	-- time_delta / time_quant * luminocity * (1 + velocity_factor*velocity) * (distance - object_distance) / (distance - always_visible_distance)
+
+
+	luminocity = (0.1+luminocity)/1.1
+
+	always_visible_distance = always_visible_distance+3
+
+	local denominator = distance - always_visible_distance
+	local floor = honest and floor_of_denominator()
+	if (floor and denominator < floor) then
+		denominator = floor
+	end
+
+	local final_distance = (distance - object_distance) / denominator
+
+	final_distance = final_distance*2
+
+	velocity = velocity*velocity
+	--velocity_factor = 0.05
+
+	local ret =  time_delta / time_quant * luminocity * (1 + velocity_factor*velocity) * final_distance
+
+	return ret
+
+end

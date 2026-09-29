@@ -1,0 +1,2008 @@
+; Human NPC AI (XFined-Ray): behaviour profiles by faction, rank band and weapon, and the tuning of perception,
+; communication, tactics, morale and search. Merged into system.ltx by the engine (x_ray.cpp) BEFORE the XMS module
+; stage, so a module's configs\xms\*.ltx sections and .ltxp directives patch any key here. Every number of the AI
+; lives in this file, not in code. Profiles resolve through a chain of sections (see [ai_profile_default]) rather than
+; "[a]:b" parents, so a patch of one key reaches every NPC whose chain does not set that key closer to its head. A
+; missing key falls back to [ai_profile_default], a missing section to the compiled-in defaults.
+;
+; Each global section belongs to one part of the AI and sits in its "; [ai:<part>]" block.
+
+; [ai:core] begin ai_config
+[ai_config]
+rays_per_frame                  = 48        ; new AI rays per frame (hearing occlusion, flash, torch, gestures...)
+squad_tick_ms                   = 250       ; per-squad step
+squad_refresh_ms                = 1000      ; re-read of an NPC's sim squad and community
+; Level of detail: an NPC farther than this from the player's camera ("far"; "calm" = without an enemy) refreshes
+; per-target work less often (the lanes' *_far keys). First reactions and identification never change.
+lod_near_m                      = 60
+; [ai:core] end ai_config
+
+; [ai:core] begin ranks
+; Rank name ([game_relations] rating) -> band 1..4; unknown names are band 2.
+[ai_rank_bands]
+novice                          = 1
+trainee                         = 1
+experienced                     = 2
+professional                    = 2
+veteran                         = 3
+expert                          = 3
+master                          = 4
+legend                          = 4
+
+; react_ms and settle_s multiplier per rank name (absent = 1).
+[ai_rank_scale]
+legend                          = 0.9
+
+; A mod's community -> the community whose profiles it uses, e.g. "renegade = bandit". Dead Air's own communities
+; all have profiles; trader and arena_enemy fall back to the default profile on purpose.
+[ai_community_alias]
+
+; Specific character id (else character profile id) prefix -> profile section; the longest prefix wins. The section
+; heads the NPC's chain; keys it leaves out come from the NPC's community and band as usual. A mod adds its special
+; NPCs here by .ltxp.
+[ai_profile_by_character]
+sim_default_military_3_default_sniper = ai_profile_army_sniper
+sim_default_military_3_sniper   = ai_profile_army_sniper
+sim_monolith_sniper             = ai_profile_monolith_sniper    ; also the Gauss snipers
+sim_monolith_specnaz_rg6        = ai_profile_monolith_rg6
+sim_default_ecolog_2            = ai_profile_ecolog             ; scientists, whatever their rank
+sim_default_ecolog_3            = ai_profile_ecolog_r3          ; field staff
+sim_default_stalker_ecolog_guard = ai_profile_ecolog_guard
+sim_default_csky_4              = ai_profile_csky_r4            ; experienced ranks on the best tier (C20)
+sim_default_metro_ecolog_2      = ai_profile_ecolog
+sim_default_metro_stalker_ecolog_guard = ai_profile_ecolog_guard
+sim_default_metro_csky_4        = ai_profile_csky_r4
+; [ai:core] end ranks
+
+; [ai:core] begin profile_default
+; Profiles. Every key is read from the first section of the NPC's chain that has it:
+;   <[ai_profile_by_character] match>_r<band>, <match>, ai_profile_<community>_r<band>, ai_profile_<community>,
+;   ai_profile_default_r<band>, ai_profile_default
+; (band 1..4 from the rank, community after [ai_community_alias]; missing sections are skipped). Keys that scale by
+; band live in the _r<band> sections, the rest in the base one; a faction's base section is its R2 row. An empty
+; value is a value (grenade_issue = means no grenades), except peek and aggr_winning, which then follow cover and
+; aggr. [ai_rank_scale] multiplies react_ms and settle_s last.
+[ai_profile_default]
+; perception
+react_ms                        = 700, 1000 ; first aimed shot after identification, random range
+react_idle_ms                   = 0         ; added when not in danger or combat
+settle_s                        = 1.0       ; aim settles from x3 to x1 dispersion
+detect_rate                     = 1.0       ; awareness gain multiplier
+hear_skill                      = 0.5       ; localisation quality 0..1
+hear_gain                       = 1.0       ; received sound power multiplier
+aim_head                        = 0.15      ; chance of the head as aim point, else the spine
+lead_error                      = 0.4       ; fraction of the velocity lead that is wrong
+light_discipline                = 0.5       ; torch use at night: below 0.5 searches with the torch on
+; comms
+radio_chance                    = 0.2, 0.2, 0.3, 0.4 ; carries a radio, by band R1..R4 (rolled once per NPC life)
+radio_leader_bonus              = 0.2       ; added for the squad's AI leader at the roll
+hq_relay                        = 0         ; 0 = none, else the minimum band that relays to other squads
+hq_delay_s                      = 60, 120
+voice                           = auto      ; auto / loud / hushed / none
+gestures                        = 3         ; minimum band, 0 = never
+pda                             = 0
+decide_ms                       = 400, 900
+understand_ms                   = 300, 700
+callouts                        = 1
+; tactics
+aggr                            = 0.5
+aggr_winning                    =           ; aggression while winning_ratio holds; empty = aggr
+winning_ratio                   = 1.5       ; known friendly / enemy strength that counts as winning
+cover                           = 0.7
+flank                           = 0.3
+supp                            = 0.3
+supp_window_s                   = 3
+gren                            = 0.2
+peek                            =           ; look-out discipline; empty = cover
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 0         ; seen in the open within this (m): shoot back first; 0 = cover first
+flank_fire                      = 0         ; the ordered flanker fires at what it sees on the move (0: at the cover)
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+grenade_issue                   =           ; item, count, chance: count at spawn, plus one more with chance
+; morale
+courage                         = 0.5
+break_cas                       = 0.45      ; own squad casualty share that breaks it
+break_ratio                     = 0.5       ; known strength ratio below which it breaks
+leader_dead                     = -0.10     ; break threshold change when the leader is known dead
+rout_style                      = orderly   ; orderly / scatter / relocate / never
+surrender                       = 0
+recover_s                       = 30
+fanatic                         = 0
+stamina                         = 0.6
+; search
+search_delay_s                  = 8         ; no sighting, sound or report this long (s): search; < 0 = never
+search_s                        = 90
+search_style                    = single    ; pairs / single / straight / none
+investigate                     = single    ; pair / single / none / advance
+quiet_search                    = 0
+giveup_stagger_s                = 4, 12
+
+; Unknown communities scale by rank band like the known factions: a master of any faction is not dumb. R2 is
+; the default row itself; the band values of the plan's default row (detect_rate, supp_window_s) differ there.
+[ai_profile_default_r1]
+react_ms                        = 950, 1350
+settle_s                        = 1.35
+detect_rate                     = 0.75
+aggr                            = 0.4
+cover                           = 0.6
+flank                           = 0.15
+supp                            = 0.15
+supp_window_s                   = 0
+gren                            = 0.1
+break_cas                       = 0.35
+search_s                        = 60
+roles                           = opportunist
+
+[ai_profile_default_r2]
+detect_rate                     = 0.9
+supp_window_s                   = 2
+
+[ai_profile_default_r3]
+react_ms                        = 550, 800
+settle_s                        = 0.75
+detect_rate                     = 1.0
+aggr                            = 0.55
+cover                           = 0.8
+flank                           = 0.45
+supp                            = 0.45
+supp_window_s                   = 3
+gren                            = 0.3
+break_cas                       = 0.55
+search_s                        = 120
+return_fire_m                   = 15
+
+[ai_profile_default_r4]
+react_ms                        = 450, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+aggr                            = 0.6
+cover                           = 0.85
+flank                           = 0.55
+supp                            = 0.55
+supp_window_s                   = 3
+gren                            = 0.4
+break_cas                       = 0.6
+search_s                        = 150
+return_fire_m                   = 20
+; [ai:core] end profile_default
+
+; [ai:core] begin profiles
+; Military (lore.md 6.1, 8.2): drilled squads with an NCO chain, a radio for everyone, HQ relay, grenades.
+; Base = R2 sergeant; R1 private, R3 lieutenant, R4 captain / spetsnaz.
+[ai_profile_army]
+radio_chance                    = 1, 1, 1, 1 ; standard issue, unit net
+radio_leader_bonus              = 0
+hq_relay                        = 1
+hq_delay_s                      = 30, 60
+voice                           = auto      ; loud privates, hushed NCOs and up
+gestures                        = 1
+pda                             = 0
+supp_window_s                   = 6
+bounding                        = 1
+fire_on_order                   = 1
+return_fire_m                   = 30        ; drilled: return fire, then move
+flank_fire                      = 1
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+leader_dead                     = -0.10
+rout_style                      = orderly
+surrender                       = 0
+fanatic                         = 0
+stamina                         = 0.8
+search_delay_s                  = 10        ; disciplined: watches its sector longer, then sweeps in pairs
+search_style                    = pairs
+investigate                     = pair
+quiet_search                    = 1
+react_ms                        = 600, 850
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.7
+aim_head                        = 0.2
+lead_error                      = 0.3
+light_discipline                = 0.8
+aggr                            = 0.55
+cover                           = 0.90
+flank                           = 0.55
+supp                            = 0.70
+gren                            = 0.55
+grenade_issue                   = grenade_f1, 1, 0.5
+courage                         = 0.65
+break_cas                       = 0.55
+break_ratio                     = 0.3
+search_s                        = 180
+
+[ai_profile_army_r1]
+flank_fire                      = 0
+react_ms                        = 800, 1100
+settle_s                        = 1.1
+detect_rate                     = 0.9
+hear_skill                      = 0.6
+aim_head                        = 0.15
+lead_error                      = 0.4
+light_discipline                = 0.7
+aggr                            = 0.45
+cover                           = 0.80
+flank                           = 0.30
+supp                            = 0.50
+gren                            = 0.35
+grenade_issue                   = grenade_f1, 1, 0
+courage                         = 0.6
+break_cas                       = 0.40
+break_ratio                     = 0.35
+search_s                        = 120
+return_fire_m                   = 20
+
+[ai_profile_army_r3]
+react_ms                        = 450, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+hear_skill                      = 0.8
+aim_head                        = 0.25
+lead_error                      = 0.2
+light_discipline                = 0.9
+aggr                            = 0.65
+cover                           = 0.90
+flank                           = 0.70
+supp                            = 0.80
+gren                            = 0.70
+grenade_issue                   = grenade_f1, 2, 0
+courage                         = 0.7
+break_cas                       = 0.65
+break_ratio                     = 0.3
+search_s                        = 240
+
+[ai_profile_army_r4]
+react_ms                        = 350, 500
+settle_s                        = 0.45
+detect_rate                     = 1.2
+hear_skill                      = 0.85
+aim_head                        = 0.3
+lead_error                      = 0.15
+light_discipline                = 0.9
+aggr                            = 0.70
+cover                           = 0.95
+flank                           = 0.80
+supp                            = 0.85
+gren                            = 0.80
+grenade_issue                   = grenade_f1, 2, 0
+courage                         = 0.75
+break_cas                       = 0.75
+break_ratio                     = 0.3
+search_s                        = 300
+
+; Military sniper ([ai_profile_by_character]): overwatch, spots for the squad, relocates when located.
+[ai_profile_army_sniper]
+react_ms                        = 400, 600
+settle_s                        = 1.2       ; deliberate
+aim_head                        = 0.5
+lead_error                      = 0.1
+aggr                            = 0.20
+cover                           = 0.95
+flank                           = 0
+supp                            = 0.30
+gren                            = 0
+grenade_issue                   =
+roles                           = opportunist
+search_s                        = 300       ; watches, does not sweep
+search_delay_s                  = 20        ; keeps watching its ground
+search_style                    = none
+investigate                     = none
+return_fire_m                   = 0
+
+; Duty (lore.md 6.3): paramilitary charter, patient, holds ground, ambushes on the leader's command.
+; Base = R2 sergeant; R1 private, R3 lieutenant, R4 captain.
+[ai_profile_dolg]
+radio_chance                    = 0.6, 0.9, 1, 1
+radio_leader_bonus              = 0.4
+hq_relay                        = 3
+hq_delay_s                      = 60, 120
+voice                           = auto
+gestures                        = 2
+pda                             = 1
+supp_window_s                   = 4
+bounding                        = 0
+fire_on_order                   = 1
+return_fire_m                   = 25
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+leader_dead                     = -0.10
+rout_style                      = orderly
+surrender                       = 0
+fanatic                         = 0
+stamina                         = 0.75
+search_delay_s                  = 10        ; patient, concealed
+search_style                    = pairs
+investigate                     = pair      ; the leader sends two
+quiet_search                    = 1
+react_ms                        = 650, 950
+settle_s                        = 0.9
+detect_rate                     = 0.95
+hear_skill                      = 0.6
+aim_head                        = 0.15
+lead_error                      = 0.35
+light_discipline                = 0.6
+aggr                            = 0.55
+cover                           = 0.80
+flank                           = 0.40
+supp                            = 0.55
+gren                            = 0.40
+grenade_issue                   = grenade_f1, 1, 0
+courage                         = 0.65
+break_cas                       = 0.55
+break_ratio                     = 0.4
+search_s                        = 120
+
+[ai_profile_dolg_r1]
+react_ms                        = 900, 1300
+settle_s                        = 1.3
+detect_rate                     = 0.8
+hear_skill                      = 0.5
+aim_head                        = 0.1
+lead_error                      = 0.5
+light_discipline                = 0.4
+aggr                            = 0.45
+cover                           = 0.70
+flank                           = 0.20
+supp                            = 0.35
+gren                            = 0.20
+grenade_issue                   = grenade_f1, 0, 0.5
+courage                         = 0.6
+break_cas                       = 0.45
+break_ratio                     = 0.5
+search_s                        = 90
+fire_on_order                   = 0
+return_fire_m                   = 15
+
+[ai_profile_dolg_r3]
+flank_fire                      = 1
+react_ms                        = 500, 750
+settle_s                        = 0.7
+detect_rate                     = 1.05
+hear_skill                      = 0.7
+aim_head                        = 0.2
+lead_error                      = 0.25
+light_discipline                = 0.7
+aggr                            = 0.60
+cover                           = 0.85
+flank                           = 0.55
+supp                            = 0.65
+gren                            = 0.55
+grenade_issue                   = grenade_f1, 1, 0.5
+courage                         = 0.7
+break_cas                       = 0.65
+break_ratio                     = 0.4
+search_s                        = 150
+bounding                        = 1
+
+[ai_profile_dolg_r4]
+flank_fire                      = 1
+react_ms                        = 400, 600
+settle_s                        = 0.55
+detect_rate                     = 1.15
+hear_skill                      = 0.8
+aim_head                        = 0.25
+lead_error                      = 0.2
+light_discipline                = 0.8
+aggr                            = 0.65
+cover                           = 0.90
+flank                           = 0.60
+supp                            = 0.70
+gren                            = 0.60
+grenade_issue                   = grenade_f1, 2, 0
+courage                         = 0.75
+break_cas                       = 0.75
+break_ratio                     = 0.35
+search_s                        = 180
+bounding                        = 1
+
+; Mercenaries (lore.md 6.2): small professional cells, silent, radios vary per man, no HQ, flank by default.
+; No novices spawn: the base (R2) also serves R1.
+[ai_profile_killer]
+radio_chance                    = 0.5, 0.5, 0.65, 0.85 ; equipment varies
+radio_leader_bonus              = 0.3
+hq_relay                        = 0         ; secret cells
+voice                           = hushed
+gestures                        = 2
+pda                             = 0
+supp_window_s                   = 5
+bounding                        = 0
+fire_on_order                   = 1
+return_fire_m                   = 30
+flank_fire                      = 1
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+leader_dead                     = -0.05
+rout_style                      = orderly
+surrender                       = 0
+fanatic                         = 0
+stamina                         = 0.8
+search_style                    = pairs
+investigate                     = pair
+quiet_search                    = 1
+react_ms                        = 550, 800
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.7
+aim_head                        = 0.25
+lead_error                      = 0.3
+light_discipline                = 0.8
+aggr                            = 0.55
+cover                           = 0.85
+flank                           = 0.60
+supp                            = 0.65
+gren                            = 0.60
+grenade_issue                   = grenade_rgd5, 1, 0.5
+courage                         = 0.6
+break_cas                       = 0.40
+break_ratio                     = 0.5
+search_s                        = 150
+
+[ai_profile_killer_r3]
+react_ms                        = 450, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+hear_skill                      = 0.8
+aim_head                        = 0.3
+lead_error                      = 0.2
+light_discipline                = 0.9
+aggr                            = 0.60
+cover                           = 0.90
+flank                           = 0.70
+supp                            = 0.75
+gren                            = 0.70
+grenade_issue                   = grenade_rgd5, 2, 0
+courage                         = 0.65
+break_cas                       = 0.50
+break_ratio                     = 0.5
+search_s                        = 180
+bounding                        = 1
+
+[ai_profile_killer_r4]
+react_ms                        = 350, 550
+settle_s                        = 0.5
+detect_rate                     = 1.2
+hear_skill                      = 0.85
+aim_head                        = 0.35
+lead_error                      = 0.15
+light_discipline                = 0.9
+aggr                            = 0.65
+cover                           = 0.90
+flank                           = 0.75
+supp                            = 0.80
+gren                            = 0.75
+grenade_issue                   = grenade_rgd5, 2, 0
+courage                         = 0.7
+break_cas                       = 0.60
+break_ratio                     = 0.45
+search_s                        = 240
+bounding                        = 1
+
+; Clear Sky (lore.md 6.7): Zone-savvy guerrillas with an HQ, organised for radio, trained less than the army.
+[ai_profile_csky]
+radio_chance                    = 0.5, 0.8, 1, 1
+radio_leader_bonus              = 0.3
+hq_relay                        = 3
+hq_delay_s                      = 60, 120
+voice                           = auto
+gestures                        = 3
+pda                             = 1
+supp_window_s                   = 3
+bounding                        = 0
+fire_on_order                   = 0
+leader_dead                     = -0.10
+rout_style                      = orderly
+fanatic                         = 0
+stamina                         = 0.6
+search_style                    = single
+investigate                     = single
+quiet_search                    = 0
+react_ms                        = 800, 1150
+settle_s                        = 1.1
+detect_rate                     = 0.9
+hear_skill                      = 0.6
+aim_head                        = 0.1
+lead_error                      = 0.4
+light_discipline                = 0.3
+aggr                            = 0.45
+cover                           = 0.75
+flank                           = 0.35
+supp                            = 0.35
+gren                            = 0.25
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.5
+break_cas                       = 0.45
+break_ratio                     = 0.5
+search_s                        = 75
+surrender                       = 0
+roles                           = opportunist, suppressor, grenadier, rearguard
+
+[ai_profile_csky_r1]
+react_ms                        = 1100, 1500
+settle_s                        = 1.5
+detect_rate                     = 0.75
+hear_skill                      = 0.5
+aim_head                        = 0.1
+lead_error                      = 0.5
+light_discipline                = 0.2
+aggr                            = 0.35
+cover                           = 0.65
+flank                           = 0.15
+supp                            = 0.15
+gren                            = 0.10
+grenade_issue                   =
+courage                         = 0.45
+break_cas                       = 0.35
+break_ratio                     = 0.6
+search_s                        = 45
+surrender                       = 0.1
+roles                           = opportunist
+
+[ai_profile_csky_r3]
+react_ms                        = 600, 900
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.7
+aim_head                        = 0.15
+lead_error                      = 0.3
+light_discipline                = 0.6
+aggr                            = 0.50
+cover                           = 0.80
+flank                           = 0.50
+supp                            = 0.50
+gren                            = 0.40
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.55
+break_cas                       = 0.55
+break_ratio                     = 0.45
+search_s                        = 100
+fire_on_order                   = 1
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+
+[ai_profile_csky_r4]
+react_ms                        = 450, 700
+settle_s                        = 0.65
+detect_rate                     = 1.1
+hear_skill                      = 0.8
+aim_head                        = 0.2
+lead_error                      = 0.25
+light_discipline                = 0.7
+aggr                            = 0.55
+cover                           = 0.85
+flank                           = 0.55
+supp                            = 0.55
+gren                            = 0.45
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.6
+break_cas                       = 0.60
+break_ratio                     = 0.45
+search_s                        = 120
+fire_on_order                   = 1
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+
+; Freedom (lore.md 6.4): bold, loose, individually brave; slow when idle in camp, sharp once the fight is on.
+[ai_profile_freedom]
+radio_chance                    = 0.15, 0.4, 0.8, 0.9
+radio_leader_bonus              = 0.3
+hq_relay                        = 0
+voice                           = auto      ; loud, banter
+gestures                        = 3
+pda                             = 1
+supp_window_s                   = 3
+react_idle_ms                   = 300
+bounding                        = 0
+fire_on_order                   = 0
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+leader_dead                     = -0.10
+rout_style                      = orderly
+fanatic                         = 0
+stamina                         = 0.5
+search_delay_s                  = 6
+search_style                    = single
+investigate                     = single
+quiet_search                    = 0
+react_ms                        = 750, 1100
+settle_s                        = 1.1
+detect_rate                     = 0.85
+hear_skill                      = 0.5
+aim_head                        = 0.15
+lead_error                      = 0.4
+light_discipline                = 0.4
+aggr                            = 0.60
+cover                           = 0.60
+flank                           = 0.40
+supp                            = 0.45
+gren                            = 0.30
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.55
+break_cas                       = 0.45
+break_ratio                     = 0.5
+search_s                        = 60
+surrender                       = 0
+
+[ai_profile_freedom_r1]
+react_ms                        = 1000, 1500
+settle_s                        = 1.5
+detect_rate                     = 0.7
+hear_skill                      = 0.4
+aim_head                        = 0.1
+lead_error                      = 0.5
+light_discipline                = 0.3
+aggr                            = 0.55
+cover                           = 0.50
+flank                           = 0.25
+supp                            = 0.30
+gren                            = 0.15
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.5
+break_cas                       = 0.35
+break_ratio                     = 0.55
+search_s                        = 45
+surrender                       = 0.1
+roles                           = opportunist
+
+[ai_profile_freedom_r3]
+react_ms                        = 550, 850
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.6
+aim_head                        = 0.2
+lead_error                      = 0.3
+light_discipline                = 0.6
+aggr                            = 0.65
+cover                           = 0.70
+flank                           = 0.50
+supp                            = 0.55
+gren                            = 0.40
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.6
+break_cas                       = 0.55
+break_ratio                     = 0.45
+search_s                        = 90
+
+[ai_profile_freedom_r4]
+react_ms                        = 400, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+hear_skill                      = 0.7
+aim_head                        = 0.3
+lead_error                      = 0.2
+light_discipline                = 0.7
+aggr                            = 0.60
+cover                           = 0.80
+flank                           = 0.50
+supp                            = 0.60
+gren                            = 0.45
+grenade_issue                   = grenade_rgd5, 1, 0.5
+courage                         = 0.65
+break_cas                       = 0.65
+break_ratio                     = 0.45
+search_s                        = 120
+
+; Loners (lore.md 6.5): survival first. Rookies hide, shout and run; veterans are patient hunters with good ears.
+[ai_profile_stalker]
+radio_chance                    = 0, 0.1, 0.3, 0.6
+radio_leader_bonus              = 0.2
+hq_relay                        = 0
+voice                           = auto
+gestures                        = 3
+pda                             = 1
+bounding                        = 0
+fire_on_order                   = 0
+leader_dead                     = -0.10
+fanatic                         = 0
+stamina                         = 0.6
+quiet_search                    = 0
+react_ms                        = 800, 1200
+settle_s                        = 1.2
+detect_rate                     = 0.85
+hear_skill                      = 0.5
+aim_head                        = 0.1
+lead_error                      = 0.45
+light_discipline                = 0.3
+aggr                            = 0.35
+cover                           = 0.70
+flank                           = 0.15
+supp                            = 0.25
+gren                            = 0.15
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.45
+break_cas                       = 0.35
+break_ratio                     = 0.6
+search_s                        = 60
+supp_window_s                   = 0
+surrender                       = 0.1
+rout_style                      = orderly
+roles                           = opportunist
+search_style                    = none
+investigate                     = none
+
+[ai_profile_stalker_r1]
+react_ms                        = 1100, 1600
+settle_s                        = 1.6
+detect_rate                     = 0.7
+hear_skill                      = 0.3
+aim_head                        = 0.05
+lead_error                      = 0.6
+light_discipline                = 0.2
+aggr                            = 0.25
+cover                           = 0.60
+flank                           = 0.05
+supp                            = 0.10
+gren                            = 0.05
+grenade_issue                   =
+courage                         = 0.35
+break_cas                       = 0.2
+break_ratio                     = 0.8
+search_s                        = 40
+supp_window_s                   = 0
+surrender                       = 0.2
+rout_style                      = scatter   ; rout to cover
+roles                           = opportunist
+search_style                    = none
+investigate                     = none      ; waits in cover, calls out
+
+[ai_profile_stalker_r3]
+react_ms                        = 550, 850
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.7
+aim_head                        = 0.2
+lead_error                      = 0.3
+light_discipline                = 0.6
+aggr                            = 0.45
+cover                           = 0.80
+flank                           = 0.35
+supp                            = 0.45
+gren                            = 0.35
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.55
+break_cas                       = 0.50
+break_ratio                     = 0.5
+search_s                        = 90
+supp_window_s                   = 3
+surrender                       = 0
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+search_style                    = single
+investigate                     = single
+
+[ai_profile_stalker_r4]
+react_ms                        = 400, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+hear_skill                      = 0.85
+aim_head                        = 0.25
+lead_error                      = 0.2
+light_discipline                = 0.8
+aggr                            = 0.50
+cover                           = 0.90
+flank                           = 0.50
+supp                            = 0.55
+gren                            = 0.50
+grenade_issue                   = grenade_rgd5, 1, 0.5
+courage                         = 0.6
+break_cas                       = 0.60
+break_ratio                     = 0.45
+search_s                        = 120
+supp_window_s                   = 3
+surrender                       = 0
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+search_style                    = single
+investigate                     = single
+
+; Bandits (lore.md 6.6): predators, not soldiers; they push while winning (aggr_winning at winning_ratio) and
+; scatter at real resistance or when the boss dies; no radio. A master is a gang boss who holds a strongpoint.
+[ai_profile_bandit]
+radio_chance                    = 0, 0, 0, 0
+radio_leader_bonus              = 0
+hq_relay                        = 0
+voice                           = auto      ; loud gangs; the boss is hushed by his silent tier
+gestures                        = 4
+pda                             = 1
+supp_window_s                   = 0
+winning_ratio                   = 1.5
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 0
+leader_dead                     = -0.25     ; immediate break check
+rout_style                      = scatter
+fanatic                         = 0
+stamina                         = 0.4
+search_delay_s                  = 5         ; impatient: one goes to look, loudly
+search_style                    = single
+investigate                     = single    ; one goes to look, often alone
+quiet_search                    = 0
+react_ms                        = 1000, 1400
+settle_s                        = 1.4
+detect_rate                     = 0.7
+hear_skill                      = 0.3
+aim_head                        = 0.1
+lead_error                      = 0.6
+light_discipline                = 0.2
+aggr                            = 0.25
+cover                           = 0.45
+flank                           = 0.30
+supp                            = 0.20
+gren                            = 0.15
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.35
+break_cas                       = 0.30
+break_ratio                     = 0.7
+search_s                        = 45
+aggr_winning                    = 0.55
+surrender                       = 0.3
+roles                           = opportunist, suppressor
+
+[ai_profile_bandit_r1]
+react_ms                        = 1200, 1800
+settle_s                        = 1.8
+detect_rate                     = 0.6
+hear_skill                      = 0.2
+aim_head                        = 0.1
+lead_error                      = 0.7
+light_discipline                = 0.1
+aggr                            = 0.20
+cover                           = 0.35
+flank                           = 0.20
+supp                            = 0.10
+gren                            = 0.05
+grenade_issue                   =
+courage                         = 0.3
+break_cas                       = 0.25
+break_ratio                     = 0.8
+search_s                        = 30
+aggr_winning                    = 0.60
+surrender                       = 0.3
+roles                           = opportunist
+
+[ai_profile_bandit_r3]
+react_ms                        = 750, 1100
+settle_s                        = 1.0
+detect_rate                     = 0.85
+hear_skill                      = 0.45
+aim_head                        = 0.15
+lead_error                      = 0.4
+light_discipline                = 0.4
+aggr                            = 0.35
+cover                           = 0.60
+flank                           = 0.45
+supp                            = 0.35
+gren                            = 0.30
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.45
+break_cas                       = 0.40
+break_ratio                     = 0.6
+search_s                        = 60
+aggr_winning                    = 0.60
+surrender                       = 0.2
+roles                           = opportunist, suppressor, flanker, grenadier
+
+[ai_profile_bandit_r4]
+react_ms                        = 500, 800
+settle_s                        = 0.7
+detect_rate                     = 1.0
+hear_skill                      = 0.6
+aim_head                        = 0.2
+lead_error                      = 0.25
+light_discipline                = 0.6
+aggr                            = 0.50
+cover                           = 0.70
+flank                           = 0.55
+supp                            = 0.50
+gren                            = 0.45
+grenade_issue                   = grenade_rgd5, 1, 0
+courage                         = 0.6
+break_cas                       = 0.50
+break_ratio                     = 0.5
+search_s                        = 90
+aggr_winning                    = 0.70
+surrender                       = 0
+supp_window_s                   = 2
+rout_style                      = orderly   ; falls back to a strongpoint
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+return_fire_m                   = 15
+
+; Monolith (lore.md 6.8): fearless and relentless but not stupid; trades cover for aggression, never routs or
+; surrenders (a retreat is a relocation), advances straight at a noise. Voice and radio only, no telepathy (C6).
+[ai_profile_monolith]
+radio_chance                    = 0, 0.7, 0.9, 1
+radio_leader_bonus              = 0
+hq_relay                        = 0
+voice                           = auto
+gestures                        = 2
+pda                             = 0
+supp_window_s                   = 4
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 30        ; fanatics stand and fire
+flank_fire                      = 1
+roles                           = opportunist, suppressor, flanker, grenadier, rearguard
+courage                         = 1
+fanatic                         = 1
+break_cas                       = 0.5       ; heavy losses: one sideways cover change, never away from the fight
+break_ratio                     = 0
+leader_dead                     = 0
+rout_style                      = relocate
+surrender                       = 0
+stamina                         = 0.85
+search_delay_s                  = 3         ; fanatics push on at once, straight at the last position
+search_style                    = straight
+investigate                     = advance
+quiet_search                    = 1
+react_ms                        = 600, 850
+settle_s                        = 0.8
+detect_rate                     = 1.0
+hear_skill                      = 0.6
+aim_head                        = 0.25
+lead_error                      = 0.3
+light_discipline                = 0.7
+aggr                            = 0.80
+cover                           = 0.55
+flank                           = 0.50
+supp                            = 0.55
+gren                            = 0.45
+grenade_issue                   = grenade_rgd5, 1, 0
+search_s                        = 240
+
+[ai_profile_monolith_r1]
+react_ms                        = 800, 1100
+settle_s                        = 1.0
+detect_rate                     = 0.9
+hear_skill                      = 0.5
+aim_head                        = 0.2
+lead_error                      = 0.4
+light_discipline                = 0.3
+aggr                            = 0.75
+cover                           = 0.50
+flank                           = 0.40
+supp                            = 0.45
+gren                            = 0.35
+grenade_issue                   = grenade_rgd5, 1, 0
+search_s                        = 180
+return_fire_m                   = 20
+
+[ai_profile_monolith_r3]
+react_ms                        = 450, 650
+settle_s                        = 0.6
+detect_rate                     = 1.1
+hear_skill                      = 0.7
+aim_head                        = 0.3
+lead_error                      = 0.2
+light_discipline                = 0.8
+aggr                            = 0.85
+cover                           = 0.60
+flank                           = 0.60
+supp                            = 0.60
+gren                            = 0.55
+grenade_issue                   = grenade_rgd5, 1, 0.5
+search_s                        = 300
+
+[ai_profile_monolith_r4]
+react_ms                        = 350, 500
+settle_s                        = 0.45
+detect_rate                     = 1.2
+hear_skill                      = 0.8
+aim_head                        = 0.35
+lead_error                      = 0.15
+light_discipline                = 0.9
+aggr                            = 0.90
+cover                           = 0.65
+flank                           = 0.65
+supp                            = 0.65
+gren                            = 0.60
+grenade_issue                   = grenade_rgd5, 2, 0
+search_s                        = 300
+
+; Monolith snipers and Gauss snipers ([ai_profile_by_character]).
+[ai_profile_monolith_sniper]
+react_ms                        = 350, 500
+settle_s                        = 0.45
+aim_head                        = 0.5
+lead_error                      = 0.1
+aggr                            = 0.20
+cover                           = 0.95
+flank                           = 0
+supp                            = 0.30
+gren                            = 0
+grenade_issue                   =
+roles                           = opportunist
+search_delay_s                  = 20        ; keeps watching its ground
+search_style                    = none      ; keeps watching its own ground
+investigate                     = none
+return_fire_m                   = 0
+
+; Monolith RG-6 specialists ([ai_profile_by_character]): the R4 row.
+[ai_profile_monolith_rg6]
+react_ms                        = 350, 500
+settle_s                        = 0.45
+aggr                            = 0.90
+cover                           = 0.65
+flank                           = 0.65
+supp                            = 0.65
+gren                            = 0.60
+grenade_issue                   = grenade_rgd5, 2, 0
+roles                           = opportunist, suppressor, grenadier
+return_fire_m                   = 0
+
+; Ecologists (lore.md 6.9): scientists never seek a fight - they break contact at once (break_cas 0), radio
+; for the guards and report. Base = scientists (R2); R3 = the blue-coverall field staff.
+[ai_profile_ecolog]
+radio_chance                    = 1, 1, 1, 1
+radio_leader_bonus              = 0
+hq_relay                        = 2
+hq_delay_s                      = 30, 60
+voice                           = loud
+gestures                        = 0
+pda                             = 1
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 0
+leader_dead                     = -0.10
+rout_style                      = orderly
+fanatic                         = 0
+search_delay_s                  = 12        ; waits for the guards
+search_style                    = none
+investigate                     = none      ; reports instead
+quiet_search                    = 0
+react_ms                        = 1300, 1800
+settle_s                        = 1.6
+detect_rate                     = 0.7
+hear_skill                      = 0.3
+aim_head                        = 0.05
+lead_error                      = 0.7
+light_discipline                = 0.2
+aggr                            = 0.05
+cover                           = 0.90
+flank                           = 0
+supp                            = 0
+gren                            = 0
+grenade_issue                   =
+courage                         = 0.2
+break_cas                       = 0
+break_ratio                     = 0.5
+search_s                        = 0
+supp_window_s                   = 0
+stamina                         = 0.3
+surrender                       = 0.5
+roles                           = opportunist
+
+[ai_profile_ecolog_r1]
+detect_rate                     = 0.6
+
+[ai_profile_ecolog_r3]
+react_ms                        = 700, 1000
+settle_s                        = 0.9
+detect_rate                     = 0.9
+hear_skill                      = 0.4
+aim_head                        = 0.1
+lead_error                      = 0.5
+light_discipline                = 0.3
+aggr                            = 0.35
+cover                           = 0.85
+flank                           = 0.25
+supp                            = 0.40
+gren                            = 0.20
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.4
+break_cas                       = 0.50
+break_ratio                     = 0.5
+search_s                        = 60
+supp_window_s                   = 3
+stamina                         = 0.5
+surrender                       = 0.1
+roles                           = opportunist, suppressor, rearguard
+
+; Hired guards of the ecologists ([ai_profile_by_character]; community ecolog): bodyguards that suppress and
+; cover and do not chase. Every key is set here, so nothing of the scientists' section leaks in.
+[ai_profile_ecolog_guard]
+radio_chance                    = 1, 1, 1, 1
+radio_leader_bonus              = 0
+hq_relay                        = 1
+hq_delay_s                      = 30, 60
+voice                           = auto
+gestures                        = 2
+pda                             = 1
+supp_window_s                   = 3
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 20
+roles                           = opportunist, suppressor, rearguard
+react_ms                        = 700, 1000
+settle_s                        = 0.9
+detect_rate                     = 0.9
+hear_skill                      = 0.6
+aim_head                        = 0.15
+lead_error                      = 0.35
+light_discipline                = 0.6
+aggr                            = 0.35
+cover                           = 0.85
+flank                           = 0.25
+supp                            = 0.40
+gren                            = 0.20
+grenade_issue                   = grenade_rgd5, 0, 0.5
+courage                         = 0.6
+break_cas                       = 0.50
+break_ratio                     = 0.45
+rout_style                      = orderly
+surrender                       = 0
+fanatic                         = 0
+stamina                         = 0.65
+search_s                        = 60
+search_style                    = single    ; stays near the scientists
+investigate                     = single
+quiet_search                    = 0
+
+[ai_profile_ecolog_guard_r1]
+detect_rate                     = 0.8
+
+[ai_profile_ecolog_guard_r2]
+detect_rate                     = 0.9
+
+[ai_profile_ecolog_guard_r3]
+detect_rate                     = 1.0
+
+[ai_profile_ecolog_guard_r4]
+detect_rate                     = 1.1
+
+; Zombified (lore.md 6.10): no cover, no comms, no flanking, no morale; drift toward noise and keep firing.
+; Their combat is a script scheme (C21); perception and knowledge rules still apply.
+[ai_profile_zombied]
+react_ms                        = 1500, 2500
+settle_s                        = 3.0
+detect_rate                     = 0.4
+hear_skill                      = 0.1
+hear_gain                       = 0.5       ; half hearing
+aim_head                        = 0
+lead_error                      = 1.0
+light_discipline                = 0
+radio_chance                    = 0, 0, 0, 0
+radio_leader_bonus              = 0
+hq_relay                        = 0
+voice                           = none
+gestures                        = 0
+pda                             = 0
+callouts                        = 0
+aggr                            = 1.0       ; shamble in
+cover                           = 0
+flank                           = 0
+supp                            = 0
+supp_window_s                   = 0
+gren                            = 0
+grenade_issue                   =
+bounding                        = 0
+fire_on_order                   = 0
+return_fire_m                   = 0
+roles                           = opportunist
+courage                         = 1
+break_cas                       = 1
+break_ratio                     = 0
+leader_dead                     = 0
+rout_style                      = never
+surrender                       = 0
+fanatic                         = 1
+stamina                         = 0.3
+search_s                        = 10
+search_delay_s                  = 4
+search_style                    = none
+investigate                     = none
+quiet_search                    = 1
+; [ai:core] end profiles
+
+; [ai:core] begin weapons
+; Class -> effective, engage_max, min (metres). Beyond engage_max an NPC does not advance across open ground toward
+; the enemy; below min it backs off or switches weapons.
+[ai_weapon_classes]
+pistol                          = 25, 40, 0
+smg                             = 60, 100, 0
+shotgun                         = 20, 35, 0
+rifle_old                       = 200, 300, 10
+rifle                           = 200, 300, 0
+mg                              = 400, 500, 10
+dmr                             = 600, 800, 30
+launcher                        = 200, 300, 30
+
+; Weapon class of a section, first match wins, cached per section:
+;  1. [ai_weapon_class_overrides];
+;  2. no ammo_class: not a firearm (none);
+;  3. slot in pistol_slots: pistol;
+;  4. the first ammo_class entry by prefix family: none_ammo -> none, launcher_ammo -> launcher, shotgun_ammo ->
+;     shotgun, smg_ammo (pistol calibres in a long-gun slot; the PM's 9x18 also feeds the Kiparis and the Bizon) -> smg;
+;  5. automatic (fire_modes holds -1) with a magazine of mg_mag or more: mg (before the scope rule: the PKM shares
+;     7.62x54 with the SVD);
+;  6. a built-in or attached scope with scope_zoom_factor >= dmr_zoom and a magazine of dmr_max_mag or less (0 = any):
+;     dmr - a scoped assault rifle stays a rifle and reaches farther by scoped_range_mult instead;
+;  7. [ai_weapon_class_rifle_old]: rifle_old; else rifle.
+[ai_weapon_class_rules]
+pistol_slots                    = 4
+none_ammo                       = ammo_knife, ammo_binoc, ammo_batteries, ammo_dyno, ammo_fuel, ammo_gravi
+launcher_ammo                   = ammo_vog-25, ammo_og-7, ammo_m209
+shotgun_ammo                    = ammo_12x70, ammo_12x76
+smg_ammo                        = ammo_9x18, ammo_9x19, ammo_11.43x23, ammo_5.7x28, ammo_7.62x25
+mg_mag                          = 45
+dmr_zoom                        = 4
+dmr_max_mag                     = 20
+scoped_range_mult               = 1.33      ; engage_max of a rifle whose scope reaches dmr_zoom
+slug_engage_max                 = 60        ; engage_max of a shotgun loaded with [ai_slug_ammo]
+
+; Weapon section -> class, before every rule. A key also covers its variants (wpn_x covers wpn_x_kobra).
+[ai_weapon_class_overrides]
+
+; Old bolt, lever and early semi-automatic rifles. A key also covers its variants.
+[ai_weapon_class_rifle_old]
+wpn_mosin                       =
+wpn_sks                         =
+wpn_svt40                       =
+wpn_k98                         =
+wpn_g43                         =
+wpn_hunter                      =
+wpn_winchester1892              =
+
+; Shotgun ammo (prefix) that makes a shotgun reach slug_engage_max.
+[ai_slug_ammo]
+ammo_12x76_zhekan               =
+
+; Fire-wound protection thresholds of the outfit (or 1 - the entity's own fire-wound immunity):
+; none < light < heavy < exo.
+[ai_armour_classes]
+light                           = 0.15
+heavy                           = 0.35
+exo                             = 0.55
+
+; Outfit section or visual prefix -> armour class; the longest prefix wins and beats the protection value. A visual is
+; matched by its file name first (stalker_dolg_2 of actors\stalker_dolg\stalker_dolg_2), then by its path. NPCs wear
+; no outfit item, so their suit is read from the visual; the digit after the faction is Dead Air's suit tier
+; (0 jacket, 1-2 standard suit, 3 heavy suit, 4 exoskeleton or top suit).
+[ai_armour_overrides]
+exo_outfit                      = exo
+stalker_                        = light
+ecolog_                         = light
+stalker_neutral0                = none
+stalker_neutral_0               = none
+stalker_neutral3                = heavy
+stalker_neutral_3               = heavy
+stalker_neutral4                = heavy
+stalker_neutral_4               = heavy
+stalker_neutral_nauchn          = heavy
+stalker_bandit1                 = none
+stalker_bandit_1                = none
+stalker_bandita                 = none
+stalker_bandit_a                = none
+stalker_bandit_exo              = exo
+stalker_free0                   = none
+stalker_free_0                  = none
+stalker_freedom_0               = none
+stalker_freedom3                = heavy
+stalker_freedom_3               = heavy
+stalker_freedom4                = heavy
+stalker_freedom_4               = heavy
+stalker_freedom5                = heavy
+stalker_freedom_5               = heavy
+stalker_dolg3                   = heavy
+stalker_dolg_3                  = heavy
+stalker_dolg4                   = heavy
+stalker_dolg_4                  = heavy
+stalker_dolgexo                 = exo
+stalker_merc4                   = heavy
+stalker_merc_4                  = heavy
+stalker_mercenary3              = heavy
+stalker_mercenary4              = heavy
+stalker_mercexo                 = exo
+stalker_soldier4                = heavy
+stalker_soldier_4               = heavy
+stalker_soldier5                = heavy
+stalker_soldier_5               = heavy
+stalker_military_exo            = exo
+stalker_monolith3               = heavy
+stalker_monolith_3              = heavy
+stalker_monolith4               = heavy
+stalker_monolith_4              = heavy
+stalker_nebo_3                  = heavy
+; [ai:core] end weapons
+
+; [ai:know] begin ai_errors
+[ai_errors]
+; Error model of every estimate an NPC holds (metres; d = distance to the source). err is the radius the NPC itself
+; assumes; the realised position is a disk sample of radius err * realise around the truth, snapped to the level
+; graph. Estimates age: err grows by age_growth per second since the observation, up to age_cap. The hearing sense
+; reads the heard_*, hit_*, near_miss_*, muzzle_flash and flashlight keys too.
+extrap_s                        = 0.6       ; a lost target is extrapolated with its last seen velocity
+extrap_band                     = 0.8, 1.0, 1.2, 1.4 ; extrap_s multiplier by rank band R1..R4
+see_me_unknown                  = 1         ; enemy_sees_me estimate while the enemy is not in own vision
+see_me_cone_deg                 = 60        ; half angle of an enemy's facing cone an NPC judges "he sees me" by
+see_me_ray_s                    = 0.5       ; the LOS ray of that judgement is reused this long per target
+script                          = 25        ; error of a scripted rumour, metres
+realise                         = 0.6
+age_growth                      = 1.5       ; m/s, a walking-speed prior
+age_cap                         = 60
+clarity_k                       = 1.5       ; err *= 1 + clarity_k * (1 - clarity) for a poorly seen or heard source
+center_height                   = 0.9       ; an estimate on the ground is held at this height (body centre)
+heard_shot                      = 3, 0.08   ; e0, k: err = e0 + k * d
+heard_step                      = 2, 0.12
+heard_other                     = 2, 0.10   ; reload, item, voice
+heard_silenced_mult             = 2         ; a suppressed shot localises this much worse
+heard_occlusion_mult            = 1         ; err x (1 + this * occlusion)
+heard_skill_base                = 1.5       ; err x (base - hear_skill), every heard kind
+muzzle_flash                    = 1, 0.02
+flashlight                      = 2, 0.05
+hit_cone_deg                    = 5, 20     ; shooter unseen: direction +-(a + b * (1 - hear_skill)) degrees
+hit_distance_err                = 0.4       ; distance +-40 %
+hit_distance_prior              = 30, 60    ; distance when no shot was heard, metres
+near_miss_cone_deg              = 25
+near_miss_distance_prior        = 20, 80    ; distance prior of an unheard shooter, metres
+witness_cone_deg                = 30        ; a friend's aim or facing seen from outside
+witness_distance_prior          = 30, 60
+; A report describes a spot by sector or landmark: err = sender's err + describe_k * d(sender, spot), quantised to
+; the grid: describe_<channel> = describe_k, grid.
+describe_voice                  = 0.15, 5
+describe_hushed                 = 0.15, 5
+describe_radio                  = 0.10, 10
+describe_gesture                = 0.20, 5
+describe_pda                    = 0.10, 25
+describe_hq                     = 0.10, 25
+forget_enemy_s                  = 300       ; a belief nobody refreshes is dropped after this age (enemies)
+forget_other_s                  = 60        ; the same for everybody else
+reacquire_s                     = 1         ; own sight lost longer than this counts as a new sighting (k_seen)
+beliefs_max                     = 16        ; beliefs per NPC; the oldest non-enemy goes first
+aim_reroll_s                    = 3         ; how long an aim roll (bone, lead error) holds on one target
+aim_bone_head                   = bip01_head
+aim_bone_body                   = bip01_spine2
+kill_wounded_seen_s             = 3         ; the finishing hit through cover needs an own sighting this recent
+restore_grace_s                 = 10        ; AIK1: staged beliefs and unresolved restored targets wait this long
+vertex_search_m                 = 22        ; an estimate off the graph snaps to the nearest cell this near (else all)
+vertex_march_steps              = 16        ; farther: windows back toward the observer, at most this many
+enemy_callback_ms               = 1000, 3000 ; the script's enemy callback answer lasts ~this: near, far (a hit: no)
+maintain_ms                     = 250, 1000 ; beliefs are aged (dropped, relations re-read) this often: near, far
+relation_refresh_ms             = 1000      ; the enemy flag of an unobserved belief is re-read this often
+sight_hold_ms                   = 750       ; a live creature stays "in sight" at most this long after own vision saw it
+; [ai:know] end ai_errors
+
+; [ai:sense] begin ai_awareness
+; Visual awareness of stalkers (mutants keep the stock vision). While the vision rays reach an object, awareness rises
+; per second by intensity / visibility_threshold x rate_<state> x detect_rate (profile) x band_rate x peripheral
+; x stance x close x concealment, where intensity is the stock visibility value (or the script hook
+; visual_memory_manager.get_visible_value) of one time quantum; unseen it decays. identify = seen (the engine's
+; visible flag), suspicious = a danger at a rough spot. Calibration targets (plan 7.5 B1: danger state, daylight, in
+; the open, frontal, <= 80 m): R1 1.0-1.8 s, R2 0.7-1.2 s, R3 0.45-0.8 s, R4 0.3-0.6 s; calm state x2.5.
+[ai_awareness]
+identify                        = 1.0
+suspicious                      = 0.35
+crouch_mult                     = 0.6       ; the target crouches
+rate_danger                     = 4.0       ; danger vision (visibility_threshold 5)
+rate_free                       = 32.0      ; calm vision (visibility_threshold 100): x2.5 slower than danger
+band_rate                       = 1.0, 1.2, 1.55, 1.9 ; R1..R4, on top of the profile's detect_rate
+peripheral_mult                 = 0.35      ; rate at the edge of the field of view (1 on the view axis)
+close                           = 10, 4     ; metres, gain: rate x (1 + gain x (1 - d / metres)) when closer
+decay                           = 0.15, 0.3 ; per second while unseen: danger, calm
+reacquire                       = 0.7, 8    ; floor, seconds: a target identified that recently decays no lower
+suspect_err                     = 15, 2     ; error of a suspicion in metres, from suspicious to identify
+suspect_period_ms               = 1000      ; one suspicion per target per period
+opaque_below                    = 0.05      ; vision transparency product that blocks a ray (foliage above it slows)
+fog_sight                       = 0.7       ; view ends this far into the weather's fog (0 = fog_near, 1 = fog_far)
+daylight_lum                    = 0.6       ; daytime brightness of a body the renderer did not light (out of view)
+intensity_cache                 = 400, 4    ; ms, m: the vision hook's value is reused unless the distance moved
+touch_m                         = 2.5       ; a hit from this close places the attacker within touch_m
+forget_ms                       = 10000     ; awareness of an object unseen this long is dropped
+; [ai:sense] end ai_awareness
+
+; [ai:sense] begin ai_noise
+; Hearing of stalkers. Every heard sound (engine sounds and the noise bus) goes through one function: the profile's
+; hear_gain, one static occlusion ray with the materials' sound occlusion, rain as a noise floor, and the NPC's own
+; adaptive threshold (recent loud sounds mask quieter ones). The noise bus carries what a human's body and hands do:
+; steps and landings (gait x surface x load), weapon reloads, torch clicks and level.ai_noise; the engine's own step,
+; reload and torch sound events of humans are then ignored by the AI so nothing is heard twice. A noise of loudness L
+; is heard in silence within L x step_range (steps, landings) or L x noise_range (everything else) metres, with an
+; inverse-square fall-off inside that radius, so gunfire masking, walls, rain and a poor ear shrink the radius.
+[ai_noise]
+occlusion_floor                 = 0.25      ; sound bends around corners: walls never let through less than this
+occlusion_hits                  = 3         ; faces along the ray that count
+occlusion_cache_ms              = 2000      ; one ray per source and hearer in this time
+occlusion_cache_far_ms          = 4000      ; the same for a hearer far from the player ([ai_config] lod_near_m)
+occlusion_move_m                = 2         ; a source that moved farther gets a new ray...
+occlusion_move_k                = 0.08      ; ...plus this share of its distance (a far source barely turns the line)
+; A burst is one observation, not one per round: rounds and impacts of one source this soon and near reuse the first.
+heard_repeat                    = 250, 2    ; ms, m
+heard_repeat_far                = 1000, 6   ; ms, m: the same for a calm NPC far from the player (its first shot counts)
+rain_mask                       = 0.08      ; received power lost in full rain (quiet sounds drown, shots do not)
+detached_m                      = 6         ; a sound this far from its source object (ricochet, whine) is only a spot
+gait                            = 0.12, 0.35, 0.7, 1.0 ; step loudness: crouch, walk, run, sprint
+shuffle                         = 0.12      ; a step in place (turning on the spot)
+landing                         = 0.9       ; the actor landing from a jump or a fall
+step_range                      = 36        ; audible radius in silence per unit of loudness: steps and landings, m
+noise_range                     = 40        ; the same for reloads, torch clicks and scripted noises, m
+cull_mult                       = 1.25      ; hearers beyond the audible radius x this are not even tested
+edge_power                      = 0.08      ; received power at the audible radius (stalkers' sound_threshold)
+load                            = 25, 0.015 ; kg carried without extra noise, loudness added per kg above it
+reload                          = 0.5       ; a weapon reload
+torch_click                     = 0.2       ; a torch switched on or off
+inbox_max                       = 16        ; pending stimuli per NPC (one per source and kind)
+stimulus_ttl_ms                 = 1500      ; a stimulus the NPC could not process in this time is dropped
+stimuli_per_update              = 8         ; stimuli one NPC update takes, oldest first; the rest wait for the next
+pre_rays                        = 2         ; new rays of one update's stimuli and lamp look (a due look keeps one)
+pre_budget_us                   = 150       ; after its first stimulus an update takes more (and looks) only within this
+; Near misses: a bullet crossing a stalker's bounding sphere. Suppression (0..1) rises by near_miss_suppression x
+; closeness and decays linearly; fire from a friend does not suppress. Tactics and morale read it.
+near_miss_suppression           = 0.25
+near_miss_radius                = 1.5, 0.3  ; metres from the eyes where closeness reaches 0; closeness floor
+suppression_decay               = 0.3       ; per second
+near_miss_estimate_ms           = 500       ; one estimate of the same shooter per this time
+near_miss_hit_ms                = 300       ; a near miss this close in time to a hit by the same shooter is that hit
+near_miss_queue_max             = 256       ; bullets waiting for the main thread
+
+; Step loudness by the ground material (the last part of its name, "materials\<name>"); unlisted = default.
+[ai_noise_surface]
+default                         = 1.0
+earth                           = 0.9
+earth_death                     = 0.9
+earth_slide                     = 0.9
+dirt                            = 0.9
+grass                           = 0.8
+sand                            = 0.8
+cloth                           = 0.6
+bush                            = 1.2       ; rustling
+bush_sux                        = 1.2
+gravel                          = 1.25
+asphalt                         = 1.0
+concrete                        = 1.0
+stucco                          = 1.0
+bricks                          = 1.15      ; rubble
+flooring_tile                   = 1.1
+tree_trunk                      = 1.0
+wood                            = 1.2
+wooden_board                    = 1.3
+shifer                          = 1.3
+metal                           = 1.5
+metal_pipe                      = 1.4
+metal_plate                     = 1.6
+tin                             = 1.6
+glass                           = 1.8       ; broken glass crunches
+water                           = 1.4       ; splashing
+water_radiation                 = 1.4
+; [ai:sense] end ai_noise
+
+; [ai:sense] begin ai_light
+; Light as a sense of stalkers. darkness runs from 0 (day) to 1 (night) with the brightest channel of the weather's
+; ambient + hemi + sun colour between the two ambient values. A muzzle flash is seen by stalkers that face it within
+; muzzle_range and have a line of sight: a muzzle_flash estimate of the shooter and, for flash_cue_ms, faster
+; recognition of him. A lit torch speeds the recognition of its carrier by torch_rate x glow (glow = strength by the
+; beam's angle to the viewer, side-on .. straight at him, x (1 - distance / torch_range)); a lamp that glows at least
+; torch_notice is noticed by itself (a flashlight estimate of its carrier), and at night the spot its beam lights.
+[ai_light]
+flash_period_ms                 = 500       ; one flash event per shooter in this time (a burst costs one set of rays)
+ambient                         = 0.6, 0.15 ; weather brightness of full day, of full night
+; Darkness is also read off the clock (the larger of the two counts): Dead Air's nights keep a bright blue sky
+; colour, as bright as an overcast day. Hours of the day, in order: dusk begins, full dark, dawn begins, full light.
+night_hours                     = 19.5, 21, 4.5, 6
+muzzle_range                    = 80, 300   ; metres, day and night
+muzzle_silenced                 = 0         ; range multiplier with a suppressor (0 = no visible flash)
+flash_rate                      = 3.0       ; awareness per second added toward the shooter at night
+flash_cue_ms                    = 600
+flash_day_mult                  = 0.3       ; the flash cue by day
+torch_range                     = 15, 150   ; metres a lamp is noticed from, day and night
+torch_strength                  = 0.3, 1.5  ; glow side-on, straight at the viewer (fades out when it points away)
+torch_rate                      = 1.0       ; awareness per second per unit of glow
+torch_notice                    = 0.15      ; glow from which a lamp alone gives its carrier away
+torch_period_ms                 = 500       ; how often a stalker looks for lamps
+torch_scan_rays                 = 4         ; rays one look at the lamps casts (beam spots included), round robin
+torch_scan_checks               = 8         ; lamps per look whose carrier is judged (relation, own sight)
+spot_darkness                   = 0.6       ; darkness from which the lit spot of a beam is noticed
+spot_range                      = 60        ; metres from the observer to the lit spot
+spot_err_k                      = 0.5       ; error added per metre of beam: the carrier is somewhere up the beam
+; [ai:sense] end ai_light
+
+; [ai:comms] begin ai_comms
+; Physical communication between NPCs: voice lines the hearer really hears, radio nets of the NPCs who carry a radio,
+; gestures, PDA texts and the HQ relay of a community. A message carries the sender's own estimate, never the target.
+[ai_comms]
+hushed_volume                   = 0.3       ; silent tiers and hushed profiles; reach = volume x the line's AI range
+voice_base_section              = stalker   ; lines a silent tier leaves empty come from this section's sound_* keys
+silent_probe                    = alarm, backup, detour ; voice = auto: hushed when all of these lines are empty
+radio_sound                     = ambient\special\marsh_click_, ambient\special\marsh_click_3a ; squelch clicks 1..3, 3a
+radio_voice_volume              = 0.3       ; words spoken into a radio
+radio_squelch_range             = 8         ; m: squelch and radio voice are heard this far from a carrier
+radio_key_ms                    = 300, 600
+radio_message_ms                = 600, 2000
+gesture_range                   = 25        ; m: hand signals between NPCs that see each other
+gesture_fov                     = 120       ; deg: the signaller must be this far inside the viewer's field of view
+gesture_ms                      = 400, 800
+pda_sound                       = device\pda\pda_tip ; the tone of an arriving PDA text, played within the squelch range
+pda_typing_ms                   = 3000, 6000
+pda_delay_ms                    = 5000, 20000
+pda_fire_block_ms               = 5000      ; no typing this long after being hit
+pda_suppression_max             = 0.2       ; nor while suppressed above this
+pda_max_wait_ms                 = 30000     ; a text not typed by then is dropped
+pda_min_distance                = 40        ; m: mates closer than this hear the voice instead
+device_height                   = 1.2       ; m above the feet where a radio or PDA sounds
+latency_floor_ms                = 250       ; nothing is learned sooner than this after it was observed
+min_interval_ms                 = 4000      ; per kind and target per squad
+report_callback_ms              = 2000
+deliveries_per_update           = 3         ; messages and witness cues one NPC update takes in, in order; the rest wait
+sounds_per_update               = 2         ; radio and PDA sounds one NPC update starts; the rest wait for the next
+transmits_per_update            = 2         ; messages one NPC update sends (urgent ones always); the rest wait
+send_budget_us                  = 100       ; after its first message an update sends more only within this time
+take_budget_us                  = 100       ; the same for the messages and witness cues it takes in
+voice_length_ms                 = 800, 1500 ; a line whose length is unknown
+voice_retry_ms                  = 2000      ; a callout waits this long for a quiet moment in the squad
+hushed_understand_mult          = 1.5
+masked_understand_mult          = 1.5       ; while recent gunfire raised the hearing threshold
+masked_ratio                    = 3         ; threshold over its floor that counts as masked
+urgent_decide_mult              = 0.35
+urgent                          = grenade
+loud_only                       = reloading ; only loud voices shout it (exploitable by design)
+hq_min_interval_ms              = 20000     ; one HQ relay per community, kind and target
+update_interval_ms              = 6000      ; position updates over the radio while the enemy is in sight
+update_min_move                 = 8         ; m the believed position must have moved since the last update
+lost_after_ms                   = 3000      ; unseen this long when the enemy is dropped: "lost him"
+relay_range                     = 40        ; m: a carrier tells radio news to mates without a radio this close
+report_confidence               = 0.8       ; confidence of a report x this (errors: [ai_errors] describe_*)
+; Witness cue: a fighting or alarmed friend in own sight tells only where he looks ([ai_errors] witness_* geometry).
+witness_ms                      = 300, 700  ; to take in what the friend is doing
+witness_interval_ms             = 3000      ; one cue per friend this often
+witness_range                   = 100       ; m: farther away his posture cannot be read
+witness_confidence              = 0.4
+
+; Stock bark -> kind it tells the hearers; "involuntary" = a cry without any estimate of the enemy. A bark or line
+; not listed here is not understood as a message.
+[ai_comms_barks]
+death                           = man_down, involuntary
+anomaly_death                   = man_down, involuntary
+hit                             = taking_fire, involuntary
+panic_human                     = fall_back, involuntary
+panic_monster                   = fall_back, involuntary
+alarm                           = contact
+attack_no_allies                = update
+attack_allies_single_enemy      = attack
+attack_allies_several_enemies   = attack
+backup                          = help
+detour                          = flanking
+search1_with_allies             = search_assign
+search1_no_allies               = update
+enemy_lost_no_allies            = lost
+enemy_lost_with_allies          = lost
+tolls                           = man_down
+wounded                         = man_down
+grenade_alarm                   = grenade
+friendly_grenade_alarm          = grenade
+need_backup                     = cover_me
+throw_grenade                   = grenade
+kill_wounded                    = update
+enemy_critically_wounded        = update
+enemy_killed_or_wounded         = update
+help                            = help
+all_clear                       = all_clear
+
+; Kind -> the line it is said with: a stock bark or a line of [ai_comms_lines]. Empty or absent = never spoken.
+[ai_comms_voice]
+contact                         = alarm
+lost                            = enemy_lost_with_allies
+man_down                        = tolls
+leader_down                     = tolls
+taking_fire                     = backup
+grenade                         = grenade_alarm
+reloading                       = need_backup
+flanking                        = detour
+cover_me                        = need_backup
+fall_back                       = panic_human
+attack                          = attack_allies_several_enemies
+help                            = help
+search_assign                   = search1_with_allies
+all_clear                       = all_clear
+surrender                       = panic_human
+
+; Kind -> channels that may carry it (voice = loud or hushed by the speaker's voice). Hand signals (gesture) go to
+; everyone who sees the signaller and whom it sees; a quiet sender who signalled to someone keeps silent.
+[ai_comms_kinds]
+contact                         = voice, gesture, radio, pda, hq
+update                          = radio, hq
+lost                            = voice, gesture, radio, pda
+man_down                        = voice, radio, pda
+leader_down                     = voice, radio, pda
+taking_fire                     = voice, radio
+grenade                         = voice
+reloading                       = voice
+flanking                        = voice, gesture, radio
+cover_me                        = voice, gesture, radio
+fall_back                       = voice, gesture, radio
+attack                          = voice, gesture, radio
+help                            = voice, radio, pda
+search_assign                   = voice, gesture, radio
+all_clear                       = voice, gesture, radio, pda
+surrender                       = voice
+
+; Extra voice lines by the NPC's voice prefix, for kinds no stock bark says (base DA voice sets).
+[ai_comms_lines]
+help                            = help\wounded_heavy\help_
+all_clear                       = alife\attack\end_fight_, fight\post_combat_wait\relax_
+; [ai:comms] end ai_comms
+
+; [ai:tactics] begin ai_tactics
+; Weapon doctrine, fire gate, accuracy and cover of human NPCs. Distances in metres, times as named. Cover values are
+; the level graph's per-direction values: 0 = covered, 1 = open.
+[ai_tactics]
+; doctrine: beyond engage_max an NPC closes in only from cover to cover, else it holds and lets the enemy come
+approach_min_gain_m             = 5         ; a bound must cut the known distance by this much (no endless re-run)
+approach_aggr_min               = 0.35      ; aggression needed to close the distance through covers
+approach_radius_m               = 30        ; covers searched for the next bound
+approach_search_ms              = 1500      ; re-search of the bound while nothing moved
+approach_moved_m                = 2         ; the NPC moved this far: search again
+approach_threat_moved_m         = 5         ; the belief moved this far: search again
+approach_cover_max              = 0.5       ; cover value a bound or a fall back cover must reach toward the belief
+approach_max_ms                 = 20000     ; a bound not reached by then is given up where the NPC stands
+fire_on_order_max_s             = 8         ; an undetected fire_on_order squad opens up after this without the order
+reload_window_s                 = 2         ; a heard enemy reload lets an aggressive NPC push or peek this long
+; reaction (identification -> first aimed shot) and aim settle
+react_blink_ms                  = 400       ; a target out of sight this briefly stays acquired
+react_reacquire_s               = 4        ; a target seen again within this time is re-acquired, not identified anew
+react_reacquire_mult            = 0.35      ; share of the reaction a re-acquisition takes
+react_dist_ms                   = 1.5       ; added per metre of known distance
+react_peripheral_deg            = 35        ; identified outside this angle from the head direction...
+react_peripheral_ms             = 150       ; ...adds this
+react_fear_mult                 = 0.5       ; reaction x (1 + mult x fear)
+react_fatigue_mult              = 0.2       ; reaction x (1 + mult x (1 - stamina))
+alert_memory_s                  = 10        ; danger or combat this recent: no react_idle_ms
+settle_start_mult               = 3.0       ; dispersion right after (re)acquisition and for suppression bursts
+settle_fear_mult                = 1.0       ; settle_s x (1 + mult x fear)
+settle_fatigue_mult             = 0.3       ; settle_s x (1 + mult x (1 - stamina))
+acc_suppression_mult            = 1.0       ; dispersion x (1 + mult x suppression)
+acc_wound_mult                  = 0.5       ; dispersion x (1 + mult x (1 - health))
+acc_fatigue_mult                = 0.3       ; dispersion x (1 + mult x (1 - stamina))
+acc_lateral_mult                = 0.5       ; dispersion x (1 + mult x min(1, lateral speed / acc_lateral_ref))
+acc_lateral_ref                 = 5         ; m/s
+; suppression: bursts at the own last-seen point only, within the profile's supp_window_s
+supp_classes                    = smg, rifle, mg
+supp_floor_m                    = 2         ; centre to the last-seen centre: another floor above this close by...
+supp_slope                      = 0.2       ; ...a height difference up to this x the distance is terrain, not a floor
+supp_order_window_s             = 12        ; an ordered cover (suppressor, rearguard) uses its own last sight this long
+supp_precise_m                  = 2.5       ; the line of fire reaches the point within this
+supp_near_m                     = 2.5       ; no burst into a wall this close
+; cover choice and path exposure toward the belief
+cover_open_value                = 0.6       ; above this toward the belief a spot is exposed
+cover_min_enemy_m               = 3         ; no cover closer to the belief (with the weapon's min)
+lof_low_max                     = 0.4       ; a low wall: low cover below this and high cover open
+short_range_engage_max          = 100       ; weapons with engage_max up to this are short-range
+exposure_open_limit_m           = 6         ; short guns: open metres to a cover away or across (none out of the open)
+exposure_gap_m                  = 2         ; toward the enemy: this; the trained under a mate's suppression: the limit
+open_fight_budget_m             = 12        ; open metres toward the enemy a short gun crosses in one fight in all
+step_hold_ms                    = 15000     ; a short gun with no covered way to a search goal watches it this long
+exposure_unknown_share          = 0.5       ; share of a straight line blocked by a wall counted as open
+score_line_of_fire              = 0.5       ; bonus of a low wall with a clear view over it
+score_band                      = 2.0       ; per effective range outside the weapon's band
+score_aggr                      = 1.0       ; aggressive profiles prefer covers closer to the belief
+score_aggr_range_m              = 30
+score_travel                    = 0.02      ; per metre to travel
+score_exposure                  = 0.15      ; per open metre on the way, x (0.5 + cover discipline)
+; fall back to better cover
+at_cover_m                      = 1.5       ; the NPC holds its cover within this
+no_cover_memory_ms              = 3000
+hit_in_cover_ms                 = 1500      ; a hit at the cover compromises it for this long
+pressure_ms                     = 3000      ; a hit this recent puts a worried NPC under pressure
+worried_supp_min                = 0.3       ; suppression that does the same
+reload_near_m                   = 15        ; reloading in the open with the enemy nearer than this
+fallback_cooldown_ms            = 8000
+fallback_max_ms                 = 15000     ; a fall back not reached by then ends where the NPC stands
+fallback_radius_m               = 30
+fallback_min_gain_m             = 3         ; a fall back cover is at least this much farther from the belief
+fallback_min_move_m             = 3         ; a fanatic's relocation moves at least this far
+; return fire (profile return_fire_m): seen at close range, in the open or in the cover it has, shoot back first
+return_fire_ms                  = 2000, 4000 ; how long the exchange lasts before the move to cover
+return_fire_cooldown_ms         = 10000     ; no new exchange this soon after one ended
+; peeking
+peek_hold_ms                    = 1000, 3000 ; exposure when holding a look-out: trained (peek 1) .. untrained (peek 0)
+peek_avoid_min                  = 0.5       ; peek discipline from which a look-out spot is not reused
+peek_reuse_m                    = 2
+danger_cover_ms                 = 120000    ; a cover a mate reported under fire stays dangerous this long
+danger_cover_m                  = 3
+; squad roles: the leader orders a suppressor and a flanker by message; a role applies on delivery, only to profiles
+; trained for it (profile key roles)
+role_think_ms                   = 2000      ; the leader reviews his plan this often
+role_hold_s                     = 20        ; a delivered role lasts this long
+role_renew_s                    = 12        ; the leader repeats his cover order after this
+flank_role_min                  = 0.4       ; profile flank needed to be sent around the flank
+flank_short_bonus               = 0.2       ; short-range weapons make better flankers once the enemy is within reach
+flank_classes                   = pistol, smg, shotgun, rifle_old, rifle ; weapons a flanker may carry
+flank_exo_mult                  = 0.5       ; an exo suit is a poor flanker
+flank_repeat_s                  = 30        ; the leader sends a new flank no sooner than this
+flank_belief_s                  = 15        ; orders need a belief of the enemy this fresh
+flank_min_enemy_m               = 15        ; no flank against an enemy this close
+flank_radius_m                  = 55        ; covers searched for the flank (reaches 35 deg around at 90 m)
+flank_open_limit_m              = 20        ; open metres in all on a flank route (short guns: the stricter limit)
+flank_via_radius_m              = 25        ; a two-leg route passes a cover this near the flanker first
+flank_checks                    = 12        ; open ground checked for this many of the best covers per route search
+flank_agent_checks              = 32        ; the best covers by geometry of a route search kept for the agent's checks
+flank_agent_per_update          = 8         ; agent's checks (restrictions, mates' covers, known enemies) per update
+flank_walks_per_update          = 4         ; open-ground walks per update of the leader's route search
+flank_step_budget_us            = 120       ; a route search step goes on to its next tile, check or walk below this
+flank_tile_m                    = 20        ; a route search's covers are gathered in square tiles of this circle radius
+flank_candidates                = 2         ; men whose route the leader looks for before another tactic (at most 4)
+flank_vias                      = 4         ; covers of a two-leg route's first leg tried per side (at most 4)
+flank_retry_s                   = 10        ; no covered route: another tactic, the next look this much later
+flank_route_s                   = 10        ; the leader's route comes with his order while the order is this fresh
+flank_grace_ms                  = 1500      ; a burst under way when the order comes ends first, within this
+flank_max_ms                    = 30000     ; a flank not finished by then ends where the flanker stands
+flank_angle_deg                 = 35, 110   ; the flank cover lies this far off the line from the enemy to the flanker
+supp_role_min                   = 0.3       ; profile supp needed to be ordered to suppress
+supp_mg_bonus                   = 0.3       ; a machine gun makes the best suppressor
+supp_order_s                    = 15        ; the leader's order to suppress holds this long (he renews it)
+cover_fire_msg_s                = 6         ; a flanking, cover_me, reloading or fall_back message: cover fire this long
+mate_scan_ms                    = 500       ; how often an NPC checks for mates it sees moving over open ground
+mate_moving_speed               = 1.2       ; m/s
+suppress_burst_ms               = 400, 1200 ; one suppression burst
+suppress_pause_ms               = 700, 1800 ; the pause after it
+suppress_spread_m               = 2         ; bursts go up to this far beside the own last-seen point (cover edges)
+order_range_mult                = 1.0       ; the leader springs the ambush when the enemy is inside effective x this
+order_supp_min                  = 0.05      ; suppression from near misses that counts as being fired on
+bound_min_m                     = 15        ; bounding overwatch stops closing at this distance
+reload_push_aggr                = 0.5       ; aggression needed to push on a heard reload
+; grenades: to flush an enemy who sits still behind cover, is indoors or out of reach; target = an own sighting or
+; hearing, never a report
+gren_think_ms                   = 4000      ; the profile's gren is rolled this often while a flush target exists
+grenadier_mult                  = 2         ; x gren for a grenadier
+flush_static_s                  = 4         ; the belief has not moved for this long
+flush_move_m                    = 3         ; ...by more than this
+flush_belief_extra_s            = 5         ; the belief may be at most flush_static_s + this old
+flush_cover_max                 = 0.5       ; the believed spot is covered toward the thrower (cover value)
+indoor_cover_max                = 0.35      ; all-round high cover of the spot (0 walled in .. 3.14 open): indoors below
+grenade_min_m                   = 10
+grenade_max_m                   = 40
+grenade_warn_m                  = 15        ; a shouted grenade warning makes a hearer this close to it take cover
+grenade_danger_m                = 10        ; a warned member's covers keep this far from the grenade...
+grenade_danger_ms               = 6000      ; ...for this long
+; counters
+stat_max_dt_ms                  = 1000
+stat_teleport_m                 = 20
+; [ai:tactics] end ai_tactics
+
+; [ai:morale] begin ai_morale
+; Morale: each NPC weighs what it knows - friends it believes alive, enemies it has seen (attributes only from its own
+; sightings), losses it perceived or was told about, its leader, its wounds, ammo and fear - into a confidence level
+; (panicked < worried < steady < confident < heroic). A break sends it out of the fight by its profile's rout_style.
+[ai_morale]
+update_ms                       = 250       ; evaluation period per NPC
+quiet_update_ms                 = 1000      ; the same while calm (no enemy, threat, break or wound); events wake it
+; confidence = conf_base + ratio_k*log2(ratio) + courage_k*(courage-0.5) - health_k*(1-health) - ammo_k*low_ammo
+;              - fear_k*fear - loss_k*losses/squad + kill_k*enemy deaths seen (<= kill_max) + leader_conf (leader near)
+levels                          = 0.15, 0.35, 0.65, 0.85 ; thresholds worried, steady, confident, heroic
+hysteresis                      = 0.04
+conf_base                       = 0.5
+ratio_k                         = 0.15      ; per doubling of the known strength ratio
+ratio_max                       = 4         ; the ratio is clamped to 1/ratio_max .. ratio_max
+courage_k                       = 0.4
+health_k                        = 0.3
+ammo_k                          = 0.1       ; less than one magazine left
+fear_k                          = 0.5
+loss_k                          = 0.4
+kill_k                          = 0.05
+kill_max                        = 0.15
+leader_conf                     = 0.05
+; strength of a fighter = armour x weapon x wounds (x band for mates: their rank is known, an enemy's is not)
+unknown_enemy_strength          = 1.0       ; an enemy known only by report or sound
+monster_strength                = 0.6       ; a monster whose class is not in [ai_morale_monsters]
+band_strength                   = 0.8, 1.0, 1.25, 1.5 ; R1..R4
+armour_strength                 = 0.8, 1.0, 1.25, 1.6 ; none, light, heavy, exo
+wounded_health                  = 0.5       ; below this health someone counts (and feels) wounded
+wounded_strength                = 0.6
+ally_weight                     = 0.7       ; friendly fighters of other squads in sight
+ally_radius                     = 50
+sightings_max                   = 16
+sighting_memory_s               = 120       ; how long a seen enemy's attributes are remembered
+; threat, engagement, leadership
+threat_window_s                 = 15        ; a hit, a close enemy in sight, suppression, a loss: "under threat"
+threat_distance_m               = 60
+threat_suppression              = 0.2
+ratio_hold_s                    = 3         ; outmatched this long under threat breaks (break_ratio)
+calm_reset_s                    = 30        ; no enemy and no threat this long: the squad is the new baseline
+leader_contact_m                = 40        ; a leader this close (or on the same radio net, or in sight) is in contact
+death_memory_s                  = 600       ; a body can tell of a death this long
+death_records                   = 64
+enemy_death_seen_s              = 10        ; an enemy or ally death counts when seen this soon after
+safe_record_s                   = 5         ; while calm, the spot is recorded as the rally point this often
+rally_max_m                     = 200
+; fear 0..1: gains x (fear_courage_base - courage) x fear_band[band]; fanatics feel none
+fear_courage_base               = 1.5
+fear_band                       = 1.3, 1.0, 0.8, 0.65
+fear_hit                        = 0.12
+fear_hit_dmg                    = 0.4       ; per unit of damage
+fear_friendly_hit               = 0.5       ; multiplier for friendly fire
+fear_supp                       = 0.25      ; per second at full suppression
+fear_casualty                   = 0.2       ; a squad mate's death
+fear_report_mult                = 0.6       ; a death learned by message instead of by own senses
+fear_close_m                    = 20
+fear_close_mult                 = 1.5       ; the death happened this close
+fear_leader                     = 0.25
+fear_ally_death                 = 0.1       ; a friendly death of another squad seen within ally_radius
+fear_contagion                  = 0.15      ; per second while a broken mate or ally is in sight
+fear_mate_fallback              = 0.08      ; a mate calls fall back or surrenders
+fear_grenade                    = 0.2
+fear_grenade_m                  = 8
+order_relief                    = 0.1       ; the leader's attack order
+fear_decay_k                    = 0.35      ; fear time constant = recover_s x this
+cover_decay_mult                = 1.5       ; faster in cover
+in_cover_protection             = 0.6       ; cover value toward the threat that counts as "in cover"
+; retreat styles
+arrive_m                        = 1.5
+replan_s                        = 4
+orderly_step_m                  = 35        ; cover to cover bound, each one farther from the enemy
+orderly_min_gain_m              = 5
+orderly_hold_s                  = 2, 5      ; pause in each cover, firing back when the enemy shows
+orderly_safe_m                  = 80        ; at this distance the withdrawal holds and waits to recover
+retreat_min_enemy_m             = 15
+retreat_back_angle              = 60        ; a bound never starts within this angle of the enemy's direction
+scatter_angle                   = 20, 70    ; each man flees at his own angle off "away from the enemy"
+scatter_search_m                = 50
+scatter_dist                    = 45
+scatter_cone                    = 50
+scatter_hide_s                  = 2         ; out of sight this long: into the nearest cover
+scatter_hide_radius             = 15
+scatter_respot_m                = 30        ; found again this close while hiding: run again
+relocate_radius                 = 25        ; fanatics: a cover to the side, never farther from the fight
+relocate_tolerance_m            = 3
+relocate_min_angle              = 15
+relocate_min_travel_m           = 6
+relocate_min_enemy_m            = 8
+relocate_max_s                  = 12
+relocate_cooldown_s             = 10
+surrender_health                = 0.5       ; wounded below this, or cornered: roll the profile's surrender chance
+surrender_cornered_m            = 12        ; an enemy in sight this close with nowhere to go
+; retreat cover score = gain*w_gain + protection*w_protect + rally progress*w_rally - travel*w_travel
+cover_w_gain                    = 1.0
+cover_w_protect                 = 1.0
+cover_w_rally                   = 0.5
+cover_w_travel                  = 0.4
+cover_w_danger                  = 2.0       ; a cover where a mate was recently hit
+cover_max_dy                    = 3         ; covers more than this above or below are not considered
+; fear's reaction and settle time and fatigue's aim penalty are tactics' ([ai_tactics] react_/settle_/acc_ keys)
+acc_withdraw                    = 0.3       ; dispersion x (1 + this) for covering fire in an orderly withdrawal
+; fatigue: stamina 1 fresh .. 0 exhausted. The profile's stamina is fitness: running drains 1/(stamina_run_s x stamina)
+; per second x gait x armour x (1 + stamina_wound_k x (1 - health)); rest restores stamina/stamina_rest_s per second
+stamina_run_s                   = 40        ; seconds of combat running from fresh to exhausted at fitness 1
+stamina_sprint_mult             = 1.6       ; panic sprint
+stamina_jog_mult                = 0.3       ; running while calm
+stamina_rest_s                  = 12        ; standing or crouching
+stamina_walk_s                  = 40        ; walking recovers slower
+stamina_move_speed              = 0.3       ; slower than this (m/s) counts as standing
+stamina_wound_k                 = 1.0
+stamina_armour                  = 0.9, 1.0, 1.3, 0.8 ; none, light, heavy, exo (servo-assisted)
+stamina_tired                   = 0.35      ; below: no panic sprint, no sprinting flank; a winded man walks until here
+stamina_exhausted               = 0.1       ; winded: walks until stamina_tired again
+stamina_max_dt_s                = 2         ; longest step between two evaluations
+; a badly hurt NPC calls for help while someone who could come is believed near (voice, hushed when down, radio)
+help_health                     = 0.3       ; below this health it calls while still fighting and under threat
+help_repeat_s                   = 20
+help_max                        = 3         ; calls per wound, anew when the wounded scheme lays it down
+help_fanatic                    = false     ; fanatics bear wounds in silence
+
+; Strength of a weapon class, as it looks in someone's hands.
+[ai_morale_weapons]
+none                            = 0.3
+pistol                          = 0.6
+smg                             = 0.9
+shotgun                         = 1.0
+rifle_old                       = 0.85
+rifle                           = 1.0
+mg                              = 1.4
+dmr                             = 1.2
+launcher                        = 1.5
+
+; Strength of a monster by the class key of its section (a mod's new monster section reuses these classes).
+[ai_morale_monsters]
+SM_BLOOD                        = 1.5       ; bloodsucker
+SM_BOARW                        = 0.8       ; boar
+SM_DOG_S                        = 0.4       ; blind dog
+SM_DOG_P                        = 1.0       ; psy dog
+SM_DOG_F                        = 0.3       ; phantom
+SM_FLESH                        = 0.5
+SM_P_DOG                        = 0.8       ; pseudodog
+SM_BURER                        = 2.0
+SM_CAT_S                        = 0.4
+SM_CHIMS                        = 3.0       ; chimera
+SM_CONTR                        = 2.0       ; controller
+SM_IZLOM                        = 0.8       ; fracture
+SM_POLTR                        = 1.0       ; poltergeist
+SM_GIANT                        = 3.0       ; pseudogiant
+SM_ZOMBI                        = 0.5       ; zombie
+SM_SNORK                        = 0.8
+SM_TUSHK                        = 0.2       ; tushkano
+
+; Modifiers on top of a profile (lore.md 8.3). Break shifts are fractions of the squad added to break_cas (a positive
+; shift holds longer) and scale break_ratio by (1 - shift); the profile's leader_dead is such a shift too.
+[ai_modifiers]
+armour_break                    = -0.10, 0, 0.10, 0.10 ; none, light, heavy, exo
+armour_aggr                     = 0, 0, 0.10, 0.10
+armour_cover                    = 0.10, 0, -0.10, -0.10
+wounded_break                   = -0.15
+wounded_aggr                    = -0.3
+low_ammo_aggr                   = -0.2
+fear_aggr                       = -0.4      ; at full fear
+leader_alive_break              = 0.10      ; followers whose leader is alive and in contact
+leader_alive                    = army, dolg, bandit, killer
+leader_handover_s               = 3, 6      ; the next in rank takes over after learning of the leader's death
+leader_handover                 = army, dolg, killer
+sworn_break                     = 0.10      ; fighting a sworn enemy ([ai_sworn_enemies] of the search block)
+level_aggr                      = 0, 0, 0, 0.05, 0.10 ; by level: panicked, worried, steady, confident, heroic
+fanatic_push_aggr               = 0.9       ; a heroic fanatic pushes, wounded or not
+wounded_max_level               = worried   ; wounded under threat: seeks cover first (tactics falls back when worried)
+; [ai:morale] end ai_morale
+
+; [ai:search] begin ai_search
+; Search after lost contact. Spots are places near the last known position (LKP) that cannot be seen from it:
+; cover points and level vertices on rings around it, ordered by the estimated escape direction. A spot is cleared
+; only by a searcher's own eyes; the squad's coordinator hands spots out by search_assign messages and learns of
+; cleared ones by all_clear messages, so a searcher out of reach keeps its own plan.
+[ai_search]
+spot_radius                     = 30        ; first ring around the LKP, metres
+spot_radius_max                 = 60        ; the search never widens beyond this
+widen_mult                      = 1.6       ; radius of the next ring when every spot is cleared
+widen_max                       = 2         ; wider rings after the first one
+spots_max                       = 10        ; spots per ring
+spot_min_gap                    = 6         ; metres between two spots
+spot_max_dy                     = 3         ; spots farther above or below the LKP are skipped
+hidden_max                      = 0.5       ; level-graph cover value toward the LKP at or below which a place is hidden
+ring_samples                    = 12        ; level vertices tried per ring
+escape_weight                   = 1.0       ; order: facing away from the escape direction costs this much
+distance_weight                 = 0.5       ; order: distance from the LKP (fraction of the ring radius)
+travel_weight                   = 0.5       ; assignment: travel from the searcher (fraction of the ring radius)
+escape_speed_min                = 0.5       ; m/s; slower last seen motion gives no escape direction
+clear_reach                     = 2.5       ; a searcher this close to a spot has cleared it
+clear_view                      = 25        ; farthest spot a searcher can clear by looking into it
+clear_height                    = 0.9       ; look point above the spot (a crouching man)
+clear_rays                      = 2         ; sight rays per searcher update (budgeted)
+replan_dist                     = 10        ; new information this far from the plan's LKP makes a new plan
+assign_timeout_s                = 25        ; an assignment without all_clear frees the spot again
+assign_tries                    = 2         ; a spot nobody cleared after this many assignments is dropped
+assign_wait_s                   = 5         ; a coordinated searcher waits this long for its next spot
+task_max_s                      = 40        ; a spot not reached in this time is given up
+pair_max_gap                    = 30        ; two searchers farther apart are not paired
+overwatch_dist                  = 8         ; the covering partner watches the spot from this far
+overwatch_max_s                 = 30        ; the covering partner stops waiting for all_clear
+takeover_s                      = 4         ; a new coordinator starts its own plan this long after the old one is gone
+unselected_drop_s               = 20        ; a target not selected for this long ends the search quietly
+sworn_mult                      = 1.3       ; search_s against a sworn enemy
+; quiet_search profiles make no search barks, give their orders hushed and sneak up on a spot; the others call to
+; each other on the way to every spot
+bark_pause_s                    = 8, 15     ; a searcher's search line is not repeated sooner, random range
+sneak_dist                      = 8         ; quiet searchers and investigators crouch this close to their spot
+torch_check_s                   = 1         ; how often a searcher's torch is looked at for r_torch_on
+plan_builds_per_frame           = 1         ; spot plan build steps per frame over all squads; the rest wait an update
+; a plan is built in steps: its ring around the LKP in square tiles whose circles are plan_tile_m, then its spots in
+; order of preference, at most plan_pops_per_step candidates per step; a step goes on to its next tile or candidate only
+; while it has taken less than plan_step_budget_us
+plan_tile_m                     = 15
+plan_pops_per_step              = 256
+plan_step_budget_us             = 120
+plan_builders                   = 4         ; plan builds under way at once (at most 4); a plan finding none free waits
+plan_build_stale_s              = 2         ; a build its owner stops asking for is dropped
+; Investigation of a suspicion (profile investigate): pair - one goes and asks a mate he sees to cover him; single -
+; one goes and says so, mates who hear it hold; none - wait in cover and call out; advance - straight at the source.
+investigate_same_m              = 10        ; a danger this close to the spot under investigation is the same one
+investigate_told_s              = 30        ; a mate who said he goes (or asked for cover) is waited for this long
+investigate_max_s               = 45        ; an investigator that has not seen the spot by then gives up
+
+; Sworn enemies search longer (lore): "<community> = <community>, ..." pairs, symmetric. Communities go through
+; [ai_community_alias] first. The actor's own communities are listed as the actor's.
+[ai_sworn_enemies]
+freedom                         = dolg, army, actor_dolg, actor_army
+dolg                            = actor_freedom
+army                            = actor_freedom
+stalker                         = bandit, actor_bandit
+bandit                          = actor_stalker
+; [ai:search] end ai_search
+
+; [ai:script] begin ai_script
+; The Lua side: dead_air_x64_ai.script and the overlay copies of base scripts it owns.
+[ai_script]
+; Report kinds whose target is the sender's enemy. A non-hostile NPC told about the actor this way by a member of its
+; own community turns on him (goodwill -1000), as DA's first-contact broadcast did for everyone within 100 m.
+hostility_kinds = contact, update, lost, taking_fire, reloading, flanking, cover_me, attack, help, search_assign
+attacked_squad_window_s         = 120       ; told this soon after the actor hit its squad, a mate drops combat_ignore
+weapon_choice_ms                = 2000      ; doctrine weapon choice period per NPC (DA's own timer)
+melee_m                         = 4.5       ; below this known distance DA's own hand-to-hand weapon choice runs
+weapon_primary                  = smg, shotgun, rifle_old, rifle, mg, dmr ; long guns, chosen first when the range fits
+weapon_heavy                    = launcher  ; chosen after the long guns when the range fits
+weapon_sidearm                  = pistol    ; chosen last, and when nothing else fits a close enemy
+torch_period_ms                 = 2000, 2100 ; torch rule period per NPC, random range (DA's sr_light timer)
+torch_discipline                = 0.5       ; light_discipline from here up: torch dark in combat, danger and search
+vision_denominator_floor_m      = 1         ; visual_memory_manager: least denominator of DA's distance ratio (fog)
+surrender_animation             = hand_up_0 ; played while the engine reports a surrender (DA's hands_up state)
+surrender_check_ms              = 250       ; surrender check period per NPC
+item_use_loudness               = 0.25      ; eating, a medkit, a bandage: level.ai_noise "item" (heard within ~10 m)
+hear_danger_fresh_ms            = 1000      ; xr_danger's hearing reaction: own perception of the source this recent
+; A level vertex DA's stalker binder remembered when the NPC went offline is used when it comes back online only on
+; the level it was taken on and within this distance of where ALife brings the NPC online.
+offline_vertex_max_m            = 150
+; [ai:script] end ai_script

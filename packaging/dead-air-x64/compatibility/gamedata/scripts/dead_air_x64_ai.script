@@ -1,0 +1,1677 @@
+-- Human NPC AI, the Lua side. The engine gives every stalker its own senses and knowledge; this script takes the
+-- places where base Dead Air scripts hand NPCs knowledge they never perceived and makes them honest:
+--   * the first-contact and hit broadcasts of xr_npc_extra: hostility now spreads by perception and by reports
+--     (on_ai_report) instead of to every same-faction NPC within 100 m;
+--   * xr_danger: no actor detection by inventory weight or torch through walls, danger reactions face the perceived
+--     spot instead of the live position of the source, and a heard attack sets a danger only where the NPC's own
+--     senses placed the source (never at the raw sound spot, which the engine's hearing had not judged yet);
+--   * axr_fight_from_cover, rx_ff, xr_camper: an unseen enemy is faced where the NPC believes he is;
+--   * weapon doctrine (ai_stalker.update_best_weapon), torch discipline (sr_light), looting only seen corpses,
+--     finishing off only a wounded enemy seen lying there (xrs_kill_wounded), "does the enemy see me" as the NPC's own
+--     estimate;
+--   * grenades issued at spawn from the NPC's profile, hands raised while the engine reports a surrender;
+--   * eating, medkits and bandages heard nearby (level.ai_noise), the actor's and an NPC's alike.
+-- Every wrapper checks that the base script is there, keeps the original, and runs it while the "scripts" AI feature
+-- is off (console `ai_feature scripts 0`). Numbers live in configs\dead_air_x64_ai.ltx, section [ai_script]; a
+-- missing key leaves that part to the base script.
+-- Apart from the AI, the stalker binder's offline position restore is kept to the level its vertex belongs to
+-- (xr_motivator, se_stalker).
+--
+-- Mods: dead_air_x64_ai.subscribe_report(fn) / unsubscribe_report(fn) register fn(receiver, target, kind, channel,
+-- sender) for every report the engine delivers to an NPC (kind and channel are the engine's indices).
+
+local HOSTILE = -1000 -- DA's goodwill of a sworn enemy
+local INVALID_VERTEX = 4294967295
+local SURRENDERED = 5 -- ai_morale() while the NPC gives up (the engine's Morale::Level::surrendered)
+
+local KIND_NAMES = {
+	"contact", "update", "lost", "man_down", "leader_down", "taking_fire", "grenade", "reloading", "flanking",
+	"cover_me", "fall_back", "attack", "help", "search_assign", "all_clear", "surrender",
+}
+
+local cfg = {}
+
+-- engine global, absent on an engine without the AI: everything then runs as in base Dead Air
+local feature_enabled = rawget(_G, "ai_feature_enabled")
+
+local function honest()
+	return feature_enabled ~= nil and feature_enabled("scripts")
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Settings
+------------------------------------------------------------------------------------------------------------------------
+local function split_list(value)
+	local list = {}
+	if type(value) == "string" then
+		for token in string.gmatch(value, "[^,%s]+") do
+			list[#list + 1] = token
+		end
+	end
+	return list
+end
+
+local function numbers_of(value)
+	local list = {}
+	for _, token in ipairs(split_list(value)) do
+		local number = tonumber(token)
+		if not number then
+			return {}
+		end
+		list[#list + 1] = number
+	end
+	return list
+end
+
+local function read_numbers(ini, section, key)
+	return numbers_of(ini:line_exist(section, key) and ini:r_string_ex(section, key) or nil)
+end
+
+local function read_set(ini, section, key)
+	local set = {}
+	for _, name in ipairs(split_list(ini:line_exist(section, key) and ini:r_string_ex(section, key) or nil)) do
+		set[name] = true
+	end
+	return set
+end
+
+local function read_settings()
+	cfg = {hostile_kinds = {}, weapon_tier = {}, weapon_bands = {}}
+	local ini = system_ini()
+	local section = "ai_script"
+	if not ini:section_exist(section) then
+		return
+	end
+
+	cfg.hostile_kinds = read_set(ini, section, "hostility_kinds")
+	local window = read_numbers(ini, section, "attacked_squad_window_s")[1]
+	cfg.attacked_window_ms = window and window * 1000
+
+	cfg.weapon_choice_ms = read_numbers(ini, section, "weapon_choice_ms")[1]
+	cfg.melee_m = read_numbers(ini, section, "melee_m")[1]
+	for tier, key in ipairs({"weapon_primary", "weapon_heavy", "weapon_sidearm"}) do
+		for class in pairs(read_set(ini, section, key)) do
+			cfg.weapon_tier[class] = tier
+		end
+	end
+	-- [ai_weapon_classes]: class = effective, engage_max, min
+	if ini:section_exist("ai_weapon_classes") then
+		for i = 0, ini:line_count("ai_weapon_classes") - 1 do
+			local _, class, value = ini:r_line("ai_weapon_classes", i, "", "")
+			local band = numbers_of(value)
+			if class and #band >= 3 then
+				cfg.weapon_bands[class] = {effective = band[1], engage_max = band[2], min = band[3]}
+			end
+		end
+	end
+
+	local period = read_numbers(ini, section, "torch_period_ms")
+	cfg.torch_period_min, cfg.torch_period_max = period[1], period[2] or period[1]
+	cfg.torch_discipline = read_numbers(ini, section, "torch_discipline")[1]
+
+	cfg.surrender_animation = split_list(ini:line_exist(section, "surrender_animation")
+		and ini:r_string_ex(section, "surrender_animation") or nil)[1]
+	cfg.surrender_check_ms = read_numbers(ini, section, "surrender_check_ms")[1]
+	cfg.offline_vertex_max_m = read_numbers(ini, section, "offline_vertex_max_m")[1]
+	cfg.item_use_loudness = read_numbers(ini, section, "item_use_loudness")[1]
+	cfg.hear_fresh_ms = read_numbers(ini, section, "hear_danger_fresh_ms")[1]
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------------------------------------------------------------------
+local function object_of(value)
+	if type(value) == "number" then
+		return value < 65535 and level.object_by_id(value) or nil
+	end
+	return value
+end
+
+local function storage_object(id)
+	local st = id and db.storage[id]
+	return st and st.object
+end
+
+-- Luabind class members raise on unknown names; a missing member is simply absent here.
+local function member_of(holder, name)
+	if not holder then
+		return nil
+	end
+	local ok, value = pcall(function() return holder[name] end)
+	return ok and value or nil
+end
+
+-- holder[name] = make(original) once per original; later calls see the replacement and do nothing.
+local replacements = setmetatable({}, {__mode = "k"})
+
+local function replaced(holder, name)
+	local own = holder and replacements[holder]
+	return own and own[name]
+end
+
+local function replace(holder, name, make)
+	local current = member_of(holder, name)
+	if type(current) ~= "function" then
+		return
+	end
+	local known = replaced(holder, name)
+	if known and known.replacement == current then
+		return
+	end
+	local replacement = make(current)
+	if pcall(function() holder[name] = replacement end) then
+		replacements[holder] = replacements[holder] or {}
+		replacements[holder][name] = {original = current, replacement = replacement}
+	end
+end
+
+local function upvalue_of(fn, name)
+	local debug_lib = rawget(_G, "debug")
+	local getupvalue = debug_lib and debug_lib.getupvalue
+	if not (getupvalue and fn) then
+		return nil
+	end
+	local i = 1
+	while true do
+		local n, value = getupvalue(fn, i)
+		if not n then
+			return nil
+		end
+		if n == name then
+			return value
+		end
+		i = i + 1
+	end
+end
+
+-- Runs a base script's on_game_start with some of its RegisterScriptCallback calls taken over: rules[name](fn)
+-- receives the function instead of the callback table. The base function stays reachable for the feature-off path.
+local function filter_start(module, rules)
+	replace(module, "on_game_start", function(original)
+		return function(...)
+			local register = _G.RegisterScriptCallback
+			_G.RegisterScriptCallback = function(name, fn)
+				local rule = rules[name]
+				if rule then
+					rule(fn)
+					return
+				end
+				return register(name, fn)
+			end
+			local ok, err = pcall(original, ...)
+			_G.RegisterScriptCallback = register
+			if not ok then
+				error(err, 0)
+			end
+		end
+	end)
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Reports (C17, C24)
+------------------------------------------------------------------------------------------------------------------------
+local report_subscribers = {}
+
+function subscribe_report(fn)
+	if type(fn) ~= "function" then
+		return
+	end
+	for i = 1, #report_subscribers do
+		if report_subscribers[i] == fn then
+			return
+		end
+	end
+	report_subscribers[#report_subscribers + 1] = fn
+end
+
+function unsubscribe_report(fn)
+	for i = #report_subscribers, 1, -1 do
+		if report_subscribers[i] == fn then
+			table.remove(report_subscribers, i)
+		end
+	end
+end
+
+local function community_fights_actor(community)
+	local fighting = xr_combat_ignore and xr_combat_ignore.fighting_with_actor_npcs
+	if not fighting then
+		return false
+	end
+	for id in pairs(fighting) do
+		local npc = storage_object(id)
+		if npc and npc:alive() and npc:character_community() == community then
+			return true
+		end
+	end
+	return false
+end
+
+-- A mate told about the actor soon after the actor attacked the squad fights back like the mates who saw it.
+local function told_of_attack(receiver)
+	local window = cfg.attacked_window_ms
+	local attacked = window and xr_combat_ignore and xr_combat_ignore.attacked_squads
+	local squad = attacked and get_object_squad(receiver)
+	local time = squad and attacked[squad.id]
+	if not (time and time_global() - time <= window) then
+		return
+	end
+	local st = db.storage[receiver:id()]
+	if st and (st.overrides == nil or st.overrides.combat_ignore_keep_when_attacked ~= true) then
+		utils.save_var(receiver, "xr_combat_ignore_enabled", false)
+	end
+end
+
+-- DA spread hostility to the actor to every same-faction NPC near him at the first contact. Here only an NPC that
+-- is told about him by a member of its own community turns on him; without a known sender, some member of its
+-- community must be fighting him.
+local function told_about(receiver, target, kind, sender)
+	if not (db.actor and target and target:id() == 0) or receiver:id() == 0 or not receiver:alive() then
+		return
+	end
+	if not cfg.hostile_kinds[KIND_NAMES[kind + 1] or ""] then
+		return
+	end
+	local community = receiver:character_community()
+	if receiver:relation(db.actor) ~= game_object.enemy then
+		local by_own
+		if sender then
+			by_own = IsStalker(sender) and sender:id() ~= 0 and sender:character_community() == community
+				and sender:relation(db.actor) == game_object.enemy
+		else
+			by_own = community_fights_actor(community)
+		end
+		if not by_own then
+			return
+		end
+		receiver:force_set_goodwill(HOSTILE, db.actor)
+	end
+	told_of_attack(receiver)
+end
+
+-- Called by the engine for every delivered report (throttled per receiver and target there).
+function on_ai_report(receiver, target, kind, channel, sender)
+	receiver, target, sender = object_of(receiver), object_of(target), object_of(sender)
+	if not receiver then
+		return
+	end
+	if honest() and type(kind) == "number" then
+		told_about(receiver, target, kind, sender)
+	end
+	if #report_subscribers == 0 then
+		return
+	end
+	local subscribers = {unpack(report_subscribers)}
+	for i = 1, #subscribers do
+		local ok, err = pcall(subscribers[i], receiver, target, kind, channel, sender)
+		if not ok then
+			printf("![dead_air_x64_ai] report subscriber failed: %s", tostring(err))
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- xr_npc_extra: first contact and hit broadcasts (H8)
+------------------------------------------------------------------------------------------------------------------------
+local extra_hit, extra_fighting
+
+local function on_npc_hit(victim, amount, local_direction, who, bone_index)
+	if not honest() then
+		if extra_hit then
+			extra_hit(victim, amount, local_direction, who, bone_index)
+		end
+		return
+	end
+	if not (who and victim and db.actor) or who:id() ~= 0 or not victim:alive() then
+		return
+	end
+	-- The victim knows who hit him, and so does every NPC of his community that sees the actor right now. Nobody is
+	-- handed a position: the hit memory and the witnesses' own sight hold what they know.
+	victim:force_set_goodwill(HOSTILE, db.actor)
+	local community = victim:character_community()
+	local online = db.OnlineStalkers
+	for i = 1, #online do
+		local npc = storage_object(online[i])
+		if npc and npc:id() ~= victim:id() and IsStalker(npc) and npc:alive()
+			and npc:character_community() == community and npc:see(db.actor) then
+			npc:force_set_goodwill(HOSTILE, db.actor)
+		end
+	end
+end
+
+local function on_fighting_actor(npc)
+	if extra_fighting and not honest() then
+		extra_fighting(npc)
+	end
+end
+
+local function drop_extra_hit(fn)
+	extra_hit = fn
+end
+
+local function drop_extra_fighting(fn)
+	extra_fighting = fn
+end
+
+local function patch_npc_extra()
+	local module = xr_npc_extra
+	if not module then
+		return
+	end
+	-- Normally that script starts after this one and its subscriptions are filtered below; if it started first, its
+	-- functions are taken out of the callback table here.
+	for name, keep in pairs({npc_on_hit_callback = drop_extra_hit, npc_on_fighting_actor = drop_extra_fighting}) do
+		local fn = member_of(module, name)
+		if type(fn) == "function" then
+			keep(fn)
+			UnregisterScriptCallback(name, fn)
+		end
+	end
+	filter_start(module, {npc_on_hit_callback = drop_extra_hit, npc_on_fighting_actor = drop_extra_fighting})
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- xr_danger (W9)
+------------------------------------------------------------------------------------------------------------------------
+local danger_leak
+-- xr_danger's hearing reaction: a scripted danger at the raw sound spot within 30 m, before the engine's hearing
+-- (threshold, occlusion) decided anything - the actor's heavy breathing through a wall was enough.
+local danger_hear
+local SOURCE_OWN_LAST = 10 -- the engine's Source list: seen .. flashlight are the NPC's own senses
+
+local function on_npc_update(npc, st)
+	if danger_leak and not honest() then
+		danger_leak(npc, st)
+	end
+end
+
+-- Where the NPC's own senses put who, when they did so this recently; reports, rumours and restored beliefs are no
+-- sound. The raw sound spot is never used.
+local function perceived_position(npc, who)
+	local source, age = npc:ai_belief_source(who), npc:ai_belief_age(who)
+	if source < 1 or source > SOURCE_OWN_LAST or age < 0 or age > cfg.hear_fresh_ms then
+		return nil
+	end
+	return npc:memory_position(who)
+end
+
+local function on_npc_hear(npc, who_id, s_type, dist, sound_power, sound_position)
+	if not danger_hear then
+		return
+	end
+	if not honest() then
+		return danger_hear(npc, who_id, s_type, dist, sound_power, sound_position)
+	end
+	local who = cfg.hear_fresh_ms and IsStalker(npc) and storage_object(who_id)
+	local pos = who and perceived_position(npc, who)
+	if pos then
+		danger_hear(npc, who_id, s_type, npc:position():distance_to_sqr(pos), sound_power, pos)
+	end
+end
+
+-- Mirror of xr_danger's private scripted-danger table: set_script_danger is its only writer.
+local script_dangers = {}
+
+local function active_script_danger(id)
+	local sd = script_dangers[id]
+	if sd and time_global() < sd.danger_time + sd.danger_inertion then
+		return sd
+	end
+	script_dangers[id] = nil
+end
+
+local function danger_scripted(npc, st, sd)
+	local pos = sd.position
+	-- Face where the NPC itself believes the source is when that is near the heard spot, else the heard spot.
+	local look = pos
+	local who = storage_object(sd.id)
+	if who and pos and npc:memory_time(who) > 0 then
+		local believed = npc:memory_position(who)
+		if believed:distance_to_sqr(pos) < 22500 then
+			look = believed
+		end
+	end
+
+	if (st.stage == 1) then
+		local new_vid = random_choice(alun_utils.try_to_strafe(npc), alun_utils.try_go_backward(npc, 6),
+			alun_utils.try_go_cover(npc, look or npc:position()))
+		st.lvid = nil
+		if (new_vid and (not st.lvid or (new_vid ~= st.lvid and new_vid ~= npc:level_vertex_id()))) then
+			st.lvid = new_vid
+		end
+		if not (new_vid) then
+			local dir = pos and vector():set(npc:position()):sub(pos) or npc:direction()
+			dir = vector_rotate_y(dir, math.random(-20, 20))
+			local node = xr_danger.position_node(5)
+			node = node:select_best_vertex_id(npc, dir, npc:level_vertex_id(), 20, 35)
+			if (node and node.vertex_id and node.vertex_id ~= npc:level_vertex_id()) then
+				st.lvid = node.vertex_id
+			end
+		end
+		if (st.lvid and st.lvid ~= npc:level_vertex_id()) then
+			st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+			st.stage = 2
+			local sm = db.storage[npc:id()].state_mgr
+			if (sm and sm.target_state ~= "assault") then
+				npc:clear_animations()
+				sm:set_state("assault", nil, nil, {look_position = look}, {fast_set = true})
+				sm.animation:set_state(nil, true)
+				sm.animation:set_control()
+				sm.animstate:set_state(nil, true)
+				sm.animstate:set_control()
+			end
+			return
+		end
+		state_mgr.set_state(npc, "hide_na", nil, nil, {look_position = look})
+	elseif (st.stage == 2) then
+		if (npc:level_vertex_id() == st.lvid) then
+			local tg = time_global()
+			st.__dtimer = not st.__dtimer and tg + math.random(5000, 15000) or st.__dtimer
+			if (tg > st.__dtimer) then
+				st.stage = 1
+				return
+			end
+			state_mgr.set_state(npc, "threat_danger", nil, nil, {look_position = look})
+			return
+		end
+		state_mgr.set_state(npc, "assault", nil, nil, {look_position = look})
+		utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+	end
+end
+
+local function danger_corpse(npc, st, best_danger_object, dependent_object)
+	local bdo = best_danger_object or dependent_object
+	if not (bdo) then
+		return
+	end
+	local dst = db.storage[bdo:id()]
+	local killer = dependent_object or dst and dst.death_by_id and storage_object(dst.death_by_id)
+	-- Where the killer stood when the body fell: the scene tells that much, never where he is now.
+	local last_known = dst and dst.killer_last_known_position
+
+	-- A killer seen at the body turns those who see him hostile; the rest of the squad learns it from callouts.
+	if (st.stage >= 2 and killer and killer:id() == 0 and killer:alive()
+		and npc:relation(killer) >= game_object.neutral and npc:see(killer)) then
+		npc:force_set_goodwill(HOSTILE, killer)
+		local squad = get_object_squad(npc)
+		if (squad) then
+			for k in squad:squad_members() do
+				local mate = storage_object(k.id)
+				if (mate and mate:id() ~= npc:id() and mate:alive() and mate:see(killer)) then
+					mate:force_set_goodwill(HOSTILE, killer)
+				end
+			end
+		end
+	end
+
+	if (st.stage == 1) then
+		if (math.random(1, 100) < 50) then
+			st.stage = 3
+		end
+	end
+
+	if (st.stage == 1) then
+		st.lvid = bdo:level_vertex_id()
+		st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+		state_mgr.set_state(npc, "assault", nil, nil, {look_object = bdo}, {fast_set = true})
+		st.rnd = math.random(30)
+		st.stage = 2
+	elseif (st.stage == 2) then
+		if not (st.rnd and st.lvid) then
+			st.stage = 1
+			return
+		end
+		local dist = bdo:position():distance_to_sqr(npc:position())
+		if (st.lvid == npc:level_vertex_id() or dist <= st.rnd) then
+			local rnd = math.random(100)
+			if (rnd <= 33) then
+				xr_sound.set_sound_play(npc:id(), "search")
+				state_mgr.set_state(npc, "check_corpse", nil, nil, {look_position = last_known})
+				st.dtimer = time_global() + math.random(3000, 5000)
+			elseif (dist <= 5 and not st.searched) then
+				st.searched = true
+				state_mgr.set_state(npc, "kick_corpse")
+				st.dtimer = time_global() + 3000
+			else
+				state_mgr.set_state(npc, "raid", nil, nil, {look_position = last_known}, {fast_set = true})
+			end
+			st.stage = 3
+			return
+		end
+		st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+		state_mgr.set_state(npc, "assault", nil, nil, {look_position = last_known}, {fast_set = true})
+	elseif (st.stage == 3) then
+		if (st.dtimer and time_global() < st.dtimer) then
+			return
+		end
+		local dist_to_killer = last_known and npc:position():distance_to_sqr(last_known) or 30
+		local new_vid = random_choice(alun_utils.try_to_strafe(npc), alun_utils.try_go_backward(npc, 6),
+			alun_utils.try_go_cover(npc, last_known or bdo:position()))
+		if (new_vid and (not st.lvid or new_vid ~= st.lvid)) then
+			st.lvid = new_vid
+		end
+		if not (new_vid) then
+			local dir = last_known and vector():set(last_known):sub(npc:position()) or npc:direction()
+			local node = xr_danger.position_node(3)
+			node = node:select_best_vertex_id(npc, dir, npc:level_vertex_id(), 10, dist_to_killer / 2)
+			if (node and node.vertex_id and node.vertex_id ~= npc:level_vertex_id()) then
+				st.lvid = node.vertex_id
+			end
+		end
+		if (st.lvid) then
+			st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+			state_mgr.set_state(npc, "assault", nil, nil, {look_position = last_known}, {fast_set = true})
+			st.stage = 4
+			return
+		end
+		st.dtimer = time_global() + math.random(5000, 7000)
+		st.stage = 5
+		state_mgr.set_state(npc, "threat_danger", nil, nil, {look_position = last_known}, {fast_set = true})
+		return
+	elseif (st.stage == 4) then
+		if (npc:level_vertex_id() == st.lvid) then
+			st.dtimer = time_global() + math.random(5000, 7000)
+			st.stage = 5
+			state_mgr.set_state(npc, "hide_na", nil, nil, {look_position = last_known}, {fast_set = true})
+			return
+		end
+		st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+	elseif (st.stage == 5) then
+		if (st.dtimer and time_global() < st.dtimer) then
+			return
+		end
+		st.lvid = nil
+		st.stage = 6
+	elseif (st.stage == 6) then
+		local new_vid = alun_utils.try_go_cover(npc, last_known or bdo:position())
+		if (new_vid) then
+			st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+			state_mgr.set_state(npc, "hide_na", nil, nil, {look_position = last_known or bdo:position()},
+				{fast_set = true})
+		end
+	end
+end
+
+local function danger_attacked(npc, st, best_danger)
+	local tg = time_global()
+	if (st.stage == 1) then
+		-- Where the attack was perceived from, taken once per attack; never the attacker's live position.
+		local time = best_danger:time()
+		if not (st.last_pos and st.last_pos_time == time) then
+			st.last_pos = vector():set(best_danger:position())
+			st.last_pos_time = time
+		end
+
+		local target_vertex_id = random_choice(alun_utils.try_to_strafe(npc), alun_utils.try_go_backward(npc, 6),
+			alun_utils.try_go_cover(npc, st.last_pos))
+		if (target_vertex_id) then
+			st.lvid = utils.send_to_nearest_accessible_vertex(npc, target_vertex_id)
+			state_mgr.set_state(npc, "assault", nil, nil, {look_position = st.last_pos})
+			st.stage = 2
+			return
+		end
+		st.dtimer = tg + math.random(5000, 6000)
+		st.stage = 3
+		return
+	elseif (st.stage == 2) then
+		if (npc:level_vertex_id() == st.lvid) then
+			st.dtimer = tg + math.random(5000, 7000)
+			st.stage = 3
+			return
+		end
+		st.lvid = utils.send_to_nearest_accessible_vertex(npc, st.lvid)
+	elseif (st.stage == 3) then
+		if (st.dtimer and tg < st.dtimer) then
+			state_mgr.set_state(npc, "threat_danger", nil, nil, {look_position = st.last_pos})
+			return
+		end
+		st.stage = 1
+	end
+end
+
+local function make_danger_execute(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		local npc = self.object
+		local best_danger = npc:best_danger()
+		local sd = active_script_danger(npc:id())
+		local bd_type = best_danger and best_danger:type()
+		-- Grenades and the rest stay with xr_danger itself: they react to what is seen there and then.
+		if not sd and bd_type ~= danger_object.entity_corpse and bd_type ~= danger_object.attacked then
+			return original(self)
+		end
+		action_base.execute(self)
+		if not (best_danger) then
+			return
+		end
+		if (sd) then
+			danger_scripted(npc, self.a, sd)
+			return
+		end
+		if (npc:path_type() ~= game_object.level_path) then
+			npc:set_path_type(game_object.level_path)
+		end
+		if (bd_type == danger_object.entity_corpse) then
+			danger_corpse(npc, self.a, best_danger:object(), best_danger:dependent_object())
+		else
+			danger_attacked(npc, self.a, best_danger)
+		end
+	end
+end
+
+local function make_set_script_danger(original)
+	return function(npc, time, who_id, pos)
+		if npc then
+			script_dangers[npc:id()] = {danger_time = time_global(), danger_inertion = time, id = who_id,
+				position = pos}
+		end
+		return original(npc, time, who_id, pos)
+	end
+end
+
+local function patch_danger()
+	local module = xr_danger
+	if not module then
+		return
+	end
+	-- The weight and torch "detection" and the hearing reaction are private functions of xr_danger: their
+	-- subscriptions are taken over while the script starts (or pulled out of the callback table when that already
+	-- happened and the debug library is there).
+	local start = replaced(module, "on_game_start")
+	local base_start = start and start.original or member_of(module, "on_game_start")
+	local leak = upvalue_of(base_start, "npc_on_update")
+	if type(leak) == "function" then
+		danger_leak = leak
+		UnregisterScriptCallback("npc_on_update", leak)
+	end
+	local hear = upvalue_of(base_start, "npc_on_hear_callback")
+	if type(hear) == "function" then
+		danger_hear = hear
+		UnregisterScriptCallback("npc_on_hear_callback", hear)
+	end
+	filter_start(module, {
+		npc_on_update = function(fn) danger_leak = fn end,
+		npc_on_hear_callback = function(fn) danger_hear = fn end,
+	})
+
+	replace(module, "set_script_danger", make_set_script_danger)
+	replace(member_of(module, "action_danger"), "execute", make_danger_execute)
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- xr_camper (W9)
+------------------------------------------------------------------------------------------------------------------------
+-- DA's camper faces an attacker for 3 s after a hit at his live position, through walls; here it faces where it
+-- believes him to be, else the perceived spot of the attack. The rest is DA's body.
+local function make_camper_process_danger(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		local npc = self.object
+		local best_danger = npc:best_danger()
+		if best_danger == nil then
+			return false
+		end
+		local bdo = best_danger:object()
+		local tg = time_global()
+		local urgent_danger = bdo and (not IsStalker(bdo) or npc:relation(bdo) >= game_object.enemy)
+			and best_danger:type() == danger_object.attacked and tg - best_danger:time() < 3000
+		if not (urgent_danger or xr_danger.has_danger(npc)) then
+			return false
+		end
+
+		if self.danger ~= true then
+			self.danger = true
+			npc:play_sound(stalker_ids.sound_alarm, 1, 0, 1, 0)
+		end
+
+		local bd_pos = best_danger:position()
+		if urgent_danger and npc:memory_time(bdo) > 0 then
+			bd_pos = npc:memory_position(bdo)
+		end
+		if (self.__keep_body_state_until == nil or tg > self.__keep_body_state_until) then
+			local dir = vector():sub(bd_pos, npc:position()):normalize()
+			self.__keep_body_state_until = tg + 3000
+			if (npc:body_state() ~= move.crouch) then
+				if (level.high_cover_in_direction(npc:level_vertex_id(), dir) >= 0.16) then
+					self.stand = false
+				end
+			elseif (level.high_cover_in_direction(npc:level_vertex_id(), dir) < 0.16) then
+				self.stand = true
+			end
+		end
+
+		state_mgr.set_state(npc, self.stand and "threat_na" or "hide_na", nil, nil, {look_position = bd_pos})
+		return true
+	end
+end
+
+local function patch_camper()
+	local module = xr_camper
+	if module then
+		replace(member_of(module, "action_patrol"), "process_danger", make_camper_process_danger)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- axr_fight_from_cover, rx_ff (W9)
+------------------------------------------------------------------------------------------------------------------------
+local function cover_lmove(npc, vid, st)
+	if (vid == nil or vid >= INVALID_VERTEX) then
+		return
+	end
+	if (db.used_level_vertex_ids[vid] == npc:id()) then
+		npc:set_dest_level_vertex_id(vid)
+		return vid
+	end
+	if (st.vid) then
+		db.used_level_vertex_ids[st.vid] = nil
+	end
+	if not (npc:accessible(vid)) then
+		local vtemp = vector()
+		vid, vtemp = npc:accessible_nearest(vid and level.vertex_position(vid) or npc:position(), vtemp)
+	end
+	db.used_level_vertex_ids[vid] = npc:id()
+	st.vid = vid
+	npc:set_dest_level_vertex_id(vid)
+	return vid
+end
+
+local function make_fight_from_cover_execute(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		action_base.execute(self)
+
+		local npc = self.object
+		local enemy = npc:best_enemy()
+
+		if (npc:path_type() ~= game_object.level_path) then
+			npc:set_path_type(game_object.level_path)
+		end
+
+		local see = enemy and npc:see(enemy)
+		local ene_pos = npc:position()
+		if (enemy) then
+			ene_pos = see and alun_utils.safe_bone_pos(enemy, "bip01_neck") or npc:memory_position(enemy)
+		end
+		-- An unseen threat is faced where the NPC believes its source is (else where the danger was perceived), not
+		-- where the source is now.
+		local bd = npc:best_danger()
+		local bdo = bd and bd:object()
+		if (bdo and not see) then
+			ene_pos = npc:memory_time(bdo) > 0 and npc:memory_position(bdo) or bd:position()
+		end
+
+		local tg = time_global()
+		if (self.st.vid) then
+			local bw = npc:active_item() and npc:best_weapon()
+
+			if (self.st.__keep_body_state_until == nil or tg > self.st.__keep_body_state_until) then
+				local dir = ene_pos and vector():sub(ene_pos, npc:position()) or npc:direction()
+				self.st.__keep_body_state_until = tg + 5000
+				if (npc:body_state() ~= move.crouch) then
+					if (level.high_cover_in_direction(npc:level_vertex_id(), dir) < 0.2) then
+						self.stand = false
+					end
+				else
+					if (level.high_cover_in_direction(npc:level_vertex_id(), dir) >= 0.2) then
+						self.stand = true
+					end
+				end
+			end
+
+			local new_state
+			if (npc:level_vertex_id() == self.st.vid) then
+				if not (bw) then
+					new_state = "sneak_run_no_wpn"
+				else
+					local is_sniper = IsSniper(bw)
+					if (is_sniper == nil and self.stand) then
+						new_state = see and (is_sniper and "threat_sniper_fire" or "threat_fire") or "threat"
+					else
+						new_state = see and (is_sniper and "hide_sniper_fire" or "sneak_fire") or "sneak_run"
+					end
+				end
+
+				if (see) then
+					state_mgr.set_state(npc, new_state, nil, nil, {look_object = enemy}, {fast_set = true})
+				else
+					state_mgr.set_state(npc, new_state, nil, nil, {look_position = ene_pos}, {fast_set = true})
+				end
+
+				self.st.__keep_point_until = self.st.__keep_point_until or tg + math.random(3000, 8000)
+				if (self.st.__keep_point_until and tg < self.st.__keep_point_until) then
+					return
+				end
+				self.st.__keep_point_until = nil
+
+				db.used_level_vertex_ids[self.st.vid] = nil
+				self.st.vid = nil
+			else
+				if not (bw) then
+					new_state = "sneak_run_no_wpn"
+				else
+					local dist = npc:position():distance_to_sqr(ene_pos)
+					if (dist < 400) then
+						local is_sniper = IsSniper(bw)
+						if (self.stand) then
+							new_state = see and (is_sniper and "threat_sniper_fire" or "assault_fire") or "assault"
+						else
+							new_state = see and (is_sniper and "hide_sniper_fire" or "sneak_fire") or "sneak_run"
+						end
+					else
+						if (self.stand) then
+							new_state = "assault"
+						else
+							new_state = "sneak_run"
+						end
+					end
+				end
+
+				if (see) then
+					state_mgr.set_state(npc, new_state, nil, nil, {look_object = enemy}, {fast_set = true})
+				else
+					state_mgr.set_state(npc, new_state, nil, nil, {look_position = ene_pos}, {fast_set = true})
+				end
+
+				cover_lmove(npc, self.st.vid, self.st)
+				return
+			end
+		end
+
+		if not (self:try_go_cover(npc, ene_pos)) then
+			self:try_to_strafe(npc)
+		end
+	end
+end
+
+local function make_verso_execute(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		action_base.execute(self)
+
+		local npc = self.object
+		local be = npc:best_enemy()
+		if not (be) then
+			return
+		end
+
+		-- The friend in the line of fire is seen; the enemy behind him may not be any more.
+		local see = npc:see(be)
+		local be_pos = see and be:position() or npc:memory_position(be)
+		local look = see and {look_object = be} or {look_position = be_pos}
+
+		local friend = storage_object(self.st.friend_id)
+		if not (self.st.vertex_id) then
+			local rnd = math.random(1, 100)
+			if (rnd < 33) then
+				self.st.vertex_id = alun_utils.try_to_strafe(npc)
+			elseif (rnd < 66) then
+				self.st.vertex_id = alun_utils.try_go_position(npc, be_pos)
+			else
+				self.st.vertex_id = alun_utils.try_go_aside_object(npc, friend, be_pos)
+			end
+		end
+
+		if (self.st.vertex_id == nil or self.st.vertex_id == npc:level_vertex_id()) then
+			if (self.st.vertex_id) then
+				db.used_level_vertex_ids[self.st.vertex_id] = nil
+				self.st.vertex_id = nil
+			end
+			state_mgr.set_state(npc, "threat", nil, nil, look)
+			return
+		end
+
+		state_mgr.set_state(npc, "raid", nil, nil, look)
+	end
+end
+
+local function patch_cover_schemes()
+	local fight_from_cover = axr_fight_from_cover
+	if fight_from_cover then
+		replace(member_of(fight_from_cover, "action_fight_from_cover"), "execute", make_fight_from_cover_execute)
+	end
+	local friendly_fire = rx_ff
+	if friendly_fire then
+		replace(member_of(friendly_fire, "action_verso"), "execute", make_verso_execute)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Weapon doctrine: ai_stalker.update_best_weapon (L3)
+------------------------------------------------------------------------------------------------------------------------
+local function firearm(item)
+	return IsWeapon(nil, item:clsid()) and not IsKnife(item)
+end
+
+local function weapon_candidate(npc, item, distance, current)
+	local class = firearm(item) and npc:ai_weapon_class(item)
+	local band = class and cfg.weapon_bands[class]
+	if not band then
+		return nil
+	end
+	local candidate = {
+		item = item,
+		tier = cfg.weapon_tier[class] or 1,
+		effective = band.effective,
+		in_band = distance >= band.min and distance <= band.engage_max,
+		ammo = item:get_ammo_in_magazine() > 0 or item:get_ammo_total() > 0,
+		current = current ~= nil and item:id() == current:id(),
+		condition = item:condition(),
+	}
+	candidate.covers = candidate.in_band and band.effective >= distance
+	-- metres the enemy stands outside the weapon's band
+	candidate.miss = candidate.in_band and 0 or
+		(distance < band.min and band.min - distance or distance - band.engage_max)
+	return candidate
+end
+
+-- True when a is the better weapon for the known distance.
+local function better_weapon(a, b)
+	if not b then
+		return true
+	end
+	if a.ammo ~= b.ammo then
+		return a.ammo
+	end
+	if a.in_band ~= b.in_band then
+		return a.in_band
+	end
+	if a.tier ~= b.tier then
+		return a.tier < b.tier
+	end
+	if a.in_band then
+		if a.covers ~= b.covers then
+			return a.covers
+		end
+		if a.effective ~= b.effective then
+			-- the most specialised weapon that still reaches, else the one that reaches farthest
+			if a.covers then
+				return a.effective < b.effective
+			end
+			return a.effective > b.effective
+		end
+	elseif a.miss ~= b.miss then
+		return a.miss < b.miss
+	end
+	if a.current ~= b.current then
+		return a.current
+	end
+	return a.condition > b.condition
+end
+
+local function make_update_best_weapon(original)
+	return function(npc, cur_wpn)
+		if not (honest() and feature_enabled("doctrine") and cfg.weapon_choice_ms and cfg.melee_m
+			and next(cfg.weapon_bands) ~= nil) then
+			return original(npc, cur_wpn)
+		end
+		if not npc:alive() then
+			return
+		end
+		local st = db.storage[npc:id()]
+		if not (st) then
+			return
+		end
+
+		-- No enemy, a helicopter or hand-to-hand range: DA's own choice.
+		local be = npc:best_enemy()
+		local heli = axr_npc_vs_heli
+		if not be or (heli and heli.is_under_npc_vs_heli and heli.is_under_npc_vs_heli(npc)) then
+			return original(npc, cur_wpn)
+		end
+		local distance = npc:ai_known_distance(be)
+		if distance < 0 or distance < cfg.melee_m then
+			return original(npc, cur_wpn)
+		end
+
+		local tg = time_global()
+		local active = npc:active_item()
+		if (st._choose_bw_timer and tg < st._choose_bw_timer + cfg.weapon_choice_ms and cur_wpn and active
+			and active:id() == cur_wpn:id()) then
+			return cur_wpn
+		end
+		st._choose_bw_timer = tg
+
+		local best, current
+		local function consider(owner, item)
+			local candidate = weapon_candidate(npc, item, distance, cur_wpn)
+			if not candidate then
+				return
+			end
+			if candidate.current then
+				current = candidate
+			end
+			if better_weapon(candidate, best) then
+				best = candidate
+			end
+		end
+		npc:iterate_inventory(consider, npc)
+		if not best then
+			return original(npc, cur_wpn)
+		end
+
+		-- The weapon in hand stays while it fits the range, has ammo and is not a sidearm with a long gun that fits:
+		-- people do not swap guns without a reason.
+		if current and current.in_band and current.ammo and current.tier <= best.tier then
+			return current.item
+		end
+		return best.item
+	end
+end
+
+local function patch_weapon_choice()
+	local module = ai_stalker
+	if module then
+		replace(module, "update_best_weapon", make_update_best_weapon)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Torch discipline: sr_light.check_light (L3)
+------------------------------------------------------------------------------------------------------------------------
+local function first_number(value)
+	return numbers_of(value)[1]
+end
+
+local function make_check_light(original)
+	return function(stalker)
+		if not (honest() and cfg.torch_discipline and cfg.torch_period_min) then
+			return original(stalker)
+		end
+		if stalker:id() == 0 or not stalker:alive() or character_community(stalker) == "zombied" then
+			return original(stalker)
+		end
+		local st = db.storage[stalker:id()]
+		if not st then
+			return original(stalker)
+		end
+		-- Only a disciplined NPC at work goes dark; the rest light up at night as DA decided (search with a torch).
+		local at_work = stalker:best_enemy() ~= nil or st.danger_flag == true or stalker:ai_searching()
+		local discipline = at_work and first_number(stalker:ai_profile("light_discipline"))
+		if not (discipline and discipline >= cfg.torch_discipline) then
+			return original(stalker)
+		end
+
+		local tg = time_global()
+		if (st.srlight_timer and tg < st.srlight_timer) then
+			return
+		end
+		st.srlight_timer = tg + math.random(cfg.torch_period_min, cfg.torch_period_max)
+
+		local torch = stalker:object("device_torch")
+		if torch and torch:attachable_item_enabled() then
+			torch:enable_attachable_item(false)
+		end
+	end
+end
+
+local function patch_torch()
+	local module = sr_light
+	if module then
+		replace(module, "check_light", make_check_light)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- xr_corpse_detection: a body is looted only once it has been seen (L3)
+------------------------------------------------------------------------------------------------------------------------
+local function make_find_valid_target(original)
+	return function(self)
+		local had = self.a.selected_corpse_id
+		local result = original(self)
+		if not (result and honest()) or had then
+			return result
+		end
+		local id = self.a.selected_corpse_id
+		local corpse = storage_object(id) or id and level.object_by_id(id)
+		if corpse and self.object:see(corpse) then
+			return result
+		end
+		-- Chosen from memory without being in sight: undo the choice and rebuild the list from the next memory read,
+		-- the body is chosen again once it is seen.
+		if id and db.storage[id] then
+			db.storage[id].corpse_already_selected = nil
+		end
+		self.a.selected_corpse_id = nil
+		self.a.vertex_id = nil
+		self.a.vertex_position = nil
+		self.a.state = nil
+		if self.a.memory then
+			empty_table(self.a.memory)
+		end
+		return false
+	end
+end
+
+local function patch_corpse_detection()
+	local module = xr_corpse_detection
+	if module then
+		replace(member_of(module, "evaluator_corpse"), "find_valid_target", make_find_valid_target)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- "Does the enemy see me": the NPC's own estimate instead of the enemy's vision (L3)
+------------------------------------------------------------------------------------------------------------------------
+local help_settings
+
+local function make_help_wounded_execute(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		action_base.execute(self)
+
+		local npc = self.object
+		local st = self.a
+		local anim_combat, anim_free = help_settings.anim_combat, help_settings.anim_free
+
+		local state = state_mgr.get_state(npc)
+		if (state == "help_victim_" .. anim_combat or state == "help_victim_" .. anim_free
+			or state == "help_wounded") then
+			return
+		end
+
+		if not (st.selected_id) then
+			return
+		end
+
+		local dist = npc:position():distance_to_sqr(st.vertex_position)
+
+		-- Stop helping the victim when the NPC reckons its enemy sees it
+		local be = npc:best_enemy()
+		local has_enemy = be and not IsWounded(be)
+		if (has_enemy and dist > help_settings.always_help_distance) then
+			if (npc:ai_enemy_sees_me(be)) then
+				if (db.storage[st.selected_id]) then
+					db.storage[st.selected_id].wounded_already_selected = nil
+				end
+				st.selected_id = nil
+				return
+			end
+		end
+
+		if (npc:level_vertex_id() == st.vertex_id) then
+			if (help_settings.use_new_anim) then
+				if (npc:active_item() and npc:best_weapon() and npc:weapon_unstrapped()) then
+					state_mgr.set_state(npc, "help_victim_" .. anim_combat, nil, nil, nil, {fast_set = true})
+				else
+					state_mgr.set_state(npc, "help_victim_" .. anim_free, nil, nil, nil, {fast_set = true})
+				end
+				-- increase stalker rank for helping an ally
+				npc:set_character_rank(npc:character_rank() + math.random(10, 20))
+			else
+				state_mgr.set_state(npc, "help_wounded", nil, nil, nil, {fast_set = true})
+			end
+		else
+			if (npc:path_type() ~= game_object.level_path) then
+				npc:set_path_type(game_object.level_path)
+			end
+			st.vertex_id = utils.send_to_nearest_accessible_vertex(npc, st.vertex_id, "xr_help_wounded:2")
+			if (has_enemy) then
+				state_mgr.set_state(npc, "assault")
+			else
+				state_mgr.set_state(npc, "run")
+			end
+		end
+	end
+end
+
+-- The settings xr_help_wounded reads into private locals, read the same way (same file, same defaults).
+local function read_help_settings()
+	local ini = ini_file("ai_tweaks\\xr_help_wounded.ltx")
+	return {
+		use_new_anim = ini:r_bool_ex("settings", "use_new_anim", true),
+		anim_combat = ini:r_float_ex("settings", "anim_combat_type") or 2,
+		anim_free = ini:r_float_ex("settings", "anim_free_type") or 1,
+		always_help_distance = ini:r_float_ex("settings", "always_help_distance") or 900,
+	}
+end
+
+-- Eating, a medkit or a bandage is heard like a quiet rustle (the engine has no sound event for item use); the actor's
+-- use and an NPC's alike.
+local function item_noise(who)
+	local loudness = cfg.item_use_loudness
+	local emit = level.ai_noise
+	if who and loudness and emit and honest() and feature_enabled("noise") then
+		emit(who:position(), loudness, "item", who)
+	end
+end
+
+local function on_actor_item_use()
+	item_noise(db.actor)
+end
+
+-- In cover and ready to shoot, a wounded NPC may heal while its enemy can see it; otherwise only unseen.
+local function may_heal_now(npc)
+	local be = npc:best_enemy()
+	if not (be and IsStalker(be) and npc:ai_enemy_sees_me(be)) then
+		return true
+	end
+	local manager = npc:motivation_action_manager()
+	if not manager:initialized() then
+		return false
+	end
+	local combat_action_planner = cast_planner(manager:action(stalker_ids.action_combat_planner))
+	if not combat_action_planner:initialized() then
+		return false
+	end
+	if not (combat_action_planner:evaluator(stalker_ids.property_in_cover):evaluate()
+		and combat_action_planner:evaluator(stalker_ids.property_ready_to_kill):evaluate()) then
+		return false
+	end
+	local active_item = npc:active_item()
+	if (active_item and IsWeapon(active_item) and active_item:get_ammo_in_magazine() > 0) then
+		npc:set_item(object.aim1, active_item)
+	end
+	return true
+end
+
+local function make_eat_medkit_evaluate(original)
+	return function(self)
+		if not honest() then
+			return original(self)
+		end
+		local npc = self.object
+
+		if not (npc:alive()) then
+			return false
+		end
+		if (IsWounded(npc)) then
+			return false
+		end
+		if (npc:is_talking()) then
+			return false
+		end
+
+		local st = self.st
+
+		if (st.boost_health_restore and st.boost_health_restore > 0) then
+			if (st.eat_medkit_timer and time_global() <= st.eat_medkit_timer) then
+				local hp = npc.health + st.boost_health_restore
+				if (hp > 1) then
+					hp = 1
+				end
+				npc:set_health_ex(hp)
+			else
+				st.boost_health_restore = nil
+				st.animate = nil
+			end
+		end
+
+		if (st.animate) then
+			return true
+		end
+
+		if (npc.health <= 0.9) then
+			if (st.eat_medkit_timer == nil or time_global() > st.eat_medkit_timer) then
+				local item = npc:object("medkit") or npc:object("medkit_army") or npc:object("medkit_scientic")
+					or npc:object("stimpack") or npc:object("stimpack_army") or npc:object("stimpack_scientic")
+				if (item and may_heal_now(npc)) then
+					npc:eat(item)
+					item_noise(npc)
+					local tm = (system_ini():r_float_ex(item:section(), "boost_time", 0) * 1000)
+					st.eat_medkit_timer = time_global() + tm
+					st.boost_health_restore = system_ini():r_float_ex(item:section(), "boost_health_restore", 0)
+					st.animate = 1
+					self.item = item:section()
+					return true
+				end
+			end
+		end
+
+		if (npc.bleeding) and (npc.bleeding > 0) then
+			if (st.eat_bandage_timer == nil or time_global() > st.eat_bandage_timer) then
+				local item = npc:object("bandage")
+				if (item and may_heal_now(npc)) then
+					npc:eat(item)
+					item_noise(npc)
+					local tm = (system_ini():r_float_ex(item:section(), "boost_time", 0) * 1000)
+					st.eat_bandage_timer = time_global() + tm
+					st.animate = 2
+					self.item = item:section()
+					return true
+				end
+			end
+		end
+
+		return false
+	end
+end
+
+local function patch_enemy_sees_me()
+	local help_wounded = xr_help_wounded
+	if help_wounded then
+		help_settings = help_settings or read_help_settings()
+		replace(member_of(help_wounded, "action_help_wounded"), "execute", make_help_wounded_execute)
+	end
+	local eat_medkit = xr_eat_medkit
+	if eat_medkit then
+		replace(member_of(eat_medkit, "evaluator_eat_medkit"), "evaluate", make_eat_medkit_evaluate)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- xrs_kill_wounded: an executioner goes for a wounded enemy it sees lying there (L4)
+------------------------------------------------------------------------------------------------------------------------
+-- DA picks the best enemy whenever he is down, seen or not, and walks to his live position. A new target is taken only
+-- in sight now; one already taken stays (a man lying wounded does not move).
+local function make_kill_wounded_find_target(original)
+	return function(self)
+		local npc, st = self.object, self.st
+		local be = honest() and npc:best_enemy()
+		-- DA's IsStalker includes the actor, who has no wounded() (the engine logs an error per call).
+		if be and be:id() ~= 0 and be:id() ~= st.selected_id and IsStalker(be) and be:alive() and be:wounded()
+			and not npc:see(be) then
+			st.selected_id, st.vertex_id, st.vertex_position, st.timer = nil, nil, nil, nil
+			return false
+		end
+		return original(self)
+	end
+end
+
+local function patch_kill_wounded()
+	local module = xrs_kill_wounded
+	if module then
+		replace(member_of(module, "eva_kill_wounded"), "find_target", make_kill_wounded_find_target)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Grenade issue at spawn (L4, C11)
+------------------------------------------------------------------------------------------------------------------------
+-- A new stalker gets the grenades of its profile's grenade_issue ("item, count, chance": count grenades, plus one more
+-- with the chance) once, when ALife creates it, at the step where DA issues its loadouts. The server object has no
+-- engine profile yet, so the engine's chain is walked here over the same sections: the [ai_profile_by_character]
+-- match of the character profile id (scripts cannot see the specific character id), the community after
+-- [ai_community_alias], the default, each "_r<band>" first; the first section with the key decides.
+local UNKNOWN_BAND = 2 -- the engine's band for a rank name missing from [ai_rank_bands]
+local rank_steps -- [game_relations] rating: name, threshold, name, threshold, ..., name
+
+local function rank_name_of(value)
+	if not rank_steps then
+		local ini = system_ini()
+		rank_steps = split_list(ini:line_exist("game_relations", "rating")
+			and ini:r_string_ex("game_relations", "rating") or nil)
+	end
+	for i = 1, #rank_steps - 1, 2 do
+		local threshold = tonumber(rank_steps[i + 1])
+		if threshold and value < threshold then
+			return rank_steps[i]
+		end
+	end
+	return rank_steps[#rank_steps]
+end
+
+local function band_of(se_npc)
+	local ini = system_ini()
+	local name = rank_name_of(se_npc:rank())
+	local band = name and ini:line_exist("ai_rank_bands", name) and tonumber(ini:r_string_ex("ai_rank_bands", name))
+	return band and band >= 1 and band <= 4 and math.floor(band) or UNKNOWN_BAND
+end
+
+-- The profile section of the longest [ai_profile_by_character] key that prefixes the id.
+local function character_section(id)
+	local ini = system_ini()
+	local section = "ai_profile_by_character"
+	if not (id and id ~= "" and ini:section_exist(section)) then
+		return nil
+	end
+	local best, best_length = nil, 0
+	for i = 0, ini:line_count(section) - 1 do
+		local _, key, value = ini:r_line(section, i, "", "")
+		if key and #key > best_length and string.sub(id, 1, #key) == key and value and value ~= "" then
+			best, best_length = value, #key
+		end
+	end
+	return best
+end
+
+local function profile_value_of(se_npc, key)
+	local ini = system_ini()
+	local band = band_of(se_npc)
+	local community = se_npc:community()
+	if community and ini:line_exist("ai_community_alias", community) then
+		local alias = ini:r_string_ex("ai_community_alias", community)
+		community = alias and alias ~= "" and alias or community
+	end
+	local bases = {character_section(se_npc:profile_name()) or false,
+		community and community ~= "" and "ai_profile_" .. community or false, "ai_profile_default"}
+	for i = 1, #bases do
+		local base = bases[i]
+		if base then
+			for _, section in ipairs({base .. "_r" .. band, base}) do
+				if ini:section_exist(section) and ini:line_exist(section, key) then
+					-- an empty value is a value: "grenade_issue =" issues nothing
+					return ini:r_string_ex(section, key) or ""
+				end
+			end
+		end
+	end
+end
+
+local function issue_grenades(se_npc)
+	if not (se_npc and honest() and feature_enabled("grenades")) then
+		return
+	end
+	local issue = split_list(profile_value_of(se_npc, "grenade_issue"))
+	local item = issue[1]
+	local count, chance = tonumber(issue[2] or "0"), tonumber(issue[3] or "0")
+	if not (item and count and chance and count >= 0 and system_ini():section_exist(item)) then
+		return
+	end
+	count = math.floor(count + 0.5)
+	if math.random() < chance then
+		count = count + 1
+	end
+	local sim = alife()
+	for _ = 1, count do
+		sim:create(item, se_npc.position, se_npc.m_level_vertex_id, se_npc.m_game_vertex_id, se_npc.id)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Surrender (L4): hands up while the engine holds the NPC giving up
+------------------------------------------------------------------------------------------------------------------------
+-- The engine keeps a surrendering NPC in place, weapon idle, facing its enemy, and reports it through ai_morale(); the
+-- raised hands are DA's hands_up animation, kept queued (one playing, one waiting) until the surrender ends.
+local hands_up = {} -- id -> true while raised here, false when the NPC's body refused the animation
+local surrender_next = {} -- id -> time of the NPC's next check
+
+-- The state manager still believes its own animation plays after the queue was cleared under it; reset it the way
+-- xr_danger does, so it lays its animation again once the hands are down.
+local function release_state_animation(npc)
+	local st = db.storage[npc:id()]
+	local sm = st and st.state_mgr
+	if sm and sm.animation and sm.animstate then
+		sm.animation:set_state(nil, true)
+		sm.animation:set_control()
+		sm.animstate:set_state(nil, true)
+		sm.animstate:set_control()
+	end
+end
+
+local function update_surrender(npc)
+	local animation, period = cfg.surrender_animation, cfg.surrender_check_ms
+	if not (animation and period) then
+		return
+	end
+	local id = npc:id()
+	local tg = time_global()
+	if tg < (surrender_next[id] or 0) then
+		return
+	end
+	surrender_next[id] = tg + period
+
+	if honest() and npc:ai_morale() == SURRENDERED and not npc:in_smart_cover() then
+		if hands_up[id] == false then
+			return
+		end
+		if not hands_up[id] then
+			npc:clear_animations()
+			hands_up[id] = true
+		end
+		for _ = npc:animation_count() + 1, 2 do
+			local queued = npc:animation_count()
+			npc:add_animation(animation, true, false)
+			-- No such motion for this visual, or a scripted pose owns the body: the engine said why, once is enough.
+			if npc:animation_count() == queued then
+				hands_up[id] = false
+				return
+			end
+		end
+	elseif hands_up[id] ~= nil then
+		if hands_up[id] then
+			npc:clear_animations()
+			release_state_animation(npc)
+		end
+		hands_up[id] = nil
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+-- Offline position restore (X1): a remembered level vertex is applied only on its own level
+------------------------------------------------------------------------------------------------------------------------
+-- DA's stalker binder remembers an NPC's level vertex when it goes offline, se_stalker keeps the number in the save,
+-- and the binder puts the NPC back on it when it next comes online. The number carries no level, so an NPC that
+-- travelled offline to another level appeared at whatever vertex of that level had the number - once beyond the level
+-- border. The level of every remembered vertex is tracked here: the level the NPC left, or for a vertex read from a
+-- save the level of the NPC's saved game vertex, which the save below keeps consistent with it. The binder applies a
+-- vertex only on its own level and only near where ALife brings the NPC online ([ai_script] offline_vertex_max_m, which
+-- also catches a foreign vertex in a save made before this fix); a rejected NPC stays where ALife put it, as any other
+-- NPC does. The save format stays: a vertex known to lie on another level than the NPC's game vertex is saved as the
+-- "nil" se_stalker writes for an NPC without one. Not an AI feature: this runs whatever `ai_feature scripts` says.
+local vertex_level = {} -- NPC id -> level id of the vertex the binder remembers for it
+
+local function level_of_game_vertex(game_vertex_id)
+	local graph = game_graph()
+	return game_vertex_id and graph:valid_vertex_id(game_vertex_id) and graph:vertex(game_vertex_id):level_id() or nil
+end
+
+local function current_level()
+	local sim = alife()
+	return sim and sim:level_id()
+end
+
+local function remembered_vertex_fits(id, vertex, spawn_position)
+	if not level.valid_vertex_id(vertex) then
+		return false
+	end
+	local recorded, here = vertex_level[id], current_level()
+	if recorded and here and recorded ~= here then
+		return false
+	end
+	local limit = cfg.offline_vertex_max_m
+	return not (limit and spawn_position)
+		or level.vertex_position(vertex):distance_to_sqr(spawn_position) <= limit * limit
+end
+
+local function make_binder_net_spawn(original)
+	return function(self, se_abstract)
+		local npc = self.object
+		local id = npc and npc:id()
+		local offline = id and db.offline_objects and db.offline_objects[id]
+		if offline and offline.level_vertex_id then
+			local spawn_position = se_abstract and se_abstract.position or npc:position()
+			if not remembered_vertex_fits(id, offline.level_vertex_id, spawn_position) then
+				offline.level_vertex_id = nil
+			end
+		end
+		local result = original(self, se_abstract)
+		if id and not (offline and offline.level_vertex_id) then
+			vertex_level[id] = nil
+		end
+		return result
+	end
+end
+
+-- A vertex that came with the packet (DA reads "nil" as no change) belongs to the level of the saved game vertex. The
+-- spawn packet of an NPC coming online carries "nil", so only a save's number is labelled here.
+local function make_stalker_state_read(original)
+	return function(self, packet, size)
+		local offline = db.offline_objects and db.offline_objects[self.id]
+		local before = offline and offline.level_vertex_id
+		original(self, packet, size)
+		offline = db.offline_objects and db.offline_objects[self.id]
+		local vertex = offline and offline.level_vertex_id
+		if vertex and vertex ~= before then
+			vertex_level[self.id] = level_of_game_vertex(self.m_game_vertex_id)
+		end
+	end
+end
+
+-- An offline NPC whose remembered vertex lies on another level than its game vertex is saved without it.
+local function make_stalker_state_write(original)
+	return function(self, packet)
+		local offline = not self.online and db.offline_objects and db.offline_objects[self.id]
+		local recorded = offline and offline.level_vertex_id and vertex_level[self.id]
+		local here = recorded and level_of_game_vertex(self.m_game_vertex_id)
+		if here and here ~= recorded then
+			offline.level_vertex_id = nil
+			vertex_level[self.id] = nil
+		end
+		return original(self, packet)
+	end
+end
+
+local function patch_offline_restore()
+	local binder = xr_motivator
+	if binder then
+		replace(member_of(binder, "motivator_binder"), "net_spawn", make_binder_net_spawn)
+	end
+	local server = se_stalker
+	if server then
+		local class = member_of(server, "se_stalker")
+		replace(class, "STATE_Read", make_stalker_state_read)
+		replace(class, "STATE_Write", make_stalker_state_write)
+	end
+end
+
+------------------------------------------------------------------------------------------------------------------------
+local function on_npc_tick(npc, st)
+	update_surrender(npc)
+	on_npc_update(npc, st)
+end
+
+local function on_npc_net_destroy(npc)
+	local id = npc:id()
+	hands_up[id], surrender_next[id] = nil, nil
+	-- The binder records the NPC's vertex right after this callback, on this level.
+	vertex_level[id] = current_level()
+end
+
+local function on_npc_death(victim)
+	if victim then
+		hands_up[victim:id()], surrender_next[victim:id()] = nil, nil
+	end
+end
+
+function on_game_start()
+	read_settings()
+	patch_npc_extra()
+	patch_danger()
+	patch_camper()
+	patch_cover_schemes()
+	patch_weapon_choice()
+	patch_torch()
+	patch_corpse_detection()
+	patch_enemy_sees_me()
+	patch_kill_wounded()
+	patch_offline_restore()
+
+	RegisterScriptCallback("npc_on_hit_callback", on_npc_hit)
+	RegisterScriptCallback("npc_on_fighting_actor", on_fighting_actor)
+	RegisterScriptCallback("npc_on_update", on_npc_tick)
+	RegisterScriptCallback("npc_on_hear_callback", on_npc_hear)
+	RegisterScriptCallback("npc_on_net_destroy", on_npc_net_destroy)
+	RegisterScriptCallback("npc_on_death_callback", on_npc_death)
+	RegisterScriptCallback("se_stalker_on_spawn", issue_grenades)
+	RegisterScriptCallback("actor_on_item_use", on_actor_item_use)
+end
