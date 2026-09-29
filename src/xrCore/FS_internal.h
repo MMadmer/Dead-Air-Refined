@@ -35,7 +35,9 @@ public:
         convert_path_separators(conv_fn);
         if (exclusive)
         {
-            const int handle = _sopen(conv_fn, _O_WRONLY | _O_TRUNC | _O_CREAT | _O_BINARY, SH_DENYWR);
+            // Not inherited: a child the engine starts (the NGX driver updater outlives the game) would keep
+            // the log and every open file locked after the engine exits.
+            const int handle = _sopen(conv_fn, _O_WRONLY | _O_TRUNC | _O_CREAT | _O_BINARY | _O_NOINHERIT, SH_DENYWR);
 #ifndef MASTER_GOLD
             if (handle == -1)
             {
@@ -48,7 +50,7 @@ public:
         }
         else
         {
-            hf = fopen(conv_fn, "wb");
+            hf = fopen(conv_fn, "wbN");
             if (hf == 0)
             {
                 string1024 error;
