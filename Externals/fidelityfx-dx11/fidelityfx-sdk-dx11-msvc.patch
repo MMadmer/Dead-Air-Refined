@@ -1,0 +1,170 @@
+diff --git a/sdk/CMakeLists.txt b/sdk/CMakeLists.txt
+index 2057d3f..f6b2093 100644
+--- a/sdk/CMakeLists.txt
++++ b/sdk/CMakeLists.txt
+@@ -109,7 +109,10 @@ if (FFX_FSR3)
+ endif()
+ 
+ # Setup common variables
+-set(FFX_SC_EXECUTABLE ${CMAKE_CURRENT_SOURCE_DIR}/tools/binary_store/FidelityFX_SC.exe)
++# A shader compiler built from tools/ffx_shader_compiler can be passed in instead of the committed binary.
++if (NOT FFX_SC_EXECUTABLE)
++    set(FFX_SC_EXECUTABLE ${CMAKE_CURRENT_SOURCE_DIR}/tools/binary_store/FidelityFX_SC.exe)
++endif()
+ set(FFX_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include)
+ set(FFX_SHARED_PATH ${CMAKE_CURRENT_SOURCE_DIR}/src/shared)
+ set(FFX_HOST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include/FidelityFX/host)
+diff --git a/sdk/src/backends/dx11/CMakeLists.txt b/sdk/src/backends/dx11/CMakeLists.txt
+index d5d4833..c5cb7d5 100644
+--- a/sdk/src/backends/dx11/CMakeLists.txt
++++ b/sdk/src/backends/dx11/CMakeLists.txt
+@@ -203,7 +203,14 @@ file(GLOB PRIVATE_SOURCE
+     "${CMAKE_CURRENT_SOURCE_DIR}/FrameInterpolationSwapchain/*.cpp"
+ )
+ 
+-if (FFX_FSR OR FFX_ALL)
++# Only the FSR3 upscaler's shader blobs: the other FSR effects are left out of the library.
++option(FFX_DX11_FSR3UPSCALER_ONLY "Build the DX11 backend for the FSR3 upscaler alone" OFF)
++
++if ((FFX_FSR OR FFX_ALL) AND FFX_DX11_FSR3UPSCALER_ONLY)
++	list(APPEND PRIVATE_SOURCE
++		"${FFX_SRC_BACKENDS_PATH}/shared/blob_accessors/ffx_fsr3upscaler_shaderblobs.h"
++		"${FFX_SRC_BACKENDS_PATH}/shared/blob_accessors/ffx_fsr3upscaler_shaderblobs.cpp")
++elseif (FFX_FSR OR FFX_ALL)
+ 	set(FFX_FSR_PRIVATE_SOURCE
+ 		"${FFX_SRC_BACKENDS_PATH}/shared/blob_accessors/ffx_fsr1_shaderblobs.h"
+ 		"${FFX_SRC_BACKENDS_PATH}/shared/blob_accessors/ffx_fsr1_shaderblobs.cpp"
+@@ -358,11 +365,16 @@ if (FFX_FSR OR FFX_ALL)
+ 
+     # FFX_FSR3 is currently only defined in DX11 native backend
+     target_compile_definitions(ffx_backend_dx11_${FFX_PLATFORM_NAME} PRIVATE FFX_FSR3)
++	if (FFX_DX11_FSR3UPSCALER_ONLY)
++		target_compile_definitions(ffx_backend_dx11_${FFX_PLATFORM_NAME} PRIVATE FFX_FSR3UPSCALER_ONLY)
++		include (CMakeShadersFSR3Upscaler.txt)
++	else()
+ 	include (CMakeShadersFrameinterpolation.txt)
+ 	include (CMakeShadersOpticalflow.txt)
+ 	include (CMakeShadersFSR3Upscaler.txt)
+ 	include (CMakeShadersFSR2.txt)
+ 	include (CMakeShadersFSR1.txt)
++	endif()
+ 
+ #	ADD_CUSTOM_TARGET(copy-shaders-FSR2 ALL
+ #		COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_SOURCE_DIR}/src/backends/dx11/shaders/fsr2 ${CMAKE_BINARY_DIR}/../bin/ffx_sdk/passes_fsr2)
+diff --git a/sdk/src/backends/dx11/ffx_dx11.cpp b/sdk/src/backends/dx11/ffx_dx11.cpp
+index 1a2a89f..78a77c3 100644
+--- a/sdk/src/backends/dx11/ffx_dx11.cpp
++++ b/sdk/src/backends/dx11/ffx_dx11.cpp
+@@ -27,7 +27,7 @@
+ #include <FidelityFX/host/ffx_assert.h>
+ #include <FidelityFX/host/backends/dx11/ffx_dx11.h>
+ #include <../src/backends/shared/ffx_shader_blobs.h>
+-#include <codecvt>  // convert string to wstring
++#include <string>
+ #include <mutex>
+ #include <new>
+ 
+@@ -185,7 +185,7 @@ FfxCommandList ffxGetCommandListDX11(ID3D11DeviceContext* deviceContext)
+ }
+ 
+ // register a DX11 resource to the backend
+-FfxResource ffxGetResourceDX11_Fsr31(ID3D11Resource* dx11Resource,
++FfxResource ffxGetResourceDX11_Fsr31(const ID3D11Resource* dx11Resource,
+     FfxResourceDescription                     ffxResDescription,
+     wchar_t const*                             ffxResName,
+     FfxResourceStates                          state /*=FFX_RESOURCE_STATE_COMPUTE_READ*/)
+@@ -769,12 +769,9 @@ FfxErrorCode GetDeviceCapabilitiesDX11(FfxInterface* backendInterface, FfxDevice
+         break;
+     }
+ 
+-    // check if we have 16bit floating point.
+-    D3D11_FEATURE_DATA_SHADER_MIN_PRECISION_SUPPORT d3d11Options = {};
+-    if (SUCCEEDED(dx11Device->CheckFeatureSupport(D3D11_FEATURE_SHADER_MIN_PRECISION_SUPPORT, &d3d11Options, sizeof(d3d11Options)))) {
+-
+-        deviceCapabilities->fp16Supported = (d3d11Options.AllOtherShaderStagesMinPrecision != 0);
+-    }
++    // The shaders are FXC (cs_5_0) builds: min-precision support is not SM 6.2 fp16, and the
++    // permutation tables have no 16-bit variants, so a 16-bit lookup would return an empty blob.
++    deviceCapabilities->fp16Supported = false;
+ 
+     return FFX_OK;
+ }
+@@ -1503,7 +1500,21 @@ FfxErrorCode CreatePipelineDX11(
+         //outPipeline->rtAccelStructCount= shaderBlob.rtAccelStructCount;
+ 
+         outPipeline->constCount = shaderBlob.cbvCount;
+-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
++        // UTF-8 binding names to wide strings (std::wstring_convert is deprecated since C++17).
++        struct
++        {
++            std::wstring from_bytes(const char* text) const
++            {
++                std::wstring wide;
++                const int length = MultiByteToWideChar(CP_UTF8, 0, text, -1, nullptr, 0);
++                if (length > 1)
++                {
++                    wide.resize(length - 1);
++                    MultiByteToWideChar(CP_UTF8, 0, text, -1, &wide[0], length);
++                }
++                return wide;
++            }
++        } converter;
+         for (uint32_t srvIndex = 0; srvIndex < outPipeline->srvTextureCount; ++srvIndex)
+         {
+             outPipeline->srvTextureBindings[srvIndex].slotIndex = shaderBlob.boundSRVTextures[srvIndex];
+diff --git a/sdk/src/backends/shared/ffx_shader_blobs.cpp b/sdk/src/backends/shared/ffx_shader_blobs.cpp
+index 721bf00..b69c7ec 100644
+--- a/sdk/src/backends/shared/ffx_shader_blobs.cpp
++++ b/sdk/src/backends/shared/ffx_shader_blobs.cpp
+@@ -24,10 +24,13 @@
+ 
+ #if defined(FFX_FSR) || defined(FFX_ALL)
+ #include "blob_accessors/ffx_fsr3upscaler_shaderblobs.h"
++// FFX_FSR3UPSCALER_ONLY: a backend for the FSR3 upscaler alone, without the other effects' blobs.
++#if !defined(FFX_FSR3UPSCALER_ONLY)
+ #include "blob_accessors/ffx_fsr2_shaderblobs.h"
+ #include "blob_accessors/ffx_fsr1_shaderblobs.h"
+ #include "blob_accessors/ffx_frameinterpolation_shaderblobs.h"
+ #include "blob_accessors/ffx_opticalflow_shaderblobs.h"
++#endif // #if !defined(FFX_FSR3UPSCALER_ONLY)
+ #endif // #if defined(FFX_FSR) || defined(FFX_ALL)
+ 
+ #if defined(FFX_SPD) || defined(FFX_ALL)
+@@ -91,17 +94,21 @@ FfxErrorCode ffxGetPermutationBlobByIndex(
+     switch (effectId)
+     {
+ #if defined(FFX_FSR) || defined(FFX_ALL)
++#if !defined(FFX_FSR3UPSCALER_ONLY)
+     case FFX_EFFECT_FSR2:
+         return fsr2GetPermutationBlobByIndex((FfxFsr2Pass)passId, permutationOptions, outBlob);
+     case FFX_EFFECT_FSR1:
+         return fsr1GetPermutationBlobByIndex((FfxFsr1Pass)passId, permutationOptions, outBlob);
++#endif // #if !defined(FFX_FSR3UPSCALER_ONLY)
+     #if defined(FFX_FSR3)
+         case FFX_EFFECT_FSR3UPSCALER:
+             return fsr3UpscalerGetPermutationBlobByIndex((FfxFsr3UpscalerPass)passId, permutationOptions, outBlob);
++#if !defined(FFX_FSR3UPSCALER_ONLY)
+         case FFX_EFFECT_FRAMEINTERPOLATION:
+             return frameInterpolationGetPermutationBlobByIndex((FfxFrameInterpolationPass)passId, stageId, permutationOptions, outBlob);
+         case FFX_EFFECT_OPTICALFLOW:
+             return opticalflowGetPermutationBlobByIndex((FfxOpticalflowPass)passId, permutationOptions, outBlob);
++#endif // #if !defined(FFX_FSR3UPSCALER_ONLY)
+     #endif
+ #endif // #if defined(FFX_FSR) || defined(FFX_ALL)
+ 
+@@ -178,13 +185,13 @@ FfxErrorCode ffxIsWave64(FfxEffect effectId, uint32_t permutationOptions, bool&
+ {
+ switch (effectId)
+     {
+-#if defined(FFX_FSR) || defined(FFX_ALL)
++#if (defined(FFX_FSR) || defined(FFX_ALL)) && !defined(FFX_FSR3UPSCALER_ONLY)
+     case FFX_EFFECT_FSR2:
+         return fsr2IsWave64(permutationOptions, isWave64);
+ 
+     case FFX_EFFECT_FSR1:
+         return fsr1IsWave64(permutationOptions, isWave64);
+-#endif // #if defined(FFX_FSR) || defined(FFX_ALL)
++#endif // #if (defined(FFX_FSR) || defined(FFX_ALL)) && !defined(FFX_FSR3UPSCALER_ONLY)
+ 
+ #if defined(FFX_SPD) || defined(FFX_ALL)
+     case FFX_EFFECT_SPD:

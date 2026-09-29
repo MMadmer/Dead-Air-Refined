@@ -110,6 +110,98 @@ These components cannot be replaced with an unrelated modern library without cha
 | Diagnostic reports | Engine-native implementation | BugTrap was removed from the runtime. Dead Air: Refined now creates compact anonymous session and crash reports without an external crash-handler DLL. |
 | DirectPlay and EAX headers | Windows legacy SDK interfaces | Compatibility declarations, not independently versioned runtime libraries. |
 
+## Upscaler and frame generation SDKs
+
+Added for 1.5.0 (DLSS, FSR and frame generation, see `DX12_RENDERER.md`). All three are plain
+vendor drops under `Externals/`, not submodules; each folder's `README.md` records the source URL,
+the SHA-256 of every file and how to update it, and `tools/qa/sdk/Run-SdkSmoke.ps1` checks all
+three against the GPU of the machine after an update. The CMake targets live in
+`cmake/XRay.Dependencies.cmake`, and `xray_stage_windows_runtime` copies the runtime DLLs next to
+`xrEngine.exe`; every one of them is listed in `packaging/dead-air-x64/installer/runtime-files.txt`,
+so the installer ships them and the uninstaller removes them.
+
+| Component | Version | Location | Licence | Runtime files (package size) |
+| --- | --- | --- | --- | --- |
+| NVIDIA Streamline | 2.14.1 (release zip, SHA-256 `92c4d954631a1710da86ca3fa8d5034f2b9503838c95fc4ae977ae149319781b`) | `Externals/streamline` | MIT (`license.txt`, `3rd-party-licenses.md`) | `sl.interposer.dll`, `sl.common.dll`, `sl.pcl.dll`, `sl.reflex.dll`, `sl.dlss.dll`, `sl.dlss_g.dll`: 3,303,168 bytes |
+| NVIDIA DLSS Super Resolution and Frame Generation (NGX) | 310.9.1, as bundled with Streamline 2.14.1 | `Externals/streamline/bin/x64` | NVIDIA RTX SDKs licence (`nvngx_dlss.license.txt`) | `nvngx_dlss.dll` 58,956,912 bytes, `nvngx_dlssg.dll` 7,460,976 bytes |
+| NVIDIA Reflex | through `sl.reflex` / `sl.pcl` of Streamline 2.14.1 | `Externals/streamline` | Streamline MIT; Reflex SDK licence (`reflex.license.txt`) | included above |
+| AMD FSR SDK (ffx-api) | 2.3.0: upscaler 4.1.1 (FSR 3.1.5 / FSR 4 providers), frame generation 3.1.6 / swap chain 3.1.7 | `Externals/fidelityfx-sdk` | MIT section of `license.md` (every file taken is in its MIT list), `3rdpartynotice.md` | `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`, `amd_fidelityfx_framegeneration_dx12.dll`: 68,874,016 bytes |
+| FidelityFX-SDK-DX11 (FSR 3.1.2 upscaler, DX11 backend) | optiscaler fork, commit `9b04fa49a` + `fidelityfx-sdk-dx11-msvc.patch` | `Externals/fidelityfx-dx11` | MIT (AMD, `LICENSE.txt`); `md5.c` under the RSA Data Security MD5 licence | none: static libraries, about 3.4 MB inside the module that links them |
+
+The package grows by 138,595,072 bytes (132.2 MiB) of SDK DLLs, uncompressed, plus
+`xrRender_R5.dll` and the FSR 3.1 DX11 code inside `xrRender_R4.dll`.
+
+CMake targets: `NVIDIA::Streamline` (headers, `sl.interposer.lib` delay-loaded),
+`NVIDIA::StreamlineHeaders` (headers only, for `LoadLibrary` + `GetProcAddress`), `AMD::FidelityFXAPI`
+(headers only; the loader DLL is loaded at runtime), `AMD::FidelityFXLoader` (headers plus the
+delay-loaded loader import library, for the `ffx::` C++ helpers), `AMD::FidelityFXDX11` (the two
+FSR 3.1 DX11 static libraries and their headers, `/MD` for Release/Mixed/ReleaseMasterGold and
+`/MDd` for Debug).
+
+Obligations that come with the NVIDIA binaries (`nvngx_dlss.license.txt`, `reflex.license.txt`):
+
+- They are redistributed only as object code inside the game, unmodified, with their NVIDIA
+  signature (NGX refuses a re-signed DLL), under terms at least as protective as NVIDIA's; no
+  reverse engineering. They are not covered by this repository's licence and must not be made
+  subject to an open-source licence (RTX SDKs licence 4.e); the Streamline part is MIT.
+- Attribution (RTX SDKs supplement 7.1(b)): a game using DLSS must attribute it with the NVIDIA
+  marks on the splash screen, in the about box if there is one, and in the credits. Other NVIDIA
+  SDKs such as Reflex (7.1(c)): on the credits screen, or in the end-user documentation when there
+  is none. The use of NVIDIA marks is subject to NVIDIA's guidelines and approval.
+- Release checklist: the RTX SDKs supplement (section 4) requires notifying NVIDIA before a
+  commercial release of an application that uses the DLSS SDK, at
+  https://developer.nvidia.com/sw-notification (company, publisher and developer, SDK used,
+  application name, platform, ship date, link to the product). DLSS is licensed for systems with
+  NVIDIA GPUs only; the game offers it only where Streamline reports support.
+- Only the production binaries are shipped; `bin/x64/development` of Streamline is never vendored.
+
+The AMD binaries are redistributed under the MIT terms of `license.md`, whose notice goes into the
+third-party notices; the SDK's `Kits/FidelityFX/docs/getting-started/naming-guidelines.md` is the
+reference for how the menu names FSR. The FSR 3.1 DX11
+libraries carry the AMD MIT notice and the RSA MD5 attribution (`Externals/fidelityfx-dx11/README.md`).
+
+Two build facts other code relies on: `ffx_framegeneration.h` (FSR SDK 2.3.0) and the FSR 3.1 DX11
+host headers both define `FfxFrameGenerationConfig`, so they never share a translation unit; and
+Streamline's `sl_security.h` defines non-inline functions, so exactly one translation unit per
+module includes it.
+
+## DirectX 12 shader compiler and DirectStorage
+
+Added with the DirectX 12 features (`docs/dead-air/dx12-features/PLAN.md`): Shader Model 6 engine
+shaders, ray tracing and mesh shaders need the DirectX Shader Compiler; texture and geometry loads go
+through DirectStorage. Both are plain vendor drops under `Externals/`, not submodules; each folder's
+`README.md` records the source, the SHA-256 of the archive and of every file, and what was left out.
+Only `xrRender_R5.dll` loads them, by absolute path from the executable's directory, so a machine
+without them runs DirectX 12 with FXC shaders and the classic texture loader.
+
+| Component | Version | Location | Licence | Runtime files (package size) |
+| --- | --- | --- | --- | --- |
+| Microsoft DirectX Shader Compiler | 1.9.2607 (release zip `dxc_2026_07_29.zip`, SHA-256 `a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241`), file version 1.9.0.5402 | `Externals/dxc` | `dxcompiler.dll`: NCSA (`LICENSE-LLVM.txt`) and MIT (`LICENCE-MIT.txt`); `dxil.dll`: Microsoft Software License Terms (`LICENSE-MS.txt`) | `dxcompiler.dll` 28,079,968 bytes, `dxil.dll` 3,831,600 bytes |
+| Microsoft DirectStorage | 1.3.0 (NuGet `Microsoft.Direct3D.DirectStorage`, SHA-256 `8ab6c1082537565388b79050d94fdd7f5f437cd0f1d909e7b19f786042b97177`), file version 1.3.2506.2501 | `Externals/DirectStorage` | binaries: Microsoft Software License Terms, DirectStorage SDK (`LICENSE.txt`), third-party notices `NOTICES.txt`; headers: MIT (`LICENSE-CODE.txt`) | `dstorage.dll` 206,904 bytes, `dstoragecore.dll` 1,482,784 bytes |
+
+The package grows by 33,601,256 bytes (32.0 MiB) uncompressed. CMake: `XRAY_DXC_RUNTIME_FILES`,
+`XRAY_DSTORAGE_RUNTIME_FILES` (staged by `xray_stage_windows_runtime`) and
+`Microsoft::DirectStorageHeaders` (headers only; the renderer resolves `DStorageGetFactory` and
+`DStorageSetConfiguration1` itself). The DXC headers (`dxcapi.h`, `d3d12shader.h`) come from the
+Windows SDK 10.0.26100, whose interfaces match this release.
+
+Obligations that come with the Microsoft binaries (`Externals/dxc/LICENSE-MS.txt`,
+`Externals/DirectStorage/LICENSE.txt`), recorded here like the NVIDIA ones because the installer has
+no licence page:
+
+- They are redistributed only as object code inside the game, unmodified and with their Microsoft
+  Authenticode signature (the D3D12 runtime accepts DXIL only when `dxil.dll` signed it), as part of
+  an application that adds significant primary functionality to them.
+- Distributors and end users must agree to terms that protect them and Microsoft at least as much
+  as Microsoft's own terms: whoever redistributes the game passes those terms on for these files,
+  which are not covered by this repository's open-source licence.
+- No Microsoft trademark or trade dress is used in a way that suggests the game comes from or is
+  endorsed by Microsoft; the Video row names DirectStorage only descriptively.
+- `NOTICES.txt` (the third-party notices of the DirectStorage runtime) travels with the binaries into
+  the game's third-party notices.
+- DirectStorage telemetry is switched off by configuration (`DSTORAGE_CONFIGURATION1`) before the
+  factory is created.
+
 ## Content system components
 
 The content asset system adds one first-party static library, two Windows system libraries and two build-time tools. The library is written against the standard library alone, because the same translation units have to run in three places: inside `xrCore` before the engine exists, inside `xrGame`, and inside the standalone updater, which is compiled straight from the sources rather than linked against a CMake artefact. One implementation, three linkers, and no second parser to drift away from the first.

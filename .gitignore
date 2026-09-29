@@ -8,6 +8,11 @@
 
 # exclude binaries and temporary files
 [Bb]in/
+# Vendored SDK runtime DLLs, staged next to the executable by the build.
+!Externals/streamline/bin/
+!Externals/fidelityfx-sdk/bin/
+!Externals/dxc/bin/
+!Externals/DirectStorage/bin/
 [Bb]uild*/
 !tools/build/
 !tools/build/**
@@ -80,3 +85,6 @@ doc/doxygen/html/*
 
 # QA run artefacts of a local mod update run
 /tools/qa/mods/results/
+
+# QA working folders of local runs
+/_work/

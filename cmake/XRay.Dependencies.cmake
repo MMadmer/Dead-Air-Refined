@@ -56,6 +56,104 @@ if (WIN32)
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/Externals/AGS_SDK"
     )
 
+    # NVIDIA Streamline 2.14.1: DLSS, DLSS Frame Generation, Reflex (Externals/streamline/README.md).
+    # NVIDIA::StreamlineHeaders suits a module that loads sl.interposer.dll itself and resolves the
+    # entry points with GetProcAddress. NVIDIA::Streamline adds the import library as a delay-load:
+    # the module loads without the DLL, and the first sl* call binds to the copy the module has
+    # already verified and loaded by its absolute path.
+    set(XRAY_STREAMLINE_DIR "${CMAKE_SOURCE_DIR}/Externals/streamline")
+    add_library(NVIDIA::StreamlineHeaders INTERFACE IMPORTED GLOBAL)
+    set_target_properties(NVIDIA::StreamlineHeaders PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${XRAY_STREAMLINE_DIR}/include"
+        # sl_security.h checks the NVIDIA signature through WinVerifyTrust.
+        INTERFACE_LINK_LIBRARIES "wintrust;crypt32"
+    )
+    add_library(NVIDIA::Streamline INTERFACE IMPORTED GLOBAL)
+    set_target_properties(NVIDIA::Streamline PROPERTIES
+        INTERFACE_LINK_LIBRARIES "NVIDIA::StreamlineHeaders;${XRAY_STREAMLINE_DIR}/lib/x64/sl.interposer.lib;delayimp"
+        INTERFACE_LINK_OPTIONS "/DELAYLOAD:sl.interposer.dll"
+    )
+    set(XRAY_STREAMLINE_RUNTIME_FILES
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.interposer.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.common.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.pcl.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.reflex.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.dlss.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/sl.dlss_g.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/nvngx_dlss.dll"
+        "${XRAY_STREAMLINE_DIR}/bin/x64/nvngx_dlssg.dll"
+    )
+
+    # AMD FSR SDK 2.3.0 (ffx-api): FSR upscaling and frame generation on DX12
+    # (Externals/fidelityfx-sdk/README.md). AMD::FidelityFXAPI is headers only: the module loads
+    # amd_fidelityfx_loader_dx12.dll by its absolute path and takes the five entry points through
+    # ffxLoadFunctions() (ffx_api_loader.h, which needs _WINDOWS, part of the default MSVC flags).
+    # AMD::FidelityFXLoader adds the loader's import library as a delay-load, for the ffx:: C++
+    # helpers of the .hpp headers, which call the entry points directly.
+    set(XRAY_FIDELITYFX_SDK_DIR "${CMAKE_SOURCE_DIR}/Externals/fidelityfx-sdk")
+    add_library(AMD::FidelityFXAPI INTERFACE IMPORTED GLOBAL)
+    set_target_properties(AMD::FidelityFXAPI PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES
+            "${XRAY_FIDELITYFX_SDK_DIR}/include/api/include;${XRAY_FIDELITYFX_SDK_DIR}/include/upscalers/include;${XRAY_FIDELITYFX_SDK_DIR}/include/framegeneration/include"
+    )
+    add_library(AMD::FidelityFXLoader INTERFACE IMPORTED GLOBAL)
+    set_target_properties(AMD::FidelityFXLoader PROPERTIES
+        INTERFACE_LINK_LIBRARIES "AMD::FidelityFXAPI;${XRAY_FIDELITYFX_SDK_DIR}/lib/amd_fidelityfx_loader_dx12.lib;delayimp"
+        INTERFACE_LINK_OPTIONS "/DELAYLOAD:amd_fidelityfx_loader_dx12.dll"
+    )
+    set(XRAY_FIDELITYFX_RUNTIME_FILES
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_loader_dx12.dll"
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_upscaler_dx12.dll"
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_framegeneration_dx12.dll"
+    )
+
+    # FSR 3.1.2 upscaler with a DX11 backend, static libraries built with MSVC from
+    # optiscaler/FidelityFX-SDK-DX11 (Externals/fidelityfx-dx11/README.md). The shaders are
+    # compiled into the backend library; nothing is shipped at runtime.
+    set(XRAY_FIDELITYFX_DX11_DIR "${CMAKE_SOURCE_DIR}/Externals/fidelityfx-dx11")
+    add_library(AMD::FidelityFXDX11Backend STATIC IMPORTED GLOBAL)
+    set_target_properties(AMD::FidelityFXDX11Backend PROPERTIES
+        IMPORTED_CONFIGURATIONS "Debug;Mixed;Release;ReleaseMasterGold"
+        IMPORTED_LOCATION_DEBUG "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_backend_dx11_x64d.lib"
+        IMPORTED_LOCATION_MIXED "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_backend_dx11_x64.lib"
+        IMPORTED_LOCATION_RELEASE "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_backend_dx11_x64.lib"
+        IMPORTED_LOCATION_RELEASEMASTERGOLD "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_backend_dx11_x64.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${XRAY_FIDELITYFX_DX11_DIR}/include"
+    )
+    add_library(AMD::FidelityFXDX11 STATIC IMPORTED GLOBAL)
+    set_target_properties(AMD::FidelityFXDX11 PROPERTIES
+        IMPORTED_CONFIGURATIONS "Debug;Mixed;Release;ReleaseMasterGold"
+        IMPORTED_LOCATION_DEBUG "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_fsr3upscaler_x64d.lib"
+        IMPORTED_LOCATION_MIXED "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_fsr3upscaler_x64.lib"
+        IMPORTED_LOCATION_RELEASE "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_fsr3upscaler_x64.lib"
+        IMPORTED_LOCATION_RELEASEMASTERGOLD "${XRAY_FIDELITYFX_DX11_DIR}/lib/ffx_fsr3upscaler_x64.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${XRAY_FIDELITYFX_DX11_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "AMD::FidelityFXDX11Backend"
+    )
+
+    # [dx12:core] begin vendored-dx12
+    # Microsoft DirectX Shader Compiler 1.9.2607 (Externals/dxc/README.md): the DX12 layer loads
+    # dxcompiler.dll from the executable's directory by its full path; dxil.dll signs the DXIL next
+    # to it. Headers come from the Windows SDK.
+    set(XRAY_DXC_DIR "${CMAKE_SOURCE_DIR}/Externals/dxc")
+    set(XRAY_DXC_RUNTIME_FILES
+        "${XRAY_DXC_DIR}/bin/x64/dxcompiler.dll"
+        "${XRAY_DXC_DIR}/bin/x64/dxil.dll"
+    )
+
+    # Microsoft DirectStorage 1.3.0 (Externals/DirectStorage/README.md): headers only; the renderer
+    # loads dstorage.dll by its full path and resolves the entry points itself.
+    set(XRAY_DSTORAGE_DIR "${CMAKE_SOURCE_DIR}/Externals/DirectStorage")
+    add_library(Microsoft::DirectStorageHeaders INTERFACE IMPORTED GLOBAL)
+    set_target_properties(Microsoft::DirectStorageHeaders PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${XRAY_DSTORAGE_DIR}/include"
+    )
+    set(XRAY_DSTORAGE_RUNTIME_FILES
+        "${XRAY_DSTORAGE_DIR}/bin/x64/dstorage.dll"
+        "${XRAY_DSTORAGE_DIR}/bin/x64/dstoragecore.dll"
+    )
+    # [dx12:core] end vendored-dx12
+
     function(xray_stage_windows_runtime target)
         set(_runtime_files
             "$<TARGET_FILE:AMD::AGS>"
@@ -65,6 +163,10 @@ if (WIN32)
             "$<TARGET_FILE:OpenSSL::Crypto>"
             "$<TARGET_FILE:SDL2>"
             "${XRAY_SDK_BINARY_DIR}/soft_oal.dll"
+            ${XRAY_STREAMLINE_RUNTIME_FILES}
+            ${XRAY_FIDELITYFX_RUNTIME_FILES}
+            ${XRAY_DXC_RUNTIME_FILES}
+            ${XRAY_DSTORAGE_RUNTIME_FILES}
         )
 
         find_file(_d3dcompiler_runtime

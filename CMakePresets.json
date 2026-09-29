@@ -41,6 +41,7 @@
       "targets": [
         "xr_3da",
         "xrRenderPC_R4",
+        "xrRenderPC_R5",
         "DarDelta"
       ]
     },
@@ -51,6 +52,7 @@
       "targets": [
         "xr_3da",
         "xrRenderPC_R4",
+        "xrRenderPC_R5",
         "DarDelta"
       ]
     },
@@ -61,6 +63,7 @@
       "targets": [
         "xr_3da",
         "xrRenderPC_R4",
+        "xrRenderPC_R5",
         "DarDelta"
       ]
     },
@@ -71,6 +74,7 @@
       "targets": [
         "xr_3da",
         "xrRenderPC_R4",
+        "xrRenderPC_R5",
         "DarDelta"
       ]
     }
