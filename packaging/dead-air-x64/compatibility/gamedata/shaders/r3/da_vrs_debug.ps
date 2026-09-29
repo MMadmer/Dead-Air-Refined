@@ -1,0 +1,29 @@
+#include "common.h"
+#include "da_vrs.h"
+
+//	r__vrs_debug 1 (phase_vrs_debug, r4_rendertarget_phase_vrs.cpp): the frame's shading rates over the
+//	finished frame at display size - 2x1 and 1x2 blue, 2x2 green, 2x4 and 4x2 yellow, 4x4 red, 1x1
+//	untinted - with the hardware tiles outlined.
+Texture2D<uint> s_vrs_rate;
+
+//	xy = the render size, z = the tile size in render pixels.
+uniform float4 da_vrs_debug;
+
+//	Exactly the outputs of da_fullscreen.vs, in its order (D3D12 checks the linkage).
+float4 main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position) : SV_Target
+{
+	const float2 px = tc * da_vrs_debug.xy;
+	const float tile = da_vrs_debug.z;
+	const uint2 size = da_vrs_decode(s_vrs_rate.Load(int3(uint2(px / tile), 0)));
+	const uint coarse = size.x * size.y;
+	float3 tint = coarse >= 16u ? float3(1.0, 0.15, 0.1) : (coarse >= 8u ? float3(1.0, 0.9, 0.1) : (coarse >= 4u ? float3(0.1, 1.0, 0.2) : float3(0.15, 0.4, 1.0)));
+	float alpha = coarse > 1u ? 0.35 : 0.0;
+	//	The tile grid, one render pixel wide.
+	const float2 inside = frac(px / tile) * tile;
+	if (any(inside < 1.0))
+	{
+		tint = float3(0.0, 0.0, 0.0);
+		alpha = 0.3;
+	}
+	return float4(tint, alpha);
+}

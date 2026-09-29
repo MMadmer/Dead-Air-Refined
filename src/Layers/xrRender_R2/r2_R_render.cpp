@@ -7,8 +7,18 @@
 #include "xrEngine/xr_object.h"
 
 #include "Layers/xrRender/FBasicVisual.h"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_framegen.h"
+#include "Layers/xrRenderPC_R4/da_async.h"
+#include "Layers/xrRenderPC_R4/da_vrs.h"
+#include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#include "Layers/xrRenderPC_R4/da_grass_mesh.h"
+#include "Layers/xrRenderPC_R4/da_offload.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
+#endif
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#include "Layers/xrRenderDX11/StateManager/dx11SamplerStateCache.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -21,6 +31,107 @@ extern void da_water_field_update();
 
 namespace
 {
+#if defined(XR_D3D12)
+// DirectX 12 records command lists truly in parallel: the G-buffer grass (a fifth of the render
+// thread on a grassy level) goes to contexts of its own - one per batch of hw_Render - while the
+// immediate one draws the level, and the lists execute exactly where the grass always drew.
+// r2_mt_render 0 keeps it inline.
+struct parallel_details
+{
+    struct batch
+    {
+        u32 context = R_dsgraph_structure::INVALID_CONTEXT_ID;
+        Task* task = nullptr;
+    };
+    batch batches[CDetailManager::dump_count];
+    u32 inline_dumps = 0; // batches no context was free for: the immediate context draws them
+    bool started = false;
+
+    void start()
+    {
+        CRender& r = RImplementation;
+        // Mesh grass draws the G-buffer grass itself: no vertex-path batches to record.
+        if (!r.o.mt_render || !r.Details || !r.Details->HasRenderableDetails() || da_grass_mesh_frame())
+            return;
+        started = true;
+        // Read here: RCache touches the context bookkeeping, which is this thread's alone.
+        const bool velocity = RCache.xforms.m_motion_pass;
+        for (u32 i = 0; i < CDetailManager::dump_count; ++i)
+        {
+            const u32 id = r.alloc_context();
+            if (id == R_dsgraph_structure::INVALID_CONTEXT_ID)
+            {
+                inline_dumps |= 1u << i;
+                continue;
+            }
+            batches[i].context = id;
+            const u32 dumps = 1u << i;
+            batches[i].task = &TaskScheduler->AddTask([id, velocity, dumps] {
+                CRender& render = RImplementation;
+                CBackend& cmd_list = render.get_context(id).cmd_list;
+                render.Target->phase_scene_begin_parallel(cmd_list, velocity);
+                cmd_list.set_xform_view(Device.mView);
+                cmd_list.set_xform_project(da_jitter_project(Device.mProject));
+                cmd_list.xforms.set_VP_motion(da_vp_nojit(), da_vp_prev());
+                SSManager.UseSceneBias(cmd_list.context_id, da_upscaler_active());
+                render.Details->Render(cmd_list, false, nullptr, dumps);
+                SSManager.UseSceneBias(cmd_list.context_id, false);
+            });
+        }
+    }
+
+    // Where the immediate context drew the grass: true when the parallel batches did instead.
+    bool finish(CBackend& imm)
+    {
+        if (!started)
+            return false;
+        started = false;
+        CRender& r = RImplementation;
+        // Before the lists run: executing one leaves the immediate context without its targets.
+        if (inline_dumps)
+            r.Details->Render(imm, true, nullptr, inline_dumps);
+        inline_dumps = 0;
+        bool executed = false;
+        for (batch& b : batches)
+        {
+            if (b.context == R_dsgraph_structure::INVALID_CONTEXT_ID)
+                continue;
+            TaskScheduler->Wait(*b.task);
+            b.task = nullptr;
+            r.get_context(b.context).cmd_list.submit();
+            r.release_context(b.context);
+            b.context = R_dsgraph_structure::INVALID_CONTEXT_ID;
+            executed = true;
+        }
+        // ExecuteCommandList(..., FALSE) cleared the immediate context: its cached state goes too,
+        // and the viewport comes back - the wallmarks after the split scene set none of their own.
+        if (executed)
+        {
+            imm.Invalidate();
+            r.rmNormal(imm);
+        }
+        return true;
+    }
+
+    // A frame left before the grass ran: its recordings are dropped, not left for the contexts'
+    // next users.
+    ~parallel_details()
+    {
+        for (batch& b : batches)
+        {
+            if (b.task)
+                TaskScheduler->Wait(*b.task);
+            if (b.context == R_dsgraph_structure::INVALID_CONTEXT_ID)
+                continue;
+            ID3D11CommandList* dropped = nullptr;
+            if (SUCCEEDED(HW.get_context(RImplementation.get_context(b.context).cmd_list.context_id)->FinishCommandList(FALSE, &dropped)))
+                _RELEASE(dropped);
+            RImplementation.release_context(b.context);
+        }
+    }
+};
+#endif
+
 // Lights demoted by the shadow budget keep lighting the scene unshadowed for this frame
 // only. bShadow is persistent game-visible light state, so it is restored on every exit
 // path once the frame's light passes are done. Lights cannot be destroyed mid-Render(),
@@ -48,21 +159,29 @@ void CRender::RenderMenu()
     RCache.set_Stencil(FALSE);
     RCache.set_ColorWriteEnable();
 
+    // While an upscaler runs the generic targets are render-sized: the menu takes the two
+    // display-size targets of the upscale slot instead, so it stays sharp and pairs with the
+    // base depth.
+    const bool display_targets = da_upscaler_active() && Target->s_menu_display && Target->rt_PostDisplay &&
+        Target->rt_Upscaled;
+    ref_rt& menu_image = display_targets ? Target->rt_PostDisplay : Target->rt_Generic_0;
+    ref_rt& menu_distort = display_targets ? Target->rt_Upscaled : Target->rt_Generic_1;
+
     // Main Render
     {
-        Target->u_setrt(RCache, Target->rt_Generic_0, nullptr, nullptr, Target->rt_Base_Depth); // LDR RT
+        Target->u_setrt(RCache, menu_image, nullptr, nullptr, Target->rt_Base_Depth); // LDR RT
         g_pGamePersistent->OnRenderPPUI_main(); // PP-UI
     }
     // Distort
     {
-        Target->u_setrt(RCache, Target->rt_Generic_1, nullptr, nullptr, Target->rt_Base_Depth); // Now RT is a distortion mask
-        RCache.ClearRT(Target->rt_Generic_1, color_rgba(127, 127, 0, 127));
+        Target->u_setrt(RCache, menu_distort, nullptr, nullptr, Target->rt_Base_Depth); // Now RT is a distortion mask
+        RCache.ClearRT(menu_distort, color_rgba(127, 127, 0, 127));
         g_pGamePersistent->OnRenderPPUI_PP(); // PP-UI
     }
 
     // Actual Display
     Target->u_setrt(RCache, Device.dwWidth, Device.dwHeight, Target->get_base_rt(), 0, 0, Target->get_base_zb());
-    RCache.set_Shader(Target->s_menu);
+    RCache.set_Shader(display_targets ? Target->s_menu_display : Target->s_menu);
     RCache.set_Geometry(Target->g_menu);
 
     Fvector2 p0, p1;
@@ -128,14 +247,65 @@ void CRender::Render()
     if (m_bFirstFrameAfterReset)
     {
         m_bFirstFrameAfterReset = false;
+#if RENDER == R_R4
+        // The reset the renderer reset asked for would be used up by a frame that draws nothing.
+        da_history_carry_reset();
+#endif
         return;
     }
+
+    // From here to the upscale in phase_combine the scene draws at the render size, with the
+    // scene's own texture LOD bias while an upscaler runs (da_temporal.h). Every way out of the
+    // frame returns to the display stage.
+    struct scene_stage_guard
+    {
+        scene_stage_guard()
+        {
+            da_stage_scene(true);
+#if defined(USE_DX11)
+            if (da_upscaler_active())
+                SSManager.UseSceneBias(RCache.context_id, true);
+#endif
+        }
+        ~scene_stage_guard()
+        {
+#if RENDER == R_R4
+            // No shading rate leaves the scene stage.
+            da_vrs_reset(RCache);
+#endif
+            da_stage_scene(false);
+#if defined(USE_DX11)
+            SSManager.UseSceneBias(RCache.context_id, false);
+#endif
+        }
+    } scene_stage;
 
     //.	VERIFY					(g_pGameLevel && g_pGameLevel->pHUD);
     auto& dsgraph = get_imm_context();
 
+    //*******
+    // Sync point. Ahead of the GPU timers' frame: on DirectX 12 the event submits what was recorded so
+    // far, and a frame timestamp riding with it would count the GPU idling until the frame's own work
+    // arrives (the offloads' auto choice compares that frame with the CPU's, da_offload.h).
+    BasicStats.WaitS.Begin();
+    {
+#if RENDER == R_R4
+        const u64 wait_start = CPU::QPC();
+#endif
+        q_sync_point.Wait(ps_r2_wait_sleep, ps_r2_wait_timeout);
+#if RENDER == R_R4
+        da_offload_sync_wait(CPU::QPC() - wait_start);
+#endif
+    }
+    BasicStats.WaitS.End();
+    q_sync_point.End();
+
 #if defined(USE_DX11)
     GpuTimers.FrameBegin();
+#endif
+#if RENDER == R_R4
+    // The GPU-driven trees' wind state of this frame, before any view draws them.
+    da_gpu_trees_frame_begin(RCache);
 #endif
 
     //******* Z-prefill calc - DEFERRER RENDERER
@@ -171,16 +341,21 @@ void CRender::Render()
         BasicStats.Culling.End();
     }
 
-    //*******
-    // Sync point
-    BasicStats.WaitS.Begin();
-    {
-        q_sync_point.Wait(ps_r2_wait_sleep, ps_r2_wait_timeout);
-    }
-    BasicStats.WaitS.End();
-    q_sync_point.End();
+#if RENDER == R_R4
+    // The grass rows the calc task produced go to the GPU.
+    da_grass_mesh_frame_prepare(RCache);
+#endif
 
     r_main.sync();
+
+#if RENDER == R_R4
+    // Fixed order (PLAN.md 2.5): the async path of the frame, the RT scene build (it may wait for
+    // the GPU, so no job may be open yet), then fork A. async_early: the ripple steps and the cloud
+    // march went into jobs and the frame skips its own below.
+    da_async_frame_begin();
+    da_rt_frame_scene(RCache);
+    const bool async_early = da_async_fork_early(RCache);
+#endif
 
     if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
     {
@@ -218,16 +393,42 @@ void CRender::Render()
 #if defined(USE_DX11)
     GpuTimers.Begin(dx11GpuTimers::Scene);
 #endif
+    // The G-buffer grass, once per frame, the mesh/vertex A/B tool around it.
+#if defined(XR_D3D12)
+    parallel_details details_job;
+    const auto render_details = [&] {
+        dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
+        da_grass_ab_gbuffer_begin();
+        if (!details_job.finish(dsgraph.cmd_list) && Details)
+            Details->Render(dsgraph.cmd_list, true);
+        da_grass_ab_gbuffer_end();
+    };
+#elif RENDER == R_R4
+    const auto render_details = [&] {
+        dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
+        da_grass_ab_gbuffer_begin();
+        if (Details)
+            Details->Render(dsgraph.cmd_list, true);
+        da_grass_ab_gbuffer_end();
+    };
+#else
+    const auto render_details = [&] {
+        if (Details)
+            Details->Render(dsgraph.cmd_list, true);
+    };
+#endif
     if (!split_the_scene_to_minimize_wait)
     {
         PIX_EVENT(DEFER_PART0_NO_SPLIT);
         // level, DO NOT SPLIT
         Target->phase_scene_begin();
+#if defined(XR_D3D12)
+        details_job.start();
+#endif
         dsgraph.render_hud();
         dsgraph.render_graph(0);
         dsgraph.render_lods(true, true);
-        if (Details)
-            Details->Render(dsgraph.cmd_list, true);
+        render_details();
         Target->phase_scene_end();
     }
     else
@@ -235,6 +436,9 @@ void CRender::Render()
         PIX_EVENT(DEFER_PART0_SPLIT);
         // level, SPLIT
         Target->phase_scene_begin();
+#if defined(XR_D3D12)
+        details_job.start();
+#endif
         dsgraph.render_graph(0);
         Target->disable_aniso();
     }
@@ -396,8 +600,7 @@ void CRender::Render()
         Target->phase_scene_begin();
         dsgraph.render_hud();
         dsgraph.render_lods(true, true);
-        if (Details)
-            Details->Render(dsgraph.cmd_list, true);
+        render_details();
         Target->phase_scene_end();
     }
 
@@ -446,13 +649,22 @@ void CRender::Render()
 
     r_rain.sync();
 
+#if RENDER == R_R4
+    // Fork B: the G-buffer is final, GTAO may run as a job.
+    da_async_fork_gtao(RCache);
+#endif
+
     // The water field and the ripple sim come first: the sun accumulation reads the field for
     // its caustics and the forward water surface reads both, so both have to hold this frame's
     // state before either of those runs. The field call is a handful of compares once the
     // level's bake has landed.
 #if RENDER == R_R4
-    da_water_field_update();
-    Target->phase_water_ripple();
+    if (!async_early)
+    {
+        da_water_field_update();
+        dx11GpuTimerScope gpu_ripple(dx11GpuTimers::Ripple);
+        Target->phase_water_ripple();
+    }
     // The visor is read at the very end of the frame, in the combine, but its field is stepped
     // here with the other fixed-step simulations: one place in the frame owns the clock.
     Target->phase_visor_drops();
@@ -461,11 +673,16 @@ void CRender::Render()
     // The cloud deck field for this frame: the sun passes below shade the ground with it, the
     // shafts march through it, and the deck itself is drawn from it in combine.
 #if RENDER == R_R4
-    Target->phase_cloud_map();
+    if (!async_early)
     {
+        Target->phase_cloud_map();
         dx11GpuTimerScope gpu_march(dx11GpuTimers::CloudsMarch);
         Target->phase_clouds_march();
     }
+
+    // Before the sun accumulation: the traced sun shadow it reads, then the frame's shading rates.
+    da_rt_sun_pass(RCache);
+    da_vrs_rate_pass(RCache);
 #endif
 
     // Directional light - fucking sun
@@ -492,7 +709,7 @@ void CRender::Render()
         PIX_EVENT(DEFER_SELF_ILLUM);
         Target->phase_accumulator(dsgraph.cmd_list);
         // Render emissive geometry, stencil - write 0x0 at pixel pos
-        dsgraph.cmd_list.set_xform_project(Device.mProject);
+        dsgraph.cmd_list.set_xform_project(da_jitter_project(Device.mProject));
         dsgraph.cmd_list.set_xform_view(Device.mView);
         // Stencil - write 0x1 at pixel pos -
         if (!o.msaa)
@@ -563,17 +780,23 @@ void CRender::Render()
     if (ps_r__screenshot_every > 0 && (Device.dwFrame % u32(ps_r__screenshot_every)) == 0)
         Screenshot(SM_NORMAL);
 
+#if RENDER == R_R4
+    // Frame generation: the hudless copy of this finished 3D frame and the backend's Prepare,
+    // before the UI goes on the back buffer.
+    da_framegen_frame();
+#endif
+
 #if defined(USE_DX11)
     GpuTimers.FrameEnd();
     // r__gpu_log N: write the pass timings to the log every N frames. This is how a QA probe
     // reads GPU cost back - the stats HUD never reaches the log.
     if (ps_r__gpu_log > 0 && GpuTimers.valid() && (Device.dwFrame % u32(ps_r__gpu_log)) == 0)
-    {
-        Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f march=%.3f combine=%.3f ms",
-            GpuTimers.ms(dx11GpuTimers::Frame), GpuTimers.ms(dx11GpuTimers::Scene),
-            GpuTimers.ms(dx11GpuTimers::Sun), GpuTimers.ms(dx11GpuTimers::Lights),
-            GpuTimers.ms(dx11GpuTimers::Clouds), GpuTimers.ms(dx11GpuTimers::CloudsMarch), GpuTimers.ms(dx11GpuTimers::Combine));
-    }
+        GpuTimers.LogLine();
+#endif
+
+#if RENDER == R_R4
+    // This frame's view-projections become the previous ones of the next frame's motion vectors.
+    da_temporal_frame_end();
 #endif
 
     VERIFY(dsgraph.mapDistort.empty());

@@ -22,6 +22,7 @@ static ID3DTexture2D* g_visor_primed = nullptr; // the surface the clear below w
 static Fvector g_visor_prev_eye{};
 static bool g_visor_have_eye = false;
 static Fvector2 g_visor_air{}; // the apparent wind in the plane of the glass, smoothed, m/s
+static float g_visor_wipe_last = -1.f; // where the hand was at the last step drawn, -1 for none
 
 // The visor is the actor's, and the actor is a level's. Nothing recreates the target between
 // levels, so the prime test below - keyed on the surface - would never fire again and the next
@@ -33,6 +34,7 @@ void da_visor_drops_reset()
     g_visor_primed = nullptr;
     g_visor_have_eye = false;
     g_visor_air.set(0.f, 0.f);
+    g_visor_wipe_last = -1.f;
 }
 
 // One or more fixed steps of the water standing on the actor's visor.
@@ -64,14 +66,28 @@ void CRenderTarget::phase_visor_drops()
     if (!g_pGamePersistent)
         return;
 
+    const auto& env = g_pGamePersistent->Environment();
+
+    // No glass in front of the eye - no mask, or its HUD switched off: nothing lands, nothing
+    // runs, and the combine draws nothing. The water is dropped rather than paused, so a mask
+    // taken off in the rain takes its drops with it and the next one goes on dry.
+    if (!env.visor_glass())
+    {
+        if (g_visor_primed)
+        {
+            RCache.ClearRT(rt_VisorDrops, {});
+            RCache.ClearRT(rt_VisorDropsTmp, {});
+        }
+        da_visor_drops_reset();
+        return;
+    }
+
     if (!s_visor_drops)
         s_visor_drops.create("da_visor_drops");
     if (!s_visor_drops)
         return;
 
     PIX_EVENT(DA_phase_visor_drops);
-
-    const auto& env = g_pGamePersistent->Environment();
 
     // A fresh target holds whatever the allocator left in it, and this one is fed back into
     // itself every step.
@@ -179,8 +195,19 @@ void CRenderTarget::phase_visor_drops()
     const float wet = (env.visor.qa_wet >= 0.f)
         ? clampr(env.visor.qa_wet, 0.f, 1.f)
         : clampr(std::max(driven, env.visor.dunk), 0.f, 1.f);
-    const float wipe = env.visor_wipe_phase();
+    // The hand is placed per step. This frame's steps share the way from where it was at the last
+    // step drawn to where it is now: one position for all of a frame's steps held the edge still and
+    // then jumped it, and every jump printed a column into the smear. Carrying the last position over
+    // means no stretch of glass is skipped or passed twice at any frame rate, a capped step count
+    // included. Negative while no hand is on the glass.
     const float wipe_dir = float(env.visor.wipe_dir);
+    const float wipe_target = (env.visor.wipe_start < 0.f || Device.fTimeGlobal < env.visor.wipe_start)
+        ? -1.f
+        : clampr((Device.fTimeGlobal - env.visor.wipe_start) / _max(env.visor.wipe_len, 0.01f), 0.f, 1.f);
+    const float wipe_from =
+        (wipe_target >= 0.f && g_visor_wipe_last >= 0.f && g_visor_wipe_last <= wipe_target) ? g_visor_wipe_last : 0.f;
+    float wipe_prev = wipe_from;
+    g_visor_wipe_last = wipe_target;
 
     const float rt_w = float(rt_VisorDrops->dwWidth);
     const float rt_h = float(rt_VisorDrops->dwHeight);
@@ -209,9 +236,13 @@ void CRenderTarget::phase_visor_drops()
         RCache.set_Geometry(g_combine);
         RCache.set_c("da_visor_sim", dt, texel_mm, float(g_visor_step), wet);
         RCache.set_c("da_visor_grav", gux, guy, g_len, rt_w / rt_h);
-        // A sweep only exists while it is running; once it is over the hand is gone and the
-        // shader must not keep scrubbing the far edge.
-        RCache.set_c("da_visor_wipe", (wipe < 1.f) ? 1.f : 0.f, wipe, wipe_dir, env.visor.qa_blob);
+        // A sweep only exists while it is running; once the hand is off the far edge the shader
+        // must not keep scrubbing it.
+        const float wipe_now =
+            (wipe_target >= 0.f) ? wipe_from + (wipe_target - wipe_from) * (float(s + 1) / float(steps)) : -1.f;
+        const bool wiping = wipe_now >= 0.f && wipe_prev < 1.f;
+        RCache.set_c("da_visor_wipe", wiping ? wipe_prev : -1.f, wipe_now, wipe_dir, env.visor.qa_blob);
+        wipe_prev = wipe_now;
         RCache.set_c("da_visor_dim", 1.f / rt_w, 1.f / rt_h, rt_w, rt_h);
         RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
@@ -222,7 +253,7 @@ void CRenderTarget::phase_visor_drops()
     }
 
     // Back to the device-sized viewport and target for whatever renders next.
-    u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), nullptr, nullptr, get_base_zb());
+    u_setrt_scene_base(RCache);
 }
 
 // Half floats, read back by hand: the field is A16B16G16R16F and there is no reason to widen a

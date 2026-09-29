@@ -209,6 +209,8 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
+        // Ray traced sun shadow (dxr.md 3.5); a name without a surface where RT is off.
+        C.r_dx11Texture("s_rt_sun", r2_RT_rt_sun);
         C.r_dx11Texture("s_smap_minmax", r2_RT_smap_depth_minmax);
 
         C.r_dx11Sampler("smp_nofilter");
@@ -251,6 +253,8 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
+        // Ray traced sun shadow (dxr.md 3.5); a name without a surface where RT is off.
+        C.r_dx11Texture("s_rt_sun", r2_RT_rt_sun);
 
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_material");
@@ -305,6 +309,8 @@ void CBlender_accum_direct::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_accumulator", r2_RT_accum);
         C.r_dx11Texture("s_lmap", r2_RT_cloud_map);
         C.r_dx11Texture("s_smap", r2_RT_smap_depth);
+        // Ray traced sun shadow (dxr.md 3.5); a name without a surface where RT is off.
+        C.r_dx11Texture("s_rt_sun", r2_RT_rt_sun);
         C.r_dx11Texture("s_smap_minmax", r2_RT_smap_depth_minmax);
 
         C.r_dx11Sampler("smp_nofilter");

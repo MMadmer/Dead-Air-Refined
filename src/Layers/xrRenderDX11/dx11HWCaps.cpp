@@ -6,7 +6,9 @@
 
 #if !defined(_EDITOR)
 #include <nvapi.h>
+#if !defined(XR_D3D12)
 #include <ags_lib/inc/amd_ags.h>
+#endif
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -70,6 +72,10 @@ u32 GetNVGpuNum()
 
 u32 GetATIGpuNum()
 {
+#if defined(XR_D3D12)
+    // AGS counts CrossFire GPUs through a temporary D3D11 device; D3D12 has no CrossFire AFR.
+    return 1;
+#else
     constexpr int AGS_VERSION = AGS_MAKE_VERSION(AMD_AGS_VERSION_MAJOR, AMD_AGS_VERSION_MINOR, AMD_AGS_VERSION_PATCH);
 
     AGSConfiguration config
@@ -119,6 +125,7 @@ u32 GetATIGpuNum()
     Msg("* AMD AGS: %d-Way CrossFire detected.", crossfireGpuCount);
     agsDeInitialize(ags);
     return crossfireGpuCount;
+#endif
 }
 
 u32 GetGpuNum()

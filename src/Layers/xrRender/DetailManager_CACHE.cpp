@@ -66,11 +66,26 @@ void CDetailManager::cache_Task(int gx, int gz, Slot* D)
 
     for (u32 i = 0; i < dm_obj_in_slot; i++)
     {
-        D->G[i].id = DS.r_id(i);
-        for (u32 clr = 0; clr < D->G[i].items.size(); clr++)
-            poolSI.destroy(D->G[i].items[clr]);
-        D->G[i].items.clear();
+        SlotPart& part = D->G[i];
+        part.id = DS.r_id(i);
+        for (SlotItem* item : part.items)
+            poolSI.destroy(item);
+        part.items.clear();
+        // The render lists point into the items just destroyed and carry the rows of the old
+        // place: drawn until the next refresh, they put grass of the far edge into the new one.
+        for (u32 group = 0; group < 3; ++group)
+        {
+            part.r_items[group].clear();
+            part.r_rows[group].clear();
+        }
+        // The mesh path's GPU copy of the old place goes too.
+        ++part.gen;
+#if RENDER == R_R4
+        ms_Release(part);
+#endif
     }
+    // Refresh at the first visibility pass instead of the old place's schedule.
+    D->frame = 0;
 
     if (old_type != stPending)
     {
@@ -173,7 +188,7 @@ void CDetailManager::cache_Update(int v_x, int v_z, Fvector& view)
         while (!cache_task.empty())
         {
             // Decompress and remove task
-            const u32 bestId = cache_task.size() - 1;
+            const u32 bestId = u32(cache_task.size()) - 1;
             cache_Decompress(cache_task[bestId]);
             cache_task.pop_back();
         }
@@ -191,7 +206,7 @@ void CDetailManager::cache_Update(int v_x, int v_z, Fvector& view)
         auto bestDistancesEnd = std::end(bestDistances);
         ptrdiff_t maxIdx = 0;
 
-        for (u32 i = 0, size = cache_task.size(); i < size; ++i)
+        for (u32 i = 0, size = u32(cache_task.size()); i < size; ++i)
         {
             // Gain access to data
             Slot* S = cache_task[i];

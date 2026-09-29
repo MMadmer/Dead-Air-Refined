@@ -26,6 +26,8 @@ struct vf
  	float2 	tc0	: TEXCOORD1	;	// base0
  	float2 	tc1	: TEXCOORD2	;	// base1
 	float4 	af	: COLOR1	;	// alpha&factor
+	float4	hpos_cur	: TEXCOORD7;	// motion vector (da_velocity.h)
+	float4	hpos_prev	: TEXCOORD8;
 	float4 	hpos: SV_Position;
 };
 
@@ -69,6 +71,9 @@ vf 	main	( vv I )
 	float 	h 	= lerp		(I.rgbh0.w,I.rgbh1.w,factor)		*L_SCALE;
 
 	o.hpos 		= mul		(m_VP, 	pos);				// xform, input in world coords
+	// The camera's motion only: the card's own sway is small at impostor range.
+	o.hpos_cur	= mul		(m_VP_nojit,	pos);
+	o.hpos_prev	= mul		(m_VP_prev,	pos);
 	o.Pe		= mul		(m_V,	pos);
 
 	// replicate TCs

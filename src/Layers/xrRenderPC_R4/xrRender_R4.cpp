@@ -35,21 +35,24 @@ public:
         ZoneScoped;
 
         const BOOL result = CheckCanAddMode();
-        if (result != FALSE)
+        if (result == FALSE)
+            return modes;
+
+        // Every mode is this one D3D11 module. Below R4 they only take a feature-level 10 device
+        // (no SM5, no compute: the water ripple solver and the GTAO filter do not even compile
+        // there and run as stubs), and R2 the advanced post-processing on top. So a card with
+        // feature level 11 is offered R4 alone; the rest stay for hardware without it and for
+        // the -r3 / -r2.5 / -r2 keys, to debug with.
+        const bool dx11 = result == TRUE + TRUE; // XXX: remove hack
+        if (!dx11 || strstr(Core.Params, "-r2") || strstr(Core.Params, "-r3"))
         {
             //modes.emplace_back(RENDERER_R2A_MODE, 1);
             modes.emplace_back(RENDERER_R2_MODE, 2);
             modes.emplace_back(RENDERER_R2_5_MODE, 3);
+            modes.emplace_back(RENDERER_R3_MODE, 4); // order matters: R3 should be first, R4 should be second.
         }
-        switch (result)
-        {
-        case TRUE:
-            modes.emplace_back(RENDERER_R3_MODE, 4);
-            break;
-        case TRUE+TRUE: // XXX: remove hack
-            modes.emplace_back(RENDERER_R3_MODE, 4); // don't optimize this switch with fallthrough, because
-            modes.emplace_back(RENDERER_R4_MODE, 5); // order matters: R3 should be first, R4 should be second.
-        }
+        if (dx11)
+            modes.emplace_back(RENDERER_R4_MODE, 5);
         return modes;
     }
 

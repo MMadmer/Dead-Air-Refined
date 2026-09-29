@@ -1,0 +1,26 @@
+#include "common.h"
+
+// r__motion_vectors 1 (CRenderTarget::phase_velocity_debug): the G-buffer's motion vectors over
+// the finished frame, at display size. Direction is the hue (right red, up yellow-green, left
+// cyan, down blue-violet), the length in render pixels the strength: full colour at 16 px a
+// frame, grey where nothing moved against the camera, dark where nothing wrote a vector at all
+// (the cleared target: sky, and whatever the velocity passes leave out).
+
+Texture2D s_velocity;	// NDC(current) - NDC(previous), unjittered, y up
+
+// Exactly the outputs of da_fullscreen.vs, in its order (D3D12 checks the linkage).
+float4 main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position) : SV_Target
+{
+	const float2 v = s_velocity.SampleLevel(smp_nofilter, tc, 0).xy;
+	if (v.x == 0.0 && v.y == 0.0)
+		return float4(0.08, 0.08, 0.08, 0.85);
+
+	// NDC spans two units across the render width and height.
+	const float2 px = v * 0.5 * pos_decompression_params2.xy;
+	const float len = length(px);
+	const float hue = atan2(px.y, px.x) / 6.2831853;
+	const float3 rgb = saturate(abs(frac(hue + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0);
+	// Square root: a tenth of a pixel still shows, sixteen pixels saturate.
+	const float strength = sqrt(saturate(len / 16.0));
+	return float4(lerp(float3(0.5, 0.5, 0.5), rgb, strength), 0.85);
+}

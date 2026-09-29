@@ -68,7 +68,8 @@ SVS* CResourceManager::_CreateVS(cpcstr shader, u32 flags /*= 0*/)
 
 void CResourceManager::_DeleteVS(const SVS* vs)
 {
-    if (DestroyShader(vs))
+    // "null" and a mesh stage that failed to compile have no input signature.
+    if (DestroyShader(vs) && vs->signature)
     {
         for (const auto& iDecl : v_declarations)
         {
@@ -90,7 +91,7 @@ void CResourceManager::_DeleteVS(const SVS* vs)
 }
 
 //--------------------------------------------------------------------------------------------------------------
-SPS* CResourceManager::_CreatePS(LPCSTR _name)
+SPS* CResourceManager::_CreatePS(LPCSTR _name, u32 flags /*= 0*/)
 {
     string_path name;
     xr_strcpy(name, _name);
@@ -122,23 +123,23 @@ SPS* CResourceManager::_CreatePS(LPCSTR _name)
         break;
     }
 
-    return CreateShader<SPS>(name, _name);
+    return CreateShader<SPS>(name, _name, flags);
 }
 
 void CResourceManager::_DeletePS(const SPS* ps) { DestroyShader(ps); }
 
 //--------------------------------------------------------------------------------------------------------------
-SGS* CResourceManager::_CreateGS(LPCSTR Name) { return CreateShader<SGS>(Name); }
+SGS* CResourceManager::_CreateGS(LPCSTR Name, u32 flags /*= 0*/) { return CreateShader<SGS>(Name, nullptr, flags); }
 void CResourceManager::_DeleteGS(const SGS* GS) { DestroyShader(GS); }
 
 #ifdef USE_DX11
-SHS* CResourceManager::_CreateHS(LPCSTR Name) { return CreateShader<SHS>(Name); }
+SHS* CResourceManager::_CreateHS(LPCSTR Name, u32 flags /*= 0*/) { return CreateShader<SHS>(Name, nullptr, flags); }
 void CResourceManager::_DeleteHS(const SHS* HS) { DestroyShader(HS); }
 
-SDS* CResourceManager::_CreateDS(LPCSTR Name) { return CreateShader<SDS>(Name); }
+SDS* CResourceManager::_CreateDS(LPCSTR Name, u32 flags /*= 0*/) { return CreateShader<SDS>(Name, nullptr, flags); }
 void CResourceManager::_DeleteDS(const SDS* DS) { DestroyShader(DS); }
 
-SCS* CResourceManager::_CreateCS(LPCSTR Name) { return CreateShader<SCS>(Name); }
+SCS* CResourceManager::_CreateCS(LPCSTR Name, u32 flags /*= 0*/) { return CreateShader<SCS>(Name, nullptr, flags); }
 void CResourceManager::_DeleteCS(const SCS* CS) { DestroyShader(CS); }
 #endif
 
@@ -164,6 +165,48 @@ SDeclaration* CResourceManager::_CreateDecl(const D3DVERTEXELEMENT9* dcl)
 
     return D;
 }
+
+// [dx12:gd] begin decl
+SDeclaration* CResourceManager::_CreateDeclGD(const SDeclaration* base)
+{
+    // The D3D9 code only tells declarations apart: the base's elements and a marker in stream 1 that
+    // no D3D9 usage can produce.
+    constexpr BYTE gdref_usage = 0xE7;
+    xr_vector<VertexElement> code(base->dcl_code.begin(), base->dcl_code.end() - 1);
+    code.push_back({1, 0, D3DDECLTYPE_UNUSED, D3DDECLMETHOD_DEFAULT, gdref_usage, 0});
+    code.push_back(D3DDECL_END());
+
+    for (SDeclaration* D : v_declarations)
+    {
+        if (dcl_equal(code.data(), &D->dcl_code.front()))
+            return D;
+    }
+
+    SDeclaration* D = v_declarations.emplace_back(xr_new<SDeclaration>());
+    D->dcl_code = std::move(code);
+    D->dx11_dcl_code.assign(base->dx11_dcl_code.begin(), base->dx11_dcl_code.end() - 1);
+    D->dx11_dcl_code.push_back({"GDREF", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1});
+    D->dx11_dcl_code.push_back({});
+    D->dwFlags |= xr_resource_flagged::RF_REGISTERED;
+    return D;
+}
+
+SGeometry* CResourceManager::CreateGeomGD(SDeclaration* dcl, VertexBufferHandle vb, IndexBufferHandle ib, u32 vb_stride)
+{
+    for (SGeometry* geom : v_geoms)
+    {
+        if (geom->dcl == dcl && geom->vb == vb && geom->ib == ib && geom->vb_stride == vb_stride)
+            return geom;
+    }
+    SGeometry* geom = v_geoms.emplace_back(xr_new<SGeometry>());
+    geom->dwFlags |= xr_resource_flagged::RF_REGISTERED;
+    geom->dcl = dcl;
+    geom->vb = vb;
+    geom->vb_stride = vb_stride;
+    geom->ib = ib;
+    return geom;
+}
+// [dx12:gd] end decl
 
 //--------------------------------------------------------------------------------------------------------------
 dx11ConstantBuffer* CResourceManager::_CreateConstantBuffer(u32 context_id, ID3DShaderReflectionConstantBuffer* pTable)

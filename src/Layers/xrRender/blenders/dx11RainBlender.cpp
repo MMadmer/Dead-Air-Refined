@@ -71,6 +71,11 @@ void CBlender_rain::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_water", "water\\water_SBumpVolume");
         // C.r_dx11Texture		("s_waterFall",	"water\\water_normal");
         C.r_dx11Texture("s_waterFall", "water\\water_flowing_nmap");
+        // The puddle mask the terrain G-buffer draws (da_puddles.h), for the standing water on the
+        // ground: its fill map and the ripple field, bound under the names that pass uses.
+        C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Sampler("smp_rtlinear");
 
         C.r_End();
 
@@ -203,6 +208,11 @@ void CBlender_rain_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_water", "water\\water_SBumpVolume");
         // C.r_dx11Texture		("s_waterFall",	"water\\water_normal");
         C.r_dx11Texture("s_waterFall", "water\\water_flowing_nmap");
+        // The puddle mask the terrain G-buffer draws (da_puddles.h), for the standing water on the
+        // ground: its fill map and the ripple field, bound under the names that pass uses.
+        C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
+        C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Sampler("smp_rtlinear");
 
         C.r_End();
 

@@ -37,6 +37,7 @@ dx11SamplerStateCache::SHandle dx11SamplerStateCache::GetState(D3D_SAMPLER_DESC&
         rec.m_crc = crc;
         rec.m_desc = desc;
         CreateState(desc, &rec.m_pState);
+        CreateSceneState(rec);
         hResult = m_StateArray.size();
         m_StateArray.push_back(rec);
     }
@@ -47,6 +48,44 @@ dx11SamplerStateCache::SHandle dx11SamplerStateCache::GetState(D3D_SAMPLER_DESC&
 void dx11SamplerStateCache::CreateState(StateDecs desc, IDeviceState** ppIState)
 {
     CHK_DX(HW.pDevice->CreateSamplerState(&desc, ppIState));
+}
+
+void dx11SamplerStateCache::CreateSceneState(StateRecord& rec)
+{
+    _RELEASE(rec.m_pSceneState);
+    if (m_fSceneMipBias == 0.f && m_uiSceneMinAniso <= m_uiMaxAnisotropy)
+        return;
+
+    StateDecs desc = rec.m_desc;
+    desc.MipLODBias = m_uiMipLODBias + m_fSceneMipBias;
+    // ValidateState drops the anisotropy again where the filter does not use it.
+    desc.MaxAnisotropy = std::max(m_uiMaxAnisotropy, m_uiSceneMinAniso);
+    dx11StateUtils::ValidateState(desc);
+    CreateState(desc, &rec.m_pSceneState);
+}
+
+void dx11SamplerStateCache::SetSceneMipBias(float extraBias, u32 minAniso)
+{
+    clamp(minAniso, 0u, 16u);
+    if (m_fSceneMipBias == extraBias && m_uiSceneMinAniso == minAniso)
+        return;
+
+    m_fSceneMipBias = extraBias;
+    m_uiSceneMinAniso = minAniso;
+    for (StateRecord& rec : m_StateArray)
+        CreateSceneState(rec);
+    InvalidateBoundArrays();
+}
+
+void dx11SamplerStateCache::UseSceneBias(u32 contextId, bool use)
+{
+    VERIFY(contextId < R__NUM_CONTEXTS);
+    if (m_bSceneBias[contextId] == use)
+        return;
+
+    m_bSceneBias[contextId] = use;
+    // Only this context's bindings: the others may be recording on their own threads.
+    ZeroMemory(m_boundSamplerArrays[contextId], sizeof(m_boundSamplerArrays[contextId]));
 }
 
 dx11SamplerStateCache::SHandle dx11SamplerStateCache::FindState(const StateDecs& desc, u32 StateCRC)
@@ -81,6 +120,7 @@ void dx11SamplerStateCache::ClearStateArray()
     for (u32 i = 0; i < m_StateArray.size(); ++i)
     {
         _RELEASE(m_StateArray[i].m_pState);
+        _RELEASE(m_StateArray[i].m_pSceneState);
     }
 
     m_StateArray.clear();
@@ -122,7 +162,8 @@ u32 dx11SamplerStateCache::PrepareSamplerStates(
         if (samplers[i] != hInvalidHandle)
         {
             VERIFY(samplers[i] < m_StateArray.size());
-            pSS[i] = m_StateArray[samplers[i]].m_pState;
+            const StateRecord& rec = m_StateArray[samplers[i]];
+            pSS[i] = m_bSceneBias[contextId] && rec.m_pSceneState ? rec.m_pSceneState : rec.m_pState;
         }
     }
 
@@ -241,6 +282,7 @@ void dx11SamplerStateCache::SetMaxAnisotropy(u32 uiMaxAniso)
         rec.m_pState->Release();
         CreateState(desc, &rec.m_pState);
         rec.m_desc = desc;
+        CreateSceneState(rec);
     }
     InvalidateBoundArrays();
 }
@@ -264,6 +306,7 @@ void dx11SamplerStateCache::SetMipLODBias(float uiMipLODBias)
         rec.m_pState->Release();
         CreateState(desc, &rec.m_pState);
         rec.m_desc = desc;
+        CreateSceneState(rec);
     }
     InvalidateBoundArrays();
 }

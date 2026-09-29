@@ -1,0 +1,7 @@
+// [DA_PORT] Without the depth test, but with the soft-particle input the vertex shaders still
+// write while soft particles are on (see particle.ps).
+#ifdef	USE_SOFT_PARTICLES
+#define	DA_PARTICLE_TEXGEN_INPUT
+#endif
+#undef	USE_SOFT_PARTICLES
+#include "particle.ps"

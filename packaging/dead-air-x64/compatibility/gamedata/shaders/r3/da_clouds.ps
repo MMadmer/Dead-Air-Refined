@@ -1,5 +1,6 @@
 #include "common.h"
 #include "da_clouds_vol.h"
+#include "da_clouds_hist.h"
 
 // The deck on the sky: a full-screen pass over the sky pixels (stencil), blended over the
 // skybox as premultiplied colour + transmittance (ONE, SRCALPHA).
@@ -35,7 +36,10 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 
 	[branch] if (tier >= 2)
 	{
-		const float4 c = s_clouds.SampleLevel(smp_rtlinear, I.tc0, 0);
+		// A sky pixel never reaches a texel the march skipped (da_clouds_march.h); a pixel whose
+		// four taps all were skipped shows no deck.
+		bool valid;
+		const float4 c = da_clouds_fetch(s_clouds, I.tc0, valid);
 		col = c.rgb;
 		T = c.a;
 	}

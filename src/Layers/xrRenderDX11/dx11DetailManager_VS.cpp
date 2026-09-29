@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "Layers/xrRender/DetailManager.h"
 #include "Layers/xrRender/BufferUtils.h"
+#include "Layers/xrRender/da_temporal.h"
+#include "Layers/xrRender/da_wind_history.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -26,51 +28,69 @@ void CDetailManager::hw_Load_Shaders()
     hwc_s_array = T1.get("array");
 }
 
-void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)
+CDetailManager::DumpInputs CDetailManager::hw_DumpInputs(const u32 dump) const
+{
+    using namespace detail_manager;
+
+    const float scale = 1.f / float(quant);
+    DumpInputs in;
+    // The shadow passes take the same wind as the screen: a blade's shadow follows the blade. The
+    // *_prev pair is the same wave one frame back, for the motion vectors of the G-buffer pass.
+    switch (dump)
+    {
+    case 0: // Wave0
+        in.consts.set(scale, scale, ps_r__Detail_l_aniso, ps_r__Detail_l_ambient);
+        in.wave.set(1.f / 5.f, 1.f / 7.f, 1.f / 3.f, m_time_pos);
+        in.wave_prev.set(1.f / 5.f, 1.f / 7.f, 1.f / 3.f, m_time_pos_prev);
+        in.wind = m_wind_dir1;
+        in.wind_prev = m_wind_dir1_prev;
+        in.var_id = 1;
+        in.lod_id = 0;
+        break;
+    case 1: // Wave1
+        in.consts.set(scale, scale, ps_r__Detail_l_aniso, ps_r__Detail_l_ambient);
+        in.wave.set(1.f / 3.f, 1.f / 7.f, 1.f / 5.f, m_time_pos);
+        in.wave_prev.set(1.f / 3.f, 1.f / 7.f, 1.f / 5.f, m_time_pos_prev);
+        in.wind = m_wind_dir2;
+        in.wind_prev = m_wind_dir2_prev;
+        in.var_id = 2;
+        in.lod_id = 0;
+        break;
+    default: // Still (the wave of Wave1, which the still shader ignores)
+        in.consts.set(scale, scale, scale, 1.f);
+        in.wave.set(1.f / 3.f, 1.f / 7.f, 1.f / 5.f, m_time_pos);
+        in.wave_prev.set(1.f / 3.f, 1.f / 7.f, 1.f / 5.f, m_time_pos_prev);
+        in.wind = m_wind_dir2;
+        in.wind_prev = m_wind_dir2_prev;
+        in.var_id = 0;
+        in.lod_id = 1;
+        break;
+    }
+    in.wave.div(PI_MUL_2);
+    in.wave_prev.div(PI_MUL_2);
+    return in;
+}
+
+void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum, const u32 dumps)
 {
     ZoneScoped;
-    using namespace detail_manager;
 
     // Setup geometry and DMA
     cmd_list.set_Geometry(hw_Geom);
 
-    // Wave0
-    float scale = 1.f / float(quant);
-    Fvector4 wave;
-    Fvector4 consts;
-    consts.set(scale, scale, ps_r__Detail_l_aniso, ps_r__Detail_l_ambient);
-    // wave.set				(1.f/5.f,		1.f/7.f,	1.f/3.f,	Device.fTimeGlobal*swing_current.speed);
-    wave.set(1.f / 5.f, 1.f / 7.f, 1.f / 3.f, m_time_pos);
-    // RCache.set_c			(&*hwc_consts,	scale,		scale,		ps_r__Detail_l_aniso,	ps_r__Detail_l_ambient);
-    // //
-    // consts
-    // RCache.set_c			(&*hwc_wave,	wave.div(PI_MUL_2));	// wave
-    // RCache.set_c			(&*hwc_wind,	dir1); //
-    // wind-dir
-    // hw_Render_dump			(&*hwc_array,	1, 0, c_hdr );
-    // The shadow passes take the same wind as the screen: a blade's shadow follows the blade.
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir1, 1, 0, collectStats, frustum);
-
-    // Wave1
-    // wave.set				(1.f/3.f,		1.f/7.f,	1.f/5.f,	Device.fTimeGlobal*swing_current.speed);
-    wave.set(1.f / 3.f, 1.f / 7.f, 1.f / 5.f, m_time_pos);
-    // RCache.set_c			(&*hwc_wave,	wave.div(PI_MUL_2));	// wave
-    // RCache.set_c			(&*hwc_wind,	dir2); //
-    // wind-dir
-    // hw_Render_dump			(&*hwc_array,	2, 0, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 2, 0, collectStats, frustum);
-
-    // Still
-    consts.set(scale, scale, scale, 1.f);
-    // RCache.set_c			(&*hwc_s_consts,scale,		scale,		scale,				1.f);
-    // RCache.set_c			(&*hwc_s_xform,	Device.mFullTransform);
-    // hw_Render_dump			(&*hwc_s_array,	0, 1, c_hdr );
-    hw_Render_dump(cmd_list, consts, wave.div(PI_MUL_2), m_wind_dir2, 0, 1, collectStats, frustum);
+    for (u32 dump = 0; dump < dump_count; ++dump)
+    {
+        if (!(dumps & (1u << dump)))
+            continue;
+        const DumpInputs in = hw_DumpInputs(dump);
+        hw_Render_dump(cmd_list, in.consts, in.wave, in.wind, in.wave_prev, in.wind_prev, in.var_id, in.lod_id,
+            collectStats, frustum);
+    }
 }
 
 void CDetailManager::hw_Render_dump(CBackend& cmd_list,
-    const Fvector4& consts, const Fvector4& wave, const Fvector4& wind, u32 var_id, u32 lod_id,
-    const bool collectStats, const CFrustum* frustum)
+    const Fvector4& consts, const Fvector4& wave, const Fvector4& wind, const Fvector4& wave_prev,
+    const Fvector4& wind_prev, u32 var_id, u32 lod_id, const bool collectStats, const CFrustum* frustum, const bool hybrid)
 {
     ZoneScoped;
 
@@ -82,6 +102,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     static shared_str strSFade("grass_sfade");
     static shared_str strSFadeEye("grass_sfade_eye");
     static shared_str strGrassTint("grass_tint");
+    static shared_str strWavePrev("wave_prev");
+    static shared_str strDir2DPrev("dir2D_prev");
+    static shared_str strWindPrevInfo("da_wm_info_prev");
 
     // Every frustum-culled detail pass today is a shadow pass (see hw_Render).
     const bool shadow_pass = frustum != nullptr;
@@ -125,12 +148,17 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     const R_constant_table* resolved_table = nullptr;
     R_constant *cConsts = nullptr, *cWave = nullptr, *cDir2D = nullptr, *cXForm = nullptr;
     R_constant *cSFade = nullptr, *cSFadeEye = nullptr, *cGrassTint = nullptr;
+    R_constant *cWavePrev = nullptr, *cDir2DPrev = nullptr, *cWindPrevInfo = nullptr;
 
     vis_list& list = m_visibles[var_id];
 
     // Iterate
     for (const u8 objectId : m_visibleObjectIds[var_id])
     {
+#if RENDER == R_R4
+        if (hybrid && !ms_HasHybrid(var_id, objectId))
+            continue;
+#endif
         CDetail& Object = *objects[objectId];
         VisiblePartVec& vis = list[objectId];
         const u32 vOffset = m_objectVertexOffsets[objectId];
@@ -157,6 +185,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 cSFade = cmd_list.get_c(strSFade)._get();
                 cSFadeEye = cmd_list.get_c(strSFadeEye)._get();
                 cGrassTint = cmd_list.get_c(strGrassTint)._get();
+                cWavePrev = cmd_list.get_c(strWavePrev)._get();
+                cDir2DPrev = cmd_list.get_c(strDir2DPrev)._get();
+                cWindPrevInfo = cmd_list.get_c(strWindPrevInfo)._get();
             }
 
             cmd_list.set_c(cConsts, consts);
@@ -166,6 +197,15 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             cmd_list.set_c(cSFade, sfade);
             cmd_list.set_c(cSFadeEye, eye);
             cmd_list.set_c(cGrassTint, tint);
+            cmd_list.set_c(cWavePrev, wave_prev);
+            cmd_list.set_c(cDir2DPrev, wind_prev);
+            // A shadow map has no motion vectors: its grass skips the second, previous-frame bend.
+            // Set here rather than left to the binder, which runs only when the table changes.
+            if (cWindPrevInfo)
+            {
+                const bool prev_bend = !shadow_pass && (da_motion_vectors_active() || ps_r__motion_vectors);
+                cmd_list.set_c(cWindPrevInfo, da_wind_prev().wm_active, prev_bend ? 1.f : 0.f, 0.f, 0.f);
+            }
 
             // ref_constant constArray = RCache.get_c(strArray);
             // VERIFY(constArray);
@@ -195,6 +235,10 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
 
                 if (!IsPartVisible(part, frustum, cmd_list.context_id))
                     continue;
+#if RENDER == R_R4
+                if (hybrid && ms_Resident(objectId, part))
+                    continue;
+#endif
 
                 // The upload bytes are already packed, in draw order, by the slot refresh
                 // (UpdateVisibleM). What used to be a SlotItem pointer dereference and a

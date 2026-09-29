@@ -81,6 +81,18 @@ public:
     using InstanceRowVec = xr_vector<InstanceRows>;
 
     struct Slot;
+    struct SlotPart;
+
+    // Where the rows of one wave group of a part live in the mesh path's GPU pool (DirectX 12,
+    // DetailManager_MS.cpp): a block of the pool, current while `gen` equals the part's.
+    struct GpuRows
+    {
+        u32 gen{};
+        u32 last_frame{};
+        u32 first_unit{};
+        u32 order{u32(-1)}; // log2 of the block's units; -1 = not resident
+        u32 live_index{};   // in the pool's list of live blocks (eviction)
+    };
 
     struct VisiblePart
     {
@@ -91,6 +103,11 @@ public:
         // The slot rather than just its bounds: the frustum answer depends only on the
         // slot, and one slot yields a part per object id per wave group.
         Slot* slot;
+        // Mesh path: the part and, this frame, its entries in the row list (count 0 = the part is
+        // not resident and the vertex path draws it).
+        SlotPart* part;
+        u32 index_first;
+        u32 index_count;
     };
 
     struct SlotPart
@@ -103,6 +120,10 @@ public:
         // it - a cache miss per blade, tens of thousands of them per pass. Packed, the
         // same upload is a memcpy the prefetcher can see coming.
         InstanceRowVec r_rows[3];
+        // Mesh path: bumped whenever r_rows change (slot refresh, re-targeting); the GPU copy of
+        // a wave group is current while its gen matches.
+        u32 gen{};
+        GpuRows gpu[3];
     };
 
     enum SlotType : u32
@@ -184,7 +205,15 @@ public:
     float m_global_time_old;
     Fvector4 m_wind_dir1{};
     Fvector4 m_wind_dir2{};
+    // The same three as the previous frame drew with them: the motion vectors bend every blade
+    // with both (UpdateRenderState keeps them, hw_Render_dump hands them over as *_prev).
+    float m_time_pos_prev{};
+    Fvector4 m_wind_dir1_prev{};
+    Fvector4 m_wind_dir2_prev{};
     u32 m_render_state_frame{u32(-1)};
+    // CPU time of every grass pass (all contexts) and the frames it covers: the [gpu] line's grass_cpu.
+    std::atomic<u64> m_render_ticks{0};
+    std::atomic<u32> m_render_frames{0};
     // Bumped once per render entry of ITS OWN context, where that context's frustum
     // changes. Slot stamps start at 0, so these start at 1 and no slot can look
     // pre-tested.
@@ -263,9 +292,43 @@ public:
     void hw_Load_Geom();
     void hw_Load_Shaders();
     void hw_Unload();
-    void hw_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum);
+    void hw_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum, u32 dumps = all_dumps);
+    // wave_prev/wind_prev: the same pair as the previous frame drew with it (motion vectors).
+    // hybrid: only the parts the mesh path does not draw this frame (DetailManager_MS.cpp).
     void hw_Render_dump(CBackend& cmd_list, const Fvector4& consts, const Fvector4& wave,
-        const Fvector4& wind, u32 var_id, u32 lod_id, bool collectStats, const CFrustum* frustum);
+        const Fvector4& wind, const Fvector4& wave_prev, const Fvector4& wind_prev, u32 var_id, u32 lod_id,
+        bool collectStats, const CFrustum* frustum, bool hybrid = false);
+    // The per-dump inputs of hw_Render: the constants, this and the previous frame's wave and wind
+    // of dump d (0 wave 1, 1 wave 2, 2 still) and the group and element it draws.
+    struct DumpInputs
+    {
+        Fvector4 consts, wave, wind, wave_prev, wind_prev;
+        u32 var_id, lod_id;
+    };
+    DumpInputs hw_DumpInputs(u32 dump) const;
+
+    // Mesh-shader grass (DirectX 12, DetailManager_MS.cpp; docs/dead-air/dx12-features/mesh.md
+    // 3.2-3.8). m_mesh_frame is latched once per frame by UpdateRenderState: the calc task, the frame
+    // prep and every pass of the frame use that value.
+    struct MeshPath;
+    MeshPath* m_mesh{};
+    bool m_mesh_frame{};
+    void ms_Load();
+    void ms_Unload();
+    bool ms_Latch();
+    // Calc task, after UpdateVisibleM: pool blocks, uploads and the chunk list of the frame.
+    void ms_Calc();
+    // cache_Task: the part's pool blocks go back.
+    void ms_Release(SlotPart& part);
+    // Render thread, top of the frame: the frame's uploads into the pool and the row list.
+    void ms_FramePrepare(CBackend& cmd_list);
+    void ms_Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum, u32 dumps);
+    // False: the part is drawn by the vertex path this frame.
+    bool ms_Resident(u32 object_id, const VisiblePart& part) const;
+    // r__dbg_grass_ab: this context draws its grass through the vertex path for the A/B's first half.
+    bool ms_ForceVertex(u32 context_id) const;
+    bool ms_HasHybrid(u32 var_id, u32 object_id) const;
+    void ms_Stats();
     bool IsPartVisible(const VisiblePart& part, const CFrustum* frustum, u32 context_id);
 
     // get unpacked slot
@@ -287,7 +350,11 @@ public:
     void Unload();
     bool HasRenderableDetails() const;
     void UpdateRenderState();
-    void Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum = nullptr);
+    // The three batches hw_Render draws (two wind waves and the still objects); a parallel pass
+    // hands each to a context of its own.
+    static constexpr u32 dump_count = 3;
+    static constexpr u32 all_dumps = (1u << dump_count) - 1;
+    void Render(CBackend& cmd_list, bool collectStats, const CFrustum* frustum = nullptr, u32 dumps = all_dumps);
 
     /// MT stuff
     // The main pass and the parallel sun cascade passes all render details and all wait for

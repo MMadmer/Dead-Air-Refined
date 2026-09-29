@@ -1,5 +1,10 @@
 #pragma once
 
+#if defined(XR_D3D12)
+// R5 reflects DXBC and DXIL through the D3D12 interfaces (xrd3d12::Reflect, dxc.md 3.4).
+#include <d3d12shader.h>
+#endif
+
 namespace xray::render::RENDER_NAMESPACE
 {
 class dx11State;
@@ -240,11 +245,27 @@ constexpr auto D3D_UAV_DIMENSION_TEXTURE2D      = D3D11_UAV_DIMENSION_TEXTURE2D;
 constexpr auto D3D_UAV_DIMENSION_TEXTURE2DARRAY = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
 constexpr auto D3D_UAV_DIMENSION_TEXTURE3D      = D3D11_UAV_DIMENSION_TEXTURE3D;
 
+#if defined(XR_D3D12)
+using D3D_SHADER_DESC                           = D3D12_SHADER_DESC;
+using D3D_SHADER_BUFFER_DESC                    = D3D12_SHADER_BUFFER_DESC;
+using D3D_SHADER_VARIABLE_DESC                  = D3D12_SHADER_VARIABLE_DESC;
+using D3D_SHADER_INPUT_BIND_DESC                = D3D12_SHADER_INPUT_BIND_DESC;
+using D3D_SHADER_TYPE_DESC                      = D3D12_SHADER_TYPE_DESC;
+using D3D_SIGNATURE_PARAMETER_DESC              = D3D12_SIGNATURE_PARAMETER_DESC;
+
+using ID3DShaderReflection                      = ID3D12ShaderReflection;
+using ID3DShaderReflectionConstantBuffer        = ID3D12ShaderReflectionConstantBuffer;
+using ID3DShaderReflectionVariable              = ID3D12ShaderReflectionVariable;
+using ID3DShaderReflectionType                  = ID3D12ShaderReflectionType;
+
+#define IID_ID3DShaderReflection __uuidof(ID3D12ShaderReflection)
+#else
 using D3D_SHADER_DESC                           = D3D11_SHADER_DESC;
 using D3D_SHADER_BUFFER_DESC                    = D3D11_SHADER_BUFFER_DESC;
 using D3D_SHADER_VARIABLE_DESC                  = D3D11_SHADER_VARIABLE_DESC;
 using D3D_SHADER_INPUT_BIND_DESC                = D3D11_SHADER_INPUT_BIND_DESC;
 using D3D_SHADER_TYPE_DESC                      = D3D11_SHADER_TYPE_DESC;
+using D3D_SIGNATURE_PARAMETER_DESC              = D3D11_SIGNATURE_PARAMETER_DESC;
 
 using ID3DShaderReflection                      = ID3D11ShaderReflection;
 using ID3DShaderReflectionConstantBuffer        = ID3D11ShaderReflectionConstantBuffer;
@@ -252,6 +273,7 @@ using ID3DShaderReflectionVariable              = ID3D11ShaderReflectionVariable
 using ID3DShaderReflectionType                  = ID3D11ShaderReflectionType;
 
 #define IID_ID3DShaderReflection IID_ID3D11ShaderReflection
+#endif
 
 using ID3DState = dx11State;
 #define DX11_ONLY(expr) expr

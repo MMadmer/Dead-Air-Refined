@@ -14,7 +14,7 @@ void CRenderTarget::accum_reflected(CBackend& cmd_list, light* L)
     L->xform_calc();
     cmd_list.set_xform_world(L->m_xform);
     cmd_list.set_xform_view(Device.mView);
-    cmd_list.set_xform_project(Device.mProject);
+    cmd_list.set_xform_project(da_jitter_project(Device.mProject));
     bIntersect = enable_scissor(L);
     enable_dbt_bounds(L);
 
@@ -29,8 +29,8 @@ void CRenderTarget::accum_reflected(CBackend& cmd_list, light* L)
     // 2D texgen (texture adjustment matrix)
     Fmatrix m_Texgen;
     {
-        float _w = float(Device.dwWidth);
-        float _h = float(Device.dwHeight);
+        float _w = float(Device.dwRenderWidth);
+        float _h = float(Device.dwRenderHeight);
         float o_w = (.5f / _w);
         float o_h = (.5f / _h);
 #if defined(USE_DX11)

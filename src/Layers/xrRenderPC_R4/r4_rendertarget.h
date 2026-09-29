@@ -5,6 +5,11 @@
 namespace xray::render::RENDER_NAMESPACE
 {
 class light;
+// The state of a DirectX 12 feature lane behind one pointer (dx12-features/PLAN.md 0.2), defined in
+// the lane's own file so that this header does not change with the lane's work.
+struct DaAsyncTargets;
+struct DaVrsTargets;
+struct DaRtTargets;
 
 //#define DU_SPHERE_NUMVERTEX 92
 //#define DU_SPHERE_NUMFACES	180
@@ -96,6 +101,18 @@ public:
     // and is copied into rt_taa_history right after it - same format, so CopyResource works.
     ref_rt rt_taa_history;
     ref_rt rt_taa_resolve;
+    // Upscaling (da_upscaler.h). rt_Render_Depth is the single-sampled scene depth at render size:
+    // the base depth itself unless an upscaler runs, then rt_MSAADepth, which is separate from
+    // the display-size base depth the back buffer, the flares, the tracers and the UI use.
+    ref_rt rt_Render_Depth;
+    ref_rt rt_Reactive; // R8, render size: how much the transparent passes changed each pixel
+    ref_rt rt_Upscaled; // RGBA16F + UAV, display size: the upscaler's output
+    ref_rt rt_PostDisplay; // RGBA8, display size: combine_2 and the flares, phase_pp's input
+    ref_texture t_velocity; // "$user$velocity": the motion vectors, when the velocity pass made them
+    // The motion vectors (shaders/r3/da_velocity.h): NDC(current) - NDC(previous), unjittered,
+    // y up, RG16F at render size. MRT 2 of the packed G-buffer on the frames that want them;
+    // exists only with the packed layout and without MSAA.
+    ref_rt rt_Velocity;
     ref_rt rt_Bloom_1; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_Bloom_2; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_LUM_64; // 64bit, 64x64,	log-average in all components
@@ -239,12 +256,21 @@ private:
     ID3DTexture2D* cloud_readback[2]{}; // one texel of the cloud map, the sun's column, two frames deep
     ref_shader s_cloud_map;
     ref_geom g_fxaa;
+    // The upscale slot: 0 the identity stretch, 1 the depth upscale, 2 the reactive mask.
+    ref_shader s_upscale;
+    ref_shader s_combine_display; // combine_2 reading rt_Upscaled instead of generic0
+    // Motion vectors the G-buffer cannot carry: the sky's and the forward water surface's.
+    // Created on first use by their phases.
+    ref_shader s_sky_velocity;
+    ref_shader s_water_velocity;
 
 public:
     ref_shader s_postprocess;
     ref_shader s_postprocess_msaa; // if MSAA is disabled, just an alias of s_bloom
+    ref_shader s_postprocess_display; // phase_pp reading rt_PostDisplay (upscaling)
     ref_geom g_postprocess;
     ref_shader s_menu;
+    ref_shader s_menu_display; // the menu over the display-size targets (upscaling)
     ref_geom g_menu;
 #if 0 // kept for historical reasons
     ref_shader s_flip;
@@ -277,9 +303,23 @@ private:
     u32 m_mblur_frame{};
     bool m_mblur_history_valid{};
 
+    // The frame the motion vectors were cleared and bound on (phase_scene_begin runs twice in a
+    // split scene: only the first call clears).
+    u32 m_velocity_frame{ u32(-1) };
+    // r__motion_vectors: made on first use, only when the shader ships with the content.
+    ref_shader s_velocity_debug;
+    bool m_velocity_debug_tried{};
+    // The TAA history targets take turns: true = the last resolve wrote rt_taa_resolve, which is
+    // this frame's history, and this frame writes rt_taa_history.
+    bool m_taa_history_in_resolve{};
+
 public:
     CRenderTarget();
     ~CRenderTarget();
+
+    // The motion vectors were rendered this frame; rt_Velocity holds them.
+    bool velocity_ready() const { return rt_Velocity && m_velocity_frame == Device.dwFrame; }
+    void phase_velocity_debug(); // r__motion_vectors: the vectors over the finished frame
 
     void build_textures();
 
@@ -326,6 +366,9 @@ public:
 
     void phase_scene_prepare();
     void phase_scene_begin();
+    // The same G-buffer targets and states on a parallel context that draws part of the scene
+    // (its list executes inside phase_scene_begin/phase_scene_end of the immediate context).
+    void phase_scene_begin_parallel(CBackend& cmd_list, bool velocity);
     void phase_scene_end();
     void phase_occq();
     void phase_ssao();
@@ -385,8 +428,11 @@ public:
     void phase_bloom();
     void phase_luminance();
     void phase_fxaa();
-    void phase_smaa();
-    void phase_taa(const Fmatrix& reproject);
+    // copy_back: the result into generic0; false leaves it in rt_Generic for the TAA after it.
+    void phase_smaa(bool copy_back = true);
+    // smaa_in_generic: the frame to resolve is SMAA's output in rt_Generic, and the resolve goes
+    // straight into generic0.
+    void phase_taa(const Fmatrix& reproject, bool smaa_in_generic);
     void phase_sunshafts();
     void phase_da_puddle_refl(); // world reflections in rain puddles
     void phase_water_ripple(); // fixed steps of the interaction ripple field
@@ -402,6 +448,52 @@ public:
 #if 0 // kept for historical reasons
     void phase_flip();
 #endif
+    // The upscale slot (r4_rendertarget_phase_upscale.cpp).
+    bool upscale_ready() const; // the targets and shaders it needs exist
+    void phase_reactive(); // rt_Reactive from the opaque scene grab against the finished scene
+    void phase_upscale(); // generic0 -> rt_Upscaled through the backend, then the depth upscale
+    void phase_upscale_identity(); // the identity backend: a bilinear stretch into rt_Upscaled
+    void phase_depth_upscale(); // the render-size scene depth into the display-size base depth
+    // Motion vectors after the forward pass (r4_rendertarget_phase_sky_water_velocity.cpp): the
+    // sky pixels, then the water surface over them. The forward pass consumes its draw lists,
+    // so the water is collected before it.
+    void phase_sky_velocity();
+    void phase_water_velocity_collect();
+    void phase_water_velocity();
+    // What the passes inside the scene leave bound for whatever renders next: the back buffer and
+    // its depth - or the scene depth alone while an upscaler runs (the sizes differ then).
+    void u_setrt_scene_base(CBackend& cmd_list);
+
+    // [dx12:async] begin members
+    // The compute versions of GTAO and the ripple step (async.md 3.4). false (the ripple: -1, else
+    // its step count) = the compute pass is not available here, the caller runs the pixel pass.
+    // verify = a r__async_verify stage runs: first the pixel pass (port) or this compute pass inline
+    // on the immediate context (schedule) from the same inputs, and the two results are compared
+    // (schedule: after the join).
+    bool phase_gtao_cs(CBackend& cmd_list, bool verify);
+    int phase_water_ripple_cs(CBackend& cmd_list, bool verify);
+    void phase_water_ripple_publish();
+    // GTAO is the AO technique of the frame (the test of phase_combine's AO slot).
+    bool gtao_is_frame_ao() const;
+    // One ripple step: the real-space pass as a pixel (compute = false) or a compute pass, then the
+    // spectral dispatches. A pixel step copies its result into the state as it always did; a
+    // compute step leaves it in scratch b for the next step and phase_water_ripple_publish.
+    void phase_water_ripple_step(CBackend& cmd_list, const struct DaRippleStep& step, int index, bool compute);
+    ref_shader s_gtao_cs;
+    ref_shader s_water_ripple_cs;
+    ref_shader s_async_compare;
+    bool m_ripple_publish{};
+    DaAsyncTargets* m_da_async{};
+    // [dx12:async] end members
+    // [dx12:vrs] begin members
+    DaVrsTargets* m_da_vrs{};
+    // [dx12:vrs] end members
+    // [dx12:rt] begin members
+    DaRtTargets* m_da_rt{};
+    // The combine's own resources the ray tracing passes draw with (the AO slot's GTAO targets and
+    // filter, the fullscreen quad, the puddle pass): r4_rendertarget_phase_rt.cpp.
+    friend struct DaRtAccess;
+    // [dx12:rt] end members
 
     u32 get_width(CBackend& cmd_list) { return dwWidth[cmd_list.context_id]; }
     u32 get_height(CBackend& cmd_list) { return dwHeight[cmd_list.context_id]; }

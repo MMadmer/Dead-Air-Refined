@@ -11,7 +11,8 @@ namespace xray::render::RENDER_NAMESPACE
 struct TreeWindShared;
 
 #ifdef USE_DX11
-constexpr u32 FTreeVisualInstanceVectorCount = 10;
+// Keep in step with TREE_INSTANCE_VECTOR_COUNT (shaders/r3/tree_instance.h).
+constexpr u32 FTreeVisualInstanceVectorCount = 11;
 
 struct FTreeVisualInstanceData
 {
@@ -28,6 +29,24 @@ struct FTreeVisualInstancedDraw
     u32 primitive_count{};
 };
 #endif
+
+// The static lighting of one tree visual as loaded (before ps_r__Tree_SBC): rgb + hemi, and sun.
+struct FTreeVisualColors
+{
+    Fvector4 scale;
+    Fvector4 bias;
+    float sun_scale;
+    float sun_bias;
+};
+
+// One root's wind as the draw paths feed it this frame (the GPU-driven trees upload it).
+struct FTreeVisualWind
+{
+    Fvector4 now; // state, frequency factor, root gust, root deviation
+    Fvector4 previous; // the same as the previous frame drew with (motion vectors)
+    float height; // tallest visual of the root above it
+    float gate; // 1: the root carries foliage, the wind moves it
+};
 
 class FTreeVisual : public dxRender_Visual, public IRender_Mesh
 {
@@ -56,15 +75,41 @@ protected:
     // Row 8 of the per-instance data / c_sun of the scalar path: (sun scale, sun bias,
     // state, frequency factor for the sway phase).
     Fvector4 wind_state_row(float s) const;
+    // Row 10 / c_tree_prev: the tree's wind as the previous frame drew it, for the motion
+    // vectors - (state, frequency factor, root gust, root deviation). Call after
+    // wind_state_row: that is what integrates this frame.
+    Fvector4 wind_prev_row() const;
 
 public:
     bool NeedsWindUpdate() const;
     static void PrepareWind(const xr_vector<FTreeVisual*>& visuals);
+    // The weather's tree speed this frame and as the previous frame drew with it (the frequency factor
+    // of every crown divides by it; the GPU-driven trees' wind pass takes both).
+    static void FrameSpeeds(float& now, float& previous);
 
     // The vegetation-audio layer harvests tree world positions once per level load.
     const Fvector& root_position() const { return xform.c; }
     // No foliage on this root - a stump, a log, a snag: the wind does not move it.
     bool rigid() const;
+
+    // Read accessors for the GPU-driven registry and the ray tracing scene (gpudriven.md 3.2).
+    const Fmatrix& world() const { return xform; }
+    FTreeVisualColors colors() const;
+    // The wind root shared by every visual of this tree (null: none); its height above the root.
+    const TreeWindShared* wind_root() const { return m_shared; }
+    float wind_height() const;
+    // The root's natural angular frequency (rad/s, from its height); 0 without a root.
+    float wind_omega() const;
+    // Integrates the root for this frame when nobody has yet, then reads what a draw would use.
+    FTreeVisualWind wind_state() const;
+#ifdef USE_DX11
+    // Index windows of the geometry: 1 for a stripified tree, the slide windows of a progressive
+    // one (0 = full detail); false for a window the visual does not have.
+    virtual u32 window_count() const { return 1; }
+    virtual bool window(u32 index, FTreeVisualInstancedDraw& draw) const;
+#endif
+    // The registry's instance index of this visual, u32(-1) while it is not registered.
+    u32 gd_instance{u32(-1)};
 
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override; // LOD - Level Of Detail  [0.0f - min, 1.0f - max], Ignored
 #ifdef USE_DX11
@@ -117,6 +162,8 @@ public:
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override; // LOD - Level Of Detail  [0.0f - min, 1.0f - max], Ignored
 #ifdef USE_DX11
     virtual bool GetInstancedDraw(float LOD, FTreeVisualInstancedDraw& draw) override;
+    u32 window_count() const override;
+    bool window(u32 index, FTreeVisualInstancedDraw& draw) const override;
 #endif
     virtual void Load(LPCSTR N, IReader* data, u32 dwFlags);
     virtual void Copy(dxRender_Visual* pFrom);

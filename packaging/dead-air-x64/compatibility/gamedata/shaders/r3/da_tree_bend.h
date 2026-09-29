@@ -39,12 +39,15 @@ struct da_tree_bend_in
 float da_tree_row_valid(float w) { return w > 2.5f ? 1.0f : 0.0f; }
 float da_tree_row_gate(float w) { return w > 2.5f ? saturate(w - 3.0f) : (w > 0.5f ? saturate(w - 1.0f) : 1.0f); }
 
-float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flow)
+// field is da_wind_field and prev false for this frame's bend; the previous frame's wind
+// (da_wind_field_prev, the previous motors, wave_prev/wind_prev and the tree's previous state)
+// gives the bend the motion vectors start from.
+float2 da_tree_bend_ex(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flow, float4 field, bool prev)
 {
     const float hn = saturate(I.H / max(I.tree_h, 1.0f));
     // Waveform: a static downwind lean with harmonic oscillation around it, one phase per
     // tree (a per-vertex phase squashed crowns), the mean/swing split following the wind.
-    const float wind_k = saturate(da_wind_field.z);
+    const float wind_k = saturate(field.z);
     const float sway_mean = 0.45f + 0.35f * wind_k;
     const float dp = sway_mean + (1.0f - sway_mean) * da_sway(wave.w * I.freq_k + dot(I.root, (float3)wave));
     // Local flow from the travelling gust field at the root: a tongue leans this crown while
@@ -54,10 +57,10 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
     // leave valid at zero, so tools and older producers retain the analytic path.
     [branch] if (root_flow.z > 0.5f)
         flow = float3(da_wind_field_amp(root_flow.x),
-            da_wind_field_lean(root_flow.x, da_wind_field.w), root_flow.y);
+            da_wind_field_lean(root_flow.x, field.w), root_flow.y);
     else
-        flow = da_wind_field_eval(I.root.xz);
-    const float2 wdir = da_wind_local_dir(wind.xz, flow.z); // its length is the authored amplitude
+        flow = da_wind_field_eval_at(I.root.xz, field);
+    const float2 wdir = da_wind_local_dir_at(wind.xz, flow.z, field.z); // its length is the authored amplitude
 
     // The crown's response to the gust field: the oscillator state where the CPU keeps one,
     // the field's instantaneous value where it does not (impostors, tools). Never both.
@@ -89,7 +92,7 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
         + dot(I.pos - I.root, (float3)wave * 3.7f) * leaf_k);
     result += wdir * (dp2 * leaf_w * saturate(I.H * 1.5f) * I.frac * 1.2f * I.flex_gate);
     // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend); wood takes none.
-    result += da_tree_motors_bend(I.pos, I.root, I.H, I.tree_h, I.frac) * I.flex_gate;
+    result += da_tree_motors_bend_ex(I.pos, I.root, I.H, I.tree_h, I.frac, prev) * I.flex_gate;
     // Progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
     // limit (~0.5 H, ~30 degrees) is an asymptote nothing visibly slams into. (An 8-degree
     // cap tried here left the trees leaning less in a storm than they used to.)
@@ -100,10 +103,23 @@ float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flo
     return result;
 }
 
+float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind, float3 root_flow)
+{
+    return da_tree_bend_ex(I, wave, wind, root_flow, da_wind_field, false);
+}
+
 // Preserve the entry point and input layout used by existing shader addons.
 float2 da_tree_bend(da_tree_bend_in I, float4 wave, float4 wind)
 {
     return da_tree_bend(I, wave, wind, float3(0, 0, 0));
+}
+
+// The bent vertex: the horizontal bend, and the drop that keeps the length from the root
+// (height H) instead of stretching it.
+float4 da_tree_bent_pos(float3 pos, float H, float2 bend)
+{
+    const float drop = H - sqrt(max(H * H - dot(bend, bend), 0.0f));
+    return float4(pos.x + bend.x, pos.y - drop, pos.z + bend.y, 1);
 }
 
 #endif // DA_TREE_BEND_H

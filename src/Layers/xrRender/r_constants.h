@@ -176,6 +176,8 @@ class ECORE_API R_constant_table : public xr_resource_flagged
 {
 public:
     bool dx9compatibility{};
+    // Parsed from DXIL: constant-buffer slots come from the bind points, not the reflection order.
+    bool dxil{};
 
     typedef xr_vector<ref_constant> c_table;
     c_table table;

@@ -134,9 +134,20 @@ ICF void CBackend::set_Format(SDeclaration* _decl)
     }
 }
 
+ICF bool CBackend::stage_forced([[maybe_unused]] u8 stage)
+{
+#if defined(XR_D3D12)
+    const bool forced = m_stagesUnknown & stage;
+    m_stagesUnknown &= ~stage;
+    return forced;
+#else
+    return false;
+#endif
+}
+
 ICF void CBackend::set_PS(ID3DPixelShader* _ps, LPCSTR _n)
 {
-    if (ps != _ps)
+    if (stage_forced(1u << 0) || ps != _ps)
     {
         PGO(Msg("PGO:Pshader:%x", _ps));
         stat.ps++;
@@ -155,7 +166,7 @@ ICF void CBackend::set_PS(ID3DPixelShader* _ps, LPCSTR _n)
 
 ICF void CBackend::set_GS(ID3DGeometryShader* _gs, LPCSTR _n)
 {
-    if (gs != _gs)
+    if (stage_forced(1u << 1) || gs != _gs)
     {
         PGO(Msg("PGO:Gshader:%x", _ps));
         stat.gs++;
@@ -175,7 +186,7 @@ ICF void CBackend::set_GS(ID3DGeometryShader* _gs, LPCSTR _n)
 #ifdef USE_DX11
 ICF void CBackend::set_HS(ID3D11HullShader* _hs, LPCSTR _n)
 {
-    if (hs != _hs)
+    if (stage_forced(1u << 2) || hs != _hs)
     {
         PGO(Msg("PGO:Hshader:%x", _ps));
         stat.hs++;
@@ -190,7 +201,7 @@ ICF void CBackend::set_HS(ID3D11HullShader* _hs, LPCSTR _n)
 
 ICF void CBackend::set_DS(ID3D11DomainShader* _ds, LPCSTR _n)
 {
-    if (ds != _ds)
+    if (stage_forced(1u << 3) || ds != _ds)
     {
         PGO(Msg("PGO:Dshader:%x", _ps));
         stat.ds++;
@@ -205,7 +216,7 @@ ICF void CBackend::set_DS(ID3D11DomainShader* _ds, LPCSTR _n)
 
 ICF void CBackend::set_CS(ID3D11ComputeShader* _cs, LPCSTR _n)
 {
-    if (cs != _cs)
+    if (stage_forced(1u << 4) || cs != _cs)
     {
         PGO(Msg("PGO:Cshader:%x", _ps));
         stat.cs++;
@@ -223,7 +234,7 @@ ICF bool CBackend::is_TessEnabled() { return HW.FeatureLevel >= D3D_FEATURE_LEVE
 
 ICF void CBackend::set_VS(ID3DVertexShader* _vs, LPCSTR _n)
 {
-    if (vs != _vs)
+    if (stage_forced(1u << 5) || vs != _vs)
     {
         PGO(Msg("PGO:Vshader:%x", _vs));
         stat.vs++;
@@ -937,11 +948,19 @@ IC void CBackend::get_ConstantDirect(const shared_str& n, size_t DataSize, void*
 
 IC void CBackend::gpu_mark_begin(const wchar_t* name)
 {
+#if defined(XR_D3D12)
+    if (m_annotationContext != context_id)
+        rebind_annotation();
+#endif
     pAnnotation->BeginEvent(name);
 }
 
 IC void CBackend::gpu_mark_end()
 {
+#if defined(XR_D3D12)
+    if (m_annotationContext != context_id)
+        rebind_annotation();
+#endif
     pAnnotation->EndEvent();
 }
 

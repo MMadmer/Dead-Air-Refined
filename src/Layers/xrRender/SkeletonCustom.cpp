@@ -129,6 +129,38 @@ CKinematics::CKinematics()
     m_is_original_lod = false;
 }
 
+void CKinematics::motion_advance(const Fmatrix& world)
+{
+    const u32 frame = Device.dwFrame;
+    if (m_motion.frame == frame)
+        return;
+
+    // Further than this in one frame is a placement (a teleport, a respawn), not motion.
+    constexpr float teleport_distance = 10.f;
+    const u16 count = LL_BoneCount();
+    bool fresh = m_motion.frame == u32(-1) || m_motion.frame + 1 != frame || m_motion.bones_cur.size() != count ||
+        world.c.distance_to_sqr(m_motion.world_cur.c) > _sqr(teleport_distance);
+#if RENDER == R_R4
+    fresh = fresh || da_history_reset();
+#endif
+
+    if (!fresh)
+    {
+        m_motion.world_prev = m_motion.world_cur;
+        m_motion.bones_prev.swap(m_motion.bones_cur);
+    }
+    m_motion.bones_cur.resize(count);
+    for (u16 id = 0; id < count; ++id)
+        m_motion.bones_cur[id] = LL_GetTransform_R(id);
+    m_motion.world_cur = world;
+    if (fresh)
+    {
+        m_motion.world_prev = world;
+        m_motion.bones_prev = m_motion.bones_cur;
+    }
+    m_motion.frame = frame;
+}
+
 CKinematics::~CKinematics()
 {
     IBoneInstances_Destroy();
@@ -457,6 +489,8 @@ void CKinematics::Spawn()
     ClearWallmarks();
     Visibility_Invalidate();
     LL_SetBoneRoot(0);
+    // A pooled instance starts a new life: whatever it drew last is not its previous frame.
+    m_motion.frame = u32(-1);
 }
 
 void CKinematics::Depart()

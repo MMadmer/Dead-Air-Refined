@@ -63,6 +63,7 @@ void CBlender_sunshafts::Compile(CBlender_Compile& C)
 }
 
 CBlender_combine::CBlender_combine() { description.CLS = 0; }
+CBlender_combine::CBlender_combine(pcstr image) : m_image(image) { description.CLS = 0; }
 CBlender_combine::~CBlender_combine() {}
 void CBlender_combine::Compile(CBlender_Compile& C)
 {
@@ -248,7 +249,7 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 
         C.r_dx11Texture("s_position", r2_RT_P);
         C.r_dx11Texture("s_normal", r2_RT_N);
-        C.r_dx11Texture("s_image", r2_RT_generic0);
+        C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
@@ -281,7 +282,7 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 
         C.r_dx11Texture("s_position", r2_RT_P);
         C.r_dx11Texture("s_normal", r2_RT_N);
-        C.r_dx11Texture("s_image", r2_RT_generic0);
+        C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
@@ -313,7 +314,7 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 
         C.r_dx11Texture("s_position", r2_RT_P);
         C.r_dx11Texture("s_normal", r2_RT_N);
-        C.r_dx11Texture("s_image", r2_RT_generic0);
+        C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
@@ -346,7 +347,7 @@ void CBlender_combine::Compile(CBlender_Compile& C)
 
         C.r_dx11Texture("s_position", r2_RT_P);
         C.r_dx11Texture("s_normal", r2_RT_N);
-        C.r_dx11Texture("s_image", r2_RT_generic0);
+        C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");

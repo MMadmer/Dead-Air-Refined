@@ -9,6 +9,10 @@
 #include "xrEngine/Environment.h"
 #include "xrEngine/EnvironmentWeatherState.h"
 #include "xrEngine/thunderbolt.h"
+#if RENDER == R_R4
+#include "Layers/xrRender/da_wind_history.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
+#endif
 
 // Declared BEFORE the render namespace opens on purpose: an extern inside it would introduce
 // its own xray::render::*::psVisDistance that nothing defines, and the build dies at link.
@@ -43,6 +47,12 @@ BIND_DECLARE(p);
 BIND_DECLARE(wv);
 BIND_DECLARE(vp);
 BIND_DECLARE(wvp);
+// Motion vectors (shaders/r3/da_velocity.h): per draw through R_xforms, like m_WVP.
+BIND_DECLARE(vp_nojit);
+BIND_DECLARE(vp_prev);
+BIND_DECLARE(wvp_nojit);
+BIND_DECLARE(wvp_prev);
+BIND_DECLARE(w_prev);
 
 #define DECLARE_TREE_BIND(c)\
     class cl_tree_##c : public R_constant_setup\
@@ -60,6 +70,10 @@ DECLARE_TREE_BIND(c_scale);
 DECLARE_TREE_BIND(c_tree);
 DECLARE_TREE_BIND(c_bias);
 DECLARE_TREE_BIND(c_sun);
+// The previous frame's wind of the tree G-buffer shaders (motion vectors).
+DECLARE_TREE_BIND(wave_prev);
+DECLARE_TREE_BIND(wind_prev);
+DECLARE_TREE_BIND(c_tree_prev);
 
 class cl_hemi_cube_pos_faces : public R_constant_setup
 {
@@ -179,6 +193,12 @@ static void fog_bounds(float& n, float& f)
         f *= k;
     }
 }
+
+#if RENDER == R_R4
+// The same ramp for the ray traced reflections' off-screen hits, which fog themselves the way the
+// combine fogs the frame (da_rt_passes.cpp).
+void da_rt_fog_bounds(float& near_m, float& far_m) { fog_bounds(near_m, far_m); }
+#endif
 
 class cl_fog_plane : public R_constant_setup
 {
@@ -347,12 +367,20 @@ class cl_hemi_color : public R_constant_setup
 static cl_hemi_color binder_hemi_color;
 #endif
 
+// The size of the frame the current stage draws: the render size inside the 3D scene, the
+// display size after the upscale and outside the frame (da_temporal.h). Not the bound target's:
+// the stock bloom and luminance passes draw pixel quads into small targets under a frame-size
+// viewport and rely on this being the frame.
 static class cl_screen_res : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, (float)Device.dwWidth, (float)Device.dwHeight, 1.0f / (float)Device.dwWidth,
-            1.0f / (float)Device.dwHeight);
+#if RENDER == R_R4
+        const u32 width = da_stage_width(), height = da_stage_height();
+#else
+        const u32 width = Device.dwWidth, height = Device.dwHeight;
+#endif
+        cmd_list.set_c(C, (float)width, (float)height, 1.0f / (float)width, 1.0f / (float)height);
     }
 } binder_screen_res;
 
@@ -415,6 +443,15 @@ static class cl_da_wind_state : public R_constant_setup
     }
 } binder_da_wind_state;
 
+#if RENDER == R_R4
+// da_wind_field as the previous frame drew with it (da_wind_history.h): the vegetation
+// G-buffer shaders bend a second time with it for the motion vectors.
+static class cl_da_wind_field_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_wind_prev().field); }
+} binder_da_wind_field_prev;
+#endif
+
 // The cloud deck (da_clouds.h): one field for the visible clouds, their shadow and the sun
 // shafts. params: coverage from the weather's cloud opacity, the deck's base altitude, and
 // the field's world-space drift - the aloft wind integrated by the service, along the aloft
@@ -454,9 +491,14 @@ static class cl_da_hud_light : public R_constant_setup
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const float hud_fov = psHUD_FOV * Device.fFOV;
+#if RENDER == R_R4
+        // At render size and with the jitter folded in, like pos_decompression_params.
+        cmd_list.set_c(C, da_pos_decompress(hud_fov));
+#else
         const float VertTan = -1.0f * tanf(deg2rad(hud_fov / 2.0f));
         const float HorzTan = -VertTan / Device.fASPECT;
         cmd_list.set_c(C, HorzTan, VertTan, (2.0f * HorzTan) / float(Device.dwWidth), (2.0f * VertTan) / float(Device.dwHeight));
+#endif
     }
 } binder_da_hud_light;
 
@@ -668,6 +710,55 @@ static class cl_da_wm_info : public R_constant_setup
         cmd_list.set_c(C, g_pGamePersistent->Environment().wind_motor_active, 0.f, 0.f, 0.f);
     }
 } binder_da_wm_info;
+
+#if RENDER == R_R4
+// The same motor rows as the previous frame drew with them (same pre-transpose), for the
+// motion vectors. da_wm_info_prev.y switches the second evaluation in the vegetation shaders:
+// it costs a whole bend per vertex and nothing reads the vectors unless TAA or an upscaler runs.
+static class cl_da_wm_pos0_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(da_wind_prev().wm_pos[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wm_pos0_prev;
+static class cl_da_wm_pos1_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(da_wind_prev().wm_pos[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wm_pos1_prev;
+static class cl_da_wm_par0_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(da_wind_prev().wm_par[0]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wm_par0_prev;
+static class cl_da_wm_par1_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        Fmatrix t;
+        t.transpose(da_wind_prev().wm_par[1]);
+        cmd_list.set_c(C, t);
+    }
+} binder_da_wm_par1_prev;
+static class cl_da_wm_info_prev : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, da_wind_prev().wm_active, da_motion_vectors_active() || ps_r__motion_vectors ? 1.f : 0.f, 0.f, 0.f);
+    }
+} binder_da_wm_info_prev;
+#endif
 
 // Water impact spots for the puddle shader - same packing and the same PRE-transpose
 // requirement as the wind motors above.
@@ -1028,6 +1119,14 @@ class cl_entity_data : public R_constant_setup //--#SM+#--
 };
 static cl_entity_data binder_entity_data;
 
+#if RENDER == R_R4
+// Ray tracing effects live this frame (da_rt.h): x reflections, y sun shadows, z AO, w quality.
+static class cl_da_rt : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_rt_constants()); }
+} binder_da_rt;
+#endif
+
 // Standart constant-binding
 void CBlender_Compile::SetMapping()
 {
@@ -1049,6 +1148,11 @@ void CBlender_Compile::SetMapping()
     r_Constant("m_WV", &binder_wv);
     r_Constant("m_VP", &binder_vp);
     r_Constant("m_WVP", &binder_wvp);
+    r_Constant("m_VP_nojit", &binder_vp_nojit);
+    r_Constant("m_VP_prev", &binder_vp_prev);
+    r_Constant("m_WVP_nojit", &binder_wvp_nojit);
+    r_Constant("m_WVP_prev", &binder_wvp_prev);
+    r_Constant("m_W_prev", &binder_w_prev);
 
     r_Constant("m_xform_v", &tree_binder_m_xform_v);
     r_Constant("m_xform", &tree_binder_m_xform);
@@ -1059,6 +1163,9 @@ void CBlender_Compile::SetMapping()
     r_Constant("c_bias", &tree_binder_c_bias);
     r_Constant("c_sun", &tree_binder_c_sun);
     r_Constant("c_tree", &tree_binder_c_tree);
+    r_Constant("wave_prev", &tree_binder_wave_prev);
+    r_Constant("wind_prev", &tree_binder_wind_prev);
+    r_Constant("c_tree_prev", &tree_binder_c_tree_prev);
 
     // hemi cube
     r_Constant("L_material", &binder_material);
@@ -1117,6 +1224,15 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_wm_par0", &binder_da_wm_par0);
     r_Constant("da_wm_par1", &binder_da_wm_par1);
     r_Constant("da_wm_info", &binder_da_wm_info);
+#if RENDER == R_R4
+    r_Constant("da_wind_field_prev", &binder_da_wind_field_prev);
+    r_Constant("da_wm_pos0_prev", &binder_da_wm_pos0_prev);
+    r_Constant("da_wm_pos1_prev", &binder_da_wm_pos1_prev);
+    r_Constant("da_wm_par0_prev", &binder_da_wm_par0_prev);
+    r_Constant("da_wm_par1_prev", &binder_da_wm_par1_prev);
+    r_Constant("da_wm_info_prev", &binder_da_wm_info_prev);
+    r_Constant("da_rt", &binder_da_rt);
+#endif
     r_Constant("da_wh_pos0", &binder_da_wh_pos0);
     r_Constant("da_wh_pos1", &binder_da_wh_pos1);
     r_Constant("da_wh_par0", &binder_da_wh_par0);

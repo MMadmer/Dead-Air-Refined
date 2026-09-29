@@ -1,0 +1,18 @@
+#include "common.h"
+
+// The upscaler's reactive mask: how much the passes the motion vectors know nothing about -
+// water, glass, particles, rain, fire, volumetric light - changed each pixel of the scene.
+// s_da_opaque is the scene as combine_1 left it (the grab water refracts, taken before the
+// puddles and the forward pass), s_image the scene with all of them on it. Where they differ
+// the history is worth little, and the upscaler gives the current frame the weight. The ceiling
+// stays under 1: AMD's guidance, a fully reactive pixel loses its anti-aliasing.
+Texture2D s_da_opaque;
+
+float main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position) : SV_Target
+{
+	const int3 p = int3(pos2d.xy, 0);
+	const float3 d = abs(s_image.Load(p).rgb - s_da_opaque.Load(p).rgb);
+	// Two 8-bit steps of noise (the grab and the scene round differently) are no change.
+	const float change = max(max(d.r, d.g), d.b) - 2.0 / 255.0;
+	return min(saturate(change * 4.0), 0.9);
+}

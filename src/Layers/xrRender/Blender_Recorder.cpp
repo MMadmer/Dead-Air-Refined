@@ -210,22 +210,26 @@ void CBlender_Compile::PassSET_Shaders(pcstr _vs, pcstr _ps, pcstr _gs /*= nullp
 #endif
     {
         dest.ps = RImplementation.Resources->_CreatePS(_ps);
-        ctable.merge(&dest.ps->constants);
         u32 flags = 0;
 #if defined(USE_DX11)
         if (dest.ps->constants.dx9compatibility)
             flags |= D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY;
 #endif
         dest.vs = RImplementation.Resources->_CreateVS(_vs, flags);
-        ctable.merge(&dest.vs->constants);
         dest.gs = RImplementation.Resources->_CreateGS(_gs);
-        ctable.merge(&dest.gs->constants);
 #ifdef USE_DX11
         dest.hs = RImplementation.Resources->_CreateHS(_hs);
         dest.ds = RImplementation.Resources->_CreateDS(_ds);
+        dest.cs = RImplementation.Resources->_CreateCS("null");
+        // Every stage exists before the table is merged: a twin may still replace one.
+        UnifyShaderFormats();
+#endif
+        ctable.merge(&dest.ps->constants);
+        ctable.merge(&dest.vs->constants);
+        ctable.merge(&dest.gs->constants);
+#ifdef USE_DX11
         ctable.merge(&dest.hs->constants);
         ctable.merge(&dest.ds->constants);
-        dest.cs = RImplementation.Resources->_CreateCS("null");
 #endif
     }
 #if defined(USE_OGL)

@@ -1,5 +1,9 @@
 #include "stdafx.h"
 
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_vrs.h"
+#endif
+
 namespace xray::render::RENDER_NAMESPACE
 {
 void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
@@ -29,7 +33,7 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
     L->xform_calc();
     cmd_list.set_xform_world(L->m_xform);
     cmd_list.set_xform_view(Device.mView);
-    cmd_list.set_xform_project(Device.mProject);
+    cmd_list.set_xform_project(da_jitter_project(Device.mProject));
     enable_scissor(L);
     enable_dbt_bounds(L);
 
@@ -126,6 +130,9 @@ void CRenderTarget::accum_point(CBackend& cmd_list, light* L)
         if (!RImplementation.o.msaa)
         {
             cmd_list.set_Stencil(TRUE, D3DCMP_EQUAL, dwLightMarkerID, 0xff, 0x00);
+#if RENDER == R_R4
+            da_vrs_scope vrs(cmd_list, VrsPass::Lights);
+#endif
             draw_volume(cmd_list, L);
         }
         else // checked Holger

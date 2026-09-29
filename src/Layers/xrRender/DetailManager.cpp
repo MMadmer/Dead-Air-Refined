@@ -32,11 +32,24 @@
 #error Add your platform here
 #endif
 #endif
+#if RENDER == R_R4 && !defined(_EDITOR)
+#include "Layers/xrRender/da_temporal.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
 const float dbgOffset = 0.f;
 const int dbgItems = 128;
+
+// A history reset (level load, teleport, back from the menu) starts the previous frame over.
+static bool detail_history_reset()
+{
+#if RENDER == R_R4 && !defined(_EDITOR)
+    return da_history_reset();
+#else
+    return true;
+#endif
+}
 
 //--------------------------------------------------- Decompression
 static int magic4x4[4][4] = {{0, 14, 3, 13}, {11, 5, 8, 6}, {12, 2, 15, 1}, {7, 9, 4, 10}};
@@ -141,6 +154,9 @@ CDetailManager::~CDetailManager()
     ZoneScoped;
 
     WaitForCalc();
+#if RENDER == R_R4
+    ms_Unload();
+#endif
 
     for (u32 i = 0; i < dm_cache_size; ++i)
         cache_pool[i].~Slot();
@@ -240,6 +256,9 @@ void CDetailManager::Load()
             vertexOffset += u32(hw_GeometryCopies()) * object->number_vertices;
             indexOffset += u32(hw_GeometryCopies()) * object->number_indices;
         }
+#if RENDER == R_R4
+        ms_Load();
+#endif
     }
     else
         soft_Load();
@@ -288,6 +307,9 @@ void CDetailManager::Unload()
     ZoneScoped;
     WaitForCalc();
 
+#if RENDER == R_R4
+    ms_Unload();
+#endif
     if (UseVS())
         hw_Unload();
     else
@@ -420,6 +442,7 @@ void CDetailManager::UpdateVisibleM()
                         if (sp.id == DetailSlot::ID_Empty)
                             continue;
 
+                        ++sp.gen;
                         sp.r_items[0].clear();
                         sp.r_items[1].clear();
                         sp.r_items[2].clear();
@@ -478,21 +501,21 @@ void CDetailManager::UpdateVisibleM()
                         auto& visibleItems = m_visibles[0][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[0].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[0], &sp.r_rows[0], &S});
+                        visibleItems.push_back({&sp.r_items[0], &sp.r_rows[0], &S, &sp, 0, 0});
                     }
                     if (!sp.r_items[1].empty())
                     {
                         auto& visibleItems = m_visibles[1][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[1].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[1], &sp.r_rows[1], &S});
+                        visibleItems.push_back({&sp.r_items[1], &sp.r_rows[1], &S, &sp, 0, 0});
                     }
                     if (!sp.r_items[2].empty())
                     {
                         auto& visibleItems = m_visibles[2][sp.id];
                         if (visibleItems.empty())
                             m_visibleObjectIds[2].push_back(static_cast<u8>(sp.id));
-                        visibleItems.push_back({&sp.r_items[2], &sp.r_rows[2], &S});
+                        visibleItems.push_back({&sp.r_items[2], &sp.r_rows[2], &S, &sp, 0, 0});
                     }
                 }
             }
@@ -540,7 +563,15 @@ void CDetailManager::UpdateRenderState()
     if (m_render_state_frame == Device.dwFrame)
         return;
     WaitForCalc();
+    // What the previous frame drew with, for the motion vectors. After a frame without an
+    // update (the menu, a load) or on a history reset there is nothing to reproject from: the
+    // new values below stand for both.
+    const bool continuous = m_render_state_frame + 1 == Device.dwFrame && !detail_history_reset();
     m_render_state_frame = Device.dwFrame;
+    m_render_frames.fetch_add(1, std::memory_order_relaxed);
+    m_time_pos_prev = m_time_pos;
+    m_wind_dir1_prev = m_wind_dir1;
+    m_wind_dir2_prev = m_wind_dir2;
 
 #ifndef _EDITOR
     const auto& env = g_pGamePersistent->Environment();
@@ -567,6 +598,16 @@ void CDetailManager::UpdateRenderState()
     if (delta < 0.f || delta > 1.f)
         delta = 0.03f;
     m_global_time_old = Device.fTimeGlobal;
+#ifndef _EDITOR
+    // Frozen wind holds the grass as well; a wind reseed (its clock jumps back) restarts the
+    // phase, so reseed + freeze gives the same meadow in every run (QA frame parity).
+    static float wind_time_seen = 0.f;
+    if (env.eff_wind_time < wind_time_seen)
+        m_time_rot_1 = m_time_rot_2 = m_time_pos = m_time_pos_prev = 0.f;
+    wind_time_seen = env.eff_wind_time;
+    if (env.eff_wind_freeze)
+        delta = 0.f;
+#endif
 
     // The swing preset (calm vs storm set) follows the smoothed gustiness from the wind service.
     swing_current.lerp(swing_desc[0], swing_desc[1], gust_smooth);
@@ -585,6 +626,16 @@ void CDetailManager::UpdateRenderState()
 
     m_wind_dir1.set(_sin(dir1), 0.f, _cos(dir1), 0.f).normalize().mul(swing_current.amp1 * wind_norm);
     m_wind_dir2.set(_sin(dir2), 0.f, _cos(dir2), 0.f).normalize().mul(swing_current.amp2 * wind_norm);
+    if (!continuous)
+    {
+        m_time_pos_prev = m_time_pos;
+        m_wind_dir1_prev = m_wind_dir1;
+        m_wind_dir2_prev = m_wind_dir2;
+    }
+#if RENDER == R_R4
+    // Before DispatchMTCalc: the calc task reads it.
+    m_mesh_frame = ms_Latch();
+#endif
 
 #ifndef _EDITOR
     // Publish "how much green is around" for the vegetation-audio layer: the visible-instance
@@ -598,10 +649,11 @@ void CDetailManager::UpdateRenderState()
 #endif
 }
 
-void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)
+void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum, const u32 dumps)
 {
     if (!HasRenderableDetails())
         return;
+    const u64 started = CPU::QPC();
 
     // A new frustum invalidates every cached slot answer at once, without touching them -
     // this context's answers, and only this context's.
@@ -624,8 +676,13 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
     cmd_list.set_xform_world(Fidentity);
     const bool previousDetailRendering = cmd_list.detailRendering;
     cmd_list.detailRendering = true;
+#if RENDER == R_R4
+    if (UseVS() && m_mesh_frame && !ms_ForceVertex(cmd_list.context_id))
+        ms_Render(cmd_list, collectStats, frustum, dumps);
+    else
+#endif
     if (UseVS())
-        hw_Render(cmd_list, collectStats, frustum);
+        hw_Render(cmd_list, collectStats, frustum, dumps);
     else
         soft_Render(frustum, cmd_list.context_id);
     cmd_list.detailRendering = previousDetailRendering;
@@ -633,6 +690,7 @@ void CDetailManager::Render(CBackend& cmd_list, const bool collectStats, const C
 
     if (collectStats)
         RImplementation.BasicStats.DetailRender.End();
+    m_render_ticks.fetch_add(CPU::QPC() - started, std::memory_order_relaxed);
 }
 
 void CDetailManager::WaitForCalc()
@@ -709,6 +767,10 @@ void CDetailManager::DispatchMTCalc()
         RImplementation.BasicStats.DetailCache.End();
 
         UpdateVisibleM();
+#if RENDER == R_R4
+        if (m_mesh_frame)
+            ms_Calc();
+#endif
 
         // Feed the press wind-motors the one fact only this side knows: is there actual
         // grass in the detail cache under the pressing entity. The sound layer

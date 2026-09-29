@@ -1,0 +1,7 @@
+// [DA_PORT] The alpha-to-coverage pre-pass details_lod.s asks for under MSAA alpha-test ATOC. The
+// file never shipped, so the engine put stub_default.ps in its place, which reads a COLOR0 lod.vs
+// does not write (D3D11 fed it an unrelated register, DirectX 12 refuses the pipeline). lod.ps
+// carries the ATOC path this was meant to be, the way deffer_base_atoc_aref_*.ps wrap theirs.
+#define ATOC
+
+#include "lod.ps"

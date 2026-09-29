@@ -3,6 +3,9 @@
 #include "xrEngine/Environment.h"
 #include "Layers/xrRender/dxEnvironmentRender.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#include "da_async.h"
+#include "da_vrs.h"
+#include "da_rt.h"
 
 #define STENCIL_CULL 0
 
@@ -23,12 +26,12 @@ void CRenderTarget::phase_fxaa()
 {
     PIX_EVENT(phase_fxaa);
 
-    const float width = static_cast<float>(Device.dwWidth);
-    const float height = static_cast<float>(Device.dwHeight);
+    const float width = static_cast<float>(Device.dwRenderWidth);
+    const float height = static_cast<float>(Device.dwRenderHeight);
     const float du = ps_r1_pps_u;
     const float dv = ps_r1_pps_v;
 
-    u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Base_Depth);
+    u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Render_Depth);
 
     u32 offset = 0;
     auto* vertex = static_cast<FVF::V*>(RImplementation.Vertex.Lock(4, g_fxaa->vb_stride, offset));
@@ -60,8 +63,8 @@ void CRenderTarget::phase_sunshafts()
         Fvector4 uv6;
     };
 
-    const float width = static_cast<float>(Device.dwWidth);
-    const float height = static_cast<float>(Device.dwHeight);
+    const float width = static_cast<float>(Device.dwRenderWidth);
+    const float height = static_cast<float>(Device.dwRenderHeight);
     const float inverseWidth = 1.f / width;
     const float inverseHeight = 1.f / height;
     const Fvector2 p0 = { .5f * inverseWidth, .5f * inverseHeight };
@@ -120,10 +123,14 @@ void CRenderTarget::phase_sunshafts()
         RCache.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
     };
 
-    renderPass(rt_SunShaftsMask, s_sunshafts->E[0]);
-    renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[1]);
-    renderPass(rt_SunShaftsPass0, s_sunshafts->E[2], "SSParams", ps_r2_sss_phase1, ps_r2_sss_radius);
-    renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[3], "SSParams", ps_r2_sss_phase2, ps_r2_sss_radius);
+    {
+        // The mask and its blurs; the last pass mixes the scene and keeps full rate.
+        da_vrs_scope vrs(RCache, VrsPass::SunshaftsBlur);
+        renderPass(rt_SunShaftsMask, s_sunshafts->E[0]);
+        renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[1]);
+        renderPass(rt_SunShaftsPass0, s_sunshafts->E[2], "SSParams", ps_r2_sss_phase1, ps_r2_sss_radius);
+        renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[3], "SSParams", ps_r2_sss_phase2, ps_r2_sss_radius);
+    }
     renderPass(rt_Generic, s_sunshafts->E[4], "SSParamsDISPLAY", ps_r2_sss_intensity, ps_r2_sss_blend);
     HW.get_context(RCache.context_id)->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
 }
@@ -146,29 +153,39 @@ void CRenderTarget::phase_combine()
         t_LUM_dest->surface_set(rt_LUM_pool[gpu_id * 2 + 1]->pSurface);
     }
 
-    if (ps_r_ssao_mode == ssao_mode_gtao && s_gtao)
+    // The compute jobs of this frame end here: the ripple step they made is published, and the
+    // GTAO job's result is what the AO slot below finds.
+    da_async_join(RCache);
+
+    // The AO slot: ray traced AO, else GTAO already done as a job, else today's techniques.
+    GpuTimers.Begin(dx11GpuTimers::CombineAO);
+    if (!da_rt_ao_pass(RCache) && !da_async_ao_done())
     {
-        // GTAO: pre-render + guided filter into rt_ssao_temp; combine_1 samples it as
-        // s_occ (USE_GTAO). s_gtao exists only when the mode was active at renderer
-        // start and MSAA is off - otherwise fall through to the inline paths.
-        phase_gtao(RCache);
-    }
-    else if (s_hdao_cs)
-    {
-        phase_hdao();
-    }
-    else
-    {
-        if (RImplementation.o.ssao_opt_data)
+        if (ps_r_ssao_mode == ssao_mode_gtao && s_gtao)
         {
-            phase_downsamp();
-            // phase_ssao();
+            // GTAO: pre-render + guided filter into rt_ssao_temp; combine_1 samples it as
+            // s_occ (USE_GTAO). s_gtao exists only when the mode was active at renderer
+            // start and MSAA is off - otherwise fall through to the inline paths.
+            phase_gtao(RCache);
         }
-        else if (RImplementation.o.ssao_blur_on)
+        else if (s_hdao_cs)
         {
-            phase_ssao();
+            phase_hdao();
+        }
+        else
+        {
+            if (RImplementation.o.ssao_opt_data)
+            {
+                phase_downsamp();
+                // phase_ssao();
+            }
+            else if (RImplementation.o.ssao_blur_on)
+            {
+                phase_ssao();
+            }
         }
     }
+    GpuTimers.End(dx11GpuTimers::CombineAO);
 
     // low/hi RTs
     {
@@ -299,8 +316,8 @@ void CRenderTarget::phase_combine()
         */
 
         // Fill VB
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        float scale_Y = float(Device.dwHeight) / float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        float scale_Y = float(Device.dwRenderHeight) / float(TEX_jitter);
 
         // Fill vertex buffer
         FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, Offset);
@@ -373,7 +390,10 @@ void CRenderTarget::phase_combine()
     // the march.
     const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl >= 2 &&
         ps_r__puddles_refl_power > 0.f && g_da_rain_wetness >= 0.01f;
-    if (rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab))
+    // The upscaler's reactive mask is this grab against the finished scene, water or not.
+    const bool upscaling = da_upscaler_active();
+    if (rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab || upscaling ||
+        da_rt_wants_scene_grab()))
     {
         PIX_EVENT(scene_grab_for_SSLR);
         // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a
@@ -395,12 +415,19 @@ void CRenderTarget::phase_combine()
         }
     }
 
+    // Ray traced reflections, from the same frame copy, before anything reads them.
+    da_rt_reflections_pass(RCache);
+
     // Puddle reflections - here and only here: the frame copy is taken (that is what gets
     // reflected) and water is not drawn yet (or puddles would reflect water that then gets
     // drawn over them).
-    phase_da_puddle_refl();
+    {
+        da_vrs_scope vrs(RCache, VrsPass::PuddleRefl);
+        phase_da_puddle_refl();
+    }
 
     // Forward rendering
+    GpuTimers.Begin(dx11GpuTimers::CombineForward);
     {
         PIX_EVENT(Forward_rendering);
         u_setrt(RCache, rt_Generic_0_r, nullptr, nullptr, rt_MSAADepth); // LDR RT
@@ -409,7 +436,12 @@ void CRenderTarget::phase_combine()
         RCache.set_ColorWriteEnable();
         //	TODO: DX11: CHeck this!
         // g_pGamePersistent->Environment().RenderClouds	();
-        RImplementation.render_forward();
+        // The water's motion vectors are drawn after this pass, which consumes its draw lists.
+        phase_water_velocity_collect();
+        {
+            da_vrs_scope vrs(RCache, VrsPass::Forward);
+            RImplementation.render_forward();
+        }
         if (g_pGamePersistent)
             g_pGamePersistent->OnRenderPPUI_main(); // PP-UI
     }
@@ -417,7 +449,20 @@ void CRenderTarget::phase_combine()
     //	Igor: for volumetric lights
     //	combine light volume here
     if (m_bHasActiveVolumetric)
+    {
+        da_vrs_scope vrs(RCache, VrsPass::VolumetricCombine);
         phase_combine_volumetric();
+    }
+    GpuTimers.End(dx11GpuTimers::CombineForward);
+
+    // The motion vectors the G-buffer does not carry: the sky, then the water surface over it.
+    phase_sky_velocity();
+    phase_water_velocity();
+
+    // Everything the upscaler cannot track with motion vectors is on the scene by now (the
+    // forward passes and the volumetric light); what follows is screen-space post.
+    if (upscaling)
+        phase_reactive();
 
     // Perform blooming filter and distortion if needed
     RCache.set_Stencil(FALSE);
@@ -430,7 +475,9 @@ void CRenderTarget::phase_combine()
     }
 
     // for msaa we need a resolved color buffer - Holger
+    GpuTimers.Begin(dx11GpuTimers::CombineBloom);
     phase_bloom(); // HDR RT invalidated here
+    GpuTimers.End(dx11GpuTimers::CombineBloom);
 
     // RImplementation.rmNormal();
     // u_setrt(rt_Generic_1,0,0,get_base_zb());
@@ -455,23 +502,52 @@ void CRenderTarget::phase_combine()
 
     RCache.set_Stencil(FALSE);
 
-    // SMAA supersedes FXAA when both are enabled - one AA pass per frame.
-    if (ps_r__smaa)
-        phase_smaa();
-    else if (ps_r2_fxaa)
-        phase_fxaa();
+    // An upscaler is the anti-aliasing while it runs: nothing spatial goes before it, and there
+    // is exactly one temporal filter.
+    GpuTimers.Begin(dx11GpuTimers::CombineAA);
+    if (!upscaling)
+    {
+        // TAA stacks on top of the spatial pass: SMAA removes staircases, this resolves the
+        // jittered frames. Needs the single-sampled G-buffer position (s_taa is only created
+        // without MSAA) and skips menus - the paused background has no valid history. The
+        // history pair is checked as well: CRT::create leaves the surface empty on a format the
+        // device rejects, and the pass then simply does not run.
+        const bool taa = ps_r__taa && s_taa && !_menu_pp && rt_taa_history && rt_taa_history->pRT &&
+            rt_taa_resolve && rt_taa_resolve->pRT;
 
-    // Camera TAA stacks on top of the spatial pass: SMAA removes staircases, this removes
-    // the temporal shimmer. Needs the single-sampled G-buffer position (s_taa is only
-    // created without MSAA) and skips menus - the paused background has no valid history.
-    // The history pair is checked as well: CRT::create leaves the surface empty on a
-    // format the device rejects, and the pass then simply does not run.
-    if (ps_r__taa && s_taa && !_menu_pp && rt_taa_history && rt_taa_history->pRT && rt_taa_resolve &&
-        rt_taa_resolve->pRT)
-        phase_taa(m_previous);
+        // SMAA supersedes FXAA when both are enabled - one AA pass per frame. Before TAA its
+        // frame stays in rt_Generic for the resolve (no copy back).
+        if (ps_r__smaa)
+            phase_smaa(!taa);
+        else if (ps_r2_fxaa)
+            phase_fxaa();
 
-    if (!_menu_pp)
+        if (taa)
+            phase_taa(m_previous, ps_r__smaa != 0);
+    }
+    GpuTimers.End(dx11GpuTimers::CombineAA);
+    GpuTimers.Begin(dx11GpuTimers::CombinePost);
+
+    // Off, the five passes still ran with shaders compiled down to a copy of the scene - a full
+    // frame of fill paid for nothing. The copy they ended in is what rt_Generic_0 already holds.
+    if (!_menu_pp && RImplementation.o.advancedpp && ps_r2_sss_enable)
         phase_sunshafts();
+
+    // The finished render-size frame gives the next frame's shading rates their luminance; nothing
+    // after this point shades at a reduced rate.
+    da_vrs_luma_pass(RCache);
+    da_vrs_reset(RCache);
+
+    // The upscale slot (da_upscaler.h): the render-size scene into the display-size output, the
+    // depth after it; from here on everything runs at the display size. Without an upscaler the
+    // frame never leaves the one size and this is not reached.
+    if (upscaling)
+        phase_upscale();
+    // The temporal pass has resolved the jitter: the flares and the tracers drawn after it are
+    // not jittered (the next frame's view brings it back).
+    else if (da_temporal_active())
+        RCache.set_xform_project(Device.mProject);
+    da_vrs_luma_upscaled_pass(RCache); // [dx12:vrs] hook
 
     // PP enabled ?
     //	Render to RT texture to be able to copy RT even in windowed mode.
@@ -483,7 +559,14 @@ void CRenderTarget::phase_combine()
     PP_Complex = TRUE;
 
     // Combine everything + perform AA
-    if (RImplementation.o.msaa)
+    if (upscaling)
+    {
+        // At the display size, over the upscaler's output; the G-buffer, the bloom and the
+        // distortion mask are read by uv. The viewport has to follow the size.
+        u_setrt(RCache, rt_PostDisplay, nullptr, nullptr, rt_Base_Depth);
+        RImplementation.rmNormal(RCache);
+    }
+    else if (RImplementation.o.msaa)
     {
         if (PP_Complex)
             u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Base_Depth); // LDR RT
@@ -572,10 +655,12 @@ void CRenderTarget::phase_combine()
         // Draw COLOR
         if (!RImplementation.o.msaa)
         {
+            // The same elements over rt_Upscaled while an upscaler runs.
+            const ref_shader& combine = upscaling ? s_combine_display : s_combine;
             if (ps_r2_ls_flags.test(R2FLAG_AA))
-                RCache.set_Element(s_combine->E[bDistort ? 3 : 1]); // look at blender_combine.cpp
+                RCache.set_Element(combine->E[bDistort ? 3 : 1]); // look at blender_combine.cpp
             else
-                RCache.set_Element(s_combine->E[bDistort ? 4 : 2]); // look at blender_combine.cpp
+                RCache.set_Element(combine->E[bDistort ? 4 : 2]); // look at blender_combine.cpp
         }
         else
         {
@@ -592,15 +677,20 @@ void CRenderTarget::phase_combine()
         RCache.set_c("m_blur", m_blur_scale.x, m_blur_scale.y, 0.f, 0.f);
         RCache.set_c("aberration", ps_r2_aberration, ps_r2_aberration, ps_r2_aberration, ps_r2_aberration);
         RCache.set_c("vibrance", ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance);
-        RCache.set_c("lensdirt", ps_r2_lensdirt_value, ps_r2_lensdirt_value, ps_r2_lensdirt_value,
-            ps_r2_lensdirt_value);
+        // Everything below that belongs to a mask - its dirt and the water on it - exists only
+        // while there is glass in front of the eye.
+        const bool visor_glass = g_pGamePersistent && g_pGamePersistent->Environment().visor_glass();
+        // x: the float the older mask drivers write, which the visor's edge reflection keys on.
+        // y: the visor's dirt glowing round bright light (USE_LENS_DIRT); r2_lensdirt only turns
+        // it off for the session.
+        RCache.set_c("lensdirt", ps_r2_lensdirt_value, (ps_r2_lensdirt && visor_glass) ? 1.f : 0.f, 0.f, 0.f);
         RCache.set_c("lenswater", ps_r2_lenswater_value, ps_r2_lenswater_value, ps_r2_lenswater_value,
             ps_r2_lenswater_value);
         // The water standing on the visor: whether there is a field at all, how much glass one
         // of its texels covers, and one texel in uv - everything da_visor.h needs to turn a
         // thickness into a slope in real millimetres rather than in texels of whatever grid the
         // preset happened to buy.
-        if (rt_VisorDrops)
+        if (rt_VisorDrops && visor_glass)
         {
             const float w = float(rt_VisorDrops->dwWidth), h = float(rt_VisorDrops->dwHeight);
             RCache.set_c("da_visor", 1.f, visor_width_m * 1000.f / w, 1.f / w, 1.f / h);
@@ -635,6 +725,13 @@ void CRenderTarget::phase_combine()
         PIX_EVENT(phase_pp);
         phase_pp();
     }
+    // QA: the shading rates over the finished frame (r__vrs_debug).
+    da_vrs_debug_pass(RCache);
+    GpuTimers.End(dx11GpuTimers::CombinePost);
+
+    // QA: the motion vectors over the finished frame (r__motion_vectors).
+    if (ps_r__motion_vectors && !_menu_pp)
+        phase_velocity_debug();
 
     //	Re-adapt luminance
     RCache.set_Stencil(FALSE);
@@ -785,8 +882,8 @@ void CRenderTarget::phase_combine_volumetric()
     RCache.set_ColorWriteEnable(D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
     {
         // Fill VB
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        float scale_Y = float(Device.dwHeight) / float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        float scale_Y = float(Device.dwRenderHeight) / float(TEX_jitter);
 
         // Fill vertex buffer
         FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, Offset);

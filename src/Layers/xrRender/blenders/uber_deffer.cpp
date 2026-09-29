@@ -5,8 +5,8 @@ namespace xray::render::RENDER_NAMESPACE
 {
 void fix_texture_name(pstr fn);
 
-void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOOL _aref, LPCSTR _detail_replace,
-    bool DO_NOT_FINISH, bool zwrite)
+bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOOL _aref, LPCSTR _detail_replace,
+    bool DO_NOT_FINISH, bool zwrite, LPCSTR mesh_ms)
 {
     // Uber-parse
     string256 fname, fnameA, fnameB;
@@ -111,6 +111,9 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
 
 // Uber-construct
 #if defined(USE_DX11)
+    // The grass mesh shader emits what the flat detail vertex shaders do (v2p_flat) and nothing else.
+    if (mesh_ms && (bump || lmap || hq))
+        return false;
     if (bump && hq && RImplementation.o.tessellation && C.TessMethod != 0)
     {
         char hs[256], ds[256]; // = "DX11" DELIMITER "tess", ds[256] = "DX11" DELIMITER "tess";
@@ -172,6 +175,10 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
             C.r_dx11Texture("s_tdetailBumpX", texDetailBumpX);
         }
     }
+    else if (mesh_ms)
+    {
+        C.r_Pass(mesh_ms, "deffer_detail_cull#as", static_cast<LPCSTR>(ps), false, TRUE, BOOL(zwrite));
+    }
     else
     {
         C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
@@ -223,6 +230,8 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
         C.r_dx11Sampler("smp_rtlinear");
     }
 #elif defined(USE_OGL)
+    if (mesh_ms)
+        return false;
     C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
     VERIFY(C.L_textures[0].size());
     if (bump)
@@ -257,6 +266,7 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
 
     if (!DO_NOT_FINISH)
         C.r_End();
+    return true;
 }
 
 #if defined(USE_DX11)
@@ -375,6 +385,13 @@ void uber_shadow(CBlender_Compile& C, LPCSTR _vspec, LPCSTR detailReplace)
     }
     else
         C.r_Pass("shadow_direct_base", "dumb", FALSE, TRUE, TRUE, FALSE);
+}
+
+void uber_detail_mesh_depth(CBlender_Compile& C, LPCSTR mesh_ms)
+{
+    C.r_Pass(mesh_ms, "deffer_detail_cull#as", "deffer_detail_mesh_depth", false, TRUE, TRUE);
+    C.r_dx11Texture("s_base", C.L_textures[0]);
+    C.r_dx11Sampler("smp_base");
 }
 #endif
 } // namespace xray::render::RENDER_NAMESPACE

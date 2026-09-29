@@ -1,0 +1,16 @@
+// r__rt_debug (dxr.md 4.1): the view the ray tracing debug pass (rt/rt_debug.hlsl) wrote, over the
+// frame. QA diagnostics only.
+#include "common.h"
+
+Texture2D	s_rt_debug;
+
+struct vf
+{
+	float2 tc0   : TEXCOORD0;
+	float4 hpos  : SV_Position;
+};
+
+float4 main( vf I ) : SV_Target
+{
+	return float4( s_rt_debug.Load( int3( I.hpos.xy, 0 ) ).rgb, 1.0f );
+}

@@ -2,6 +2,9 @@
 #include "tree_instance.h"
 #include "da_wind_field.h"
 #include "da_tree_bend.h"
+#ifdef DA_TREE_GD
+#include "da_gd_tree.h"
+#endif
 
 // The tree's shadow caster. The SAME deformation as deffer_tree_flat.vs, in every shadow pass
 // (the sun cascades and the local lights): the shadow is the crown's shadow and not a stiff
@@ -14,9 +17,17 @@ uniform float4 c_sun;
 uniform float4 c_tree;
 
 #ifdef USE_AREF
-v2p_shadow_direct_aref main(v_shadow_direct_aref I, uint instance_id : SV_InstanceID)
+v2p_shadow_direct_aref main(v_shadow_direct_aref I, uint instance_id : SV_InstanceID
+#ifdef DA_TREE_GD
+    , uint gd_ref : GDREF
+#endif
+)
 #else
-v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID)
+v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID
+#ifdef DA_TREE_GD
+    , uint gd_ref : GDREF
+#endif
+)
 #endif
 {
 #ifdef USE_AREF
@@ -28,12 +39,22 @@ v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID)
     float3x4 local_xform = m_xform;
     float4 local_c_sun = c_sun;
     float4 local_c_tree = c_tree;
+#ifdef DA_TREE_GD
+    {
+        // GPU-driven trees: the instance's rows from the registry (da_gd_tree.h).
+        const da_gd_rows gd = da_gd_tree_rows(gd_ref);
+        local_xform = gd.xform;
+        local_c_sun = gd.c_sun;
+        local_c_tree = gd.c_tree;
+    }
+#else
     if (tree_instance_control.x > 0.5f)
     {
         local_xform = tree_instance_xform(instance_id);
         local_c_sun = tree_instance_sun(instance_id);
         local_c_tree = tree_instance_tree(instance_id);
     }
+#endif
 
     float3 pos = mul(local_xform, I.P);
     float base = local_xform._24;

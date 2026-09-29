@@ -7,6 +7,7 @@
 #include "Layers/xrRender/PSLibrary.h"
 
 #include "r2_types.h"
+#include "Layers/xrRender/da_temporal.h"
 
 #include "Layers/xrRender/HOM.h"
 #include "Layers/xrRender/DetailManager.h"
@@ -470,7 +471,11 @@ public:
     bool is_sun_static() override { return o.sunstatic; }
 
 #if defined(USE_DX11)
+#ifdef XR_D3D12
+    BackendAPI GetBackendAPI() const override { return IRender::BackendAPI::D3D12; }
+#else
     BackendAPI GetBackendAPI() const override { return IRender::BackendAPI::D3D11; }
+#endif
     u32 get_dx_level() override { return HW.FeatureLevel >= D3D_FEATURE_LEVEL_10_1 ? 0x000A0001 : 0x000A0000; }
     pcstr getShaderPath() override { return "r3\\"; }
 #elif defined(USE_OGL)

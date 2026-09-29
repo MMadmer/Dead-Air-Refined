@@ -1,0 +1,27 @@
+#include "common.h"
+
+// Motion vectors of the sky (docs/dead-air/DX12_RENDERER.md, 3.4). Written only where the
+// G-buffer holds nothing (position z == 0): the dome and the cloud deck laid over it. Both are
+// far enough that the camera's travel between two frames does not move them and only its turn
+// does, so the pixel's view direction pushed through the unjittered view-projections of both
+// frames without their translation (w = 0) is the whole vector.
+uniform float3x4 m_v2w;
+
+float2 main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position) : SV_Target
+{
+#ifdef USE_MSAA
+	const float z = s_position.Load(int2(pos2d.xy), 0).z;
+#else
+	const float z = s_position.Load(int3(pos2d.xy, 0)).z;
+#endif
+	if (z != 0.0f)
+		discard;
+
+	// The view ray of this pixel (pos_decompression_params carries the jitter, so it is the
+	// direction the jittered sample saw), turned into world space.
+	const float3 ray = float3(pos2d.xy * pos_decompression_params.zw - pos_decompression_params.xy, 1.0f);
+	const float3 dir = mul(m_v2w, float4(ray, 0.0f));
+	const float4 cur = mul(m_VP_nojit, float4(dir, 0.0f));
+	const float4 prev = mul(m_VP_prev, float4(dir, 0.0f));
+	return da_velocity(cur, prev);
+}

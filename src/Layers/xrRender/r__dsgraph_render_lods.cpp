@@ -52,7 +52,7 @@ void R_dsgraph_structure::render_lods(bool _setup_zb, bool _clear)
 
     for (u32 i = 0; i < lstLODs.size(); i++)
     {
-        const u32 iBatchSize = std::min(lstLODs.size() - i, (size_t)uiImpostersFit);
+        const u32 iBatchSize = u32(std::min(lstLODs.size() - i, (size_t)uiImpostersFit));
         int cur_count = 0;
         u32 vOffset;
         FLOD::_hw* V =

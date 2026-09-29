@@ -7,6 +7,9 @@
 #include "FTreeVisual.h"
 #include "Common/OGF_GContainer_Vertices.hpp"
 #include "xrCore/Threading/ParallelFor.hpp"
+#if RENDER == R_R4
+#include "Layers/xrRender/da_temporal.h"
+#endif
 
 #include <mutex>
 
@@ -26,6 +29,10 @@ struct TreeWindShared
     float qd{};
     float gust{};
     float deviation{};
+    // The state the previous frame drew with (the motion vectors bend the crown with it too).
+    float q_prev{1.f};
+    float gust_prev{};
+    float deviation_prev{};
     Fvector sampled_root{};
     std::atomic<u32> frame{u32(-1)};
     std::mutex update_lock;
@@ -41,6 +48,16 @@ struct TreeWindShared
 
 static xr_map<u64, TreeWindShared*> g_tree_wind_shared;
 static std::mutex g_tree_wind_shared_lock;
+
+// A history reset (level load, teleport, back from the menu) starts the previous frame over.
+static bool tree_history_reset()
+{
+#if RENDER == R_R4
+    return da_history_reset();
+#else
+    return true;
+#endif
+}
 
 static u64 tree_wind_key(const Fvector& root)
 {
@@ -207,14 +224,17 @@ struct FTreeVisual_setup
     float scale;
     Fvector4 wave;
     Fvector4 wind;
+    // The weather's tree speed: the frequency factor of every tree divides by it.
+    float speed;
 
-    FTreeVisual_setup(): dwFrame(0), scale(0) {}
+    FTreeVisual_setup(): dwFrame(0), scale(0), speed(1.f) {}
 
     void calculate()
     {
         dwFrame = Device.dwFrame;
         auto& env = g_pGamePersistent->Environment();
         CEnvDescriptor& desc = env.CurrentEnv;
+        speed = std::max(desc.m_fTreeSpeed, 0.2f);
 
         // The wind heading used to spin full circle every m_fTreeRotation seconds - crowns leaned
         // east, then north, then west on a windless noon. Now it comes from the effective-wind
@@ -240,15 +260,44 @@ struct FTreeVisual_setup
     }
 };
 
-FTreeVisual_setup& GetTreeVisualSetup()
+// This frame's setup and the previous frame's, published once per frame: the first caller of a
+// frame computes it and every render thread reads the same record. (A thread_local copy per
+// thread cannot know the previous frame - a thread that drew no tree then holds an older one.)
+struct FTreeVisual_frame
 {
-    // thread_local is only race-free while calculate() stays a pure function of
-    // frame-constant inputs (Device time/frame, CurrentEnv wind). If accumulated
-    // wind state is ever added, switch to shared one-writer publication instead.
-    static thread_local FTreeVisual_setup setup;
-    if (setup.dwFrame != Device.dwFrame)
-        setup.calculate();
-    return setup;
+    std::atomic<u32> frame{u32(-1)};
+    std::mutex lock;
+    FTreeVisual_setup current;
+    FTreeVisual_setup previous;
+};
+static FTreeVisual_frame g_tree_visual_frame;
+
+static FTreeVisual_frame& GetTreeVisualFrame()
+{
+    FTreeVisual_frame& f = g_tree_visual_frame;
+    const u32 frame = Device.dwFrame;
+    if (f.frame.load(std::memory_order_acquire) != frame)
+    {
+        std::lock_guard guard(f.lock);
+        const u32 last = f.frame.load(std::memory_order_relaxed);
+        if (last != frame)
+        {
+            FTreeVisual_setup now;
+            now.calculate();
+            // A frame without trees in between, or a reset: no history, the sway reads as still.
+            f.previous = last + 1 == frame && !tree_history_reset() ? f.current : now;
+            f.current = now;
+            f.frame.store(frame, std::memory_order_release);
+        }
+    }
+    return f;
+}
+
+void FTreeVisual::FrameSpeeds(float& now, float& previous)
+{
+    const FTreeVisual_frame& frame = GetTreeVisualFrame();
+    now = frame.current.speed;
+    previous = frame.previous.speed;
 }
 
 Fvector4 FTreeVisual::tree_wind_row() const
@@ -302,6 +351,11 @@ void FTreeVisual::UpdateWindState() const
         return;
     if (!g_pGamePersistent || s->omega <= 0.f)
         return;
+    // What the previous frame drew with, when it integrated this tree; otherwise (first sight,
+    // back from a visibility gap, a history reset) the new state, and the crown's own motion
+    // reads as none for that one frame.
+    const bool continuous = s->settled && s->frame.load(std::memory_order_relaxed) + 1 == frame && !tree_history_reset();
+    const float q_last = s->q, gust_last = s->gust, deviation_last = s->deviation;
     const auto& env = g_pGamePersistent->Environment();
     s->gust = env.SampleWindGust(xform.c.x, xform.c.z);
     s->deviation = env.SampleWindDeviation(xform.c.x, xform.c.z);
@@ -314,7 +368,9 @@ void FTreeVisual::UpdateWindState() const
     // lull-to-tongue contrast and rocked every crown.
     const float target = (0.60f + 0.65f * s->gust) * (1.f + 0.6f * env.eff_wind_gust_event);
 
-    if (!s->settled)
+    // Frozen wind (QA shots) holds the crown at its field: the state then depends on the frozen
+    // field alone, not on how long the ring-down has run.
+    if (!s->settled || env.eff_wind_freeze)
     {
         // The first frame after a load starts AT the field, not at 1: every crown on the level
         // swinging down to its lull at once was a visible settle.
@@ -359,6 +415,9 @@ void FTreeVisual::UpdateWindState() const
             Msg("* [wind-tree] target=%.3f q=%.3f qd=%.3f omega=%.2f top=%.1f", target, s->q, s->qd, s->omega, s->top);
         }
     }
+    s->q_prev = continuous ? q_last : s->q;
+    s->gust_prev = continuous ? gust_last : s->gust;
+    s->deviation_prev = continuous ? deviation_last : s->deviation;
     s->frame.store(frame, std::memory_order_release);
 }
 
@@ -374,9 +433,20 @@ Fvector4 FTreeVisual::wind_state_row(float s) const
     return Fvector4{s * c_scale.sun, s * c_bias.sun, q, freq_k};
 }
 
+Fvector4 FTreeVisual::wind_prev_row() const
+{
+    if (!m_shared)
+        return Fvector4{0.f, 0.f, 0.f, 0.f};
+    const TreeWindShared& s = *m_shared;
+    const float speed = GetTreeVisualFrame().previous.speed;
+    const float freq_k = s.omega > 0.f ? clampr(s.omega / speed, 0.4f, 6.f) : 0.f;
+    return Fvector4{s.q_prev, freq_k, s.gust_prev, s.deviation_prev};
+}
+
 void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
 {
-    FTreeVisual_setup& tvs = GetTreeVisualSetup();
+    FTreeVisual_frame& frame = GetTreeVisualFrame();
+    FTreeVisual_setup& tvs = frame.current;
 // setup constants
 #if RENDER != R_R1
     Fmatrix xform_v;
@@ -403,6 +473,10 @@ void FTreeVisual::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
     cmd_list.tree.set_c_sun(row.x, row.y, row.z, row.w); // sun + crown wind state
     const Fvector4 tree = tree_wind_row();
     cmd_list.tree.set_c_tree(tree.x, tree.y, tree.z, tree.w);
+    // The previous frame's wind for the motion vectors (G-buffer shaders only declare these).
+    cmd_list.tree.set_wave_prev(frame.previous.wave);
+    cmd_list.tree.set_wind_prev(frame.previous.wind);
+    cmd_list.tree.set_c_tree_prev(wind_prev_row());
 }
 
 #ifdef USE_DX11
@@ -410,10 +484,13 @@ bool FTreeVisual::GetInstancedDraw(float /*LOD*/, FTreeVisualInstancedDraw& /*dr
 
 void FTreeVisual::SetupInstancedGlobals(CBackend& cmd_list)
 {
-    FTreeVisual_setup& tvs = GetTreeVisualSetup();
+    FTreeVisual_frame& frame = GetTreeVisualFrame();
+    FTreeVisual_setup& tvs = frame.current;
     cmd_list.tree.set_consts(tvs.scale, tvs.scale, 0, 0);
     cmd_list.tree.set_wave(tvs.wave);
     cmd_list.tree.set_wind(tvs.wind);
+    cmd_list.tree.set_wave_prev(frame.previous.wave);
+    cmd_list.tree.set_wind_prev(frame.previous.wind);
 }
 
 void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& data) const
@@ -436,6 +513,7 @@ void FTreeVisual::FillInstanceData(CBackend& cmd_list, FTreeVisualInstanceData& 
         scale * c_bias.hemi);
     data.vectors[8] = wind_state_row(scale);
     data.vectors[9] = tree_wind_row();
+    data.vectors[10] = wind_prev_row();
 }
 #endif
 
@@ -468,6 +546,43 @@ void FTreeVisual::Copy(dxRender_Visual* pSrc)
 }
 
 bool FTreeVisual::rigid() const { return !m_shared || !m_shared->foliage; }
+
+FTreeVisualColors FTreeVisual::colors() const
+{
+    return FTreeVisualColors{Fvector4{c_scale.rgb.x, c_scale.rgb.y, c_scale.rgb.z, c_scale.hemi},
+        Fvector4{c_bias.rgb.x, c_bias.rgb.y, c_bias.rgb.z, c_bias.hemi}, c_scale.sun, c_bias.sun};
+}
+
+float FTreeVisual::wind_height() const { return m_shared ? m_shared->top : 0.f; }
+
+float FTreeVisual::wind_omega() const { return m_shared ? m_shared->omega : 0.f; }
+
+FTreeVisualWind FTreeVisual::wind_state() const
+{
+    // The rows FillInstanceData writes, taken apart per root: rows 8 (zw), 9 (xyz) and 10.
+    const Fvector4 state = wind_state_row(1.f);
+    const Fvector4 tree = tree_wind_row();
+    FTreeVisualWind wind;
+    wind.now.set(state.z, state.w, tree.y, tree.z);
+    wind.previous = wind_prev_row();
+    wind.height = tree.x;
+    wind.gate = m_shared && m_shared->foliage ? 1.f : 0.f;
+    return wind;
+}
+
+#ifdef USE_DX11
+bool FTreeVisual::window(u32 index, FTreeVisualInstancedDraw& draw) const
+{
+    if (!rm_geom || index)
+        return false;
+    draw.geometry = &*rm_geom;
+    draw.base_vertex = vBase;
+    draw.vertex_count = vCount;
+    draw.start_index = iBase;
+    draw.primitive_count = dwPrimitives;
+    return true;
+}
+#endif
 
 //-----------------------------------------------------------------------------------
 // Stripified Tree
@@ -548,6 +663,21 @@ bool FTreeVisual_PM::GetInstancedDraw(float LOD, FTreeVisualInstancedDraw& draw)
     draw.vertex_count = window.num_verts;
     draw.start_index = iBase + window.offset;
     draw.primitive_count = window.num_tris;
+    return true;
+}
+
+u32 FTreeVisual_PM::window_count() const { return pSWI ? pSWI->count : 0; }
+
+bool FTreeVisual_PM::window(u32 index, FTreeVisualInstancedDraw& draw) const
+{
+    if (!rm_geom || !pSWI || index >= pSWI->count)
+        return false;
+    const FSlideWindow& sw = pSWI->sw[index];
+    draw.geometry = &*rm_geom;
+    draw.base_vertex = vBase;
+    draw.vertex_count = sw.num_verts;
+    draw.start_index = iBase + sw.offset;
+    draw.primitive_count = sw.num_tris;
     return true;
 }
 #endif

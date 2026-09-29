@@ -484,7 +484,7 @@ void render_sun_old::render_sun()
     // Restore XForms
     dsgraph.cmd_list.set_xform_world(Fidentity);
     dsgraph.cmd_list.set_xform_view(Device.mView);
-    dsgraph.cmd_list.set_xform_project(Device.mProject);
+    dsgraph.cmd_list.set_xform_project(da_jitter_project(Device.mProject));
 }
 
 void render_sun_old::render_sun_near()
@@ -712,7 +712,7 @@ void render_sun_old::render_sun_near()
     // Restore XForms
     dsgraph.cmd_list.set_xform_world(Fidentity);
     dsgraph.cmd_list.set_xform_view(Device.mView);
-    dsgraph.cmd_list.set_xform_project(Device.mProject);
+    dsgraph.cmd_list.set_xform_project(da_jitter_project(Device.mProject));
 }
 
 void render_sun_old::render_sun_filtered() const

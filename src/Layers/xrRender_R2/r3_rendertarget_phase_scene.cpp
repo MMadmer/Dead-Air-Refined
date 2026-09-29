@@ -21,14 +21,14 @@ void CRenderTarget::phase_scene_prepare()
                                             ((ps_r_sun_shafts > 0) && (fValue >= 0.0001)) || (ps_r_ssao > 0)))
     {
         //	TODO: DX11: Check if we need to set RT here.
-        u_setrt(RCache, Device.dwWidth, Device.dwHeight, rt_Position->pRT, 0, 0, rt_MSAADepth);
+        u_setrt(RCache, Device.dwRenderWidth, Device.dwRenderHeight, rt_Position->pRT, 0, 0, rt_MSAADepth);
 
         const Fcolor color{}; // black
         RCache.ClearRT(rt_Position, color);
         // RCache.ClearRT(rt_Normal, color);
         // RCache.ClearRT(rt_Color, color);
         if (!RImplementation.o.msaa)
-            RCache.ClearZB(get_base_zb(), 1.0f, 0);
+            RCache.ClearZB(rt_Render_Depth, 1.0f, 0);
         else
         {
             RCache.ClearRT(rt_Color, color);
@@ -40,9 +40,21 @@ void CRenderTarget::phase_scene_prepare()
     else
     {
         //	TODO: DX11: Check if we need to set RT here.
-        u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, rt_MSAADepth);
+        if (!da_upscaler_active())
+            u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, rt_MSAADepth);
+        else // the display-size back buffer cannot pair with the render-size depth
+            u_setrt(RCache, Device.dwRenderWidth, Device.dwRenderHeight, nullptr, nullptr, nullptr, rt_MSAADepth);
         RCache.ClearZB(rt_MSAADepth, 1.0f, 0);
+        // da_sky_velocity.ps tells the sky by position z == 0: without this clear it would keep the
+        // z of whatever covered those pixels in an earlier frame.
+        if (rt_Velocity && RImplementation.o.gbuffer_opt && (da_motion_vectors_active() || ps_r__motion_vectors))
+            RCache.ClearRT(rt_Position, {});
     }
+
+    // The scene's viewport: nothing between here and the first pass that sets one would give the
+    // render size back after the display-size frame before (the sizes equal without an upscaler).
+    if (da_upscaler_active())
+        RImplementation.rmNormal(RCache);
 
     //	Igor: for volumetric lights
     m_bHasActiveVolumetric = false;
@@ -62,10 +74,24 @@ void CRenderTarget::phase_scene_begin()
     }
     else
     {
-        if (RImplementation.o.albedo_wo)
-            u_setrt(RCache, rt_Position, rt_Accumulator, rt_MSAADepth);
+        // MRT 2 holds the motion vectors on the frames that want them (shaders/r3/da_velocity.h).
+        // Every G-buffer shader writes them; with nothing bound there the write goes nowhere.
+        const bool velocity = rt_Velocity && (da_motion_vectors_active() || ps_r__motion_vectors);
+        const ref_rt& albedo = RImplementation.o.albedo_wo ? rt_Accumulator : rt_Color;
+        if (velocity)
+        {
+            u_setrt(RCache, rt_Position, albedo, rt_Velocity, rt_MSAADepth);
+            // Once a frame: a split scene begins twice and its second part adds to the first.
+            if (m_velocity_frame != Device.dwFrame)
+            {
+                RCache.ClearRT(rt_Velocity, {});
+                m_velocity_frame = Device.dwFrame;
+            }
+        }
         else
-            u_setrt(RCache, rt_Position, rt_Color, rt_MSAADepth);
+            u_setrt(RCache, rt_Position, albedo, rt_MSAADepth);
+        // Movers report their previous transforms only while the vectors are drawn.
+        RCache.xforms.m_motion_pass = velocity;
         // else								u_setrt		(rt_Position,	rt_Color, rt_Normal,		rt_MSAADepth);
     }
 
@@ -80,6 +106,32 @@ void CRenderTarget::phase_scene_begin()
     RCache.set_ColorWriteEnable();
 }
 
+#if defined(USE_DX11)
+void CRenderTarget::phase_scene_begin_parallel(CBackend& cmd_list, bool velocity)
+{
+    if (!RImplementation.o.gbuffer_opt)
+    {
+        const ref_rt& third = RImplementation.o.albedo_wo ? rt_Accumulator : rt_Color;
+        u_setrt(cmd_list, rt_Position, rt_Normal, third, rt_MSAADepth);
+    }
+    else
+    {
+        // elocity: what phase_scene_begin decided; it clears them before this list runs.
+        const ref_rt& albedo = RImplementation.o.albedo_wo ? rt_Accumulator : rt_Color;
+        if (velocity)
+            u_setrt(cmd_list, rt_Position, albedo, rt_Velocity, rt_MSAADepth);
+        else
+            u_setrt(cmd_list, rt_Position, albedo, rt_MSAADepth);
+        cmd_list.xforms.m_motion_pass = velocity;
+    }
+    RImplementation.rmNormal(cmd_list);
+    cmd_list.set_Stencil(
+        TRUE, D3DCMP_ALWAYS, 0x01, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
+    cmd_list.set_CullMode(CULL_CCW);
+    cmd_list.set_ColorWriteEnable();
+}
+#endif
+
 void CRenderTarget::disable_aniso()
 {
     // Disable ANISO
@@ -92,6 +144,14 @@ void CRenderTarget::disable_aniso()
 void CRenderTarget::phase_scene_end()
 {
     disable_aniso();
+
+    // The motion vectors belong to the G-buffer alone: nothing drawn after it may land in them,
+    // and a target still bound reads as zeros to the passes that sample it.
+    if (RCache.xforms.m_motion_pass)
+    {
+        RCache.set_RT(nullptr, 2);
+        RCache.xforms.m_motion_pass = false;
+    }
 
     if (!RImplementation.o.albedo_wo)
         return;
@@ -108,8 +168,8 @@ void CRenderTarget::phase_scene_end()
     // common calc for quad-rendering
     u32 Offset;
     u32 C = color_rgba(255, 255, 255, 255);
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);

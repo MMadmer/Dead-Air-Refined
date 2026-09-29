@@ -1,14 +1,16 @@
 #include "common.h"
 
-// Camera-reprojection temporal AA (Dead Air x64). Not a full jittered TAA: there is no
-// per-object velocity and no projection jitter - this pass stabilises what the camera
-// motion aliases (grass shimmer, foliage crawl, spec sparkle) by blending the current
-// frame with the reprojected previous one under a neighbourhood clamp. Runs on the
-// tonemapped LDR frame after SMAA, so the history is LDR too.
+// Temporal AA (Dead Air x64). The scene is rendered through a projection jittered by a
+// sub-pixel Halton offset every frame (da_temporal.h), and this pass accumulates those
+// samples: the current frame is blended with the reprojected previous result under a
+// neighbourhood clamp. Runs on the tonemapped LDR frame after SMAA, so the history is LDR too.
 //
-// m_previous comes from the mblur block of phase_combine: previous-frame view-projection
-// composed with the CURRENT inverse view, i.e. it maps current view-space positions into
-// previous-frame clip space directly.
+// Reprojection: through the motion vectors of the velocity pass when they were made this
+// frame (they carry the camera, moving models, the HUD and the wind); otherwise through
+// m_previous from the mblur block of phase_combine - previous-frame view-projection composed
+// with the CURRENT inverse view, i.e. current view-space positions straight into the previous
+// frame's clip space. Both are unjittered; the G-buffer position already has the jitter taken
+// out (pos_decompression_params), so the jitter is added back to land on the history's grid.
 //
 // Two outputs: the frame the rest of the chain reads (RGBA8 rt_Generic) and the history
 // for the next frame (10-bit rt_taa_resolve). The history needs more than 8 bits: with
@@ -16,9 +18,14 @@
 // softness picked up while the camera moved never converged back once it stopped.
 
 Texture2D s_taa_history;
+// NDC(current) - NDC(previous), unjittered, y up (the velocity pass's target).
+Texture2D s_da_taa_velocity;
 
 uniform float4x4 m_taa_previous;
 uniform float4 screen_res;
+// x: 1 when the motion vectors were rendered this frame, y: 1 on a history reset (level load,
+// teleport, back from the menu), zw: this frame's jitter in uv, y down.
+uniform float4 da_taa_params;
 // Screen-space uv bbox (min.xy, max.xy) of the held 3D PDA. Its screen is a forward pass
 // with no G-buffer depth, so reprojection under it follows the BACKGROUND and smears the
 // display while moving. Inside the box the current frame passes through untouched. Empty
@@ -73,16 +80,56 @@ float3 taa_history(float2 uv)
     return max(c / wsum, 0.0);
 }
 
-taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Position)
+#ifdef XFR_WAVE_LANES
+// The 3x3 neighbourhoods of a 2x2 quad cover a 4x4 block: each lane loads the three texels past its
+// own on its outer side and takes the other five from the lanes beside it (dxc.md 6.4). Quad-uniform
+// control flow only: every lane of the quad must reach this call.
+void taa_moments(float2 tc, float2 pos2d, float3 current, out float3 m1, out float3 m2)
+{
+    const float2 o = float2((uint2(pos2d) & 1u) * 2u) - 1.0;
+    const float3 a = s_image.Sample(smp_nofilter, tc + float2(o.x, 0.0) * screen_res.zw).rgb;
+    const float3 b = s_image.Sample(smp_nofilter, tc + float2(0.0, o.y) * screen_res.zw).rgb;
+    const float3 d = s_image.Sample(smp_nofilter, tc + o * screen_res.zw).rgb;
+    const float3 n0 = QuadReadAcrossX(current), n1 = QuadReadAcrossX(b), n2 = QuadReadAcrossY(current),
+                 n3 = QuadReadAcrossY(a), n4 = QuadReadAcrossDiagonal(current);
+    m1 = current + a + b + d + n0 + n1 + n2 + n3 + n4;
+    m2 = current * current + a * a + b * b + d * d + n0 * n0 + n1 * n1 + n2 * n2 + n3 * n3 + n4 * n4;
+}
+#endif
+
+// Exactly what da_fullscreen.vs outputs, in its order: D3D12 refuses a pipeline whose pixel
+// shader asks for an input the vertex shader does not write.
+taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
 {
     gbuffer_data gbd = gbuffer_load_data(tc, pos2d.xy);
 
     float3 current = s_image.Sample(smp_nofilter, tc).rgb;
 
+    // What passes through untouched is taken back to the pixel's own centre: a jittered sample
+    // left as it is would shake the passed-through pixels by up to half a pixel every frame.
+    // Without jitter (zw = 0) this is the texel itself.
+    const float3 still = s_image.SampleLevel(smp_rtlinear, tc + da_taa_params.zw, 0).rgb;
+
+#ifdef XFR_WAVE_LANES
+    // The pass-through cases below, decided for the whole quad first: a quad with any pixel that
+    // blends takes its neighbourhood here, while all four lanes still run.
+    const bool pass = da_taa_params.y > 0.5 || gbd.P.z < 1.10 ||
+        (tc.x >= pda_taa_bbox.x && tc.y >= pda_taa_bbox.y && tc.x <= pda_taa_bbox.z && tc.y <= pda_taa_bbox.w);
+    const bool quad_blends = !pass || !QuadReadAcrossX(pass) || !QuadReadAcrossY(pass) || !QuadReadAcrossDiagonal(pass);
+    float3 m1 = current, m2 = current * current;
+    [branch]
+    if (quad_blends)
+        taa_moments(tc, pos2d.xy, current, m1, m2);
+#endif
+
+    [branch]
+    if (da_taa_params.y > 0.5)
+        return taa_write(still);
+
     [branch]
     if (tc.x >= pda_taa_bbox.x && tc.y >= pda_taa_bbox.y && tc.x <= pda_taa_bbox.z &&
         tc.y <= pda_taa_bbox.w)
-        return taa_write(current);
+        return taa_write(still);
 
     // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
     // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
@@ -96,15 +143,29 @@ taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Po
     // for a moment is invisible.
     [branch]
     if (gbd.P.z < 1.10)
-        return taa_write(current);
+        return taa_write(still);
 
-    // Reproject the view-space position into the previous frame.
-    float4 prev_clip = mul(m_taa_previous, float4(gbd.P, 1.0));
-    float2 prev_uv = (prev_clip.xy / prev_clip.w) * float2(0.5, -0.5) + 0.5;
+    float2 prev_uv;
+    bool behind = false;
+    [branch]
+    if (da_taa_params.x > 0.5)
+    {
+        // The motion vector of this pixel's surface: where it was, in the history's grid.
+        const float2 v = s_da_taa_velocity.SampleLevel(smp_nofilter, tc, 0).xy;
+        prev_uv = tc - v * float2(0.5, -0.5);
+    }
+    else
+    {
+        // Reproject the view-space position into the previous frame. The position is where
+        // the jittered sample landed; the history's grid is the pixel centres, jitter away.
+        float4 prev_clip = mul(m_taa_previous, float4(gbd.P, 1.0));
+        prev_uv = (prev_clip.xy / prev_clip.w) * float2(0.5, -0.5) + 0.5 + da_taa_params.zw;
+        behind = prev_clip.w <= 0.0;
+    }
 
     [branch]
-    if (prev_uv.x < 0.0 || prev_uv.x > 1.0 || prev_uv.y < 0.0 || prev_uv.y > 1.0 || prev_clip.w <= 0.0)
-        return taa_write(current);
+    if (prev_uv.x < 0.0 || prev_uv.x > 1.0 || prev_uv.y < 0.0 || prev_uv.y > 1.0 || behind)
+        return taa_write(still);
 
     float3 history = taa_history(prev_uv);
 
@@ -116,6 +177,7 @@ taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Po
     // back within a frame or two. Clipping toward the mean (uniform scale) instead of a
     // per-component clamp keeps the hue - corner-of-the-box clamping tints the ghost.
     // The same box also bounds the cubic's ringing at hard edges.
+#ifndef XFR_WAVE_LANES
     float3 m1 = current, m2 = current * current;
     [unroll]
     for (int dy = -1; dy <= 1; ++dy)
@@ -130,6 +192,7 @@ taa_out main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 pos2d : SV_Po
             m2 += n * n;
         }
     }
+#endif
     m1 /= 9.0;
     m2 /= 9.0;
     float3 sigma = sqrt(max(m2 - m1 * m1, 0.0));

@@ -2,6 +2,9 @@
 
 #include "xrEngine/CustomHUD.h"
 #include "xrCore/Threading/TaskManager.hpp"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -74,6 +77,12 @@ void CRender::Calculate()
 {
     ZoneScopedN("r2_calculate");
 
+#if RENDER == R_R4
+    // A changed r__gpu_driven moves the GPU-driven trees between the sector roots and their own list,
+    // before any view walks the graph.
+    da_gpu_trees_apply_switch();
+#endif
+
     // Transfer to global space to avoid deep pointer access
     //
     // The fov term keeps pixel coverage constant: a wider view makes everything smaller on
@@ -105,6 +114,16 @@ void CRender::Calculate()
 #endif
 
     if (m_bFirstFrameAfterReset)
+    {
+        // Nothing is drawn, but this frame's occlusion task is already running.
+        if (ProcessHOMTask)
+            TaskScheduler->Wait(*ProcessHOMTask);
+        ProcessHOMTask = nullptr;
+        return;
+    }
+
+    // Render draws no scene under such a menu and would never sync the rain and sun passes.
+    if (IMainMenu* menu = g_pGamePersistent->m_pMainMenu; menu && menu->CanSkipSceneRendering())
         return;
 
     auto& dsgraph_main = get_imm_context();
@@ -164,7 +183,10 @@ void CRender::Calculate()
         add_spatial_light(spatial);
     }
 
-    TaskScheduler->Wait(*ProcessHOMTask);
+    // Joined tasks are forgotten, so a later frame never waits on a recycled task slot.
+    if (ProcessHOMTask)
+        TaskScheduler->Wait(*ProcessHOMTask);
+    ProcessHOMTask = nullptr;
 
     // The first-person shadow caster is prepared before any graph is built: creating its model
     // and refreshing the actor's pose must stay on the main thread, outside the parallel passes.

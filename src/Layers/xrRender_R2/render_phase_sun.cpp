@@ -2,6 +2,10 @@
 
 #include "r2_R_sun_support.h"
 #include "xrCore/Threading/ParallelFor.hpp"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_grass_mesh.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -79,6 +83,14 @@ bool render_sun::cascade_cache_expired(u32 cascade_ind) const
 void render_sun::calculate()
 {
     ZoneScoped;
+
+    // The middle and far boxes are the quality preset's (xrRender_sync_preset_derived), read every
+    // frame so a console change shows at once; the near one keeps the 20 m set in init().
+    constexpr float fBias = -0.0000025f;
+    m_sun_cascades[1].size = ps_r__sun_cascade_mid;
+    m_sun_cascades[1].bias = m_sun_cascades[1].size * fBias;
+    m_sun_cascades[2].size = std::max(ps_r__sun_cascade_far, ps_r__sun_cascade_mid);
+    m_sun_cascades[2].bias = m_sun_cascades[2].size * fBias;
 
     need_to_render_sunshafts = RImplementation.Target->need_to_render_sunshafts();
     last_cascade_chain_mode = m_sun_cascades[R__NUM_SUN_CASCADES - 1].reset_chain;
@@ -360,6 +372,10 @@ void render_sun::calculate()
                 dsgraph.o.xform = cull_xform[cascade_ind];
                 dsgraph.o.view_frustum = cull_frustum[cascade_ind];
                 dsgraph.o.view_pos = cull_COP[cascade_ind];
+#if RENDER == R_R4
+                // Ray traced sun shadows cover the static casters of the near and middle maps.
+                dsgraph.o.rt_skip_static = cascade_ind < 2 && da_rt_skip_static_casters();
+#endif
 
                 // Fill the database
                 dsgraph.build_subspace();
@@ -404,8 +420,12 @@ void render_sun::render()
             bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
             bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
                 !dsgraph.mapSorted.empty();
+            // Never into the far map: a blade there is a third of a metre of texel that the wind
+            // switches on and off, and the ground under it flickered. The middle box is sized to
+            // reach as far as grass casts (xrRender_sync_preset_derived).
             const bool renderDetails = ps_r_sun_details >= detail_shadow_medium &&
-                (cascade_ind == 0 || ps_r_sun_details >= detail_shadow_high) && RImplementation.Details &&
+                (cascade_ind == 0 || ps_r_sun_details >= detail_shadow_high) &&
+                cascade_ind + 1 < R__NUM_SUN_CASCADES && RImplementation.Details &&
                 RImplementation.Details->HasRenderableDetails();
             if (bNormal || bSpecial || renderDetails)
             {
@@ -415,7 +435,15 @@ void render_sun::render()
                 dsgraph.cmd_list.set_xform_project(sun->X.D[cascade_ind].combine);
                 dsgraph.render_graph(0);
                 if (renderDetails)
+                {
+#if RENDER == R_R4
+                    da_grass_ab_cascade_begin(cascade_ind, dsgraph.cmd_list);
+#endif
                     RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
+#if RENDER == R_R4
+                    da_grass_ab_cascade_end(cascade_ind, dsgraph.cmd_list);
+#endif
+                }
                 sun->X.D[cascade_ind].transluent = FALSE;
                 if (bSpecial)
                 {
@@ -471,7 +499,7 @@ void render_sun::flush()
     // Restore XForms
     cmd_list_imm.set_xform_world(Fidentity);
     cmd_list_imm.set_xform_view(Device.mView);
-    cmd_list_imm.set_xform_project(Device.mProject);
+    cmd_list_imm.set_xform_project(da_jitter_project(Device.mProject));
 }
 
 void render_sun::accumulate_cascade(u32 cascade_ind)

@@ -8,6 +8,12 @@
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
+#if RENDER == R_R4
+#include "da_temporal.h"
+#include "Layers/xrRenderPC_R4/da_streamline.h"
+#include "Layers/xrRenderPC_R4/da_framegen.h"
+#include "Layers/xrRenderPC_R4/da_offload.h"
+#endif
 
 #if defined(XR_PLATFORM_WINDOWS) || defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_APPLE)
 #   ifndef MASTER_GOLD
@@ -368,9 +374,34 @@ void D3DXRenderBase::End()
     // we're done with rendering
     cleanup_contexts();
 
+#if RENDER == R_R4
+    // A frame nothing prepared (menu, loading screen) is shown without a generated one.
+    da_framegen_present();
+#endif
     HW.EndScene();
+#if RENDER == R_R4
+    OnFrameMarker(FrameMarker::PresentStart);
     HW.Present();
+    OnFrameMarker(FrameMarker::PresentEnd);
+#else
+    HW.Present();
+#endif
 }
+
+#if RENDER == R_R4
+void D3DXRenderBase::OnFrameMarker(FrameMarker marker)
+{
+    da_offload_frame_marker(marker);
+    da_streamline_frame_marker(marker);
+}
+
+// Once per frame, after the frame's work and before the engine's limiter.
+bool D3DXRenderBase::OwnFrameLimit(u32 fpsLimit)
+{
+    da_offload_frame_done();
+    return da_streamline_frame_limit(fpsLimit);
+}
+#endif
 
 void D3DXRenderBase::ResourcesDestroyNecessaryTextures()
 {
@@ -384,10 +415,15 @@ void D3DXRenderBase::ClearTarget()
 void D3DXRenderBase::SetCacheXform(Fmatrix& mView, Fmatrix& mProject)
 {
 #if RENDER == R_R4
+    // The scene is drawn through the jittered projection while TAA or an upscaler runs; the
+    // matrix the engine keeps (culling, cascades, gameplay) stays as it is.
+    const Fmatrix project = da_jitter_project(mProject);
     for (int id = 0; id < R__NUM_CONTEXTS; ++id)
     {
         contexts_pool[id].cmd_list.set_xform_view(mView);
-        contexts_pool[id].cmd_list.set_xform_project(mProject);
+        contexts_pool[id].cmd_list.set_xform_project(project);
+        // The motion vectors' view-projections, unjittered (da_temporal_frame_begin made them).
+        contexts_pool[id].cmd_list.xforms.set_VP_motion(da_vp_nojit(), da_vp_prev());
     }
 #else
     RCache.set_xform_view(mView);

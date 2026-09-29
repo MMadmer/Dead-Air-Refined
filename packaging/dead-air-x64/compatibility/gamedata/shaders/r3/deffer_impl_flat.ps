@@ -253,5 +253,7 @@ f_deffer 	main	( p_flat I 		)
 								float4 	(I.position.xyz + Ne.xyz*def_virtualh/2.h, 	ms			),	//
 								sat(float4(D.x,D.y,D.z,G*0.4),0.8));	// OUT: rgb.gloss
 
+	// Motion vector (da_velocity.h)
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
   return O;
 }

@@ -2,6 +2,9 @@ add_subdirectory(xrAPI)
 
 if (WIN32)
     add_subdirectory(xrRenderPC_R4)
+    # DirectX 12: the xrD3D12 library and the renderer module built on it from the R4 sources.
+    add_subdirectory(xrRenderDX12)
+    add_subdirectory(xrRenderPC_R5)
 endif()
 
 # The OpenGL renderer is removed from the build: only R4 is played and maintained, and

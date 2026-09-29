@@ -6,6 +6,7 @@
 #include "xrEngine/tntQAVI.h"
 #include "xrEngine/xrTheora_Surface.h"
 #include "StateManager/dx11ShaderResourceStateCache.h"
+#include "Layers/xrRenderPC_R4/da_dstorage.h"
 
 #define PRIORITY_HIGH 12
 #define PRIORITY_NORMAL 8
@@ -16,7 +17,18 @@ namespace xray::render::RENDER_NAMESPACE
 namespace
 {
 std::atomic<u32> textureSliceEpoch{ 1 };
+std::atomic<u32> liveTextures{ 0 };
+
+// Serialises finishing pending DirectStorage textures (the batch's last worker against a thread that
+// needs one of them first).
+std::mutex& ds_finish_lock()
+{
+    static std::mutex lock;
+    return lock;
 }
+}
+
+u32 da_texload_live_textures() { return liveTextures.load(std::memory_order_relaxed); }
 
 void resptrcode_texture::create(LPCSTR _name) { _set(RImplementation.Resources->_CreateTexture(_name)); }
 //////////////////////////////////////////////////////////////////////
@@ -24,6 +36,7 @@ void resptrcode_texture::create(LPCSTR _name) { _set(RImplementation.Resources->
 //////////////////////////////////////////////////////////////////////
 CTexture::CTexture()
 {
+    liveTextures.fetch_add(1, std::memory_order_relaxed);
     pSurface = NULL;
     m_pSRView = NULL;
     pAVI = NULL;
@@ -44,6 +57,7 @@ CTexture::~CTexture()
 
     // release external reference
     RImplementation.Resources->_DeleteTexture(this);
+    liveTextures.fetch_sub(1, std::memory_order_relaxed);
 }
 
 void CTexture::release_surface_views()
@@ -174,6 +188,8 @@ ID3DBaseTexture* CTexture::surface_get() const
     // Direct surface consumers need the same lazy residency guarantee as shader binding.
     if (!flags.bLoaded && Device.b_is_Ready)
         const_cast<CTexture*>(this)->Load();
+    else if (ds_pending())
+        const_cast<CTexture*>(this)->ds_finish();
 
     if (pSurface)
         pSurface->AddRef();
@@ -196,10 +212,33 @@ void CTexture::apply_load(CBackend& cmd_list, u32 dwStage)
 {
     if (!flags.bLoaded)
         Load();
-    else
+    else if (!ds_finish())
         PostLoad();
     bind(cmd_list, dwStage);
 };
+
+bool CTexture::ds_finish()
+{
+    if (!ds_pending())
+        return false;
+    std::lock_guard guard(ds_finish_lock());
+    DaDsTicket* ticket = ds_ticket.load(std::memory_order_acquire);
+    if (!ticket)
+        return true;
+    u32 mem = 0;
+    pSurface = da_dstorage_end(ticket, mem);
+    if (!pSurface)
+        pSurface = RImplementation.texture_load(cName.c_str(), mem);
+    if (pSurface)
+    {
+        flags.MemoryUsage = mem;
+        CHK_DX(HW.pDevice->CreateShaderResourceView(pSurface, NULL, &m_pSRView));
+    }
+    PostLoad();
+    // Cleared last: a thread that sees no ticket also sees the surface.
+    ds_ticket.store(nullptr, std::memory_order_release);
+    return true;
+}
 
 void CTexture::Apply(CBackend& cmd_list, u32 dwStage) const
 {
@@ -301,7 +340,7 @@ void CTexture::apply_seq(CBackend& cmd_list, u32 dwStage)
 {
     // SEQ
     u32 frame = Device.dwTimeContinual / seqMSPF; // Device.dwTimeGlobal
-    u32 frame_data = seqDATA.size();
+    const u32 frame_data = u32(seqDATA.size());
     if (flags.seqCycles)
     {
         u32 frame_id = frame % (frame_data * 2);
@@ -345,6 +384,8 @@ void CTexture::Preload()
 
 void CTexture::Load()
 {
+    if (ds_finish())
+        return;
     flags.bLoaded = true;
     desc_cache = 0;
     if (pSurface)
@@ -504,9 +545,20 @@ void CTexture::Load()
     }
     else
     {
-        // Normal texture
+        // Normal texture: DirectStorage when it takes it (a batch worker leaves it pending), else today's path.
         u32 mem = 0;
-        pSurface = RImplementation.texture_load(cName.c_str(), mem);
+        if (DaDsTicket* ticket = da_dstorage_begin(cName.c_str()))
+        {
+            if (da_dstorage_batch_thread())
+            {
+                ds_ticket.store(ticket, std::memory_order_release);
+                da_dstorage_batch_add(this);
+                return;
+            }
+            pSurface = da_dstorage_end(ticket, mem);
+        }
+        if (!pSurface)
+            pSurface = RImplementation.texture_load(cName.c_str(), mem);
 
         // Calc memory usage and preload into vid-mem
         if (pSurface)
@@ -529,6 +581,8 @@ void CTexture::Load()
 void CTexture::Unload()
 {
     ZoneScoped;
+    // DirectStorage must be done writing before the surface goes.
+    ds_finish();
 #ifdef DEBUG
     string_path msg_buff;
     xr_sprintf(msg_buff, sizeof(msg_buff), "* Unloading texture [%s] pSurface RefCount =", cName.c_str());

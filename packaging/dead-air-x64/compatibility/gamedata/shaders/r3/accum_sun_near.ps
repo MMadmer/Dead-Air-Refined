@@ -19,6 +19,7 @@
 
 #include "shadow.h"
 #include "da_sss.h"	// screen-space contact shadows, r__sss (off by default)
+#include "da_rt_consumer.h"	// ray traced sun shadow (DirectX 12, RTX)
 
 #ifdef USE_SUNFILTER
 #ifdef MSAA_OPTIMIZATION
@@ -41,6 +42,8 @@ float4 main ( v2p_volume I  ) : SV_Target
 	float4 PS = mul( m_shadow,  _P );
 
 	float s	= shadowtest_sun( PS, I.tcJ ) * sunmask( _P );
+	[branch] if ( da_rt.y > 0.5f )
+		s *= s_rt_sun.Load( int3( I.hpos.xy, 0 ) );
 
 	return s;
 }
@@ -81,6 +84,12 @@ float4 main ( v2p_volume I ) : SV_Target
 			s *= shadow( PS );
 #endif
 	#endif
+
+	// Ray traced sun shadow of the static world (dxr.md 3.5): while it runs, the near and middle
+	// maps no longer hold the static casters (vegetation, characters and moving objects stay in
+	// them and keep swaying), so the two multiply.
+	[branch] if ( da_rt.y > 0.5f )
+		s *= s_rt_sun.Load( int3( I.hpos.xy, 0 ) );
 
 	[branch] if (s <= 0.0f)
 		return 0.0f;

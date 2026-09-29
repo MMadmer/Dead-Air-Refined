@@ -33,6 +33,13 @@ public:
     void SetMaxAnisotropy(u32 uiMaxAniso);
     void SetMipLODBias(float uiMipLODBias);
 
+    // The 3D scene's own sampler variant while an upscaler renders it below the display size: the
+    // extra LOD bias on top of the global one, anisotropy at least minAniso. Every state gets a
+    // twin once (not per frame - the DX12 layer must not see states churn), and a context uses
+    // the twins while UseSceneBias is on for it. 0 and 0 drop the twins.
+    void SetSceneMipBias(float extraBias, u32 minAniso);
+    void UseSceneBias(u32 contextId, bool use);
+
 private:
     enum class ShaderStage : u32
     {
@@ -53,10 +60,12 @@ private:
         u32 m_crc;
         IDeviceState* m_pState;
         StateDecs m_desc;
+        IDeviceState* m_pSceneState; // the scene variant (SetSceneMipBias), null without one
     };
 
 private:
     void CreateState(StateDecs desc, IDeviceState** ppIState);
+    void CreateSceneState(StateRecord& rec);
     SHandle FindState(const StateDecs& desc, u32 StateCRC);
 
     u32 PrepareSamplerStates(
@@ -73,6 +82,9 @@ private:
 
     u32 m_uiMaxAnisotropy;
     float m_uiMipLODBias;
+    float m_fSceneMipBias{};
+    u32 m_uiSceneMinAniso{};
+    bool m_bSceneBias[R__NUM_CONTEXTS]{};
     u8 m_boundSamplerCounts[R__NUM_CONTEXTS][static_cast<u32>(ShaderStage::Count)]{};
     const HArray* m_boundSamplerArrays[R__NUM_CONTEXTS][static_cast<u32>(ShaderStage::Count)]{};
 };

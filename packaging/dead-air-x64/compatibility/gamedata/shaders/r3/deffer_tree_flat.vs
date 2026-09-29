@@ -2,6 +2,9 @@
 #include "tree_instance.h"
 #include "da_wind_field.h"
 #include "da_tree_bend.h"
+#ifdef DA_TREE_GD
+#include "da_gd_tree.h"
+#endif
 
 uniform float3x4 m_xform;
 uniform float3x4 m_xform_v;
@@ -9,8 +12,16 @@ uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
 uniform float4 c_sun;
 uniform float4 c_tree;
+// The previous frame's wind for the motion vectors: wave/wind as the frame before drew with
+// them, and this tree's previous state (tree_instance_prev has the layout).
+uniform float4 wind_prev, wave_prev;
+uniform float4 c_tree_prev;
 
-v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
+v2p_flat main(v_tree I, uint instance_id : SV_InstanceID
+#ifdef DA_TREE_GD
+    , uint gd_ref : GDREF
+#endif
+)
 {
     I.Nh = unpack_D3DCOLOR(I.Nh);
     I.T = unpack_D3DCOLOR(I.T);
@@ -22,6 +33,20 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     float4 local_c_bias = c_bias;
     float4 local_c_sun = c_sun;
     float4 local_c_tree = c_tree;
+    float4 local_c_prev = c_tree_prev;
+#ifdef DA_TREE_GD
+    {
+        // GPU-driven trees: the instance's rows from the registry (da_gd_tree.h).
+        const da_gd_rows gd = da_gd_tree_rows(gd_ref);
+        local_xform = gd.xform;
+        local_xform_v = gd.xform_v;
+        local_c_scale = gd.c_scale;
+        local_c_bias = gd.c_bias;
+        local_c_sun = gd.c_sun;
+        local_c_tree = gd.c_tree;
+        local_c_prev = gd.c_prev;
+    }
+#else
     if (tree_instance_control.x > 0.5f)
     {
         local_xform = tree_instance_xform(instance_id);
@@ -30,7 +55,9 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
         local_c_bias = tree_instance_bias(instance_id);
         local_c_sun = tree_instance_sun(instance_id);
         local_c_tree = tree_instance_tree(instance_id);
+        local_c_prev = tree_instance_prev(instance_id);
     }
+#endif
 
     v2p_flat o;
     float3 pos = mul(local_xform, I.P);
@@ -46,6 +73,7 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     // the shadow. c_sun.z is the crown's CPU-integrated oscillator state, c_sun.w its
     // natural-frequency factor from the model's real height; the hash is the fallback for a
     // tree that carries neither.
+    const float freq_hash = 0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f);
     da_tree_bend_in bi;
     bi.pos = pos;
     bi.root = root3;
@@ -53,18 +81,34 @@ v2p_flat main(v_tree I, uint instance_id : SV_InstanceID)
     bi.tree_h = local_c_tree.x;
     bi.frac = frac;
     bi.q_state = local_c_sun.z;
-    bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
+    bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : freq_hash;
     bi.flex_gate = da_tree_row_gate(local_c_tree.w);
     float2 result = da_tree_bend(bi, wave, wind, float3(local_c_tree.yz, da_tree_row_valid(local_c_tree.w)));
 #ifdef USE_TREEWAVE
     result = 0;
 #endif
-    const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
-    float4 f_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);
+    float4 f_pos = da_tree_bent_pos(pos, H, result);
+
+    // The same bend under the previous frame's wind, only while motion vectors are rendered.
+    float4 f_pos_prev = f_pos;
+    [branch] if (da_wind_prev_on())
+    {
+        da_tree_bend_in bp = bi;
+        bp.q_state = local_c_prev.x;
+        bp.freq_k = local_c_prev.y > 0.01f ? local_c_prev.y : freq_hash;
+        float2 result_prev = da_tree_bend_ex(bp, wave_prev, wind_prev,
+            float3(local_c_prev.zw, da_tree_row_valid(local_c_tree.w)), da_wind_field_prev, true);
+#ifdef USE_TREEWAVE
+        result_prev = 0;
+#endif
+        f_pos_prev = da_tree_bent_pos(pos, H, result_prev);
+    }
 
     float3 Pe = mul(m_V, f_pos);
     float hemi = I.Nh.w * local_c_scale.w + local_c_bias.w;
     o.hpos = mul(m_VP, f_pos);
+    o.hpos_cur = mul(m_VP_nojit, f_pos);
+    o.hpos_prev = mul(m_VP_prev, f_pos_prev);
     o.N = mul((float3x3)local_xform_v, unpack_bx2(I.Nh));
     o.tcdh = float4((I.tc * consts).xyyy);
     o.position = float4(Pe, hemi);

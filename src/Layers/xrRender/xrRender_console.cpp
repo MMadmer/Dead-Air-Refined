@@ -25,6 +25,16 @@
 #   endif // MASTER_GOLD
 #endif // (RENDER == R_R3) || (RENDER == R_R4)
 
+#if RENDER == R_R4
+#include "Layers/xrRender/da_temporal.h"
+#include "Layers/xrRenderPC_R4/da_upscaler.h"
+#include "Layers/xrRenderPC_R4/da_native_selftest.h"
+#include "Layers/xrRenderPC_R4/da_async.h"
+#include "Layers/xrRenderPC_R4/da_vrs.h"
+#include "Layers/xrRenderPC_R4/da_grass_mesh.h"
+#include "Layers/xrRenderPC_R4/da_dstorage.h"
+#endif
+
 // How many of the eight wave rows the water shader evaluates - a quality tier, set from the
 // preset ladder below and overridable for the session from the console. Declared here rather
 // than defined with its neighbours (and outside the render namespace, or the extern would name
@@ -336,12 +346,135 @@ int ps_r__grass_shadow_dist = 40;
 // raises it on low tiers (fewer shaded foliage pixels).
 int ps_r__aref_quality = 128;
 // SMAA 1x in the FXAA slot of phase_combine (see phase_smaa): morphological AA over the
-// tonemapped LDR frame, three fullscreen passes + two RGBA8 targets. Preset-derived; the
+// tonemapped LDR frame, three fullscreen passes + two RGBA8 targets. Follows r__aa; the
 // console command overrides for the session only and supersedes r2_fxaa while on.
 int ps_r__smaa = 0;
-// Camera-reprojection TAA on top of SMAA (phase_taa): stabilises grass/foliage shimmer the
-// spatial pass cannot see. One fullscreen resolve + one RGBA8 history target.
+// Temporal AA on top of SMAA (phase_taa): a jittered projection resolved against the history,
+// reprojected through the motion vectors when they exist. Follows r__aa like the one above.
 int ps_r__taa = 0;
+// QA view of the motion vectors (phase_velocity_debug) over the finished frame; renders them
+// even when nothing temporal runs. Session only.
+int ps_r__motion_vectors = 0;
+// Anti-aliasing is the player's own setting since 1.5.0, no longer a step of the quality preset:
+// the persisted choice the three runtime switches above follow (xrRender_apply_aa). An upscaler
+// replaces it while one runs. Until a user.ltx carries it, it is what the player's preset gave
+// (FXAA on Minimum/Low, SMAA on Default/High, SMAA + TAA on Extreme) - SMAA on a fresh install,
+// whose preset is Default.
+constexpr u32 da_aa_unset = u32(-1);
+u32 ps_r__aa = da_aa_unset;
+const xr_token qaa_token[] =
+{
+    { "st_aa_off", 0 },
+    { "st_aa_fxaa", 1 },
+    { "st_aa_smaa", 2 },
+    { "st_aa_taa", 3 },
+    { nullptr, 0 }
+};
+// The upscalers, one row each and never both: the token value is the quality the backend gets.
+// They take effect on the renderer reset (vid_restart), which rebuilds the targets at the new
+// render size and the SDK context.
+u32 ps_r__fsr = 0;
+const xr_token qfsr_token[] =
+{
+    { "st_fsr_off", 0 },
+    { "st_fsr_native", 1 },
+    { "st_fsr_quality", 2 },
+    { "st_fsr_balanced", 3 },
+    { "st_fsr_performance", 4 },
+    { "st_fsr_ultra_performance", 5 },
+    { nullptr, 0 }
+};
+u32 ps_r__dlss = 0;
+const xr_token qdlss_token[] =
+{
+    { "st_dlss_off", 0 },
+    { "st_dlss_dlaa", 1 },
+    { "st_dlss_quality", 2 },
+    { "st_dlss_balanced", 3 },
+    { "st_dlss_performance", 4 },
+    { "st_dlss_ultra_performance", 5 },
+    { nullptr, 0 }
+};
+// What a DLSS row offers on an adapter that cannot run it: nothing but off.
+const xr_token qdlss_off_token[] =
+{
+    { "st_dlss_off", 0 },
+    { nullptr, 0 }
+};
+// Frame generation (DX12). Stored here; the frame generation stage reads it.
+u32 ps_r__framegen = 0;
+const xr_token qframegen_token[] =
+{
+    { "st_fg_off", 0 },
+    { "st_fg_fsr", 1 },
+    { "st_fg_dlss", 2 },
+    { "st_fg_dlss_x3", 3 },
+    { "st_fg_dlss_x4", 4 },
+    { nullptr, 0 }
+};
+// FSR's RCAS strength, and the post sharpening DLSS gets; 0 = none.
+float ps_r__upscale_sharpness = 0.3f;
+
+// DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6).
+// [dx12:dxc] begin variables
+int ps_r__dxc = 1;
+// [dx12:dxc] end variables
+// [dx12:async] begin variables
+u32 ps_r__async_compute = 1;
+const xr_token qasync_compute_token[] =
+{
+    { "st_async_off", 0 },
+    { "st_async_auto", 1 },
+    { "st_async_on", 2 },
+    { nullptr, 0 }
+};
+int ps_r__async_path = 0;
+// [dx12:async] end variables
+// [dx12:vrs] begin variables
+int ps_r__vrs = 0;
+int ps_r__vrs_override = -1;
+float ps_r__vrs_threshold = 1.f;
+int ps_r__vrs_force = 0;
+int ps_r__vrs_debug = 0;
+int ps_r__vrs_log = 0;
+// [dx12:vrs] end variables
+// [dx12:gd] begin variables
+// 0 CPU path, 1 GPU-driven (wind, cull and draw on the GPU), 2 QA: CPU cull, GPU draw (G1/G2 path),
+// -1 auto (da_offload.h), the default: the GPU path saves CPU time and costs GPU time, so it runs only
+// while the CPU is the frame's bottleneck (gpudriven.md 3.13).
+int ps_r__gpu_driven = -1;
+// [dx12:gd] end variables
+// [dx12:mesh] begin variables
+// Mesh-shader grass: 0 the vertex path, 1 mesh, -1 auto (the default, as r__gpu_driven): mesh grass cuts
+// the CPU grass work from 8.6 to 1.8 ms a frame on the foliage save and costs 0.4-0.6 ms of GPU (mesh.md).
+int ps_r__grass_mesh = -1;
+int ps_r__dbg_grass_ab = 0;
+// [dx12:mesh] end variables
+// [dx12:offload] begin variables
+float ps_r__offload_margin = 0.1f;
+float ps_r__offload_agree = 3.f;
+float ps_r__offload_dwell = 10.f;
+float ps_r__offload_recall = 120.f;
+float ps_r__offload_smooth = 1.f;
+float ps_r__offload_warmup = 30.f;
+// [dx12:offload] end variables
+// [dx12:ds] begin variables
+int ps_r__dstorage = 1;
+// [dx12:ds] end variables
+// [dx12:rt] begin variables
+int ps_r__rt_reflections = 0;
+int ps_r__rt_shadows = 0;
+int ps_r__rtao = 0;
+u32 ps_r__rt_quality = 1;
+const xr_token qrt_quality_token[] =
+{
+    { "st_rt_low", 0 },
+    { "st_rt_medium", 1 },
+    { "st_rt_high", 2 },
+    { nullptr, 0 }
+};
+int ps_r__rt_debug = 0;
+// [dx12:rt] end variables
 // Fade band width before that cut-off, metres; 0 = hard edge (stock). Blades lie down over
 // the band so their shadows shorten into nothing instead of popping at a moving circle.
 int ps_r__grass_shadow_fade = 10;
@@ -403,8 +536,11 @@ int ps_r__parallax_force = 1;
 int ps_r__parallax_debug = 0;
 // Distance (metres from camera) where the far sun shadow has fully dissolved into light.
 // Replaces the stock map-edge fade whose border MOVES with every camera turn (the
-// travelling shadow "wedge"). 140 completes before the 160 m far cascade edge.
+// travelling shadow "wedge"). The preset puts it at 7/8 of the far cascade box, before its edge.
 float ps_r__sun_shadow_fade = 140.f;
+// The middle and far sun cascade boxes, metres; the near one stays at 20. The preset's.
+float ps_r__sun_cascade_mid = 40.f;
+float ps_r__sun_cascade_far = 160.f;
 // Tint sun light per cascade (near=R, middle=G, far=B) to see cascade borders in place.
 int ps_r__dbg_sun_cascades = 0;
 // Particle effect draw distance, metres from the camera; 0 = no limit (stock). Culled
@@ -562,7 +698,9 @@ int ps_r2_technicolor = 0;
 int ps_r2_vignette = 0;
 BOOL ps_r2_filmgrain = FALSE;
 int ps_r2_reflections = 0;
-int ps_r2_lensdirt = 0;
+// The visor's dirt glowing round bright light. Not an option: it is on whenever a mask is up
+// (phase_combine gates it on the glass), and this only turns it off for the session.
+int ps_r2_lensdirt = 1;
 // Droplets on the visor. It is a user-facing checkbox (configs\ui\ui_mm_opt*.xml,
 // check_lenswater), so the preset only moves it when the player applies a preset - but the
 // stock default of 0 meant USE_LENS_WATER was not even compiled and every driver of it, the
@@ -709,6 +847,103 @@ public:
 
     void Save(IWriter*) override {}
 };
+
+#if RENDER == R_R4
+// r__aa: the persisted choice, applied to the passes at once (they switch live).
+class CCC_AA final : public CCC_Token
+{
+public:
+    CCC_AA(pcstr name, u32* target, const xr_token* tokens) : CCC_Token(name, target, tokens) {}
+
+    void Execute(pcstr args) override
+    {
+        const u32 before = *value;
+        CCC_Token::Execute(args);
+        xrRender_apply_aa();
+        if (*value != before)
+            da_history_request_reset("anti-aliasing changed");
+    }
+};
+
+// r__fsr / r__dlss: choosing one switches the other off. The new render size and SDK context
+// arrive with the renderer reset (vid_restart).
+class CCC_Upscaler final : public CCC_Token
+{
+    u32* other;
+    const bool dlss;
+
+public:
+    CCC_Upscaler(pcstr name, u32* target, const xr_token* tokens, u32* other_upscaler, bool is_dlss)
+        : CCC_Token(name, target, tokens), other(other_upscaler), dlss(is_dlss) {}
+
+    void Execute(pcstr args) override
+    {
+        const u32 before = *value;
+        CCC_Token::Execute(args);
+        if (*value)
+            *other = 0;
+        if (*value != before)
+            da_upscaler_settings_changed();
+    }
+
+    const xr_token* GetToken() noexcept override
+    {
+        // An adapter known not to run DLSS gets a row with off alone, so neither the menu nor a
+        // user.ltx line can select it.
+        if (dlss && da_upscaler_support(UpscalerKind::DLSS) == 0)
+            return qdlss_off_token;
+        return tokens;
+    }
+};
+
+// r__caps: what this adapter and module can do, for the options menu
+// (get_console():get_string("r__caps")). Read-only and never saved.
+class CCC_RenderCaps final : public IConsole_Command
+{
+public:
+    CCC_RenderCaps(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+
+    void Execute(pcstr) override
+    {
+        TStatus status;
+        GetStatus(status);
+        Msg("- %s %s", cName, status);
+    }
+
+    void GetStatus(TStatus& S) override
+    {
+        const UpscalerCaps caps = da_upscaler_caps();
+        // snprintf: a status that grew past TStatus is cut and reported once, never a crash.
+        const int length = std::snprintf(S, sizeof(TStatus),
+            "api=%u;dx12=%d;dlss=%d;dlssg=%d;dlssg_max=%u;fsr=%d;fsrfg=%d;hags=%d;rt=%d;rt_tier=%u;vrs_tier=%u;"
+            "vrs_tile=%u;vrs=%d;ms=%d;sm=%u;wave=%u;fp16=%d;eb=%d;acq=%d;dxc=%d;gd=%d;dstorage=%d",
+            caps.api, caps.dx12 ? 1 : 0, caps.dlss ? 1 : 0, caps.dlssg ? 1 : 0, caps.dlssg_max, caps.fsr ? 1 : 0,
+            caps.fsrfg ? 1 : 0, caps.hags ? 1 : 0, caps.rt ? 1 : 0, caps.rt_tier, caps.vrs_tier, caps.vrs_tile,
+            caps.vrs ? 1 : 0, caps.ms ? 1 : 0, caps.sm, caps.wave, caps.fp16 ? 1 : 0, caps.eb ? 1 : 0,
+            caps.acq ? 1 : 0, caps.dxc ? 1 : 0, caps.gd ? 1 : 0, caps.dstorage ? 1 : 0);
+        static bool reported = false;
+        if (length >= int(sizeof(TStatus)) && !reported)
+        {
+            reported = true;
+            Msg("! r__caps: the status needs %d characters, %u fit", length, u32(sizeof(TStatus) - 1));
+        }
+    }
+
+    void Save(IWriter*) override {}
+};
+
+// A QA command of a DirectX 12 feature: runs the feature's function, has no value, is never saved.
+class CCC_DaCall final : public IConsole_Command
+{
+    void (*m_call)();
+
+public:
+    CCC_DaCall(pcstr name, void (*call)()) : IConsole_Command(name), m_call(call) { bEmptyArgsHandled = true; }
+
+    void Execute(pcstr) override { m_call(); }
+    void Save(IWriter*) override {}
+};
+#endif // RENDER == R_R4
 
 class CCC_tf_Aniso : public CCC_Integer
 {
@@ -966,9 +1201,9 @@ void xrRender_sync_preset_derived()
     // step wide, so at 8 steps over 35 cm it is 4 cm of rough edge - Maximum halves it.
     static constexpr float sss_steps_by_preset[] = {8.f, 8.f, 8.f, 8.f, 16.f};
     // Water screen-space reflections ladder. The tier IS the reflection distance: REFL_RANGE in
-    // ogse_reflections.h cuts the reflection off past 100/140/180/220 metres of eye depth for
-    // tiers 1..4, and the sample count along the ray follows it (16/24/30/48) so the far end
-    // does not thin out. Reported from the field as reflections ending too close: the fourth
+    // ogse_reflections.h cuts the reflection off past 150/250/350/500 metres of eye depth for
+    // tiers 1..4 (100/140/180/220 before), and the sample count along the ray follows it
+    // (20/32/40/64) so the far end does not thin out. Reported from the field as reflections ending too close: the fourth
     // tier exists, the video menu offers it by name, and no preset ever selected it - Maximum
     // sat on the same 180 m as High. It has it now; Minimum stays on the plain cubemap.
     // A shader-options change, so it applies on renderer (re)start like the token itself.
@@ -1001,6 +1236,11 @@ void xrRender_sync_preset_derived()
     // Visor droplets: a post effect in the combine, so it joins at Default with the rest of the
     // post stack. It is a shader option (USE_LENS_WATER), so it lands on the vid restart.
     static constexpr int lenswater_by_preset[] = {0, 0, 1, 1, 1};
+    // Screen-space sun shafts (r2_sss_enable - not the contact shadows above): five full-screen
+    // passes. Measured on the rig at 1080p, Extreme: +0.63 ms median in the combine, which a
+    // weak card pays several times over, so they join at Default with the rest of the post
+    // stack. A shader option (USE_SSHAFTS), so it lands on the renderer (re)start.
+    static constexpr int sun_shafts_ss_by_preset[] = {0, 0, 1, 1, 1};
     // How wide the visor's drop field is. The height follows the screen's aspect, so this is the
     // resolution of the glass ITSELF, and it is what decides whether a drop can be a drop: across
     // the 12 cm of visor the screen spans a cell is 0.23 mm at 512 and 0.12 at 1024, so the
@@ -1023,66 +1263,88 @@ void xrRender_sync_preset_derived()
     // the distance below - arithmetic only, so every tier has them), 2 = plus a sky reflection
     // (the reflection pass without the depth march), 3 = the world ray-march while wet.
     static constexpr u32 puddles_by_preset[] = {1, 1, 2, 3, 3};
-    // Puddle draw distance ladder, metres: the mask and the reflection cost per covered pixel,
-    // and the far pixels are the cheap ones, so the top tiers see water to the tree line.
-    static constexpr int puddles_dist_by_preset[] = {15, 20, 30, 45, 60};
+    // Puddle draw distance ladder, metres, from the 20 every preset had: the mask and the
+    // reflection cost per covered pixel, and the far pixels are the cheap ones.
+    static constexpr int puddles_dist_by_preset[] = {20, 40, 60, 90, 120};
     // Grass density ladder (lower = denser: cell grid is iCeil(2/density)+1 squared). The flat
     // 0.6 left even Extreme with a 25-cell grid; IX-Ray runs 121 cells there. Default keeps a
     // near-stock look, the top presets grow the field. Applies on level (re)load (cache_Alloc).
     static constexpr float detail_density_by_preset[] = {0.6f, 0.6f, 0.5f, 0.35f, 0.25f};
-    // Grass draw radius ladder, metres. Was pinned at the stock 49 on every preset; the ceiling
-    // stays modest because slot count grows quadratically. Applies live (CCC recomputes dm_*).
-    static constexpr int detail_radius_by_preset[] = {49, 49, 60, 80, 100};
+    // Grass draw radius ladder, metres, from the stock 49 every preset had. Slot count grows with
+    // the square, so the top stops at 160 rather than the 200 some open worlds reach: 100 -> 160 m
+    // is +2.0 ms of frame at 1080p on Extreme, the whole price of the distance ladders - the rest
+    // of them measured inside the noise. Applies live (CCC recomputes dm_*).
+    static constexpr int detail_radius_by_preset[] = {49, 70, 100, 130, 160};
     // Wet-surface radius ladder, metres (r3_dynamic_wet_surfaces_far semantics). The pair of
     // console knobs existed but the shader hardcoded 5/20 - now that they are live, the far edge
     // rides the preset. Near stays at its 5 m default.
-    static constexpr float wet_far_by_preset[] = {20.f, 20.f, 25.f, 35.f, 50.f};
+    static constexpr float wet_far_by_preset[] = {20.f, 30.f, 45.f, 65.f, 90.f};
     // The rain occlusion map covers that radius: its resolution rides along so a roof edge
-    // stays a roof edge at fifty metres. Applied at start (the surface is created then).
-    static constexpr int wet_sm_res_by_preset[] = {256, 256, 512, 512, 1024};
+    // stays a roof edge at the far end. Applied at start (the surface is created then).
+    static constexpr int wet_sm_res_by_preset[] = {256, 512, 1024, 1024, 2048};
     // Alpha-ref ladder (donor rspec values with Default pinned to our historical 128): lower =
     // denser foliage silhouettes = more shaded pixels; Minimum/Low trim exactly there.
     static constexpr int aref_by_preset[] = {180, 160, 128, 110, 100};
-    // SMAA 1x from the Default preset up: better gradients than FXAA for ~3 cheap fullscreen
-    // passes.
-    static constexpr int smaa_by_preset[] = {0, 0, 1, 1, 1};
-    // FXAA underneath it, so the two cheapest presets are antialiased too - one fullscreen pass,
-    // which is what they can afford. phase_combine runs SMAA or FXAA, never both, so above them
-    // this is off rather than compiled in and never reached: the checkbox it replaces did
-    // nothing on three presets out of five, whichever way the player set it.
-    static constexpr int fxaa_by_preset[] = {1, 1, 0, 0, 0};
-    // Camera TAA only on the top preset: it trades a touch of sharpness under motion for a
-    // stable field, which is an Extreme-tier call.
-    static constexpr int taa_by_preset[] = {0, 0, 0, 0, 1};
-    // Sun shadow-map size ladder - the single most expensive shadow knob was pinned at 2048
-    // on every preset ("presets or nothing" gap). Applies on renderer (re)start, since the
-    // How far the sun casts, metres: the far edge of the last cascade (r2_R_sun clamps it
-    // against the weather's own far_plane). Pinned at 100 on every preset, which is where the
-    // field report of shadows ending mid-view comes from - cloud shadows crossing a valley are
-    // the thing this cuts, and they are the whole point of having them move. The stock ceiling
-    // is 180 and it is what Maximum gets back; Default stays exactly where it is today, so
-    // nobody's frame rate moves without them asking for it. The cost lands on the FAR cascade -
-    // the same texels cover more ground - and the near cascade, which is what you look at, is
-    // untouched.
-    static constexpr float sun_far_by_preset[] = {60.f, 80.f, 100.f, 140.f, 180.f};
-    // How far grass casts into those cascades, metres. Also pinned - at 40 - so the top presets
-    // drew grass out to a hundred metres that stopped shadowing itself at forty. Grass is fed
-    // per blade into the near pass, so this is the one shadow distance that is genuinely
-    // expensive (the sibling measured 5.05 ms -> 2.42 ms cutting it back), and the ladder is
-    // correspondingly modest. Default keeps its 40.
-    static constexpr int grass_shadow_by_preset[] = {24, 32, 40, 56, 72};
-    // smap targets are created once. Default keeps the historical 2048 exactly.
-    // 4096 cascades cost ~3.5 ms more than 2048 in the sun pass at 1440p (rig, 3 cascades);
-    // 2048 on the top presets too: the clouds are where those milliseconds go now.
+    // Every distance below follows one rule: Minimum sits exactly where the distance was before it
+    // had a ladder - the value every preset used to share - and each preset above goes further,
+    // up to what current games ship: sun shadows to 200 m of cascades in Unreal's default, 500 m in
+    // Unity HDRP's, the horizon with virtual shadow maps; grass to 100-200 m in open worlds; wet
+    // ground, puddles and water reflections as far as the eye goes.
+    //
+    // How far the sun casts. The game runs the cascaded path (the shaders are cascade shaders -
+    // must_enable_old_cascades), where the reach is the far cascade's box and the distance fade
+    // inside it, and those were a fixed 160 m and 140 m on every preset; r2_sun_far only moves
+    // the old single-map path. The fade ends at 7/8 of the far box, where the tuned 140/160 pair
+    // had it. Measured at 1080p, Extreme: the longer boxes cost +0.1 ms in the sun pass, a 4096
+    // map on top of them +2.9 ms - so the maps stay as they were.
+    //
+    // The middle box is exactly as far as grass casts (grass_shadow_by_preset below), because grass
+    // shadows are drawn into the near and middle maps only. In the far map a texel is a third of a
+    // metre, a blade a few centimetres, and the wind moves it by less than a texel: the shadow
+    // there is a block that switches on and off, and a patch of ground at middle distance
+    // flickered in sun and wind - from 1.4.2, which sent grass shadows past the middle box.
+    static constexpr float sun_cascade_mid_by_preset[] = {40.f, 50.f, 60.f, 75.f, 95.f};
+    static constexpr float sun_cascade_far_by_preset[] = {160.f, 200.f, 240.f, 300.f, 360.f};
     static constexpr u32 smapsize_by_preset[] = {1024, 1536, 2048, 2048, 2048};
+    // The old single-map path (r2_shadow_cascede_old): its one far map, pinned at 100 before.
+    static constexpr float sun_far_by_preset[] = {100.f, 150.f, 200.f, 250.f, 350.f};
+    // How far grass casts into those cascades, metres. Pinned at 40 before. Grass is fed per blade
+    // into the near pass, so this is the one genuinely expensive shadow distance (the sibling
+    // measured 5.05 ms -> 2.42 ms cutting it back). Equal to the middle box above, rung for rung.
+    static constexpr int grass_shadow_by_preset[] = {40, 50, 60, 75, 95};
     // AO technique ladder. GTAO (ported from IX-Ray: 3-slice horizon integral plus a guided
     // filter) replaces the inline HDAO/HBAO on the two top presets; Default keeps the reference
     // inline SSAO, the two lowest presets keep AO off. Applied through the console command so
     // the R2FLAGEXT_SSAO_* side effects stay in CCC_SSAO_Mode.
     static constexpr pcstr ssao_mode_by_preset[] = {"disabled", "disabled", "default", "gtao", "gtao"};
+    // [dx12:vrs] begin preset
+    // Variable rate shading on DirectX 12, conservative on High and Extreme only: it pays where the
+    // frame is pixel-bound (Extreme 1440p +3.9 %) and costs its rate image on the light presets
+    // (Low aggressive -1.9 %, Default conservative -1 %; vrs.md, final test phase).
+    static constexpr int vrs_by_preset[] = {0, 0, 0, 1, 1};
+    // [dx12:vrs] end preset
+    // [dx12:mesh] begin preset
+    // The grass columns when mesh grass runs this session (mesh.md 3.9): the radius and density the
+    // same frame cost buys through mesh shaders, set by the mesh lane's ladder sweep (M10).
+    static constexpr int detail_radius_mesh_by_preset[] = {49, 70, 100, 130, 160};
+    static constexpr float detail_density_mesh_by_preset[] = {0.6f, 0.6f, 0.5f, 0.35f, 0.25f};
+    // [dx12:mesh] end preset
 
     if (ps_Preset >= std::size(budget_by_preset))
         return;
+
+#if RENDER == R_R4
+    const bool mesh_grass = da_grass_mesh_expected();
+#else
+    constexpr bool mesh_grass = false;
+#endif
+    const int detail_radius =
+        mesh_grass ? detail_radius_mesh_by_preset[ps_Preset] : detail_radius_by_preset[ps_Preset];
+    const float detail_density =
+        mesh_grass ? detail_density_mesh_by_preset[ps_Preset] : detail_density_by_preset[ps_Preset];
+    // [dx12:vrs] begin apply
+    ps_r__vrs = vrs_by_preset[ps_Preset];
+    // [dx12:vrs] end apply
 
     ps_r__light_shadow_budget = budget_by_preset[ps_Preset];
     ps_r__light_details = light_details_by_preset[ps_Preset];
@@ -1138,31 +1400,45 @@ void xrRender_sync_preset_derived()
     // dxRainRender scales this base by the r__rain_quality tier factor. A second table here
     // would apply the ladder twice, so what this heals is only a stale pinned count.
     ps_r__rain_drops = 6000;
-    ps_current_detail_density = detail_density_by_preset[ps_Preset];
+    ps_current_detail_density = detail_density;
     ps_r3_dyn_wet_surf_far = wet_far_by_preset[ps_Preset];
     ps_r3_dyn_wet_surf_sm_res = wet_sm_res_by_preset[ps_Preset];
     ps_r__aref_quality = aref_by_preset[ps_Preset];
-    ps_r__smaa = smaa_by_preset[ps_Preset];
-    ps_r2_fxaa = fxaa_by_preset[ps_Preset];
-    ps_r__taa = taa_by_preset[ps_Preset];
+    // Anti-aliasing is not the preset's: the replay only puts the passes back on the player's
+    // r__aa after a console session override.
+    xrRender_apply_aa();
     ps_r2_lenswater = lenswater_by_preset[ps_Preset];
+    ps_r2_sss_enable = sun_shafts_ss_by_preset[ps_Preset];
+    // The visor's dirt is a mask's, not a setting: a user.ltx line from when it was a checkbox
+    // must not keep it off.
+    ps_r2_lensdirt = 1;
     ps_r2_smapsize = smapsize_by_preset[ps_Preset];
     ps_r2_sun_far = sun_far_by_preset[ps_Preset];
+    ps_r__sun_cascade_mid = sun_cascade_mid_by_preset[ps_Preset];
+    ps_r__sun_cascade_far = sun_cascade_far_by_preset[ps_Preset];
+    ps_r__sun_shadow_fade = ps_r__sun_cascade_far * 0.875f;
     ps_r__grass_shadow_dist = grass_shadow_by_preset[ps_Preset];
 
     // The distances the preset just decided, in the log. Every report about something ending
     // too close - shadows, reflections, grass - is answered by these five numbers, and until
     // now answering it meant reading this function.
-    Msg("* [preset] %u: sun_far=%.0f m, grass_shadow=%d m, grass=%d m, refl_tier=%u, puddles=%d m",
-        ps_Preset, ps_r2_sun_far, ps_r__grass_shadow_dist, detail_radius_by_preset[ps_Preset],
-        ps_r_water_reflection, ps_r__puddles_dist);
+#if RENDER == R_R4
+    const int vrs_mode = da_vrs_preset_mode();
+#else
+    constexpr int vrs_mode = 0;
+#endif
+    Msg("* [preset] %u: sun shadows=%.0f m (cascades 20/%.0f/%.0f, map %u), grass_shadow=%d m, grass=%d m%s, "
+        "refl_tier=%u, puddles=%d m, wet=%.0f m, vrs=%d",
+        ps_Preset, ps_r__sun_shadow_fade, ps_r__sun_cascade_mid, ps_r__sun_cascade_far, ps_r2_smapsize,
+        ps_r__grass_shadow_dist, detail_radius, mesh_grass ? " (mesh)" : "", ps_r_water_reflection,
+        ps_r__puddles_dist, ps_r3_dyn_wet_surf_far, vrs_mode);
     string_path ssao_cmd;
     strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
     Console->Execute(ssao_cmd);
     // Radius goes through the console command so dm_current_size/dm_fade recompute exactly
     // the way a manual r__detail_radius change does.
     string32 radius_cmd;
-    xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius_by_preset[ps_Preset]);
+    xr_sprintf(radius_cmd, "r__detail_radius %d", detail_radius);
     Console->Execute(radius_cmd);
 
     // QA hook: an optional appdata\qa_autoexec.ltx executes AFTER the derived switches.
@@ -1204,6 +1480,19 @@ void xrRender_apply_preset()
     Console->Execute(cmd);
 
     xrRender_sync_preset_derived();
+}
+
+// r__aa onto the passes: TAA is SMAA plus the temporal resolve, as the old Extreme preset had it.
+void xrRender_apply_aa()
+{
+    if (ps_r__aa > 3)
+    {
+        static constexpr u32 aa_by_preset[] = {1, 1, 2, 2, 3};
+        ps_r__aa = aa_by_preset[std::min<u32>(ps_Preset, 4)];
+    }
+    ps_r2_fxaa = ps_r__aa == 1 ? 1 : 0;
+    ps_r__smaa = ps_r__aa >= 2 ? 1 : 0;
+    ps_r__taa = ps_r__aa == 3 ? 1 : 0;
 }
 
 class CCC_Preset : public CCC_Token
@@ -1672,7 +1961,7 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_sun_tsm_bias", &ps_r2_sun_tsm_bias, -0.5, +0.5);
     CMD4(CCC_Float, "r2_sun_near", &ps_r2_sun_near, 1.f, 150.f); //AVO: extended from 50.f to 150.f
 #if RENDER != R_R1
-    CMD4(CCC_Float, "r2_sun_far", &ps_r2_sun_far, 51.f, 180.f);
+    CMD4(CCC_Float, "r2_sun_far", &ps_r2_sun_far, 51.f, 500.f);
 #endif
     CMD4(CCC_Float, "r2_sun_near_border", &ps_r2_sun_near_border, .5f, 1.0f);
     CMD4(CCC_Float, "r2_sun_depth_far_scale", &ps_r2_sun_depth_far_scale, 0.5, 1.5);
@@ -1747,7 +2036,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r2_vignette", &ps_r2_vignette, 0, 1);
     CMD4(CCC_Integer, "r2_filmgrain", &ps_r2_filmgrain, 0, 1);
     CMD4(CCC_Integer, "r2_reflections", &ps_r2_reflections, 0, 2);
-    CMD4(CCC_Integer, "r2_lensdirt", &ps_r2_lensdirt, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r2_lensdirt", &ps_r2_lensdirt, 0, 1);
     CMD4(CCC_Integer, "r2_lenswater", &ps_r2_lenswater, 0, 1);
     CMD4(CCC_Float, "r2_aberration_val", &ps_r2_aberration, 0.f, 1.f);
     CMD4(CCC_Float, "r2_aberration", &ps_r2_aberration, 0.f, 1.f);
@@ -1782,6 +2071,74 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__aref_quality", &ps_r__aref_quality, 64, 255);
     CMD4(CCC_RuntimeInteger, "r__smaa", &ps_r__smaa, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__taa", &ps_r__taa, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__motion_vectors", &ps_r__motion_vectors, 0, 1);
+#if RENDER == R_R4
+    // The same commands in both renderer modules: a combo bound to a command the running module
+    // lacks asserts, and user.ltx would drop the line at the next save.
+    CMD3(CCC_AA, "r__aa", &ps_r__aa, qaa_token);
+    {
+        static CCC_Upscaler fsr("r__fsr", &ps_r__fsr, qfsr_token, &ps_r__dlss, false);
+        Console->AddCommand(&fsr);
+        static CCC_Upscaler dlss("r__dlss", &ps_r__dlss, qdlss_token, &ps_r__fsr, true);
+        Console->AddCommand(&dlss);
+    }
+    CMD3(CCC_Token, "r__framegen", &ps_r__framegen, qframegen_token);
+    CMD4(CCC_Float, "r__upscale_sharpness", &ps_r__upscale_sharpness, 0.f, 1.f);
+    CMD1(CCC_RenderCaps, "r__caps");
+
+    // DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6): the same commands in both
+    // modules, so user.ltx keeps the DirectX 12 choices across a DirectX 11 session. Nothing here is
+    // written by a preset except r__vrs's ladder (xrRender_sync_preset_derived).
+    // [dx12:infra] begin commands
+    CMD2(CCC_DaCall, "r__native_selftest", &da_native_selftest_run);
+    // [dx12:infra] end commands
+    // [dx12:dxc] begin commands
+    CMD4(CCC_Integer, "r__dxc", &ps_r__dxc, 0, 1);
+    // [dx12:dxc] end commands
+    // [dx12:async] begin commands
+    CMD3(CCC_Token, "r__async_compute", &ps_r__async_compute, qasync_compute_token);
+    CMD4(CCC_RuntimeInteger, "r__async_path", &ps_r__async_path, 0, 3);
+    CMD2(CCC_DaCall, "r__async_verify", &da_async_verify_request);
+    // [dx12:async] end commands
+    // [dx12:vrs] begin commands
+    CMD4(CCC_RuntimeInteger, "r__vrs", &ps_r__vrs_override, -1, 2);
+    CMD4(CCC_RuntimeFloat, "r__vrs_threshold", &ps_r__vrs_threshold, 0.25f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__vrs_force", &ps_r__vrs_force, 0, 2);
+    CMD4(CCC_RuntimeInteger, "r__vrs_debug", &ps_r__vrs_debug, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__vrs_log", &ps_r__vrs_log, 0, 100000);
+    // QA: which passes may shade at a reduced rate, bit n = VrsPass n (da_vrs.h).
+    CMD4(CCC_RuntimeInteger, "r__vrs_passes", &ps_r__vrs_passes, 0, (1 << int(VrsPass::Count)) - 1);
+    // QA: scales the depth ratio a silhouette needs (k_jump, calibration).
+    CMD4(CCC_RuntimeFloat, "r__vrs_edge", &ps_r__vrs_edge, 0.25f, 4.f);
+    // [dx12:vrs] end commands
+    // [dx12:gd] begin commands
+    CMD4(CCC_RuntimeInteger, "r__gpu_driven", &ps_r__gpu_driven, -1, 2);
+    // [dx12:gd] end commands
+    // [dx12:mesh] begin commands
+    CMD4(CCC_RuntimeInteger, "r__grass_mesh", &ps_r__grass_mesh, -1, 1);
+    CMD2(CCC_DaCall, "r__grass_stats", &da_grass_mesh_stats);
+    CMD4(CCC_RuntimeInteger, "r__dbg_grass_ab", &ps_r__dbg_grass_ab, 0, 1);
+    // [dx12:mesh] end commands
+    // [dx12:offload] begin commands
+    CMD4(CCC_RuntimeFloat, "r__offload_margin", &ps_r__offload_margin, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__offload_agree", &ps_r__offload_agree, 0.f, 60.f);
+    CMD4(CCC_RuntimeFloat, "r__offload_dwell", &ps_r__offload_dwell, 0.f, 600.f);
+    CMD4(CCC_RuntimeFloat, "r__offload_recall", &ps_r__offload_recall, 0.f, 3600.f);
+    CMD4(CCC_RuntimeFloat, "r__offload_smooth", &ps_r__offload_smooth, 0.05f, 10.f);
+    CMD4(CCC_RuntimeFloat, "r__offload_warmup", &ps_r__offload_warmup, 0.f, 120.f);
+    // [dx12:offload] end commands
+    // [dx12:ds] begin commands
+    CMD4(CCC_Integer, "r__dstorage", &ps_r__dstorage, 0, 1);
+    CMD2(CCC_DaCall, "r__texload_stats", &da_dstorage_log_stats);
+    // [dx12:ds] end commands
+    // [dx12:rt] begin commands
+    CMD4(CCC_Integer, "r__rt_reflections", &ps_r__rt_reflections, 0, 1);
+    CMD4(CCC_Integer, "r__rt_shadows", &ps_r__rt_shadows, 0, 1);
+    CMD4(CCC_Integer, "r__rtao", &ps_r__rtao, 0, 1);
+    CMD3(CCC_Token, "r__rt_quality", &ps_r__rt_quality, qrt_quality_token);
+    CMD4(CCC_RuntimeInteger, "r__rt_debug", &ps_r__rt_debug, 0, 4);
+    // [dx12:rt] end commands
+#endif
 #if defined(USE_RENDERDOC)
     CMD1(CCC_RdocCapture, "rdoc_capture");
 #endif
@@ -1836,7 +2193,9 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__parallax_shadow_samples", &ps_r__parallax_shadow_samples, 2, 32);
     CMD4(CCC_Integer, "r__parallax_force", &ps_r__parallax_force, 0, 1);
     CMD4(CCC_Integer, "r__parallax_debug", &ps_r__parallax_debug, 0, 3);
-    CMD4(CCC_Float, "r__sun_shadow_fade", &ps_r__sun_shadow_fade, 20.f, 500.f);
+    CMD4(CCC_RuntimeFloat, "r__sun_shadow_fade", &ps_r__sun_shadow_fade, 20.f, 800.f);
+    CMD4(CCC_RuntimeFloat, "r__sun_cascade_mid", &ps_r__sun_cascade_mid, 20.f, 200.f);
+    CMD4(CCC_RuntimeFloat, "r__sun_cascade_far", &ps_r__sun_cascade_far, 60.f, 800.f);
     CMD4(CCC_Integer, "r__dbg_sun_cascades", &ps_r__dbg_sun_cascades, 0, 1);
     CMD4(CCC_Integer, "r__particle_dist", &ps_r__particle_dist, 0, 1000);
     CMD4(CCC_Float, "r__macro_var", &ps_r__macro_var, 0.f, 1.f);
@@ -1856,15 +2215,14 @@ void xrRender_initconsole()
     //CMD3(CCC_Mask, "r2_sun_shafts", &ps_r2_ls_flags, R2FLAG_SUN_SHAFTS);
     CMD3(CCC_Token, "r2_sun_shafts", &ps_r_sun_shafts, qsun_shafts_token);
     CMD4(CCC_Float, "r2_sun_shafts_value", &ps_r2_sun_shafts_value, 0.f, 0.4f);
-    CMD4(CCC_Integer, "r2_sss_enable", &ps_r2_sss_enable, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r2_sss_enable", &ps_r2_sss_enable, 0, 1);
     CMD4(CCC_Float, "r2_sss_intensity", &ps_r2_sss_intensity, 0.f, 2.f);
     CMD4(CCC_Float, "r2_sss_blend", &ps_r2_sss_blend, 0.01f, 1.f);
     CMD4(CCC_Float, "r2_sss_phase0", &ps_r2_sss_phase1, 0.01f, 0.2f);
     CMD4(CCC_Float, "r2_sss_phase1", &ps_r2_sss_phase1, 0.01f, 0.2f);
     CMD4(CCC_Float, "r2_sss_phase2", &ps_r2_sss_phase2, 0.01f, 0.2f);
     CMD4(CCC_Float, "r2_sss_radius", &ps_r2_sss_radius, 0.5f, 2.f);
-    // Runtime, like r__smaa beside it: antialiasing is the preset's call, and a line in user.ltx
-    // would be read before the renderer and overwritten by it anyway.
+    // Runtime, like r__smaa: the saved choice is r__aa, which these follow at every start.
     CMD4(CCC_RuntimeInteger, "r2_fxaa", &ps_r2_fxaa, 0, 1);
     CMD3(CCC_SSAO_Mode, "r2_ssao_mode", &ps_r_ssao_mode, qssao_mode_token);
     CMD3(CCC_Token, "r2_ssao", &ps_r_ssao, qssao_token);
@@ -1923,7 +2281,7 @@ void xrRender_initconsole()
     CMD1(CCC_VisorDropsStats, "r__visor_drops_stats");
     CMD4(CCC_Integer, "r__clouds_debug", &ps_r__clouds_debug, 0, 3);
     CMD4(CCC_Float, "r__clouds_temporal", &ps_r__clouds_temporal, 0.f, 0.95f);
-    CMD4(CCC_Integer, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
+    CMD4(CCC_RuntimeInteger, "r__gpu_log", &ps_r__gpu_log, 0, 100000);
     CMD4(CCC_Integer, "r__screenshot_every", &ps_r__screenshot_every, 0, 100000);
 
     //CMD3(CCC_Mask, "r2_sun_ignore_portals", &ps_r2_ls_flags, R2FLAG_SUN_IGNORE_PORTALS);

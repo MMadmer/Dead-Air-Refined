@@ -24,10 +24,13 @@ uniform float4		da_gamma;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Pixel
+// [DA_PORT] p_aa_AA, not the vertex INPUT v_aa_AA: its leading POSITIONT pushed every texcoord one
+// register past where stub_notransform_aa_AA.vs writes it, so D3D11 fed Tex0 from Tex2 and so on,
+// and DirectX 12 refuses the pipeline outright.
 #ifdef GBUFFER_OPTIMIZATION
-float4 main ( v_aa_AA I, float4 pos2d : SV_POSITION ) : SV_Target
+float4 main ( p_aa_AA I, float4 pos2d : SV_POSITION ) : SV_Target
 #else
-float4 main ( v_aa_AA I ) : SV_Target
+float4 main ( p_aa_AA I ) : SV_Target
 #endif
 {
 #ifdef GBUFFER_OPTIMIZATION

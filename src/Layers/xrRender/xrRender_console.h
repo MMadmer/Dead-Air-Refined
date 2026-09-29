@@ -131,6 +131,62 @@ extern ECORE_API int ps_r__grass_shadow_dist;
 extern ECORE_API int ps_r__aref_quality;
 extern ECORE_API int ps_r__smaa;
 extern ECORE_API int ps_r__taa;
+extern ECORE_API int ps_r__motion_vectors; // QA view of the motion vectors (phase_velocity_debug)
+// Anti-aliasing (r__aa), the upscalers (r__fsr / r__dlss, token value = quality, 0 = off), frame
+// generation (r__framegen) and the upscaler's sharpening - docs/dead-air/DX12_RENDERER.md, 2.
+extern ECORE_API u32 ps_r__aa;
+extern ECORE_API u32 ps_r__fsr;
+extern ECORE_API u32 ps_r__dlss;
+extern ECORE_API u32 ps_r__framegen;
+extern ECORE_API float ps_r__upscale_sharpness;
+
+// DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6), registered by both modules; each
+// lane changes only its own block.
+// [dx12:dxc] begin variables
+extern ECORE_API int ps_r__dxc; // r__dxc: engine shaders through DXC, next start
+// [dx12:dxc] end variables
+// [dx12:async] begin variables
+extern ECORE_API u32 ps_r__async_compute; // r__async_compute: 0 off, 1 auto, 2 on
+extern ECORE_API const xr_token qasync_compute_token[];
+extern ECORE_API int ps_r__async_path; // r__async_path: 0 the setting, 1 pixel, 2 inline, 3 async
+// [dx12:async] end variables
+// [dx12:vrs] begin variables
+extern ECORE_API int ps_r__vrs; // the preset's mode: 0 off, 1 conservative, 2 aggressive
+extern ECORE_API int ps_r__vrs_override; // r__vrs: -1 the preset, else the mode for the session
+extern ECORE_API float ps_r__vrs_threshold;
+extern ECORE_API int ps_r__vrs_force;
+extern ECORE_API int ps_r__vrs_debug;
+extern ECORE_API int ps_r__vrs_log;
+// [dx12:vrs] end variables
+// [dx12:gd] begin variables
+extern ECORE_API int ps_r__gpu_driven; // r__gpu_driven: the GPU-driven trees (-1 auto, 0 off, 1 on, 2 CPU cull)
+// [dx12:gd] end variables
+// [dx12:mesh] begin variables
+extern ECORE_API int ps_r__grass_mesh; // r__grass_mesh: mesh grass (-1 auto, 0 off, 1 on)
+extern ECORE_API int ps_r__dbg_grass_ab; // r__dbg_grass_ab: one A/B of the grass paths next frame
+// [dx12:mesh] end variables
+// [dx12:offload] begin variables
+// The auto value of r__gpu_driven and r__grass_mesh (da_offload.h): its thresholds.
+extern ECORE_API float ps_r__offload_margin; // how much slower the bottleneck side is, 0.1 = 10 %
+extern ECORE_API float ps_r__offload_agree; // seconds the verdict holds before a switch
+extern ECORE_API float ps_r__offload_dwell; // seconds a switch holds at least
+extern ECORE_API float ps_r__offload_recall; // seconds a path left stays remembered
+extern ECORE_API float ps_r__offload_smooth; // seconds of the timings' smoothing
+extern ECORE_API float ps_r__offload_warmup; // seconds of a level (or of a return to auto) not measured
+// [dx12:offload] end variables
+// [dx12:ds] begin variables
+extern ECORE_API int ps_r__dstorage; // r__dstorage: DirectStorage texture loading
+// [dx12:ds] end variables
+// [dx12:rt] begin variables
+// The RTX category of the Video tab: never written by a preset.
+extern ECORE_API int ps_r__rt_reflections;
+extern ECORE_API int ps_r__rt_shadows;
+extern ECORE_API int ps_r__rtao;
+extern ECORE_API u32 ps_r__rt_quality; // 0 low, 1 medium, 2 high
+extern ECORE_API const xr_token qrt_quality_token[];
+extern ECORE_API int ps_r__rt_debug;
+// [dx12:rt] end variables
+
 extern ECORE_API int ps_r__grass_shadow_fade;
 // The fluid campfire (CDaFireEffect over the 3D fluid grid): on/off, and the distance within
 // which a fire is simulated rather than drawn as the procedural flame.
@@ -174,6 +230,8 @@ extern ECORE_API int ps_r__parallax_shadow_samples;
 extern ECORE_API int ps_r__parallax_force;
 extern ECORE_API int ps_r__parallax_debug;
 extern ECORE_API float ps_r__sun_shadow_fade;
+extern ECORE_API float ps_r__sun_cascade_mid;
+extern ECORE_API float ps_r__sun_cascade_far;
 extern ECORE_API int ps_r__dbg_sun_cascades;
 extern ECORE_API int ps_r__particle_dist;
 extern ECORE_API float ps_r__macro_var;
@@ -384,5 +442,7 @@ extern void xrRender_sync_preset_derived();
 // page shows nothing the preset owns, so nothing else can be the source of those values - and a
 // user.ltx line left over from a build whose menu did show them has to lose to the preset.
 extern void xrRender_apply_preset();
+// r__aa -> the runtime switches of the passes (r2_fxaa, r__smaa, r__taa).
+extern void xrRender_apply_aa();
 extern BOOL xrRender_test_hw();
 } // namespace xray::render::RENDER_NAMESPACE

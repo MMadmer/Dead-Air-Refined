@@ -263,14 +263,21 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		//	millimetres apart and they are all the smear has to show for itself.
 		const float2 fg = float2(-(tx1.y - tx0.y), (ty1.y - ty0.y)) * inv2mm;
 		const float2 foff = fg * (DA_VS_FILM_BEND * 0.004f);
-		const float3 through = da_visor_gather(img, saturate(uv + foff), 0.004f);
-		const float haze = smoothstep(DA_VS_FILM_ON, DA_VS_FILM_FULL, film) * DA_VS_FILM_HAZE;
+		//	img is the frame BEFORE the tone curve and scene is after it. The bend and the blur are
+		//	carried over as the ratio of the bent, blurred sample to the plain one, both taken from
+		//	img, so the finished pixel stays the base: returning the raw sample itself put an untoned
+		//	- darker - copy of the frame wherever there was any film at all, and a wiped visor showed
+		//	grey smears on a bright sky. The blur grows with the film, as a smear does.
+		const float thick = smoothstep(DA_VS_FILM_ON, DA_VS_FILM_FULL, film);
+		const float3 bent = da_visor_gather(img, saturate(uv + foff), 0.0005f + 0.005f * thick);
+		const float3 plain = img.SampleLevel(smp_rtlinear, uv, 0).rgb;
+		const float3 through = scene * clamp((bent + 1e-3f) / (plain + 1e-3f), 0.5f, 2.0f);
+		const float haze = thick * DA_VS_FILM_HAZE;
 		const float lum = dot(through, float3(0.30f, 0.59f, 0.11f));
-		//	Wet glass scatters forward: the blacks lift a little and the colour goes toward the sky
-		//	it is scattering, which is what a smeared visor looks like against a bright sky. Against
-		//	the sky itself it is nearly nothing, which is right - what shows a smear there is the
-		//	bend of its ridges, not a tint.
-		wiped = lerp(through, lerp(lerp(through, (float3)lum, 0.45f), sky, 0.20f) + 0.006f, haze);
+		//	Wet glass scatters forward: contrast drops, the blacks lift a little and the colour goes
+		//	grey. Against the sky itself it is nearly nothing, which is right - what shows a smear
+		//	there is the bend of its ridges, not a tint.
+		wiped = lerp(through, lerp(through, (float3)lum, 0.45f) * 0.92f + 0.04f, haze);
 	}
 
 	return lerp(wiped, drop, cov);

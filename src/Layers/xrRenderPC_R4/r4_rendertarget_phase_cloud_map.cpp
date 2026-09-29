@@ -57,7 +57,7 @@ void CRenderTarget::phase_cloud_map()
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
     // Back to the device-sized viewport for whatever renders next.
-    u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), nullptr, nullptr, get_base_zb());
+    u_setrt_scene_base(RCache);
 
     // The sun's column: the texel the camera-to-sun ray hits, copied to a staging texture and
     // read back a frame later (no stall), so the engine knows how much deck stands between the

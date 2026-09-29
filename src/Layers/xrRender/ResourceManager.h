@@ -15,6 +15,10 @@ namespace xray::render::RENDER_NAMESPACE
 {
 class dx11ConstantBuffer;
 
+// Engine-private shader flag (never reaches D3DCompile): compile with FXC even in a DXC session
+// (DXBC twins, dxc.md 3.6). The shader maps key such a shader with a "|fxc" suffix.
+constexpr u32 RSC_FXC = 1u << 31;
+
 // defs
 class ECORE_API CResourceManager
 {
@@ -87,6 +91,8 @@ private:
 
     xr_vector<SState*> v_states;
     xr_vector<SDeclaration*> v_declarations;
+    // [dx12:gd] begin members
+    // [dx12:gd] end members
     xr_vector<SGeometry*> v_geoms;
     xr_vector<R_constant_table*> v_constant_tables;
 
@@ -177,19 +183,19 @@ public:
     void _DeletePP(const SPP* p);
 #endif
 
-    SGS* _CreateGS(LPCSTR Name);
+    SGS* _CreateGS(LPCSTR Name, u32 flags = 0);
     void _DeleteGS(const SGS* GS);
 
-    SHS* _CreateHS(LPCSTR Name);
+    SHS* _CreateHS(LPCSTR Name, u32 flags = 0);
     void _DeleteHS(const SHS* HS);
 
-    SDS* _CreateDS(LPCSTR Name);
+    SDS* _CreateDS(LPCSTR Name, u32 flags = 0);
     void _DeleteDS(const SDS* DS);
 
-    SCS* _CreateCS(LPCSTR Name);
+    SCS* _CreateCS(LPCSTR Name, u32 flags = 0);
     void _DeleteCS(const SCS* CS);
 
-    SPS* _CreatePS(LPCSTR Name);
+    SPS* _CreatePS(LPCSTR Name, u32 flags = 0);
     void _DeletePS(const SPS* PS);
 
     SVS* _CreateVS(cpcstr shader, u32 flags = 0);
@@ -204,6 +210,14 @@ public:
 
     SDeclaration* _CreateDecl(const VertexElement* dcl);
     void _DeleteDecl(const SDeclaration* dcl);
+    // [dx12:gd] begin api
+#if defined(USE_DX11)
+    // The declaration of base plus one per-instance u32 GDREF in slot 1 (GPU-driven trees), and a
+    // geometry over it; cached like their plain counterparts.
+    SDeclaration* _CreateDeclGD(const SDeclaration* base);
+    SGeometry* CreateGeomGD(SDeclaration* dcl, VertexBufferHandle vb, IndexBufferHandle ib, u32 vb_stride);
+#endif
+    // [dx12:gd] end api
 
     STextureList* _CreateTextureList(STextureList& L);
     void _DeleteTextureList(const STextureList* L);

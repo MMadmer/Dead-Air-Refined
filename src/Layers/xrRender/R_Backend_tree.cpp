@@ -17,6 +17,9 @@ void R_tree::unmap()
     c_c_bias = nullptr;
     c_c_sun = nullptr;
     c_c_tree = nullptr;
+    c_wave_prev = nullptr;
+    c_wind_prev = nullptr;
+    c_c_tree_prev = nullptr;
 }
 
 void R_tree::set_m_xform_v(Fmatrix& mat)
@@ -71,5 +74,23 @@ void R_tree::set_c_tree(float x, float y, float z, float w)
 {
     if (c_c_tree)
         cmd_list.set_c(c_c_tree, x, y, z, w);
+}
+
+void R_tree::set_wave_prev(const Fvector4& vec)
+{
+    if (c_wave_prev)
+        cmd_list.set_c(c_wave_prev, vec);
+}
+
+void R_tree::set_wind_prev(const Fvector4& vec)
+{
+    if (c_wind_prev)
+        cmd_list.set_c(c_wind_prev, vec);
+}
+
+void R_tree::set_c_tree_prev(const Fvector4& vec)
+{
+    if (c_c_tree_prev)
+        cmd_list.set_c(c_c_tree_prev, vec);
 }
 } // namespace xray::render::RENDER_NAMESPACE

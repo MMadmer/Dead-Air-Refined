@@ -107,6 +107,8 @@ f_deffer 	main	( p_flat I )
 								float4	(D.rgb,											def_gloss),
 								mask );
 #endif
+	// Motion vector (da_velocity.h)
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
   return O;
 }
 

@@ -391,6 +391,8 @@ public:
 private:
 #if defined(USE_DX11)
     ICF void set_PS(ID3DPixelShader* _ps, LPCSTR _n = nullptr);
+    // True once after Invalidate for this stage bit: the set binds even when the cache matches.
+    ICF bool stage_forced(u8 stage);
 #elif defined(USE_OGL)
     ICF void set_PS(GLuint _ps, LPCSTR _n = 0);
 #else
@@ -561,6 +563,23 @@ public:
 #endif
     ICF void Render(D3DPRIMITIVETYPE T, u32 startV, u32 PC);
 
+    // DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.2).
+#ifdef USE_DX11
+    // The per-instance stream in IA slot 1 (null unbinds): cached like slot 0, forgotten by Invalidate.
+    void set_InstanceStream(ID3D11Buffer* buffer, u32 stride);
+    // maxCount indexed instanced triangle-list draws, 20-byte records of args from offset, with the
+    // draw prologue of RenderInstanced.
+    void RenderIndirect(ID3D11Buffer* args, u32 offset, u32 maxCount);
+#endif
+#if defined(XR_D3D12)
+    // The shading rate of the draws that follow: a D3D12_SHADING_RATE, the image combiner and the
+    // rate image (null = none). Cached per context, forgotten by Invalidate.
+    void set_ShadingRate(u8 base, u8 combiner, ID3D11Texture2D* image);
+    // A mesh-shader dispatch with the bound mesh (VS slot), amplification (GS slot) and pixel
+    // shaders; false = the layer refused the pipeline and the caller draws its vertex path.
+    bool RenderMesh(u32 x, u32 y, u32 z);
+#endif
+
     ICF void submit()
     {
 #ifdef USE_DX11
@@ -646,6 +665,20 @@ private:
 private:
     ID3DBlob* m_pInputSignature{ nullptr };
     bool m_bVSPositionOnly{ false };
+    ID3D11Buffer* m_instanceStream{};
+    u32 m_instanceStride{};
+#if defined(XR_D3D12)
+    ID3D11Texture2D* m_shadingRateImage{};
+    u8 m_shadingRateBase{};
+    u8 m_shadingRateCombiner{};
+    bool m_shadingRateValid{};
+    // Shader stages Invalidate left unknown: another backend (a pooled one recording on the immediate
+    // context) may have bound anything there, and the next set of a stage must reach the context.
+    u8 m_stagesUnknown{};
+    // The context pAnnotation marks: a pooled backend recording on the immediate context re-points it.
+    u32 m_annotationContext{ u32(-1) };
+    void rebind_annotation();
+#endif
     ID3DUserDefinedAnnotation* pAnnotation{ nullptr };
 
     bool m_bChangedRTorZB;

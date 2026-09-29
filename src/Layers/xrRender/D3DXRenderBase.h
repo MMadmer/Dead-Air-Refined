@@ -61,6 +61,10 @@ public:
     virtual void SetCacheXform(Fmatrix& mView, Fmatrix& mProject) override;
     virtual void OnAssetsChanged() override;
     virtual void DumpStatistics(class IGameFont& font, class IPerformanceAlert* alert) override;
+#if RENDER == R_R4
+    void OnFrameMarker(FrameMarker marker) override;
+    bool OwnFrameLimit(u32 fpsLimit) override;
+#endif
 
     xrImTextureData GetImGuiTextureId(pcstr texture_name) override;
 
@@ -84,6 +88,9 @@ public:
         // Backend invalidation is context-specific, so select the target before resetting its state.
         contexts_pool[id].cmd_list.context_id = alloc_cmd_list ? id : CHW::IMM_CTX_ID;
         contexts_pool[id].reset();
+        // A G-buffer pass on this context (the parallel grass) left it drawing motion vectors;
+        // shadow passes must not advance the skinned models' previous poses.
+        contexts_pool[id].cmd_list.xforms.m_motion_pass = false;
         contexts_pool[id].context_id = id;
         return id;
     }

@@ -1,0 +1,13 @@
+#include "common.h"
+
+// Motion vectors of the water surface: see da_water_velocity.vs.
+struct v2p
+{
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+};
+
+float2 main(v2p I) : SV_Target
+{
+	return da_velocity(I.hpos_cur, I.hpos_prev);
+}

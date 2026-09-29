@@ -12,6 +12,11 @@
 #include "Blender.h"
 #include "Blender_Recorder.h"
 
+#if defined(USE_DX11)
+#include "Layers/xrRenderPC_R4/da_dstorage.h"
+#endif
+
+#include <chrono>
 #include <condition_variable>
 #include <optional>
 
@@ -87,7 +92,7 @@ public:
             worker.join();
     }
 
-    void Start(xr_vector<CTexture*>&& batch, size_t requestedWorkers)
+    void Start(xr_vector<CTexture*>&& batch, size_t requestedWorkers, pcstr label)
     {
         std::unique_lock lock(mutex);
         VERIFY(!workersRemaining);
@@ -95,18 +100,36 @@ public:
         textures = std::move(batch);
         workerLimit = std::min(requestedWorkers, maximumWorkers);
         workersRemaining = workerLimit;
+        loopsRemaining.store(workerLimit, std::memory_order_relaxed);
         nextTexture.store(0, std::memory_order_relaxed);
+#if defined(USE_DX11)
+        da_texload_batch_begin(label, textures.size(), workerLimit);
+#else
+        UNUSED(label);
+#endif
         ++generation;
         workAvailable.notify_all();
     }
 
+    // The joining thread reports the batch ([texload] line) with how long it was blocked.
     void Wait()
     {
-        std::unique_lock lock(mutex);
-        if (!workersRemaining)
-            return;
-        completed.wait(lock, [this] { return !workersRemaining; });
-        textures.clear();
+        float waitedMs = 0.f;
+        {
+            std::unique_lock lock(mutex);
+            if (workersRemaining)
+            {
+                const auto started = std::chrono::steady_clock::now();
+                completed.wait(lock, [this] { return !workersRemaining; });
+                textures.clear();
+                waitedMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - started).count();
+            }
+        }
+#if defined(USE_DX11)
+        da_texload_batch_joined(waitedMs);
+#else
+        UNUSED(waitedMs);
+#endif
     }
 
     bool IsRunning()
@@ -115,15 +138,18 @@ public:
         return workersRemaining != 0;
     }
 
-    void Run(xr_vector<CTexture*>&& batch, size_t requestedWorkers)
+    void Run(xr_vector<CTexture*>&& batch, size_t requestedWorkers, pcstr label)
     {
-        Start(std::move(batch), requestedWorkers);
+        Start(std::move(batch), requestedWorkers, label);
         Wait();
     }
 
 private:
     void WorkerMain(size_t workerIndex)
     {
+#if defined(USE_DX11)
+        da_texload_batch_worker();
+#endif
         size_t observedGeneration{};
         for (;;)
         {
@@ -149,10 +175,20 @@ private:
             {
                 (*batch)[index]->Load();
             }
+#if defined(USE_DX11)
+            // The last worker out completes what DirectStorage still loads before the batch counts as done.
+            if (loopsRemaining.fetch_sub(1, std::memory_order_acq_rel) == 1)
+                da_dstorage_batch_complete();
+#endif
 
             lock.lock();
             if (!--workersRemaining)
+            {
+#if defined(USE_DX11)
+                da_texload_batch_end();
+#endif
                 completed.notify_one();
+            }
         }
     }
 
@@ -165,6 +201,7 @@ private:
     std::condition_variable completed;
     xr_vector<CTexture*> textures;
     std::atomic_size_t nextTexture{};
+    std::atomic_size_t loopsRemaining{};
     size_t workerLimit{};
     size_t workersRemaining{};
     size_t generation{};
@@ -562,7 +599,7 @@ void CResourceManager::BeginDeferredUpload()
 
     const size_t workerCount = texture_upload_worker_count(textures.size());
     Msg("* Early texture upload: %zu textures, %zu workers", textures.size(), workerCount);
-    uploadPool->Start(std::move(textures), workerCount);
+    uploadPool->Start(std::move(textures), workerCount, "early");
 #endif
 }
 
@@ -574,18 +611,22 @@ void CResourceManager::DeferredUpload()
     ZoneScoped;
 
 #if defined(USE_DX11)
+    const u64 uploadStart = da_texload_ticks();
     auto*& uploadPool = texture_upload_pool();
     if (!uploadPool)
         uploadPool = xr_new<TextureUploadPool>();
     uploadPool->Wait();
 
     auto textures = collect_unloaded_textures(m_textures);
-    if (textures.empty())
-        return;
-
-    const size_t workerCount = texture_upload_worker_count(textures.size());
-    Msg("* Final texture upload: %zu textures, %zu workers", textures.size(), workerCount);
-    uploadPool->Run(std::move(textures), workerCount);
+    if (!textures.empty())
+    {
+        const size_t workerCount = texture_upload_worker_count(textures.size());
+        Msg("* Final texture upload: %zu textures, %zu workers", textures.size(), workerCount);
+        uploadPool->Run(std::move(textures), workerCount, "final");
+    }
+    // The level's batches are resident; later loads are synchronous (the rest of the load, then play).
+    if (g_pGameLevel)
+        da_texload_game_begin(da_texload_ms_since(uploadStart));
 #elif defined(USE_OGL) // XXX: OGL: Set additional contexts for all worker threads?
     for (auto& texture : m_textures)
         texture.second->Load();
@@ -597,6 +638,7 @@ void CResourceManager::DeferredUpload()
 void CResourceManager::ShutdownTextureUploadPool()
 {
 #if defined(USE_DX11)
+    da_texload_game_end();
     auto*& uploadPool = texture_upload_pool();
     if (uploadPool)
         uploadPool->Wait();
@@ -628,6 +670,8 @@ void CResourceManager::DeferredUnload()
 void CResourceManager::BeginLevelTextureTracking()
 {
 #if defined(USE_DX11)
+    // A level load starts: the previous level's in-game numbers end here if its unload kept the textures.
+    da_texload_game_end();
     m_level_persistent_textures.clear();
 
     for (const auto& texture : m_textures)
@@ -641,6 +685,7 @@ void CResourceManager::BeginLevelTextureTracking()
 void CResourceManager::UnloadLevelTextures()
 {
 #if defined(USE_DX11)
+    da_texload_game_end();
     auto*& uploadPool = texture_upload_pool();
     if (uploadPool)
         uploadPool->Wait();

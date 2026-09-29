@@ -10,6 +10,14 @@
 #include <SDL_syswm.h>
 #include <d3d11sdklayers.h>
 
+#ifdef XR_D3D12
+#include "Layers/xrRenderDX12/d12_api.h"
+#endif
+#include "Layers/xrRenderPC_R4/da_streamline.h"
+#include "Layers/xrRenderPC_R4/da_native_caps.h"
+#include "Layers/xrRenderPC_R4/da_dxc.h"
+#include "Layers/xrRenderPC_R4/da_dstorage.h"
+
 extern ENGINE_API int g_pause_in_background;
 
 // Diagnostics (-dxdebug): validator message queue of the debug-layer device. Drained into
@@ -79,6 +87,10 @@ void dx11_debug_drain_messages(pcstr tag)
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#ifdef XR_D3D12
+void xrRender_d3d12_failed(); // r2_test_hw.cpp
+#endif
+
 CHW HW;
 
 CHW::CHW()
@@ -177,6 +189,52 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     Caps.id_vendor = Desc.VendorId;
     Caps.id_device = Desc.DeviceId;
 
+    // NVIDIA Streamline (DLSS, Reflex) is initialised before the device exists.
+    if (ThisInstanceIsGlobal())
+        da_streamline_init(m_pAdapter);
+
+#ifdef XR_D3D12
+    // Direct3D 12 through xrD3D12: the native device comes back behind the D3D11 interfaces the
+    // renderer is written against. -dxdebug: debug layer, -dx12gbv: GPU-based validation (slow),
+    // -dx12dred: DRED breadcrumbs and page fault data when the device is removed.
+    HRESULT R;
+    auto& pContext = d3d_contexts_pool[CHW::IMM_CTX_ID];
+    {
+        ZoneScopedN("CreateDevice");
+
+        // Pipeline state objects are compiled from the shaders' content; the library keeps them
+        // across runs next to the shader cache.
+        string_path pipelineCache;
+        FS.update_path(pipelineCache, "$app_data_root$", "shaders_cache_xfr" DELIMITER "r5" DELIMITER "pipelines.bin");
+        VerifyPath(pipelineCache);
+        wchar_t pipelineCacheW[sizeof(string_path)]{};
+        MultiByteToWideChar(CP_ACP, 0, pipelineCache, -1, pipelineCacheW, int(std::size(pipelineCacheW)));
+
+        xrd3d12::DeviceCreateInfo info;
+        info.adapter = m_pAdapter;
+        info.debugLayer = !!strstr(Core.Params, "-dxdebug");
+        info.gpuValidation = !!strstr(Core.Params, "-dx12gbv");
+        info.dred = !!strstr(Core.Params, "-dx12dred");
+        info.stats = !!strstr(Core.Params, "-dxstats");
+        info.gpuUploadHeaps = !strstr(Core.Params, "-dx12_no_rebar");
+        info.pipelineCachePath = ThisInstanceIsGlobal() ? pipelineCacheW : nullptr;
+        info.log = [](const char* line) { Msg("%s", line); };
+        if (ThisInstanceIsGlobal())
+        {
+            info.deviceCreated = &da_streamline_d3d12_device_created;
+            info.createQueue = &da_streamline_d3d12_create_queue;
+        }
+        // [dx12:infra] begin create-info
+        static_assert(DaNativeDisableRT == xrd3d12::NativeFeatureRaytracing && DaNativeDisableVRS == xrd3d12::NativeFeatureVrs &&
+                DaNativeDisableMS == xrd3d12::NativeFeatureMeshShaders &&
+                DaNativeDisableAsync == xrd3d12::NativeFeatureAsyncCompute && DaNativeDisableSM6 == xrd3d12::NativeFeatureSm6,
+            "the -dx12_no_* bits are the layer's NativeFeature bits");
+        info.disabledFeatures = da_native_disabled_features();
+        info.copyQueueUploads = !strstr(Core.Params, "-dx12_no_copy_queue");
+        // [dx12:infra] end create-info
+        R = xrd3d12::CreateDevice(info, &pDevice, &pContext, &FeatureLevel);
+    }
+#else
     u32 createDeviceFlags = 0;
 
 #ifdef DEBUG
@@ -253,11 +311,16 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
                 R = createDevice(featureLevels2, std::size(featureLevels2));
         }
     }
+#endif
 
     if (SUCCEEDED(R))
     {
+#ifndef XR_D3D12
         if (createDeviceFlags & D3D_CREATE_DEVICE_DEBUG)
             dx11_debug_bind_info_queue(pDevice);
+        if (ThisInstanceIsGlobal())
+            da_streamline_d3d11_device_created(pDevice);
+#endif
 
         pContext->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(&pContext1));
 #ifdef HAS_DX11_3
@@ -294,6 +357,17 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         DoublePrecisionFloatShaderOps = doubles.DoublePrecisionFloatShaderOps;
         SAD4ShaderInstructions = options.SAD4ShaderInstructions;
         ExtendedDoublesShaderInstructions = options.ExtendedDoublesShaderInstructions;
+
+        // The DirectX 12 capabilities, then the shader compiler that depends on them; the caps are
+        // read again for the shader model the loaded compiler targets.
+        if (ThisInstanceIsGlobal())
+        {
+            da_native_caps_on_device(pDevice);
+#ifdef XR_D3D12
+            da_dxc_init(pDevice);
+            da_native_caps_on_device(pDevice);
+#endif
+        }
     }
 
     if (FAILED(R))
@@ -301,6 +375,14 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         Valid = false;
         if (!ThisInstanceIsGlobal())
             return;
+#ifdef XR_D3D12
+        // The adapter passed the probe and still failed: the next start runs DirectX 11.
+        xrRender_d3d12_failed();
+        Msg("Failed to initialize DirectX 12.\n"
+            "The game will start with DirectX 11 next time.\n"
+            "CreateDevice returned 0x%08x", R);
+        xrDebug::DoExit("Failed to initialize DirectX 12.\nThe game will start with DirectX 11 next time.");
+#endif
         // Fatal error! Cannot create rendering device AT STARTUP !!!
         Msg("Failed to initialize graphics hardware.\n"
             "Please try to restart the game.\n"
@@ -310,6 +392,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     _SHOW_REF("* CREATE: DeviceREF:", pDevice);
 
+#ifndef XR_D3D12 // Tracy's D3D11 GPU zones need a real D3D11 device
     // Register immediate context in profiler
     if (ThisInstanceIsGlobal())
     {
@@ -319,6 +402,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
             profiler_ctx = TracyD3D11Context(pDevice, get_context(CHW::IMM_CTX_ID));
         });
     }
+#endif
 
     // Create deferred contexts
     if (ThisInstanceIsGlobal())
@@ -346,8 +430,20 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     if (!CreateSwapChain2(hwnd))
     {
+#ifdef XR_D3D12
+        // D3D12 has no legacy DXGI 1.1 swap chain to fall back to.
+        Valid = false;
+        if (ThisInstanceIsGlobal())
+        {
+            xrRender_d3d12_failed();
+            Log("Failed to create the DirectX 12 swap chain.\n"
+                "The game will start with DirectX 11 next time.");
+            xrDebug::DoExit("Failed to initialize DirectX 12.\nThe game will start with DirectX 11 next time.");
+        }
+#else
         if (!CreateSwapChain(hwnd))
             Valid = false;
+#endif
     }
 
     // Select depth-stencil format
@@ -432,6 +528,11 @@ bool CHW::CreateSwapChain(HWND hwnd)
     const auto hr = m_pFactory->CreateSwapChain(pDevice, &sd, &m_pSwapChain);
     if (FAILED(hr))
         return false;
+#ifndef XR_D3D12
+    // sl.common sees every present through Streamline's proxy of the chain.
+    if (ThisInstanceIsGlobal())
+        da_streamline_d3d11_swapchain_created(m_pSwapChain);
+#endif
 
     // sd already describes what was asked for, so a failed refresh is not fatal here.
     UpdateChainDesc();
@@ -460,8 +561,10 @@ bool CHW::UpdateChainDesc()
 
 bool CHW::CreateSwapChain2(HWND hwnd)
 {
+#ifndef XR_D3D12 // the only swap chain D3D12 has
     if (strstr(Core.Params, "-no_dx11_2"))
         return false;
+#endif
 
     ZoneScoped;
 
@@ -548,8 +651,15 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     }
 
     IDXGISwapChain1* swapchain{};
+#ifdef XR_D3D12
+    // The layer creates the chain on its command queue, always flip model: a copy-model
+    // description (exclusive fullscreen at creation, -no_flip) becomes FLIP_DISCARD there.
+    HRESULT result = xrd3d12::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
+        fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
+#else
     HRESULT result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
         fulldesc.Windowed ? nullptr : &fulldesc, nullptr, &swapchain);
+#endif
 
     if (FAILED(result) && flipModel)
     {
@@ -560,8 +670,13 @@ bool CHW::CreateSwapChain2(HWND hwnd)
         desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
         desc.BufferCount = 1;
         desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+#ifdef XR_D3D12
+        result = xrd3d12::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
+            fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
+#else
         result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
             fulldesc.Windowed ? nullptr : &fulldesc, nullptr, &swapchain);
+#endif
     }
 
     _RELEASE(pFactory2);
@@ -569,11 +684,29 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     if (FAILED(result))
         return false;
 
+#ifdef XR_D3D12
+    flipModel = true;
+#endif
     if (ThisInstanceIsGlobal())
         Msg("* Presentation: %s%s", flipModel ? "flip" : "copy (legacy)",
             m_tearingSupported ? ", tearing allowed" : "");
 
     m_pSwapChain = swapchain;
+
+    // sl.common sees every present only through Streamline: its proxy of the chain (DX11), or a
+    // chain made through its upgraded factory (DX12; frame generation swaps it again later).
+    if (ThisInstanceIsGlobal())
+    {
+#ifdef XR_D3D12
+        if (xrd3d12::SwapChainProvider* provider = da_streamline_swapchain_provider())
+        {
+            if (FAILED(xrd3d12::RecreateSwapChain(m_pSwapChain, provider)))
+                Msg("! [Streamline] the swap chain could not be made through Streamline: DLSS may leak memory");
+        }
+#else
+        da_streamline_d3d11_swapchain_created(m_pSwapChain);
+#endif
+    }
 
     m_pSwapChain->QueryInterface(__uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&m_pSwapChain2));
 
@@ -601,6 +734,15 @@ void CHW::DestroyDevice()
 {
     RestoreWindowProc();
     ReleaseBackgroundPreviewResources();
+
+    // DirectStorage drains its queues on the device, then Streamline goes before the swap chain and
+    // the device it was given.
+    if (ThisInstanceIsGlobal())
+    {
+        da_dxc_log_stats(); // [dx12:dxc] hook
+        da_dstorage_shutdown();
+        da_streamline_shutdown();
+    }
 
     if (ThisInstanceIsGlobal()) // only if we are global HW
     {
@@ -634,6 +776,8 @@ void CHW::DestroyDevice()
     _SHOW_REF("refCount:pDevice:", pDevice);
     _RELEASE(pDevice);
     DestroyD3D();
+    if (ThisInstanceIsGlobal())
+        da_streamline_device_released();
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -760,7 +904,9 @@ void CHW::Present()
 
     CurrentBackBuffer = (CurrentBackBuffer + 1) % BackBufferCount;
 
+#ifndef XR_D3D12
     TracyD3D11Collect(profiler_ctx);
+#endif
 }
 
 DeviceState CHW::GetDeviceState()
@@ -836,6 +982,8 @@ DeviceState CHW::GetDeviceState()
 LRESULT CALLBACK CHW::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result{};
+    if (HW.outputWindow == hwnd)
+        da_streamline_window_message(message);
     if (HW.outputWindow == hwnd && HW.HandleDwmMessage(message, lParam, result))
         return result;
 

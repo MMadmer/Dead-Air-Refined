@@ -3,6 +3,8 @@
 
 #include <DirectXTex.h>
 
+#include "Layers/xrRenderPC_R4/da_dstorage.h"
+
 namespace xray::render::RENDER_NAMESPACE
 {
 void fix_texture_name(pstr fn)
@@ -61,7 +63,7 @@ int get_texture_load_lod(LPCSTR fn)
 u32 calc_texture_size(int lod, u32 mip_cnt, size_t orig_size)
 {
     if (1 == mip_cnt)
-        return orig_size;
+        return u32(orig_size);
 
     int _lod = lod;
     float res = float(orig_size);
@@ -235,6 +237,70 @@ HRESULT create_texture_from_block_compressed_dds(
         loadedMipCount = outputMipCount;
     return createResult;
 }
+
+// Notes one texture_load in the [texload] numbers when it returns, whatever the path took.
+class TexloadProbe
+{
+public:
+    explicit TexloadProbe(ID3DBaseTexture* const& result) : m_result(result), m_start(da_texload_ticks()) {}
+    TexloadProbe(const TexloadProbe&) = delete;
+    TexloadProbe& operator=(const TexloadProbe&) = delete;
+
+    ~TexloadProbe()
+    {
+        sample.total_ms = da_texload_ms_since(m_start);
+        sample.error = !m_result;
+        da_texload_note(sample);
+    }
+
+    DaTexloadSample sample;
+
+private:
+    ID3DBaseTexture* const& m_result;
+    const u64 m_start;
+};
+}
+
+bool texture_resolve_name(pcstr fRName, string_path& fn, bool quiet)
+{
+    string_path fname;
+    xr_strcpy(fname, fRName);
+    fix_texture_name(fname);
+
+    const bool isBump = strstr(fname, "_bump");
+    if (isBump)
+    {
+        string_path gameTexturePath;
+        if (!FS.exist(gameTexturePath, "$game_textures$", fname, ".dds"))
+        {
+            if (quiet)
+                return false;
+            Msg("* Fallback to default bump map: %s", fname);
+            if (strstr(fname, "_bump#"))
+                R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return false);
+            else
+                R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump", ".dds"), return false);
+        }
+        else
+        {
+            if (!FS.exist(fn, "$level$", fname, ".dds") &&
+                !FS.exist(fn, "$game_saves$", fname, ".dds"))
+            {
+                xr_strcpy(fn, gameTexturePath);
+            }
+        }
+        return true;
+    }
+
+    for (cpcstr folder : { "$level$", "$game_saves$", "$game_textures$" })
+    {
+        if (FS.exist(fn, folder, fname, ".dds"))
+            return true;
+    }
+    if (quiet)
+        return false;
+    Msg("! Can't find texture '%s'", fname);
+    return FS.exist(fn, "$game_textures$", "ed\\ed_not_existing_texture", ".dds");
 }
 
 ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
@@ -243,59 +309,22 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
     R_ASSERT1_CURE(fRName && fRName[0], { return nullptr; });
 
     ID3DBaseTexture* pTexture2D{};
+    TexloadProbe probe(pTexture2D);
+    if (da_texload_take_fallback())
+        probe.sample.path = DaTexPath::DsFailed;
     string_path fn;
-    {
-        // make file name
-        string_path fname;
-        xr_strcpy(fname, fRName);
-        fix_texture_name(fname);
+    if (!texture_resolve_name(fRName, fn))
+        return nullptr;
 
-        const bool isBump = strstr(fname, "_bump");
-        if (isBump)
-        {
-            string_path gameTexturePath;
-            if (!FS.exist(gameTexturePath, "$game_textures$", fname, ".dds"))
-            {
-                Msg("* Fallback to default bump map: %s", fname);
-                if (strstr(fname, "_bump#"))
-                    R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump#", ".dds"), return nullptr);
-                else
-                    R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump", ".dds"), return nullptr);
-            }
-            else
-            {
-                if (!FS.exist(fn, "$level$", fname, ".dds") &&
-                    !FS.exist(fn, "$game_saves$", fname, ".dds"))
-                {
-                    xr_strcpy(fn, gameTexturePath);
-                }
-            }
-        }
-        else
-        {
-            bool exist = false;
-
-            for (cpcstr folder : { "$level$", "$game_saves$", "$game_textures$" })
-            {
-                exist = FS.exist(fn, folder, fname, ".dds");
-                if (exist)
-                    break;
-            }
-
-            if (!exist)
-            {
-                Msg("! Can't find texture '%s'", fname);
-                if (!FS.exist(fn, "$game_textures$", "ed\\ed_not_existing_texture", ".dds"))
-                    return nullptr;
-            }
-        }
-    }
-
-    // Load and get header
+    // Load and get header. Reading covers the archive open and an LZO inflate; a raw entry is paged in
+    // while the resource is created.
+    const u64 readStart = da_texload_ticks();
     IReader* S = FS.r_open(fn);
+    probe.sample.read_ms = da_texload_ms_since(readStart);
     R_ASSERT3_CURE(S, "Can't open texture", fn, { return nullptr; });
 
     size_t img_size = S->length();
+    probe.sample.bytes = img_size;
 #ifdef DEBUG
     Msg("* Loaded: %s[%zu]", fn, img_size);
 #endif // DEBUG
@@ -304,8 +333,10 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
     xr_strlwr(fn);
     const int img_loaded_lod = get_texture_load_lod(fn);
     size_t fastMipCount = 0;
+    const u64 fastStart = da_texload_ticks();
     auto fastResult = create_texture_from_block_compressed_dds(
         static_cast<const u8*>(S->pointer()), img_size, img_loaded_lod, &pTexture2D, fastMipCount);
+    probe.sample.create_ms = da_texload_ms_since(fastStart);
     if (SUCCEEDED(fastResult))
     {
         ret_msize = calc_texture_size(img_loaded_lod, static_cast<u32>(fastMipCount), img_size);
@@ -372,14 +403,16 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
             IMG.height = (IMG.height + 3u) & ~0x3u;
         }
 
+        const u64 createStart = da_texload_ticks();
         hresult = CreateTextureEx(HW.pDevice, texture.GetImages() + mip_lod, texture.GetImageCount(), IMG,
             D3D_USAGE_IMMUTABLE, D3D_BIND_SHADER_RESOURCE, 0, IMG.miscFlags, DirectX::CREATETEX_DEFAULT,
             &pTexture2D);
+        probe.sample.create_ms += da_texload_ms_since(createStart);
 
         if (SUCCEEDED(hresult))
         {
             // OK
-            ret_msize = calc_texture_size(img_loaded_lod, IMG.mipLevels, img_size);
+            ret_msize = calc_texture_size(img_loaded_lod, u32(IMG.mipLevels), img_size);
             break;
         }
 

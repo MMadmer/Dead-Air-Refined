@@ -89,13 +89,10 @@ void CRender::render_hud_shadow()
     hud_shadow_xform.mul(xf_project, Device.mInvView);
 
     // The HUD is rasterized through its own narrow projection, so its pixels have to be
-    // rebuilt with the HUD field of view. Same layout as the deferred decompression params.
+    // rebuilt with the HUD field of view. Same layout as the deferred decompression params
+    // (render size, the projection jitter folded in).
     const float hud_fov = psHUD_FOV * Device.fFOV;
-    const float VertTan = -1.0f * tanf(deg2rad(hud_fov / 2.0f));
-    const float HorzTan = -VertTan / Device.fASPECT;
-    Fvector4 hud_pos_decompress;
-    hud_pos_decompress.set(HorzTan, VertTan,
-        (2.0f * HorzTan) / float(Device.dwWidth), (2.0f * VertTan) / float(Device.dwHeight));
+    const Fvector4 hud_pos_decompress = da_pos_decompress(hud_fov);
 
     Target->set_hud_shadow_params(hud_shadow_xform, hud_pos_decompress);
 
@@ -144,7 +141,7 @@ void CRenderTarget::copy_depth_for_hud()
 {
     if (!ps_r__hud_shadow || !rt_depth_copy || RImplementation.o.msaa)
         return;
-    HW.get_context(RCache.context_id)->CopyResource(rt_depth_copy->pSurface, rt_Base_Depth->pSurface);
+    HW.get_context(RCache.context_id)->CopyResource(rt_depth_copy->pSurface, rt_Render_Depth->pSurface);
 }
 
 void CRenderTarget::phase_smap_hud(CBackend& cmd_list)
@@ -166,8 +163,8 @@ void CRenderTarget::phase_hud_shadow(CBackend& cmd_list)
     // on the weapon and leaves ambient, emissive and every local light untouched.
     u32 Offset;
     const u32 C = color_rgba(255, 255, 255, 255);
-    const float _w = float(Device.dwWidth);
-    const float _h = float(Device.dwHeight);
+    const float _w = float(Device.dwRenderWidth);
+    const float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);

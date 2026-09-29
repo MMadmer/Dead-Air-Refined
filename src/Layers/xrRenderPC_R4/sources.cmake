@@ -148,6 +148,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_combine.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_gtao.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_smaa.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_upscale.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_deffer_aref.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_deffer_flat.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_deffer_model.cpp"
@@ -189,6 +190,8 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender_R2/r3_R_rain.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender_R2/render_phase_sun.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender_R2/render_phase_sun_old.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender_R2/da_temporal.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_wind_history.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/dx11HDAOCSBlender.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/dx11MinMaxSMBlender.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_hud_shadow.cpp"
@@ -208,6 +211,54 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_gtao.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_smaa.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_taa.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_sky_water_velocity.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_upscale.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_upscaler.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_fsr_dx11.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_fsr_dx12.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_ffx_loader.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_framegen.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_framegen_fsr.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_streamline.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_dlss.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_framegen_dlss.cpp"
+    # DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.3): each lane adds late files inside
+    # its own block.
+    # [dx12:core] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_native_caps.cpp"
+    # [dx12:core] end sources
+    # [dx12:infra] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_native_selftest.cpp"
+    # [dx12:infra] end sources
+    # [dx12:dxc] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_dxc.cpp"
+    # [dx12:dxc] end sources
+    # [dx12:async] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_async.cpp"
+    # [dx12:async] end sources
+    # [dx12:vrs] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_vrs.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_vrs.cpp"
+    # [dx12:vrs] end sources
+    # [dx12:gd] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_gpu_trees.cpp"
+    # [dx12:gd] end sources
+    # [dx12:mesh] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/DetailManager_MS.cpp"
+    # [dx12:mesh] end sources
+    # [dx12:offload] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_offload.cpp"
+    # [dx12:offload] end sources
+    # [dx12:ds] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_dstorage.cpp"
+    # [dx12:ds] end sources
+    # [dx12:rt] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/da_rt.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_rt_device.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_rt_scene.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_rt_passes.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_rt.cpp"
+    # [dx12:rt] end sources
     "${CMAKE_CURRENT_LIST_DIR}/r4_shaders.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/R_Backend_LOD.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/stdafx.cpp"

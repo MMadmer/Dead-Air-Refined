@@ -41,13 +41,27 @@ dx11ConstantBuffer::dx11ConstantBuffer(u32 contextId, ID3DShaderReflectionConsta
         VERIFY(pVar);
         pType = pVar->GetType();
         VERIFY(pType);
-        pType->GetDesc(&m_MembersList[i]);
+        D3D_SHADER_TYPE_DESC type_desc;
+        CHK_DX(pType->GetDesc(&type_desc));
         //	Buffers with the same layout can contain totally different members
         CHK_DX(pVar->GetDesc(&var_desc));
         m_MembersNames[i] = var_desc.Name;
+        // Layout fields only: the type name pointer differs between two reflections of the same buffer
+        // (and the padding is undefined), which kept Similar() from ever sharing equal buffers. Offset
+        // holds the variable's place in the buffer (a type's own Offset is 0 outside structs, which
+        // constant buffers here never contain), so explicit packing cannot make two layouts look equal.
+        D3D_SHADER_TYPE_DESC& member = m_MembersList[i];
+        ZeroMemory(&member, sizeof(member));
+        member.Class = type_desc.Class;
+        member.Type = type_desc.Type;
+        member.Rows = type_desc.Rows;
+        member.Columns = type_desc.Columns;
+        member.Elements = type_desc.Elements;
+        member.Members = type_desc.Members;
+        member.Offset = var_desc.StartOffset;
     }
 
-    m_uiMembersCRC = crc32(&m_MembersList[0], Desc.Variables * sizeof(m_MembersList[0]));
+    m_uiMembersCRC = crc32(m_MembersList.data(), Desc.Variables * sizeof(D3D_SHADER_TYPE_DESC));
 
     R_CHK(BufferUtils::CreateConstantBuffer(&m_pBuffer, Desc.Size));
     VERIFY(m_pBuffer);
@@ -75,19 +89,21 @@ bool dx11ConstantBuffer::Similar(dx11ConstantBuffer& _in)
     if (m_eBufferType != _in.m_eBufferType)
         return false;
 
+    if (m_uiBufferSize != _in.m_uiBufferSize)
+        return false;
+
     if (m_uiMembersCRC != _in.m_uiMembersCRC)
         return false;
 
     if (m_MembersList.size() != _in.m_MembersList.size())
         return false;
 
-    if (memcmp(&m_MembersList[0], &_in.m_MembersList[0], m_MembersList.size() * sizeof(m_MembersList[0])))
+    if (memcmp(m_MembersList.data(), _in.m_MembersList.data(), m_MembersList.size() * sizeof(D3D_SHADER_TYPE_DESC)))
         return false;
 
     VERIFY(m_MembersNames.size() == _in.m_MembersNames.size());
 
-    int iMemberNum = m_MembersNames.size();
-    for (int i = 0; i < iMemberNum; ++i)
+    for (size_t i = 0; i < m_MembersNames.size(); ++i)
     {
         if (m_MembersNames[i].c_str() != _in.m_MembersNames[i].c_str())
             return false;

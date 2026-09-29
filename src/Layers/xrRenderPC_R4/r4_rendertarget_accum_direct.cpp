@@ -2,6 +2,8 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 
+#include "da_vrs.h"
+
 namespace xray::render::RENDER_NAMESPACE
 {
 //////////////////////////////////////////////////////////////////////////
@@ -77,8 +79,8 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
     // Common calc for quad-rendering
     u32 Offset;
     u32 C = color_rgba(255, 255, 255, 255);
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);
@@ -227,8 +229,8 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
 
         // Make jitter texture
         Fvector2 j0, j1;
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        // float	scale_Y				= float(Device.dwHeight)/ float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        // float	scale_Y				= float(Device.dwRenderHeight)/ float(TEX_jitter);
         float offset = (.5f / float(TEX_jitter));
         j0.set(offset, offset);
         j1.set(scale_X, scale_X).add(offset);
@@ -302,6 +304,7 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
         if (!RImplementation.o.msaa)
         {
             cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
+            da_vrs_scope vrs(cmd_list, VrsPass::SunLight);
             cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
         }
         else
@@ -347,7 +350,10 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
         //	Igor: draw volumetric here
         // if (ps_r2_ls_flags.test(R2FLAG_SUN_SHAFTS))
         if (RImplementation.o.advancedpp && (ps_r_sun_shafts > 0) && sub_phase == SE_SUN_FAR)
+        {
+            da_vrs_scope vrs(cmd_list, VrsPass::SunVolumetric);
             accum_direct_volumetric(cmd_list, sub_phase, Offset, m_shadow, 0, ps_r2_sun_far);
+        }
     }
 }
 
@@ -373,8 +379,8 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
     // Common calc for quad-rendering
     u32 Offset;
     u32 C = color_rgba(255, 255, 255, 255);
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);
@@ -529,13 +535,13 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
         m_Texgen.identity();
         cmd_list.xforms.set_W(m_Texgen);
         cmd_list.xforms.set_V(Device.mView);
-        cmd_list.xforms.set_P(Device.mProject);
+        cmd_list.xforms.set_P(da_jitter_project(Device.mProject));
         u_compute_texgen_screen(cmd_list, m_Texgen);
 
         // Make jitter texture
         Fvector2 j0, j1;
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        // float	scale_Y				= float(Device.dwHeight)/ float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        // float	scale_Y				= float(Device.dwRenderHeight)/ float(TEX_jitter);
         float offset = (.5f / float(TEX_jitter));
         j0.set(offset, offset);
         j1.set(scale_X, scale_X).add(offset);
@@ -693,6 +699,7 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
             // cmd_list.set_Stencil	(TRUE,D3DCMP_LESSEQUAL,dwLightMarkerID,0xff,0x00);
             cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, st_mask,
                 D3DSTENCILOP_KEEP, st_pass, D3DSTENCILOP_KEEP);
+            da_vrs_scope vrs(cmd_list, VrsPass::SunLight);
             cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, st_vertices, 0, st_primitives);
         }
         else
@@ -760,6 +767,7 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
         if (RImplementation.o.advancedpp && (ps_r_sun_shafts > 0) && sub_phase == SE_SUN_FAR)
         {
             const float max = RImplementation.r_sun.m_sun_cascades[R__NUM_SUN_CASCADES - 1].size;
+            da_vrs_scope vrs(cmd_list, VrsPass::SunVolumetric);
             accum_direct_volumetric(cmd_list, sub_phase, Offset, m_shadow, 0, max);
         }
     }
@@ -777,8 +785,8 @@ void CRenderTarget::accum_direct_blend(CBackend& cmd_list)
         // Common calc for quad-rendering
         u32 Offset;
         u32 C = color_rgba(255, 255, 255, 255);
-        float _w = float(Device.dwWidth);
-        float _h = float(Device.dwHeight);
+        float _w = float(Device.dwRenderWidth);
+        float _h = float(Device.dwRenderHeight);
         Fvector2 p0, p1;
         p0.set(.5f / _w, .5f / _h);
         p1.set((_w + .5f) / _w, (_h + .5f) / _h);
@@ -859,8 +867,8 @@ void CRenderTarget::accum_direct_f(CBackend& cmd_list, u32 sub_phase)
     // Common calc for quad-rendering
     u32 Offset;
     u32 C = color_rgba(255, 255, 255, 255);
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);
@@ -994,8 +1002,8 @@ void CRenderTarget::accum_direct_f(CBackend& cmd_list, u32 sub_phase)
 
         // Make jitter texture
         Fvector2 j0, j1;
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        // float	scale_Y				= float(Device.dwHeight)/ float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        // float	scale_Y				= float(Device.dwRenderHeight)/ float(TEX_jitter);
         float offset = (.5f / float(TEX_jitter));
         j0.set(offset, offset);
         j1.set(scale_X, scale_X).add(offset);
@@ -1031,6 +1039,7 @@ void CRenderTarget::accum_direct_f(CBackend& cmd_list, u32 sub_phase)
         {
             // setup stencil
             cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
+            da_vrs_scope vrs(cmd_list, VrsPass::SunLight);
             cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
         }
         else
@@ -1080,8 +1089,8 @@ void CRenderTarget::accum_direct_lum(CBackend& cmd_list)
     // Common calc for quad-rendering
     u32 Offset;
     // u32		C					= color_rgba	(255,255,255,255);
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     Fvector2 p0, p1;
     p0.set(.5f / _w, .5f / _h);
     p1.set((_w + .5f) / _w, (_h + .5f) / _h);
@@ -1105,8 +1114,8 @@ void CRenderTarget::accum_direct_lum(CBackend& cmd_list)
 
     // Make jitter texture
     Fvector2 j0, j1;
-    float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-    //		float	scale_Y				= float(Device.dwHeight)/ float(TEX_jitter);
+    float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+    //		float	scale_Y				= float(Device.dwRenderHeight)/ float(TEX_jitter);
     float offset = (.5f / float(TEX_jitter));
     j0.set(offset, offset);
     j1.set(scale_X, scale_X).add(offset);
@@ -1264,7 +1273,7 @@ void CRenderTarget::accum_direct_volumetric(CBackend& cmd_list, u32 sub_phase,
         m_Texgen.identity();
         cmd_list.xforms.set_W(m_Texgen);
         cmd_list.xforms.set_V(Device.mView);
-        cmd_list.xforms.set_P(Device.mProject);
+        cmd_list.xforms.set_P(da_jitter_project(Device.mProject));
         u_compute_texgen_screen(cmd_list, m_Texgen);
 
         cmd_list.set_c("m_texgen", m_Texgen);

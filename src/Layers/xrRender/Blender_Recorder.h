@@ -140,6 +140,10 @@ public:
         BOOL bZwrite = TRUE, BOOL bABlend = FALSE, D3DBLEND abSRC = D3DBLEND_ONE, D3DBLEND abDST = D3DBLEND_ZERO,
         BOOL aTest = FALSE, u32 aRef = 0);
     void r_ComputePass(LPCSTR cs);
+    // A pass whose stages differ in format (a shader DXC could not build went to FXC) gets DXBC twins
+    // of its DXIL stages (dxc.md 3.6). Runs before the stages' constants are merged; true when a
+    // stage was replaced. Passes with a mesh stage are left alone (their PS must be DXIL).
+    bool UnifyShaderFormats();
 #endif
     void r_Stencil(BOOL Enable, u32 Func = D3DCMP_ALWAYS, u32 Mask = 0x00, u32 WriteMask = 0x00,
         u32 Fail = D3DSTENCILOP_KEEP, u32 Pass = D3DSTENCILOP_KEEP, u32 ZFail = D3DSTENCILOP_KEEP);

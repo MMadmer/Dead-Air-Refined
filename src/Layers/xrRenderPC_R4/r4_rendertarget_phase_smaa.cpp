@@ -11,7 +11,7 @@ namespace xray::render::RENDER_NAMESPACE
 // Donor deviations, on purpose: no stencil "optimization" (theirs never ran - stencil ops
 // with no DSV bound), and rt_Generic instead of their rt_Generic_2 (ours is the live light
 // accumulator, FP16 and MSAA-sampled under MSAA).
-void CRenderTarget::phase_smaa()
+void CRenderTarget::phase_smaa(bool copy_back)
 {
     PIX_EVENT(phase_smaa);
 
@@ -50,11 +50,12 @@ void CRenderTarget::phase_smaa()
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
 
     // Pass 3: neighbourhood blending, resolved back into the frame like phase_fxaa
-    u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Base_Depth);
+    u_setrt(RCache, rt_Generic, nullptr, nullptr, rt_Render_Depth);
     fullscreen_quad();
     RCache.set_Element(s_smaa->E[2]);
     RCache.set_Geometry(g_combine);
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-    HW.get_context(RCache.context_id)->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
+    if (copy_back)
+        HW.get_context(RCache.context_id)->CopyResource(rt_Generic_0->pSurface, rt_Generic->pSurface);
 }
 } // namespace xray::render::RENDER_NAMESPACE

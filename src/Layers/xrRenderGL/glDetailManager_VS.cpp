@@ -28,7 +28,7 @@ void CDetailManager::hw_Load_Shaders()
     hwc_s_array = T1.get("array");
 }
 
-void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum)
+void CDetailManager::hw_Render(CBackend& cmd_list, const bool collectStats, const CFrustum* frustum, const u32 /*dumps*/)
 {
     using namespace detail_manager;
 

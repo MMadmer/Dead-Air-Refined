@@ -1,0 +1,13 @@
+#include "common.h"
+
+// The render-size scene depth brought to the display-size base depth, the nearest sample of it:
+// the lens flares, the bullet tracers and the UI are depth-tested against the base depth after
+// the upscale. Written with no depth test, so every pixel of the target gets it.
+Texture2D s_da_depth_render;
+
+float main(float2 tc : TEXCOORD0) : SV_Depth
+{
+	const int2 size = int2(pos_decompression_params2.xy);
+	const int2 p = min(int2(tc * pos_decompression_params2.xy), size - 1);
+	return s_da_depth_render.Load(int3(p, 0)).x;
+}

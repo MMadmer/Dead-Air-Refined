@@ -49,17 +49,20 @@ void CBlender_taa::Compile(CBlender_Compile& C)
     IBlender::Compile(C);
 
 #if RENDER == R_R4
-    switch (C.iElement)
+    // The resolve: current frame + reprojected history. Element = the frame (+2: SMAA's output in
+    // rt_Generic instead of generic0) + where the history is (+1: taa_resolve instead of
+    // taa_history): the two 10-bit targets take turns, the resolve writes the one not read.
+    if (C.iElement < 4)
     {
-    case 0: // resolve: current frame + reprojected history -> rt_Generic
         C.r_Pass("da_fullscreen", "da_taa", FALSE, FALSE, FALSE);
-        C.r_dx11Texture("s_image", r2_RT_generic0);
-        C.r_dx11Texture("s_taa_history", r2_RT_taa_history);
+        C.r_dx11Texture("s_image", (C.iElement & 2) ? r2_RT_generic : r2_RT_generic0);
+        C.r_dx11Texture("s_taa_history", (C.iElement & 1) ? r2_RT_taa_resolve : r2_RT_taa_history);
         C.r_dx11Texture("s_position", r2_RT_P);
+        // The motion vectors of the velocity pass (read only when they were made this frame).
+        C.r_dx11Texture("s_da_taa_velocity", "$user$velocity");
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
         C.r_End();
-        break;
     }
 #endif
 }

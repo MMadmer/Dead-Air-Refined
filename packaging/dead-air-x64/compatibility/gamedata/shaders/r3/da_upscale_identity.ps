@@ -1,0 +1,9 @@
+#include "common.h"
+
+// The identity upscaler (da_upscaler.cpp): the render-size scene stretched bilinearly into the
+// display-size output. Nothing is reconstructed - it proves the upscale slot without an SDK and
+// fills it when an upscaler fails - so the frame it reads is not jittered.
+float4 main(float2 tc : TEXCOORD0) : SV_Target
+{
+	return float4(s_image.SampleLevel(smp_rtlinear, tc, 0).rgb, 1.0);
+}

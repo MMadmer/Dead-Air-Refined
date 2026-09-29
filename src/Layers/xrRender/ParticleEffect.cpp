@@ -6,6 +6,9 @@
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/Environment.h"
 #include "xrCore/Threading/ParallelFor.hpp"
+#if RENDER == R_R4
+#include "da_temporal.h"
+#endif
 
 #ifndef _EDITOR
 #if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64) || defined(XR_ARCHITECTURE_E2K) || defined(XR_ARCHITECTURE_PPC64)
@@ -722,6 +725,10 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
                     hudProject.build_projection(
                         deg2rad(psHUD_FOV * Device.fFOV), Device.fASPECT, HUD_VIEWPORT_NEAR,
                         g_pGamePersistent->Environment().CurrentEnv.far_plane);
+#if RENDER == R_R4
+                    // Jittered like the rest of the scene the temporal pass resolves.
+                    hudProject = da_jitter_project(hudProject);
+#endif
 
                     Fmatrix hudFull;
                     hudFull.mul(hudProject, cmd_list.xforms.m_v);

@@ -376,7 +376,7 @@ void render_rain::flush()
     // Restore XForms
     cmd_list_imm.set_xform_world(Fidentity);
     cmd_list_imm.set_xform_view(Device.mView);
-    cmd_list_imm.set_xform_project(Device.mProject);
+    cmd_list_imm.set_xform_project(da_jitter_project(Device.mProject));
 
     // Accumulate
     PIX_EVENT_CTX(cmd_list_imm, RainApply);

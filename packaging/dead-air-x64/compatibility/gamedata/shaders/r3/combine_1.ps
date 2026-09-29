@@ -14,6 +14,7 @@ uniform	Texture2D					s_half_depth;
 // does not double its permutations. The forward passes include the same header, so the scene
 // and the water cannot converge to different densities or different colours again.
 #include "da_fog_common.h"
+#include "da_rt_consumer.h"	// ray traced occlusion (DirectX 12, RTX)
 
 //#include "ssao_blur.ps"
 
@@ -145,31 +146,41 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	float   occ = ssao_blur_ps( texCoord, ISAMPLE );
 #	endif*/
 
+	float occ;
+#ifdef SM_5
+	// Ray traced occlusion (dxr.md 3.6): traced, accumulated and guided-filtered into
+	// $user$ssao_temp ahead of this pass, in place of the preset's technique.
+	[branch] if ( da_rt.z > 0.5f )
+		occ = s_occ.Sample( smp_nofilter, I.tc0 ).x;
+	else
+#endif // SM_5
+	{
 #if defined(USE_GTAO) && defined(SM_5)
 	// GTAO mode: the occlusion was rendered and guided-filtered into $user$ssao_temp
 	// by phase_gtao before combine ran; nothing is computed inline here.
-	float occ = s_occ.Sample( smp_nofilter, I.tc0 ).x;
+	occ = s_occ.Sample( smp_nofilter, I.tc0 ).x;
 #elif defined(USE_HDAO)
 #ifdef SM_5
 #if SSAO_QUALITY > 3
-    float occ = s_occ.Sample( smp_nofilter, I.tc0);
+    occ = s_occ.Sample( smp_nofilter, I.tc0);
 #else // SSAO_QUALITY > 3
-	float occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+	occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #endif // SSAO_QUALITY > 3
 #else // SM_5
 #if SSAO_QUALITY > 3
-	float occ = calc_new_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+	occ = calc_new_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #else // SSAO_QUALITY > 3
-	float occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+	occ = calc_hdao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #endif // SSAO_QUALITY > 3
 #endif // SM_5
 #else // USE_HDAO
 #ifdef USE_HBAO
-	float occ = calc_hbao( P.z, N, I.tc0, I.pos2d );
+	occ = calc_hbao( P.z, N, I.tc0, I.pos2d );
 #else // USE_HBAO
-	float occ = calc_ssao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
+	occ = calc_ssao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #endif
 #endif // USE_HDAO
+	}
 	
 	hmodel	(hdiffuse, hspecular, mtl, N.w, D.w, P.xyz, N.xyz);
 //      hmodel		(hdiffuse, hspecular, mtl, 1, D.w, P.xyz, N.xyz);

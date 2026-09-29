@@ -13,6 +13,7 @@
 namespace xray::render::RENDER_NAMESPACE
 {
 shared_str s_bones_array_const;
+shared_str s_bones_array_prev_const; // the previous frame's palette, for motion vectors
 
 //////////////////////////////////////////////////////////////////////
 // Body Part
@@ -43,6 +44,15 @@ void CSkeletonX::_Copy(CSkeletonX* B)
 //////////////////////////////////////////////////////////////////////
 void CSkeletonX::_Render(CBackend& cmd_list, ref_geom& hGeom, u32 vCount, u32 iOffset, u32 pCount)
 {
+    // Motion vectors (shaders/r3/da_velocity.h): a model moves and deforms on its own, so while
+    // the main scene draws them it reports the world and the pose of its previous frame.
+    const bool motion = cmd_list.xforms.m_motion_pass && Parent;
+    if (motion)
+    {
+        Parent->motion_advance(cmd_list.xforms.m_w);
+        cmd_list.xforms.set_W_prev(Parent->motion_world_prev());
+    }
+
     cmd_list.stat.r.s_dynamic.add(vCount);
     switch (RenderMode)
     {
@@ -53,9 +63,18 @@ void CSkeletonX::_Render(CBackend& cmd_list, ref_geom& hGeom, u32 vCount, u32 iO
     case RM_SINGLE:
     case RM_SINGLE_HQ:
     {
+        const Fmatrix world_prev = cmd_list.xforms.m_w_prev;
         Fmatrix W;
         W.mul_43(cmd_list.xforms.m_w, Parent->LL_GetTransform_R(u16(RMS_boneid)));
         cmd_list.set_xform_world(W);
+        // The rigid part rides its bone: the previous world is the previous bone on the previous
+        // model world.
+        if (const Fmatrix* bones_prev = motion ? Parent->motion_bones_prev(RMS_boneid + 1u) : nullptr)
+        {
+            Fmatrix W_prev;
+            W_prev.mul_43(world_prev, bones_prev[RMS_boneid]);
+            cmd_list.xforms.set_W_prev(W_prev);
+        }
         cmd_list.set_Geometry(hGeom);
         cmd_list.Render(D3DPT_TRIANGLELIST, 0, 0, vCount, iOffset, pCount);
         cmd_list.stat.r.s_dynamic_inst.add(vCount);
@@ -80,6 +99,26 @@ void CSkeletonX::_Render(CBackend& cmd_list, ref_geom& hGeom, u32 vCount, u32 iO
             cmd_list.set_ca(&*array, id + 0, M._11, M._21, M._31, M._41);
             cmd_list.set_ca(&*array, id + 1, M._12, M._22, M._32, M._42);
             cmd_list.set_ca(&*array, id + 2, M._13, M._23, M._33, M._43);
+        }
+
+        // The same palette as it was on the previous frame (skin.h, skinning_prev_*). Only the
+        // G-buffer shaders carry the array, and only the main scene pass fills it.
+        if (motion)
+        {
+            if (ref_constant array_prev = cmd_list.get_c(s_bones_array_prev_const))
+            {
+                // Without a previous pose that covers these bones the current one stands in: the
+                // part then moves with its model alone, never with whatever was uploaded last.
+                const Fmatrix* bones_prev = Parent->motion_bones_prev(count);
+                for (u32 mid = 0; mid < count; mid++)
+                {
+                    const Fmatrix& M = bones_prev ? bones_prev[mid] : Parent->LL_GetTransform_R(u16(mid));
+                    const u32 id = mid * 3;
+                    cmd_list.set_ca(&*array_prev, id + 0, M._11, M._21, M._31, M._41);
+                    cmd_list.set_ca(&*array_prev, id + 1, M._12, M._22, M._32, M._42);
+                    cmd_list.set_ca(&*array_prev, id + 2, M._13, M._23, M._33, M._43);
+                }
+            }
         }
 
         // render
@@ -156,6 +195,7 @@ void CSkeletonX::_Render_soft(CBackend& cmd_list, ref_geom& hGeom, u32 vCount, u
 void CSkeletonX::_Load(const char* N, IReader* data, u32& dwVertCount)
 {
     s_bones_array_const = "sbones_array";
+    s_bones_array_prev_const = "sbones_array_prev";
     xr_vector<u16> bids;
 
     // Load vertices

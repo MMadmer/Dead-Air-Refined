@@ -7,6 +7,9 @@
 #if defined(USE_DX11)
 #include <DirectXMath.h>
 #endif
+#if defined(XR_D3D12)
+#include "Layers/xrRenderDX12/d12_api.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -80,6 +83,10 @@ void CBackend::Invalidate()
     ds = 0;
     cs = 0;
 #endif
+#if defined(XR_D3D12)
+    // DirectX 12 refuses a pipeline whose stages do not link, so a stage is never left to a stale bind.
+    m_stagesUnknown = 0x3f;
+#endif
     ctable = nullptr;
     lmaterial_base_constant = nullptr;
 
@@ -125,6 +132,12 @@ void CBackend::Invalidate()
     StateManager.Reset();
     SRVSManager.ResetDeviceState();
     SSManager.ResetContext(context_id);
+    // Unknown until set again: the next set_InstanceStream / set_ShadingRate always reaches the context.
+    m_instanceStream = nullptr;
+    m_instanceStride = u32(-1);
+#if defined(XR_D3D12)
+    m_shadingRateValid = false;
+#endif
 
     for (u32 gs_it = 0; gs_it < CTexture::mtMaxGeometryShaderTextures;)
         textures_gs[gs_it++] = 0;
@@ -154,6 +167,75 @@ void CBackend::Invalidate()
     last_texture_cs = -1;
 #endif
 }
+
+#if defined(USE_DX11)
+void CBackend::set_InstanceStream(ID3D11Buffer* buffer, u32 stride)
+{
+    if (buffer == m_instanceStream && stride == m_instanceStride)
+        return;
+    m_instanceStream = buffer;
+    m_instanceStride = stride;
+    const UINT offset = 0;
+    HW.get_context(context_id)->IASetVertexBuffers(1, 1, &buffer, &stride, &offset);
+}
+
+void CBackend::RenderIndirect(ID3D11Buffer* args, u32 offset, u32 maxCount)
+{
+    if (!args || !maxCount)
+        return;
+
+    D3D_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    if (hs || ds)
+        topology = D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST;
+
+    stat.render.calls += maxCount;
+
+    ApplyPrimitieTopology(topology);
+    SRVSManager.Apply(context_id);
+    ApplyRTandZB();
+    if (!ApplyVertexLayout())
+        return;
+    StateManager.Apply();
+    constants.flush();
+#if defined(XR_D3D12)
+    xrd3d12::DrawIndexedIndirectCount(HW.get_context(context_id), args, offset, maxCount, nullptr, 0);
+#else
+    // D3D11 has no draw count: one indirect draw per record.
+    constexpr u32 record_size = 5 * sizeof(u32);
+    auto* context = HW.get_context(context_id);
+    for (u32 i = 0; i < maxCount; ++i)
+        context->DrawIndexedInstancedIndirect(args, offset + i * record_size);
+#endif
+}
+#endif
+
+#if defined(XR_D3D12)
+void CBackend::set_ShadingRate(u8 base, u8 combiner, ID3D11Texture2D* image)
+{
+    if (m_shadingRateValid && base == m_shadingRateBase && combiner == m_shadingRateCombiner &&
+        image == m_shadingRateImage)
+    {
+        return;
+    }
+    m_shadingRateValid = true;
+    m_shadingRateBase = base;
+    m_shadingRateCombiner = combiner;
+    m_shadingRateImage = image;
+    xrd3d12::SetShadingRate(HW.get_context(context_id), D3D12_SHADING_RATE(base),
+        D3D12_SHADING_RATE_COMBINER_PASSTHROUGH, D3D12_SHADING_RATE_COMBINER(combiner), image);
+}
+
+bool CBackend::RenderMesh(u32 x, u32 y, u32 z)
+{
+    stat.render.calls++;
+    SRVSManager.Apply(context_id);
+    ApplyRTandZB();
+    StateManager.Apply();
+    //  State manager may alter constants
+    constants.flush();
+    return xrd3d12::DispatchMesh(HW.get_context(context_id), x, y, z);
+}
+#endif
 
 void CBackend::set_ClipPlanes(u32 _enable, Fplane* _planes /*=NULL */, u32 count /* =0*/)
 {
@@ -552,6 +634,9 @@ void CBackend::OnDeviceCreate()
 #if defined(USE_DX11)
     HW.get_context(context_id)->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), reinterpret_cast<void**>(&pAnnotation));
 #endif
+#if defined(XR_D3D12)
+    m_annotationContext = context_id;
+#endif
 
     // Debug Draw
     InitializeDebugDraw();
@@ -559,6 +644,17 @@ void CBackend::OnDeviceCreate()
     // invalidate caching
     Invalidate();
 }
+
+#if defined(XR_D3D12)
+// A pooled backend drawing on the immediate context (alloc_context(false)) marks that context: markers left
+// on its own deferred context would sit in a list nobody executes (and block an async job's recording).
+void CBackend::rebind_annotation()
+{
+    _RELEASE(pAnnotation);
+    HW.get_context(context_id)->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), reinterpret_cast<void**>(&pAnnotation));
+    m_annotationContext = context_id;
+}
+#endif
 
 void CBackend::OnDeviceDestroy()
 {

@@ -1,0 +1,263 @@
+#ifndef DA_WATER_RIPPLE_H
+#define DA_WATER_RIPPLE_H
+
+#include "common.h"
+#include "da_water_field.h"
+#include "da_water_rings.h"
+
+//	---- The ripple field: the real-space half of one fixed step -------------------------------
+//
+//	A 32 m window around the camera, snapped to whole texels, holding the surface height and
+//	vertical velocity of everything that has disturbed the water: bullets, blasts, feet, bodies,
+//	waders and - on the top tier - rain. water.ps and the puddles add its gradient to their
+//	surface slope; the analytic ring path (da_water_rings.h) covers only what the field cannot:
+//	rings born outside the window, and the stretch of a ring past its edge.
+//
+//	The wave motion itself is not solved here. This pass does what has to happen in real space -
+//	moves the field with the window, takes the losses at the window's rim and on dry ground,
+//	digs the sources in - and packs the result as one complex texture, height in the real part
+//	and velocity in the imaginary. Two FFT passes (da_ripple_fft.h) take it to Fourier space,
+//	da_ripple_propagate.cs advances every wavenumber by its own exact harmonic solution with the
+//	full dispersion relation of water (gravity, surface tension, depth), and two more bring it
+//	back: Tessendorf's eWave. A stencil solver has one speed for every wave it carries, and the
+//	two before this one - leapfrog at one speed, then at three - were a block moving as one
+//	crest or three; water is dispersive, a bullet's ring is a train whose long waves run out
+//	ahead of its short ones, and only the spectral solver draws that.
+//
+//	The field runs over the WHOLE window, dry ground included. A rain puddle is water too and
+//	its rings live in this field; the baked coverage decides only where the puddle's stronger
+//	losses apply. Rain is seeded only onto real water: a puddle's drops are rings of its own.
+//
+//	Three things about it are not free choices, each of them a known way this goes wrong:
+//	  * the step is FIXED and driven by an accumulator on the CPU - a step tied to the frame
+//	    time makes the ripple speed track the frame rate;
+//	  * the window is snapped to whole texels and the previous state is resampled at a WHOLE
+//	    texel offset, so nothing is ever filtered on the way in (a window that slides
+//	    continuously smears the field into mush - the open defect in OpenMW's version);
+//	  * the damping ramps over a fixed number of METRES at the rim, or every wave echoes off
+//	    the invisible window edge - and the Fourier solver's domain is periodic, so without the
+//	    rim a ring leaving one side would come back in from the other.
+//
+//	One body for the pixel pass (da_water_ripple.ps) and its compute version (da_water_ripple.cs,
+//	the DirectX 12 async path): both call da_water_ripple_pixel with the integer texel and write
+//	the same (height, velocity).
+//
+//	The state is read from "$user$water_ripple0" and this pass writes into the solver's first
+//	scratch buffer; the solver's last pass is copied back into that name, so every CONSUMER
+//	binds one fixed texture and reads the finished step.
+
+Texture2D s_water_ripple_prev;
+
+//	x = damping per step on dry ground (a puddle is centimetres deep and its bed takes the
+//	energy out fast), y = 0, z = texels across the window, w = the step counter - the clock the
+//	rain hash runs on, and the only thing that makes two consecutive steps differ.
+uniform float4 da_ripple_sim;
+//	xy = how far the window moved since the last step, in uv (a whole number of texels by
+//	construction), z = the chance a texel is hit by a drop this step, w = how deep that drop's
+//	crater is, in metres. zw are zero unless rain is running into the field.
+uniform float4 da_ripple_src;
+//	x = the fixed step in seconds, y = how long an impact's dimple is fed for, z = the same for a
+//	wader's push, w = the speed the CPU runs a slot's ring radius at - its clock. Every source
+//	below is a DEPTH in metres, not a rate, so it has to be spread over the steps that make it
+//	up - without that the dimple is dug once per step and a single bullet drives the whole
+//	field into its clamp in a tenth of a second.
+uniform float4 da_ripple_sim2;
+//	x = the absorbing rim in metres, y = metres per texel.
+uniform float4 da_ripple_sim3;
+
+//	Wading wakes, one per moving foot: pos rows are (xyz, the leg's radius), par rows (enveloped
+//	strength, the foot's velocity in world XZ, m/s). Pre-transposed on the CPU like the wind
+//	motors and the impact slots; info.x is the live count, so a dry world walks nothing.
+uniform float4x4 da_water_wake0;
+uniform float4x4 da_water_wake1;
+uniform float4x4 da_water_wakep0;
+uniform float4x4 da_water_wakep1;
+uniform float4 da_water_wakei;
+
+#define DA_RIP_EDGE_DAMP	0.92f	// damping at the very rim of the absorbing band
+//	The dimple an impact digs: this deep per metre of cavity radius, between the two limits. A
+//	bullet's 6 cm cavity is 9 cm deep - deeper than wide, as the cavity a round opens is - a
+//	blast's half metre a third of a metre. The cavity's radius is what sets the wavelengths the
+//	ring is made of and the spectral solver sorts them out from there; its depth is how much
+//	water the ring carries.
+#define DA_RIP_HIT_DEPTH	1.50f
+#define DA_RIP_HIT_MIN		0.05f
+#define DA_RIP_HIT_MAX		0.35f
+//	Metres per second the cavity's rim runs out at while the dimple is being fed. A splash is
+//	not a still dimple: the collapsing cavity throws its rim outward at a metre or two a second
+//	for the first tenth of a second, which is what makes a real ring start fast and only then
+//	settle to the speed of its waves.
+#define DA_RIP_RIM_SPEED	1.5f
+//	A leg moving through water is a travelling pressure footprint, and Bernoulli says what the
+//	surface does over one: the mean pressure coefficient round a cylinder is -1, so the water
+//	over the leg stands v^2 / 2g below the pond - five centimetres at a metre a second - and the
+//	trough goes with the leg. The solver makes everything else out of that: the bow wave ahead,
+//	the V of the wake behind, the ring a foot leaves when it stops and its trough springs back.
+//	The version before pushed a half-metre bump up and down at a made-up 1.7 Hz, and a bump that
+//	wide holds nothing at the wavelength that frequency radiates: it breathed and made no wave,
+//	which is what "no rings under my feet" was. The stepping is in the foot's own velocity now.
+//
+//	The footprint is a kinematic condition on BOTH state fields, as an obstruction is in eWave:
+//	the height is relaxed onto the trough and the vertical velocity onto the trough's own rate
+//	of change as it travels. Relaxing the height alone does not hold a trough on an oscillator
+//	- the solver answers every pull with velocity, and the rig showed a 3 mm dent carrying a
+//	fifth of a metre a second.
+#define DA_RIP_WAKE_MAX		0.05f	// metres: the deepest footprint, a fast wader shin-deep
+#define DA_RIP_WAKE_TAU		0.06f	// seconds the surface takes to settle onto the footprint
+#define DA_RIP_WAKE_VREF	0.30f	// m/s at which the footprint is fully enforced; a planted
+									// foot is left alone, so the waves may pass under it
+//	Metres. A stable field is centimetres, so this is a rail and not a range: if a frame ever
+//	pins against it something upstream is wrong.
+#define DA_RIP_CLAMP		0.50f
+
+//	Integer hash of a WORLD texel and the step number. World, not window: the window slides
+//	with the camera, and a hash keyed on window texels would drag the whole rain pattern along
+//	with the player. No texture - a drop field is one value per texel per step, which is
+//	cheaper to hash than to fetch.
+float da_rip_hash(int2 p, uint n)
+{
+	uint h = uint(p.x) * 73856093u ^ uint(p.y) * 19349663u ^ n * 83492791u;
+	h ^= h >> 13;
+	h *= 0x5bd1e995u;
+	h ^= h >> 15;
+	return float(h & 0x00ffffffu) * (1.0f / 16777216.0f);
+}
+
+float2 da_water_ripple_pixel(uint2 pix)
+{
+	//	The texel's centre from the integer texel, the same float operations in both stages.
+	const float2 tc0 = (float2(pix) + 0.5f) / da_ripple_sim.z;
+	const float win = da_water_rip.z;
+	const float texel_m = da_ripple_sim3.y;
+	const float2 wxz = da_water_rip.xy + (tc0 - 0.5f) * win;
+
+	//	A level whose bake produced nothing is one sheet of open water. On a baked level a texel
+	//	is either the water body or the ground beside it (a puddle), and both carry the field.
+	const bool has_field = da_water_map2.w > 0.5f;
+	const float4 wf = has_field ? da_wf_sample(wxz) : float4(0.0f, 1.0f, -1.0f, 0.0f);
+	const bool wet = wf.y > 0.5f;
+	const float surf = wet ? wf.x : 0.0f;
+
+	//	The previous state, read at the offset the window moved. Both centres are snapped, so
+	//	this lands exactly on a texel and the point sample is a copy, not a resample.
+	const float2 uv_s = tc0 + da_ripple_src.xy;
+	//	Water the window has only just swallowed has no history: start it flat instead of
+	//	dragging the clamped edge of the old field in behind the camera. What was rippling there
+	//	is the analytic path's to draw, and it knows (da_water_rings.h).
+	[branch]
+	if (uv_s.x < 0.0f || uv_s.x > 1.0f || uv_s.y < 0.0f || uv_s.y > 1.0f)
+		return 0.0f;
+
+	float2 state = s_water_ripple_prev.SampleLevel(smp_nofilter, uv_s, 0).rg;	// (height, velocity)
+
+	//	Losses that live in real space: the window's rim - not a wall in the world, and the
+	//	solver's domain wraps, so anything that reaches it has to be absorbed - and dry ground.
+	//	The water's own losses are in the solver, per wavelength.
+	const float2 d = min(tc0, 1.0f - tc0) * win;
+	const float edge = saturate(min(d.x, d.y) / max(da_ripple_sim3.x, 0.01f));
+	state *= lerp(DA_RIP_EDGE_DAMP, 1.0f, edge) * (wet ? 1.0f : da_ripple_sim.x);
+
+	//	---- Sources, in the same pass and straight out of the constants ------------------------
+	float inject = 0.0f;
+
+	//	Impacts. The slot carries an analytic ring front (radius = speed * age), and the solver
+	//	makes its own train out of a dimple - so the slot only feeds the dimple that STARTS the
+	//	ring and then gets out of the way. A slot with no crater is a ring the field never saw
+	//	born (outside the window): the analytic path draws that one, this pass leaves it alone.
+	const int wh_count = int(da_wh_info.x);
+	[loop]
+	for (int ri = 0; ri < wh_count; ++ri)
+	{
+		const float4 RP = (ri < 4) ? da_wh_pos0[min(ri, 3)] : da_wh_pos1[max(ri - 4, 0)];
+		const float4 RA = (ri < 4) ? da_wh_par0[min(ri, 3)] : da_wh_par1[max(ri - 4, 0)];
+		[branch]
+		if (RP.w <= 0.0f || RA.z > 0.5f || RA.x <= 0.001f || RA.w <= 0.0f)	// empty, a drain, or not the field's
+			continue;
+		//	Age from the ring radius, which the CPU runs on the speed in sim2.w.
+		const float age = RA.y / max(da_ripple_sim2.w, 0.01f);
+		const float young = saturate(1.0f - age / max(da_ripple_sim2.y, 0.001f));
+		[branch]
+		if (young <= 0.0f)
+			continue;
+		//	A splash in a puddle on a roof has no business rippling the lake underneath it. On
+		//	the ground beside the lake there is no such height to test against.
+		[branch]
+		if (has_field && wet && abs(RP.y - surf) > 0.75f)
+			continue;
+		//	The cavity, dug as a ring whose radius runs out at the rim speed while it is fed, so
+		//	the wave is born already moving.
+		const float rad = max(RA.w, 2.0f * texel_m);
+		const float depth = clamp(DA_RIP_HIT_DEPTH * RA.w, DA_RIP_HIT_MIN, DA_RIP_HIT_MAX);
+		const float rr = length(wxz - RP.xz) - DA_RIP_RIM_SPEED * age;
+		//	young ramps from 1 to 0 across the window, so its integral is half of it: the 2 puts
+		//	the total dug depth back at exactly depth.
+		const float hit_rate = 2.0f * da_ripple_sim2.x / max(da_ripple_sim2.y, 0.001f);
+		inject -= RA.x * young * exp(-rr * rr / (rad * rad)) * depth * hit_rate;
+	}
+
+	//	Wakes: a travelling pressure footprint per wading foot. The surface under it is RELAXED
+	//	onto the Bernoulli trough and its rate of change rather than pushed by a height, so the
+	//	leg drags its trough along and the solver radiates from that. Where the grid is coarser
+	//	than the leg the trough is spread over the texel and made shallower by the same ratio, so
+	//	the water it moves is the same on every preset.
+	const int wk_count = int(da_water_wakei.x);
+	[loop]
+	for (int wi = 0; wi < wk_count; ++wi)
+	{
+		const float4 WP = (wi < 4) ? da_water_wake0[min(wi, 3)] : da_water_wake1[max(wi - 4, 0)];
+		const float4 WA = (wi < 4) ? da_water_wakep0[min(wi, 3)] : da_water_wakep1[max(wi - 4, 0)];
+		[branch]
+		if (WP.w <= 0.0f || WA.x <= 0.001f)
+			continue;
+		[branch]
+		if (has_field && wet && abs(WP.y - surf) > 0.75f)
+			continue;
+		const float rad = max(WP.w, 2.0f * texel_m);
+		const float2 dw = wxz - WP.xz;
+		const float G = exp(-dot(dw, dw) / (rad * rad));
+		[branch]
+		if (G < 0.01f)
+			continue;
+		const float2 u = WA.yz;
+		const float speed = length(u);
+		const float head = min(speed * speed * (1.0f / (2.0f * 9.81f)), DA_RIP_WAKE_MAX) * ((WP.w * WP.w) / (rad * rad));
+		//	The trough, and how fast the surface at this texel is moving as the trough passes:
+		//	d/dt of -head G(x - p(t)) with p moving at u.
+		const float target_h = -head * WA.x * G;
+		const float target_v = target_h * (2.0f * dot(dw, u) / (rad * rad));
+		//	The grip loosens with the strength as well, so a foot lifting out lets its trough go
+		//	to the solver instead of being walked back up to flat.
+		const float hold = G * saturate(speed * (1.0f / DA_RIP_WAKE_VREF)) * saturate(WA.x * 4.0f) *
+			saturate(da_ripple_sim2.x * (1.0f / DA_RIP_WAKE_TAU));
+		inject += (target_h - state.x) * hold;
+		state.y += (target_v - state.y) * hold;
+	}
+
+	//	Rain, on the water body only. Poisson in the only sense that matters here: every texel
+	//	rolls independently every step against a rate the engine derived from mm/h. The 3x3
+	//	neighbourhood is not decoration: a one-texel spike is the worst thing you can hand a
+	//	spectrum, while a drop that also lifts its neighbours is a crater and radiates a ring.
+	[branch]
+	if (da_ripple_src.z > 0.0f && has_field && wet)
+	{
+		const uint step = uint(da_ripple_sim.w);
+		const int2 id = int2(floor(wxz / texel_m));
+		[unroll]
+		for (int j = -1; j <= 1; ++j)
+		{
+			[unroll]
+			for (int i = -1; i <= 1; ++i)
+			{
+				const float w = exp(-float(i * i + j * j) * 0.7f);
+				[flatten]
+				if (da_rip_hash(id + int2(i, j), step) < da_ripple_src.z)
+					inject -= da_ripple_src.w * w;
+			}
+		}
+	}
+
+	//	Height in the real part, velocity in the imaginary: the solver's input.
+	return float2(clamp(state.x + inject, -DA_RIP_CLAMP, DA_RIP_CLAMP), clamp(state.y, -8.0f, 8.0f));
+}
+
+#endif // DA_WATER_RIPPLE_H

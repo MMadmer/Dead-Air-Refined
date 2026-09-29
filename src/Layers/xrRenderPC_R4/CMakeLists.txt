@@ -30,6 +30,8 @@ target_link_libraries(xrRenderPC_R4
     DirectXTex
     NVIDIA::NvAPI
     AMD::AGS
+    AMD::FidelityFXDX11
+    NVIDIA::Streamline
     d3dcompiler
     dxguid
     dwmapi

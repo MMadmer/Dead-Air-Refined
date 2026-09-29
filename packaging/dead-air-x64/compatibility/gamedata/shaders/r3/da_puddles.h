@@ -134,11 +134,9 @@ float da_vnoise(float2 p)
 // at all, so the caller can fall back to the noise where there is not. No rim fade: the bake
 // seeds the map's own border as an outlet, so it is already zero where it ends.
 #define DA_PUDDLE_FILL_MAX	0.25f	// metres of standing water that read as full (CEnvironment::puddle_fill_depth)
-// How far the value noise may move that level, in the noise's own 0..1 domain. This is the whole
-// of what the noise does now: the map says WHERE the water is, the noise gives the edge its
-// shape so a puddle is not a contour line of a 1.4 m lattice. Mirrored on the CPU as
-// da_puddle_fill_edge (Environment.cpp) - the two masks are one mask.
-#define DA_PUDDLE_FILL_EDGE	0.30f
+// How far a full dip raises the noise's level, in the noise's own 0..1 domain. Mirrored on the CPU
+// as da_puddle_fill_gain (Environment.cpp) - the two masks are one mask.
+#define DA_PUDDLE_FILL_GAIN	0.8f
 
 float2 da_puddle_fill_level(float2 wp)
 {
@@ -264,23 +262,22 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 	[branch] if (rain_params.z < 0.005f)
 		return R;
 
-	// The fill map, where the ladder bought it and where the map has something to say. This is
-	// the difference between blobs on flat ground and water in the dips it would really run to.
-	//
-	// The map sets the LEVEL and the noise keeps its job as the EDGE: the perturbation is a
-	// third of the threshold band, so the contour of a puddle follows the fill isoline while
-	// wandering by roughly the width of one noise feature. Without it the edge would trace the
-	// bake's lattice and every puddle would have the same soft rectangular shoulder.
+	// The fill map, where the ladder bought it and where the map has something to say: the dips
+	// water really runs to. It ADDS to the noise, it does not replace it. The noise is the ground's
+	// own small relief - ruts, prints and hollows a 1.4 m lattice cannot see, which is where rain
+	// on flat ground actually stands - and the map raises the level on top of it, so the dips
+	// fill first and deepest and their puddles grow past what flat ground holds. When the map
+	// replaced the noise outright, flat ground held no water in any storm: a village yard, a road,
+	// the ground round a campfire - the bake sees a dip only where its lattice does.
 	//
 	// fill.y is 0 where there is no answer - a level with no bake, or a point off its footprint -
-	// and the lerp then leaves the noise placement exactly as it was, which is also what the
-	// whole branch does when the rung is off (Minimum and Low). da_wet_params.x is
-	// r__puddle_fill, straight off the preset ladder. Below the size early-out so the tap is
-	// never spent on a rung that draws no puddle at all.
+	// and the noise stands alone, which is also what the whole branch does when the rung is off
+	// (Minimum and Low). da_wet_params.x is r__puddle_fill, straight off the preset ladder. Below
+	// the size early-out so the tap is never spent on a rung that draws no puddle at all.
 	[branch] if (da_wet_params.x > 0.5f)
 	{
 		const float2 fill = da_puddle_fill_level(wp);
-		n = lerp(n, saturate(fill.x + (n - 0.5f) * DA_PUDDLE_FILL_EDGE), fill.y);
+		n = saturate(n + fill.x * fill.y * DA_PUDDLE_FILL_GAIN);
 	}
 
 	const float thr = lerp(0.86f, 0.30f, saturate(rain_params.z)) + (1.0f - wet) * 0.15f;

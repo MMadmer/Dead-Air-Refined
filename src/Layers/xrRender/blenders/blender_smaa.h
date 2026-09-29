@@ -11,8 +11,8 @@ public:
     void Compile(CBlender_Compile& C) override;
 };
 
-// Camera-reprojection temporal AA: one resolve pass blending the current LDR frame with
-// the reprojected history under a neighbourhood clamp (no jitter, no object velocity).
+// Temporal AA: one resolve pass blending the current (jittered) LDR frame with the reprojected
+// history under a neighbourhood clamp; the motion vectors reproject when they exist.
 class CBlender_taa final : public IBlender
 {
 public:

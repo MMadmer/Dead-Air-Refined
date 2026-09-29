@@ -10,6 +10,12 @@
 #include "SkeletonCustom.h"
 #include "FLOD.h"
 #include "xrCore/Threading/ParallelFor.hpp"
+#if RENDER == R_R4
+#include "da_temporal.h"
+#endif
+#ifdef XR_D3D12
+#include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#endif
 
 extern ENGINE_API float psHUD_FOV;
 
@@ -360,6 +366,11 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                     if (item.pVisual->Type == MT_TREE_ST || item.pVisual->Type == MT_TREE_PM)
                     {
                         auto* tree = static_cast<FTreeVisual*>(item.pVisual);
+#ifdef XR_D3D12
+                        // The GPU-driven trees integrate their roots at the frame's start.
+                        if (da_gpu_trees_draws(tree))
+                            continue;
+#endif
                         if (tree->NeedsWindUpdate())
                             windVisuals.push_back(tree);
                     }
@@ -374,6 +385,16 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
 
+#ifdef XR_D3D12
+                // The registered trees of this pass through ExecuteIndirect; the rest as before.
+                if (da_gpu_trees_draw_pass(cmd_list, it->first, items, o.phase))
+                {
+                    if (items.empty())
+                        continue;
+                    cmd_list.set_Pass(it->first);
+                    cmd_list.apply_lmaterial();
+                }
+#endif
 #ifdef USE_DX11
                 if (render_tree_batches(cmd_list, items) && items.empty())
                     continue;
@@ -446,6 +467,13 @@ void R_dsgraph_structure::render_graph(u32 _priority)
         }
     }
 
+#ifdef XR_D3D12
+    // The GPU-driven trees of this view after every CPU-drawn object of priority 0: the depth already
+    // holds the occluders when the crowns rasterise (and when the main view's Hi-Z is built).
+    if (_priority == 0 && gd_view)
+        da_gpu_trees_view_render(*this);
+#endif
+
     RImplementation.BasicStats.Primitives.End(); // XXX: Refactor a bit later
 }
 
@@ -458,6 +486,9 @@ void R_dsgraph_structure::render_graph(u32 _priority)
 class hud_transform_helper
 {
     Fmatrix Pold;
+#if RENDER == R_R4
+    Fmatrix vp_nojit_old, vp_prev_old; // the motion vectors' view-projections of the world
+#endif
     static u32 cullMode;
     static bool isActive;
 
@@ -467,8 +498,13 @@ public:
     explicit hud_transform_helper(CBackend& cmd_list_in)
         : cmd_list(cmd_list_in)
     {
-        // Change projection
+        // Change projection. Both carry the frame's jitter (da_temporal.h): the HUD is part of
+        // the scene the temporal pass resolves.
+#if RENDER == R_R4
+        Pold = da_jitter_project(Device.mProject);
+#else
         Pold  = Device.mProject;
+#endif
 
         // XXX: Xottab_DUTY: custom FOV. Implement it someday
         // It should be something like this:
@@ -489,7 +525,18 @@ public:
         Fmatrix prj_new;
         prj_new.build_projection(deg2rad(psHUD_FOV * Device.fFOV /* *Device.fASPECT*/), Device.fASPECT,
             HUD_VIEWPORT_NEAR, g_pGamePersistent->Environment().CurrentEnv.far_plane);
+#if RENDER == R_R4
+        cmd_list.set_xform_project(da_jitter_project(prj_new));
+        // The motion vectors of the HUD are measured in its own projection, current against its
+        // previous frame's; the world's pair would compare two different cameras.
+        vp_nojit_old = cmd_list.xforms.m_vp_nojit;
+        vp_prev_old = cmd_list.xforms.m_vp_prev;
+        Fmatrix hud_vp_nojit, hud_vp_prev;
+        da_hud_vp(prj_new, hud_vp_nojit, hud_vp_prev);
+        cmd_list.xforms.set_VP_motion(hud_vp_nojit, hud_vp_prev);
+#else
         cmd_list.set_xform_project(prj_new);
+#endif
 
         RImplementation.rmNear(cmd_list);
 
@@ -504,6 +551,9 @@ public:
 
         // Restore projection
         cmd_list.set_xform_project(Pold);
+#if RENDER == R_R4
+        cmd_list.xforms.set_VP_motion(vp_nojit_old, vp_prev_old);
+#endif
         // restore culling mode
         cmd_list.set_CullMode(cullMode);
         isActive = false;
@@ -593,7 +643,8 @@ void R_dsgraph_structure::render_hud_ui()
     auto zb = RImplementation.Target->rt_Base_Depth;
 
 #if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER==R_GL)
-    if (RImplementation.o.msaa)
+    // The scene depth: separate from the base depth under MSAA and while an upscaler runs.
+    if (RImplementation.o.msaa || RImplementation.Target->rt_MSAADepth != RImplementation.Target->rt_Base_Depth)
         zb = RImplementation.Target->rt_MSAADepth;
 #endif
 

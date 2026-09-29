@@ -25,7 +25,7 @@ class dx11GpuTimers
 public:
     enum Slot : u32
     {
-        Frame, // the whole CRender::Render
+        Frame, // CRender::Render from the CPU/GPU sync point on
         Scene, // G-buffer fill: geometry, trees, grass
         Shadows, // sun shadow cascades (smap rendering)
         Sun, // sun accumulation, cloud shadows included
@@ -33,6 +33,24 @@ public:
         Clouds, // the cloud cache retrace and the sky/cloud composite
         CloudsMarch, // the volumetric march at half resolution
         Combine, // combine + post-processing + AA
+        // Parts of Combine
+        CombineAO, // ambient occlusion (GTAO/HDAO/SSAO)
+        CombineForward, // forward geometry: water, particles, sorted, volumetric light
+        CombineBloom,
+        CombineAA, // SMAA/FXAA/TAA
+        CombinePost, // sun shafts, upscale, the final combine, flares, pp
+        // DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6): each is bracketed where
+        // the feature's work is recorded, the ones of today's passes by the frame itself.
+        Ripple, // the water ripple steps on the direct queue (pixel path)
+        JoinWait, // the direct queue waiting for the compute jobs at the join
+        VrsRate, // the VRS rate image
+        VrsLuma, // the VRS luminance contrast
+        GdCull, // GPU-driven trees: main-view cull, args and scatter
+        Grass, // the G-buffer grass, parallel lists included
+        RtScene, // ray tracing: acceleration structure builds
+        RtSun, // ray traced sun shadows
+        RtAO, // ray traced ambient occlusion
+        RtRefl, // ray traced reflections
         Count
     };
 
@@ -54,6 +72,15 @@ public:
 
     bool enabled() const { return m_enabled; }
 
+    // A field of the r__gpu_log line that is not a direct-queue slot (compute-queue job times, the
+    // async path): registered once by its feature, printed as key=%.3f after the slot fields.
+    using FieldValue = float (*)();
+    static void RegisterField(pcstr key, FieldValue value);
+
+    // The "[gpu]" line of r__gpu_log; nothing else writes it. Slot values are the mean of every frame
+    // resolved since the previous line (one frame alone varies by 5-10 %).
+    void LogLine() const;
+
 private:
     static constexpr u32 RingSize = 4;
 
@@ -72,6 +99,9 @@ private:
     FrameQueries m_ring[RingSize];
     u32 m_write{};
     float m_ms[Count]{};
+    // Sums since the last log line; the log line consumes them.
+    mutable double m_sum[Count]{};
+    mutable u32 m_sum_frames{};
     bool m_valid{};
     bool m_enabled{};
     bool m_in_frame{};

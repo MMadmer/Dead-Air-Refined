@@ -285,6 +285,28 @@ IC u32 dest_to_cbuf_type(u32 destination)
     return 0;
 }
 
+// Slot of a constant buffer (PLAN C6): DXIL reflection lists the buffers in first-use order, so the slot
+// is the register; DXBC keeps the reflection index, which is the register in every shipped shader.
+static u32 constant_buffer_slot(ID3DShaderReflection* reflection, pcstr name, u32 index, bool dxil)
+{
+    D3D_SHADER_INPUT_BIND_DESC bind{};
+    if (!name || FAILED(reflection->GetResourceBindingDescByName(name, &bind)))
+        return index;
+    if (dxil)
+        return bind.BindPoint;
+    if (bind.BindPoint != index)
+    {
+        static bool logged = false;
+        if (!logged)
+        {
+            logged = true;
+            Msg("! constant buffer %s: reflection index %u, register %u (DXBC binds the index)", name, index,
+                bind.BindPoint);
+        }
+    }
+    return index;
+}
+
 BOOL R_constant_table::parse(void* _desc, u32 destination)
 {
     ID3DShaderReflection* pReflection = (ID3DShaderReflection*)_desc;
@@ -310,17 +332,18 @@ BOOL R_constant_table::parse(void* _desc, u32 destination)
                 // whose members are the element struct - nothing bindable through the constant
                 // table, and the member walk below would fatal on the struct type.
                 D3D_SHADER_BUFFER_DESC BufferDesc;
-                if (SUCCEEDED(pTable->GetDesc(&BufferDesc)) && BufferDesc.Type != D3D_CT_CBUFFER &&
-                    BufferDesc.Type != D3D_CT_TBUFFER)
+                const bool described = SUCCEEDED(pTable->GetDesc(&BufferDesc));
+                if (described && BufferDesc.Type != D3D_CT_CBUFFER && BufferDesc.Type != D3D_CT_TBUFFER)
                     continue;
+                const u32 slot = constant_buffer_slot(pReflection, described ? BufferDesc.Name : nullptr, iBuf, dxil);
                 //  Encode buffer index into destination
                 u32 updatedDest = destination;
-                updatedDest |= iBuf << dest_to_shift_value(destination); /*((destination&RC_dest_pixel)
+                updatedDest |= slot << dest_to_shift_value(destination); /*((destination&RC_dest_pixel)
                     ? RC_dest_pixel_cb_index_shift : (destination&RC_dest_vertex)
                     ? RC_dest_vertex_cb_index_shift : RC_dest_geometry_cb_index_shift);*/
 
                 //  Encode bind dest (pixel/vertex buffer) and bind point index
-                u32 uiBufferIndex = iBuf;
+                u32 uiBufferIndex = slot;
                 uiBufferIndex |= dest_to_cbuf_type(destination); /*(destination&RC_dest_pixel)
                      ? CB_BufferPixelShader : (destination&RC_dest_vertex)
                      ? CB_BufferVertexShader : CB_BufferGeometryShader;*/

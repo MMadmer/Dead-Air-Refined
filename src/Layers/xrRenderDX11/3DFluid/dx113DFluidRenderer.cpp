@@ -387,7 +387,7 @@ void dx113DFluidRenderer::Draw(const dx113DFluidData& FluidData)
 
     RImplementation.rmNormal(RCache);
 
-    PrepareCBuffer(FluidData, Device.dwWidth, Device.dwHeight);
+    PrepareCBuffer(FluidData, Device.dwRenderWidth, Device.dwRenderHeight);
     RCache.set_c(strDiffuseLight, LightData.m_vLightIntencity.x, LightData.m_vLightIntencity.y,
         LightData.m_vLightIntencity.z, 1.0f);
     if (bRenderDaFire)
@@ -427,7 +427,7 @@ void dx113DFluidRenderer::ComputeRayData(const dx113DFluidData &FluidData)
 
     RImplementation.rmNormal(RCache);
 
-    PrepareCBuffer(FluidData, Device.dwWidth, Device.dwHeight);
+    PrepareCBuffer(FluidData, Device.dwRenderWidth, Device.dwRenderHeight);
 
     // Render volume back faces
     // We output xyz=(0,-1,0) and w=min(sceneDepth, boxDepth)
@@ -438,7 +438,7 @@ void dx113DFluidRenderer::ComputeRayData(const dx113DFluidData &FluidData)
     //  unless the pixel is occluded by the scene, in which case we output xyzw=(1,0,0,0)
     pTarget->u_setrt(RCache, RT[RRT_RayDataTex], nullptr, nullptr, nullptr); // LDR RT
     RCache.set_Element(m_RendererTechnique[RS_CompRayData_Front]);
-    PrepareCBuffer(FluidData, Device.dwWidth, Device.dwHeight);
+    PrepareCBuffer(FluidData, Device.dwRenderWidth, Device.dwRenderHeight);
 
     // Render
     DrawBox();

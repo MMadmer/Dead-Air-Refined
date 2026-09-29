@@ -1,7 +1,8 @@
 #ifndef TREE_INSTANCE_H
 #define TREE_INSTANCE_H
 
-#define TREE_INSTANCE_VECTOR_COUNT 10
+// Keep in step with FTreeVisualInstanceVectorCount (FTreeVisual.h).
+#define TREE_INSTANCE_VECTOR_COUNT 11
 #define TREE_INSTANCE_MAX_COUNT 64
 
 cbuffer tree_instance_data_buffer
@@ -56,6 +57,14 @@ float4 tree_instance_sun(uint instance_id)
 float4 tree_instance_tree(uint instance_id)
 {
     return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 9];
+}
+
+// Row 10: the tree's wind as the previous frame drew it, for the motion vectors: x = wind
+// state (row 8 z), y = natural-frequency factor (row 8 w), zw = root gust/deviation (row 9 yz).
+// The scalar path passes the same in c_tree_prev.
+float4 tree_instance_prev(uint instance_id)
+{
+    return tree_instance_data[tree_instance_index(instance_id) * TREE_INSTANCE_VECTOR_COUNT + 10];
 }
 
 #endif

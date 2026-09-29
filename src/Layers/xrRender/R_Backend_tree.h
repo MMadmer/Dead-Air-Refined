@@ -14,6 +14,10 @@ public:
     R_constant* c_c_bias;
     R_constant* c_c_sun;
     R_constant* c_c_tree;
+    // The previous frame's wind, for the motion vectors of the G-buffer pass.
+    R_constant* c_wave_prev;
+    R_constant* c_wind_prev;
+    R_constant* c_c_tree_prev;
 
 public:
     explicit R_tree(CBackend& cmd_list_in);
@@ -28,6 +32,9 @@ public:
     void set_c_c_bias(R_constant* C) { c_c_bias = C; }
     void set_c_c_sun(R_constant* C) { c_c_sun = C; }
     void set_c_c_tree(R_constant* C) { c_c_tree = C; }
+    void set_c_wave_prev(R_constant* C) { c_wave_prev = C; }
+    void set_c_wind_prev(R_constant* C) { c_wind_prev = C; }
+    void set_c_c_tree_prev(R_constant* C) { c_c_tree_prev = C; }
     void set_m_xform_v(Fmatrix& mat);
     void set_m_xform(Fmatrix& mat);
     void set_consts(float x, float y, float z, float w);
@@ -37,6 +44,9 @@ public:
     void set_c_bias(float x, float y, float z, float w);
     void set_c_sun(float x, float y, float z, float w);
     void set_c_tree(float x, float y, float z, float w);
+    void set_wave_prev(const Fvector4& vec);
+    void set_wind_prev(const Fvector4& vec);
+    void set_c_tree_prev(const Fvector4& vec);
 
     CBackend& cmd_list;
 };

@@ -2,6 +2,11 @@
 #include "r2.h"
 #include "Layers/xrRender/ShaderResourceTraits.h"
 #include "xrCore/FileCRC32.h"
+#include "da_dxc.h"
+
+#ifdef XR_D3D12
+#include "Layers/xrRenderDX12/d12_api.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -11,9 +16,19 @@ void CRender::addShaderOption(const char* name, const char* value)
     m_ShaderOptions.push_back(macro);
 }
 
+// The shader's reflection: R5 through the layer (DXBC and DXIL alike, D3D12 interfaces), R4 D3DReflect.
+static HRESULT reflect_shader(const void* data, size_t size, ID3DShaderReflection** reflection)
+{
+#ifdef XR_D3D12
+    return xrd3d12::Reflect(data, size, IID_ID3DShaderReflection, reinterpret_cast<void**>(reflection));
+#else
+    return D3DReflect(data, size, IID_ID3DShaderReflection, reinterpret_cast<void**>(reflection));
+#endif
+}
+
 template <typename T>
-static HRESULT create_shader(DWORD const* buffer, size_t const buffer_size, LPCSTR const file_name,
-    T*& result, bool const dx9compatibility)
+static HRESULT create_shader(DWORD const* buffer, size_t const buffer_size, ID3DShaderReflection* reflection,
+    LPCSTR const file_name, T*& result, bool const dx9compatibility, bool const dxil)
 {
     HRESULT _hr = ShaderTypeTraits<T>::CreateHWShader(buffer, buffer_size, result->sh);
     if (!SUCCEEDED(_hr))
@@ -23,50 +38,61 @@ static HRESULT create_shader(DWORD const* buffer, size_t const buffer_size, LPCS
         return E_FAIL;
     }
 
-#ifdef DEBUG
+    // The DirectX 12 layer names refused pipelines by these.
+#if defined(DEBUG) || defined(XR_D3D12)
     if (result->sh)
     {
-        result->sh->SetPrivateData(WKPDID_D3DDebugObjectName, xr_strlen(file_name), file_name);
+        result->sh->SetPrivateData(WKPDID_D3DDebugObjectName, u32(xr_strlen(file_name)), file_name);
     }
 #endif
 
-    ID3DShaderReflection* pReflection = 0;
-    _hr = D3DReflect(buffer, buffer_size, IID_ID3DShaderReflection, (void**)&pReflection);
-
-    if (SUCCEEDED(_hr) && pReflection)
+    if (!reflection)
     {
-        result->constants.dx9compatibility = dx9compatibility;
-        // Parse constant table data
-        result->constants.parse(pReflection, ShaderTypeTraits<T>::GetShaderDest());
-
-        _RELEASE(pReflection);
-    }
-    else
-    {
-        Msg("! D3DReflectShader %s hr == 0x%08x", file_name, _hr);
+        // The next attempt (FXC after DXC, a recompile after a stale cache entry) creates it anew.
+        _RELEASE(result->sh);
+        return E_FAIL;
     }
 
-    return _hr;
+    result->dxil = dxil;
+    result->constants.dx9compatibility = dx9compatibility;
+    result->constants.dxil = dxil;
+    // Parse constant table data
+    result->constants.parse(reflection, ShaderTypeTraits<T>::GetShaderDest());
+    return S_OK;
 }
 
-static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t const buffer_size, LPCSTR const file_name,
-    void*& result, bool const disasm, bool dx9compatibility)
+// `reflection_data`: DXC's reflection blob of a DXIL object; null for DXBC, which reflects itself.
+static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t const buffer_size,
+    const void* reflection_data, size_t reflection_size, LPCSTR const file_name, void*& result, bool const disasm,
+    bool const dx9compatibility, bool const dxil)
 {
+    ID3DShaderReflection* reflection = nullptr;
+    const HRESULT reflected = reflection_data ? reflect_shader(reflection_data, reflection_size, &reflection) :
+                                                reflect_shader(buffer, buffer_size, &reflection);
+    if (FAILED(reflected) || !reflection)
+    {
+        Msg("! D3DReflectShader %s hr == 0x%08x", file_name, reflected);
+        reflection = nullptr;
+    }
+
     HRESULT _result = E_FAIL;
     pcstr extension = ".hlsl";
-    if (pTarget[0] == 'p')
+    switch (pTarget[0])
     {
+    case 'p':
         extension = ".ps";
-        _result = create_shader(buffer, buffer_size, file_name, (SPS*&)result, dx9compatibility);
-    }
-    else if (pTarget[0] == 'v')
+        _result = create_shader(buffer, buffer_size, reflection, file_name, (SPS*&)result, dx9compatibility, dxil);
+        break;
+    // A mesh shader rides the vertex slot (the layer knows it by its program kind).
+    case 'v':
+    case 'm':
     {
-        extension = ".vs";
+        extension = pTarget[0] == 'm' ? ".ms" : ".vs";
         SVS* svs_result = (SVS*)result;
-        _result = create_shader(buffer, buffer_size, file_name, svs_result, dx9compatibility);
+        _result = create_shader(buffer, buffer_size, reflection, file_name, svs_result, dx9compatibility, dxil);
         if (SUCCEEDED(_result))
         {
-            //	Store input signature (need only for VS)
+            //	Store input signature (need only for VS); DXIL carries one too (ISG1, empty for a mesh shader)
             ID3DBlob* pSignatureBlob;
             CHK_DX(D3DGetInputSignatureBlob(buffer, buffer_size, &pSignatureBlob));
             VERIFY(pSignatureBlob);
@@ -80,68 +106,71 @@ static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t c
             if (svs_result->signature)
             {
                 bool position_only = true;
-                ID3DShaderReflection* pReflection = nullptr;
-                if (SUCCEEDED(D3DReflect(buffer, buffer_size, IID_ID3DShaderReflection, (void**)&pReflection)) &&
-                    pReflection)
+                D3D_SHADER_DESC shader_desc{};
+                if (SUCCEEDED(reflection->GetDesc(&shader_desc)))
                 {
-                    D3D_SHADER_DESC shader_desc{};
-                    if (SUCCEEDED(pReflection->GetDesc(&shader_desc)))
+                    for (UINT i = 0; i < shader_desc.InputParameters && position_only; ++i)
                     {
-                        for (UINT i = 0; i < shader_desc.InputParameters && position_only; ++i)
-                        {
-                            D3D11_SIGNATURE_PARAMETER_DESC param{};
-                            if (FAILED(pReflection->GetInputParameterDesc(i, &param)) || !param.SemanticName)
-                                continue;
-                            if (param.SystemValueType != D3D_NAME_UNDEFINED)
-                                continue;
-                            if (xr_stricmp(param.SemanticName, "POSITION") != 0)
-                                position_only = false;
-                        }
+                        D3D_SIGNATURE_PARAMETER_DESC param{};
+                        if (FAILED(reflection->GetInputParameterDesc(i, &param)) || !param.SemanticName)
+                            continue;
+                        if (param.SystemValueType != D3D_NAME_UNDEFINED)
+                            continue;
+                        if (xr_stricmp(param.SemanticName, "POSITION") != 0)
+                            position_only = false;
                     }
-                    _RELEASE(pReflection);
                 }
                 svs_result->signature->position_only = position_only;
             }
         }
+        break;
     }
-    else if (pTarget[0] == 'g')
-    {
-        extension = ".gs";
-        _result = create_shader(buffer, buffer_size, file_name, (SGS*&)result, dx9compatibility);
-    }
-    else if (pTarget[0] == 'c')
-    {
+    // An amplification shader rides the geometry slot.
+    case 'g':
+    case 'a':
+        extension = pTarget[0] == 'a' ? ".as" : ".gs";
+        _result = create_shader(buffer, buffer_size, reflection, file_name, (SGS*&)result, dx9compatibility, dxil);
+        break;
+    case 'c':
         extension = ".cs";
-        _result = create_shader(buffer, buffer_size, file_name, (SCS*&)result, dx9compatibility);
-    }
-    else if (pTarget[0] == 'h')
-    {
+        _result = create_shader(buffer, buffer_size, reflection, file_name, (SCS*&)result, dx9compatibility, dxil);
+        break;
+    case 'h':
         extension = ".hs";
-        _result = create_shader(buffer, buffer_size, file_name, (SHS*&)result, dx9compatibility);
-    }
-    else if (pTarget[0] == 'd')
-    {
+        _result = create_shader(buffer, buffer_size, reflection, file_name, (SHS*&)result, dx9compatibility, dxil);
+        break;
+    case 'd':
         extension = ".ds";
-        _result = create_shader(buffer, buffer_size, file_name, (SDS*&)result, dx9compatibility);
-    }
-    else
-    {
+        _result = create_shader(buffer, buffer_size, reflection, file_name, (SDS*&)result, dx9compatibility, dxil);
+        break;
+    default:
         NODEFAULT;
     }
+    _RELEASE(reflection);
 
     if (disasm)
     {
-        ID3DBlob* disasm = 0;
-        D3DDisassemble(buffer, buffer_size, FALSE, 0, &disasm);
-        if (!disasm)
+        string_path dname;
+        strconcat(sizeof(dname), dname, "disasm" DELIMITER, file_name, extension, dxil ? ".dxil.txt" : "");
+#ifdef XR_D3D12
+        std::string text;
+        if (SUCCEEDED(xrd3d12::Disassemble(buffer, buffer_size, text)) && !text.empty())
+        {
+            IWriter* W = FS.w_open("$app_data_root$", dname);
+            W->w(text.data(), text.size());
+            FS.w_close(W);
+        }
+#else
+        ID3DBlob* disasm_blob = nullptr;
+        D3DDisassemble(buffer, buffer_size, FALSE, 0, &disasm_blob);
+        if (!disasm_blob)
             return _result;
 
-        string_path dname;
-        strconcat(sizeof(dname), dname, "disasm" DELIMITER, file_name, extension);
         IWriter* W = FS.w_open("$app_data_root$", dname);
-        W->w(disasm->GetBufferPointer(), disasm->GetBufferSize());
+        W->w(disasm_blob->GetBufferPointer(), disasm_blob->GetBufferSize());
         FS.w_close(W);
-        _RELEASE(disasm);
+        _RELEASE(disasm_blob);
+#endif
     }
 
     return _result;
@@ -172,7 +201,7 @@ public:
         FS.r_close(R);
 
         *ppData = data;
-        *pBytes = size;
+        *pBytes = UINT(size);
         return D3D_OK;
     }
     HRESULT __stdcall Close(LPCVOID pData)
@@ -246,6 +275,60 @@ public:
     D3D_SHADER_MACRO* data() { return m_options; }
 };
 
+#ifdef XR_D3D12
+// An engine shader through DXC with its r5_dxil cache (dxc.md 3.3, 3.5).
+static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader* fs, u32 fileCrc, pcstr entry,
+    pcstr target, const D3D_SHADER_MACRO* options, bool disasm, void*& result)
+{
+    // The name the layer reports refused pipelines by, and the cache file.
+    string_path shader_name, cache_file;
+    {
+        strconcat(sizeof(shader_name), shader_name, "r5_dxil" DELIMITER, name, ".", extension, DELIMITER, sh_name);
+        string_path file;
+        strconcat(sizeof(file), file, "shaders_cache_xfr" DELIMITER, da_dxc_cache_dir(), name, ".", extension,
+            DELIMITER, sh_name);
+        FS.update_path(cache_file, "$app_data_root$", file);
+    }
+
+    // Refused this session (DXC or the layer): straight to FXC, no cache probe, no recompile.
+    if (da_dxc_refused(cache_file, fileCrc))
+        return E_FAIL;
+
+    xr_vector<u8> object, reflection;
+    if (da_dxc_cache_load(cache_file, fileCrc, object, reflection))
+    {
+        const HRESULT hr = create_shader(target, reinterpret_cast<const DWORD*>(object.data()), object.size(),
+            reflection.data(), reflection.size(), shader_name, result, disasm, false, true);
+        if (SUCCEEDED(hr))
+            return hr;
+    }
+
+    string_path source_name;
+    strconcat(sizeof(source_name), source_name, name, ".", extension);
+    includer Includer;
+    xr_string error;
+    if (!da_dxc_compile_engine(source_name, fs->pointer(), fs->length(), options, &Includer, entry, target, object,
+            reflection, error))
+    {
+        da_dxc_note_refusal(cache_file, fileCrc);
+        Msg("! [dxc] %s: %s", shader_name, error.c_str());
+        for (const D3D_SHADER_MACRO* m = options; m && m->Name; ++m)
+            Msg("!   with define: %s=%s", m->Name, m->Definition ? m->Definition : "");
+        return E_FAIL;
+    }
+    // Only an object the layer accepted is cached; a rejected one is refused like a compile error.
+    const HRESULT hr = create_shader(target, reinterpret_cast<const DWORD*>(object.data()), object.size(),
+        reflection.data(), reflection.size(), shader_name, result, disasm, false, true);
+    if (FAILED(hr))
+    {
+        da_dxc_note_refusal(cache_file, fileCrc);
+        return hr;
+    }
+    da_dxc_cache_store(cache_file, fileCrc, object, reflection);
+    return hr;
+}
+#endif
+
 HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     pcstr pTarget, u32 Flags, void*& result)
 {
@@ -281,9 +364,9 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         {
             if (!macro.Name)
                 break;
-            opt_crc = crc32(macro.Name, xr_strlen(macro.Name), opt_crc);
+            opt_crc = crc32(macro.Name, u32(xr_strlen(macro.Name)), opt_crc);
             if (macro.Definition)
-                opt_crc = crc32(macro.Definition, xr_strlen(macro.Definition), opt_crc);
+                opt_crc = crc32(macro.Definition, u32(xr_strlen(macro.Definition)), opt_crc);
         }
         if (opt_crc)
         {
@@ -295,7 +378,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
 
     // Shadow map size
     {
-        xr_itoa(m_SMAPSize, c_smap, 10);
+        xr_sprintf(c_smap, "%u", m_SMAPSize);
         options.add("SMAP_size", c_smap);
         sh_name.append(c_smap);
     }
@@ -422,7 +505,9 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     appendShaderOption(ps_r2_technicolor, "USE_TECHICOLOR", "1");
     appendShaderOption(ps_r2_vignette, "USE_VIGNETTE", "1");
     appendShaderOption(ps_r2_filmgrain, "USE_FILMGRAIN", "1");
-    appendShaderOption(RImplementation.o.advancedpp && ps_r2_lensdirt, "USE_LENS_DIRT", "1");
+    // The visor's dirt is a mask's and is switched per frame by whether a mask is up, so it is
+    // always compiled: a define would cost a shader restart every time a mask goes on or off.
+    appendShaderOption(RImplementation.o.advancedpp, "USE_LENS_DIRT", "1");
     appendShaderOption(ps_r2_lenswater, "USE_LENS_WATER", "1");
     // Water screen-space reflections. USE_REFLECTIONS gates the whole SSLR branch in the
     // water shader (the R2 engine defined it, R4 never did - "sky reflects but nothing else").
@@ -440,7 +525,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             ps_r_water_reflection && ps_r2_ls_flags_ext.test(R3FLAGEXT_SSR_JITTER), "SSR_JITTER", "1");
     }
     appendShaderOption(RImplementation.o.advancedpp && ps_r2_sss_enable, "USE_SSHAFTS", "1");
-    appendShaderOption(ps_r2_fxaa, "USE_FXAA", "1");
+    // No USE_FXAA: no shader reads it, and anti-aliasing switches live now (r__aa).
 
     // Sun shafts
     if (RImplementation.o.advancedpp && ps_r_sun_shafts)
@@ -564,6 +649,13 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         sh_name.append(static_cast<u32>(0)); // DX10_1_NATIVE off
     }
 
+#ifdef XR_D3D12
+    // D3D12 cannot view a slice past the first of the sun cascade array as a Texture2D, so the
+    // shaders read s_smap as an array (shadow.h). Every R5 shader has it: the cache directory
+    // below tells the permutations apart.
+    options.add("SMAP_ARRAY", "1");
+#endif
+
     // finish
     options.finish();
     sh_name.finish();
@@ -583,6 +675,9 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         renderer = "r4_level9" DELIMITER;
         R_ASSERT(!"Feature levels lower than 10.0 are unsupported");
     }
+#ifdef XR_D3D12
+    renderer = "r5" DELIMITER;
+#endif
 
     string_path filename;
     strconcat(sizeof(filename), filename, renderer, name, ".", extension);
@@ -602,6 +697,26 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     getFileCrc32(fs, shadersFolder, fileCrc);
     fs->seek(0);
 
+#ifdef XR_D3D12
+    // DXC for every engine shader but a DXBC twin (RSC_FXC). One DXC cannot build goes to FXC below and
+    // its passes get DXBC twins (UnifyShaderFormats); mesh and amplification shaders have only DXC.
+    const bool mesh_stage = (pTarget[0] == 'm' || pTarget[0] == 'a') && pTarget[1] == 's';
+    if (da_dxc_active() && !(Flags & RSC_FXC))
+    {
+        _result = compile_dxil(name, extension, sh_name.c_str(), fs, fileCrc, pFunctionName, pTarget, options.data(),
+            o.disasm, result);
+        if (SUCCEEDED(_result) || mesh_stage)
+            return _result;
+        da_dxc_note_fxc();
+    }
+    else if (mesh_stage)
+    {
+        Msg("! %s: mesh and amplification shaders compile only through DXC", filename);
+        return E_FAIL;
+    }
+#endif
+    Flags &= ~RSC_FXC;
+
     if (FS.exist(file_name))
     {
         IReader* file = FS.r_open(file_name);
@@ -613,15 +728,14 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             if (savedFileCrc == fileCrc)
             {
                 u32 savedBytecodeCrc = file->r_u32();
-                u32 bytecodeCrc = crc32(file->pointer(), file->elapsed());
+                u32 bytecodeCrc = crc32(file->pointer(), u32(file->elapsed()));
                 if (bytecodeCrc == savedBytecodeCrc)
                 {
 #ifdef DEBUG
                     Log("* Loading shader:", file_name);
 #endif
-                    _result =
-                        create_shader(pTarget, (DWORD*)file->pointer(), file->elapsed(),
-                            filename, result, o.disasm, dx9compatibility);
+                    _result = create_shader(pTarget, (DWORD*)file->pointer(), file->elapsed(), nullptr, 0,
+                        filename, result, o.disasm, dx9compatibility, false);
                 }
             }
         }
@@ -667,7 +781,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             file->w_u32(dx9compatibility);
             file->w_u32(fileCrc);
 
-            u32 bytecodeCrc = crc32(pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize());
+            u32 bytecodeCrc = crc32(pShaderBuf->GetBufferPointer(), u32(pShaderBuf->GetBufferSize()));
             file->w_u32(bytecodeCrc); // Do not write anything below this line, take a look at reading (crc32)
 
             file->w(pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize());
@@ -676,7 +790,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
             Log("- Compile shader:", file_name);
 #endif
             _result = create_shader(pTarget, (DWORD*)pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize(),
-                filename, result, o.disasm, dx9compatibility);
+                nullptr, 0, filename, result, o.disasm, dx9compatibility, false);
         }
         else
         {

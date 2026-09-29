@@ -30,11 +30,11 @@ void CRenderTarget::phase_ssao()
     fSSAOKernelSize /= tan(deg2rad(Device.fFOV));
 
     // Fill VB
-    float scale_X = float(Device.dwWidth) * 0.5f / float(TEX_jitter);
-    float scale_Y = float(Device.dwHeight) * 0.5f / float(TEX_jitter);
+    float scale_X = float(Device.dwRenderWidth) * 0.5f / float(TEX_jitter);
+    float scale_Y = float(Device.dwRenderHeight) * 0.5f / float(TEX_jitter);
 
-    float _w = float(Device.dwWidth) * 0.5f;
-    float _h = float(Device.dwHeight) * 0.5f;
+    float _w = float(Device.dwRenderWidth) * 0.5f;
+    float _h = float(Device.dwRenderHeight) * 0.5f;
 
     RCache.SetViewport({ 0.f, 0.f, _w, _h, 0.f, 1.f });
 
@@ -86,7 +86,7 @@ void CRenderTarget::phase_ssao()
         // RCache.set_Stencil( FALSE, D3DCMP_EQUAL, 0x01, 0xff, 0 );
     }
 
-    RCache.SetViewport({ 0.f, 0.f, float(Device.dwWidth), float(Device.dwHeight), 0.f, 1.f });
+    RCache.SetViewport({ 0.f, 0.f, float(Device.dwRenderWidth), float(Device.dwRenderHeight), 0.f, 1.f });
 
     RCache.set_Stencil(FALSE);
 }
@@ -104,12 +104,12 @@ void CRenderTarget::phase_downsamp()
 
     u_setrt(RCache, rt_half_depth, nullptr, nullptr, nullptr /*rt_MSAADepth*/);
     RCache.ClearRT(rt_half_depth, {}); // black
-    u32 w = Device.dwWidth;
-    u32 h = Device.dwHeight;
+    u32 w = Device.dwRenderWidth;
+    u32 h = Device.dwRenderHeight;
 
     if (RImplementation.o.ssao_half_data)
     {
-        RCache.SetViewport({ 0.f, 0.f, float(Device.dwWidth) * 0.5f, float(Device.dwHeight) * 0.5f, 0.f, 1.f });
+        RCache.SetViewport({ 0.f, 0.f, float(Device.dwRenderWidth) * 0.5f, float(Device.dwRenderHeight) * 0.5f, 0.f, 1.f });
         w /= 2;
         h /= 2;
     }
@@ -142,6 +142,6 @@ void CRenderTarget::phase_downsamp()
     }
 
     if (RImplementation.o.ssao_half_data)
-        RCache.SetViewport({ 0.f, 0.f, float(Device.dwWidth), float(Device.dwHeight), 0.f, 1.f });
+        RCache.SetViewport({ 0.f, 0.f, float(Device.dwRenderWidth), float(Device.dwRenderHeight), 0.f, 1.f });
 }
 } // namespace xray::render::RENDER_NAMESPACE

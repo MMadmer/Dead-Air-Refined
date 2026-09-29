@@ -379,22 +379,29 @@ void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nul
         HW.get_context(CHW::IMM_CTX_ID)->CopyResource(pTex, pSrcTexture);
 
         D3D_MAPPED_TEXTURE2D MappedData;
-        HW.get_context(CHW::IMM_CTX_ID)->Map(pTex, 0, D3D_MAP_READ, 0, &MappedData);
-        // Swap r and b, but don't kill alpha
+        if (FAILED(HW.get_context(CHW::IMM_CTX_ID)->Map(pTex, 0, D3D_MAP_READ, 0, &MappedData)))
         {
-            u32* pPixel = (u32*)MappedData.pData;
-            u32* pEnd = pPixel + (Device.dwWidth * Device.dwHeight);
-
-            for (; pPixel != pEnd; pPixel++)
+            Log("! Failed to make a screenshot: couldn't map the capture texture");
+            goto _end_;
+        }
+        // Mapped rows are RowPitch apart (a D3D12 readback aligns them to 256 bytes): repack them
+        // tightly for the resampler. Swap r and b, but don't kill alpha
+        u32* pixels = (u32*)xr_malloc(Device.dwWidth * Device.dwHeight * 4);
+        for (u32 y = 0; y < Device.dwHeight; ++y)
+        {
+            const u32* source = (const u32*)((const u8*)MappedData.pData + size_t(y) * MappedData.RowPitch);
+            u32* target = pixels + size_t(y) * Device.dwWidth;
+            for (u32 x = 0; x < Device.dwWidth; ++x)
             {
-                u32 p = *pPixel;
-                *pPixel = color_argb(color_get_A(p), color_get_B(p), color_get_G(p), color_get_R(p));
+                const u32 p = source[x];
+                target[x] = color_argb(color_get_A(p), color_get_B(p), color_get_G(p), color_get_R(p));
             }
         }
+        HW.get_context(CHW::IMM_CTX_ID)->Unmap(pTex, 0);
         // save
         u32* data = (u32*)xr_malloc(Device.dwHeight * Device.dwHeight * 4);
-        imf_Process(data, Device.dwHeight, Device.dwHeight, (u32*)MappedData.pData, Device.dwWidth, Device.dwHeight, imf_lanczos3);
-        HW.get_context(CHW::IMM_CTX_ID)->Unmap(pTex, 0);
+        imf_Process(data, Device.dwHeight, Device.dwHeight, pixels, Device.dwWidth, Device.dwHeight, imf_lanczos3);
+        xr_free(pixels);
 
         if (IWriter* fs = FS.w_open("$screenshots$", buf))
         {

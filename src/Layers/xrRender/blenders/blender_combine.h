@@ -4,6 +4,9 @@ namespace xray::render::RENDER_NAMESPACE
 {
 class CBlender_combine : public IBlender
 {
+    // What combine_2 reads as the scene (s_image): generic0, or the upscaler's output.
+    pcstr m_image{ r2_RT_generic0 };
+
 public:
     virtual LPCSTR getComment() { return "INTERNAL: combiner"; }
     virtual BOOL canBeDetailed() { return FALSE; }
@@ -11,6 +14,7 @@ public:
     virtual void Compile(CBlender_Compile& C);
 
     CBlender_combine();
+    explicit CBlender_combine(pcstr image);
     virtual ~CBlender_combine();
 };
 

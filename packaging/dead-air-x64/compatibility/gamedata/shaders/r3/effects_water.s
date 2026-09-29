@@ -38,6 +38,11 @@ function normal                (shader, t_base, t_second, t_detail)
 
 	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR (frame copy before water)
 
+	-- Ray traced reflections (DirectX 12, RTX): this frame's mirror requests and the traced result,
+	-- read only while da_rt.x says so (names without a surface elsewhere, sampled as zero).
+	shader:dx10texture	("s_rt_refl_req",	"$user$rt_refl_req")
+	shader:dx10texture	("s_rt_refl",	"$user$rt_refl")
+
 	shader:dx10sampler	("smp_base")
 	shader:dx10sampler	("smp_nofilter")
 	shader:dx10sampler	("smp_rtlinear")

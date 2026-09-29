@@ -2,6 +2,9 @@
 #include "lmodel.h"
 #include "shadow.h"
 #include "da_wetness.h"
+// The terrain's standing water, the same mask its G-buffer pass and the reflection pass draw. It
+// also brings da_puddle_wind (w = accumulated rain travel, which slides the run-off downhill).
+#include "da_puddles.h"
 
 Texture2D s_waterFall;
 float4 RainDensity;
@@ -10,9 +13,6 @@ float4 RainFallof; // x = wet radius near, y = far (r3_dynamic_wet_surfaces_near
 // world -Y in view space). The engine has been binding both all along; nothing read them.
 float4 WorldX;
 float4 WorldZ;
-// Wind service state (same binder as the puddle shader): w = accumulated rain travel phase,
-// used to slide the run-off pattern DOWNHILL on sloped ground.
-float4 da_puddle_wind;
 
 float2 SampleFlowNormal(float2 tc)
 {
@@ -109,7 +109,7 @@ float2 Rivulets(float u, float v, float t, float rain)
 
 float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
 {
-    const float d0 = s_smap.SampleLevel(smp_nofilter, uv0, 0).x;
+    const float d0 = s_smap.SampleLevel(smp_nofilter, SMAP_TC(uv0), 0).x;
 
     // Never step less than a texel and a half: below that the ray reads its own footprint and
     // every surface looks like the bottom of a bowl.
@@ -140,7 +140,7 @@ float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
                 barrier = 0.0;
                 break;
             }
-            const float h = (s_smap.SampleLevel(smp_nofilter, uv, 0).x - d0) * inv_dz;
+            const float h = (s_smap.SampleLevel(smp_nofilter, SMAP_TC(uv), 0).x - d0) * inv_dz;
             barrier = max(barrier, h);
             [branch]
             if (barrier >= DA_FILL_CAP)
@@ -330,6 +330,16 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
             // wet patch and the film already draws it.
             puddle = saturate(fill / 0.03) * slope_gate * sky_gate * saturate(da_wetness.z);
         }
+        // Terrain carries its own standing water, placed by the terrain's G-buffer pass; the same
+        // call here gives the same mask. This pass used to salt it with the ground's pops, run-off
+        // and rivulets like the mud round it, so a puddle near the camera read as more wet ground
+        // and water showed only past the distance this pass fades over - a ring round the player.
+        [branch]
+        if (gbd.ground > 0.5 && da_wetness.z > 0.01)
+        {
+            const da_puddle_result pdl = da_puddles(position.xyz, gbd.hemi, normal);
+            puddle = max(puddle, saturate(pdl.mask));
+        }
 
         // Same scaling reason as the viewmodel: the ring field returns a water-surface slope,
         // this pass wants a normal perturbation.
@@ -373,11 +383,13 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
         water.x = splash.x * upwardWeight + flowZ.y * zWeight + pop.x * upwardWeight + slope_flow.x;
         water.y = flowX.x * xWeight + flowZ.x * zWeight + pop.z;
         water.z = splash.y * upwardWeight + flowX.y * xWeight + pop.y * upwardWeight + slope_flow.y;
-        water *= wetness * cont;
+        // The ground's own pops, run-off and rivulets stop at the water's edge: standing water is
+        // smooth, and the rain on it is the rings drawn over the flattened normal below.
+        water *= wetness * cont * (1.0 - puddle);
         // Rivulets are already gated by steepness and carry their own shape; they ride on the
         // surface frame, not on the world axes.
         const float3 riv_w = across_w * riv.x + down_w * riv.y;
-        water += riv_w * (wetness * cont);
+        water += riv_w * (wetness * cont * (1.0 - puddle));
 
         normal = normalize(normal + mul((float3x3)m_V, water));
 

@@ -64,5 +64,7 @@ f_deffer main ( p_bumped I )
 //								float4 	(I.position.xyz, ms),
 								float4	(S.base.xyz, 								S.gloss	) );
 
+	// Motion vector (da_velocity.h)
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
   return O;
 }

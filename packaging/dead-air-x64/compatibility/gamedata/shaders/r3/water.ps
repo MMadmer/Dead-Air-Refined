@@ -68,6 +68,7 @@ Texture2D	s_leaves;
 #include "da_water_rings.h"			// impact rings, shared with the puddles
 #include "da_water_field.h"		// the baked field: depth, bank distance, the ripple sim
 #include "da_water_caustic.h"		// the sun through this surface, onto what is behind it
+#include "da_rt_consumer.h"		// ray traced reflections (DirectX 12, RTX)
 
 // x = rain density 0..1.
 uniform float4 rain_params;
@@ -89,17 +90,31 @@ float2 da_w_rain(float2 wxz, float t)
 	return r0 + r1 * 0.7f;
 }
 
-#ifdef GBUFFER_OPTIMIZATION
-float4 main( vf I, float4 pos2d : SV_Position ) : SV_Target
-#else
+// The share of a screen-space bend `off` at `uv` whose tap stays inside the frame. Past the edge the
+// frame copy holds nothing, and a clamped tap repeats the border row down every column. So the bend is
+// let go toward the border it points at: whole while three bends of room are left, none at the border.
+// The ramp stretches the image at most twice and never reverses it: no seam, no mirrored band.
+float da_w_bend_in_frame( float2 uv, float2 off )
+{
+	const float2 room = lerp( uv, 1.0f - uv, step( 0.0f, off ) );
+	const float2 k = smoothstep( 0.0f, 3.0f, room / max( abs( off ), 1e-6f ) );
+	return min( k.x, k.y );
+}
+
 float4 main( vf I ) : SV_Target
-#endif
 {
 	const float2 PosTc = I.tctexgen.xy / I.tctexgen.z;
 #ifdef GBUFFER_OPTIMIZATION
-	const gbuffer_data gbd = gbuffer_load_data( PosTc, pos2d );
+	const gbuffer_data gbd = gbuffer_load_data( PosTc, I.hpos );
 #else
 	const gbuffer_data gbd = gbuffer_load_data( PosTc );
+#endif
+#ifndef DA_WATER_RT_REQUEST
+	// How far this surface's depth moves across the pixel, for the ray traced reflection's request
+	// test below: under variable rate shading this pass interpolates at the coarse pixel's centre,
+	// while the request it loads was written at a fine pixel's centre half a pixel away. Taken here,
+	// in uniform control flow.
+	const float  rt_req_slack = 0.75f * fwidth( I.tctexgen.z );
 #endif
 
 	// ---- geometry of the sight line ------------------------------------------------------
@@ -268,6 +283,13 @@ float4 main( vf I ) : SV_Target
 
 	// ---- reflection ----------------------------------------------------------------------
 	const float3 vreflect = reflect( V, Nw );
+#ifdef DA_WATER_RT_REQUEST
+	// The ray traced reflections' request (water_rtreq.ps, dxr.md 3.7): where this pixel's mirror ray
+	// starts and where it goes. Nothing from below the surface, nor for a ray heading into the water.
+	if ( under || vreflect.y <= 0.02f )
+		discard;
+	return float4( da_rt_oct_encode( normalize( vreflect ) ), I.tctexgen.z, 2.0f );
+#else
 	float3 reflection;
 	[branch]
 	if ( under )
@@ -307,12 +329,44 @@ float4 main( vf I ) : SV_Target
 		}
 
 		reflection = env;
+		// Ray traced reflections (dxr.md 3.7): the mirror ray this pixel requested, traced against
+		// the whole level at any distance. Where the request belongs to another water body (a nearer
+		// surface in front of this one), this one keeps the screen-space march. The depth match allows
+		// for the depth's own change across the pixel: without it every coarse-shaded block of water
+		// past a few metres failed the match and flickered back to the march and the sky.
+		bool rt_refl = false;
+		[branch]
+		if ( da_rt.x > 0.5f )
+		{
+			const int3 px = int3( I.hpos.xy, 0 );
+			const float4 req = s_rt_refl_req.Load( px );
+			[branch]
+			if ( req.w > 1.5f && abs( req.z - I.tctexgen.z ) < max( 0.02f, 0.002f * I.tctexgen.z ) + rt_req_slack )
+			{
+				// Rough water blurs the mirror along the slope, as the environment's mip does. The
+				// result is premultiplied by its confidence (a miss is zero), so taps average cleanly.
+				float4 rt = s_rt_refl.Load( px );
+				const float blur = saturate( sqrt( mss_total ) / 0.35f );
+				[branch]
+				if ( blur > 0.05f )
+				{
+					const float3 Nv = mul( (float3x3)m_V, Nw );
+					const float2 blur_dir = ( abs( Nv.x ) + abs( Nv.y ) > 1e-4f ? normalize( Nv.xy ) : float2( 1.0f, 0.0f ) )
+						* float2( 1.0f, -1.0f ) * blur;
+					const float4 a = s_rt_refl.Load( int3( I.hpos.xy + blur_dir, 0 ) );
+					const float4 b = s_rt_refl.Load( int3( I.hpos.xy - blur_dir, 0 ) );
+					rt = ( rt * 2.0f + a + b ) * 0.25f;
+				}
+				reflection = lerp( env, rt.rgb / max( rt.a, 1e-4f ), saturate( rt.a ) );
+				rt_refl = true;
+			}
+		}
 #ifdef USE_REFLECTIONS
 		// A ray that leaves the surface going DOWN is not a reflection - it is refraction, and
 		// the march would find the lake bed and mirror it into the sky. That reject is the one
 		// the stock march never had.
 		[branch]
-		if ( vreflect.y > 0.02f && dist < WATER_SSR_END )
+		if ( !rt_refl && vreflect.y > 0.02f && dist < WATER_SSR_END )
 		{
 			const float4 refl = calc_reflections( float4( Pw, 1.0f ), vreflect );
 			// The march's own screen-edge confidence, faded out with distance instead of the hard
@@ -361,8 +415,15 @@ float4 main( vf I ) : SV_Target
 		if ( under )
 			off = Nv.xy * ( WATER_REFRACT_STRENGTH * WATER_REFRACT_UNDER / max( dist, 1.0f ) );
 		else
-			off = Nv.xy * ( 0.2497f * da_w_path * float2( m_P._11, m_P._22 ) / ( 2.0f * max( I.tctexgen.z, 0.5f ) ) );
-		const float2 uv = PosTc + off;
+		{
+			// The tilt is the ripple's, measured from the flat surface: a level pond seen from above
+			// moves its whole bed alike, and done in screen space that shift grew toward the camera and
+			// stretched the water underfoot as one walked.
+			const float3 tilt = Nv - mul( (float3x3)m_V, float3( 0.0f, 1.0f, 0.0f ) );
+			off = tilt.xy * ( 0.2497f * da_w_path * float2( m_P._11, m_P._22 ) / ( 2.0f * max( I.tctexgen.z, 0.5f ) ) );
+		}
+		// Near the camera, looking down, the bed a deep column shows lies below the frame's bottom edge.
+		const float2 uv = PosTc + off * da_w_bend_in_frame( PosTc, off );
 		// A refracted tap that lands on something IN FRONT of the surface is a piece of dry
 		// shore being smeared across the water; fall back to the straight tap there.
 		Br = ( get_depth_fast( uv ) > I.tctexgen.z ) ? s_image.SampleLevel( smp_rtlinear, uv, 0 ).xyz : Bs;
@@ -486,4 +547,5 @@ float4 main( vf I ) : SV_Target
 	}
 
 	return float4( final, 1.0f );
+#endif	// DA_WATER_RT_REQUEST
 }

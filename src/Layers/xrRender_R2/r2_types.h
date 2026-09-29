@@ -43,6 +43,10 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_RT_gtao          "$user$gtao_0"      // GTAO: view-z + raw AO for the guided filter
 #define     r2_RT_taa_history   "$user$taa_history"  // camera-TAA history (previous resolved frame, 10-bit)
 #define     r2_RT_taa_resolve   "$user$taa_resolve"  // camera-TAA resolve MRT1: this frame's history before the copy
+#define     r2_RT_reactive      "$user$reactive"     // upscaler reactive mask, R8, render size
+#define     r2_RT_upscaled      "$user$upscaled"     // upscaler output, RGBA16F + UAV, display size
+#define     r2_RT_post_display  "$user$post_display" // combine_2 and the flares at display size, read by phase_pp
+#define     r2_RT_velocity      "$user$velocity"     // motion vectors, RG16F, render size: G-buffer MRT 2
 
 #define     r2_RT_ssao_temp     "$user$ssao_temp"   // temporary rt for ssao calculation
 #define     r2_RT_half_depth    "$user$half_depth"  // temporary rt for ssao/hbao calculation
@@ -109,6 +113,28 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define r2_RT_depth_copy "$user$depth_copy"
 #define r2_RT_clouds0 "$user$clouds0"
 #define r2_RT_clouds1 "$user$clouds1"
+
+// DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.2): each lane names its targets in its
+// own block.
+// [dx12:vrs] begin names
+// The luminance contrast of the finished frame (1/8 size) and the previous frame's rate image.
+#define r2_RT_vrs_contrast "$user$vrs_contrast"
+#define r2_RT_vrs_prev "$user$vrs_prev"
+// [dx12:vrs] end names
+// [dx12:rt] begin names
+// Ray traced sun shadow: the raw trace, its history pair and the filtered mask the sun passes read.
+#define r2_RT_rt_sun_raw "$user$rt_sun_raw"
+#define r2_RT_rt_sun_hist0 "$user$rt_sun_hist0"
+#define r2_RT_rt_sun_hist1 "$user$rt_sun_hist1"
+#define r2_RT_rt_sun "$user$rt_sun"
+// Ray traced AO at half size and its history pair.
+#define r2_RT_rt_ao_half "$user$rt_ao_half"
+#define r2_RT_rt_ao_hist0 "$user$rt_ao_hist0"
+#define r2_RT_rt_ao_hist1 "$user$rt_ao_hist1"
+// Ray traced reflections: the requests the water and puddle passes write, and the traced result.
+#define r2_RT_rt_refl_req "$user$rt_refl_req"
+#define r2_RT_rt_refl "$user$rt_refl"
+// [dx12:rt] end names
 
 #define     r2_base             "$user$base"
 

@@ -315,8 +315,31 @@ public:
         return sz;
     }
 
+    // Motion vectors (shaders/r3/da_velocity.h): the world matrix and the bone palette this
+    // instance was drawn with on the previous frame. Advanced once a frame by its first draw in
+    // the main scene pass (CSkeletonX::_Render). After a gap in drawing, a history reset or a
+    // jump the previous pose is the current one: no motion is a few pixels wrong, a stale pose
+    // is half a screen wrong.
+    void motion_advance(const Fmatrix& world);
+    const Fmatrix& motion_world_prev() const { return m_motion.world_prev; }
+    // The previous palette when it covers the first count bones, else null.
+    const Fmatrix* motion_bones_prev(u32 count) const
+    {
+        return m_motion.bones_prev.size() >= count ? m_motion.bones_prev.data() : nullptr;
+    }
+
 private:
     bool m_is_original_lod;
+
+    struct motion_history
+    {
+        u32 frame{ u32(-1) }; // the frame world_cur and bones_cur were taken on; -1: never
+        Fmatrix world_prev{ Fidentity };
+        Fmatrix world_cur{ Fidentity };
+        xr_vector<Fmatrix> bones_prev;
+        xr_vector<Fmatrix> bones_cur;
+    };
+    motion_history m_motion;
 };
 
 IC CKinematics* PCKinematics(dxRender_Visual* V) { return V ? (CKinematics*)V->dcast_PKinematics() : 0; }

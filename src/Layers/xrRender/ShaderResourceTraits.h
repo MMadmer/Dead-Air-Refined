@@ -617,8 +617,14 @@ template <typename T>
 T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32 flags /*= 0*/)
 {
     typename ShaderTypeTraits<T>::MapType& sh_map = GetShaderMap<typename ShaderTypeTraits<T>::MapType>();
-    pstr N = pstr(name);
-    auto iterator = sh_map.find(N);
+    pcstr key = name;
+#if defined(USE_DX11)
+    // A DXBC twin (dxc.md 3.6) lives next to the DXIL shader of the same name.
+    string_path fxc_key;
+    if (flags & RSC_FXC)
+        key = strconcat(sizeof(fxc_key), fxc_key, name, "|fxc");
+#endif
+    auto iterator = sh_map.find(pstr(key));
 
     if (iterator != sh_map.end())
         return iterator->second;
@@ -627,36 +633,67 @@ T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32
         T* sh = xr_new<T>();
 
         sh->dwFlags |= xr_resource_flagged::RF_REGISTERED;
-        sh_map.emplace(sh->set_name(name), sh);
+        sh_map.emplace(sh->set_name(key), sh);
         if (0 == xr_stricmp(name, "null"))
         {
             sh->sh = 0;
             return sh;
         }
 
+        if (!filename)
+            filename = name;
+#if defined(USE_DX11)
+        sh->source = filename;
+#endif
+
         // Remove ( and everything after it
         string_path shName;
         {
-            if (filename == nullptr)
-                filename = name;
-
             pcstr pchr = strchr(filename, '(');
-            ptrdiff_t size = pchr ? pchr - filename : xr_strlen(filename);
-            strncpy(shName, filename, size);
+            const size_t size = std::min(pchr ? size_t(pchr - filename) : size_t(xr_strlen(filename)), sizeof(shName) - 1);
+            CopyMemory(shName, filename, size);
             shName[size] = 0;
         }
 
+        // Mesh and amplification shaders (R5 in DXC mode, mesh.md 3.6): "name#ms" in the vertex slot
+        // and "name#as" in the geometry slot are name.ms / name.as. They have no stand-in: a failure
+        // leaves sh null for the caller to see.
+        pcstr extension = ShaderTypeTraits<T>::GetShaderExt();
+        pcstr mesh_target = nullptr;
+#if defined(USE_DX11)
+        if (const size_t length = xr_strlen(shName); length > 3 && shName[length - 3] == '#')
+        {
+            const u32 dest = ShaderTypeTraits<T>::GetShaderDest();
+            if (dest == RC_dest_vertex && !xr_stricmp(shName + length - 3, "#ms"))
+            {
+                extension = ".ms";
+                mesh_target = "ms_6_5";
+            }
+            else if (dest == RC_dest_geometry && !xr_stricmp(shName + length - 3, "#as"))
+            {
+                extension = ".as";
+                mesh_target = "as_6_5";
+            }
+            if (mesh_target)
+                shName[length - 3] = 0;
+        }
+#endif
+
         // Open file
         string_path cname;
-        strconcat(cname, RImplementation.getShaderPath(), shName,
-            ShaderTypeTraits<T>::GetShaderExt());
+        strconcat(cname, RImplementation.getShaderPath(), shName, extension);
         FS.update_path(cname, "$game_shaders$", cname);
 
         // Try to open
         IReader* file = FS.r_open(cname);
+        if (!file && mesh_target)
+        {
+            Msg("! CreateShader: %s is missing", cname);
+            return sh;
+        }
 
         // Here we can fallback to "stub_default"
-        bool fallback = m_shader_fallback_allowed;
+        bool fallback = m_shader_fallback_allowed && !mesh_target;
         if (!file && fallback)
         {
         fallback:
@@ -689,6 +726,11 @@ T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32
         // Select target
         pcstr c_target, c_entry;
         ShaderTypeTraits<T>::GetCompilationTarget(c_target, c_entry, data);
+        if (mesh_target)
+        {
+            c_target = mesh_target;
+            c_entry = "main";
+        }
 #if defined(USE_D3DX)
 #   ifdef NDEBUG
         flags |= D3DXSHADER_PACKMATRIX_ROWMAJOR;
@@ -707,6 +749,9 @@ T* CResourceManager::CreateShader(cpcstr name, pcstr filename /*= nullptr*/, u32
         HRESULT const _hr = RImplementation.shader_compile(name, file, c_entry, c_target, flags, (void*&)sh);
 
         FS.r_close(file);
+
+        if (FAILED(_hr) && mesh_target)
+            return sh;
 
         VERIFY(SUCCEEDED(_hr));
 

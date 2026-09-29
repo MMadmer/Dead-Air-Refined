@@ -7,6 +7,8 @@ class ENGINE_API CTheoraSurface;
 
 namespace xray::render::RENDER_NAMESPACE
 {
+struct DaDsTicket; // da_dstorage.cpp
+
 class ECORE_API CTexture : public xr_resource_named
 {
 public:
@@ -75,6 +77,14 @@ public:
     // void Apply(u32 dwStage);
 
 #if defined(USE_DX11)
+    // DirectStorage (da_dstorage.h): a texture of a running upload batch that it is still writing has no
+    // surface yet. Finishes it (waits for its requests, falls back to today's path when they failed);
+    // true when it was pending.
+    bool ds_finish();
+    [[nodiscard]] bool ds_pending() const { return !!ds_ticket.load(std::memory_order_acquire); }
+#endif
+
+#if defined(USE_DX11)
     void surface_set(ID3DBaseTexture* surf);
     [[nodiscard]] ID3DBaseTexture* surface_get() const;
 #elif defined(USE_OGL)
@@ -120,6 +130,8 @@ public:
     {
         if (!flags.bLoaded)
             Load();
+        else if (ds_pending())
+            ds_finish();
         return reinterpret_cast<ImTextureID>(m_pSRView);
     }
 #elif defined(USE_OGL)
@@ -141,6 +153,10 @@ private:
 
     void desc_enshure()
     {
+#if defined(USE_DX11)
+        if (ds_pending())
+            ds_finish();
+#endif
         if (!desc_valid())
             desc_update();
     }
@@ -205,6 +221,10 @@ private:
 
 #if defined(USE_DX11)
     void release_surface_views();
+
+    // The request of a pending DirectStorage load (set by a batch worker's Load, cleared by ds_finish once
+    // the surface is set).
+    std::atomic<DaDsTicket*> ds_ticket{};
 
     ID3DShaderResourceView* m_pSRView{ nullptr };
     ID3DShaderResourceView* srv_all{ nullptr };

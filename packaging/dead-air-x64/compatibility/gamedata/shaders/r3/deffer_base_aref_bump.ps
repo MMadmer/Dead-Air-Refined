@@ -101,6 +101,8 @@ S.base.xyz = da_debleach(S.base.xyz, da_foliage.w);
   						mask );
 #endif
 
+	// Motion vector (da_velocity.h)
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
 	return 	O	;
 }
 

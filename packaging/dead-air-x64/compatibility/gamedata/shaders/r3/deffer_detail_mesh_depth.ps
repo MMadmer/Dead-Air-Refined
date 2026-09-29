@@ -1,0 +1,16 @@
+#include "common.h"
+#include "sload.h"
+
+// The grass mesh path in the shadow passes (detail elements 4, 5 with deffer_detail_mesh.ms under
+// DETAIL_DEPTH): only the alpha test of deffer_base_aref_flat.ps - no colour target is bound there,
+// so everything else that shader computes is dropped anyway.
+struct p_grass_depth
+{
+	float2	tcdh	: TEXCOORD0;
+};
+
+void 	main	( p_grass_depth I )
+{
+	const float4 D 	= tbase	(I.tcdh);
+	clip	(D.w-def_aref);
+}

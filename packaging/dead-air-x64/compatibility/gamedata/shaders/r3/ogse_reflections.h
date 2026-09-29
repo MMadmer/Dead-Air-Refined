@@ -27,22 +27,25 @@
 #ifndef SSR_QUALITY
 #  define SSR_QUALITY 3
 #endif
+// The ranges were 100/140/180/220 m; water in current games reflects its far shore, so each tier
+// reaches further and takes more samples for the longer ray (16/24/30/48 before). Measured at
+// 1080p on the top tier: inside the noise of the combine pass.
 #if SSR_QUALITY <= 1
 #  define SSR_MAX_IT 64
-#  define REFL_RANGE 100
-#  define SSR_STEPS  16
+#  define REFL_RANGE 150
+#  define SSR_STEPS  20
 #elif SSR_QUALITY == 2
 #  define SSR_MAX_IT 110
-#  define REFL_RANGE 140
-#  define SSR_STEPS  24
+#  define REFL_RANGE 250
+#  define SSR_STEPS  32
 #elif SSR_QUALITY == 3
 #  define SSR_MAX_IT 160
-#  define REFL_RANGE 180
-#  define SSR_STEPS  30
+#  define REFL_RANGE 350
+#  define SSR_STEPS  40
 #else
 #  define SSR_MAX_IT 240
-#  define REFL_RANGE 220
-#  define SSR_STEPS  48
+#  define REFL_RANGE 500
+#  define SSR_STEPS  64
 #endif
 #define SKY_EPS float(0.001)
 

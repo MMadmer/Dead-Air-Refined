@@ -5,8 +5,16 @@
 
 //uniform	sampler	s_smap	: register(ps,s0);	// 2D/cube shadowmap
 //Texture2D<float>	s_smap;		// 2D/cube shadowmap
+#ifdef SMAP_ARRAY
+//	DirectX 12: the sun cascades are one texture array and D3D12 cannot view a slice past the
+//	first as a Texture2D. The bound view starts at the cascade, so slice 0 is the cascade.
+Texture2DArray	s_smap : register(ps,t0);
+#define SMAP_TC(tc) float3(tc, 0)
+#else
 //	Used for RGBA texture too ?!
 Texture2D	s_smap : register(ps,t0);		// 2D/cube shadowmap
+#define SMAP_TC(tc) tc
+#endif
 
 Texture2D<float>	s_smap_minmax;		// 2D/cube shadowmap
 #include "gather.ps"
@@ -43,14 +51,14 @@ float sample_hw_pcf (float4 tc,float4 shift)
 	tc.xyz 	/= tc.w;
 	tc.xy 	+= shift.xy * ts;
 
-	return s_smap.SampleCmpLevelZero( smp_smap, tc.xy, tc.z).x;
+	return s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tc.xy), tc.z).x;
 }
 
 float sample_hw_pcf_projected(float3 tc, float2 shift)
 {
 	static const float ts = KERNEL / float(SMAP_size);
 	tc.xy += shift * ts;
-	return s_smap.SampleCmpLevelZero(smp_smap, tc.xy, tc.z).x;
+	return s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(tc.xy), tc.z).x;
 }
 
 #define GS2 3
@@ -163,7 +171,7 @@ float shadow_extreme_quality( float3 tc )
     {
         for( col = -BFS2; col <= BFS2; col += 2 )
         {
-            float4 d4 = s_smap.Gather( smp_nofilter, tc.xy, int2( col, row ) );
+            float4 d4 = s_smap.Gather( smp_nofilter, SMAP_TC(tc.xy), int2( col, row ) );
             float4 b4 = ( tc.zzzz <= d4 ) ? (0.0f).xxxx : (1.0f).xxxx;
 
             blockerCount += dot( b4, (1.0f).xxxx );
@@ -183,25 +191,25 @@ float shadow_extreme_quality( float3 tc )
             float4 d4;
             float  b;
 
-			d4.w = s_smap.SampleLevel( smp_nofilter, tc.xy, 0, int2( col, row ) ).x;
+			d4.w = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy), 0, int2( col, row ) ).x;
 			b = ( tc.z <= d4.w ) ? (0.0f) : (1.0f);
 			vmask[ col + FS2 + 0 ] += ( ( tc.z <= d4.w ) ? ( uint(1) << uint( row + FS2 + 0 ) ) : uint(0) );
 			blockerCount     += b;
             avgBlockerDepth  += d4.w * b;
 
-			d4.z = s_smap.SampleLevel( smp_nofilter, tc.xy, 0, int2( col+1, row ) ).x;
+			d4.z = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy), 0, int2( col+1, row ) ).x;
 			b = ( tc.z <= d4.z ) ? (0.0f) : (1.0f);
 			vmask[ col + FS2 + 1 ] += ( ( tc.z <= d4.z ) ? ( uint(1) << uint( row + FS2 + 0 ) ) : uint(0) );
 			blockerCount     += b;
             avgBlockerDepth  += d4.z * b;
 
-			d4.x = s_smap.SampleLevel( smp_nofilter, tc.xy, 0, int2( col, row+1 ) ).x;
+			d4.x = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy), 0, int2( col, row+1 ) ).x;
 			vmask[ col + FS2 + 0 ] += ( ( tc.z <= d4.x ) ? ( uint(1) << uint( row + FS2 + 1 ) ) : uint(0) );
 			b = ( tc.z <= d4.x ) ? (0.0f) : (1.0f);
 			blockerCount     += b;
             avgBlockerDepth  += d4.x * b;
 
-			d4.y = s_smap.SampleLevel( smp_nofilter, tc.xy, 0, int2( col+1, row+1 ) ).x;
+			d4.y = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy), 0, int2( col+1, row+1 ) ).x;
 			vmask[ col + FS2 + 1 ] += ( ( tc.z <= d4.y ) ? ( uint(1) << uint( row + FS2 + 1 ) ) : uint(0) );
 			b = ( tc.z <= d4.y ) ? (0.0f) : (1.0f);
 			blockerCount     += b;
@@ -235,10 +243,10 @@ float shadow_extreme_quality( float3 tc )
         {
 #if ( defined(SM_5) ) || ( defined(SM_4_1) )
 #ifdef SM_5
-            v1[(col+FS2)/2] = s_smap.GatherCmpRed( smp_smap, tc.xy, tc.z,
+            v1[(col+FS2)/2] = s_smap.GatherCmpRed( smp_smap, SMAP_TC(tc.xy), tc.z,
                                                    int2( col, row ) );
 #else // SM_4_1
-            float4 d4 = s_smap.Gather( smp_linear, tc.xy, int2( col, row ) );
+            float4 d4 = s_smap.Gather( smp_linear, SMAP_TC(tc.xy), int2( col, row ) );
             v1[(col+FS2)/2] = ( tc.zzzz <= d4 ) ? (1.0f).xxxx : (0.0f).xxxx;
 #endif
 #else
@@ -325,12 +333,12 @@ float shadow_extreme_quality_fused( float3 tc )
             float4 d4;
 
 #ifndef PS_4
-            d4 = s_smap.Gather( smp_nofilter, tc.xy + (1.0f/SMAP_size) * float2( col, row ) );
+            d4 = s_smap.Gather( smp_nofilter, SMAP_TC(tc.xy + (1.0f/SMAP_size) * float2( col, row )) );
 #else
-			d4.w = s_smap.SampleLevel( smp_nofilter, tc.xy + (1.0f/SMAP_size) * float2( col, row ), 0 ).x;
-			d4.z = s_smap.SampleLevel( smp_nofilter, tc.xy + (1.0f/SMAP_size) * float2( col+1, row ) , 0 ).x;
-			d4.y = s_smap.SampleLevel( smp_nofilter, tc.xy + (1.0f/SMAP_size) * float2( col+1, row+1 ), 0 ).x;
-			d4.x = s_smap.SampleLevel( smp_nofilter, tc.xy + (1.0f/SMAP_size) * float2( col, row+1 ), 0 ).x;
+			d4.w = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy + (1.0f/SMAP_size) * float2( col, row )), 0 ).x;
+			d4.z = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy + (1.0f/SMAP_size) * float2( col+1, row )) , 0 ).x;
+			d4.y = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy + (1.0f/SMAP_size) * float2( col+1, row+1 )), 0 ).x;
+			d4.x = s_smap.SampleLevel( smp_nofilter, SMAP_TC(tc.xy + (1.0f/SMAP_size) * float2( col, row+1 )), 0 ).x;
 #endif
             float4 b4  = ( tc.zzzz <= d4 ) ? (0.0f).xxxx : (1.0f).xxxx;
 
@@ -481,7 +489,7 @@ float dx10_1_hw_hq_7x7( float3 tc )
    {
        [unroll]for( col = -GS2; col <= GS2; col += 2 )
        {
-            float4 v = ( tc.zzzz <= s_smap.Gather( smp_nofilter, tc.xy, int2( col, row ) ) ) ? (1.0).xxxx : (0.0).xxxx;
+            float4 v = ( tc.zzzz <= s_smap.Gather( smp_nofilter, SMAP_TC(tc.xy), int2( col, row ) ) ) ? (1.0).xxxx : (0.0).xxxx;
 
             if( row == -GS2 ) // top row
             {
@@ -540,32 +548,35 @@ float dx10_0_hw_hq_7x7( float4 tc )
    {
       for( int col = -GS2; col <= GS2; col += 2 )
 	  {
+		// Texel offset folded into the coordinate (the same texel, SMAP_size is a power of two):
+		// at SM 6.6 DXC cannot keep a sample offset from this loop an immediate value.
+		const float2 tco = tc.xy + float2( col, row ) * ( 1.0/SMAP_size );
 		if( row == -GS2 ) // top row
 		{
 			if( col == -GS2 ) // left
-				s += ( pwAB.x * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + tcAB, tc.z, int2( col, row ) ).x;
+				s += ( pwAB.x * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + tcAB), tc.z ).x;
 			else if( col == GS2 ) // right
-				s += ( pwGH.x * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcGH.x, tcAB.y), tc.z, int2( col, row ) ).x;
+				s += ( pwGH.x * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcGH.x, tcAB.y)), tc.z ).x;
 			else // center
-				s += (    2.0 * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcM.x, tcAB.y), tc.z, int2( col, row ) ).x;
+				s += (    2.0 * pwAB.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcM.x, tcAB.y)), tc.z ).x;
 		}
 		else if( row == GS2 )  // bottom row
 		{
 			if( col == -GS2 ) // left
-				s += ( pwAB.x * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcAB.x, tcGH.y ), tc.z, int2( col, row ) ).x;
+				s += ( pwAB.x * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcAB.x, tcGH.y )), tc.z ).x;
 			else if( col == GS2 ) // right
-				s += ( pwGH.x * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + tcGH, tc.z, int2( col, row ) ).x;
+				s += ( pwGH.x * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + tcGH), tc.z ).x;
 			else // center
-				s += (    2.0 * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcM.x, tcGH.y ), tc.z, int2( col, row ) ).x;
+				s += (    2.0 * pwGH.y ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcM.x, tcGH.y )), tc.z ).x;
 		}
 		else // center rows
 		{
 			if( col == -GS2 ) // left
-				s += ( pwAB.x * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcAB.x, tcM.y ), tc.z, int2( col, row ) ).x;
+				s += ( pwAB.x * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcAB.x, tcM.y )), tc.z ).x;
 			else if( col == GS2 ) // right
-				s += ( pwGH.x * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + float2( tcGH.x, tcM.y),  tc.z, int2( col, row ) ).x;
+				s += ( pwGH.x * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + float2( tcGH.x, tcM.y)),  tc.z ).x;
 			else // center
-				s += (    2.0 * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, tc.xy + tcM, tc.z, int2( col, row ) ).x;
+				s += (    2.0 * 2.0    ) * s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tco + tcM), tc.z ).x;
 		}
       }
 	}
@@ -663,7 +674,7 @@ float4 	test 		(float4 tc, float2 offset)
 
 	tc.xyz 	/= tc.w;
 	tc.xy 	+= offset;
-	return s_smap.SampleCmpLevelZero( smp_smap, tc.xy, tc.z).x;
+	return s_smap.SampleCmpLevelZero( smp_smap, SMAP_TC(tc.xy), tc.z).x;
 }
 
 /*half 	shadowtest_sun 	(float4 tc, float4 tcJ)			// jittered sampling
@@ -845,8 +856,8 @@ float 	shadow_rain 	(float4 tc, float2 tcJ)			// jittered sampling
 
 	const float scale = (4.0f / float(SMAP_size));
 	const float4 jitter = jitter0.Sample(smp_linear, tcJ) * scale;
-	const float4 first = s_smap.GatherCmpRed(smp_smap, tc.xy + jitter.xy, tc.z);
-	const float4 second = s_smap.GatherCmpRed(smp_smap, tc.xy + jitter.wz, tc.z);
+	const float4 first = s_smap.GatherCmpRed(smp_smap, SMAP_TC(tc.xy + jitter.xy), tc.z);
+	const float4 second = s_smap.GatherCmpRed(smp_smap, SMAP_TC(tc.xy + jitter.wz), tc.z);
 
 	return dot(first + second, 1.0h / 8.0h);
 #else

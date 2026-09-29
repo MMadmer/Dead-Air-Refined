@@ -7,6 +7,9 @@
 #include "xrEngine/xr_object.h"
 #include "xrEngine/GameFont.h"
 #include "SkeletonCustom.h"
+#if RENDER == R_R4
+#include "da_temporal.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -398,8 +401,12 @@ void CWallmarksEngine::Render()
     auto& cmd_list = dsgraph.cmd_list;
 
     //	if (marks.empty())			return;
-    // Projection and xform
+    // Projection and xform (with the frame's jitter: the marks are part of the scene)
+#if RENDER == R_R4
+    Fmatrix proj = da_jitter_project(Device.mProject);
+#else
     Fmatrix proj = Device.mProject;
+#endif
     proj._43 -= ps_r__WallmarkSHIFT;
     cmd_list.set_xform_world(Fidentity);
     cmd_list.set_xform_project(proj);
@@ -523,6 +530,10 @@ void CWallmarksEngine::Render()
     RImplementation.BasicStats.Wallmarks.End();
 
     cmd_list.set_xform_view(Device.mView);
+#if RENDER == R_R4
+    cmd_list.set_xform_project(da_jitter_project(Device.mProject));
+#else
     cmd_list.set_xform_project(Device.mProject);
+#endif
 }
 } // namespace xray::render::RENDER_NAMESPACE

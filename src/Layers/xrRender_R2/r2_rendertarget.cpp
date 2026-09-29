@@ -22,6 +22,13 @@
 #    include "Layers/xrRender/blenders/blender_hud_shadow.h"
 #    include "Layers/xrRender/blenders/blender_gtao.h"
 #endif
+#if RENDER == R_R4
+#    include "Layers/xrRender/blenders/blender_da_upscale.h"
+#    include "Layers/xrRenderPC_R4/da_upscaler.h"
+#    include "Layers/xrRenderPC_R4/da_vrs.h"
+#    include "Layers/xrRenderPC_R4/da_rt.h"
+#    include "Layers/xrRenderPC_R4/da_async.h"
+#endif
 
 // Ripple-field resolution the preset picked (0 = the analytic ring path only): the target pair
 // is created at that size, so a preset change takes effect on renderer restart like the rest of
@@ -57,8 +64,8 @@ void CRenderTarget::u_stencil_optimize(CBackend& cmd_list, eStencilOptimizeMode 
     // TODO: DX11: remove half pixel offset?
     VERIFY(RImplementation.o.nvstencil);
     u32 Offset;
-    float _w = float(Device.dwWidth);
-    float _h = float(Device.dwHeight);
+    float _w = float(Device.dwRenderWidth);
+    float _h = float(Device.dwRenderHeight);
     u32 C = color_rgba(255, 255, 255, 255);
     FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, Offset);
     float eps = 0;
@@ -141,8 +148,8 @@ void CRenderTarget::u_compute_texgen_jitter(CBackend& cmd_list, Fmatrix& m_Texge
     m_Texgen_J.mul(m_TexelAdjust, cmd_list.xforms.m_wvp);
 
     // rescale - tile it
-    float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-    float scale_Y = float(Device.dwHeight) / float(TEX_jitter);
+    float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+    float scale_Y = float(Device.dwRenderHeight) / float(TEX_jitter);
     m_TexelAdjust.scale(scale_X, scale_Y, 1.f);
     m_Texgen_J.mulA_44(m_TexelAdjust);
 }
@@ -283,20 +290,35 @@ CRenderTarget::CRenderTarget()
 
     // NORMAL
     {
-        u32 w = Device.dwWidth, h = Device.dwHeight;
+#if RENDER == R_R4
+        // The upscaler (r__fsr / r__dlss) decides the render size first: every scene target below
+        // is that size, the back buffer, the base depth and the targets after the upscale are the
+        // display size. Without an upscaler both are the display size.
+        da_update_render_size();
+        const bool upscale = da_upscaler_active();
+#else
+        constexpr bool upscale = false;
+#endif
+        const u32 dw = Device.dwWidth, dh = Device.dwHeight;
+        u32 w = Device.dwRenderWidth, h = Device.dwRenderHeight;
         rt_Base.resize(HW.BackBufferCount);
         for (u32 i = 0; i < HW.BackBufferCount; i++)
         {
             string32 temp;
             xr_sprintf(temp, "%s%u", r2_RT_base, i);
-            rt_Base[i].create(temp, w, h, HW.Caps.fTarget, 1, { CRT::CreateBase });
+            rt_Base[i].create(temp, dw, dh, HW.Caps.fTarget, 1, { CRT::CreateBase });
         }
-        rt_Base_Depth.create(r2_RT_base_depth, w, h, HW.Caps.fDepth, 1, { CRT::CreateBase });
+        rt_Base_Depth.create(r2_RT_base_depth, dw, dh, HW.Caps.fDepth, 1, { CRT::CreateBase });
 
-        if (!options.msaa)
-            rt_MSAADepth = rt_Base_Depth;
-        else
+        // An upscaler reads the scene depth while the base depth is written from it, so the two are
+        // separate targets then even at a 1:1 ratio.
+        if (options.msaa)
             rt_MSAADepth.create(r2_RT_MSAAdepth, w, h, D3DFMT_D24S8, SampleCount);
+        else if (upscale)
+            rt_MSAADepth.create(r2_RT_MSAAdepth, w, h, HW.Caps.fDepth, 1);
+        else
+            rt_MSAADepth = rt_Base_Depth;
+        rt_Render_Depth = options.msaa ? rt_Base_Depth : rt_MSAADepth;
 
         rt_Position.create(r2_RT_P, w, h, D3DFMT_A16B16G16R16F, SampleCount);
 #if RENDER == R_R4
@@ -430,6 +452,24 @@ CRenderTarget::CRenderTarget()
             rt_taa_history.create(r2_RT_taa_history, w, h, D3DFMT_A2B10G10R10, 1);
             rt_taa_resolve.create(r2_RT_taa_resolve, w, h, D3DFMT_A2B10G10R10, 1);
         }
+        // The upscale slot (da_upscaler.h): the reactive mask at render size, the upscaler's
+        // output, and the display-size frame combine_2 and the flares draw into for phase_pp.
+        if (upscale)
+        {
+            rt_Reactive.create(r2_RT_reactive, w, h, D3DFMT_L8, 1);
+            rt_Upscaled.create(r2_RT_upscaled, dw, dh, D3DFMT_A16B16G16R16F, 1, { CRT::CreateUAV });
+            rt_PostDisplay.create(r2_RT_post_display, dw, dh, D3DFMT_A8R8G8B8, 1);
+        }
+        // The motion vectors: MRT 2 of the packed G-buffer on the frames that want them (see
+        // phase_scene_begin), read by TAA, the upscalers and frame generation. The unpacked
+        // layout has no free slot and MSAA has no temporal filter, so neither gets one.
+        if (!options.msaa && options.gbuffer_opt)
+            rt_Velocity.create(r2_RT_velocity, w, h, D3DFMT_G16R16F, 1);
+        t_velocity.create(r2_RT_velocity);
+
+        // The DirectX 12 features' targets, which read the velocity target.
+        da_vrs_targets_create(*this);
+        da_rt_targets_create(*this);
 #endif
 
         if (!options.msaa)
@@ -710,13 +750,13 @@ CRenderTarget::CRenderTarget()
         u32 h = 0;
         if (options.ssao_half_data)
         {
-            w = Device.dwWidth / 2;
-            h = Device.dwHeight / 2;
+            w = Device.dwRenderWidth / 2;
+            h = Device.dwRenderHeight / 2;
         }
         else
         {
-            w = Device.dwWidth;
-            h = Device.dwHeight;
+            w = Device.dwRenderWidth;
+            h = Device.dwRenderHeight;
         }
 
         D3DFORMAT fmt = HW.Caps.id_vendor == 0x10DE ? D3DFMT_R32F : D3DFMT_R16F;
@@ -726,13 +766,24 @@ CRenderTarget::CRenderTarget()
         s_ssao.create(&b_ssao, "r2" DELIMITER "ssao");
     }
 
+#if RENDER == R_R4
+    // GTAO's targets (below); ray traced AO writes into the same ones.
+    const bool gtao_targets = (ps_r_ssao_mode == ssao_mode_gtao || da_rt_needs_ao_targets()) && !RImplementation.o.msaa;
+#endif
+#if defined(XR_D3D12)
+    // The async GTAO filter writes the final AO through a UAV: R16F with one, made before the blur
+    // branch below could make the target G16R16F without it.
+    if (gtao_targets)
+        rt_ssao_temp.create(r2_RT_ssao_temp, Device.dwRenderWidth, Device.dwRenderHeight, D3DFMT_R16F, 1, { CRT::CreateUAV });
+#endif
+
     // HDAO/SSAO
     const bool ssao_blur_on = options.ssao_blur_on;
     const bool ssao_hdao_ultra = options.ssao_hdao && options.ssao_ultra && ps_r_ssao > 3;
 
     if (ssao_blur_on || ssao_hdao_ultra)
     {
-        const u32 w = Device.dwWidth, h = Device.dwHeight;
+        const u32 w = Device.dwRenderWidth, h = Device.dwRenderHeight;
 
         if (ssao_hdao_ultra)
         {
@@ -773,14 +824,18 @@ CRenderTarget::CRenderTarget()
     // filter into rt_ssao_temp, which combine_1 samples as s_occ. Needs SM5 gathers and
     // a single-sampled G-buffer, so it is not created under MSAA - combine_1 then keeps
     // its inline SSAO (USE_GTAO is gated the same way in r4_shaders.cpp).
-    if (ps_r_ssao_mode == ssao_mode_gtao && !RImplementation.o.msaa)
+    if (gtao_targets)
     {
-        const u32 gw = Device.dwWidth, gh = Device.dwHeight;
+        const u32 gw = Device.dwRenderWidth, gh = Device.dwRenderHeight;
 
         // x = linear view-z (the filter guide), y = raw AO. The donor packed the same
         // two halves into R32_UINT; our RT system has no uint formats and G16R16F
-        // stores identical values.
+        // stores identical values. DirectX 12 adds the UAV of the async render pass.
+#if defined(XR_D3D12)
+        rt_gtao.create(r2_RT_gtao, gw, gh, D3DFMT_G16R16F, 1, { CRT::CreateUAV });
+#else
         rt_gtao.create(r2_RT_gtao, gw, gh, D3DFMT_G16R16F);
+#endif
 
         // The blur path did not run, so the final-AO target may not exist yet.
         if (!rt_ssao_temp)
@@ -788,6 +843,15 @@ CRenderTarget::CRenderTarget()
 
         CBlender_gtao b_gtao;
         s_gtao.create(&b_gtao, "r2" DELIMITER "gtao");
+#if defined(XR_D3D12)
+        // The same two passes as compute shaders, for the async path.
+        if (da_async_shader_exists("gtao_render.cs") && da_async_shader_exists("gtao_filter.cs"))
+        {
+            CBlender_gtao b_gtao_cs;
+            b_gtao_cs.compute = true;
+            s_gtao_cs.create(&b_gtao_cs, "r2" DELIMITER "gtao_cs");
+        }
+#endif
     }
 #endif
 
@@ -844,8 +908,8 @@ CRenderTarget::CRenderTarget()
         s_cloud_map.create("da_cloud_map");
         // The volumetric deck: marched at half resolution into clouds0, clouds1 keeps the
         // previous frame for the temporal blend; the composite lays it over the sky.
-        rt_clouds[0].create(r2_RT_clouds0, Device.dwWidth / 2, Device.dwHeight / 2, D3DFMT_A16B16G16R16F, 1);
-        rt_clouds[1].create(r2_RT_clouds1, Device.dwWidth / 2, Device.dwHeight / 2, D3DFMT_A16B16G16R16F, 1);
+        rt_clouds[0].create(r2_RT_clouds0, Device.dwRenderWidth / 2, Device.dwRenderHeight / 2, D3DFMT_A16B16G16R16F, 1);
+        rt_clouds[1].create(r2_RT_clouds1, Device.dwRenderWidth / 2, Device.dwRenderHeight / 2, D3DFMT_A16B16G16R16F, 1);
         s_clouds_march.create("da_clouds_march");
         s_clouds_composite.create("da_clouds");
 
@@ -853,6 +917,27 @@ CRenderTarget::CRenderTarget()
         // types s_position as Texture2DMS and the shader would only fail to compile.
         if (!RImplementation.o.msaa)
             s_puddle_refl.create("da_puddle_refl");
+
+        // The upscale slot's passes and combine_2 over the upscaler's output. The shaders ship with
+        // the content: an install whose archive is older than the binaries has none, compiling a
+        // missing file is fatal, and without them no upscaler starts (da_upscaler_create).
+        if (da_upscaler_active())
+        {
+            bool shaders_exist = true;
+            for (pcstr shader : { "da_upscale_identity.ps", "da_depth_upscale.ps", "da_reactive.ps" })
+            {
+                IReader* file = open_shader(shader);
+                shaders_exist = shaders_exist && file;
+                FS.r_close(file);
+            }
+            if (shaders_exist)
+            {
+                CBlender_da_upscale b_upscale;
+                s_upscale.create(&b_upscale, "r2" DELIMITER "da_upscale");
+                CBlender_combine b_combine_display{ r2_RT_upscaled };
+                s_combine_display.create(&b_combine_display, "r2" DELIMITER "combine");
+            }
+        }
 #endif
         s_combine_volumetric.create("combine_volumetric");
         s_combine_dbg_0.create("effects" DELIMITER "screen_set", r2_RT_smap_surf);
@@ -892,6 +977,21 @@ CRenderTarget::CRenderTarget()
     s_menu.create("distort");
     g_menu.create(FVF::F_TL, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
 
+#if RENDER == R_R4
+    // Their counterparts over the display-size targets of the upscale slot (content scripts, so
+    // only when the archive carries them).
+    if (da_upscaler_active())
+    {
+        if (RImplementation.Resources->_lua_HasShader("da_postprocess_display"))
+            s_postprocess_display.create("da_postprocess_display");
+        if (RImplementation.Resources->_lua_HasShader("da_menu_display"))
+            s_menu_display.create("da_menu_display");
+    }
+
+    // The async lane's state: the depth alias of the march's early-out, the compute shaders.
+    da_async_targets_create(*this);
+#endif
+
 #if 0 // OpenGL: kept for historical reasons
     // Flip
     t_base = RImplementation.Resources->_CreateTexture(r2_base);
@@ -908,6 +1008,9 @@ CRenderTarget::CRenderTarget()
 CRenderTarget::~CRenderTarget()
 {
 #if RENDER == R_R4
+    da_async_targets_destroy(*this);
+    da_rt_targets_destroy(*this);
+    da_vrs_targets_destroy(*this);
     for (auto& tex : cloud_readback)
         _RELEASE(tex);
     da_water_field_release();
@@ -964,8 +1067,8 @@ void CRenderTarget::reset_light_marker(CBackend& cmd_list, bool bResetStencil)
     if (bResetStencil)
     {
         u32 Offset;
-        float _w = float(Device.dwWidth);
-        float _h = float(Device.dwHeight);
+        float _w = float(Device.dwRenderWidth);
+        float _h = float(Device.dwRenderHeight);
         u32 C = color_rgba(255, 255, 255, 255);
         float eps = 0;
         float _dw = 0.5f;

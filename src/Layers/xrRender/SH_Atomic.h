@@ -41,6 +41,8 @@ struct ECORE_API SVS : public xr_resource_named
 #endif
     R_constant_table constants;
 #if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
     ref_input_sign signature;
 #endif
     SVS();
@@ -59,6 +61,10 @@ struct ECORE_API SPS : public xr_resource_named
 #   error No graphics API selected or enabled!
 #endif
     R_constant_table constants;
+#if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
+#endif
     ~SPS();
 };
 typedef resptr_core<SPS, resptr_base<SPS>> ref_ps;
@@ -74,6 +80,10 @@ struct ECORE_API SGS : public xr_resource_named
 #   error No graphics API selected or enabled!
 #endif
     R_constant_table constants;
+#if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
+#endif
     ~SGS();
 };
 typedef resptr_core<SGS, resptr_base<SGS>> ref_gs;
@@ -88,6 +98,10 @@ struct ECORE_API SHS : public xr_resource_named
 #   error No graphics API selected or enabled!
 #endif
     R_constant_table constants;
+#if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
+#endif
     ~SHS();
 };
 typedef resptr_core<SHS, resptr_base<SHS>> ref_hs;
@@ -102,6 +116,10 @@ struct ECORE_API SDS : public xr_resource_named
 #   error No graphics API selected or enabled!
 #endif
     R_constant_table constants;
+#if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
+#endif
     ~SDS();
 };
 typedef resptr_core<SDS, resptr_base<SDS>> ref_ds;
@@ -116,6 +134,10 @@ struct ECORE_API SCS : public xr_resource_named
 #   error No graphics API selected or enabled!
 #endif
     R_constant_table constants;
+#if defined(USE_DX11)
+    bool dxil{}; // DXC output (R5 in DXC mode); a graphics pipeline never mixes formats
+    shared_str source; // name given to CreateShader, before the skinning/MSAA-sample suffix
+#endif
     ~SCS();
 };
 typedef resptr_core<SCS, resptr_base<SCS>> ref_cs;

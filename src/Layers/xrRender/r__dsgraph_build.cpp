@@ -11,6 +11,9 @@
 #include "LightTrack.h"
 #include "ParticleGroup.h"
 #include "FTreeVisual.h"
+#ifdef XR_D3D12
+#include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -71,6 +74,19 @@ ICF bool is_static_geometry_valuable(dxRender_Visual* visual, u32 context)
     }
 
     visual->vis.valuable_frame[context] = Device.dwFrame;
+    return true;
+}
+
+bool dsgraph_static_value_thresholds(float (&volume)[5], float (&distance)[5])
+{
+    if (ps_r_optimize_static == geometry_optimization_off)
+        return false;
+    const u32 quality = _min(ps_r_optimize_static, u32(geometry_optimization_high));
+    for (u32 i = 0; i < 5; ++i)
+    {
+        volume[i] = staticGeometryThresholds[quality - 1][i].volume;
+        distance[i] = staticGeometryThresholds[quality - 1][i].distance;
+    }
     return true;
 }
 
@@ -218,6 +234,9 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
 void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual)
 {
     ZoneScoped;
+
+    if (o.rt_skip_static && pVisual->rt_static)
+        return;
 
     CRender& RI = RImplementation;
 
@@ -772,6 +791,98 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     }
 }
 
+void R_dsgraph_structure::gd_node_main(u32 node, dxRender_Visual* visual)
+{
+#ifdef XR_D3D12
+    // A tree listed through another frustum is done (insert_static's marker); an FLOD is visited again,
+    // as add_static visits it (its impostor goes in once per frustum that sees it).
+    const bool lod = visual->Type == MT_LOD;
+    if (!lod && da_gpu_trees_view_listed(*this, node))
+        return;
+    if (o.use_hom && !RImplementation.HOM.visible(visual->vis))
+        return;
+    if (!is_static_geometry_valuable(visual, context_id))
+        return;
+    if (lod)
+    {
+        FLOD* pV = static_cast<FLOD*>(visual);
+        float D;
+        const float ssa = CalcSSA(D, pV->vis.sphere.P, pV) * pV->lod_factor;
+        if (ssa < r_ssaLOD_A)
+        {
+            // Own threshold, not the shared one - see r_ssaVEG_DISCARD.
+            if (ssa < r_ssaVEG_DISCARD)
+                return;
+            mapLOD.insert_anyway(D, _LodItem({ ssa, visual }));
+        }
+        if (!(ssa > r_ssaLOD_B || o.phase == CRender::PHASE_SMAP))
+            return;
+    }
+    da_gpu_trees_view_node(*this, node);
+#else
+    UNUSED(node);
+    UNUSED(visual);
+#endif
+}
+
+void R_dsgraph_structure::add_static_sector(CSector* sector, const CFrustum& view)
+{
+    dxRender_Visual* root = sector->root();
+#ifdef XR_D3D12
+    // Shadow views leave the nodes to the GPU cull.
+    const DaGpuTreeSector* gd =
+        gd_walk != u8(DaGpuTreeWalk::skip) ? da_gpu_trees_sector(u32(sector->unique_id)) : nullptr;
+    if (gd)
+    {
+        // add_static's MT_HIERRARHY path with the moved nodes after the children: the root is tested
+        // once (a second HOM test in the same frame would pass a hidden root, CHOM::visible).
+        vis_data& vis = root->vis;
+        if (vis.marker[context_id] == marker)
+            return;
+        u32 planes = view.getMask();
+        const EFC_Visible VIS = view.testSAABB(vis.sphere.P, vis.sphere.R, vis.box.data(), planes);
+        if (fcvNone == VIS)
+            return;
+        if (o.use_hom && !RImplementation.HOM.visible(vis))
+            return;
+        if (!is_static_geometry_valuable(root, context_id))
+            return;
+        for (dxRender_Visual* child : static_cast<FHierrarhyVisual*>(root)->children)
+        {
+            if (fcvPartial == VIS)
+                add_static(child, view, planes);
+            else
+                add_leafs_static(child);
+        }
+        // After the hierarchy walk, so the value filter of a node's hierarchies reads the verdicts
+        // this view already wrote for them (an ancestor inside the frustum was visited just now).
+        for (const DaGpuTreeNode& node : gd->nodes)
+        {
+            dxRender_Visual* visual = node.visual;
+            if (fcvPartial == VIS)
+            {
+                u32 node_planes = planes;
+                if (view.testSAABB(visual->vis.sphere.P, visual->vis.sphere.R, visual->vis.box.data(), node_planes) == fcvNone)
+                    continue;
+            }
+            bool valuable = true;
+            for (u32 a = 0; valuable && a < node.ancestor_count; ++a)
+                valuable = is_static_geometry_valuable(gd->ancestors[node.first_ancestor + a], context_id);
+            if (!valuable)
+                continue;
+            if (gd_walk == u8(DaGpuTreeWalk::main))
+                gd_node_main(node.node, visual);
+            else if (fcvPartial == VIS)
+                add_static(visual, view, planes);
+            else
+                add_leafs_static(visual);
+        }
+        return;
+    }
+#endif
+    add_static(root, view, view.getMask());
+}
+
 void R_dsgraph_structure::load(const xr_vector<CSector::level_sector_data_t>& sectors_data,
     const xr_vector<CPortal::level_portal_data_t>& portals_data)
 {
@@ -826,6 +937,8 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
     deferred_static_visuals.clear();
     defer_static_main_thread_work = defer_main_thread_work;
     marker++; // !!! critical here
+    gd_view = 0;
+    gd_walk = 0;
 
     if (o.precise_portals && RImplementation.rmPortals)
     {
@@ -850,6 +963,10 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
 
     // Traverse sector/portal structure
     PortalTraverser.traverse(Sectors[o.sector_id], o.view_frustum, o.view_pos, o.xform, o.portal_traverse_flags, context_id);
+#ifdef XR_D3D12
+    // The GPU-driven trees' view over the sectors just visited.
+    gd_walk = u8(da_gpu_trees_view_begin(*this));
+#endif
 
     // Determine visibility for static geometry hierarchy
 #if 0
@@ -888,12 +1005,14 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
                     traverse_children(TaskRange<size_t>(0, children.size()));
                 }
 #else
-                const auto& view = sector->r_frustums[context_id][v_it];
-                add_static(root, view, view.getMask());
+                add_static_sector(sector, sector->r_frustums[context_id][v_it]);
 #endif
             }
         }
     }
+#ifdef XR_D3D12
+    da_gpu_trees_view_end(*this);
+#endif
 
     return true;
 }

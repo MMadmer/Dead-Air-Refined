@@ -9,6 +9,28 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// DirectX 12 capabilities beyond the D3D11 feature set (docs/dead-air/dx12-features/infra.md 3.1),
+// filled by da_native_caps_on_device once the device exists: from the D3D12 device on R5, from the
+// D3D12 probe's cache on R4 (the adapter's tiers only), masked by the -dx12_no_* switches.
+struct CHWNativeCaps
+{
+    u32 raytracingTier{}; // D3D12_RAYTRACING_TIER: 0, 10, 11, 12
+    u32 vrsTier{}; // 0, 1, 2
+    u32 vrsTileSize{}; // tier 2: 8, 16 or 32
+    bool vrsAdditionalRates{};
+    u32 meshShaderTier{}; // 0 or 10
+    u32 shaderModel{}; // the device's highest D3D_SHADER_MODEL (0x60..0x69), 0 = none of SM 6
+    u32 dxcShaderModel{}; // what the loaded DXC targets, 0 = no DXC
+    bool waveOps{};
+    u32 waveLanesMin{};
+    u32 waveLanesMax{};
+    bool native16Bit{};
+    bool heapIndexing{};
+    bool enhancedBarriers{}; // reported only
+    u32 executeIndirectTier{};
+    bool asyncCompute{}; // jobs run on the compute queue
+};
+
 class CHW
     : public pureAppActivate,
       public pureAppDeactivate
@@ -81,6 +103,7 @@ public:
     static constexpr auto IMM_CTX_ID = R__NUM_PARALLEL_CONTEXTS;
 
     CHWCaps Caps;
+    CHWNativeCaps native{};
 
     u32 BackBufferCount{};
     u32 CurrentBackBuffer{};

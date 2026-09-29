@@ -1,0 +1,6 @@
+// The mirror request of a water surface for the ray traced reflections (dxr.md 3.7): water.ps up to
+// the reflection vector, so the vertex stage and every term that shapes the surface normal are
+// exactly the drawn water's. Written into $user$rt_refl_req by phase_rt_reflections.
+#define	NEED_SOFT_WATER
+#define	DA_WATER_RT_REQUEST
+#include "water.ps"

@@ -10,6 +10,30 @@ void CBlender_gtao::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);
 
+#if defined(USE_DX11)
+    if (compute)
+    {
+        switch (C.iElement)
+        {
+        case 0: // raw GTAO, UAV $user$gtao_0
+            C.r_ComputePass("gtao_render");
+            C.r_dx11Texture("s_position", r2_RT_P);
+            C.r_dx11Texture("s_normal", r2_RT_N);
+            C.r_dx11Texture("s_blue_noise", r2_blue_noise);
+            C.r_dx11Sampler("smp_nofilter");
+            C.r_End();
+            break;
+        case 1: // guided filter, UAV $user$ssao_temp
+            C.r_ComputePass("gtao_filter");
+            C.r_dx11Texture("t_gtao_packed", r2_RT_gtao);
+            C.r_dx11Sampler("smp_nofilter");
+            C.r_End();
+            break;
+        }
+        return;
+    }
+#endif
+
     switch (C.iElement)
     {
     case 0: // raw GTAO: view-z + occlusion into $user$gtao_0

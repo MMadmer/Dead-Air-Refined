@@ -14,6 +14,8 @@ struct 	vf
  	float2	tc0			: TEXCOORD1;	// base0
  	float2	tc1			: TEXCOORD2;	// base1
 	float4	af			: COLOR1;		// alpha&factor
+	float4	hpos_cur	: TEXCOORD7;	// motion vector (da_velocity.h)
+	float4	hpos_prev	: TEXCOORD8;
 	float4	hpos		: SV_Position;
 };
 
@@ -46,11 +48,7 @@ float4 	main	( vf I ) : SV_Target
 
 #else	//	ATOC
 
-#ifdef	MSAA_ALPHATEST_DX10_1_ATOC
-f_deffer 	main	( vf I, float4 pos2d : SV_Position )
-#else	//	MSAA_ALPHATEST_DX10_1_ATOC
 f_deffer 	main	( vf I )
-#endif	//	MSAA_ALPHATEST_DX10_1_ATOC
 {
   f_deffer	O;
 
@@ -70,7 +68,7 @@ f_deffer 	main	( vf I )
 #endif	//	!( defined(MSAA_ALPHATEST_DX10_1_ATOC) || defined(MSAA_ALPHATEST_DX10_1_ATOC) )
 #ifdef 	MSAA_ALPHATEST_DX10_1_ATOC
 	float alpha = (D.w-def_aref*0.5)/(1-def_aref*0.5);
-	uint mask = alpha_to_coverage ( alpha, pos2d );
+	uint mask = alpha_to_coverage ( alpha, I.hpos );
 #endif	//	MSAA_ALPHATEST_DX10_1_ATOC
 
 #else
@@ -124,6 +122,8 @@ f_deffer 	main	( vf I )
 								mask );		// OUT: rgb.gloss
 #endif
 
+	// Motion vector (da_velocity.h)
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
   return O;
 }
 

@@ -17,6 +17,11 @@
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_upscaler.h"
+#include "Layers/xrRenderPC_R4/da_framegen.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
+#endif
 
 // Declared BEFORE the render namespace opens: a block-scope extern inside it binds to the
 // enclosing namespace and dies at link. These live in the engine (xr_ioc_cmd.cpp).
@@ -89,21 +94,23 @@ static class cl_LOD : public R_constant_setup
 } binder_LOD;
 #endif
 
+// The G-buffer's addressing: the render size, and the reconstruction of the view ray with the
+// projection jitter folded in (da_temporal.h) - after the upscale too, where the G-buffer is read
+// by uv (tc * pos_decompression_params2.xy).
 static class cl_pos_decompress_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
 #if defined(USE_DX11)
-        const float VertTan = -1.0f * tanf(deg2rad(Device.fFOV / 2.0f));
-        const float HorzTan = -VertTan / Device.fASPECT;
+        cmd_list.set_c(C, da_pos_decompress(Device.fFOV));
 #elif defined(USE_OGL)
         const float VertTan = tanf(deg2rad(Device.fFOV / 2.0f));
         const float HorzTan = VertTan / Device.fASPECT;
+        cmd_list.set_c(
+            C, HorzTan, VertTan, (2.0f * HorzTan) / (float)Device.dwWidth, (2.0f * VertTan) / (float)Device.dwHeight);
 #else
 #   error No graphics API selected or enabled!
 #endif
-        cmd_list.set_c(
-            C, HorzTan, VertTan, (2.0f * HorzTan) / (float)Device.dwWidth, (2.0f * VertTan) / (float)Device.dwHeight);
     }
 } binder_pos_decompress_params;
 
@@ -111,8 +118,8 @@ static class cl_pos_decompress_params2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        cmd_list.set_c(C, (float)Device.dwWidth, (float)Device.dwHeight, 1.0f / (float)Device.dwWidth,
-            1.0f / (float)Device.dwHeight);
+        cmd_list.set_c(C, (float)Device.dwRenderWidth, (float)Device.dwRenderHeight, 1.0f / (float)Device.dwRenderWidth,
+            1.0f / (float)Device.dwRenderHeight);
     }
 } binder_pos_decompress_params2;
 
@@ -563,6 +570,23 @@ static bool must_enable_old_cascades()
     return exist;
 }
 
+// The main render target, and the upscaler it is sized for: the SDK context starts once the
+// targets exist, and when it cannot, the targets are made again at the display size.
+static void create_main_target()
+{
+    RImplementation.Target = xr_new<CRenderTarget>();
+#if RENDER == R_R4
+    if (!da_upscaler_create())
+    {
+        xr_delete(RImplementation.Target);
+        RImplementation.Target = xr_new<CRenderTarget>();
+    }
+    da_history_request_reset("renderer (re)started");
+    // Frame generation starts at the display size once the targets exist.
+    da_framegen_start();
+#endif
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Just two static storage
 void CRender::create()
@@ -742,16 +766,29 @@ void CRender::create()
     // TODO: OGL: temporary disabled, need to fix it
     o.volumetricfog = false;
 #endif
-    o.sjitter = (strstr(Core.Params, "-sjitter")) ? TRUE : FALSE;
+    // -sjitter is a no-op: the accumulation shaders lost the jitter input it switched on, and
+    // neither compiler builds them with it (dx12-features/dxc.md 6.2).
+    o.sjitter = FALSE;
     o.depth16 = (strstr(Core.Params, "-depth16")) ? TRUE : FALSE;
     o.noshadows = (strstr(Core.Params, "-noshadows")) ? TRUE : FALSE;
     o.Tshadows = (strstr(Core.Params, "-tsh")) ? TRUE : FALSE;
     o.oldshadowcascades = must_enable_old_cascades() || ps_r2_ls_flags_ext.test(R2FLAGEXT_SUN_OLD);
+#ifdef XR_D3D12
+    // Their passes (stub_notransform_2uv into accum_sun_near/far) do not link, and DirectX 12
+    // validates a pipeline as a whole: without this there would be no sun at all.
+    if (o.oldshadowcascades)
+    {
+        Msg("! [render] the old sun cascades do not run on DirectX 12 - the current ones are used");
+        o.oldshadowcascades = false;
+    }
+#endif
     o.mblur = (strstr(Core.Params, "-mblur")) ? TRUE : FALSE;
     o.distortion_enabled = (strstr(Core.Params, "-nodistort")) ? FALSE : TRUE;
     o.distortion = o.distortion_enabled;
     o.disasm = (strstr(Core.Params, "-disasm")) ? TRUE : FALSE;
-    o.forceskinw = (strstr(Core.Params, "-skinw")) ? TRUE : FALSE;
+    // -skinw is a no-op: SKIN_COLOR reads a member the model vertex shaders' input no longer has, and
+    // neither compiler builds them with it (dx12-features/dxc.md 6.2).
+    o.forceskinw = FALSE;
 
     o.ssao_blur_on = ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_BLUR) && (ps_r_ssao != 0);
     o.ssao_opt_data = ps_r2_ls_flags_ext.test(R2FLAGEXT_SSAO_OPT_DATA) && (ps_r_ssao != 0);
@@ -906,7 +943,14 @@ void CRender::create()
     Resources->RegisterConstantSetup("triLOD", &binder_LOD);
 #endif
 
-    Target = xr_new<CRenderTarget>(); // Main target
+#if RENDER == R_R4
+    // Before any back buffer view exists: the swap chain a frame generation backend presents
+    // through replaces the plain one here.
+    da_framegen_switch();
+    // The ray tracing device part goes before the targets, which size its own by its availability.
+    da_rt_device_create();
+#endif
+    create_main_target(); // Main target
 #if defined(USE_DX11)
     GpuTimers.OnDeviceCreate();
 #endif
@@ -923,7 +967,7 @@ void CRender::create()
     //	Taller than it is wide: a campfire needs a metre of flame and a couple more of plume.
     FluidManager.Initialize(64, 96, 64);
     //	FluidManager.Initialize( 100, 100, 100 );
-    FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
+    FluidManager.SetScreenSize(Device.dwRenderWidth, Device.dwRenderHeight);
 #endif
 }
 
@@ -939,7 +983,15 @@ void CRender::destroy()
 #if defined(USE_DX11)
     GpuTimers.OnDeviceDestroy();
 #endif
+#if RENDER == R_R4
+    // The SDK contexts go before the targets they were created for.
+    da_upscaler_destroy();
+    da_framegen_destroy();
+#endif
     xr_delete(Target);
+#if RENDER == R_R4
+    da_rt_device_destroy();
+#endif
     PSLibrary.OnDestroy();
     Device.seqFrame.Remove(this);
 }
@@ -955,6 +1007,10 @@ void CRender::reset_begin()
     r_rain.sync();
 #endif
 
+#if RENDER == R_R4
+    // Frame generation stops while its hudless target and the scene surfaces still exist.
+    da_framegen_stop();
+#endif
     Resources->reset_begin();
 
     // Update incremental shadowmap-visibility solver
@@ -992,7 +1048,18 @@ void CRender::reset_begin()
 #if defined(USE_DX11)
     GpuTimers.OnDeviceDestroy();
 #endif
+#if RENDER == R_R4
+    // The SDK context goes before the targets it was created for, and so do ray tracing's.
+    da_upscaler_destroy();
+    da_rt_reset_begin();
+#endif
     xr_delete(Target);
+#if RENDER == R_R4
+    // Every render target surface is released now (Resources->reset_begin, the target above):
+    // no back buffer view is left, so frame generation may rebuild the swap chain here, before
+    // HW.Reset resizes it and reset_end wraps its buffers again.
+    da_framegen_switch();
+#endif
     HWOCC.occq_destroy();
     q_sync_point.Destroy();
 }
@@ -1003,7 +1070,10 @@ void CRender::reset_end()
     q_sync_point.Create();
     HWOCC.occq_create(occq_size);
 
-    Target = xr_new<CRenderTarget>();
+    create_main_target();
+#if RENDER == R_R4
+    da_rt_reset_end();
+#endif
 #if defined(USE_DX11)
     GpuTimers.OnDeviceCreate();
 #endif
@@ -1019,7 +1089,7 @@ void CRender::reset_end()
     //-AVO
 
 #if defined(USE_DX11)
-    FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
+    FluidManager.SetScreenSize(Device.dwRenderWidth, Device.dwRenderHeight);
 #endif
 
     cleanup_contexts();
@@ -1033,12 +1103,23 @@ void CRender::OnCameraUpdated()
 {
     ZoneScoped;
 
+    // RT latch first: the temporal state asks it whether this frame draws motion vectors.
+#if RENDER == R_R4
+    da_rt_frame_begin();
+#endif
+    // This frame's jitter and history state, before the engine hands the view to the contexts.
+    da_temporal_frame_begin();
+
     // Frustum
     ViewBase.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
 
     if (g_pGamePersistent->MainMenuActiveOrLevelNotExist())
         return;
 
+    // A frame that never reached the sync in Calculate left its occlusion task unjoined:
+    // two of them would rasterize into the same HOM buffers at once.
+    if (ProcessHOMTask)
+        TaskScheduler->Wait(*ProcessHOMTask);
     ProcessHOMTask = &HOM.DispatchMTRender();
     if (Details)
     {

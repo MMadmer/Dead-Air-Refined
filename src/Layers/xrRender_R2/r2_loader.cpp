@@ -18,6 +18,13 @@
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidVolume.h"
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#include "Layers/xrRenderPC_R4/da_offload.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
+#include "Layers/xrRenderPC_R4/da_dxc.h"
+#include "Layers/xrRenderPC_R4/da_dstorage.h" // [dx12:ds] hook
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -31,6 +38,8 @@ void CRender::level_Load(IReader* fs)
     R_ASSERT(g_pGameLevel);
     R_ASSERT(!b_loaded);
     da_rain_wetness_on_level_load();
+    // Nothing the previous level left in TAA or the upscaler belongs to this one.
+    da_history_request_reset("level load");
     Resources->BeginLevelTextureTracking();
 
     // Begin
@@ -118,6 +127,14 @@ void CRender::level_Load(IReader* fs)
     // XMS: module-added geometry goes in right after the sectors exist
     LoadOverlayVisuals();
 
+#if RENDER == R_R4
+    // The offloads' auto choice measures the new level from scratch; its path decides whether the GPU
+    // registry (built below in auto either way) is applied from the first frame.
+    da_offload_level_load();
+    // Every tree of the level is known now, module overlays included: the GPU registry.
+    da_gpu_trees_level_load();
+#endif
+
     // HOM
     HOM.Load();
 
@@ -192,7 +209,7 @@ void CRender::level_Load(IReader* fs)
     //  fluid shaders against whatever the registry handed back, and crashed the load outright
     //  about half the time on levels where the deferred unload had already run.
     FluidManager.RebindResources();
-    FluidManager.SetScreenSize(Device.dwWidth, Device.dwHeight);
+    FluidManager.SetScreenSize(Device.dwRenderWidth, Device.dwRenderHeight);
 #endif
 
     // Headlamp projector warmup - see m_torch_spot_warm in r2.h. The texture name is the
@@ -205,6 +222,12 @@ void CRender::level_Load(IReader* fs)
         strconcat(sizeof(warm_name), warm_name, "r2" DELIMITER "accum_spot_", torch_spot_texture);
         m_torch_spot_warm.create(Target->b_accum_spot, warm_name, torch_spot_texture);
     }
+
+#if RENDER == R_R4
+    // The ray tracing scene may walk the finished level from now on; then the shader compiler's statistics.
+    da_rt_level_load();
+    da_dxc_log_stats();
+#endif
 }
 
 void CRender::level_Unload()
@@ -227,6 +250,13 @@ void CRender::level_Unload()
         return;
     if (!b_loaded)
         return;
+
+#if RENDER == R_R4
+    // First the GPU users of the level's geometry: ray tracing waits for its work and frees the
+    // scene, the tree registry puts its nodes back into the sector roots.
+    da_rt_level_unload();
+    da_gpu_trees_level_unload();
+#endif
 
 #if defined(USE_DX11)
     // Before anything else: the volumes hang off sector roots and must be detached while the visual
@@ -334,6 +364,10 @@ void CRender::LoadBuffers(CStreamReader* base_fs, bool alternative)
 
     R_ASSERT2(base_fs, "Could not load geometry. File not found.");
     Resources->Evict();
+#if RENDER == R_R4 // [dx12:ds] hook
+    const DaGeometryTimer da_geometry_timer(alternative); // [dx12:ds] hook
+    if (da_dstorage_load_buffers(*this, base_fs, alternative)) return; // [dx12:ds] hook
+#endif // [dx12:ds] hook
     // Vertex buffers
     {
         ZoneScopedN("Load VBs");

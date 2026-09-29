@@ -135,7 +135,13 @@ void CRenderTarget::phase_pp()
     //	Element 0 for for normal post-process
     //	Element 4 for color map post-process
     bool bCMap = u_need_CM();
+#if RENDER == R_R4
+    // While an upscaler runs combine_2 wrote the display-size rt_PostDisplay, not rt_Color.
+    const ref_shader& postprocess = da_upscaler_active() ? s_postprocess_display : s_postprocess_msaa;
+    RCache.set_Element(postprocess->E[bCMap ? 4 : 0]);
+#else
     RCache.set_Element(s_postprocess_msaa->E[bCMap ? 4 : 0]);
+#endif
 
     int gblend = clampr(iFloor((1 - param_gray) * 255.f), 0, 255);
     int nblend = clampr(iFloor((1 - param_noise) * 255.f), 0, 255);

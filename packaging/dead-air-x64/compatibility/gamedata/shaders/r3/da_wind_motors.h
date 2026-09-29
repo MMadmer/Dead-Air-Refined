@@ -19,25 +19,54 @@ uniform float4x4 da_wm_pos1;
 uniform float4x4 da_wm_par0;
 uniform float4x4 da_wm_par1;
 uniform float4 da_wm_info;
+// The same rows as the previous frame drew with them, for the motion vectors (the vegetation
+// G-buffer shaders bend a second time with the previous wind). da_wm_info_prev: x = the
+// previous frame's live motor count, y = 1 while motion vectors are rendered - the second
+// evaluation is skipped otherwise.
+uniform float4x4 da_wm_pos0_prev;
+uniform float4x4 da_wm_pos1_prev;
+uniform float4x4 da_wm_par0_prev;
+uniform float4x4 da_wm_par1_prev;
+uniform float4 da_wm_info_prev;
+
+bool da_wind_prev_on() { return da_wm_info_prev.y > 0.5f; }
+
+// Motor row i of this frame or of the previous one. prev is a literal at every call site, so
+// the unused side folds away and the rows stay direct constant-buffer reads.
+void da_wm_row(int i, bool prev, out float4 P, out float4 A)
+{
+    // Both ternary sides are evaluated in HLSL, so each index must stay in range on its own.
+    const int lo = min(i, 3);
+    const int hi = max(i - 4, 0);
+    if (prev)
+    {
+        P = (i < 4) ? da_wm_pos0_prev[lo] : da_wm_pos1_prev[hi];
+        A = (i < 4) ? da_wm_par0_prev[lo] : da_wm_par1_prev[hi];
+    }
+    else
+    {
+        P = (i < 4) ? da_wm_pos0[lo] : da_wm_pos1[hi];
+        A = (i < 4) ? da_wm_par0[lo] : da_wm_par1[hi];
+    }
+}
+
+int da_wm_count(bool prev) { return int(prev ? da_wm_info_prev.x : da_wm_info.x); }
 
 // Horizontal bend (world XZ) for a vegetation instance rooted at root_w (xyz - the Y matters
 // for the shot-trace height gate), scaled by height so tips move and roots stay planted.
 // Returns a displacement to ADD to the wind result. press_w rises to 1 inside a press motor's
 // footprint: the caller suppresses the wind wave with it, because grass held down by a boot
-// must not keep waving mid-air.
-float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
+// must not keep waving mid-air. prev: the previous frame's motors.
+float2 da_wind_motors_bend_ex(float3 root_w, float H, bool prev, out float press_w)
 {
     float2 bend = float2(0.0f, 0.0f);
     press_w = 0.0f;
-    const int count = int(da_wm_info.x);
+    const int count = da_wm_count(prev);
     [loop]
     for (int i = 0; i < count; ++i)
     {
-        // Both ternary sides are evaluated in HLSL, so each index must stay in range on its own.
-        const int lo = min(i, 3);
-        const int hi = max(i - 4, 0);
-        const float4 P = (i < 4) ? da_wm_pos0[lo] : da_wm_pos1[hi];
-        const float4 A = (i < 4) ? da_wm_par0[lo] : da_wm_par1[hi];
+        float4 P, A;
+        da_wm_row(i, prev, P, A);
         [branch]
         if (P.w <= 0.0f || abs(A.x) <= 0.001f)
             continue;
@@ -131,6 +160,11 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
     return bend;
 }
 
+float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
+{
+    return da_wind_motors_bend_ex(root_w, H, false, press_w);
+}
+
 // Motors on tree-shader geometry: crowns, trunks and the bushes (Dead Air's bushes are tree
 // models under flora\leaf_wave). The grass rule above - strength times height, measured at
 // the tuft root - does not carry over. A boot flattens a blade of grass, a shoulder does not
@@ -148,10 +182,11 @@ float2 da_wind_motors_bend(float3 root_w, float H, out float press_w)
 //    feet, fading out by 3.2 m, with a body-wide footprint and a bounded travel; a shot gives
 //    the low foliage a gentle, wide shiver (nothing above six metres); a blast bends the
 //    whole tree from its root through the authored flexibility, the way the wind does.
-float2 da_tree_motors_bend(float3 pos, float3 root, float H, float tree_h, float frac)
+// prev: the previous frame's motors.
+float2 da_tree_motors_bend_ex(float3 pos, float3 root, float H, float tree_h, float frac, bool prev)
 {
     float2 bend = float2(0.0f, 0.0f);
-    const int count = int(da_wm_info.x);
+    const int count = da_wm_count(prev);
     const float bush_k = saturate((4.5f - tree_h) * (1.0f / 1.5f));
     const float canopy = 0.4f * min(tree_h, 4.5f);
     // Foliage keeps trunks and thick branches (frac under 0.3) out of a press or a wake;
@@ -159,19 +194,21 @@ float2 da_tree_motors_bend(float3 pos, float3 root, float H, float tree_h, float
     const float foliage = saturate((frac - 0.3f) * 2.5f);
     const float flex = saturate(frac * 2.0f);
     const float vy = root.y + H;
+    // A reed patch or a hedge is one model around one root metres wide: a body or a shot there
+    // must move the stalks it reaches, not only the ones by the root. Past the canopy a vertex
+    // bends from its own spot on the ground, so each stalk leans as one plant of its own.
+    const float spread = length(pos.xz - root.xz);
+    const float2 root_xz = lerp(root.xz, pos.xz, bush_k * saturate((spread - canopy) / max(canopy, 0.3f)));
     [loop]
     for (int i = 0; i < count; ++i)
     {
-        // Both ternary sides are evaluated in HLSL, so each index must stay in range on its own.
-        const int lo = min(i, 3);
-        const int hi = max(i - 4, 0);
-        const float4 P = (i < 4) ? da_wm_pos0[lo] : da_wm_pos1[hi];
-        const float4 A = (i < 4) ? da_wm_par0[lo] : da_wm_par1[hi];
+        float4 P, A;
+        da_wm_row(i, prev, P, A);
         [branch]
         if (P.w <= 0.0f || abs(A.x) <= 0.001f)
             continue;
 
-        const float2 d_root = root.xz - P.xz;
+        const float2 d_root = root_xz - P.xz;
         const float2 d_vert = pos.xz - P.xz;
 
         [branch]
@@ -254,6 +291,11 @@ float2 da_tree_motors_bend(float3 pos, float3 root, float H, float tree_h, float
         bend += lerp(dir_v * w_tree, dir_b * w_bush, bush_k) * A.x;
     }
     return bend;
+}
+
+float2 da_tree_motors_bend(float3 pos, float3 root, float H, float tree_h, float frac)
+{
+    return da_tree_motors_bend_ex(pos, root, H, tree_h, frac, false);
 }
 
 #endif // DA_WIND_MOTORS_H

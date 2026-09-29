@@ -75,6 +75,12 @@ void dxRainRender::Render(CEffect_Rain& owner)
         const u32 desired_items =
             iFloor(float(_max(ps_r__rain_drops, 1)) * (0.20f + 0.80f * rate01) * tier_k);
 
+        // The wind every drop born this frame is solved on (Born). Sampled once at the camera and
+        // shared by the whole sheet: the gust field varies over tens of metres while the sheet
+        // is thirty across, so a per-drop sample would buy nothing for thousands of noise
+        // evaluations a frame.
+        const Fvector wind_v = env.WindAt(vEye, 6.f);
+
         // born _new_ if needed
         if (owner.items.size() < desired_items)
         {
@@ -82,7 +88,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
             while (owner.items.size() < desired_items)
             {
                 CEffect_Rain::Item one;
-                owner.Born(one, ps_r__rain_radius);
+                owner.Born(one, ps_r__rain_radius, wind_v);
                 owner.items.push_back(one);
             }
         }
@@ -108,15 +114,6 @@ void dxRainRender::Render(CEffect_Rain& owner)
 
         const float b_radius_wrap_sqr = _sqr((ps_r__rain_radius + .5f));
 
-        // Wind steers a drop in FLIGHT, not only at birth. Sampled once at the camera and
-        // shared by the whole sheet: the gust field varies over tens of metres while the sheet
-        // is thirty across, so a per-drop sample would buy nothing for six thousand noise
-        // evaluations a frame. What a drop gets of its own is a fixed jitter keyed on its
-        // index, so the sheet shimmers under a gust instead of sliding as one rigid slab.
-        const Fvector wind_v = env.WindAt(vEye, 6.f);
-        const float wind_a = 1.f - expf(-dt / da_rain::wind_tau);
-        const float slant_sin = _sin(da_rain::max_slant);
-
         for (u32 I = 0; I < desired_items; I++)
         {
             CEffect_Rain::Item& one = owner.items[I];
@@ -124,41 +121,26 @@ void dxRainRender::Render(CEffect_Rain& owner)
             if (one.dwTime_Hit < Device.dwTimeGlobal)
                 owner.HitItem(one);
             if (one.dwTime_Life < Device.dwTimeGlobal)
-                owner.Born(one, ps_r__rain_radius);
+                owner.Born(one, ps_r__rain_radius, wind_v);
             // Parked under a roof: no motion, no membership test, and below it no quad.
             if (one.sheltered)
                 continue;
 
-            // The wind's pull, expressed in the drop's own units: the slant is
-            // atan(wind / terminal), so at the speed the streak is DRAWN at the matching
-            // horizontal velocity is that ratio times fSpeed. Relaxed toward rather than
-            // snapped to, over the drop's response time.
-            Fvector vel;
-            vel.mul(one.D, one.fSpeed);
-            const float jitter = 0.75f + 0.5f * float((I * 2654435761u) >> 29) * (1.f / 7.f);
-            const float k = one.fSpeed * jitter / da_rain::fall_ms;
-            float tx = wind_v.x * k, tz = wind_v.z * k;
-            // Same readability cap the birth slant has, or a squall lays the sheet flat.
-            const float hmax = one.fSpeed * slant_sin;
-            const float h = _sqrt(tx * tx + tz * tz);
-            if (h > hmax)
-            {
-                const float s = hmax / h;
-                tx *= s;
-                tz *= s;
-            }
-            vel.x += (tx - vel.x) * wind_a;
-            vel.z += (tz - vel.z) * wind_a;
-            one.D.set(vel);
-            one.D.normalize_safe(Fvector().set(0.f, -1.f, 0.f));
-
+            // Along the line the birth ray cleared, and nothing else (see Born) - and never past its
+            // end. A drop may be born a hand's width over the roof, and the first step comes before
+            // any check: a frame of fall, metres of it after a hitch, carried it through the ceiling
+            // and it was drawn in the room below until the next frame retired it.
             one.P.mad(one.D, one.fSpeed * dt);
+            Fvector past;
+            if (past.sub(one.P, one.Phit).dotproduct(one.D) > 0.f)
+                one.P = one.Phit;
+
             // Membership in the SLANT-ALIGNED cylinder: test where the streak's LINE crosses
             // eye level, not where the drop is right now - the old vertical test kept the
             // population in an upright column whose sheared edge showed as a rain shaft once
-            // the wind slanted the fall axis. Drops that leave the volume (the camera moved,
-            // the wind turned) are simply reborn into the landing disc: Born costs the same
-            // ray as the old edge-teleport machinery did.
+            // the wind slanted the fall axis. Drops that leave the volume (the camera moved)
+            // are simply reborn into the landing disc: Born costs the same ray as the old
+            // edge-teleport machinery did.
             const float t_eye = (vEye.y - one.P.y) / std::min(one.D.y, -0.05f);
             Fvector wdir;
             wdir.set(one.P.x + one.D.x * t_eye - vEye.x, 0, one.P.z + one.D.z * t_eye - vEye.z);

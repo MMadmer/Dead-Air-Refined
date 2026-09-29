@@ -76,6 +76,9 @@ void CDetailManager::cache_Decompress(Slot* S)
     VERIFY(S);
     Slot& D = *S;
     D.type = stReady;
+    // New contents: rebuild the render lists at the next visibility pass, not up to 30 frames
+    // later on the schedule a refresh of the still empty, pending slot had set.
+    D.frame = 0;
     if (D.empty)
         return;
 
@@ -114,6 +117,9 @@ void CDetailManager::cache_Decompress(Slot* S)
     CRandom r_jitter(0x12071980 ^ p_rnd);
     CRandom r_yaw(0x12071980 ^ p_rnd);
     CRandom r_scale(0x12071980 ^ p_rnd);
+    // The wave group of each blade, per slot like the rest, so a slot looks the same in every
+    // session and after every re-decompression.
+    CRandom r_wave(0x7A3C95E1 ^ p_rnd);
 
     // Prepare to actual-bounds-calculations
     Fbox Bounds;
@@ -323,7 +329,7 @@ gray255[3]						=	255.f*float(c_pal->a3)/15.f;
                 {
                     // 50/50 between the two wave groups (was 1/3 vs 2/3): with authored amplitudes
                     // live, the quieter second wave carrying half the field calms it visibly.
-                    Item.vis_ID = ::Random.randI(1, 3);
+                    Item.vis_ID = r_wave.randI(1, 3);
                 }
             }
 #else

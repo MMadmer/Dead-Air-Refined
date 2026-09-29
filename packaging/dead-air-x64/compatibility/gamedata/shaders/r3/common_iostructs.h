@@ -298,21 +298,25 @@ struct	v_static_color
 
 ////////////////////////////////////////////////////////////////
 //	defer
+//	velocity: the motion vector (da_velocity.h). Always written; the target behind it is bound
+//	only in the packed layout while TAA or an upscaler runs, otherwise the write goes nowhere.
 #ifndef GBUFFER_OPTIMIZATION
-struct                  f_deffer        		
+struct                  f_deffer
 {
 	float4	position: SV_Target0;        // px,py,pz, m-id
 	float4	Ne		  : SV_Target1;        // nx,ny,nz, hemi
 	float4	C		  : SV_Target2;        // r, g, b,  gloss
+	float2	velocity  : SV_Target3;        // never bound in this layout
 #ifdef EXTEND_F_DEFFER
    uint     mask    : SV_COVERAGE;
 #endif
 };
 #else
-struct                  f_deffer        		
+struct                  f_deffer
 {
 	float4	position: SV_Target0;        // xy=encoded normal, z = pz, w = encoded(m-id,hemi)
 	float4	C		  : SV_Target1;        // r, g, b,  gloss
+	float2	velocity  : SV_Target2;        // NDC(current) - NDC(previous), unjittered, y up
 #ifdef EXTEND_F_DEFFER
    uint     mask    : SV_COVERAGE;
 #endif
@@ -332,6 +336,9 @@ struct					gbuffer_data
 
 ////////////////////////////////////////////////////////////////
 //	Defer bumped
+//	hpos_cur/hpos_prev: the unjittered clip position now and on the previous frame, for the
+//	motion vector (da_velocity.h). Every deffer_* vertex shader fills both. They sit after
+//	everything else and before hpos, so the p_ struct stays a prefix of the v2p_ one.
 struct v2p_bumped
 {
 #if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
@@ -349,6 +356,8 @@ struct v2p_bumped
 #ifdef USE_LM_HEMI
 		float2	lmh	: TEXCOORD6;	// lm-hemi
 #endif
+	float4	hpos_cur	: TEXCOORD7;	// unjittered clip position, this frame
+	float4	hpos_prev	: TEXCOORD8;	// unjittered clip position, previous frame
 	float4	hpos	: SV_Position;
 };
 
@@ -369,6 +378,8 @@ struct p_bumped
 #ifdef USE_LM_HEMI
 		float2	lmh	: TEXCOORD6;	// lm-hemi
 #endif
+	float4	hpos_cur	: TEXCOORD7;	// unjittered clip position, this frame
+	float4	hpos_prev	: TEXCOORD8;	// unjittered clip position, previous frame
 };
 ////////////////////////////////////////////////////////////////
 //	Defer flat
@@ -387,6 +398,8 @@ struct	v2p_flat
 #ifdef USE_LM_HEMI
 	float2	lmh		: TEXCOORD4;	// lm-hemi
 #endif
+	float4	hpos_cur	: TEXCOORD7;	// unjittered clip position, this frame
+	float4	hpos_prev	: TEXCOORD8;	// unjittered clip position, previous frame
 	float4	hpos	: SV_Position;
 };
 
@@ -405,6 +418,8 @@ struct	p_flat
 #ifdef USE_LM_HEMI
 	float2	lmh		: TEXCOORD4;	// lm-hemi
 #endif
+	float4	hpos_cur	: TEXCOORD7;	// unjittered clip position, this frame
+	float4	hpos_prev	: TEXCOORD8;	// unjittered clip position, previous frame
 };
 
 ////////////////////////////////////////////////////////////////

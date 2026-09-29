@@ -157,8 +157,8 @@ void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
 
         // Make jitter texture
         Fvector2 j0, j1;
-        float scale_X = float(Device.dwWidth) / float(TEX_jitter);
-        // float	scale_Y				= float(Device.dwHeight)/ float(TEX_jitter);
+        float scale_X = float(Device.dwRenderWidth) / float(TEX_jitter);
+        // float	scale_Y				= float(Device.dwRenderHeight)/ float(TEX_jitter);
         float offset = (.5f / float(TEX_jitter));
         j0.set(offset, offset);
         j1.set(scale_X, scale_X).add(offset);

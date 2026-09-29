@@ -51,6 +51,33 @@ IC void R_xforms::set_c_wvp(R_constant* C)
     c_wvp = C;
     cmd_list.set_c(C, m_wvp);
 };
+IC void R_xforms::set_c_vp_nojit(R_constant* C)
+{
+    c_vp_nojit = C;
+    cmd_list.set_c(C, m_vp_nojit);
+};
+IC void R_xforms::set_c_vp_prev(R_constant* C)
+{
+    c_vp_prev = C;
+    cmd_list.set_c(C, m_vp_prev);
+};
+IC void R_xforms::set_c_wvp_nojit(R_constant* C)
+{
+    c_wvp_nojit = C;
+    update_motion();
+    cmd_list.set_c(C, m_wvp_nojit);
+};
+IC void R_xforms::set_c_wvp_prev(R_constant* C)
+{
+    c_wvp_prev = C;
+    update_motion();
+    cmd_list.set_c(C, m_wvp_prev);
+};
+IC void R_xforms::set_c_w_prev(R_constant* C)
+{
+    c_w_prev = C;
+    cmd_list.set_c(C, m_w_prev);
+};
 
 IC void CBackend::set_xform_world(const Fmatrix& M) { xforms.set_W(M); }
 IC void CBackend::set_xform_view(const Fmatrix& M) { xforms.set_V(M); }

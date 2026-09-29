@@ -221,7 +221,9 @@ void CParticleGroup::SItem::StartRelatedChild(CParticleEffect* emitter, LPCSTR e
 }
 void CParticleGroup::SItem::StopRelatedChild(u32 idx)
 {
-    VERIFY(idx < _children_related.size());
+    // A suppressed on-play child is never started, so its list stays empty.
+    if (idx >= _children_related.size())
+        return;
     dxRender_Visual*& V = _children_related[idx];
     ((CParticleEffect*)V)->Stop(TRUE);
     _children_free.push_back(V);
@@ -365,7 +367,8 @@ void CParticleGroup::SItem::OnFrame(u32 u_dt, const CPGDef::SEffect& def, Fbox& 
                 PAPI::Particle* particles;
                 u32 p_cnt;
                 PAPI::ParticleManager()->GetParticles(E1->GetHandleEffect(), particles, p_cnt);
-                VERIFY(p_cnt == _children_related.size());
+                VERIFY(p_cnt == _children_related.size() || _children_related.empty());
+                p_cnt = std::min(p_cnt, u32(_children_related.size()));
                 if (p_cnt)
                 {
                     for (u32 i = 0; i < p_cnt; i++)
@@ -624,21 +627,18 @@ u32 CParticleGroup::ParticlesCount()
 void CParticleGroup::SetHudMode(BOOL b)
 {
     ScopeLock lock{ &render_lock };
+    // A suppressed item has no effect (Compile).
     for (auto& item : items)
-    {
-        CParticleEffect* E = static_cast<CParticleEffect*>(item._effect);
-        E->SetHudMode(b);
-    }
+        if (auto* E = static_cast<CParticleEffect*>(item._effect))
+            E->SetHudMode(b);
 }
 
 BOOL CParticleGroup::GetHudMode()
 {
     ScopeLock lock{ &render_lock };
-    if (items.size())
-    {
-        CParticleEffect* E = static_cast<CParticleEffect*>(items[0]._effect);
-        return E->GetHudMode();
-    }
+    for (const auto& item : items)
+        if (auto* E = static_cast<CParticleEffect*>(item._effect))
+            return E->GetHudMode();
     return false;
 }
 } // namespace xray::render::RENDER_NAMESPACE

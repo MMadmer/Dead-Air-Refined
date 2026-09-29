@@ -5,6 +5,10 @@
 namespace xray::render::RENDER_NAMESPACE
 {
 class FTreeVisual;
+
+// is_static_geometry_valuable's thresholds at the current quality, for the GPU-driven trees' cull;
+// false while the static value filter is off.
+bool dsgraph_static_value_thresholds(float (&volume)[5], float (&distance)[5]);
 // feedback	for receiving visuals
 class R_feedback
 {
@@ -44,6 +48,11 @@ struct R_dsgraph_structure
         bool precise_portals{ false };
         bool is_main_pass{ false };
         bool mt_calculate{ false };
+        // Static casters marked dxRender_Visual::rt_static stay out of this view: ray traced sun
+        // shadows cover them in the near and middle cascades (dx12-features/dxr.md 3.5).
+        bool rt_skip_static{ false };
+        // A local light's shadow face: the GPU-driven trees stay on the CPU walk there (gpudriven.md 3.13).
+        bool local_light{ false };
         // A dynamic-object list collected ahead of time. When set, build_subspace_dynamic filters it
         // with the view frustum instead of querying the spatial database - the database takes one
         // lock for every query, and the shadow-map passes of one frame would otherwise queue up on
@@ -100,6 +109,11 @@ struct R_dsgraph_structure
     bool defer_static_main_thread_work{};
 
     CBackend cmd_list{};
+
+    // GPU-driven trees (da_gpu_trees.h): the view the last build set up (0: none), consumed by the first
+    // render_graph(0), and how the build walks the nodes the registry took out of the hierarchies.
+    u32 gd_view{};
+    u8 gd_walk{};
 
     u32 counter_S{};
     u32 counter_D{};
@@ -168,6 +182,10 @@ struct R_dsgraph_structure
         o.portal_traverse_flags = 0;
         o.spatial_types = STYPE_RENDERABLE;
         o.dynamic_source = nullptr;
+        o.rt_skip_static = false;
+        o.local_light = false;
+        gd_view = 0;
+        gd_walk = 0;
 
         val_recorder = nullptr;
         val_feedback = nullptr;
@@ -255,6 +273,12 @@ struct R_dsgraph_structure
     // governed by r_ssaLOD_A/B against the imposter, so the static value filter must not
     // cull it a second time.
     void add_static(dxRender_Visual* pVisual, const CFrustum& view, u32 planes, bool lod_managed = false);
+    // A sector's static geometry through one of its frustums: its root, and the vegetation nodes the
+    // GPU-driven registry moved out of it, under the root's own tests as before.
+    void add_static_sector(CSector* sector, const CFrustum& view);
+    // The main view of phase 1 (gpudriven.md 3.5): add_static's tests of a GPU-driven node inside the
+    // frustum (HOM, value filter, the FLOD switch with its impostor); its instances go to the GPU cull.
+    void gd_node_main(u32 node, dxRender_Visual* visual);
     void add_leafs_dynamic(IRenderable* root, dxRender_Visual* pVisual, Fmatrix& xform); // if detected node's full visibility
     void add_leafs_static(dxRender_Visual* pVisual, bool lod_managed = false); // if detected node's full visibility
 

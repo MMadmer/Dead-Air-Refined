@@ -8,6 +8,63 @@ namespace xray::render::RENDER_NAMESPACE
 {
 dx11GpuTimers GpuTimers;
 
+namespace
+{
+// Plain arrays: a feature may register from a static initialiser.
+struct gpu_log_field
+{
+    pcstr key;
+    dx11GpuTimers::FieldValue value;
+};
+constexpr size_t gpu_log_max_fields = 16;
+gpu_log_field g_gpu_log_fields[gpu_log_max_fields];
+size_t g_gpu_log_field_count = 0;
+} // namespace
+
+void dx11GpuTimers::RegisterField(pcstr key, FieldValue value)
+{
+    for (size_t i = 0; i < g_gpu_log_field_count; ++i)
+    {
+        if (!xr_strcmp(g_gpu_log_fields[i].key, key))
+        {
+            g_gpu_log_fields[i].value = value;
+            return;
+        }
+    }
+    R_ASSERT2(g_gpu_log_field_count < gpu_log_max_fields, "too many r__gpu_log fields");
+    g_gpu_log_fields[g_gpu_log_field_count++] = { key, value };
+}
+
+void dx11GpuTimers::LogLine() const
+{
+    float mean[Count];
+    for (u32 i = 0; i < Count; ++i)
+        mean[i] = m_sum_frames ? float(m_sum[i] / m_sum_frames) : m_ms[i];
+    const u32 frames = m_sum_frames;
+    std::fill(std::begin(m_sum), std::end(m_sum), 0.0);
+    m_sum_frames = 0;
+    const auto ms = [&mean](Slot slot) { return mean[slot]; };
+
+    // snprintf: a field that does not fit is cut, never a crash in the log line.
+    string1024 extra;
+    int length = std::snprintf(extra, sizeof(extra),
+        " ripple=%.3f join=%.3f vrs=%.3f gd=%.3f grass=%.3f rt_scene=%.3f rt_sun=%.3f rt_ao=%.3f rt_refl=%.3f",
+        ms(Ripple), ms(JoinWait), ms(VrsRate) + ms(VrsLuma), ms(GdCull), ms(Grass), ms(RtScene), ms(RtSun),
+        ms(RtAO), ms(RtRefl));
+    for (size_t i = 0; i < g_gpu_log_field_count && length > 0 && size_t(length) < sizeof(extra); ++i)
+    {
+        const int added = std::snprintf(extra + length, sizeof(extra) - length, " %s=%.3f",
+            g_gpu_log_fields[i].key, g_gpu_log_fields[i].value());
+        if (added <= 0)
+            break;
+        length += added;
+    }
+    Msg("* [gpu] frame=%.3f scene=%.3f sun=%.3f lights=%.3f clouds=%.3f march=%.3f combine=%.3f ms "
+        "(ao=%.3f forward=%.3f bloom=%.3f aa=%.3f post=%.3f)%s frames=%u",
+        ms(Frame), ms(Scene), ms(Sun), ms(Lights), ms(Clouds), ms(CloudsMarch), ms(Combine), ms(CombineAO),
+        ms(CombineForward), ms(CombineBloom), ms(CombineAA), ms(CombinePost), extra, frames);
+}
+
 pcstr dx11GpuTimers::name(Slot slot)
 {
     switch (slot)
@@ -20,6 +77,21 @@ pcstr dx11GpuTimers::name(Slot slot)
     case Clouds: return "clouds";
     case CloudsMarch: return "clouds_march";
     case Combine: return "combine";
+    case CombineAO: return "ao";
+    case CombineForward: return "forward";
+    case CombineBloom: return "bloom";
+    case CombineAA: return "aa";
+    case CombinePost: return "post";
+    case Ripple: return "ripple";
+    case JoinWait: return "join";
+    case VrsRate: return "vrs_rate";
+    case VrsLuma: return "vrs_luma";
+    case GdCull: return "gd";
+    case Grass: return "grass";
+    case RtScene: return "rt_scene";
+    case RtSun: return "rt_sun";
+    case RtAO: return "rt_ao";
+    case RtRefl: return "rt_refl";
     default: return "?";
     }
 }
@@ -154,6 +226,9 @@ void dx11GpuTimers::Resolve(FrameQueries& f)
         }
         m_ms[i] = t1 >= t0 ? float(double(t1 - t0) * to_ms) : 0.f;
     }
+    for (u32 i = 0; i < Count; ++i)
+        m_sum[i] += m_ms[i];
+    ++m_sum_frames;
     m_valid = true;
 }
 } // namespace xray::render::RENDER_NAMESPACE

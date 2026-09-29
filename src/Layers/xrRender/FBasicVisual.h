@@ -65,6 +65,9 @@ public:
     u32 Type; // visual's type
     vis_data vis; // visibility-data
     ref_shader shader; // pipe state, shared
+    // A static caster whose sun shadow ray tracing takes over (set by the RT scene, never on a
+    // swaying visual): the near and middle cascades skip it (dx12-features/dxr.md 3.5).
+    bool rt_static{};
 
     virtual void Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo) {} // LOD - Level Of Detail  [0..1], Ignored
     virtual void Load(const char* N, IReader* data, u32 dwFlags);

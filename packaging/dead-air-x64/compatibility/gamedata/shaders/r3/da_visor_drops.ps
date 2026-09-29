@@ -67,8 +67,9 @@ uniform float4 da_visor_sim;
 // xy = which way is down IN THE PLANE OF THE GLASS, unit; z = how much of gravity the plate
 // feels, 0 when the visor is horizontal and 1 when it faces the horizon; w = the target's aspect.
 uniform float4 da_visor_grav;
-// x = 1 while a hand is going across, y = how far across it is 0..1, z = which way it travels,
-// w = the radius in mm of a lens the rig holds at the centre of the glass, 0 for none.
+// x = how far across the hand was at the previous step and y = how far it is now, both 0..1 (x
+// negative while no hand is on the glass), z = which way it travels, w = the radius in mm of a
+// lens the rig holds at the centre of the glass, 0 for none.
 uniform float4 da_visor_wipe;
 // xy = one texel in uv, zw = the target's size in texels.
 uniform float4 da_visor_dim;
@@ -196,9 +197,11 @@ uniform float4 da_visor_dim;
 //	third of the plate. Spread thin it covered a third at a tenth of the water, which is how the
 //	field looked wet while holding almost nothing - and why every shape on it was a smear. Halved
 //	from there at the player's request: at the full figure the glass closed over too fast to see
-//	past in a downpour, and a visor is a thing you look THROUGH. It is the one number here that is
-//	a preference rather than a measurement - everything downstream is per drop.
-#define DA_VD_FLUX		15000.0f
+//	past in a downpour, and a visor is a thing you look THROUGH. Down from 15000 to 10000 after
+//	players found a storm still covered it too fast, and back up to 12500 when 10000 read as too
+//	sparse. It is the one number here that is a preference rather than a measurement -
+//	everything downstream is per drop.
+#define DA_VD_FLUX		12500.0f
 //	The cell the spawn lottery is drawn on, in millimetres: bigger than the drops, or two of them
 //	land in the same place.
 #define DA_VD_CELL_MM	4.0f
@@ -216,14 +219,20 @@ uniform float4 da_visor_dim;
 //	water is the one way this scheme can lose mass.
 #define DA_VD_CLAMP		2.40f
 
-//	The hand. It does not delete water - it COLLECTS it: the edge drives everything it touches
-//	forward faster than it is itself travelling, so the water piles into a bead that rides ahead of
-//	it and runs off the far side. Only what the bead could not take is left behind, and it is left
-//	as a smeared film and not as clean glass.
-#define DA_VD_WIPE_W	11.0f
-#define DA_VD_WIPE_PUSH	30.0f
-#define DA_VD_WIPE_KEEP	0.10f
-#define DA_VD_WIPE_SMEAR 0.85f
+//	The hand: a gloved palm pressed on the visor and drawn across it. Under the palm the water is
+//	squeezed out and taken up by the glove; what stays is a thin smear, fibred along the stroke by the
+//	glove and heavier where the palm pressed less. The palm is not asked to push the water ahead of it
+//	as a bead: it crosses the glass three to four times faster than the flux can carry water, so the
+//	bead never formed - the edge overran the water and left it in slabs, one per frame.
+#define DA_VD_WIPE_PALM	28.0f	// mm of palm in contact, along the stroke
+#define DA_VD_WIPE_BOW	8.0f	// mm of meniscus the leading edge drives ahead of itself
+//	What one whole pass leaves where the palm pressed firmly; twice that where it pressed lightly.
+//	Kept under the thickness the optics draw as a drop (DA_VS_ON): at a tenth a wiped bead left a
+//	flat patch that thick, and every one of them was drawn as a grey blot with a dark rim.
+#define DA_VD_WIPE_KEEP	0.04f
+#define DA_VD_WIPE_SMEAR 0.60f	// how much of what it took stays on the glass as film
+#define DA_VD_WIPE_DRAG_MM 10.0f	// mm of stroke over which the smear the palm drags thins by e
+#define DA_VD_WIPE_ARC	0.05f	// how far the middle of the edge leads its ends, in uv - a hand draws an arc
 
 float da_vd_hash(int2 p, uint n)
 {
@@ -234,18 +243,34 @@ float da_vd_hash(int2 p, uint n)
 	return float(h & 0x00ffffffu) * (1.0f / 16777216.0f);
 }
 
+//	Value noise on the hash lattice, smoothly interpolated; n picks an independent field.
+float da_vd_vnoise(float2 c, uint n)
+{
+	const int2 i = int2(floor(c));
+	const float2 f = c - float2(i);
+	const float2 w = f * f * (3.0f - 2.0f * f);
+	const float a = da_vd_hash(i, n), b = da_vd_hash(i + int2(1, 0), n);
+	const float d = da_vd_hash(i + int2(0, 1), n), e = da_vd_hash(i + int2(1, 1), n);
+	return lerp(lerp(a, b, w.x), lerp(d, e, w.x), w.y);
+}
+
 //	A smooth field of how rough the glass is here: where the plate holds a drop harder than average
 //	and where it lets one go early. Two millimetres across, so it is per drop and not per texel - a
 //	per-texel threshold is noise, and noise makes a field crawl instead of run.
 float da_vd_pinning(float2 mm)
 {
-	const float2 c = mm * (1.0f / 2.2f);
-	const int2 i = int2(floor(c));
-	const float2 f = c - float2(i);
-	const float2 w = f * f * (3.0f - 2.0f * f);
-	const float a = da_vd_hash(i, 7u), b = da_vd_hash(i + int2(1, 0), 7u);
-	const float d = da_vd_hash(i + int2(0, 1), 7u), e = da_vd_hash(i + int2(1, 1), 7u);
-	return lerp(lerp(a, b, w.x), lerp(d, e, w.x), w.y);
+	return da_vd_vnoise(mm * (1.0f / 2.2f), 7u);
+}
+
+//	Where the hand's leading edge crosses this row, in uv x, at a given phase of the sweep: easing in
+//	and out as an arm does, -0.15..1.15 so it starts and ends off the plate, the middle of the edge
+//	a little ahead of its ends.
+float da_vd_wipe_edge(float phase, float dir, float v)
+{
+	const float eased = phase * phase * (3.0f - 2.0f * phase);
+	const float lane = lerp(-0.15f, 1.15f, (dir > 0.0f) ? eased : (1.0f - eased));
+	const float arc = 1.0f - 4.0f * (v - 0.5f) * (v - 0.5f);
+	return lane + dir * DA_VD_WIPE_ARC * (arc - 0.5f);
 }
 
 struct v2p
@@ -361,8 +386,10 @@ float4 main(v2p I) : SV_Target
 
 	//	---- the trail --------------------------------------------------------------------------------
 	//	The water that moved on did not take all of itself: a sliding drop leaves microns behind, and
-	//	that film is what the next drop follows.
-	film = min(film + max(c.x - h, 0.0f) * DA_VD_TRAIL, DA_VD_FILM_MAX);
+	//	that film is what the next drop follows. Only what the trail adds is capped: clamping the whole
+	//	film pressed a hand's smear - a couple of tenths - down to a trail's worth on the next step,
+	//	and a wiped visor looked like clean glass.
+	film = max(film, min(film + max(c.x - h, 0.0f) * DA_VD_TRAIL, DA_VD_FILM_MAX));
 
 	//	---- the footprint ----------------------------------------------------------------------------
 	//	Eight taps on a ring of the critical radius. The sliding criterion is a WEIGHT, so what has to
@@ -403,8 +430,10 @@ float4 main(v2p I) : SV_Target
 		const float2 probe = perp * (2.5f * uv_per_mm.x);
 		const float4 sl = da_vd_read(I.tc0 - probe);
 		const float4 sr = da_vd_read(I.tc0 + probe);
-		const float wl = sl.y + sl.x * 0.15f;
-		const float wr = sr.y + sr.x * 0.15f;
+		//	The film counted only up to a trail's worth: a hand's smear is thicker, and at its full
+		//	weight every drop landing on a wiped visor was steered along the smear's fibres.
+		const float wl = min(sl.y, DA_VD_FILM_MAX) + sl.x * 0.15f;
+		const float wr = min(sr.y, DA_VD_FILM_MAX) + sr.x * 0.15f;
 		dir = normalize(gdir + perp * ((wr - wl) * (DA_VD_FOLLOW / max(DA_VD_FILM_MAX, 1e-4f))));
 	}
 
@@ -507,39 +536,49 @@ float4 main(v2p I) : SV_Target
 	h = max(h, 0.0f);
 
 	//	---- the hand ----------------------------------------------------------------------------------
-	//	A sweep, not a switch. The edge crosses the glass over the better part of a second: what it
-	//	touches is driven forward as fast as the scheme can carry water, so it piles into a bead in
-	//	front of the hand, and what the bead could not take is smeared behind it.
+	//	A sweep, not a switch. The edge is where the hand is at THIS step: a frame's steps sharing one
+	//	position held the edge still for a dozen steps and then jumped it a hundred pixels, and each
+	//	jump printed a column into the smear. What a texel loses is the share of the palm that slid
+	//	over it during the step, so a whole pass takes the same water at any frame rate and in any
+	//	number of steps, and nothing about the result is stepped.
 	[branch]
-	if (da_visor_wipe.x > 0.5f)
+	if (da_visor_wipe.x >= 0.0f)
 	{
-		//	The hand travels across the glass, so along the visor's own x, easing in and out the way
-		//	an arm does. -0.15..1.15, so it starts and ends off the plate.
-		const float ph = da_visor_wipe.y;
-		const float eased = ph * ph * (3.0f - 2.0f * ph);
-		const float lane = lerp(-0.15f, 1.15f, (da_visor_wipe.z > 0.0f) ? eased : (1.0f - eased));
-		const float2 travel = float2((da_visor_wipe.z > 0.0f) ? 1.0f : -1.0f, 0.0f);
-		//	Distance from the edge, in millimetres, signed so that positive is ahead of it.
-		const float d_mm = (I.tc0.x - lane) / max(uv_per_mm.x, 1e-6f) * travel.x;
+		const float dir = (da_visor_wipe.z > 0.0f) ? 1.0f : -1.0f;
+		const float to_mm = dir / max(uv_per_mm.x, 1e-6f);
+		//	How far the leading edge is past this texel, in millimetres, at the previous step and now.
+		const float b0 = (da_vd_wipe_edge(da_visor_wipe.x, dir, I.tc0.y) - I.tc0.x) * to_mm;
+		const float b1 = (da_vd_wipe_edge(da_visor_wipe.y, dir, I.tc0.y) - I.tc0.x) * to_mm;
+		const float swept = (clamp(b1, 0.0f, DA_VD_WIPE_PALM) - clamp(b0, 0.0f, DA_VD_WIPE_PALM)) / DA_VD_WIPE_PALM;
 
 		[branch]
-		if (d_mm > -DA_VD_WIPE_W && d_mm < DA_VD_WIPE_PUSH)
+		if (swept > 0.0f)
 		{
-			const float k = (d_mm < 0.0f) ? 1.0f : (1.0f - d_mm / DA_VD_WIPE_PUSH);
-			v = lerp(v, travel * v_max, saturate(k * k * 0.95f));
-		}
-		//	Behind it: whatever the bead could not take is smeared. Streaks run ALONG the way the hand
-		//	went, so they vary across it - a couple of incommensurate waves a few millimetres apart,
-		//	which is the spacing a squeegee leaves. A hash of the coordinate would be pixel noise.
-		else if (d_mm <= -DA_VD_WIPE_W && d_mm > -DA_VD_WIPE_W - 14.0f)
-		{
-			const float across = mm_here.y;
-			const float streak = 0.55f + 0.45f * saturate(0.5f + 0.35f * sin(across * 1.9f) +
-				0.30f * sin(across * 0.73f + 2.1f) + 0.20f * sin(across * 4.3f + 0.7f));
-			const float taken = h * (1.0f - DA_VD_WIPE_KEEP);
+			//	The glove's print: fibres along the stroke, a millimetre or so apart and gently wavy,
+			//	and patches a couple of centimetres across where the palm pressed less and left more.
+			const float wav = (da_vd_vnoise(mm_here * float2(0.03f, 0.05f), 11u) - 0.5f) * 4.0f;
+			const float across = mm_here.y + wav;
+			const float fibre = saturate(0.15f + 1.1f * (0.6f * da_vd_vnoise(float2(mm_here.x * 0.025f, across * 1.1f), 13u) +
+				0.4f * da_vd_vnoise(float2(mm_here.x * 0.06f, across * 3.3f), 17u)));
+			const float light = da_vd_vnoise(mm_here * 0.05f, 19u);
+			const float keep = lerp(DA_VD_WIPE_KEEP, 2.0f * DA_VD_WIPE_KEEP, light * light);
+			const float taken = h * (1.0f - pow(keep, swept));
 			h -= taken;
-			film = min(film + taken * DA_VD_WIPE_SMEAR * streak, DA_VD_FILM_MAX * 3.0f);
-			v *= 0.15f;
+			//	What the palm drags: the film it laid a step ago upstream comes along under it, thinner
+			//	for every millimetre, so a drop leaves a streak ahead of where it stood and not a blot
+			//	where it stood.
+			const float step_mm = max(b1 - b0, 0.0f);
+			const float2 from = I.tc0 - float2(dir * step_mm * uv_per_mm.x, 0.0f);
+			const float dragged = s_visor_prev.SampleLevel(smp_rtlinear, from, 0).y * exp(-step_mm / DA_VD_WIPE_DRAG_MM);
+			film = max(min(film + taken * DA_VD_WIPE_SMEAR * fibre, DA_VD_FILM_MAX * 3.0f), dragged * lerp(0.6f, 1.0f, fibre));
+			v *= pow(0.15f, swept);
+		}
+		//	Just ahead of the edge the palm drives a meniscus; it cannot keep pace with the hand, so it
+		//	only shows where the arm slows at either end of the stroke.
+		else if (b1 < 0.0f && b1 > -DA_VD_WIPE_BOW)
+		{
+			const float k = 1.0f + b1 / DA_VD_WIPE_BOW;
+			v = lerp(v, float2(dir, 0.0f) * v_max, saturate(k * k * 0.6f));
 		}
 	}
 
